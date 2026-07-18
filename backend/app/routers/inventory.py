@@ -8,6 +8,7 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.inventory import (
     ContactIn,
     ContactOut,
@@ -41,9 +42,15 @@ def create_warehouse(
     return warehouse
 
 
-@router.get("/api/contacts", response_model=list[ContactOut])
-def list_contacts(db: Session = Depends(get_db), _=Depends(require_permission("invoices", "view"))):
-    return db.query(Contact).order_by(Contact.name).all()
+@router.get("/api/contacts", response_model=Page[ContactOut])
+def list_contacts(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("invoices", "view")),
+):
+    # نام یکتا نیست، پس id تساوی را می‌شکند
+    items, next_cursor = paginate(db.query(Contact), [Contact.name, Contact.id], params, descending=False)
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/contacts", response_model=ContactOut, status_code=201)
@@ -74,9 +81,15 @@ def update_contact(
     return contact
 
 
-@router.get("/api/items", response_model=list[ItemOut])
-def list_items(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
-    return db.query(Item).order_by(Item.sku).all()
+@router.get("/api/items", response_model=Page[ItemOut])
+def list_items(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("inventory", "view")),
+):
+    # sku یکتاست، پس به‌تنهایی کلید امنی است
+    items, next_cursor = paginate(db.query(Item), [Item.sku], params, descending=False)
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/items", response_model=ItemOut, status_code=201)
@@ -105,9 +118,16 @@ def update_item(
     return item
 
 
-@router.get("/api/stock-adjustments", response_model=list[StockAdjustmentOut])
-def list_stock_adjustments(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
-    return db.query(StockAdjustment).order_by(StockAdjustment.adjustment_date.desc()).all()
+@router.get("/api/stock-adjustments", response_model=Page[StockAdjustmentOut])
+def list_stock_adjustments(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("inventory", "view")),
+):
+    items, next_cursor = paginate(
+        db.query(StockAdjustment), [StockAdjustment.adjustment_date, StockAdjustment.id], params
+    )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/stock-adjustments", response_model=StockAdjustmentOut, status_code=201)

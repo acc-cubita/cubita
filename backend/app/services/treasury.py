@@ -102,10 +102,6 @@ def create_payment(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
     return txn
 
 
-def list_transactions(db: Session) -> list[TreasuryTransaction]:
-    return (
-        db.query(TreasuryTransaction)
-        .options(joinedload(TreasuryTransaction.contact))
-        .order_by(TreasuryTransaction.transaction_date.desc(), TreasuryTransaction.created_at.desc())
-        .all()
-    )
+def transactions_query(db: Session):
+    """کوئری پایه؛ مرتب‌سازی و صفحه‌بندی در لایه‌ی روتر اعمال می‌شود."""
+    return db.query(TreasuryTransaction).options(joinedload(TreasuryTransaction.contact))

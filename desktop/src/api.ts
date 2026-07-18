@@ -76,6 +76,47 @@ async function authedGet<T>(token: string, path: string): Promise<T> {
   return res.json()
 }
 
+/** پوشش پاسخ اندپوینت‌های لیستی صفحه‌بندی‌شده در بک‌اند. */
+export interface Page<T> {
+  items: T[]
+  next_cursor: string | null
+}
+
+/** یک صفحه می‌گیرد. وقتی UI صفحه‌بندی واقعی گرفت (اسکرول بی‌نهایت یا دکمه‌ی صفحه) از این استفاده کند. */
+export async function authedGetPage<T>(
+  token: string,
+  path: string,
+  opts: { limit?: number; cursor?: string | null } = {},
+): Promise<Page<T>> {
+  const qs = new URLSearchParams()
+  if (opts.limit != null) qs.set('limit', String(opts.limit))
+  if (opts.cursor) qs.set('cursor', opts.cursor)
+  const sep = path.includes('?') ? '&' : '?'
+  const suffix = qs.toString() ? `${sep}${qs}` : ''
+  return authedGet<Page<T>>(token, `${path}${suffix}`)
+}
+
+const MAX_PAGES = 200
+
+/** همه‌ی صفحه‌ها را دنبال می‌کند و آرایه‌ی مسطح برمی‌گرداند.
+ *
+ * این پل موقت است: بک‌اند حالا صفحه‌بندی می‌کند ولی UI هنوز همه‌ی ردیف‌ها را یکجا
+ * می‌خواهد. سود اصلی همین حالا گرفته می‌شود — سرور دیگر کل جدول را در یک کوئری با
+ * selectinload نمی‌خواند — ولی تا وقتی صفحه‌ها در UI پیاده نشوند، کلاینت هنوز کل
+ * داده را می‌گیرد. سقف MAX_PAGES جلوی حلقه‌ی بی‌پایان روی کرسر خراب را می‌گیرد.
+ */
+async function authedGetAll<T>(token: string, path: string): Promise<T[]> {
+  const all: T[] = []
+  let cursor: string | null = null
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const page: Page<T> = await authedGetPage<T>(token, path, { limit: 200, cursor })
+    all.push(...page.items)
+    if (!page.next_cursor) return all
+    cursor = page.next_cursor
+  }
+  throw new Error(`دریافت لیست ${path} از ${MAX_PAGES} صفحه فراتر رفت`)
+}
+
 async function authedSend<T>(token: string, method: 'POST' | 'PATCH' | 'PUT', path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -138,7 +179,7 @@ export interface JournalEntryRecord {
 }
 
 export const fetchJournalEntries = (token: string) =>
-  authedGet<JournalEntryRecord[]>(token, '/api/journal-entries')
+  authedGetAll<JournalEntryRecord>(token, '/api/journal-entries')
 
 export interface CheckRecord {
   id: string
@@ -154,7 +195,7 @@ export interface CheckRecord {
   bank_account_id: string | null
 }
 
-export const fetchChecks = (token: string) => authedGet<CheckRecord[]>(token, '/api/checks')
+export const fetchChecks = (token: string) => authedGetAll<CheckRecord>(token, '/api/checks')
 
 export const updateCheckStatus = (token: string, checkId: string, status: string, bankAccountId?: string) =>
   authedSend<CheckRecord>(token, 'PATCH', `/api/checks/${checkId}/status`, {
@@ -170,7 +211,7 @@ export interface PettyCashRecord {
   description: string
 }
 
-export const fetchPettyCashTransactions = (token: string) => authedGet<PettyCashRecord[]>(token, '/api/petty-cash')
+export const fetchPettyCashTransactions = (token: string) => authedGetAll<PettyCashRecord>(token, '/api/petty-cash')
 
 export const fetchPettyCashBalance = (token: string) =>
   authedGet<{ balance: string }>(token, '/api/petty-cash/balance')
@@ -336,7 +377,7 @@ export interface PayslipRecord {
 }
 
 export const fetchPayslips = (token: string, periodId: string) =>
-  authedGet<PayslipRecord[]>(token, `/api/payslips?period_id=${periodId}`)
+  authedGetAll<PayslipRecord>(token, `/api/payslips?period_id=${periodId}`)
 
 export const generatePayslips = (token: string, periodId: string) =>
   authedSend<PayslipRecord[]>(token, 'POST', `/api/payroll-periods/${periodId}/generate-payslips`, {})
@@ -365,7 +406,7 @@ export interface ItemRecord {
   storefront_product_id: number | null
 }
 
-export const fetchItemsLive = (token: string) => authedGet<ItemRecord[]>(token, '/api/items')
+export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
 
 export const updateItemStorefrontMapping = (token: string, itemId: string, storefrontProductId: number | null) =>
   authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { storefront_product_id: storefrontProductId })
@@ -391,7 +432,7 @@ export interface StockAdjustmentRecord {
 }
 
 export const fetchStockAdjustments = (token: string) =>
-  authedGet<StockAdjustmentRecord[]>(token, '/api/stock-adjustments')
+  authedGetAll<StockAdjustmentRecord>(token, '/api/stock-adjustments')
 
 export const createStockAdjustment = (
   token: string,
@@ -421,7 +462,7 @@ export interface SalesQuotationRecord {
 }
 
 export const fetchSalesQuotations = (token: string) =>
-  authedGet<SalesQuotationRecord[]>(token, '/api/sales-quotations')
+  authedGetAll<SalesQuotationRecord>(token, '/api/sales-quotations')
 
 export const createSalesQuotation = (
   token: string,
@@ -459,7 +500,7 @@ export interface SalesInvoiceRecord {
   lines: (InvoiceLineRecord & { unit_price: string; unit_cost: string })[]
 }
 
-export const fetchSalesInvoices = (token: string) => authedGet<SalesInvoiceRecord[]>(token, '/api/sales-invoices')
+export const fetchSalesInvoices = (token: string) => authedGetAll<SalesInvoiceRecord>(token, '/api/sales-invoices')
 
 export interface PurchaseInvoiceRecord {
   id: string
@@ -472,7 +513,7 @@ export interface PurchaseInvoiceRecord {
   lines: (InvoiceLineRecord & { unit_cost: string })[]
 }
 
-export const fetchPurchaseInvoices = (token: string) => authedGet<PurchaseInvoiceRecord[]>(token, '/api/purchase-invoices')
+export const fetchPurchaseInvoices = (token: string) => authedGetAll<PurchaseInvoiceRecord>(token, '/api/purchase-invoices')
 
 export interface SalesReturnRecord {
   id: string
@@ -485,7 +526,7 @@ export interface SalesReturnRecord {
   lines: { id: string; item_id: string; qty: string; unit_price: string; unit_cost: string; description: string }[]
 }
 
-export const fetchSalesReturns = (token: string) => authedGet<SalesReturnRecord[]>(token, '/api/sales-returns')
+export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
 
 export const createSalesReturn = (
   token: string,
@@ -502,7 +543,7 @@ export interface PurchaseReturnRecord {
   lines: { id: string; item_id: string; qty: string; unit_cost: string; description: string }[]
 }
 
-export const fetchPurchaseReturns = (token: string) => authedGet<PurchaseReturnRecord[]>(token, '/api/purchase-returns')
+export const fetchPurchaseReturns = (token: string) => authedGetAll<PurchaseReturnRecord>(token, '/api/purchase-returns')
 
 export const createPurchaseReturn = (
   token: string,
@@ -519,7 +560,7 @@ export interface StockTransferRecord {
   lines: { id: string; item_id: string; qty: string }[]
 }
 
-export const fetchStockTransfers = (token: string) => authedGet<StockTransferRecord[]>(token, '/api/stock-transfers')
+export const fetchStockTransfers = (token: string) => authedGetAll<StockTransferRecord>(token, '/api/stock-transfers')
 
 export const createStockTransfer = (
   token: string,
@@ -594,7 +635,7 @@ interface ItemWithPricingLiveOut {
 }
 
 export const fetchItemsWithPricingLive = async (token: string) => {
-  const rows = await authedGet<ItemWithPricingLiveOut[]>(token, '/api/items')
+  const rows = await authedGetAll<ItemWithPricingLiveOut>(token, '/api/items')
   return rows.map((i) => ({ ...i, is_service: i.is_service ? 1 : 0 }))
 }
 
@@ -674,7 +715,7 @@ export interface ContactIn {
   tax_id: string | null
 }
 
-export const fetchContacts = (token: string) => authedGet<ContactRecord[]>(token, '/api/contacts')
+export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')
 
 export const createContact = (token: string, data: ContactIn) =>
   authedSend<ContactRecord>(token, 'POST', '/api/contacts', data)
@@ -705,7 +746,7 @@ export interface TreasuryTransactionIn {
 }
 
 export const fetchTreasuryTransactions = (token: string) =>
-  authedGet<TreasuryTransactionRecord[]>(token, '/api/treasury')
+  authedGetAll<TreasuryTransactionRecord>(token, '/api/treasury')
 
 export const createTreasuryReceipt = (token: string, data: TreasuryTransactionIn) =>
   authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/receipts', data)

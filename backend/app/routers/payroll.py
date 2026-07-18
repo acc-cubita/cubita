@@ -7,6 +7,7 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.payroll import Attendance, Employee, PayrollPeriod, PayrollSettings, Payslip, SalaryContract
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.payroll import (
     AttendanceIn,
     AttendanceOut,
@@ -137,11 +138,12 @@ def export_insurance_list(
     )
 
 
-@router.get("/api/payslips", response_model=list[PayslipOut])
+@router.get("/api/payslips", response_model=Page[PayslipOut])
 def list_payslips(
     period_id: UUID | None = None,
     employee_id: UUID | None = None,
     db: Session = Depends(get_db),
+    params: PageParams = Depends(),
     _=Depends(require_permission("payroll", "view")),
 ):
     query = db.query(Payslip)
@@ -149,7 +151,9 @@ def list_payslips(
         query = query.filter(Payslip.period_id == period_id)
     if employee_id is not None:
         query = query.filter(Payslip.employee_id == employee_id)
-    return query.order_by(Payslip.number).all()
+    # number از sequence می‌آید و یکتاست
+    items, next_cursor = paginate(query, [Payslip.number], params, descending=False)
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.get("/api/payroll-settings", response_model=list[PayrollSettingsOut])

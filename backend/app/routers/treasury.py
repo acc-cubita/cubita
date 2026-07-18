@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
+from app.models.treasury import TreasuryTransaction
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.treasury import TreasuryTransactionIn, TreasuryTransactionOut
 from app.services import treasury as treasury_service
 
@@ -25,9 +27,18 @@ def _to_out(txn) -> TreasuryTransactionOut:
     )
 
 
-@router.get("/api/treasury", response_model=list[TreasuryTransactionOut])
-def list_treasury(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return [_to_out(t) for t in treasury_service.list_transactions(db)]
+@router.get("/api/treasury", response_model=Page[TreasuryTransactionOut])
+def list_treasury(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    items, next_cursor = paginate(
+        treasury_service.transactions_query(db),
+        [TreasuryTransaction.transaction_date, TreasuryTransaction.id],
+        params,
+    )
+    return Page(items=[_to_out(t) for t in items], next_cursor=next_cursor)
 
 
 @router.post("/api/treasury/receipts", response_model=TreasuryTransactionOut, status_code=201)

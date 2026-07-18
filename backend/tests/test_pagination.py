@@ -153,7 +153,73 @@ def test_cursor_is_opaque_base64():
 # --- سایر اندپوینت‌ها ------------------------------------------------------------
 
 
-@pytest.mark.parametrize("url", ["/api/sales-invoices", "/api/purchase-invoices"])
-def test_other_document_lists_also_use_the_envelope(db, user, client, url):
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/sales-invoices",
+        "/api/purchase-invoices",
+        "/api/sales-quotations",
+        "/api/sales-returns",
+        "/api/purchase-returns",
+        "/api/stock-transfers",
+        "/api/checks",
+        "/api/bank-transactions",
+        "/api/petty-cash",
+        "/api/treasury",
+        "/api/contacts",
+        "/api/items",
+        "/api/stock-adjustments",
+        "/api/payslips",
+    ],
+)
+def test_every_paginated_list_uses_the_envelope(db, user, client, url):
     body = client.get(url).json()
+    assert set(body) == {"items", "next_cursor"}, f"{url} پوشش صفحه‌بندی ندارد"
+
+
+def test_filters_and_pagination_coexist(db, user, client):
+    """payslips هم فیلتر دارد هم صفحه‌بندی.
+
+    ریسک واقعی این است که کرسر فیلتر را از دست بدهد و ردیف‌های دوره‌ی دیگر نشت کنند،
+    یا کلاینت به مسیری که از قبل ? دارد یک ? دوم بچسباند.
+    """
+    from uuid import uuid4
+
+    other_period = uuid4()
+    res = client.get("/api/payslips", params={"period_id": str(other_period), "limit": 5})
+    assert res.status_code == 200
+    body = res.json()
     assert set(body) == {"items", "next_cursor"}
+    assert body["items"] == [], "فیلتر روی دوره‌ی ناموجود باید خالی برگرداند"
+
+
+# --- جهت صعودی (مسیر کد جداگانه) -----------------------------------------------
+
+
+def test_ascending_traversal_returns_every_row_exactly_once(db, user, client):
+    """contacts صعودی مرتب می‌شود؛ مقایسه‌ی tuple باید > باشد نه <."""
+    from tests.factories import make_contact
+
+    for i in range(14):
+        make_contact(db, name=f"طرف‌حساب {i:02d}")
+    db.flush()
+
+    seen = walk_all_pages(client, "/api/contacts", limit=4)
+    names = [row["name"] for row in seen]
+    assert len(names) == len(set(names)), "طرف‌حساب تکراری برگشت"
+    assert len(names) >= 14, f"از ۱۴ طرف‌حساب فقط {len(names)} برگشت"
+    assert names == sorted(names), "ترتیب صعودی بین صفحه‌ها حفظ نشد"
+
+
+def test_ascending_traversal_handles_duplicate_names(db, user, client):
+    """نام یکتا نیست — id باید تساوی را بشکند وگرنه ردیف‌ها گم می‌شوند."""
+    from tests.factories import make_contact
+
+    for _ in range(9):
+        make_contact(db, name="نام تکراری")
+    db.flush()
+
+    seen = walk_all_pages(client, "/api/contacts", limit=2)
+    ids = [row["id"] for row in seen if row["name"] == "نام تکراری"]
+    assert len(ids) == len(set(ids)), "ردیف‌های هم‌نام تکرار شدند"
+    assert len(ids) == 9, f"از ۹ طرف‌حساب هم‌نام فقط {len(ids)} برگشت"
