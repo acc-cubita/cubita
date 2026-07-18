@@ -1,0 +1,112 @@
+import { useState } from 'react'
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, ShoppingCart, BookOpen, Landmark } from 'lucide-react'
+import { login, fetchMe, type MeResponse } from '../api'
+
+const FEATURES = [
+  { icon: ShoppingCart, text: 'فروش، خرید و انبارداری یکپارچه' },
+  { icon: BookOpen, text: 'حسابداری دوطرفه با گزارش‌های زنده' },
+  { icon: Landmark, text: 'چک، بانک، حقوق و دستمزد در یک‌جا' },
+]
+
+export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: MeResponse) => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const t = await login(email, password)
+      await window.cubita?.setAuthToken(t)
+      const meRes = await fetchMe(t)
+      onLoggedIn(t, meRes)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="login-shell">
+      <div className="login-brand">
+        <div className="login-brand-blobs" aria-hidden="true">
+          <span className="blob blob-1" />
+          <span className="blob blob-2" />
+          <span className="blob blob-3" />
+        </div>
+        <div className="login-brand-content">
+          <div className="login-brand-mark">C</div>
+          <h2 className="login-brand-title">کوبیتا</h2>
+          <p className="login-brand-tagline">سامانه‌ی یکپارچه‌ی حسابداری، انبار و فروش — آفلاین و آنلاین</p>
+          <ul className="login-brand-features">
+            {FEATURES.map(({ icon: Icon, text }) => (
+              <li key={text}>
+                <span className="login-brand-feature-icon">
+                  <Icon size={16} />
+                </span>
+                {text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="login-form-panel">
+        <form className="login-card" onSubmit={handleSubmit}>
+          <h1>ورود به حساب کاربری</h1>
+          <p className="login-card-subtitle">برای ادامه، اطلاعات ورود خود را وارد کنید</p>
+
+          <label>
+            ایمیل
+            <div className="input-with-icon">
+              <Mail size={16} className="input-icon" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoFocus
+                required
+              />
+            </div>
+          </label>
+
+          <label>
+            رمز عبور
+            <div className="input-with-icon">
+              <Lock size={16} className="input-icon" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                className="input-icon-toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'پنهان‌کردن رمز' : 'نمایش رمز'}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </label>
+
+          {error && <div className="error">{error}</div>}
+
+          <button type="submit" className="btn-primary login-submit" disabled={loading}>
+            {loading ? 'در حال ورود...' : 'ورود'}
+            {!loading && <ArrowLeft size={15} />}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,150 @@
+import { useEffect, useState } from 'react'
+import { FileCheck, RefreshCw, ArrowLeftCircle } from 'lucide-react'
+import { fetchSalesQuotations, updateQuotationStatus, convertQuotationToInvoice, type SalesQuotationRecord } from '../api'
+import { SectionCard } from './SectionCard'
+import { EmptyState } from './EmptyState'
+import { formatJalali } from '../lib/jalali'
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'پیش‌نویس',
+  sent: 'ارسال‌شده',
+  accepted: 'تأییدشده',
+  rejected: 'ردشده',
+  converted: 'تبدیل به فاکتور',
+}
+
+const STATUS_TONE: Record<string, string> = {
+  draft: 'default',
+  sent: 'warning',
+  accepted: 'success',
+  rejected: 'danger',
+  converted: 'success',
+}
+
+export function QuotationsList({ token, onConverted }: { token: string; onConverted: () => void }) {
+  const [quotations, setQuotations] = useState<SalesQuotationRecord[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  async function refresh() {
+    setError(null)
+    try {
+      setQuotations(await fetchSalesQuotations(token))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  async function handleStatusChange(id: string, status: string) {
+    setError(null)
+    setBusyId(id)
+    try {
+      await updateQuotationStatus(token, id, status)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleConvert(id: string) {
+    setError(null)
+    setBusyId(id)
+    try {
+      await convertQuotationToInvoice(token, id)
+      await refresh()
+      onConverted()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={FileCheck}
+      title="لیست پیش‌فاکتورها"
+      actions={
+        <button onClick={() => void refresh()}>
+          <RefreshCw size={13} /> به‌روزرسانی
+        </button>
+      }
+    >
+      {error && <div className="error">{error}</div>}
+      {quotations.length === 0 ? (
+        <EmptyState icon={FileCheck} text="پیش‌فاکتوری ثبت نشده." />
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>شماره</th>
+              <th>تاریخ</th>
+              <th>اعتبار تا</th>
+              <th>مبلغ</th>
+              <th>وضعیت</th>
+              <th>اقدام</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quotations.map((q) => (
+              <tr key={q.id}>
+                <td>{q.number != null ? q.number.toLocaleString('fa-IR') : '—'}</td>
+                <td>{formatJalali(q.quotation_date)}</td>
+                <td>{formatJalali(q.valid_until)}</td>
+                <td>{Number(q.total_amount).toLocaleString('fa-IR')}</td>
+                <td>
+                  <span className={`status-badge tone-${STATUS_TONE[q.status] ?? 'default'}`}>
+                    {STATUS_LABELS[q.status] ?? q.status}
+                  </span>
+                </td>
+                <td>
+                  <div className="check-actions">
+                    {q.status === 'draft' && (
+                      <>
+                        <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'sent')}>
+                          ارسال شد
+                        </button>
+                        <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'accepted')}>
+                          تأیید شد
+                        </button>
+                        <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'rejected')}>
+                          رد شد
+                        </button>
+                      </>
+                    )}
+                    {q.status === 'sent' && (
+                      <>
+                        <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'accepted')}>
+                          تأیید شد
+                        </button>
+                        <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'rejected')}>
+                          رد شد
+                        </button>
+                      </>
+                    )}
+                    {(q.status === 'draft' || q.status === 'sent' || q.status === 'accepted') && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={busyId === q.id}
+                        onClick={() => void handleConvert(q.id)}
+                      >
+                        <ArrowLeftCircle size={13} /> تبدیل به فاکتور
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </SectionCard>
+  )
+}

@@ -1,0 +1,30 @@
+# Secrets — هر فایل env جز نمونه‌ها. این قواعد نباید به gitignore سراسری کاربر تکیه کنند.
+.env
+.env.*
+!.env.example
+*.local
+.claude/settings.local.json
+*.pem
+*.key
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# Node / Electron
+node_modules/
+desktop/dist/
+desktop/dist-electron/
+desktop/release/
+website/dist/
+*.log
+
+# Local SQLite data
+desktop/data/*.db
+desktop/data/*.db-journal
+
+# Editor
+.vscode/
+.idea/

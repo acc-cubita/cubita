@@ -1,0 +1,115 @@
+@font-face {
+  font-family: 'Vazirmatn UI';
+  src: url('/fonts/Vazirmatn-UI-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn UI';
+  src: url('/fonts/Vazirmatn-UI-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn UI';
+  src: url('/fonts/Vazirmatn-UI-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn UI';
+  src: url('/fonts/Vazirmatn-UI-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  --page: #060714;
+  --bg: #090a1c;
+  --surface: #12142c;
+  --surface-2: #191c3d;
+  --surface-hover: #212550;
+  --border: #262a52;
+  --border-strong: #363b70;
+
+  --text: #a9aecb;
+  --text-muted: #6c7196;
+  --text-h: #f5f6fc;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-bg: rgba(59, 130, 246, 0.16);
+  --accent-text: #060714;
+
+  /* دومین رنگ برند — فقط تزئینی (پس‌زمینه‌ی نوری، گرادیان‌ها، بج‌ها)، هرگز برای دکمه/لینک تعاملی اصلی */
+  --accent-2: #a855f7;
+  --accent-2-bg: rgba(168, 85, 247, 0.16);
+  --accent-2-hover: #c084fc;
+  --accent-3: #ec4899;
+
+  --success: #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.14);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.14);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.14);
+
+  --shadow-sm: rgba(0, 0, 0, 0.3) 0 1px 2px;
+  --shadow-md: rgba(0, 0, 0, 0.45) 0 8px 24px -4px, rgba(0, 0, 0, 0.3) 0 2px 6px -2px;
+  --shadow-glow: rgba(59, 130, 246, 0.25) 0 8px 32px -4px;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  --sans: 'Vazirmatn UI', 'Segoe UI', Tahoma, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text-h);
+  font-weight: 700;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+}
