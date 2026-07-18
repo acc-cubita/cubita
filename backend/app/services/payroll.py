@@ -125,6 +125,21 @@ def compute_payslip_amounts(
     }
 
 
+def _is_placeholder_tax_config(settings: PayrollSettings) -> bool:
+    """آیا پلکان مالیات هنوز همان مقدار placeholder ساخته‌شده در seed است؟
+
+    seed عمداً پلکان را با نرخ صفر می‌سازد تا هیچ عددی به‌اشتباه مبنای قانونی فرض نشود،
+    ولی هیچ چیزی جلوی صدور فیش با همان مقدار را نمی‌گرفت — نتیجه‌اش فیش با مالیات صفر
+    کسرشده است که مسئولیت قانونی کارفرماست. مالیات حقوق در ایران هرگز در همه‌ی پلکان‌ها
+    صفر نیست (معافیت، درآمد پایین را پوشش می‌دهد)، پس نرخِ سراسر صفر بدون ابهام یعنی
+    تنظیمات واقعی هنوز وارد نشده.
+    """
+    brackets = settings.tax_brackets or []
+    if not brackets:
+        return True
+    return all(Decimal(str(b.get("rate", "0"))) == 0 for b in brackets)
+
+
 def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> list[Payslip]:
     period = db.get(PayrollPeriod, period_id)
     if period is None:
@@ -137,6 +152,14 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"تنظیمات حقوق (نرخ بیمه/مالیات) برای سال {period.year} ثبت نشده است",
+        )
+
+    if _is_placeholder_tax_config(settings):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"پلکان مالیات سال {period.year} هنوز مقدار placeholder (نرخ صفر) دارد. صدور فیش با این "
+            "تنظیمات یعنی مالیات حقوق صفر کسر می‌شود که مسئولیت قانونی کارفرماست. ابتدا با "
+            "PUT /api/payroll-settings ارقام رسمی همان سال را ثبت کنید.",
         )
 
     already_issued = db.query(Payslip).filter(Payslip.period_id == period_id).count()

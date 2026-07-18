@@ -52,9 +52,44 @@ class Settings(BaseSettings):
         return [e.strip().lower() for e in self.platform_admin_emails.split(",") if e.strip()]
 
 
+KNOWN_ENVS = ("development", "staging", "production")
+WEAK_JWT_SECRETS = ("changeme", "", "secret", "changeit", "test")
+MIN_JWT_SECRET_LENGTH = 32
+
+
+def _validate(settings: Settings) -> None:
+    """گاردهای fail-closed.
+
+    گارد قبلی فقط وقتی ENV=production بود فعال می‌شد، و همین باعث شد نمونه‌ی واقعی با
+    ENV=development اجرا شود در حالی که با پول واقعی کار می‌کرد — که هم بررسی قدرت
+    JWT_SECRET را دور می‌زد و هم /api/docs را عمومی نگه می‌داشت. معیار درست «چه چیزی
+    در فایل نوشته شده» نیست، «آیا این نمونه با پول واقعی کار می‌کند» است.
+    """
+    if settings.env not in KNOWN_ENVS:
+        raise RuntimeError(f"ENV نامعتبر است: {settings.env!r}. مقادیر مجاز: {', '.join(KNOWN_ENVS)}")
+
+    handles_real_money = not settings.zarinpal_sandbox
+
+    if handles_real_money and not settings.is_production:
+        raise RuntimeError(
+            "ZARINPAL_SANDBOX=false یعنی این نمونه کارت واقعی شارژ می‌کند، ولی "
+            f"ENV={settings.env!r} است. یا ENV=production بگذارید (و گاردهای production فعال شود) "
+            "یا ZARINPAL_SANDBOX=true کنید."
+        )
+
+    if settings.is_production or handles_real_money:
+        if settings.jwt_secret.strip().lower() in WEAK_JWT_SECRETS:
+            raise RuntimeError("JWT_SECRET مقدار پیش‌فرض/ضعیف دارد؛ اجرا با پول واقعی مجاز نیست.")
+        if len(settings.jwt_secret) < MIN_JWT_SECRET_LENGTH:
+            raise RuntimeError(
+                f"JWT_SECRET کوتاه است ({len(settings.jwt_secret)} کاراکتر)؛ "
+                f"حداقل {MIN_JWT_SECRET_LENGTH} کاراکتر لازم است. "
+                'تولید: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+
+
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    if settings.is_production and settings.jwt_secret in ("changeme", ""):
-        raise RuntimeError("JWT_SECRET تنظیم نشده؛ اجرا در production با مقدار پیش‌فرض مجاز نیست.")
+    _validate(settings)
     return settings
