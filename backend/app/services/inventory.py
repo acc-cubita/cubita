@@ -39,17 +39,28 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
     assert_period_open(db, data.invoice_date)
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
+
+    # مقدار درخواستی هر کالا باید بین ردیف‌ها جمع شود، نه ردیف‌به‌ردیف سنجیده شود:
+    # وگرنه فاکتوری با دو ردیف ۶تایی از یک کالا در برابر موجودی ۱۰ پاس می‌شد، چون هر
+    # ردیف جدا با همان ۱۰ مقایسه می‌شد. این تک‌نخی هم رخ می‌داد و نیازی به همزمانی نداشت.
+    requested_by_item: dict[UUID, Decimal] = {}
     for line in data.lines:
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
         if not item.is_service:
-            available = get_stock_qty(db, line.item_id, data.warehouse_id)
-            if available < line.qty:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    f"موجودی «{item.name}» کافی نیست (موجود: {available}, درخواستی: {line.qty})",
-                )
+            requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
+
+    # نکته: این کنترل همچنان در برابر همزمانی محافظت نمی‌کند — دو فاکتور موازی روی آخرین
+    # موجودی هر دو می‌توانند پاس شوند. رفعش به قفل سطری (SELECT ... FOR UPDATE) نیاز دارد
+    # که همراه با یکپارچه‌سازی مرزهای تراکنش انجام می‌شود.
+    for item_id, requested in requested_by_item.items():
+        available = get_stock_qty(db, item_id, data.warehouse_id)
+        if available < requested:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"موجودی «{items_by_id[item_id].name}» کافی نیست (موجود: {available}, درخواستی: {requested})",
+            )
 
     number = db.execute(text("SELECT nextval('sales_invoice_number_seq')")).scalar_one()
 
