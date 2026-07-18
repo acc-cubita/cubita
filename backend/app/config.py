@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:5173"
 
+    # ادمین پلتفرم (کنترل‌پنل فروش خودِ کوبیتا) — عمداً از RBAC مستأجر جداست، چون آن سیستم
+    # wildcard دارد و هر نقشی با "*" به‌طور ناخواسته به داده‌ی همه‌ی مشتریان دسترسی می‌گرفت.
+    # خالی = دسترسی برای همه بسته (fail closed). فهرست ایمیل با کاما جدا شود.
+    platform_admin_emails: str = ""
+
     # اکانت سرویس ادمین روی سایت فروشگاهی؛ هر sync دوباره لاگین می‌کند تا نیازی به نگهداری توکن بلندمدت نباشد
     storefront_api_base_url: str = ""
     storefront_admin_email: str = ""
@@ -41,6 +46,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def platform_admin_emails_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.platform_admin_emails.split(",") if e.strip()]
 
 
 @lru_cache

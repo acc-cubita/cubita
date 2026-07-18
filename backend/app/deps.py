@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.security import decode_access_token
@@ -25,9 +26,25 @@ def get_current_user(
 
 
 def require_permission(module: str, action: str):
+    """مجوز در سطح داده‌ی یک مستأجر. هرگز برای اندپوینت‌های کنترل‌پنل پلتفرم استفاده نشود."""
+
     def checker(user: User = Depends(get_current_user)) -> User:
         if not user.role.has_permission(module, action):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
         return user
 
     return checker
+
+
+def require_platform_admin(user: User = Depends(get_current_user)) -> User:
+    """مجوز کنترل‌پنل فروش خودِ کوبیتا — عمداً به RBAC مستأجر وابسته نیست.
+
+    اندپوینت‌های /api/admin/purchases داده‌ی هویتی همه‌ی مشتریان پولی را برمی‌گردانند.
+    وقتی این‌ها پشت require_permission("billing", ...) بودند، هر نقشی که permissions
+    آن شامل wildcard "*" بود — از جمله نقش عمومی «دمو» — به آن‌ها دسترسی می‌گرفت.
+    فهرست خالی یعنی دسترسی برای همه بسته است (fail closed).
+    """
+    allowed = get_settings().platform_admin_emails_list
+    if not allowed or user.email.strip().lower() not in allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
+    return user

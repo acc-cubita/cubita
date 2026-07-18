@@ -42,7 +42,16 @@ DEFAULT_ROLES: list[dict] = [
     {
         "key": "demo",
         "name": "دمو (فقط مشاهده)",
-        "permissions": {"*": ["view"]},
+        # عمداً بدون wildcard: هر ماژول باید صراحتاً فهرست شود. قبلاً {"*": ["view"]} بود
+        # که به‌طور ناخواسته ماژول billing را هم پوشش می‌داد و چون رمز این حساب روی سایت
+        # عمومی نمایش داده می‌شود، داده‌ی هویتی همه‌ی مشتریان پولی قابل خواندن شده بود.
+        "permissions": {
+            "accounting": ["view"],
+            "invoices": ["view"],
+            "inventory": ["view"],
+            "checks_bank": ["view"],
+            "payroll": ["view"],
+        },
     },
 ]
 

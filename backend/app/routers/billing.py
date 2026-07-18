@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import require_platform_admin
 from app.models.billing import Plan
 from app.models.user import User
 from app.schemas.billing import PlanOut, PurchaseFulfillIn, PurchaseOut, PurchaseRequestIn, PurchaseRequestOut
@@ -43,8 +43,9 @@ def purchase_callback(Authority: str, Status: str, db: Session = Depends(get_db)
 @router.get("/api/admin/purchases", response_model=list[PurchaseOut])
 def admin_list_purchases(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("billing", "view")),
+    _: User = Depends(require_platform_admin),
 ):
+    """کنترل‌پنل پلتفرم — داده‌ی هویتی همه‌ی مشتریان. پشت PLATFORM_ADMIN_EMAILS، نه RBAC مستأجر."""
     return billing_service.list_purchases(db)
 
 
@@ -53,6 +54,6 @@ def admin_fulfill_purchase(
     purchase_id: UUID,
     data: PurchaseFulfillIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("billing", "update")),
+    _: User = Depends(require_platform_admin),
 ):
     return billing_service.fulfill_purchase(db, purchase_id, data.admin_notes)
