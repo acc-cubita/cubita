@@ -6,23 +6,26 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.accounting import JournalEntryIn, JournalEntryOut
 from app.services.period_close import assert_period_open
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
 
 
-@router.get("", response_model=list[JournalEntryOut])
+@router.get("", response_model=Page[JournalEntryOut])
 def list_entries(
     db: Session = Depends(get_db),
+    params: PageParams = Depends(),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return (
-        db.query(JournalEntry)
-        .options(selectinload(JournalEntry.lines))
-        .order_by(JournalEntry.entry_date.desc(), JournalEntry.number.desc())
-        .all()
+    # (entry_date, number) یکتاست چون number از sequence می‌آید — کلید امن برای keyset
+    items, next_cursor = paginate(
+        db.query(JournalEntry).options(selectinload(JournalEntry.lines)),
+        [JournalEntry.entry_date, JournalEntry.number],
+        params,
     )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("", response_model=JournalEntryOut, status_code=201)

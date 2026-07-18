@@ -7,6 +7,7 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.quotations import SalesQuotation
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import SalesInvoiceOut
 from app.schemas.quotations import SalesQuotationIn, SalesQuotationOut, SalesQuotationStatusUpdateIn
 from app.services.quotations import convert_quotation_to_invoice, create_quotation, update_quotation_status
@@ -14,14 +15,18 @@ from app.services.quotations import convert_quotation_to_invoice, create_quotati
 router = APIRouter(tags=["quotations"])
 
 
-@router.get("/api/sales-quotations", response_model=list[SalesQuotationOut])
-def list_quotations(db: Session = Depends(get_db), _=Depends(require_permission("invoices", "view"))):
-    return (
-        db.query(SalesQuotation)
-        .options(selectinload(SalesQuotation.lines))
-        .order_by(SalesQuotation.quotation_date.desc(), SalesQuotation.number.desc())
-        .all()
+@router.get("/api/sales-quotations", response_model=Page[SalesQuotationOut])
+def list_quotations(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("invoices", "view")),
+):
+    items, next_cursor = paginate(
+        db.query(SalesQuotation).options(selectinload(SalesQuotation.lines)),
+        [SalesQuotation.quotation_date, SalesQuotation.number],
+        params,
     )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/sales-quotations", response_model=SalesQuotationOut, status_code=201)

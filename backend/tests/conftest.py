@@ -38,7 +38,7 @@ get_settings.cache_clear()
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.database import Base, engine  # noqa: E402
+from app.database import Base, engine, get_db  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 # seed در ماژول‌های زیر import می‌شود و همگی روی engine بالا سوارند
@@ -82,3 +82,24 @@ def db(_schema):
 def user(db) -> User:
     """کاربر مالک seed‌شده — سرویس‌ها برای created_by به آن نیاز دارند."""
     return db.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
+
+
+@pytest.fixture
+def client(db, user):
+    """کلاینت HTTP روی همان session تست.
+
+    برای سنجیدن قرارداد واقعی اندپوینت (شکل پاسخ، کدهای خطا، پارامترهای کوئری) لازم
+    است، نه فقط تابع سرویس. احراز هویت override می‌شود چون هدف این تست‌ها منطق
+    اندپوینت است نه مسیر توکن؛ آن جداگانه تست می‌شود.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.deps import get_current_user
+    from app.main import app
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()

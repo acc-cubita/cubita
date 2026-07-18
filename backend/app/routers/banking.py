@@ -5,6 +5,7 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.banking import (
     BankAccountIn,
     BankAccountOut,
@@ -52,9 +53,20 @@ def create_bank_account(
     return account
 
 
-@router.get("/api/checks", response_model=list[CheckOut])
-def list_checks(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return db.query(Check).order_by(Check.due_date).all()
+@router.get("/api/checks", response_model=Page[CheckOut])
+def list_checks(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
+    items, next_cursor = paginate(
+        db.query(Check),
+        [Check.due_date, Check.id],
+        params,
+        descending=False,
+    )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/checks", response_model=CheckOut, status_code=201)
@@ -74,9 +86,19 @@ def update_check_status(
     return banking_service.update_check_status(db, check_id, data.status, data.bank_account_id, user)
 
 
-@router.get("/api/bank-transactions", response_model=list[BankTransactionOut])
-def list_bank_transactions(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return db.query(BankTransaction).order_by(BankTransaction.transaction_date.desc()).all()
+@router.get("/api/bank-transactions", response_model=Page[BankTransactionOut])
+def list_bank_transactions(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
+    items, next_cursor = paginate(
+        db.query(BankTransaction),
+        [BankTransaction.transaction_date, BankTransaction.id],
+        params,
+    )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/bank-transactions", response_model=BankTransactionOut, status_code=201)
@@ -142,9 +164,19 @@ def unmatch_statement_line(
     return banking_service.unmatch_statement_line(db, line_id)
 
 
-@router.get("/api/petty-cash", response_model=list[PettyCashTransactionOut])
-def list_petty_cash(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return db.query(PettyCashTransaction).order_by(PettyCashTransaction.transaction_date.desc()).all()
+@router.get("/api/petty-cash", response_model=Page[PettyCashTransactionOut])
+def list_petty_cash(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
+    items, next_cursor = paginate(
+        db.query(PettyCashTransaction),
+        [PettyCashTransaction.transaction_date, PettyCashTransaction.id],
+        params,
+    )
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.get("/api/petty-cash/balance")
