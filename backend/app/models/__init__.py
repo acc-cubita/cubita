@@ -3,6 +3,7 @@ from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.billing import Plan, Purchase
 from app.models.counters import DocumentCounter
+from app.models.idempotency import IdempotencyKey
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.invoices import (
     PurchaseInvoice,
@@ -71,4 +72,5 @@ __all__ = [
     "TreasuryTransaction",
     "AuthToken",
     "DocumentCounter",
+    "IdempotencyKey",
 ]

@@ -132,10 +132,35 @@ async function authedGetAll<T>(token: string, path: string): Promise<T[]> {
   throw new Error(`دریافت لیست ${path} از ${MAX_PAGES} صفحه فراتر رفت`)
 }
 
-async function authedSend<T>(token: string, method: 'POST' | 'PATCH' | 'PUT', path: string, body: unknown): Promise<T> {
+/** کلید یکتاسازی برای عملیاتی که سند مالی می‌سازد.
+ *
+ * سرور با همین کلید تشخیص می‌دهد که یک درخواست، تکرارِ درخواست قبلی است. سه حالتی
+ * که بدون آن دو سند مالی ساخته می‌شود و هیچ‌کدام تقصیر کاربر نیست: دوبار کلیک،
+ * گم شدن پاسخ در شبکه، و retry مرورگر.
+ *
+ * کلید باید به *عملیات* گره بخورد نه به هر تلاش شبکه‌ای — یعنی اگر کاربر بعد از
+ * خطا دوباره دکمه را بزند، همان کلید برود. پس فراخواننده آن را یک‌بار می‌سازد و
+ * برای همان فرم نگه می‌دارد.
+ */
+export const newIdempotencyKey = (): string =>
+  (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+
+async function authedSend<T>(
+  token: string,
+  method: 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  body: unknown,
+  idempotencyKey?: string,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  }
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers,
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -670,7 +695,8 @@ export const createSalesInvoiceDirect = (
     warehouse_id: string
     lines: { item_id: string; qty: number; unit_price: number }[]
   },
-) => authedSend<unknown>(token, 'POST', '/api/sales-invoices', data)
+  idempotencyKey?: string,
+) => authedSend<unknown>(token, 'POST', '/api/sales-invoices', data, idempotencyKey)
 
 export const createPurchaseInvoiceDirect = (
   token: string,
@@ -679,7 +705,8 @@ export const createPurchaseInvoiceDirect = (
     warehouse_id: string
     lines: { item_id: string; qty: number; unit_cost: number }[]
   },
-) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data)
+  idempotencyKey?: string,
+) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
 
 export const createCheckDirect = (
   token: string,

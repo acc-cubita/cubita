@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -17,6 +17,7 @@ from app.schemas.invoices import (
     SalesInvoiceOut,
 )
 from app.schemas.voiding import VoidIn, VoidOut
+from app.services.idempotency import idempotent
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.printing import render_invoice
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
@@ -41,10 +42,19 @@ def list_sales_invoices(
 @router.post("/api/sales-invoices", response_model=SalesInvoiceOut, status_code=201)
 def create_sales_invoice(
     data: SalesInvoiceIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return post_sales_invoice(db, data, user)
+    return idempotent(
+        db,
+        request,
+        user,
+        operation="create_sales_invoice",
+        payload=data,
+        run=lambda: post_sales_invoice(db, data, user),
+        replay=lambda rid: db.get(SalesInvoice, rid),
+    )
 
 
 @router.get("/api/purchase-invoices", response_model=Page[PurchaseInvoiceOut])
@@ -64,10 +74,19 @@ def list_purchase_invoices(
 @router.post("/api/purchase-invoices", response_model=PurchaseInvoiceOut, status_code=201)
 def create_purchase_invoice(
     data: PurchaseInvoiceIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return post_purchase_invoice(db, data, user)
+    return idempotent(
+        db,
+        request,
+        user,
+        operation="create_purchase_invoice",
+        payload=data,
+        run=lambda: post_purchase_invoice(db, data, user),
+        replay=lambda rid: db.get(PurchaseInvoice, rid),
+    )
 
 
 @router.post("/api/sales-invoices/{invoice_id}/void", response_model=VoidOut)

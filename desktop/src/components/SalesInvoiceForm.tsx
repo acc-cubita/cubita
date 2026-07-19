@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ShoppingCart, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import { createSalesInvoiceDirect } from '../api'
+import { createSalesInvoiceDirect, newIdempotencyKey } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -28,6 +28,12 @@ export function SalesInvoiceForm({
   const [invoiceDate, setInvoiceDate] = useState(todayIso())
   const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitPrice: '' }])
   const [message, setMessage] = useState<string | null>(null)
+  // کلید یکتاسازی به *این فاکتور* گره می‌خورد، نه به هر تلاش شبکه‌ای.
+  //
+  // اگر ثبت با خطا برگردد و کاربر دوباره دکمه را بزند، همان کلید می‌رود — چون
+  // ممکن است سرور نوبت اول کارش را کرده باشد و فقط پاسخ گم شده باشد. کلید تازه
+  // در آن حالت یعنی فاکتور دوم. کلید فقط بعد از موفقیت قطعی نو می‌شود.
+  const idempotencyKey = useRef(newIdempotencyKey())
 
   const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
 
@@ -74,9 +80,10 @@ export function SalesInvoiceForm({
         await window.cubita.queueSalesInvoice(payload)
         setMessage('فاکتور در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.')
       } else {
-        await createSalesInvoiceDirect(token, payload)
+        await createSalesInvoiceDirect(token, payload, idempotencyKey.current)
         setMessage('فاکتور با موفقیت ثبت شد.')
       }
+      idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
       setLines([{ itemId: '', qty: '1', unitPrice: '' }])
       onQueued()
     } catch (err) {
