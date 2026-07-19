@@ -1,74 +1,134 @@
 #!/usr/bin/env bash
-# پشتیبان‌گیری از پایگاه‌داده‌ی کوبیتا.
+# پشتیبان‌گیری از پایگاه‌داده‌ی کوبیتا، با راستی‌آزمایی.
 #
-# **باید با نقشی اجرا شود که BYPASSRLS دارد** (cubita_migrate).
+# **مسئله‌ای که این اسکریپت برای آن وجود دارد** (روی همین سیستم اثبات شد):
 #
-# چرا این‌قدر تأکید: بعد از FORCE ROW LEVEL SECURITY، pg_dump با نقش معمولی شکست
-# می‌خورد. وسوسه‌ی طبیعی این است که سوییچ --enable-row-security اضافه شود تا خطا
-# برطرف شود — و آن کار یک پشتیبانِ ظاهراً سالم می‌سازد که همه‌ی جدول‌ها را دارد
-# ولی ردیف‌هایشان خالی است، چون pg_dump زمینه‌ی مستأجر ندارد و سیاست صفر ردیف
-# مچ می‌کند. این با اندازه‌ی فایل یا شمارش جدول‌ها هم معلوم نمی‌شود؛ فقط روز
-# بازیابی معلوم می‌شود، که دیر است.
+# بعد از FORCE ROW LEVEL SECURITY، اگر pg_dump با نقشی اجرا شود که BYPASSRLS ندارد،
+# این اتفاق می‌افتد:
 #
-# پس این اسکریپت هرگز از آن سوییچ استفاده نمی‌کند و **قبل** از dump بررسی می‌کند
-# که نقش واقعاً BYPASSRLS دارد.
+#     pg_dump: error: query would be affected by row-level security policy
+#     کد خروج: 0                    ← اینجاست فاجعه
+#     فایل ۱۶۰ کیلوبایتی ساخته می‌شود، با همه‌ی جدول‌ها، و صفر ردیف.
 #
-# اجرا:
-#   BACKUP_DB_URL=postgresql://cubita_migrate:PASS@host:5432/hesabdari ./scripts/backup.sh /var/backups/cubita
+# چون کد خروج صفر است، نه `set -e` می‌گیردش، نه cron هشدار می‌دهد. اسکریپت قبلی
+# بعد از dump بی‌قید‌و‌شرط پشتیبان‌های قدیمی‌تر از ۱۴ روز را پاک می‌کرد — یعنی
+# دقیقاً ۱۴ روز بعد از فعال شدن RLS، آخرین پشتیبان سالم هم می‌رفت و از آن به بعد
+# فقط فایل‌های خالی می‌ماند. بی‌صدا.
+#
+# سه دفاع اینجا هست، و ترتیبشان مهم است:
+#   ۱. پیش‌بررسی: نقش باید BYPASSRLS یا superuser باشد.
+#   ۲. پس‌بررسی: هر جدولی که در پایگاه‌داده ردیف دارد باید در پشتیبان هم داشته باشد.
+#   ۳. چرخش فقط و فقط بعد از موفقیت هر دو. پشتیبان بد حذف می‌شود، قدیمی‌ها نه.
+#
+# هرگز از --enable-row-security استفاده نکنید: خطا را خاموش می‌کند و همان پشتیبانِ
+# خالی را می‌سازد، فقط بدون پیام.
+#
+# اجرا (روی سرور، از cron ریشه):
+#   /opt/hesabdari/backup.sh /opt/hesabdari/backups
+#
+# به‌طور پیش‌فرض با نقش postgres از طریق سوکت یونیکس (peer auth) وصل می‌شود، پس
+# هیچ رمزی لازم ندارد و هیچ رمزی در فایل نیست. برای استفاده از نقش دیگر:
+#   BACKUP_DB_URL=postgresql://role:pass@host/db /opt/hesabdari/backup.sh /dest
 set -euo pipefail
 
-DEST="${1:-./backups}"
-DB_URL="${BACKUP_DB_URL:-}"
+DEST="${1:-/opt/hesabdari/backups}"
+DB_NAME="${BACKUP_DB_NAME:-hesabdari}"
+KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 
-if [[ -z "$DB_URL" ]]; then
-    echo "خطا: BACKUP_DB_URL ست نشده." >&2
-    echo "باید به نقش cubita_migrate اشاره کند (دارای BYPASSRLS)، نه به نقش برنامه." >&2
-    exit 1
+# دو حالت اتصال: URL صریح، یا peer auth به‌عنوان postgres (پیش‌فرض، بدون رمز).
+if [[ -n "${BACKUP_DB_URL:-}" ]]; then
+    PSQL=(psql --dbname="$BACKUP_DB_URL")
+    PGDUMP=(pg_dump --dbname="$BACKUP_DB_URL")
+    RESTORE=(pg_restore)
+else
+    PSQL=(sudo -u postgres psql --dbname="$DB_NAME")
+    PGDUMP=(sudo -u postgres pg_dump --dbname="$DB_NAME")
+    RESTORE=(sudo -u postgres pg_restore)
 fi
 
-# --- پیش‌بررسی: نقش باید بتواند همه‌ی ردیف‌ها را ببیند -------------------------
-CAN_SEE_ALL="$(psql --dbname="$DB_URL" -At -c \
-    "SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user")"
+fail() { echo "[پشتیبان‌گیری ناموفق] $*" >&2; exit 1; }
+
+# --- دفاع ۱: نقش باید بتواند همه‌ی ردیف‌ها را ببیند ------------------------------
+CAN_SEE_ALL="$("${PSQL[@]}" -At -c \
+    "SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user" 2>/dev/null || true)"
 
 if [[ "$CAN_SEE_ALL" != "t" ]]; then
-    ROLE="$(psql --dbname="$DB_URL" -At -c 'SELECT current_user')"
-    cat >&2 <<MSG
-خطا: نقش «$ROLE» نه BYPASSRLS دارد نه superuser است.
-
-پشتیبانی که با این نقش گرفته شود ردیف‌های جدول‌های مستأجرمحور را نخواهد داشت،
-و این در فایل خروجی به چشم نمی‌آید. پشتیبان‌گیری متوقف شد.
-
-رفع: scripts/setup_db_roles.sql را یک‌بار با superuser اجرا کنید و BACKUP_DB_URL
-را به نقش cubita_migrate بدهید.
-MSG
-    exit 1
+    ROLE="$("${PSQL[@]}" -At -c 'SELECT current_user' 2>/dev/null || echo '؟')"
+    fail "نقش «$ROLE» نه BYPASSRLS دارد نه superuser است.
+اگر RLS فعال باشد، پشتیبانِ گرفته‌شده با این نقش ساختار کامل و صفر ردیف خواهد داشت
+و این در فایل خروجی به چشم نمی‌آید. پشتیبان‌گیری انجام نشد."
 fi
 
 mkdir -p "$DEST"
-STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-FILE="$DEST/cubita_${STAMP}.dump"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+FILE="$DEST/hesabdari_${STAMP}.dump"
 
-# فرمت custom تا بازیابی گزینشی جدول ممکن باشد؛ فشرده‌سازی داخلی دارد.
-pg_dump --dbname="$DB_URL" --format=custom --compress=9 --no-owner --no-privileges --file="$FILE"
+# خروجی به stdout و تغییر مسیر در پوسته، نه --file: وقتی pg_dump زیر
+# `sudo -u postgres` اجرا می‌شود، --file را *به‌عنوان کاربر postgres* می‌نویسد و
+# پوشه‌ی پشتیبان مال کاربر دیگری است، پس Permission denied می‌گیرد. با تغییر مسیر،
+# نوشتن کارِ پوسته است و با دسترسی همان کاربری انجام می‌شود که اسکریپت را اجرا کرده.
+# فایل ناقص باید برود. اسکریپت قبلی وقتی pg_dump شکست می‌خورد یک فایل ۹۶ کیلوبایتیِ
+# نیمه‌کاره جا می‌گذاشت با نامِ درست و تاریخِ امروز — یعنی هر کسی که با `ls` بررسی
+# می‌کرد پشتیبان‌گیری سالم به‌نظرش می‌رسید، در حالی که هفته‌ها بود کار نمی‌کرد.
+# فایل جعلی از نبودِ فایل بدتر است.
+"${PGDUMP[@]}" --format=custom --compress=9 > "$FILE" || {
+    rm -f "$FILE"
+    fail "خودِ pg_dump خطا داد. فایل ناقص حذف شد."
+}
 
-# --- پس‌بررسی: ردیف‌های واقعی در پشتیبان با پایگاه‌داده بخوانند ------------------
-# پشتیبان تست‌نشده پشتیبان نیست. جدول‌های حیاتی با شمارش واقعی سنجیده می‌شوند، نه
-# با شمارش نامِ جدول‌ها — چون دقیقاً همان چیزی است که در حالت خراب سالم به نظر می‌رسد.
-for TABLE in accounts journal_lines; do
-    LIVE="$(psql --dbname="$DB_URL" -At -c "SELECT count(*) FROM $TABLE")"
-    IN_DUMP="$(pg_restore --data-only --table="$TABLE" "$FILE" 2>/dev/null | grep -cE '^[0-9a-f]{8}-' || true)"
-    if [[ "$LIVE" -gt 0 && "$IN_DUMP" -eq 0 ]]; then
-        echo "خطا: جدول $TABLE در پایگاه‌داده $LIVE ردیف دارد ولی در پشتیبان صفر." >&2
-        echo "پشتیبان ناقص است و حذف شد." >&2
-        rm -f "$FILE"
-        exit 1
+[[ -s "$FILE" ]] || { rm -f "$FILE"; fail "فایل پشتیبان خالی است."; }
+
+# --- دفاع ۲: هر جدول پرداده در پایگاه‌داده باید در پشتیبان هم ردیف داشته باشد ------
+# فهرست جدول‌ها از خودِ پایگاه‌داده خوانده می‌شود و نه از یک لیست ثابت، تا با رشد
+# اسکیما خودش را به‌روز نگه دارد. لیست ثابت همان چیزی است که کهنه می‌شود و بعد
+# جدولی که تازه اضافه شده بی‌صدا از راستی‌آزمایی جا می‌ماند.
+# ردیف‌ها بین `COPY ... FROM stdin;` و `\.` شمرده می‌شوند.
+#
+# دو تله‌ای که خودم داخلشان افتادم و اینجا ثبت می‌شوند تا کسی دوباره نیفتد:
+#
+#   ۱. `pg_restore` در نسخه‌ی ۱۴ بدون `-f -` اصلاً کار نمی‌کند و خطا می‌دهد. اگر
+#      stderr را دور بریزید، شمارش همیشه صفر درمی‌آید و اسکریپت *همیشه* پشتیبان
+#      سالم را هم رد می‌کند — بررسی‌ای که چیزی را نمی‌سنجد ولی مطمئن به‌نظر می‌رسد.
+#   ۲. شمارش با `pg_restore -l` (فهرست TABLE DATA) بی‌فایده است: در حالت خرابِ RLS
+#      همه‌ی ورودی‌ها سر جایشان هستند و فقط ردیف‌ها نیستند. دقیقاً همان چیزی که
+#      باید تشخیص داده شود از دید آن روش نامرئی است.
+count_rows_in_dump() {
+    local table="$1" err
+    err="$("${RESTORE[@]}" --data-only --table="$table" -f - "$FILE" 2>&1 >/dev/null)" || {
+        echo "خطای pg_restore برای $table: $err" >&2
+        return 1
+    }
+    "${RESTORE[@]}" --data-only --table="$table" -f - "$FILE" 2>/dev/null \
+        | awk '/^COPY .* FROM stdin;$/ {inside=1; next} /^\\\.$/ {inside=0} inside {n++} END {print n+0}'
+}
+
+MISMATCH=0
+while read -r TABLE LIVE; do
+    [[ -z "$TABLE" ]] && continue
+    IN_DUMP="$(count_rows_in_dump "$TABLE")" || { MISMATCH=1; continue; }
+    if [[ "$IN_DUMP" -eq 0 ]]; then
+        echo "  ✗ $TABLE: پایگاه‌داده $LIVE ردیف — پشتیبان ۰" >&2
+        MISMATCH=1
+    else
+        echo "  ✓ $TABLE: $IN_DUMP ردیف"
     fi
-    echo "  $TABLE: $IN_DUMP ردیف در پشتیبان (پایگاه‌داده: $LIVE)"
-done
+done < <("${PSQL[@]}" -At -F' ' -c "
+    SELECT relname, n_live_tup
+      FROM pg_stat_user_tables
+     WHERE schemaname = 'public' AND n_live_tup > 0
+     ORDER BY n_live_tup DESC
+     LIMIT 12")
 
-echo "پشتیبان ساخته شد: $FILE ($(du -h "$FILE" | cut -f1))"
+if [[ "$MISMATCH" -ne 0 ]]; then
+    rm -f "$FILE"
+    fail "پشتیبان ردیف‌های واقعی را نداشت و حذف شد. پشتیبان‌های قدیمی دست‌نخورده ماندند.
+محتمل‌ترین علت: RLS فعال شده و این نقش BYPASSRLS ندارد."
+fi
 
-# --- نگهداری ------------------------------------------------------------------
-KEEP="${BACKUP_KEEP_DAYS:-30}"
-find "$DEST" -name 'cubita_*.dump' -type f -mtime "+$KEEP" -delete
-echo "پشتیبان‌های قدیمی‌تر از $KEEP روز حذف شدند."
+echo "پشتیبان سالم: $FILE ($(du -h "$FILE" | cut -f1))"
+
+# --- دفاع ۳: چرخش فقط بعد از موفقیت ----------------------------------------------
+# این خط عمداً آخرین خط است. اسکریپت قبلی آن را بی‌قیدوشرط اجرا می‌کرد و همین باعث
+# می‌شد پشتیبان خرابِ امروز، پشتیبان سالمِ دو هفته پیش را هم با خودش ببرد.
+DELETED="$(find "$DEST" -name 'hesabdari_*.dump' -type f -mtime "+$KEEP_DAYS" -print -delete | wc -l)"
+echo "چرخش: $DELETED پشتیبان قدیمی‌تر از $KEEP_DAYS روز حذف شد."
