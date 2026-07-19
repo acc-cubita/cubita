@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -84,6 +84,21 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(200))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    #: نسل توکن‌های معتبر. با هر تغییر رمز یکی زیاد می‌شود و همه‌ی توکن‌های نسل قبل
+    #: را باطل می‌کند.
+    #:
+    #: توکن‌های ما stateless‌اند و لیست ابطال ندارند، پس بدون این ستون عوض کردن رمز
+    #: هیچ اثری روی نشست‌های باز نداشت: کسی که توکن دزدیده بود تا انقضای طبیعی
+    #: (۸ ساعت) دسترسی داشت، حتی بعد از اینکه قربانی رمزش را عوض می‌کرد. یعنی
+    #: دقیقاً کاری که کاربر برای بیرون کردن مهاجم انجام می‌دهد، کار نمی‌کرد.
+    #:
+    #: **چرا شمارنده و نه مهر زمان:** نسخه‌ی اول این را با مقایسه‌ی `iat` توکن و
+    #: زمان آخرین تغییر رمز پیاده کرده بودم. `iat` در JWT ثانیه‌ی صحیح است، پس
+    #: توکنی که در *همان ثانیه‌ی* تغییر رمز صادر شده بود زنده می‌ماند — یک پنجره‌ی
+    #: یک‌ثانیه‌ای که تستش گاهی سبز و گاهی قرمز می‌شد. شمارنده اصلاً ساعت را وارد
+    #: مقایسه نمی‌کند و این دسته از باگ را حذف می‌کند، نه اینکه کوچکش کند.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     # نقش روی User نمی‌نشیند: یک نفر می‌تواند در یک کسب‌وکار حسابدار و در دیگری فقط
     # بیننده باشد، پس نقش خاصیتِ «عضویت» است نه خاصیتِ «کاربر».

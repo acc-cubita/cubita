@@ -31,7 +31,7 @@ def anon_client(db):
 def authed(db, user, tenant_id) -> TestClient:
     app.dependency_overrides[get_db] = lambda: db
     client = TestClient(app)
-    client.headers.update({"Authorization": f"Bearer {create_access_token(user.id, tenant_id)}"})
+    client.headers.update({"Authorization": f"Bearer {create_access_token(user, tenant_id)}"})
     return client
 
 
@@ -233,7 +233,7 @@ def test_a_forged_tenant_claim_in_the_token_is_rejected(db, user):
     app.dependency_overrides[get_db] = lambda: db
     try:
         client = TestClient(app)
-        client.headers.update({"Authorization": f"Bearer {create_access_token(user.id, foreign.id)}"})
+        client.headers.update({"Authorization": f"Bearer {create_access_token(user, foreign.id)}"})
         res = client.get("/api/auth/me")
         assert res.status_code == 403, f"توکن با مستأجر جعلی پذیرفته شد: {res.status_code}"
     finally:

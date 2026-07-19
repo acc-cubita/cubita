@@ -61,6 +61,11 @@ def client_key(request: Request) -> str:
 # کردن کاربری که رمزش را چند بار اشتباه می‌زند.
 _login_limiter = SlidingWindowLimiter(max_events=10, window_seconds=300)
 _signup_limiter = SlidingWindowLimiter(max_events=3, window_seconds=3600)
+_password_reset_limiter = SlidingWindowLimiter(max_events=5, window_seconds=900)
+#: سقف جداگانه بر اساس خودِ ایمیل، نه IP. بدون این، مهاجم از چند IP می‌تواند صندوق
+#: یک نفر مشخص را با ایمیل بازیابی پر کند — که خرابکاری علیه قربانی است، نه علیه ما،
+#: و سقف مبتنی بر IP اصلاً نمی‌بیندش.
+_password_reset_per_email = SlidingWindowLimiter(max_events=3, window_seconds=3600)
 
 
 def limit_login(request: Request) -> None:
@@ -71,7 +76,27 @@ def limit_signup(request: Request) -> None:
     _signup_limiter.check(f"signup:{client_key(request)}")
 
 
+def limit_password_reset(request: Request) -> None:
+    _password_reset_limiter.check(f"reset:{client_key(request)}")
+
+
+def limit_password_reset_for_email(email: str) -> bool:
+    """False یعنی این ایمیل به سقف خورده.
+
+    برخلاف بقیه استثنا نمی‌اندازد: پاسخِ اندپوینت بازیابی باید در همه‌ی حالت‌ها یکسان
+    بماند، وگرنه ۴۲۹ برای ایمیل‌های موجود و ۲۰۲ برای ایمیل‌های ناموجود دقیقاً همان
+    نشت شمارش کاربران را می‌دهد که کل طراحی برای جلوگیری از آن است.
+    """
+    try:
+        _password_reset_per_email.check(f"reset-email:{email.strip().lower()}")
+        return True
+    except HTTPException:
+        return False
+
+
 def reset_all() -> None:
     """فقط برای تست — وگرنه تست‌ها به‌خاطر سقف مشترک روی هم اثر می‌گذارند."""
     _login_limiter.reset()
     _signup_limiter.reset()
+    _password_reset_limiter.reset()
+    _password_reset_per_email.reset()

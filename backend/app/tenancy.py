@@ -24,6 +24,10 @@ TENANT_SETTING = "app.tenant_id"
 #: - users: هویت سراسری است؛ یک حسابدار مستقل می‌تواند عضو چند کسب‌وکار باشد،
 #:   پس تعلقش از طریق memberships بیان می‌شود نه یک ستون روی خودش
 #: - memberships / platform_admins: پیوند هویت به مستأجر و ادمین پلتفرم
+#: - auth_tokens: بازیابی رمز و پذیرش دعوت *قبل از* احراز هویت اجرا می‌شوند، پس در
+#:   لحظه‌ی مصرف هیچ زمینه‌ی مستأجری وجود ندارد و سیاست RLS هر لینک معتبری را هم
+#:   «نامعتبر» نشان می‌داد. محافظت اینجا خودِ راز است نه سیاست؛ توضیح کامل در
+#:   models/auth_token.py
 GLOBAL_TABLES = frozenset(
     {
         "alembic_version",
@@ -33,6 +37,7 @@ GLOBAL_TABLES = frozenset(
         "users",
         "memberships",
         "platform_admins",
+        "auth_tokens",
     }
 )
 

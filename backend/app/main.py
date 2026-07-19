@@ -11,6 +11,7 @@ from app.routers import (
     inventory,
     invoices,
     journal,
+    members,
     payroll,
     period_close,
     quotations,
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(members.router)
 app.include_router(accounts.router)
 app.include_router(journal.router)
 app.include_router(inventory.router)

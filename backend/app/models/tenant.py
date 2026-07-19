@@ -12,7 +12,7 @@
 """
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
@@ -43,6 +43,15 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | suspended | cancelled
+
+    #: سقف کاربران. NULL یعنی نامحدود (پلن سازمانی).
+    #:
+    #: این مقدار موقع ساخت مستأجر از `Plan.max_users` گرفته می‌شود و بعد از آن ثابت
+    #: می‌ماند. **این هنوز اشتراک نیست:** جدول subscriptions وجود ندارد، پس ارتقای
+    #: پلن سقف را خودکار بالا نمی‌برد و باید دستی عوض شود. سقف ثابتِ قابل اعمال از
+    #: `Plan.max_users`ی که تعریف شده بود ولی هیچ‌جا خوانده نمی‌شد بهتر است، چون
+    #: بدون هیچ سقفی دعوت یک منبع نامحدود است.
+    max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="tenant")
 

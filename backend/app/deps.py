@@ -36,18 +36,23 @@ def get_principal(
     if credentials is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "احراز هویت لازم است")
 
-    decoded = decode_access_token(credentials.credentials)
-    if decoded is None:
+    claims = decode_access_token(credentials.credentials)
+    if claims is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "توکن نامعتبر است")
-    user_id, tenant_id = decoded
 
-    user = db.get(User, user_id)
+    user = db.get(User, claims.user_id)
     if user is None or not user.active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "کاربر یافت نشد یا غیرفعال است")
 
+    # توکنی از نسل قبل دیگر معتبر نیست. بدون این بررسی، عوض کردن رمز — کاری که کاربر
+    # دقیقاً برای بیرون کردن مهاجم انجام می‌دهد — تا انقضای طبیعی توکن هیچ اثری روی
+    # نشست‌های باز نداشت.
+    if claims.token_version != (user.token_version or 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "رمز عبور عوض شده است؛ دوباره وارد شوید")
+
     query = db.query(Membership).filter(Membership.user_id == user.id, Membership.status == "active")
-    if tenant_id is not None:
-        query = query.filter(Membership.tenant_id == tenant_id)
+    if claims.tenant_id is not None:
+        query = query.filter(Membership.tenant_id == claims.tenant_id)
     membership = query.first()
 
     if membership is None:

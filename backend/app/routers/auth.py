@@ -2,8 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.rate_limit import limit_login, limit_signup
+from app.rate_limit import (
+    limit_login,
+    limit_password_reset,
+    limit_password_reset_for_email,
+    limit_signup,
+)
 from app.deps import Principal, get_current_user, get_principal
+from app.models.auth_token import PURPOSE_PASSWORD_RESET
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.schemas.auth import (
@@ -14,8 +20,17 @@ from app.schemas.auth import (
     TenantMembershipOut,
     TokenOut,
 )
-from app.security import create_access_token, verify_password
+from app.schemas.members import (
+    AcceptInviteIn,
+    ChangePasswordIn,
+    ForgotPasswordIn,
+    ResetPasswordIn,
+)
+from app.security import create_access_token, set_password, verify_password
+from app.services import members
+from app.services.mailer import send_password_reset
 from app.services.provisioning import signup_new_business
+from app.services.tokens import PASSWORD_RESET_HOURS, consume, issue_password_reset
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, tenant_scope
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -45,7 +60,7 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
         email=data.email,
         password=data.password,
     )
-    return TokenOut(access_token=create_access_token(user.id, tenant.id))
+    return TokenOut(access_token=create_access_token(user, tenant.id))
 
 
 @router.post("/login", response_model=TokenOut, dependencies=[Depends(limit_login)])
@@ -60,7 +75,7 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
 
     # توکن همیشه به یک کسب‌وکار مشخص گره می‌خورد. کاربری که چند عضویت دارد با
     # اولی وارد می‌شود و بعد می‌تواند از /switch-tenant جابه‌جا شود.
-    return TokenOut(access_token=create_access_token(user.id, memberships[0].tenant_id))
+    return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
 
 
 @router.get("/tenants", response_model=list[TenantMembershipOut])
@@ -123,7 +138,89 @@ def switch_tenant(
     if target is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در این کسب‌وکار ندارید")
 
-    return TokenOut(access_token=create_access_token(principal.user.id, target.tenant_id))
+    return TokenOut(access_token=create_access_token(principal.user, target.tenant_id))
+
+
+@router.post("/forgot-password", status_code=202)
+def forgot_password(
+    data: ForgotPasswordIn,
+    _limit=Depends(limit_password_reset),
+    db: Session = Depends(get_db),
+):
+    """لینک بازیابی می‌فرستد — و همیشه ۲۰۲ برمی‌گرداند.
+
+    پاسخ عمداً به وجود یا نبودِ ایمیل حساس نیست. اگر برای ایمیل ناموجود ۴۰۴ بدهیم،
+    این اندپوینت به ابزار فهرست‌برداری کاربران تبدیل می‌شود: مهاجم ایمیل‌ها را یکی
+    یکی می‌فرستد و می‌فهمد کدام‌ها مشتری کوبیتا هستند. همان دلیل، سقفِ مبتنی بر
+    ایمیل هم اینجا به‌جای ۴۲۹ بی‌صدا رد می‌شود.
+    """
+    email = data.email.strip().lower()
+    if limit_password_reset_for_email(email):
+        user = db.query(User).filter(User.email == email).first()
+        if user is not None and user.active:
+            raw = issue_password_reset(db, user.id)
+            send_password_reset(to=user.email, name=user.name, token=raw, valid_hours=PASSWORD_RESET_HOURS)
+
+    return {"detail": "اگر این ایمیل در سیستم ثبت شده باشد، لینک بازیابی برایش ارسال شد"}
+
+
+@router.post("/reset-password", response_model=TokenOut)
+def reset_password(data: ResetPasswordIn, db: Session = Depends(get_db)):
+    """رمز تازه را ست می‌کند و کاربر را وارد می‌کند.
+
+    ورود خودکار عمدی است: کسی که همین حالا مالکیت صندوق ایمیل را اثبات کرده، لازم
+    نیست بلافاصله رمزی را که تازه ساخته دوباره تایپ کند.
+
+    ترتیب اهمیت دارد: توکن **بعد از** `set_password` صادر می‌شود تا نسل تازه را
+    داشته باشد. اگر قبلش صادر می‌شد، همان بررسی‌ای که نشست‌های قدیمی را می‌کشد این
+    توکنِ تازه را هم می‌کشت و کاربر بلافاصله بعد از بازیابی بیرون می‌ماند.
+    """
+    token = consume(db, data.token, purpose=PURPOSE_PASSWORD_RESET)
+    if token is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این لینک نامعتبر یا منقضی شده است")
+
+    user = db.get(User, token.user_id)
+    if user is None or not user.active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این لینک نامعتبر یا منقضی شده است")
+
+    set_password(user, data.password)
+    db.flush()
+
+    memberships = _active_memberships(db, user)
+    if not memberships:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در هیچ کسب‌وکاری ندارید")
+
+    return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
+
+
+@router.post("/accept-invite", response_model=TokenOut)
+def accept_invite(data: AcceptInviteIn, db: Session = Depends(get_db)):
+    """دعوت همکار (یا اولین ورود مشتریِ تازه‌خریده) را می‌پذیرد."""
+    user, tenant_id = members.accept_invite(
+        db, raw_token=data.token, password=data.password, name=data.name
+    )
+    return TokenOut(access_token=create_access_token(user, tenant_id))
+
+
+@router.post("/change-password", response_model=TokenOut)
+def change_password(
+    data: ChangePasswordIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """تغییر رمز توسط کاربری که وارد شده.
+
+    رمز فعلی دوباره پرسیده می‌شود: بدون آن، هر کسی که لپ‌تاپِ باز یا توکنِ دزدیده‌شده
+    داشته باشد می‌تواند رمز را عوض کند و صاحب اصلی را برای همیشه بیرون بگذارد.
+    """
+    if not verify_password(data.current_password, principal.user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "رمز عبور فعلی نادرست است")
+
+    set_password(principal.user, data.new_password)
+    db.flush()
+
+    # همه‌ی نشست‌های دیگر همین حالا باطل شدند؛ توکن تازه جای همین نشست را می‌گیرد.
+    return TokenOut(access_token=create_access_token(principal.user, principal.tenant_id))
 
 
 @router.get("/me", response_model=MeOut)

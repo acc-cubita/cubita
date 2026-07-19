@@ -36,7 +36,7 @@ def real_auth_client(db, user, tenant_id):
     from app.tenant_context import get_current_tenant, set_current_tenant
 
     app.dependency_overrides[get_db] = lambda: db
-    token = create_access_token(user.id, tenant_id)
+    token = create_access_token(user, tenant_id)
 
     # ContextVar عمداً خالی می‌شود. fixture `db` آن را از قبل پر می‌کند و همان
     # پر بودن، باگ اصلی را پوشانده بود: در سرور واقعی هیچ‌چیز از قبل ستش نمی‌کند،

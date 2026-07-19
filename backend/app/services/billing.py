@@ -123,16 +123,32 @@ def _deliver(db: Session, purchase: Purchase) -> None:
     اعلان باخبر می‌شود تا دستی رسیدگی کند — که دقیقاً همان رفتار قبلی است، فقط
     حالا به‌عنوان مسیر پشتیبان نه مسیر اصلی.
     """
+    from app.services.mailer import send_welcome_after_purchase
     from app.services.provisioning import provision_for_purchase
+    from app.services.tokens import INVITE_DAYS
 
-    credentials = None
+    result = None
     try:
         with db.begin_nested():
-            credentials = provision_for_purchase(db, purchase)
+            result = provision_for_purchase(db, purchase)
     except Exception as err:  # noqa: BLE001 - تحویل ناموفق نباید پرداخت را برگرداند
         logging.exception(f"provisioning failed for purchase {purchase.id}: {err}")
 
-    send_purchase_paid_notification(purchase, credentials=credentials)
+    # ایمیلِ خودِ مشتری اول فرستاده می‌شود، چون این همان تحویل است؛ اعلانِ مدیر فقط
+    # اطلاع‌رسانی است. ترتیب اهمیت دارد فقط از این نظر که اگر SMTP کند یا خراب باشد،
+    # مهم‌ترین پیام اولین شانس را داشته باشد.
+    if result is not None:
+        tenant, setup_token = result
+        if setup_token:
+            send_welcome_after_purchase(
+                to=purchase.customer_email,
+                name=purchase.customer_name or "مشتری گرامی",
+                tenant_name=tenant.name,
+                token=setup_token,
+                valid_days=INVITE_DAYS,
+            )
+
+    send_purchase_paid_notification(purchase, provisioned=result)
 
 
 def list_purchases(db: Session) -> list[Purchase]:

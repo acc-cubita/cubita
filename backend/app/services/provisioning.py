@@ -14,9 +14,11 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models.tenant import Membership, Tenant
 from app.models.user import User
 from app.seed import provision_tenant
+from app.services import tokens
 
 MAX_SLUG_LEN = 60
 
@@ -75,6 +77,9 @@ def signup_new_business(
         owner_email=email,
         owner_password=password,
         owner_name=owner_name,
+        # ثبت‌نام مستقیم هنوز پلنی نخریده، پس سقف آزمایشی می‌گیرد. بدون هیچ سقفی،
+        # دعوت یک منبع نامحدود است و هر ثبت‌نام رایگان می‌تواند بی‌نهایت کاربر بسازد.
+        max_users=get_settings().signup_default_max_users,
     )
     user = db.query(User).filter(User.email == email).one()
     return tenant, user
@@ -84,29 +89,61 @@ def provision_for_purchase(db: Session, purchase) -> tuple[Tenant, str] | None:
     """بعد از پرداخت تأییدشده، کسب‌وکار مشتری را می‌سازد.
 
     idempotent است چون callback زرین‌پال می‌تواند دوباره بیاید و کاربر هم ممکن
-    است صفحه را رفرش کند. اگر این کاربر از قبل مستأجری دارد، چیزی ساخته نمی‌شود
-    و همان برگردانده می‌شود.
+    است صفحه را رفرش کند. اگر این کاربر از قبل مستأجری دارد، کسب‌وکار تازه‌ای ساخته
+    نمی‌شود و فقط سقف کاربرانش با پلن تازه به‌روز می‌شود (یعنی ارتقا).
 
-    رمز موقت برمی‌گرداند تا فراخواننده ایمیلش کند. ذخیره نمی‌شود.
+    **توکن راه‌اندازی برمی‌گرداند، نه رمز موقت.** قبلاً رمز موقت ساخته می‌شد و در
+    ایمیلِ اعلانِ *مدیر* می‌رفت تا او دستی به مشتری بدهد؛ یعنی مشتری بعد از پرداخت
+    منتظر یک انسان می‌ماند و رمزش از یک صندوق ایمیل واسط عبور می‌کرد. حالا لینک
+    مستقیماً به خودِ مشتری می‌رود و رمز را خودش انتخاب می‌کند، پس هیچ رمزی هیچ‌جا
+    نوشته نمی‌شود.
+
+    رشته‌ی خالی یعنی مشتریِ موجود بود و لینک راه‌اندازی لازم نیست.
     """
     email = (purchase.customer_email or "").strip().lower()
     if not email:
         return None
+
+    plan_max_users = purchase.plan.max_users if purchase.plan else None
 
     user = db.query(User).filter(User.email == email).first()
     if user is not None:
         membership = db.query(Membership).filter(Membership.user_id == user.id).first()
         if membership is not None:
             # از قبل مشتری است — خرید جدید یعنی تمدید/ارتقا، نه کسب‌وکار جدید.
-            return db.get(Tenant, membership.tenant_id), ""
+            tenant = db.get(Tenant, membership.tenant_id)
+            if tenant is not None and _is_upgrade(tenant.max_users, plan_max_users):
+                tenant.max_users = plan_max_users
+                db.flush()
+            return tenant, ""
 
-    temp_password = uuid4().hex[:16]
     tenant = provision_tenant(
         db,
         name=purchase.business_name or purchase.customer_name or "کسب‌وکار جدید",
         slug=unique_slug(db, purchase.business_name or purchase.customer_name or "business"),
         owner_email=email,
-        owner_password=temp_password,
+        # رمز تصادفیِ دورانداختنی: حساب تا وقتی مشتری لینک راه‌اندازی را باز نکند
+        # رمز قابل استفاده ندارد، و این رمز هرگز جایی نمایش داده یا ایمیل نمی‌شود.
+        owner_password=uuid4().hex,
         owner_name=purchase.customer_name or "مدیر",
+        max_users=plan_max_users,
     )
-    return tenant, temp_password
+    owner = db.query(User).filter(User.email == email).one()
+    return tenant, tokens.issue_invite(db, owner.id, tenant.id)
+
+
+def _is_upgrade(current: int | None, new: int | None) -> bool:
+    """آیا پلن تازه سقف را بالا می‌برد؟
+
+    None یعنی نامحدود، پس در مقایسه بزرگ‌ترین مقدار است — نه کوچک‌ترین. بدون این
+    تفکیک، خریدِ پلن سازمانی (نامحدود) روی پلن حرفه‌ای (۵ کاربر) به‌عنوان «تنزل»
+    خوانده می‌شد و سقف پایین می‌ماند.
+
+    تنزل عمداً اعمال نمی‌شود: پایین آوردن سقف روی کسب‌وکاری که همین حالا کاربران
+    فعال دارد باید تصمیم آگاهانه باشد، نه اثر جانبیِ یک callback پرداخت.
+    """
+    if current is None:
+        return False  # از نامحدود بالاتر نمی‌رود
+    if new is None:
+        return True  # به نامحدود می‌رسد
+    return new > current

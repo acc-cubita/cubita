@@ -6,13 +6,18 @@ from app.config import get_settings
 from app.models.billing import Purchase
 
 
-def send_purchase_paid_notification(purchase: Purchase, credentials=None) -> None:
+def send_purchase_paid_notification(purchase: Purchase, provisioned=None) -> None:
     """به مدیر ایمیل می‌زند که یک خرید جدید پرداخت شده.
 
-    credentials نتیجه‌ی provisioning خودکار است: (مستأجر، رمز موقت) در صورت موفقیت،
-    یا None اگر تحویل خودکار شکست خورده باشد. در حالت دوم ایمیل صراحتاً می‌گوید که
-    تحویل دستی لازم است — چون پول گرفته شده و سکوت در این حالت یعنی مشتری منتظر
-    می‌ماند بدون اینکه کسی بداند.
+    `provisioned` نتیجه‌ی provisioning خودکار است: (مستأجر، توکن راه‌اندازی) در صورت
+    موفقیت، یا None اگر شکست خورده باشد. در حالت دوم ایمیل صراحتاً می‌گوید که تحویل
+    دستی لازم است — چون پول گرفته شده و سکوت در این حالت یعنی مشتری منتظر می‌ماند
+    بدون اینکه کسی بداند.
+
+    **توکن راه‌اندازی عمداً در این ایمیل نمی‌آید.** قبلاً رمز موقت مشتری اینجا نوشته
+    می‌شد تا مدیر دستی تحویلش دهد؛ حالا لینک مستقیم به خودِ مشتری می‌رود و این ایمیل
+    فقط اطلاع‌رسانی است. نوشتن آن توکن اینجا یعنی صندوق ایمیل مدیر کلید ورود به حساب
+    هر مشتری تازه را نگه می‌دارد.
 
     عمداً هیچ استثنایی بیرون نمی‌اندازد: شکست ارسال ایمیل نباید verify کردن پرداخت
     واقعی را خراب کند.
@@ -21,15 +26,14 @@ def send_purchase_paid_notification(purchase: Purchase, credentials=None) -> Non
     if not settings.smtp_host or not settings.admin_notify_email:
         return
 
-    if credentials:
-        tenant, temp_password = credentials
-        if temp_password:
+    if provisioned:
+        tenant, setup_token = provisioned
+        if setup_token:
             delivery = (
-                f"\n✅ کسب‌وکار خودکار ساخته شد.\n"
+                f"\n✅ کسب‌وکار خودکار ساخته شد و لینک راه‌اندازی به خودِ مشتری ایمیل شد.\n"
                 f"   شناسه: {tenant.slug}\n"
                 f"   ورود: {purchase.customer_email}\n"
-                f"   رمز موقت: {temp_password}\n"
-                f"   این رمز فقط همین‌جا نمایش داده می‌شود و ذخیره نشده؛ به مشتری بدهید.\n"
+                f"   اگر مشتری گفت لینک نرسیده، از او بخواهید «رمز عبور را فراموش کرده‌ام» را بزند.\n"
             )
         else:
             delivery = f"\n✅ این مشتری از قبل کسب‌وکار دارد ({tenant.slug}) — احتمالاً تمدید یا ارتقاست.\n"
