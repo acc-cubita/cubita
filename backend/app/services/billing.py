@@ -107,9 +107,32 @@ def verify_purchase_callback(db: Session, authority: str, ok: bool) -> Purchase 
     db.refresh(purchase)
 
     if purchase.status == "paid":
-        send_purchase_paid_notification(purchase)
+        _deliver(db, purchase)
 
     return purchase
+
+
+def _deliver(db: Session, purchase: Purchase) -> None:
+    """تحویل خودکار پلن خریداری‌شده.
+
+    قبلاً فقط ایمیل اعلان به مدیر می‌رفت و ساخت کسب‌وکار دستی انجام می‌شد. حالا
+    کسب‌وکار همین‌جا ساخته می‌شود.
+
+    شکست تحویل نباید پرداخت را باطل کند: پول از حساب مشتری رفته و وضعیت «paid»
+    حقیقت دارد. اگر provisioning بشکند، خرید پرداخت‌شده باقی می‌ماند و ادمین از
+    اعلان باخبر می‌شود تا دستی رسیدگی کند — که دقیقاً همان رفتار قبلی است، فقط
+    حالا به‌عنوان مسیر پشتیبان نه مسیر اصلی.
+    """
+    from app.services.provisioning import provision_for_purchase
+
+    credentials = None
+    try:
+        with db.begin_nested():
+            credentials = provision_for_purchase(db, purchase)
+    except Exception as err:  # noqa: BLE001 - تحویل ناموفق نباید پرداخت را برگرداند
+        logging.exception(f"provisioning failed for purchase {purchase.id}: {err}")
+
+    send_purchase_paid_notification(purchase, credentials=credentials)
 
 
 def list_purchases(db: Session) -> list[Purchase]:
