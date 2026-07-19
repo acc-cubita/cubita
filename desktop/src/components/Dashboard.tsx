@@ -23,6 +23,7 @@ import { InventoryPage } from '../pages/InventoryPage'
 import { AccountingPage } from '../pages/AccountingPage'
 import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
+import { TeamPage } from '../pages/TeamPage'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -36,6 +37,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
   reports: 'گزارش‌ها',
+  team: 'کاربران',
   help: 'راهنما',
 }
 
@@ -219,6 +221,7 @@ export function Dashboard({
               <Reports token={token} accounts={accounts} />
             </div>
           )}
+          {page === 'team' && <TeamPage token={token} me={me} />}
           {page === 'help' && <HelpPage />}
         </main>
       </div>

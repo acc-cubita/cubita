@@ -8,6 +8,21 @@ export interface MeResponse {
   role_key: string
   role_name: string
   permissions: Record<string, string[]>
+  tenant_id: string
+  tenant_name: string
+}
+
+/** آیا این نقش اجازه‌ی یک اکشن روی یک ماژول را دارد؟ همان منطق سمت سرور.
+ *
+ * سرور همچنان مرجع است و هر درخواست را خودش می‌سنجد؛ این فقط برای پنهان کردن
+ * دکمه‌ای است که به ۴۰۳ می‌خورد. اگر جایی این را به‌جای بررسی سرور بگیرند، مجوز
+ * به کلاینت منتقل می‌شود — که یعنی اصلاً مجوزی وجود ندارد. */
+export function can(me: MeResponse, module: string, action: string): boolean {
+  for (const key of [module, '*']) {
+    const actions = me.permissions[key]
+    if (actions && (actions.includes(action) || actions.includes('*'))) return true
+  }
+  return false
 }
 
 export async function login(email: string, password: string): Promise<string> {
@@ -753,3 +768,61 @@ export const createTreasuryReceipt = (token: string, data: TreasuryTransactionIn
 
 export const createTreasuryPayment = (token: string, data: TreasuryTransactionIn) =>
   authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/payments', data)
+
+// --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
+
+export interface Member {
+  id: string
+  user_id: string
+  name: string
+  email: string
+  role_key: string
+  role_name: string
+  status: 'active' | 'invited' | 'disabled'
+  is_me: boolean
+}
+
+export interface MemberList {
+  members: Member[]
+  seats: { used: number; limit: number | null }
+}
+
+export const fetchMembers = (token: string) => authedGet<MemberList>(token, '/api/members')
+
+export const inviteMember = (token: string, data: { email: string; name: string; role_key: string }) =>
+  authedSend<{ member: Member; email_sent: boolean }>(token, 'POST', '/api/members/invite', data)
+
+export const changeMemberRole = (token: string, membershipId: string, roleKey: string) =>
+  authedSend<Member>(token, 'PATCH', `/api/members/${membershipId}/role`, { role_key: roleKey })
+
+export const setMemberActive = (token: string, membershipId: string, active: boolean) =>
+  authedSend<Member>(token, 'PATCH', `/api/members/${membershipId}/status`, { active })
+
+export const changePassword = (token: string, currentPassword: string, newPassword: string) =>
+  authedSend<{ access_token: string }>(token, 'POST', '/api/auth/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  })
+
+/** درخواست‌های بدون احراز هویت. پاسخ خطا همان detail بک‌اند است تا پیام فارسی حفظ شود. */
+async function anonPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw new Error(errBody.detail ?? `درخواست ناموفق بود (${res.status})`)
+  }
+  return res.json()
+}
+
+export const requestPasswordReset = (email: string) =>
+  anonPost<{ detail: string }>('/api/auth/forgot-password', { email })
+
+export const resetPassword = (token: string, password: string) =>
+  anonPost<{ access_token: string }>('/api/auth/reset-password', { token, password })
+
+export const acceptInvite = (token: string, password: string, name?: string) =>
+  anonPost<{ access_token: string }>('/api/auth/accept-invite', { token, password, name: name || null })

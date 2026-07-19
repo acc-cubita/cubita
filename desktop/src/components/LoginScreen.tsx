@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, ShoppingCart, BookOpen, Landmark } from 'lucide-react'
-import { login, fetchMe, type MeResponse } from '../api'
+import { login, fetchMe, requestPasswordReset, type MeResponse } from '../api'
 
 const FEATURES = [
   { icon: ShoppingCart, text: 'فروش، خرید و انبارداری یکپارچه' },
@@ -14,6 +14,8 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: Me
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [mode, setMode] = useState<'login' | 'forgot'>('login')
+  const [notice, setNotice] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -29,6 +31,85 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: Me
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await requestPasswordReset(email)
+      // پیام سرور عمداً نمی‌گوید ایمیل وجود داشت یا نه؛ همان را نشان می‌دهیم تا
+      // رابط کاربری چیزی را لو ندهد که خودِ اندپوینت پنهانش کرده.
+      setNotice(res.detail)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <div className="login-shell">
+        <div className="login-brand">
+          <div className="login-brand-blobs" aria-hidden="true">
+            <span className="blob blob-1" />
+            <span className="blob blob-2" />
+            <span className="blob blob-3" />
+          </div>
+          <div className="login-brand-content">
+            <div className="login-brand-mark">C</div>
+            <h2 className="login-brand-title">کوبیتا</h2>
+            <p className="login-brand-tagline">لینک بازیابی را برایتان ایمیل می‌کنیم</p>
+          </div>
+        </div>
+
+        <div className="login-form-panel">
+          <form className="login-card" onSubmit={handleForgot}>
+            <h1>بازیابی رمز عبور</h1>
+            <p className="login-card-subtitle">
+              ایمیل حسابتان را وارد کنید. لینک بازیابی تا یک ساعت معتبر است.
+            </p>
+
+            <label>
+              ایمیل
+              <div className="input-with-icon">
+                <Mail size={16} className="input-icon" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoFocus
+                  required
+                />
+              </div>
+            </label>
+
+            {error && <div className="error">{error}</div>}
+            {notice && <div className="notice">{notice}</div>}
+
+            <button type="submit" className="btn-primary login-submit" disabled={loading}>
+              {loading ? 'در حال ارسال...' : 'ارسال لینک بازیابی'}
+              {!loading && <ArrowLeft size={15} />}
+            </button>
+
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setMode('login')
+                setError(null)
+                setNotice(null)
+              }}
+            >
+              بازگشت به صفحه‌ی ورود
+            </button>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -104,6 +185,17 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: Me
           <button type="submit" className="btn-primary login-submit" disabled={loading}>
             {loading ? 'در حال ورود...' : 'ورود'}
             {!loading && <ArrowLeft size={15} />}
+          </button>
+
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setMode('forgot')
+              setError(null)
+            }}
+          >
+            رمز عبور را فراموش کرده‌ام
           </button>
         </form>
       </div>

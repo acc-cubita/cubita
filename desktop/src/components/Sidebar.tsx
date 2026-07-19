@@ -11,6 +11,7 @@ import {
   BarChart3,
   CreditCard,
   HelpCircle,
+  UserCog,
   LogOut,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -27,6 +28,7 @@ export type PageKey =
   | 'integration'
   | 'billing'
   | 'reports'
+  | 'team'
   | 'help'
 
 const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
@@ -47,6 +49,7 @@ const OWNER_ONLY_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] =
 ]
 
 const SECONDARY_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
+  { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
   { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
 ]
 

@@ -64,8 +64,15 @@ def send_email(to: str, subject: str, body: str) -> bool:
         return False
 
 
-def _link(path: str, token: str) -> str:
-    return f"{get_settings().app_url.rstrip('/')}/{path.lstrip('/')}?token={token}"
+def _link(action: str, token: str) -> str:
+    """لینک به ریشه‌ی اپ با پارامتر action — عمداً نه مسیر جدا.
+
+    اپ یک SPA است و روی هاست ایستا هر مسیری جز `/` نیاز به تنظیم fallback دارد.
+    لینکی مثل `/reset-password?token=...` روی میزبانی که آن تنظیم را ندارد ۴۰۴
+    می‌دهد — و این خرابی فقط در ایمیلِ مشتریِ قفل‌شده دیده می‌شود، نه در توسعه.
+    پارامتر روی ریشه همیشه index.html را می‌آورد.
+    """
+    return f"{get_settings().app_url.rstrip('/')}/?action={action}&token={token}"
 
 
 def send_password_reset(to: str, name: str, token: str, valid_hours: int) -> bool:
