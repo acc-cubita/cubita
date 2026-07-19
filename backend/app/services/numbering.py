@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.counters import DOC_TYPES
-from app.tenant_context import require_current_tenant
+from app.tenant_context import require_session_tenant
 
 
 def next_document_number(db: Session, doc_type: str, tenant_id: UUID | None = None) -> int:
@@ -28,7 +28,7 @@ def next_document_number(db: Session, doc_type: str, tenant_id: UUID | None = No
     if doc_type not in DOC_TYPES:
         raise ValueError(f"نوع سند ناشناخته: {doc_type}")
 
-    tenant_id = tenant_id or require_current_tenant()
+    tenant_id = tenant_id or require_session_tenant(db)
     number = db.execute(
         text(
             """

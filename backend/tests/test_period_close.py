@@ -56,8 +56,10 @@ def trade(db, user, *, buy_qty, buy_cost, sell_qty, sell_price, when=IN_PERIOD):
 
 
 def retained_earnings_balance(db, as_of=CLOSING) -> Decimal:
+    # cc.RETAINED_EARNINGS حالا نقش است نه کد، پس کد واقعی باید از خود حساب گرفته
+    # شود — همان چیزی که این تغییر ممکنش کرد: مشتری می‌تواند کد را عوض کند.
+    code = get_account(db, cc.RETAINED_EARNINGS).code
     sheet = get_balance_sheet(db, as_of)
-    code = cc.RETAINED_EARNINGS
     for row in sheet["equity"]:
         if row["account_code"] == code:
             return Decimal(row["balance"])

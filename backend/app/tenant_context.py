@@ -28,6 +28,9 @@ from app.tenancy import TENANT_SETTING
 
 _current_tenant: ContextVar[UUID | None] = ContextVar("current_tenant", default=None)
 
+#: کلید نگهداری مستأجر روی خودِ Session
+SESSION_KEY = "cubita_tenant_id"
+
 
 def set_current_tenant(tenant_id: UUID | None) -> None:
     _current_tenant.set(tenant_id)
@@ -37,8 +40,29 @@ def get_current_tenant() -> UUID | None:
     return _current_tenant.get()
 
 
-def require_current_tenant() -> UUID:
-    tenant_id = _current_tenant.get()
+def bind_session_tenant(db: Session, tenant_id: UUID | None) -> None:
+    """مستأجر را روی خودِ Session می‌نشاند.
+
+    **چرا نه فقط ContextVar:** FastAPI اندپوینت‌های sync را در threadpool اجرا
+    می‌کند و هر dependency در نخ خودش با یک *کپی* از زمینه کار می‌کند. مقداری که
+    در get_principal ست شود به نخ اندپوینت نمی‌رسد. این باعث می‌شد خواندن‌ها کار
+    کنند (آن‌ها زمینه را از اتصال DB می‌گیرند) ولی هر نوشتنی بشکند — یعنی بدترین
+    نوع باگ: نامرئی در تست‌های خواندنی، مرگبار در production.
+
+    Session تنها چیزی است که به‌صورت صریح در تمام مسیر درخواست پاس داده می‌شود،
+    پس زمینه به آن می‌چسبد. ContextVar به‌عنوان fallback برای اسکریپت‌ها و
+    مسیرهایی که Session در دست ندارند باقی می‌ماند.
+    """
+    db.info[SESSION_KEY] = tenant_id
+    _current_tenant.set(tenant_id)
+
+
+def session_tenant(db: Session) -> UUID | None:
+    return db.info.get(SESSION_KEY) or _current_tenant.get()
+
+
+def require_session_tenant(db: Session) -> UUID:
+    tenant_id = session_tenant(db)
     if tenant_id is None:
         raise RuntimeError("مستأجر جاری ست نشده — این مسیر نباید بدون زمینه‌ی مستأجر اجرا شود")
     return tenant_id
@@ -52,6 +76,7 @@ def tenant_scope(db: Session, tenant_id: UUID | None):
     دیگر شلیک نمی‌شود، پس مقدار را همین‌جا هم روی اتصال جاری می‌نشانیم.
     """
     token = _current_tenant.set(tenant_id)
+    db.info[SESSION_KEY] = tenant_id
     try:
         apply_tenant_to_transaction(db, tenant_id)
         yield
@@ -65,7 +90,9 @@ def apply_tenant_to_transaction(db: Session, tenant_id: UUID | None) -> None:
 
 @event.listens_for(Session, "after_begin")
 def _bind_tenant_to_new_transaction(session, transaction, connection) -> None:
-    tenant_id = _current_tenant.get()
+    # از Session خوانده می‌شود نه ContextVar، به همان دلیلی که در bind_session_tenant
+    # توضیح داده شد: زیر threadpool، ContextVar قابل اعتماد نیست.
+    tenant_id = session.info.get(SESSION_KEY) or _current_tenant.get()
     if tenant_id is None:
         return
     connection.execute(text("SELECT set_config(:k, :v, true)"), {"k": TENANT_SETTING, "v": str(tenant_id)})
@@ -82,7 +109,7 @@ def _stamp_tenant_on_new_rows(session, flush_context, instances) -> None:
     RLS همچنان لایه‌ی پشتیبان است نه جایگزین: اگر این مهر به هر دلیلی نخورد،
     WITH CHECK در پایگاه‌داده جلوی نوشتن را می‌گیرد.
     """
-    tenant_id = _current_tenant.get()
+    tenant_id = session.info.get(SESSION_KEY) or _current_tenant.get()
     if tenant_id is None:
         return
     for obj in session.new:

@@ -16,7 +16,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.accounting import JournalLine
+from app.models.accounting import Account, JournalLine
 from app.schemas.invoices import (
     PurchaseInvoiceIn,
     PurchaseInvoiceLineIn,
@@ -30,7 +30,9 @@ from app.services.reports import get_balance_sheet, get_income_statement, get_tr
 from tests.factories import main_warehouse, make_contact, make_item
 
 TODAY = date(2026, 3, 15)
-CAPITAL = "3101"
+# سرمایه نقش سیستمی ندارد چون هیچ ثبت خودکاری رویش نمی‌نویسد؛ فقط اینجا برای
+# آورده‌ی اولیه لازم است، پس با کد پیدا می‌شود نه با get_account.
+CAPITAL_CODE = "3101"
 
 
 def inject_capital(db, user, amount: Decimal | int = 500_000_000):
@@ -49,7 +51,12 @@ def inject_capital(db, user, amount: Decimal | int = 500_000_000):
         user,
         [
             JournalLine(account_id=get_account(db, cc.CASH).id, debit=amount, credit=0, description="آورده"),
-            JournalLine(account_id=get_account(db, CAPITAL).id, debit=0, credit=amount, description="آورده"),
+            JournalLine(
+                account_id=db.query(Account).filter(Account.code == CAPITAL_CODE).one().id,
+                debit=0,
+                credit=amount,
+                description="آورده",
+            ),
         ],
     )
     db.commit()

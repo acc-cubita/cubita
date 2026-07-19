@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.accounting import JournalEntry, JournalLine
+from app.models.accounting import Account, JournalEntry, JournalLine
 from app.pagination import MAX_LIMIT, decode_cursor, encode_cursor
 from app.services import chart_codes as cc
 from app.services.common import get_account, next_journal_number
@@ -21,7 +21,9 @@ BASE_DATE = date(2026, 3, 1)
 def make_entries(db, user, count: int, *, all_same_date: bool = False):
     """count سند می‌سازد. با all_same_date همه هم‌تاریخ می‌شوند تا مرز صفحه تست شود."""
     cash = get_account(db, cc.CASH).id
-    capital = get_account(db, "3101").id
+    # سرمایه نقش سیستمی ندارد (منطق ثبت خودکار هرگز رویش نمی‌نویسد)، پس با کد
+    # پیدا می‌شود — همان چیزی که برای حساب‌های معمولی طبیعی است.
+    capital = db.query(Account).filter(Account.code == "3101").one().id
     for i in range(count):
         entry_date = BASE_DATE if all_same_date else BASE_DATE + timedelta(days=i)
         db.add(

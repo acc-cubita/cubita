@@ -19,9 +19,15 @@ class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(f"type IN {ACCOUNT_TYPES}", name="ck_accounts_type"),
         UniqueConstraint("tenant_id", "code", name="uq_accounts_tenant_code"),
+        # هر نقش در هر کسب‌وکار فقط یک حساب دارد. بدون این قید، دو حساب با نقش
+        # «صندوق» ممکن بود وجود داشته باشد و ثبت خودکار بی‌قاعده یکی را برمی‌داشت.
+        UniqueConstraint("tenant_id", "system_role", name="uq_accounts_tenant_system_role"),
     )
 
     code: Mapped[str] = mapped_column(String(20), index=True)
+    #: نقش معنایی برای ثبت خودکار (cash، inventory، cogs و…). برای حساب‌های معمولی
+    #: و سرفصل‌ها NULL است — قید یکتا روی NULL اعمال نمی‌شود، پس تعدادشان آزاد است.
+    system_role: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     type: Mapped[str] = mapped_column(String(20))
     is_group: Mapped[bool] = mapped_column(default=False)

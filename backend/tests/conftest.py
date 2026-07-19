@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app.database import Base, SessionLocal, engine, get_db  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.tenancy import rls_statements, tenant_tables  # noqa: E402
-from app.tenant_context import apply_tenant_to_transaction, set_current_tenant  # noqa: E402
+from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, set_current_tenant  # noqa: E402
 
 # seed در ماژول‌های زیر import می‌شود و همگی روی engine بالا سوارند
 from app.seed import provision_tenant, seed_platform  # noqa: E402
@@ -111,7 +111,8 @@ def db(_schema):
     connection = engine.connect()
     outer = connection.begin()
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
-    set_current_tenant(_schema)
+    # مثل production: زمینه به خودِ Session بچسبد، نه فقط به ContextVar
+    bind_session_tenant(session, _schema)
     apply_tenant_to_transaction(session, _schema)
     try:
         yield session
@@ -134,9 +135,9 @@ def tenant_session(tenant_id):
     تست‌های همزمانی و مرز تراکنش نمی‌توانند از fixture `db` استفاده کنند (آن همه‌چیز
     را برمی‌گرداند)، ولی بدون زمینه‌ی مستأجر هر نوشتنی با خطای RLS رد می‌شود.
     """
-    set_current_tenant(tenant_id)
     session = SessionLocal()
     try:
+        bind_session_tenant(session, tenant_id)
         apply_tenant_to_transaction(session, tenant_id)
         yield session
     finally:

@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.tenant import Membership
 from app.models.user import User
 from app.security import decode_access_token
-from app.tenant_context import apply_tenant_to_transaction, set_current_tenant
+from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -53,7 +53,7 @@ def get_principal(
     if membership is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در این کسب‌وکار ندارید")
 
-    set_current_tenant(membership.tenant_id)
+    bind_session_tenant(db, membership.tenant_id)
     apply_tenant_to_transaction(db, membership.tenant_id)
     return Principal(user, membership)
 

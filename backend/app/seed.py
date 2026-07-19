@@ -15,7 +15,8 @@ from app.models.payroll import PayrollSettings
 from app.models.tenant import Membership, Tenant
 from app.models.user import DEFAULT_ROLES, Role, User
 from app.security import hash_password
-from app.tenant_context import apply_tenant_to_transaction, set_current_tenant
+from app.services import chart_codes as cc
+from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 # پلن‌های نمونه‌ی سایت تجاری cubita.ir — قیمت‌ها placeholder هستند، بعداً توسط ادمین قابل تغییرند
 SAMPLE_PLANS = [
@@ -134,7 +135,7 @@ def provision_tenant(
         db.flush()
 
     apply_tenant_to_transaction(db, tenant.id)
-    set_current_tenant(tenant.id)
+    bind_session_tenant(db, tenant.id)
 
     roles_by_key: dict[str, Role] = {}
     for role_def in DEFAULT_ROLES:
@@ -158,6 +159,9 @@ def provision_tenant(
             account = Account(
                 tenant_id=tenant.id,
                 code=code,
+                # نقش از کد پیش‌فرض گرفته می‌شود، ولی از این به بعد نقش است که
+                # اهمیت دارد: مشتری می‌تواند کد را عوض کند بدون اینکه چیزی بشکند.
+                system_role=cc.ROLE_BY_DEFAULT_CODE.get(code),
                 name=name_,
                 type=type_,
                 is_group=is_group,

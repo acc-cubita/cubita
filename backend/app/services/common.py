@@ -10,12 +10,18 @@ from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 
 
-def get_account(db: Session, code: str) -> Account:
-    account = db.query(Account).filter(Account.code == code).first()
+def get_account(db: Session, system_role: str) -> Account:
+    """حساب را با نقش معنایی‌اش پیدا می‌کند، نه با کدش.
+
+    کد حساب متعلق به مشتری است و بازشماره‌گذاری‌اش کار رایج حسابداران است؛ نقش
+    متعلق به سیستم است و ثابت می‌ماند. جست‌وجو با کد باعث می‌شد اولین مشتری‌ای که
+    چارتش را مرتب می‌کند، همه‌ی ثبت‌های خودکارش بشکند.
+    """
+    account = db.query(Account).filter(Account.system_role == system_role).first()
     if account is None:
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
-            f"حساب با کد {code} در چارت حساب یافت نشد؛ ابتدا seed اولیه را اجرا کنید",
+            f"هیچ حسابی با نقش «{system_role}» علامت‌گذاری نشده؛ چارت حساب این کسب‌وکار ناقص است",
         )
     return account
 
