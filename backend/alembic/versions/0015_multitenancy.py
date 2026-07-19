@@ -187,6 +187,23 @@ def upgrade() -> None:
         "uq_document_counters_tenant_doc", "document_counters", ["tenant_id", "doc_type"]
     )
 
+    # --- ۴.۵) انتقال نقش کاربران به عضویت ------------------------------------------
+    # نقش از users به memberships منتقل می‌شود چون یک نفر می‌تواند در کسب‌وکارهای
+    # مختلف نقش‌های مختلف داشته باشد. بدون این backfill، هر کاربر موجود بعد از
+    # مهاجرت با ۴۰۳ روبه‌رو می‌شد — یعنی همه از سیستم قفل بیرون می‌ماندند.
+    if tenant_id is not None:
+        conn.execute(
+            sa.text(
+                "INSERT INTO memberships (id, user_id, tenant_id, role_id, status) "
+                "SELECT gen_random_uuid(), u.id, :t, u.role_id, "
+                "       CASE WHEN u.active THEN 'active' ELSE 'disabled' END "
+                "  FROM users u WHERE u.role_id IS NOT NULL"
+            ),
+            {"t": tenant_id},
+        )
+
+    op.drop_column("users", "role_id")
+
     # --- ۵) انتقال مقدار دنباله‌ها به شمارنده‌ها ------------------------------------
     if tenant_id is not None:
         for seq, doc_type in SEQUENCE_TO_DOC:
@@ -245,6 +262,18 @@ def downgrade() -> None:
         conn.execute(sa.text(f"CREATE SEQUENCE IF NOT EXISTS {seq} START 1"))
         if last:
             conn.execute(sa.text(f"SELECT setval('{seq}', :n, true)"), {"n": int(last)})
+
+    # نقش را از عضویت به users برمی‌گرداند. اگر کاربری عضو چند مستأجر باشد، یکی
+    # انتخاب می‌شود — ولی گارد بالای این تابع از قبل جلوی چندمستأجری بودن را گرفته.
+    op.add_column("users", sa.Column("role_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=True))
+    conn.execute(
+        sa.text(
+            "UPDATE users u SET role_id = m.role_id "
+            "  FROM (SELECT DISTINCT ON (user_id) user_id, role_id FROM memberships ORDER BY user_id) m "
+            " WHERE m.user_id = u.id"
+        )
+    )
+    op.create_foreign_key("users_role_id_fkey", "users", "roles", ["role_id"], ["id"])
 
     for table, old_name, cols in COMPOSITE_UNIQUES:
         name = f"uq_{table}_tenant_{'_'.join(cols)}"[:63]
