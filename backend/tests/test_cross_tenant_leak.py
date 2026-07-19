@@ -23,6 +23,7 @@ from app.models.user import Role
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.seed import provision_tenant
 from app.services import inventory as inventory_service
+from app.services.provisioning import purge_tenant
 from app.tenancy import tenant_tables
 from app.tenant_context import set_current_tenant
 
@@ -88,8 +89,11 @@ def other_tenant(_schema):
     set_current_tenant(None)
     cleanup = SessionLocal()
     try:
-        # حذف مستأجر آبشاری است، پس همه‌ی ردیف‌هایش با آن می‌روند
-        cleanup.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
+        # حذف مستأجر آبشاری است، پس همه‌ی ردیف‌هایش با آن می‌روند. از مسیر واقعی
+        # عبور می‌کند و نه DELETE خام، چون دفتر حسابرسی فقط‌افزودنی است و تنها
+        # جایی که دریچه‌اش باز می‌شود همان تابع است — اگر تست راه خودش را می‌ساخت،
+        # مسیر واقعی offboarding هرگز سنجیده نمی‌شد.
+        purge_tenant(cleanup, tenant_id)
         cleanup.commit()
     finally:
         cleanup.close()

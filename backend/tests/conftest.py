@@ -39,6 +39,7 @@ get_settings.cache_clear()
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app.audit import append_only_statements  # noqa: E402
 from app.database import Base, SessionLocal, engine, get_db  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.tenancy import rls_statements, tenant_tables  # noqa: E402
@@ -71,6 +72,11 @@ def _schema():
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         for stmt in rls_statements(tenant_tables(Base.metadata)):
+            conn.execute(text(stmt))
+        # trigger فقط‌افزودنیِ دفتر حسابرسی — به همان دلیل RLS بالا: create_all
+        # فقط جدول می‌سازد و از trigger خبر ندارد. بدون این، تست‌ها روی جدولی
+        # اجرا می‌شوند که می‌شود ویرایشش کرد، یعنی مهم‌ترین خاصیتش سنجیده نمی‌شود.
+        for stmt in append_only_statements():
             conn.execute(text(stmt))
 
     session = SessionLocal()

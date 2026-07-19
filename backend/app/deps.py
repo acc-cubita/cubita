@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.audit import bind_session_actor
 from app.config import get_settings
 from app.database import get_db
 from app.models.tenant import Membership
@@ -61,6 +62,10 @@ def get_principal(
 
     bind_session_tenant(db, membership.tenant_id)
     apply_tenant_to_transaction(db, membership.tenant_id)
+    # کاربر روی همان Session می‌نشیند تا رویداد flush بداند چه کسی مسئول این تغییر
+    # است. اگر اینجا نباشد، هر رکورد حسابرسی «سیستم» ثبت می‌شود — یعنی دفتری که
+    # می‌گوید چیزی عوض شد ولی نمی‌گوید توسط چه کسی، که نیمی از فایده‌اش را می‌برد.
+    bind_session_actor(db, user)
     # مستأجر روی زمینه‌ی لاگ هم می‌نشیند. در سیستم چندمستأجری، لاگی که نگوید کدام
     # کسب‌وکار عملاً بی‌فایده است: نمی‌شود فهمید مشکل یک مشتری است یا همه.
     tenant_id_var.set(str(membership.tenant_id))

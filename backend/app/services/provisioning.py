@@ -12,8 +12,10 @@ import unicodedata
 from uuid import uuid4
 
 from fastapi import HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.audit import PURGE_SETTING
 from app.config import get_settings
 from app.models.tenant import Membership, Tenant
 from app.models.user import User
@@ -130,6 +132,22 @@ def provision_for_purchase(db: Session, purchase) -> tuple[Tenant, str] | None:
     )
     owner = db.query(User).filter(User.email == email).one()
     return tenant, tokens.issue_invite(db, owner.id, tenant.id)
+
+
+def purge_tenant(db: Session, tenant_id) -> None:
+    """حذف کامل یک کسب‌وکار — قرینه‌ی provision_tenant.
+
+    **چرا این تابع وجود دارد و کسی مستقیم DELETE نمی‌زند:** دفتر حسابرسی در سطح
+    پایگاه‌داده فقط‌افزودنی است، پس حذف مستأجر به قید FK می‌خورد و شکست می‌خورد.
+    دریچه‌ی `app.audit_purge` تنها راه عبور است، و عمداً اینجا و فقط اینجا باز
+    می‌شود: اگر هر مسیری می‌توانست بازش کند، همان مسیر برای پاک کردن ردِ یک ابطال
+    هم کار می‌کرد و کل خاصیت فقط‌افزودنی بودن تزئینی می‌شد.
+
+    دریچه با `set_config(..., true)` به همین تراکنش محدود است، پس با پایان تراکنش
+    خودش بسته می‌شود — نه با به‌یاد آوردنِ کسی.
+    """
+    db.execute(text("SELECT set_config(:k, 'on', true)"), {"k": PURGE_SETTING})
+    db.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
 
 
 def _is_upgrade(current: int | None, new: int | None) -> bool:

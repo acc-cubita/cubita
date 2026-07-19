@@ -1,4 +1,5 @@
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.audit import AuditLog
 from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.billing import Plan, Purchase
@@ -73,4 +74,5 @@ __all__ = [
     "AuthToken",
     "DocumentCounter",
     "IdempotencyKey",
+    "AuditLog",
 ]
