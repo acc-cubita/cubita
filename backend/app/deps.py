@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.models.tenant import Membership
+from app.observability import tenant_id_var
 from app.models.user import User
 from app.security import decode_access_token
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
@@ -60,6 +61,9 @@ def get_principal(
 
     bind_session_tenant(db, membership.tenant_id)
     apply_tenant_to_transaction(db, membership.tenant_id)
+    # مستأجر روی زمینه‌ی لاگ هم می‌نشیند. در سیستم چندمستأجری، لاگی که نگوید کدام
+    # کسب‌وکار عملاً بی‌فایده است: نمی‌شود فهمید مشکل یک مشتری است یا همه.
+    tenant_id_var.set(str(membership.tenant_id))
     return Principal(user, membership)
 
 

@@ -2,6 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.observability import (
+    REQUEST_ID_HEADER,
+    configure_logging,
+    request_context_middleware,
+    unhandled_exception_handler,
+)
 from app.routers import (
     accounts,
     auth,
@@ -22,8 +28,14 @@ from app.routers import (
 )
 
 settings = get_settings()
+configure_logging()
 
 app = FastAPI(title="Cubita API", docs_url=None if settings.is_production else "/api/docs")
+
+# ترتیب مهم است: middleware زمینه باید بیرونی‌ترین باشد تا شناسه‌ی درخواست برای
+# هر چیزی که داخلش لاگ می‌شود در دسترس باشد.
+app.middleware("http")(request_context_middleware)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +43,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # بدون این، کلاینت در مرورگر شناسه‌ی درخواست را نمی‌بیند و کاربر نمی‌تواند
+    # کد پیگیری را به ما بدهد.
+    expose_headers=[REQUEST_ID_HEADER],
 )
 
 app.include_router(auth.router)
