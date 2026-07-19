@@ -35,6 +35,12 @@ DEST="${1:-/opt/hesabdari/backups}"
 DB_NAME="${BACKUP_DB_NAME:-hesabdari}"
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 
+# نام فایل از نام پایگاه‌داده می‌آید و ثابت نیست. وقتی پیشوند هاردکد بود، پشتیبانِ
+# دمو هم `hesabdari_*.dump` نام می‌گرفت — یعنی دو مقصدِ کاملاً متفاوت فایل‌هایی با
+# نام یکسان تولید می‌کردند. روزی که کسی زیر فشار دنبال پشتیبان بگردد، آن شباهت
+# دقیقاً همان‌جایی است که پشتیبان دمو روی داده‌ی واقعی بازیابی می‌شود.
+PREFIX="$DB_NAME"
+
 # دو حالت اتصال: URL صریح، یا peer auth به‌عنوان postgres (پیش‌فرض، بدون رمز).
 if [[ -n "${BACKUP_DB_URL:-}" ]]; then
     PSQL=(psql --dbname="$BACKUP_DB_URL")
@@ -61,7 +67,7 @@ fi
 
 mkdir -p "$DEST"
 STAMP="$(date +%Y%m%d_%H%M%S)"
-FILE="$DEST/hesabdari_${STAMP}.dump"
+FILE="$DEST/${PREFIX}_${STAMP}.dump"
 
 # خروجی به stdout و تغییر مسیر در پوسته، نه --file: وقتی pg_dump زیر
 # `sudo -u postgres` اجرا می‌شود، --file را *به‌عنوان کاربر postgres* می‌نویسد و
@@ -130,5 +136,5 @@ echo "پشتیبان سالم: $FILE ($(du -h "$FILE" | cut -f1))"
 # --- دفاع ۳: چرخش فقط بعد از موفقیت ----------------------------------------------
 # این خط عمداً آخرین خط است. اسکریپت قبلی آن را بی‌قیدوشرط اجرا می‌کرد و همین باعث
 # می‌شد پشتیبان خرابِ امروز، پشتیبان سالمِ دو هفته پیش را هم با خودش ببرد.
-DELETED="$(find "$DEST" -name 'hesabdari_*.dump' -type f -mtime "+$KEEP_DAYS" -print -delete | wc -l)"
+DELETED="$(find "$DEST" -name "${PREFIX}_*.dump" -type f -mtime "+$KEEP_DAYS" -print -delete | wc -l)"
 echo "چرخش: $DELETED پشتیبان قدیمی‌تر از $KEEP_DAYS روز حذف شد."

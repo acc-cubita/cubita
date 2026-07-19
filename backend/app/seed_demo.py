@@ -9,15 +9,20 @@ import sys
 from datetime import date, timedelta
 
 from app.database import SessionLocal
-from app.models.accounting import JournalEntry, JournalLine
-from app.models.banking import BankAccount
+from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.inventory import Contact, Item, Warehouse
+from app.models.invoices import SalesInvoice
+from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.security import hash_password
 from app.seed import seed
+from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
+
+DEMO_TENANT_SLUG = "default"
 
 # رمزها از محیط خوانده می‌شوند و هیچ مقدار پیش‌فرضی ندارند — تا چرخش رمز دمو نیازی به تغییر کد
 # نداشته باشد و رمز واقعی هیچ‌وقت داخل مخزن ننشیند. رمز DEMO_LOGIN روی سایت تجاری عمومی نمایش
@@ -42,6 +47,23 @@ SAMPLE_CONTACTS = [
 ]
 
 
+def _count_persisted_invoices(tenant_id) -> int:
+    """شمارش از یک نشست *تازه* — و این جزئیات کل نکته‌ی این تابع است.
+
+    شمارش داخل همان نشستی که فاکتورها را ساخته، داده‌ی commit‌نشده‌ی تراکنش خودش را
+    هم می‌بیند. یعنی اگر روزی کسی خط commit را بردارد، آن شمارش همچنان ۲ برمی‌گرداند
+    و گارد سبز می‌ماند در حالی که پایگاه‌داده خالی است — دقیقاً همان باگی که این گارد
+    برای گرفتنش هست. فقط اتصال جدا ثابت می‌کند داده واقعاً ماندگار شده.
+    """
+    check = SessionLocal()
+    try:
+        apply_tenant_to_transaction(check, tenant_id)
+        bind_session_tenant(check, tenant_id)
+        return check.query(SalesInvoice).count()
+    finally:
+        check.close()
+
+
 def seed_demo() -> None:
     if not DEMO_OWNER_PASSWORD or not DEMO_LOGIN_PASSWORD:
         sys.exit(
@@ -54,17 +76,41 @@ def seed_demo() -> None:
 
     db = SessionLocal()
     try:
+        # زمینه‌ی مستأجر باید قبل از هر کوئری بنشیند. بدون آن، RLS صفر ردیف
+        # برمی‌گرداند و اسکریپت با «انبار MAIN پیدا نشد» می‌شکند — خطایی که به
+        # نبودِ داده اشاره می‌کند، در حالی که مسئله نبودِ زمینه است.
+        tenant = db.query(Tenant).filter(Tenant.slug == DEMO_TENANT_SLUG).first()
+        if tenant is None:
+            sys.exit(f"مستأجر «{DEMO_TENANT_SLUG}» ساخته نشد؛ seed اولیه شکست خورده است.")
+        apply_tenant_to_transaction(db, tenant.id)
+        bind_session_tenant(db, tenant.id)
+
         owner = db.query(User).filter(User.email == DEMO_OWNER_EMAIL).first()
-        demo_role = db.query(Role).filter(Role.key == "demo").first()
+        demo_role = db.query(Role).filter(Role.key == "demo", Role.tenant_id == tenant.id).first()
         warehouse = db.query(Warehouse).filter(Warehouse.code == "MAIN").first()
 
-        if not db.query(User).filter(User.email == DEMO_LOGIN_EMAIL).first():
+        # کاربر سراسری است و عضویت چیزی است که او را به این مستأجر و به نقش دمو
+        # وصل می‌کند. تا مهاجرت ۰۰۱۵ نقش روی خودِ کاربر بود (`users.role_id`)؛ آن
+        # ستون حذف شده و هر کدی که هنوز آن را بنویسد در زمان اجرا می‌شکند.
+        demo_user = db.query(User).filter(User.email == DEMO_LOGIN_EMAIL).first()
+        if demo_user is None:
+            demo_user = User(
+                name="کاربر دمو",
+                email=DEMO_LOGIN_EMAIL,
+                hashed_password=hash_password(DEMO_LOGIN_PASSWORD),
+            )
+            db.add(demo_user)
+            db.flush()
+
+        if not db.query(Membership).filter(
+            Membership.user_id == demo_user.id, Membership.tenant_id == tenant.id
+        ).first():
             db.add(
-                User(
-                    name="کاربر دمو",
-                    email=DEMO_LOGIN_EMAIL,
-                    hashed_password=hash_password(DEMO_LOGIN_PASSWORD),
+                Membership(
+                    user_id=demo_user.id,
+                    tenant_id=tenant.id,
                     role_id=demo_role.id,
+                    status="active",
                 )
             )
 
@@ -97,8 +143,11 @@ def seed_demo() -> None:
             return
 
         # سند افتتاحیه: واریز سرمایه به صندوق تا بقیه‌ی تراکنش‌های نمونه معنا داشته باشند
-        cash = get_account(db, "1101")
-        capital = get_account(db, "3101")
+        cash = get_account(db, cc.CASH)
+        # «سرمایه» نقش معنایی ندارد (فقط سود انباشته دارد)، پس با کد پیدا می‌شود.
+        # برای یک seeder این درست است چون خودش همین چارت را ساخته و کدهایش را
+        # می‌داند؛ چیزی که نباید از کد عبور کند منطقِ ثبت است، نه ساختِ داده‌ی نمونه.
+        capital = db.query(Account).filter(Account.code == "3101", Account.tenant_id == tenant.id).one()
         make_journal_entry(
             db,
             date.today() - timedelta(days=30),
@@ -159,8 +208,18 @@ def seed_demo() -> None:
             owner,
         )
 
+        # commit اجباری است. تا فاز ۱.۵ هر سرویس خودش commit می‌کرد، و این اسکریپت
+        # روی همان حساب باز کرده بود. حالا تصمیم commit در get_db() گرفته می‌شود و
+        # این اسکریپت اصلاً از آنجا عبور نمی‌کند — یعنی بدون این خط، هر سه فاکتور
+        # ساخته می‌شوند، شماره می‌گیرند، و بعد موقع close بی‌صدا دور ریخته می‌شوند.
+        # بدترین بخشش این بود که چاپِ پایین همچنان «کامل شد» می‌گفت.
+        db.commit()
+        invoices = _count_persisted_invoices(tenant.id)
+        if invoices != 2:
+            sys.exit(f"انتظار ۲ فاکتور فروش بود ولی {invoices} تا ماندگار شد — داده‌ی دمو ناقص است.")
+
         print(f"دمو کامل شد. ورود دمو: {DEMO_LOGIN_EMAIL} / {DEMO_LOGIN_PASSWORD}  (نقش: فقط‌خواندنی)")
-        print(f"خرید نمونه: {purchase.number}")
+        print(f"خرید نمونه: {purchase.number} — {invoices} فاکتور فروش ماندگار شد")
     finally:
         db.close()
 
