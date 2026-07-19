@@ -11,7 +11,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# `%` باید دوبرابر شود: alembic مقدار را در configparser می‌گذارد و آن `%` را
+# به‌عنوان نحو interpolation می‌خواند. هر URL حاوی درصد — رمز URL-encoded یا
+# پارامتر options برای search_path — بدون این، اجرای مهاجرت را با ValueError
+# می‌شکند و پیام خطا هیچ ربطی به علت واقعی ندارد.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
