@@ -6,11 +6,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 
-class SalesInvoice(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "sales_invoices"
 
     __table_args__ = (
@@ -54,7 +54,7 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item: Mapped["Item"] = relationship()
 
 
-class PurchaseInvoice(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "purchase_invoices"
 
     __table_args__ = (

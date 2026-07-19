@@ -145,6 +145,10 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
         lines=return_lines,
     )
     db.add(sales_return)
+    # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
+    # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
+    # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
+    db.flush()
     for move in stock_moves:
         move.source_id = sales_return.id
         db.add(move)
@@ -257,6 +261,10 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         lines=return_lines,
     )
     db.add(purchase_return)
+    # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
+    # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
+    # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
+    db.flush()
     for move in stock_moves:
         move.source_id = purchase_return.id
         db.add(move)

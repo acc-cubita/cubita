@@ -1,7 +1,18 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Numeric,
+    Sequence,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,6 +76,19 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
     """دفتر موجودی: هر رکورد یک حرکت ورود(+)/خروج(-) است. موجودی فعلی = SUM(qty) به تفکیک کالا/انبار."""
 
     __tablename__ = "stock_ledger"
+
+    #: ترتیب قطعیِ ثبت. کلید اصلی UUID تصادفی است و مرتب کردن بر اساسش بی‌معناست،
+    #: و `entry_date` فقط روز را دارد — پس چند حرکت در یک روز هیچ ترتیب مشخصی
+    #: ندارند. برای موجودی (که جمع ساده است) مهم نیست، ولی بهای تمام‌شده‌ی میانگین
+    #: موزون به ترتیب وابسته است: خرید-فروش-خرید عدد متفاوتی از خرید-خرید-فروش
+    #: می‌دهد. بدون این ستون، بازمحاسبه هر بار می‌توانست عدد دیگری بدهد.
+    #:
+    #: ایندکس عمداً یکتا نیست: خودِ SEQUENCE تضمین می‌کند مقدار تکراری صادر نشود، و
+    #: یکتای سراسری روی جدول مستأجرمحور دقیقاً همان الگویی است که تست انحراف
+    #: (به‌درستی) رد می‌کند.
+    seq: Mapped[int] = mapped_column(
+        BigInteger, Sequence("stock_ledger_seq"), nullable=False, index=True
+    )
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), index=True)

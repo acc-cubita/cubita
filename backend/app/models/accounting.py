@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 ACCOUNT_TYPES = ("asset", "liability", "equity", "income", "expense")
@@ -39,7 +39,7 @@ class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     children: Mapped[list["Account"]] = relationship(back_populates="parent")
 
 
-class JournalEntry(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     """سند حسابداری: واحد اتمی هر رویداد مالی. دفتر روزنامه/کل/تراز همه از JournalLine مشتق می‌شوند."""
 
     __tablename__ = "journal_entries"
@@ -57,6 +57,12 @@ class JournalEntry(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    #: اگر این سند، معکوسِ سند دیگری باشد. رابطه یک‌طرفه و صریح است تا در دفتر
+    #: روزنامه بتوان جفتِ «اصلی و معکوس» را نشان داد؛ جمعشان همیشه صفر است.
+    reverses_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
 
     lines: Mapped[list["JournalLine"]] = relationship(
         back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.id"

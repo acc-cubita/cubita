@@ -176,6 +176,10 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         lines=invoice_lines,
     )
     db.add(invoice)
+    # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
+    # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
+    # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
+    db.flush()
     for move in stock_moves:
         move.source_id = invoice.id
         db.add(move)
@@ -269,6 +273,10 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         lines=invoice_lines,
     )
     db.add(invoice)
+    # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
+    # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
+    # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
+    db.flush()
     for move in stock_moves:
         move.source_id = invoice.id
         db.add(move)
