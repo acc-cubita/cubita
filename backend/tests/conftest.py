@@ -96,6 +96,20 @@ def _schema():
         conn.execute(text(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE"))
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """سقف نرخ بین تست‌ها ریست می‌شود.
+
+    بدون این، تست‌ها روی هم اثر می‌گذارند: چند تست ثبت‌نام پشت‌سرهم به سقف ساعتی
+    می‌خورند و تستِ بعدی به‌خاطر کارِ تستِ قبلی شکست می‌خورد — که اشکال‌زدایی‌اش
+    گمراه‌کننده است.
+    """
+    from app.rate_limit import reset_all
+
+    reset_all()
+    yield
+
+
 @pytest.fixture
 def tenant_id(_schema):
     return _schema

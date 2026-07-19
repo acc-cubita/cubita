@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.rate_limit import limit_login, limit_signup
 from app.deps import Principal, get_current_user, get_principal
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
@@ -30,7 +31,7 @@ def _active_memberships(db: Session, user: User) -> list[Membership]:
     )
 
 
-@router.post("/signup", response_model=TokenOut, status_code=201)
+@router.post("/signup", response_model=TokenOut, status_code=201, dependencies=[Depends(limit_signup)])
 def signup(data: SignupIn, db: Session = Depends(get_db)):
     """ثبت‌نام self-serve — کاربر و کسب‌وکارش با هم ساخته می‌شوند.
 
@@ -47,7 +48,7 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
     return TokenOut(access_token=create_access_token(user.id, tenant.id))
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(limit_login)])
 def login(data: LoginIn, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if user is None or not user.active or not verify_password(data.password, user.hashed_password):
