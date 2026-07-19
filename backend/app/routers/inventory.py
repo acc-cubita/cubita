@@ -37,7 +37,7 @@ def create_warehouse(
 ):
     warehouse = Warehouse(code=data.code, name=data.name)
     db.add(warehouse)
-    db.commit()
+    db.flush()
     db.refresh(warehouse)
     return warehouse
 
@@ -59,7 +59,7 @@ def create_contact(
 ):
     contact = Contact(**data.model_dump())
     db.add(contact)
-    db.commit()
+    db.flush()
     db.refresh(contact)
     return contact
 
@@ -76,7 +76,7 @@ def update_contact(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
     for field, value in data.model_dump().items():
         setattr(contact, field, value)
-    db.commit()
+    db.flush()
     db.refresh(contact)
     return contact
 
@@ -96,7 +96,7 @@ def list_items(
 def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "create"))):
     item = Item(**data.model_dump())
     db.add(item)
-    db.commit()
+    db.flush()
     db.refresh(item)
     return item
 
@@ -113,7 +113,7 @@ def update_item(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(item, key, value)
-    db.commit()
+    db.flush()
     db.refresh(item)
     return item
 

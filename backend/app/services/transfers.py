@@ -68,6 +68,6 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
         move.source_id = transfer.id
         db.add(move)
 
-    db.commit()
+    db.flush()
     db.refresh(transfer)
     return transfer

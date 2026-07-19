@@ -35,6 +35,26 @@ def get_total_stock_qty(db: Session, item_id: UUID) -> Decimal:
     return Decimal(total)
 
 
+def lock_items(db: Session, item_ids) -> None:
+    """ردیف کالاها را تا پایان تراکنش قفل می‌کند.
+
+    قفل روی «کالا» است و نه روی دفتر موجودی، چون دفتر append-only است: قفل کردن
+    ردیف‌های موجود جلوی INSERT ردیف جدید توسط تراکنش دیگر را نمی‌گیرد. ردیف کالا
+    تنها نقطه‌ی مشترکی است که همه‌ی عملیات آن کالا از آن رد می‌شوند، و همین قفل
+    هم‌زمان read-modify-write روی average_cost را هم امن می‌کند.
+
+    ORDER BY لازم است نه تزئینی: بدون ترتیب قطعی، دو فاکتور هم‌زمان روی کالاهای
+    مشترک می‌توانند آن‌ها را به ترتیب معکوس قفل کنند و deadlock بدهند.
+
+    این فقط وقتی معنا دارد که تراکنش تا لحظه‌ی نوشتن باز بماند — که مرز تراکنشِ
+    سطح درخواست در get_db آن را تضمین می‌کند.
+    """
+    ids = sorted(set(item_ids))
+    if not ids:
+        return
+    db.query(Item.id).filter(Item.id.in_(ids)).order_by(Item.id).with_for_update().all()
+
+
 def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesInvoice:
     assert_period_open(db, data.invoice_date)
 
@@ -51,9 +71,10 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         if not item.is_service:
             requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
 
-    # نکته: این کنترل همچنان در برابر همزمانی محافظت نمی‌کند — دو فاکتور موازی روی آخرین
-    # موجودی هر دو می‌توانند پاس شوند. رفعش به قفل سطری (SELECT ... FOR UPDATE) نیاز دارد
-    # که همراه با یکپارچه‌سازی مرزهای تراکنش انجام می‌شود.
+    # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
+    # هر دو پاس می‌شوند و موجودی منفی می‌شود — یعنی کالایی فروخته می‌شود که وجود ندارد.
+    lock_items(db, requested_by_item.keys())
+
     for item_id, requested in requested_by_item.items():
         available = get_stock_qty(db, item_id, data.warehouse_id)
         if available < requested:
@@ -157,7 +178,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         move.source_id = invoice.id
         db.add(move)
 
-    db.commit()
+    db.flush()
     db.refresh(invoice)
     return invoice
 
@@ -169,6 +190,10 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for line in data.lines:
         if line.item_id not in items_by_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
+
+    # average_cost پایین‌تر read-modify-write می‌شود؛ بدون قفل، دو خرید هم‌زمان یکی
+    # محاسبه‌ی دیگری را بازنویسی می‌کند و بهای تمام‌شده برای همیشه غلط می‌ماند.
+    lock_items(db, [line.item_id for line in data.lines])
 
     number = db.execute(text("SELECT nextval('purchase_invoice_number_seq')")).scalar_one()
 
@@ -246,7 +271,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         move.source_id = invoice.id
         db.add(move)
 
-    db.commit()
+    db.flush()
     db.refresh(invoice)
     return invoice
 
@@ -315,6 +340,6 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
             source_type="adjustment",
         )
     )
-    db.commit()
+    db.flush()
     db.refresh(adjustment)
     return adjustment

@@ -190,23 +190,26 @@ def pull_new_orders(
                 except ValueError:
                     invoice_date = date.today()
 
+                # هر سفارش داخل savepoint خودش وارد می‌شود تا یک سفارش خراب فقط خودش
+                # برگردد. قبلاً اینجا db.rollback() بود؛ حالا که کل درخواست یک تراکنش
+                # است، rollback کامل سفارش‌های موفقِ همین اجرا را هم پاک می‌کرد.
                 try:
-                    post_sales_invoice(
-                        db,
-                        SalesInvoiceIn(
-                            invoice_date=invoice_date,
-                            warehouse_id=warehouse.id,
-                            contact_id=None,
-                            description=f"سفارش آنلاین #{order_id} (کد رهگیری {order.get('tracking_code', '')})",
-                            lines=lines,
-                            source_order_id=order_id,
-                        ),
-                        user,
-                    )
+                    with db.begin_nested():
+                        post_sales_invoice(
+                            db,
+                            SalesInvoiceIn(
+                                invoice_date=invoice_date,
+                                warehouse_id=warehouse.id,
+                                contact_id=None,
+                                description=f"سفارش آنلاین #{order_id} (کد رهگیری {order.get('tracking_code', '')})",
+                                lines=lines,
+                                source_order_id=order_id,
+                            ),
+                            user,
+                        )
                     result.imported.append(order_id)
                     already_imported.add(order_id)
                 except Exception as err:  # noqa: BLE001 - می‌خواهیم یک سفارش خراب بقیه‌ی sync را متوقف نکند
-                    db.rollback()
                     result.skipped.append({"order_id": order_id, "reason": str(err)})
 
             if len(orders) < per_page:

@@ -51,7 +51,7 @@ def create_quotation(db: Session, data: SalesQuotationIn, user: User) -> SalesQu
         lines=lines,
     )
     db.add(quotation)
-    db.commit()
+    db.flush()
     db.refresh(quotation)
     return quotation
 
@@ -68,7 +68,7 @@ def update_quotation_status(db: Session, quotation_id: UUID, new_status: str, us
         )
 
     quotation.status = new_status
-    db.commit()
+    db.flush()
     db.refresh(quotation)
     return quotation
 
@@ -100,6 +100,6 @@ def convert_quotation_to_invoice(db: Session, quotation_id: UUID, user: User) ->
 
     quotation.converted_invoice_id = invoice.id
     quotation.status = "converted"
-    db.commit()
+    db.flush()
     db.refresh(invoice)
     return invoice

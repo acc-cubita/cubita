@@ -147,7 +147,7 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
         move.source_id = sales_return.id
         db.add(move)
 
-    db.commit()
+    db.flush()
     db.refresh(sales_return)
     return sales_return
 
@@ -259,6 +259,6 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         move.source_id = purchase_return.id
         db.add(move)
 
-    db.commit()
+    db.flush()
     db.refresh(purchase_return)
     return purchase_return

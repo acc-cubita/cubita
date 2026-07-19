@@ -57,7 +57,7 @@ def create_receipt(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
         created_by_id=user.id,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 
@@ -97,7 +97,7 @@ def create_payment(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
         created_by_id=user.id,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 

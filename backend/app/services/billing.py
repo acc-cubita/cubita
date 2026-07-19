@@ -64,12 +64,12 @@ def create_purchase_request(db: Session, data: PurchaseRequestIn) -> tuple[Purch
     )
     authority = (result.get("data") or {}).get("authority")
     if not authority:
-        db.rollback()
+        # rollback صریح لازم نیست: مرز تراکنش در get_db با بالا رفتن استثنا خودش برمی‌گرداند.
         message = (result.get("errors") or {}).get("message", "خطا در ایجاد تراکنش زرین‌پال")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, message)
 
     purchase.zarinpal_authority = authority
-    db.commit()
+    db.flush()
     db.refresh(purchase)
 
     payment_url = f"{ZARINPAL_STARTPAY_BASE[settings.zarinpal_sandbox]}/{authority}"
@@ -85,7 +85,7 @@ def verify_purchase_callback(db: Session, authority: str, ok: bool) -> Purchase 
 
     if not ok:
         purchase.status = "cancelled"
-        db.commit()
+        db.flush()
         return purchase
 
     settings = get_settings()
@@ -103,7 +103,7 @@ def verify_purchase_callback(db: Session, authority: str, ok: bool) -> Purchase 
         purchase.zarinpal_ref_id = str(data.get("ref_id", authority))
     else:
         purchase.status = "cancelled"
-    db.commit()
+    db.flush()
     db.refresh(purchase)
 
     if purchase.status == "paid":
@@ -131,6 +131,6 @@ def fulfill_purchase(db: Session, purchase_id: UUID, admin_notes: str) -> Purcha
     purchase.status = "fulfilled"
     purchase.fulfilled_at = datetime.now(timezone.utc)
     purchase.admin_notes = admin_notes
-    db.commit()
+    db.flush()
     db.refresh(purchase)
     return purchase

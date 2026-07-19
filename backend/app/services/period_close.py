@@ -79,6 +79,6 @@ def close_period(db: Session, data: FiscalPeriodCloseIn, user: User) -> FiscalPe
         created_by_id=user.id,
     )
     db.add(close)
-    db.commit()
+    db.flush()
     db.refresh(close)
     return close

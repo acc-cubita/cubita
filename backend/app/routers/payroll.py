@@ -37,7 +37,7 @@ def create_employee(
 ):
     employee = Employee(**data.model_dump())
     db.add(employee)
-    db.commit()
+    db.flush()
     db.refresh(employee)
     return employee
 
@@ -62,7 +62,7 @@ def create_salary_contract(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمند یافت نشد")
     contract = SalaryContract(**data.model_dump())
     db.add(contract)
-    db.commit()
+    db.flush()
     db.refresh(contract)
     return contract
 
@@ -83,7 +83,7 @@ def create_payroll_period(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این دوره قبلاً ساخته شده است")
     period = PayrollPeriod(year=data.year, month=data.month)
     db.add(period)
-    db.commit()
+    db.flush()
     db.refresh(period)
     return period
 
@@ -104,7 +104,7 @@ def upsert_attendance(
         record.worked_days = data.worked_days
         record.absent_days = data.absent_days
         record.overtime_hours = data.overtime_hours
-    db.commit()
+    db.flush()
     db.refresh(record)
     return record
 
@@ -185,6 +185,6 @@ def upsert_payroll_settings(
         settings.tax_exemption_annual = data.tax_exemption_annual
         settings.tax_brackets = brackets
         settings.notes = data.notes
-    db.commit()
+    db.flush()
     db.refresh(settings)
     return settings

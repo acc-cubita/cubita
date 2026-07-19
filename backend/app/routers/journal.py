@@ -56,6 +56,6 @@ def create_entry(
         ],
     )
     db.add(entry)
-    db.commit()
+    db.flush()
     db.refresh(entry)
     return entry

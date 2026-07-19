@@ -63,7 +63,7 @@ def create_check(db: Session, data: CheckIn, user: User) -> Check:
         created_by_id=user.id,
     )
     db.add(check)
-    db.commit()
+    db.flush()
     db.refresh(check)
     return check
 
@@ -150,7 +150,7 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
         )
 
     check.status = new_status
-    db.commit()
+    db.flush()
     db.refresh(check)
     return check
 
@@ -187,7 +187,7 @@ def create_bank_transaction(db: Session, data: BankDepositWithdrawIn, user: User
         created_by_id=user.id,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 
@@ -210,7 +210,7 @@ def create_petty_cash_charge(db: Session, data: PettyCashChargeIn, user: User) -
         created_by_id=user.id,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 
@@ -235,7 +235,7 @@ def create_petty_cash_expense(db: Session, data: PettyCashExpenseIn, user: User)
         created_by_id=user.id,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 
@@ -250,7 +250,7 @@ def import_statement_lines(db: Session, bank_account_id: UUID, lines: list[BankS
         for line in lines
     ]
     db.add_all(statement_lines)
-    db.commit()
+    db.flush()
     for line in statement_lines:
         db.refresh(line)
     return statement_lines
@@ -282,7 +282,7 @@ def auto_match_statement(db: Session, bank_account_id: UUID) -> int:
                 matched_count += 1
                 break
 
-    db.commit()
+    db.flush()
     return matched_count
 
 
@@ -303,7 +303,7 @@ def match_statement_line(db: Session, line_id: UUID, transaction_id: UUID) -> Ba
 
     line.matched_transaction_id = txn.id
     txn.is_reconciled = True
-    db.commit()
+    db.flush()
     db.refresh(line)
     return line
 
@@ -318,7 +318,7 @@ def unmatch_statement_line(db: Session, line_id: UUID) -> BankStatementLine:
         if txn is not None:
             txn.is_reconciled = False
         line.matched_transaction_id = None
-        db.commit()
+        db.flush()
         db.refresh(line)
     return line
 

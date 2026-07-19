@@ -234,7 +234,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         payslip.journal_entry_id = journal_entry.id
     period.status = "finalized"
 
-    db.commit()
+    db.flush()
     for payslip in payslips:
         db.refresh(payslip)
     return payslips

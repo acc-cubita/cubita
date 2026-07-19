@@ -48,7 +48,7 @@ def create_bank_account(
         gl_account_id=gl_account_id,
     )
     db.add(account)
-    db.commit()
+    db.flush()
     db.refresh(account)
     return account
 
