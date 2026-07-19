@@ -29,6 +29,13 @@ rollback() {
     echo
     echo "!!! استقرار شکست خورد — برگشت به وضعیت قبل" >&2
     if [[ -f "$ARCHIVE" ]]; then
+        # پوشه‌ها اول خالی می‌شوند و بعد آرشیو باز می‌شود.
+        #
+        # نسخه‌ی اول فقط `tar xzf` روی پوشه می‌زد، و tar فایل‌هایی را که در آرشیو
+        # نیستند پاک نمی‌کند. نتیجه‌اش یک حالت *ترکیبی* بود: main.py قدیمی کنار
+        # فایل‌های تازه‌ای که هرگز وجود نداشتند. آن حالت از هر دو نسخه بدتر است،
+        # چون نه قدیمی است نه جدید و هیچ‌کدام از دو مسیر تست‌شده نیست.
+        rm -rf "$APP_DIR/app" "$APP_DIR/alembic"
         tar xzf "$ARCHIVE" -C "$APP_DIR"
         chown -R hesabdari:hesabdari "$APP_DIR/app" "$APP_DIR/alembic" 2>/dev/null || true
         echo "کد برگردانده شد از: $ARCHIVE" >&2
@@ -65,6 +72,9 @@ echo "وضعیت: $(systemctl is-active $SERVICE || true)"
 
 # --- ۴. استقرار کد ----------------------------------------------------------------
 say "۴/۷ استقرار کد بک‌اند و وب"
+# به همان دلیلِ rollback: پوشه اول خالی، بعد استخراج. وگرنه ماژولی که در نسخه‌ی
+# تازه حذف شده باشد روی دیسک می‌ماند و ممکن است هنوز import شود.
+rm -rf "$APP_DIR/app" "$APP_DIR/alembic"
 tar xzf /tmp/cubita_code.tgz -C "$APP_DIR" app alembic alembic.ini scripts
 chown -R hesabdari:hesabdari "$APP_DIR/app" "$APP_DIR/alembic"
 rm -rf "$APP_DIR/web.old" && cp -a "$APP_DIR/web" "$APP_DIR/web.old"
@@ -82,9 +92,19 @@ grep '^APP_URL=' "$APP_DIR/.env"
 say "۶/۷ مهاجرت پایگاه‌داده"
 cd "$APP_DIR"
 sudo -u hesabdari "$APP_DIR/venv/bin/python" -m alembic upgrade head 2>&1 | grep -E "Running upgrade|ERROR" || true
+
+# نسخه‌ی انتظار از خودِ مهاجرت‌ها خوانده می‌شود، نه از یک عدد هاردکدشده.
+#
+# نسخه‌ی اول این خط `== "0018"` بود و بعد مهاجرت ۰۰۱۹ اضافه شد. نتیجه این بود که
+# مهاجرت‌ها با موفقیت تا ۰۰۱۹ اجرا شدند و بعد همین گارد استقرار را «شکست‌خورده»
+# اعلام کرد و کد را برگرداند — یعنی دقیقاً همان حالت خطرناکی ساخته شد که کل
+# توقف سرویس برای اجتناب از آن بود: اسکیمای تازه با کد قدیمی. هر ثابتی که باید
+# همراه چیز دیگری به‌روز شود، دیر یا زود به‌روز نمی‌شود.
+EXPECTED="$(sudo -u hesabdari "$APP_DIR/venv/bin/python" -m alembic heads 2>/dev/null | awk '{print $1}' | head -1)"
 VERSION="$(sudo -u postgres psql -d hesabdari -tAc 'select version_num from alembic_version;' | tr -d ' ')"
-echo "نسخه‌ی نهایی: $VERSION"
-[[ "$VERSION" == "0018" ]] || { echo "نسخه‌ی مهاجرت انتظار ۰۰۱۸ بود ولی $VERSION است" >&2; false; }
+echo "نسخه‌ی نهایی: $VERSION (انتظار: $EXPECTED)"
+[[ -n "$EXPECTED" && "$VERSION" == "$EXPECTED" ]] \
+    || { echo "نسخه‌ی مهاجرت $VERSION است ولی head برابر $EXPECTED" >&2; false; }
 
 # --- ۷. راه‌اندازی و راستی‌آزمایی ---------------------------------------------------
 say "۷/۷ راه‌اندازی و راستی‌آزمایی"
