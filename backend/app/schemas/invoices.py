@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -57,6 +57,9 @@ class SalesInvoiceOut(BaseModel):
     total_cost: Decimal
     journal_entry_id: UUID | None
     source_order_id: int | None
+    #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
+    voided_at: datetime | None = None
+    void_reason: str = ""
     lines: list[SalesInvoiceLineOut]
 
     model_config = {"from_attributes": True}
@@ -110,6 +113,8 @@ class PurchaseInvoiceOut(BaseModel):
     description: str
     total_amount: Decimal
     journal_entry_id: UUID | None
+    voided_at: datetime | None = None
+    void_reason: str = ""
     lines: list[PurchaseInvoiceLineOut]
 
     model_config = {"from_attributes": True}

@@ -147,6 +147,7 @@ export function Dashboard({
           {page === 'sales' && (
             <SalesPage
               token={token}
+              me={me}
               warehouses={warehouses}
               items={items}
               outbox={invoiceOutbox}
@@ -156,6 +157,7 @@ export function Dashboard({
           {page === 'purchases' && (
             <PurchasesPage
               token={token}
+              me={me}
               warehouses={warehouses}
               items={items}
               outbox={purchaseOutbox}

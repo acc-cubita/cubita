@@ -512,6 +512,8 @@ export interface SalesInvoiceRecord {
   description: string
   total_amount: string
   total_cost: string
+  voided_at: string | null
+  void_reason: string
   lines: (InvoiceLineRecord & { unit_price: string; unit_cost: string })[]
 }
 
@@ -525,6 +527,8 @@ export interface PurchaseInvoiceRecord {
   contact_id: string | null
   description: string
   total_amount: string
+  voided_at: string | null
+  void_reason: string
   lines: (InvoiceLineRecord & { unit_cost: string })[]
 }
 
@@ -826,3 +830,40 @@ export const resetPassword = (token: string, password: string) =>
 
 export const acceptInvite = (token: string, password: string, name?: string) =>
   anonPost<{ access_token: string }>('/api/auth/accept-invite', { token, password, name: name || null })
+
+
+// --- ابطال و چاپ فاکتور ------------------------------------------------------------
+
+export interface VoidResult {
+  reversal_entry_id: string
+  reversal_entry_number: number | null
+}
+
+export const voidSalesInvoice = (token: string, invoiceId: string, reason: string) =>
+  authedSend<VoidResult>(token, 'POST', `/api/sales-invoices/${invoiceId}/void`, { reason })
+
+export const voidPurchaseInvoice = (token: string, invoiceId: string, reason: string) =>
+  authedSend<VoidResult>(token, 'POST', `/api/purchase-invoices/${invoiceId}/void`, { reason })
+
+/** نمای چاپی را در پنجره‌ی تازه باز می‌کند.
+ *
+ * چون اندپوینت احراز هویت می‌خواهد، نمی‌شود صرفاً URL را باز کرد — توکن در هدر
+ * می‌رود نه در آدرس. عمداً هم در آدرس گذاشته نمی‌شود: توکن در نوار آدرس، در
+ * تاریخچه‌ی مرورگر و در لاگ هر پراکسی میانی می‌ماند.
+ */
+export async function openInvoicePrintView(token: string, path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`دریافت نمای چاپی ناموفق بود (${res.status})`)
+  const html = await res.text()
+
+  const win = window.open('', '_blank')
+  if (!win) throw new Error('مرورگر پنجره‌ی تازه را مسدود کرد؛ اجازه‌ی باز کردن پنجره را بدهید.')
+  win.document.write(html)
+  win.document.close()
+}
+
+export const printSalesInvoice = (token: string, invoiceId: string) =>
+  openInvoicePrintView(token, `/api/sales-invoices/${invoiceId}/print`)
+
+export const printPurchaseInvoice = (token: string, invoiceId: string) =>
+  openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)

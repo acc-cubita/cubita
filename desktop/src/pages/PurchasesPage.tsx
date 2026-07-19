@@ -1,6 +1,8 @@
 import { Inbox, PackagePlus } from 'lucide-react'
+import type { MeResponse } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { PurchaseInvoiceForm } from '../components/PurchaseInvoiceForm'
+import { InvoiceList } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
@@ -9,12 +11,14 @@ import { isElectron } from '../platform'
 
 export function PurchasesPage({
   token,
+  me,
   warehouses,
   items,
   outbox,
   onQueued,
 }: {
   token: string
+  me: MeResponse
   warehouses: WarehouseCache[]
   items: ItemCache[]
   outbox: OutboxEntry[]
@@ -28,6 +32,7 @@ export function PurchasesPage({
         description="خرید از تأمین‌کننده را اینجا ثبت کنید؛ موجودی انبار افزایش می‌یابد و بهای تمام‌شده‌ی کالا بر اساس آن محاسبه می‌شود."
       />
       <PurchaseInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={onQueued} />
+      <InvoiceList token={token} me={me} kind="purchase" />
       {isElectron && (
         <SectionCard
           icon={Inbox}

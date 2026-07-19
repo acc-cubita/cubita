@@ -1,6 +1,8 @@
 import { Inbox, ShoppingCart } from 'lucide-react'
+import type { MeResponse } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
+import { InvoiceList } from '../components/InvoiceList'
 import { QuotationForm } from '../components/QuotationForm'
 import { QuotationsList } from '../components/QuotationsList'
 import { SalesReturnForm } from '../components/SalesReturnForm'
@@ -11,12 +13,14 @@ import { isElectron } from '../platform'
 
 export function SalesPage({
   token,
+  me,
   warehouses,
   items,
   outbox,
   onQueued,
 }: {
   token: string
+  me: MeResponse
   warehouses: WarehouseCache[]
   items: ItemCache[]
   outbox: OutboxEntry[]
@@ -30,6 +34,7 @@ export function SalesPage({
         description="برای هر فروش یک فاکتور بزنید — موجودی انبار و سند حسابداری آن به‌طور خودکار ثبت می‌شود. بدون اینترنت هم می‌توانید فاکتور بزنید؛ بعداً با «هم‌گام‌سازی» ارسال می‌شود."
       />
       <SalesInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={onQueued} />
+      <InvoiceList token={token} me={me} kind="sales" />
       {isElectron && (
         <SectionCard
           icon={Inbox}

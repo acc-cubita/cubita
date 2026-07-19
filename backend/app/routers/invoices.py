@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
+from app.models.inventory import Contact
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
@@ -16,6 +18,7 @@ from app.schemas.invoices import (
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.printing import render_invoice
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
 
 router = APIRouter(tags=["invoices"])
@@ -93,3 +96,90 @@ def void_purchase(
 ):
     reversal = void_purchase_invoice(db, invoice_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
+
+
+def _print_response(html: str) -> HTMLResponse:
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+def _party(db: Session, contact_id, fallback: str) -> tuple[str, str]:
+    contact = db.get(Contact, contact_id) if contact_id else None
+    if contact is None:
+        return fallback, ""
+    return contact.name, " — ".join(filter(None, [contact.phone, contact.address]))
+
+
+@router.get("/api/sales-invoices/{invoice_id}/print", response_class=HTMLResponse)
+def print_sales_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    invoice = db.get(SalesInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+
+    name, detail = _party(db, invoice.contact_id, "مشتری نقدی")
+    return _print_response(
+        render_invoice(
+            kind="فاکتور فروش",
+            business_name=principal.membership.tenant.name,
+            number=invoice.number,
+            invoice_date=invoice.invoice_date,
+            party_name=name,
+            party_detail=detail,
+            description=invoice.description,
+            lines=[
+                {
+                    "name": line.item.name,
+                    "description": line.description,
+                    "qty": line.qty,
+                    "unit": line.item.unit,
+                    "unit_price": line.unit_price,
+                }
+                for line in invoice.lines
+            ],
+            total=invoice.total_amount,
+            voided_at=invoice.voided_at,
+            void_reason=invoice.void_reason,
+        )
+    )
+
+
+@router.get("/api/purchase-invoices/{invoice_id}/print", response_class=HTMLResponse)
+def print_purchase_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    invoice = db.get(PurchaseInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+
+    name, detail = _party(db, invoice.contact_id, "تأمین‌کننده نقدی")
+    return _print_response(
+        render_invoice(
+            kind="فاکتور خرید",
+            business_name=principal.membership.tenant.name,
+            number=invoice.number,
+            invoice_date=invoice.invoice_date,
+            party_name=name,
+            party_detail=detail,
+            description=invoice.description,
+            lines=[
+                {
+                    "name": line.item.name,
+                    "description": line.description,
+                    "qty": line.qty,
+                    "unit": line.item.unit,
+                    "unit_price": line.unit_cost,
+                }
+                for line in invoice.lines
+            ],
+            total=invoice.total_amount,
+            voided_at=invoice.voided_at,
+            void_reason=invoice.void_reason,
+        )
+    )
