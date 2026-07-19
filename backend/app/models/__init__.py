@@ -26,6 +26,7 @@ from app.models.returns import (
 )
 from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.treasury import TreasuryTransaction
+from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.user import Role, User
 
 __all__ = [

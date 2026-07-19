@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from fastapi import HTTPException, status
 
+from app.models.counters import DOC_STOCK_TRANSFER
+from app.services.numbering import next_document_number
 from app.models.inventory import Item, StockLedger
 from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.user import User
@@ -52,7 +54,7 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
             )
         )
 
-    number = db.execute(text("SELECT nextval('stock_transfer_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_STOCK_TRANSFER)
     transfer = StockTransfer(
         number=number,
         transfer_date=data.transfer_date,

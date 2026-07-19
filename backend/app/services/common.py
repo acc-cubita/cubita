@@ -4,6 +4,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.models.counters import DOC_JOURNAL_ENTRY
+from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 
@@ -19,7 +21,7 @@ def get_account(db: Session, code: str) -> Account:
 
 
 def next_journal_number(db: Session) -> int:
-    return db.execute(text("SELECT nextval('journal_entry_number_seq')")).scalar_one()
+    return next_document_number(db, DOC_JOURNAL_ENTRY)
 
 
 def make_journal_entry(

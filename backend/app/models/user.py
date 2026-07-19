@@ -1,11 +1,12 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 # نقش‌های پیش‌فرض و اکشن‌های هر ماژول - permissions مثال: {"invoices": ["view", "create"], "accounting": ["view"]}
 DEFAULT_ROLES: list[dict] = [
@@ -56,14 +57,16 @@ DEFAULT_ROLES: list[dict] = [
 ]
 
 
-class Role(UUIDPKMixin, TimestampMixin, Base):
+class Role(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "roles"
 
-    key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "key", name="uq_roles_tenant_key"),
+    )
+
+    key: Mapped[str] = mapped_column(String(50), index=True)
     name: Mapped[str] = mapped_column(String(100))
     permissions: Mapped[dict] = mapped_column(JSONB, default=dict)
-
-    users: Mapped[list["User"]] = relationship(back_populates="role")
 
     def has_permission(self, module: str, action: str) -> bool:
         for mod_key in (module, "*"):
@@ -82,5 +85,6 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(200))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("roles.id"))
-    role: Mapped["Role"] = relationship(back_populates="users")
+    # نقش روی User نمی‌نشیند: یک نفر می‌تواند در یک کسب‌وکار حسابدار و در دیگری فقط
+    # بیننده باشد، پس نقش خاصیتِ «عضویت» است نه خاصیتِ «کاربر».
+    memberships: Mapped[list["Membership"]] = relationship(back_populates="user")  # noqa: F821

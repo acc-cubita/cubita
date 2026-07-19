@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import require_permission
+from app.models.counters import DOC_JOURNAL_ENTRY
+from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
@@ -37,7 +39,7 @@ def create_entry(
     assert_period_open(db, data.entry_date)
 
     # شماره‌ی سند از یک sequence اتمیک پایگاه‌داده گرفته می‌شود تا زیر بار همزمان چند کاربر تصادم نکند
-    number = db.execute(text("SELECT nextval('journal_entry_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_JOURNAL_ENTRY)
 
     entry = JournalEntry(
         number=number,

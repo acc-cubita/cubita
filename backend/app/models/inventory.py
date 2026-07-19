@@ -1,25 +1,30 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 CONTACT_TYPES = ("customer", "supplier", "both")
 
 
-class Warehouse(UUIDPKMixin, TimestampMixin, Base):
+class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "warehouses"
 
-    code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_warehouses_tenant_code"),
+    )
+
+    code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class Contact(UUIDPKMixin, TimestampMixin, Base):
+class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """طرف حساب: مشتری، تأمین‌کننده یا هر دو."""
 
     __tablename__ = "contacts"
@@ -34,12 +39,16 @@ class Contact(UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class Item(UUIDPKMixin, TimestampMixin, Base):
+class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """کالا یا خدمت. average_cost فقط برای کالا به‌روزرسانی می‌شود (روش میانگین موزون)."""
 
     __tablename__ = "items"
 
-    sku: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sku", name="uq_items_tenant_sku"),
+    )
+
+    sku: Mapped[str] = mapped_column(String(50), index=True)
     name: Mapped[str] = mapped_column(String(300))
     category: Mapped[str] = mapped_column(String(100), default="")
     unit: Mapped[str] = mapped_column(String(20), default="عدد")
@@ -52,7 +61,7 @@ class Item(UUIDPKMixin, TimestampMixin, Base):
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
 
 
-class StockLedger(UUIDPKMixin, Base):
+class StockLedger(TenantMixin, UUIDPKMixin, Base):
     """دفتر موجودی: هر رکورد یک حرکت ورود(+)/خروج(-) است. موجودی فعلی = SUM(qty) به تفکیک کالا/انبار."""
 
     __tablename__ = "stock_ledger"
@@ -70,7 +79,7 @@ class StockLedger(UUIDPKMixin, Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockAdjustment(UUIDPKMixin, TimestampMixin, Base):
+class StockAdjustment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """انبارگردانی/تعدیل موجودی دستی (کسری یا اضافی) با سند حسابداری خودکار متناظر."""
 
     __tablename__ = "stock_adjustments"

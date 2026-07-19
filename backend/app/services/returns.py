@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.models.counters import DOC_PURCHASE_RETURN, DOC_SALES_RETURN
+from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
 from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
@@ -126,7 +128,7 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
             )
         )
 
-    number = db.execute(text("SELECT nextval('sales_return_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_SALES_RETURN)
     journal_entry = make_journal_entry(
         db, data.return_date, f"برگشت از فروش شماره {number} (فاکتور فروش {invoice.number})", "sales_return", user, journal_lines
     )
@@ -239,7 +241,7 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             account_id=get_account(db, cc.INVENTORY).id, debit=0, credit=total_amount, description="کاهش موجودی بابت برگشت از خرید"
         ),
     ]
-    number = db.execute(text("SELECT nextval('purchase_return_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_PURCHASE_RETURN)
     journal_entry = make_journal_entry(
         db, data.return_date, f"برگشت از خرید شماره {number} (فاکتور خرید {invoice.number})", "purchase_return", user, journal_lines
     )

@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PURCHASE_INVOICE, DOC_SALES_INVOICE
+from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.inventory import Item, StockAdjustment, StockLedger
 from app.models.invoices import (
@@ -83,7 +85,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
                 f"موجودی «{items_by_id[item_id].name}» کافی نیست (موجود: {available}, درخواستی: {requested})",
             )
 
-    number = db.execute(text("SELECT nextval('sales_invoice_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_SALES_INVOICE)
 
     total_amount = Decimal(0)
     total_cost = Decimal(0)
@@ -148,7 +150,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
             )
         )
 
-    entry_number = db.execute(text("SELECT nextval('journal_entry_number_seq')")).scalar_one()
+    entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
     journal_entry = JournalEntry(
         number=entry_number,
         entry_date=data.invoice_date,
@@ -195,7 +197,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     # محاسبه‌ی دیگری را بازنویسی می‌کند و بهای تمام‌شده برای همیشه غلط می‌ماند.
     lock_items(db, [line.item_id for line in data.lines])
 
-    number = db.execute(text("SELECT nextval('purchase_invoice_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_PURCHASE_INVOICE)
 
     total_amount = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
@@ -243,7 +245,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         ),
     ]
 
-    entry_number = db.execute(text("SELECT nextval('journal_entry_number_seq')")).scalar_one()
+    entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
     journal_entry = JournalEntry(
         number=entry_number,
         entry_date=data.invoice_date,
@@ -304,7 +306,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
 
     journal_entry = None
     if amount > 0:
-        entry_number = db.execute(text("SELECT nextval('journal_entry_number_seq')")).scalar_one()
+        entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
         journal_entry = JournalEntry(
             number=entry_number,
             entry_date=data.adjustment_date,

@@ -1,20 +1,25 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Date, ForeignKey, Numeric, Text
+from sqlalchemy import Date, ForeignKey, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 
-class SalesReturn(UUIDPKMixin, TimestampMixin, Base):
+class SalesReturn(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """برگشت از فروش: بازگشت کالا از مشتری بابت یک فاکتور فروش مشخص. موجودی برمی‌گردد و درآمد/بهای تمام‌شده معکوس می‌شود."""
 
     __tablename__ = "sales_returns"
 
-    number: Mapped[int | None] = mapped_column(nullable=True, unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_sales_returns_tenant_number"),
+    )
+
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     return_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     sales_invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_invoices.id"))
     description: Mapped[str] = mapped_column(Text, default="")
@@ -32,7 +37,7 @@ class SalesReturn(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class SalesReturnLine(UUIDPKMixin, Base):
+class SalesReturnLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_return_lines"
 
     return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_returns.id"))
@@ -46,12 +51,16 @@ class SalesReturnLine(UUIDPKMixin, Base):
     item: Mapped["Item"] = relationship()
 
 
-class PurchaseReturn(UUIDPKMixin, TimestampMixin, Base):
+class PurchaseReturn(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """برگشت از خرید: بازگشت کالا به تأمین‌کننده بابت یک فاکتور خرید مشخص."""
 
     __tablename__ = "purchase_returns"
 
-    number: Mapped[int | None] = mapped_column(nullable=True, unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_purchase_returns_tenant_number"),
+    )
+
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     return_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     purchase_invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_invoices.id"))
     description: Mapped[str] = mapped_column(Text, default="")
@@ -68,7 +77,7 @@ class PurchaseReturn(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class PurchaseReturnLine(UUIDPKMixin, Base):
+class PurchaseReturnLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "purchase_return_lines"
 
     return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"))

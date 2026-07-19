@@ -6,6 +6,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.models.counters import DOC_SALES_QUOTATION
+from app.services.numbering import next_document_number
 from app.models.inventory import Item
 from app.models.invoices import SalesInvoice
 from app.models.quotations import SalesQuotation, SalesQuotationLine
@@ -27,7 +29,7 @@ def create_quotation(db: Session, data: SalesQuotationIn, user: User) -> SalesQu
         if line.item_id not in items_by_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
 
-    number = db.execute(text("SELECT nextval('sales_quotation_number_seq')")).scalar_one()
+    number = next_document_number(db, DOC_SALES_QUOTATION)
 
     total_amount = Decimal(0)
     lines: list[SalesQuotationLine] = []

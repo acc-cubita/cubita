@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
     from app.models.inventory import Contact
@@ -17,7 +18,7 @@ CHECK_STATUSES = ("in_hand", "deposited", "cleared", "bounced", "endorsed", "iss
 PETTY_CASH_TYPES = ("charge", "expense")
 
 
-class BankAccount(UUIDPKMixin, TimestampMixin, Base):
+class BankAccount(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "bank_accounts"
 
     name: Mapped[str] = mapped_column(String(200))
@@ -29,7 +30,7 @@ class BankAccount(UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class Check(UUIDPKMixin, TimestampMixin, Base):
+class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """چک دریافتنی/پرداختنی. چرخه‌ی وضعیت در app/services/banking.py مدیریت و سند حسابداری متناظر می‌سازد."""
 
     __tablename__ = "checks"
@@ -58,7 +59,7 @@ class Check(UUIDPKMixin, TimestampMixin, Base):
     bank_account: Mapped["BankAccount | None"] = relationship("BankAccount")
 
 
-class BankTransaction(UUIDPKMixin, Base):
+class BankTransaction(TenantMixin, UUIDPKMixin, Base):
     """واریز(+)/برداشت(-) در یک حساب بانکی؛ برای تطبیق بانکی، is_reconciled بعداً علامت زده می‌شود."""
 
     __tablename__ = "bank_transactions"
@@ -78,7 +79,7 @@ class BankTransaction(UUIDPKMixin, Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
-class BankStatementLine(UUIDPKMixin, TimestampMixin, Base):
+class BankStatementLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک ردیف واردشده از صورت‌حساب رسمی بانک؛ برای تطبیق با BankTransaction ثبت‌شده در سیستم."""
 
     __tablename__ = "bank_statement_lines"
@@ -94,7 +95,7 @@ class BankStatementLine(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class PettyCashTransaction(UUIDPKMixin, Base):
+class PettyCashTransaction(TenantMixin, UUIDPKMixin, Base):
     """شارژ/هزینه‌کرد تنخواه‌گردان (یک صندوق تنخواه واحد در فاز ۳؛ چندصندوقی می‌تواند فاز بعد باشد)."""
 
     __tablename__ = "petty_cash_transactions"

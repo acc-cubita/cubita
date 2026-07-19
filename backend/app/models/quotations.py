@@ -1,23 +1,27 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 QUOTATION_STATUSES = ("draft", "sent", "accepted", "rejected", "converted")
 
 
-class SalesQuotation(UUIDPKMixin, TimestampMixin, Base):
+class SalesQuotation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """پیش‌فاکتور فروش: پیشنهاد قیمت به مشتری، بدون اثر مالی یا انبار تا زمانی که به فاکتور تبدیل شود."""
 
     __tablename__ = "sales_quotations"
-    __table_args__ = (CheckConstraint(f"status IN {QUOTATION_STATUSES}", name="ck_sales_quotations_status"),)
+    __table_args__ = (
+        CheckConstraint(f"status IN {QUOTATION_STATUSES}", name="ck_sales_quotations_status"),
+        UniqueConstraint("tenant_id", "number", name="uq_sales_quotations_tenant_number"),
+    )
 
-    number: Mapped[int | None] = mapped_column(nullable=True, unique=True, index=True)
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     quotation_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     valid_until: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
@@ -38,7 +42,7 @@ class SalesQuotation(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class SalesQuotationLine(UUIDPKMixin, Base):
+class SalesQuotationLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_quotation_lines"
 
     quotation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_quotations.id"))

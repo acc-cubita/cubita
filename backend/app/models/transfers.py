@@ -1,23 +1,25 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, Text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 
-class StockTransfer(UUIDPKMixin, TimestampMixin, Base):
+class StockTransfer(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """حواله بین‌انباری: انتقال کالا از یک انبار به انبار دیگر. بدون سند حسابداری چون فقط جابه‌جایی موجودی است، نه تغییر ارزش."""
 
     __tablename__ = "stock_transfers"
     __table_args__ = (
         CheckConstraint("from_warehouse_id <> to_warehouse_id", name="ck_stock_transfers_diff_warehouse"),
+        UniqueConstraint("tenant_id", "number", name="uq_stock_transfers_tenant_number"),
     )
 
-    number: Mapped[int | None] = mapped_column(nullable=True, unique=True, index=True)
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     transfer_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     from_warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     to_warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
@@ -30,7 +32,7 @@ class StockTransfer(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class StockTransferLine(UUIDPKMixin, Base):
+class StockTransferLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "stock_transfer_lines"
 
     transfer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("stock_transfers.id"))

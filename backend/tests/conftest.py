@@ -14,6 +14,7 @@ JSONB، و Numeric(18,0) وابسته است و در فاز بعد به RLS هم
 commitها فقط تا savepoint بروند و rollback بیرونی همچنان همه‌چیز را پاک کند.
 """
 import os
+from contextlib import contextmanager
 from urllib.parse import quote
 
 import pytest
@@ -38,38 +39,80 @@ get_settings.cache_clear()
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.database import Base, engine, get_db  # noqa: E402
+from app.database import Base, SessionLocal, engine, get_db  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.tenancy import rls_statements, tenant_tables  # noqa: E402
+from app.tenant_context import apply_tenant_to_transaction, set_current_tenant  # noqa: E402
 
 # seed در ماژول‌های زیر import می‌شود و همگی روی engine بالا سوارند
-from app.seed import seed  # noqa: E402
+from app.seed import provision_tenant, seed_platform  # noqa: E402
 
 SEED_OWNER_EMAIL = "test-owner@example.invalid"
 SEED_OWNER_PASSWORD = "TestOwnerPassword!2026"
 
+#: مستأجر اصلی تست. تست‌های ایزوله‌سازی مستأجر دوم را خودشان می‌سازند.
+PRIMARY_SLUG = "primary-test-tenant"
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
-    """schema تست را از صفر می‌سازد، در پایان کل session حذف می‌کند."""
+    """schema تست را از صفر می‌سازد، RLS را اعمال می‌کند، و یک مستأجر آماده می‌کند.
+
+    RLS اینجا دستی اعمال می‌شود چون create_all فقط جدول می‌سازد و از سیاست‌ها خبر
+    ندارد؛ آن‌ها در مهاجرت زندگی می‌کنند. اگر این کار نشود، تست‌ها روی دنیایی
+    اجرا می‌شوند که ایزوله‌سازی در آن خاموش است — یعنی دقیقاً چیزی را که باید
+    بسنجند نمی‌سنجند.
+    """
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(text(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE"))
         conn.execute(text(f"CREATE SCHEMA {TEST_SCHEMA}"))
 
-    # ساخت جدول‌ها، دنباله‌ها، چارت حساب، نقش‌ها، انبارها و کاربر مالک — همان مسیر نصب واقعی
-    seed(SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, owner_name="مالک تست")
+    Base.metadata.create_all(bind=engine)
 
-    yield
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        for stmt in rls_statements(tenant_tables(Base.metadata)):
+            conn.execute(text(stmt))
 
+    session = SessionLocal()
+    try:
+        seed_platform(session)
+        tenant = provision_tenant(
+            session,
+            name="کسب‌وکار تست",
+            slug=PRIMARY_SLUG,
+            owner_email=SEED_OWNER_EMAIL,
+            owner_password=SEED_OWNER_PASSWORD,
+            owner_name="مالک تست",
+        )
+        session.commit()
+        tenant_id = tenant.id
+    finally:
+        session.close()
+
+    yield tenant_id
+
+    set_current_tenant(None)
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(text(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE"))
 
 
 @pytest.fixture
+def tenant_id(_schema):
+    return _schema
+
+
+@pytest.fixture
 def db(_schema):
-    """Session ایزوله؛ هرچه تست بنویسد (حتی با commit) در پایان برمی‌گردد."""
+    """Session ایزوله با زمینه‌ی مستأجر ست‌شده؛ هرچه تست بنویسد در پایان برمی‌گردد.
+
+    زمینه هم روی ContextVar و هم روی خودِ تراکنشِ بازِ فعلی نشانده می‌شود: رویداد
+    after_begin فقط برای تراکنش‌های *بعدی* شلیک می‌کند، و این تراکنش از قبل باز شده.
+    """
     connection = engine.connect()
     outer = connection.begin()
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    set_current_tenant(_schema)
+    apply_tenant_to_transaction(session, _schema)
     try:
         yield session
     finally:
@@ -84,6 +127,22 @@ def user(db) -> User:
     return db.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
 
 
+@contextmanager
+def tenant_session(tenant_id):
+    """Session مستقل با زمینه‌ی مستأجر — برای تست‌هایی که به تراکنش واقعی نیاز دارند.
+
+    تست‌های همزمانی و مرز تراکنش نمی‌توانند از fixture `db` استفاده کنند (آن همه‌چیز
+    را برمی‌گرداند)، ولی بدون زمینه‌ی مستأجر هر نوشتنی با خطای RLS رد می‌شود.
+    """
+    set_current_tenant(tenant_id)
+    session = SessionLocal()
+    try:
+        apply_tenant_to_transaction(session, tenant_id)
+        yield session
+    finally:
+        session.close()
+
+
 @pytest.fixture
 def client(db, user):
     """کلاینت HTTP روی همان session تست.
@@ -94,10 +153,17 @@ def client(db, user):
     """
     from fastapi.testclient import TestClient
 
-    from app.deps import get_current_user
+    from app.deps import Principal, get_current_user, get_principal
     from app.main import app
+    from app.models.tenant import Membership
 
+    membership = db.query(Membership).filter(Membership.user_id == user.id).one()
+    principal = Principal(user, membership)
+
+    # get_principal باید override شود نه فقط get_current_user: مسیرها از طریق
+    # require_permission به آن وابسته‌اند و بدون این، احراز هویت واقعی اجرا می‌شود.
     app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_principal] = lambda: principal
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         yield TestClient(app)

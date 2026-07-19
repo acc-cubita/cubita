@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
     from app.models.inventory import Contact
@@ -16,7 +17,7 @@ TREASURY_TYPES = ("receipt", "payment")
 TREASURY_METHODS = ("cash", "bank")
 
 
-class TreasuryTransaction(UUIDPKMixin, TimestampMixin, Base):
+class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """دریافت از مشتری یا پرداخت به تأمین‌کننده — تسویه‌ی حساب‌های دریافتنی/پرداختنی با سند خودکار."""
 
     __tablename__ = "treasury_transactions"

@@ -7,6 +7,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.models.counters import DOC_PAYSLIP
+from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
 from app.models.payroll import (
     Attendance,
@@ -187,7 +189,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             continue  # کارمندی بدون حکم حقوقی فعال، از این دوره صرف‌نظر می‌شود
 
         amounts = compute_payslip_amounts(contract, attendance_by_employee.get(employee.id), settings)
-        payslip_number = db.execute(text("SELECT nextval('payslip_number_seq')")).scalar_one()
+        payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
             number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
         )

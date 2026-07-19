@@ -1,7 +1,8 @@
 """همزمانی موجودی.
 
 این تست‌ها fixture `db` را استفاده نمی‌کنند: آن یک تراکنش واحد است و ذاتاً نمی‌تواند
-رقابت دو تراکنش موازی را نشان دهد. اینجا دو session واقعی و هم‌زمان باز می‌شود.
+رقابت دو تراکنش موازی را نشان دهد. اینجا دو session واقعی و هم‌زمان باز می‌شود، هرکدام
+با زمینه‌ی مستأجر خودشان — بدون آن، سیاست RLS هر نوشتنی را رد می‌کند.
 
 **چرا با barrier و نه فقط دو نخ:** پنجره‌ی رقابت واقعی چند میلی‌ثانیه است، پس دو نخِ
 ساده معمولاً پشت‌سرهم اجرا می‌شوند و تست از روی شانس سبز می‌ماند — یعنی تستی که باگ
@@ -15,19 +16,33 @@ from decimal import Decimal
 
 import pytest
 
-from app.database import SessionLocal
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.inventory import Item, StockLedger, Warehouse
-from app.models.invoices import SalesInvoice, SalesInvoiceLine
+from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
 from app.models.user import User
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.services import inventory as inventory_service
 
-from tests.conftest import SEED_OWNER_EMAIL
+from tests.conftest import SEED_OWNER_EMAIL, tenant_session
 
 SALE_DATE = date(2026, 5, 20)
 STARTING_STOCK = 10
 EACH_SALE = 6  # دو تا از این‌ها با هم از موجودی بیشتر می‌شود
+
+#: مستأجر جاری این ماژول. نخ‌های کارگر تابع ماژول‌اند و به fixture دسترسی ندارند،
+#: پس شناسه از اینجا خوانده می‌شود.
+_TENANT: list = [None]
+
+
+@pytest.fixture(autouse=True)
+def _bind_tenant(tenant_id):
+    _TENANT[0] = tenant_id
+    yield
+    _TENANT[0] = None
+
+
+def _owner(session) -> User:
+    return session.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
 
 
 def _purge_items(*item_ids) -> None:
@@ -37,11 +52,8 @@ def _purge_items(*item_ids) -> None:
     درگیر حذف شوند، نه فقط ردیف‌های کالای موردنظر — وگرنه فاکتور با ردیف باقی‌مانده
     می‌ماند و حذفش FK را نقض می‌کند.
     """
-    from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine
-
     ids = list(item_ids)
-    session = SessionLocal()
-    try:
+    with tenant_session(_TENANT[0]) as session:
         entry_ids: list = []
         for inv_model, line_model in ((SalesInvoice, SalesInvoiceLine), (PurchaseInvoice, PurchaseInvoiceLine)):
             inv_ids = [
@@ -67,117 +79,68 @@ def _purge_items(*item_ids) -> None:
             session.query(JournalLine).filter(JournalLine.entry_id.in_(entry_ids)).delete(synchronize_session=False)
             session.query(JournalEntry).filter(JournalEntry.id.in_(entry_ids)).delete(synchronize_session=False)
         session.commit()
-    finally:
-        session.close()
 
 
-@pytest.fixture
-def stocked_item(_schema):
-    """کالایی با موجودی دقیقاً STARTING_STOCK می‌سازد و در پایان پاک می‌کند."""
-    session = SessionLocal()
-    try:
-        user = session.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
+def _stock_items(specs: list[tuple[str, int, int]]):
+    """کالاها را می‌سازد و با یک فاکتور خرید موجودی می‌دهد."""
+    with tenant_session(_TENANT[0]) as session:
+        user = _owner(session)
         warehouse = session.query(Warehouse).filter(Warehouse.code == "MAIN").one()
-        item = Item(sku=f"CONC-{uuid.uuid4().hex[:8]}", name="کالای تست همزمانی", sales_price=Decimal(1_000_000))
-        session.add(item)
-        session.flush()
+        created = []
+        for name, qty, cost in specs:
+            item = Item(sku=f"CONC-{uuid.uuid4().hex[:8]}", name=name, sales_price=Decimal(1_000_000))
+            session.add(item)
+            session.flush()
+            created.append((item, qty, cost))
         inventory_service.post_purchase_invoice(
             session,
             PurchaseInvoiceIn(
                 invoice_date=date(2026, 5, 1),
                 warehouse_id=warehouse.id,
                 lines=[
-                    PurchaseInvoiceLineIn(
-                        item_id=item.id, qty=Decimal(STARTING_STOCK), unit_cost=Decimal(500_000)
-                    )
+                    PurchaseInvoiceLineIn(item_id=i.id, qty=Decimal(q), unit_cost=Decimal(c)) for i, q, c in created
                 ],
             ),
             user,
         )
         session.commit()
-        ids = (item.id, warehouse.id)
-    finally:
-        session.close()
+        return [i.id for i, _, _ in created], warehouse.id
 
-    yield ids
+
+@pytest.fixture
+def stocked_item():
+    ids, warehouse_id = _stock_items([("کالای تست همزمانی", STARTING_STOCK, 500_000)])
+    yield ids[0], warehouse_id
     _purge_items(ids[0])
 
 
-def _sell(item_id, warehouse_id, qty: int, errors: list):
-    """در session مستقل خودش می‌فروشد — تراکنش جدا، مثل دو درخواست موازی."""
-    session = SessionLocal()
-    try:
-        user = session.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
-        inventory_service.post_sales_invoice(
-            session,
-            SalesInvoiceIn(
-                invoice_date=SALE_DATE,
-                warehouse_id=warehouse_id,
-                lines=[SalesInvoiceLineIn(item_id=item_id, qty=Decimal(qty), unit_price=Decimal(1_000_000))],
-            ),
-            user,
-        )
-        session.commit()
-    except Exception as exc:  # noqa: BLE001 - می‌خواهیم بدانیم کدام تلاش رد شد
-        session.rollback()
-        errors.append(exc)
-    finally:
-        session.close()
-
-
 @pytest.fixture
-def two_stocked_items(_schema):
-    """دو کالا، هرکدام با موجودی کافی — برای سنجیدن ترتیب قفل."""
-    session = SessionLocal()
-    try:
-        user = session.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
-        warehouse = session.query(Warehouse).filter(Warehouse.code == "MAIN").one()
-        a = Item(sku=f"DLA-{uuid.uuid4().hex[:8]}", name="کالا الف", sales_price=Decimal(100))
-        b = Item(sku=f"DLB-{uuid.uuid4().hex[:8]}", name="کالا ب", sales_price=Decimal(100))
-        session.add_all([a, b])
-        session.flush()
-        inventory_service.post_purchase_invoice(
-            session,
-            PurchaseInvoiceIn(
-                invoice_date=date(2026, 5, 1),
-                warehouse_id=warehouse.id,
-                lines=[
-                    PurchaseInvoiceLineIn(item_id=a.id, qty=Decimal(100), unit_cost=Decimal(50)),
-                    PurchaseInvoiceLineIn(item_id=b.id, qty=Decimal(100), unit_cost=Decimal(50)),
-                ],
-            ),
-            user,
-        )
-        session.commit()
-        ids = (a.id, b.id, warehouse.id)
-    finally:
-        session.close()
-
-    yield ids
+def two_stocked_items():
+    ids, warehouse_id = _stock_items([("کالا الف", 100, 50), ("کالا ب", 100, 50)])
+    yield ids[0], ids[1], warehouse_id
     _purge_items(ids[0], ids[1])
 
 
-def _sell_many(item_ids, warehouse_id, errors: list):
-    session = SessionLocal()
-    try:
-        user = session.query(User).filter(User.email == SEED_OWNER_EMAIL).one()
-        inventory_service.post_sales_invoice(
-            session,
-            SalesInvoiceIn(
-                invoice_date=SALE_DATE,
-                warehouse_id=warehouse_id,
-                lines=[
-                    SalesInvoiceLineIn(item_id=i, qty=Decimal(1), unit_price=Decimal(100)) for i in item_ids
-                ],
-            ),
-            user,
-        )
-        session.commit()
-    except Exception as exc:  # noqa: BLE001
-        session.rollback()
-        errors.append(f"{type(exc).__name__}: {exc}"[:120])
-    finally:
-        session.close()
+def _sell(item_ids, warehouse_id, qty: int, errors: list):
+    """در session مستقل خودش می‌فروشد — تراکنش جدا، مثل دو درخواست موازی."""
+    with tenant_session(_TENANT[0]) as session:
+        try:
+            inventory_service.post_sales_invoice(
+                session,
+                SalesInvoiceIn(
+                    invoice_date=SALE_DATE,
+                    warehouse_id=warehouse_id,
+                    lines=[
+                        SalesInvoiceLineIn(item_id=i, qty=Decimal(qty), unit_price=Decimal(1_000_000))
+                        for i in item_ids
+                    ],
+                ),
+                _owner(session),
+            )
+            session.commit()
+        except Exception as exc:  # noqa: BLE001 - می‌خواهیم بدانیم کدام تلاش رد شد
+            session.rollback()
+            errors.append(f"{type(exc).__name__}: {exc}"[:140])
 
 
 def test_shared_items_in_opposite_order_do_not_deadlock(two_stocked_items):
@@ -190,8 +153,8 @@ def test_shared_items_in_opposite_order_do_not_deadlock(two_stocked_items):
     errors: list = []
 
     threads = [
-        threading.Thread(target=_sell_many, args=([a_id, b_id], warehouse_id, errors)),
-        threading.Thread(target=_sell_many, args=([b_id, a_id], warehouse_id, errors)),
+        threading.Thread(target=_sell, args=([a_id, b_id], warehouse_id, 1, errors)),
+        threading.Thread(target=_sell, args=([b_id, a_id], warehouse_id, 1, errors)),
     ]
     for t in threads:
         t.start()
@@ -221,21 +184,18 @@ def test_parallel_sales_cannot_oversell(stocked_item, monkeypatch):
 
     monkeypatch.setattr(inventory_service, "get_stock_qty", synced_get_stock_qty)
 
-    threads = [threading.Thread(target=_sell, args=(item_id, warehouse_id, EACH_SALE, errors)) for _ in range(2)]
+    threads = [threading.Thread(target=_sell, args=([item_id], warehouse_id, EACH_SALE, errors)) for _ in range(2)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=40)
     barrier.abort()
 
-    check = SessionLocal()
-    try:
+    with tenant_session(_TENANT[0]) as check:
         remaining = real_get_stock_qty(check, item_id, warehouse_id)
-    finally:
-        check.close()
 
     assert remaining >= 0, (
         f"موجودی منفی شد ({remaining}): هر دو فروش {EACH_SALE}تایی از موجودی {STARTING_STOCK} پاس شدند "
         "— کالایی فروخته شد که وجود نداشت"
     )
-    assert len(errors) == 1, f"باید دقیقاً یک فروش رد می‌شد، ولی {len(errors)} تا رد شد"
+    assert len(errors) == 1, f"باید دقیقاً یک فروش رد می‌شد، ولی {len(errors)} تا رد شد: {errors}"

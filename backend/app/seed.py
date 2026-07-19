@@ -3,19 +3,19 @@
 اجرا: python -m app.seed
 """
 import sys
-
-from sqlalchemy import text
-
 from datetime import date
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
 from app.models.accounting import Account
 from app.models.banking import BankAccount
 from app.models.billing import Plan
+from app.models.counters import DOC_TYPES, DocumentCounter
 from app.models.inventory import Warehouse
 from app.models.payroll import PayrollSettings
+from app.models.tenant import Membership, Tenant
 from app.models.user import DEFAULT_ROLES, Role, User
 from app.security import hash_password
+from app.tenant_context import apply_tenant_to_transaction, set_current_tenant
 
 # پلن‌های نمونه‌ی سایت تجاری cubita.ir — قیمت‌ها placeholder هستند، بعداً توسط ادمین قابل تغییرند
 SAMPLE_PLANS = [
@@ -102,85 +102,159 @@ CHART_OF_ACCOUNTS = [
 ]
 
 
+def seed_platform(db) -> None:
+    """داده‌ی سراسری پلتفرم — به هیچ مستأجری تعلق ندارد. یک‌بار برای کل نصب."""
+    for plan_def in SAMPLE_PLANS:
+        if not db.query(Plan).filter(Plan.key == plan_def["key"]).first():
+            db.add(Plan(**plan_def))
+    db.flush()
+
+
+def provision_tenant(
+    db,
+    *,
+    name: str,
+    slug: str,
+    owner_email: str,
+    owner_password: str,
+    owner_name: str = "مدیر سیستم",
+) -> Tenant:
+    """یک مستأجر کامل و آماده‌ی کار می‌سازد.
+
+    تراکنشی و idempotent است چون از webhook پرداخت فراخوانی می‌شود و آن webhook
+    می‌تواند دوباره تلاش کند؛ اجرای دوباره نباید مستأجر تکراری بسازد.
+
+    زمینه‌ی مستأجر همین اول ست می‌شود، چون از آن به بعد هر INSERT زیر سیاست RLS
+    می‌رود و بدون زمینه، WITH CHECK آن را رد می‌کند.
+    """
+    tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
+    if tenant is None:
+        tenant = Tenant(name=name, slug=slug, status="active")
+        db.add(tenant)
+        db.flush()
+
+    apply_tenant_to_transaction(db, tenant.id)
+    set_current_tenant(tenant.id)
+
+    roles_by_key: dict[str, Role] = {}
+    for role_def in DEFAULT_ROLES:
+        role = db.query(Role).filter(Role.key == role_def["key"], Role.tenant_id == tenant.id).first()
+        if role is None:
+            role = Role(
+                tenant_id=tenant.id,
+                key=role_def["key"],
+                name=role_def["name"],
+                permissions=role_def["permissions"],
+            )
+            db.add(role)
+            db.flush()
+        roles_by_key[role.key] = role
+
+    accounts_by_code: dict[str, Account] = {}
+    for code, name_, type_, is_group, parent_code in CHART_OF_ACCOUNTS:
+        account = db.query(Account).filter(Account.code == code, Account.tenant_id == tenant.id).first()
+        if account is None:
+            parent = accounts_by_code.get(parent_code) if parent_code else None
+            account = Account(
+                tenant_id=tenant.id,
+                code=code,
+                name=name_,
+                type=type_,
+                is_group=is_group,
+                parent_id=parent.id if parent else None,
+            )
+            db.add(account)
+            db.flush()
+        accounts_by_code[code] = account
+
+    for wh_code, wh_name in (("MAIN", "انبار اصلی"), ("ONLINE", "انبار آنلاین")):
+        if not db.query(Warehouse).filter(Warehouse.code == wh_code, Warehouse.tenant_id == tenant.id).first():
+            db.add(Warehouse(tenant_id=tenant.id, code=wh_code, name=wh_name))
+
+    if not db.query(BankAccount).filter(BankAccount.name == "حساب اصلی", BankAccount.tenant_id == tenant.id).first():
+        db.add(BankAccount(tenant_id=tenant.id, name="حساب اصلی", gl_account_id=accounts_by_code["1102"].id))
+
+    # شمارنده‌ی هر نوع سند. بدون این‌ها اولین ثبت سند شکست می‌خورد — عمداً، چون
+    # جایگزین بی‌صدا از ۱ یعنی شماره‌ی تکراری.
+    for doc_type in DOC_TYPES:
+        exists = (
+            db.query(DocumentCounter)
+            .filter(DocumentCounter.tenant_id == tenant.id, DocumentCounter.doc_type == doc_type)
+            .first()
+        )
+        if exists is None:
+            db.add(DocumentCounter(tenant_id=tenant.id, doc_type=doc_type, last_number=0))
+
+    _seed_payroll_settings(db, tenant)
+    _create_owner(db, tenant, roles_by_key, owner_email, owner_password, owner_name)
+    db.flush()
+    return tenant
+
+
+def _seed_payroll_settings(db, tenant: Tenant) -> None:
+    current_year = date.today().year
+    if (
+        not db.query(PayrollSettings)
+        .filter(PayrollSettings.year == current_year, PayrollSettings.tenant_id == tenant.id)
+        .first()
+    ):
+        # نرخ سهم بیمه (۷٪ کارمند / ۲۳٪ کارفرما طبق ماده ۲۸ قانون تأمین اجتماعی) نرخ ساختاری و پایدار است،
+        # اما سقف معافیت مالیاتی و پلکان‌ها هرسال با قانون بودجه عوض می‌شوند — این‌جا عمداً placeholder
+        # و غیرفعال (نرخ صفر) گذاشته شده تا هیچ عدد نادرستی به‌عنوان مبنای قانونی فرض نشود.
+        # صدور فیش با همین مقدار توسط گاردِ generate_payslips_for_period رد می‌شود.
+        db.add(
+            PayrollSettings(
+                tenant_id=tenant.id,
+                year=current_year,
+                insurance_employee_rate="0.07",
+                insurance_employer_rate="0.23",
+                tax_exemption_annual="0",
+                tax_brackets=[{"up_to": None, "rate": "0"}],
+                notes="PLACEHOLDER — نرخ بیمه ساختاری تخمینی است، مالیات غیرفعال (۰٪). قبل از صدور فیش واقعی با ارقام رسمی همان سال جایگزین شود.",
+            )
+        )
+
+
+def _create_owner(db, tenant: Tenant, roles_by_key, email: str, password: str, name: str) -> User:
+    """کاربر سراسری + عضویتش در این مستأجر.
+
+    اگر کاربر از قبل وجود داشته باشد (یک حسابدار که دفتر چند کسب‌وکار را می‌برد)
+    فقط عضویت جدید اضافه می‌شود، نه کاربر تکراری.
+    """
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        user = User(name=name, email=email, hashed_password=hash_password(password))
+        db.add(user)
+        db.flush()
+
+    membership = (
+        db.query(Membership).filter(Membership.user_id == user.id, Membership.tenant_id == tenant.id).first()
+    )
+    if membership is None:
+        db.add(
+            Membership(
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role_id=roles_by_key["owner"].id,
+                status="active",
+            )
+        )
+    return user
+
+
 def seed(owner_email: str, owner_password: str, owner_name: str = "مدیر سیستم") -> None:
-    Base.metadata.create_all(bind=engine)  # فقط برای dev سریع؛ در production از alembic استفاده کنید
-    with engine.begin() as conn:
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS journal_entry_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS sales_invoice_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS purchase_invoice_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS payslip_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS sales_quotation_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS sales_return_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS purchase_return_number_seq START 1"))
-        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS stock_transfer_number_seq START 1"))
+    """نصب کامل یک نسخه‌ی تک‌مستأجری — برای dev و برای اولین راه‌اندازی."""
     db = SessionLocal()
     try:
-        roles_by_key: dict[str, Role] = {}
-        for role_def in DEFAULT_ROLES:
-            role = db.query(Role).filter(Role.key == role_def["key"]).first()
-            if role is None:
-                role = Role(key=role_def["key"], name=role_def["name"], permissions=role_def["permissions"])
-                db.add(role)
-                db.flush()
-            roles_by_key[role.key] = role
-
-        accounts_by_code: dict[str, Account] = {}
-        for code, name, type_, is_group, parent_code in CHART_OF_ACCOUNTS:
-            account = db.query(Account).filter(Account.code == code).first()
-            if account is None:
-                parent = accounts_by_code.get(parent_code) if parent_code else None
-                account = Account(
-                    code=code,
-                    name=name,
-                    type=type_,
-                    is_group=is_group,
-                    parent_id=parent.id if parent else None,
-                )
-                db.add(account)
-                db.flush()
-            accounts_by_code[code] = account
-
-        if not db.query(Warehouse).filter(Warehouse.code == "MAIN").first():
-            db.add(Warehouse(code="MAIN", name="انبار اصلی"))
-
-        if not db.query(Warehouse).filter(Warehouse.code == "ONLINE").first():
-            # سفارش‌های وارداتی از سایت فروشگاهی (فاز Integration) از این انبار کسر می‌شوند
-            db.add(Warehouse(code="ONLINE", name="انبار آنلاین"))
-
-        if not db.query(BankAccount).filter(BankAccount.name == "حساب اصلی").first():
-            db.add(BankAccount(name="حساب اصلی", gl_account_id=accounts_by_code["1102"].id))
-
-        current_year = date.today().year
-        if not db.query(PayrollSettings).filter(PayrollSettings.year == current_year).first():
-            # نرخ سهم بیمه (۷٪ کارمند / ۲۳٪ کارفرما طبق ماده ۲۸ قانون تأمین اجتماعی) نرخ ساختاری و پایدار است،
-            # اما سقف معافیت مالیاتی و پلکان‌ها هرسال با قانون بودجه عوض می‌شوند — این‌جا عمداً placeholder
-            # و غیرفعال (نرخ صفر) گذاشته شده تا هیچ عدد نادرستی به‌عنوان مبنای قانونی فرض نشود.
-            # قبل از صدور فیش واقعی حتماً از PUT /api/payroll-settings با ارقام تأییدشده‌ی همان سال بروزرسانی کنید.
-            db.add(
-                PayrollSettings(
-                    year=current_year,
-                    insurance_employee_rate="0.07",
-                    insurance_employer_rate="0.23",
-                    tax_exemption_annual="0",
-                    tax_brackets=[{"up_to": None, "rate": "0"}],
-                    notes="PLACEHOLDER — نرخ بیمه ساختاری تخمینی است، مالیات غیرفعال (۰٪). قبل از صدور فیش واقعی با ارقام رسمی همان سال جایگزین شود.",
-                )
-            )
-
-        for plan_def in SAMPLE_PLANS:
-            if not db.query(Plan).filter(Plan.key == plan_def["key"]).first():
-                db.add(Plan(**plan_def))
-
-        if not db.query(User).filter(User.email == owner_email).first():
-            db.add(
-                User(
-                    name=owner_name,
-                    email=owner_email,
-                    hashed_password=hash_password(owner_password),
-                    role_id=roles_by_key["owner"].id,
-                )
-            )
-
+        seed_platform(db)
+        provision_tenant(
+            db,
+            name="کسب‌وکار اصلی",
+            slug="default",
+            owner_email=owner_email,
+            owner_password=owner_password,
+            owner_name=owner_name,
+        )
         db.commit()
         print(f"seed کامل شد. کاربر مدیر: {owner_email}")
     finally:

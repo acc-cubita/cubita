@@ -1,23 +1,27 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.tenant import TenantMixin
 
 ACCOUNT_TYPES = ("asset", "liability", "equity", "income", "expense")
 
 
-class Account(UUIDPKMixin, TimestampMixin, Base):
+class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک گره در چارت حساب‌ها. is_group=True یعنی سرفصل (فقط برای دسته‌بندی)، نه ثبت سند مستقیم روی آن."""
 
     __tablename__ = "accounts"
-    __table_args__ = (CheckConstraint(f"type IN {ACCOUNT_TYPES}", name="ck_accounts_type"),)
+    __table_args__ = (
+        CheckConstraint(f"type IN {ACCOUNT_TYPES}", name="ck_accounts_type"),
+        UniqueConstraint("tenant_id", "code", name="uq_accounts_tenant_code"),
+    )
 
-    code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
     type: Mapped[str] = mapped_column(String(20))
     is_group: Mapped[bool] = mapped_column(default=False)
@@ -29,12 +33,16 @@ class Account(UUIDPKMixin, TimestampMixin, Base):
     children: Mapped[list["Account"]] = relationship(back_populates="parent")
 
 
-class JournalEntry(UUIDPKMixin, TimestampMixin, Base):
+class JournalEntry(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """سند حسابداری: واحد اتمی هر رویداد مالی. دفتر روزنامه/کل/تراز همه از JournalLine مشتق می‌شوند."""
 
     __tablename__ = "journal_entries"
 
-    number: Mapped[int | None] = mapped_column(nullable=True, unique=True, index=True)  # شماره رسمی، فقط سرور اختصاص می‌دهد
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_journal_entries_tenant_number"),
+    )
+
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)  # شماره رسمی، فقط سرور اختصاص می‌دهد
     entry_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     description: Mapped[str] = mapped_column(Text, default="")
 
@@ -49,7 +57,7 @@ class JournalEntry(UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class JournalLine(UUIDPKMixin, Base):
+class JournalLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "journal_lines"
     __table_args__ = (
         CheckConstraint("debit >= 0 AND credit >= 0", name="ck_journal_lines_nonnegative"),
