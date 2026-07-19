@@ -155,3 +155,42 @@ def test_rls_is_enabled_on_the_migrated_schema(db, migrated_schema):
         ).scalar()
     ]
     assert not unprotected, f"مهاجرت‌ها FORCE RLS را روی این جدول‌ها فعال نکرده‌اند: {unprotected}"
+
+
+def test_every_model_module_is_registered_in_the_package():
+    """هر ماژول مدل باید در app/models/__init__.py وارد شده باشد.
+
+    این تست بعد از یک باگ واقعی نوشته شد: `document_counters` هیچ‌وقت در
+    `app/models/__init__.py` وارد نشده بود و فقط به‌خاطر import غیرمستقیم از
+    `app.seed` در متادیتا ظاهر می‌شد.
+
+    نتیجه‌اش این بود که `alembic/env.py` — که فقط `from app.models import *`
+    می‌کند — آن جدول را نمی‌دید، و اولین کسی که autogenerate می‌زد مهاجرتی
+    می‌گرفت که **جدول شمارنده‌ها را DROP می‌کرد**. تست‌ها این را نمی‌دیدند چون
+    conftest تصادفاً `app.seed` را وارد می‌کند و ترتیب import مسئله را می‌پوشاند.
+
+    مهم است که این تست *فقط* از `app.models` وارد کند و نه چیز دیگری، وگرنه
+    دوباره همان اثرِ پوشاننده رخ می‌دهد.
+    """
+    import importlib
+    import pkgutil
+
+    import app.models as models_pkg
+
+    declared = set(Base.metadata.tables)
+    missing: list[str] = []
+
+    for module in pkgutil.iter_modules(models_pkg.__path__):
+        if module.name in ("base",):
+            continue  # فقط mixin دارد، جدولی تعریف نمی‌کند
+        mod = importlib.import_module(f"app.models.{module.name}")
+        for attr in vars(mod).values():
+            table = getattr(attr, "__tablename__", None)
+            if isinstance(table, str) and table not in declared:
+                missing.append(f"{module.name}.{attr.__name__} → {table}")
+
+    assert not missing, (
+        "این مدل‌ها در app/models/__init__.py وارد نشده‌اند و alembic آن‌ها را نمی‌بیند: "
+        f"{sorted(set(missing))}\n"
+        "autogenerate برایشان دستور DROP تولید می‌کند."
+    )

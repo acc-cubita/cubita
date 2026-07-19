@@ -1,0 +1,102 @@
+name: CI
+
+# تست‌ها تا امروز فقط وقتی اجرا می‌شدند که کسی دستی اجرایشان کند. ۳۴۴ تست که
+# خودکار اجرا نشوند، تستی هستند که به‌مرور می‌پوسند و کسی نمی‌فهمد کِی از کار افتادند.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # نسخه عمداً با production یکی است. تست روی نسخه‌ی دیگر، سبزِ گمراه‌کننده
+        # می‌دهد — همان فاصله‌ای که مجبور شدم دستی روی خودِ سرور بسنجم.
+        image: postgres:14
+        env:
+          POSTGRES_USER: cubita
+          POSTGRES_PASSWORD: cubita
+          POSTGRES_DB: cubita_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://cubita:cubita@localhost:5432/cubita_ci
+      ENV: development
+      ZARINPAL_SANDBOX: "true"
+      JWT_SECRET: ci-only-secret-not-used-outside-github-actions-0123
+      PLATFORM_ADMIN_EMAILS: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"  # همان نسخه‌ی VPS
+          cache: pip
+
+      - name: نصب وابستگی‌ها
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: اجرای تست‌ها
+        working-directory: backend
+        run: pytest -q
+
+      - name: مهاجرت‌ها از صفر تا head اجرا می‌شوند
+        # این جدا از تست‌هاست: مجموعه‌ی تست با create_all جدول می‌سازد، پس
+        # مهاجرتی که بشکند در تست‌ها دیده نمی‌شود ولی روی production می‌شکند.
+        #
+        # `alembic check` عمداً اینجا نیست. امروز ۵۸ مورد انحراف گزارش می‌کند که
+        # تقریباً همه‌شان آرایشی‌اند (NOT NULL روی ستون‌های created_at/updated_at،
+        # و قید یکتا در برابر ایندکس یکتا). چکی که از روز اول قرمز باشد فقط به
+        # همه یاد می‌دهد CI را نادیده بگیرند — که بدتر از نداشتنش است.
+        #
+        # انحرافِ *معنادار* را `tests/test_migration_drift.py` می‌گیرد: جدول
+        # گم‌شده، ایندکس یکتای سراسری روی جدول مستأجرمحور، RLS اعمال‌نشده، و
+        # مدلی که در app/models/__init__.py وارد نشده باشد.
+        working-directory: backend
+        run: |
+          psql "$DATABASE_URL_PLAIN" -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+          alembic upgrade head
+        env:
+          DATABASE_URL_PLAIN: postgresql://cubita:cubita@localhost:5432/cubita_ci
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: نصب
+        working-directory: desktop
+        run: npm ci
+
+      - name: بررسی نوع‌ها
+        working-directory: desktop
+        run: npx tsc -b
+
+      - name: lint
+        working-directory: desktop
+        run: npx oxlint src/
+
+      - name: build
+        working-directory: desktop
+        run: npx vite build
+        env:
+          VITE_API_URL: https://acc.cubita.ir
