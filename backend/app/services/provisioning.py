@@ -149,6 +149,19 @@ def purge_tenant(db: Session, tenant_id) -> None:
     db.execute(text("SELECT set_config(:k, 'on', true)"), {"k": PURGE_SETTING})
     db.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
 
+    # کاربر جدول سراسری است، پس حذف آبشاری مستأجر به آن نمی‌رسد و هویت‌های
+    # بی‌عضویت جا می‌مانند. دسترسی نمی‌دهند (get_principal بدون عضویت فعال رد
+    # می‌کند) ولی نگه داشتن ایمیل مشتریِ رفته، offboardingِ ناتمام است.
+    #
+    # فقط کسانی که *هیچ* عضویتی ندارند: یک حسابدار مستقل می‌تواند دفتر چند
+    # کسب‌وکار را ببرد، و رفتن یکی از آن‌ها نباید حسابش را پاک کند.
+    db.execute(
+        text(
+            "DELETE FROM users u WHERE NOT EXISTS "
+            "(SELECT 1 FROM memberships m WHERE m.user_id = u.id)"
+        )
+    )
+
 
 def _is_upgrade(current: int | None, new: int | None) -> bool:
     """آیا پلن تازه سقف را بالا می‌برد؟

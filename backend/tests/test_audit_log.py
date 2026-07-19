@@ -320,3 +320,92 @@ def test_there_is_no_way_to_write_an_audit_entry_through_the_api(client):
         assert set(route.methods) <= {"GET", "HEAD", "OPTIONS"}, (
             f"مسیر حسابرسی {route.path} متد نوشتن دارد: {route.methods}"
         )
+
+
+# --- offboarding کامل ---------------------------------------------------------------
+
+
+def test_purging_a_tenant_removes_its_orphaned_users(tenant_id):
+    """حذف کسب‌وکار نباید هویت بی‌صاحب جا بگذارد.
+
+    users جدول سراسری است، پس حذف آبشاری مستأجر به آن نمی‌رسد. اولین بار روی
+    production واقعی دیده شد: مستأجر آزمون رفت و ایمیلش ماند.
+    """
+    from app.database import SessionLocal
+    from app.models.user import User
+    from app.seed import provision_tenant
+    from app.services.provisioning import purge_tenant
+    from app.tenant_context import set_current_tenant
+
+    email = "offboard-me@example.invalid"
+    s = SessionLocal()
+    try:
+        t = provision_tenant(
+            s, name="کسب‌وکار رفتنی", slug="offboard-test",
+            owner_email=email, owner_password="OffboardPass!2026",
+        )
+        s.commit()
+        new_tenant_id = t.id
+        assert s.query(User).filter(User.email == email).one_or_none() is not None
+    finally:
+        s.close()
+        set_current_tenant(None)
+
+    s = SessionLocal()
+    try:
+        purge_tenant(s, new_tenant_id)
+        s.commit()
+        assert s.query(User).filter(User.email == email).one_or_none() is None, (
+            "کاربر بی‌عضویت بعد از حذف کسب‌وکار باقی ماند"
+        )
+    finally:
+        s.close()
+        set_current_tenant(None)
+
+
+def test_purging_does_not_touch_a_user_who_serves_another_business(tenant_id):
+    """حسابدار مستقل که دفتر چند کسب‌وکار را می‌برد نباید با رفتن یکی پاک شود."""
+    from app.database import SessionLocal
+    from app.models.tenant import Membership
+    from app.models.user import Role, User
+    from app.seed import provision_tenant
+    from app.services.provisioning import purge_tenant
+    from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, set_current_tenant
+
+    email = "hesabdar-e-mostaqel@example.invalid"
+    s = SessionLocal()
+    try:
+        t = provision_tenant(
+            s, name="کسب‌وکار دوم", slug="second-business",
+            owner_email=email, owner_password="SharedPass!2026",
+        )
+        s.commit()
+        second_id = t.id
+        # شناسه به‌عنوان مقدار ساده نگه داشته می‌شود، نه شیء ORM: بعد از بسته شدن
+        # نشست، شیء detach است و هر دسترسی به خصوصیتش خطا می‌دهد.
+        shared_user_id = s.query(User).filter(User.email == email).one().id
+
+        # همان شخص عضو مستأجر اصلی هم می‌شود
+        bind_session_tenant(s, tenant_id)
+        apply_tenant_to_transaction(s, tenant_id)
+        role = s.query(Role).filter(Role.tenant_id == tenant_id, Role.key == "accountant").one()
+        s.add(Membership(user_id=shared_user_id, tenant_id=tenant_id, role_id=role.id, status="active"))
+        s.commit()
+    finally:
+        s.close()
+        set_current_tenant(None)
+
+    s = SessionLocal()
+    try:
+        purge_tenant(s, second_id)
+        s.commit()
+        assert s.query(User).filter(User.email == email).one_or_none() is not None, (
+            "کاربری که هنوز در کسب‌وکار دیگری عضو است پاک شد"
+        )
+        # پاک‌سازی خودِ تست
+        s.execute(text("DELETE FROM memberships WHERE user_id = :u"), {"u": shared_user_id})
+        s.execute(text("DELETE FROM users WHERE id = :u"), {"u": shared_user_id})
+        s.commit()
+    finally:
+        s.close()
+        set_current_tenant(None)
