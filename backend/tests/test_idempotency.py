@@ -275,3 +275,45 @@ def test_two_concurrent_requests_create_only_one_invoice(tenant_id, warehouse, w
                 cleanup.query(StockLedger).filter(StockLedger.item_id == it.id).delete()
                 cleanup.delete(it)
             cleanup.commit()
+
+
+def test_a_replayed_outbox_item_returns_the_same_invoice(client, db, user, tenant_id):
+    """قرارداد صفِ آفلاین اپ دسکتاپ.
+
+    صف local_id را به‌عنوان کلید می‌فرستد و در هر تلاش مجدد همان را نگه می‌دارد.
+    حالتی که این می‌سنجد: سرور ثبت می‌کند، پاسخ در شبکه گم می‌شود، صف دوباره
+    همان بدنه را با همان کلید می‌فرستد. اگر سرور فاکتور دومی بسازد، دفتر بی‌صدا
+    غلط می‌شود.
+    """
+    from app.models.inventory import Contact, Item, Warehouse
+
+    wh = db.query(Warehouse).first()
+    item = db.query(Item).first()
+    if item is None:
+        item = Item(sku="OUTBOX-1", name="کالای صف", unit="عدد", sales_price=1000)
+        db.add(item)
+    contact = db.query(Contact).filter(Contact.type == "supplier").first()
+    if contact is None:
+        contact = Contact(name="تأمین‌کننده صف", type="supplier")
+        db.add(contact)
+    db.flush()
+
+    local_id = "b2c3d4e5-0000-4000-8000-000000000001"
+    body = {
+        "invoice_date": "2026-07-20",
+        "warehouse_id": str(wh.id),
+        "contact_id": str(contact.id),
+        "description": "از صف آفلاین",
+        "lines": [{"item_id": str(item.id), "qty": 2, "unit_cost": 1000, "description": ""}],
+    }
+    headers = {"Idempotency-Key": local_id}
+
+    first = client.post("/api/purchase-invoices", json=body, headers=headers)
+    assert first.status_code == 201
+
+    # همان کلید، همان بدنه — یعنی همان چیزی که صف بعد از گم شدن پاسخ می‌فرستد
+    second = client.post("/api/purchase-invoices", json=body, headers=headers)
+
+    assert second.status_code in (200, 201)
+    assert second.json()["id"] == first.json()["id"], "تلاش مجدد صف، سند مالی دوم ساخت"
+    assert second.json()["number"] == first.json()["number"]

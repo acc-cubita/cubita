@@ -139,7 +139,21 @@ async function pushOutboxTable(
     try {
       const res = await fetch(`${config.apiBaseUrl}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          // local_id همان کلید یکتاسازی است و از ابتدا هم برای همین ساخته می‌شد،
+          // فقط هرگز فرستاده نمی‌شد.
+          //
+          // حالتی که این حل می‌کند: سرور فاکتور را ثبت می‌کند ولی پاسخ در شبکه گم
+          // می‌شود. کد به catch می‌رود، synced صفر می‌ماند، و دور بعدی دوباره POST
+          // می‌کند — یعنی **سند مالی دوم**، بدون هیچ خطایی. برای نرم‌افزار حسابداری
+          // این از هر باگی بدتر است چون دفتر را بی‌صدا غلط می‌کند.
+          //
+          // چون local_id در همان ردیف صف ذخیره شده، در همه‌ی تلاش‌های مجدد یکسان
+          // است. سرور بار دوم همان فاکتور اول را برمی‌گرداند، نه فاکتور تازه.
+          'Idempotency-Key': item.local_id,
+        },
         body: item.payload,
       })
       if (!res.ok) {
