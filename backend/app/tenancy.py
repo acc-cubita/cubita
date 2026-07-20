@@ -38,6 +38,8 @@ GLOBAL_TABLES = frozenset(
         "memberships",
         "platform_admins",
         "auth_tokens",
+        # اشتراک: داده‌ی صفحه‌ی کنترل پلتفرم است، نه دفتر مشتری
+        "subscriptions",
     }
 )
 

@@ -9,6 +9,8 @@ from app.models.tenant import Membership
 from app.observability import tenant_id_var
 from app.models.user import User
 from app.security import decode_access_token
+from app.services.subscriptions import WRITE_ACTIONS
+from app.services.subscriptions import state_for as subscription_state
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -77,11 +79,31 @@ def get_current_user(principal: Principal = Depends(get_principal)) -> User:
 
 
 def require_permission(module: str, action: str):
-    """مجوز در سطح داده‌ی یک مستأجر. هرگز برای اندپوینت‌های کنترل‌پنل پلتفرم استفاده نشود."""
+    """مجوز در سطح داده‌ی یک مستأجر. هرگز برای اندپوینت‌های کنترل‌پنل پلتفرم استفاده نشود.
 
-    def checker(principal: Principal = Depends(get_principal)) -> User:
+    اعمال اشتراک هم اینجاست و نه در تک‌تک سرویس‌ها: یک نقطه‌ی گلوگاه یعنی مسیر
+    تازه‌ای که کسی اضافه کند خودکار پوشش می‌گیرد. پخش کردنش در سرویس‌ها یعنی
+    اولین اندپوینتی که فراموش شود، یک در باز است.
+
+    **خواندن هرگز محدود نمی‌شود.** فقط اکشن‌های نوشتن. دفتر مالی سند قانونی خودِ
+    مشتری است و قفل کردنش پشت پرداخت، گروگان گرفتن چیزی است که مال ما نیست.
+    """
+
+    def checker(
+        principal: Principal = Depends(get_principal),
+        db: Session = Depends(get_db),
+    ) -> User:
         if not principal.role.has_permission(module, action):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
+
+        if action in WRITE_ACTIONS:
+            state = subscription_state(db, principal.tenant_id)
+            if not state.can_write:
+                raise HTTPException(
+                    status.HTTP_402_PAYMENT_REQUIRED,
+                    "اشتراک این کسب‌وکار تمام شده است. دفترها و گزارش‌ها در دسترس‌اند "
+                    "ولی برای ثبت سند تازه باید اشتراک تمدید شود.",
+                )
         return principal.user
 
     return checker

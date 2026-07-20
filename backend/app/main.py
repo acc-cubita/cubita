@@ -24,6 +24,7 @@ from app.routers import (
     quotations,
     reports,
     returns,
+    subscription,
     transfers,
     treasury,
 )
@@ -66,6 +67,7 @@ app.include_router(integration.router)
 app.include_router(billing.router)
 app.include_router(treasury.router)
 app.include_router(audit.router)
+app.include_router(subscription.router)
 
 
 @app.get("/api/health")

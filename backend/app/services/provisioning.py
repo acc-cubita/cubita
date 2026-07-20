@@ -20,7 +20,7 @@ from app.config import get_settings
 from app.models.tenant import Membership, Tenant
 from app.models.user import User
 from app.seed import provision_tenant
-from app.services import tokens
+from app.services import subscriptions, tokens
 
 MAX_SLUG_LEN = 60
 
@@ -114,9 +114,11 @@ def provision_for_purchase(db: Session, purchase) -> tuple[Tenant, str] | None:
         if membership is not None:
             # از قبل مشتری است — خرید جدید یعنی تمدید/ارتقا، نه کسب‌وکار جدید.
             tenant = db.get(Tenant, membership.tenant_id)
-            if tenant is not None and _is_upgrade(tenant.max_users, plan_max_users):
-                tenant.max_users = plan_max_users
-                db.flush()
+            if tenant is not None:
+                if _is_upgrade(tenant.max_users, plan_max_users):
+                    tenant.max_users = plan_max_users
+                    db.flush()
+                _extend_subscription(db, tenant.id, purchase, note="تمدید/ارتقا")
             return tenant, ""
 
     tenant = provision_tenant(
@@ -130,8 +132,29 @@ def provision_for_purchase(db: Session, purchase) -> tuple[Tenant, str] | None:
         owner_name=purchase.customer_name or "مدیر",
         max_users=plan_max_users,
     )
+    _extend_subscription(db, tenant.id, purchase, note="خرید اولیه")
     owner = db.query(User).filter(User.email == email).one()
     return tenant, tokens.issue_invite(db, owner.id, tenant.id)
+
+
+def _extend_subscription(db: Session, tenant_id, purchase, *, note: str) -> None:
+    """دوره‌ی اشتراک را به‌اندازه‌ی پلن خریداری‌شده جلو می‌برد.
+
+    بدون این، پرداخت فقط یک ردیف در purchases می‌ساخت و هیچ اثری روی حق استفاده
+    نداشت — یعنی پلن سالانه فروخته می‌شد و سال دوم رایگان بود.
+    """
+    plan = purchase.plan
+    if plan is None:
+        return
+    subscriptions.grant(
+        db,
+        tenant_id,
+        days=subscriptions.days_for_period(plan.billing_period),
+        plan_id=plan.id,
+        purchase_id=purchase.id,
+        note=note,
+        source="zarinpal",
+    )
 
 
 def purge_tenant(db: Session, tenant_id) -> None:

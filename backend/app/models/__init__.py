@@ -21,6 +21,7 @@ from app.models.payroll import (
     Payslip,
     SalaryContract,
 )
+from app.models.subscription import Subscription
 from app.models.quotations import SalesQuotation, SalesQuotationLine
 from app.models.returns import (
     PurchaseReturn,
@@ -75,4 +76,5 @@ __all__ = [
     "DocumentCounter",
     "IdempotencyKey",
     "AuditLog",
+    "Subscription",
 ]
