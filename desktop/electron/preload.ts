@@ -30,3 +30,13 @@ contextBridge.exposeInMainWorld('windowControls', {
     return () => ipcRenderer.removeListener('window:maximizedChanged', listener)
   },
 })
+
+contextBridge.exposeInMainWorld('cubitaUpdate', {
+  status: () => ipcRenderer.invoke('update:status'),
+  installNow: () => ipcRenderer.invoke('update:installNow'),
+  onStatus: (cb: (status: unknown) => void) => {
+    const listener = (_evt: unknown, status: unknown) => cb(status)
+    ipcRenderer.on('update:status', listener)
+    return () => ipcRenderer.removeListener('update:status', listener)
+  },
+})

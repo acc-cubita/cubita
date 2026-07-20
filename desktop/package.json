@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "کوبیتا — نرم‌افزار حسابداری آفلاین/آنلاین",
   "author": "ipnetcity.ir",
   "main": "dist-electron/main.js",
@@ -12,10 +12,12 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "publish-update": "node scripts/publish-update.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
+    "electron-updater": "^6.8.9",
     "jalaali-js": "^2.0.0",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
@@ -53,9 +55,17 @@
       "**/node_modules/better-sqlite3/**"
     ],
     "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://acc.cubita.ir/updates/"
+      }
+    ],
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "win": {
       "target": "nsis",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,

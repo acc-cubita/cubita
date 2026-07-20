@@ -1460,3 +1460,45 @@ button:disabled {
   padding: 6px;
   font-size: 12.5px;
 }
+
+/* --- نوار به‌روزرسانی (فقط اپ دسکتاپ) --- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background: #1a2744;
+  border-block-end: 1px solid #2b3f6b;
+  color: #e6edf7;
+  font-size: 0.9rem;
+}
+
+.update-banner__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.update-banner button {
+  padding: 0.35rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #3b82f6;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.update-banner__later {
+  background: transparent;
+  border-color: #46587f;
+  color: #b8c6de;
+}
+
+/* حلقه‌ی فوکوس صریح: بقیه‌ی این فایل جاهایی outline را صفر می‌کند و بدون این،
+   کاربر کیبورد نمی‌فهمد روی کدام دکمه است. */
+.update-banner button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}

@@ -5,6 +5,7 @@ import { SetPasswordScreen } from './components/SetPasswordScreen'
 import { Dashboard } from './components/Dashboard'
 import { TitleBar } from './components/TitleBar'
 import { isElectron } from './platform'
+import { UpdateBanner } from './components/UpdateBanner'
 import './App.css'
 
 type PendingAction = { action: 'reset-password' | 'accept-invite'; token: string }
@@ -47,6 +48,7 @@ export default function App() {
   return (
     <div className="app-window">
       {isElectron && <TitleBar />}
+      {isElectron && <UpdateBanner />}
       <div className="app-window-body">
         {pending && !token ? (
           <SetPasswordScreen

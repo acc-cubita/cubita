@@ -23,9 +23,14 @@ import {
   queuePurchaseInvoice,
   queueSalesInvoice,
 } from './sync.js'
+import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
 
+// acc.cubita.ir و acc.ipnetcity.ir به یک بک‌اند می‌روند، ولی رندرر روی
+// acc.cubita.ir ساخته می‌شود و این خط دامنه‌ی قدیمی را داشت. دو دامنه‌ی متفاوت در
+// دو نیمه‌ی یک اپ یعنی هر تغییر آینده‌ای (CORS، کوکی، دامنه‌ی جدید) باید در دو جا
+// یادآوری شود — و یکی‌شان فراموش می‌شود.
 const API_BASE_URL =
-  process.env.CUBITA_API_URL ?? (app.isPackaged ? 'https://acc.ipnetcity.ir' : 'http://localhost:8000')
+  process.env.CUBITA_API_URL ?? (app.isPackaged ? 'https://acc.cubita.ir' : 'http://localhost:8000')
 
 let mainWindow: BrowserWindow | null = null
 let authToken: string | null = null
@@ -98,6 +103,9 @@ app.whenReady().then(() => {
     debugLog('initLocalDb done')
     createWindow()
     debugLog('createWindow called')
+
+    setupAutoUpdate(() => mainWindow, debugLog)
+    debugLog('auto-update wired')
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -192,4 +200,12 @@ ipcMain.handle('items:listCached', () => {
 
 ipcMain.handle('bankAccounts:listCached', () => {
   return getLocalDb().prepare('SELECT * FROM bank_accounts_cache ORDER BY name').all()
+})
+
+// --- به‌روزرسانی ---
+
+ipcMain.handle('update:status', () => currentUpdateStatus())
+
+ipcMain.handle('update:installNow', () => {
+  quitAndInstall()
 })
