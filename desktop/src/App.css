@@ -9,6 +9,17 @@
 .app-window-body {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* app-shell زیرش height:100% دارد، پس اگر نوار اشتراک بالایش بنشیند بدون این
+   ستون، ارتفاع مجموع از ظرف بیرون می‌زند. app-shell با flex:1 جای باقی‌مانده
+   را می‌گیرد، نه ۱۰۰٪ کل. */
+.app-window-body > .app-shell {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 
 .titlebar {
@@ -1499,6 +1510,53 @@ button:disabled {
 /* حلقه‌ی فوکوس صریح: بقیه‌ی این فایل جاهایی outline را صفر می‌کند و بدون این،
    کاربر کیبورد نمی‌فهمد روی کدام دکمه است. */
 .update-banner button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* --- نوار وضعیت اشتراک (وب و دسکتاپ) --- */
+.subscription-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  border-block-end: 1px solid transparent;
+}
+
+.subscription-banner--critical {
+  background: #3a1414;
+  border-color: #6b2323;
+  color: #f5c6c6;
+}
+
+.subscription-banner--warning {
+  background: #3a2e10;
+  border-color: #6b5323;
+  color: #f0d9a0;
+}
+
+.subscription-banner--notice {
+  background: #14233a;
+  border-color: #23426b;
+  color: #b8cfe6;
+}
+
+.subscription-banner__dismiss {
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.85;
+}
+
+.subscription-banner__dismiss:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }

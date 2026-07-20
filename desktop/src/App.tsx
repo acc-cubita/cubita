@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard'
 import { TitleBar } from './components/TitleBar'
 import { isElectron } from './platform'
 import { UpdateBanner } from './components/UpdateBanner'
+import { SubscriptionBanner } from './components/SubscriptionBanner'
 import './App.css'
 
 type PendingAction = { action: 'reset-password' | 'accept-invite'; token: string }
@@ -60,14 +61,17 @@ export default function App() {
         ) : !token || !me ? (
           <LoginScreen onLoggedIn={handleAuthenticated} />
         ) : (
-          <Dashboard
-            token={token}
-            me={me}
-            onLogout={() => {
-              setToken(null)
-              setMe(null)
-            }}
-          />
+          <>
+            <SubscriptionBanner token={token} />
+            <Dashboard
+              token={token}
+              me={me}
+              onLogout={() => {
+                setToken(null)
+                setMe(null)
+              }}
+            />
+          </>
         )}
       </div>
     </div>

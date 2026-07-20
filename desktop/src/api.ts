@@ -1,5 +1,8 @@
+// build همیشه VITE_API_URL را صریح می‌دهد، پس این fallback در عمل کد مرده است —
+// ولی همان دامنه‌ی قدیمی‌ای بود که در electron/main.ts هم یک‌بار جا مانده بود.
+// یکسان نگه داشتنش ارزان‌تر از دوباره پیدا کردنش است.
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? 'https://acc.ipnetcity.ir' : 'http://localhost:8000')
+  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? 'https://acc.cubita.ir' : 'http://localhost:8000')
 
 export interface MeResponse {
   id: string
@@ -169,6 +172,16 @@ async function authedSend<T>(
   }
   return res.json()
 }
+
+export interface SubscriptionStatus {
+  status: 'active' | 'grace' | 'expired' | 'cancelled' | 'none'
+  expires_at: string | null
+  days_left: number | null
+  can_write: boolean
+  should_warn: boolean
+}
+
+export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 
 export const fetchTrialBalance = (token: string) =>
   authedGet<TrialBalanceRow[]>(token, '/api/reports/trial-balance')
