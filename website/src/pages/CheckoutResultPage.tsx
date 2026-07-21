@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { LightStreakBackground } from '../components/LightStreakBackground'
 import { Header } from '../components/Header'
@@ -6,6 +7,18 @@ import { Footer } from '../components/Footer'
 export function CheckoutResultPage() {
   const params = new URLSearchParams(window.location.search)
   const success = params.get('status') === 'success'
+
+  useEffect(() => {
+    document.title = success ? 'پرداخت موفق | کوبیتا' : 'پرداخت ناموفق | کوبیتا'
+    // صفحه‌ی تراکنشی است، نه محتوایی — نباید در نتایج جستجو ایندکس شود.
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    meta.content = 'noindex'
+    document.head.appendChild(meta)
+    return () => {
+      document.head.removeChild(meta)
+    }
+  }, [success])
 
   return (
     <>
@@ -20,8 +33,8 @@ export function CheckoutResultPage() {
               </div>
               <h2>پرداخت با موفقیت انجام شد</h2>
               <p>
-                خرید شما ثبت شد. تیم کوبیتا طی چند ساعت آینده با اطلاعات ورود به نسخه‌ی اختصاصی‌تان، از طریق
-                ایمیل یا تماس تلفنی با شما در ارتباط خواهد بود.
+                کسب‌وکار اختصاصی‌تان همین الان ساخته شد. لینک تعیین رمز عبور به ایمیلی که وارد کردید ارسال شده —
+                آن را باز کنید تا وارد نسخه‌ی خودتان شوید.
               </p>
             </>
           ) : (

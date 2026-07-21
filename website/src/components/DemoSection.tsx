@@ -13,7 +13,7 @@ export function DemoSection() {
         <div className="demo-panel">
           <div className="demo-panel-text">
             <h2>
-              <MonitorPlay size={22} style={{ verticalAlign: 'text-bottom', marginLeft: 8 }} />
+              <MonitorPlay size={22} className="icon-inline" />
               نرم‌افزار واقعی را همین حالا امتحان کنید
             </h2>
             <p>

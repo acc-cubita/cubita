@@ -5,6 +5,7 @@ import { Hero } from './components/Hero'
 import { StatsBar } from './components/StatsBar'
 import { Features } from './components/Features'
 import { HowItWorks } from './components/HowItWorks'
+import { ProductGallery } from './components/ProductGallery'
 import { DemoSection } from './components/DemoSection'
 import { PricingSection } from './components/PricingSection'
 import { FAQ } from './components/FAQ'
@@ -20,6 +21,7 @@ function App() {
       <StatsBar />
       <Features />
       <HowItWorks />
+      <ProductGallery />
       <DemoSection />
       <PricingSection />
       <FAQ />

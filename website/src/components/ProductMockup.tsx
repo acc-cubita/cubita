@@ -5,46 +5,26 @@ export function ProductMockup() {
     <div className="mockup-wrap">
       <div className="mockup-card">
         <div className="mockup-titlebar">
-          <span className="mockup-dot" style={{ background: '#ff5f57' }} />
-          <span className="mockup-dot" style={{ background: '#febc2e' }} />
-          <span className="mockup-dot" style={{ background: '#28c840' }} />
+          <span className="mockup-dot red" />
+          <span className="mockup-dot yellow" />
+          <span className="mockup-dot green" />
           <span className="mockup-url">acc.cubita.ir</span>
         </div>
-        <div className="mockup-body">
-          <div className="mockup-sidebar">
-            <span className="mockup-side-item active" />
-            <span className="mockup-side-item" />
-            <span className="mockup-side-item" />
-            <span className="mockup-side-item" />
-            <span className="mockup-side-item" />
-          </div>
-          <div className="mockup-main">
-            <div className="mockup-stat-row">
-              <div className="mockup-stat">
-                <span className="mockup-stat-label">فروش امروز</span>
-                <span className="mockup-stat-value">۴۸,۲۰۰,۰۰۰</span>
-              </div>
-              <div className="mockup-stat">
-                <span className="mockup-stat-label">مانده صندوق</span>
-                <span className="mockup-stat-value">۱۲۲,۰۰۰,۰۰۰</span>
-              </div>
-            </div>
-            <div className="mockup-chart">
-              <span style={{ height: '40%' }} />
-              <span style={{ height: '65%' }} />
-              <span style={{ height: '50%' }} />
-              <span style={{ height: '85%' }} />
-              <span style={{ height: '60%' }} />
-              <span style={{ height: '95%' }} />
-              <span style={{ height: '70%' }} />
-            </div>
-            <div className="mockup-rows">
-              <span className="mockup-row" />
-              <span className="mockup-row" />
-              <span className="mockup-row short" />
-            </div>
-          </div>
-        </div>
+        {/* اسکرین‌شات واقعی داشبورد، نه شبیه‌سازی CSS — چیزی که مشتری اینجا می‌بیند
+            دقیقاً همان چیزی است که بعد از ورود می‌بیند. eager+fetchPriority چون
+            این تصویر بالای تاشدگی است و اولین چیزی است که کاربر نگاهش می‌افتد. */}
+        <picture>
+          <source srcSet="/screenshots/dashboard.webp" type="image/webp" />
+          <img
+            src="/screenshots/dashboard.png"
+            alt="داشبورد کوبیتا با خلاصه‌ی فروش، موجودی انبار، سود دوره و مانده‌ی نقد و بانک"
+            className="mockup-screenshot"
+            width={1600}
+            height={1000}
+            loading="eager"
+            fetchPriority="high"
+          />
+        </picture>
       </div>
 
       <div className="floating-chip chip-1">

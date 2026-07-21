@@ -27,6 +27,12 @@ export function Footer() {
           <a href="#faq">سوالات متداول</a>
           <a href="mailto:ipnetcity@gmail.com">ipnetcity@gmail.com</a>
         </div>
+
+        <div className="footer-col">
+          <h4>قانونی</h4>
+          <a href="/terms">شرایط استفاده از خدمات</a>
+          <a href="/privacy">حریم خصوصی</a>
+        </div>
       </div>
       <div className="container footer-bottom">© {new Date().getFullYear()} کوبیتا — تمام حقوق محفوظ است.</div>
     </footer>

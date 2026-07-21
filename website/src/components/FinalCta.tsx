@@ -9,7 +9,7 @@ export function FinalCta() {
         <div className="final-cta-card">
           <h2>همین امروز حسابداری کسب‌وکارتان را متحول کنید</h2>
           <p>بدون نیاز به کارت اعتباری، نسخه‌ی دموی کوبیتا را همین حالا در مرورگر امتحان کنید.</p>
-          <div className="hero-actions" style={{ justifyContent: 'center' }}>
+          <div className="hero-actions justify-center">
             <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-lg">
               مشاهده دموی رایگان
               <ArrowLeft size={16} />

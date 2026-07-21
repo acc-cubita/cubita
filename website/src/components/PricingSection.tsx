@@ -23,7 +23,11 @@ export function PricingSection() {
           <p>قیمت‌ها سالانه و به تومان است. هر زمان می‌توانید پلن خود را ارتقا دهید.</p>
         </div>
 
-        {loadError && <p style={{ textAlign: 'center', color: 'var(--danger)' }}>{loadError}</p>}
+        {loadError && (
+          <p role="alert" className="form-error centered">
+            {loadError}
+          </p>
+        )}
 
         <div className="pricing-grid">
           {plans.map((plan) => (

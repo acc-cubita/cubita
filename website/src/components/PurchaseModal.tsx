@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { requestPurchase, type Plan } from '../api'
 
@@ -9,6 +9,16 @@ export function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => vo
   const [business, setBusiness] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // با Escape هم باید بشود بست — رفتار استاندارد هر دیالوگ، و کاربری که با
+  // صفحه‌کلید کار می‌کند راه دیگری برای خروج بدون موس ندارد.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -35,10 +45,16 @@ export function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => vo
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div
+        className="modal-box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchase-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
           <div>
-            <h3>خرید پلن {plan.name}</h3>
+            <h3 id="purchase-modal-title">خرید پلن {plan.name}</h3>
             <div className="modal-sub">
               {Number(plan.price_toman).toLocaleString('fa-IR')} تومان / {plan.billing_period === 'yearly' ? 'سالانه' : 'ماهانه'}
             </div>
@@ -46,29 +62,40 @@ export function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => vo
           <button
             type="button"
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}
+            aria-label="بستن"
+            className="modal-close"
           >
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          {error && <div className="form-error">{error}</div>}
+          {error && (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          )}
           <div className="form-field">
-            <label>نام و نام خانوادگی</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <label htmlFor="pm-name">نام و نام خانوادگی</label>
+            <input id="pm-name" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="form-field">
-            <label>ایمیل</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <label htmlFor="pm-email">ایمیل</label>
+            <input
+              id="pm-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
           <div className="form-field">
-            <label>شماره تماس</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <label htmlFor="pm-phone">شماره تماس</label>
+            <input id="pm-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="form-field">
-            <label>نام کسب‌وکار (اختیاری)</label>
-            <input value={business} onChange={(e) => setBusiness(e.target.value)} />
+            <label htmlFor="pm-business">نام کسب‌وکار (اختیاری)</label>
+            <input id="pm-business" value={business} onChange={(e) => setBusiness(e.target.value)} />
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-outline" onClick={onClose}>
@@ -78,6 +105,10 @@ export function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => vo
               {loading ? 'در حال اتصال به درگاه...' : 'پرداخت با زرین‌پال'}
             </button>
           </div>
+          <p className="modal-legal-note">
+            با ادامه‌ی پرداخت، <a href="/terms" target="_blank" rel="noreferrer">شرایط استفاده از خدمات</a> و{' '}
+            <a href="/privacy" target="_blank" rel="noreferrer">حریم خصوصی</a> کوبیتا را می‌پذیرید.
+          </p>
         </form>
       </div>
     </div>

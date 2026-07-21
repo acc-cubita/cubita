@@ -20,7 +20,7 @@ const FAQS = [
   },
   {
     q: 'بعد از پرداخت، چقدر طول می‌کشد تا نسخه‌ی من آماده شود؟',
-    a: 'معمولاً طی چند ساعت کاری. بعد از پرداخت موفق، تیم کوبیتا نسخه‌ی اختصاصی شما را راه‌اندازی و اطلاعات ورود را از طریق ایمیل یا تماس تلفنی ارسال می‌کند.',
+    a: 'بلافاصله. بعد از پرداخت موفق، نسخه‌ی اختصاصی و ایزوله‌ی شما همان لحظه ساخته می‌شود و لینک تعیین رمز عبور به ایمیلتان می‌رسد.',
   },
   {
     q: 'آیا امکان اتصال به سامانه‌ی مؤدیان وجود دارد؟',
@@ -43,11 +43,21 @@ export function FAQ() {
             const isOpen = openIndex === idx
             return (
               <div className={`faq-item${isOpen ? ' open' : ''}`} key={item.q}>
-                <button type="button" className="faq-question" onClick={() => setOpenIndex(isOpen ? null : idx)}>
+                <button
+                  type="button"
+                  className="faq-question"
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${idx}`}
+                  onClick={() => setOpenIndex(isOpen ? null : idx)}
+                >
                   {item.q}
                   <ChevronDown size={18} className="faq-chevron" />
                 </button>
-                {isOpen && <p className="faq-answer">{item.a}</p>}
+                {isOpen && (
+                  <p id={`faq-answer-${idx}`} className="faq-answer">
+                    {item.a}
+                  </p>
+                )}
               </div>
             )
           })}
