@@ -89,6 +89,35 @@ class KardexReportOut(BaseModel):
     closing_qty: Decimal
 
 
+class DashboardMonthOut(BaseModel):
+    jy: int  # سال شمسی
+    jm: int  # ماه شمسی (۱..۱۲)
+    sales: Decimal
+    purchases: Decimal
+
+
+class DashboardItemOut(BaseModel):
+    item_id: UUID
+    name: str
+    qty: Decimal
+    revenue: Decimal
+
+
+class DashboardCustomerOut(BaseModel):
+    contact_id: UUID
+    name: str
+    total: Decimal
+
+
+class SalesDashboardOut(BaseModel):
+    """تحلیل فروش برای صفحه‌ی نمای کلی."""
+
+    months: int
+    monthly: list[DashboardMonthOut]
+    top_items: list[DashboardItemOut]
+    top_customers: list[DashboardCustomerOut]
+
+
 class InventoryRowOut(BaseModel):
     item_id: UUID
     sku: str

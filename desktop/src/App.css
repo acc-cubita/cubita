@@ -1050,6 +1050,87 @@ button:disabled {
   margin-top: 8px;
 }
 
+/* ---------- داشبورد تحلیل فروش ---------- */
+
+.dashboard-analytics {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-analytics h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bars-chart {
+  position: relative;
+  margin-top: 8px;
+}
+
+.bars-chart-svg {
+  width: 100%;
+  height: clamp(220px, 32vh, 320px);
+  overflow: visible;
+  direction: ltr;
+}
+
+.rank-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.rank-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rank-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rank-label {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.rank-track {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--chart-grid);
+  overflow: hidden;
+}
+
+.rank-fill {
+  height: 100%;
+  border-radius: 5px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.rank-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
 .trend-legend {
   display: flex;
   gap: 16px;

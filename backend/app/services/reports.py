@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -10,7 +10,7 @@ from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount
 from app.models.cost_center import CostCenter
 from app.models.inventory import Contact, Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.treasury import TreasuryTransaction
 from app.services import chart_codes as cc
@@ -483,6 +483,96 @@ def get_kardex(
         "total_out": total_out,
         "closing_qty": running,
     }
+
+
+def get_sales_dashboard(db: Session, months: int = 12) -> dict:
+    """تحلیل فروش برای داشبورد: روند ماهانه‌ی فروش/خرید، پرفروش‌ترین کالاها و بهترین مشتریان.
+
+    ماه‌ها **شمسی** سطل‌بندی می‌شوند نه میلادی — چون یک ماه میلادی روی دو ماه شمسی
+    می‌افتد و برچسبِ ماهِ اشتباه، روندِ فروش را برای کاربر ایرانی بی‌معنا می‌کند.
+    فقط فاکتورهای باطل‌نشده و در بازه‌ی همان ماه‌ها حساب می‌شوند.
+    """
+    from app.services.printing import gregorian_to_jalali
+
+    months = max(1, min(months, 36))
+    today = date.today()
+    cy, cm, _ = gregorian_to_jalali(today)
+
+    # سطل‌های (سال، ماه) شمسی، از قدیمی به جدید
+    buckets: list[tuple[int, int]] = []
+    jy, jm = cy, cm
+    for _ in range(months):
+        buckets.append((jy, jm))
+        jm -= 1
+        if jm == 0:
+            jm = 12
+            jy -= 1
+    buckets.reverse()
+    index_of = {ym: i for i, ym in enumerate(buckets)}
+
+    # کفِ درشت برای کوئری تا کلِ تاریخ خوانده نشود؛ سطل‌بندیِ دقیق در پایتون است.
+    lower = today - timedelta(days=months * 31 + 31)
+
+    sales = [Decimal(0)] * months
+    purchases = [Decimal(0)] * months
+    for inv_date, amount in (
+        db.query(SalesInvoice.invoice_date, SalesInvoice.total_amount)
+        .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
+        .all()
+    ):
+        i = index_of.get(gregorian_to_jalali(inv_date)[:2])
+        if i is not None:
+            sales[i] += Decimal(amount)
+    for inv_date, amount in (
+        db.query(PurchaseInvoice.invoice_date, PurchaseInvoice.total_amount)
+        .filter(PurchaseInvoice.voided_at.is_(None), PurchaseInvoice.invoice_date >= lower)
+        .all()
+    ):
+        i = index_of.get(gregorian_to_jalali(inv_date)[:2])
+        if i is not None:
+            purchases[i] += Decimal(amount)
+
+    monthly = [
+        {"jy": jy, "jm": jm, "sales": sales[i], "purchases": purchases[i]}
+        for i, (jy, jm) in enumerate(buckets)
+    ]
+
+    # پرفروش‌ترین کالاها بر اساس درآمدِ پس از تخفیف، در همان بازه
+    line_revenue = SalesInvoiceLine.qty * SalesInvoiceLine.unit_price - SalesInvoiceLine.discount
+    top_items = [
+        {"item_id": item_id, "name": name, "qty": Decimal(qty), "revenue": Decimal(revenue)}
+        for item_id, name, qty, revenue in (
+            db.query(
+                Item.id,
+                Item.name,
+                func.coalesce(func.sum(SalesInvoiceLine.qty), 0),
+                func.coalesce(func.sum(line_revenue), 0),
+            )
+            .join(SalesInvoiceLine, SalesInvoiceLine.item_id == Item.id)
+            .join(SalesInvoice, SalesInvoiceLine.invoice_id == SalesInvoice.id)
+            .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
+            .group_by(Item.id, Item.name)
+            .order_by(func.coalesce(func.sum(line_revenue), 0).desc())
+            .limit(5)
+            .all()
+        )
+    ]
+
+    # بهترین مشتریان بر اساس جمعِ خالصِ فروش (فقط فروشِ اعتباریِ شخص‌دار)
+    top_customers = [
+        {"contact_id": contact_id, "name": name, "total": Decimal(total)}
+        for contact_id, name, total in (
+            db.query(Contact.id, Contact.name, func.coalesce(func.sum(SalesInvoice.total_amount), 0))
+            .join(SalesInvoice, SalesInvoice.contact_id == Contact.id)
+            .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
+            .group_by(Contact.id, Contact.name)
+            .order_by(func.coalesce(func.sum(SalesInvoice.total_amount), 0).desc())
+            .limit(5)
+            .all()
+        )
+    ]
+
+    return {"months": months, "monthly": monthly, "top_items": top_items, "top_customers": top_customers}
 
 
 def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | None) -> dict:

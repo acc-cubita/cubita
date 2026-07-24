@@ -1211,6 +1211,36 @@ export interface InventoryReport {
 export const fetchInventoryReport = (token: string) =>
   authedGet<InventoryReport>(token, '/api/reports/inventory')
 
+export interface DashboardMonth {
+  jy: number
+  jm: number
+  sales: string
+  purchases: string
+}
+
+export interface DashboardItem {
+  item_id: string
+  name: string
+  qty: string
+  revenue: string
+}
+
+export interface DashboardCustomer {
+  contact_id: string
+  name: string
+  total: string
+}
+
+export interface SalesDashboard {
+  months: number
+  monthly: DashboardMonth[]
+  top_items: DashboardItem[]
+  top_customers: DashboardCustomer[]
+}
+
+export const fetchSalesDashboard = (token: string, months = 12) =>
+  authedGet<SalesDashboard>(token, `/api/reports/dashboard?months=${months}`)
+
 export interface KardexLine {
   entry_date: string
   source_type: string

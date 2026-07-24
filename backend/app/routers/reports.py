@@ -16,6 +16,7 @@ from app.schemas.reports import (
     IncomeStatementOut,
     InventoryReportOut,
     KardexReportOut,
+    SalesDashboardOut,
     TrialBalanceRowOut,
     VatReportOut,
 )
@@ -102,6 +103,15 @@ def aging_report(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_aging(db, kind, as_of)
+
+
+@router.get("/dashboard", response_model=SalesDashboardOut)
+def sales_dashboard(
+    months: int = Query(12, ge=1, le=36),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_sales_dashboard(db, months)
 
 
 @router.get("/inventory", response_model=InventoryReportOut)

@@ -9,6 +9,7 @@ import {
 import { StatCard } from '../components/StatCard'
 import { TrendChart, type TrendSeries } from '../components/TrendChart'
 import { ActivityFeed } from '../components/ActivityFeed'
+import { SalesDashboard } from '../components/SalesDashboard'
 import { Wallet, TrendingUp, PackageSearch, Inbox } from 'lucide-react'
 
 const fa = (v: number) => v.toLocaleString('fa-IR')
@@ -133,6 +134,8 @@ export function OverviewPage({
           <ActivityFeed entries={entries} />
         </section>
       </div>
+
+      <SalesDashboard token={token} />
     </div>
   )
 }
