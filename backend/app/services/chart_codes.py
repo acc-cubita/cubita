@@ -26,6 +26,11 @@ COGS = "cogs"
 PAYROLL_EXPENSE = "payroll_expense"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
+VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
+VAT_RECEIVABLE = "vat_receivable"  # مالیات بر ارزش افزوده‌ی خرید (اعتبار مالیاتی — دارایی)
+FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌های ثابت (دارایی)
+ACCUMULATED_DEPRECIATION = "accumulated_depreciation"  # استهلاک انباشته (کاهنده‌ی دارایی)
+DEPRECIATION_EXPENSE = "depreciation_expense"  # هزینه‌ی استهلاک دوره (هزینه)
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -40,11 +45,16 @@ DEFAULT_CODE_BY_ROLE = {
     CHECKS_PAYABLE: "2102",
     INSURANCE_TAX_PAYABLE: "2103",
     PAYROLL_PAYABLE: "2104",
+    VAT_PAYABLE: "2105",
+    VAT_RECEIVABLE: "1107",
+    FIXED_ASSETS: "1201",
+    ACCUMULATED_DEPRECIATION: "1202",
     RETAINED_EARNINGS: "3102",
     SALES_REVENUE: "4101",
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
     INVENTORY_ADJUSTMENT: "5105",
+    DEPRECIATION_EXPENSE: "5106",
 }
 
 ROLE_BY_DEFAULT_CODE = {code: role for role, code in DEFAULT_CODE_BY_ROLE.items()}

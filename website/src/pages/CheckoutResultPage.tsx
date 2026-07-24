@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
-import { LightStreakBackground } from '../components/LightStreakBackground'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 
@@ -22,7 +21,6 @@ export function CheckoutResultPage() {
 
   return (
     <>
-      <LightStreakBackground />
       <Header />
       <div className="result-page">
         <div className="result-card">

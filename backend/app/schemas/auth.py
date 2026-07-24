@@ -22,6 +22,11 @@ class MeOut(BaseModel):
     permissions: dict
     tenant_id: UUID
     tenant_name: str
+    #: آیا این کاربر روی allowlist کنترل‌پنل فروش خودِ کوبیتاست — مستقل از نقش
+    #: تنانت. بدون این، فرانت فقط راه چک کردنش را با role_key == "owner" حدس
+    #: می‌زد، که یعنی هر صاحب کسب‌وکاری (نه فقط خودِ کوبیتا) تب «خریدهای سایت
+    #: تجاری» را در ساید‌بار می‌دید.
+    is_platform_admin: bool = False
 
     model_config = {"from_attributes": True}
 

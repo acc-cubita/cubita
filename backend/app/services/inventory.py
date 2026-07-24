@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -20,7 +20,38 @@ from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
 from app.services.common import get_account as _get_account
+from app.services.common import get_or_create_account
+from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
+
+
+def vat_payable_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.VAT_PAYABLE,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.VAT_PAYABLE],
+        name="مالیات بر ارزش افزوده پرداختنی",
+        acc_type="liability",
+        parent_code="21",
+    )
+
+
+def vat_receivable_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.VAT_RECEIVABLE,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.VAT_RECEIVABLE],
+        name="مالیات بر ارزش افزوده / اعتبار مالیاتی",
+        acc_type="asset",
+        parent_code="11",
+    )
+
+
+def compute_tax(net: Decimal, rate: Decimal) -> Decimal:
+    """مبلغ مالیات = خالص × نرخ٪، گردشده به عددِ صحیحِ ریال/تومان (ROUND_HALF_UP)."""
+    if rate is None or rate <= 0:
+        return Decimal(0)
+    return (net * rate / Decimal(100)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
 
 def get_stock_qty(db: Session, item_id: UUID, warehouse_id: UUID) -> Decimal:
@@ -118,10 +149,13 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
                 )
             )
 
+    tax_amount = compute_tax(total_amount, data.tax_rate)
+    cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
+    receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
         JournalLine(
-            account_id=(_get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)).id,
-            debit=total_amount,
+            account_id=receivable_or_cash.id,
+            debit=total_amount + tax_amount,  # مشتری خالص + مالیات را می‌پردازد
             credit=0,
             description="بابت فروش کالا/خدمت",
         ),
@@ -132,6 +166,15 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
             description="بابت فروش کالا/خدمت",
         ),
     ]
+    if tax_amount > 0:
+        journal_lines.append(
+            JournalLine(
+                account_id=vat_payable_account(db).id,
+                debit=0,
+                credit=tax_amount,
+                description="مالیات بر ارزش افزوده فروش",
+            )
+        )
     if total_cost > 0:
         journal_lines.append(
             JournalLine(
@@ -150,6 +193,10 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
             )
         )
 
+    if cost_center_id is not None:
+        for line in journal_lines:
+            line.cost_center_id = cost_center_id
+
     entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
     journal_entry = JournalEntry(
         number=entry_number,
@@ -166,10 +213,13 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         number=number,
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
+        cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
         total_cost=total_cost,
+        tax_rate=data.tax_rate,
+        tax_amount=tax_amount,
         journal_entry_id=journal_entry.id,
         source_order_id=data.source_order_id,
         created_by_id=user.id,
@@ -234,6 +284,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 )
             )
 
+    tax_amount = compute_tax(total_amount, data.tax_rate)
+    cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
+    payable_or_cash = _get_account(db, cc.ACCOUNTS_PAYABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
         JournalLine(
             account_id=_get_account(db, cc.INVENTORY).id,
@@ -241,13 +294,28 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             credit=0,
             description="بابت خرید کالا",
         ),
-        JournalLine(
-            account_id=(_get_account(db, cc.ACCOUNTS_PAYABLE) if data.contact_id else _get_account(db, cc.CASH)).id,
-            debit=0,
-            credit=total_amount,
-            description="بابت خرید کالا",
-        ),
     ]
+    if tax_amount > 0:
+        journal_lines.append(
+            JournalLine(
+                account_id=vat_receivable_account(db).id,
+                debit=tax_amount,
+                credit=0,
+                description="مالیات بر ارزش افزوده خرید (اعتبار مالیاتی)",
+            )
+        )
+    journal_lines.append(
+        JournalLine(
+            account_id=payable_or_cash.id,
+            debit=0,
+            credit=total_amount + tax_amount,  # به تأمین‌کننده خالص + مالیات پرداخت می‌شود
+            description="بابت خرید کالا",
+        )
+    )
+
+    if cost_center_id is not None:
+        for line in journal_lines:
+            line.cost_center_id = cost_center_id
 
     entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
     journal_entry = JournalEntry(
@@ -265,9 +333,12 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         number=number,
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
+        cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
+        tax_rate=data.tax_rate,
+        tax_amount=tax_amount,
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
         lines=invoice_lines,

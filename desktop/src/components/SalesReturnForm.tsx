@@ -110,6 +110,11 @@ export function SalesReturnForm({ token, items }: { token: string; items: ItemCa
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
 
+          {selectedInvoice && Number(selectedInvoice.tax_amount) > 0 && (
+            <div className="hint">
+              این فاکتور {Number(selectedInvoice.tax_rate).toLocaleString('fa-IR')}٪ مالیات بر ارزش افزوده دارد؛ مالیاتِ متناسب با مقدارِ برگشتی هم خودکار برمی‌گردد.
+            </div>
+          )}
           {selectedInvoice && (
             <table className="invoice-lines">
               <thead>
@@ -151,24 +156,30 @@ export function SalesReturnForm({ token, items }: { token: string; items: ItemCa
       {returns.length === 0 ? (
         <EmptyState icon={Undo2} text="برگشتی از فروش ثبت نشده." />
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>شماره</th>
-              <th>تاریخ</th>
-              <th>مبلغ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {returns.map((r) => (
-              <tr key={r.id}>
-                <td>{r.number != null ? r.number.toLocaleString('fa-IR') : '—'}</td>
-                <td>{formatJalali(r.return_date)}</td>
-                <td>{Number(r.total_amount).toLocaleString('fa-IR')}</td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>شماره</th>
+                <th>تاریخ</th>
+                <th>خالص</th>
+                <th>مالیات</th>
+                <th>جمع کل</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {returns.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.number != null ? r.number.toLocaleString('fa-IR') : '—'}</td>
+                  <td>{formatJalali(r.return_date)}</td>
+                  <td>{Number(r.total_amount).toLocaleString('fa-IR')}</td>
+                  <td>{Number(r.tax_amount).toLocaleString('fa-IR')}</td>
+                  <td>{(Number(r.total_amount) + Number(r.tax_amount)).toLocaleString('fa-IR')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </SectionCard>
   )

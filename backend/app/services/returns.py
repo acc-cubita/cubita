@@ -15,7 +15,13 @@ from app.models.user import User
 from app.schemas.returns import PurchaseReturnIn, SalesReturnIn
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
-from app.services.inventory import get_stock_qty, get_total_stock_qty
+from app.services.inventory import (
+    compute_tax,
+    get_stock_qty,
+    get_total_stock_qty,
+    vat_payable_account,
+    vat_receivable_account,
+)
 from app.services.period_close import assert_period_open
 
 
@@ -102,17 +108,34 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
                 )
             )
 
+    # مالیات با همان نرخِ فاکتورِ اصلی برمی‌گردد. بدون این، مالیاتی که هنگام فروش
+    # بستانکار شده بود با برگشتِ کالا آزاد نمی‌شد و ماندهٔ «مالیات پرداختنی» — همان
+    # عددی که مبنای اظهارنامه است — برای همیشه بیشتر از واقعیت می‌ماند.
+    tax_rate = Decimal(invoice.tax_rate or 0)
+    tax_amount = compute_tax(total_amount, tax_rate)
+
     journal_lines = [
         JournalLine(
             account_id=get_account(db, cc.SALES_REVENUE).id, debit=total_amount, credit=0, description="برگشت از فروش"
         ),
+    ]
+    if tax_amount > 0:
+        journal_lines.append(
+            JournalLine(
+                account_id=vat_payable_account(db).id,
+                debit=tax_amount,
+                credit=0,
+                description="برگشت مالیات بر ارزش افزوده فروش",
+            )
+        )
+    journal_lines.append(
         JournalLine(
             account_id=(get_account(db, cc.ACCOUNTS_RECEIVABLE) if invoice.contact_id else get_account(db, cc.CASH)).id,
             debit=0,
-            credit=total_amount,
+            credit=total_amount + tax_amount,  # کلِ مبلغی که به مشتری برمی‌گردد
             description="برگشت از فروش",
-        ),
-    ]
+        )
+    )
     if total_cost > 0:
         journal_lines.append(
             JournalLine(
@@ -140,6 +163,8 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
         description=data.description,
         total_amount=total_amount,
         total_cost=total_cost,
+        tax_rate=tax_rate,
+        tax_amount=tax_amount,
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
         lines=return_lines,
@@ -234,10 +259,15 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
                 )
             )
 
+    # قرینهٔ برگشت از فروش: اعتبار مالیاتیِ خرید هم باید پس برود، وگرنه اعتبارِ
+    # مالیاتی بابت کالایی که دیگر نداریم روی حساب می‌ماند.
+    tax_rate = Decimal(invoice.tax_rate or 0)
+    tax_amount = compute_tax(total_amount, tax_rate)
+
     journal_lines = [
         JournalLine(
             account_id=(get_account(db, cc.ACCOUNTS_PAYABLE) if invoice.contact_id else get_account(db, cc.CASH)).id,
-            debit=total_amount,
+            debit=total_amount + tax_amount,  # کلِ مبلغی که از تأمین‌کننده پس گرفته می‌شود
             credit=0,
             description="برگشت از خرید",
         ),
@@ -245,6 +275,15 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             account_id=get_account(db, cc.INVENTORY).id, debit=0, credit=total_amount, description="کاهش موجودی بابت برگشت از خرید"
         ),
     ]
+    if tax_amount > 0:
+        journal_lines.append(
+            JournalLine(
+                account_id=vat_receivable_account(db).id,
+                debit=0,
+                credit=tax_amount,
+                description="برگشت مالیات بر ارزش افزوده خرید (اعتبار مالیاتی)",
+            )
+        )
     number = next_document_number(db, DOC_PURCHASE_RETURN)
     journal_entry = make_journal_entry(
         db, data.return_date, f"برگشت از خرید شماره {number} (فاکتور خرید {invoice.number})", "purchase_return", user, journal_lines
@@ -256,6 +295,8 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         purchase_invoice_id=data.purchase_invoice_id,
         description=data.description,
         total_amount=total_amount,
+        tax_rate=tax_rate,
+        tax_amount=tax_amount,
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
         lines=return_lines,

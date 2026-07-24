@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BookOpen, Plus, Trash2, Save } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
-import { createJournalEntryDirect } from '../api'
+import { createJournalEntryDirect, fetchCostCenters, type CostCenterRecord } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -28,8 +28,18 @@ export function JournalEntryForm({
   const [entryDate, setEntryDate] = useState(todayIso())
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(), emptyLine()])
   const [message, setMessage] = useState<string | null>(null)
+  const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
+  const [costCenterId, setCostCenterId] = useState('')
 
   const postableAccounts = accounts.filter((a) => !a.is_group)
+
+  // مراکز هزینه زنده خوانده می‌شوند (در کش محلی نیستند)؛ آفلاین که نشد، فهرست خالی
+  // می‌ماند و انتخاب‌گر بی‌اثر است — ثبت سند بدون مرکز مثل قبل کار می‌کند.
+  useEffect(() => {
+    fetchCostCenters(token)
+      .then((rows) => setCostCenters(rows.filter((c) => c.is_active)))
+      .catch(() => setCostCenters([]))
+  }, [token])
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
@@ -66,6 +76,7 @@ export function JournalEntryForm({
     const payload = {
       entry_date: entryDate,
       description,
+      cost_center_id: costCenterId || null,
       lines: validLines.map((l) => ({
         account_id: l.accountId,
         debit: Number(l.debit) || 0,
@@ -83,6 +94,7 @@ export function JournalEntryForm({
       }
       setDescription('')
       setLines([emptyLine(), emptyLine()])
+      setCostCenterId('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -103,6 +115,19 @@ export function JournalEntryForm({
             تاریخ سند
             <JalaliDatePicker value={entryDate} onChange={setEntryDate} />
           </label>
+          {costCenters.length > 0 && (
+            <label>
+              مرکز هزینه/پروژه (اختیاری)
+              <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                <option value="">— بدون مرکز —</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code ? `${c.code} — ${c.name}` : c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <table className="invoice-lines">
             <thead>

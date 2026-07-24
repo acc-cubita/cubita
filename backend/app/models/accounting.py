@@ -78,6 +78,10 @@ class JournalLine(TenantMixin, UUIDPKMixin, Base):
 
     entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
+    #: مرکز هزینه/پروژه؛ از سطحِ سند به ردیف به ارث می‌رسد. NULL = بدون مرکز.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True, index=True
+    )
 
     debit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     credit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)

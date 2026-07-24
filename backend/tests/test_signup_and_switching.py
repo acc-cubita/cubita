@@ -61,6 +61,32 @@ def test_signup_creates_a_working_business(anon_client, db):
     assert me.json()["tenant_name"] == "کسب‌وکار تازه"
 
 
+def test_a_regular_business_owner_is_not_a_platform_admin(client, user):
+    """تب «خریدهای سایت تجاری» کنترل‌پنل فروش خودِ کوبیتاست، نه ویژگی مشتری.
+
+    تا امروز فرانت این را با role_key == "owner" حدس می‌زد، یعنی هر صاحب
+    کسب‌وکاری — نه فقط خودِ کوبیتا — آن را در ساید‌بار می‌دید و کلیک می‌کرد تا
+    از بک‌اند ۴۰۳ بگیرد. `is_platform_admin` باید صراحتاً false باشد مگر ایمیل
+    کاربر روی allowlist سرور باشد.
+    """
+    res = client.get("/api/auth/me")
+    assert res.status_code == 200
+    assert res.json()["role_key"] == "owner", "این تست باید صاحب کسب‌وکار باشد، نه نقش دیگر"
+    assert res.json()["is_platform_admin"] is False
+
+
+def test_an_allowlisted_email_is_a_platform_admin(client, user, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("PLATFORM_ADMIN_EMAILS", user.email)
+    get_settings.cache_clear()
+    try:
+        res = client.get("/api/auth/me")
+        assert res.json()["is_platform_admin"] is True
+    finally:
+        get_settings.cache_clear()
+
+
 def test_signup_provisions_everything_needed_to_post(anon_client, db):
     """کسب‌وکار نیمه‌ساخته سالم به‌نظر می‌رسد و اولین فاکتور می‌شکند.
 

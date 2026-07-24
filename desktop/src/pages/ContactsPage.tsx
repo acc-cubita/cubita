@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HandCoins, Pencil, Plus, Save, UsersRound, Wallet, X } from 'lucide-react'
+import {
+  Building2,
+  HandCoins,
+  Pencil,
+  Plus,
+  Save,
+  UserRound,
+  UsersRound,
+  Wallet,
+  X,
+} from 'lucide-react'
 import {
   createContact,
   createTreasuryPayment,
@@ -14,6 +24,8 @@ import {
 import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { StatCard } from '../components/StatCard'
+import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { formatJalali } from '../lib/jalali'
@@ -25,6 +37,8 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
 }
 
 const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '' }
+
+const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
 export function ContactsPage({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
@@ -72,6 +86,16 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       }),
     [contacts, filterType, search],
   )
+
+  // شاخص‌های بالای صفحه — از همان داده‌ی موجود محاسبه می‌شوند
+  const kpis = useMemo(() => {
+    const customers = contacts.filter((c) => c.type === 'customer' || c.type === 'both').length
+    const suppliers = contacts.filter((c) => c.type === 'supplier' || c.type === 'both').length
+    const received = transactions
+      .filter((t) => t.type === 'receipt')
+      .reduce((s, t) => s + Number(t.amount), 0)
+    return { total: contacts.length, customers, suppliers, received }
+  }, [contacts, transactions])
 
   async function handleSaveContact(e: React.FormEvent) {
     e.preventDefault()
@@ -155,19 +179,12 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       ? contacts.filter((c) => c.type !== 'supplier')
       : contacts.filter((c) => c.type !== 'customer')
 
-  return (
-    <div className="page">
-      <PageHeader
-        icon={UsersRound}
-        title="اشخاص"
-        description="مشتریان و تأمین‌کنندگان را مدیریت کنید و دریافت و پرداخت‌هایشان را با سند خودکار ثبت کنید."
-      />
-
-      {error && <div className="error">{error}</div>}
-
+  const contactsTab = (
+    <div className="workspace-split">
       <SectionCard
         icon={editingId ? Pencil : Plus}
         title={editingId ? 'ویرایش طرف حساب' : 'طرف حساب جدید'}
+        description={editingId ? 'اطلاعات این طرف حساب را به‌روزرسانی کنید.' : 'مشتری یا تأمین‌کننده‌ی تازه را ثبت کنید.'}
         actions={
           editingId ? (
             <button
@@ -177,15 +194,15 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                 setFormMessage(null)
               }}
             >
-              <X size={13} /> انصراف از ویرایش
+              <X size={13} /> انصراف
             </button>
           ) : undefined
         }
       >
-        <form className="invoice-form" onSubmit={handleSaveContact}>
+        <form className="invoice-form form-full" onSubmit={handleSaveContact}>
           <label>
             نام
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="نام شخص یا شرکت" required />
           </label>
           <label>
             نوع
@@ -195,17 +212,19 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               <option value="both">مشتری و تأمین‌کننده</option>
             </select>
           </label>
-          <label>
-            تلفن
-            <input type="text" value={form.phone ?? ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          </label>
+          <div className="field-row">
+            <label>
+              تلفن
+              <input type="text" value={form.phone ?? ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </label>
+            <label>
+              شناسه/کد اقتصادی
+              <input type="text" value={form.tax_id ?? ''} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} />
+            </label>
+          </div>
           <label>
             ایمیل
             <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
-          <label>
-            شناسه/کد اقتصادی
-            <input type="text" value={form.tax_id ?? ''} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} />
           </label>
           <label>
             نشانی
@@ -223,6 +242,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       <SectionCard
         icon={UsersRound}
         title="لیست اشخاص"
+        description={`${faMoney(filteredContacts.length)} طرف حساب`}
         actions={
           <div className="check-actions">
             <select value={filterType} onChange={(e) => setFilterType(e.target.value as typeof filterType)}>
@@ -237,41 +257,53 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
         {filteredContacts.length === 0 ? (
           <EmptyState icon={UsersRound} text="طرف حسابی ثبت نشده." />
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>نام</th>
-                <th>نوع</th>
-                <th>تلفن</th>
-                <th>ایمیل</th>
-                <th>اقدام</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{TYPE_LABELS[c.type]}</td>
-                  <td>{c.phone ?? '—'}</td>
-                  <td>{c.email ?? '—'}</td>
-                  <td>
-                    <button type="button" onClick={() => startEdit(c)}>
-                      <Pencil size={13} /> ویرایش
-                    </button>
-                  </td>
+          <div className="entity-table-wrap">
+            <table className="entity-table">
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>نوع</th>
+                  <th>تلفن</th>
+                  <th>ایمیل</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredContacts.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <div className="entity-cell">
+                        <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
+                        <div>
+                          <div className="entity-name">{c.name}</div>
+                          {c.tax_id && <div className="entity-sub">کد اقتصادی: {c.tax_id}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
+                    </td>
+                    <td>{c.phone ?? '—'}</td>
+                    <td className="ltr-cell">{c.email ?? '—'}</td>
+                    <td>
+                      <button type="button" onClick={() => startEdit(c)}>
+                        <Pencil size={13} /> ویرایش
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </SectionCard>
+    </div>
+  )
 
-      <SectionCard icon={HandCoins} title="دریافت و پرداخت">
-        <p className="hint">
-          دریافت از مشتری، حساب‌های دریافتنی را تسویه می‌کند؛ پرداخت به تأمین‌کننده، حساب‌های پرداختنی را. سند
-          حسابداری هر دو خودکار صادر می‌شود.
-        </p>
-        <form className="invoice-form" onSubmit={handleSubmitTransaction}>
+  const treasuryTab = (
+    <div className="workspace-split">
+      <SectionCard icon={HandCoins} title="ثبت دریافت / پرداخت" description="سند حسابداری هر تراکنش خودکار صادر می‌شود.">
+        <form className="invoice-form form-full" onSubmit={handleSubmitTransaction}>
           <label>
             نوع عملیات
             <select value={txType} onChange={(e) => setTxType(e.target.value as 'receipt' | 'payment')}>
@@ -290,14 +322,16 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               ))}
             </select>
           </label>
-          <label>
-            مبلغ
-            <input type="number" min="0" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} required />
-          </label>
-          <label>
-            تاریخ
-            <JalaliDatePicker value={txDate} onChange={setTxDate} />
-          </label>
+          <div className="field-row">
+            <label>
+              مبلغ (تومان)
+              <input type="number" min="0" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} required />
+            </label>
+            <label>
+              تاریخ
+              <JalaliDatePicker value={txDate} onChange={setTxDate} />
+            </label>
+          </div>
           <label>
             روش
             <select value={txMethod} onChange={(e) => setTxMethod(e.target.value as 'cash' | 'bank')}>
@@ -331,40 +365,72 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
         </form>
       </SectionCard>
 
-      <SectionCard icon={Wallet} title="آخرین دریافت‌ها و پرداخت‌ها">
+      <SectionCard icon={Wallet} title="آخرین دریافت‌ها و پرداخت‌ها" description={`${faMoney(transactions.length)} تراکنش`}>
         {transactions.length === 0 ? (
           <EmptyState icon={Wallet} text="هنوز دریافت یا پرداختی ثبت نشده." />
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>نوع</th>
-                <th>طرف حساب</th>
-                <th>مبلغ</th>
-                <th>روش</th>
-                <th>تاریخ</th>
-                <th>توضیحات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
-                      {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
-                    </span>
-                  </td>
-                  <td>{t.contact_name}</td>
-                  <td>{Number(t.amount).toLocaleString('fa-IR')}</td>
-                  <td>{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
-                  <td>{formatJalali(t.transaction_date)}</td>
-                  <td>{t.description}</td>
+          <div className="entity-table-wrap">
+            <table className="entity-table">
+              <thead>
+                <tr>
+                  <th>نوع</th>
+                  <th>طرف حساب</th>
+                  <th>مبلغ</th>
+                  <th>روش</th>
+                  <th>تاریخ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {transactions.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
+                        {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
+                      </span>
+                    </td>
+                    <td className="entity-name">{t.contact_name}</td>
+                    <td className="money-cell">{faMoney(Number(t.amount))}</td>
+                    <td>{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
+                    <td>{formatJalali(t.transaction_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </SectionCard>
+    </div>
+  )
+
+  return (
+    <div className="page">
+      <PageHeader
+        icon={UsersRound}
+        title="اشخاص"
+        description="مشتریان و تأمین‌کنندگان را مدیریت کنید و دریافت و پرداخت‌هایشان را با سند خودکار ثبت کنید."
+      />
+
+      {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard icon={<UsersRound size={18} />} label="کل اشخاص" value={faMoney(kpis.total)} hint="مشتری و تأمین‌کننده" />
+        <StatCard icon={<UserRound size={18} />} label="مشتریان" value={faMoney(kpis.customers)} />
+        <StatCard icon={<Building2 size={18} />} label="تأمین‌کنندگان" value={faMoney(kpis.suppliers)} />
+        <StatCard
+          icon={<HandCoins size={18} />}
+          label="مجموع دریافت‌ها"
+          value={faMoney(kpis.received)}
+          tone="success"
+          hint="تومان"
+        />
+      </div>
+
+      <Tabs
+        tabs={[
+          { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
+          { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins, content: treasuryTab },
+        ]}
+      />
     </div>
   )
 }

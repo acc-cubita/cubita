@@ -20,6 +20,7 @@ type Row = {
   invoice_date: string
   description: string
   total_amount: string
+  tax_amount: string
   voided_at: string | null
   void_reason: string
 }
@@ -101,7 +102,8 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
       ) : rows.length === 0 ? (
         <EmptyState icon={FileText} text="هنوز فاکتوری ثبت نشده." />
       ) : (
-        <table>
+        <div className="table-scroll">
+          <table>
           <thead>
             <tr>
               <th>شماره</th>
@@ -118,7 +120,15 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
                 <td>{row.number ?? '—'}</td>
                 <td>{formatJalali(row.invoice_date)}</td>
                 <td>{row.description || '—'}</td>
-                <td>{Number(row.total_amount).toLocaleString('fa-IR')}</td>
+                <td
+                  title={
+                    Number(row.tax_amount) > 0
+                      ? `خالص ${Number(row.total_amount).toLocaleString('fa-IR')} + مالیات ${Number(row.tax_amount).toLocaleString('fa-IR')}`
+                      : undefined
+                  }
+                >
+                  {(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}
+                </td>
                 <td>
                   {row.voided_at ? (
                     <span title={row.void_reason}>باطل شده</span>
@@ -146,7 +156,8 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </SectionCard>
   )

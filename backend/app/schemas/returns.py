@@ -49,6 +49,8 @@ class SalesReturnOut(BaseModel):
     description: str
     total_amount: Decimal
     total_cost: Decimal
+    tax_rate: Decimal
+    tax_amount: Decimal
     journal_entry_id: UUID | None
     lines: list[SalesReturnLineOut]
 
@@ -97,6 +99,8 @@ class PurchaseReturnOut(BaseModel):
     purchase_invoice_id: UUID
     description: str
     total_amount: Decimal
+    tax_rate: Decimal
+    tax_amount: Decimal
     journal_entry_id: UUID | None
     lines: list[PurchaseReturnLineOut]
 

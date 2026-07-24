@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { LightStreakBackground } from '../components/LightStreakBackground'
+import { SoftBackground } from '../components/SoftBackground'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 
@@ -10,7 +10,7 @@ export function TermsPage() {
 
   return (
     <>
-      <LightStreakBackground />
+      <SoftBackground />
       <Header />
       <div className="legal-page">
         <div className="container legal-container">

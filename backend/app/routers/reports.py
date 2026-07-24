@@ -6,11 +6,15 @@ from uuid import UUID
 
 from app.database import get_db
 from app.deps import require_permission
+from app.schemas.cost_center import CostCenterReportOut
 from app.schemas.reports import (
+    AgingReportOut,
     BalanceSheetOut,
+    CashFlowOut,
     GeneralLedgerOut,
     IncomeStatementOut,
     TrialBalanceRowOut,
+    VatReportOut,
 )
 from app.services import reports as reports_service
 
@@ -55,3 +59,43 @@ def balance_sheet(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_balance_sheet(db, as_of or date.today())
+
+
+@router.get("/vat", response_model=VatReportOut)
+def vat_report(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_vat_report(db, date_from, date_to)
+
+
+@router.get("/cash-flow", response_model=CashFlowOut)
+def cash_flow(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_cash_flow(db, date_from, date_to)
+
+
+@router.get("/cost-center", response_model=CostCenterReportOut)
+def cost_center_report(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_cost_center_report(db, date_from, date_to)
+
+
+@router.get("/aging", response_model=AgingReportOut)
+def aging_report(
+    kind: str = Query("receivable"),
+    as_of: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_aging(db, kind, as_of)

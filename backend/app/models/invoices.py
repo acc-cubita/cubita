@@ -22,10 +22,17 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     invoice_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text, default="")
 
-    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)  # خالص (بدون مالیات)
     total_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ قابل‌پرداختِ مشتری = total_amount + tax_amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     # شناسه‌ی سفارش روی سایت فروشگاهی؛ برای idempotent بودن sync (جلوگیری از وارد کردن دوباره‌ی همان سفارش)
     source_order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
@@ -65,9 +72,16 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     invoice_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text, default="")
 
-    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)  # خالص (بدون مالیات)
+    # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

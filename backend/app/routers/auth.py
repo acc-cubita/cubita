@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.rate_limit import (
     limit_login,
@@ -234,4 +235,5 @@ def me(principal: Principal = Depends(get_principal)):
         permissions=principal.role.permissions,
         tenant_id=principal.tenant_id,
         tenant_name=principal.membership.tenant.name,
+        is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
     )

@@ -24,14 +24,19 @@ class SalesInvoiceIn(BaseModel):
     invoice_date: date
     warehouse_id: UUID
     contact_id: UUID | None = None
+    cost_center_id: UUID | None = None
     description: str = ""
     lines: list[SalesInvoiceLineIn]
+    #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
+    tax_rate: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
 
     @model_validator(mode="after")
     def validate_lines(self) -> "SalesInvoiceIn":
         if not self.lines:
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
+        if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
+            raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
         return self
 
 
@@ -52,9 +57,12 @@ class SalesInvoiceOut(BaseModel):
     invoice_date: date
     warehouse_id: UUID
     contact_id: UUID | None
+    cost_center_id: UUID | None = None
     description: str
     total_amount: Decimal
     total_cost: Decimal
+    tax_rate: Decimal
+    tax_amount: Decimal
     journal_entry_id: UUID | None
     source_order_id: int | None
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
@@ -84,13 +92,18 @@ class PurchaseInvoiceIn(BaseModel):
     invoice_date: date
     warehouse_id: UUID
     contact_id: UUID | None = None
+    cost_center_id: UUID | None = None
     description: str = ""
     lines: list[PurchaseInvoiceLineIn]
+    #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
+    tax_rate: Decimal = Decimal(0)
 
     @model_validator(mode="after")
     def validate_lines(self) -> "PurchaseInvoiceIn":
         if not self.lines:
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
+        if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
+            raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
         return self
 
 
@@ -110,8 +123,11 @@ class PurchaseInvoiceOut(BaseModel):
     invoice_date: date
     warehouse_id: UUID
     contact_id: UUID | None
+    cost_center_id: UUID | None = None
     description: str
     total_amount: Decimal
+    tax_rate: Decimal
+    tax_amount: Decimal
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""

@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ShoppingCart, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import { createSalesInvoiceDirect, newIdempotencyKey } from '../api'
+import { createSalesInvoiceDirect, fetchCostCenters, newIdempotencyKey, type CostCenterRecord } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -26,8 +26,18 @@ export function SalesInvoiceForm({
 }) {
   const [warehouseId, setWarehouseId] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(todayIso())
+  const [taxRate, setTaxRate] = useState('10')
   const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitPrice: '' }])
   const [message, setMessage] = useState<string | null>(null)
+  const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
+  const [costCenterId, setCostCenterId] = useState('')
+
+  // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور بدون مرکز است.
+  useEffect(() => {
+    fetchCostCenters(token)
+      .then((rows) => setCostCenters(rows.filter((c) => c.is_active)))
+      .catch(() => setCostCenters([]))
+  }, [token])
   // کلید یکتاسازی به *این فاکتور* گره می‌خورد، نه به هر تلاش شبکه‌ای.
   //
   // اگر ثبت با خطا برگردد و کاربر دوباره دکمه را بزند، همان کلید می‌رود — چون
@@ -50,6 +60,9 @@ export function SalesInvoiceForm({
   }
 
   const total = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitPrice) || 0), 0)
+  const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
+  const taxAmount = Math.round((total * taxRateNum) / 100)
+  const grandTotal = total + taxAmount
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -68,6 +81,8 @@ export function SalesInvoiceForm({
     const payload = {
       invoice_date: invoiceDate,
       warehouse_id: effectiveWarehouseId,
+      tax_rate: taxRateNum,
+      cost_center_id: costCenterId || null,
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
@@ -85,6 +100,7 @@ export function SalesInvoiceForm({
       }
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
       setLines([{ itemId: '', qty: '1', unitPrice: '' }])
+      setCostCenterId('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -111,6 +127,30 @@ export function SalesInvoiceForm({
             تاریخ فاکتور
             <JalaliDatePicker value={invoiceDate} onChange={setInvoiceDate} />
           </label>
+          <label>
+            نرخ مالیات بر ارزش افزوده (٪)
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="any"
+              value={taxRate}
+              onChange={(e) => setTaxRate(e.target.value)}
+            />
+          </label>
+          {costCenters.length > 0 && (
+            <label>
+              مرکز هزینه/پروژه (اختیاری)
+              <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                <option value="">— بدون مرکز —</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code ? `${c.code} — ${c.name}` : c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <table className="invoice-lines">
             <thead>
@@ -171,7 +211,11 @@ export function SalesInvoiceForm({
             <button type="button" onClick={addLine}>
               <Plus size={14} /> افزودن ردیف
             </button>
-            <span className="invoice-total">جمع کل: {total.toLocaleString('fa-IR')}</span>
+            <div className="invoice-totals">
+              <span>جمع خالص: {total.toLocaleString('fa-IR')}</span>
+              <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {taxAmount.toLocaleString('fa-IR')}</span>
+              <span className="invoice-total">قابل پرداخت: {grandTotal.toLocaleString('fa-IR')}</span>
+            </div>
             <button type="submit" className="btn-primary"><Save size={14} /> ثبت فاکتور</button>
           </div>
 

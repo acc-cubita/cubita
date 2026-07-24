@@ -26,6 +26,9 @@ class SalesReturn(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     total_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    # مالیاتِ برگشتی — با همان نرخِ فاکتورِ اصلی. مبلغِ بازگرداندنی به مشتری = total_amount + tax_amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
@@ -66,6 +69,9 @@ class PurchaseReturn(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, default="")
 
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    # مالیاتِ برگشتی — با همان نرخِ فاکتورِ اصلی. مبلغِ بازپس‌گرفتنی از تأمین‌کننده = total_amount + tax_amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

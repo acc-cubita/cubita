@@ -23,22 +23,34 @@ DEFAULT_ROLES: list[dict] = [
             "invoices": ["view", "create", "update"],
             "checks_bank": ["view", "create", "update"],
             "payroll": ["view"],
+            "assets": ["view", "create", "update", "approve"],
+            "calendar": ["view", "create", "update", "delete"],
         },
     },
     {
         "key": "salesperson",
         "name": "فروشنده/صندوق‌دار",
-        "permissions": {"invoices": ["view", "create"], "inventory": ["view"]},
+        "permissions": {
+            "invoices": ["view", "create"],
+            "inventory": ["view"],
+            "calendar": ["view", "create", "update"],
+        },
     },
     {
         "key": "warehouse_keeper",
         "name": "انباردار",
-        "permissions": {"inventory": ["view", "create", "update"]},
+        "permissions": {
+            "inventory": ["view", "create", "update"],
+            "calendar": ["view", "create", "update"],
+        },
     },
     {
         "key": "payroll_officer",
         "name": "مسئول حقوق و دستمزد",
-        "permissions": {"payroll": ["view", "create", "update", "approve"]},
+        "permissions": {
+            "payroll": ["view", "create", "update", "approve"],
+            "calendar": ["view", "create", "update"],
+        },
     },
     {
         "key": "demo",
@@ -52,6 +64,8 @@ DEFAULT_ROLES: list[dict] = [
             "inventory": ["view"],
             "checks_bank": ["view"],
             "payroll": ["view"],
+            "assets": ["view"],
+            "calendar": ["view"],
         },
     },
 ]

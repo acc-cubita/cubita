@@ -9,6 +9,7 @@ import {
   Users,
   Store,
   BarChart3,
+  CalendarDays,
   CreditCard,
   HelpCircle,
   UserCog,
@@ -28,6 +29,7 @@ export type PageKey =
   | 'integration'
   | 'billing'
   | 'reports'
+  | 'calendar'
   | 'team'
   | 'help'
 
@@ -42,9 +44,14 @@ const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
   { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
   { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
+  { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
 ]
 
-const OWNER_ONLY_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
+// این تب کنترل‌پنل فروش خودِ کوبیتاست، نه یک ویژگی برای مشتری‌ها. تا امروز فقط
+// روی role_key === 'owner' شرط داشت، یعنی هر صاحب کسب‌وکاری (نه فقط خودِ کوبیتا)
+// آن را در ساید‌بار می‌دید و کلیک می‌کرد تا از بک‌اند ۴۰۳ بگیرد — بک‌اند درست
+// محافظت می‌کرد، ولی UI چیزی نشان می‌داد که هرگز قرار نبود مال او باشد.
+const PLATFORM_ADMIN_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'billing', label: 'خریدهای سایت تجاری', icon: <CreditCard size={18} /> },
 ]
 
@@ -58,20 +65,27 @@ export function Sidebar({
   onNavigate,
   userName,
   roleName,
-  roleKey,
+  isPlatformAdmin,
   onLogout,
+  open = false,
+  onClose,
 }: {
   active: PageKey
   onNavigate: (page: PageKey) => void
   userName: string
   roleName: string
-  roleKey: string
+  isPlatformAdmin: boolean
   onLogout: () => void
+  /** فقط در وبِ باریک (موبایل) معنا دارد: نوار کناری کشوی روی‌هم می‌شود. */
+  open?: boolean
+  onClose?: () => void
 }) {
-  const navItems = roleKey === 'owner' ? [...NAV_ITEMS, ...OWNER_ONLY_NAV_ITEMS] : NAV_ITEMS
+  const navItems = isPlatformAdmin ? [...NAV_ITEMS, ...PLATFORM_ADMIN_NAV_ITEMS] : NAV_ITEMS
 
   return (
-    <aside className="sidebar">
+    <>
+      {open && <div className="sidebar-overlay" onClick={onClose} aria-hidden="true" />}
+      <aside className={`sidebar${open ? ' sidebar--open' : ''}`}>
       <div className="sidebar-brand">
         <span className="sidebar-brand-mark">C</span>
         <span className="sidebar-brand-name">کوبیتا</span>
@@ -83,7 +97,10 @@ export function Sidebar({
             key={item.key}
             type="button"
             className={`sidebar-nav-item${active === item.key ? ' active' : ''}`}
-            onClick={() => onNavigate(item.key)}
+            onClick={() => {
+              onNavigate(item.key)
+              onClose?.()
+            }}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -95,7 +112,10 @@ export function Sidebar({
             key={item.key}
             type="button"
             className={`sidebar-nav-item${active === item.key ? ' active' : ''}`}
-            onClick={() => onNavigate(item.key)}
+            onClick={() => {
+              onNavigate(item.key)
+              onClose?.()
+            }}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -115,6 +135,7 @@ export function Sidebar({
           <LogOut size={17} />
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

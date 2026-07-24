@@ -160,6 +160,7 @@ def print_sales_invoice(
                 for line in invoice.lines
             ],
             total=invoice.total_amount,
+            tax_amount=invoice.tax_amount,
             voided_at=invoice.voided_at,
             void_reason=invoice.void_reason,
         )
@@ -198,6 +199,7 @@ def print_purchase_invoice(
                 for line in invoice.lines
             ],
             total=invoice.total_amount,
+            tax_amount=invoice.tax_amount,
             voided_at=invoice.voided_at,
             void_reason=invoice.void_reason,
         )

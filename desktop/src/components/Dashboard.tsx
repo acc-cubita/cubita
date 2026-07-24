@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Users, Store, BarChart3, CreditCard } from 'lucide-react'
+import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard } from 'lucide-react'
 import {
   fetchAccountsLive,
   fetchBankAccountsLive,
@@ -16,6 +16,7 @@ import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
+import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -37,6 +38,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
   reports: 'گزارش‌ها',
+  calendar: 'تقویم و یادآوری',
   team: 'کاربران',
   help: 'راهنما',
 }
@@ -51,6 +53,7 @@ export function Dashboard({
   onLogout: () => void
 }) {
   const [page, setPage] = useState<PageKey>('overview')
+  const [navOpen, setNavOpen] = useState(false)
   const [accounts, setAccounts] = useState<AccountCache[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseCache[]>([])
   const [items, setItems] = useState<ItemCache[]>([])
@@ -117,13 +120,25 @@ export function Dashboard({
         onNavigate={setPage}
         userName={me.name}
         roleName={me.role_name}
-        roleKey={me.role_key}
+        isPlatformAdmin={me.is_platform_admin}
         onLogout={onLogout}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
       />
 
       <div className="app-main">
         <header className="topbar">
-          <h1 className="topbar-title">{PAGE_TITLES[page]}</h1>
+          <div className="topbar-start">
+            <button
+              type="button"
+              className="nav-toggle"
+              onClick={() => setNavOpen(true)}
+              aria-label="باز کردن منو"
+            >
+              <Menu size={20} />
+            </button>
+            <h1 className="topbar-title">{PAGE_TITLES[page]}</h1>
+          </div>
           <div className="topbar-actions">
             {syncStatus && <span className="sync-status">{syncStatus}</span>}
             {isElectron && (
@@ -203,7 +218,7 @@ export function Dashboard({
               <IntegrationPanel token={token} />
             </div>
           )}
-          {page === 'billing' && me.role_key === 'owner' && (
+          {page === 'billing' && me.is_platform_admin && (
             <div className="page">
               <PageHeader
                 icon={CreditCard}
@@ -223,6 +238,7 @@ export function Dashboard({
               <Reports token={token} accounts={accounts} />
             </div>
           )}
+          {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} me={me} />}
           {page === 'help' && <HelpPage />}
         </main>

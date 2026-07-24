@@ -192,6 +192,7 @@ def render_invoice(
     description: str,
     lines: list[dict],
     total: Decimal,
+    tax_amount: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
 ) -> str:
@@ -200,6 +201,19 @@ def render_invoice(
     if voided_at is not None:
         reason = f" — {escape(void_reason)}" if void_reason else ""
         banner = f"<div class='voided'>این فاکتور باطل شده است{reason}</div>"
+
+    # total همان جمعِ خالص (بدون مالیات) است؛ اگر مالیاتی هست، تفکیک نشان داده می‌شود.
+    subtotal = Decimal(str(total))
+    tax = Decimal(str(tax_amount or 0))
+    grand_total = subtotal + tax
+    if tax > 0:
+        totals_rows = (
+            f"<tr><td colspan='6'>جمع خالص (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>"
+            f"<tr><td colspan='6'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>"
+            f"<tr><td colspan='6'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>"
+        )
+    else:
+        totals_rows = f"<tr><td colspan='6'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>"
 
     return f"""<!doctype html>
 <html lang="fa" dir="rtl">
@@ -252,11 +266,11 @@ def render_invoice(
 {_rows(lines)}
     </tbody>
     <tfoot>
-      <tr><td colspan="6">جمع کل (ریال)</td><td class="num">{fa_number(total)}</td></tr>
+      {totals_rows}
     </tfoot>
   </table>
 
-  <div class="words">مبلغ به حروف: <strong>{amount_in_words(total)}</strong> ریال</div>
+  <div class="words">مبلغ به حروف: <strong>{amount_in_words(grand_total)}</strong> ریال</div>
 
   <div class="signs">
     <div class="sign">مهر و امضای فروشنده</div>

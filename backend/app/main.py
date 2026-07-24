@@ -10,10 +10,14 @@ from app.observability import (
 )
 from app.routers import (
     accounts,
+    assets,
     audit,
     auth,
     banking,
     billing,
+    budgeting,
+    calendar,
+    cost_centers,
     integration,
     inventory,
     invoices,
@@ -68,6 +72,10 @@ app.include_router(billing.router)
 app.include_router(treasury.router)
 app.include_router(audit.router)
 app.include_router(subscription.router)
+app.include_router(calendar.router)
+app.include_router(assets.router)
+app.include_router(budgeting.router)
+app.include_router(cost_centers.router)
 
 
 @app.get("/api/health")

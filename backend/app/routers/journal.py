@@ -10,6 +10,7 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.accounting import JournalEntryIn, JournalEntryOut
+from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
@@ -37,6 +38,7 @@ def create_entry(
     user: User = Depends(require_permission("accounting", "create")),
 ):
     assert_period_open(db, data.entry_date)
+    cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
 
     # شماره‌ی سند از یک sequence اتمیک پایگاه‌داده گرفته می‌شود تا زیر بار همزمان چند کاربر تصادم نکند
     number = next_document_number(db, DOC_JOURNAL_ENTRY)
@@ -50,6 +52,7 @@ def create_entry(
         lines=[
             JournalLine(
                 account_id=line.account_id,
+                cost_center_id=cost_center_id,
                 debit=line.debit,
                 credit=line.credit,
                 description=line.description,

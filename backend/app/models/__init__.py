@@ -1,8 +1,12 @@
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.assets import DepreciationEntry, FixedAsset
 from app.models.audit import AuditLog
 from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.billing import Plan, Purchase
+from app.models.budgeting import BudgetLine
+from app.models.calendar import CalendarEvent
+from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.idempotency import IdempotencyKey
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
@@ -38,6 +42,8 @@ __all__ = [
     "Account",
     "JournalEntry",
     "JournalLine",
+    "FixedAsset",
+    "DepreciationEntry",
     "Role",
     "User",
     "Contact",
@@ -71,6 +77,9 @@ __all__ = [
     "StockTransferLine",
     "Plan",
     "Purchase",
+    "BudgetLine",
+    "CalendarEvent",
+    "CostCenter",
     "TreasuryTransaction",
     "AuthToken",
     "DocumentCounter",

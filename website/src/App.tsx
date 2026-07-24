@@ -1,5 +1,5 @@
 import './App.css'
-import { LightStreakBackground } from './components/LightStreakBackground'
+import { SoftBackground } from './components/SoftBackground'
 import { Header } from './components/Header'
 import { Hero } from './components/Hero'
 import { StatsBar } from './components/StatsBar'
@@ -15,7 +15,7 @@ import { Footer } from './components/Footer'
 function App() {
   return (
     <>
-      <LightStreakBackground />
+      <SoftBackground />
       <Header />
       <Hero />
       <StatsBar />

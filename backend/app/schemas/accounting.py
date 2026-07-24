@@ -26,6 +26,8 @@ class JournalLineIn(BaseModel):
 class JournalEntryIn(BaseModel):
     entry_date: date
     description: str = ""
+    #: مرکز هزینه/پروژه‌ی سند؛ به همه‌ی ردیف‌هایش منتقل می‌شود. None = بدون مرکز.
+    cost_center_id: UUID | None = None
     lines: list[JournalLineIn]
 
     @model_validator(mode="after")
@@ -44,6 +46,7 @@ class JournalEntryIn(BaseModel):
 class JournalLineOut(BaseModel):
     id: UUID
     account_id: UUID
+    cost_center_id: UUID | None = None
     debit: Decimal
     credit: Decimal
     description: str

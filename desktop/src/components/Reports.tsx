@@ -1,20 +1,40 @@
 import { useState } from 'react'
 import { BarChart3, Search } from 'lucide-react'
 import {
+  fetchAging,
   fetchBalanceSheet,
+  fetchBudgetReport,
+  fetchCashFlow,
+  fetchCostCenterReport,
   fetchGeneralLedger,
   fetchIncomeStatement,
   fetchTrialBalance,
+  fetchVatReport,
+  type AgingReport,
   type BalanceSheet,
+  type BudgetReport,
+  type CashFlow,
+  type CostCenterReport,
   type GeneralLedger,
   type IncomeStatement,
   type TrialBalanceRow,
+  type VatReport,
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { formatJalali } from '../lib/jalali'
 
-type ReportKind = 'trial-balance' | 'income-statement' | 'balance-sheet' | 'general-ledger'
+type ReportKind =
+  | 'trial-balance'
+  | 'income-statement'
+  | 'balance-sheet'
+  | 'general-ledger'
+  | 'vat'
+  | 'budget'
+  | 'cash-flow'
+  | 'cost-center'
+  | 'receivable-aging'
+  | 'payable-aging'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -23,6 +43,11 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [trialBalance, setTrialBalance] = useState<TrialBalanceRow[] | null>(null)
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null)
+  const [vatReport, setVatReport] = useState<VatReport | null>(null)
+  const [budgetReport, setBudgetReport] = useState<BudgetReport | null>(null)
+  const [cashFlow, setCashFlow] = useState<CashFlow | null>(null)
+  const [costCenterReport, setCostCenterReport] = useState<CostCenterReport | null>(null)
+  const [aging, setAging] = useState<AgingReport | null>(null)
   const [ledgerAccountId, setLedgerAccountId] = useState('')
   const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,6 +64,12 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       if (kind === 'trial-balance') setTrialBalance(await fetchTrialBalance(token))
       if (kind === 'income-statement') setIncomeStatement(await fetchIncomeStatement(token))
       if (kind === 'balance-sheet') setBalanceSheet(await fetchBalanceSheet(token))
+      if (kind === 'vat') setVatReport(await fetchVatReport(token))
+      if (kind === 'budget') setBudgetReport(await fetchBudgetReport(token))
+      if (kind === 'cash-flow') setCashFlow(await fetchCashFlow(token))
+      if (kind === 'cost-center') setCostCenterReport(await fetchCostCenterReport(token))
+      if (kind === 'receivable-aging') setAging(await fetchAging(token, 'receivable'))
+      if (kind === 'payable-aging') setAging(await fetchAging(token, 'payable'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {
@@ -67,6 +98,12 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     { key: 'income-statement', label: 'سود و زیان' },
     { key: 'balance-sheet', label: 'ترازنامه' },
     { key: 'general-ledger', label: 'دفتر کل' },
+    { key: 'vat', label: 'مالیات بر ارزش افزوده' },
+    { key: 'budget', label: 'بودجه در برابر عملکرد' },
+    { key: 'cash-flow', label: 'جریان وجوه نقد' },
+    { key: 'cost-center', label: 'سود پروژه/مرکز هزینه' },
+    { key: 'receivable-aging', label: 'سنی مطالبات' },
+    { key: 'payable-aging', label: 'سنی بدهی‌ها' },
   ]
 
   return (
@@ -163,6 +200,236 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
             ))}
           </tbody>
         </table>
+      )}
+
+      {active === 'vat' && vatReport && (
+        <div>
+          <p className="hint">خلاصه‌ی مالیات بر ارزش افزوده از ابتدای فعالیت تا امروز — مبنای اظهارنامه و تسویه با سازمان.</p>
+          <table>
+            <tbody>
+              <tr>
+                <td>جمع خالص فروش</td>
+                <td>{fa(vatReport.sales_net)}</td>
+              </tr>
+              <tr>
+                <td>مالیات فروش، پس از کسرِ برگشت</td>
+                <td>{fa(vatReport.output_vat)}</td>
+              </tr>
+              {Number(vatReport.sales_returns_vat) > 0 && (
+                <tr className="muted-row">
+                  <td>— از این میان، مالیاتِ برگشت از فروش (کسرشده)</td>
+                  <td>{fa(vatReport.sales_returns_vat)}</td>
+                </tr>
+              )}
+              <tr>
+                <td>جمع خالص خرید</td>
+                <td>{fa(vatReport.purchase_net)}</td>
+              </tr>
+              <tr>
+                <td>اعتبار مالیاتی خرید، پس از کسرِ برگشت</td>
+                <td>{fa(vatReport.input_vat)}</td>
+              </tr>
+              {Number(vatReport.purchase_returns_vat) > 0 && (
+                <tr className="muted-row">
+                  <td>— از این میان، اعتبارِ برگشت از خرید (کسرشده)</td>
+                  <td>{fa(vatReport.purchase_returns_vat)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          <p className="invoice-total">
+            {Number(vatReport.net_vat) >= 0
+              ? 'مالیات قابل پرداخت به سازمان'
+              : 'اعتبار مالیاتی (انتقالی به دوره‌ی بعد)'}
+            : {fa(Math.abs(Number(vatReport.net_vat)))}
+          </p>
+        </div>
+      )}
+
+      {active === 'budget' && budgetReport && (
+        <div>
+          <p className="hint">
+            مبلغِ برنامه‌ریزی‌شده در برابر عملکردِ واقعی، فقط برای حساب‌هایی که بودجه دارند. «مطلوب» یعنی درآمدِ بیشتر
+            یا هزینه‌ی کمتر از برنامه.
+          </p>
+          {budgetReport.rows.length === 0 ? (
+            <p className="hint">هنوز بودجه‌ای تعریف نشده. از «حسابداری ← بودجه‌بندی» بودجه اضافه کنید.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>کد</th>
+                    <th>نام حساب</th>
+                    <th>بودجه</th>
+                    <th>عملکرد</th>
+                    <th>انحراف</th>
+                    <th>درصد</th>
+                    <th>وضعیت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {budgetReport.rows.map((r) => (
+                    <tr key={r.account_id}>
+                      <td>{r.account_code}</td>
+                      <td>{r.account_name}</td>
+                      <td>{fa(r.budget)}</td>
+                      <td>{fa(r.actual)}</td>
+                      <td>{fa(r.variance)}</td>
+                      <td>{r.variance_pct != null ? `${fa(r.variance_pct)}٪` : '—'}</td>
+                      <td>
+                        <span className={`status-badge ${r.favorable ? 'tone-success' : 'tone-danger'}`}>
+                          {r.favorable ? 'مطلوب' : 'نامطلوب'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={2}>جمع</td>
+                    <td>{fa(budgetReport.total_budget)}</td>
+                    <td>{fa(budgetReport.total_actual)}</td>
+                    <td>{fa(budgetReport.total_variance)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {active === 'cash-flow' && cashFlow && (() => {
+        const groups = [
+          { title: 'فعالیت‌های عملیاتی', lines: cashFlow.operating, total: cashFlow.net_operating },
+          { title: 'فعالیت‌های سرمایه‌گذاری', lines: cashFlow.investing, total: cashFlow.net_investing },
+          { title: 'فعالیت‌های تأمین مالی', lines: cashFlow.financing, total: cashFlow.net_financing },
+        ]
+        return (
+          <div>
+            <p className="hint">
+              ورود (+) و خروج (−) نقد از ابتدای فعالیت تا امروز، به تفکیک سه فعالیت. جمعِ سه فعالیت با تغییرِ ماندهٔ نقد
+              برابر است.
+            </p>
+            <p>ماندهٔ نقد ابتدای دوره: {fa(cashFlow.opening_cash)}</p>
+            {groups.map((g) => (
+              <div key={g.title}>
+                <h3>{g.title}</h3>
+                {g.lines.length === 0 ? (
+                  <p className="hint">موردی در این فعالیت نبود.</p>
+                ) : (
+                  <div className="table-scroll">
+                    <table>
+                      <tbody>
+                        {g.lines.map((l) => (
+                          <tr key={l.account_id}>
+                            <td>{l.account_code} — {l.account_name}</td>
+                            <td>{fa(l.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="invoice-total">جمع {g.title}: {fa(g.total)}</p>
+              </div>
+            ))}
+            <p className="invoice-total">تغییر خالص نقد در دوره: {fa(cashFlow.net_change)}</p>
+            <p className="invoice-total">ماندهٔ نقد پایان دوره: {fa(cashFlow.closing_cash)}</p>
+          </div>
+        )
+      })()}
+
+      {active === 'cost-center' && costCenterReport && (
+        <div>
+          <p className="hint">
+            سود و زیانِ هر مرکز هزینه/پروژه از سندهای برچسب‌خورده. سطرِ «بدون مرکز هزینه» یعنی فعالیتی که به هیچ پروژه‌ای
+            نسبت داده نشده.
+          </p>
+          {costCenterReport.rows.length === 0 ? (
+            <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «حسابداری ← مراکز هزینه» شروع کنید.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>کد</th>
+                    <th>مرکز / پروژه</th>
+                    <th>درآمد</th>
+                    <th>هزینه</th>
+                    <th>سود/زیان</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costCenterReport.rows.map((r) => (
+                    <tr key={r.cost_center_id ?? 'none'} className={r.cost_center_id ? '' : 'muted-row'}>
+                      <td>{r.cost_center_code || '—'}</td>
+                      <td>{r.cost_center_name}</td>
+                      <td>{fa(r.income)}</td>
+                      <td>{fa(r.expense)}</td>
+                      <td>{fa(r.profit)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={2}>جمع</td>
+                    <td>{fa(costCenterReport.total_income)}</td>
+                    <td>{fa(costCenterReport.total_expense)}</td>
+                    <td>{fa(costCenterReport.total_profit)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(active === 'receivable-aging' || active === 'payable-aging') && aging && (
+        <div>
+          <p className="hint">
+            {aging.kind === 'receivable'
+              ? 'مانده‌ی طلب از هر مشتری، به تفکیک سنِ فاکتورها. تسویه‌ها و برگشت‌ها اول به قدیمی‌ترین فاکتور اعمال می‌شوند.'
+              : 'مانده‌ی بدهی به هر تأمین‌کننده، به تفکیک سنِ فاکتورها. پرداخت‌ها و برگشت‌ها اول به قدیمی‌ترین فاکتور اعمال می‌شوند.'}
+          </p>
+          {aging.rows.length === 0 ? (
+            <p className="hint">
+              {aging.kind === 'receivable' ? 'مطالبات بازی وجود ندارد.' : 'بدهی بازی وجود ندارد.'}
+            </p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}</th>
+                    <th>جاری (۰–۳۰)</th>
+                    <th>۳۱–۶۰ روز</th>
+                    <th>۶۱–۹۰ روز</th>
+                    <th>بالای ۹۰ روز</th>
+                    <th>جمع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aging.rows.map((r) => (
+                    <tr key={r.contact_id}>
+                      <td>{r.contact_name}</td>
+                      <td>{fa(r.current)}</td>
+                      <td>{fa(r.d31_60)}</td>
+                      <td>{fa(r.d61_90)}</td>
+                      <td>{Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(r.over_90)}</span> : fa(r.over_90)}</td>
+                      <td>{fa(r.total)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td>جمع</td>
+                    <td>{fa(aging.total_current)}</td>
+                    <td>{fa(aging.total_31_60)}</td>
+                    <td>{fa(aging.total_61_90)}</td>
+                    <td>{fa(aging.total_over_90)}</td>
+                    <td className="invoice-total">{fa(aging.grand_total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {active === 'income-statement' && incomeStatement && (

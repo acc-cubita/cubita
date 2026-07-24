@@ -13,6 +13,8 @@ export interface MeResponse {
   permissions: Record<string, string[]>
   tenant_id: string
   tenant_name: string
+  //: کاربر روی allowlist کنترل‌پنل فروش خودِ کوبیتاست، نه صاحب یک کسب‌وکار عادی.
+  is_platform_admin: boolean
 }
 
 /** آیا این نقش اجازه‌ی یک اکشن روی یک ماژول را دارد؟ همان منطق سمت سرور.
@@ -173,6 +175,18 @@ async function authedSend<T>(
   return res.json()
 }
 
+async function authedDelete(token: string, path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  // ۲۰۴ بدنه ندارد، پس res.ok کافی است؛ فقط خطاها به پیام فارسی تبدیل می‌شوند.
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw new Error(errBody.detail ?? `حذف ناموفق بود (${res.status})`)
+  }
+}
+
 export interface SubscriptionStatus {
   status: 'active' | 'grace' | 'expired' | 'cancelled' | 'none'
   expires_at: string | null
@@ -191,6 +205,57 @@ export const fetchIncomeStatement = (token: string) =>
 
 export const fetchBalanceSheet = (token: string) =>
   authedGet<BalanceSheet>(token, '/api/reports/balance-sheet')
+
+export interface VatReport {
+  date_from: string | null
+  date_to: string | null
+  sales_net: string
+  output_vat: string
+  purchase_net: string
+  input_vat: string
+  net_vat: string
+  sales_returns_net: string
+  sales_returns_vat: string
+  purchase_returns_net: string
+  purchase_returns_vat: string
+}
+
+export const fetchVatReport = (token: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<VatReport>(token, `/api/reports/vat${suffix}`)
+}
+
+export interface CashFlowLine {
+  account_id: string
+  account_code: string
+  account_name: string
+  amount: string
+}
+
+export interface CashFlow {
+  date_from: string | null
+  date_to: string | null
+  opening_cash: string
+  operating: CashFlowLine[]
+  investing: CashFlowLine[]
+  financing: CashFlowLine[]
+  net_operating: string
+  net_investing: string
+  net_financing: string
+  net_change: string
+  closing_cash: string
+}
+
+export const fetchCashFlow = (token: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<CashFlow>(token, `/api/reports/cash-flow${suffix}`)
+}
 
 export interface GeneralLedgerLine {
   entry_id: string
@@ -550,6 +615,8 @@ export interface SalesInvoiceRecord {
   description: string
   total_amount: string
   total_cost: string
+  tax_rate: string
+  tax_amount: string
   voided_at: string | null
   void_reason: string
   lines: (InvoiceLineRecord & { unit_price: string; unit_cost: string })[]
@@ -565,6 +632,8 @@ export interface PurchaseInvoiceRecord {
   contact_id: string | null
   description: string
   total_amount: string
+  tax_rate: string
+  tax_amount: string
   voided_at: string | null
   void_reason: string
   lines: (InvoiceLineRecord & { unit_cost: string })[]
@@ -580,6 +649,8 @@ export interface SalesReturnRecord {
   description: string
   total_amount: string
   total_cost: string
+  tax_rate: string
+  tax_amount: string
   lines: { id: string; item_id: string; qty: string; unit_price: string; unit_cost: string; description: string }[]
 }
 
@@ -597,6 +668,8 @@ export interface PurchaseReturnRecord {
   purchase_invoice_id: string
   description: string
   total_amount: string
+  tax_rate: string
+  tax_amount: string
   lines: { id: string; item_id: string; qty: string; unit_cost: string; description: string }[]
 }
 
@@ -698,7 +771,12 @@ export const fetchItemsWithPricingLive = async (token: string) => {
 
 export const createJournalEntryDirect = (
   token: string,
-  data: { entry_date: string; description: string; lines: { account_id: string; debit: number; credit: number }[] },
+  data: {
+    entry_date: string
+    description: string
+    cost_center_id?: string | null
+    lines: { account_id: string; debit: number; credit: number }[]
+  },
 ) => authedSend<unknown>(token, 'POST', '/api/journal-entries', data)
 
 export const createSalesInvoiceDirect = (
@@ -706,6 +784,8 @@ export const createSalesInvoiceDirect = (
   data: {
     invoice_date: string
     warehouse_id: string
+    tax_rate?: number
+    cost_center_id?: string | null
     lines: { item_id: string; qty: number; unit_price: number }[]
   },
   idempotencyKey?: string,
@@ -716,6 +796,8 @@ export const createPurchaseInvoiceDirect = (
   data: {
     invoice_date: string
     warehouse_id: string
+    tax_rate?: number
+    cost_center_id?: string | null
     lines: { item_id: string; qty: number; unit_cost: number }[]
   },
   idempotencyKey?: string,
@@ -812,6 +894,266 @@ export const createTreasuryReceipt = (token: string, data: TreasuryTransactionIn
 
 export const createTreasuryPayment = (token: string, data: TreasuryTransactionIn) =>
   authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/payments', data)
+
+// --- تقویم و یادآوری ---------------------------------------------------------------
+// مثل اشخاص، مسیرِ مستقیمِ API است و در هر دو پلتفرم (Electron و وب) یکسان کار می‌کند.
+
+export type CalendarCategory = 'reminder' | 'meeting' | 'payment' | 'tax' | 'task' | 'other'
+
+export interface CalendarEventRecord {
+  id: string
+  title: string
+  description: string
+  event_date: string // ISO میلادی؛ تبدیل به شمسی فقط در UI
+  start_time: string | null
+  end_time: string | null
+  category: CalendarCategory
+  is_done: boolean
+  created_by_id: string
+}
+
+export interface CalendarEventIn {
+  title: string
+  description: string
+  event_date: string
+  start_time: string | null
+  end_time: string | null
+  category: CalendarCategory
+  is_done: boolean
+}
+
+export const fetchCalendarEvents = (
+  token: string,
+  opts: { from?: string; to?: string; includeDone?: boolean } = {},
+) => {
+  const qs = new URLSearchParams()
+  if (opts.from) qs.set('from', opts.from)
+  if (opts.to) qs.set('to', opts.to)
+  if (opts.includeDone === false) qs.set('include_done', 'false')
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<CalendarEventRecord[]>(token, `/api/calendar-events${suffix}`)
+}
+
+export const createCalendarEvent = (token: string, data: CalendarEventIn) =>
+  authedSend<CalendarEventRecord>(token, 'POST', '/api/calendar-events', data)
+
+export const updateCalendarEvent = (token: string, id: string, data: CalendarEventIn) =>
+  authedSend<CalendarEventRecord>(token, 'PUT', `/api/calendar-events/${id}`, data)
+
+export const setCalendarEventDone = (token: string, id: string, done: boolean) =>
+  authedSend<CalendarEventRecord>(token, 'PATCH', `/api/calendar-events/${id}/done`, { is_done: done })
+
+export const deleteCalendarEvent = (token: string, id: string) =>
+  authedDelete(token, `/api/calendar-events/${id}`)
+
+// --- دارایی‌های ثابت و استهلاک ----------------------------------------------------
+
+export interface FixedAssetRecord {
+  id: string
+  name: string
+  category: string
+  acquired_date: string
+  cost: string
+  salvage_value: string
+  useful_life_months: number
+  method: string
+  accumulated_depreciation: string
+  is_disposed: boolean
+  disposed_date: string | null
+  notes: string
+  book_value: string
+  monthly_depreciation: string
+  fully_depreciated: boolean
+}
+
+export interface FixedAssetIn {
+  name: string
+  category: string
+  acquired_date: string
+  cost: number
+  salvage_value: number
+  useful_life_months: number
+  notes: string
+}
+
+export const fetchFixedAssets = (token: string) => authedGet<FixedAssetRecord[]>(token, '/api/fixed-assets')
+
+export const createFixedAsset = (token: string, data: FixedAssetIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', '/api/fixed-assets', data)
+
+export const updateFixedAsset = (token: string, id: string, data: FixedAssetIn) =>
+  authedSend<FixedAssetRecord>(token, 'PUT', `/api/fixed-assets/${id}`, data)
+
+export const disposeFixedAsset = (token: string, id: string, disposedDate: string) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${id}/dispose`, { disposed_date: disposedDate })
+
+export const deleteFixedAsset = (token: string, id: string) => authedDelete(token, `/api/fixed-assets/${id}`)
+
+export interface DepreciationRunResult {
+  period_date: string
+  asset_count: number
+  total_amount: string
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+}
+
+export const runDepreciation = (token: string, periodDate: string) =>
+  authedSend<DepreciationRunResult>(token, 'POST', '/api/depreciation/run', { period_date: periodDate })
+
+export interface DepreciationEntryRecord {
+  id: string
+  asset_id: string
+  asset_name: string
+  period_date: string
+  amount: string
+  journal_entry_id: string | null
+}
+
+export const fetchDepreciationEntries = (token: string) =>
+  authedGet<DepreciationEntryRecord[]>(token, '/api/depreciation')
+
+// --- بودجه‌بندی -------------------------------------------------------------------
+
+export interface BudgetLineRecord {
+  id: string
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  period_date: string
+  amount: string
+  notes: string
+}
+
+export interface BudgetLineIn {
+  account_id: string
+  period_date: string
+  amount: number
+  notes: string
+}
+
+export interface BudgetReportRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  budget: string
+  actual: string
+  variance: string
+  variance_pct: string | null
+  favorable: boolean
+}
+
+export interface BudgetReport {
+  date_from: string | null
+  date_to: string | null
+  rows: BudgetReportRow[]
+  total_budget: string
+  total_actual: string
+  total_variance: string
+}
+
+export const fetchBudgetLines = (token: string) =>
+  authedGet<BudgetLineRecord[]>(token, '/api/budgets')
+
+export const createBudgetLine = (token: string, data: BudgetLineIn) =>
+  authedSend<BudgetLineRecord>(token, 'POST', '/api/budgets', data)
+
+export const updateBudgetLine = (token: string, id: string, data: BudgetLineIn) =>
+  authedSend<BudgetLineRecord>(token, 'PUT', `/api/budgets/${id}`, data)
+
+export const deleteBudgetLine = (token: string, id: string) =>
+  authedDelete(token, `/api/budgets/${id}`)
+
+export const fetchBudgetReport = (token: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<BudgetReport>(token, `/api/budgets/report${suffix}`)
+}
+
+// --- مراکز هزینه / پروژه ----------------------------------------------------------
+
+export interface CostCenterRecord {
+  id: string
+  code: string
+  name: string
+  is_active: boolean
+  notes: string
+}
+
+export interface CostCenterIn {
+  code: string
+  name: string
+  is_active: boolean
+  notes: string
+}
+
+export const fetchCostCenters = (token: string) =>
+  authedGet<CostCenterRecord[]>(token, '/api/cost-centers')
+
+export const createCostCenter = (token: string, data: CostCenterIn) =>
+  authedSend<CostCenterRecord>(token, 'POST', '/api/cost-centers', data)
+
+export const updateCostCenter = (token: string, id: string, data: CostCenterIn) =>
+  authedSend<CostCenterRecord>(token, 'PUT', `/api/cost-centers/${id}`, data)
+
+export const deleteCostCenter = (token: string, id: string) =>
+  authedDelete(token, `/api/cost-centers/${id}`)
+
+export interface CostCenterReportRow {
+  cost_center_id: string | null
+  cost_center_code: string
+  cost_center_name: string
+  income: string
+  expense: string
+  profit: string
+}
+
+export interface CostCenterReport {
+  date_from: string | null
+  date_to: string | null
+  rows: CostCenterReportRow[]
+  total_income: string
+  total_expense: string
+  total_profit: string
+}
+
+export const fetchCostCenterReport = (token: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<CostCenterReport>(token, `/api/reports/cost-center${suffix}`)
+}
+
+export interface AgingRow {
+  contact_id: string
+  contact_name: string
+  current: string
+  d31_60: string
+  d61_90: string
+  over_90: string
+  total: string
+}
+
+export interface AgingReport {
+  as_of: string
+  kind: 'receivable' | 'payable'
+  rows: AgingRow[]
+  total_current: string
+  total_31_60: string
+  total_61_90: string
+  total_over_90: string
+  grand_total: string
+}
+
+export const fetchAging = (token: string, kind: 'receivable' | 'payable', asOf?: string) => {
+  const qs = new URLSearchParams({ kind })
+  if (asOf) qs.set('as_of', asOf)
+  return authedGet<AgingReport>(token, `/api/reports/aging?${qs}`)
+}
 
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 

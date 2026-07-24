@@ -600,6 +600,8 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+  /* روی باریک، عنوان و اکشن‌ها (مثل جست‌وجو) به خطِ بعد می‌روند به‌جای سرریز */
+  flex-wrap: wrap;
 }
 
 .section-card-heading {
@@ -705,6 +707,60 @@ button:disabled {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 4px;
+}
+
+/* ---------- تب‌های ماژول (نوار افقی به‌جای چیدن بخش‌ها زیر هم) ---------- */
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tab-list {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px;
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-list .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+
+.tab-list .tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-h);
+  border-color: transparent;
+}
+
+.tab-list .tab.active,
+.tab-list .tab.active:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+  border-color: transparent;
+}
+
+/* بخش‌های داخل هر تب همان فاصله‌ی عمودیِ صفحه را نگه می‌دارند */
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 /* ---------- وضعیت outbox ---------- */
@@ -840,6 +896,12 @@ button:disabled {
   color: var(--text-h);
 }
 
+/* ردیفِ اطلاعاتی/فرعی در جدول‌ها (مثل زیرشاخه‌های گزارش مالیات) */
+.page tr.muted-row td {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
 .outbox-list {
   list-style: none;
   padding: 0;
@@ -853,10 +915,20 @@ button:disabled {
 /* ---------- فرم‌ها ---------- */
 
 .invoice-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  /* شبکه‌ی چندستونه: فیلدها (label) بسته به عرضِ در دسترس کنار هم می‌چینند تا فضای
+     افقی خالی نماند؛ روی پنل باریک خودکار به یک ستون برمی‌گردند. */
+  display: grid;
+  /* min(220px, 100%) تضمین می‌کند روی صفحه‌ی باریک‌تر از ۲۲۰px ستون به‌جای
+     سرریز، تا ۱۰۰٪ عرض کوچک شود. */
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px 16px;
+  align-items: start;
   margin-top: 12px;
+}
+
+/* هرچیزی جز خودِ فیلدها (سرتیتر، جدولِ ردیف‌ها، فوتر، پیام) تمام‌عرض می‌ماند */
+.invoice-form > *:not(label) {
+  grid-column: 1 / -1;
 }
 
 .invoice-form label {
@@ -865,7 +937,9 @@ button:disabled {
   gap: 6px;
   font-size: 13.5px;
   color: var(--text-muted);
-  max-width: 280px;
+  max-width: none;
+  /* بدون این، فیلد زیر فشارِ عرضِ محتوای input کوچک نمی‌شود و فرم سرریز می‌کند */
+  min-width: 0;
 }
 
 .invoice-form select,
@@ -876,6 +950,9 @@ button:disabled {
   background: var(--bg);
   color: var(--text-h);
   font-size: 13.5px;
+  /* input عرضِ ذاتیِ خودش را دارد؛ بدون این‌ها از ستون بیرون می‌زند و اسکرول افقی می‌سازد */
+  width: 100%;
+  min-width: 0;
 }
 
 .invoice-form select:focus,
@@ -921,6 +998,22 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.invoice-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-start: auto;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: start;
+}
+
+.invoice-totals .invoice-total {
+  color: var(--text-h);
+  font-size: 14px;
 }
 
 .invoice-total {
@@ -1559,4 +1652,451 @@ button:disabled {
 .subscription-banner__dismiss:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
+}
+
+/* ---------- تقویم و یادآوری ---------- */
+
+/* نمای ماه و فرم کنار هم روی صفحه‌ی پهن؛ زیر هم روی صفحه‌ی باریک */
+.cal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .cal-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-nav button {
+  padding: 6px 10px;
+}
+
+/* شبکه‌ی ماه (۷ ستون) */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cal-weekday {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.cal-cell {
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  text-align: right;
+  transition: border-color 0.12s;
+}
+
+.cal-cell:hover {
+  border-color: var(--border-strong);
+}
+
+.cal-cell.empty {
+  border: none;
+  background: transparent;
+  cursor: default;
+  min-height: 0;
+}
+
+.cal-cell.today {
+  border-color: var(--accent);
+}
+
+.cal-cell.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.cal-cell-num {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-cell.today .cal-cell-num {
+  color: var(--accent);
+}
+
+.cal-cell-events {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+}
+
+.cal-chip {
+  display: block;
+  width: 100%;
+  text-align: right;
+  border: none;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-h);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.cal-chip:hover {
+  background: var(--surface-hover);
+}
+
+.cal-chip.done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.cal-more {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  padding-inline-start: 2px;
+}
+
+/* رنگ دسته‌ها — روی chip (لبه‌ی راست) و badge؛ بعد از .cal-chip می‌آید تا رنگ لبه را ببرد */
+.cat-reminder {
+  border-inline-start-color: var(--accent);
+}
+.cat-meeting {
+  border-inline-start-color: var(--accent-2);
+}
+.cat-payment {
+  border-inline-start-color: var(--warning);
+}
+.cat-tax {
+  border-inline-start-color: var(--danger);
+}
+.cat-task {
+  border-inline-start-color: var(--success);
+}
+.cat-other {
+  border-inline-start-color: var(--text-muted);
+}
+
+.cal-badge {
+  border-inline-start: 3px solid var(--border);
+  border-radius: 5px;
+}
+
+/* فرم: دو ورودی ساعت کنار هم، و چک‌باکس افقی */
+.cal-time-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cal-time-row label {
+  flex: 1;
+  min-width: 130px;
+}
+
+.cal-check-inline,
+.invoice-form label.cal-check-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  max-width: none;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.cal-check-inline input {
+  width: auto;
+}
+
+/* تب فهرست */
+.cal-row-done {
+  opacity: 0.7;
+}
+
+.cal-row-done .cal-list-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.cal-list-title {
+  font-size: 13.5px;
+  color: var(--text-h);
+}
+
+.cal-list-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.cal-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-done-toggle {
+  padding: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.cal-done-toggle.on {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: transparent;
+}
+
+.cal-done-toggle.on:hover {
+  border-color: transparent;
+}
+
+/* ---------- چیدمان حرفه‌ایِ دوستونه + موجودیت‌ها (اشخاص، و الگوی قابل‌استفاده‌ی مجدد) ---------- */
+
+/* فرم و لیست کنار هم، تا فضای افقی خالی نماند */
+.workspace-split {
+  display: grid;
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .workspace-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* آیتم‌های گرید باید بتوانند کوچک شوند. بدون این، محتوای پهن (مثل جدولِ nowrap
+   داخل ظرفِ اسکرول‌دار، یا یک input) به‌جای لغزیدن/جمع‌شدن، خودِ ستون و در نتیجه
+   کلِ صفحه را پهن‌تر از نمایشگر می‌کند و سمت چپِ کارت‌ها بریده می‌شود. */
+.workspace-split > *,
+.split-2col > *,
+.stat-grid > * {
+  min-width: 0;
+}
+
+/* چیدمان دوستونه‌ی عمومی (دو کارت هم‌ارزش کنار هم؛ مثل دو لیست) — بدون قابِ گرادیانی */
+.split-2col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+/* کارت فرم (ستون اول): حاشیه‌ی گرادیانیِ کامل که دقیقاً انحنای گوشه‌ها را دنبال
+   می‌کند (تکنیک background-clip؛ بدون بیرون‌زدگی و بدون overflow:hidden که popover
+   تقویم/تاریخ را ببرد). */
+.workspace-split > section:first-child {
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(135deg, var(--accent), var(--accent-2) 55%, var(--accent-3)) border-box;
+  box-shadow: var(--shadow-md);
+}
+
+/* ورودی‌های فرم تمام‌عرضِ پنل شوند (نه ۲۸۰px ثابت که فضا را خالی می‌گذاشت) */
+.form-full label {
+  max-width: none;
+}
+
+/* دو فیلد کنار هم داخل فرم — روی باریک خودکار یک‌ستونه می‌شود، بدون سرریز */
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+}
+
+/* آواتار گرادیانی برای هر موجودیت */
+.entity-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
+  box-shadow: var(--shadow-sm);
+}
+
+.entity-avatar.tone-supplier {
+  background: linear-gradient(135deg, var(--warning), var(--accent-3));
+}
+
+.entity-avatar.tone-both {
+  background: linear-gradient(135deg, var(--success), var(--accent));
+}
+
+.entity-cell {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.entity-name {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.entity-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.entity-table-wrap,
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.entity-table tbody tr {
+  transition: background 0.12s;
+}
+
+.entity-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.ltr-cell {
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+.money-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* بج نوع طرف حساب — رنگ‌بندی شده */
+.type-badge.customer {
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+}
+
+.type-badge.supplier {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.type-badge.both {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+/* ---------- ریسپانسیو: نوار کناری به کشو در وبِ باریک (موبایل) ----------
+   اپ دسکتاپ (Electron) حداقل عرض ۸۶۰px دارد، پس این مدیا‌کوئری فقط در مرورگرِ
+   موبایل فعال می‌شود؛ آنجا نوار کناری از جریان خارج و کشوی روی‌هم می‌شود تا
+   محتوا تمام‌عرض دیده شود. */
+
+.topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nav-toggle {
+  display: none; /* پیش‌فرض مخفی؛ فقط زیر بریک‌پوینت موبایل دیده می‌شود */
+  padding: 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  flex-shrink: 0;
+}
+
+.nav-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* جلوی اسکرول افقیِ ناشی از کشوی خارج از صفحه را می‌گیرد */
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-content {
+    padding: 16px 14px 32px;
+  }
+
+  .topbar {
+    padding: 12px 16px;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: min(288px, 84vw);
+    transform: translateX(100%);
+    transition: transform 0.22s ease;
+    box-shadow: var(--shadow-md);
+    z-index: 60;
+  }
+
+  .sidebar.sidebar--open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(3, 5, 12, 0.55);
+  }
+
+  /* جدول‌ها جدولِ واقعی می‌مانند (ستون‌ها هم‌تراز) و داخل ظرفِ اسکرول‌دار
+     (.table-scroll / .entity-table-wrap) افقی می‌لغزند؛ سلول‌ها روی موبایل
+     نمی‌شکنند تا به‌جای درهم‌ریختنِ کلمه‌به‌کلمه، اسکرول شوند. */
+  .table-scroll th,
+  .table-scroll td,
+  .entity-table th,
+  .entity-table td {
+    white-space: nowrap;
+  }
 }
