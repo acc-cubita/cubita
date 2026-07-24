@@ -166,7 +166,10 @@ tfoot td { font-weight: 700; background: #fafafa; }
 def _rows(lines) -> str:
     out = []
     for i, line in enumerate(lines, start=1):
-        amount = Decimal(str(line["qty"])) * Decimal(str(line["unit_price"]))
+        gross = Decimal(str(line["qty"])) * Decimal(str(line["unit_price"]))
+        discount = Decimal(str(line.get("discount") or 0))
+        # مبلغِ ستونِ آخر خالصِ پس از تخفیف است تا جمعِ ستون با «جمع کل» بخواند؛
+        # وگرنه خریدار روی کاغذ دو عددِ ناسازگار می‌بیند.
         out.append(
             f"<tr>"
             f"<td class='num'>{fa_number(i)}</td>"
@@ -175,7 +178,8 @@ def _rows(lines) -> str:
             f"<td class='num'>{fa_number(line['qty'])}</td>"
             f"<td class='num'>{escape(line.get('unit') or '')}</td>"
             f"<td class='num'>{fa_number(line['unit_price'])}</td>"
-            f"<td class='num'>{fa_number(amount)}</td>"
+            f"<td class='num'>{fa_number(discount)}</td>"
+            f"<td class='num'>{fa_number(gross - discount)}</td>"
             f"</tr>"
         )
     return "\n".join(out)
@@ -193,6 +197,7 @@ def render_invoice(
     lines: list[dict],
     total: Decimal,
     tax_amount: Decimal = Decimal(0),
+    total_discount: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
 ) -> str:
@@ -205,15 +210,22 @@ def render_invoice(
     # total همان جمعِ خالص (بدون مالیات) است؛ اگر مالیاتی هست، تفکیک نشان داده می‌شود.
     subtotal = Decimal(str(total))
     tax = Decimal(str(tax_amount or 0))
+    discount = Decimal(str(total_discount or 0))
     grand_total = subtotal + tax
+
+    rows = []
+    if discount > 0:
+        # ناخالص و تخفیف فقط وقتی نشان داده می‌شوند که تخفیفی باشد، تا فاکتورهای
+        # بدون تخفیف دقیقاً مثل قبل چاپ شوند.
+        rows.append(f"<tr><td colspan='7'>جمع ناخالص (ریال)</td><td class='num'>{fa_number(subtotal + discount)}</td></tr>")
+        rows.append(f"<tr><td colspan='7'>جمع تخفیف (ریال)</td><td class='num'>{fa_number(discount)}</td></tr>")
     if tax > 0:
-        totals_rows = (
-            f"<tr><td colspan='6'>جمع خالص (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>"
-            f"<tr><td colspan='6'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>"
-            f"<tr><td colspan='6'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>"
-        )
+        rows.append(f"<tr><td colspan='7'>جمع خالص (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
+        rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
+        rows.append(f"<tr><td colspan='7'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
     else:
-        totals_rows = f"<tr><td colspan='6'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>"
+        rows.append(f"<tr><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
+    totals_rows = "".join(rows)
 
     return f"""<!doctype html>
 <html lang="fa" dir="rtl">
@@ -258,8 +270,9 @@ def render_invoice(
         <th style="width:20%">توضیح</th>
         <th class="num" style="width:10%">تعداد</th>
         <th class="num" style="width:8%">واحد</th>
-        <th class="num" style="width:15%">مبلغ واحد</th>
-        <th class="num" style="width:15%">مبلغ کل</th>
+        <th class="num" style="width:13%">مبلغ واحد</th>
+        <th class="num" style="width:9%">تخفیف</th>
+        <th class="num" style="width:13%">مبلغ کل</th>
       </tr>
     </thead>
     <tbody>

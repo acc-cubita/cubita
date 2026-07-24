@@ -104,22 +104,25 @@ def build_invoice_packet(invoice: SalesInvoice, settings: MoadianSettings, tax_i
 
     ⚠️ نامِ فیلدها را با دستورالعملِ نسخه‌ی جاریِ خودتان تطبیق بدهید.
     """
-    net = _rial(invoice.total_amount)
+    net = _rial(invoice.total_amount)  # پس از تخفیف
+    discount = _rial(invoice.total_discount or 0)
     tax = _rial(invoice.tax_amount)
 
     body = []
     for line in invoice.lines:
-        line_net = _rial(Decimal(line.qty) * Decimal(line.unit_price))
+        line_gross = _rial(Decimal(line.qty) * Decimal(line.unit_price))
+        line_discount = _rial(line.discount or 0)
+        line_net = line_gross - line_discount
         rate = Decimal(invoice.tax_rate or 0)
-        line_tax = _rial(line_net * rate / Decimal(100))
+        line_tax = _rial(Decimal(line_net) * rate / Decimal(100))
         body.append(
             {
                 "sstid": line.item.sku if line.item else "",  # شناسه کالا/خدمت
                 "sstt": line.item.name if line.item else "",  # شرح کالا/خدمت
                 "am": float(Decimal(line.qty)),  # مقدار
                 "fee": _rial(line.unit_price),  # مبلغ واحد
-                "am_ir": line_net,  # مبلغ قبل از تخفیف
-                "dis": 0,  # تخفیف
+                "am_ir": line_gross,  # مبلغ قبل از تخفیف
+                "dis": line_discount,  # تخفیف
                 "adis": line_net,  # مبلغ پس از تخفیف
                 "vra": float(rate),  # نرخ مالیات بر ارزش افزوده
                 "vam": line_tax,  # مبلغ مالیات
@@ -134,8 +137,8 @@ def build_invoice_packet(invoice: SalesInvoice, settings: MoadianSettings, tax_i
         "inno": str(invoice.number or ""),  # شماره صورتحساب داخلی
         "tins": settings.national_id,  # شناسه ملی/اقتصادی فروشنده
         "tob": 2,  # نوع شخص خریدار
-        "tprdis": net,  # جمع مبلغ قبل از تخفیف
-        "tdis": 0,  # جمع تخفیف
+        "tprdis": net + discount,  # جمع مبلغ قبل از تخفیف
+        "tdis": discount,  # جمع تخفیف
         "tadis": net,  # جمع مبلغ پس از تخفیف
         "tvam": tax,  # جمع مالیات بر ارزش افزوده
         "tbill": net + tax,  # جمع کل صورتحساب

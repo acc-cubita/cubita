@@ -9,6 +9,9 @@ class SalesInvoiceLineIn(BaseModel):
     item_id: UUID
     qty: Decimal
     unit_price: Decimal
+    #: تخفیفِ ردیف به مبلغ (نه درصد). درصد در رابط کاربری به مبلغ تبدیل می‌شود تا
+    #: رقمِ ذخیره‌شده بی‌ابهام باشد و با فیلدِ تخفیفِ صورتحساب مؤدیان هم بخواند.
+    discount: Decimal = Decimal(0)
     description: str = ""
 
     @model_validator(mode="after")
@@ -17,6 +20,12 @@ class SalesInvoiceLineIn(BaseModel):
             raise ValueError("تعداد باید بزرگ‌تر از صفر باشد")
         if self.unit_price < 0:
             raise ValueError("قیمت واحد نمی‌تواند منفی باشد")
+        if self.discount < 0:
+            raise ValueError("تخفیف نمی‌تواند منفی باشد")
+        # تخفیفِ بیشتر از مبلغِ ردیف یعنی خالصِ منفی؛ به‌جای گردکردنِ بی‌صدا رد می‌شود
+        # تا اشتباهِ ورود اطلاعات همان‌جا دیده شود.
+        if self.discount > self.qty * self.unit_price:
+            raise ValueError("تخفیف نمی‌تواند از مبلغ ردیف بیشتر باشد")
         return self
 
 
@@ -45,6 +54,7 @@ class SalesInvoiceLineOut(BaseModel):
     item_id: UUID
     qty: Decimal
     unit_price: Decimal
+    discount: Decimal = Decimal(0)
     unit_cost: Decimal
     description: str
 
@@ -60,6 +70,7 @@ class SalesInvoiceOut(BaseModel):
     cost_center_id: UUID | None = None
     description: str
     total_amount: Decimal
+    total_discount: Decimal = Decimal(0)
     total_cost: Decimal
     tax_rate: Decimal
     tax_amount: Decimal
@@ -77,6 +88,8 @@ class PurchaseInvoiceLineIn(BaseModel):
     item_id: UUID
     qty: Decimal
     unit_cost: Decimal
+    #: تخفیفِ ردیف به مبلغ. بهای موجودی از همان اول پس از تخفیف ثبت می‌شود.
+    discount: Decimal = Decimal(0)
     description: str = ""
 
     @model_validator(mode="after")
@@ -85,6 +98,10 @@ class PurchaseInvoiceLineIn(BaseModel):
             raise ValueError("تعداد باید بزرگ‌تر از صفر باشد")
         if self.unit_cost < 0:
             raise ValueError("بهای واحد نمی‌تواند منفی باشد")
+        if self.discount < 0:
+            raise ValueError("تخفیف نمی‌تواند منفی باشد")
+        if self.discount > self.qty * self.unit_cost:
+            raise ValueError("تخفیف نمی‌تواند از مبلغ ردیف بیشتر باشد")
         return self
 
 
@@ -112,6 +129,7 @@ class PurchaseInvoiceLineOut(BaseModel):
     item_id: UUID
     qty: Decimal
     unit_cost: Decimal
+    discount: Decimal = Decimal(0)
     description: str
 
     model_config = {"from_attributes": True}
@@ -126,6 +144,7 @@ class PurchaseInvoiceOut(BaseModel):
     cost_center_id: UUID | None = None
     description: str
     total_amount: Decimal
+    total_discount: Decimal = Decimal(0)
     tax_rate: Decimal
     tax_amount: Decimal
     journal_entry_id: UUID | None

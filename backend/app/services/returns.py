@@ -32,7 +32,10 @@ def _sales_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dic
     for line in lines:
         entry = summary.setdefault(line.item_id, {"qty": Decimal(0), "amount": Decimal(0), "cost_amount": Decimal(0)})
         entry["qty"] += Decimal(line.qty)
-        entry["amount"] += Decimal(line.qty) * Decimal(line.unit_price)
+        # مبلغ **پس از کسر تخفیف** جمع می‌شود تا قیمتِ واحدِ مؤثرِ پایین‌تر همان چیزی
+        # باشد که مشتری واقعاً پرداخت کرده؛ وگرنه برگشت، بیش از دریافتی به او
+        # برمی‌گرداند و تخفیف عملاً دو بار داده می‌شود.
+        entry["amount"] += (Decimal(line.qty) * Decimal(line.unit_price)) - Decimal(line.discount or 0)
         entry["cost_amount"] += Decimal(line.qty) * Decimal(line.unit_cost)
 
     already_returned = (
@@ -189,7 +192,9 @@ def _purchase_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, 
     for line in lines:
         entry = summary.setdefault(line.item_id, {"qty": Decimal(0), "cost_amount": Decimal(0)})
         entry["qty"] += Decimal(line.qty)
-        entry["cost_amount"] += Decimal(line.qty) * Decimal(line.unit_cost)
+        # پس از کسر تخفیف — به همان دلیلِ برگشت از فروش: باید همان مبلغی به
+        # تأمین‌کننده برگردد که به او پرداخت شده، نه قیمتِ فهرست.
+        entry["cost_amount"] += (Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
 
     already_returned = (
         db.query(PurchaseReturnLine.item_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0))

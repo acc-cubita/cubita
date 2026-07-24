@@ -119,6 +119,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
     number = next_document_number(db, DOC_SALES_INVOICE)
 
     total_amount = Decimal(0)
+    total_discount = Decimal(0)
     total_cost = Decimal(0)
     invoice_lines: list[SalesInvoiceLine] = []
     stock_moves: list[StockLedger] = []
@@ -126,13 +127,18 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
     for line in data.lines:
         item = items_by_id[line.item_id]
         unit_cost = item.average_cost if not item.is_service else Decimal(0)
-        total_amount += line.qty * line.unit_price
+        line_discount = Decimal(line.discount or 0)
+        # خالصِ ردیف = ناخالص − تخفیف. جمعِ همین‌ها می‌شود total_amount، یعنی درآمد و
+        # پایه‌ی مالیات هر دو «پس از تخفیف»اند.
+        total_amount += (line.qty * line.unit_price) - line_discount
+        total_discount += line_discount
         total_cost += line.qty * unit_cost
         invoice_lines.append(
             SalesInvoiceLine(
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_price=line.unit_price,
+                discount=line_discount,
                 unit_cost=unit_cost,
                 description=line.description,
             )
@@ -217,6 +223,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
+        total_discount=total_discount,
         total_cost=total_cost,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
@@ -254,17 +261,26 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     number = next_document_number(db, DOC_PURCHASE_INVOICE)
 
     total_amount = Decimal(0)
+    total_discount = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
     stock_moves: list[StockLedger] = []
 
     for line in data.lines:
         item = items_by_id[line.item_id]
-        total_amount += line.qty * line.unit_cost
+        line_discount = Decimal(line.discount or 0)
+        line_net = (line.qty * line.unit_cost) - line_discount
+        # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
+        # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
+        # فروشِ بعدی کمتر از واقع گزارش می‌شود.
+        effective_unit_cost = (line_net / line.qty) if line.qty else Decimal(0)
+        total_amount += line_net
+        total_discount += line_discount
         invoice_lines.append(
             PurchaseInvoiceLine(
                 item_id=line.item_id,
                 qty=line.qty,
-                unit_cost=line.unit_cost,
+                unit_cost=line.unit_cost,  # قیمتِ فهرستِ تأمین‌کننده، همان‌طور که در فاکتورش هست
+                discount=line_discount,
                 description=line.description,
             )
         )
@@ -272,13 +288,13 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             existing_qty = get_total_stock_qty(db, item.id)
             new_qty = existing_qty + line.qty
             if new_qty > 0:
-                item.average_cost = ((existing_qty * item.average_cost) + (line.qty * line.unit_cost)) / new_qty
+                item.average_cost = ((existing_qty * item.average_cost) + line_net) / new_qty
             stock_moves.append(
                 StockLedger(
                     item_id=line.item_id,
                     warehouse_id=data.warehouse_id,
                     qty=line.qty,
-                    unit_cost=line.unit_cost,
+                    unit_cost=effective_unit_cost,
                     entry_date=data.invoice_date,
                     source_type="purchase_invoice",
                 )
@@ -337,6 +353,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
+        total_discount=total_discount,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
         journal_entry_id=journal_entry.id,

@@ -11,6 +11,7 @@ interface DraftLine {
   itemId: string
   qty: string
   unitCost: string
+  discount: string
 }
 
 export function PurchaseInvoiceForm({
@@ -27,7 +28,7 @@ export function PurchaseInvoiceForm({
   const [warehouseId, setWarehouseId] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(todayIso())
   const [taxRate, setTaxRate] = useState('10')
-  const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitCost: '' }])
+  const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
   const [message, setMessage] = useState<string | null>(null)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = useState('')
@@ -52,14 +53,17 @@ export function PurchaseInvoiceForm({
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { itemId: '', qty: '1', unitCost: '' }])
+    setLines((prev) => [...prev, { itemId: '', qty: '1', unitCost: '', discount: '' }])
   }
 
   function removeLine(index: number) {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev))
   }
 
-  const total = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitCost) || 0), 0)
+  const gross = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitCost) || 0), 0)
+  const discountTotal = lines.reduce((sum, line) => sum + (Number(line.discount) || 0), 0)
+  // بهای موجودی هم پس از تخفیف ثبت می‌شود، پس پایه همین خالص است.
+  const total = gross - discountTotal
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const taxAmount = Math.round((total * taxRateNum) / 100)
   const grandTotal = total + taxAmount
@@ -77,6 +81,13 @@ export function PurchaseInvoiceForm({
       setMessage('حداقل یک ردیف معتبر (کالا + تعداد) لازم است.')
       return
     }
+    const overDiscounted = validLines.find(
+      (l) => (Number(l.discount) || 0) > (Number(l.qty) || 0) * (Number(l.unitCost) || 0),
+    )
+    if (overDiscounted) {
+      setMessage('تخفیف نمی‌تواند از مبلغ ردیف بیشتر باشد.')
+      return
+    }
 
     const payload = {
       invoice_date: invoiceDate,
@@ -87,6 +98,7 @@ export function PurchaseInvoiceForm({
         item_id: l.itemId,
         qty: Number(l.qty),
         unit_cost: Number(l.unitCost) || 0,
+        discount: Number(l.discount) || 0,
       })),
     }
 
@@ -99,7 +111,7 @@ export function PurchaseInvoiceForm({
         setMessage('فاکتور خرید با موفقیت ثبت شد.')
       }
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
-      setLines([{ itemId: '', qty: '1', unitCost: '' }])
+      setLines([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
       setCostCenterId('')
       onQueued()
     } catch (err) {
@@ -158,6 +170,7 @@ export function PurchaseInvoiceForm({
                 <th>کالا</th>
                 <th>تعداد</th>
                 <th>بهای واحد</th>
+                <th>تخفیف</th>
                 <th></th>
               </tr>
             </thead>
@@ -192,6 +205,15 @@ export function PurchaseInvoiceForm({
                     />
                   </td>
                   <td>
+                    <input
+                      type="number"
+                      min="0"
+                      value={line.discount}
+                      onChange={(e) => updateLine(i, { discount: e.target.value })}
+                      placeholder="۰"
+                    />
+                  </td>
+                  <td>
                     <button
                       type="button"
                       className="icon-btn-danger"
@@ -212,6 +234,8 @@ export function PurchaseInvoiceForm({
               <Plus size={14} /> افزودن ردیف
             </button>
             <div className="invoice-totals">
+              {discountTotal > 0 && <span>جمع ناخالص: {gross.toLocaleString('fa-IR')}</span>}
+              {discountTotal > 0 && <span>تخفیف: {discountTotal.toLocaleString('fa-IR')}</span>}
               <span>جمع خالص: {total.toLocaleString('fa-IR')}</span>
               <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {taxAmount.toLocaleString('fa-IR')}</span>
               <span className="invoice-total">قابل پرداخت: {grandTotal.toLocaleString('fa-IR')}</span>

@@ -28,7 +28,11 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     )
     description: Mapped[str] = mapped_column(Text, default="")
 
-    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)  # خالص (بدون مالیات)
+    #: خالصِ **پس از تخفیف** و بدون مالیات. پایه‌ی ثبتِ درآمد و محاسبه‌ی مالیات.
+    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: جمع تخفیفِ ردیف‌ها. فقط برای نمایش/صورتحساب مؤدیان؛ در سند حسابداری نمی‌آید
+    #: چون درآمد از همان اول به مبلغِ پس از تخفیف ثبت می‌شود (تخفیف تجاری).
+    total_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     total_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ قابل‌پرداختِ مشتری = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
@@ -54,6 +58,8 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: تخفیفِ این ردیف به مبلغ (نه درصد). خالصِ ردیف = qty×unit_price − discount.
+    discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # بهای تمام‌شده در لحظه‌ی فروش (برای COGS)
     description: Mapped[str] = mapped_column(Text, default="")
 
@@ -78,7 +84,10 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     )
     description: Mapped[str] = mapped_column(Text, default="")
 
-    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)  # خالص (بدون مالیات)
+    #: خالصِ **پس از تخفیف** و بدون مالیات.
+    total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: جمع تخفیفِ ردیف‌ها (فقط نمایشی؛ بهای موجودی از همان اول پس از تخفیف است).
+    total_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -100,6 +109,8 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: تخفیفِ این ردیف به مبلغ. خالصِ ردیف = qty×unit_cost − discount.
+    discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     description: Mapped[str] = mapped_column(Text, default="")
 
     invoice: Mapped["PurchaseInvoice"] = relationship(back_populates="lines")

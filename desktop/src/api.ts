@@ -603,6 +603,8 @@ export interface InvoiceLineRecord {
   id: string
   item_id: string
   qty: string
+  /** تخفیفِ ردیف به مبلغ. خالصِ ردیف = تعداد×قیمت − تخفیف. */
+  discount: string
   description: string
 }
 
@@ -613,7 +615,9 @@ export interface SalesInvoiceRecord {
   warehouse_id: string
   contact_id: string | null
   description: string
+  /** خالصِ پس از تخفیف، بدون مالیات. */
   total_amount: string
+  total_discount: string
   total_cost: string
   tax_rate: string
   tax_amount: string
@@ -632,6 +636,7 @@ export interface PurchaseInvoiceRecord {
   contact_id: string | null
   description: string
   total_amount: string
+  total_discount: string
   tax_rate: string
   tax_amount: string
   voided_at: string | null
@@ -786,7 +791,7 @@ export const createSalesInvoiceDirect = (
     warehouse_id: string
     tax_rate?: number
     cost_center_id?: string | null
-    lines: { item_id: string; qty: number; unit_price: number }[]
+    lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/sales-invoices', data, idempotencyKey)
@@ -798,7 +803,7 @@ export const createPurchaseInvoiceDirect = (
     warehouse_id: string
     tax_rate?: number
     cost_center_id?: string | null
-    lines: { item_id: string; qty: number; unit_cost: number }[]
+    lines: { item_id: string; qty: number; unit_cost: number; discount?: number }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
