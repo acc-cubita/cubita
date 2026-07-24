@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { BarChart3, Search } from 'lucide-react'
+import { BarChart3, Search, Download } from 'lucide-react'
+import { downloadCsv } from '../lib/csv'
 import {
   fetchAging,
   fetchBalanceSheet,
@@ -168,6 +169,124 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     }
   }
 
+  // داده‌ی گزارشِ فعال را به سرستون + ردیف‌ها نگاشت می‌کند تا همان چیزی که روی صفحه
+  // است در اکسل هم بیاید. null یعنی این گزارش هنوز داده‌ای برای خروجی ندارد.
+  function buildExport(): { name: string; headers: string[]; rows: (string | number)[][] } | null {
+    switch (active) {
+      case 'trial-balance':
+        return trialBalance && {
+          name: 'تراز-آزمایشی',
+          headers: ['کد', 'نام حساب', 'بدهکار', 'بستانکار', 'مانده'],
+          rows: trialBalance.map((r) => [r.account_code, r.account_name, r.total_debit, r.total_credit, r.balance]),
+        }
+      case 'income-statement':
+        return incomeStatement && {
+          name: 'سود-و-زیان',
+          headers: ['نوع', 'حساب', 'مبلغ'],
+          rows: [
+            ...incomeStatement.income.map((r) => ['درآمد', r.account_name, r.balance] as (string | number)[]),
+            ...incomeStatement.expenses.map((r) => ['هزینه', r.account_name, r.balance] as (string | number)[]),
+            ['', 'سود/زیان خالص', incomeStatement.net_profit],
+          ],
+        }
+      case 'balance-sheet':
+        return balanceSheet && {
+          name: 'ترازنامه',
+          headers: ['بخش', 'حساب', 'مانده'],
+          rows: [
+            ...balanceSheet.assets.map((r) => ['دارایی', r.account_name, r.balance] as (string | number)[]),
+            ...balanceSheet.liabilities.map((r) => ['بدهی', r.account_name, r.balance] as (string | number)[]),
+            ...balanceSheet.equity.map((r) => ['حقوق صاحبان سرمایه', r.account_name, r.balance] as (string | number)[]),
+            ['حقوق صاحبان سرمایه', 'سود/زیان دوره جاری', balanceSheet.current_period_profit],
+          ],
+        }
+      case 'general-ledger':
+        return generalLedger && {
+          name: `دفتر-کل-${generalLedger.account_code}`,
+          headers: ['شماره سند', 'تاریخ', 'شرح', 'بدهکار', 'بستانکار', 'مانده'],
+          rows: [
+            ['', '', 'مانده ابتدای دوره', '', '', generalLedger.opening_balance],
+            ...generalLedger.lines.map((l) => [l.entry_number ?? '', formatJalali(l.entry_date), l.description, l.debit, l.credit, l.balance] as (string | number)[]),
+          ],
+        }
+      case 'vat':
+        return vatReport && {
+          name: 'مالیات-ارزش-افزوده',
+          headers: ['عنوان', 'مبلغ'],
+          rows: [
+            ['جمع خالص فروش', vatReport.sales_net],
+            ['مالیات فروش (پس از کسر برگشت)', vatReport.output_vat],
+            ['جمع خالص خرید', vatReport.purchase_net],
+            ['اعتبار مالیاتی خرید (پس از کسر برگشت)', vatReport.input_vat],
+            ['خالص قابل پرداخت', vatReport.net_vat],
+          ],
+        }
+      case 'budget':
+        return budgetReport && {
+          name: 'بودجه-در-برابر-عملکرد',
+          headers: ['کد', 'حساب', 'بودجه', 'عملکرد', 'انحراف', 'درصد', 'وضعیت'],
+          rows: budgetReport.rows.map((r) => [r.account_code, r.account_name, r.budget, r.actual, r.variance, r.variance_pct ?? '', r.favorable ? 'مطلوب' : 'نامطلوب']),
+        }
+      case 'cash-flow':
+        return cashFlow && {
+          name: 'جریان-وجوه-نقد',
+          headers: ['فعالیت', 'حساب', 'مبلغ'],
+          rows: [
+            ['', 'مانده ابتدای دوره', cashFlow.opening_cash],
+            ...cashFlow.operating.map((l) => ['عملیاتی', `${l.account_code} — ${l.account_name}`, l.amount] as (string | number)[]),
+            ...cashFlow.investing.map((l) => ['سرمایه‌گذاری', `${l.account_code} — ${l.account_name}`, l.amount] as (string | number)[]),
+            ...cashFlow.financing.map((l) => ['تأمین مالی', `${l.account_code} — ${l.account_name}`, l.amount] as (string | number)[]),
+            ['', 'تغییر خالص نقد', cashFlow.net_change],
+            ['', 'مانده پایان دوره', cashFlow.closing_cash],
+          ],
+        }
+      case 'cost-center':
+        return costCenterReport && {
+          name: 'سود-مرکز-هزینه',
+          headers: ['کد', 'مرکز/پروژه', 'درآمد', 'هزینه', 'سود/زیان'],
+          rows: costCenterReport.rows.map((r) => [r.cost_center_code, r.cost_center_name, r.income, r.expense, r.profit]),
+        }
+      case 'receivable-aging':
+      case 'payable-aging':
+        return aging && {
+          name: aging.kind === 'receivable' ? 'سنی-مطالبات' : 'سنی-بدهی‌ها',
+          headers: [aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده', 'جاری (۰-۳۰)', '۳۱-۶۰', '۶۱-۹۰', 'بالای ۹۰', 'جمع'],
+          rows: aging.rows.map((r) => [r.contact_name, r.current, r.d31_60, r.d61_90, r.over_90, r.total]),
+        }
+      case 'contact-statement':
+        return contactStatement && {
+          name: `صورت‌حساب-${contactStatement.contact_name}`,
+          headers: ['تاریخ', 'شرح', 'شماره', 'بدهکار', 'بستانکار', 'مانده'],
+          rows: [
+            ['', 'مانده ابتدای دوره', '', '', '', contactStatement.opening_balance],
+            ...contactStatement.lines.map((l) => [formatJalali(l.txn_date), l.description, l.number ?? '', l.debit, l.credit, l.balance] as (string | number)[]),
+          ],
+        }
+      case 'inventory':
+        return inventory && {
+          name: 'ارزش-موجودی-انبار',
+          headers: ['کد', 'کالا', 'واحد', 'موجودی', 'بهای واحد', 'ارزش'],
+          rows: inventory.rows.map((r) => [r.sku, r.name, r.unit, r.qty_on_hand, r.unit_cost, r.stock_value]),
+        }
+      case 'kardex':
+        return kardex && {
+          name: `کاردکس-${kardex.item_sku}`,
+          headers: ['تاریخ', 'شرح', 'ورود', 'خروج', 'بهای واحد', 'موجودی'],
+          rows: [
+            ['', 'موجودی ابتدای دوره', '', '', '', kardex.opening_qty],
+            ...kardex.lines.map((l) => [formatJalali(l.entry_date), l.source_label, l.qty_in, l.qty_out, l.unit_cost, l.balance_qty] as (string | number)[]),
+          ],
+        }
+      default:
+        return null
+    }
+  }
+
+  function handleExport() {
+    const data = buildExport()
+    if (data) downloadCsv(data.name, data.headers, data.rows)
+  }
+
   const tabs: { key: ReportKind; label: string }[] = [
     { key: 'trial-balance', label: 'تراز آزمایشی' },
     { key: 'income-statement', label: 'سود و زیان' },
@@ -201,6 +320,14 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
 
       {loading && <p className="hint">در حال بارگذاری...</p>}
       {error && <div className="error">{error}</div>}
+
+      {buildExport() && (
+        <div className="report-export">
+          <button type="button" onClick={handleExport}>
+            <Download size={13} /> دانلود اکسل (CSV)
+          </button>
+        </div>
+      )}
 
       {active === 'general-ledger' && (
         <div className="check-actions">

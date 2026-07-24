@@ -709,6 +709,12 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.report-export {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+
 /* ---------- تب‌های ماژول (نوار افقی به‌جای چیدن بخش‌ها زیر هم) ---------- */
 
 .tabs {
