@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { PackagePlus, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import { createPurchaseInvoiceDirect, fetchCostCenters, newIdempotencyKey, type CostCenterRecord } from '../api'
+import {
+  createPurchaseInvoiceDirect,
+  fetchContacts,
+  fetchCostCenters,
+  newIdempotencyKey,
+  type ContactRecord,
+  type CostCenterRecord,
+} from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -32,12 +39,22 @@ export function PurchaseInvoiceForm({
   const [message, setMessage] = useState<string | null>(null)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = useState('')
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [contactId, setContactId] = useState('')
 
   // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور بدون مرکز است.
   useEffect(() => {
     fetchCostCenters(token)
       .then((rows) => setCostCenters(rows.filter((c) => c.is_active)))
       .catch(() => setCostCenters([]))
+  }, [token])
+
+  // تأمین‌کننده‌ها هم زنده خوانده می‌شوند (همان الگوی مراکز هزینه). آفلاین که نشد،
+  // انتخاب‌گر پنهان و فاکتور بدون تأمین‌کننده است. مشتری‌ها کنار گذاشته می‌شوند.
+  useEffect(() => {
+    fetchContacts(token)
+      .then((rows) => setContacts(rows.filter((c) => c.type !== 'customer')))
+      .catch(() => setContacts([]))
   }, [token])
   // کلید یکتاسازی به *این فاکتور* گره می‌خورد، نه به هر تلاش شبکه‌ای.
   //
@@ -94,6 +111,7 @@ export function PurchaseInvoiceForm({
       warehouse_id: effectiveWarehouseId,
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
+      contact_id: contactId || null,
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
@@ -113,6 +131,7 @@ export function PurchaseInvoiceForm({
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
       setLines([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
       setCostCenterId('')
+      setContactId('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -158,6 +177,19 @@ export function PurchaseInvoiceForm({
                 {costCenters.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.code ? `${c.code} — ${c.name}` : c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {contacts.length > 0 && (
+            <label>
+              تأمین‌کننده (اختیاری)
+              <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+                <option value="">— بدون تأمین‌کننده —</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>

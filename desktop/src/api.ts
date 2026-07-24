@@ -804,6 +804,7 @@ export const createPurchaseInvoiceDirect = (
     warehouse_id: string
     tax_rate?: number
     cost_center_id?: string | null
+    contact_id?: string | null
     lines: { item_id: string; qty: number; unit_cost: number; discount?: number }[]
   },
   idempotencyKey?: string,
