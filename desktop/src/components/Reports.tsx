@@ -9,6 +9,8 @@ import {
   fetchContactStatement,
   fetchCostCenterReport,
   fetchInventoryReport,
+  fetchItemsLive,
+  fetchKardex,
   fetchGeneralLedger,
   fetchIncomeStatement,
   fetchTrialBalance,
@@ -22,6 +24,8 @@ import {
   type CostCenterReport,
   type GeneralLedger,
   type InventoryReport,
+  type ItemRecord,
+  type KardexReport,
   type IncomeStatement,
   type TrialBalanceRow,
   type VatReport,
@@ -43,6 +47,7 @@ type ReportKind =
   | 'payable-aging'
   | 'contact-statement'
   | 'inventory'
+  | 'kardex'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -60,6 +65,9 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [statementContactId, setStatementContactId] = useState('')
   const [contactStatement, setContactStatement] = useState<ContactStatement | null>(null)
   const [inventory, setInventory] = useState<InventoryReport | null>(null)
+  const [items, setItems] = useState<ItemRecord[]>([])
+  const [kardexItemId, setKardexItemId] = useState('')
+  const [kardex, setKardex] = useState<KardexReport | null>(null)
   const [ledgerAccountId, setLedgerAccountId] = useState('')
   const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
   const [loading, setLoading] = useState(false)
@@ -76,6 +84,17 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       if (contacts.length === 0) {
         try {
           setContacts(await fetchContacts(token))
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+        }
+      }
+      return
+    }
+    if (kind === 'kardex') {
+      // نیاز به انتخاب کالا دارد؛ فهرست کالاها زنده، خودِ کاردکس با دکمه
+      if (items.length === 0) {
+        try {
+          setItems((await fetchItemsLive(token)).filter((i) => !i.is_service))
         } catch (err) {
           setError(err instanceof Error ? err.message : 'خطای ناشناخته')
         }
@@ -117,6 +136,22 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     }
   }
 
+  async function loadKardex() {
+    if (!kardexItemId) {
+      setError('ابتدا یک کالا انتخاب کنید.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      setKardex(await fetchKardex(token, kardexItemId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function loadContactStatement() {
     if (!statementContactId) {
       setError('ابتدا یک طرف‌حساب انتخاب کنید.')
@@ -146,6 +181,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     { key: 'payable-aging', label: 'سنی بدهی‌ها' },
     { key: 'contact-statement', label: 'صورت‌حساب اشخاص' },
     { key: 'inventory', label: 'ارزش موجودی انبار' },
+    { key: 'kardex', label: 'کاردکس کالا' },
   ]
 
   return (
@@ -179,6 +215,67 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <button type="button" onClick={() => void loadGeneralLedger()}>
             <Search size={13} /> نمایش
           </button>
+        </div>
+      )}
+
+      {active === 'kardex' && (
+        <div className="check-actions">
+          <select value={kardexItemId} onChange={(e) => setKardexItemId(e.target.value)}>
+            <option value="">— انتخاب کالا —</option>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.sku} — {i.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void loadKardex()}>
+            <Search size={13} /> نمایش
+          </button>
+        </div>
+      )}
+
+      {active === 'kardex' && kardex && (
+        <div>
+          <h3>
+            {kardex.item_sku} — {kardex.item_name} ({kardex.unit})
+          </h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>شرح</th>
+                  <th>ورود</th>
+                  <th>خروج</th>
+                  <th>بهای واحد</th>
+                  <th>موجودی</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="muted-row">
+                  <td colSpan={5}>موجودی ابتدای دوره</td>
+                  <td>{fa(kardex.opening_qty)}</td>
+                </tr>
+                {kardex.lines.map((l, i) => (
+                  <tr key={i}>
+                    <td>{formatJalali(l.entry_date)}</td>
+                    <td>{l.source_label}</td>
+                    <td>{Number(l.qty_in) ? fa(l.qty_in) : ''}</td>
+                    <td>{Number(l.qty_out) ? fa(l.qty_out) : ''}</td>
+                    <td>{fa(l.unit_cost)}</td>
+                    <td>{fa(l.balance_qty)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={2}>جمع</td>
+                  <td>{fa(kardex.total_in)}</td>
+                  <td>{fa(kardex.total_out)}</td>
+                  <td></td>
+                  <td className="invoice-total">{fa(kardex.closing_qty)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

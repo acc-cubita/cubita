@@ -1206,6 +1206,39 @@ export interface InventoryReport {
 export const fetchInventoryReport = (token: string) =>
   authedGet<InventoryReport>(token, '/api/reports/inventory')
 
+export interface KardexLine {
+  entry_date: string
+  source_type: string
+  source_label: string
+  qty_in: string
+  qty_out: string
+  unit_cost: string
+  balance_qty: string
+}
+
+export interface KardexReport {
+  item_id: string
+  item_sku: string
+  item_name: string
+  unit: string
+  warehouse_id: string | null
+  date_from: string | null
+  date_to: string | null
+  opening_qty: string
+  lines: KardexLine[]
+  total_in: string
+  total_out: string
+  closing_qty: string
+}
+
+export const fetchKardex = (token: string, itemId: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<KardexReport>(token, `/api/reports/kardex/${itemId}${suffix}`)
+}
+
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 
 export interface Member {

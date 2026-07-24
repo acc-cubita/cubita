@@ -401,6 +401,90 @@ def get_cost_center_report(db: Session, date_from: date | None, date_to: date | 
     }
 
 
+#: برچسبِ فارسیِ منشأ هر حرکتِ انبار — همان مقادیری که سرویس‌ها می‌نویسند.
+STOCK_SOURCE_LABELS = {
+    "purchase_invoice": "فاکتور خرید",
+    "sales_invoice": "فاکتور فروش",
+    "purchase_return": "برگشت از خرید",
+    "sales_return": "برگشت از فروش",
+    "adjustment": "تعدیل انبار",
+    "transfer_in": "انتقال (ورود)",
+    "transfer_out": "انتقال (خروج)",
+}
+
+
+def get_kardex(
+    db: Session,
+    item_id: UUID,
+    warehouse_id: UUID | None,
+    date_from: date | None,
+    date_to: date | None,
+) -> dict:
+    """کاردکس یک کالا — هر ورود/خروج با موجودیِ در حال اجرا.
+
+    ترتیب بر اساس `seq` است نه تاریخ: `entry_date` فقط روز را دارد و چند حرکت در یک
+    روز ترتیبِ مشخصی نمی‌گیرند، در حالی که موجودیِ در حال اجرا به ترتیب وابسته است.
+    """
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+
+    def base():
+        query = db.query(StockLedger).filter(StockLedger.item_id == item_id)
+        if warehouse_id is not None:
+            query = query.filter(StockLedger.warehouse_id == warehouse_id)
+        return query
+
+    opening = Decimal(0)
+    if date_from is not None:
+        opening_rows = base().filter(StockLedger.entry_date < date_from).all()
+        opening = sum((Decimal(r.qty) for r in opening_rows), Decimal(0))
+
+    query = base()
+    if date_from is not None:
+        query = query.filter(StockLedger.entry_date >= date_from)
+    if date_to is not None:
+        query = query.filter(StockLedger.entry_date <= date_to)
+
+    running = opening
+    total_in = Decimal(0)
+    total_out = Decimal(0)
+    lines = []
+    for move in query.order_by(StockLedger.seq).all():
+        qty = Decimal(move.qty)
+        running += qty
+        qty_in = qty if qty > 0 else Decimal(0)
+        qty_out = -qty if qty < 0 else Decimal(0)
+        total_in += qty_in
+        total_out += qty_out
+        lines.append(
+            {
+                "entry_date": move.entry_date,
+                "source_type": move.source_type,
+                "source_label": STOCK_SOURCE_LABELS.get(move.source_type, move.source_type),
+                "qty_in": qty_in,
+                "qty_out": qty_out,
+                "unit_cost": Decimal(move.unit_cost),
+                "balance_qty": running,
+            }
+        )
+
+    return {
+        "item_id": item.id,
+        "item_sku": item.sku,
+        "item_name": item.name,
+        "unit": item.unit,
+        "warehouse_id": warehouse_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "opening_qty": opening,
+        "lines": lines,
+        "total_in": total_in,
+        "total_out": total_out,
+        "closing_qty": running,
+    }
+
+
 def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | None) -> dict:
     """ارزش‌گذاری موجودی: موجودیِ هر کالا × بهای میانگین موزون.
 

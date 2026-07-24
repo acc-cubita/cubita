@@ -15,6 +15,7 @@ from app.schemas.reports import (
     GeneralLedgerOut,
     IncomeStatementOut,
     InventoryReportOut,
+    KardexReportOut,
     TrialBalanceRowOut,
     VatReportOut,
 )
@@ -111,6 +112,18 @@ def inventory_report(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_inventory_report(db, warehouse_id, as_of)
+
+
+@router.get("/kardex/{item_id}", response_model=KardexReportOut)
+def kardex(
+    item_id: UUID,
+    warehouse_id: UUID | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_kardex(db, item_id, warehouse_id, date_from, date_to)
 
 
 @router.get("/contact-statement/{contact_id}", response_model=ContactStatementOut)

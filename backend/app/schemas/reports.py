@@ -62,6 +62,33 @@ class IncomeStatementOut(BaseModel):
     net_profit: Decimal
 
 
+class KardexLineOut(BaseModel):
+    entry_date: date
+    source_type: str
+    source_label: str
+    qty_in: Decimal
+    qty_out: Decimal
+    unit_cost: Decimal
+    balance_qty: Decimal  # موجودی در حال اجرا پس از این حرکت
+
+
+class KardexReportOut(BaseModel):
+    """کاردکس کالا: همه‌ی ورود/خروج‌های یک کالا با موجودیِ در حال اجرا."""
+
+    item_id: UUID
+    item_sku: str
+    item_name: str
+    unit: str
+    warehouse_id: UUID | None
+    date_from: date | None
+    date_to: date | None
+    opening_qty: Decimal
+    lines: list[KardexLineOut]
+    total_in: Decimal
+    total_out: Decimal
+    closing_qty: Decimal
+
+
 class InventoryRowOut(BaseModel):
     item_id: UUID
     sku: str
