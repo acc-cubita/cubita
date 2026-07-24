@@ -1155,6 +1155,57 @@ export const fetchAging = (token: string, kind: 'receivable' | 'payable', asOf?:
   return authedGet<AgingReport>(token, `/api/reports/aging?${qs}`)
 }
 
+export interface ContactStatementLine {
+  txn_date: string
+  kind: string
+  number: number | null
+  description: string
+  debit: string
+  credit: string
+  balance: string
+}
+
+export interface ContactStatement {
+  contact_id: string
+  contact_name: string
+  date_from: string | null
+  date_to: string | null
+  opening_balance: string
+  lines: ContactStatementLine[]
+  total_debit: string
+  total_credit: string
+  closing_balance: string
+}
+
+export const fetchContactStatement = (token: string, contactId: string, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<ContactStatement>(token, `/api/reports/contact-statement/${contactId}${suffix}`)
+}
+
+export interface InventoryRow {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  category: string
+  qty_on_hand: string
+  unit_cost: string
+  stock_value: string
+}
+
+export interface InventoryReport {
+  as_of: string | null
+  rows: InventoryRow[]
+  total_value: string
+  item_count: number
+}
+
+export const fetchInventoryReport = (token: string) =>
+  authedGet<InventoryReport>(token, '/api/reports/inventory')
+
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 
 export interface Member {

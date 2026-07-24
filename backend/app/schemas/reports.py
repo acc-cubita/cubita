@@ -62,6 +62,50 @@ class IncomeStatementOut(BaseModel):
     net_profit: Decimal
 
 
+class InventoryRowOut(BaseModel):
+    item_id: UUID
+    sku: str
+    name: str
+    unit: str
+    category: str
+    qty_on_hand: Decimal
+    unit_cost: Decimal  # بهای تمام‌شده‌ی میانگین موزون
+    stock_value: Decimal  # qty_on_hand × unit_cost
+
+
+class InventoryReportOut(BaseModel):
+    """ارزش‌گذاری موجودی انبار — تعداد و ارزش ریالیِ هر کالای موجود."""
+
+    as_of: date | None
+    rows: list[InventoryRowOut]
+    total_value: Decimal
+    item_count: int
+
+
+class ContactStatementLineOut(BaseModel):
+    txn_date: date
+    kind: str  # sales_invoice | sales_return | purchase_invoice | purchase_return | receipt | payment
+    number: int | None
+    description: str
+    debit: Decimal  # بدهیِ شخص به ما را زیاد می‌کند
+    credit: Decimal  # بدهیِ شخص به ما را کم می‌کند
+    balance: Decimal  # ماندهٔ در حال اجرا؛ مثبت = شخص به ما بدهکار است
+
+
+class ContactStatementOut(BaseModel):
+    """کارت حساب یک طرف‌حساب: گردشِ کاملِ فاکتور/برگشت/دریافت/پرداخت با ماندهٔ در حال اجرا."""
+
+    contact_id: UUID
+    contact_name: str
+    date_from: date | None
+    date_to: date | None
+    opening_balance: Decimal
+    lines: list[ContactStatementLineOut]
+    total_debit: Decimal
+    total_credit: Decimal
+    closing_balance: Decimal
+
+
 class AgingRowOut(BaseModel):
     contact_id: UUID
     contact_name: str

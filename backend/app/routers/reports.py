@@ -11,8 +11,10 @@ from app.schemas.reports import (
     AgingReportOut,
     BalanceSheetOut,
     CashFlowOut,
+    ContactStatementOut,
     GeneralLedgerOut,
     IncomeStatementOut,
+    InventoryReportOut,
     TrialBalanceRowOut,
     VatReportOut,
 )
@@ -99,3 +101,24 @@ def aging_report(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_aging(db, kind, as_of)
+
+
+@router.get("/inventory", response_model=InventoryReportOut)
+def inventory_report(
+    warehouse_id: UUID | None = Query(None),
+    as_of: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_inventory_report(db, warehouse_id, as_of)
+
+
+@router.get("/contact-statement/{contact_id}", response_model=ContactStatementOut)
+def contact_statement(
+    contact_id: UUID,
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_contact_statement(db, contact_id, date_from, date_to)

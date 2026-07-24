@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount
 from app.models.cost_center import CostCenter
-from app.models.inventory import Contact
+from app.models.inventory import Contact, Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.treasury import TreasuryTransaction
@@ -398,6 +398,164 @@ def get_cost_center_report(db: Session, date_from: date | None, date_to: date | 
         "total_income": total_income,
         "total_expense": total_expense,
         "total_profit": total_income - total_expense,
+    }
+
+
+def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | None) -> dict:
+    """ارزش‌گذاری موجودی: موجودیِ هر کالا × بهای میانگین موزون.
+
+    موجودیِ فعلی از جمعِ حرکاتِ دفترِ موجودی می‌آید و ارزش با `average_cost`ِ روزِ
+    کالا حساب می‌شود — همان روشی که حسابِ «موجودی کالا» در دفتر با آن نگه‌داری
+    می‌شود، پس جمعِ این گزارش باید با ماندهٔ آن حساب بخواند. کالاهای خدماتی و اقلامِ
+    با موجودیِ صفر نمایش داده نمی‌شوند.
+    """
+    qty_query = db.query(
+        StockLedger.item_id, func.coalesce(func.sum(StockLedger.qty), 0)
+    )
+    if warehouse_id is not None:
+        qty_query = qty_query.filter(StockLedger.warehouse_id == warehouse_id)
+    if as_of is not None:
+        qty_query = qty_query.filter(StockLedger.entry_date <= as_of)
+    qty_by_item = {item_id: Decimal(qty) for item_id, qty in qty_query.group_by(StockLedger.item_id).all()}
+
+    items = {i.id: i for i in db.query(Item).filter(Item.is_service.is_(False)).all()}
+
+    rows = []
+    for item_id, qty in qty_by_item.items():
+        item = items.get(item_id)
+        if item is None or qty == 0:
+            continue
+        unit_cost = Decimal(item.average_cost)
+        rows.append(
+            {
+                "item_id": item.id,
+                "sku": item.sku,
+                "name": item.name,
+                "unit": item.unit,
+                "category": item.category,
+                "qty_on_hand": qty,
+                "unit_cost": unit_cost,
+                "stock_value": qty * unit_cost,
+            }
+        )
+
+    rows.sort(key=lambda r: r["stock_value"], reverse=True)  # بیشترین ارزش اول
+    return {
+        "as_of": as_of,
+        "rows": rows,
+        "total_value": sum((r["stock_value"] for r in rows), Decimal(0)),
+        "item_count": len(rows),
+    }
+
+
+#: ترتیبِ نمایشِ رویدادهای هم‌تاریخ در کارت حساب — اول اسناد، بعد برگشت، بعد وجه.
+_STATEMENT_KIND_ORDER = {
+    "sales_invoice": 1,
+    "purchase_invoice": 1,
+    "sales_return": 2,
+    "purchase_return": 2,
+    "receipt": 3,
+    "payment": 3,
+}
+
+
+def get_contact_statement(
+    db: Session, contact_id: UUID, date_from: date | None, date_to: date | None
+) -> dict:
+    """کارت حساب یک طرف‌حساب — همه‌ی رویدادهایش با ماندهٔ در حال اجرا.
+
+    قرارداد علامت از دیدِ کسب‌وکار است: بدهکار یعنی طلبِ ما از شخص بیشتر می‌شود
+    (فروش به او، پرداختِ ما به او، برگشتِ خریدِ ما)، بستانکار یعنی کمتر می‌شود
+    (دریافت از او، برگشتِ فروشِ او، خریدِ ما از او). ماندهٔ مثبت = شخص به ما بدهکار
+    است؛ منفی = ما به او. اسنادِ باطل‌شده کنار گذاشته می‌شوند.
+    """
+    contact = db.get(Contact, contact_id)
+    if contact is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
+
+    events: list[dict] = []
+
+    def add(txn_date, kind, number, description, debit, credit):
+        events.append(
+            {
+                "txn_date": txn_date,
+                "kind": kind,
+                "number": number,
+                "description": description,
+                "debit": Decimal(debit),
+                "credit": Decimal(credit),
+            }
+        )
+
+    # فروش به این شخص (بدهکار)
+    for number, inv_date, total, tax in db.query(
+        SalesInvoice.number, SalesInvoice.invoice_date, SalesInvoice.total_amount, SalesInvoice.tax_amount
+    ).filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None)).all():
+        add(inv_date, "sales_invoice", number, "فاکتور فروش", Decimal(total) + Decimal(tax), 0)
+
+    # برگشت از فروشِ این شخص (بستانکار)
+    for number, r_date, total, tax in (
+        db.query(SalesReturn.number, SalesReturn.return_date, SalesReturn.total_amount, SalesReturn.tax_amount)
+        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+        .all()
+    ):
+        add(r_date, "sales_return", number, "برگشت از فروش", 0, Decimal(total) + Decimal(tax))
+
+    # خرید از این شخص (بستانکار — ما به او بدهکار می‌شویم)
+    for number, inv_date, total, tax in db.query(
+        PurchaseInvoice.number, PurchaseInvoice.invoice_date, PurchaseInvoice.total_amount, PurchaseInvoice.tax_amount
+    ).filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None)).all():
+        add(inv_date, "purchase_invoice", number, "فاکتور خرید", 0, Decimal(total) + Decimal(tax))
+
+    # برگشت از خرید به این شخص (بدهکار)
+    for number, r_date, total, tax in (
+        db.query(PurchaseReturn.number, PurchaseReturn.return_date, PurchaseReturn.total_amount, PurchaseReturn.tax_amount)
+        .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
+        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
+        .all()
+    ):
+        add(r_date, "purchase_return", number, "برگشت از خرید", Decimal(total) + Decimal(tax), 0)
+
+    # دریافت/پرداختِ خزانه
+    for t_type, t_date, amount in db.query(
+        TreasuryTransaction.type, TreasuryTransaction.transaction_date, TreasuryTransaction.amount
+    ).filter(TreasuryTransaction.contact_id == contact_id).all():
+        if t_type == "receipt":
+            add(t_date, "receipt", None, "دریافت وجه", 0, Decimal(amount))  # شخص پرداخت کرد
+        else:
+            add(t_date, "payment", None, "پرداخت وجه", Decimal(amount), 0)  # ما پرداخت کردیم
+
+    events.sort(key=lambda e: (e["txn_date"], _STATEMENT_KIND_ORDER.get(e["kind"], 99)))
+
+    opening = sum(
+        (e["debit"] - e["credit"] for e in events if date_from is not None and e["txn_date"] < date_from),
+        Decimal(0),
+    )
+    running = opening
+    total_debit = Decimal(0)
+    total_credit = Decimal(0)
+    lines = []
+    for e in events:
+        if date_from is not None and e["txn_date"] < date_from:
+            continue
+        if date_to is not None and e["txn_date"] > date_to:
+            continue
+        running += e["debit"] - e["credit"]
+        total_debit += e["debit"]
+        total_credit += e["credit"]
+        lines.append({**e, "balance": running})
+
+    return {
+        "contact_id": contact.id,
+        "contact_name": contact.name,
+        "date_from": date_from,
+        "date_to": date_to,
+        "opening_balance": opening,
+        "lines": lines,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "closing_balance": running,
     }
 
 

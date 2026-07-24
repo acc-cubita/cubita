@@ -5,7 +5,10 @@ import {
   fetchBalanceSheet,
   fetchBudgetReport,
   fetchCashFlow,
+  fetchContacts,
+  fetchContactStatement,
   fetchCostCenterReport,
+  fetchInventoryReport,
   fetchGeneralLedger,
   fetchIncomeStatement,
   fetchTrialBalance,
@@ -14,8 +17,11 @@ import {
   type BalanceSheet,
   type BudgetReport,
   type CashFlow,
+  type ContactRecord,
+  type ContactStatement,
   type CostCenterReport,
   type GeneralLedger,
+  type InventoryReport,
   type IncomeStatement,
   type TrialBalanceRow,
   type VatReport,
@@ -35,6 +41,8 @@ type ReportKind =
   | 'cost-center'
   | 'receivable-aging'
   | 'payable-aging'
+  | 'contact-statement'
+  | 'inventory'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -48,6 +56,10 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [cashFlow, setCashFlow] = useState<CashFlow | null>(null)
   const [costCenterReport, setCostCenterReport] = useState<CostCenterReport | null>(null)
   const [aging, setAging] = useState<AgingReport | null>(null)
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [statementContactId, setStatementContactId] = useState('')
+  const [contactStatement, setContactStatement] = useState<ContactStatement | null>(null)
+  const [inventory, setInventory] = useState<InventoryReport | null>(null)
   const [ledgerAccountId, setLedgerAccountId] = useState('')
   const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
   const [loading, setLoading] = useState(false)
@@ -59,6 +71,17 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     setActive(kind)
     setError(null)
     if (kind === 'general-ledger') return // نیاز به انتخاب حساب دارد؛ با دکمه‌ی جدا بارگذاری می‌شود
+    if (kind === 'contact-statement') {
+      // نیاز به انتخاب طرف‌حساب دارد؛ فهرست اشخاص را زنده می‌گیریم، خودِ گزارش با دکمه
+      if (contacts.length === 0) {
+        try {
+          setContacts(await fetchContacts(token))
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+        }
+      }
+      return
+    }
     setLoading(true)
     try {
       if (kind === 'trial-balance') setTrialBalance(await fetchTrialBalance(token))
@@ -70,6 +93,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       if (kind === 'cost-center') setCostCenterReport(await fetchCostCenterReport(token))
       if (kind === 'receivable-aging') setAging(await fetchAging(token, 'receivable'))
       if (kind === 'payable-aging') setAging(await fetchAging(token, 'payable'))
+      if (kind === 'inventory') setInventory(await fetchInventoryReport(token))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {
@@ -93,6 +117,22 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     }
   }
 
+  async function loadContactStatement() {
+    if (!statementContactId) {
+      setError('ابتدا یک طرف‌حساب انتخاب کنید.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      setContactStatement(await fetchContactStatement(token, statementContactId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const tabs: { key: ReportKind; label: string }[] = [
     { key: 'trial-balance', label: 'تراز آزمایشی' },
     { key: 'income-statement', label: 'سود و زیان' },
@@ -104,6 +144,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     { key: 'cost-center', label: 'سود پروژه/مرکز هزینه' },
     { key: 'receivable-aging', label: 'سنی مطالبات' },
     { key: 'payable-aging', label: 'سنی بدهی‌ها' },
+    { key: 'contact-statement', label: 'صورت‌حساب اشخاص' },
+    { key: 'inventory', label: 'ارزش موجودی انبار' },
   ]
 
   return (
@@ -137,6 +179,69 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <button type="button" onClick={() => void loadGeneralLedger()}>
             <Search size={13} /> نمایش
           </button>
+        </div>
+      )}
+
+      {active === 'contact-statement' && (
+        <div className="check-actions">
+          <select value={statementContactId} onChange={(e) => setStatementContactId(e.target.value)}>
+            <option value="">— انتخاب طرف‌حساب —</option>
+            {contacts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void loadContactStatement()}>
+            <Search size={13} /> نمایش
+          </button>
+        </div>
+      )}
+
+      {active === 'contact-statement' && contactStatement && (
+        <div>
+          <h3>{contactStatement.contact_name}</h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>شرح</th>
+                  <th>شماره</th>
+                  <th>بدهکار</th>
+                  <th>بستانکار</th>
+                  <th>مانده</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="muted-row">
+                  <td colSpan={5}>مانده ابتدای دوره</td>
+                  <td>{fa(contactStatement.opening_balance)}</td>
+                </tr>
+                {contactStatement.lines.map((l, i) => (
+                  <tr key={i}>
+                    <td>{formatJalali(l.txn_date)}</td>
+                    <td>{l.description}</td>
+                    <td>{l.number != null ? fa(l.number) : '—'}</td>
+                    <td>{Number(l.debit) ? fa(l.debit) : ''}</td>
+                    <td>{Number(l.credit) ? fa(l.credit) : ''}</td>
+                    <td>{fa(l.balance)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={3}>جمع</td>
+                  <td>{fa(contactStatement.total_debit)}</td>
+                  <td>{fa(contactStatement.total_credit)}</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="invoice-total">
+            {Number(contactStatement.closing_balance) >= 0
+              ? `مانده‌ی پایان دوره (بدهکار — به ما بدهکار است): ${fa(contactStatement.closing_balance)}`
+              : `مانده‌ی پایان دوره (بستانکار — ما به او بدهکاریم): ${fa(Math.abs(Number(contactStatement.closing_balance)))}`}
+          </p>
         </div>
       )}
 
@@ -424,6 +529,48 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                     <td>{fa(aging.total_61_90)}</td>
                     <td>{fa(aging.total_over_90)}</td>
                     <td className="invoice-total">{fa(aging.grand_total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {active === 'inventory' && inventory && (
+        <div>
+          <p className="hint">
+            ارزش ریالیِ موجودیِ هر کالا = تعداد موجود × بهای میانگین موزون. جمعِ کل باید با ماندهٔ حسابِ «موجودی کالا» بخواند.
+          </p>
+          {inventory.rows.length === 0 ? (
+            <p className="hint">موجودی کالایی برای نمایش نیست.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>کد</th>
+                    <th>کالا</th>
+                    <th>واحد</th>
+                    <th>موجودی</th>
+                    <th>بهای واحد</th>
+                    <th>ارزش</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventory.rows.map((r) => (
+                    <tr key={r.item_id}>
+                      <td>{r.sku}</td>
+                      <td>{r.name}</td>
+                      <td>{r.unit}</td>
+                      <td>{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
+                      <td>{fa(r.unit_cost)}</td>
+                      <td>{fa(r.stock_value)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={5}>جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
+                    <td className="invoice-total">{fa(inventory.total_value)}</td>
                   </tr>
                 </tbody>
               </table>
