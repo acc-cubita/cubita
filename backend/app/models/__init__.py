@@ -16,6 +16,7 @@ from app.models.invoices import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from app.models.moadian import MoadianSettings, MoadianSubmission
 from app.models.period_close import FiscalPeriodClose
 from app.models.payroll import (
     Attendance,
@@ -80,6 +81,8 @@ __all__ = [
     "BudgetLine",
     "CalendarEvent",
     "CostCenter",
+    "MoadianSettings",
+    "MoadianSubmission",
     "TreasuryTransaction",
     "AuthToken",
     "DocumentCounter",

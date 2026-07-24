@@ -1239,6 +1239,56 @@ export const fetchKardex = (token: string, itemId: string, dateFrom?: string, da
   return authedGet<KardexReport>(token, `/api/reports/kardex/${itemId}${suffix}`)
 }
 
+// --- سامانه مؤدیان (صورتحساب الکترونیکی) ------------------------------------------
+
+export interface MoadianSettingsRecord {
+  memory_id: string
+  economic_code: string
+  national_id: string
+  /** کلید خصوصی هرگز از سرور برنمی‌گردد؛ فقط وجودش گزارش می‌شود. */
+  has_private_key: boolean
+  is_sandbox: boolean
+  is_active: boolean
+  base_url_override: string
+  last_serial: number
+  effective_base_url: string
+}
+
+export interface MoadianSettingsIn {
+  memory_id: string
+  economic_code: string
+  national_id: string
+  /** خالی = کلیدِ ذخیره‌شده دست‌نخورده بماند. */
+  private_key_pem?: string
+  is_sandbox: boolean
+  is_active: boolean
+  base_url_override: string
+}
+
+export interface MoadianSubmissionRecord {
+  id: string
+  sales_invoice_id: string
+  tax_id: string
+  serial: number
+  invoice_date: string
+  status: 'pending' | 'sent' | 'confirmed' | 'rejected' | 'failed'
+  reference_number: string
+  error_message: string
+  sent_at: string | null
+}
+
+export const fetchMoadianSettings = (token: string) =>
+  authedGet<MoadianSettingsRecord>(token, '/api/moadian/settings')
+
+export const updateMoadianSettings = (token: string, data: MoadianSettingsIn) =>
+  authedSend<MoadianSettingsRecord>(token, 'PUT', '/api/moadian/settings', data)
+
+export const fetchMoadianSubmissions = (token: string) =>
+  authedGet<MoadianSubmissionRecord[]>(token, '/api/moadian/submissions')
+
+export const submitInvoiceToMoadian = (token: string, invoiceId: string) =>
+  authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/submit/${invoiceId}`, {})
+
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 
 export interface Member {

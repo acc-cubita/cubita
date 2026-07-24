@@ -23,6 +23,7 @@ from app.routers import (
     invoices,
     journal,
     members,
+    moadian,
     payroll,
     period_close,
     quotations,
@@ -76,6 +77,7 @@ app.include_router(calendar.router)
 app.include_router(assets.router)
 app.include_router(budgeting.router)
 app.include_router(cost_centers.router)
+app.include_router(moadian.router)
 
 
 @app.get("/api/health")

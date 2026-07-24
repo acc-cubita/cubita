@@ -24,6 +24,9 @@ DEFAULT_ROLES: list[dict] = [
             "checks_bank": ["view", "create", "update"],
             "payroll": ["view"],
             "assets": ["view", "create", "update", "approve"],
+            # حسابدار می‌تواند صورتحساب را به سامانه بفرستد ولی «update» ندارد، پس
+            # اعتبارنامه و کلید خصوصیِ امضا فقط در اختیار مالک می‌ماند.
+            "moadian": ["view", "approve"],
             "calendar": ["view", "create", "update", "delete"],
         },
     },

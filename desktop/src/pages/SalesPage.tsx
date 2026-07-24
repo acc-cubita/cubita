@@ -1,4 +1,4 @@
-import { Inbox, ShoppingCart, FileText, Undo2 } from 'lucide-react'
+import { Inbox, ShoppingCart, FileText, Undo2, Landmark } from 'lucide-react'
 import type { MeResponse } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
@@ -6,6 +6,7 @@ import { InvoiceList } from '../components/InvoiceList'
 import { QuotationForm } from '../components/QuotationForm'
 import { QuotationsList } from '../components/QuotationsList'
 import { SalesReturnForm } from '../components/SalesReturnForm'
+import { MoadianPanel } from '../components/MoadianPanel'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -72,6 +73,12 @@ export function SalesPage({
             label: 'برگشت از فروش',
             icon: Undo2,
             content: <SalesReturnForm token={token} items={items} />,
+          },
+          {
+            key: 'moadian',
+            label: 'سامانه مؤدیان',
+            icon: Landmark,
+            content: <MoadianPanel token={token} />,
           },
         ]}
       />
