@@ -48,6 +48,8 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     address: Mapped[str] = mapped_column(Text, default="")
     tax_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: سقفِ مجازِ مانده‌ی مطالبات از این مشتری (ریال). صفر = بدون سقف / بدون هشدار.
+    credit_limit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
 
 
 class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

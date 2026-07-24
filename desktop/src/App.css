@@ -2187,3 +2187,30 @@ button:disabled {
     white-space: nowrap;
   }
 }
+
+/* بنر سقف اعتبار در فرم فاکتور فروش */
+.credit-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.credit-banner--ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.credit-banner--warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.credit-banner strong {
+  font-weight: 700;
+}
+.credit-banner-alert {
+  flex-basis: 100%;
+  font-weight: 600;
+}

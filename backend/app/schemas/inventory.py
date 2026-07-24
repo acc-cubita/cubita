@@ -26,6 +26,13 @@ class ContactIn(BaseModel):
     email: str | None = None
     address: str = ""
     tax_id: str | None = None
+    credit_limit: Decimal = Decimal(0)
+
+    @model_validator(mode="after")
+    def _check_credit_limit(self) -> "ContactIn":
+        if self.credit_limit < 0:
+            raise ValueError("سقف اعتبار نمی‌تواند منفی باشد")
+        return self
 
 
 class ContactOut(BaseModel):
@@ -37,8 +44,18 @@ class ContactOut(BaseModel):
     address: str
     tax_id: str | None
     is_active: bool
+    credit_limit: Decimal
 
     model_config = {"from_attributes": True}
+
+
+class CreditStatusOut(BaseModel):
+    contact_id: UUID
+    name: str
+    credit_limit: Decimal
+    outstanding: Decimal
+    available: Decimal
+    over_limit: bool
 
 
 class ItemIn(BaseModel):

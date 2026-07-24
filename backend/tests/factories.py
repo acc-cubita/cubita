@@ -32,8 +32,14 @@ def make_item(
     return item
 
 
-def make_contact(db, *, name: str = "طرف‌حساب تست", type_: str = "customer") -> Contact:
-    contact = Contact(name=name, type=type_)
+def make_contact(
+    db,
+    *,
+    name: str = "طرف‌حساب تست",
+    type_: str = "customer",
+    credit_limit: Decimal | int = 0,
+) -> Contact:
+    contact = Contact(name=name, type=type_, credit_limit=Decimal(credit_limit))
     db.add(contact)
     db.flush()
     return contact

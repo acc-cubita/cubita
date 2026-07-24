@@ -12,6 +12,7 @@ from app.pagination import Page, PageParams, paginate
 from app.schemas.inventory import (
     ContactIn,
     ContactOut,
+    CreditStatusOut,
     ItemIn,
     ItemOut,
     ItemUpdateIn,
@@ -21,6 +22,7 @@ from app.schemas.inventory import (
     WarehouseIn,
     WarehouseOut,
 )
+from app.services.credit import get_credit_status
 from app.services.inventory import post_stock_adjustment
 
 router = APIRouter(tags=["inventory"])
@@ -79,6 +81,15 @@ def update_contact(
     db.flush()
     db.refresh(contact)
     return contact
+
+
+@router.get("/api/contacts/{contact_id}/credit", response_model=CreditStatusOut)
+def contact_credit_status(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    return get_credit_status(db, contact_id)
 
 
 @router.get("/api/items", response_model=Page[ItemOut])

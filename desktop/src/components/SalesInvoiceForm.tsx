@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { ShoppingCart, Plus, Trash2, Save } from 'lucide-react'
+import { ShoppingCart, Plus, Trash2, Save, AlertTriangle } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import { createSalesInvoiceDirect, fetchCostCenters, newIdempotencyKey, type CostCenterRecord } from '../api'
+import {
+  createSalesInvoiceDirect,
+  fetchContacts,
+  fetchCostCenters,
+  fetchCreditStatus,
+  newIdempotencyKey,
+  type ContactRecord,
+  type CostCenterRecord,
+  type CreditStatus,
+} from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -32,6 +41,9 @@ export function SalesInvoiceForm({
   const [message, setMessage] = useState<string | null>(null)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = useState('')
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [contactId, setContactId] = useState('')
+  const [credit, setCredit] = useState<CreditStatus | null>(null)
 
   // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور بدون مرکز است.
   useEffect(() => {
@@ -39,6 +51,29 @@ export function SalesInvoiceForm({
       .then((rows) => setCostCenters(rows.filter((c) => c.is_active)))
       .catch(() => setCostCenters([]))
   }, [token])
+
+  // مشتری‌ها هم زنده خوانده می‌شوند (همان الگوی مراکز هزینه). آفلاین که نشد، انتخاب‌گر
+  // پنهان و فاکتور بدون مشتری است — دقیقاً رفتار فعلی. تأمین‌کننده‌ها کنار گذاشته می‌شوند.
+  useEffect(() => {
+    fetchContacts(token)
+      .then((rows) => setContacts(rows.filter((c) => c.type !== 'supplier')))
+      .catch(() => setContacts([]))
+  }, [token])
+
+  // وضعیت اعتبارِ مشتریِ انتخاب‌شده را زنده می‌گیریم تا مانده و سقف را نشان دهیم.
+  useEffect(() => {
+    if (!contactId) {
+      setCredit(null)
+      return
+    }
+    let cancelled = false
+    fetchCreditStatus(token, contactId)
+      .then((s) => !cancelled && setCredit(s))
+      .catch(() => !cancelled && setCredit(null))
+    return () => {
+      cancelled = true
+    }
+  }, [token, contactId])
   // کلید یکتاسازی به *این فاکتور* گره می‌خورد، نه به هر تلاش شبکه‌ای.
   //
   // اگر ثبت با خطا برگردد و کاربر دوباره دکمه را بزند، همان کلید می‌رود — چون
@@ -94,6 +129,7 @@ export function SalesInvoiceForm({
       warehouse_id: effectiveWarehouseId,
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
+      contact_id: contactId || null,
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
@@ -113,6 +149,7 @@ export function SalesInvoiceForm({
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
       setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '' }])
       setCostCenterId('')
+      setContactId('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -162,6 +199,23 @@ export function SalesInvoiceForm({
                 ))}
               </select>
             </label>
+          )}
+          {contacts.length > 0 && (
+            <label>
+              مشتری (اختیاری)
+              <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+                <option value="">— بدون مشتری —</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {credit && Number(credit.credit_limit) > 0 && (
+            <CreditBanner credit={credit} invoiceTotal={grandTotal} />
           )}
 
           <table className="invoice-lines">
@@ -247,5 +301,33 @@ export function SalesInvoiceForm({
         </form>
       )}
     </SectionCard>
+  )
+}
+
+// بنر اعتبار — مانده و سقفِ مشتری را نشان می‌دهد و اگر این فاکتور مانده را از سقف
+// عبور دهد، هشدار می‌دهد. عمداً بلاک‌کننده نیست: تصمیمِ فروش با کاربر است و فاکتورهای
+// آفلاین هم نباید سمت سرور رد شوند — این فقط یک هشدارِ آگاه‌کننده است.
+function CreditBanner({ credit, invoiceTotal }: { credit: CreditStatus; invoiceTotal: number }) {
+  const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+  const limit = Number(credit.credit_limit)
+  const outstanding = Number(credit.outstanding)
+  const available = limit - outstanding
+  const projected = outstanding + invoiceTotal
+  const willExceed = projected > limit
+
+  return (
+    <div className={`credit-banner ${willExceed ? 'credit-banner--warn' : 'credit-banner--ok'}`}>
+      {willExceed && <AlertTriangle size={15} />}
+      <span>
+        مانده فعلی: <strong>{fa(outstanding)}</strong> از سقف <strong>{fa(limit)}</strong> تومان
+        {' — '}
+        قابل استفاده: <strong>{fa(available)}</strong>
+      </span>
+      {willExceed && (
+        <span className="credit-banner-alert">
+          این فاکتور مانده را به {fa(projected)} می‌رساند و از سقف اعتبار عبور می‌کند.
+        </span>
+      )}
+    </div>
   )
 }

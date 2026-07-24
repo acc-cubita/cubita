@@ -791,6 +791,7 @@ export const createSalesInvoiceDirect = (
     warehouse_id: string
     tax_rate?: number
     cost_center_id?: string | null
+    contact_id?: string | null
     lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,
@@ -850,6 +851,7 @@ export interface ContactRecord {
   address: string
   tax_id: string | null
   is_active: boolean
+  credit_limit: string
 }
 
 export interface ContactIn {
@@ -859,6 +861,7 @@ export interface ContactIn {
   email: string | null
   address: string
   tax_id: string | null
+  credit_limit: number
 }
 
 export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')
@@ -868,6 +871,18 @@ export const createContact = (token: string, data: ContactIn) =>
 
 export const updateContact = (token: string, contactId: string, data: ContactIn) =>
   authedSend<ContactRecord>(token, 'PATCH', `/api/contacts/${contactId}`, data)
+
+export interface CreditStatus {
+  contact_id: string
+  name: string
+  credit_limit: string
+  outstanding: string
+  available: string
+  over_limit: boolean
+}
+
+export const fetchCreditStatus = (token: string, contactId: string) =>
+  authedGet<CreditStatus>(token, `/api/contacts/${contactId}/credit`)
 
 export interface TreasuryTransactionRecord {
   id: string

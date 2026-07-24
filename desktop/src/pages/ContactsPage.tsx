@@ -36,7 +36,7 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   both: 'مشتری و تأمین‌کننده',
 }
 
-const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '' }
+const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0 }
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -135,6 +135,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       email: c.email ?? '',
       address: c.address,
       tax_id: c.tax_id ?? '',
+      credit_limit: Number(c.credit_limit) || 0,
     })
     setFormMessage(null)
   }
@@ -222,10 +223,22 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               <input type="text" value={form.tax_id ?? ''} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} />
             </label>
           </div>
-          <label>
-            ایمیل
-            <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
+          <div className="field-row">
+            <label>
+              ایمیل
+              <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </label>
+            <label>
+              سقف اعتبار (تومان)
+              <input
+                type="number"
+                min="0"
+                value={form.credit_limit || ''}
+                onChange={(e) => setForm({ ...form, credit_limit: Number(e.target.value) || 0 })}
+                placeholder="۰ = بدون سقف"
+              />
+            </label>
+          </div>
           <label>
             نشانی
             <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
@@ -264,7 +277,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                   <th>نام</th>
                   <th>نوع</th>
                   <th>تلفن</th>
-                  <th>ایمیل</th>
+                  <th>سقف اعتبار</th>
                   <th></th>
                 </tr>
               </thead>
@@ -284,7 +297,9 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                       <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
                     </td>
                     <td>{c.phone ?? '—'}</td>
-                    <td className="ltr-cell">{c.email ?? '—'}</td>
+                    <td className="money-cell">
+                      {Number(c.credit_limit) > 0 ? faMoney(Number(c.credit_limit)) : '—'}
+                    </td>
                     <td>
                       <button type="button" onClick={() => startEdit(c)}>
                         <Pencil size={13} /> ویرایش
