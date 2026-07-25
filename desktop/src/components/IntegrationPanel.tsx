@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Store, RefreshCw, Save } from 'lucide-react'
+import { Store, RefreshCw, Save, Link2, Plug } from 'lucide-react'
 import {
   fetchItemsLive,
+  fetchStorefrontSettings,
   triggerStorefrontSync,
   updateItemStorefrontMapping,
+  updateStorefrontSettings,
   type ItemRecord,
+  type StorefrontSettingsIn,
   type SyncResult,
 } from '../api'
 import { SectionCard } from './SectionCard'
+
+const EMPTY_SETTINGS: StorefrontSettingsIn = {
+  base_url: '',
+  admin_email: '',
+  admin_password: '',
+  cutover_order_id: 0,
+  is_active: false,
+}
 
 export function IntegrationPanel({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
@@ -16,13 +27,46 @@ export function IntegrationPanel({ token }: { token: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  async function refresh() {
+  // تنظیماتِ اتصالِ همین کسب‌وکار (پرمستأجر)
+  const [settings, setSettings] = useState<StorefrontSettingsIn>(EMPTY_SETTINGS)
+  const [hasPassword, setHasPassword] = useState(false)
+  const [savingSettings, setSavingSettings] = useState(false)
+
+  async function refreshItems() {
     setItems((await fetchItemsLive(token)).filter((i) => !i.is_service))
   }
 
+  async function refreshSettings() {
+    const s = await fetchStorefrontSettings(token)
+    setSettings({
+      base_url: s.base_url,
+      admin_email: s.admin_email,
+      admin_password: '', // هرگز از سرور نمی‌آید؛ خالی = رمزِ فعلی حفظ شود
+      cutover_order_id: s.cutover_order_id,
+      is_active: s.is_active,
+    })
+    setHasPassword(s.has_password)
+  }
+
   useEffect(() => {
-    void refresh()
+    void refreshItems()
+    void refreshSettings().catch(() => {})
   }, [])
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault()
+    setMessage(null)
+    setSavingSettings(true)
+    try {
+      await updateStorefrontSettings(token, settings)
+      await refreshSettings()
+      setMessage('تنظیمات اتصال ذخیره شد.')
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
 
   async function saveMapping(itemId: string) {
     setMessage(null)
@@ -30,7 +74,7 @@ export function IntegrationPanel({ token }: { token: string }) {
     const value = raw === undefined || raw === '' ? null : Number(raw)
     try {
       await updateItemStorefrontMapping(token, itemId, value)
-      await refresh()
+      await refreshItems()
       setMessage('نگاشت کالا ذخیره شد.')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -54,85 +98,148 @@ export function IntegrationPanel({ token }: { token: string }) {
   }
 
   return (
-    <SectionCard
-      icon={Store}
-      title="اتصال به سایت فروشگاهی (ipnetcity.ir)"
-      actions={
-        <button className="btn-primary" onClick={() => void handleSync()} disabled={loading}>
-          <RefreshCw size={13} className={loading ? 'spin' : ''} />
-          {loading ? 'در حال sync...' : 'هم‌گام‌سازی با سایت فروشگاهی'}
-        </button>
-      }
-    >
-      <p className="hint">
-        این بخش نیاز به اتصال اینترنت دارد و تنظیمات <code>STOREFRONT_API_BASE_URL</code> /{' '}
-        <code>STOREFRONT_ADMIN_EMAIL</code> / <code>STOREFRONT_ADMIN_PASSWORD</code> روی بک‌اند را لازم دارد.
-        هر sync ابتدا سفارش‌های جدید سایت را به فاکتور فروش (انبار «آنلاین») تبدیل می‌کند، سپس موجودی/قیمت فعلی
-        هر کالای نگاشت‌شده را روی سایت به‌روزرسانی می‌کند.
-      </p>
-      {message && <div className="hint">{message}</div>}
+    <div className="workspace-split">
+      <SectionCard icon={Plug} title="تنظیمات اتصال به فروشگاه" description="اطلاعاتِ فروشگاهِ اینترنتیِ خودتان را وارد کنید تا نرم‌افزار به آن وصل شود.">
+        <form className="invoice-form form-full" onSubmit={saveSettings}>
+          <label>
+            آدرس سایت (API)
+            <input
+              type="text"
+              dir="ltr"
+              placeholder="https://example.ir"
+              value={settings.base_url}
+              onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
+            />
+          </label>
+          <div className="field-row">
+            <label>
+              ایمیل ادمین سایت
+              <input
+                type="text"
+                dir="ltr"
+                value={settings.admin_email}
+                onChange={(e) => setSettings({ ...settings, admin_email: e.target.value })}
+              />
+            </label>
+            <label>
+              رمز ادمین سایت
+              <input
+                type="password"
+                dir="ltr"
+                placeholder={hasPassword ? '•••••• (تنظیم‌شده — برای تغییر وارد کنید)' : 'رمز عبور'}
+                value={settings.admin_password}
+                onChange={(e) => setSettings({ ...settings, admin_password: e.target.value })}
+              />
+            </label>
+          </div>
+          <div className="field-row">
+            <label>
+              آستانه‌ی سفارش (cutover)
+              <input
+                type="number"
+                min="0"
+                value={settings.cutover_order_id || ''}
+                onChange={(e) => setSettings({ ...settings, cutover_order_id: Number(e.target.value) || 0 })}
+              />
+              <span className="field-hint">سفارش‌های با شماره‌ی کوچک‌تر/مساویِ این مقدار وارد نمی‌شوند (سفارش‌های قدیمیِ پیش از اتصال).</span>
+            </label>
+            <label className="check-inline">
+              <input
+                type="checkbox"
+                checked={settings.is_active}
+                onChange={(e) => setSettings({ ...settings, is_active: e.target.checked })}
+              />
+              اتصال فعال باشد
+            </label>
+          </div>
+          <div className="invoice-form-footer">
+            <button type="submit" className="btn-primary" disabled={savingSettings}>
+              <Save size={14} /> {savingSettings ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
+            </button>
+          </div>
+        </form>
+        {message && <div className="hint">{message}</div>}
+      </SectionCard>
 
-      <h3>نگاشت کالا ↔ محصول سایت</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>کد کالا</th>
-            <th>نام</th>
-            <th>شناسه محصول در سایت</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.id}>
-              <td>{item.sku}</td>
-              <td>{item.name}</td>
-              <td>
-                <input
-                  type="number"
-                  value={pendingMapping[item.id] ?? item.storefront_product_id ?? ''}
-                  onChange={(e) => setPendingMapping((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                  style={{ width: 100 }}
-                />
-              </td>
-              <td>
-                <button type="button" onClick={() => void saveMapping(item.id)}>
-                  <Save size={13} /> ذخیره
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <SectionCard
+        icon={Store}
+        title="نگاشت کالا و هم‌گام‌سازی"
+        description="هر کالای حسابداری را به شناسه‌ی محصولِ سایت وصل کنید؛ سپس هم‌گام‌سازی بزنید."
+        actions={
+          <button className="btn-primary" onClick={() => void handleSync()} disabled={loading || !settings.is_active}>
+            <RefreshCw size={13} className={loading ? 'spin' : ''} />
+            {loading ? 'در حال sync...' : 'هم‌گام‌سازی با سایت'}
+          </button>
+        }
+      >
+        <p className="hint">
+          هر sync ابتدا سفارش‌های جدید سایت را به فاکتور فروش (انبار «آنلاین») تبدیل می‌کند، سپس موجودی و قیمتِ
+          هر کالای نگاشت‌شده را روی سایت به‌روزرسانی می‌کند. {!settings.is_active && '— ابتدا اتصال را تنظیم و فعال کنید.'}
+        </p>
 
-      {syncResult && (syncResult.orders_skipped.length > 0 || syncResult.items_push_failed.length > 0) && (
-        <div>
-          {syncResult.orders_skipped.length > 0 && (
-            <>
-              <h3>سفارش‌های رد‌شده</h3>
-              <ul className="outbox-list">
-                {syncResult.orders_skipped.map((s, idx) => (
-                  <li key={idx}>
-                    سفارش #{s.order_id ?? '—'}: {s.reason}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {syncResult.items_push_failed.length > 0 && (
-            <>
-              <h3>کالاهای push‌نشده</h3>
-              <ul className="outbox-list">
-                {syncResult.items_push_failed.map((f, idx) => (
-                  <li key={idx}>
-                    {f.sku}: {f.error}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+        <div className="entity-table-wrap">
+          <table className="entity-table">
+            <thead>
+              <tr>
+                <th>کد کالا</th>
+                <th>نام</th>
+                <th>شناسه محصول در سایت</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.sku}</td>
+                  <td className="entity-name">{item.name}</td>
+                  <td>
+                    <input
+                      type="number"
+                      style={{ width: 100 }}
+                      value={pendingMapping[item.id] ?? item.storefront_product_id ?? ''}
+                      onChange={(e) => setPendingMapping((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    />
+                  </td>
+                  <td>
+                    <button type="button" onClick={() => void saveMapping(item.id)}>
+                      <Link2 size={13} /> ذخیره
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-    </SectionCard>
+
+        {syncResult && (syncResult.orders_skipped.length > 0 || syncResult.items_push_failed.length > 0) && (
+          <div>
+            {syncResult.orders_skipped.length > 0 && (
+              <>
+                <h3>سفارش‌های رد‌شده</h3>
+                <ul className="outbox-list">
+                  {syncResult.orders_skipped.map((s, idx) => (
+                    <li key={idx}>
+                      سفارش #{s.order_id ?? '—'}: {s.reason}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {syncResult.items_push_failed.length > 0 && (
+              <>
+                <h3>کالاهای push‌نشده</h3>
+                <ul className="outbox-list">
+                  {syncResult.items_push_failed.map((f, idx) => (
+                    <li key={idx}>
+                      {f.sku}: {f.error}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+      </SectionCard>
+    </div>
   )
 }

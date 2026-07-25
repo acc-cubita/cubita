@@ -539,6 +539,28 @@ export interface SyncResult {
 export const triggerStorefrontSync = (token: string) =>
   authedSend<SyncResult>(token, 'POST', '/api/integration/sync', {})
 
+export interface StorefrontSettings {
+  base_url: string
+  admin_email: string
+  has_password: boolean
+  cutover_order_id: number
+  is_active: boolean
+}
+
+export interface StorefrontSettingsIn {
+  base_url: string
+  admin_email: string
+  admin_password: string
+  cutover_order_id: number
+  is_active: boolean
+}
+
+export const fetchStorefrontSettings = (token: string) =>
+  authedGet<StorefrontSettings>(token, '/api/integration/settings')
+
+export const updateStorefrontSettings = (token: string, data: StorefrontSettingsIn) =>
+  authedSend<StorefrontSettings>(token, 'PUT', '/api/integration/settings', data)
+
 export interface StockAdjustmentRecord {
   id: string
   item_id: string

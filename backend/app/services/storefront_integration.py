@@ -1,10 +1,13 @@
-"""اتصال به سایت فروشگاهی (ipnetcity.ir / پروژه‌ی D:\\camera).
+"""اتصال به سایتِ فروشگاهیِ هر کسب‌وکار.
 
 طبق پلن تأییدشده: حسابداری منبع حقیقت موجودی/قیمت است (push)، و سفارش‌های ثبت‌شده روی سایت
 به‌صورت فاکتور فروش وارد حسابداری می‌شوند (pull). این ماژول به هیچ کد سمت سایت فروشگاهی نیاز ندارد؛
 فقط از اندپوینت‌های عمومی/ادمین موجود آن (GET /api/products/{id}، PUT /api/admin/products/{id}،
 GET /api/admin/orders، POST /api/auth/login) استفاده می‌کند. هر sync دوباره با ایمیل/رمز لاگین می‌کند
 تا نیازی به نگهداری توکن بلندمدت نباشد.
+
+**پیکربندی پرمستأجر است:** آدرس/ایمیل/رمزِ سایت در جدولِ `storefront_settings` به‌ازای هر
+کسب‌وکار ذخیره می‌شود (نه در `.env`ِ سراسری)، پس هر کاربر فروشگاهِ خودش را وصل می‌کند.
 """
 
 from dataclasses import dataclass, field
@@ -14,9 +17,9 @@ from decimal import Decimal
 import httpx
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models.inventory import Item, Warehouse
 from app.models.invoices import SalesInvoice
+from app.models.storefront import StorefrontSettings
 from app.models.user import User
 from app.schemas.invoices import SalesInvoiceIn, SalesInvoiceLineIn
 from app.services.inventory import get_total_stock_qty, post_sales_invoice
@@ -32,7 +35,7 @@ ONLINE_WAREHOUSE_CODE = "ONLINE"
 
 
 class StorefrontConfigError(Exception):
-    """تنظیمات اتصال به سایت فروشگاهی کامل نیست (در .env)."""
+    """تنظیمات اتصال به سایت فروشگاهی برای این کسب‌وکار کامل یا فعال نیست."""
 
 
 class StorefrontClient:
@@ -80,15 +83,34 @@ class StorefrontClient:
         self._client.close()
 
 
-def _build_client() -> StorefrontClient:
-    settings = get_settings()
-    if not (settings.storefront_api_base_url and settings.storefront_admin_email and settings.storefront_admin_password):
-        raise StorefrontConfigError(
-            "STOREFRONT_API_BASE_URL / STOREFRONT_ADMIN_EMAIL / STOREFRONT_ADMIN_PASSWORD در .env تنظیم نشده‌اند"
-        )
-    return StorefrontClient(
-        settings.storefront_api_base_url, settings.storefront_admin_email, settings.storefront_admin_password
-    )
+def get_settings_row(db: Session) -> StorefrontSettings | None:
+    """ردیفِ تنظیماتِ فروشگاهِ کسب‌وکارِ جاری (RLS خودش مستأجر را محدود می‌کند)."""
+    return db.query(StorefrontSettings).first()
+
+
+def update_settings(db: Session, data) -> StorefrontSettings:
+    row = get_settings_row(db)
+    if row is None:
+        row = StorefrontSettings()
+        db.add(row)
+    row.base_url = (data.base_url or "").strip()
+    row.admin_email = (data.admin_email or "").strip()
+    if data.admin_password:  # خالی یعنی رمزِ فعلی حفظ شود
+        row.admin_password = data.admin_password
+    row.cutover_order_id = data.cutover_order_id
+    row.is_active = data.is_active
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+def _build_client(db: Session) -> StorefrontClient:
+    row = get_settings_row(db)
+    if row is None or not row.is_active:
+        raise StorefrontConfigError("اتصال به فروشگاه هنوز تنظیم/فعال نشده است")
+    if not (row.base_url and row.admin_email and row.admin_password):
+        raise StorefrontConfigError("آدرس، ایمیل یا رمزِ اتصال به فروشگاه کامل نیست")
+    return StorefrontClient(row.base_url, row.admin_email, row.admin_password)
 
 
 @dataclass
@@ -99,7 +121,7 @@ class PushResult:
 
 def push_stock_and_price(db: Session, client: StorefrontClient | None = None) -> PushResult:
     owns_client = client is None
-    client = client or _build_client()
+    client = client or _build_client(db)
     result = PushResult()
     try:
         items = (
@@ -134,10 +156,15 @@ def _get_online_warehouse(db: Session) -> Warehouse | None:
 
 
 def pull_new_orders(
-    db: Session, user: User, client: StorefrontClient | None = None, max_pages: int = 5, per_page: int = 50
+    db: Session,
+    user: User,
+    client: StorefrontClient | None = None,
+    cutover: int | None = None,
+    max_pages: int = 5,
+    per_page: int = 50,
 ) -> PullResult:
     owns_client = client is None
-    client = client or _build_client()
+    client = client or _build_client(db)
     result = PullResult()
     try:
         warehouse = _get_online_warehouse(db)
@@ -148,6 +175,14 @@ def pull_new_orders(
         already_imported = {
             row[0] for row in db.query(SalesInvoice.source_order_id).filter(SalesInvoice.source_order_id.isnot(None)).all()
         }
+
+        # سفارش‌های قبل از راه‌اندازیِ اتصال، موجودی‌شان همان لحظه‌ی ثبت روی سایت کم شده
+        # (سایت `prod.stock -= qty` می‌کند). چون موجودیِ اولیه‌ی حسابداری برابرِ همان
+        # موجودیِ فعلیِ سایت گذاشته می‌شود، واردکردن دوباره‌ی این سفارش‌ها موجودی را دوبار
+        # کم می‌کند. آستانه‌ی cutover آن‌ها را کنار می‌گذارد؛ فقط سفارش‌های تازه وارد می‌شوند.
+        if cutover is None:
+            row = get_settings_row(db)
+            cutover = row.cutover_order_id if row else 0
 
         items_by_storefront_id = {
             item.storefront_product_id: item
@@ -162,7 +197,7 @@ def pull_new_orders(
 
             for order in orders:
                 order_id = order["id"]
-                if order_id in already_imported:
+                if order_id <= cutover or order_id in already_imported:
                     continue
 
                 lines: list[SalesInvoiceLineIn] = []
@@ -222,7 +257,7 @@ def pull_new_orders(
 
 
 def sync_all(db: Session, user: User) -> dict:
-    client = _build_client()
+    client = _build_client(db)
     try:
         pull_result = pull_new_orders(db, user, client=client)
         push_result = push_stock_and_price(db, client=client)

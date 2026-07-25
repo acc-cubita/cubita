@@ -32,6 +32,7 @@ from app.models.payroll import (
 from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
 from app.models.stock_count import StockCountLine, StockCountSession
+from app.models.storefront import StorefrontSettings
 from app.models.quotations import SalesQuotation, SalesQuotationLine
 from app.models.returns import (
     PurchaseReturn,
@@ -102,4 +103,5 @@ __all__ = [
     "ExchangeRate",
     "LeaveRecord",
     "BenefitRun",
+    "StorefrontSettings",
 ]

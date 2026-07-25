@@ -21,10 +21,8 @@ class Settings(BaseSettings):
     # خالی = دسترسی برای همه بسته (fail closed). فهرست ایمیل با کاما جدا شود.
     platform_admin_emails: str = ""
 
-    # اکانت سرویس ادمین روی سایت فروشگاهی؛ هر sync دوباره لاگین می‌کند تا نیازی به نگهداری توکن بلندمدت نباشد
-    storefront_api_base_url: str = ""
-    storefront_admin_email: str = ""
-    storefront_admin_password: str = ""
+    # تنظیماتِ اتصال به سایتِ فروشگاهی حالا پرمستأجر است (جدولِ storefront_settings)،
+    # نه سراسری در .env — تا هر کسب‌وکار فروشگاهِ خودش را وصل کند.
 
     # درگاه پرداخت زرین‌پال برای خرید پلن‌های سایت تجاری cubita.ir
     zarinpal_merchant_id: str = "00000000-0000-0000-0000-000000000000"
