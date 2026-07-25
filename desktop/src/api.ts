@@ -1434,3 +1434,71 @@ export const printSalesInvoice = (token: string, invoiceId: string) =>
 
 export const printPurchaseInvoice = (token: string, invoiceId: string) =>
   openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)
+
+// --- انبارگردانی (شمارش فیزیکی موجودی) ---
+
+export type StockCountStatus = 'open' | 'posted' | 'cancelled'
+
+export interface StockCountSummary {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: StockCountStatus
+  notes: string
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
+}
+
+export interface StockCountLine {
+  id: string
+  item_id: string
+  item_name: string
+  item_sku: string
+  unit: string
+  system_qty: string
+  counted_qty: string
+  unit_cost: string
+  variance: string
+  variance_value: string
+}
+
+export interface StockCountSession {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: StockCountStatus
+  notes: string
+  journal_entry_id: string | null
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
+  variance_line_count: number
+  total_variance_value: string
+  lines: StockCountLine[]
+}
+
+export const fetchStockCounts = (token: string) =>
+  authedGet<StockCountSummary[]>(token, '/api/stock-counts')
+
+export const fetchStockCount = (token: string, id: string) =>
+  authedGet<StockCountSession>(token, `/api/stock-counts/${id}`)
+
+export const createStockCount = (
+  token: string,
+  data: { warehouse_id: string; count_date: string; notes: string },
+) => authedSend<StockCountSession>(token, 'POST', '/api/stock-counts', data)
+
+export const setStockCounts = (
+  token: string,
+  id: string,
+  lines: { line_id: string; counted_qty: number }[],
+) => authedSend<StockCountSession>(token, 'PUT', `/api/stock-counts/${id}/counts`, { lines })
+
+export const postStockCount = (token: string, id: string) =>
+  authedSend<StockCountSession>(token, 'POST', `/api/stock-counts/${id}/post`, {})
+
+export const cancelStockCount = (token: string, id: string) =>
+  authedSend<StockCountSession>(token, 'POST', `/api/stock-counts/${id}/cancel`, {})

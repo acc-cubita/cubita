@@ -27,6 +27,7 @@ from app.models.payroll import (
     SalaryContract,
 )
 from app.models.subscription import Subscription
+from app.models.stock_count import StockCountLine, StockCountSession
 from app.models.quotations import SalesQuotation, SalesQuotationLine
 from app.models.returns import (
     PurchaseReturn,
@@ -89,4 +90,6 @@ __all__ = [
     "IdempotencyKey",
     "AuditLog",
     "Subscription",
+    "StockCountSession",
+    "StockCountLine",
 ]

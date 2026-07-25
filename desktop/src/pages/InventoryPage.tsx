@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ArrowLeftRight } from 'lucide-react'
+import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
+import { StockCountPanel } from '../components/StockCountPanel'
 import { TransferForm } from '../components/TransferForm'
 import { fetchStockLevels, type StockLevel } from '../api'
 import { SectionCard } from '../components/SectionCard'
@@ -126,8 +127,14 @@ export function InventoryPage({
             ),
           },
           {
-            key: 'adjust',
+            key: 'count',
             label: 'انبارگردانی',
+            icon: ClipboardCheck,
+            content: <StockCountPanel token={token} warehouses={warehouses} />,
+          },
+          {
+            key: 'adjust',
+            label: 'تعدیل دستی',
             icon: ClipboardList,
             content: (
               <StockAdjustmentForm token={token} warehouses={warehouses} items={items} onAdjusted={() => void refreshStock()} />

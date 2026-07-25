@@ -2214,3 +2214,34 @@ button:disabled {
   flex-basis: 100%;
   font-weight: 600;
 }
+
+/* پنل انبارگردانی */
+.panel-subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.stat-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.count-input {
+  width: 90px;
+  text-align: center;
+}
+.text-danger {
+  color: var(--danger);
+}
+.text-success {
+  color: var(--success);
+}
+.entity-table tr.row-selected {
+  background: var(--accent-soft, rgba(99, 102, 241, 0.08));
+}
