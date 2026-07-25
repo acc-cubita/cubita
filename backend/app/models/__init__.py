@@ -27,6 +27,7 @@ from app.models.payroll import (
     SalaryContract,
 )
 from app.models.subscription import Subscription
+from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
 from app.models.stock_count import StockCountLine, StockCountSession
 from app.models.quotations import SalesQuotation, SalesQuotationLine
 from app.models.returns import (
@@ -92,4 +93,6 @@ __all__ = [
     "Subscription",
     "StockCountSession",
     "StockCountLine",
+    "RecurringJournalEntry",
+    "RecurringJournalLine",
 ]

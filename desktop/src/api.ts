@@ -1502,3 +1502,73 @@ export const postStockCount = (token: string, id: string) =>
 
 export const cancelStockCount = (token: string, id: string) =>
   authedSend<StockCountSession>(token, 'POST', `/api/stock-counts/${id}/cancel`, {})
+
+// --- اسناد تکرارشونده ---
+
+export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly'
+
+export interface RecurringLine {
+  id: string
+  account_id: string
+  account_code: string
+  account_name: string
+  debit: string
+  credit: string
+  description: string
+}
+
+export interface RecurringEntry {
+  id: string
+  title: string
+  description: string
+  frequency: RecurringFrequency
+  interval: number
+  start_date: string
+  end_date: string | null
+  next_run_date: string
+  last_run_date: string | null
+  is_active: boolean
+  cost_center_id: string | null
+  created_at: string | null
+  is_due: boolean
+  amount: string
+  lines: RecurringLine[]
+}
+
+export interface RecurringEntryInput {
+  title: string
+  description: string
+  frequency: RecurringFrequency
+  interval: number
+  start_date: string
+  end_date: string | null
+  cost_center_id: string | null
+  lines: { account_id: string; debit: number; credit: number; description?: string }[]
+}
+
+export interface RecurringRunResult {
+  generated: number
+  skipped: number
+  entries: { id: string; number: number | null; entry_date: string; title: string }[]
+}
+
+export const fetchRecurringEntries = (token: string) =>
+  authedGet<RecurringEntry[]>(token, '/api/recurring-entries')
+
+export const createRecurringEntry = (token: string, data: RecurringEntryInput) =>
+  authedSend<RecurringEntry>(token, 'POST', '/api/recurring-entries', data)
+
+export const updateRecurringEntry = (token: string, id: string, data: RecurringEntryInput) =>
+  authedSend<RecurringEntry>(token, 'PUT', `/api/recurring-entries/${id}`, data)
+
+export const setRecurringActive = (token: string, id: string, isActive: boolean) =>
+  authedSend<RecurringEntry>(token, 'POST', `/api/recurring-entries/${id}/set-active?is_active=${isActive}`, {})
+
+export const deleteRecurringEntry = (token: string, id: string) =>
+  authedDelete(token, `/api/recurring-entries/${id}`)
+
+export const runRecurringDue = (token: string) =>
+  authedSend<RecurringRunResult>(token, 'POST', '/api/recurring-entries/run', {})
+
+export const runRecurringOne = (token: string, id: string) =>
+  authedSend<RecurringRunResult>(token, 'POST', `/api/recurring-entries/${id}/run`, {})

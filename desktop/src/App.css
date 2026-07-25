@@ -2245,3 +2245,21 @@ button:disabled {
 .entity-table tr.row-selected {
   background: var(--accent-soft, rgba(99, 102, 241, 0.08));
 }
+
+/* اسناد تکرارشونده */
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.inline-check input {
+  width: auto;
+}
+.row-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+.due-badge {
+  margin-inline-start: 6px;
+}
