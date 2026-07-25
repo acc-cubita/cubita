@@ -8,7 +8,6 @@ const NAV_LINKS = [
 ]
 
 export function Header() {
-  const demoUrl = import.meta.env.VITE_DEMO_URL ?? 'https://demo.cubita.ir'
   const appUrl = import.meta.env.VITE_APP_URL ?? 'https://acc.cubita.ir'
   const [open, setOpen] = useState(false)
 
@@ -37,14 +36,9 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="header-actions desktop-only">
-          <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-outline">
-            پیش‌نمایش برنامه
-          </a>
-          <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
-            ورود به برنامه
-          </a>
-        </div>
+        <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary desktop-only">
+          ورود به برنامه
+        </a>
 
         <button
           type="button"
@@ -65,9 +59,6 @@ export function Header() {
               {l.label}
             </a>
           ))}
-          <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-outline">
-            پیش‌نمایش برنامه
-          </a>
           <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
             ورود به برنامه
           </a>
