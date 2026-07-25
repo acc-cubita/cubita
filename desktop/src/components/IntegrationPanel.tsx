@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Store, RefreshCw, Save, Link2, Plug } from 'lucide-react'
+import { Store, RefreshCw, Save, Plug } from 'lucide-react'
 import {
   fetchItemsLive,
   fetchStorefrontSettings,
   triggerStorefrontSync,
+  updateItemCost,
   updateItemStorefrontMapping,
   updateStorefrontSettings,
   type ItemRecord,
@@ -23,6 +24,7 @@ const EMPTY_SETTINGS: StorefrontSettingsIn = {
 export function IntegrationPanel({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
   const [pendingMapping, setPendingMapping] = useState<Record<string, string>>({})
+  const [pendingCost, setPendingCost] = useState<Record<string, string>>({})
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -68,14 +70,23 @@ export function IntegrationPanel({ token }: { token: string }) {
     }
   }
 
-  async function saveMapping(itemId: string) {
+  async function saveRow(item: ItemRecord) {
     setMessage(null)
-    const raw = pendingMapping[itemId]
-    const value = raw === undefined || raw === '' ? null : Number(raw)
     try {
-      await updateItemStorefrontMapping(token, itemId, value)
+      // نگاشتِ فروشگاه اگر تغییر کرده
+      const rawMap = pendingMapping[item.id]
+      if (rawMap !== undefined) {
+        await updateItemStorefrontMapping(token, item.id, rawMap === '' ? null : Number(rawMap))
+      }
+      // بهای تمام‌شده اگر تغییر کرده
+      const rawCost = pendingCost[item.id]
+      if (rawCost !== undefined && rawCost !== '') {
+        await updateItemCost(token, item.id, Number(rawCost) || 0)
+      }
       await refreshItems()
-      setMessage('نگاشت کالا ذخیره شد.')
+      setPendingMapping((p) => ({ ...p, [item.id]: undefined as unknown as string }))
+      setPendingCost((p) => ({ ...p, [item.id]: undefined as unknown as string }))
+      setMessage('کالا ذخیره شد.')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -183,6 +194,8 @@ export function IntegrationPanel({ token }: { token: string }) {
               <tr>
                 <th>کد کالا</th>
                 <th>نام</th>
+                <th>قیمت فروش</th>
+                <th>بهای تمام‌شده</th>
                 <th>شناسه محصول در سایت</th>
                 <th></th>
               </tr>
@@ -192,6 +205,16 @@ export function IntegrationPanel({ token }: { token: string }) {
                 <tr key={item.id}>
                   <td>{item.sku}</td>
                   <td className="entity-name">{item.name}</td>
+                  <td className="money-cell">{Number(item.sales_price).toLocaleString('fa-IR')}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="0"
+                      style={{ width: 110 }}
+                      value={pendingCost[item.id] ?? String(Number(item.average_cost) || 0)}
+                      onChange={(e) => setPendingCost((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    />
+                  </td>
                   <td>
                     <input
                       type="number"
@@ -201,8 +224,8 @@ export function IntegrationPanel({ token }: { token: string }) {
                     />
                   </td>
                   <td>
-                    <button type="button" onClick={() => void saveMapping(item.id)}>
-                      <Link2 size={13} /> ذخیره
+                    <button type="button" onClick={() => void saveRow(item)}>
+                      <Save size={13} /> ذخیره
                     </button>
                   </td>
                 </tr>

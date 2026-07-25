@@ -521,6 +521,8 @@ export interface ItemRecord {
   name: string
   is_service: boolean
   is_active: boolean
+  sales_price: string
+  average_cost: string
   storefront_product_id: number | null
 }
 
@@ -528,6 +530,9 @@ export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token,
 
 export const updateItemStorefrontMapping = (token: string, itemId: string, storefrontProductId: number | null) =>
   authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { storefront_product_id: storefrontProductId })
+
+export const updateItemCost = (token: string, itemId: string, averageCost: number) =>
+  authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { average_cost: averageCost })
 
 export interface SyncResult {
   orders_imported: number[]

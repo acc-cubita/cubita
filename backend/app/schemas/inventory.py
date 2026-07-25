@@ -83,12 +83,24 @@ class ItemOut(BaseModel):
 
 
 class ItemUpdateIn(BaseModel):
-    """آپدیت جزئی کالا؛ فقط فیلدهای ارسال‌شده تغییر می‌کنند (بقیه دست‌نخورده می‌مانند)."""
+    """آپدیت جزئی کالا؛ فقط فیلدهای ارسال‌شده تغییر می‌کنند (بقیه دست‌نخورده می‌مانند).
+
+    `average_cost` را می‌توان دستی ویرایش کرد (بهای تمام‌شده‌ی جاری برای محاسبه‌ی سود/بهای
+    فروش‌رفته). توجه: این فقط مبنای بهای رو به جلو را عوض می‌کند و ارزشِ ثبت‌شده‌ی موجودی در
+    دفترِ کل را بازارزیابی نمی‌کند؛ برای افتتاحیه، سندِ جداگانه‌ی موجودی/سرمایه زده می‌شود.
+    """
 
     name: str | None = None
     sales_price: Decimal | None = None
+    average_cost: Decimal | None = None
     is_active: bool | None = None
     storefront_product_id: int | None = None
+
+    @model_validator(mode="after")
+    def _non_negative_cost(self) -> "ItemUpdateIn":
+        if self.average_cost is not None and self.average_cost < 0:
+            raise ValueError("بهای تمام‌شده نمی‌تواند منفی باشد")
+        return self
 
 
 class StockLevelOut(BaseModel):
