@@ -156,6 +156,8 @@ tfoot td { font-weight: 700; background: #fafafa; }
 .sign { flex: 1; border-top: 1px solid #888; padding-top: 6px; text-align: center; color: #555; }
 .voided { color: #b00; border: 2px solid #b00; border-radius: 4px;
           padding: 6px 10px; margin-bottom: 12px; font-weight: 700; }
+.currency-note { background: #f2f6ff; border: 1px solid #b8c8e8; border-radius: 4px;
+          padding: 6px 10px; margin-bottom: 12px; font-weight: 600; }
 .toolbar { text-align: center; margin: 12px 0 20px; }
 .toolbar button { font: inherit; padding: 8px 22px; cursor: pointer;
                   border: 1px solid #111; background: #111; color: #fff; border-radius: 6px; }
@@ -200,12 +202,15 @@ def render_invoice(
     total_discount: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
+    currency_line: str = "",
 ) -> str:
     """HTML کامل و مستقل — بدون هیچ منبع بیرونی، تا آفلاین و در چاپ هم درست باشد."""
     banner = ""
     if voided_at is not None:
         reason = f" — {escape(void_reason)}" if void_reason else ""
         banner = f"<div class='voided'>این فاکتور باطل شده است{reason}</div>"
+
+    currency_banner = f"<div class='currency-note'>{escape(currency_line)}</div>" if currency_line else ""
 
     # total همان جمعِ خالص (بدون مالیات) است؛ اگر مالیاتی هست، تفکیک نشان داده می‌شود.
     subtotal = Decimal(str(total))
@@ -239,6 +244,7 @@ def render_invoice(
 <div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
 <div class="sheet">
   {banner}
+  {currency_banner}
   <div class="head">
     <div>
       <h1 class="title">{escape(kind)}</h1>

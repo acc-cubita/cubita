@@ -19,6 +19,7 @@ from app.routers import (
     budgeting,
     calendar,
     cost_centers,
+    currencies,
     integration,
     inventory,
     invoices,
@@ -84,6 +85,7 @@ app.include_router(moadian.router)
 app.include_router(stock_taking.router)
 app.include_router(recurring.router)
 app.include_router(alerts.router)
+app.include_router(currencies.router)
 
 
 @app.get("/api/health")

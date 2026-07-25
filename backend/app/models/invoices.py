@@ -38,6 +38,11 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
+    #: ارزِ فاکتور. NULL = پایه (ریال). مبالغِ بالا همیشه پایه‌اند؛ این‌ها فقط برای
+    #: نمایشِ معادلِ ارزی و نرخ‌اند — دفتر پایه می‌ماند.
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
+
     # شناسه‌ی سفارش روی سایت فروشگاهی؛ برای idempotent بودن sync (جلوگیری از وارد کردن دوباره‌ی همان سفارش)
     source_order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
 
@@ -91,6 +96,11 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    #: ارزِ فاکتور. NULL = پایه (ریال). مبالغِ بالا همیشه پایه‌اند؛ این‌ها فقط برای
+    #: نمایشِ معادلِ ارزی و نرخ‌اند — دفتر پایه می‌ماند.
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

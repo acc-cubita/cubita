@@ -1,4 +1,4 @@
-import { Inbox, ListTree, BookOpen, CalendarCheck, Building2, Target, FolderKanban, Repeat } from 'lucide-react'
+import { Inbox, ListTree, BookOpen, CalendarCheck, Building2, Target, FolderKanban, Repeat, Coins } from 'lucide-react'
 import type { AccountCache, OutboxEntry } from '../electron.d'
 import { JournalEntryForm } from '../components/JournalEntryForm'
 import { OutboxList } from '../components/OutboxList'
@@ -10,6 +10,7 @@ import { FixedAssetsPanel } from '../components/FixedAssetsPanel'
 import { BudgetPanel } from '../components/BudgetPanel'
 import { CostCentersPanel } from '../components/CostCentersPanel'
 import { RecurringEntriesPanel } from '../components/RecurringEntriesPanel'
+import { CurrenciesPanel } from '../components/CurrenciesPanel'
 import { Tabs } from '../components/Tabs'
 import { isElectron } from '../platform'
 
@@ -113,6 +114,12 @@ export function AccountingPage({
             label: 'اسناد تکرارشونده',
             icon: Repeat,
             content: <RecurringEntriesPanel token={token} accounts={accounts} />,
+          },
+          {
+            key: 'currencies',
+            label: 'ارزها و نرخ ارز',
+            icon: Coins,
+            content: <CurrenciesPanel token={token} />,
           },
           {
             key: 'close',

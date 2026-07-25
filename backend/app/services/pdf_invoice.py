@@ -99,6 +99,7 @@ def render_invoice_pdf(
     total_discount: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
+    currency_line: str = "",
 ) -> bytes:
     pdf = _InvoicePDF()
     usable = _usable(pdf)
@@ -141,6 +142,17 @@ def render_invoice_pdf(
         pdf.cell(usable, 9, f"این فاکتور باطل شده است{reason}", border=1, align="C", fill=True)
         pdf.set_text_color(*_INK)
         y += 13
+
+    # --- نوار ارز (اگر فاکتور ارزی باشد) ---
+    if currency_line:
+        pdf.set_fill_color(242, 246, 255)
+        pdf.set_draw_color(184, 200, 232)
+        pdf.set_line_width(0.2)
+        pdf.set_text_color(*_INK)
+        pdf.set_font("Vazir", "B", 10)
+        pdf.set_xy(pdf.l_margin, y)
+        pdf.cell(usable, 8, currency_line, border=1, align="R", fill=True)
+        y += 12
 
     # --- طرف حساب و شرح (دو جعبه) ---
     box_w = (usable - 6) / 2

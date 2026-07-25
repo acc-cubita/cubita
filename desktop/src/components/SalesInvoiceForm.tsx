@@ -6,10 +6,13 @@ import {
   fetchContacts,
   fetchCostCenters,
   fetchCreditStatus,
+  fetchCurrencies,
+  fetchLatestRate,
   newIdempotencyKey,
   type ContactRecord,
   type CostCenterRecord,
   type CreditStatus,
+  type Currency,
 } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
@@ -44,6 +47,9 @@ export function SalesInvoiceForm({
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = useState('')
   const [credit, setCredit] = useState<CreditStatus | null>(null)
+  const [currencies, setCurrencies] = useState<Currency[]>([])
+  const [currencyCode, setCurrencyCode] = useState('')
+  const [exchangeRate, setExchangeRate] = useState('1')
 
   // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور بدون مرکز است.
   useEffect(() => {
@@ -59,6 +65,28 @@ export function SalesInvoiceForm({
       .then((rows) => setContacts(rows.filter((c) => c.type !== 'supplier')))
       .catch(() => setContacts([]))
   }, [token])
+
+  // ارزها زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور به ریال است.
+  useEffect(() => {
+    fetchCurrencies(token)
+      .then(setCurrencies)
+      .catch(() => setCurrencies([]))
+  }, [token])
+
+  // با انتخابِ ارز، آخرین نرخِ ثبت‌شده پیشنهاد می‌شود (کاربر می‌تواند دستی تغییر دهد).
+  useEffect(() => {
+    if (!currencyCode) {
+      setExchangeRate('1')
+      return
+    }
+    let cancelled = false
+    fetchLatestRate(token, currencyCode)
+      .then((r) => !cancelled && r.rate && setExchangeRate(String(Number(r.rate))))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token, currencyCode])
 
   // وضعیت اعتبارِ مشتریِ انتخاب‌شده را زنده می‌گیریم تا مانده و سقف را نشان دهیم.
   useEffect(() => {
@@ -102,6 +130,10 @@ export function SalesInvoiceForm({
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const taxAmount = Math.round((total * taxRateNum) / 100)
   const grandTotal = total + taxAmount
+  // ارز پایه = ریال با نرخ ۱. مبالغِ بالا به ارزِ انتخابی وارد شده‌اند؛ برای ارسال و
+  // نمایشِ معادلِ ریالی در نرخ ضرب می‌شوند. دفتر همیشه ریالی است.
+  const rate = currencyCode ? Number(exchangeRate) || 1 : 1
+  const baseGrandTotal = Math.round(grandTotal * rate)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -130,11 +162,14 @@ export function SalesInvoiceForm({
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
       contact_id: contactId || null,
+      currency_code: currencyCode || null,
+      exchange_rate: rate,
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
-        unit_price: Number(l.unitPrice) || 0,
-        discount: Number(l.discount) || 0,
+        // مبالغ به پایه (ریال) تبدیل می‌شوند؛ ردیف‌ها همیشه پایه ذخیره می‌شوند.
+        unit_price: Math.round((Number(l.unitPrice) || 0) * rate),
+        discount: Math.round((Number(l.discount) || 0) * rate),
       })),
     }
 
@@ -150,6 +185,7 @@ export function SalesInvoiceForm({
       setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '' }])
       setCostCenterId('')
       setContactId('')
+      setCurrencyCode('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -213,9 +249,30 @@ export function SalesInvoiceForm({
               </select>
             </label>
           )}
+          {currencies.length > 0 && (
+            <div className="field-row">
+              <label>
+                ارز فاکتور
+                <select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
+                  <option value="">ریال (پایه)</option>
+                  {currencies.map((c) => (
+                    <option key={c.id} value={c.code}>
+                      {c.code} — {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {currencyCode && (
+                <label>
+                  نرخ برابری (۱ {currencyCode} = ؟ ریال)
+                  <input type="number" min="0" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} />
+                </label>
+              )}
+            </div>
+          )}
 
           {credit && Number(credit.credit_limit) > 0 && (
-            <CreditBanner credit={credit} invoiceTotal={grandTotal} />
+            <CreditBanner credit={credit} invoiceTotal={baseGrandTotal} />
           )}
 
           <table className="invoice-lines">
@@ -292,7 +349,13 @@ export function SalesInvoiceForm({
               {discountTotal > 0 && <span>تخفیف: {discountTotal.toLocaleString('fa-IR')}</span>}
               <span>جمع خالص: {total.toLocaleString('fa-IR')}</span>
               <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {taxAmount.toLocaleString('fa-IR')}</span>
-              <span className="invoice-total">قابل پرداخت: {grandTotal.toLocaleString('fa-IR')}</span>
+              <span className="invoice-total">
+                قابل پرداخت: {grandTotal.toLocaleString('fa-IR')}
+                {currencyCode ? ` ${currencyCode}` : ''}
+              </span>
+              {currencyCode && (
+                <span className="hint">معادل ریالی: {baseGrandTotal.toLocaleString('fa-IR')}</span>
+              )}
             </div>
             <button type="submit" className="btn-primary"><Save size={14} /> ثبت فاکتور</button>
           </div>

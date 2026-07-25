@@ -8,6 +8,7 @@ from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
+from app.models.currency import Currency, ExchangeRate
 from app.models.idempotency import IdempotencyKey
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.invoices import (
@@ -95,4 +96,6 @@ __all__ = [
     "StockCountLine",
     "RecurringJournalEntry",
     "RecurringJournalLine",
+    "Currency",
+    "ExchangeRate",
 ]

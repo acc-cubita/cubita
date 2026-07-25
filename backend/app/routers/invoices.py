@@ -19,8 +19,10 @@ from app.schemas.invoices import (
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from decimal import Decimal
+
 from app.services.pdf_invoice import render_invoice_pdf
-from app.services.printing import render_invoice
+from app.services.printing import fa_number, render_invoice
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
 
 router = APIRouter(tags=["invoices"])
@@ -129,6 +131,22 @@ def _party(db: Session, contact_id, fallback: str) -> tuple[str, str]:
     return contact.name, " — ".join(filter(None, [contact.phone, contact.address]))
 
 
+def _currency_line(invoice) -> str:
+    """اگر فاکتور ارزی باشد، رشته‌ی «ارز/نرخ/معادل» را برای چاپ و PDF می‌سازد.
+
+    مبالغِ فاکتور پایه (ریال) اند؛ معادلِ ارزی = مبلغِ قابل‌پرداختِ ریالی ÷ نرخ.
+    """
+    if not invoice.currency_code:
+        return ""
+    rate = Decimal(str(invoice.exchange_rate or 1))
+    grand = Decimal(str(invoice.total_amount)) + Decimal(str(invoice.tax_amount))
+    foreign = (grand / rate).quantize(Decimal("0.01")) if rate else Decimal(0)
+    return (
+        f"ارز فاکتور: {invoice.currency_code} — نرخ برابری: {fa_number(rate)} ریال — "
+        f"معادل: {fa_number(foreign)} {invoice.currency_code}"
+    )
+
+
 def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoice) -> dict:
     name, detail = _party(db, invoice.contact_id, "مشتری نقدی")
     return dict(
@@ -155,6 +173,7 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
         total_discount=invoice.total_discount,
         voided_at=invoice.voided_at,
         void_reason=invoice.void_reason,
+        currency_line=_currency_line(invoice),
     )
 
 
@@ -184,6 +203,7 @@ def _purchase_render_kwargs(db: Session, principal: Principal, invoice: Purchase
         total_discount=invoice.total_discount,
         voided_at=invoice.voided_at,
         void_reason=invoice.void_reason,
+        currency_line=_currency_line(invoice),
     )
 
 

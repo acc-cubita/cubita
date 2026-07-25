@@ -792,6 +792,8 @@ export const createSalesInvoiceDirect = (
     tax_rate?: number
     cost_center_id?: string | null
     contact_id?: string | null
+    currency_code?: string | null
+    exchange_rate?: number
     lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,
@@ -805,6 +807,8 @@ export const createPurchaseInvoiceDirect = (
     tax_rate?: number
     cost_center_id?: string | null
     contact_id?: string | null
+    currency_code?: string | null
+    exchange_rate?: number
     lines: { item_id: string; qty: number; unit_cost: number; discount?: number }[]
   },
   idempotencyKey?: string,
@@ -1621,3 +1625,41 @@ export interface Alerts {
 }
 
 export const fetchAlerts = (token: string) => authedGet<Alerts>(token, '/api/alerts')
+
+// --- چندارزی ---
+
+export interface Currency {
+  id: string
+  code: string
+  name: string
+  symbol: string
+}
+
+export interface ExchangeRate {
+  id: string
+  currency_code: string
+  rate_date: string
+  rate: string
+}
+
+export interface LatestRate {
+  currency_code: string
+  rate: string | null
+  rate_date: string | null
+}
+
+export const fetchCurrencies = (token: string) => authedGet<Currency[]>(token, '/api/currencies')
+
+export const createCurrency = (token: string, data: { code: string; name: string; symbol: string }) =>
+  authedSend<Currency>(token, 'POST', '/api/currencies', data)
+
+export const deleteCurrency = (token: string, id: string) => authedDelete(token, `/api/currencies/${id}`)
+
+export const fetchRates = (token: string, currencyCode?: string) =>
+  authedGet<ExchangeRate[]>(token, `/api/currencies/rates${currencyCode ? `?currency_code=${currencyCode}` : ''}`)
+
+export const upsertRate = (token: string, data: { currency_code: string; rate_date: string; rate: number }) =>
+  authedSend<ExchangeRate>(token, 'POST', '/api/currencies/rates', data)
+
+export const fetchLatestRate = (token: string, currencyCode: string) =>
+  authedGet<LatestRate>(token, `/api/currencies/rates/latest?currency_code=${currencyCode}`)

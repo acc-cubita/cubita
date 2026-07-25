@@ -39,6 +39,10 @@ class SalesInvoiceIn(BaseModel):
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
+    #: ارز فاکتور (مثل USD). None/خالی = پایه (ریال). مبالغِ سطرها همیشه پایه‌اند —
+    #: کلاینت پیش از ارسال با نرخ تبدیل می‌کند؛ این‌ها فقط برای نمایش ذخیره می‌شوند.
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
 
     @model_validator(mode="after")
     def validate_lines(self) -> "SalesInvoiceIn":
@@ -46,6 +50,8 @@ class SalesInvoiceIn(BaseModel):
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
         if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
+        if self.currency_code and self.exchange_rate <= 0:
+            raise ValueError("نرخ ارز باید بزرگ‌تر از صفر باشد")
         return self
 
 
@@ -74,6 +80,8 @@ class SalesInvoiceOut(BaseModel):
     total_cost: Decimal
     tax_rate: Decimal
     tax_amount: Decimal
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
     journal_entry_id: UUID | None
     source_order_id: int | None
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
@@ -114,6 +122,9 @@ class PurchaseInvoiceIn(BaseModel):
     lines: list[PurchaseInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
+    #: ارز فاکتور (مثل USD). None/خالی = پایه. مبالغِ سطرها همیشه پایه‌اند.
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
 
     @model_validator(mode="after")
     def validate_lines(self) -> "PurchaseInvoiceIn":
@@ -121,6 +132,8 @@ class PurchaseInvoiceIn(BaseModel):
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
         if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
+        if self.currency_code and self.exchange_rate <= 0:
+            raise ValueError("نرخ ارز باید بزرگ‌تر از صفر باشد")
         return self
 
 
@@ -147,6 +160,8 @@ class PurchaseInvoiceOut(BaseModel):
     total_discount: Decimal = Decimal(0)
     tax_rate: Decimal
     tax_amount: Decimal
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""
