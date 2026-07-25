@@ -1626,6 +1626,70 @@ export interface Alerts {
 
 export const fetchAlerts = (token: string) => authedGet<Alerts>(token, '/api/alerts')
 
+// --- مزایای حقوق (عیدی/سنوات/مرخصی) ---
+
+export interface BenefitRow {
+  employee_id: string
+  employee_name: string
+  base_salary: string
+  eidi: string
+  severance: string
+  leave_entitled: string
+  leave_used: string
+  leave_remaining: string
+  leave_value: string
+}
+
+export interface BenefitsReport {
+  year: number
+  as_of: string
+  min_base_wage: string
+  annual_leave_days: number
+  rows: BenefitRow[]
+  total_eidi: string
+  total_severance: string
+  total_leave_value: string
+}
+
+export interface LeaveRecordRow {
+  id: string
+  employee_id: string
+  leave_date: string
+  days: string
+  note: string
+}
+
+export interface BenefitIssueResult {
+  kind: string
+  amount: string
+  journal_entry_number: number | null
+}
+
+export const fetchBenefits = (token: string, year: number, asOf?: string) =>
+  authedGet<BenefitsReport>(token, `/api/payroll/benefits?year=${year}${asOf ? `&as_of=${asOf}` : ''}`)
+
+export const setBenefitSettings = (
+  token: string,
+  data: { year: number; min_base_wage: number; annual_leave_days: number },
+) => authedSend<{ year: number; min_base_wage: string; annual_leave_days: number }>(token, 'PUT', '/api/payroll/benefit-settings', data)
+
+export const fetchLeaveRecords = (token: string, employeeId?: string) =>
+  authedGet<LeaveRecordRow[]>(token, `/api/payroll/leave${employeeId ? `?employee_id=${employeeId}` : ''}`)
+
+export const recordLeave = (
+  token: string,
+  data: { employee_id: string; leave_date: string; days: number; note: string },
+) => authedSend<LeaveRecordRow>(token, 'POST', '/api/payroll/leave', data)
+
+export const issueEidi = (token: string, year: number) =>
+  authedSend<BenefitIssueResult>(token, 'POST', `/api/payroll/eidi?year=${year}`, {})
+
+export const issueSeverance = (token: string, employeeId: string, asOf?: string) =>
+  authedSend<BenefitIssueResult>(token, 'POST', `/api/payroll/severance/${employeeId}${asOf ? `?as_of=${asOf}` : ''}`, {})
+
+export const issueLeavePayout = (token: string, employeeId: string, year: number) =>
+  authedSend<BenefitIssueResult>(token, 'POST', `/api/payroll/leave-payout/${employeeId}?year=${year}`, {})
+
 // --- چندارزی ---
 
 export interface Currency {

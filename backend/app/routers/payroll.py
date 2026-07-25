@@ -176,6 +176,8 @@ def upsert_payroll_settings(
             insurance_employer_rate=data.insurance_employer_rate,
             tax_exemption_annual=data.tax_exemption_annual,
             tax_brackets=brackets,
+            min_base_wage=data.min_base_wage,
+            annual_leave_days=data.annual_leave_days,
             notes=data.notes,
         )
         db.add(settings)
@@ -184,6 +186,8 @@ def upsert_payroll_settings(
         settings.insurance_employer_rate = data.insurance_employer_rate
         settings.tax_exemption_annual = data.tax_exemption_annual
         settings.tax_brackets = brackets
+        settings.min_base_wage = data.min_base_wage
+        settings.annual_leave_days = data.annual_leave_days
         settings.notes = data.notes
     db.flush()
     db.refresh(settings)

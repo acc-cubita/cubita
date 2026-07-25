@@ -2264,6 +2264,22 @@ button:disabled {
   margin-inline-start: 6px;
 }
 
+/* نوار ابزار مزایا (سال/تنظیمات/ثبت مرخصی) */
+.benefit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+.benefit-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 /* مرکز هشدارها */
 .alerts-card {
   background: var(--surface, #fff);

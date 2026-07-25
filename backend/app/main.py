@@ -15,6 +15,7 @@ from app.routers import (
     audit,
     auth,
     banking,
+    benefits,
     billing,
     budgeting,
     calendar,
@@ -71,6 +72,7 @@ app.include_router(transfers.router)
 app.include_router(reports.router)
 app.include_router(banking.router)
 app.include_router(payroll.router)
+app.include_router(benefits.router)
 app.include_router(period_close.router)
 app.include_router(integration.router)
 app.include_router(billing.router)

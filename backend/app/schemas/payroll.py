@@ -126,6 +126,8 @@ class PayrollSettingsIn(BaseModel):
     insurance_employer_rate: Decimal
     tax_exemption_annual: Decimal
     tax_brackets: list[TaxBracketIn]
+    min_base_wage: Decimal = Decimal(0)
+    annual_leave_days: int = 26
     notes: str = ""
 
     @model_validator(mode="after")
@@ -147,6 +149,80 @@ class PayrollSettingsOut(BaseModel):
     insurance_employer_rate: Decimal
     tax_exemption_annual: Decimal
     tax_brackets: list[dict]
+    min_base_wage: Decimal = Decimal(0)
+    annual_leave_days: int = 26
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+class LeaveRecordIn(BaseModel):
+    employee_id: UUID
+    leave_date: date
+    days: Decimal
+    note: str = ""
+
+    @model_validator(mode="after")
+    def _positive(self) -> "LeaveRecordIn":
+        if self.days <= 0:
+            raise ValueError("تعداد روز مرخصی باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class LeaveRecordOut(BaseModel):
+    id: UUID
+    employee_id: UUID
+    leave_date: date
+    days: Decimal
+    note: str
+
+    model_config = {"from_attributes": True}
+
+
+class BenefitRowOut(BaseModel):
+    employee_id: UUID
+    employee_name: str
+    base_salary: Decimal
+    eidi: Decimal
+    severance: Decimal
+    leave_entitled: Decimal
+    leave_used: Decimal
+    leave_remaining: Decimal
+    leave_value: Decimal
+
+
+class BenefitsReportOut(BaseModel):
+    year: int
+    as_of: date
+    min_base_wage: Decimal
+    annual_leave_days: int
+    rows: list[BenefitRowOut]
+    total_eidi: Decimal
+    total_severance: Decimal
+    total_leave_value: Decimal
+
+
+class BenefitIssueOut(BaseModel):
+    kind: str
+    amount: Decimal
+    journal_entry_number: int | None
+
+
+class BenefitSettingsIn(BaseModel):
+    year: int
+    min_base_wage: Decimal = Decimal(0)
+    annual_leave_days: int = 26
+
+    @model_validator(mode="after")
+    def _check(self) -> "BenefitSettingsIn":
+        if self.min_base_wage < 0:
+            raise ValueError("حداقل حقوق نمی‌تواند منفی باشد")
+        if self.annual_leave_days < 0:
+            raise ValueError("روزهای مرخصی نمی‌تواند منفی باشد")
+        return self
+
+
+class BenefitSettingsOut(BaseModel):
+    year: int
+    min_base_wage: Decimal
+    annual_leave_days: int

@@ -11,6 +11,7 @@ import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseC
 import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
 import { PayrollPanel } from './PayrollPanel'
+import { BenefitsPanel } from './BenefitsPanel'
 import { IntegrationPanel } from './IntegrationPanel'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
@@ -206,6 +207,7 @@ export function Dashboard({
                 description="پرونده‌ی پرسنل، حکم حقوقی، کارکرد ماهانه و صدور فیش حقوقی برای هر دوره."
               />
               <PayrollPanel token={token} />
+              <BenefitsPanel token={token} />
             </div>
           )}
           {page === 'integration' && (

@@ -130,4 +130,36 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     tax_exemption_annual: Mapped[float] = mapped_column(Numeric(18, 0))
     # لیست پلکان مالیات سالانه: [{"up_to": <سقف تجمعی یا null برای نامحدود>, "rate": <نرخ 0..1>}, ...] به ترتیب صعودی
     tax_brackets: Mapped[list] = mapped_column(JSONB)
+    #: حداقل حقوق ماهانه‌ی مصوبِ همان سال — پایه‌ی سقف/کفِ عیدی (۲ تا ۳ برابر). صفر = بدون سقف.
+    min_base_wage: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: روزهای مرخصی استحقاقیِ سالانه (قانون کار: ۲۶ روز کاری).
+    annual_leave_days: Mapped[int] = mapped_column(Integer, default=26, server_default="26")
     notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class LeaveRecord(TenantMixin, UUIDPKMixin, Base):
+    """یک مرخصیِ استفاده‌شده. مانده‌ی مرخصی = استحقاقی − جمعِ همین رکوردها در همان سال."""
+
+    __tablename__ = "leave_records"
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"), index=True)
+    leave_date: Mapped[date_] = mapped_column(Date)
+    days: Mapped[float] = mapped_column(Numeric(5, 2))
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class BenefitRun(TenantMixin, UUIDPKMixin, Base):
+    """ثبتِ صدورِ یک مزیت (عیدی/سنوات/بازخریدِ مرخصی) با سندِ حسابداری، تا دوباره صادر نشود."""
+
+    __tablename__ = "benefit_runs"
+
+    kind: Mapped[str] = mapped_column(String(20))  # eidi | severance | leave_payout
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    employee_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True)
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    run_date: Mapped[date_] = mapped_column(Date)
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

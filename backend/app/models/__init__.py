@@ -21,7 +21,9 @@ from app.models.moadian import MoadianSettings, MoadianSubmission
 from app.models.period_close import FiscalPeriodClose
 from app.models.payroll import (
     Attendance,
+    BenefitRun,
     Employee,
+    LeaveRecord,
     PayrollPeriod,
     PayrollSettings,
     Payslip,
@@ -98,4 +100,6 @@ __all__ = [
     "RecurringJournalLine",
     "Currency",
     "ExchangeRate",
+    "LeaveRecord",
+    "BenefitRun",
 ]
