@@ -1572,3 +1572,27 @@ export const runRecurringDue = (token: string) =>
 
 export const runRecurringOne = (token: string, id: string) =>
   authedSend<RecurringRunResult>(token, 'POST', `/api/recurring-entries/${id}/run`, {})
+
+// --- مرکز هشدارها ---
+
+export type AlertCategory = 'check' | 'receivable' | 'credit' | 'recurring' | 'calendar' | 'stock'
+export type AlertSeverity = 'danger' | 'warning' | 'info'
+
+export interface AlertItem {
+  category: AlertCategory
+  severity: AlertSeverity
+  title: string
+  detail: string
+  alert_date: string | null
+  amount: string | null
+  ref_id: string | null
+}
+
+export interface Alerts {
+  as_of: string
+  total: number
+  counts: Record<string, number>
+  items: AlertItem[]
+}
+
+export const fetchAlerts = (token: string) => authedGet<Alerts>(token, '/api/alerts')

@@ -10,6 +10,7 @@ from app.observability import (
 )
 from app.routers import (
     accounts,
+    alerts,
     assets,
     audit,
     auth,
@@ -82,6 +83,7 @@ app.include_router(cost_centers.router)
 app.include_router(moadian.router)
 app.include_router(stock_taking.router)
 app.include_router(recurring.router)
+app.include_router(alerts.router)
 
 
 @app.get("/api/health")

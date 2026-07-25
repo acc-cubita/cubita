@@ -10,6 +10,7 @@ import { StatCard } from '../components/StatCard'
 import { TrendChart, type TrendSeries } from '../components/TrendChart'
 import { ActivityFeed } from '../components/ActivityFeed'
 import { SalesDashboard } from '../components/SalesDashboard'
+import { AlertsPanel } from '../components/AlertsPanel'
 import { Wallet, TrendingUp, PackageSearch, Inbox } from 'lucide-react'
 
 const fa = (v: number) => v.toLocaleString('fa-IR')
@@ -93,6 +94,8 @@ export function OverviewPage({
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      <AlertsPanel token={token} />
 
       <div className="stat-grid">
         <StatCard
