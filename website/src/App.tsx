@@ -4,6 +4,8 @@ import { Header } from './components/Header'
 import { Hero } from './components/Hero'
 import { StatsBar } from './components/StatsBar'
 import { Features } from './components/Features'
+import { WhyCubita } from './components/WhyCubita'
+import { Industries } from './components/Industries'
 import { HowItWorks } from './components/HowItWorks'
 import { ProductGallery } from './components/ProductGallery'
 import { DemoSection } from './components/DemoSection'
@@ -20,6 +22,8 @@ function App() {
       <Hero />
       <StatsBar />
       <Features />
+      <WhyCubita />
+      <Industries />
       <HowItWorks />
       <ProductGallery />
       <DemoSection />

@@ -1,8 +1,8 @@
 const STATS = [
-  { value: '۶', label: 'ماژول اصلی حسابداری' },
-  { value: '۱۰۰٪', label: 'قابلیت کار آفلاین' },
-  { value: '۵', label: 'نقش کاربری مجزا' },
-  { value: '۲۴/۷', label: 'دسترسی به نسخه‌ی وب' },
+  { value: '۱۲+', label: 'ماژول کامل حسابداری' },
+  { value: '۱۰۰٪', label: 'کار بدون اینترنت' },
+  { value: '۲', label: 'پلتفرم: دسکتاپ و وب' },
+  { value: '۵', label: 'نقش کاربری با دسترسی مجزا' },
 ]
 
 export function StatsBar() {

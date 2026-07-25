@@ -1,5 +1,7 @@
-import { ArrowLeft, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, Sparkles } from 'lucide-react'
 import { ProductMockup } from './ProductMockup'
+
+const TRUST = ['بدون نیاز به نصب برای شروع', 'پرداخت امن با زرین‌پال', 'نسخه‌ی دسکتاپ و وب', 'پشتیبانی فارسی']
 
 export function Hero() {
   const demoUrl = import.meta.env.VITE_DEMO_URL ?? 'https://demo.cubita.ir'
@@ -30,7 +32,14 @@ export function Hero() {
               مشاهده پلن‌ها و قیمت‌ها
             </a>
           </div>
-          <div className="hero-note">بدون نیاز به نصب، بدون کارت اعتباری — همین حالا در مرورگر امتحان کنید.</div>
+          <ul className="hero-trust">
+            {TRUST.map((t) => (
+              <li key={t}>
+                <Check size={15} />
+                {t}
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div className="hero-visual">
