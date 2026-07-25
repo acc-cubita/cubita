@@ -9,6 +9,7 @@ const NAV_LINKS = [
 
 export function Header() {
   const demoUrl = import.meta.env.VITE_DEMO_URL ?? 'https://demo.cubita.ir'
+  const appUrl = import.meta.env.VITE_APP_URL ?? 'https://acc.cubita.ir'
   const [open, setOpen] = useState(false)
 
   // با تغییر مسیر (کلیک روی یک لینک) پنل موبایل خودش بسته شود؛ وگرنه کاربر
@@ -36,9 +37,14 @@ export function Header() {
           ))}
         </nav>
 
-        <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-outline desktop-only">
-          مشاهده دمو
-        </a>
+        <div className="header-actions desktop-only">
+          <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-outline">
+            پیش‌نمایش برنامه
+          </a>
+          <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+            ورود به برنامه
+          </a>
+        </div>
 
         <button
           type="button"
@@ -60,7 +66,10 @@ export function Header() {
             </a>
           ))}
           <a href={demoUrl} target="_blank" rel="noreferrer" className="btn btn-outline">
-            مشاهده دمو
+            پیش‌نمایش برنامه
+          </a>
+          <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+            ورود به برنامه
           </a>
         </nav>
       )}
