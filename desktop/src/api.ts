@@ -1435,6 +1435,31 @@ export const printSalesInvoice = (token: string, invoiceId: string) =>
 export const printPurchaseInvoice = (token: string, invoiceId: string) =>
   openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)
 
+/** فایل PDF فاکتور را با احراز هویت می‌گیرد و دانلود می‌کند.
+ *
+ * چون اندپوینت توکن می‌خواهد نمی‌شود صرفاً لینک داد؛ blob را با هدر می‌گیریم و با یک
+ * لینکِ موقتِ Blob دانلود می‌کنیم — در الکترون (کرومیوم) و مرورگر هر دو کار می‌کند.
+ */
+export async function downloadInvoicePdf(token: string, path: string, filename: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`دریافت PDF ناموفق بود (${res.status})`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export const downloadSalesInvoicePdf = (token: string, invoiceId: string, number: number | null) =>
+  downloadInvoicePdf(token, `/api/sales-invoices/${invoiceId}/pdf`, `فاکتور-فروش-${number ?? invoiceId}.pdf`)
+
+export const downloadPurchaseInvoicePdf = (token: string, invoiceId: string, number: number | null) =>
+  downloadInvoicePdf(token, `/api/purchase-invoices/${invoiceId}/pdf`, `فاکتور-خرید-${number ?? invoiceId}.pdf`)
+
 // --- انبارگردانی (شمارش فیزیکی موجودی) ---
 
 export type StockCountStatus = 'open' | 'posted' | 'cancelled'

@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -19,6 +19,7 @@ from app.schemas.invoices import (
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.pdf_invoice import render_invoice_pdf
 from app.services.printing import render_invoice
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
 
@@ -128,6 +129,75 @@ def _party(db: Session, contact_id, fallback: str) -> tuple[str, str]:
     return contact.name, " — ".join(filter(None, [contact.phone, contact.address]))
 
 
+def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoice) -> dict:
+    name, detail = _party(db, invoice.contact_id, "مشتری نقدی")
+    return dict(
+        kind="فاکتور فروش",
+        business_name=principal.membership.tenant.name,
+        number=invoice.number,
+        invoice_date=invoice.invoice_date,
+        party_name=name,
+        party_detail=detail,
+        description=invoice.description,
+        lines=[
+            {
+                "name": line.item.name,
+                "description": line.description,
+                "qty": line.qty,
+                "unit": line.item.unit,
+                "unit_price": line.unit_price,
+                "discount": line.discount,
+            }
+            for line in invoice.lines
+        ],
+        total=invoice.total_amount,
+        tax_amount=invoice.tax_amount,
+        total_discount=invoice.total_discount,
+        voided_at=invoice.voided_at,
+        void_reason=invoice.void_reason,
+    )
+
+
+def _purchase_render_kwargs(db: Session, principal: Principal, invoice: PurchaseInvoice) -> dict:
+    name, detail = _party(db, invoice.contact_id, "تأمین‌کننده نقدی")
+    return dict(
+        kind="فاکتور خرید",
+        business_name=principal.membership.tenant.name,
+        number=invoice.number,
+        invoice_date=invoice.invoice_date,
+        party_name=name,
+        party_detail=detail,
+        description=invoice.description,
+        lines=[
+            {
+                "name": line.item.name,
+                "description": line.description,
+                "qty": line.qty,
+                "unit": line.item.unit,
+                "unit_price": line.unit_cost,
+                "discount": line.discount,
+            }
+            for line in invoice.lines
+        ],
+        total=invoice.total_amount,
+        tax_amount=invoice.tax_amount,
+        total_discount=invoice.total_discount,
+        voided_at=invoice.voided_at,
+        void_reason=invoice.void_reason,
+    )
+
+
+def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/api/sales-invoices/{invoice_id}/print", response_class=HTMLResponse)
 def print_sales_invoice(
     invoice_id: UUID,
@@ -138,35 +208,21 @@ def print_sales_invoice(
     invoice = db.get(SalesInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+    return _print_response(render_invoice(**_sales_render_kwargs(db, principal, invoice)))
 
-    name, detail = _party(db, invoice.contact_id, "مشتری نقدی")
-    return _print_response(
-        render_invoice(
-            kind="فاکتور فروش",
-            business_name=principal.membership.tenant.name,
-            number=invoice.number,
-            invoice_date=invoice.invoice_date,
-            party_name=name,
-            party_detail=detail,
-            description=invoice.description,
-            lines=[
-                {
-                    "name": line.item.name,
-                    "description": line.description,
-                    "qty": line.qty,
-                    "unit": line.item.unit,
-                    "unit_price": line.unit_price,
-                    "discount": line.discount,
-                }
-                for line in invoice.lines
-            ],
-            total=invoice.total_amount,
-            tax_amount=invoice.tax_amount,
-            total_discount=invoice.total_discount,
-            voided_at=invoice.voided_at,
-            void_reason=invoice.void_reason,
-        )
-    )
+
+@router.get("/api/sales-invoices/{invoice_id}/pdf")
+def pdf_sales_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    invoice = db.get(SalesInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+    pdf_bytes = render_invoice_pdf(**_sales_render_kwargs(db, principal, invoice))
+    return _pdf_response(pdf_bytes, f"sales-invoice-{invoice.number}.pdf")
 
 
 @router.get("/api/purchase-invoices/{invoice_id}/print", response_class=HTMLResponse)
@@ -179,32 +235,18 @@ def print_purchase_invoice(
     invoice = db.get(PurchaseInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+    return _print_response(render_invoice(**_purchase_render_kwargs(db, principal, invoice)))
 
-    name, detail = _party(db, invoice.contact_id, "تأمین‌کننده نقدی")
-    return _print_response(
-        render_invoice(
-            kind="فاکتور خرید",
-            business_name=principal.membership.tenant.name,
-            number=invoice.number,
-            invoice_date=invoice.invoice_date,
-            party_name=name,
-            party_detail=detail,
-            description=invoice.description,
-            lines=[
-                {
-                    "name": line.item.name,
-                    "description": line.description,
-                    "qty": line.qty,
-                    "unit": line.item.unit,
-                    "unit_price": line.unit_cost,
-                    "discount": line.discount,
-                }
-                for line in invoice.lines
-            ],
-            total=invoice.total_amount,
-            tax_amount=invoice.tax_amount,
-            total_discount=invoice.total_discount,
-            voided_at=invoice.voided_at,
-            void_reason=invoice.void_reason,
-        )
-    )
+
+@router.get("/api/purchase-invoices/{invoice_id}/pdf")
+def pdf_purchase_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    invoice = db.get(PurchaseInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
+    pdf_bytes = render_invoice_pdf(**_purchase_render_kwargs(db, principal, invoice))
+    return _pdf_response(pdf_bytes, f"purchase-invoice-{invoice.number}.pdf")

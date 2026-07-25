@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Ban, FileText, Printer } from 'lucide-react'
+import { Ban, FileText, Printer, FileDown } from 'lucide-react'
 import {
   can,
+  downloadPurchaseInvoicePdf,
+  downloadSalesInvoicePdf,
   fetchPurchaseInvoices,
   fetchSalesInvoices,
   printPurchaseInvoice,
@@ -55,6 +57,17 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
     setMessage(null)
     try {
       await (isSales ? printSalesInvoice(token, id) : printPurchaseInvoice(token, id))
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  async function handlePdf(row: Row) {
+    setMessage(null)
+    try {
+      await (isSales
+        ? downloadSalesInvoicePdf(token, row.id, row.number)
+        : downloadPurchaseInvoicePdf(token, row.id, row.number))
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -140,6 +153,9 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(row.id)}>
                       <Printer size={13} /> چاپ
+                    </button>
+                    <button type="button" onClick={() => void handlePdf(row)}>
+                      <FileDown size={13} /> PDF
                     </button>
                     {canVoid && !row.voided_at && (
                       <button
