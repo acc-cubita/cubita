@@ -10,6 +10,20 @@ export function Footer() {
             کوبیتا
           </a>
           <p>نرم‌افزار حسابداری ابری و آفلاین برای کسب‌وکارهای ایرانی.</p>
+          <a
+            className="enamad-seal"
+            referrerPolicy="origin"
+            target="_blank"
+            rel="noopener"
+            href="https://trustseal.enamad.ir/?id=623640&Code=tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR"
+          >
+            <img
+              referrerPolicy="origin"
+              src="https://trustseal.enamad.ir/logo.aspx?id=623640&Code=tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR"
+              alt="نماد اعتماد الکترونیکی"
+              {...({ code: 'tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR' } as Record<string, string>)}
+            />
+          </a>
         </div>
 
         <div className="footer-col">
