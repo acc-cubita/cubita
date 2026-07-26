@@ -508,6 +508,20 @@
   color: var(--danger);
 }
 
+.sidebar-icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  display: flex;
+}
+
+.sidebar-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
 /* ---------- دکمه‌ها (سراسری) ---------- */
 
 button {
@@ -1676,9 +1690,9 @@ button:disabled {
   gap: 1rem;
   flex-wrap: wrap;
   padding: 0.6rem 1rem;
-  background: #1a2744;
-  border-block-end: 1px solid #2b3f6b;
-  color: #e6edf7;
+  background: var(--surface-2);
+  border-block-end: 1px solid var(--border);
+  color: var(--text);
   font-size: 0.9rem;
 }
 
@@ -1690,8 +1704,8 @@ button:disabled {
 .update-banner button {
   padding: 0.35rem 0.9rem;
   border-radius: 6px;
-  border: 1px solid #3b82f6;
-  background: #3b82f6;
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: #fff;
   cursor: pointer;
   font: inherit;
@@ -1699,8 +1713,8 @@ button:disabled {
 
 .update-banner__later {
   background: transparent;
-  border-color: #46587f;
-  color: #b8c6de;
+  border-color: var(--border-strong);
+  color: var(--text-muted);
 }
 
 /* حلقه‌ی فوکوس صریح: بقیه‌ی این فایل جاهایی outline را صفر می‌کند و بدون این،
@@ -1724,21 +1738,21 @@ button:disabled {
 }
 
 .subscription-banner--critical {
-  background: #3a1414;
-  border-color: #6b2323;
-  color: #f5c6c6;
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .subscription-banner--warning {
-  background: #3a2e10;
-  border-color: #6b5323;
-  color: #f0d9a0;
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .subscription-banner--notice {
-  background: #14233a;
-  border-color: #23426b;
-  color: #b8cfe6;
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .subscription-banner__dismiss {

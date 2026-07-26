@@ -14,8 +14,11 @@ import {
   HelpCircle,
   UserCog,
   LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useTheme } from '../lib/theme'
 
 export type PageKey =
   | 'overview'
@@ -81,6 +84,7 @@ export function Sidebar({
   onClose?: () => void
 }) {
   const navItems = isPlatformAdmin ? [...NAV_ITEMS, ...PLATFORM_ADMIN_NAV_ITEMS] : NAV_ITEMS
+  const { theme, toggle } = useTheme()
 
   return (
     <>
@@ -131,6 +135,15 @@ export function Sidebar({
             <div className="sidebar-user-role">{roleName}</div>
           </div>
         </div>
+        <button
+          type="button"
+          className="sidebar-icon-btn"
+          onClick={toggle}
+          title={theme === 'dark' ? 'پوسته‌ی روشن' : 'پوسته‌ی تیره'}
+          aria-label="تغییر پوسته"
+        >
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
         <button type="button" className="sidebar-logout" onClick={onLogout} title="خروج">
           <LogOut size={17} />
         </button>

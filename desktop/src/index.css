@@ -92,6 +92,57 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── پوسته‌ی روشن (کاربر با دکمه‌ی ساید‌بار سوییچ می‌کند) ─────────────────
+   آبی-بنفشِ برند روی سفیدِ سردِ نرم؛ کارت‌های سفید روی پس‌زمینه‌ی کم‌رنگ برجسته
+   می‌شوند و سایه‌ها آبیِ بسیار کم‌رنگ‌اند. همه از روی همین متغیرها ساخته می‌شود. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --page: #f5f7fc;
+  --bg: #eef1f8;
+  --surface: #ffffff;
+  --surface-2: #f3f5fb;
+  --surface-hover: #eaeef8;
+  --border: #e5e9f2;
+  --border-strong: #cfd6e6;
+
+  --text: #454c68;
+  --text-muted: #6f7695;
+  --text-h: #1a1f37;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-bg: rgba(37, 99, 235, 0.1);
+  --accent-text: #ffffff;
+
+  --accent-2: #9333ea;
+  --accent-2-hover: #7c3aed;
+  --accent-3: #db2777;
+
+  --success: #15a34a;
+  --success-bg: rgba(21, 163, 74, 0.11);
+  --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.09);
+  --warning: #c2740a;
+  --warning-bg: rgba(217, 119, 6, 0.13);
+
+  --series-1: #2563eb;
+  --series-1-text: #1d4ed8;
+  --series-2: #15a34a;
+  --series-2-text: #15803d;
+  --chart-grid: #e5e9f2;
+  --chart-axis: #cbd3e3;
+
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e6e9f2;
+  --sidebar-active-bg: rgba(37, 99, 235, 0.1);
+  --sidebar-active-text: #1d4ed8;
+  --sidebar-text: #6b7291;
+
+  --shadow-sm: rgba(30, 41, 82, 0.07) 0 1px 2px;
+  --shadow-md: rgba(30, 41, 82, 0.1) 0 8px 24px -4px, rgba(30, 41, 82, 0.06) 0 2px 6px -2px;
+}
+
 * {
   box-sizing: border-box;
 }
