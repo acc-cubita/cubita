@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
+  CalendarCheck2,
   CalendarDays,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
   Check,
+  Clock,
   ListChecks,
   Pencil,
   RotateCcw,
@@ -24,6 +27,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
@@ -114,6 +118,15 @@ export function CalendarPage({ token }: { token: string }) {
       map.set(ev.event_date, list)
     }
     return map
+  }, [events])
+
+  // شاخص‌های بالای صفحه
+  const kpis = useMemo(() => {
+    const todayStr = todayIso()
+    const done = events.filter((e) => e.is_done).length
+    const pending = events.filter((e) => !e.is_done)
+    const overdue = pending.filter((e) => e.event_date < todayStr).length
+    return { total: events.length, done, pending: pending.length, overdue }
   }, [events])
 
   const cells = buildJalaliMonthCells(viewYear, viewMonth)
@@ -475,6 +488,18 @@ export function CalendarPage({ token }: { token: string }) {
       />
 
       {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard icon={<CalendarDays size={18} />} label="کل رویدادها" value={kpis.total.toLocaleString('fa-IR')} />
+        <StatCard icon={<CalendarCheck2 size={18} />} label="انجام‌شده" value={kpis.done.toLocaleString('fa-IR')} tone="success" />
+        <StatCard icon={<Clock size={18} />} label="در انتظار" value={kpis.pending.toLocaleString('fa-IR')} />
+        <StatCard
+          icon={<AlertTriangle size={18} />}
+          label="عقب‌افتاده"
+          value={kpis.overdue.toLocaleString('fa-IR')}
+          tone={kpis.overdue > 0 ? 'danger' : 'default'}
+        />
+      </div>
 
       <Tabs
         tabs={[

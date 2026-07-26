@@ -1,6 +1,8 @@
-import { Inbox, ShoppingCart, FileText, Undo2, Landmark } from 'lucide-react'
-import type { MeResponse } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import { Inbox, ShoppingCart, FileText, Undo2, Landmark, TrendingUp, CalendarRange, Receipt } from 'lucide-react'
+import { fetchSalesInvoices, type MeResponse, type SalesInvoiceRecord } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
+import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
 import { InvoiceList } from '../components/InvoiceList'
 import { QuotationForm } from '../components/QuotationForm'
@@ -28,6 +30,20 @@ export function SalesPage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
+  const [invoices, setInvoices] = useState<SalesInvoiceRecord[]>([])
+  useEffect(() => {
+    void fetchSalesInvoices(token).then(setInvoices).catch(() => {})
+  }, [])
+  const kpis = useMemo(() => {
+    const live = invoices.filter((i) => !i.voided_at)
+    const withTax = (i: SalesInvoiceRecord) => Number(i.total_amount) + Number(i.tax_amount)
+    const total = live.reduce((s, i) => s + withTax(i), 0)
+    const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+    const last30 = live.filter((i) => i.invoice_date >= cutoff).reduce((s, i) => s + withTax(i), 0)
+    const avg = live.length ? Math.round(total / live.length) : 0
+    return { count: live.length, total, last30, avg }
+  }, [invoices])
+
   return (
     <div className="page">
       <PageHeader
@@ -35,6 +51,14 @@ export function SalesPage({
         title="فروش"
         description="برای هر فروش یک فاکتور بزنید — موجودی انبار و سند حسابداری آن به‌طور خودکار ثبت می‌شود. بدون اینترنت هم می‌توانید فاکتور بزنید؛ بعداً با «هم‌گام‌سازی» ارسال می‌شود."
       />
+
+      <div className="stat-grid">
+        <StatCard icon={<FileText size={18} />} label="تعداد فاکتور فروش" value={kpis.count.toLocaleString('fa-IR')} />
+        <StatCard icon={<TrendingUp size={18} />} label="مجموع فروش" value={kpis.total.toLocaleString('fa-IR')} tone="success" hint="تومان (با مالیات)" />
+        <StatCard icon={<CalendarRange size={18} />} label="فروش ۳۰ روز اخیر" value={kpis.last30.toLocaleString('fa-IR')} hint="تومان" />
+        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={kpis.avg.toLocaleString('fa-IR')} hint="تومان" />
+      </div>
+
       <Tabs
         tabs={[
           {

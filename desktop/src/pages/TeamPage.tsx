@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { KeyRound, Save, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Armchair, Clock, KeyRound, Save, ShieldCheck, UserCheck, UserPlus, UsersRound } from 'lucide-react'
 import {
   changeMemberRole,
   changePassword,
@@ -12,6 +12,13 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { StatCard } from '../components/StatCard'
+
+const STATUS_TONE: Record<Member['status'], 'success' | 'warning' | 'default'> = {
+  active: 'success',
+  invited: 'warning',
+  disabled: 'default',
+}
 
 /** نقش‌های پیش‌فرضی که هر کسب‌وکار موقع ساخته شدن می‌گیرد. */
 const ROLES = [
@@ -73,6 +80,15 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
   const seats = data?.seats
   const seatsFull = seats != null && seats.limit != null && seats.used >= seats.limit
 
+  const kpis = useMemo(() => {
+    const members = data?.members ?? []
+    return {
+      total: members.length,
+      active: members.filter((m) => m.status === 'active').length,
+      invited: members.filter((m) => m.status === 'invited').length,
+    }
+  }, [data])
+
   return (
     <div className="page">
       <PageHeader
@@ -82,6 +98,22 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
       />
 
       {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard icon={<UsersRound size={18} />} label="کل کاربران" value={kpis.total.toLocaleString('fa-IR')} />
+        <StatCard icon={<UserCheck size={18} />} label="کاربران فعال" value={kpis.active.toLocaleString('fa-IR')} tone="success" />
+        <StatCard
+          icon={<Clock size={18} />}
+          label="دعوت‌های در انتظار"
+          value={kpis.invited.toLocaleString('fa-IR')}
+          tone={kpis.invited > 0 ? 'warning' : 'default'}
+        />
+        <StatCard
+          icon={<Armchair size={18} />}
+          label="صندلی‌های پلن"
+          value={seats == null ? '—' : seats.limit == null ? 'نامحدود' : `${seats.used.toLocaleString('fa-IR')} از ${seats.limit.toLocaleString('fa-IR')}`}
+        />
+      </div>
 
       <SectionCard
         icon={UserPlus}
@@ -156,11 +188,11 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
         {data == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : (
-          <table>
+          <div className="entity-table-wrap">
+          <table className="entity-table">
             <thead>
               <tr>
-                <th>نام</th>
-                <th>ایمیل</th>
+                <th>کاربر</th>
                 <th>نقش</th>
                 <th>وضعیت</th>
                 <th>عملیات</th>
@@ -170,10 +202,17 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
               {data.members.map((m) => (
                 <tr key={m.id}>
                   <td>
-                    {m.name}
-                    {m.is_me && <span className="muted"> (شما)</span>}
+                    <div className="entity-cell">
+                      <div className="entity-avatar">{m.name.trim().charAt(0) || '؟'}</div>
+                      <div>
+                        <div className="entity-name">
+                          {m.name}
+                          {m.is_me && <span className="muted"> (شما)</span>}
+                        </div>
+                        <div className="entity-sub ltr-cell">{m.email}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td>{m.email}</td>
                   <td>
                     <select
                       value={m.role_key}
@@ -193,7 +232,9 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
                       )}
                     </select>
                   </td>
-                  <td>{STATUS_LABELS[m.status]}</td>
+                  <td>
+                    <span className={`status-badge tone-${STATUS_TONE[m.status]}`}>{STATUS_LABELS[m.status]}</span>
+                  </td>
                   <td>
                     {!m.is_me && (
                       <button
@@ -214,6 +255,7 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </SectionCard>
 
