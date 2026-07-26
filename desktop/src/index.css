@@ -178,6 +178,34 @@ textarea {
   font-family: var(--sans);
 }
 
+/* ورودی‌هایی که استایلِ اختصاصی ندارند (جست‌وجو، فیلتر، تاریخ، انتخابگرِ داخلِ جدول
+   و ...) هم با تم بخوانند — وگرنه مرورگر به‌خاطرِ color-scheme رنگِ خاکستریِ
+   پیش‌فرضِ خودش را می‌گذارد که با نیویِ تم جور نیست. چک‌باکس/رادیو/رنج مستثنا تا
+   شکلشان نشکند. کلاس‌های اختصاصی (مثل .invoice-form input) با تخصیصِ بالاتر همچنان برنده‌اند. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+select,
+textarea {
+  background: var(--bg);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13.5px;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
