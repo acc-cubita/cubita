@@ -36,7 +36,9 @@ def purchase_callback(Authority: str, Status: str, db: Session = Depends(get_db)
     if purchase is None:
         return RedirectResponse(f"{site}/checkout-result?status=failed")
     if purchase.status == "paid":
-        return RedirectResponse(f"{site}/checkout-result?status=success&purchase_id={purchase.id}")
+        # شناسه‌ی خرید عمداً در URL نمی‌آید: صفحه‌ی نتیجه به آن نیازی ندارد و هر
+        # شناسه‌ای در URL در تاریخچه‌ی مرورگر/هدر Referer می‌نشیند. فقط وضعیت کافی است.
+        return RedirectResponse(f"{site}/checkout-result?status=success")
     return RedirectResponse(f"{site}/checkout-result?status=failed")
 
 
