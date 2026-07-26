@@ -69,24 +69,26 @@ export function AccountingPage({
                     text={isElectron ? 'برای دریافت اولین کپی چارت حساب، دکمه‌ی «هم‌گام‌سازی» را بزنید.' : 'چارت حسابی ثبت نشده.'}
                   />
                 ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>کد</th>
-                        <th>نام</th>
-                        <th>نوع</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {accounts.map((a) => (
-                        <tr key={a.id} className={a.is_group ? 'group-row' : ''}>
-                          <td>{a.code}</td>
-                          <td>{a.name}</td>
-                          <td>{a.type}</td>
+                  <div className="entity-table-wrap">
+                    <table className="entity-table">
+                      <thead>
+                        <tr>
+                          <th>کد</th>
+                          <th>نام</th>
+                          <th>نوع</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {accounts.map((a) => (
+                          <tr key={a.id} className={a.is_group ? 'group-row' : ''}>
+                            <td className="ltr-cell">{a.code}</td>
+                            <td className={a.is_group ? '' : 'entity-name'}>{a.name}</td>
+                            <td>{a.type}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </SectionCard>
             ),

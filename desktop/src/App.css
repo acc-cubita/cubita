@@ -557,6 +557,7 @@ button:disabled {
   border-color: transparent;
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 4px 14px -5px rgba(59, 130, 246, 0.55);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -800,6 +801,12 @@ button:disabled {
   border-radius: var(--radius-md);
   padding: clamp(16px, 1.2vw, 22px) clamp(18px, 1.4vw, 24px);
   box-shadow: var(--shadow-sm);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .stat-card-top {
@@ -895,6 +902,15 @@ button:disabled {
 
 .page tr:last-child td {
   border-bottom: none;
+}
+
+/* هایلایتِ ملایمِ ردیف هنگام هاور — همه‌ی جدول‌های ساده هم مثل entity-table تعاملی می‌شوند */
+.page tbody tr {
+  transition: background 0.12s ease;
+}
+
+.page tbody tr:not(.group-row):hover td {
+  background: var(--surface-2);
 }
 
 .page tr.group-row td {
