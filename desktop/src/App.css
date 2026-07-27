@@ -1070,6 +1070,12 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+/* بدون این، ستون‌ها زیرِ flex-basisِ خود (۴۸۰/۲۸۰px) کوچک نمی‌شوند و نمودارِ
+   داخلشان روی موبایل از عرضِ نمایشگر بیرون می‌زند (داشبورد). */
+.overview-columns > * {
+  min-width: 0;
+}
+
 .trend-section {
   flex: 2 1 480px;
 }
@@ -1104,7 +1110,9 @@ button:disabled {
 }
 
 .bars-chart-svg {
+  display: block;
   width: 100%;
+  max-width: 100%;
   height: clamp(220px, 32vh, 320px);
   overflow: visible;
   direction: ltr;
@@ -1186,7 +1194,9 @@ button:disabled {
 }
 
 .trend-chart-svg {
+  display: block;
   width: 100%;
+  max-width: 100%;
   height: clamp(220px, 32vh, 340px);
   overflow: visible;
   direction: ltr;
