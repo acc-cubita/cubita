@@ -795,6 +795,21 @@ button:disabled {
   gap: 20px;
 }
 
+/* روی موبایل، تب‌های ماژول به‌جای فلکسِ ناهموار، گریدِ هم‌عرض می‌شوند تا مرتب و
+   یک‌اندازه بچینند (روی دسکتاپ همان نوارِ تک‌ردیفِ صاف می‌ماند). */
+@media (max-width: 760px) {
+  .tab-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+  }
+
+  .tab-list .tab {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
 /* ---------- وضعیت outbox ---------- */
 
 .outbox-status {
