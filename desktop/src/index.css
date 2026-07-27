@@ -182,7 +182,11 @@ textarea {
    و ...) هم با تم بخوانند — وگرنه مرورگر به‌خاطرِ color-scheme رنگِ خاکستریِ
    پیش‌فرضِ خودش را می‌گذارد که با نیویِ تم جور نیست. چک‌باکس/رادیو/رنج مستثنا تا
    شکلشان نشکند. کلاس‌های اختصاصی (مثل .invoice-form input) با تخصیصِ بالاتر همچنان برنده‌اند. */
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+/* :where() تخصیصِ صفر دارد؛ بدون آن، زنجیره‌ی :not() تخصیصِ این قاعده را بالا می‌بُرد
+   و padding اینجا روی paddingِ کامپوننت‌هایی مثل .input-with-icon (که برای آیکونِ کنارِ
+   ورودی جا باز می‌کنند) سوار می‌شد و آیکون روی متن می‌افتاد. با :where قاعده‌ی سراسری
+   پایه می‌ماند و کامپوننت همیشه برنده است. */
+input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])),
 select,
 textarea {
   background: var(--bg);
@@ -214,7 +218,7 @@ select option {
   color: var(--text-h);
 }
 
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):focus-visible,
+input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])):focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
