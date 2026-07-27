@@ -129,6 +129,7 @@ export function JournalEntryForm({
             </label>
           )}
 
+          <div className="table-scroll">
           <table className="invoice-lines">
             <thead>
               <tr>
@@ -182,6 +183,7 @@ export function JournalEntryForm({
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>

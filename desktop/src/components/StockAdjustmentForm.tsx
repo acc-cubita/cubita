@@ -116,6 +116,7 @@ export function StockAdjustmentForm({
       </form>
 
       {history.length > 0 && (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -134,6 +135,7 @@ export function StockAdjustmentForm({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

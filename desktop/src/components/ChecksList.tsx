@@ -88,6 +88,7 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
       {checks.length === 0 ? (
         <EmptyState icon={Landmark} text="چکی ثبت نشده." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -151,6 +152,7 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

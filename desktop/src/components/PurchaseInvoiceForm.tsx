@@ -253,6 +253,7 @@ export function PurchaseInvoiceForm({
             </div>
           )}
 
+          <div className="table-scroll">
           <table className="invoice-lines">
             <thead>
               <tr>
@@ -317,6 +318,7 @@ export function PurchaseInvoiceForm({
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>

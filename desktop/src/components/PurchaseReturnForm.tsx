@@ -116,6 +116,7 @@ export function PurchaseReturnForm({ token, items }: { token: string; items: Ite
             </div>
           )}
           {selectedInvoice && (
+            <div className="table-scroll">
             <table className="invoice-lines">
               <thead>
                 <tr>
@@ -142,6 +143,7 @@ export function PurchaseReturnForm({ token, items }: { token: string; items: Ite
                 ))}
               </tbody>
             </table>
+            </div>
           )}
 
           <div className="invoice-form-footer">

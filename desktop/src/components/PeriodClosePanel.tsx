@@ -83,6 +83,7 @@ export function PeriodClosePanel({ token }: { token: string }) {
       {closes.length === 0 ? (
         <EmptyState icon={Lock} text="هنوز هیچ دوره‌ای بسته نشده." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -101,6 +102,7 @@ export function PeriodClosePanel({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

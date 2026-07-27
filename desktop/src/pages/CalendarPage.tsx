@@ -426,6 +426,7 @@ export function CalendarPage({ token }: { token: string }) {
       {filteredList.length === 0 ? (
         <EmptyState icon={CalendarDays} text="رویدادی مطابق فیلتر پیدا نشد." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -475,6 +476,7 @@ export function CalendarPage({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

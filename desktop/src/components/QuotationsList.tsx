@@ -80,6 +80,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
       {quotations.length === 0 ? (
         <EmptyState icon={FileCheck} text="پیش‌فاکتوری ثبت نشده." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -144,6 +145,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

@@ -357,6 +357,9 @@
 .app-content {
   flex: 1;
   overflow-y: auto;
+  /* افقی کلیپ می‌شود تا هیچ محتوایِ پهنی کلِ ناحیه‌ی محتوا را افقی نلغزاند؛
+     جدول‌ها داخلِ ظرفِ .table-scroll خودشان می‌لغزند، پس چیزی بریده نمی‌شود. */
+  overflow-x: hidden;
   padding: clamp(24px, 2vw, 40px) clamp(28px, 3vw, 52px) 40px;
 }
 

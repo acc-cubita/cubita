@@ -138,6 +138,7 @@ export function TransferForm({
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
 
+          <div className="table-scroll">
           <table className="invoice-lines">
             <thead>
               <tr>
@@ -183,6 +184,7 @@ export function TransferForm({
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>
@@ -199,6 +201,7 @@ export function TransferForm({
       {transfers.length === 0 ? (
         <EmptyState icon={ArrowLeftRight} text="حواله‌ای ثبت نشده." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -225,6 +228,7 @@ export function TransferForm({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

@@ -111,6 +111,7 @@ export function QuotationForm({
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
 
+          <div className="table-scroll">
           <table className="invoice-lines">
             <thead>
               <tr>
@@ -165,6 +166,7 @@ export function QuotationForm({
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>

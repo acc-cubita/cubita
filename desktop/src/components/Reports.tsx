@@ -329,6 +329,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
         </div>
       )}
 
+      <div className="table-scroll">
       {active === 'general-ledger' && (
         <div className="check-actions">
           <select value={ledgerAccountId} onChange={(e) => setLedgerAccountId(e.target.value)}>
@@ -877,6 +878,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <p className="invoice-total">جمع حقوق صاحبان سرمایه: {fa(balanceSheet.total_equity)}</p>
         </div>
       )}
+      </div>
     </SectionCard>
   )
 }

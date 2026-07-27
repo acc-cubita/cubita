@@ -63,6 +63,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
       ) : purchases.length === 0 ? (
         <EmptyState icon={CreditCard} text="هنوز هیچ خریدی ثبت نشده است." />
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -117,6 +118,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </SectionCard>
   )

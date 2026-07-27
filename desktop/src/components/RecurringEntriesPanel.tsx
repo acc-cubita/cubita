@@ -266,6 +266,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
               </label>
             )}
 
+            <div className="table-scroll">
             <table className="invoice-lines">
               <thead>
                 <tr>
@@ -319,6 +320,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                 ))}
               </tbody>
             </table>
+            </div>
 
             <div className="invoice-form-footer">
               <button type="button" onClick={() => setLines((prev) => [...prev, emptyLine()])}>

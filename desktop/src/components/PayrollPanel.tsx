@@ -138,6 +138,7 @@ function EmployeeForm({ token, onCreated }: { token: string; onCreated: () => vo
 function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
   if (employees.length === 0) return <EmptyState icon={Users} text="پرسنلی ثبت نشده." />
   return (
+    <div className="table-scroll">
     <table>
       <thead>
         <tr>
@@ -160,6 +161,7 @@ function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
         ))}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -369,6 +371,7 @@ function PayrollRunPanel({
   return (
     <div className="invoice-form">
       <h3>کارکرد و صدور فیش برای دوره‌ی انتخاب‌شده</h3>
+      <div className="table-scroll">
       <table>
         <thead>
           <tr>
@@ -420,6 +423,7 @@ function PayrollRunPanel({
           ))}
         </tbody>
       </table>
+      </div>
 
       <div className="invoice-form-footer">
         <button type="button" className="btn-primary" onClick={() => void handleGenerate()}>
@@ -439,6 +443,7 @@ function PayrollRunPanel({
       {message && <div className="hint">{message}</div>}
 
       {payslips.length > 0 && (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -461,6 +466,7 @@ function PayrollRunPanel({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

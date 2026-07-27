@@ -275,6 +275,7 @@ export function SalesInvoiceForm({
             <CreditBanner credit={credit} invoiceTotal={baseGrandTotal} />
           )}
 
+          <div className="table-scroll">
           <table className="invoice-lines">
             <thead>
               <tr>
@@ -339,6 +340,7 @@ export function SalesInvoiceForm({
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>

@@ -196,6 +196,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                 <div className="overview-columns">
                   <div>
                     <h3>ردیف‌های صورت‌حساب بدون تطبیق</h3>
+                    <div className="table-scroll">
                     <table>
                       <thead>
                         <tr>
@@ -223,10 +224,12 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
 
                   <div>
                     <h3>تراکنش‌های سیستم بدون تطبیق</h3>
+                    <div className="table-scroll">
                     <table>
                       <thead>
                         <tr>
@@ -256,6 +259,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -263,6 +267,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
               {matchedLines.length > 0 && (
                 <>
                   <h3 style={{ marginTop: 16 }}>ردیف‌های تطبیق‌شده</h3>
+                  <div className="table-scroll">
                   <table>
                     <thead>
                       <tr>
@@ -292,6 +297,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </>
               )}
             </>
