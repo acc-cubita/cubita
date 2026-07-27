@@ -1523,6 +1523,22 @@ button:disabled {
   padding: 4px 14px 16px 50px;
 }
 
+/* پاراگرافِ مقدمه‌ی هر بخش: توضیحِ روانِ «این بخش برای چیست» پیش از قدم‌ها */
+.help-intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+/* گروه‌بندیِ قدم‌ها زیرِ یک زیرعنوان، برای بخش‌های طولانی */
+.help-subhead {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 .help-steps {
   margin: 0;
   padding-inline-start: 18px;
