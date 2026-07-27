@@ -721,10 +721,18 @@ button:disabled {
 /* ---------- تب‌های گزارش ---------- */
 
 .report-tabs {
-  display: flex;
+  /* گرید با ستون‌های هم‌عرض تا دکمه‌ها یک‌اندازه و مرتب بچینند (نه ناهموارِ فلکس) */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 8px;
-  flex-wrap: wrap;
   margin-bottom: 4px;
+}
+
+.report-tabs button {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.35;
 }
 
 .report-export {
