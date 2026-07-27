@@ -519,6 +519,8 @@ export interface ItemRecord {
   id: string
   sku: string
   name: string
+  category: string
+  unit: string
   is_service: boolean
   is_active: boolean
   sales_price: string
@@ -527,6 +529,26 @@ export interface ItemRecord {
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
+
+/** ورودیِ ساختِ کالای جدید — دقیقاً منطبق بر ItemIn سمت سرور (sku و name الزامی‌اند). */
+export interface ItemIn {
+  sku: string
+  name: string
+  category?: string
+  unit?: string
+  is_service?: boolean
+  sales_price?: number
+}
+
+export const createItemLive = (token: string, data: ItemIn) =>
+  authedSend<ItemRecord>(token, 'POST', '/api/items', data)
+
+/** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد (نام، قیمت فروش، فعال/غیرفعال). */
+export const updateItemLive = (
+  token: string,
+  itemId: string,
+  patch: { name?: string; sales_price?: number; is_active?: boolean },
+) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 export const updateItemStorefrontMapping = (token: string, itemId: string, storefrontProductId: number | null) =>
   authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { storefront_product_id: storefrontProductId })

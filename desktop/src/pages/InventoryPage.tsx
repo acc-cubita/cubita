@@ -4,6 +4,7 @@ import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockCountPanel } from '../components/StockCountPanel'
 import { TransferForm } from '../components/TransferForm'
+import { ProductsPanel } from '../components/ProductsPanel'
 import { fetchStockLevels, type StockLevel } from '../api'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
@@ -18,10 +19,13 @@ export function InventoryPage({
   token,
   warehouses,
   items,
+  onChanged,
 }: {
   token: string
   warehouses: WarehouseCache[]
   items: ItemCache[]
+  /** بعد از ثبت/ویرایشِ کالا صدا زده می‌شود تا کشِ سراسریِ کالاها هم تازه شود. */
+  onChanged?: () => void
 }) {
   const [stock, setStock] = useState<StockLevel[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -71,8 +75,14 @@ export function InventoryPage({
       <Tabs
         tabs={[
           {
+            key: 'products',
+            label: 'کالاها',
+            icon: Package,
+            content: <ProductsPanel token={token} onChanged={onChanged} />,
+          },
+          {
             key: 'stock',
-            label: 'موجودی و کالاها',
+            label: 'موجودی',
             icon: PackageSearch,
             content: (
               <div className="split-2col">

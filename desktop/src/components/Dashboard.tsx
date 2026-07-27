@@ -181,7 +181,14 @@ export function Dashboard({
             />
           )}
           {page === 'contacts' && <ContactsPage token={token} bankAccounts={bankAccounts} />}
-          {page === 'inventory' && <InventoryPage token={token} warehouses={warehouses} items={items} />}
+          {page === 'inventory' && (
+            <InventoryPage
+              token={token}
+              warehouses={warehouses}
+              items={items}
+              onChanged={() => void refreshFromLocalCache()}
+            />
+          )}
           {page === 'accounting' && (
             <AccountingPage
               token={token}
