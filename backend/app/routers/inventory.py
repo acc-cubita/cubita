@@ -1,7 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -127,6 +128,35 @@ def update_item(
     db.flush()
     db.refresh(item)
     return item
+
+
+@router.delete("/api/items/{item_id}", status_code=204)
+def delete_item(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "delete")),
+):
+    """حذفِ کاملِ کالا — فقط اگر در هیچ سند یا موجودی‌ای رد پا نداشته باشد.
+
+    کالایی که در فاکتور، برگشت، پیش‌فاکتور، انبارگردانی، انتقال یا سطحِ موجودی استفاده
+    شده نباید پاک شود؛ پاک‌کردنش اسنادِ تاریخی را می‌شکند. به‌جای بررسیِ دستیِ همه‌ی
+    جدول‌های ارجاع‌دهنده (که هرکدام جا بیفتد یک نشتی است)، تلاشِ حذف داخل یک SAVEPOINT
+    انجام می‌شود: قیدهای کلیدِ خارجیِ پایگاه‌داده مرجعِ حقیقت‌اند. اگر مانع شد، فقط همان
+    SAVEPOINT برمی‌گردد (نه کلِ تراکنش و نه زمینه‌ی RLS) و پیامِ روشن داده می‌شود.
+    """
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    try:
+        with db.begin_nested():
+            db.delete(item)
+            db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این کالا در سند یا موجودی استفاده شده و قابلِ حذف نیست؛ به‌جای حذف، آن را «غیرفعال» کنید.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/stock-adjustments", response_model=Page[StockAdjustmentOut])

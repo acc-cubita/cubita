@@ -550,6 +550,9 @@ export const updateItemLive = (
   patch: { name?: string; sales_price?: number; is_active?: boolean },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
+/** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
+export const deleteItemLive = (token: string, itemId: string) => authedDelete(token, `/api/items/${itemId}`)
+
 export const updateItemStorefrontMapping = (token: string, itemId: string, storefrontProductId: number | null) =>
   authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { storefront_product_id: storefrontProductId })
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, Pencil, Plus, Save, X } from 'lucide-react'
-import { createItemLive, fetchItemsLive, updateItemLive, type ItemRecord } from '../api'
+import { Package, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { createItemLive, deleteItemLive, fetchItemsLive, updateItemLive, type ItemRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 
@@ -120,6 +120,21 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
     setError(null)
     try {
       await updateItemLive(token, p.id, { is_active: !p.is_active })
+      await refresh()
+      onChanged?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  async function handleDelete(p: ItemRecord) {
+    setError(null)
+    // حذف بازگشت‌ناپذیر است؛ کالاهایی که در سندی استفاده شده‌اند از سمتِ سرور با ۴۰۹ رد
+    // می‌شوند و پیامِ «غیرفعال کنید» می‌گیرند — اینجا فقط یک تأییدِ ساده کافی است.
+    if (!window.confirm(`کالای «${p.name}» برای همیشه حذف شود؟`)) return
+    try {
+      await deleteItemLive(token, p.id)
+      if (editingId === p.id) resetForm()
       await refresh()
       onChanged?.()
     } catch (err) {
@@ -280,6 +295,9 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                         </button>
                         <button type="button" onClick={() => void toggleActive(p)}>
                           {p.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
+                        </button>
+                        <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(p)} aria-label="حذف کالا">
+                          <Trash2 size={13} /> حذف
                         </button>
                       </div>
                     </td>
