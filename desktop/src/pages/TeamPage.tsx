@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Armchair, Clock, KeyRound, Save, ShieldCheck, UserCheck, UserPlus, UsersRound } from 'lucide-react'
+import { Armchair, Clock, ShieldCheck, UserCheck, UserPlus, UsersRound } from 'lucide-react'
 import {
   changeMemberRole,
-  changePassword,
   fetchMembers,
   inviteMember,
   setMemberActive,
   type Member,
   type MemberList,
-  type MeResponse,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -35,7 +33,7 @@ const STATUS_LABELS: Record<Member['status'], string> = {
   disabled: 'غیرفعال',
 }
 
-export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
+export function TeamPage({ token }: { token: string }) {
   const [data, setData] = useState<MemberList | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -258,76 +256,6 @@ export function TeamPage({ token, me }: { token: string; me: MeResponse }) {
           </div>
         )}
       </SectionCard>
-
-      <ChangePasswordCard token={token} me={me} />
     </div>
-  )
-}
-
-function ChangePasswordCard({ token, me }: { token: string; me: MeResponse }) {
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [message, setMessage] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-    if (next !== confirm) {
-      setMessage('دو رمز تازه یکسان نیستند.')
-      return
-    }
-    setBusy(true)
-    try {
-      await changePassword(token, current, next)
-      setCurrent('')
-      setNext('')
-      setConfirm('')
-      // توکنِ تازه‌ی سرور عمداً ذخیره نمی‌شود. نشستِ همین صفحه با توکن قدیمی کار
-      // می‌کند و آن توکن همین حالا باطل شد، پس درخواست بعدی ۴۰۱ می‌گیرد. گفتنِ
-      // صریحِ «دوباره وارد شوید» صادقانه‌تر از این است که کاربر با اولین کلیک به
-      // خطای نامفهوم بخورد.
-      setMessage('رمز عبور عوض شد و همه‌ی دستگاه‌های دیگر بیرون رفتند. برای ادامه، دوباره وارد شوید.')
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <SectionCard
-      icon={KeyRound}
-      title="تغییر رمز عبور"
-      description={`رمز حساب ${me.email}. با تغییر آن، همه‌ی دستگاه‌های دیگری که با این حساب وارد شده‌اند بیرون می‌روند.`}
-    >
-      <form className="invoice-form" onSubmit={handleSubmit}>
-        <label>
-          رمز فعلی
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-        </label>
-        <label>
-          رمز تازه
-          <input
-            type="password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            placeholder="حداقل ۱۰ کاراکتر"
-            required
-          />
-        </label>
-        <label>
-          تکرار رمز تازه
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-        </label>
-        <div className="invoice-form-footer">
-          <button type="submit" className="btn-primary" disabled={busy}>
-            <Save size={14} /> ثبت رمز تازه
-          </button>
-        </div>
-        {message && <div className="hint">{message}</div>}
-      </form>
-    </SectionCard>
   )
 }

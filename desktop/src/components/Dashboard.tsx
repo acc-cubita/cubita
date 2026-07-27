@@ -26,6 +26,7 @@ import { AccountingPage } from '../pages/AccountingPage'
 import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
 import { TeamPage } from '../pages/TeamPage'
+import { ProfilePage } from '../pages/ProfilePage'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -41,6 +42,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
   team: 'کاربران',
+  profile: 'پروفایل من',
   help: 'راهنما',
 }
 
@@ -48,10 +50,12 @@ export function Dashboard({
   token,
   me,
   onLogout,
+  onMeUpdated,
 }: {
   token: string
   me: MeResponse
   onLogout: () => void
+  onMeUpdated: (me: MeResponse) => void
 }) {
   const [page, setPage] = useState<PageKey>('overview')
   const [navOpen, setNavOpen] = useState(false)
@@ -248,7 +252,8 @@ export function Dashboard({
             </div>
           )}
           {page === 'calendar' && <CalendarPage token={token} />}
-          {page === 'team' && <TeamPage token={token} me={me} />}
+          {page === 'team' && <TeamPage token={token} />}
+          {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'help' && <HelpPage />}
         </main>
       </div>

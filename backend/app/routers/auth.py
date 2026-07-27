@@ -14,8 +14,10 @@ from app.models.auth_token import PURPOSE_PASSWORD_RESET
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.schemas.auth import (
+    BusinessUpdateIn,
     LoginIn,
     MeOut,
+    ProfileUpdateIn,
     SignupIn,
     SwitchTenantIn,
     TenantMembershipOut,
@@ -44,6 +46,22 @@ def _active_memberships(db: Session, user: User) -> list[Membership]:
         .join(Tenant, Tenant.id == Membership.tenant_id)
         .filter(Tenant.status == "active")
         .all()
+    )
+
+
+def _me_out(principal: Principal) -> MeOut:
+    """پاسخِ استانداردِ «من» — یک منبعِ حقیقت برای /me و اندپوینت‌های ویرایشِ پروفایل."""
+    return MeOut(
+        id=principal.user.id,
+        name=principal.user.name,
+        email=principal.user.email,
+        phone=principal.user.phone,
+        role_key=principal.role.key,
+        role_name=principal.role.name,
+        permissions=principal.role.permissions,
+        tenant_id=principal.tenant_id,
+        tenant_name=principal.membership.tenant.name,
+        is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
     )
 
 
@@ -226,14 +244,56 @@ def change_password(
 
 @router.get("/me", response_model=MeOut)
 def me(principal: Principal = Depends(get_principal)):
-    return MeOut(
-        id=principal.user.id,
-        name=principal.user.name,
-        email=principal.user.email,
-        role_key=principal.role.key,
-        role_name=principal.role.name,
-        permissions=principal.role.permissions,
-        tenant_id=principal.tenant_id,
-        tenant_name=principal.membership.tenant.name,
-        is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
-    )
+    return _me_out(principal)
+
+
+@router.patch("/me", response_model=MeOut)
+def update_profile(
+    data: ProfileUpdateIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """ویرایشِ پروفایلِ خودِ کاربر — نام و تلفن آزادانه، ایمیل با رمزِ فعلی.
+
+    نام و تلفن حساس نیستند و بی‌درنگ تغییر می‌کنند. ایمیل هویتِ ورود است: تغییرش هم
+    رمزِ فعلی می‌خواهد (تا نشستِ ربوده‌شده نتواند حساب را بدزدد) و هم یکتا بودنش سنجیده
+    می‌شود. برای پرهیز از فهرست‌برداریِ کاربران، پیامِ «تکراری بودن» عمداً مبهم است.
+    """
+    user = principal.user
+
+    if data.name is not None:
+        user.name = data.name
+    if data.phone is not None:
+        user.phone = data.phone.strip() or None
+
+    if data.email is not None:
+        new_email = data.email.strip().lower()
+        if new_email != user.email:
+            if not data.current_password or not verify_password(data.current_password, user.hashed_password):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای تغییر ایمیل، رمز فعلی را درست وارد کنید")
+            taken = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+            if taken is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "امکان استفاده از این ایمیل نیست")
+            user.email = new_email
+
+    db.flush()
+    return _me_out(principal)
+
+
+@router.patch("/business", response_model=MeOut)
+def update_business(
+    data: BusinessUpdateIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """تغییرِ نامِ کسب‌وکارِ جاری — فقط مالک.
+
+    نقشِ مالک با wildcardِ «*» شناخته می‌شود؛ نقش‌های دیگر (حسابدار، فروشنده و …) اجازه
+    ندارند نامِ کسب‌وکار را عوض کنند. فقط مستأجرِ جاری دست می‌خورد، پس جدولِ سراسریِ
+    tenants امن می‌ماند.
+    """
+    if "*" not in principal.role.permissions:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "فقط مالک می‌تواند نام کسب‌وکار را تغییر دهد")
+    principal.membership.tenant.name = data.name
+    db.flush()
+    return _me_out(principal)

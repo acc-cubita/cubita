@@ -70,6 +70,7 @@ export default function App() {
                 setToken(null)
                 setMe(null)
               }}
+              onMeUpdated={setMe}
             />
           </>
         )}

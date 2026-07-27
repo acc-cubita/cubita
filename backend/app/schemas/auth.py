@@ -17,6 +17,7 @@ class MeOut(BaseModel):
     id: UUID
     name: str
     email: str
+    phone: str | None = None
     role_key: str
     role_name: str
     permissions: dict
@@ -44,6 +45,42 @@ class TenantMembershipOut(BaseModel):
 
 class SwitchTenantIn(BaseModel):
     tenant_id: UUID
+
+
+class ProfileUpdateIn(BaseModel):
+    """ویرایشِ پروفایلِ کاربرِ واردشده. هر فیلدِ نیامده دست‌نخورده می‌ماند.
+
+    ایمیل هویتِ ورود است؛ تغییرش رمزِ فعلی می‌خواهد، وگرنه یک نشستِ ربوده‌شده می‌توانست
+    ایمیل را عوض کند و بعد با «فراموشی رمز» کلِ حساب را بگیرد — همان دلیلی که تغییرِ رمز
+    هم رمزِ فعلی می‌پرسد.
+    """
+
+    name: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    current_password: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not v.strip():
+            raise ValueError("نام نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class BusinessUpdateIn(BaseModel):
+    """ویرایشِ نامِ کسب‌وکارِ جاری — فقط مالک."""
+
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نام کسب‌وکار نمی‌تواند خالی باشد")
+        return v.strip()
 
 
 class SignupIn(BaseModel):

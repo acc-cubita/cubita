@@ -8,6 +8,7 @@ export interface MeResponse {
   id: string
   name: string
   email: string
+  phone: string | null
   role_key: string
   role_name: string
   permissions: Record<string, string[]>
@@ -1430,6 +1431,21 @@ export const changePassword = (token: string, currentPassword: string, newPasswo
     current_password: currentPassword,
     new_password: newPassword,
   })
+
+/** ویرایشِ پروفایلِ خودِ کاربر. تغییرِ ایمیل به `current_password` نیاز دارد. */
+export interface ProfileUpdate {
+  name?: string
+  phone?: string | null
+  email?: string
+  current_password?: string
+}
+
+export const updateProfile = (token: string, patch: ProfileUpdate) =>
+  authedSend<MeResponse>(token, 'PATCH', '/api/auth/me', patch)
+
+/** تغییرِ نامِ کسب‌وکارِ جاری — فقط مالک؛ سرور غیرمالک را با ۴۰۳ رد می‌کند. */
+export const updateBusinessName = (token: string, name: string) =>
+  authedSend<MeResponse>(token, 'PATCH', '/api/auth/business', { name })
 
 /** درخواست‌های بدون احراز هویت. پاسخ خطا همان detail بک‌اند است تا پیام فارسی حفظ شود. */
 async function anonPost<T>(path: string, body: unknown): Promise<T> {
