@@ -193,6 +193,27 @@ textarea {
   font-size: 13.5px;
 }
 
+/* انتخابگرها را از رندرِ نیتیوِ ویندوز درمی‌آوریم: آن رندر رنگِ متن را کامل رعایت
+   نمی‌کرد و نوشته‌ی داخلِ باکس (مثلاً نامِ کالا/حساب) کم‌رنگ و ناخوانا دیده می‌شد.
+   با appearance:none کنترلِ کامل می‌گیریم — متنِ روشن، وزنِ کمی بیشتر، کارتِ سفارشیِ
+   سمتِ چپ (RTL) و جای کافی تا متن زیرِ کارت نرود. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-weight: 500;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c86a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 10px center;
+  background-size: 15px;
+  padding-left: 32px;
+}
+
+/* پاپ‌آپِ گزینه‌ها هم با تم بخواند (برخی نسخه‌های ویندوز رنگِ پیش‌فرضِ خود را می‌زنند) */
+select option {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):focus-visible,
 select:focus-visible,
 textarea:focus-visible {

@@ -1006,13 +1006,9 @@ button:disabled {
 
 .invoice-form select,
 .invoice-form input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-h);
-  font-size: 13.5px;
-  /* input عرضِ ذاتیِ خودش را دارد؛ بدون این‌ها از ستون بیرون می‌زند و اسکرول افقی می‌سازد */
+  /* ظاهرِ پایه (پس‌زمینه، متن، بوردر، کارتِ انتخابگر) از استایلِ سراسریِ input/select
+     می‌آید تا یک منبعِ حقیقت باشد؛ این‌جا فقط عرض و کوچک‌شوندگی را تضمین می‌کنیم —
+     بدون این‌ها input به عرضِ ذاتیِ خود از ستون بیرون می‌زند و اسکرول افقی می‌سازد. */
   width: 100%;
   min-width: 0;
 }
@@ -1033,6 +1029,8 @@ button:disabled {
 .invoice-lines select,
 .invoice-lines input {
   width: 100%;
+  /* بوردرِ پررنگ‌تر تا هر باکسِ ردیف (کالا/حساب، تعداد، مبلغ) واضح از هم جدا دیده شود */
+  border-color: var(--border-strong);
 }
 
 .invoice-form h3 {
@@ -1048,10 +1046,11 @@ button:disabled {
 }
 
 .check-actions select {
-  padding: 6px 8px;
+  /* background به‌جای شورت‌هند تا کارتِ سراسریِ انتخابگر پاک نشود؛ کارت سمتِ چپ است پس فضای چپ */
+  padding: 6px 8px 6px 28px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--text-h);
   font-size: 12.5px;
 }
