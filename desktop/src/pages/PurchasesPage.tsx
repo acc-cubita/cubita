@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Inbox, PackagePlus, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
 import { fetchPurchaseInvoices, type MeResponse, type PurchaseInvoiceRecord } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
@@ -28,9 +28,19 @@ export function PurchasesPage({
   onQueued: () => void
 }) {
   const [invoices, setInvoices] = useState<PurchaseInvoiceRecord[]>([])
-  useEffect(() => {
+  // بعد از ثبتِ فاکتورِ خرید، شاخص‌ها و فهرست باید بی‌نیاز از ترکِ صفحه به‌روز شوند
+  const [reloadKey, setReloadKey] = useState(0)
+  const refresh = useCallback(() => {
     void fetchPurchaseInvoices(token).then(setInvoices).catch(() => {})
-  }, [])
+    setReloadKey((k) => k + 1)
+  }, [token])
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+  const handleQueued = useCallback(() => {
+    onQueued()
+    refresh()
+  }, [onQueued, refresh])
   const kpis = useMemo(() => {
     const live = invoices.filter((i) => !i.voided_at)
     const withTax = (i: PurchaseInvoiceRecord) => Number(i.total_amount) + Number(i.tax_amount)
@@ -64,8 +74,8 @@ export function PurchasesPage({
             icon: PackagePlus,
             content: (
               <>
-                <PurchaseInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={onQueued} />
-                <InvoiceList token={token} me={me} kind="purchase" />
+                <PurchaseInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}

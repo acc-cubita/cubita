@@ -177,7 +177,10 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
         return trialBalance && {
           name: 'تراز-آزمایشی',
           headers: ['کد', 'نام حساب', 'بدهکار', 'بستانکار', 'مانده'],
-          rows: trialBalance.map((r) => [r.account_code, r.account_name, r.total_debit, r.total_credit, r.balance]),
+          rows: [
+            ...trialBalance.map((r) => [r.account_code, r.account_name, r.total_debit, r.total_credit, r.balance] as (string | number)[]),
+            ['', 'جمع', trialBalance.reduce((s, r) => s + Number(r.total_debit), 0), trialBalance.reduce((s, r) => s + Number(r.total_credit), 0), ''],
+          ],
         }
       case 'income-statement':
         return incomeStatement && {
@@ -529,6 +532,17 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </tr>
             ))}
           </tbody>
+          {/* ردیفِ جمع — کلِ کارِ ترازِ آزمایشی همین است: جمعِ بدهکار باید با جمعِ بستانکار
+              برابر باشد، وگرنه دفتر نامتوازن است. ستونِ مانده «ماندهٔ طبیعیِ» هر حساب است و
+              جمعش صفر نمی‌شود، پس عمداً خالی می‌ماند تا گمراه‌کننده نباشد. */}
+          <tfoot>
+            <tr>
+              <td colSpan={2}>جمع</td>
+              <td className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_debit), 0))}</td>
+              <td className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_credit), 0))}</td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       )}
 

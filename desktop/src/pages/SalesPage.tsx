@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Inbox, ShoppingCart, FileText, Undo2, Landmark, TrendingUp, CalendarRange, Receipt } from 'lucide-react'
 import { fetchSalesInvoices, type MeResponse, type SalesInvoiceRecord } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
@@ -31,9 +31,20 @@ export function SalesPage({
   onQueued: () => void
 }) {
   const [invoices, setInvoices] = useState<SalesInvoiceRecord[]>([])
-  useEffect(() => {
+  // reloadKey فهرستِ فاکتورها (InvoiceList) را دوباره مونت می‌کند تا بعد از ثبتِ فاکتورِ
+  // تازه، هم شاخص‌های بالای صفحه و هم جدولِ زیرِ آن به‌روز شوند — نه فقط با ترک‌کردن صفحه.
+  const [reloadKey, setReloadKey] = useState(0)
+  const refresh = useCallback(() => {
     void fetchSalesInvoices(token).then(setInvoices).catch(() => {})
-  }, [])
+    setReloadKey((k) => k + 1)
+  }, [token])
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+  const handleQueued = useCallback(() => {
+    onQueued()
+    refresh()
+  }, [onQueued, refresh])
   const kpis = useMemo(() => {
     const live = invoices.filter((i) => !i.voided_at)
     const withTax = (i: SalesInvoiceRecord) => Number(i.total_amount) + Number(i.tax_amount)
@@ -67,8 +78,8 @@ export function SalesPage({
             icon: ShoppingCart,
             content: (
               <>
-                <SalesInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={onQueued} />
-                <InvoiceList token={token} me={me} kind="sales" />
+                <SalesInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="sales" />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -88,7 +99,7 @@ export function SalesPage({
             content: (
               <>
                 <QuotationForm token={token} warehouses={warehouses} items={items} onCreated={onQueued} />
-                <QuotationsList token={token} onConverted={onQueued} />
+                <QuotationsList token={token} onConverted={handleQueued} />
               </>
             ),
           },
