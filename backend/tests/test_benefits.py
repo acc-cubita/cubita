@@ -21,8 +21,11 @@ from app.services.benefits import (
     record_leave,
 )
 from app.services.common import get_account
+from app.jalali import jalali_to_gregorian, persian_year_end
 
-YEAR = 2025
+# سالِ شمسی (۱۴۰۴ = ۲۰۲۵-۰۳-۲۱ تا ۲۰۲۶-۰۳-۲۰). تاریخ‌هایی که باید داخلِ این سال
+# بیفتند با jalali_to_gregorian ساخته می‌شوند تا فیلترِ سالِ شمسی درست بسنجدشان.
+YEAR = 1404
 
 
 def _employee(db, *, hire=date(2024, 1, 1), termination=None, base=10_000_000, nid=None):
@@ -73,8 +76,8 @@ def test_eidi_no_minwage_means_no_clamp(db):
 
 
 def test_eidi_prorated_for_partial_year(db):
-    # استخدام از ۱ ژوئیه ۲۰۲۵ → حدوداً نیم سال
-    emp = _employee(db, hire=date(2025, 7, 1), base=10_000_000)
+    # استخدام از اولِ مهرِ ۱۴۰۴ (ماهِ هفتمِ شمسی) → حدوداً نیمه‌ی دومِ سال
+    emp = _employee(db, hire=jalali_to_gregorian(YEAR, 7, 1), base=10_000_000)
     s = _settings(db, min_wage=0)
     eidi = calc_eidi(_contract(db, emp), s, emp, YEAR)
     assert Decimal(9_000_000) < eidi < Decimal(11_000_000)  # حدود نصفِ ۲۰م
@@ -90,7 +93,7 @@ def test_severance_one_month_per_year(db):
 def test_leave_balance_and_value(db):
     emp = _employee(db, base=9_000_000)  # دستمزد روزانه = ۳۰۰٬۰۰۰
     s = _settings(db, leave_days=26)
-    db.add(LeaveRecord(employee_id=emp.id, leave_date=date(YEAR, 5, 1), days=Decimal(10), created_by_id=_uid(db)))
+    db.add(LeaveRecord(employee_id=emp.id, leave_date=jalali_to_gregorian(YEAR, 5, 1), days=Decimal(10), created_by_id=_uid(db)))
     db.flush()
     entitled, used, remaining, value = calc_leave(db, _contract(db, emp), s, emp, YEAR)
     assert entitled == Decimal("26.00")
@@ -117,7 +120,7 @@ def test_report_totals(db, user):
 def test_issue_eidi_posts_and_guards(db, user):
     _employee(db, base=10_000_000)
     _settings(db, min_wage=0)
-    result = issue_eidi(db, YEAR, user, run_date=date(YEAR, 12, 31))
+    result = issue_eidi(db, YEAR, user, run_date=persian_year_end(YEAR))
     assert result["amount"] == Decimal(20_000_000)
 
     entry = db.query(JournalEntry).filter(JournalEntry.source_type == "payroll_benefit").one()
@@ -128,28 +131,28 @@ def test_issue_eidi_posts_and_guards(db, user):
     assert lines[pay.id].credit == Decimal(20_000_000)
 
     with pytest.raises(HTTPException) as exc:  # دوباره صادر نمی‌شود
-        issue_eidi(db, YEAR, user, run_date=date(YEAR, 12, 31))
+        issue_eidi(db, YEAR, user, run_date=persian_year_end(YEAR))
     assert exc.value.status_code == 400
 
 
 def test_issue_severance_guards(db, user):
     emp = _employee(db, hire=date(2023, 1, 1), base=9_000_000)
-    r = issue_severance(db, emp.id, user, as_of=date(YEAR, 12, 31))
+    r = issue_severance(db, emp.id, user, as_of=persian_year_end(YEAR))
     assert r["amount"] > 0
     assert db.query(BenefitRun).filter(BenefitRun.kind == "severance").count() == 1
     with pytest.raises(HTTPException):
-        issue_severance(db, emp.id, user, as_of=date(YEAR, 12, 31))
+        issue_severance(db, emp.id, user, as_of=persian_year_end(YEAR))
 
 
 def test_record_leave_then_payout(db, user):
     emp = _employee(db, base=9_000_000)
     _settings(db, leave_days=26)
-    record_leave(db, LeaveRecordIn(employee_id=emp.id, leave_date=date(YEAR, 4, 1), days=Decimal(6)), user)
+    record_leave(db, LeaveRecordIn(employee_id=emp.id, leave_date=jalali_to_gregorian(YEAR, 4, 1), days=Decimal(6)), user)
     # مانده = ۲۶ − ۶ = ۲۰ روز × ۳۰۰٬۰۰۰ = ۶م
-    r = issue_leave_payout(db, emp.id, YEAR, user, run_date=date(YEAR, 12, 31))
+    r = issue_leave_payout(db, emp.id, YEAR, user, run_date=persian_year_end(YEAR))
     assert r["amount"] == Decimal(6_000_000)
     with pytest.raises(HTTPException):
-        issue_leave_payout(db, emp.id, YEAR, user, run_date=date(YEAR, 12, 31))
+        issue_leave_payout(db, emp.id, YEAR, user, run_date=persian_year_end(YEAR))
 
 
 def test_unknown_employee_severance_404(db, user):

@@ -3,7 +3,7 @@ import { Users, Save, CalendarPlus, Download } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, isoToJalali, todayIso, JALALI_MONTH_NAMES } from '../lib/jalali'
 import {
   createEmployee,
   createPayrollPeriod,
@@ -20,9 +20,7 @@ import {
   type PayslipRecord,
 } from '../api'
 
-const MONTH_NAMES = [
-  'ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن', 'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر',
-]
+// دوره‌ی حقوق شمسی است: ماه‌ها فروردین..اسفند (JALALI_MONTH_NAMES)
 
 export function PayrollPanel({ token }: { token: string }) {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
@@ -255,9 +253,9 @@ function PeriodSection({
   onSelect: (id: string) => void
   onPeriodCreated: () => void
 }) {
-  const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth() + 1)
+  const today = isoToJalali(todayIso())
+  const [year, setYear] = useState(today.jy)
+  const [month, setMonth] = useState(today.jm)
   const [error, setError] = useState<string | null>(null)
 
   async function handleCreate(e: React.FormEvent) {
@@ -278,7 +276,7 @@ function PeriodSection({
       <form onSubmit={handleCreate} className="check-actions">
         <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 90 }} />
         <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-          {MONTH_NAMES.map((name, idx) => (
+          {JALALI_MONTH_NAMES.map((name, idx) => (
             <option key={idx} value={idx + 1}>
               {name}
             </option>

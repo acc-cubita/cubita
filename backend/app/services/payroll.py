@@ -86,10 +86,11 @@ def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContrac
 
 
 def _period_as_of_date(period: PayrollPeriod):
-    from calendar import monthrange
-    from datetime import date
+    # دوره‌ی حقوق شمسی است (سال/ماهِ شمسی)؛ تاریخِ سررسیدِ سند = آخرین روزِ همان ماهِ
+    # شمسی، به میلادی (که در دفتر ذخیره می‌شود).
+    from app.jalali import persian_month_end
 
-    return date(period.year, period.month, monthrange(period.year, period.month)[1])
+    return persian_month_end(period.year, period.month)
 
 
 def compute_payslip_amounts(

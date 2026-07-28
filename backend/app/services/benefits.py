@@ -7,9 +7,11 @@
 - **مرخصی:** استحقاقیِ سالانه (پیش‌فرض ۲۶ روز) به‌نسبتِ کارکرد، منهای مرخصی‌های استفاده‌شده؛
   طلبِ مرخصی = ماندهٔ روز × دستمزدِ روزانه (پایه ÷ ۳۰).
 
-**سال = سالِ میلادیِ داخلی** (همان قراردادِ ماژول حقوق: `PayrollPeriod.year`/`PayrollSettings.year`).
-صدورِ هر مزیت یک `BenefitRun` ثبت می‌کند تا دوباره صادر نشود، و مثل فیشِ حقوق یک
-سندِ دوطرفه می‌زند: بدهکارِ هزینه‌ی حقوق، بستانکارِ حقوقِ پرداختنی.
+**سال = سالِ شمسی** (همان قراردادِ ماژول حقوق: `PayrollPeriod.year`/`PayrollSettings.year`).
+بازه‌ی هر سال از اولِ فروردین تا آخرِ اسفندِ همان سالِ شمسی است و برای فیلترِ تاریخ‌ها
+(که در دیتابیس میلادی‌اند) به مرزِ میلادیِ متناظر تبدیل می‌شود. صدورِ هر مزیت یک
+`BenefitRun` ثبت می‌کند تا دوباره صادر نشود، و مثل فیشِ حقوق یک سندِ دوطرفه می‌زند:
+بدهکارِ هزینه‌ی حقوق، بستانکارِ حقوقِ پرداختنی.
 """
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -19,6 +21,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.jalali import days_in_jalali_year, gregorian_to_jalali, persian_year_end, persian_year_start
 from app.models.accounting import JournalLine
 from app.models.payroll import BenefitRun, Employee, LeaveRecord, PayrollSettings
 from app.models.user import User
@@ -37,12 +40,14 @@ def _round(v: Decimal) -> Decimal:
 
 
 def _days_in_year(year: int) -> int:
-    return (date(year, 12, 31) - date(year, 1, 1)).days + 1
+    # سالِ شمسی: ۳۶۵ یا ۳۶۶ روز
+    return days_in_jalali_year(year)
 
 
 def _employed_days_in_year(emp: Employee, year: int) -> int:
-    start = max(emp.hire_date, date(year, 1, 1))
-    end = date(year, 12, 31)
+    # بازه‌ی سالِ شمسی، به مرزِ میلادی
+    start = max(emp.hire_date, persian_year_start(year))
+    end = persian_year_end(year)
     if emp.termination_date is not None and emp.termination_date < end:
         end = emp.termination_date
     if end < start:
@@ -79,8 +84,8 @@ def _leave_used(db: Session, employee_id: UUID, year: int) -> Decimal:
         db.query(func.coalesce(func.sum(LeaveRecord.days), 0))
         .filter(
             LeaveRecord.employee_id == employee_id,
-            LeaveRecord.leave_date >= date(year, 1, 1),
-            LeaveRecord.leave_date <= date(year, 12, 31),
+            LeaveRecord.leave_date >= persian_year_start(year),
+            LeaveRecord.leave_date <= persian_year_end(year),
         )
         .scalar()
     )
@@ -106,7 +111,7 @@ def _employed_in_year(emp: Employee, year: int) -> bool:
 
 
 def get_benefits_report(db: Session, year: int, as_of: date | None = None) -> dict:
-    as_of = as_of or date(year, 12, 31)
+    as_of = as_of or persian_year_end(year)
     settings = _settings_for(db, year)
     employees = db.query(Employee).order_by(Employee.first_name, Employee.last_name).all()
 
@@ -212,10 +217,10 @@ def _post_benefit(db: Session, description: str, amount: Decimal, run_date: date
 def issue_eidi(db: Session, year: int, user: User, run_date: date | None = None) -> dict:
     if db.query(BenefitRun).filter(BenefitRun.kind == "eidi", BenefitRun.year == year).first() is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"عیدیِ سال {year} قبلاً صادر شده است")
-    run_date = run_date or min(date.today(), date(year, 12, 31))
+    run_date = run_date or min(date.today(), persian_year_end(year))
     assert_period_open(db, run_date)
 
-    report = get_benefits_report(db, year, as_of=date(year, 12, 31))
+    report = get_benefits_report(db, year, as_of=persian_year_end(year))
     total = Decimal(report["total_eidi"])
     if total <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای این سال عیدیِ قابلِ صدوری وجود ندارد")
@@ -245,7 +250,7 @@ def issue_severance(db: Session, employee_id: UUID, user: User, as_of: date | No
     name = f"{emp.first_name} {emp.last_name}".strip()
     entry = _post_benefit(db, f"سنوات پایان خدمت — {name}", amount, as_of, user)
     run = BenefitRun(
-        kind="severance", year=as_of.year, employee_id=employee_id, amount=amount, run_date=as_of,
+        kind="severance", year=gregorian_to_jalali(as_of)[0], employee_id=employee_id, amount=amount, run_date=as_of,
         journal_entry_id=entry.id, created_by_id=user.id,
     )
     db.add(run)
@@ -265,8 +270,8 @@ def issue_leave_payout(db: Session, employee_id: UUID, year: int, user: User, ru
     if existing is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "بازخریدِ مرخصیِ این کارمند برای این سال قبلاً ثبت شده است")
 
-    as_of = run_date or min(date.today(), date(year, 12, 31))
-    contract = get_current_contract(db, employee_id, date(year, 12, 31))
+    as_of = run_date or min(date.today(), persian_year_end(year))
+    contract = get_current_contract(db, employee_id, persian_year_end(year))
     if contract is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این کارمند حکمِ حقوقی ندارد")
     _, _, _, value = calc_leave(db, contract, _settings_for(db, year), emp, year)

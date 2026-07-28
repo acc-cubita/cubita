@@ -14,13 +14,13 @@ import {
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { todayIso } from '../lib/jalali'
+import { isoToJalali, todayIso } from '../lib/jalali'
 
 const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faDays = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
 export function BenefitsPanel({ token }: { token: string }) {
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [year, setYear] = useState(isoToJalali(todayIso()).jy)
   const [report, setReport] = useState<BenefitsReport | null>(null)
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -135,7 +135,7 @@ export function BenefitsPanel({ token }: { token: string }) {
     >
       <div className="benefit-toolbar">
         <label>
-          سال (میلادی)
+          سال (شمسی)
           <input
             type="number"
             value={year}
