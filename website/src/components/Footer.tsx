@@ -48,7 +48,9 @@ export function Footer() {
           <a href="/privacy">حریم خصوصی</a>
         </div>
       </div>
-      <div className="container footer-bottom">© {new Date().getFullYear()} کوبیتا — تمام حقوق محفوظ است.</div>
+      <div className="container footer-bottom">
+        © {new Intl.DateTimeFormat('fa-IR', { year: 'numeric' }).format(new Date())} کوبیتا — تمام حقوق محفوظ است.
+      </div>
     </footer>
   )
 }
