@@ -2360,6 +2360,19 @@ button:disabled {
   font-size: 12.5px;
 }
 
+/* دکمه‌ای که مثلِ لینک دیده می‌شود (انتخابِ لیستِ قیمت) */
+.link-like {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: inherit;
+}
+.link-like:hover .entity-name {
+  color: var(--accent);
+}
+
 /* ── صندوق فروشگاهی (POS) ── */
 .pos-toolbar {
   display: flex;

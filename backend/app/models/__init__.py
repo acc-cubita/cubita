@@ -8,6 +8,7 @@ from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
+from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
 from app.models.crm import CrmActivity, Lead, LoyaltyTransaction
 from app.models.currency import Currency, ExchangeRate
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine
@@ -58,6 +59,9 @@ __all__ = [
     "BomLine",
     "ProductionOrder",
     "ProductionOrderLine",
+    "PriceList",
+    "PriceListItem",
+    "StockBatch",
     "FixedAsset",
     "DepreciationEntry",
     "Role",

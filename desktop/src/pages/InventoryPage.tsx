@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX } from 'lucide-react'
+import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockCountPanel } from '../components/StockCountPanel'
+import { PriceListsPanel } from '../components/PriceListsPanel'
+import { BatchesPanel } from '../components/BatchesPanel'
 import { TransferForm } from '../components/TransferForm'
 import { ProductsPanel } from '../components/ProductsPanel'
 import { fetchStockLevels, type StockLevel } from '../api'
@@ -196,6 +198,18 @@ export function InventoryPage({
             label: 'انتقال بین انبار',
             icon: ArrowLeftRight,
             content: <TransferForm token={token} warehouses={warehouses} items={items} />,
+          },
+          {
+            key: 'pricelists',
+            label: 'لیست قیمت',
+            icon: Tags,
+            content: <PriceListsPanel token={token} />,
+          },
+          {
+            key: 'batches',
+            label: 'بچ و انقضا',
+            icon: CalendarClock,
+            content: <BatchesPanel token={token} />,
           },
         ]}
       />

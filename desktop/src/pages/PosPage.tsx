@@ -4,10 +4,13 @@ import {
   createSalesInvoiceDirect,
   fetchContacts,
   fetchItemsLive,
+  fetchPriceListItems,
+  fetchPriceLists,
   fetchWarehousesLive,
   newIdempotencyKey,
   type ContactRecord,
   type ItemRecord,
+  type PriceListRecord,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -28,6 +31,9 @@ export function PosPage({ token }: { token: string }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [warehouseId, setWarehouseId] = useState('')
   const [contactId, setContactId] = useState('') // '' = مشتریِ گذری (فروشِ نقدی)
+  const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
+  const [priceListId, setPriceListId] = useState('') // '' = قیمتِ پایه
+  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
   const [taxRate, setTaxRate] = useState('10')
   const [cart, setCart] = useState<CartLine[]>([])
   const [scan, setScan] = useState('')
@@ -48,8 +54,30 @@ export function PosPage({ token }: { token: string }) {
       })
       .catch(() => {})
     fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.type !== 'supplier'))).catch(() => {})
+    fetchPriceLists(token).then((ls) => setPriceLists(ls.filter((l) => l.is_active))).catch(() => {})
     scanRef.current?.focus()
   }, [token])
+
+  // با انتخابِ لیستِ قیمت، قیمت‌های آن لیست بار می‌شود و سبد دوباره قیمت‌گذاری می‌شود
+  useEffect(() => {
+    if (!priceListId) {
+      setPriceMap(new Map())
+      return
+    }
+    fetchPriceListItems(token, priceListId)
+      .then((rows) => setPriceMap(new Map(rows.map((r) => [r.item_id, Number(r.price)]))))
+      .catch(() => setPriceMap(new Map()))
+  }, [token, priceListId])
+
+  function priceFor(it: ItemRecord): number {
+    return priceMap.get(it.id) ?? Number(it.sales_price) ?? 0
+  }
+
+  // وقتی لیستِ قیمت عوض شد، قیمتِ ردیف‌های داخلِ سبد را هم به‌روزرسانی کن
+  useEffect(() => {
+    setCart((prev) => prev.map((l) => ({ ...l, unitPrice: priceMap.get(l.item.id) ?? Number(l.item.sales_price) ?? 0 })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceMap])
 
   // نگاشتِ بارکد و کدِ کالا برای جست‌وجوی فوریِ سمتِ کلاینت (بدونِ رفت‌وبرگشتِ شبکه در هر اسکن)
   const codeMap = useMemo(() => {
@@ -69,7 +97,7 @@ export function PosPage({ token }: { token: string }) {
         copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 }
         return copy
       }
-      return [...prev, { item: it, qty: 1, unitPrice: Number(it.sales_price) || 0 }]
+      return [...prev, { item: it, qty: 1, unitPrice: priceFor(it) }]
     })
   }
 
@@ -167,6 +195,17 @@ export function PosPage({ token }: { token: string }) {
             ))}
           </select>
         </label>
+        {priceLists.length > 0 && (
+          <label>
+            لیست قیمت
+            <select value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>
+              <option value="">قیمتِ پایه</option>
+              {priceLists.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           مالیات (٪)
           <input type="number" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} style={{ width: 80 }} />

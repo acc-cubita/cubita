@@ -1948,3 +1948,47 @@ export const createProductionOrder = (
   token: string,
   data: { bom_id: string; warehouse_id: string; production_date: string; qty_produced: number; overhead_cost?: number },
 ) => authedSend<ProductionOrderRecord>(token, 'POST', '/api/production-orders', data)
+
+// ── انبار پیشرفته: لیستِ قیمت و بچ/انقضا ─────────────────────────────
+export interface PriceListRecord {
+  id: string
+  name: string
+  is_active: boolean
+  notes: string
+}
+export interface PriceListItemRecord {
+  id: string
+  item_id: string
+  price: string
+}
+export interface StockBatchRecord {
+  id: string
+  item_id: string
+  warehouse_id: string
+  batch_number: string
+  expiry_date: string | null
+  qty: string
+  received_date: string
+  notes: string
+}
+
+export const fetchPriceLists = (token: string) => authedGet<PriceListRecord[]>(token, '/api/price-lists')
+export const createPriceList = (token: string, data: { name: string; notes?: string }) =>
+  authedSend<PriceListRecord>(token, 'POST', '/api/price-lists', data)
+export const updatePriceList = (token: string, id: string, patch: { name?: string; is_active?: boolean; notes?: string }) =>
+  authedSend<PriceListRecord>(token, 'PATCH', `/api/price-lists/${id}`, patch)
+export const deletePriceList = (token: string, id: string) => authedDelete(token, `/api/price-lists/${id}`)
+export const fetchPriceListItems = (token: string, listId: string) =>
+  authedGet<PriceListItemRecord[]>(token, `/api/price-lists/${listId}/items`)
+export const setPriceListItems = (token: string, listId: string, items: { item_id: string; price: number }[]) =>
+  authedSend<PriceListItemRecord[]>(token, 'PUT', `/api/price-lists/${listId}/items`, { items })
+
+export const fetchStockBatches = (token: string, itemId?: string) =>
+  authedGet<StockBatchRecord[]>(token, `/api/stock-batches${itemId ? `?item_id=${itemId}` : ''}`)
+export const fetchExpiringBatches = (token: string, days = 30) =>
+  authedGet<StockBatchRecord[]>(token, `/api/stock-batches/expiring?days=${days}`)
+export const createStockBatch = (
+  token: string,
+  data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
+) => authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
+export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
