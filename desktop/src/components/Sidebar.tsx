@@ -9,6 +9,7 @@ import {
   Landmark,
   Users,
   HeartHandshake,
+  Factory,
   Store,
   BarChart3,
   CalendarDays,
@@ -31,6 +32,7 @@ export type PageKey =
   | 'contacts'
   | 'crm'
   | 'inventory'
+  | 'manufacturing'
   | 'accounting'
   | 'banking'
   | 'payroll'
@@ -50,6 +52,7 @@ const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
   { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
   { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
+  { key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> },
   { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
   { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },
   { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },

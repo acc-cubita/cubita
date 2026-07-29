@@ -29,6 +29,7 @@ DEFAULT_ROLES: list[dict] = [
             "moadian": ["view", "approve"],
             "calendar": ["view", "create", "update", "delete"],
             "crm": ["view"],
+            "manufacturing": ["view", "create", "update"],
         },
     },
     {
@@ -48,6 +49,8 @@ DEFAULT_ROLES: list[dict] = [
         "permissions": {
             "inventory": ["view", "create", "update"],
             "calendar": ["view", "create", "update"],
+            # انباردار متولیِ تولید است: فرمول و سفارشِ تولید را می‌سازد و مدیریت می‌کند
+            "manufacturing": ["view", "create", "update"],
         },
     },
     {
@@ -73,6 +76,7 @@ DEFAULT_ROLES: list[dict] = [
             "assets": ["view"],
             "calendar": ["view"],
             "crm": ["view"],
+            "manufacturing": ["view"],
         },
     },
 ]

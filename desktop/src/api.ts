@@ -1894,3 +1894,57 @@ export const addLoyaltyTxn = (
   token: string,
   data: { contact_id: string; points: number; reason?: string; txn_date: string },
 ) => authedSend<LoyaltyTxnRecord>(token, 'POST', '/api/crm/loyalty/transactions', data)
+
+// ── تولید و بهای تمام‌شده (BOM) ──────────────────────────────────────
+export interface BomLineRecord {
+  id: string
+  component_item_id: string
+  qty: string
+}
+export interface BomRecord {
+  id: string
+  finished_item_id: string
+  name: string
+  yield_qty: string
+  is_active: boolean
+  notes: string
+  lines: BomLineRecord[]
+}
+export interface ProductionOrderLineRecord {
+  component_item_id: string
+  qty: string
+  unit_cost: string
+}
+export interface ProductionOrderRecord {
+  id: string
+  number: number | null
+  bom_id: string
+  finished_item_id: string
+  warehouse_id: string
+  production_date: string
+  qty_produced: string
+  component_cost: string
+  overhead_cost: string
+  unit_cost: string
+  lines: ProductionOrderLineRecord[]
+}
+
+export interface BomInput {
+  finished_item_id: string
+  name?: string
+  yield_qty?: number
+  notes?: string
+  lines: { component_item_id: string; qty: number }[]
+}
+
+export const fetchBoms = (token: string) => authedGet<BomRecord[]>(token, '/api/boms')
+export const createBom = (token: string, data: BomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
+export const updateBom = (token: string, id: string, patch: Partial<BomInput> & { is_active?: boolean }) =>
+  authedSend<BomRecord>(token, 'PATCH', `/api/boms/${id}`, patch)
+export const deleteBom = (token: string, id: string) => authedDelete(token, `/api/boms/${id}`)
+
+export const fetchProductionOrders = (token: string) => authedGet<ProductionOrderRecord[]>(token, '/api/production-orders')
+export const createProductionOrder = (
+  token: string,
+  data: { bom_id: string; warehouse_id: string; production_date: string; qty_produced: number; overhead_cost?: number },
+) => authedSend<ProductionOrderRecord>(token, 'POST', '/api/production-orders', data)

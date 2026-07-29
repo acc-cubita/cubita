@@ -20,6 +20,7 @@ import { OverviewPage } from '../pages/OverviewPage'
 import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
+import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -38,6 +39,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contacts: 'اشخاص',
   crm: 'باشگاه مشتریان',
   inventory: 'انبار',
+  manufacturing: 'تولید و بهای تمام‌شده',
   accounting: 'حسابداری',
   banking: 'چک و بانک',
   payroll: 'حقوق و دستمزد',
@@ -199,6 +201,7 @@ export function Dashboard({
               onChanged={() => void refreshFromLocalCache()}
             />
           )}
+          {page === 'manufacturing' && <ManufacturingPage token={token} />}
           {page === 'accounting' && (
             <AccountingPage
               token={token}
