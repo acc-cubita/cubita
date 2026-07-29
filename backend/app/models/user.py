@@ -72,6 +72,7 @@ DEFAULT_ROLES: list[dict] = [
             "payroll": ["view"],
             "assets": ["view"],
             "calendar": ["view"],
+            "crm": ["view"],
         },
     },
 ]
