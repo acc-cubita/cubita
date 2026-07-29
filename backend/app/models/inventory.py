@@ -62,6 +62,9 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
     sku: Mapped[str] = mapped_column(String(50), index=True)
+    #: بارکد (EAN/Code128/…) برای اسکن در صندوقِ فروشگاهی (POS). اختیاری و nullable؛
+    #: کالاهایی که بارکد ندارند NULL می‌مانند (چند NULL مجاز است).
+    barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(300))
     category: Mapped[str] = mapped_column(String(100), default="")
     unit: Mapped[str] = mapped_column(String(20), default="عدد")

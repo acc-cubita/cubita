@@ -21,6 +21,7 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { SalesPage } from '../pages/SalesPage'
+import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
 import { AccountingPage } from '../pages/AccountingPage'
@@ -32,6 +33,7 @@ import { ProfilePage } from '../pages/ProfilePage'
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
   sales: 'فروش',
+  pos: 'صندوق فروشگاهی',
   purchases: 'خرید',
   contacts: 'اشخاص',
   crm: 'باشگاه مشتریان',
@@ -176,6 +178,7 @@ export function Dashboard({
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
+          {page === 'pos' && <PosPage token={token} />}
           {page === 'purchases' && (
             <PurchasesPage
               token={token}

@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class WarehouseIn(BaseModel):
@@ -65,6 +65,16 @@ class ItemIn(BaseModel):
     unit: str = "عدد"
     is_service: bool = False
     sales_price: Decimal = Decimal(0)
+    barcode: str | None = None
+
+    @field_validator("barcode")
+    @classmethod
+    def _blank_barcode_is_null(cls, v: str | None) -> str | None:
+        # بارکدِ خالی = بدونِ بارکد (NULL)، تا با یکتاییِ منطقی جور باشد
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class ItemOut(BaseModel):
@@ -77,6 +87,7 @@ class ItemOut(BaseModel):
     sales_price: Decimal
     average_cost: Decimal
     is_active: bool
+    barcode: str | None
     storefront_product_id: int | None
 
     model_config = {"from_attributes": True}
@@ -94,7 +105,16 @@ class ItemUpdateIn(BaseModel):
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None
+    barcode: str | None = None
     storefront_product_id: int | None = None
+
+    @field_validator("barcode")
+    @classmethod
+    def _blank_barcode_is_null(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
     @model_validator(mode="after")
     def _non_negative_cost(self) -> "ItemUpdateIn":

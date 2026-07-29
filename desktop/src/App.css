@@ -2359,6 +2359,117 @@ button:disabled {
   padding-block: 5px;
   font-size: 12.5px;
 }
+
+/* ── صندوق فروشگاهی (POS) ── */
+.pos-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.pos-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 18px;
+  align-items: start;
+}
+.pos-scan {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px;
+}
+.pos-scan svg { color: var(--accent); flex-shrink: 0; }
+.pos-scan input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  padding: 12px 14px;
+}
+.pos-scan .btn-primary { flex-shrink: 0; }
+.pos-pick { margin: 10px 0 4px; }
+.pos-pick select { width: 100%; }
+.pos-flash {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13px;
+}
+.pos-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pos-qty button {
+  padding: 4px 6px;
+  min-width: 0;
+}
+.pos-qty input {
+  width: 52px;
+  text-align: center;
+  padding: 6px 4px;
+}
+.pos-price { width: 100px; }
+.pos-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.pos-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 14px;
+  color: var(--text);
+}
+.pos-row strong { color: var(--text-h); }
+.pos-total {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 16px;
+}
+.pos-total strong { color: var(--accent-hover); font-size: 19px; }
+.pos-received {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.pos-change {
+  margin: 10px 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+  color: var(--success);
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+}
+.pos-change.neg { background: var(--danger-bg); color: var(--danger); }
+.pos-checkout {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 13px;
+  font-size: 15px;
+}
+.pos-note { margin-top: 10px; font-size: 12px; line-height: 1.7; }
+
+@media (max-width: 860px) {
+  .pos-grid { grid-template-columns: 1fr; }
+}
 .due-badge {
   margin-inline-start: 6px;
 }

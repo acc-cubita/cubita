@@ -526,10 +526,15 @@ export interface ItemRecord {
   is_active: boolean
   sales_price: string
   average_cost: string
+  barcode: string | null
   storefront_product_id: number | null
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
+
+/** جست‌وجوی کالا با بارکد (اسکن در صندوقِ فروشگاهی). ۴۰۴ اگر پیدا نشود. */
+export const fetchItemByBarcode = (token: string, code: string) =>
+  authedGet<ItemRecord>(token, `/api/items/by-barcode?code=${encodeURIComponent(code)}`)
 
 /** ورودیِ ساختِ کالای جدید — دقیقاً منطبق بر ItemIn سمت سرور (sku و name الزامی‌اند). */
 export interface ItemIn {
@@ -539,16 +544,17 @@ export interface ItemIn {
   unit?: string
   is_service?: boolean
   sales_price?: number
+  barcode?: string | null
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
   authedSend<ItemRecord>(token, 'POST', '/api/items', data)
 
-/** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد (نام، قیمت فروش، فعال/غیرفعال). */
+/** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد. */
 export const updateItemLive = (
   token: string,
   itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean },
+  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */

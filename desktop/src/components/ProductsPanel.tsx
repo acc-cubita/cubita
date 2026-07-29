@@ -12,10 +12,11 @@ interface DraftForm {
   category: string
   unit: string
   salesPrice: string
+  barcode: string
   isService: boolean
 }
 
-const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', isService: false }
+const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', isService: false }
 
 /**
  * مدیریتِ کالاها/محصولات — ثبت، ویرایش و فعال/غیرفعال‌سازی.
@@ -71,6 +72,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       category: p.category,
       unit: p.unit,
       salesPrice: String(Number(p.sales_price) || ''),
+      barcode: p.barcode ?? '',
       isService: p.is_service,
     })
     setMessage(null)
@@ -93,6 +95,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
         await updateItemLive(token, editingId, {
           name: form.name.trim(),
           sales_price: Number(form.salesPrice) || 0,
+          barcode: form.barcode.trim() || null,
         })
         setMessage('کالا ویرایش شد.')
       } else {
@@ -103,6 +106,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           unit: form.unit.trim() || 'عدد',
           is_service: form.isService,
           sales_price: Number(form.salesPrice) || 0,
+          barcode: form.barcode.trim() || null,
         })
         setMessage('کالای جدید ثبت شد.')
       }
@@ -206,16 +210,28 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               />
             </label>
           </div>
-          <label>
-            قیمت فروش (تومان)
-            <input
-              type="number"
-              min="0"
-              value={form.salesPrice}
-              onChange={(e) => setForm({ ...form, salesPrice: e.target.value })}
-              placeholder="۰"
-            />
-          </label>
+          <div className="field-row">
+            <label>
+              قیمت فروش (تومان)
+              <input
+                type="number"
+                min="0"
+                value={form.salesPrice}
+                onChange={(e) => setForm({ ...form, salesPrice: e.target.value })}
+                placeholder="۰"
+              />
+            </label>
+            <label>
+              بارکد (برای صندوق فروشگاهی)
+              <input
+                type="text"
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="اسکن یا تایپ — اختیاری"
+                inputMode="numeric"
+              />
+            </label>
+          </div>
           {!editingId ? (
             <label className="cal-check-inline">
               <input
@@ -276,7 +292,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                         <div className="entity-avatar">{p.name.trim().charAt(0) || '؟'}</div>
                         <div>
                           <div className="entity-name">{p.name}</div>
-                          <div className="entity-sub ltr-cell">{p.sku}</div>
+                          <div className="entity-sub ltr-cell">{p.barcode ? `${p.sku} · ${p.barcode}` : p.sku}</div>
                         </div>
                       </div>
                     </td>

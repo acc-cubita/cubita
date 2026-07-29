@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -102,6 +102,19 @@ def list_items(
     # sku یکتاست، پس به‌تنهایی کلید امنی است
     items, next_cursor = paginate(db.query(Item), [Item.sku], params, descending=False)
     return Page(items=items, next_cursor=next_cursor)
+
+
+@router.get("/api/items/by-barcode", response_model=ItemOut)
+def item_by_barcode(
+    code: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """جست‌وجوی کالا با بارکد — برای اسکن در صندوقِ فروشگاهی."""
+    item = db.query(Item).filter(Item.barcode == code.strip(), Item.is_active.is_(True)).first()
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالایی با این بارکد یافت نشد")
+    return item
 
 
 @router.post("/api/items", response_model=ItemOut, status_code=201)
