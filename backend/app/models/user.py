@@ -28,6 +28,7 @@ DEFAULT_ROLES: list[dict] = [
             # اعتبارنامه و کلید خصوصیِ امضا فقط در اختیار مالک می‌ماند.
             "moadian": ["view", "approve"],
             "calendar": ["view", "create", "update", "delete"],
+            "crm": ["view"],
         },
     },
     {
@@ -37,6 +38,8 @@ DEFAULT_ROLES: list[dict] = [
             "invoices": ["view", "create"],
             "inventory": ["view"],
             "calendar": ["view", "create", "update"],
+            # فروشنده متولیِ باشگاه مشتریان است: سرنخ می‌گیرد، پیگیری و امتیاز ثبت می‌کند
+            "crm": ["view", "create", "update"],
         },
     },
     {

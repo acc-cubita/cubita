@@ -1795,3 +1795,96 @@ export const upsertRate = (token: string, data: { currency_code: string; rate_da
 
 export const fetchLatestRate = (token: string, currencyCode: string) =>
   authedGet<LatestRate>(token, `/api/currencies/rates/latest?currency_code=${currencyCode}`)
+
+// ── باشگاه مشتریان / CRM ─────────────────────────────────────────────
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'won' | 'lost'
+export type ActivityKind = 'call' | 'meeting' | 'note' | 'task'
+
+export interface LeadRecord {
+  id: string
+  name: string
+  phone: string
+  email: string
+  company: string
+  source: string
+  status: LeadStatus
+  estimated_value: string
+  notes: string
+  next_action_date: string | null
+  assigned_to_id: string | null
+  converted_contact_id: string | null
+}
+
+export interface LeadInput {
+  name: string
+  phone?: string
+  email?: string
+  company?: string
+  source?: string
+  status?: LeadStatus
+  estimated_value?: number
+  notes?: string
+  next_action_date?: string | null
+}
+
+export interface CrmActivityRecord {
+  id: string
+  kind: ActivityKind
+  subject: string
+  body: string
+  activity_date: string
+  done: boolean
+  lead_id: string | null
+  contact_id: string | null
+  assigned_to_id: string | null
+}
+
+export interface LoyaltyBalance {
+  contact_id: string
+  contact_name: string
+  balance: number
+}
+
+export interface LoyaltyTxnRecord {
+  id: string
+  contact_id: string
+  points: number
+  reason: string
+  txn_date: string
+}
+
+export const fetchLeads = (token: string, status?: string) =>
+  authedGet<LeadRecord[]>(token, `/api/crm/leads${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+export const createLead = (token: string, data: LeadInput) =>
+  authedSend<LeadRecord>(token, 'POST', '/api/crm/leads', data)
+export const updateLead = (token: string, id: string, data: Partial<LeadInput>) =>
+  authedSend<LeadRecord>(token, 'PATCH', `/api/crm/leads/${id}`, data)
+export const deleteLead = (token: string, id: string) => authedDelete(token, `/api/crm/leads/${id}`)
+export const convertLead = (token: string, id: string) =>
+  authedSend<{ contact_id: string }>(token, 'POST', `/api/crm/leads/${id}/convert`, {})
+
+export const fetchCrmActivities = (
+  token: string,
+  params?: { lead_id?: string; contact_id?: string; done?: boolean },
+) => {
+  const qs = new URLSearchParams()
+  if (params?.lead_id) qs.set('lead_id', params.lead_id)
+  if (params?.contact_id) qs.set('contact_id', params.contact_id)
+  if (params?.done !== undefined) qs.set('done', String(params.done))
+  const q = qs.toString()
+  return authedGet<CrmActivityRecord[]>(token, `/api/crm/activities${q ? `?${q}` : ''}`)
+}
+export const createCrmActivity = (
+  token: string,
+  data: { kind: ActivityKind; subject: string; body?: string; activity_date: string; lead_id?: string | null; contact_id?: string | null },
+) => authedSend<CrmActivityRecord>(token, 'POST', '/api/crm/activities', data)
+export const updateCrmActivity = (token: string, id: string, data: { done?: boolean; subject?: string; body?: string; activity_date?: string }) =>
+  authedSend<CrmActivityRecord>(token, 'PATCH', `/api/crm/activities/${id}`, data)
+export const deleteCrmActivity = (token: string, id: string) => authedDelete(token, `/api/crm/activities/${id}`)
+
+export const fetchLoyaltyBalances = (token: string) =>
+  authedGet<LoyaltyBalance[]>(token, '/api/crm/loyalty')
+export const addLoyaltyTxn = (
+  token: string,
+  data: { contact_id: string; points: number; reason?: string; txn_date: string },
+) => authedSend<LoyaltyTxnRecord>(token, 'POST', '/api/crm/loyalty/transactions', data)

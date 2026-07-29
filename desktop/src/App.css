@@ -2348,6 +2348,17 @@ button:disabled {
   gap: 4px;
   flex-wrap: nowrap;
 }
+
+/* ردیفِ کارِ انجام‌شده (پیگیریِ CRM) کم‌رنگ می‌شود تا کارهای باز برجسته بمانند */
+.entity-table tr.row-muted td {
+  opacity: 0.55;
+}
+
+/* انتخابگرِ فشرده‌ی وضعیت داخلِ جدولِ سرنخ‌ها */
+.status-select {
+  padding-block: 5px;
+  font-size: 12.5px;
+}
 .due-badge {
   margin-inline-start: 6px;
 }

@@ -7,6 +7,7 @@ import {
   BookOpen,
   Landmark,
   Users,
+  HeartHandshake,
   Store,
   BarChart3,
   CalendarDays,
@@ -26,6 +27,7 @@ export type PageKey =
   | 'sales'
   | 'purchases'
   | 'contacts'
+  | 'crm'
   | 'inventory'
   | 'accounting'
   | 'banking'
@@ -43,6 +45,7 @@ const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
   { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
   { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
+  { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
   { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
   { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
   { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },

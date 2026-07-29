@@ -19,6 +19,7 @@ import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
 import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
+import { CrmPage } from '../pages/CrmPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
@@ -33,6 +34,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   sales: 'فروش',
   purchases: 'خرید',
   contacts: 'اشخاص',
+  crm: 'باشگاه مشتریان',
   inventory: 'انبار',
   accounting: 'حسابداری',
   banking: 'چک و بانک',
@@ -185,6 +187,7 @@ export function Dashboard({
             />
           )}
           {page === 'contacts' && <ContactsPage token={token} bankAccounts={bankAccounts} />}
+          {page === 'crm' && <CrmPage token={token} />}
           {page === 'inventory' && (
             <InventoryPage
               token={token}

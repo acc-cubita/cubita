@@ -20,6 +20,7 @@ from app.routers import (
     budgeting,
     calendar,
     cost_centers,
+    crm,
     currencies,
     integration,
     inventory,
@@ -88,6 +89,7 @@ app.include_router(stock_taking.router)
 app.include_router(recurring.router)
 app.include_router(alerts.router)
 app.include_router(currencies.router)
+app.include_router(crm.router)
 
 
 @app.get("/api/health")
