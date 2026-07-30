@@ -70,7 +70,15 @@ def test_contact_default_price_list(client):
     pl = client.post("/api/price-lists", json={"name": "عمده"}).json()["id"]
     cust = client.post("/api/contacts", json={"name": "عمده‌فروش", "type": "customer", "default_price_list_id": pl}).json()
     assert cust["default_price_list_id"] == pl
-    # ویرایش: برداشتنِ لیست
-    updated = client.patch(f"/api/contacts/{cust['id']}", json={"name": "عمده‌فروش", "type": "customer"}) if False else None
     # settings default when never set
     assert client.get("/api/crm/loyalty/settings").json()["is_enabled"] is False
+
+
+def test_delete_price_list_assigned_to_contact(client):
+    """حذفِ لیستی که مشتری آن را پیش‌فرض دارد نباید ۵۰۰ بدهد؛ مشتری به قیمتِ پایه برمی‌گردد."""
+    pl = client.post("/api/price-lists", json={"name": "لیستِ متصل"}).json()["id"]
+    cust = client.post("/api/contacts", json={"name": "مشتری", "type": "customer", "default_price_list_id": pl}).json()["id"]
+    assert client.delete(f"/api/price-lists/{pl}").status_code == 204
+    # مشتری باید بماند ولی بدونِ لیست
+    got = next(c for c in client.get("/api/contacts").json()["items"] if c["id"] == cust)
+    assert got["default_price_list_id"] is None

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import require_permission
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
+from app.models.inventory import Contact
 from app.models.user import User
 from app.schemas.advanced_inventory import (
     PriceListIn,
@@ -66,6 +67,11 @@ def delete_price_list(
     pl = db.get(PriceList, list_id)
     if pl is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "لیستِ قیمت یافت نشد")
+    # مشتری‌هایی که این لیست را پیش‌فرض دارند رها می‌شوند (به قیمتِ پایه)، وگرنه قیدِ FK
+    # حذف را با ۵۰۰ می‌شکند. اجزای لیست خودشان با ondelete CASCADE پاک می‌شوند.
+    db.query(Contact).filter(Contact.default_price_list_id == list_id).update(
+        {Contact.default_price_list_id: None}, synchronize_session="evaluate"
+    )
     db.delete(pl)
 
 
