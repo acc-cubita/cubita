@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import {
   addLoyaltyTxn,
+  fetchLoyaltySettings,
+  setLoyaltySettings,
   convertLead,
   createCrmActivity,
   createLead,
@@ -479,6 +481,30 @@ function LoyaltyTab({
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
 
+  // تنظیماتِ کسبِ خودکارِ امتیاز هنگامِ فروش
+  const [autoEnabled, setAutoEnabled] = useState(false)
+  const [perPoint, setPerPoint] = useState('')
+  const [setMsg2, setSetMsg2] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchLoyaltySettings(token)
+      .then((s) => {
+        setAutoEnabled(s.is_enabled)
+        setPerPoint(Number(s.amount_per_point) ? String(Number(s.amount_per_point)) : '')
+      })
+      .catch(() => {})
+  }, [token])
+
+  async function saveSettings() {
+    setSetMsg2(null)
+    try {
+      await setLoyaltySettings(token, { is_enabled: autoEnabled, amount_per_point: Number(perPoint) || 0 })
+      setSetMsg2('تنظیماتِ کسبِ خودکار ذخیره شد.')
+    } catch (err) {
+      setSetMsg2(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
@@ -504,7 +530,23 @@ function LoyaltyTab({
   }
 
   return (
-    <div className="workspace-split">
+    <>
+      <SectionCard icon={Gift} title="کسبِ خودکارِ امتیاز هنگامِ فروش" description="با فعال‌سازی، هر فروش به یک مشتری خودکار امتیاز می‌دهد.">
+        <div className="benefit-toolbar">
+          <label className="cal-check-inline">
+            <input type="checkbox" checked={autoEnabled} onChange={(e) => setAutoEnabled(e.target.checked)} />
+            کسبِ خودکار فعال باشد
+          </label>
+          <label>
+            به‌ازای هر چند تومان خرید، ۱ امتیاز؟
+            <input type="number" min="0" value={perPoint} onChange={(e) => setPerPoint(e.target.value)} placeholder="مثلاً ۱۰۰۰۰" style={{ width: 140 }} disabled={!autoEnabled} />
+          </label>
+          <button type="button" className="btn-primary" onClick={() => void saveSettings()}><Save size={13} /> ذخیره</button>
+          {setMsg2 && <span className="hint">{setMsg2}</span>}
+        </div>
+      </SectionCard>
+
+      <div className="workspace-split">
       <SectionCard icon={Gift} title="ثبت امتیاز" description="به مشتریانِ وفادار امتیاز بدهید یا امتیازشان را خرج کنید.">
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
@@ -575,6 +617,7 @@ function LoyaltyTab({
           </div>
         )}
       </SectionCard>
-    </div>
+      </div>
+    </>
   )
 }

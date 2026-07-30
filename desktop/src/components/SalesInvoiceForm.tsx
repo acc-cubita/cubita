@@ -8,6 +8,7 @@ import {
   fetchCreditStatus,
   fetchCurrencies,
   fetchLatestRate,
+  fetchPriceListItems,
   newIdempotencyKey,
   type ContactRecord,
   type CostCenterRecord,
@@ -109,10 +110,39 @@ export function SalesInvoiceForm({
   // در آن حالت یعنی فاکتور دوم. کلید فقط بعد از موفقیت قطعی نو می‌شود.
   const idempotencyKey = useRef(newIdempotencyKey())
 
+  // لیستِ قیمتِ مشتریِ انتخاب‌شده — با انتخابِ کالا در هر ردیف، قیمت خودکار پر می‌شود.
+  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
+  useEffect(() => {
+    const c = contacts.find((x) => x.id === contactId)
+    const plId = c?.default_price_list_id
+    if (!plId) {
+      setPriceMap(new Map())
+      return
+    }
+    let cancelled = false
+    fetchPriceListItems(token, plId)
+      .then((rows) => !cancelled && setPriceMap(new Map(rows.map((r) => [r.item_id, Number(r.price)]))))
+      .catch(() => !cancelled && setPriceMap(new Map()))
+    return () => {
+      cancelled = true
+    }
+  }, [token, contactId, contacts])
+
   const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+  }
+
+  // انتخابِ کالا در یک ردیف: قیمتِ واحد از لیستِ قیمتِ مشتری (یا قیمتِ پایه) پر می‌شود.
+  function chooseLineItem(index: number, itemId: string) {
+    if (!itemId) {
+      updateLine(index, { itemId: '', unitPrice: '' })
+      return
+    }
+    const it = items.find((x) => x.id === itemId)
+    const price = priceMap.get(itemId) ?? (it ? Number(it.sales_price) : 0)
+    updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
   }
 
   function addLine() {
@@ -290,7 +320,7 @@ export function SalesInvoiceForm({
               {lines.map((line, i) => (
                 <tr key={i}>
                   <td>
-                    <select value={line.itemId} onChange={(e) => updateLine(i, { itemId: e.target.value })}>
+                    <select value={line.itemId} onChange={(e) => chooseLineItem(i, e.target.value)}>
                       <option value="">— انتخاب کالا —</option>
                       {items.map((it) => (
                         <option key={it.id} value={it.id}>

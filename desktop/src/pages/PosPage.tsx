@@ -69,6 +69,12 @@ export function PosPage({ token }: { token: string }) {
       .catch(() => setPriceMap(new Map()))
   }, [token, priceListId])
 
+  // با انتخابِ مشتری، اگر لیستِ قیمتِ پیش‌فرض داشته باشد، خودکار همان انتخاب می‌شود
+  useEffect(() => {
+    const c = contacts.find((x) => x.id === contactId)
+    if (c && c.default_price_list_id) setPriceListId(c.default_price_list_id)
+  }, [contactId, contacts])
+
   function priceFor(it: ItemRecord): number {
     return priceMap.get(it.id) ?? Number(it.sales_price) ?? 0
   }

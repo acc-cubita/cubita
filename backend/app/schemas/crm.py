@@ -152,3 +152,23 @@ class LoyaltyBalanceOut(BaseModel):
     contact_id: UUID
     contact_name: str
     balance: int
+
+
+class LoyaltySettingsIn(BaseModel):
+    is_enabled: bool = False
+    #: چند تومان خرید = ۱ امتیاز (۰ = بدون کسبِ خودکار)
+    amount_per_point: Decimal = Decimal(0)
+
+    @field_validator("amount_per_point")
+    @classmethod
+    def nonneg(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("مقدار نمی‌تواند منفی باشد")
+        return v
+
+
+class LoyaltySettingsOut(BaseModel):
+    is_enabled: bool
+    amount_per_point: Decimal
+
+    model_config = {"from_attributes": True}

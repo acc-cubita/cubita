@@ -27,6 +27,7 @@ class ContactIn(BaseModel):
     address: str = ""
     tax_id: str | None = None
     credit_limit: Decimal = Decimal(0)
+    default_price_list_id: UUID | None = None
 
     @model_validator(mode="after")
     def _check_credit_limit(self) -> "ContactIn":
@@ -45,6 +46,7 @@ class ContactOut(BaseModel):
     tax_id: str | None
     is_active: bool
     credit_limit: Decimal
+    default_price_list_id: UUID | None
 
     model_config = {"from_attributes": True}
 

@@ -916,6 +916,7 @@ export interface ContactRecord {
   tax_id: string | null
   is_active: boolean
   credit_limit: string
+  default_price_list_id: string | null
 }
 
 export interface ContactIn {
@@ -926,6 +927,7 @@ export interface ContactIn {
   address: string
   tax_id: string | null
   credit_limit: number
+  default_price_list_id?: string | null
 }
 
 export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')
@@ -1890,6 +1892,15 @@ export const deleteCrmActivity = (token: string, id: string) => authedDelete(tok
 
 export const fetchLoyaltyBalances = (token: string) =>
   authedGet<LoyaltyBalance[]>(token, '/api/crm/loyalty')
+
+export interface LoyaltySettings {
+  is_enabled: boolean
+  amount_per_point: string
+}
+export const fetchLoyaltySettings = (token: string) =>
+  authedGet<LoyaltySettings>(token, '/api/crm/loyalty/settings')
+export const setLoyaltySettings = (token: string, data: { is_enabled: boolean; amount_per_point: number }) =>
+  authedSend<LoyaltySettings>(token, 'PUT', '/api/crm/loyalty/settings', data)
 export const addLoyaltyTxn = (
   token: string,
   data: { contact_id: string; points: number; reason?: string; txn_date: string },

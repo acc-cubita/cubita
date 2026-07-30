@@ -15,10 +15,12 @@ import {
   createTreasuryPayment,
   createTreasuryReceipt,
   fetchContacts,
+  fetchPriceLists,
   fetchTreasuryTransactions,
   updateContact,
   type ContactIn,
   type ContactRecord,
+  type PriceListRecord,
   type TreasuryTransactionRecord,
 } from '../api'
 import type { BankAccountCache } from '../electron.d'
@@ -36,12 +38,13 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   both: 'مشتری و تأمین‌کننده',
 }
 
-const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0 }
+const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0, default_price_list_id: null }
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
 export function ContactsPage({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
   const [transactions, setTransactions] = useState<TreasuryTransactionRecord[]>([])
   const [filterType, setFilterType] = useState<'all' | 'customer' | 'supplier'>('all')
   const [search, setSearch] = useState('')
@@ -65,9 +68,10 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   async function refresh() {
     setError(null)
     try {
-      const [cs, txs] = await Promise.all([fetchContacts(token), fetchTreasuryTransactions(token)])
+      const [cs, txs, pls] = await Promise.all([fetchContacts(token), fetchTreasuryTransactions(token), fetchPriceLists(token).catch(() => [])])
       setContacts(cs)
       setTransactions(txs)
+      setPriceLists(pls.filter((p) => p.is_active))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -136,6 +140,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       address: c.address,
       tax_id: c.tax_id ?? '',
       credit_limit: Number(c.credit_limit) || 0,
+      default_price_list_id: c.default_price_list_id ?? null,
     })
     setFormMessage(null)
   }
@@ -239,6 +244,20 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               />
             </label>
           </div>
+          {priceLists.length > 0 && (
+            <label>
+              لیستِ قیمتِ پیش‌فرض
+              <select
+                value={form.default_price_list_id ?? ''}
+                onChange={(e) => setForm({ ...form, default_price_list_id: e.target.value || null })}
+              >
+                <option value="">— قیمتِ پایه —</option>
+                {priceLists.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             نشانی
             <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />

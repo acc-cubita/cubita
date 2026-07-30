@@ -243,6 +243,14 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         move.source_id = invoice.id
         db.add(move)
 
+    # کسبِ خودکارِ امتیازِ وفاداری — فقط اگر مشتری دارد و در تنظیماتِ CRM فعال باشد.
+    # عمداً بی‌اثر بر مسیرِ اصلیِ فروش است (تابع خودش بی‌صدا رد می‌شود اگر غیرفعال باشد).
+    from app.services import crm as crm_service
+
+    crm_service.award_purchase_points(
+        db, data.contact_id, total_amount + tax_amount, data.invoice_date, user
+    )
+
     db.flush()
     db.refresh(invoice)
     return invoice

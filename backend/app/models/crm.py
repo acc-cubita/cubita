@@ -11,7 +11,7 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -97,3 +97,18 @@ class LoyaltyTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     reason: Mapped[str] = mapped_column(String(200), default="", server_default="")
     txn_date: Mapped[date_] = mapped_column(Date)
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class LoyaltySettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تنظیماتِ کسبِ خودکارِ امتیازِ وفاداری — یک ردیف به‌ازای هر مستأجر.
+
+    وقتی فعال باشد، هر فروش به یک مشتری خودکار امتیاز می‌دهد: امتیاز = مبلغِ فروش ÷
+    `amount_per_point` (رو به پایین). پیش‌فرض غیرفعال است تا رفتارِ فعلیِ فروش تغییر نکند.
+    """
+
+    __tablename__ = "loyalty_settings"
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_loyalty_settings_tenant"),)
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: چند تومان خرید = ۱ امتیاز (مثلاً ۱۰۰۰۰ یعنی هر ۱۰هزار تومان یک امتیاز)
+    amount_per_point: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")

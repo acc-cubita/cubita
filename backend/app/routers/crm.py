@@ -16,6 +16,8 @@ from app.schemas.crm import (
     LeadOut,
     LeadUpdateIn,
     LoyaltyBalanceOut,
+    LoyaltySettingsIn,
+    LoyaltySettingsOut,
     LoyaltyTxnIn,
     LoyaltyTxnOut,
 )
@@ -184,3 +186,25 @@ def add_loyalty_txn(
     db.flush()
     db.refresh(txn)
     return txn
+
+
+@router.get("/loyalty/settings", response_model=LoyaltySettingsOut)
+def get_loyalty_settings(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    s = service.get_loyalty_settings(db)
+    if s is None:
+        from decimal import Decimal
+
+        return LoyaltySettingsOut(is_enabled=False, amount_per_point=Decimal(0))
+    return s
+
+
+@router.put("/loyalty/settings", response_model=LoyaltySettingsOut)
+def set_loyalty_settings(
+    data: LoyaltySettingsIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "update")),
+):
+    return service.set_loyalty_settings(db, data.is_enabled, data.amount_per_point)

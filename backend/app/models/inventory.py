@@ -50,6 +50,14 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     #: سقفِ مجازِ مانده‌ی مطالبات از این مشتری (ریال). صفر = بدون سقف / بدون هشدار.
     credit_limit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: لیستِ قیمتِ پیش‌فرضِ این مشتری — در فاکتورِ فروش و صندوق خودکار اعمال می‌شود.
+    default_price_list_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True
+    )
+    #: لیستِ قیمتِ پیش‌فرضِ این مشتری — در فاکتورِ فروش و صندوق خودکار اعمال می‌شود.
+    default_price_list_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True
+    )
 
 
 class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
