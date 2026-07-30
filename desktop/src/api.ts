@@ -229,6 +229,44 @@ export const fetchVatReport = (token: string, dateFrom?: string, dateTo?: string
   return authedGet<VatReport>(token, `/api/reports/vat${suffix}`)
 }
 
+// ── گزارش معاملات فصلی (ماده ۱۶۹ ق.م.م) ──
+export interface SeasonalPartyRow {
+  contact_id: string | null
+  contact_name: string
+  entity_type: 'real' | 'legal' | 'aggregate'
+  national_id: string | null
+  economic_code: string | null
+  postal_code: string | null
+  invoice_count: number
+  gross: string
+  discount: string
+  net: string
+  vat: string
+  total: string
+}
+
+export interface SeasonalSection {
+  rows: SeasonalPartyRow[]
+  total_gross: string
+  total_discount: string
+  total_net: string
+  total_vat: string
+  total_total: string
+}
+
+export interface SeasonalReport {
+  year: number
+  quarter: number
+  quarter_label: string
+  date_from: string
+  date_to: string
+  sales: SeasonalSection
+  purchases: SeasonalSection
+}
+
+export const fetchSeasonalReport = (token: string, year: number, quarter: number) =>
+  authedGet<SeasonalReport>(token, `/api/reports/seasonal?year=${year}&quarter=${quarter}`)
+
 export interface CashFlowLine {
   account_id: string
   account_code: string
@@ -917,6 +955,10 @@ export interface ContactRecord {
   is_active: boolean
   credit_limit: string
   default_price_list_id: string | null
+  entity_type: 'real' | 'legal'
+  national_id: string | null
+  economic_code: string | null
+  postal_code: string | null
 }
 
 export interface ContactIn {
@@ -928,6 +970,10 @@ export interface ContactIn {
   tax_id: string | null
   credit_limit: number
   default_price_list_id?: string | null
+  entity_type?: 'real' | 'legal'
+  national_id?: string | null
+  economic_code?: string | null
+  postal_code?: string | null
 }
 
 export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')

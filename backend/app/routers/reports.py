@@ -17,6 +17,7 @@ from app.schemas.reports import (
     InventoryReportOut,
     KardexReportOut,
     SalesDashboardOut,
+    SeasonalReportOut,
     TrialBalanceRowOut,
     VatReportOut,
 )
@@ -73,6 +74,16 @@ def vat_report(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_vat_report(db, date_from, date_to)
+
+
+@router.get("/seasonal", response_model=SeasonalReportOut)
+def seasonal_report(
+    year: int = Query(..., ge=1300, le=1500),
+    quarter: int = Query(0, ge=0, le=4),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_seasonal_report(db, year, quarter)
 
 
 @router.get("/cash-flow", response_model=CashFlowOut)

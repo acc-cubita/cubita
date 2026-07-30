@@ -209,6 +209,45 @@ class CashFlowOut(BaseModel):
     closing_cash: Decimal  # = opening_cash + net_change
 
 
+class SeasonalPartyRowOut(BaseModel):
+    """یک طرف حساب در یک نوعِ معامله (خرید یا فروش) در یک فصل — تجمیعِ فاکتورها."""
+
+    contact_id: UUID | None  # NULL = تجمیعِ معاملاتِ خرد بدونِ طرف حسابِ مشخص
+    contact_name: str
+    entity_type: str  # real | legal | aggregate
+    national_id: str | None
+    economic_code: str | None
+    postal_code: str | None
+    invoice_count: int
+    gross: Decimal  # ناخالص = خالص + تخفیف (مبلغِ کلِ معامله پیش از تخفیف)
+    discount: Decimal
+    net: Decimal  # خالصِ پس از تخفیف (پایه‌ی مالیات)
+    vat: Decimal  # مالیات و عوارضِ ارزش افزوده
+    total: Decimal  # net + vat (مبلغِ نهاییِ قابلِ پرداخت)
+
+
+class SeasonalSectionOut(BaseModel):
+    rows: list[SeasonalPartyRowOut]
+    total_gross: Decimal
+    total_discount: Decimal
+    total_net: Decimal
+    total_vat: Decimal
+    total_total: Decimal
+
+
+class SeasonalReportOut(BaseModel):
+    """گزارشِ معاملاتِ فصلی (ماده ۱۶۹ ق.م.م) — تجمیعِ خرید و فروشِ هر فصلِ شمسی
+    به تفکیکِ طرف حساب، برای سامانه‌ی معاملاتِ فصلیِ سازمانِ امور مالیاتی."""
+
+    year: int  # سالِ شمسی
+    quarter: int  # ۱=بهار ۲=تابستان ۳=پاییز ۴=زمستان ۰=کلِ سال
+    quarter_label: str
+    date_from: date
+    date_to: date
+    sales: SeasonalSectionOut
+    purchases: SeasonalSectionOut
+
+
 class VatReportOut(BaseModel):
     """خلاصه‌ی مالیات بر ارزش افزوده در یک بازه — مبنای اظهارنامه/تسویه."""
 

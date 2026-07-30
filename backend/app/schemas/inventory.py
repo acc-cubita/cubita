@@ -19,6 +19,9 @@ class WarehouseOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+ENTITY_TYPES = ("real", "legal")
+
+
 class ContactIn(BaseModel):
     name: str
     type: str = "customer"
@@ -28,6 +31,25 @@ class ContactIn(BaseModel):
     tax_id: str | None = None
     credit_limit: Decimal = Decimal(0)
     default_price_list_id: UUID | None = None
+    entity_type: str = "real"
+    national_id: str | None = None
+    economic_code: str | None = None
+    postal_code: str | None = None
+
+    @field_validator("entity_type")
+    @classmethod
+    def _valid_entity_type(cls, v: str) -> str:
+        if v not in ENTITY_TYPES:
+            raise ValueError("نوعِ شخص باید حقیقی یا حقوقی باشد")
+        return v
+
+    @field_validator("national_id", "economic_code", "postal_code")
+    @classmethod
+    def _blank_to_null(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
     @model_validator(mode="after")
     def _check_credit_limit(self) -> "ContactIn":
@@ -47,6 +69,10 @@ class ContactOut(BaseModel):
     is_active: bool
     credit_limit: Decimal
     default_price_list_id: UUID | None
+    entity_type: str
+    national_id: str | None
+    economic_code: str | None
+    postal_code: str | None
 
     model_config = {"from_attributes": True}
 

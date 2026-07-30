@@ -54,10 +54,16 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     default_price_list_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True
     )
-    #: لیستِ قیمتِ پیش‌فرضِ این مشتری — در فاکتورِ فروش و صندوق خودکار اعمال می‌شود.
-    default_price_list_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True
-    )
+
+    # ── هویتِ مالیاتیِ طرف حساب (برای گزارشِ معاملاتِ فصلی، ماده ۱۶۹ ق.م.م) ──
+    #: نوعِ شخص: real = حقیقی، legal = حقوقی. پیش‌فرض حقیقی.
+    entity_type: Mapped[str] = mapped_column(String(10), default="real", server_default="real")
+    #: کد ملی (حقیقی، ۱۰ رقم) یا شناسه‌ی ملی (حقوقی، ۱۱ رقم). NULL = وارد نشده.
+    national_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: کد اقتصادیِ طرف حساب. NULL = وارد نشده.
+    economic_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: کد پستیِ ۱۰رقمی — سامانه‌ی معاملاتِ فصلی می‌خواهد. NULL = وارد نشده.
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

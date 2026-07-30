@@ -38,7 +38,10 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   both: 'مشتری و تأمین‌کننده',
 }
 
-const EMPTY_FORM: ContactIn = { name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0, default_price_list_id: null }
+const EMPTY_FORM: ContactIn = {
+  name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0,
+  default_price_list_id: null, entity_type: 'real', national_id: '', economic_code: '', postal_code: '',
+}
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -113,6 +116,9 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       phone: form.phone || null,
       email: form.email || null,
       tax_id: form.tax_id || null,
+      national_id: form.national_id || null,
+      economic_code: form.economic_code || null,
+      postal_code: form.postal_code || null,
     }
     try {
       if (editingId) {
@@ -141,6 +147,10 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       tax_id: c.tax_id ?? '',
       credit_limit: Number(c.credit_limit) || 0,
       default_price_list_id: c.default_price_list_id ?? null,
+      entity_type: c.entity_type ?? 'real',
+      national_id: c.national_id ?? '',
+      economic_code: c.economic_code ?? '',
+      postal_code: c.postal_code ?? '',
     })
     setFormMessage(null)
   }
@@ -224,26 +234,48 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               <input type="text" value={form.phone ?? ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </label>
             <label>
-              شناسه/کد اقتصادی
-              <input type="text" value={form.tax_id ?? ''} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} />
+              ایمیل
+              <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </label>
           </div>
           <div className="field-row">
             <label>
-              ایمیل
-              <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              نوعِ شخص
+              <select value={form.entity_type ?? 'real'} onChange={(e) => setForm({ ...form, entity_type: e.target.value as 'real' | 'legal' })}>
+                <option value="real">حقیقی</option>
+                <option value="legal">حقوقی</option>
+              </select>
             </label>
             <label>
-              سقف اعتبار (تومان)
+              {form.entity_type === 'legal' ? 'شناسه ملی' : 'کد ملی'}
               <input
-                type="number"
-                min="0"
-                value={form.credit_limit || ''}
-                onChange={(e) => setForm({ ...form, credit_limit: Number(e.target.value) || 0 })}
-                placeholder="۰ = بدون سقف"
+                type="text"
+                value={form.national_id ?? ''}
+                onChange={(e) => setForm({ ...form, national_id: e.target.value })}
+                placeholder={form.entity_type === 'legal' ? '۱۱ رقم' : '۱۰ رقم'}
               />
             </label>
           </div>
+          <div className="field-row">
+            <label>
+              کد اقتصادی
+              <input type="text" value={form.economic_code ?? ''} onChange={(e) => setForm({ ...form, economic_code: e.target.value })} />
+            </label>
+            <label>
+              کد پستی
+              <input type="text" value={form.postal_code ?? ''} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} placeholder="۱۰ رقم" />
+            </label>
+          </div>
+          <label>
+            سقف اعتبار (تومان)
+            <input
+              type="number"
+              min="0"
+              value={form.credit_limit || ''}
+              onChange={(e) => setForm({ ...form, credit_limit: Number(e.target.value) || 0 })}
+              placeholder="۰ = بدون سقف"
+            />
+          </label>
           {priceLists.length > 0 && (
             <label>
               لیستِ قیمتِ پیش‌فرض
@@ -308,7 +340,9 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                         <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
                         <div>
                           <div className="entity-name">{c.name}</div>
-                          {c.tax_id && <div className="entity-sub">کد اقتصادی: {c.tax_id}</div>}
+                          {(c.economic_code || c.tax_id) && (
+                            <div className="entity-sub">کد اقتصادی: {c.economic_code || c.tax_id}</div>
+                          )}
                         </div>
                       </div>
                     </td>

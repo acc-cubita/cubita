@@ -13,9 +13,14 @@ from app.models.inventory import Contact, Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.treasury import TreasuryTransaction
+from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
 from app.services import chart_codes as cc
 
 AGING_KINDS = ("receivable", "payable")
+
+#: فصل‌های شمسی → ماهِ شروع و برچسب. ۰ = کلِ سال.
+QUARTER_START_MONTH = {1: 1, 2: 4, 3: 7, 4: 10}
+QUARTER_LABELS = {0: "کل سال", 1: "بهار", 2: "تابستان", 3: "پاییز", 4: "زمستان"}
 
 CREDIT_NORMAL_TYPES = ("liability", "equity", "income")
 
@@ -66,6 +71,152 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
         "sales_returns_vat": sales_ret_vat,
         "purchase_returns_net": purchase_ret_net,
         "purchase_returns_vat": purchase_ret_vat,
+    }
+
+
+def _seasonal_range(year: int, quarter: int) -> tuple[date, date]:
+    """بازه‌ی میلادیِ یک فصلِ شمسی (۱..۴) یا کلِ سال (۰)."""
+    if quarter == 0:
+        return persian_year_start(year), persian_year_end(year)
+    start_month = QUARTER_START_MONTH[quarter]
+    date_from = jalali_to_gregorian(year, start_month, 1)
+    if quarter == 4:
+        date_to = persian_year_end(year)
+    else:
+        date_to = jalali_to_gregorian(year, start_month + 3, 1) - timedelta(days=1)
+    return date_from, date_to
+
+
+def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
+    """گزارشِ معاملاتِ فصلی (ماده ۱۶۹ ق.م.م): تجمیعِ خرید و فروشِ یک فصلِ شمسی به
+    تفکیکِ طرف حساب. فاکتورهای باطل حساب نمی‌شوند؛ برگشت‌ها (از روی فاکتورِ اصلی) از
+    مبلغِ همان طرف حساب کسر می‌شوند تا رقمِ سامانه دقیقاً چیزی باشد که در دفاتر مانده.
+    فاکتورهای بدونِ طرف حساب (فروشِ نقدی/خرده) در یک ردیفِ تجمیعیِ «معاملاتِ خرد» جمع می‌شوند.
+    """
+    if quarter not in (0, 1, 2, 3, 4):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فصل باید بین ۰ تا ۴ باشد")
+    date_from, date_to = _seasonal_range(year, quarter)
+
+    def build_section(invoice_model, date_col, return_model, return_date_col, return_fk) -> dict:
+        acc: dict[UUID | None, dict] = {}
+
+        def bucket(cid: UUID | None) -> dict:
+            return acc.setdefault(
+                cid, {"count": 0, "net": Decimal(0), "discount": Decimal(0), "vat": Decimal(0)}
+            )
+
+        inv_rows = (
+            db.query(
+                invoice_model.contact_id,
+                func.count(invoice_model.id),
+                func.coalesce(func.sum(invoice_model.total_amount), 0),
+                func.coalesce(func.sum(invoice_model.total_discount), 0),
+                func.coalesce(func.sum(invoice_model.tax_amount), 0),
+            )
+            .filter(
+                invoice_model.voided_at.is_(None),
+                date_col >= date_from,
+                date_col <= date_to,
+            )
+            .group_by(invoice_model.contact_id)
+            .all()
+        )
+        for cid, cnt, net, disc, vat in inv_rows:
+            b = bucket(cid)
+            b["count"] += cnt
+            b["net"] += Decimal(net)
+            b["discount"] += Decimal(disc)
+            b["vat"] += Decimal(vat)
+
+        # برگشت‌ها: از طریقِ فاکتورِ اصلی به طرف حساب نسبت داده و از خالص/مالیات کم می‌شوند.
+        ret_rows = (
+            db.query(
+                invoice_model.contact_id,
+                func.coalesce(func.sum(return_model.total_amount), 0),
+                func.coalesce(func.sum(return_model.tax_amount), 0),
+            )
+            .join(invoice_model, return_fk == invoice_model.id)
+            .filter(
+                invoice_model.voided_at.is_(None),
+                return_date_col >= date_from,
+                return_date_col <= date_to,
+            )
+            .group_by(invoice_model.contact_id)
+            .all()
+        )
+        for cid, ret_net, ret_vat in ret_rows:
+            b = bucket(cid)
+            b["net"] -= Decimal(ret_net)
+            b["vat"] -= Decimal(ret_vat)
+
+        # هویتِ طرف‌حساب‌ها را یک‌جا واکشی کن.
+        contact_ids = [cid for cid in acc if cid is not None]
+        contacts = {c.id: c for c in db.query(Contact).filter(Contact.id.in_(contact_ids))} if contact_ids else {}
+
+        rows = []
+        for cid, b in acc.items():
+            net = b["net"]
+            gross = net + b["discount"]
+            vat = b["vat"]
+            if cid is None:
+                rows.append({
+                    "contact_id": None,
+                    "contact_name": "معاملاتِ خرد (بدون طرف حساب)",
+                    "entity_type": "aggregate",
+                    "national_id": None,
+                    "economic_code": None,
+                    "postal_code": None,
+                    "invoice_count": b["count"],
+                    "gross": gross,
+                    "discount": b["discount"],
+                    "net": net,
+                    "vat": vat,
+                    "total": net + vat,
+                })
+            else:
+                c = contacts.get(cid)
+                rows.append({
+                    "contact_id": cid,
+                    "contact_name": c.name if c else "—",
+                    "entity_type": c.entity_type if c else "real",
+                    "national_id": c.national_id if c else None,
+                    "economic_code": c.economic_code if c else None,
+                    "postal_code": c.postal_code if c else None,
+                    "invoice_count": b["count"],
+                    "gross": gross,
+                    "discount": b["discount"],
+                    "net": net,
+                    "vat": vat,
+                    "total": net + vat,
+                })
+
+        # بزرگ‌ترین معامله‌ها بالا؛ ردیفِ تجمیعیِ خرد ته.
+        rows.sort(key=lambda r: (r["contact_id"] is None, -r["net"]))
+        return {
+            "rows": rows,
+            "total_gross": sum((r["gross"] for r in rows), Decimal(0)),
+            "total_discount": sum((r["discount"] for r in rows), Decimal(0)),
+            "total_net": sum((r["net"] for r in rows), Decimal(0)),
+            "total_vat": sum((r["vat"] for r in rows), Decimal(0)),
+            "total_total": sum((r["total"] for r in rows), Decimal(0)),
+        }
+
+    sales = build_section(
+        SalesInvoice, SalesInvoice.invoice_date, SalesReturn, SalesReturn.return_date,
+        SalesReturn.sales_invoice_id,
+    )
+    purchases = build_section(
+        PurchaseInvoice, PurchaseInvoice.invoice_date, PurchaseReturn, PurchaseReturn.return_date,
+        PurchaseReturn.purchase_invoice_id,
+    )
+    return {
+        "year": year,
+        "quarter": quarter,
+        "quarter_label": QUARTER_LABELS[quarter],
+        "date_from": date_from,
+        "date_to": date_to,
+        "sales": sales,
+        "purchases": purchases,
     }
 
 

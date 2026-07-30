@@ -14,6 +14,7 @@ import {
   fetchKardex,
   fetchGeneralLedger,
   fetchIncomeStatement,
+  fetchSeasonalReport,
   fetchTrialBalance,
   fetchVatReport,
   type AgingReport,
@@ -28,12 +29,23 @@ import {
   type ItemRecord,
   type KardexReport,
   type IncomeStatement,
+  type SeasonalReport,
+  type SeasonalSection,
   type TrialBalanceRow,
   type VatReport,
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, isoToJalali, todayIso } from '../lib/jalali'
+
+const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
+const QUARTER_OPTIONS = [
+  { value: 0, label: 'کل سال' },
+  { value: 1, label: 'بهار' },
+  { value: 2, label: 'تابستان' },
+  { value: 3, label: 'پاییز' },
+  { value: 4, label: 'زمستان' },
+]
 
 type ReportKind =
   | 'trial-balance'
@@ -49,6 +61,7 @@ type ReportKind =
   | 'contact-statement'
   | 'inventory'
   | 'kardex'
+  | 'seasonal'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -71,6 +84,9 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [kardex, setKardex] = useState<KardexReport | null>(null)
   const [ledgerAccountId, setLedgerAccountId] = useState('')
   const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
+  const [seasonalYear, setSeasonalYear] = useState(() => isoToJalali(todayIso()).jy)
+  const [seasonalQuarter, setSeasonalQuarter] = useState(0)
+  const [seasonal, setSeasonal] = useState<SeasonalReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -80,6 +96,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     setActive(kind)
     setError(null)
     if (kind === 'general-ledger') return // نیاز به انتخاب حساب دارد؛ با دکمه‌ی جدا بارگذاری می‌شود
+    if (kind === 'seasonal') return // نیاز به انتخاب سال/فصل دارد؛ با دکمه‌ی جدا
     if (kind === 'contact-statement') {
       // نیاز به انتخاب طرف‌حساب دارد؛ فهرست اشخاص را زنده می‌گیریم، خودِ گزارش با دکمه
       if (contacts.length === 0) {
@@ -146,6 +163,18 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     setError(null)
     try {
       setKardex(await fetchKardex(token, kardexItemId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadSeasonal() {
+    setLoading(true)
+    setError(null)
+    try {
+      setSeasonal(await fetchSeasonalReport(token, seasonalYear, seasonalQuarter))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {
@@ -280,6 +309,15 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
             ...kardex.lines.map((l) => [formatJalali(l.entry_date), l.source_label, l.qty_in, l.qty_out, l.unit_cost, l.balance_qty] as (string | number)[]),
           ],
         }
+      case 'seasonal':
+        return seasonal && {
+          name: `معاملات-فصلی-${seasonal.year}-${seasonal.quarter_label}`,
+          headers: ['نوع معامله', 'طرف حساب', 'شخص', 'کد/شناسه ملی', 'کد اقتصادی', 'کد پستی', 'تعداد فاکتور', 'ناخالص', 'تخفیف', 'خالص', 'مالیات و عوارض', 'مبلغ کل'],
+          rows: [
+            ...seasonal.sales.rows.map((r) => ['فروش', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total] as (string | number)[]),
+            ...seasonal.purchases.rows.map((r) => ['خرید', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total] as (string | number)[]),
+          ],
+        }
       default:
         return null
     }
@@ -304,6 +342,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     { key: 'contact-statement', label: 'صورت‌حساب اشخاص' },
     { key: 'inventory', label: 'ارزش موجودی انبار' },
     { key: 'kardex', label: 'کاردکس کالا' },
+    { key: 'seasonal', label: 'معاملات فصلی (م۱۶۹)' },
   ]
 
   return (
@@ -407,6 +446,85 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {active === 'seasonal' && (
+        <div className="check-actions">
+          <input
+            type="number"
+            min={1300}
+            max={1500}
+            value={seasonalYear}
+            onChange={(e) => setSeasonalYear(Number(e.target.value) || seasonalYear)}
+            placeholder="سال شمسی"
+            style={{ width: 110 }}
+          />
+          <select value={seasonalQuarter} onChange={(e) => setSeasonalQuarter(Number(e.target.value))}>
+            {QUARTER_OPTIONS.map((q) => (
+              <option key={q.value} value={q.value}>{q.label}</option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void loadSeasonal()}>
+            <Search size={13} /> نمایش
+          </button>
+        </div>
+      )}
+
+      {active === 'seasonal' && seasonal && (
+        <div>
+          <h3>
+            معاملات {seasonal.quarter_label} سال {fa(seasonal.year)} — {formatJalali(seasonal.date_from)} تا {formatJalali(seasonal.date_to)}
+          </h3>
+          <p className="hint">
+            تجمیعِ خرید و فروش به تفکیکِ طرف حساب، برای سامانه‌ی معاملاتِ فصلیِ سازمانِ امور مالیاتی (ماده ۱۶۹ ق.م.م).
+            هویتِ مالیاتیِ هر طرف حساب (کد/شناسه‌ی ملی و کد اقتصادی) در صفحه‌ی «اشخاص» وارد می‌شود.
+          </p>
+          {([['فروش', seasonal.sales], ['خرید', seasonal.purchases]] as [string, SeasonalSection][]).map(([title, section]) => (
+            <div key={title} style={{ marginTop: 16 }}>
+              <h4>{title}</h4>
+              {section.rows.length === 0 ? (
+                <p className="hint">در این فصل معامله‌ای ثبت نشده.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>طرف حساب</th>
+                        <th>شخص</th>
+                        <th>کد/شناسه ملی</th>
+                        <th>کد اقتصادی</th>
+                        <th>تعداد</th>
+                        <th>خالص</th>
+                        <th>مالیات و عوارض</th>
+                        <th>مبلغ کل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.rows.map((r, i) => (
+                        <tr key={r.contact_id ?? `agg-${i}`}>
+                          <td>{r.contact_name}</td>
+                          <td>{ENTITY_LABEL[r.entity_type]}</td>
+                          <td>{r.national_id ?? '—'}</td>
+                          <td>{r.economic_code ?? '—'}</td>
+                          <td>{fa(r.invoice_count)}</td>
+                          <td className="money-cell">{fa(r.net)}</td>
+                          <td className="money-cell">{fa(r.vat)}</td>
+                          <td className="money-cell">{fa(r.total)}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td colSpan={5}>جمع {title}</td>
+                        <td className="invoice-total">{fa(section.total_net)}</td>
+                        <td className="invoice-total">{fa(section.total_vat)}</td>
+                        <td className="invoice-total">{fa(section.total_total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
