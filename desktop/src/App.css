@@ -790,6 +790,10 @@ button:disabled {
    با portal به body می‌رود تا داخلِ جدولِ overflow-دار بریده نشود. */
 .item-picker-pop {
   z-index: 200;
+  /* جهت را صریح می‌گذاریم چون با portal به body می‌رود؛ به ارث‌بریِ RTL تکیه نمی‌کنیم
+     تا نام/کد/واحد همیشه مرتب و راست‌چین بنشیند. */
+  direction: rtl;
+  text-align: right;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -811,6 +815,7 @@ button:disabled {
   padding: 0;
   font: inherit;
   color: var(--text);
+  text-align: right;
   box-shadow: none !important;
 }
 .item-picker-search input:focus { outline: none; }
@@ -824,16 +829,18 @@ button:disabled {
 .item-picker-opt {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 6px 9px;
+  gap: 2px;
+  padding: 7px 10px;
   border-radius: 6px;
   cursor: pointer;
 }
 .item-picker-opt.active { background: var(--surface-hover); }
 .item-picker-opt.selected { background: var(--accent-bg); }
 .item-picker-opt.disabled { opacity: 0.4; cursor: not-allowed; }
-.item-picker-opt-name { font-size: 13px; color: var(--text); }
-.item-picker-opt-meta { font-size: 11px; color: var(--text-muted); }
+.item-picker-opt-name { font-size: 13px; color: var(--text); text-align: right; }
+/* متادیتا کدِ لاتین (SKU/بارکد) + واحدِ فارسی را قاطی دارد؛ با جهتِ LTRِ صریح و
+   راست‌چین، همیشه تمیز و قطعی «A-001 · عدد» خوانده می‌شود (نه جابه‌جا/نامرتب). */
+.item-picker-opt-meta { font-size: 11px; color: var(--text-muted); direction: ltr; text-align: right; }
 .item-picker-empty { padding: 12px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
 
 /* ── ردیفِ بازشوندهٔ جزئیاتِ فاکتور (InvoiceList) ── */
