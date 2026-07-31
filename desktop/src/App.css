@@ -2837,9 +2837,88 @@ button:disabled {
   font-size: 15px;
 }
 .pos-note { margin-top: 10px; font-size: 12px; line-height: 1.7; }
+/* روی دسکتاپ فقط آیکنِ سطلِ حذف؛ متنِ «حذف» مخصوصِ کارتِ موبایل است */
+.pos-remove-text { display: none; }
 
 @media (max-width: 860px) {
   .pos-grid { grid-template-columns: 1fr; }
+  /* نوارِ ابزار: هر کنترل عرضِ کامل تا انگشت راحت بزند */
+  .pos-toolbar { gap: 10px 12px; }
+  .pos-toolbar label { flex: 1 1 45%; }
+  .pos-toolbar select { width: 100%; }
+  .pos-toolbar input { width: 100% !important; }
+}
+
+/* ── موبایل: سبدِ صندوق به‌جای جدولِ فشرده/اسکرولِ افقی، «کارتِ برچسب‌دار» می‌شود
+   (هم‌الگو با ردیف‌های فاکتور فروش). سرِ کارت نامِ کالاست؛ تعداد/قیمت/جمع هرکدام یک
+   خط با برچسبِ راست؛ حذف یک دکمه‌ی تمام‌عرضِ قابل‌لمس. */
+@media (max-width: 640px) {
+  .pos-cart,
+  .pos-cart tbody { display: block; }
+  .pos-cart thead { display: none; }
+  .pos-cart tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 6px 12px;
+    margin-bottom: 12px;
+  }
+  .pos-cart td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+  }
+  .pos-cart tr td:last-child { border-bottom: 0; }
+  /* نامِ کالا = سرِ کارت: تمام‌عرض، پررنگ، بدونِ برچسب */
+  .pos-cart td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+    font-size: 14.5px;
+  }
+  .pos-cart td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* ورودی/کنترل فضای باقی‌مانده را می‌گیرد و به سمتِ چپ می‌چسبد */
+  .pos-cart td .pos-qty { margin-inline-start: auto; }
+  .pos-cart td .pos-price {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 180px;
+    text-align: left;
+  }
+  .pos-cart td.money-cell { font-weight: 700; color: var(--text-h); }
+  /* سلولِ حذف: دکمه‌ی تمام‌عرضِ متن‌دار */
+  .pos-cart td.pos-remove-cell { justify-content: center; padding-top: 10px; }
+  .pos-cart td.pos-remove-cell .icon-btn-danger {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px;
+  }
+  .pos-remove-text { display: inline; }
+
+  /* کنترل‌های تخفیف/رند: هر فیلد عرضِ کامل، دکمه‌های رند کشیده و قابل‌لمس */
+  .pos-adjust label { flex: 1 1 100%; }
+  .pos-adjust input { width: 100%; }
+  .pos-adjust .qty-with-unit { width: 100%; }
+  .pos-adjust .qty-with-unit input { flex: 1 1 auto; }
+  .pos-adjust > label > .seg-toggle { width: 100%; }
+  .pos-adjust > label > .seg-toggle button { flex: 1 1 auto; text-align: center; }
 }
 .due-badge {
   margin-inline-start: 6px;

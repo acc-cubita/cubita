@@ -302,19 +302,19 @@ export function PosPage({ token }: { token: string }) {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td data-label="تعداد">
                         <div className="pos-qty">
                           <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
                           <input type="number" min="0" step="any" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value))} />
                           <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
                         </div>
                       </td>
-                      <td>
+                      <td data-label="قیمت واحد">
                         <input className="pos-price" type="number" min="0" value={l.unitPrice} onChange={(e) => setPrice(l.item.id, Number(e.target.value))} />
                       </td>
-                      <td className="money-cell">{fa(l.qty * l.unitPrice)}</td>
-                      <td>
-                        <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                      <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
+                      <td className="pos-remove-cell">
+                        <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /> <span className="pos-remove-text">حذف</span></button>
                       </td>
                     </tr>
                     )
