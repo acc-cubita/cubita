@@ -19,6 +19,15 @@ def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
 
+def record_login(user) -> None:
+    """آخرین ورودِ موفق را ثبت می‌کند — برای «آخرین فعالیت» در پنلِ مدیریت.
+
+    فقط از مسیرهای اعتبارسنجی‌شده‌ی ورود صدا زده می‌شود (login، بازیابیِ رمز،
+    پذیرشِ دعوت). commit را get_db در پایانِ درخواست انجام می‌دهد.
+    """
+    user.last_login_at = datetime.now(timezone.utc)
+
+
 def set_password(user, password: str) -> None:
     """تنها مسیر مجاز برای عوض کردن رمز.
 

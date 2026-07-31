@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -124,6 +125,11 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: یک‌ثانیه‌ای که تستش گاهی سبز و گاهی قرمز می‌شد. شمارنده اصلاً ساعت را وارد
     #: مقایسه نمی‌کند و این دسته از باگ را حذف می‌کند، نه اینکه کوچکش کند.
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    #: آخرین ورودِ موفق. NULL یعنی هرگز وارد نشده (مثلاً مالکی که همین حالا دستی
+    #: ساخته شده و رمزش را هنوز به او نداده‌ایم). فقط مسیرهای اعتبارسنجی‌شده‌ی ورود
+    #: آن را جلو می‌برند؛ برای پنلِ مدیریت («آخرین فعالیت») خوانده می‌شود.
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # نقش روی User نمی‌نشیند: یک نفر می‌تواند در یک کسب‌وکار حسابدار و در دیگری فقط
     # بیننده باشد، پس نقش خاصیتِ «عضویت» است نه خاصیتِ «کاربر».

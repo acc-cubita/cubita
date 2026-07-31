@@ -33,10 +33,32 @@ def _owner_membership(db: Session, tenant_id: UUID) -> Membership | None:
     )
 
 
+def _login_key(dt: datetime | None) -> float:
+    """کلیدِ مرتب‌سازیِ نزولیِ آخرین‌ورود؛ «هرگز وارد نشده» ته می‌نشیند."""
+    return dt.timestamp() if dt is not None else float("-inf")
+
+
 def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) -> dict:
     owner = min(members, key=lambda mu: mu[0].created_at or _LONG_AGO)[1] if members else None
     state = subscriptions.state_for(db, tenant.id)
     sub = subscriptions.current_subscription(db, tenant.id)
+
+    logins = [u.last_login_at for _m, u in members if u.last_login_at is not None]
+    last_activity = max(logins) if logins else None
+
+    users = [
+        {
+            "name": u.name,
+            "email": u.email,
+            "status": m.status,
+            "is_owner": owner is not None and u.id == owner.id,
+            "last_login_at": u.last_login_at,
+        }
+        for m, u in members
+    ]
+    # مالک اول، سپس تازه‌ترین ورود بالاتر؛ «هرگز» ته فهرست.
+    users.sort(key=lambda d: (not d["is_owner"], -_login_key(d["last_login_at"])))
+
     return {
         "tenant_id": tenant.id,
         "name": tenant.name,
@@ -51,6 +73,9 @@ def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) ->
         "expires_at": state.expires_at,
         "days_left": state.days_left,
         "plan_name": sub.plan.name if sub and sub.plan else "",
+        "owner_last_login_at": owner.last_login_at if owner else None,
+        "last_activity_at": last_activity,
+        "users": users,
     }
 
 

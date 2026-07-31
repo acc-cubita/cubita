@@ -29,7 +29,7 @@ from app.schemas.members import (
     ForgotPasswordIn,
     ResetPasswordIn,
 )
-from app.security import create_access_token, set_password, verify_password
+from app.security import create_access_token, record_login, set_password, verify_password
 from app.services import members
 from app.services.mailer import send_password_reset
 from app.services.provisioning import signup_new_business
@@ -95,6 +95,7 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
 
     # توکن همیشه به یک کسب‌وکار مشخص گره می‌خورد. کاربری که چند عضویت دارد با
     # اولی وارد می‌شود و بعد می‌تواند از /switch-tenant جابه‌جا شود.
+    record_login(user)
     return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
 
 
@@ -210,6 +211,7 @@ def reset_password(data: ResetPasswordIn, db: Session = Depends(get_db)):
     if not memberships:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در هیچ کسب‌وکاری ندارید")
 
+    record_login(user)
     return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
 
 

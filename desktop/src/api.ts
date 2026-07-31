@@ -1009,6 +1009,14 @@ export const fulfillPurchase = (token: string, purchaseId: string, adminNotes: s
   authedSend<PurchaseRecord>(token, 'POST', `/api/admin/purchases/${purchaseId}/fulfill`, { admin_notes: adminNotes })
 
 // ── مدیریت اکانت‌ها (فقط سوپرادمین) ──────────────────────────────────────────
+export interface AdminAccountUser {
+  name: string
+  email: string
+  status: string // عضویت: active | invited | disabled
+  is_owner: boolean
+  last_login_at: string | null
+}
+
 export interface AdminAccount {
   tenant_id: string
   name: string
@@ -1023,6 +1031,9 @@ export interface AdminAccount {
   expires_at: string | null
   days_left: number | null
   plan_name: string
+  owner_last_login_at: string | null
+  last_activity_at: string | null
+  users: AdminAccountUser[]
 }
 
 export const fetchAdminAccounts = (token: string) =>

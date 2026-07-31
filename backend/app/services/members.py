@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
-from app.security import hash_password, set_password
+from app.security import hash_password, record_login, set_password
 from app.services import tokens
 
 #: ماژول مجوز. هیچ نقش پیش‌فرضی جز «مالک» آن را ندارد، چون فقط مالک wildcard دارد —
@@ -183,6 +183,7 @@ def accept_invite(db: Session, *, raw_token: str, password: str, name: str | Non
     if name and name.strip():
         user.name = name.strip()
     membership.status = "active"
+    record_login(user)  # پذیرشِ دعوت هم یک ورودِ موفق است
     db.flush()
 
     return user, token.tenant_id

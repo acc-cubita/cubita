@@ -125,3 +125,37 @@ def test_cannot_delete_own_account(super_client):
     rows = super_client.get("/api/admin/accounts").json()
     own = next(r for r in rows if r["owner_email"] == OWNER)
     assert super_client.delete(f"/api/admin/accounts/{own['tenant_id']}").status_code == 400
+
+
+# --- فعالیتِ کاربران --------------------------------------------------------
+
+def test_new_account_has_users_but_no_activity(super_client):
+    row = _create(super_client, email="act@example.com").json()
+    # اکانتِ تازه یک کاربرِ مالک دارد که هنوز وارد نشده
+    assert row["owner_last_login_at"] is None
+    assert row["last_activity_at"] is None
+    assert len(row["users"]) == 1
+    owner = row["users"][0]
+    assert owner["is_owner"] is True
+    assert owner["email"] == "act@example.com"
+    assert owner["last_login_at"] is None
+
+
+def test_login_updates_last_activity(super_client):
+    # اکانتی با ایمیلِ معتبر می‌سازیم تا بتوانیم واقعاً با /login وارد شویم
+    # (ایمیلِ seed پسوندِ رزروِ .invalid دارد و EmailStr ردش می‌کند).
+    email, pw = "login@example.com", "verylongpassword"
+    tid = _create(super_client, email=email).json()["tenant_id"]
+
+    before = next(r for r in super_client.get("/api/admin/accounts").json() if r["tenant_id"] == tid)
+    assert before["owner_last_login_at"] is None
+    assert before["last_activity_at"] is None
+
+    # ورودِ واقعی (این اندپوینت auth را override نمی‌کند)
+    r = super_client.post("/api/auth/login", json={"email": email, "password": pw})
+    assert r.status_code == 200, r.text
+
+    after = next(r for r in super_client.get("/api/admin/accounts").json() if r["tenant_id"] == tid)
+    assert after["owner_last_login_at"] is not None
+    assert after["last_activity_at"] is not None
+    assert any(u["is_owner"] and u["last_login_at"] is not None for u in after["users"])

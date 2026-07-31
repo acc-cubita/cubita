@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, RefreshCw, UserPlus, CalendarClock, Users, CheckCircle2,
-  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock,
+  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
@@ -26,12 +26,42 @@ const STATUS_LABEL: Record<string, string> = {
 }
 const EXTEND_PRESETS = [30, 90, 180, 365]
 
+const MEMBERSHIP_LABEL: Record<string, string> = {
+  active: 'فعال', invited: 'دعوت‌شده', disabled: 'غیرفعال',
+}
+
+/** «۳ روز پیش» / «همین حالا» / «هرگز» — نمایشِ انسانیِ آخرین فعالیت. */
+function relativeFa(iso: string | null): string {
+  if (!iso) return 'هرگز وارد نشده'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return '—'
+  const sec = Math.floor((Date.now() - then) / 1000)
+  if (sec < 0) return 'همین حالا'
+  if (sec < 90) return 'همین حالا'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${fa(min)} دقیقه پیش`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${fa(hr)} ساعت پیش`
+  const day = Math.floor(hr / 24)
+  if (day < 30) return `${fa(day)} روز پیش`
+  const month = Math.floor(day / 30)
+  if (month < 12) return `${fa(month)} ماه پیش`
+  return `${fa(Math.floor(day / 365))} سال پیش`
+}
+
+/** آخرین فعالیت به‌شکلِ «۳ روز پیش · ۱۴۰۴/۰۵/۰۸». */
+function lastSeenText(iso: string | null): string {
+  if (!iso) return 'هرگز وارد نشده'
+  return `${relativeFa(iso)} · ${formatJalali(iso.slice(0, 10))}`
+}
+
 export function AccountsAdminPage({ token }: { token: string }) {
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [extendId, setExtendId] = useState<string | null>(null)
+  const [usersId, setUsersId] = useState<string | null>(null)
 
   // فرم ساخت
   const [showCreate, setShowCreate] = useState(false)
@@ -54,11 +84,13 @@ export function AccountsAdminPage({ token }: { token: string }) {
 
   const kpis = useMemo(() => {
     const a = accounts ?? []
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
     return {
       total: a.length,
       active: a.filter((x) => x.subscription_status === 'active').length,
       expiring: a.filter((x) => (x.subscription_status === 'active' || x.subscription_status === 'grace') && x.days_left != null && x.days_left <= 14).length,
       trouble: a.filter((x) => x.subscription_status === 'expired' || x.status === 'suspended').length,
+      activeWeek: a.filter((x) => x.last_activity_at != null && new Date(x.last_activity_at).getTime() >= weekAgo).length,
     }
   }, [accounts])
 
@@ -138,6 +170,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
       <div className="stat-grid">
         <StatCard icon={<Users size={18} />} label="کل اکانت‌ها" value={fa(kpis.total)} />
         <StatCard icon={<CheckCircle2 size={18} />} label="اشتراکِ فعال" value={fa(kpis.active)} tone="success" />
+        <StatCard icon={<Activity size={18} />} label="فعال در ۷ روزِ اخیر" value={fa(kpis.activeWeek)} tone={kpis.activeWeek ? 'success' : undefined} />
         <StatCard icon={<Clock size={18} />} label="رو به انقضا (≤۱۴ روز)" value={fa(kpis.expiring)} tone={kpis.expiring ? 'warning' : undefined} />
         <StatCard icon={<AlertTriangle size={18} />} label="منقضی/تعلیق" value={fa(kpis.trouble)} tone={kpis.trouble ? 'danger' : undefined} />
       </div>
@@ -201,11 +234,32 @@ export function AccountsAdminPage({ token }: { token: string }) {
 
                 <div className="account-meta">
                   <span><CalendarClock size={13} /> انقضا: {a.expires_at ? formatJalali(a.expires_at.slice(0, 10)) : '—'} <strong>({daysText(a)})</strong></span>
+                  <span><Activity size={13} /> آخرین فعالیت: <strong>{lastSeenText(a.last_activity_at)}</strong></span>
                   <span>پلن: {a.plan_name || '—'}</span>
                   <span><Users size={13} /> {fa(a.user_count)}{a.max_users != null ? ` / ${fa(a.max_users)}` : ''} کاربر</span>
                   <span>ساخت: {formatJalali(a.created_at.slice(0, 10))}</span>
                   {a.status !== 'active' && <span className="account-suspended-tag">{STATUS_LABEL[a.status] ?? a.status}</span>}
                 </div>
+
+                {usersId === a.tenant_id && (
+                  <div className="account-users">
+                    {a.users.map((u) => (
+                      <div key={u.email} className="account-user-row">
+                        <div className="account-user-id">
+                          <span className="account-user-name">
+                            {u.name}
+                            {u.is_owner && <span className="account-user-owner">مالک</span>}
+                            {u.status !== 'active' && <span className="account-user-tag">{MEMBERSHIP_LABEL[u.status] ?? u.status}</span>}
+                          </span>
+                          <span className="account-user-email">{u.email}</span>
+                        </div>
+                        <span className={`account-user-seen${u.last_login_at ? '' : ' is-never'}`}>
+                          {u.last_login_at ? lastSeenText(u.last_login_at) : 'هرگز وارد نشده'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {extendId === a.tenant_id && (
                   <div className="account-extend">
@@ -218,6 +272,10 @@ export function AccountsAdminPage({ token }: { token: string }) {
                 )}
 
                 <div className="account-actions">
+                  <button type="button" onClick={() => setUsersId(usersId === a.tenant_id ? null : a.tenant_id)}>
+                    <Users size={13} /> کاربرها ({fa(a.user_count)})
+                    {usersId === a.tenant_id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
                   <button type="button" disabled={busyId === a.tenant_id} onClick={() => setExtendId(extendId === a.tenant_id ? null : a.tenant_id)}>
                     <CalendarClock size={13} /> تمدید
                   </button>

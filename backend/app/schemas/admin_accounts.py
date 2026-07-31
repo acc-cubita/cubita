@@ -7,6 +7,15 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator
 MIN_PASSWORD = 10  # هم‌راستا با SignupIn
 
 
+class AccountUserOut(BaseModel):
+    """یک کاربرِ اکانت به‌همراه آخرین فعالیت — برای بخشِ «کاربرها» در پنلِ مدیریت."""
+    name: str
+    email: str
+    status: str  # وضعیتِ عضویت: active | invited | disabled
+    is_owner: bool
+    last_login_at: datetime | None
+
+
 class AccountRowOut(BaseModel):
     tenant_id: UUID
     name: str
@@ -21,6 +30,10 @@ class AccountRowOut(BaseModel):
     expires_at: datetime | None
     days_left: int | None
     plan_name: str
+    #: آخرین ورودِ مالک، و آخرین ورودِ هر کاربرِ اکانت (بیشینه‌ی همه) — NULL یعنی هرگز.
+    owner_last_login_at: datetime | None
+    last_activity_at: datetime | None
+    users: list[AccountUserOut]
 
 
 class CreateAccountIn(BaseModel):
