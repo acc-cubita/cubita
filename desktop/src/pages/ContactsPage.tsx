@@ -267,7 +267,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
             </label>
           </div>
           <label>
-            سقف اعتبار (تومان)
+            سقف اعتبار (ریال)
             <input
               type="number"
               min="0"
@@ -392,7 +392,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           </label>
           <div className="field-row">
             <label>
-              مبلغ (تومان)
+              مبلغ (ریال)
               <input type="number" min="0" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} required />
             </label>
             <label>
@@ -489,7 +489,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           label="مجموع دریافت‌ها"
           value={faMoney(kpis.received)}
           tone="success"
-          hint="تومان"
+          hint="ریال"
         />
       </div>
 

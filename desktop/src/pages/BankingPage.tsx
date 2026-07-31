@@ -59,8 +59,8 @@ export function BankingPage({
 
       <div className="stat-grid">
         <StatCard icon={<Landmark size={18} />} label="حساب‌های بانکی" value={faMoney(kpis.banks)} />
-        <StatCard icon={<ScrollText size={18} />} label="چک دریافتنیِ باز" value={faMoney(kpis.recvCount)} tone="success" hint={`${faMoney(kpis.recvSum)} تومان`} />
-        <StatCard icon={<ScrollText size={18} />} label="چک پرداختنیِ باز" value={faMoney(kpis.payCount)} hint={`${faMoney(kpis.paySum)} تومان`} />
+        <StatCard icon={<ScrollText size={18} />} label="چک دریافتنیِ باز" value={faMoney(kpis.recvCount)} tone="success" hint={`${faMoney(kpis.recvSum)} ریال`} />
+        <StatCard icon={<ScrollText size={18} />} label="چک پرداختنیِ باز" value={faMoney(kpis.payCount)} hint={`${faMoney(kpis.paySum)} ریال`} />
         <StatCard
           icon={<CalendarClock size={18} />}
           label="نزدیکِ سررسید (۷ روز)"

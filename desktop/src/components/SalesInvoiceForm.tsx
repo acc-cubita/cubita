@@ -330,13 +330,16 @@ export function SalesInvoiceForm({
                     </select>
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={line.qty}
-                      onChange={(e) => updateLine(i, { qty: e.target.value })}
-                    />
+                    <div className="qty-with-unit">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.qty}
+                        onChange={(e) => updateLine(i, { qty: e.target.value })}
+                      />
+                      {(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? <span className="unit-suffix">{u}</span> : null })()}
+                    </div>
                   </td>
                   <td>
                     <input
@@ -344,6 +347,7 @@ export function SalesInvoiceForm({
                       min="0"
                       value={line.unitPrice}
                       onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
+                      title={(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? `قیمت هر ${u}` : 'قیمت واحد' })()}
                     />
                   </td>
                   <td>
@@ -414,7 +418,7 @@ function CreditBanner({ credit, invoiceTotal }: { credit: CreditStatus; invoiceT
     <div className={`credit-banner ${willExceed ? 'credit-banner--warn' : 'credit-banner--ok'}`}>
       {willExceed && <AlertTriangle size={15} />}
       <span>
-        مانده فعلی: <strong>{fa(outstanding)}</strong> از سقف <strong>{fa(limit)}</strong> تومان
+        مانده فعلی: <strong>{fa(outstanding)}</strong> از سقف <strong>{fa(limit)}</strong> ریال
         {' — '}
         قابل استفاده: <strong>{fa(available)}</strong>
       </span>

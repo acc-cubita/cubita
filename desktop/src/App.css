@@ -707,6 +707,21 @@ button:disabled {
   color: var(--text-muted);
 }
 
+/* تعداد + واحد کنار هم در ردیفِ فاکتور (مثلاً «۲٫۵ متر») */
+.qty-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.qty-with-unit input {
+  min-width: 0;
+}
+.unit-suffix {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ردیفِ پرداختِ درون‌خطیِ قسط (فروش اقساطی) */
 .pay-inline {
   display: flex;

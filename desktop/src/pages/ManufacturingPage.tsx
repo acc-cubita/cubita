@@ -74,7 +74,7 @@ export function ManufacturingPage({ token }: { token: string }) {
         <StatCard icon={<FlaskConical size={18} />} label="فرمول‌های ساخت" value={fa(kpis.boms)} />
         <StatCard icon={<Layers size={18} />} label="فرمول‌های فعال" value={fa(kpis.active)} tone="success" />
         <StatCard icon={<Hammer size={18} />} label="سفارش‌های تولید" value={fa(kpis.orders)} />
-        <StatCard icon={<Package size={18} />} label="ارزش تولیدشده" value={fa(kpis.producedValue)} hint="تومان" />
+        <StatCard icon={<Package size={18} />} label="ارزش تولیدشده" value={fa(kpis.producedValue)} hint="ریال" />
       </div>
 
       <Tabs
@@ -333,7 +333,7 @@ function ProduceTab({
       })
       setQty('')
       setOverhead('')
-      setMsg(`تولید ثبت شد ✓ سفارش شماره ${o.number ?? '—'} — بهای هر واحد: ${fa(Number(o.unit_cost))} تومان`)
+      setMsg(`تولید ثبت شد ✓ سفارش شماره ${o.number ?? '—'} — بهای هر واحد: ${fa(Number(o.unit_cost))} ریال`)
       await onChanged()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -378,7 +378,7 @@ function ProduceTab({
                 <input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} required />
               </label>
               <label>
-                سربار/دستمزد (اختیاری، تومان)
+                سربار/دستمزد (اختیاری، ریال)
                 <input type="number" min="0" value={overhead} onChange={(e) => setOverhead(e.target.value)} placeholder="۰" />
               </label>
             </div>

@@ -65,9 +65,9 @@ export function SalesPage({
 
       <div className="stat-grid">
         <StatCard icon={<FileText size={18} />} label="تعداد فاکتور فروش" value={kpis.count.toLocaleString('fa-IR')} />
-        <StatCard icon={<TrendingUp size={18} />} label="مجموع فروش" value={kpis.total.toLocaleString('fa-IR')} tone="success" hint="تومان (با مالیات)" />
-        <StatCard icon={<CalendarRange size={18} />} label="فروش ۳۰ روز اخیر" value={kpis.last30.toLocaleString('fa-IR')} hint="تومان" />
-        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={kpis.avg.toLocaleString('fa-IR')} hint="تومان" />
+        <StatCard icon={<TrendingUp size={18} />} label="مجموع فروش" value={kpis.total.toLocaleString('fa-IR')} tone="success" hint="ریال (با مالیات)" />
+        <StatCard icon={<CalendarRange size={18} />} label="فروش ۳۰ روز اخیر" value={kpis.last30.toLocaleString('fa-IR')} hint="ریال" />
+        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={kpis.avg.toLocaleString('fa-IR')} hint="ریال" />
       </div>
 
       <Tabs

@@ -206,7 +206,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
               <input type="text" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="اینستاگرام، معرفی، ..." />
             </label>
             <label>
-              ارزش تخمینی (تومان)
+              ارزش تخمینی (ریال)
               <input type="number" min="0" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
             </label>
           </div>
@@ -538,7 +538,7 @@ function LoyaltyTab({
             کسبِ خودکار فعال باشد
           </label>
           <label>
-            به‌ازای هر چند تومان خرید، ۱ امتیاز؟
+            به‌ازای هر چند ریال خرید، ۱ امتیاز؟
             <input type="number" min="0" value={perPoint} onChange={(e) => setPerPoint(e.target.value)} placeholder="مثلاً ۱۰۰۰۰" style={{ width: 140 }} disabled={!autoEnabled} />
           </label>
           <button type="button" className="btn-primary" onClick={() => void saveSettings()}><Save size={13} /> ذخیره</button>

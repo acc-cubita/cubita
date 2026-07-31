@@ -243,7 +243,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
             <div className="stat-inline">
               <span>ردیف‌های دارای مغایرت: <strong>{faInt(varianceCount)}</strong></span>
               <span className={totalVarianceValue < 0 ? 'text-danger' : totalVarianceValue > 0 ? 'text-success' : ''}>
-                ارزش خالص مغایرت: <strong>{faInt(totalVarianceValue)}</strong> تومان
+                ارزش خالص مغایرت: <strong>{faInt(totalVarianceValue)}</strong> ریال
               </span>
             </div>
             <div className="entity-table-wrap">

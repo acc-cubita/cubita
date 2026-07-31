@@ -152,8 +152,8 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
 
       <div className="stat-grid">
         <StatCard icon={<CalendarClock size={18} />} label="قراردادهای فعال" value={fa(kpis.active)} />
-        <StatCard icon={<CircleDollarSign size={18} />} label="مانده‌ی قابل وصول" value={fa(kpis.remaining)} hint="تومان" />
-        <StatCard icon={<Wallet size={18} />} label="اقساط معوق" value={fa(kpis.overdue)} tone={kpis.overdue > 0 ? 'danger' : 'success'} hint="تومان" />
+        <StatCard icon={<CircleDollarSign size={18} />} label="مانده‌ی قابل وصول" value={fa(kpis.remaining)} hint="ریال" />
+        <StatCard icon={<Wallet size={18} />} label="اقساط معوق" value={fa(kpis.overdue)} tone={kpis.overdue > 0 ? 'danger' : 'success'} hint="ریال" />
       </div>
 
       <div className="workspace-split">
@@ -172,7 +172,7 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
             </label>
             <div className="field-row">
               <label>
-                مبلغ کل (تومان)
+                مبلغ کل (ریال)
                 <input type="number" min="0" value={total} onChange={(e) => setTotal(e.target.value)} required />
               </label>
               <label>

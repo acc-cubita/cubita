@@ -6,6 +6,14 @@ import { EmptyState } from './EmptyState'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
+// واحدهای رایج برای انتخابِ سریع؛ «سایر…» اجازه‌ی تایپِ واحدِ دلخواه را می‌دهد.
+// قیمت/بها همیشه «per واحد» است، پس اگر واحد «متر» باشد قیمتِ فروش یعنی قیمتِ هر متر
+// و تعداد می‌تواند اعشاری باشد (مثلاً ۲٫۵ متر).
+const COMMON_UNITS = [
+  'عدد', 'متر', 'متر مربع', 'متر مکعب', 'سانتی‌متر', 'کیلوگرم', 'گرم', 'تن',
+  'لیتر', 'بسته', 'کارتن', 'جعبه', 'جفت', 'دست', 'رول', 'طاقه', 'شاخه', 'عدل', 'ساعت',
+]
+
 interface DraftForm {
   sku: string
   name: string
@@ -201,18 +209,29 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             </label>
             <label>
               واحد
-              <input
-                type="text"
-                value={form.unit}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                placeholder="عدد"
+              <select
+                value={COMMON_UNITS.includes(form.unit) ? form.unit : '__custom__'}
+                onChange={(e) => setForm({ ...form, unit: e.target.value === '__custom__' ? '' : e.target.value })}
                 disabled={!!editingId}
-              />
+              >
+                {COMMON_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                <option value="__custom__">سایر (دستی)…</option>
+              </select>
+              {!COMMON_UNITS.includes(form.unit) && (
+                <input
+                  type="text"
+                  value={form.unit}
+                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  placeholder="واحدِ دلخواه، مثلاً «قواره»"
+                  disabled={!!editingId}
+                  style={{ marginTop: 6 }}
+                />
+              )}
             </label>
           </div>
           <div className="field-row">
             <label>
-              قیمت فروش (تومان)
+              قیمت فروش (ریال، هر {form.unit || 'واحد'})
               <input
                 type="number"
                 min="0"

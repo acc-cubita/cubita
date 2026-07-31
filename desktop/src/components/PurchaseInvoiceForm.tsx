@@ -278,13 +278,16 @@ export function PurchaseInvoiceForm({
                     </select>
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={line.qty}
-                      onChange={(e) => updateLine(i, { qty: e.target.value })}
-                    />
+                    <div className="qty-with-unit">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.qty}
+                        onChange={(e) => updateLine(i, { qty: e.target.value })}
+                      />
+                      {(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? <span className="unit-suffix">{u}</span> : null })()}
+                    </div>
                   </td>
                   <td>
                     <input
@@ -292,6 +295,7 @@ export function PurchaseInvoiceForm({
                       min="0"
                       value={line.unitCost}
                       onChange={(e) => updateLine(i, { unitCost: e.target.value })}
+                      title={(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? `بهای هر ${u}` : 'بهای واحد' })()}
                     />
                   </td>
                   <td>

@@ -164,7 +164,7 @@ export function PosPage({ token }: { token: string }) {
       )) as { number?: number }
       idem.current = newIdempotencyKey()
       const num = res?.number != null ? res.number.toLocaleString('fa-IR') : '—'
-      setMessage(`فروش ثبت شد ✓ فاکتور شماره ${num}${change > 0 ? ` — بازگردانده به مشتری: ${fa(change)} تومان` : ''}`)
+      setMessage(`فروش ثبت شد ✓ فاکتور شماره ${num}${change > 0 ? ` — بازگردانده به مشتری: ${fa(change)} ریال` : ''}`)
       setCart([])
       setReceived('')
       scanRef.current?.focus()
@@ -262,11 +262,14 @@ export function PosPage({ token }: { token: string }) {
                 <tbody>
                   {cart.map((l) => (
                     <tr key={l.item.id}>
-                      <td className="entity-name">{l.item.name}</td>
+                      <td className="entity-name">
+                        {l.item.name}
+                        {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
+                      </td>
                       <td>
                         <div className="pos-qty">
                           <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
-                          <input type="number" min="0" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value))} />
+                          <input type="number" min="0" step="any" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value))} />
                           <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
                         </div>
                       </td>
@@ -293,12 +296,12 @@ export function PosPage({ token }: { token: string }) {
           </div>
 
           <label className="pos-received">
-            مبلغ دریافتی از مشتری (تومان)
+            مبلغ دریافتی از مشتری (ریال)
             <input type="number" min="0" value={received} onChange={(e) => setReceived(e.target.value)} placeholder="برای محاسبه‌ی باقی‌مانده" />
           </label>
           {Number(received) > 0 && (
             <div className={`pos-change ${change < 0 ? 'neg' : ''}`}>
-              {change >= 0 ? `باقی‌مانده به مشتری: ${fa(change)} تومان` : `کسری: ${fa(-change)} تومان`}
+              {change >= 0 ? `باقی‌مانده به مشتری: ${fa(change)} ریال` : `کسری: ${fa(-change)} ریال`}
             </div>
           )}
 
