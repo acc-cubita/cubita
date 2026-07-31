@@ -57,6 +57,17 @@ class SalesReturnOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ReturnableLineOut(BaseModel):
+    """یک ردیفِ «قابلِ برگشت» از یک فاکتور فروش."""
+    item_id: UUID
+    item_name: str
+    unit: str
+    sold: Decimal
+    already_returned: Decimal
+    remaining: Decimal
+    unit_price: Decimal
+
+
 class PurchaseReturnLineIn(BaseModel):
     item_id: UUID
     qty: Decimal

@@ -55,6 +55,34 @@ def _sales_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dic
     return summary
 
 
+def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
+    """برای هر کالای فاکتور فروش: فروخته‌شده، قبلاً برگشت‌خورده، و باقی‌ماندهٔ قابل‌برگشت.
+
+    تا فرمِ برگشت «باقی‌مانده» را نشان دهد نه «تعداد فروخته‌شده» — کاربر همان لحظه
+    بداند چقدر هنوز قابلِ برگشت است.
+    """
+    invoice = db.get(SalesInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
+    summary = _sales_invoice_line_summary(db, invoice_id)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(summary.keys()))).all()}
+    rows: list[dict] = []
+    for item_id, info in summary.items():
+        it = items.get(item_id)
+        rows.append(
+            {
+                "item_id": item_id,
+                "item_name": it.name if it else "",
+                "unit": it.unit if it else "",
+                "sold": info["qty"],
+                "already_returned": info["already_returned"],
+                "remaining": info["remaining"],
+                "unit_price": info["unit_price"],
+            }
+        )
+    return rows
+
+
 def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesReturn:
     assert_period_open(db, data.return_date)
 

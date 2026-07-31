@@ -200,6 +200,7 @@ def render_invoice(
     total: Decimal,
     tax_amount: Decimal = Decimal(0),
     total_discount: Decimal = Decimal(0),
+    rounding: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
     currency_line: str = "",
@@ -212,11 +213,12 @@ def render_invoice(
 
     currency_banner = f"<div class='currency-note'>{escape(currency_line)}</div>" if currency_line else ""
 
-    # total همان جمعِ خالص (بدون مالیات) است؛ اگر مالیاتی هست، تفکیک نشان داده می‌شود.
+    # total همان جمعِ خالص (بدون مالیات) است؛ اگر مالیات یا گِردکردنی هست، تفکیک نشان داده می‌شود.
     subtotal = Decimal(str(total))
     tax = Decimal(str(tax_amount or 0))
     discount = Decimal(str(total_discount or 0))
-    grand_total = subtotal + tax
+    rnd = Decimal(str(rounding or 0))
+    grand_total = subtotal + tax + rnd
 
     rows = []
     if discount > 0:
@@ -224,9 +226,12 @@ def render_invoice(
         # بدون تخفیف دقیقاً مثل قبل چاپ شوند.
         rows.append(f"<tr><td colspan='7'>جمع ناخالص (ریال)</td><td class='num'>{fa_number(subtotal + discount)}</td></tr>")
         rows.append(f"<tr><td colspan='7'>جمع تخفیف (ریال)</td><td class='num'>{fa_number(discount)}</td></tr>")
-    if tax > 0:
+    if tax > 0 or rnd != 0:
         rows.append(f"<tr><td colspan='7'>جمع خالص (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
-        rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
+        if tax > 0:
+            rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
+        if rnd != 0:
+            rows.append(f"<tr><td colspan='7'>گِرد کردن (ریال)</td><td class='num'>{fa_number(rnd)}</td></tr>")
         rows.append(f"<tr><td colspan='7'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
     else:
         rows.append(f"<tr><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")

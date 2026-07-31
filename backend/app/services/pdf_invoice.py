@@ -97,6 +97,7 @@ def render_invoice_pdf(
     total: Decimal,
     tax_amount: Decimal = Decimal(0),
     total_discount: Decimal = Decimal(0),
+    rounding: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
     currency_line: str = "",
@@ -108,7 +109,8 @@ def render_invoice_pdf(
     subtotal = Decimal(str(total))
     tax = Decimal(str(tax_amount or 0))
     discount = Decimal(str(total_discount or 0))
-    grand_total = subtotal + tax
+    rnd = Decimal(str(rounding or 0))
+    grand_total = subtotal + tax + rnd
 
     # --- سربرگ ---
     pdf.set_text_color(*_INK)
@@ -209,9 +211,12 @@ def render_invoice_pdf(
     if discount > 0:
         y = total_row(y, "جمع ناخالص (ریال)", subtotal + discount, bold=False)
         y = total_row(y, "جمع تخفیف (ریال)", discount, bold=False)
-    if tax > 0:
+    if tax > 0 or rnd != 0:
         y = total_row(y, "جمع خالص (ریال)", subtotal, bold=False)
-        y = total_row(y, "مالیات بر ارزش افزوده (ریال)", tax, bold=False)
+        if tax > 0:
+            y = total_row(y, "مالیات بر ارزش افزوده (ریال)", tax, bold=False)
+        if rnd != 0:
+            y = total_row(y, "گِرد کردن (ریال)", rnd, bold=False)
         y = total_row(y, "مبلغ قابل پرداخت (ریال)", grand_total)
     else:
         y = total_row(y, "جمع کل (ریال)", subtotal)

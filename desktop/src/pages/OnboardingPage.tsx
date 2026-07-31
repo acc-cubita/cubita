@@ -3,7 +3,6 @@ import { Download, FileUp, Rocket, Save, Table2, Trash2, Wallet } from 'lucide-r
 import {
   createOpeningBalances,
   fetchAccountsLive,
-  fetchContacts,
   fetchItemsLive,
   fetchOpeningStatus,
   fetchWarehousesLive,

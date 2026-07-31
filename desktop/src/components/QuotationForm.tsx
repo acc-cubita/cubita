@@ -4,6 +4,7 @@ import type { ItemCache, WarehouseCache } from '../electron.d'
 import { createSalesQuotation, fetchContacts, fetchStockLevels, type ContactRecord, type StockLevel } from '../api'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { ItemPicker } from './ItemPicker'
 import { todayIso } from '../lib/jalali'
 
 interface DraftLine {
@@ -217,10 +218,7 @@ export function QuotationForm({
                 return (
                   <tr key={i}>
                     <td>
-                      <select value={line.itemId} onChange={(e) => chooseLineItem(i, e.target.value)}>
-                        <option value="">— انتخاب کالا —</option>
-                        {items.map((it) => (<option key={it.id} value={it.id}>{it.name}</option>))}
-                      </select>
+                      <ItemPicker items={items} value={line.itemId} onChange={(id) => chooseLineItem(i, id)} />
                     </td>
                     <td>
                       <div className="qty-with-unit">

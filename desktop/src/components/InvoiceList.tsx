@@ -1,49 +1,65 @@
-import { useEffect, useState } from 'react'
-import { Ban, FileText, Printer, FileDown } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { Ban, FileText, Printer, FileDown, ChevronDown, ChevronLeft, Copy } from 'lucide-react'
 import {
   can,
   downloadPurchaseInvoicePdf,
   downloadSalesInvoicePdf,
+  fetchContacts,
   fetchPurchaseInvoices,
   fetchSalesInvoices,
   printPurchaseInvoice,
   printSalesInvoice,
   voidPurchaseInvoice,
   voidSalesInvoice,
+  type ContactRecord,
   type MeResponse,
+  type PurchaseInvoiceRecord,
+  type SalesInvoiceRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
 
-type Row = {
-  id: string
-  number: number | null
-  invoice_date: string
-  description: string
-  total_amount: string
-  tax_amount: string
-  voided_at: string | null
-  void_reason: string
-}
+type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
+type NamedItem = { id: string; name: string }
 
-/** فهرست فاکتورها با امکان چاپ و ابطال.
+const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+/** فهرست فاکتورها با جزئیاتِ بازشونده، سودِ ناخالص (فروش)، چاپ، PDF، ابطال و رونوشت.
  *
- * تا امروز فاکتور ثبت‌شده هیچ‌جا فهرست نمی‌شد و هیچ کاری نمی‌شد رویش کرد — نه
- * چاپ، نه تصحیح. یعنی اشتباهِ ثبت‌شده دائمی بود.
+ * تا امروز فاکتور ثبت‌شده فقط خلاصه فهرست می‌شد؛ برای دیدنِ اقلام باید چاپ می‌کردی و
+ * سود هیچ‌جا دیده نمی‌شد. حالا هر ردیف باز می‌شود و ردیف‌ها + بهای تمام‌شده + سود را
+ * نشان می‌دهد.
  */
-export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse; kind: 'sales' | 'purchase' }) {
+export function InvoiceList({
+  token,
+  me,
+  kind,
+  items,
+  onDuplicate,
+}: {
+  token: string
+  me: MeResponse
+  kind: 'sales' | 'purchase'
+  items: NamedItem[]
+  /** رونوشتِ فاکتور (فقط فروش) — فرمِ فاکتور را با اقلامِ همین فاکتور پیش‌پر می‌کند. */
+  onDuplicate?: (invoice: SalesInvoiceRecord) => void
+}) {
   const isSales = kind === 'sales'
-  const [rows, setRows] = useState<Row[] | null>(null)
+  const [rows, setRows] = useState<AnyInvoice[] | null>(null)
+  const [contactNames, setContactNames] = useState<Map<string, string>>(new Map())
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   const canVoid = can(me, 'invoices', 'delete')
+  const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? id
+  const columnCount = isSales ? 8 : 7
 
   async function refresh() {
     try {
       const data = isSales ? await fetchSalesInvoices(token) : await fetchPurchaseInvoices(token)
-      setRows(data as unknown as Row[])
+      setRows(data)
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -51,7 +67,15 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
 
   useEffect(() => {
     void refresh()
+    fetchContacts(token)
+      .then((rows: ContactRecord[]) => setContactNames(new Map(rows.map((c) => [c.id, c.name]))))
+      .catch(() => setContactNames(new Map()))
   }, [token, kind])
+
+  function partyLabel(row: AnyInvoice): string {
+    if (!row.contact_id) return isSales ? 'مشتری نقدی' : 'تأمین‌کننده نقدی'
+    return contactNames.get(row.contact_id) ?? '—'
+  }
 
   async function handlePrint(id: string) {
     setMessage(null)
@@ -62,7 +86,7 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
     }
   }
 
-  async function handlePdf(row: Row) {
+  async function handlePdf(row: AnyInvoice) {
     setMessage(null)
     try {
       await (isSales
@@ -73,7 +97,7 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
     }
   }
 
-  async function handleVoid(row: Row) {
+  async function handleVoid(row: AnyInvoice) {
     // دلیل اجباری است و سرور هم آن را الزام می‌کند؛ اینجا فقط زودتر پرسیده می‌شود
     // تا کاربر بعد از یک رفت‌وبرگشت شبکه پیام خطا نگیرد.
     const reason = window.prompt(
@@ -106,7 +130,7 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
     <SectionCard
       icon={FileText}
       title={isSales ? 'فاکتورهای فروش' : 'فاکتورهای خرید'}
-      description="برای اصلاح اشتباه، فاکتور را باطل کنید — حذف نمی‌شود و سند معکوسش ثبت می‌گردد."
+      description="روی هر ردیف بزنید تا اقلام و جزئیات باز شود. برای اصلاح اشتباه، فاکتور را باطل کنید — حذف نمی‌شود و سند معکوسش ثبت می‌گردد."
     >
       {message && <div className="hint">{message}</div>}
 
@@ -119,37 +143,54 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
           <table>
           <thead>
             <tr>
+              <th style={{ width: 28 }}></th>
               <th>شماره</th>
               <th>تاریخ</th>
-              <th>شرح</th>
+              <th>طرف حساب</th>
               <th>مبلغ</th>
+              {isSales && <th>سود ناخالص</th>}
               <th>وضعیت</th>
               <th>عملیات</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} style={row.voided_at ? { opacity: 0.55 } : undefined}>
+            {rows.map((row) => {
+              const isOpen = expanded === row.id
+              const net = Number(row.total_amount)
+              const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
+              const grand = net + Number(row.tax_amount) + rounding
+              const profit = isSales ? net - Number((row as SalesInvoiceRecord).total_cost) : 0
+              const margin = isSales && net > 0 ? (profit / net) * 100 : 0
+              return (
+              <Fragment key={row.id}>
+              <tr
+                style={row.voided_at ? { opacity: 0.55 } : undefined}
+                className="invoice-row"
+                onClick={() => setExpanded(isOpen ? null : row.id)}
+              >
+                <td>{isOpen ? <ChevronDown size={15} /> : <ChevronLeft size={15} />}</td>
                 <td>{row.number ?? '—'}</td>
                 <td>{formatJalali(row.invoice_date)}</td>
-                <td>{row.description || '—'}</td>
+                <td className="entity-name">{partyLabel(row)}</td>
                 <td
                   title={
                     Number(row.tax_amount) > 0
-                      ? `خالص ${Number(row.total_amount).toLocaleString('fa-IR')} + مالیات ${Number(row.tax_amount).toLocaleString('fa-IR')}`
+                      ? `خالص ${fa(net)} + مالیات ${fa(Number(row.tax_amount))}`
                       : undefined
                   }
                 >
-                  {(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}
+                  {fa(grand)}
                 </td>
+                {isSales && (
+                  <td className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
+                    {fa(profit)}
+                    <span className="unit-suffix"> ({margin.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)</span>
+                  </td>
+                )}
                 <td>
-                  {row.voided_at ? (
-                    <span title={row.void_reason}>باطل شده</span>
-                  ) : (
-                    'معتبر'
-                  )}
+                  {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : 'معتبر'}
                 </td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(row.id)}>
                       <Printer size={13} /> چاپ
@@ -157,6 +198,11 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
                     <button type="button" onClick={() => void handlePdf(row)}>
                       <FileDown size={13} /> PDF
                     </button>
+                    {isSales && onDuplicate && !row.voided_at && (
+                      <button type="button" onClick={() => onDuplicate(row as SalesInvoiceRecord)}>
+                        <Copy size={13} /> رونوشت
+                      </button>
+                    )}
                     {canVoid && !row.voided_at && (
                       <button
                         type="button"
@@ -170,11 +216,94 @@ export function InvoiceList({ token, me, kind }: { token: string; me: MeResponse
                   </div>
                 </td>
               </tr>
-            ))}
+              {isOpen && (
+                <tr className="invoice-detail-row">
+                  <td colSpan={columnCount}>
+                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
+              )
+            })}
           </tbody>
           </table>
         </div>
       )}
     </SectionCard>
+  )
+}
+
+function InvoiceDetail({
+  row,
+  isSales,
+  itemName,
+}: {
+  row: AnyInvoice
+  isSales: boolean
+  itemName: (id: string) => string
+}) {
+  const net = Number(row.total_amount)
+  const tax = Number(row.tax_amount)
+  const discount = Number(row.total_discount)
+  const headerDiscount = isSales ? Number((row as SalesInvoiceRecord).invoice_discount) : 0
+  const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
+  const cost = isSales ? Number((row as SalesInvoiceRecord).total_cost) : 0
+  const profit = net - cost
+  const margin = net > 0 ? (profit / net) * 100 : 0
+
+  return (
+    <div className="invoice-detail">
+      {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
+      <table className="invoice-detail-table">
+        <thead>
+          <tr>
+            <th>کالا</th>
+            <th>تعداد</th>
+            <th>{isSales ? 'قیمت واحد' : 'بهای واحد'}</th>
+            <th>تخفیف</th>
+            <th>خالص</th>
+            {isSales && <th>بهای تمام‌شده</th>}
+            {isSales && <th>سود</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {row.lines.map((line) => {
+            const qty = Number(line.qty)
+            const price = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_price) : Number((line as PurchaseInvoiceRecord['lines'][number]).unit_cost)
+            const lineDiscount = Number(line.discount)
+            const lineNet = qty * price - lineDiscount
+            const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
+            const lineCost = qty * unitCost
+            const lineProfit = lineNet - lineCost
+            return (
+              <tr key={line.id}>
+                <td className="entity-name">{itemName(line.item_id)}</td>
+                <td>{qty.toLocaleString('fa-IR')}</td>
+                <td>{fa(price)}</td>
+                <td>{lineDiscount ? fa(lineDiscount) : '—'}</td>
+                <td>{fa(lineNet)}</td>
+                {isSales && <td>{fa(lineCost)}</td>}
+                {isSales && <td className={lineProfit >= 0 ? 'stock-ok' : 'stock-over'}>{fa(lineProfit)}</td>}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <div className="invoice-detail-totals">
+        {discount > 0 && <span>جمع تخفیف: {fa(discount)}</span>}
+        {headerDiscount > 0 && <span>از آن، تخفیف کل فاکتور: {fa(headerDiscount)}</span>}
+        <span>جمع خالص: {fa(net)}</span>
+        {tax > 0 && <span>مالیات: {fa(tax)}</span>}
+        {rounding !== 0 && <span>گِرد کردن: {fa(rounding)}</span>}
+        <span>قابل پرداخت: <strong>{fa(net + tax + rounding)}</strong></span>
+        {isSales && <span>بهای تمام‌شده: {fa(cost)}</span>}
+        {isSales && (
+          <span className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
+            سود ناخالص: <strong>{fa(profit)}</strong> ({margin.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)
+          </span>
+        )}
+      </div>
+    </div>
   )
 }

@@ -756,6 +756,140 @@ button:disabled {
 .stock-over { color: var(--danger, crimson); font-weight: 600; }
 .stock-warn { font-size: 10.5px; color: var(--danger, crimson); }
 
+/* ── کمبوباکسِ جست‌وجوی کالا (ItemPicker) ── جایگزینِ <select>های بلندِ کالا */
+.item-picker { position: relative; width: 100%; }
+.item-picker-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: right;
+}
+.item-picker.open .item-picker-trigger {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.item-picker-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-picker-placeholder { color: var(--text-muted); }
+.item-picker-clear {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.item-picker-clear:hover { color: var(--danger, crimson); }
+/* موقعیت (top/left/width) در‌جا و با inline از روی دکمه ست می‌شود؛ اینجا فقط ظاهر.
+   با portal به body می‌رود تا داخلِ جدولِ overflow-دار بریده نشود. */
+.item-picker-pop {
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.item-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.item-picker-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  box-shadow: none !important;
+}
+.item-picker-search input:focus { outline: none; }
+.item-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.item-picker-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.item-picker-opt.active { background: var(--surface-hover); }
+.item-picker-opt.selected { background: var(--accent-bg); }
+.item-picker-opt.disabled { opacity: 0.4; cursor: not-allowed; }
+.item-picker-opt-name { font-size: 13px; color: var(--text); }
+.item-picker-opt-meta { font-size: 11px; color: var(--text-muted); }
+.item-picker-empty { padding: 12px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+
+/* ── ردیفِ بازشوندهٔ جزئیاتِ فاکتور (InvoiceList) ── */
+.invoice-row { cursor: pointer; }
+.invoice-row:hover { background: var(--surface-hover); }
+.invoice-detail-row > td { background: var(--surface-2); padding: 0; }
+.invoice-detail { padding: 12px 16px; }
+.invoice-detail-desc { font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px; }
+.invoice-detail-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; background: var(--surface); }
+.invoice-detail-table th,
+.invoice-detail-table td { border: 1px solid var(--border); padding: 5px 8px; text-align: right; font-size: 12.5px; }
+.invoice-detail-table th { background: var(--surface-2); color: var(--text-muted); font-weight: 600; }
+.invoice-detail-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  justify-content: flex-end;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.invoice-detail-totals strong { color: var(--text); }
+
+/* ── تخفیفِ کل و گِرد کردن (فرم فاکتور فروش) ── */
+.invoice-adjustments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 10px 4px 4px;
+  border-top: 1px dashed var(--border);
+  margin-top: 6px;
+}
+.adj-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.adj-field .qty-with-unit { gap: 8px; }
+.adj-field input { width: 130px; }
+
+/* کنترل‌های تخفیف و رند در صندوقِ فروشگاهی */
+.pos-adjust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-bottom: 12px;
+}
+.pos-adjust label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.pos-adjust input { width: 110px; }
+
 /* ردیفِ پرداختِ درون‌خطیِ قسط (فروش اقساطی) */
 .pay-inline {
   display: flex;

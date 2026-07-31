@@ -6,15 +6,18 @@ import {
   fetchItemsLive,
   fetchPriceListItems,
   fetchPriceLists,
+  fetchStockLevels,
   fetchWarehousesLive,
   newIdempotencyKey,
   type ContactRecord,
   type ItemRecord,
   type PriceListRecord,
+  type StockLevel,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
+import { ItemPicker } from '../components/ItemPicker'
 import { todayIso } from '../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
@@ -34,7 +37,11 @@ export function PosPage({ token }: { token: string }) {
   const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
   const [priceListId, setPriceListId] = useState('') // '' = قیمتِ پایه
   const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
   const [taxRate, setTaxRate] = useState('10')
+  const [discount, setDiscount] = useState('')
+  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
+  const [roundStep, setRoundStep] = useState(0)
   const [cart, setCart] = useState<CartLine[]>([])
   const [scan, setScan] = useState('')
   const [pick, setPick] = useState('')
@@ -55,8 +62,16 @@ export function PosPage({ token }: { token: string }) {
       .catch(() => {})
     fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.type !== 'supplier'))).catch(() => {})
     fetchPriceLists(token).then((ls) => setPriceLists(ls.filter((l) => l.is_active))).catch(() => {})
+    fetchStockLevels(token).then(setStockLevels).catch(() => setStockLevels([]))
     scanRef.current?.focus()
   }, [token])
+
+  // موجودیِ در دسترسِ یک کالا در انبارِ انتخاب‌شده — تا فروشنده کسری را همان لحظه ببیند.
+  function availableStock(itemId: string): number | null {
+    if (!warehouseId) return null
+    const row = stockLevels.find((s) => s.item_id === itemId && s.warehouse_id === warehouseId)
+    return row ? Number(row.qty) : 0
+  }
 
   // با انتخابِ لیستِ قیمت، قیمت‌های آن لیست بار می‌شود و سبد دوباره قیمت‌گذاری می‌شود
   useEffect(() => {
@@ -134,8 +149,17 @@ export function PosPage({ token }: { token: string }) {
 
   const subtotal = cart.reduce((s, l) => s + l.qty * l.unitPrice, 0)
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
-  const tax = Math.round((subtotal * taxRateNum) / 100)
-  const total = subtotal + tax
+  const discountInput = Number(discount) || 0
+  const discountAmount = Math.min(
+    discountMode === 'percent' ? Math.round((subtotal * discountInput) / 100) : discountInput,
+    subtotal,
+  )
+  const netAfterDiscount = subtotal - discountAmount
+  const tax = Math.round((netAfterDiscount * taxRateNum) / 100)
+  const grandBeforeRound = netAfterDiscount + tax
+  // رند فقط به پایین (به نفعِ مشتری)
+  const roundAdjust = roundStep > 0 ? Math.floor(grandBeforeRound / roundStep) * roundStep - grandBeforeRound : 0
+  const total = grandBeforeRound + roundAdjust
   const change = Number(received) ? Number(received) - total : 0
   const itemCount = cart.reduce((s, l) => s + l.qty, 0)
 
@@ -158,6 +182,8 @@ export function PosPage({ token }: { token: string }) {
           warehouse_id: warehouseId,
           tax_rate: taxRateNum,
           contact_id: contactId || null,
+          invoice_discount: discountAmount,
+          rounding: roundAdjust,
           lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
         },
         idem.current,
@@ -167,6 +193,8 @@ export function PosPage({ token }: { token: string }) {
       setMessage(`فروش ثبت شد ✓ فاکتور شماره ${num}${change > 0 ? ` — بازگردانده به مشتری: ${fa(change)} ریال` : ''}`)
       setCart([])
       setReceived('')
+      setDiscount('')
+      setRoundStep(0)
       scanRef.current?.focus()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -235,12 +263,12 @@ export function PosPage({ token }: { token: string }) {
           </form>
 
           <div className="pos-pick">
-            <select value={pick} onChange={(e) => { const it = items.find((i) => i.id === e.target.value); if (it) addItem(it); setPick('') }}>
-              <option value="">— افزودن از فهرست کالاها —</option>
-              {items.map((i) => (
-                <option key={i.id} value={i.id}>{i.name}{i.barcode ? ` (${i.barcode})` : ''}</option>
-              ))}
-            </select>
+            <ItemPicker
+              items={items}
+              value={pick}
+              onChange={(id) => { const it = items.find((i) => i.id === id); if (it) addItem(it); setPick('') }}
+              placeholder="— افزودن از فهرست کالاها —"
+            />
           </div>
 
           {flash && <div className="pos-flash">{flash}</div>}
@@ -260,11 +288,19 @@ export function PosPage({ token }: { token: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {cart.map((l) => (
+                  {cart.map((l) => {
+                    const avail = availableStock(l.item.id)
+                    const over = avail != null && l.qty > avail
+                    return (
                     <tr key={l.item.id}>
                       <td className="entity-name">
                         {l.item.name}
                         {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
+                        {avail != null && (
+                          <div className={over ? 'stock-warn' : 'unit-suffix'}>
+                            موجودی: {avail.toLocaleString('fa-IR')}{over ? ' — بیش از موجودی' : ''}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div className="pos-qty">
@@ -281,7 +317,8 @@ export function PosPage({ token }: { token: string }) {
                         <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /></button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -289,9 +326,34 @@ export function PosPage({ token }: { token: string }) {
         </SectionCard>
 
         <SectionCard icon={Wallet} title="تسویه">
+          <div className="pos-adjust">
+            <label>
+              تخفیف
+              <div className="qty-with-unit">
+                <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="۰" />
+                <div className="seg-toggle">
+                  <button type="button" className={discountMode === 'amount' ? 'active' : ''} onClick={() => setDiscountMode('amount')}>مبلغ</button>
+                  <button type="button" className={discountMode === 'percent' ? 'active' : ''} onClick={() => setDiscountMode('percent')}>٪</button>
+                </div>
+              </div>
+            </label>
+            <label>
+              رند (به پایین)
+              <div className="seg-toggle">
+                {[0, 1000, 5000, 10000].map((s) => (
+                  <button key={s} type="button" className={roundStep === s ? 'active' : ''} onClick={() => setRoundStep(s)}>
+                    {s === 0 ? 'بدون' : s.toLocaleString('fa-IR')}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+
           <div className="pos-summary">
             <div className="pos-row"><span>جمع کالاها</span><strong>{fa(subtotal)}</strong></div>
+            {discountAmount > 0 && <div className="pos-row"><span>تخفیف</span><strong>−{fa(discountAmount)}</strong></div>}
             <div className="pos-row"><span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪)</span><strong>{fa(tax)}</strong></div>
+            {roundAdjust !== 0 && <div className="pos-row"><span>گِرد کردن</span><strong>{fa(roundAdjust)}</strong></div>}
             <div className="pos-row pos-total"><span>مبلغ قابل پرداخت</span><strong>{fa(total)}</strong></div>
           </div>
 

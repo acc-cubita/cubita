@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -45,6 +45,40 @@ def vat_receivable_account(db: Session):
         acc_type="asset",
         parent_code="11",
     )
+
+
+def sales_rounding_account(db: Session):
+    """حسابِ تعدیلِ گِرد کردنِ فروش — on-demand (مثل حساب‌های مالیات) تا برای
+    کسب‌وکارهای قدیمی هم خودکار فراهم شود."""
+    return get_or_create_account(
+        db,
+        cc.SALES_ROUNDING,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.SALES_ROUNDING],
+        name="تعدیلِ گِرد کردن فروش",
+        acc_type="income",
+        parent_code="41",
+    )
+
+
+def _allocate_discount(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
+    """تسهیمِ یک تخفیفِ کل میان ردیف‌ها به‌نسبتِ خالصِ هر ردیف.
+
+    مبالغ صحیحِ ریال‌اند؛ با روشِ «بیشترین باقی‌مانده» جمعِ سهم‌ها *دقیقاً* برابرِ کل
+    می‌شود (نه یک ریال کم، نه زیاد). چون total ≤ Σweights تضمین شده، سهمِ هر ردیف از
+    خالصِ همان ردیف بیشتر نمی‌شود.
+    """
+    n = len(weights)
+    s = sum(weights)
+    if total <= 0 or s <= 0:
+        return [Decimal(0)] * n
+    raw = [total * w / s for w in weights]
+    shares = [r.to_integral_value(rounding=ROUND_FLOOR) for r in raw]
+    remainder = int(total - sum(shares))
+    # باقی‌مانده (کمتر از تعداد ردیف‌ها) را به ردیف‌هایی با بزرگ‌ترین کسر بده
+    order = sorted(range(n), key=lambda i: raw[i] - shares[i], reverse=True)
+    for i in order[:remainder]:
+        shares[i] += 1
+    return shares
 
 
 def compute_tax(net: Decimal, rate: Decimal) -> Decimal:
@@ -118,16 +152,29 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
 
     number = next_document_number(db, DOC_SALES_INVOICE)
 
+    # تخفیفِ کلِ فاکتور به‌نسبتِ خالصِ هر ردیف بینِ ردیف‌ها تسهیم می‌شود، پس درآمد،
+    # پایه‌ی مالیات، بهای برگشت و بسته‌ی مؤدیان همگی خودکار درست می‌مانند — بدونِ نیاز
+    # به منطقِ جدا در آن مسیرها.
+    base_nets = [max((line.qty * line.unit_price) - Decimal(line.discount or 0), Decimal(0)) for line in data.lines]
+    gross_net = sum(base_nets, Decimal(0))
+    invoice_discount = Decimal(data.invoice_discount or 0)
+    if invoice_discount > gross_net:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "تخفیفِ کلِ فاکتور نمی‌تواند از جمعِ خالصِ فاکتور بیشتر باشد"
+        )
+    allocated = _allocate_discount(invoice_discount, base_nets)
+
     total_amount = Decimal(0)
     total_discount = Decimal(0)
     total_cost = Decimal(0)
     invoice_lines: list[SalesInvoiceLine] = []
     stock_moves: list[StockLedger] = []
 
-    for line in data.lines:
+    for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
         unit_cost = item.average_cost if not item.is_service else Decimal(0)
-        line_discount = Decimal(line.discount or 0)
+        # تخفیفِ مؤثرِ ردیف = تخفیفِ خودِ ردیف + سهمِ تسهیم‌شده‌ی تخفیفِ کلِ فاکتور
+        line_discount = Decimal(line.discount or 0) + allocated[idx]
         # خالصِ ردیف = ناخالص − تخفیف. جمعِ همین‌ها می‌شود total_amount، یعنی درآمد و
         # پایه‌ی مالیات هر دو «پس از تخفیف»اند.
         total_amount += (line.qty * line.unit_price) - line_discount
@@ -156,12 +203,17 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
             )
 
     tax_amount = compute_tax(total_amount, data.tax_rate)
+    # گِرد کردن: تعدیلِ مبلغِ نهایی پس از مالیات. مبلغِ قابل‌پرداخت نباید منفی شود.
+    rounding = Decimal(data.rounding or 0)
+    if total_amount + tax_amount + rounding < 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "گِرد کردن نمی‌تواند مبلغِ قابل‌پرداخت را منفی کند")
+
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
         JournalLine(
             account_id=receivable_or_cash.id,
-            debit=total_amount + tax_amount,  # مشتری خالص + مالیات را می‌پردازد
+            debit=total_amount + tax_amount + rounding,  # مشتری خالص + مالیات ± گِرد را می‌پردازد
             credit=0,
             description="بابت فروش کالا/خدمت",
         ),
@@ -179,6 +231,16 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
                 debit=0,
                 credit=tax_amount,
                 description="مالیات بر ارزش افزوده فروش",
+            )
+        )
+    if rounding != 0:
+        # رند به بالا (rounding>0) درآمدِ ناچیز است → بستانکار؛ رند به پایین بدهکار.
+        journal_lines.append(
+            JournalLine(
+                account_id=sales_rounding_account(db).id,
+                debit=(-rounding if rounding < 0 else Decimal(0)),
+                credit=(rounding if rounding > 0 else Decimal(0)),
+                description="گِرد کردنِ مبلغِ فاکتور",
             )
         )
     if total_cost > 0:
@@ -224,6 +286,8 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         description=data.description,
         total_amount=total_amount,
         total_discount=total_discount,
+        invoice_discount=invoice_discount,
+        rounding=rounding,
         total_cost=total_cost,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
@@ -248,7 +312,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
     from app.services import crm as crm_service
 
     crm_service.award_purchase_points(
-        db, data.contact_id, total_amount + tax_amount, data.invoice_date, user
+        db, data.contact_id, total_amount + tax_amount + rounding, data.invoice_date, user
     )
 
     db.flush()

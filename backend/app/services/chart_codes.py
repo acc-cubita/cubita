@@ -31,6 +31,7 @@ VAT_RECEIVABLE = "vat_receivable"  # مالیات بر ارزش افزوده‌�
 FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌های ثابت (دارایی)
 ACCUMULATED_DEPRECIATION = "accumulated_depreciation"  # استهلاک انباشته (کاهنده‌ی دارایی)
 DEPRECIATION_EXPENSE = "depreciation_expense"  # هزینه‌ی استهلاک دوره (هزینه)
+SALES_ROUNDING = "sales_rounding"  # تعدیلِ گِرد کردنِ مبلغِ فاکتور فروش (کاهنده/افزاینده‌ی درآمد)
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -51,6 +52,7 @@ DEFAULT_CODE_BY_ROLE = {
     ACCUMULATED_DEPRECIATION: "1202",
     RETAINED_EARNINGS: "3102",
     SALES_REVENUE: "4101",
+    SALES_ROUNDING: "4102",
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
     INVENTORY_ADJUSTMENT: "5105",

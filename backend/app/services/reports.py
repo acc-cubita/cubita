@@ -30,6 +30,49 @@ CASH_ROLES = (cc.CASH, cc.BANK, cc.PETTY_CASH)
 FIXED_ASSET_ROLES = (cc.FIXED_ASSETS, cc.ACCUMULATED_DEPRECIATION)
 
 
+def get_sales_summary(db: Session) -> dict:
+    """شاخص‌های فروش را در پایگاه‌داده جمع می‌زند تا کلاینت مجبور نباشد کلِ تاریخچه را
+    دانلود کند (که کند است و در کسب‌وکارِ واقعی از سقفِ صفحه‌بندی فراتر می‌رود).
+
+    فقط فاکتورهای باطل‌نشده. سود ناخالص = خالص − بهای تمام‌شده؛ مالیات درآمد نیست و
+    در سود نمی‌آید.
+    """
+    count, net, tax, cost = (
+        db.query(
+            func.count(SalesInvoice.id),
+            func.coalesce(func.sum(SalesInvoice.total_amount), 0),
+            func.coalesce(func.sum(SalesInvoice.tax_amount), 0),
+            func.coalesce(func.sum(SalesInvoice.total_cost), 0),
+        )
+        .filter(SalesInvoice.voided_at.is_(None))
+        .one()
+    )
+
+    cutoff = date.today() - timedelta(days=30)
+    last30 = (
+        db.query(func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0))
+        .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= cutoff)
+        .scalar()
+    )
+
+    net, tax, cost = Decimal(net), Decimal(tax), Decimal(cost)
+    with_tax = net + tax
+    profit = net - cost
+    margin = (profit / net * 100) if net > 0 else Decimal(0)
+    avg = (with_tax / count) if count else Decimal(0)
+    return {
+        "invoice_count": int(count),
+        "total_net": net,
+        "total_tax": tax,
+        "total_with_tax": with_tax,
+        "total_cost": cost,
+        "gross_profit": profit,
+        "margin_pct": margin.quantize(Decimal("0.01")),
+        "last_30_with_tax": Decimal(last30),
+        "avg_invoice": avg.quantize(Decimal(1)),
+    }
+
+
 def get_vat_report(db: Session, date_from: date | None, date_to: date | None) -> dict:
     """جمعِ خالص و مالیاتِ فاکتورهای فروش (خروجی) و خرید (ورودی) در بازه.
 

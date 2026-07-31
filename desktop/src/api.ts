@@ -718,6 +718,10 @@ export interface SalesInvoiceRecord {
   /** خالصِ پس از تخفیف، بدون مالیات. */
   total_amount: string
   total_discount: string
+  /** تخفیفِ کلِ فاکتور (تسهیم‌شده در ردیف‌ها؛ در total_discount هم منظور شده). */
+  invoice_discount: string
+  /** تعدیلِ گِرد کردنِ مبلغِ نهایی، علامت‌دار. قابل پرداخت = خالص + مالیات + rounding. */
+  rounding: string
   total_cost: string
   tax_rate: string
   tax_amount: string
@@ -727,6 +731,22 @@ export interface SalesInvoiceRecord {
 }
 
 export const fetchSalesInvoices = (token: string) => authedGetAll<SalesInvoiceRecord>(token, '/api/sales-invoices')
+
+export interface SalesSummary {
+  invoice_count: number
+  total_net: string
+  total_tax: string
+  total_with_tax: string
+  total_cost: string
+  gross_profit: string
+  margin_pct: string
+  last_30_with_tax: string
+  avg_invoice: string
+}
+
+/** شاخص‌های فروش، محاسبه‌شده سمت سرور — به‌جای دانلودِ کلِ فاکتورها در کلاینت. */
+export const fetchSalesSummary = (token: string) =>
+  authedGet<SalesSummary>(token, '/api/sales-invoices/summary')
 
 export interface PurchaseInvoiceRecord {
   id: string
@@ -760,6 +780,20 @@ export interface SalesReturnRecord {
 }
 
 export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
+
+export interface ReturnableLine {
+  item_id: string
+  item_name: string
+  unit: string
+  sold: string
+  already_returned: string
+  remaining: string
+  unit_price: string
+}
+
+/** باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور فروش. */
+export const fetchReturnable = (token: string, invoiceId: string) =>
+  authedGet<ReturnableLine[]>(token, `/api/sales-invoices/${invoiceId}/returnable`)
 
 export const createSalesReturn = (
   token: string,
@@ -894,6 +928,10 @@ export const createSalesInvoiceDirect = (
     contact_id?: string | null
     currency_code?: string | null
     exchange_rate?: number
+    /** تخفیفِ کلِ فاکتور به مبلغِ پایه (ریال). درصد در UI به مبلغ تبدیل می‌شود. */
+    invoice_discount?: number
+    /** تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات)، علامت‌دار. */
+    rounding?: number
     lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,
@@ -1701,6 +1739,9 @@ export const printPurchaseInvoice = (token: string, invoiceId: string) =>
 
 export const printSalesQuotation = (token: string, quotationId: string) =>
   openInvoicePrintView(token, `/api/sales-quotations/${quotationId}/print`)
+
+export const printSalesReturn = (token: string, returnId: string) =>
+  openInvoicePrintView(token, `/api/sales-returns/${returnId}/print`)
 
 /** فایل PDF فاکتور را با احراز هویت می‌گیرد و دانلود می‌کند.
  *

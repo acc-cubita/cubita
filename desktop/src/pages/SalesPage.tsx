@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Inbox, ShoppingCart, FileText, Undo2, Landmark, TrendingUp, CalendarRange, Receipt } from 'lucide-react'
-import { fetchSalesInvoices, type MeResponse, type SalesInvoiceRecord } from '../api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Inbox, ShoppingCart, FileText, Undo2, Landmark, TrendingUp, CalendarRange, Receipt, Coins } from 'lucide-react'
+import { fetchSalesSummary, type MeResponse, type SalesInvoiceRecord, type SalesSummary } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
@@ -30,12 +30,14 @@ export function SalesPage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
-  const [invoices, setInvoices] = useState<SalesInvoiceRecord[]>([])
-  // reloadKey فهرستِ فاکتورها (InvoiceList) را دوباره مونت می‌کند تا بعد از ثبتِ فاکتورِ
-  // تازه، هم شاخص‌های بالای صفحه و هم جدولِ زیرِ آن به‌روز شوند — نه فقط با ترک‌کردن صفحه.
+  // شاخص‌ها از سرور می‌آیند (نه با دانلودِ کلِ فاکتورها در کلاینت که کند است و از
+  // سقفِ صفحه‌بندی فراتر می‌رود). reloadKey فهرستِ فاکتورها را هم دوباره مونت می‌کند.
+  const [summary, setSummary] = useState<SalesSummary | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [prefill, setPrefill] = useState<SalesInvoiceRecord | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
   const refresh = useCallback(() => {
-    void fetchSalesInvoices(token).then(setInvoices).catch(() => {})
+    void fetchSalesSummary(token).then(setSummary).catch(() => {})
     setReloadKey((k) => k + 1)
   }, [token])
   useEffect(() => {
@@ -45,15 +47,12 @@ export function SalesPage({
     onQueued()
     refresh()
   }, [onQueued, refresh])
-  const kpis = useMemo(() => {
-    const live = invoices.filter((i) => !i.voided_at)
-    const withTax = (i: SalesInvoiceRecord) => Number(i.total_amount) + Number(i.tax_amount)
-    const total = live.reduce((s, i) => s + withTax(i), 0)
-    const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
-    const last30 = live.filter((i) => i.invoice_date >= cutoff).reduce((s, i) => s + withTax(i), 0)
-    const avg = live.length ? Math.round(total / live.length) : 0
-    return { count: live.length, total, last30, avg }
-  }, [invoices])
+  // رونوشت: فاکتور را در فرمِ بالای صفحه پیش‌پر کن و فرم را به دید بیاور.
+  const handleDuplicate = useCallback((inv: SalesInvoiceRecord) => {
+    setPrefill(inv)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+  const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 
   return (
     <div className="page">
@@ -64,10 +63,11 @@ export function SalesPage({
       />
 
       <div className="stat-grid">
-        <StatCard icon={<FileText size={18} />} label="تعداد فاکتور فروش" value={kpis.count.toLocaleString('fa-IR')} />
-        <StatCard icon={<TrendingUp size={18} />} label="مجموع فروش" value={kpis.total.toLocaleString('fa-IR')} tone="success" hint="ریال (با مالیات)" />
-        <StatCard icon={<CalendarRange size={18} />} label="فروش ۳۰ روز اخیر" value={kpis.last30.toLocaleString('fa-IR')} hint="ریال" />
-        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={kpis.avg.toLocaleString('fa-IR')} hint="ریال" />
+        <StatCard icon={<FileText size={18} />} label="تعداد فاکتور فروش" value={(summary?.invoice_count ?? 0).toLocaleString('fa-IR')} />
+        <StatCard icon={<TrendingUp size={18} />} label="مجموع فروش" value={fa(summary?.total_with_tax ?? 0)} tone="success" hint="ریال (با مالیات)" />
+        <StatCard icon={<Coins size={18} />} label="سود ناخالص" value={fa(summary?.gross_profit ?? 0)} tone="success" hint={`ریال — حاشیه ${Number(summary?.margin_pct ?? 0).toLocaleString('fa-IR')}٪`} />
+        <StatCard icon={<CalendarRange size={18} />} label="فروش ۳۰ روز اخیر" value={fa(summary?.last_30_with_tax ?? 0)} hint="ریال" />
+        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={fa(summary?.avg_invoice ?? 0)} hint="ریال" />
       </div>
 
       <Tabs
@@ -78,8 +78,17 @@ export function SalesPage({
             icon: ShoppingCart,
             content: (
               <>
-                <SalesInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />
-                <InvoiceList key={reloadKey} token={token} me={me} kind="sales" />
+                <div ref={formRef}>
+                  <SalesInvoiceForm
+                    token={token}
+                    warehouses={warehouses}
+                    items={items}
+                    onQueued={handleQueued}
+                    prefill={prefill}
+                    onPrefillConsumed={() => setPrefill(null)}
+                  />
+                </div>
+                <InvoiceList key={reloadKey} token={token} me={me} kind="sales" items={items} onDuplicate={handleDuplicate} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -107,7 +116,7 @@ export function SalesPage({
             key: 'returns',
             label: 'برگشت از فروش',
             icon: Undo2,
-            content: <SalesReturnForm token={token} items={items} />,
+            content: <SalesReturnForm token={token} />,
           },
           {
             key: 'moadian',

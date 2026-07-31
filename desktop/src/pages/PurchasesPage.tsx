@@ -75,7 +75,7 @@ export function PurchasesPage({
             content: (
               <>
                 <PurchaseInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}

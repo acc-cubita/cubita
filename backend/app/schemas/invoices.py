@@ -29,6 +29,11 @@ class SalesInvoiceLineIn(BaseModel):
         return self
 
 
+#: سقفِ قدرمطلقِ گِرد کردن — رند برای «رند کردنِ خرده‌ریز» است، نه ابزارِ تعدیلِ
+#: دلخواهِ درآمد. تا نزدیکِ رند به بالاترین پله‌ی رایج (۵۰٬۰۰۰) اجازه می‌دهد.
+MAX_ROUNDING = Decimal(100_000)
+
+
 class SalesInvoiceIn(BaseModel):
     invoice_date: date
     warehouse_id: UUID
@@ -38,6 +43,11 @@ class SalesInvoiceIn(BaseModel):
     lines: list[SalesInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
+    #: تخفیفِ کلِ فاکتور به مبلغ (درصد در رابط کاربری به مبلغ تبدیل می‌شود). هنگام ثبت
+    #: به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس پایه‌ی مالیات و درآمد هر دو پس از آن‌اند.
+    invoice_discount: Decimal = Decimal(0)
+    #: تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات)، علامت‌دار: منفی = رند به پایین.
+    rounding: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
     #: ارز فاکتور (مثل USD). None/خالی = پایه (ریال). مبالغِ سطرها همیشه پایه‌اند —
     #: کلاینت پیش از ارسال با نرخ تبدیل می‌کند؛ این‌ها فقط برای نمایش ذخیره می‌شوند.
@@ -50,6 +60,10 @@ class SalesInvoiceIn(BaseModel):
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
         if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
+        if self.invoice_discount < 0:
+            raise ValueError("تخفیفِ کلِ فاکتور نمی‌تواند منفی باشد")
+        if abs(self.rounding) > MAX_ROUNDING:
+            raise ValueError("مبلغِ گِرد کردن خارج از حدِّ مجاز است")
         if self.currency_code and self.exchange_rate <= 0:
             raise ValueError("نرخ ارز باید بزرگ‌تر از صفر باشد")
         return self
@@ -77,6 +91,8 @@ class SalesInvoiceOut(BaseModel):
     description: str
     total_amount: Decimal
     total_discount: Decimal = Decimal(0)
+    invoice_discount: Decimal = Decimal(0)
+    rounding: Decimal = Decimal(0)
     total_cost: Decimal
     tax_rate: Decimal
     tax_amount: Decimal
@@ -90,6 +106,22 @@ class SalesInvoiceOut(BaseModel):
     lines: list[SalesInvoiceLineOut]
 
     model_config = {"from_attributes": True}
+
+
+class SalesSummaryOut(BaseModel):
+    """خلاصه‌ی فروش، محاسبه‌شده در پایگاه‌داده (نه با دانلودِ همه‌ی فاکتورها در کلاینت).
+
+    فقط فاکتورهای باطل‌نشده. مبالغ همه پایه (ریال)اند.
+    """
+    invoice_count: int
+    total_net: Decimal        # جمعِ خالص (پس از تخفیف، بدون مالیات)
+    total_tax: Decimal
+    total_with_tax: Decimal   # خالص + مالیات = مبلغِ واقعیِ فروش
+    total_cost: Decimal       # بهای تمام‌شده‌ی کالای فروش‌رفته
+    gross_profit: Decimal     # خالص − بهای تمام‌شده
+    margin_pct: Decimal       # حاشیه‌ی سود = سود ÷ خالص × ۱۰۰
+    last_30_with_tax: Decimal # فروشِ ۳۰ روزِ اخیر (با مالیات)
+    avg_invoice: Decimal      # میانگینِ هر فاکتور (با مالیات)
 
 
 class PurchaseInvoiceLineIn(BaseModel):

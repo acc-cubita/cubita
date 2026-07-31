@@ -15,10 +15,12 @@ from app.schemas.invoices import (
     PurchaseInvoiceOut,
     SalesInvoiceIn,
     SalesInvoiceOut,
+    SalesSummaryOut,
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.reports import get_sales_summary
 from decimal import Decimal
 
 from app.services.pdf_invoice import render_invoice_pdf
@@ -40,6 +42,15 @@ def list_sales_invoices(
         params,
     )
     return Page(items=items, next_cursor=next_cursor)
+
+
+@router.get("/api/sales-invoices/summary", response_model=SalesSummaryOut)
+def sales_summary(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """شاخص‌های فروش، محاسبه‌شده سمت سرور (تا کلاینت کلِ فاکتورها را دانلود نکند)."""
+    return SalesSummaryOut(**get_sales_summary(db))
 
 
 @router.post("/api/sales-invoices", response_model=SalesInvoiceOut, status_code=201)
@@ -171,6 +182,7 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
         total=invoice.total_amount,
         tax_amount=invoice.tax_amount,
         total_discount=invoice.total_discount,
+        rounding=invoice.rounding,
         voided_at=invoice.voided_at,
         void_reason=invoice.void_reason,
         currency_line=_currency_line(invoice),

@@ -36,6 +36,7 @@ import { ProfilePage } from '../pages/ProfilePage'
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
   sales: 'فروش',
+  installments: 'فروش اقساطی',
   pos: 'صندوق فروشگاهی',
   purchases: 'خرید',
   contacts: 'اشخاص',
@@ -51,6 +52,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   calendar: 'تقویم و یادآوری',
   team: 'کاربران',
   profile: 'پروفایل من',
+  onboarding: 'راه‌اندازی',
   help: 'راهنما',
 }
 

@@ -30,9 +30,17 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     #: خالصِ **پس از تخفیف** و بدون مالیات. پایه‌ی ثبتِ درآمد و محاسبه‌ی مالیات.
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
-    #: جمع تخفیفِ ردیف‌ها. فقط برای نمایش/صورتحساب مؤدیان؛ در سند حسابداری نمی‌آید
-    #: چون درآمد از همان اول به مبلغِ پس از تخفیف ثبت می‌شود (تخفیف تجاری).
+    #: جمع تخفیفِ ردیف‌ها (شاملِ سهمِ تسهیم‌شده‌ی تخفیفِ کلِ فاکتور). فقط برای
+    #: نمایش/صورتحساب مؤدیان؛ در سند حسابداری نمی‌آید چون درآمد از همان اول به مبلغِ
+    #: پس از تخفیف ثبت می‌شود (تخفیف تجاری).
     total_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تخفیفِ کلِ فاکتور که کاربر روی سرِ فاکتور اعمال کرده. هنگام ثبت به‌نسبتِ خالصِ
+    #: هر ردیف بینِ ردیف‌ها تسهیم می‌شود (پس در total_discount هم منظور شده)؛ اینجا
+    #: فقط برای نمایشِ شفافِ «چه مقدار از تخفیف، تخفیفِ کل بوده» جدا نگه داشته می‌شود.
+    invoice_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات). علامت‌دار: منفی = رند به پایین
+    #: (تخفیفِ نقدی)، مثبت = رند به بالا. مبلغِ قابل‌پرداخت = خالص + مالیات + rounding.
+    rounding: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     total_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ قابل‌پرداختِ مشتری = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
