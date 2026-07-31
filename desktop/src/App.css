@@ -1235,6 +1235,16 @@ button:disabled {
   border-color: var(--border-strong);
 }
 
+/* ── موبایل/عرضِ کم: ورودی‌های ردیفِ فاکتور نباید تا نامرئی‌شدن جمع شوند ──
+   بدونِ این کف‌ها، «تعداد» و «قیمت» زیرِ فشارِ ستون‌های زیاد به صفر می‌رسند و عدد
+   دیده نمی‌شود. با کفِ عرض، جدول به‌جای فشرده‌شدن داخلِ .table-scroll افقی می‌لغزد و
+   هر سلول خوانا می‌ماند. (specificity بالاتر از min-width:0 های عمومی.) */
+.invoice-lines td input { min-width: 72px; }
+.invoice-lines td .qty-with-unit { flex-wrap: nowrap; }
+.invoice-lines td .qty-with-unit input { min-width: 56px; }
+.invoice-lines td .item-picker { min-width: 150px; }
+.invoice-lines td .stock-cell { min-width: 96px; }
+
 .invoice-form h3 {
   font-size: 14px;
   margin: 8px 0 0;
