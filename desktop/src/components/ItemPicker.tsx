@@ -60,7 +60,7 @@ export function ItemPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
-  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -77,11 +77,24 @@ export function ItemPicker({
   }, [items, query])
 
   // موقعیتِ پاپ‌آور را از دکمه می‌گیرد و با اسکرول/تغییرِ اندازه به‌روز می‌کند.
+  //
+  // روی موبایل ستونِ «کالا» باریک است؛ اگر عرضِ پاپ‌آور را برابرِ همان بگذاریم،
+  // جست‌وجو و آیتم‌ها فشرده و بریده می‌شوند. پس عرض را دستِ‌کم ۲۶۰px می‌گیریم (تا
+  // عرضِ صفحه)، لبه‌ی راستش را به لبه‌ی راستِ دکمه می‌چسبانیم (طبیعیِ RTL)، و داخلِ
+  // صفحه نگه می‌داریم. ارتفاعِ فهرست هم به فضای پایین محدود می‌شود تا از صفحه بیرون نزند.
   function reposition() {
     const el = triggerRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    const m = 8
+    const vw = window.innerWidth
+    const w = Math.min(Math.max(r.width, 260), vw - m * 2)
+    let left = r.right - w // لبه‌ی راست به دکمه بچسبد
+    if (left + w > vw - m) left = vw - m - w
+    if (left < m) left = m
+    // ۴۸px برای نوارِ جست‌وجو کنار گذاشته می‌شود تا کلِ پاپ‌آور از پایینِ صفحه نزند.
+    const maxH = Math.max(140, Math.min(320, window.innerHeight - r.bottom - m - 48))
+    setRect({ top: r.bottom + 4, left, width: w, maxH })
   }
 
   useLayoutEffect(() => {
@@ -196,7 +209,7 @@ export function ItemPicker({
                 placeholder="جست‌وجو با نام، کد یا بارکد…"
               />
             </div>
-            <ul className="item-picker-list" ref={listRef}>
+            <ul className="item-picker-list" ref={listRef} style={{ maxHeight: rect.maxH }}>
               {filtered.length === 0 ? (
                 <li className="item-picker-empty">کالایی یافت نشد</li>
               ) : (
