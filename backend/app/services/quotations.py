@@ -85,15 +85,13 @@ def convert_quotation_to_invoice(db: Session, quotation_id: UUID, user: User) ->
     if quotation.status == "rejected":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "پیش‌فاکتور ردشده قابل تبدیل به فاکتور نیست")
 
-    description = f"از پیش‌فاکتور شماره {quotation.number}"
-    if quotation.description:
-        description += f" — {quotation.description}"
-
+    # فقط توضیحاتِ خودِ کاربر منتقل می‌شود؛ جمله‌ی خودکارِ «از پیش‌فاکتور شماره X»
+    # حذف شد (کاربر نمی‌خواست). پیوندِ ردیابی در converted_invoice_id نگه داشته می‌شود.
     invoice_data = SalesInvoiceIn(
         invoice_date=date.today(),
         warehouse_id=quotation.warehouse_id,
         contact_id=quotation.contact_id,
-        description=description,
+        description=quotation.description or "",
         lines=[
             SalesInvoiceLineIn(item_id=line.item_id, qty=line.qty, unit_price=line.unit_price, description=line.description)
             for line in quotation.lines

@@ -1699,6 +1699,9 @@ export const printSalesInvoice = (token: string, invoiceId: string) =>
 export const printPurchaseInvoice = (token: string, invoiceId: string) =>
   openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)
 
+export const printSalesQuotation = (token: string, quotationId: string) =>
+  openInvoicePrintView(token, `/api/sales-quotations/${quotationId}/print`)
+
 /** فایل PDF فاکتور را با احراز هویت می‌گیرد و دانلود می‌کند.
  *
  * چون اندپوینت توکن می‌خواهد نمی‌شود صرفاً لینک داد؛ blob را با هدر می‌گیریم و با یک

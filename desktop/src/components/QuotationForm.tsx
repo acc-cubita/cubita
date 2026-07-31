@@ -62,6 +62,11 @@ export function QuotationForm({
     return items.find((it) => it.id === itemId)?.unit || ''
   }
 
+  // کالای خدماتی موجودیِ انبار ندارد (is_service در کش عدد ۰/۱ است).
+  function isService(itemId: string): boolean {
+    return !!items.find((it) => it.id === itemId)?.is_service
+  }
+
   // موجودیِ در دسترسِ یک کالا در انبارِ انتخاب‌شده.
   function availableStock(itemId: string): number | null {
     if (!itemId || !effectiveWarehouseId) return null
@@ -206,7 +211,8 @@ export function QuotationForm({
             </thead>
             <tbody>
               {lines.map((line, i) => {
-                const avail = stockMode === 'warehouse' ? availableStock(line.itemId) : null
+                const service = isService(line.itemId)
+                const avail = stockMode === 'warehouse' && !service ? availableStock(line.itemId) : null
                 const over = avail != null && Number(line.qty) > avail
                 return (
                   <tr key={i}>
@@ -224,7 +230,9 @@ export function QuotationForm({
                     </td>
                     {stockMode === 'warehouse' && (
                       <td>
-                        {line.itemId ? (
+                        {!line.itemId ? '—' : service ? (
+                          <span className="unit-suffix">خدمات (بدون موجودی)</span>
+                        ) : (
                           <div className="stock-cell">
                             <span className={over ? 'stock-over' : 'stock-ok'}>{avail != null ? fa(avail) : '—'} {unitOf(line.itemId)}</span>
                             {avail != null && avail > 0 && (
@@ -232,7 +240,7 @@ export function QuotationForm({
                             )}
                             {over && <div className="stock-warn">بیش از موجودی</div>}
                           </div>
-                        ) : '—'}
+                        )}
                       </td>
                     )}
                     <td>

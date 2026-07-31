@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { FileCheck, RefreshCw, ArrowLeftCircle } from 'lucide-react'
-import { fetchSalesQuotations, fetchContacts, updateQuotationStatus, convertQuotationToInvoice, type SalesQuotationRecord } from '../api'
+import { FileCheck, RefreshCw, ArrowLeftCircle, Printer } from 'lucide-react'
+import { fetchSalesQuotations, fetchContacts, updateQuotationStatus, convertQuotationToInvoice, printSalesQuotation, type SalesQuotationRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
@@ -61,6 +61,15 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
     }
   }
 
+  async function handlePrint(id: string) {
+    setError(null)
+    try {
+      await printSalesQuotation(token, id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
   async function handleConvert(id: string) {
     setError(null)
     setBusyId(id)
@@ -117,6 +126,9 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
                 </td>
                 <td>
                   <div className="check-actions">
+                    <button type="button" onClick={() => void handlePrint(q.id)}>
+                      <Printer size={13} /> چاپ
+                    </button>
                     {q.status === 'draft' && (
                       <>
                         <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'sent')}>

@@ -12,6 +12,13 @@ def _item(client):
     return client.post("/api/items", json={"sku": "Q-1", "name": "کالا", "sales_price": 5000}).json()["id"]
 
 
+def _buy(client, wh, item, qty=100, cost=1000):
+    client.post("/api/purchase-invoices", json={
+        "invoice_date": TODAY, "warehouse_id": wh, "tax_rate": 0,
+        "lines": [{"item_id": item, "qty": qty, "unit_cost": cost}],
+    })
+
+
 def _quote(client, wh, item, **extra):
     body = {
         "quotation_date": TODAY,
@@ -58,3 +65,38 @@ def test_quotation_without_customer_still_valid(client):
     assert r.status_code == 201, r.text
     assert r.json()["contact_id"] is None
     assert r.json()["customer_name"] is None
+
+
+def test_quotation_print_shows_manual_customer_name(client):
+    wh, item = _wh(client), _item(client)
+    q = _quote(client, wh, item, customer_name="آقای رضایی").json()
+    r = client.get(f"/api/sales-quotations/{q['id']}/print")
+    assert r.status_code == 200
+    html = r.text
+    assert "پیش‌فاکتور" in html
+    assert "آقای رضایی" in html  # نامِ مشتریِ دستی در چاپ می‌آید
+
+
+def test_quotation_print_empty_description_shows_proforma(client):
+    wh, item = _wh(client), _item(client)
+    q = _quote(client, wh, item).json()  # بدونِ توضیحات
+    html = client.get(f"/api/sales-quotations/{q['id']}/print").text
+    # توضیحاتِ خالی → «پیش‌فاکتور»، بدونِ جمله‌ی پیش‌فرض
+    assert "پیش‌فاکتور" in html
+
+
+def test_convert_carries_user_description_without_default_sentence(client):
+    wh, item = _wh(client), _item(client)
+    _buy(client, wh, item)
+    q = _quote(client, wh, item, description="سفارشِ ویژه").json()
+    inv = client.post(f"/api/sales-quotations/{q['id']}/convert").json()
+    assert inv["description"] == "سفارشِ ویژه"
+    assert "از پیش‌فاکتور شماره" not in inv["description"]
+
+
+def test_convert_empty_description_stays_empty(client):
+    wh, item = _wh(client), _item(client)
+    _buy(client, wh, item)
+    q = _quote(client, wh, item).json()
+    inv = client.post(f"/api/sales-quotations/{q['id']}/convert").json()
+    assert inv["description"] == ""
