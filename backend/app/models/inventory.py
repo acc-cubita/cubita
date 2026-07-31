@@ -87,6 +87,11 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     average_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). وقتی موجودیِ کلِ کالا ≤ این عدد باشد، در
+    #: «نیازمندِ سفارش» هشدار داده می‌شود. صفر = بدونِ هشدار (پیش‌فرض). فقط برای کالا
+    #: معنا دارد، نه خدمت. اعشاری‌پذیر چون واحد می‌تواند متر/کیلوگرم باشد.
+    reorder_point: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
 

@@ -21,10 +21,11 @@ interface DraftForm {
   unit: string
   salesPrice: string
   barcode: string
+  reorderPoint: string
   isService: boolean
 }
 
-const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', isService: false }
+const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', reorderPoint: '', isService: false }
 
 /**
  * مدیریتِ کالاها/محصولات — ثبت، ویرایش و فعال/غیرفعال‌سازی.
@@ -81,6 +82,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       unit: p.unit,
       salesPrice: String(Number(p.sales_price) || ''),
       barcode: p.barcode ?? '',
+      reorderPoint: String(Number(p.reorder_point) || ''),
       isService: p.is_service,
     })
     setMessage(null)
@@ -104,6 +106,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           name: form.name.trim(),
           sales_price: Number(form.salesPrice) || 0,
           barcode: form.barcode.trim() || null,
+          reorder_point: Number(form.reorderPoint) || 0,
         })
         setMessage('کالا ویرایش شد.')
       } else {
@@ -115,6 +118,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           is_service: form.isService,
           sales_price: Number(form.salesPrice) || 0,
           barcode: form.barcode.trim() || null,
+          reorder_point: Number(form.reorderPoint) || 0,
         })
         setMessage('کالای جدید ثبت شد.')
       }
@@ -251,6 +255,23 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               />
             </label>
           </div>
+          {!form.isService && (
+            <div className="field-row">
+              <label>
+                نقطه‌ی سفارش (حداقلِ موجودی)
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.reorderPoint}
+                  onChange={(e) => setForm({ ...form, reorderPoint: e.target.value })}
+                  placeholder="۰ = بدون هشدار"
+                />
+                <span className="field-hint">وقتی موجودیِ کل به این عدد یا کمتر برسد، در «نیازمندِ سفارش» هشدار داده می‌شود.</span>
+              </label>
+              <span aria-hidden="true" />
+            </div>
+          )}
           {!editingId ? (
             <label className="cal-check-inline">
               <input
@@ -312,6 +333,9 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                         <div>
                           <div className="entity-name">{p.name}</div>
                           <div className="entity-sub ltr-cell">{p.barcode ? `${p.sku} · ${p.barcode}` : p.sku}</div>
+                          {!p.is_service && Number(p.reorder_point) > 0 && (
+                            <div className="entity-sub">نقطه‌ی سفارش: {faMoney(Number(p.reorder_point))} {p.unit}</div>
+                          )}
                         </div>
                       </div>
                     </td>

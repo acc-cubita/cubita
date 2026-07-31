@@ -3039,3 +3039,136 @@ button:disabled {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* ═══════════════ ارتقای انبار: کاردکس، ارزشِ موجودی، نیازمندِ سفارش، انبارها ═══════════════ */
+
+/* راهنمای کوچکِ زیرِ یک ورودی (مثلاً نقطه‌ی سفارش) */
+.field-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--text-muted); line-height: 1.6; }
+
+/* رنگِ ورود/خروجِ کاردکس */
+.pos-in { color: var(--success); }
+.pos-out { color: var(--danger); }
+
+/* نشانِ «نیازمندِ سفارش» کنارِ نامِ کالا در جدولِ موجودی */
+.inv-low-badge { margin-inline-start: 8px; font-size: 11px; }
+
+/* دکمه‌ی اکشن (کاردکس) در جدول‌های موجودی/کسری */
+.lowstock-action button { padding: 4px 10px; font-size: 12.5px; }
+
+/* ── کاردکسِ درجا: پوششِ تیره + پنلِ لغزان از سمتِ چپ (RTL) ── */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(3, 5, 12, 0.55);
+  display: flex;
+  justify-content: flex-start; /* پنل به لبه‌ی شروع (چپ در RTL) می‌چسبد */
+}
+.drawer-panel {
+  width: min(720px, 100%);
+  max-width: 100%;
+  height: 100%;
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  animation: drawer-in 0.18s ease-out;
+}
+@keyframes drawer-in { from { transform: translateX(-16px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.drawer-title { display: flex; align-items: center; gap: 10px; color: var(--accent); min-width: 0; }
+.drawer-title-main { font-weight: 700; color: var(--text-h); font-size: 15px; }
+.drawer-title-sub { font-size: 12.5px; color: var(--text-muted); }
+.drawer-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+}
+.drawer-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px 28px; }
+
+/* خلاصه‌ی کاردکس (اول/ورود/خروج/پایان) */
+.kardex-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.kardex-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.kardex-stat strong { margin-inline-start: auto; color: var(--text-h); font-size: 15px; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های تازه‌ی انبار به کارتِ برچسب‌دار تبدیل می‌شوند ── */
+@media (max-width: 760px) {
+  .inv-stock-table, .inv-stock-table tbody,
+  .lowstock-table, .lowstock-table tbody,
+  .kardex-table, .kardex-table tbody,
+  .wh-table, .wh-table tbody { display: block; }
+  .inv-stock-table thead, .lowstock-table thead, .kardex-table thead, .wh-table thead { display: none; }
+  .inv-stock-table tr, .lowstock-table tr, .kardex-table tr, .wh-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .inv-stock-table td, .lowstock-table td, .kardex-table td, .wh-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .inv-stock-table tr td:last-child, .lowstock-table tr td:last-child,
+  .kardex-table tr td:last-child, .wh-table tr td:last-child { border-bottom: 0; }
+  .inv-stock-table td[data-label]::before, .lowstock-table td[data-label]::before,
+  .kardex-table td[data-label]::before, .wh-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* نامِ کالا/انبار = سرِ کارت: تمام‌عرض، پررنگ، بدونِ برچسب */
+  .inv-stock-table td.entity-name, .lowstock-table td.entity-name, .wh-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+    font-size: 14px;
+  }
+  .inv-stock-table td.entity-name::before,
+  .lowstock-table td.entity-name::before,
+  .wh-table td.entity-name::before { display: none; }
+  /* سلولِ اکشن (کاردکس/ویرایش) بدونِ برچسب → دکمه‌های تمام‌عرضِ قابل‌لمس */
+  .inv-stock-table td.lowstock-action, .lowstock-table td.lowstock-action { justify-content: center; padding-top: 10px; }
+  .inv-stock-table td.lowstock-action button, .lowstock-table td.lowstock-action button { width: 100%; justify-content: center; }
+  .wh-table td.check-actions { justify-content: center; padding-top: 10px; flex-wrap: wrap; }
+  .wh-table td.check-actions input { flex: 1 1 auto; min-width: 0; }
+}

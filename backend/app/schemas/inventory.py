@@ -10,6 +10,23 @@ class WarehouseIn(BaseModel):
     name: str
 
 
+class WarehouseUpdateIn(BaseModel):
+    """ویرایشِ انبار — فقط فیلدهای ارسال‌شده تغییر می‌کنند. کد پس از ساخت ثابت است
+    (روی حرکاتِ انبار و اسناد نشسته)، پس اینجا نمی‌آید."""
+
+    name: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not v.strip():
+            raise ValueError("نام انبار نمی‌تواند خالی باشد")
+        return v.strip()
+
+
 class WarehouseOut(BaseModel):
     id: UUID
     code: str
@@ -94,6 +111,8 @@ class ItemIn(BaseModel):
     is_service: bool = False
     sales_price: Decimal = Decimal(0)
     barcode: str | None = None
+    #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). ۰ = بدونِ هشدار.
+    reorder_point: Decimal = Decimal(0)
 
     @field_validator("barcode")
     @classmethod
@@ -103,6 +122,13 @@ class ItemIn(BaseModel):
             return None
         v = v.strip()
         return v or None
+
+    @field_validator("reorder_point")
+    @classmethod
+    def _non_negative_reorder(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("نقطه‌ی سفارش نمی‌تواند منفی باشد")
+        return v
 
 
 class ItemOut(BaseModel):
@@ -117,6 +143,7 @@ class ItemOut(BaseModel):
     is_active: bool
     barcode: str | None
     storefront_product_id: int | None
+    reorder_point: Decimal
 
     model_config = {"from_attributes": True}
 
@@ -135,6 +162,7 @@ class ItemUpdateIn(BaseModel):
     is_active: bool | None = None
     barcode: str | None = None
     storefront_product_id: int | None = None
+    reorder_point: Decimal | None = None
 
     @field_validator("barcode")
     @classmethod
@@ -145,9 +173,11 @@ class ItemUpdateIn(BaseModel):
         return v or None
 
     @model_validator(mode="after")
-    def _non_negative_cost(self) -> "ItemUpdateIn":
+    def _non_negative(self) -> "ItemUpdateIn":
         if self.average_cost is not None and self.average_cost < 0:
             raise ValueError("بهای تمام‌شده نمی‌تواند منفی باشد")
+        if self.reorder_point is not None and self.reorder_point < 0:
+            raise ValueError("نقطه‌ی سفارش نمی‌تواند منفی باشد")
         return self
 
 
@@ -158,6 +188,21 @@ class StockLevelOut(BaseModel):
     warehouse_id: UUID
     warehouse_name: str
     qty: Decimal
+    #: بهای میانگین موزونِ هر واحد و ارزشِ ریالیِ همین ردیف (qty × unit_cost).
+    unit_cost: Decimal = Decimal(0)
+    stock_value: Decimal = Decimal(0)
+
+
+class LowStockRowOut(BaseModel):
+    """کالایی که موجودیِ کلش به/زیرِ نقطه‌ی سفارش رسیده."""
+
+    item_id: UUID
+    sku: str
+    name: str
+    unit: str
+    qty_on_hand: Decimal
+    reorder_point: Decimal
+    shortfall: Decimal  # کمبود تا نقطه‌ی سفارش = max(reorder_point − qty, 0)
 
 
 class StockAdjustmentIn(BaseModel):

@@ -568,6 +568,7 @@ export interface ItemRecord {
   average_cost: string
   barcode: string | null
   storefront_product_id: number | null
+  reorder_point: string
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -585,6 +586,7 @@ export interface ItemIn {
   is_service?: boolean
   sales_price?: number
   barcode?: string | null
+  reorder_point?: number
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
@@ -594,7 +596,7 @@ export const createItemLive = (token: string, data: ItemIn) =>
 export const updateItemLive = (
   token: string,
   itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null },
+  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
@@ -870,9 +872,41 @@ export interface StockLevel {
   warehouse_id: string
   warehouse_name: string
   qty: string
+  unit_cost: string
+  stock_value: string
 }
 
 export const fetchStockLevels = (token: string) => authedGet<StockLevel[]>(token, '/api/stock')
+
+/** کالاهایی که موجودی‌شان به/زیرِ نقطه‌ی سفارش رسیده — هشدارِ سفارشِ مجدد. */
+export interface LowStockRow {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  qty_on_hand: string
+  reorder_point: string
+  shortfall: string
+}
+
+export const fetchLowStock = (token: string) => authedGet<LowStockRow[]>(token, '/api/stock/low')
+
+/** انبار (کامل، با وضعیتِ فعال) — برای تبِ مدیریتِ انبارها. */
+export interface WarehouseRecord {
+  id: string
+  code: string
+  name: string
+  is_active: boolean
+}
+
+export const fetchWarehousesAdmin = (token: string) =>
+  authedGet<WarehouseRecord[]>(token, '/api/warehouses')
+
+export const createWarehouse = (token: string, data: { code: string; name: string }) =>
+  authedSend<WarehouseRecord>(token, 'POST', '/api/warehouses', data)
+
+export const updateWarehouse = (token: string, id: string, patch: { name?: string; is_active?: boolean }) =>
+  authedSend<WarehouseRecord>(token, 'PATCH', `/api/warehouses/${id}`, patch)
 
 // --- مسیر «وب مستقیم» (بدون Electron): برای اجرای همین اپ در مرورگر (دموی وب/ورود وب)، جای صف آفلاین و
 // کش محلی SQLite، همه‌چیز مستقیم و زنده از API خوانده/نوشته می‌شود. شکل خروجی هرکدام با Cache-type متناظر در

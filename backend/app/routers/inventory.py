@@ -17,11 +17,13 @@ from app.schemas.inventory import (
     ItemIn,
     ItemOut,
     ItemUpdateIn,
+    LowStockRowOut,
     StockAdjustmentIn,
     StockAdjustmentOut,
     StockLevelOut,
     WarehouseIn,
     WarehouseOut,
+    WarehouseUpdateIn,
 )
 from app.services.credit import get_credit_status
 from app.services.inventory import post_stock_adjustment
@@ -40,6 +42,24 @@ def create_warehouse(
 ):
     warehouse = Warehouse(code=data.code, name=data.name)
     db.add(warehouse)
+    db.flush()
+    db.refresh(warehouse)
+    return warehouse
+
+
+@router.patch("/api/warehouses/{warehouse_id}", response_model=WarehouseOut)
+def update_warehouse(
+    warehouse_id: UUID,
+    data: WarehouseUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    """ویرایشِ نام/فعال‌بودنِ انبار. کد ثابت می‌ماند (روی حرکاتِ انبار نشسته)."""
+    warehouse = db.get(Warehouse, warehouse_id)
+    if warehouse is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "انبار یافت نشد")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(warehouse, key, value)
     db.flush()
     db.refresh(warehouse)
     return warehouse
@@ -195,18 +215,80 @@ def create_stock_adjustment(
 
 @router.get("/api/stock", response_model=list[StockLevelOut])
 def current_stock(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    """موجودیِ زنده به تفکیکِ کالا/انبار، همراه با بهای میانگین و ارزشِ ریالیِ هر ردیف.
+
+    ارزش = موجودی × `average_cost`ِ کالا — همان مبنایی که حسابِ «موجودی کالا» با آن
+    نگه‌داری می‌شود، پس جمعِ ارزش‌ها با ماندهٔ آن حساب هم‌خوان است.
+    """
     rows = (
         db.query(
             Item.id.label("item_id"),
             Item.sku.label("item_sku"),
             Item.name.label("item_name"),
+            Item.average_cost.label("unit_cost"),
             Warehouse.id.label("warehouse_id"),
             Warehouse.name.label("warehouse_name"),
             func.sum(StockLedger.qty).label("qty"),
         )
         .join(StockLedger, StockLedger.item_id == Item.id)
         .join(Warehouse, Warehouse.id == StockLedger.warehouse_id)
-        .group_by(Item.id, Item.sku, Item.name, Warehouse.id, Warehouse.name)
+        .group_by(Item.id, Item.sku, Item.name, Item.average_cost, Warehouse.id, Warehouse.name)
         .having(func.sum(StockLedger.qty) != 0)
     ).all()
-    return [StockLevelOut.model_validate(row, from_attributes=True) for row in rows]
+    out: list[StockLevelOut] = []
+    for r in rows:
+        qty = r.qty or 0
+        unit_cost = r.unit_cost or 0
+        out.append(
+            StockLevelOut(
+                item_id=r.item_id,
+                item_sku=r.item_sku,
+                item_name=r.item_name,
+                warehouse_id=r.warehouse_id,
+                warehouse_name=r.warehouse_name,
+                qty=qty,
+                unit_cost=unit_cost,
+                stock_value=qty * unit_cost,
+            )
+        )
+    return out
+
+
+@router.get("/api/stock/low", response_model=list[LowStockRowOut])
+def low_stock(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    """کالاهایی که موجودیِ کلشان به/زیرِ نقطه‌ی سفارش رسیده — برای هشدارِ سفارشِ مجدد.
+
+    موجودی روی همه‌ی انبارها جمع می‌شود (نقطه‌ی سفارش خصیصه‌ی کالاست، نه انبار). فقط
+    کالاهای فعالِ غیرخدماتی با `reorder_point > 0` سنجیده می‌شوند.
+    """
+    on_hand = dict(
+        db.query(StockLedger.item_id, func.coalesce(func.sum(StockLedger.qty), 0))
+        .group_by(StockLedger.item_id)
+        .all()
+    )
+    items = (
+        db.query(Item)
+        .filter(Item.is_service.is_(False), Item.is_active.is_(True), Item.reorder_point > 0)
+        .all()
+    )
+    from decimal import Decimal
+
+    rows: list[LowStockRowOut] = []
+    for item in items:
+        qty = Decimal(on_hand.get(item.id, 0))
+        reorder = Decimal(item.reorder_point)
+        if qty <= reorder:
+            rows.append(
+                LowStockRowOut(
+                    item_id=item.id,
+                    sku=item.sku,
+                    name=item.name,
+                    unit=item.unit,
+                    qty_on_hand=qty,
+                    reorder_point=reorder,
+                    shortfall=max(reorder - qty, Decimal(0)),
+                )
+            )
+    # بحرانی‌ترین اول: بیشترین کمبود بالاتر
+    rows.sort(key=lambda r: r.shortfall, reverse=True)
+    return rows
