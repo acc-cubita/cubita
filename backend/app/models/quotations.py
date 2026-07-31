@@ -25,6 +25,9 @@ class SalesQuotation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     quotation_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     valid_until: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    #: نامِ مشتریِ دستی — وقتی مشتری از فهرستِ اشخاص انتخاب نشده و آزادانه تایپ شده.
+    #: نمایش/چاپِ پیش‌فاکتور = نامِ طرف‌حساب (اگر contact_id باشد) وگرنه همین.
+    customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")

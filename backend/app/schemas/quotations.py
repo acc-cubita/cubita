@@ -25,6 +25,7 @@ class SalesQuotationIn(BaseModel):
     valid_until: date | None = None
     warehouse_id: UUID
     contact_id: UUID | None = None
+    customer_name: str | None = None
     description: str = ""
     lines: list[SalesQuotationLineIn]
 
@@ -56,6 +57,7 @@ class SalesQuotationOut(BaseModel):
     valid_until: date | None
     warehouse_id: UUID
     contact_id: UUID | None
+    customer_name: str | None
     description: str
     status: str
     total_amount: Decimal

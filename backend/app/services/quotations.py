@@ -46,6 +46,7 @@ def create_quotation(db: Session, data: SalesQuotationIn, user: User) -> SalesQu
         quotation_date=data.quotation_date,
         valid_until=data.valid_until,
         contact_id=data.contact_id,
+        customer_name=(data.customer_name or None) if not data.contact_id else None,
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,

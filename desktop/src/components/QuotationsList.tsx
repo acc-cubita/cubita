@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileCheck, RefreshCw, ArrowLeftCircle } from 'lucide-react'
-import { fetchSalesQuotations, updateQuotationStatus, convertQuotationToInvoice, type SalesQuotationRecord } from '../api'
+import { fetchSalesQuotations, fetchContacts, updateQuotationStatus, convertQuotationToInvoice, type SalesQuotationRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
@@ -23,6 +23,7 @@ const STATUS_TONE: Record<string, string> = {
 
 export function QuotationsList({ token, onConverted }: { token: string; onConverted: () => void }) {
   const [quotations, setQuotations] = useState<SalesQuotationRecord[]>([])
+  const [contactNames, setContactNames] = useState<Map<string, string>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -37,7 +38,15 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
 
   useEffect(() => {
     void refresh()
+    fetchContacts(token)
+      .then((rows) => setContactNames(new Map(rows.map((c) => [c.id, c.name]))))
+      .catch(() => setContactNames(new Map()))
   }, [])
+
+  function customerLabel(q: SalesQuotationRecord): string {
+    if (q.contact_id) return contactNames.get(q.contact_id) ?? '—'
+    return q.customer_name || '—'
+  }
 
   async function handleStatusChange(id: string, status: string) {
     setError(null)
@@ -85,6 +94,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
           <thead>
             <tr>
               <th>شماره</th>
+              <th>مشتری</th>
               <th>تاریخ</th>
               <th>اعتبار تا</th>
               <th>مبلغ</th>
@@ -96,6 +106,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
             {quotations.map((q) => (
               <tr key={q.id}>
                 <td>{q.number != null ? q.number.toLocaleString('fa-IR') : '—'}</td>
+                <td className="entity-name">{customerLabel(q)}</td>
                 <td>{formatJalali(q.quotation_date)}</td>
                 <td>{formatJalali(q.valid_until)}</td>
                 <td>{Number(q.total_amount).toLocaleString('fa-IR')}</td>

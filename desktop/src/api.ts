@@ -669,6 +669,7 @@ export interface SalesQuotationRecord {
   valid_until: string | null
   warehouse_id: string
   contact_id: string | null
+  customer_name: string | null
   description: string
   status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
   total_amount: string
@@ -685,6 +686,8 @@ export const createSalesQuotation = (
     quotation_date: string
     valid_until: string | null
     warehouse_id: string
+    contact_id?: string | null
+    customer_name?: string | null
     description: string
     lines: { item_id: string; qty: number; unit_price: number; description: string }[]
   },
