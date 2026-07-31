@@ -21,6 +21,7 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
+import { OnboardingPage } from '../pages/OnboardingPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -260,6 +261,7 @@ export function Dashboard({
               <Reports token={token} accounts={accounts} />
             </div>
           )}
+          {page === 'onboarding' && <OnboardingPage token={token} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}

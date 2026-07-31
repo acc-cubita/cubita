@@ -15,6 +15,38 @@ function escapeCell(value: string | number): string {
   return text
 }
 
+/** پارسِ متنِ CSV به آرایه‌ای از ردیف‌ها (هر ردیف آرایه‌ی سلول‌های متنی).
+ * نقل‌قول، ویرگول و خط جدیدِ داخلِ سلول را درست می‌فهمد؛ BOM و ردیف‌های خالی حذف می‌شوند. */
+export function parseCsv(text: string): string[][] {
+  const clean = text.replace(/^﻿/, '')
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let inQuotes = false
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (clean[i + 1] === '"') { cell += '"'; i++ } else inQuotes = false
+      } else cell += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      row.push(cell); cell = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && clean[i + 1] === '\n') i++
+      row.push(cell); cell = ''
+      if (row.some((c) => c.trim() !== '')) rows.push(row)
+      row = []
+    } else cell += ch
+  }
+  if (cell !== '' || row.length > 0) {
+    row.push(cell)
+    if (row.some((c) => c.trim() !== '')) rows.push(row)
+  }
+  return rows
+}
+
 export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
   const body = [headers, ...rows].map((row) => row.map(escapeCell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + body], { type: 'text/csv;charset=utf-8;' })

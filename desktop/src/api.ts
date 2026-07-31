@@ -976,6 +976,75 @@ export interface ContactIn {
   postal_code?: string | null
 }
 
+// ── راه‌اندازی: ورودِ گروهی + مانده‌های اول دوره ──
+export interface ImportResult {
+  created: number
+  skipped: number
+  errors: { row: number; message: string }[]
+}
+
+export interface ItemImportRow {
+  sku: string
+  name: string
+  category?: string
+  unit?: string
+  is_service?: boolean
+  sales_price?: number
+  barcode?: string | null
+}
+
+export interface ContactImportRow {
+  name: string
+  type?: string
+  phone?: string | null
+  email?: string | null
+  address?: string
+  entity_type?: string
+  national_id?: string | null
+  economic_code?: string | null
+  postal_code?: string | null
+}
+
+export const importItems = (token: string, rows: ItemImportRow[]) =>
+  authedSend<ImportResult>(token, 'POST', '/api/import/items', { rows })
+
+export const importContacts = (token: string, rows: ContactImportRow[]) =>
+  authedSend<ImportResult>(token, 'POST', '/api/import/contacts', { rows })
+
+export interface OpeningStatus {
+  exists: boolean
+  entry_id: string | null
+  entry_number: number | null
+  entry_date: string | null
+}
+
+export interface OpeningAccountLine {
+  account_id: string
+  debit?: number
+  credit?: number
+  description?: string
+}
+
+export interface OpeningStockLine {
+  item_id: string
+  warehouse_id: string
+  qty: number
+  unit_cost: number
+}
+
+export interface OpeningBalancesIn {
+  entry_date: string
+  lines?: OpeningAccountLine[]
+  stock?: OpeningStockLine[]
+  balancing_account_id?: string | null
+}
+
+export const fetchOpeningStatus = (token: string) =>
+  authedGet<OpeningStatus>(token, '/api/opening-balances/status')
+
+export const createOpeningBalances = (token: string, data: OpeningBalancesIn) =>
+  authedSend<{ id: string; number: number | null }>(token, 'POST', '/api/opening-balances', data)
+
 export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')
 
 export const createContact = (token: string, data: ContactIn) =>

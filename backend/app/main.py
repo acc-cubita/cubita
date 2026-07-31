@@ -30,6 +30,7 @@ from app.routers import (
     journal,
     members,
     moadian,
+    onboarding,
     payroll,
     period_close,
     quotations,
@@ -94,6 +95,7 @@ app.include_router(currencies.router)
 app.include_router(crm.router)
 app.include_router(manufacturing.router)
 app.include_router(advanced_inventory.router)
+app.include_router(onboarding.router)
 
 
 @app.get("/api/health")

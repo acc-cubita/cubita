@@ -14,6 +14,7 @@ import {
   BarChart3,
   CalendarDays,
   CreditCard,
+  Rocket,
   HelpCircle,
   UserCog,
   UserCircle,
@@ -39,6 +40,7 @@ export type PageKey =
   | 'integration'
   | 'billing'
   | 'reports'
+  | 'onboarding'
   | 'calendar'
   | 'team'
   | 'profile'
@@ -58,6 +60,7 @@ const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
   { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
   { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
+  { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
   { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
 ]
 

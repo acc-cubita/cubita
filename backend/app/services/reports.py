@@ -561,6 +561,7 @@ STOCK_SOURCE_LABELS = {
     "adjustment": "تعدیل انبار",
     "transfer_in": "انتقال (ورود)",
     "transfer_out": "انتقال (خروج)",
+    "opening": "موجودی اول دوره",
 }
 
 
