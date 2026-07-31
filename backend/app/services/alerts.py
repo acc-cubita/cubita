@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.banking import Check
 from app.models.calendar import CalendarEvent
+from app.models.installments import Installment, InstallmentPlan
 from app.models.inventory import Contact, Item, StockLedger
 from app.models.recurring import RecurringJournalEntry
 from app.services.reports import get_aging
@@ -151,6 +152,34 @@ def get_alerts(db: Session, as_of: date | None = None) -> dict:
                     "alert_date": None,
                     "amount": None,
                     "ref_id": item_id,
+                }
+            )
+
+    # ۷) اقساطِ سررسیدگذشته‌ی قراردادهای فعال (باقیمانده > ۰)
+    overdue_installments = (
+        db.query(Installment, InstallmentPlan)
+        .join(InstallmentPlan, Installment.plan_id == InstallmentPlan.id)
+        .filter(
+            InstallmentPlan.status == "active",
+            Installment.due_date < as_of,
+            Installment.paid_amount < Installment.amount,
+        )
+        .order_by(Installment.due_date)
+        .all()
+    )
+    if overdue_installments:
+        contact_names = {c.id: c.name for c in db.query(Contact).all()}
+        for inst, plan in overdue_installments:
+            remaining = Decimal(inst.amount) - Decimal(inst.paid_amount)
+            items.append(
+                {
+                    "category": "installment",
+                    "severity": "danger",
+                    "title": f"قسط معوق: {contact_names.get(plan.contact_id, '—')}",
+                    "detail": f"قسط {inst.seq} قرارداد {plan.number}",
+                    "alert_date": inst.due_date,
+                    "amount": remaining,
+                    "ref_id": plan.id,
                 }
             )
 

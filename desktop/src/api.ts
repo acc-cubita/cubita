@@ -1045,6 +1045,72 @@ export const fetchOpeningStatus = (token: string) =>
 export const createOpeningBalances = (token: string, data: OpeningBalancesIn) =>
   authedSend<{ id: string; number: number | null }>(token, 'POST', '/api/opening-balances', data)
 
+// ── فروش اقساطی ──
+export interface Installment {
+  id: string
+  seq: number
+  due_date: string
+  amount: string
+  paid_amount: string
+  remaining: string
+  paid_date: string | null
+  status: 'pending' | 'partial' | 'paid' | 'overdue'
+}
+
+export interface InstallmentPlan {
+  id: string
+  number: number | null
+  contact_id: string
+  contact_name: string
+  sales_invoice_id: string | null
+  title: string
+  total_amount: string
+  down_payment: string
+  financed: string
+  num_installments: number
+  interval_months: number
+  start_date: string
+  status: 'active' | 'completed' | 'cancelled'
+  notes: string
+  installments: Installment[]
+  total_paid: string
+  total_remaining: string
+  next_due_date: string | null
+  overdue_amount: string
+  overdue_count: number
+}
+
+export interface InstallmentPlanIn {
+  contact_id: string
+  sales_invoice_id?: string | null
+  title?: string
+  total_amount: number
+  down_payment?: number
+  num_installments: number
+  interval_months?: number
+  start_date: string
+  notes?: string
+}
+
+export interface InstallmentPayIn {
+  amount: number
+  transaction_date: string
+  method: 'cash' | 'bank'
+  bank_account_id?: string | null
+}
+
+export const fetchInstallmentPlans = (token: string) =>
+  authedGet<InstallmentPlan[]>(token, '/api/installment-plans')
+
+export const createInstallmentPlan = (token: string, data: InstallmentPlanIn) =>
+  authedSend<InstallmentPlan>(token, 'POST', '/api/installment-plans', data)
+
+export const payInstallment = (token: string, planId: string, installmentId: string, data: InstallmentPayIn) =>
+  authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/installments/${installmentId}/pay`, data)
+
+export const cancelInstallmentPlan = (token: string, planId: string) =>
+  authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/cancel`, {})
+
 export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(token, '/api/contacts')
 
 export const createContact = (token: string, data: ContactIn) =>

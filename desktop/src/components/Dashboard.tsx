@@ -22,6 +22,7 @@ import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
+import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -192,6 +193,7 @@ export function Dashboard({
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
+          {page === 'installments' && <InstallmentsPage token={token} bankAccounts={bankAccounts} />}
           {page === 'contacts' && <ContactsPage token={token} bankAccounts={bankAccounts} />}
           {page === 'crm' && <CrmPage token={token} />}
           {page === 'inventory' && (

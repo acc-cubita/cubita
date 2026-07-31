@@ -22,6 +22,7 @@ __all__ = [
     "persian_year_end",
     "persian_month_end",
     "days_in_jalali_year",
+    "add_jalali_months",
 ]
 
 
@@ -98,3 +99,25 @@ def persian_month_end(jy: int, jm: int) -> date:
 def days_in_jalali_year(jy: int) -> int:
     """۳۶۵ یا ۳۶۶ (سالِ کبیسه‌ی شمسی)."""
     return (persian_year_start(jy + 1) - persian_year_start(jy)).days
+
+
+def _jalali_month_length(jy: int, jm: int) -> int:
+    if jm <= 6:
+        return 31
+    if jm <= 11:
+        return 30
+    return 30 if days_in_jalali_year(jy) == 366 else 29  # اسفند
+
+
+def add_jalali_months(g: date, months: int) -> date:
+    """`months` ماهِ **شمسی** به یک تاریخِ میلادی اضافه می‌کند و روزِ ماه را نگه می‌دارد.
+
+    اقساطِ ماهانه باید روی همان روزِ ماهِ شمسی بیفتند نه ماهِ میلادی. روزِ ماه اگر از
+    طولِ ماهِ مقصد بیشتر شود به آخرین روزِ آن ماه چسبانده می‌شود (۳۱ → ۳۰/۲۹).
+    """
+    jy, jm, jd = gregorian_to_jalali(g)
+    total = (jm - 1) + months
+    jy2 = jy + total // 12
+    jm2 = total % 12 + 1
+    jd2 = min(jd, _jalali_month_length(jy2, jm2))
+    return jalali_to_gregorian(jy2, jm2, jd2)

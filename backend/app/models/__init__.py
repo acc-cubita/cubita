@@ -12,6 +12,7 @@ from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
 from app.models.crm import CrmActivity, Lead, LoyaltySettings, LoyaltyTransaction
 from app.models.currency import Currency, ExchangeRate
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine
+from app.models.installments import Installment, InstallmentPlan
 from app.models.idempotency import IdempotencyKey
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.invoices import (
@@ -60,6 +61,8 @@ __all__ = [
     "BomLine",
     "ProductionOrder",
     "ProductionOrderLine",
+    "InstallmentPlan",
+    "Installment",
     "PriceList",
     "PriceListItem",
     "StockBatch",

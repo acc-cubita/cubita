@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   ScanLine,
+  CalendarClock,
   PackagePlus,
   Warehouse,
   UsersRound,
@@ -29,6 +30,7 @@ export type PageKey =
   | 'overview'
   | 'sales'
   | 'pos'
+  | 'installments'
   | 'purchases'
   | 'contacts'
   | 'crm'
@@ -50,6 +52,7 @@ const NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> },
   { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
   { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
+  { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
   { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
   { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
   { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },

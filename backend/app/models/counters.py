@@ -30,6 +30,7 @@ DOC_SALES_RETURN = "sales_return"
 DOC_PURCHASE_RETURN = "purchase_return"
 DOC_STOCK_TRANSFER = "stock_transfer"
 DOC_PRODUCTION_ORDER = "production_order"
+DOC_INSTALLMENT_PLAN = "installment_plan"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -41,6 +42,7 @@ DOC_TYPES = (
     DOC_PURCHASE_RETURN,
     DOC_STOCK_TRANSFER,
     DOC_PRODUCTION_ORDER,
+    DOC_INSTALLMENT_PLAN,
 )
 
 
