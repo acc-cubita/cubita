@@ -1252,6 +1252,56 @@ button:disabled {
 .invoice-lines td .item-picker { min-width: 150px; }
 .invoice-lines td .stock-cell { min-width: 96px; }
 
+/* ── موبایل: ردیف‌های فاکتور به‌جای جدولِ فشرده/اسکرولِ افقی، «کارتِ برچسب‌دار» می‌شوند.
+   هر سلول یک خط: برچسب (از data-label) راست، ورودی چپ. حرفه‌ای‌تر و قابل‌لمس‌تر. سرِ
+   ستون پنهان می‌شود چون هر سلول برچسبِ خودش را دارد. */
+@media (max-width: 640px) {
+  .invoice-lines,
+  .invoice-lines tbody { display: block; }
+  .invoice-lines thead { display: none; }
+  .invoice-lines tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .invoice-lines td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .invoice-lines tr td:last-child { border-bottom: 0; }
+  /* سلولِ اکشن (حذف ردیف) برچسب ندارد → وسط‌چین و بدونِ خطِ جداکننده */
+  .invoice-lines tr td:not([data-label]) {
+    justify-content: center;
+    padding-top: 10px;
+  }
+  .invoice-lines td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* ورودی/انتخابگر فضای باقی‌مانده را می‌گیرد؛ کف‌های عرضِ دسکتاپ اینجا لازم نیستند */
+  .invoice-lines td > .item-picker,
+  .invoice-lines td > input,
+  .invoice-lines td > .qty-with-unit,
+  .invoice-lines td > .stock-cell { flex: 1 1 auto; }
+  .invoice-lines td .item-picker,
+  .invoice-lines td input,
+  .invoice-lines td .qty-with-unit input,
+  .invoice-lines td .stock-cell { min-width: 0; }
+  /* در حالتِ کارت دیگر اسکرولِ افقی لازم نیست */
+  .invoice-form .table-scroll { overflow-x: visible; }
+}
+
 .invoice-form h3 {
   font-size: 14px;
   margin: 8px 0 0;

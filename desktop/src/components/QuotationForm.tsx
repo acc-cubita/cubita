@@ -217,17 +217,17 @@ export function QuotationForm({
                 const over = avail != null && Number(line.qty) > avail
                 return (
                   <tr key={i}>
-                    <td>
+                    <td data-label="کالا">
                       <ItemPicker items={items} value={line.itemId} onChange={(id) => chooseLineItem(i, id)} />
                     </td>
-                    <td>
+                    <td data-label="تعداد">
                       <div className="qty-with-unit">
                         <input type="number" min="0" step="any" value={line.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} />
                         {line.itemId && <span className="unit-suffix">{unitOf(line.itemId)}</span>}
                       </div>
                     </td>
                     {stockMode === 'warehouse' && (
-                      <td>
+                      <td data-label="موجودی انبار">
                         {!line.itemId ? '—' : service ? (
                           <span className="unit-suffix">خدمات (بدون موجودی)</span>
                         ) : (
@@ -241,7 +241,7 @@ export function QuotationForm({
                         )}
                       </td>
                     )}
-                    <td>
+                    <td data-label="قیمت واحد">
                       <div className="qty-with-unit">
                         <input
                           type="number"

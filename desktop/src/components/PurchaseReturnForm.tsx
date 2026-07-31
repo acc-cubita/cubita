@@ -128,9 +128,9 @@ export function PurchaseReturnForm({ token, items }: { token: string; items: Ite
               <tbody>
                 {selectedInvoice.lines.map((line) => (
                   <tr key={line.id}>
-                    <td>{itemsById.get(line.item_id)?.name ?? line.item_id}</td>
-                    <td>{Number(line.qty).toLocaleString('fa-IR')}</td>
-                    <td>
+                    <td data-label="کالا">{itemsById.get(line.item_id)?.name ?? line.item_id}</td>
+                    <td data-label="تعداد خریداری‌شده">{Number(line.qty).toLocaleString('fa-IR')}</td>
+                    <td data-label="مقدار برگشتی">
                       <input
                         type="number"
                         min="0"

@@ -15,6 +15,7 @@ import {
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { ItemPicker } from './ItemPicker'
 import { todayIso } from '../lib/jalali'
 
 interface DraftLine {
@@ -267,17 +268,10 @@ export function PurchaseInvoiceForm({
             <tbody>
               {lines.map((line, i) => (
                 <tr key={i}>
-                  <td>
-                    <select value={line.itemId} onChange={(e) => updateLine(i, { itemId: e.target.value })}>
-                      <option value="">— انتخاب کالا —</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.name}
-                        </option>
-                      ))}
-                    </select>
+                  <td data-label="کالا">
+                    <ItemPicker items={items} value={line.itemId} onChange={(id) => updateLine(i, { itemId: id })} />
                   </td>
-                  <td>
+                  <td data-label="تعداد">
                     <div className="qty-with-unit">
                       <input
                         type="number"
@@ -289,7 +283,7 @@ export function PurchaseInvoiceForm({
                       {(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? <span className="unit-suffix">{u}</span> : null })()}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="بهای واحد">
                     <input
                       type="number"
                       min="0"
@@ -298,7 +292,7 @@ export function PurchaseInvoiceForm({
                       title={(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? `بهای هر ${u}` : 'بهای واحد' })()}
                     />
                   </td>
-                  <td>
+                  <td data-label="تخفیف">
                     <input
                       type="number"
                       min="0"

@@ -182,11 +182,11 @@ export function SalesReturnForm({ token }: { token: string }) {
                   const over = entered > remaining
                   return (
                     <tr key={r.item_id}>
-                      <td className="entity-name">{r.item_name} {r.unit && <span className="unit-suffix">/ {r.unit}</span>}</td>
-                      <td>{fa(Number(r.sold))}</td>
-                      <td>{fa(Number(r.already_returned))}</td>
-                      <td className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
-                      <td>
+                      <td className="entity-name" data-label="کالا">{r.item_name} {r.unit && <span className="unit-suffix">/ {r.unit}</span>}</td>
+                      <td data-label="فروخته‌شده">{fa(Number(r.sold))}</td>
+                      <td data-label="قبلاً برگشتی">{fa(Number(r.already_returned))}</td>
+                      <td data-label="باقی‌مانده" className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
+                      <td data-label="مقدار برگشتی">
                         <div className="stock-cell">
                           <input
                             type="number"

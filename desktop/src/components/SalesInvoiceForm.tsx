@@ -399,10 +399,10 @@ export function SalesInvoiceForm({
                 const unit = items.find((it) => it.id === line.itemId)?.unit
                 return (
                 <tr key={i}>
-                  <td>
+                  <td data-label="کالا">
                     <ItemPicker items={items} value={line.itemId} onChange={(id) => chooseLineItem(i, id)} />
                   </td>
-                  <td>
+                  <td data-label="تعداد">
                     <div className="qty-with-unit">
                       <input
                         type="number"
@@ -414,7 +414,7 @@ export function SalesInvoiceForm({
                       {unit ? <span className="unit-suffix">{unit}</span> : null}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="موجودی انبار">
                     {!line.itemId ? '—' : service ? (
                       <span className="unit-suffix">خدمات (بدون موجودی)</span>
                     ) : (
@@ -424,7 +424,7 @@ export function SalesInvoiceForm({
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td data-label="قیمت واحد">
                     <input
                       type="number"
                       min="0"
@@ -433,7 +433,7 @@ export function SalesInvoiceForm({
                       title={(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? `قیمت هر ${u}` : 'قیمت واحد' })()}
                     />
                   </td>
-                  <td>
+                  <td data-label="تخفیف">
                     <input
                       type="number"
                       min="0"
