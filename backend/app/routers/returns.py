@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact, Item
-from app.models.invoices import SalesInvoice
+from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
@@ -19,7 +19,12 @@ from app.schemas.returns import (
     SalesReturnOut,
 )
 from app.services.printing import render_invoice
-from app.services.returns import get_returnable_summary, post_purchase_return, post_sales_return
+from app.services.returns import (
+    get_purchase_returnable_summary,
+    get_returnable_summary,
+    post_purchase_return,
+    post_sales_return,
+)
 
 router = APIRouter(tags=["returns"])
 
@@ -32,6 +37,16 @@ def sales_invoice_returnable(
 ):
     """باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور فروش."""
     return [ReturnableLineOut(**row) for row in get_returnable_summary(db, invoice_id)]
+
+
+@router.get("/api/purchase-invoices/{invoice_id}/returnable", response_model=list[ReturnableLineOut])
+def purchase_invoice_returnable(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور خرید."""
+    return [ReturnableLineOut(**row) for row in get_purchase_returnable_summary(db, invoice_id)]
 
 
 @router.get("/api/sales-returns", response_model=Page[SalesReturnOut])
@@ -119,5 +134,48 @@ def print_sales_return(
         ],
         total=sret.total_amount,
         tax_amount=sret.tax_amount,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/purchase-returns/{return_id}/print", response_class=HTMLResponse)
+def print_purchase_return(
+    return_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """نمای چاپیِ سندِ برگشت از خرید — همان قالب با عنوانِ «برگشت از خرید»."""
+    pret = db.get(PurchaseReturn, return_id)
+    if pret is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت یافت نشد")
+
+    invoice = db.get(PurchaseInvoice, pret.purchase_invoice_id)
+    contact = db.get(Contact, invoice.contact_id) if invoice and invoice.contact_id else None
+    party_name = contact.name if contact else "تأمین‌کننده نقدی"
+    party_detail = " — ".join(filter(None, [contact.phone, contact.address])) if contact else ""
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in pret.lines])).all()}
+
+    html = render_invoice(
+        kind="برگشت از خرید",
+        business_name=principal.membership.tenant.name,
+        number=pret.number,
+        invoice_date=pret.return_date,
+        party_name=party_name,
+        party_detail=party_detail,
+        description=pret.description or (f"بابت فاکتور خرید شماره {invoice.number}" if invoice else ""),
+        lines=[
+            {
+                "name": items[l.item_id].name if l.item_id in items else "",
+                "description": l.description,
+                "qty": l.qty,
+                "unit": items[l.item_id].unit if l.item_id in items else "",
+                "unit_price": l.unit_cost,
+                "discount": 0,
+            }
+            for l in pret.lines
+        ],
+        total=pret.total_amount,
+        tax_amount=pret.tax_amount,
     )
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})

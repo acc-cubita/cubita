@@ -334,14 +334,25 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
     number = next_document_number(db, DOC_PURCHASE_INVOICE)
 
+    # تخفیفِ کلِ فاکتور به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس ارزش‌گذاریِ موجودی،
+    # پایه‌ی مالیات و بهای برگشت همگی خودکار درست می‌مانند.
+    base_nets = [max((line.qty * line.unit_cost) - Decimal(line.discount or 0), Decimal(0)) for line in data.lines]
+    gross_net = sum(base_nets, Decimal(0))
+    invoice_discount = Decimal(data.invoice_discount or 0)
+    if invoice_discount > gross_net:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "تخفیفِ کلِ فاکتور نمی‌تواند از جمعِ خالصِ فاکتور بیشتر باشد"
+        )
+    allocated = _allocate_discount(invoice_discount, base_nets)
+
     total_amount = Decimal(0)
     total_discount = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
     stock_moves: list[StockLedger] = []
 
-    for line in data.lines:
+    for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
-        line_discount = Decimal(line.discount or 0)
+        line_discount = Decimal(line.discount or 0) + allocated[idx]
         line_net = (line.qty * line.unit_cost) - line_discount
         # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
         # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
@@ -428,6 +439,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         description=data.description,
         total_amount=total_amount,
         total_discount=total_discount,
+        invoice_discount=invoice_discount,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
         currency_code=(data.currency_code or None),

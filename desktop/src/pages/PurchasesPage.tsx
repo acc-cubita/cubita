@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Inbox, PackagePlus, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
-import { fetchPurchaseInvoices, type MeResponse, type PurchaseInvoiceRecord } from '../api'
+import { fetchPurchaseSummary, type MeResponse, type PurchaseInvoiceRecord, type PurchaseSummary } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { PurchaseInvoiceForm } from '../components/PurchaseInvoiceForm'
-import { InvoiceList } from '../components/InvoiceList'
+import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
@@ -27,11 +27,13 @@ export function PurchasesPage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
-  const [invoices, setInvoices] = useState<PurchaseInvoiceRecord[]>([])
-  // بعد از ثبتِ فاکتورِ خرید، شاخص‌ها و فهرست باید بی‌نیاز از ترکِ صفحه به‌روز شوند
+  // شاخص‌ها از سرور می‌آیند (قرینه‌ی صفحه‌ی فروش؛ رفعِ دانلودِ کلِ تاریخچه در کلاینت).
+  const [summary, setSummary] = useState<PurchaseSummary | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [prefill, setPrefill] = useState<PurchaseInvoiceRecord | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
   const refresh = useCallback(() => {
-    void fetchPurchaseInvoices(token).then(setInvoices).catch(() => {})
+    void fetchPurchaseSummary(token).then(setSummary).catch(() => {})
     setReloadKey((k) => k + 1)
   }, [token])
   useEffect(() => {
@@ -41,15 +43,11 @@ export function PurchasesPage({
     onQueued()
     refresh()
   }, [onQueued, refresh])
-  const kpis = useMemo(() => {
-    const live = invoices.filter((i) => !i.voided_at)
-    const withTax = (i: PurchaseInvoiceRecord) => Number(i.total_amount) + Number(i.tax_amount)
-    const total = live.reduce((s, i) => s + withTax(i), 0)
-    const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
-    const last30 = live.filter((i) => i.invoice_date >= cutoff).reduce((s, i) => s + withTax(i), 0)
-    const avg = live.length ? Math.round(total / live.length) : 0
-    return { count: live.length, total, last30, avg }
-  }, [invoices])
+  const handleDuplicate = useCallback((inv: AnyInvoice) => {
+    setPrefill(inv as PurchaseInvoiceRecord)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+  const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 
   return (
     <div className="page">
@@ -60,10 +58,10 @@ export function PurchasesPage({
       />
 
       <div className="stat-grid">
-        <StatCard icon={<FileText size={18} />} label="تعداد فاکتور خرید" value={kpis.count.toLocaleString('fa-IR')} />
-        <StatCard icon={<TrendingDown size={18} />} label="مجموع خرید" value={kpis.total.toLocaleString('fa-IR')} hint="ریال (با مالیات)" />
-        <StatCard icon={<CalendarRange size={18} />} label="خرید ۳۰ روز اخیر" value={kpis.last30.toLocaleString('fa-IR')} hint="ریال" />
-        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={kpis.avg.toLocaleString('fa-IR')} hint="ریال" />
+        <StatCard icon={<FileText size={18} />} label="تعداد فاکتور خرید" value={(summary?.invoice_count ?? 0).toLocaleString('fa-IR')} />
+        <StatCard icon={<TrendingDown size={18} />} label="مجموع خرید" value={fa(summary?.total_with_tax ?? 0)} hint="ریال (با مالیات)" />
+        <StatCard icon={<CalendarRange size={18} />} label="خرید ۳۰ روز اخیر" value={fa(summary?.last_30_with_tax ?? 0)} hint="ریال" />
+        <StatCard icon={<Receipt size={18} />} label="میانگین هر فاکتور" value={fa(summary?.avg_invoice ?? 0)} hint="ریال" />
       </div>
 
       <Tabs
@@ -74,8 +72,17 @@ export function PurchasesPage({
             icon: PackagePlus,
             content: (
               <>
-                <PurchaseInvoiceForm token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} />
+                <div ref={formRef}>
+                  <PurchaseInvoiceForm
+                    token={token}
+                    warehouses={warehouses}
+                    items={items}
+                    onQueued={handleQueued}
+                    prefill={prefill}
+                    onPrefillConsumed={() => setPrefill(null)}
+                  />
+                </div>
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} onDuplicate={handleDuplicate} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -92,7 +99,7 @@ export function PurchasesPage({
             key: 'returns',
             label: 'برگشت از خرید',
             icon: Undo2,
-            content: <PurchaseReturnForm token={token} items={items} />,
+            content: <PurchaseReturnForm token={token} />,
           },
         ]}
       />

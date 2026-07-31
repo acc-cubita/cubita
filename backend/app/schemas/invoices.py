@@ -124,6 +124,19 @@ class SalesSummaryOut(BaseModel):
     avg_invoice: Decimal      # میانگینِ هر فاکتور (با مالیات)
 
 
+class PurchaseSummaryOut(BaseModel):
+    """خلاصه‌ی خرید، محاسبه‌شده در پایگاه‌داده. فقط فاکتورهای باطل‌نشده.
+
+    خرید سود ندارد (خودش بهای تمام‌شده است)، پس فقط جمع‌ها گزارش می‌شوند.
+    """
+    invoice_count: int
+    total_net: Decimal        # جمعِ خالص (پس از تخفیف، بدون مالیات)
+    total_tax: Decimal
+    total_with_tax: Decimal   # خالص + مالیات = مبلغِ پرداختنی به تأمین‌کننده
+    last_30_with_tax: Decimal
+    avg_invoice: Decimal
+
+
 class PurchaseInvoiceLineIn(BaseModel):
     item_id: UUID
     qty: Decimal
@@ -154,6 +167,9 @@ class PurchaseInvoiceIn(BaseModel):
     lines: list[PurchaseInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
+    #: تخفیفِ کلِ فاکتور به مبلغ (درصد در رابط کاربری به مبلغ تبدیل می‌شود). هنگام ثبت
+    #: به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس ارزش‌گذاریِ موجودی و پایه‌ی مالیات پس از آن‌اند.
+    invoice_discount: Decimal = Decimal(0)
     #: ارز فاکتور (مثل USD). None/خالی = پایه. مبالغِ سطرها همیشه پایه‌اند.
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
@@ -164,6 +180,8 @@ class PurchaseInvoiceIn(BaseModel):
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
         if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
+        if self.invoice_discount < 0:
+            raise ValueError("تخفیفِ کلِ فاکتور نمی‌تواند منفی باشد")
         if self.currency_code and self.exchange_rate <= 0:
             raise ValueError("نرخ ارز باید بزرگ‌تر از صفر باشد")
         return self
@@ -190,6 +208,7 @@ class PurchaseInvoiceOut(BaseModel):
     description: str
     total_amount: Decimal
     total_discount: Decimal = Decimal(0)
+    invoice_discount: Decimal = Decimal(0)
     tax_rate: Decimal
     tax_amount: Decimal
     currency_code: str | None = None

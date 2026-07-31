@@ -73,6 +73,38 @@ def get_sales_summary(db: Session) -> dict:
     }
 
 
+def get_purchase_summary(db: Session) -> dict:
+    """شاخص‌های خرید را در پایگاه‌داده جمع می‌زند (قرینه‌ی get_sales_summary، بدون سود)."""
+    count, net, tax = (
+        db.query(
+            func.count(PurchaseInvoice.id),
+            func.coalesce(func.sum(PurchaseInvoice.total_amount), 0),
+            func.coalesce(func.sum(PurchaseInvoice.tax_amount), 0),
+        )
+        .filter(PurchaseInvoice.voided_at.is_(None))
+        .one()
+    )
+
+    cutoff = date.today() - timedelta(days=30)
+    last30 = (
+        db.query(func.coalesce(func.sum(PurchaseInvoice.total_amount + PurchaseInvoice.tax_amount), 0))
+        .filter(PurchaseInvoice.voided_at.is_(None), PurchaseInvoice.invoice_date >= cutoff)
+        .scalar()
+    )
+
+    net, tax = Decimal(net), Decimal(tax)
+    with_tax = net + tax
+    avg = (with_tax / count) if count else Decimal(0)
+    return {
+        "invoice_count": int(count),
+        "total_net": net,
+        "total_tax": tax,
+        "total_with_tax": with_tax,
+        "last_30_with_tax": Decimal(last30),
+        "avg_invoice": avg.quantize(Decimal(1)),
+    }
+
+
 def get_vat_report(db: Session, date_from: date | None, date_to: date | None) -> dict:
     """جمعِ خالص و مالیاتِ فاکتورهای فروش (خروجی) و خرید (ورودی) در بازه.
 

@@ -13,6 +13,7 @@ from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import (
     PurchaseInvoiceIn,
     PurchaseInvoiceOut,
+    PurchaseSummaryOut,
     SalesInvoiceIn,
     SalesInvoiceOut,
     SalesSummaryOut,
@@ -20,7 +21,7 @@ from app.schemas.invoices import (
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
-from app.services.reports import get_sales_summary
+from app.services.reports import get_purchase_summary, get_sales_summary
 from decimal import Decimal
 
 from app.services.pdf_invoice import render_invoice_pdf
@@ -83,6 +84,15 @@ def list_purchase_invoices(
         params,
     )
     return Page(items=items, next_cursor=next_cursor)
+
+
+@router.get("/api/purchase-invoices/summary", response_model=PurchaseSummaryOut)
+def purchase_summary(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """شاخص‌های خرید، محاسبه‌شده سمت سرور."""
+    return PurchaseSummaryOut(**get_purchase_summary(db))
 
 
 @router.post("/api/purchase-invoices", response_model=PurchaseInvoiceOut, status_code=201)

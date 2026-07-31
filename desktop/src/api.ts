@@ -757,6 +757,8 @@ export interface PurchaseInvoiceRecord {
   description: string
   total_amount: string
   total_discount: string
+  /** تخفیفِ کلِ فاکتور (تسهیم‌شده در ردیف‌ها؛ در total_discount هم منظور شده). */
+  invoice_discount: string
   tax_rate: string
   tax_amount: string
   voided_at: string | null
@@ -765,6 +767,19 @@ export interface PurchaseInvoiceRecord {
 }
 
 export const fetchPurchaseInvoices = (token: string) => authedGetAll<PurchaseInvoiceRecord>(token, '/api/purchase-invoices')
+
+export interface PurchaseSummary {
+  invoice_count: number
+  total_net: string
+  total_tax: string
+  total_with_tax: string
+  last_30_with_tax: string
+  avg_invoice: string
+}
+
+/** شاخص‌های خرید، محاسبه‌شده سمت سرور — به‌جای دانلودِ کلِ فاکتورها در کلاینت. */
+export const fetchPurchaseSummary = (token: string) =>
+  authedGet<PurchaseSummary>(token, '/api/purchase-invoices/summary')
 
 export interface SalesReturnRecord {
   id: string
@@ -794,6 +809,10 @@ export interface ReturnableLine {
 /** باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور فروش. */
 export const fetchReturnable = (token: string, invoiceId: string) =>
   authedGet<ReturnableLine[]>(token, `/api/sales-invoices/${invoiceId}/returnable`)
+
+/** باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور خرید (`unit_price` بهای واحد را حمل می‌کند). */
+export const fetchPurchaseReturnable = (token: string, invoiceId: string) =>
+  authedGet<ReturnableLine[]>(token, `/api/purchase-invoices/${invoiceId}/returnable`)
 
 export const createSalesReturn = (
   token: string,
@@ -947,6 +966,8 @@ export const createPurchaseInvoiceDirect = (
     contact_id?: string | null
     currency_code?: string | null
     exchange_rate?: number
+    /** تخفیفِ کلِ فاکتور به مبلغِ پایه (ریال). درصد در UI به مبلغ تبدیل می‌شود. */
+    invoice_discount?: number
     lines: { item_id: string; qty: number; unit_cost: number; discount?: number }[]
   },
   idempotencyKey?: string,
@@ -1742,6 +1763,9 @@ export const printSalesQuotation = (token: string, quotationId: string) =>
 
 export const printSalesReturn = (token: string, returnId: string) =>
   openInvoicePrintView(token, `/api/sales-returns/${returnId}/print`)
+
+export const printPurchaseReturn = (token: string, returnId: string) =>
+  openInvoicePrintView(token, `/api/purchase-returns/${returnId}/print`)
 
 /** فایل PDF فاکتور را با احراز هویت می‌گیرد و دانلود می‌کند.
  *

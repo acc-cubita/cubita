@@ -11,6 +11,7 @@ import {
   type ContactRecord,
   type CostCenterRecord,
   type Currency,
+  type PurchaseInvoiceRecord,
 } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
@@ -30,15 +31,22 @@ export function PurchaseInvoiceForm({
   warehouses,
   items,
   onQueued,
+  prefill,
+  onPrefillConsumed,
 }: {
   token: string
   warehouses: WarehouseCache[]
   items: ItemCache[]
   onQueued: () => void
+  /** رونوشتِ فاکتور خرید: فرم را با اقلامِ یک فاکتورِ موجود پیش‌پر می‌کند. */
+  prefill?: PurchaseInvoiceRecord | null
+  onPrefillConsumed?: () => void
 }) {
   const [warehouseId, setWarehouseId] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(todayIso())
   const [taxRate, setTaxRate] = useState('10')
+  const [invoiceDiscount, setInvoiceDiscount] = useState('')
+  const [invoiceDiscountMode, setInvoiceDiscountMode] = useState<'amount' | 'percent'>('amount')
   const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
   const [message, setMessage] = useState<string | null>(null)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
@@ -92,6 +100,29 @@ export function PurchaseInvoiceForm({
   // در آن حالت یعنی فاکتور دوم. کلید فقط بعد از موفقیت قطعی نو می‌شود.
   const idempotencyKey = useRef(newIdempotencyKey())
 
+  // رونوشتِ فاکتور خرید: با تغییرِ prefill، فرم با اقلامِ همان فاکتور به‌عنوان پیش‌نویسِ
+  // تازه پر می‌شود (تاریخ و کلیدِ یکتاسازی نو).
+  useEffect(() => {
+    if (!prefill) return
+    setWarehouseId(prefill.warehouse_id)
+    setContactId(prefill.contact_id ?? '')
+    setTaxRate(String(Number(prefill.tax_rate)))
+    setCurrencyCode('')
+    setInvoiceDate(todayIso())
+    setLines(
+      prefill.lines.map((l) => ({
+        itemId: l.item_id,
+        qty: String(Number(l.qty)),
+        unitCost: String(Number(l.unit_cost)),
+        discount: Number(l.discount) ? String(Number(l.discount)) : '',
+      })),
+    )
+    idempotencyKey.current = newIdempotencyKey()
+    setMessage(`رونوشت از فاکتور خرید شماره ${prefill.number ?? ''} بارگذاری شد؛ ویرایش و ثبت کنید.`)
+    onPrefillConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
+
   const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
@@ -108,8 +139,15 @@ export function PurchaseInvoiceForm({
 
   const gross = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitCost) || 0), 0)
   const discountTotal = lines.reduce((sum, line) => sum + (Number(line.discount) || 0), 0)
-  // بهای موجودی هم پس از تخفیف ثبت می‌شود، پس پایه همین خالص است.
-  const total = gross - discountTotal
+  const netAfterLine = gross - discountTotal
+  // تخفیفِ کلِ فاکتور: مبلغی یا درصدی (روی خالصِ پس از تخفیفِ سطری). سقفش همان خالص است.
+  const invoiceDiscountInput = Number(invoiceDiscount) || 0
+  const invoiceDiscountAmount = Math.min(
+    invoiceDiscountMode === 'percent' ? Math.round((netAfterLine * invoiceDiscountInput) / 100) : invoiceDiscountInput,
+    netAfterLine,
+  )
+  // بهای موجودی هم پس از همه‌ی تخفیف‌ها ثبت می‌شود، پس پایه همین خالص است.
+  const total = netAfterLine - invoiceDiscountAmount
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const taxAmount = Math.round((total * taxRateNum) / 100)
   const grandTotal = total + taxAmount
@@ -147,6 +185,7 @@ export function PurchaseInvoiceForm({
       contact_id: contactId || null,
       currency_code: currencyCode || null,
       exchange_rate: rate,
+      invoice_discount: Math.round(invoiceDiscountAmount * rate),
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
@@ -169,6 +208,7 @@ export function PurchaseInvoiceForm({
       setCostCenterId('')
       setContactId('')
       setCurrencyCode('')
+      setInvoiceDiscount('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -318,13 +358,36 @@ export function PurchaseInvoiceForm({
           </table>
           </div>
 
+          {/* ── تخفیفِ کلِ فاکتور ── */}
+          <div className="invoice-adjustments">
+            <label className="adj-field">
+              تخفیف کل فاکتور
+              <div className="qty-with-unit">
+                <input
+                  type="number"
+                  min="0"
+                  value={invoiceDiscount}
+                  onChange={(e) => setInvoiceDiscount(e.target.value)}
+                  placeholder="۰"
+                />
+                <div className="seg-toggle">
+                  <button type="button" className={invoiceDiscountMode === 'amount' ? 'active' : ''} onClick={() => setInvoiceDiscountMode('amount')}>مبلغ</button>
+                  <button type="button" className={invoiceDiscountMode === 'percent' ? 'active' : ''} onClick={() => setInvoiceDiscountMode('percent')}>٪</button>
+                </div>
+              </div>
+              {invoiceDiscountMode === 'percent' && invoiceDiscountAmount > 0 && (
+                <span className="hint">معادل {invoiceDiscountAmount.toLocaleString('fa-IR')}</span>
+              )}
+            </label>
+          </div>
+
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}>
               <Plus size={14} /> افزودن ردیف
             </button>
             <div className="invoice-totals">
-              {discountTotal > 0 && <span>جمع ناخالص: {gross.toLocaleString('fa-IR')}</span>}
-              {discountTotal > 0 && <span>تخفیف: {discountTotal.toLocaleString('fa-IR')}</span>}
+              {discountTotal > 0 && <span>تخفیف سطری: {discountTotal.toLocaleString('fa-IR')}</span>}
+              {invoiceDiscountAmount > 0 && <span>تخفیف کل: {invoiceDiscountAmount.toLocaleString('fa-IR')}</span>}
               <span>جمع خالص: {total.toLocaleString('fa-IR')}</span>
               <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {taxAmount.toLocaleString('fa-IR')}</span>
               <span className="invoice-total">

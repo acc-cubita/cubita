@@ -99,8 +99,13 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
 
     #: خالصِ **پس از تخفیف** و بدون مالیات.
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
-    #: جمع تخفیفِ ردیف‌ها (فقط نمایشی؛ بهای موجودی از همان اول پس از تخفیف است).
+    #: جمع تخفیفِ ردیف‌ها (شاملِ سهمِ تسهیم‌شده‌ی تخفیفِ کلِ فاکتور؛ بهای موجودی از
+    #: همان اول پس از تخفیف است).
     total_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تخفیفِ کلِ فاکتور که تأمین‌کننده روی سرِ فاکتور داده. هنگام ثبت بینِ ردیف‌ها
+    #: تسهیم می‌شود (پس ارزش‌گذاریِ موجودی و اعتبارِ مالیاتی هم پس از آن‌اند)؛ اینجا
+    #: فقط برای نمایشِ شفاف جدا نگه داشته می‌شود.
+    invoice_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")

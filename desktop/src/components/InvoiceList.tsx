@@ -20,7 +20,7 @@ import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
 
-type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
+export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
 type NamedItem = { id: string; name: string }
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
@@ -42,8 +42,8 @@ export function InvoiceList({
   me: MeResponse
   kind: 'sales' | 'purchase'
   items: NamedItem[]
-  /** رونوشتِ فاکتور (فقط فروش) — فرمِ فاکتور را با اقلامِ همین فاکتور پیش‌پر می‌کند. */
-  onDuplicate?: (invoice: SalesInvoiceRecord) => void
+  /** رونوشتِ فاکتور — فرمِ فاکتور (فروش یا خرید) را با اقلامِ همین فاکتور پیش‌پر می‌کند. */
+  onDuplicate?: (invoice: AnyInvoice) => void
 }) {
   const isSales = kind === 'sales'
   const [rows, setRows] = useState<AnyInvoice[] | null>(null)
@@ -198,8 +198,8 @@ export function InvoiceList({
                     <button type="button" onClick={() => void handlePdf(row)}>
                       <FileDown size={13} /> PDF
                     </button>
-                    {isSales && onDuplicate && !row.voided_at && (
-                      <button type="button" onClick={() => onDuplicate(row as SalesInvoiceRecord)}>
+                    {onDuplicate && !row.voided_at && (
+                      <button type="button" onClick={() => onDuplicate(row)}>
                         <Copy size={13} /> رونوشت
                       </button>
                     )}
@@ -246,7 +246,7 @@ function InvoiceDetail({
   const net = Number(row.total_amount)
   const tax = Number(row.tax_amount)
   const discount = Number(row.total_discount)
-  const headerDiscount = isSales ? Number((row as SalesInvoiceRecord).invoice_discount) : 0
+  const headerDiscount = Number(row.invoice_discount) // هر دو نوع (فروش/خرید) این را دارند
   const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
   const cost = isSales ? Number((row as SalesInvoiceRecord).total_cost) : 0
   const profit = net - cost

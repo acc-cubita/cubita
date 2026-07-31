@@ -240,6 +240,34 @@ def _purchase_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, 
     return summary
 
 
+def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
+    """قرینه‌ی get_returnable_summary برای خرید: باقی‌ماندهٔ قابلِ برگشتِ هر کالا.
+
+    `unit_price` در خروجی بهای واحد (unit_cost) را حمل می‌کند تا از همان اسکیمای
+    ReturnableLineOut استفاده شود.
+    """
+    invoice = db.get(PurchaseInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
+    summary = _purchase_invoice_line_summary(db, invoice_id)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(summary.keys()))).all()}
+    rows: list[dict] = []
+    for item_id, info in summary.items():
+        it = items.get(item_id)
+        rows.append(
+            {
+                "item_id": item_id,
+                "item_name": it.name if it else "",
+                "unit": it.unit if it else "",
+                "sold": info["qty"],
+                "already_returned": info["already_returned"],
+                "remaining": info["remaining"],
+                "unit_price": info["unit_cost"],
+            }
+        )
+    return rows
+
+
 def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> PurchaseReturn:
     assert_period_open(db, data.return_date)
 

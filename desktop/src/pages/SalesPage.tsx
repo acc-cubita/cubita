@@ -4,7 +4,7 @@ import { fetchSalesSummary, type MeResponse, type SalesInvoiceRecord, type Sales
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
-import { InvoiceList } from '../components/InvoiceList'
+import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { QuotationForm } from '../components/QuotationForm'
 import { QuotationsList } from '../components/QuotationsList'
 import { SalesReturnForm } from '../components/SalesReturnForm'
@@ -48,8 +48,8 @@ export function SalesPage({
     refresh()
   }, [onQueued, refresh])
   // رونوشت: فاکتور را در فرمِ بالای صفحه پیش‌پر کن و فرم را به دید بیاور.
-  const handleDuplicate = useCallback((inv: SalesInvoiceRecord) => {
-    setPrefill(inv)
+  const handleDuplicate = useCallback((inv: AnyInvoice) => {
+    setPrefill(inv as SalesInvoiceRecord)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
