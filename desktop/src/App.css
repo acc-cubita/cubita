@@ -863,6 +863,55 @@ button:disabled {
 }
 .invoice-detail-totals strong { color: var(--text); }
 
+/* ── مدیریت اکانت‌ها (سوپرادمین) ── کارتِ هر اکانت؛ موبایل‌پسند بدونِ جدولِ فشرده */
+.account-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.account-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 14px);
+  background: var(--surface-2);
+  padding: 14px 16px;
+}
+.account-card--suspended { opacity: 0.72; border-style: dashed; }
+.account-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.account-name { font-weight: 700; color: var(--text-h); font-size: 14.5px; }
+.account-owner { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.account-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 10px 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.account-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.account-meta strong { color: var(--text); }
+.account-suspended-tag { color: var(--danger, crimson); font-weight: 600; }
+.account-extend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.account-extend button { padding: 4px 10px; font-size: 12.5px; }
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
 /* ── تخفیفِ کل و گِرد کردن (فرم فاکتور فروش) ── */
 .invoice-adjustments {
   display: flex;

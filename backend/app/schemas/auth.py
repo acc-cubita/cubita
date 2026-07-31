@@ -28,6 +28,9 @@ class MeOut(BaseModel):
     #: می‌زد، که یعنی هر صاحب کسب‌وکاری (نه فقط خودِ کوبیتا) تب «خریدهای سایت
     #: تجاری» را در ساید‌بار می‌دید.
     is_platform_admin: bool = False
+    #: سوپرادمینِ کلِ سامانه (فقط مالک) — گیتِ ماژولِ «مدیریت اکانت‌ها». سخت‌گیرانه‌تر
+    #: از is_platform_admin و مستقل از آن.
+    is_super_admin: bool = False
 
     model_config = {"from_attributes": True}
 

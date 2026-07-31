@@ -11,6 +11,7 @@ from app.observability import (
 from app.routers import (
     accounts,
     advanced_inventory,
+    admin_accounts,
     alerts,
     assets,
     audit,
@@ -66,6 +67,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin_accounts.router)
 app.include_router(members.router)
 app.include_router(accounts.router)
 app.include_router(journal.router)

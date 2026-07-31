@@ -62,6 +62,11 @@ def get_principal(
     if membership is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در این کسب‌وکار ندارید")
 
+    # کسب‌وکارِ تعلیق‌شده/لغوشده دسترسی ندارد — حتی با توکنِ معتبرِ از قبل. بدون این،
+    # «تعلیق» فقط جلوی ورودِ تازه را می‌گرفت و نشست‌های باز تا انقضای توکن ادامه داشتند.
+    if membership.tenant.status != "active":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "این کسب‌وکار غیرفعال شده است")
+
     bind_session_tenant(db, membership.tenant_id)
     apply_tenant_to_transaction(db, membership.tenant_id)
     # کاربر روی همان Session می‌نشیند تا رویداد flush بداند چه کسی مسئول این تغییر
@@ -118,6 +123,18 @@ def require_platform_admin(user: User = Depends(get_current_user)) -> User:
     فهرست خالی یعنی دسترسی برای همه بسته است (fail closed).
     """
     allowed = get_settings().platform_admin_emails_list
+    if not allowed or user.email.strip().lower() not in allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
+    return user
+
+
+def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """مجوزِ سوپرادمینِ کلِ سامانه — سخت‌گیرانه‌تر از require_platform_admin.
+
+    ماژولِ «مدیریت اکانت‌ها» می‌تواند اکانتِ هر مشتری را بسازد/تمدید/تعلیق/حذف کند؛
+    این قدرت فقط دستِ مالکِ سامانه است، نه هر ادمینِ پلتفرم. فهرست خالی = بسته (fail closed).
+    """
+    allowed = get_settings().super_admin_emails_list
     if not allowed or user.email.strip().lower() not in allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
     return user

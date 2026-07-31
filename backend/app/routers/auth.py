@@ -62,6 +62,7 @@ def _me_out(principal: Principal) -> MeOut:
         tenant_id=principal.tenant_id,
         tenant_name=principal.membership.tenant.name,
         is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
+        is_super_admin=principal.user.email.strip().lower() in get_settings().super_admin_emails_list,
     )
 
 

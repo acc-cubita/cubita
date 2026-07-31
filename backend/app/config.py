@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # خالی = دسترسی برای همه بسته (fail closed). فهرست ایمیل با کاما جدا شود.
     platform_admin_emails: str = ""
 
+    # سوپرادمینِ کلِ سامانه (مدیریتِ اکانت‌ها/اشتراک‌ها) — سخت‌گیرانه‌تر از platform_admin.
+    # عمداً فقط مالکِ سامانه، نه هر ادمینِ پلتفرم (مثلاً مرچنتِ زرین‌پال). پیش‌فرض روی
+    # ایمیلِ مالک تا ماژول بدونِ نیاز به env هم کار کند؛ با SUPER_ADMIN_EMAILS قابلِ override.
+    super_admin_emails: str = "acc.cubita@gmail.com"
+
     # تنظیماتِ اتصال به سایتِ فروشگاهی حالا پرمستأجر است (جدولِ storefront_settings)،
     # نه سراسری در .env — تا هر کسب‌وکار فروشگاهِ خودش را وصل کند.
 
@@ -58,6 +63,10 @@ class Settings(BaseSettings):
     @property
     def platform_admin_emails_list(self) -> list[str]:
         return [e.strip().lower() for e in self.platform_admin_emails.split(",") if e.strip()]
+
+    @property
+    def super_admin_emails_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.super_admin_emails.split(",") if e.strip()]
 
 
 KNOWN_ENVS = ("development", "staging", "production")

@@ -23,6 +23,7 @@ import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
+import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -48,6 +49,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   payroll: 'حقوق و دستمزد',
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
+  accounts: 'مدیریت اکانت‌ها',
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
   team: 'کاربران',
@@ -136,6 +138,7 @@ export function Dashboard({
         userName={me.name}
         roleName={me.role_name}
         isPlatformAdmin={me.is_platform_admin}
+        isSuperAdmin={me.is_super_admin}
         onLogout={onLogout}
         open={navOpen}
         onClose={() => setNavOpen(false)}
@@ -255,6 +258,7 @@ export function Dashboard({
               <PurchasesAdminPanel token={token} />
             </div>
           )}
+          {page === 'accounts' && me.is_super_admin && <AccountsAdminPage token={token} />}
           {page === 'reports' && (
             <div className="page">
               <PageHeader

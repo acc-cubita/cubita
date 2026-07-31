@@ -19,6 +19,7 @@ import {
   HelpCircle,
   UserCog,
   UserCircle,
+  ShieldCheck,
   LogOut,
   Sun,
   Moon,
@@ -41,6 +42,7 @@ export type PageKey =
   | 'payroll'
   | 'integration'
   | 'billing'
+  | 'accounts'
   | 'reports'
   | 'onboarding'
   | 'calendar'
@@ -75,6 +77,12 @@ const PLATFORM_ADMIN_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }
   { key: 'billing', label: 'خریدهای سایت تجاری', icon: <CreditCard size={18} /> },
 ]
 
+// ماژولِ «مدیریت اکانت‌ها» فقط برای سوپرادمینِ سامانه (مالک) — سخت‌گیرانه‌تر از
+// ادمینِ پلتفرم. برای هیچ کاربرِ دیگری، حتی ادمین‌های پلتفرم، دیده نمی‌شود.
+const SUPER_ADMIN_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
+  { key: 'accounts', label: 'مدیریت اکانت‌ها', icon: <ShieldCheck size={18} /> },
+]
+
 const SECONDARY_NAV_ITEMS: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: 'profile', label: 'پروفایل من', icon: <UserCircle size={18} /> },
   { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
@@ -87,6 +95,7 @@ export function Sidebar({
   userName,
   roleName,
   isPlatformAdmin,
+  isSuperAdmin,
   onLogout,
   open = false,
   onClose,
@@ -96,12 +105,17 @@ export function Sidebar({
   userName: string
   roleName: string
   isPlatformAdmin: boolean
+  isSuperAdmin: boolean
   onLogout: () => void
   /** فقط در وبِ باریک (موبایل) معنا دارد: نوار کناری کشوی روی‌هم می‌شود. */
   open?: boolean
   onClose?: () => void
 }) {
-  const navItems = isPlatformAdmin ? [...NAV_ITEMS, ...PLATFORM_ADMIN_NAV_ITEMS] : NAV_ITEMS
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(isPlatformAdmin ? PLATFORM_ADMIN_NAV_ITEMS : []),
+    ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : []),
+  ]
   const { theme, toggle } = useTheme()
 
   return (

@@ -16,6 +16,8 @@ export interface MeResponse {
   tenant_name: string
   //: کاربر روی allowlist کنترل‌پنل فروش خودِ کوبیتاست، نه صاحب یک کسب‌وکار عادی.
   is_platform_admin: boolean
+  //: سوپرادمینِ کلِ سامانه (فقط مالک) — گیتِ ماژولِ «مدیریت اکانت‌ها».
+  is_super_admin: boolean
 }
 
 /** آیا این نقش اجازه‌ی یک اکشن روی یک ماژول را دارد؟ همان منطق سمت سرور.
@@ -1005,6 +1007,46 @@ export const fetchAdminPurchases = (token: string) => authedGet<PurchaseRecord[]
 
 export const fulfillPurchase = (token: string, purchaseId: string, adminNotes: string) =>
   authedSend<PurchaseRecord>(token, 'POST', `/api/admin/purchases/${purchaseId}/fulfill`, { admin_notes: adminNotes })
+
+// ── مدیریت اکانت‌ها (فقط سوپرادمین) ──────────────────────────────────────────
+export interface AdminAccount {
+  tenant_id: string
+  name: string
+  slug: string
+  status: string // active | suspended | cancelled
+  owner_name: string
+  owner_email: string
+  created_at: string
+  user_count: number
+  max_users: number | null
+  subscription_status: string // active | grace | expired | cancelled | none
+  expires_at: string | null
+  days_left: number | null
+  plan_name: string
+}
+
+export const fetchAdminAccounts = (token: string) =>
+  authedGet<AdminAccount[]>(token, '/api/admin/accounts')
+
+export const createAdminAccount = (
+  token: string,
+  data: { business_name: string; owner_name: string; email: string; password: string; days: number },
+) => authedSend<AdminAccount>(token, 'POST', '/api/admin/accounts', data)
+
+export const extendAdminAccount = (
+  token: string,
+  tenantId: string,
+  data: { days?: number; expires_at?: string },
+) => authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/extend`, data)
+
+export const setAdminAccountStatus = (token: string, tenantId: string, status: 'active' | 'suspended') =>
+  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/status`, { status })
+
+export const resetAdminAccountPassword = (token: string, tenantId: string, password: string) =>
+  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/reset-password`, { password })
+
+export const deleteAdminAccount = (token: string, tenantId: string) =>
+  authedDelete(token, `/api/admin/accounts/${tenantId}`)
 
 export interface ContactRecord {
   id: string
