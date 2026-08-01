@@ -3323,3 +3323,61 @@ button:disabled {
   .checks-table td.checks-action-cell .check-actions select,
   .checks-table td.checks-action-cell .check-actions button { flex: 1 1 auto; }
 }
+
+/* ═══════════════ ارتقای اشخاص: مانده، صورت‌حساب، سنین مطالبات ═══════════════ */
+
+/* ماندهٔ طرف حساب: بدهکار (طلبِ ما) / بستانکار (بدهیِ ما) */
+.bal-debit { color: var(--text-h); font-weight: 700; }
+.bal-credit { color: var(--warning); font-weight: 700; }
+.bal-tag { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+.credit-over { margin-inline-start: 8px; font-size: 10.5px; }
+.aging-total-row td { border-top: 2px solid var(--border-strong); background: var(--surface-2); }
+.aging-action button { padding: 4px 10px; font-size: 12.5px; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های اشخاص/دریافت‌پرداخت/سنین کارتِ برچسب‌دار می‌شوند ── */
+@media (max-width: 760px) {
+  .contacts-table, .contacts-table tbody,
+  .treasury-table, .treasury-table tbody,
+  .aging-table, .aging-table tbody { display: block; }
+  .contacts-table thead, .treasury-table thead, .aging-table thead { display: none; }
+  .contacts-table tr, .treasury-table tr, .aging-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .contacts-table td, .treasury-table td, .aging-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .contacts-table tr td:last-child, .treasury-table tr td:last-child, .aging-table tr td:last-child { border-bottom: 0; }
+  .contacts-table td[data-label]::before, .treasury-table td[data-label]::before, .aging-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* سلولِ نام (با آواتار) سرِ کارت، بدونِ برچسب */
+  .contacts-table td[data-label="نام"], .treasury-table td.entity-name, .aging-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .contacts-table td[data-label="نام"]::before,
+  .treasury-table td.entity-name::before,
+  .aging-table td.entity-name::before { display: none; }
+  /* سلولِ اکشن (بدونِ برچسب) → دکمه‌ها تمام‌عرض */
+  .contacts-table td.check-actions { justify-content: flex-start; flex-wrap: wrap; padding-top: 10px; }
+  .contacts-table td.check-actions button { flex: 1 1 auto; }
+  .aging-table td.aging-action { padding-top: 10px; }
+  .aging-table td.aging-action button { width: 100%; justify-content: center; }
+}

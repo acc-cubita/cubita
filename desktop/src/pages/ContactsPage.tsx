@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Building2,
+  CalendarClock,
+  FileText,
   HandCoins,
   Pencil,
   Plus,
   Save,
+  TrendingDown,
   UserRound,
   UsersRound,
   Wallet,
@@ -14,6 +17,7 @@ import {
   createContact,
   createTreasuryPayment,
   createTreasuryReceipt,
+  fetchAging,
   fetchContacts,
   fetchPriceLists,
   fetchTreasuryTransactions,
@@ -30,6 +34,8 @@ import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { AgingPanel } from '../components/AgingPanel'
+import { ContactStatementDrawer } from '../components/ContactStatementDrawer'
 import { formatJalali } from '../lib/jalali'
 
 const TYPE_LABELS: Record<ContactRecord['type'], string> = {
@@ -49,9 +55,13 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
   const [transactions, setTransactions] = useState<TreasuryTransactionRecord[]>([])
+  const [recvMap, setRecvMap] = useState<Map<string, number>>(new Map())
+  const [payMap, setPayMap] = useState<Map<string, number>>(new Map())
+  const [agingTotals, setAgingTotals] = useState<{ recv: number; pay: number }>({ recv: 0, pay: 0 })
   const [filterType, setFilterType] = useState<'all' | 'customer' | 'supplier'>('all')
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [statementContact, setStatementContact] = useState<{ id: string; name: string } | null>(null)
 
   // فرم ایجاد/ویرایش طرف حساب
   const [form, setForm] = useState<ContactIn>(EMPTY_FORM)
@@ -71,14 +81,26 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   async function refresh() {
     setError(null)
     try {
-      const [cs, txs, pls] = await Promise.all([fetchContacts(token), fetchTreasuryTransactions(token), fetchPriceLists(token).catch(() => [])])
+      const [cs, txs, pls, recvAging, payAging] = await Promise.all([
+        fetchContacts(token),
+        fetchTreasuryTransactions(token),
+        fetchPriceLists(token).catch(() => []),
+        fetchAging(token, 'receivable').catch(() => null),
+        fetchAging(token, 'payable').catch(() => null),
+      ])
       setContacts(cs)
       setTransactions(txs)
       setPriceLists(pls.filter((p) => p.is_active))
+      setRecvMap(new Map((recvAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
+      setPayMap(new Map((payAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
+      setAgingTotals({ recv: Number(recvAging?.grand_total ?? 0), pay: Number(payAging?.grand_total ?? 0) })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }
+
+  // ماندهٔ خالصِ هر طرف حساب: مثبت = بدهکار (طلبِ ما)، منفی = بستانکار (بدهیِ ما)
+  const balanceOf = (id: string) => (recvMap.get(id) ?? 0) - (payMap.get(id) ?? 0)
 
   useEffect(() => {
     void refresh()
@@ -98,11 +120,8 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   const kpis = useMemo(() => {
     const customers = contacts.filter((c) => c.type === 'customer' || c.type === 'both').length
     const suppliers = contacts.filter((c) => c.type === 'supplier' || c.type === 'both').length
-    const received = transactions
-      .filter((t) => t.type === 'receipt')
-      .reduce((s, t) => s + Number(t.amount), 0)
-    return { total: contacts.length, customers, suppliers, received }
-  }, [contacts, transactions])
+    return { total: contacts.length, customers, suppliers }
+  }, [contacts])
 
   async function handleSaveContact(e: React.FormEvent) {
     e.preventDefault()
@@ -322,44 +341,57 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           <EmptyState icon={UsersRound} text="طرف حسابی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table contacts-table">
               <thead>
                 <tr>
                   <th>نام</th>
                   <th>نوع</th>
-                  <th>تلفن</th>
+                  <th>مانده</th>
                   <th>سقف اعتبار</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredContacts.map((c) => (
+                {filteredContacts.map((c) => {
+                  const bal = balanceOf(c.id)
+                  const limit = Number(c.credit_limit) || 0
+                  const overLimit = limit > 0 && (recvMap.get(c.id) ?? 0) > limit
+                  return (
                   <tr key={c.id}>
-                    <td>
+                    <td data-label="نام">
                       <div className="entity-cell">
                         <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
                         <div>
                           <div className="entity-name">{c.name}</div>
-                          {(c.economic_code || c.tax_id) && (
-                            <div className="entity-sub">کد اقتصادی: {c.economic_code || c.tax_id}</div>
-                          )}
+                          <div className="entity-sub">{c.phone || (c.economic_code ? `کد اقتصادی: ${c.economic_code}` : '')}</div>
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td data-label="نوع">
                       <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
                     </td>
-                    <td>{c.phone ?? '—'}</td>
-                    <td className="money-cell">
-                      {Number(c.credit_limit) > 0 ? faMoney(Number(c.credit_limit)) : '—'}
+                    <td data-label="مانده" className="money-cell">
+                      {bal === 0 ? '۰' : (
+                        <span className={bal > 0 ? 'bal-debit' : 'bal-credit'}>
+                          {faMoney(Math.abs(Math.round(bal)))} <span className="bal-tag">{bal > 0 ? 'بدهکار' : 'بستانکار'}</span>
+                        </span>
+                      )}
                     </td>
-                    <td>
-                      <button type="button" onClick={() => startEdit(c)}>
-                        <Pencil size={13} /> ویرایش
-                      </button>
+                    <td data-label="سقف اعتبار" className="money-cell">
+                      {limit > 0 ? (
+                        <>
+                          {faMoney(limit)}
+                          {overLimit && <span className="status-badge tone-danger credit-over">فراتر از سقف</span>}
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td className="check-actions">
+                      <button type="button" onClick={() => setStatementContact({ id: c.id, name: c.name })}><FileText size={13} /> صورت‌حساب</button>
+                      <button type="button" onClick={() => startEdit(c)}><Pencil size={13} /> ویرایش</button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -438,7 +470,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           <EmptyState icon={Wallet} text="هنوز دریافت یا پرداختی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table treasury-table">
               <thead>
                 <tr>
                   <th>نوع</th>
@@ -451,15 +483,15 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
               <tbody>
                 {transactions.map((t) => (
                   <tr key={t.id}>
-                    <td>
+                    <td data-label="نوع">
                       <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
                         {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
                       </span>
                     </td>
-                    <td className="entity-name">{t.contact_name}</td>
-                    <td className="money-cell">{faMoney(Number(t.amount))}</td>
-                    <td>{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
-                    <td>{formatJalali(t.transaction_date)}</td>
+                    <td data-label="طرف حساب" className="entity-name">{t.contact_name}</td>
+                    <td data-label="مبلغ" className="money-cell">{faMoney(Number(t.amount))}</td>
+                    <td data-label="روش">{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
+                    <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -484,21 +516,19 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
         <StatCard icon={<UsersRound size={18} />} label="کل اشخاص" value={faMoney(kpis.total)} hint="مشتری و تأمین‌کننده" />
         <StatCard icon={<UserRound size={18} />} label="مشتریان" value={faMoney(kpis.customers)} />
         <StatCard icon={<Building2 size={18} />} label="تأمین‌کنندگان" value={faMoney(kpis.suppliers)} />
-        <StatCard
-          icon={<HandCoins size={18} />}
-          label="مجموع دریافت‌ها"
-          value={faMoney(kpis.received)}
-          tone="success"
-          hint="ریال"
-        />
+        <StatCard icon={<HandCoins size={18} />} label="مطالباتِ باز" value={faMoney(agingTotals.recv)} tone={agingTotals.recv > 0 ? 'success' : 'default'} hint="ریال، طلبِ ما" />
+        <StatCard icon={<TrendingDown size={18} />} label="بدهی به تأمین‌کنندگان" value={faMoney(agingTotals.pay)} tone={agingTotals.pay > 0 ? 'warning' : 'default'} hint="ریال" />
       </div>
 
       <Tabs
         tabs={[
           { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
           { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins, content: treasuryTab },
+          { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, content: <AgingPanel token={token} onStatement={setStatementContact} /> },
         ]}
       />
+
+      {statementContact && <ContactStatementDrawer token={token} contact={statementContact} onClose={() => setStatementContact(null)} />}
     </div>
   )
 }
