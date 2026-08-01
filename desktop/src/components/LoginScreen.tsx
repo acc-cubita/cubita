@@ -8,7 +8,13 @@ const FEATURES = [
   { icon: Landmark, text: 'چک، بانک، حقوق و دستمزد در یک‌جا' },
 ]
 
-export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: MeResponse) => void }) {
+export function LoginScreen({
+  onLoggedIn,
+  onSignup,
+}: {
+  onLoggedIn: (token: string, me: MeResponse) => void
+  onSignup?: () => void
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -197,6 +203,15 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, me: Me
           >
             رمز عبور را فراموش کرده‌ام
           </button>
+
+          {onSignup && (
+            <div className="login-signup-cta">
+              <span>حساب ندارید؟</span>
+              <button type="button" className="link-button login-signup-link" onClick={onSignup}>
+                ۱۴ روز رایگان امتحان کنید
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

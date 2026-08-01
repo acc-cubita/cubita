@@ -9,6 +9,7 @@ import { QuotationForm } from '../components/QuotationForm'
 import { QuotationsList } from '../components/QuotationsList'
 import { SalesReturnForm } from '../components/SalesReturnForm'
 import { MoadianPanel } from '../components/MoadianPanel'
+import { FeatureUpsell } from '../components/FeatureUpsell'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -122,7 +123,11 @@ export function SalesPage({
             key: 'moadian',
             label: 'سامانه مؤدیان',
             icon: Landmark,
-            content: <MoadianPanel token={token} />,
+            content: me.locked_features.includes('moadian') ? (
+              <FeatureUpsell feature="moadian" />
+            ) : (
+              <MoadianPanel token={token} />
+            ),
           },
         ]}
       />

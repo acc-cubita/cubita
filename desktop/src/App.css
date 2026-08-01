@@ -4138,3 +4138,112 @@ button:disabled {
   .phone-verify-code .btn-primary { min-height: 40px; }
   .phone-verify-code .link-button { flex-basis: 100%; }
 }
+
+/* ===== حسابِ آزمایشیِ رایگان (trial) ===== */
+.trial-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--accent-bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.trial-banner--urgent { background: var(--warning-bg); }
+.trial-banner__text { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.trial-banner__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.trial-banner__cta:hover { filter: brightness(1.06); }
+
+/* باکسِ ارتقا — جای ماژولِ قفل‌شده (مودیان/اتصال‌فروشگاه) */
+.feature-upsell {
+  max-width: 560px;
+  margin: 24px auto;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px 28px;
+  box-shadow: var(--shadow-sm);
+}
+.feature-upsell-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.feature-upsell h2 { margin: 0 0 10px; font-size: 18px; color: var(--text-h); }
+.feature-upsell p { margin: 0 0 20px; color: var(--text-muted); line-height: 2; font-size: 14px; }
+.feature-upsell-cta { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 10px 20px; }
+
+/* صفحه‌ی قفلِ پایانِ آزمایشی */
+.trial-lock-shell {
+  min-height: 100%;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--page);
+}
+.trial-lock-card {
+  max-width: 480px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 40px 32px;
+  box-shadow: var(--shadow-md);
+}
+.trial-lock-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.trial-lock-card h1 { margin: 0 0 14px; font-size: 22px; color: var(--text-h); }
+.trial-lock-card p { margin: 0 0 12px; color: var(--text-muted); line-height: 2.1; font-size: 14.5px; }
+.trial-lock-warn { color: var(--danger) !important; font-weight: 500; }
+.trial-lock-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 12px 26px; text-decoration: none; }
+.trial-lock-logout { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; }
+
+/* لینکِ ثبت‌نام روی صفحه‌ی ورود */
+.login-signup-cta {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.login-signup-link { font-weight: 700; color: var(--accent); }
+
+@media (max-width: 760px) {
+  .trial-banner { flex-direction: column; align-items: stretch; gap: 8px; text-align: center; }
+  .trial-banner__cta { justify-content: center; }
+  .feature-upsell { margin: 16px auto; padding: 24px 18px; }
+  .trial-lock-card { padding: 28px 20px; }
+}

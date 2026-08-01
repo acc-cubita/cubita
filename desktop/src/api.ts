@@ -20,7 +20,19 @@ export interface MeResponse {
   is_platform_admin: boolean
   //: سوپرادمینِ کلِ سامانه (فقط مالک) — گیتِ ماژولِ «مدیریت اکانت‌ها».
   is_super_admin: boolean
+  //: حسابِ آزمایشیِ رایگان — نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل از این مشتق می‌شوند.
+  is_trial: boolean
+  //: روزهای مانده تا انقضای آزمایشی (منفی = گذشته). برای مشتریِ واقعی null.
+  trial_days_left: number | null
+  //: دوره‌ی آزمایشی تمام شده — فقط صفحه‌ی خرید نشان داده می‌شود.
+  trial_expired: boolean
+  //: قابلیت‌های قفل‌شده در آزمایشی (moadian/storefront) — جای ماژول باکسِ «خرید پلن» می‌آید.
+  locked_features: string[]
 }
+
+//: صفحه‌ی پلن‌ها و خرید روی سایتِ تجاری. خریدِ کاربرِ آزمایشی با همین ایمیل، حسابش را
+//: سرِ جا به واقعی تبدیل می‌کند و دیتایش حفظ می‌شود.
+export const PLANS_URL = 'https://cubita.ir/#pricing'
 
 /** آیا این نقش اجازه‌ی یک اکشن روی یک ماژول را دارد؟ همان منطق سمت سرور.
  *
@@ -44,6 +56,26 @@ export async function login(email: string, password: string): Promise<string> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
     throw new Error(body.detail ?? 'ورود ناموفق بود')
+  }
+  const data = await res.json()
+  return data.access_token as string
+}
+
+/** ثبت‌نامِ خودسرویس — کسب‌وکار و مالکش با هم ساخته می‌شوند و حسابِ آزمایشیِ ۱۴روزه می‌گیرند. */
+export async function signup(
+  businessName: string,
+  ownerName: string,
+  email: string,
+  password: string,
+): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw new Error(body.detail ?? 'ثبت‌نام ناموفق بود')
   }
   const data = await res.json()
   return data.access_token as string

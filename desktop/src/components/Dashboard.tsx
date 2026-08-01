@@ -13,6 +13,7 @@ import { Sidebar, type PageKey } from './Sidebar'
 import { PayrollPanel } from './PayrollPanel'
 import { BenefitsPanel } from './BenefitsPanel'
 import { IntegrationPanel } from './IntegrationPanel'
+import { FeatureUpsell } from './FeatureUpsell'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
 import { PageHeader } from './PageHeader'
@@ -245,7 +246,11 @@ export function Dashboard({
                 title="اتصال فروشگاه"
                 description="موجودی و قیمت را با سایت فروشگاهی هم‌گام کنید و سفارش‌های ثبت‌شده‌ی آنلاین را خودکار به فاکتور فروش تبدیل کنید."
               />
-              <IntegrationPanel token={token} />
+              {me.locked_features.includes('storefront') ? (
+                <FeatureUpsell feature="storefront" />
+              ) : (
+                <IntegrationPanel token={token} />
+              )}
             </div>
           )}
           {page === 'billing' && me.is_platform_admin && (

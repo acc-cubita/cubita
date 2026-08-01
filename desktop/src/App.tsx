@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import type { MeResponse } from './api'
 import { LoginScreen } from './components/LoginScreen'
+import { SignupScreen } from './components/SignupScreen'
 import { SetPasswordScreen } from './components/SetPasswordScreen'
 import { Dashboard } from './components/Dashboard'
 import { TitleBar } from './components/TitleBar'
 import { isElectron } from './platform'
 import { UpdateBanner } from './components/UpdateBanner'
 import { SubscriptionBanner } from './components/SubscriptionBanner'
+import { TrialBanner } from './components/TrialBanner'
+import { TrialExpiredScreen } from './components/TrialExpiredScreen'
 import './App.css'
 
 type PendingAction = { action: 'reset-password' | 'accept-invite'; token: string }
@@ -39,11 +42,18 @@ export default function App() {
   // مقدار اولیه با تابع داده می‌شود تا *قبل از* اولین رندر خوانده شود؛ با useEffect
   // صفحه‌ی ورود یک لحظه ظاهر می‌شد و بعد جایش عوض می‌شد.
   const [pending, setPending] = useState<PendingAction | null>(readPendingAction)
+  const [authView, setAuthView] = useState<'login' | 'signup'>('login')
 
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
     setMe(newMe)
     setPending(null)
+    setAuthView('login')
+  }
+
+  function handleLogout() {
+    setToken(null)
+    setMe(null)
   }
 
   return (
@@ -59,19 +69,20 @@ export default function App() {
             onCancel={() => setPending(null)}
           />
         ) : !token || !me ? (
-          <LoginScreen onLoggedIn={handleAuthenticated} />
+          authView === 'signup' ? (
+            <SignupScreen onDone={handleAuthenticated} onBackToLogin={() => setAuthView('login')} />
+          ) : (
+            <LoginScreen onLoggedIn={handleAuthenticated} onSignup={() => setAuthView('signup')} />
+          )
+        ) : me.trial_expired ? (
+          // آزمایشیِ منقضی: کلِ اپ جایش را به صفحه‌ی قفل می‌دهد. سرور هم مستقل همین را
+          // اعمال می‌کند (۴۰۲ روی دفتر)، پس این فقط تجربه‌ی کاربری است نه تنها مرزِ امنیت.
+          <TrialExpiredScreen onLogout={handleLogout} />
         ) : (
           <>
             <SubscriptionBanner token={token} />
-            <Dashboard
-              token={token}
-              me={me}
-              onLogout={() => {
-                setToken(null)
-                setMe(null)
-              }}
-              onMeUpdated={setMe}
-            />
+            <TrialBanner me={me} />
+            <Dashboard token={token} me={me} onLogout={handleLogout} onMeUpdated={setMe} />
           </>
         )}
       </div>
