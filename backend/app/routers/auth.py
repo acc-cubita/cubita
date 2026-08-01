@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -8,15 +10,18 @@ from app.rate_limit import (
     limit_password_reset,
     limit_password_reset_for_email,
     limit_signup,
+    limit_sms_code,
 )
 from app.deps import Principal, get_current_user, get_principal
-from app.models.auth_token import PURPOSE_PASSWORD_RESET
+from app.models.auth_token import PURPOSE_PASSWORD_RESET, PURPOSE_PHONE_VERIFY
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.schemas.auth import (
     BusinessUpdateIn,
     LoginIn,
     MeOut,
+    PhoneSendCodeIn,
+    PhoneVerifyIn,
     ProfileUpdateIn,
     SignupIn,
     SwitchTenantIn,
@@ -30,10 +35,17 @@ from app.schemas.members import (
     ResetPasswordIn,
 )
 from app.security import create_access_token, record_login, set_password, verify_password
-from app.services import members
+from app.services import members, sms
 from app.services.mailer import send_password_reset
 from app.services.provisioning import signup_new_business
-from app.services.tokens import PASSWORD_RESET_HOURS, consume, issue_password_reset
+from app.services.tokens import (
+    CODE_TTL_MINUTES,
+    PASSWORD_RESET_HOURS,
+    consume,
+    consume_code,
+    issue_code,
+    issue_password_reset,
+)
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, tenant_scope
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -56,6 +68,7 @@ def _me_out(principal: Principal) -> MeOut:
         name=principal.user.name,
         email=principal.user.email,
         phone=principal.user.phone,
+        phone_verified=principal.user.phone_verified_at is not None,
         role_key=principal.role.key,
         role_name=principal.role.name,
         permissions=principal.role.permissions,
@@ -267,7 +280,11 @@ def update_profile(
     if data.name is not None:
         user.name = data.name
     if data.phone is not None:
-        user.phone = data.phone.strip() or None
+        new_phone = data.phone.strip() or None
+        if new_phone != user.phone:
+            # شماره‌ی تازه هنوز اثباتِ مالکیت ندارد؛ تأییدِ قبلی نباید به آن منتقل شود.
+            user.phone = new_phone
+            user.phone_verified_at = None
 
     if data.email is not None:
         new_email = data.email.strip().lower()
@@ -279,6 +296,62 @@ def update_profile(
                 raise HTTPException(status.HTTP_409_CONFLICT, "امکان استفاده از این ایمیل نیست")
             user.email = new_email
 
+    db.flush()
+    return _me_out(principal)
+
+
+def _mask_phone(phone: str) -> str:
+    """۰۹۱۲****۸۷۸ — تا پاسخِ اندپوینت بگوید کد کجا رفت بی‌آنکه کلِ شماره را لو دهد."""
+    if len(phone) < 7:
+        return phone
+    return phone[:4] + "*" * (len(phone) - 7) + phone[-3:]
+
+
+@router.post("/phone/send-code")
+def send_phone_code(
+    data: PhoneSendCodeIn,
+    _limit=Depends(limit_sms_code),
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """کدِ تأییدِ شماره را پیامک می‌کند.
+
+    کاربر همین‌جا احراز شده، پس مسئله‌ی «این شماره مالِ کیست» وجود ندارد؛ شماره روی
+    خودِ او ذخیره می‌شود (تأییدنشده) و کد به همان می‌رود. تغییرِ شماره، تأییدِ قبلی را
+    باطل می‌کند تا نشانِ «تأییدشده» همیشه به شماره‌ی فعلی اشاره کند.
+
+    پاسخ `sent=false` یعنی ملی‌پیامک نپذیرفت (اعتبار یا کانفیگ) — فرانت باید صادقانه
+    بگوید کد نرفت، نه اینکه کاربر بی‌خود منتظرِ پیامکی بماند که هرگز نمی‌آید.
+    """
+    phone = sms.normalize_phone(data.phone)
+    if phone is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "شماره‌ی موبایل معتبر نیست")
+
+    if principal.user.phone != phone:
+        principal.user.phone = phone
+        principal.user.phone_verified_at = None
+    db.flush()
+
+    code = issue_code(db, user_id=principal.user.id, purpose=PURPOSE_PHONE_VERIFY)
+    sent = sms.send_verification_code(phone, code)
+    return {"sent": sent, "phone": _mask_phone(phone), "expires_in": CODE_TTL_MINUTES * 60}
+
+
+@router.post("/phone/verify", response_model=MeOut)
+def verify_phone(
+    data: PhoneVerifyIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """کدِ تأیید را می‌سنجد و شماره را تأییدشده می‌کند.
+
+    consume_code خودش سقفِ تلاش و انقضا را اعمال می‌کند و کدِ درست را یک‌بارمصرف می‌کند؛
+    این‌جا فقط لحظه‌ی تأیید ثبت می‌شود.
+    """
+    if not consume_code(db, user_id=principal.user.id, purpose=PURPOSE_PHONE_VERIFY, code=data.code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کد نادرست یا منقضی است")
+
+    principal.user.phone_verified_at = datetime.now(timezone.utc)
     db.flush()
     return _me_out(principal)
 

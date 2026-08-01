@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     admin_notify_email: str = ""
 
+    # پیامک (ملی‌پیامک، کنسولِ جدید console.melipayamak.com) — سراسری، نه پرمستأجر،
+    # چون یک حسابِ ملی‌پیامکِ خودِ کوبیتاست (مثلِ SMTP). خالی = پیامک غیرفعال.
+    # api_key: کلیدِ کنسول. sender: شماره‌ی خطِ اختصاصی برای متنِ آزاد. otp_pattern_id:
+    # کدِ الگوی تأییدشده‌ی خطِ اشتراکی برای کدها.
+    melipayamak_api_key: str = ""
+    melipayamak_sender: str = ""
+    melipayamak_otp_pattern_id: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"

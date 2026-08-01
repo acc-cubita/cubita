@@ -111,6 +111,11 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(200))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    #: لحظه‌ی تأییدِ شماره‌ی موبایل با کدِ پیامکی. NULL یعنی تأییدنشده. با هر تغییرِ
+    #: `phone` دوباره NULL می‌شود، پس مقدارِ ناتهی همیشه یعنی «همین شماره تأیید شده» —
+    #: مبنای بازیابیِ رمز با پیامک، که فقط به شماره‌ی تأییدشده کد می‌فرستد.
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     #: نسل توکن‌های معتبر. با هر تغییر رمز یکی زیاد می‌شود و همه‌ی توکن‌های نسل قبل
     #: را باطل می‌کند.
     #:

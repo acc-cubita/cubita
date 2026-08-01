@@ -19,7 +19,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,7 +28,10 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 
 PURPOSE_PASSWORD_RESET = "password_reset"
 PURPOSE_INVITE = "invite"
-PURPOSES = (PURPOSE_PASSWORD_RESET, PURPOSE_INVITE)
+#: کدهای کوتاهِ عددیِ پیامکی (برخلافِ دو موردِ بالا که توکنِ ۲۵۶بیتیِ لینک‌اند).
+PURPOSE_PHONE_VERIFY = "phone_verify"
+PURPOSE_SMS_PASSWORD_RESET = "sms_password_reset"
+PURPOSES = (PURPOSE_PASSWORD_RESET, PURPOSE_INVITE, PURPOSE_PHONE_VERIFY, PURPOSE_SMS_PASSWORD_RESET)
 
 
 class AuthToken(UUIDPKMixin, TimestampMixin, Base):
@@ -49,5 +52,9 @@ class AuthToken(UUIDPKMixin, TimestampMixin, Base):
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    #: تلاش‌های ناموفقِ راستی‌آزماییِ کدِ کوتاهِ عددی. کدِ ۶رقمی فقط یک‌میلیون حالت دارد،
+    #: پس بدونِ سقفِ تلاش با چند صد درخواست حدس‌زدنی است؛ بعد از سقف، کد قفل می‌شود.
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])  # noqa: F821

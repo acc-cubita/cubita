@@ -4067,3 +4067,74 @@ button:disabled {
   .integration-table td.integration-action button { width: 100%; justify-content: center; }
   .integration-search { flex-basis: 100%; }
 }
+
+/* ===== تأییدِ شماره‌ی موبایل (پروفایل) ===== */
+.phone-verify {
+  margin-top: -2px;
+  margin-bottom: 2px;
+}
+.phone-verify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+.phone-verify-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.phone-verify-btn:hover:not(:disabled) { background: var(--accent-hover); color: #fff; }
+.phone-verify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.phone-verify-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.phone-code-input {
+  width: 140px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  letter-spacing: 5px;
+  text-align: center;
+  font-size: 16px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.phone-code-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.phone-verify-hint {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.phone-verify-hint.ok { color: var(--success); }
+.phone-verify-hint.err { color: var(--danger); }
+
+@media (max-width: 760px) {
+  .phone-verify-code { gap: 6px; }
+  .phone-code-input { flex: 1 1 130px; min-width: 120px; width: auto; }
+  .phone-verify-btn,
+  .phone-verify-code .btn-primary { min-height: 40px; }
+  .phone-verify-code .link-button { flex-basis: 100%; }
+}

@@ -18,6 +18,9 @@ class MeOut(BaseModel):
     name: str
     email: str
     phone: str | None = None
+    #: آیا شماره‌ی موبایلِ فعلی با کدِ پیامکی تأیید شده — تا فرانت نشانِ «تأییدشده» و
+    #: امکانِ بازیابیِ رمز با پیامک را نشان دهد.
+    phone_verified: bool = False
     role_key: str
     role_name: str
     permissions: dict
@@ -71,6 +74,26 @@ class ProfileUpdateIn(BaseModel):
         if not v.strip():
             raise ValueError("نام نمی‌تواند خالی باشد")
         return v.strip()
+
+
+class PhoneSendCodeIn(BaseModel):
+    """درخواستِ کدِ تأییدِ شماره. شماره ذخیره می‌شود (تأییدنشده) و کد پیامک می‌شود."""
+
+    phone: str
+
+
+class PhoneVerifyIn(BaseModel):
+    """راستی‌آزماییِ کدِ تأییدِ شماره."""
+
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def digits_only(cls, v: str) -> str:
+        v = v.strip()
+        if not v.isdigit():
+            raise ValueError("کد فقط عدد است")
+        return v
 
 
 class BusinessUpdateIn(BaseModel):

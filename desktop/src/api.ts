@@ -9,6 +9,8 @@ export interface MeResponse {
   name: string
   email: string
   phone: string | null
+  //: شماره‌ی موبایلِ فعلی با کدِ پیامکی تأیید شده — برای نشانِ «تأییدشده» و بازیابیِ رمز با پیامک.
+  phone_verified: boolean
   role_key: string
   role_name: string
   permissions: Record<string, string[]>
@@ -1882,6 +1884,21 @@ export interface ProfileUpdate {
 
 export const updateProfile = (token: string, patch: ProfileUpdate) =>
   authedSend<MeResponse>(token, 'PATCH', '/api/auth/me', patch)
+
+/** نتیجه‌ی ارسالِ کدِ تأییدِ شماره. `phone` ماسک‌شده است (۰۹۱۲****۵۶۷). */
+export interface PhoneCodeResult {
+  sent: boolean
+  phone: string
+  expires_in: number
+}
+
+/** کدِ تأییدِ شماره را پیامک می‌کند (شماره را هم تأییدنشده روی حساب ذخیره می‌کند). */
+export const sendPhoneCode = (token: string, phone: string) =>
+  authedSend<PhoneCodeResult>(token, 'POST', '/api/auth/phone/send-code', { phone })
+
+/** کدِ تأیید را می‌سنجد؛ در صورتِ درستی، `me`ی به‌روز (با phone_verified=true) برمی‌گرداند. */
+export const verifyPhoneCode = (token: string, code: string) =>
+  authedSend<MeResponse>(token, 'POST', '/api/auth/phone/verify', { code })
 
 /** تغییرِ نامِ کسب‌وکارِ جاری — فقط مالک؛ سرور غیرمالک را با ۴۰۳ رد می‌کند. */
 export const updateBusinessName = (token: string, name: string) =>

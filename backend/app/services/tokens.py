@@ -114,6 +114,92 @@ def consume(db: Session, raw: str, *, purpose: str) -> AuthToken | None:
     return token
 
 
+#: عمرِ کدِ کوتاهِ پیامکی و سقفِ تلاشِ راستی‌آزمایی. کوتاه چون کد حدس‌زدنی است و
+#: نباید پنجره‌ی حمله باز بماند؛ کاربر هم معمولاً کد را در همان دقیقه وارد می‌کند.
+CODE_TTL_MINUTES = 5
+MAX_CODE_ATTEMPTS = 5
+
+
+def _numeric_code(digits: int = 6) -> str:
+    """کدِ عددیِ تصادفیِ امن. secrets نه random — تا قابلِ پیش‌بینی نباشد."""
+    return "".join(secrets.choice("0123456789") for _ in range(digits))
+
+
+def _code_hash(user_id: UUID, purpose: str, code: str) -> str:
+    """hashِ کد، نمک‌خورده با کاربر و هدف.
+
+    دو دلیل: (۱) `token_hash` یکتاست و اگر خامِ کد را hash می‌کردیم، دو کاربر با کدِ
+    ۶رقمیِ یکسان به تصادمِ یکتایی می‌خوردند؛ user_id هر hash را جدا می‌کند. (۲) بدونِ
+    نمک، یک جدولِ آماده‌ی یک‌میلیون کد کلِ hashها را برمی‌گرداند.
+    """
+    return hash_token(f"{user_id}:{purpose}:{code}")
+
+
+def issue_code(
+    db: Session,
+    *,
+    user_id: UUID,
+    purpose: str,
+    lifetime: timedelta = timedelta(minutes=CODE_TTL_MINUTES),
+    digits: int = 6,
+) -> str:
+    """کدِ کوتاهِ عددیِ تازه می‌سازد و مقدارِ خامش را برمی‌گرداند (برای ارسالِ پیامکی).
+
+    کدهای قبلیِ همین کاربر و همین هدف حذف می‌شوند (نه فقط باطل): این‌ها گذرا و
+    یک‌بارمصرف‌اند، ماندگاری‌شان ارزشِ ممیزی ندارد و حذف، تصادمِ `token_hash` را هم
+    (وقتی کدِ تازه اتفاقی با کدِ قبلی یکی شود) کاملاً حذف می‌کند.
+    """
+    db.query(AuthToken).filter(
+        AuthToken.user_id == user_id,
+        AuthToken.purpose == purpose,
+    ).delete()
+
+    code = _numeric_code(digits)
+    db.add(
+        AuthToken(
+            purpose=purpose,
+            token_hash=_code_hash(user_id, purpose, code),
+            user_id=user_id,
+            expires_at=datetime.now(timezone.utc) + lifetime,
+        )
+    )
+    db.flush()
+    return code
+
+
+def consume_code(db: Session, *, user_id: UUID, purpose: str, code: str) -> bool:
+    """کد را می‌سنجد و در صورتِ درستی مصرفش می‌کند. False یعنی نامعتبر — بدون تفکیک.
+
+    مثلِ consume، بین «کدی نیست»، «منقضی شده»، «قفل شده» و «غلط است» فرق نمی‌گذارد.
+    هر تلاشِ غلط `attempts` را بالا می‌برد و بعد از سقف، حتی کدِ درست هم رد می‌شود تا
+    حمله‌ی حدسِ کدِ کوتاه بی‌اثر بماند.
+    """
+    token = (
+        db.query(AuthToken)
+        .filter(
+            AuthToken.user_id == user_id,
+            AuthToken.purpose == purpose,
+            AuthToken.used_at.is_(None),
+        )
+        .order_by(AuthToken.created_at.desc())
+        .first()
+    )
+    if token is None:
+        return False
+    if token.expires_at <= datetime.now(timezone.utc):
+        return False
+    if token.attempts >= MAX_CODE_ATTEMPTS:
+        return False
+    if token.token_hash != _code_hash(user_id, purpose, code):
+        token.attempts += 1
+        db.flush()
+        return False
+
+    token.used_at = datetime.now(timezone.utc)
+    db.flush()
+    return True
+
+
 def issue_password_reset(db: Session, user_id: UUID) -> str:
     from app.models.auth_token import PURPOSE_PASSWORD_RESET
 

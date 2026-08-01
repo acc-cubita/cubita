@@ -66,6 +66,9 @@ _password_reset_limiter = SlidingWindowLimiter(max_events=5, window_seconds=900)
 #: یک نفر مشخص را با ایمیل بازیابی پر کند — که خرابکاری علیه قربانی است، نه علیه ما،
 #: و سقف مبتنی بر IP اصلاً نمی‌بیندش.
 _password_reset_per_email = SlidingWindowLimiter(max_events=3, window_seconds=3600)
+#: ارسالِ کدِ پیامکی هزینه‌ی واقعی دارد (هر پیامک از اعتبارِ ملی‌پیامک کم می‌کند)، پس
+#: سقفش سخت‌گیرانه‌تر است: هدف جلوگیری از تخلیه‌ی اعتباب با درخواستِ پیاپیِ کد است.
+_sms_code_limiter = SlidingWindowLimiter(max_events=5, window_seconds=900)
 
 
 def limit_login(request: Request) -> None:
@@ -78,6 +81,10 @@ def limit_signup(request: Request) -> None:
 
 def limit_password_reset(request: Request) -> None:
     _password_reset_limiter.check(f"reset:{client_key(request)}")
+
+
+def limit_sms_code(request: Request) -> None:
+    _sms_code_limiter.check(f"sms-code:{client_key(request)}")
 
 
 def limit_password_reset_for_email(email: str) -> bool:
@@ -100,3 +107,4 @@ def reset_all() -> None:
     _signup_limiter.reset()
     _password_reset_limiter.reset()
     _password_reset_per_email.reset()
+    _sms_code_limiter.reset()
