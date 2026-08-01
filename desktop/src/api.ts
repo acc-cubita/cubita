@@ -982,6 +982,31 @@ export const fetchBankAccountsLive = async (token: string) => {
   return rows.map((b) => ({ id: b.id, name: b.name, bank_name: b.bank_name }))
 }
 
+/** حساب بانکیِ کامل — برای مدیریتِ حساب‌ها و «کارتِ حساب» (دفتر کلِ متناظر). */
+export interface BankAccountRecord {
+  id: string
+  name: string
+  bank_name: string
+  account_number: string
+  iban: string
+  gl_account_id: string
+  is_active: boolean
+}
+
+export const fetchBankAccountsAdmin = (token: string) =>
+  authedGet<BankAccountRecord[]>(token, '/api/bank-accounts')
+
+export const createBankAccount = (
+  token: string,
+  data: { name: string; bank_name?: string; account_number?: string; iban?: string },
+) => authedSend<BankAccountRecord>(token, 'POST', '/api/bank-accounts', data)
+
+export const updateBankAccount = (
+  token: string,
+  id: string,
+  patch: { name?: string; bank_name?: string; account_number?: string; iban?: string; is_active?: boolean },
+) => authedSend<BankAccountRecord>(token, 'PATCH', `/api/bank-accounts/${id}`, patch)
+
 interface ItemWithPricingLiveOut {
   id: string
   sku: string

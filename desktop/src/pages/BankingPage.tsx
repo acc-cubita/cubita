@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Inbox, Landmark, ScrollText, GitCompareArrows, CalendarClock } from 'lucide-react'
+import { Inbox, Landmark, ScrollText, GitCompareArrows, CalendarClock, Wallet } from 'lucide-react'
 import { fetchChecks, type CheckRecord } from '../api'
 import type { AccountCache, BankAccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
@@ -9,7 +9,8 @@ const faMoney = (n: number) => n.toLocaleString('fa-IR')
 const ACTIVE_CHECK = new Set(['in_hand', 'deposited', 'issued'])
 import { OutboxList } from '../components/OutboxList'
 import { ChecksList } from '../components/ChecksList'
-import { BankingPanel } from '../components/BankingPanel'
+import { BankAccountsPanel } from '../components/BankAccountsPanel'
+import { PettyCashPanel } from '../components/PettyCashPanel'
 import { ReconciliationPanel } from '../components/ReconciliationPanel'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -95,7 +96,13 @@ export function BankingPage({
             key: 'accounts',
             label: 'حساب‌های بانکی',
             icon: Landmark,
-            content: <BankingPanel token={token} accounts={accounts} bankAccounts={bankAccounts} />,
+            content: <BankAccountsPanel token={token} accounts={accounts} />,
+          },
+          {
+            key: 'petty',
+            label: 'تنخواه‌گردان',
+            icon: Wallet,
+            content: <PettyCashPanel token={token} accounts={accounts} />,
           },
           {
             key: 'reconciliation',

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +9,7 @@ from app.pagination import Page, PageParams, paginate
 from app.schemas.banking import (
     BankAccountIn,
     BankAccountOut,
+    BankAccountUpdateIn,
     BankDepositWithdrawIn,
     BankStatementImportIn,
     BankStatementLineOut,
@@ -48,6 +49,24 @@ def create_bank_account(
         gl_account_id=gl_account_id,
     )
     db.add(account)
+    db.flush()
+    db.refresh(account)
+    return account
+
+
+@router.patch("/api/bank-accounts/{bank_account_id}", response_model=BankAccountOut)
+def update_bank_account(
+    bank_account_id: UUID,
+    data: BankAccountUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "update")),
+):
+    """ویرایشِ نام/بانک/شماره/شبا یا فعال‌بودنِ حساب بانکی. حسابِ دفترِ کل ثابت می‌ماند."""
+    account = db.get(BankAccount, bank_account_id)
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(account, key, value)
     db.flush()
     db.refresh(account)
     return account

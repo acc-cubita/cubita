@@ -13,6 +13,23 @@ class BankAccountIn(BaseModel):
     gl_account_id: UUID | None = None  # اگر خالی باشد، حساب پیش‌فرض «۱۱۰۲ بانک» استفاده می‌شود
 
 
+class BankAccountUpdateIn(BaseModel):
+    """ویرایشِ حساب بانکی — فقط فیلدهای ارسال‌شده تغییر می‌کنند. حسابِ دفترِ کلِ
+    متناظر (gl_account_id) پس از ساخت عوض نمی‌شود (روی اسناد نشسته)."""
+
+    name: str | None = None
+    bank_name: str | None = None
+    account_number: str | None = None
+    iban: str | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _name_not_blank(self) -> "BankAccountUpdateIn":
+        if self.name is not None and not self.name.strip():
+            raise ValueError("نام حساب نمی‌تواند خالی باشد")
+        return self
+
+
 class BankAccountOut(BaseModel):
     id: UUID
     name: str
