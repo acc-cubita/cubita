@@ -2431,7 +2431,8 @@ button:disabled {
    کلِ صفحه را پهن‌تر از نمایشگر می‌کند و سمت چپِ کارت‌ها بریده می‌شود. */
 .workspace-split > *,
 .split-2col > *,
-.stat-grid > * {
+.stat-grid > *,
+.pos-grid > * {
   min-width: 0;
 }
 
