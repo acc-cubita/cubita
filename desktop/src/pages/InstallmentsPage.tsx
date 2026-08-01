@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CircleDollarSign, Plus, Save, Wallet, X, Ban } from 'lucide-react'
+import { CalendarClock, CircleDollarSign, Plus, Save, Wallet, X, Ban, Printer } from 'lucide-react'
 import {
   cancelInstallmentPlan,
   createInstallmentPlan,
@@ -16,7 +16,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, toFaDigits } from '../lib/jalali'
 
 const fa = (n: string | number) => Number(n).toLocaleString('fa-IR')
 
@@ -32,10 +32,24 @@ const INST_STATUS: Record<Installment['status'], { label: string; tone: string }
   overdue: { label: 'معوق', tone: 'danger' },
 }
 
+type PlanFilter = 'all' | 'active' | 'overdue' | 'completed' | 'cancelled'
+
+// نوارِ پیشرفتِ وصول (پرداخت‌شده ÷ تسهیم‌شده)
+function ProgressBar({ paid, scheduled }: { paid: number; scheduled: number }) {
+  const pct = scheduled > 0 ? Math.min(100, Math.round((paid / scheduled) * 100)) : 0
+  return (
+    <div className="inst-progress" title={`${toFaDigits(pct)}٪ وصول‌شده`}>
+      <div className="inst-progress-fill" style={{ width: `${pct}%` }} />
+      <span className="inst-progress-label">{toFaDigits(pct)}٪</span>
+    </div>
+  )
+}
+
 export function InstallmentsPage({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
   const [plans, setPlans] = useState<InstallmentPlan[]>([])
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<PlanFilter>('all')
   const [error, setError] = useState<string | null>(null)
 
   // فرم قرارداد
@@ -76,6 +90,32 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
     const overdue = active.reduce((s, p) => s + Number(p.overdue_amount), 0)
     return { active: active.length, remaining, overdue }
   }, [plans])
+
+  const filteredPlans = useMemo(() => {
+    return plans.filter((p) => {
+      if (filter === 'all') return true
+      if (filter === 'overdue') return p.status === 'active' && p.overdue_count > 0
+      return p.status === filter
+    })
+  }, [plans, filter])
+
+  const filterCounts = useMemo(() => ({
+    all: plans.length,
+    active: plans.filter((p) => p.status === 'active').length,
+    overdue: plans.filter((p) => p.status === 'active' && p.overdue_count > 0).length,
+    completed: plans.filter((p) => p.status === 'completed').length,
+    cancelled: plans.filter((p) => p.status === 'cancelled').length,
+  }), [plans])
+
+  // پیش‌نمایشِ تسهیم — همان منطقِ سرور: financed=کل−پیش، قسط=کف(financed÷n)، باقی‌مانده به آخری
+  const amortization = useMemo(() => {
+    const t = Number(total), d = Number(down) || 0, n = Number(count) || 0
+    if (!(t > 0) || n < 1 || d < 0 || d >= t) return null
+    const financed = t - d
+    const base = Math.floor(financed / n)
+    const last = base + (financed - base * n)
+    return { financed, base, last, n }
+  }, [total, down, count])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -141,6 +181,62 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
     }
   }
 
+  function printSchedule(plan: InstallmentPlan) {
+    const win = window.open('', '_blank', 'width=840,height=1000')
+    if (!win) return
+    const rows = plan.installments.map((i) =>
+      `<tr><td>${toFaDigits(i.seq)}</td><td>${formatJalali(i.due_date)}</td><td class="num">${fa(i.amount)}</td><td class="num">${fa(i.paid_amount)}</td><td class="num">${fa(i.remaining)}</td><td>${INST_STATUS[i.status].label}</td></tr>`,
+    ).join('')
+    win.document.write(`<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<title>جدولِ اقساط ${plan.number ?? ''} — ${plan.contact_name}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:Vazirmatn,Tahoma,sans-serif;margin:28px;color:#1f2937}
+  h1{font-size:20px;margin:0 0 4px}
+  .muted{color:#6b7280;font-size:13px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:16px}
+  .meta{text-align:left;font-size:13px;line-height:1.9}
+  .summary{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;font-size:13px}
+  .summary div{border:1px solid #e5e7eb;border-radius:8px;padding:8px 14px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th{text-align:right;background:#f3f4f6;font-size:13px;padding:8px 10px;border:1px solid #e5e7eb}
+  td{padding:8px 10px;border:1px solid #e5e7eb;font-size:13.5px}
+  td.num{text-align:left;font-variant-numeric:tabular-nums}
+  .foot{margin-top:26px;color:#6b7280;font-size:11.5px;line-height:1.8}
+</style></head><body>
+  <div class="head">
+    <div><h1>جدولِ اقساط</h1><div class="muted">${plan.title || 'فروش اقساطی'}</div></div>
+    <div class="meta">
+      <div>مشتری: <strong>${plan.contact_name}</strong></div>
+      <div>قرارداد شماره: ${plan.number != null ? toFaDigits(plan.number) : '—'}</div>
+      <div>تاریخِ شروع: ${formatJalali(plan.start_date)}</div>
+    </div>
+  </div>
+  <div class="summary">
+    <div>مبلغ کل: <strong>${fa(plan.total_amount)}</strong></div>
+    <div>پیش‌پرداخت: <strong>${fa(plan.down_payment)}</strong></div>
+    <div>تسهیم‌شده: <strong>${fa(plan.financed)}</strong></div>
+    <div>پرداخت‌شده: <strong>${fa(plan.total_paid)}</strong></div>
+    <div>مانده: <strong>${fa(plan.total_remaining)}</strong></div>
+  </div>
+  <table>
+    <thead><tr><th>قسط</th><th>سررسید</th><th class="num">مبلغ</th><th class="num">پرداخت‌شده</th><th class="num">مانده</th><th>وضعیت</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="foot">این جدول از سیستمِ حسابداری صادر شده است. هر پرداخت به‌صورتِ دریافت از مشتری در خزانه ثبت می‌شود.</div>
+  <script>window.onload=function(){window.print()}</script>
+</body></html>`)
+    win.document.close()
+  }
+
+  const filters: { key: PlanFilter; label: string }[] = [
+    { key: 'all', label: 'همه' },
+    { key: 'active', label: 'فعال' },
+    { key: 'overdue', label: 'دارای معوق' },
+    { key: 'completed', label: 'تسویه‌شده' },
+    { key: 'cancelled', label: 'لغوشده' },
+  ]
+
   return (
     <div className="page">
       <PageHeader
@@ -194,6 +290,18 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
               تاریخِ اولین قسط
               <JalaliDatePicker value={startDate} onChange={setStartDate} />
             </label>
+
+            {amortization && (
+              <div className="pos-summary" style={{ marginTop: 4 }}>
+                <div className="pos-row"><span>مبلغِ تسهیم‌شده (کل − پیش‌پرداخت)</span><strong>{fa(amortization.financed)}</strong></div>
+                <div className="pos-row"><span>هر قسط</span><strong>{fa(amortization.base)}</strong></div>
+                {amortization.last !== amortization.base && (
+                  <div className="pos-row"><span>قسط آخر (با گِردکردن)</span><strong>{fa(amortization.last)}</strong></div>
+                )}
+                <div className="pos-row pos-total"><span>{toFaDigits(amortization.n)} قسط، هر {toFaDigits(Number(interval) || 1)} ماه</span><strong>{fa(amortization.financed)}</strong></div>
+              </div>
+            )}
+
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary"><Save size={14} /> ثبت قرارداد</button>
             </div>
@@ -201,33 +309,55 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
           </form>
         </SectionCard>
 
-        <SectionCard icon={CalendarClock} title="قراردادها" description={`${fa(plans.length)} قرارداد`}>
-          {plans.length === 0 ? (
-            <EmptyState icon={CalendarClock} text="هنوز قرارداد اقساطی ثبت نشده." />
+        <SectionCard
+          icon={CalendarClock}
+          title="قراردادها"
+          description={`${fa(filteredPlans.length)} از ${fa(plans.length)} قرارداد`}
+        >
+          <div className="inst-filters">
+            {filters.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={filter === f.key ? 'chip-active' : ''}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label} ({toFaDigits(filterCounts[f.key])})
+              </button>
+            ))}
+          </div>
+          {filteredPlans.length === 0 ? (
+            <EmptyState icon={CalendarClock} text={plans.length === 0 ? 'هنوز قرارداد اقساطی ثبت نشده.' : 'قراردادی مطابق فیلتر نیست.'} />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table">
+              <table className="entity-table inst-plans-table">
                 <thead>
-                  <tr><th>#</th><th>مشتری</th><th>مبلغ کل</th><th>مانده</th><th>وضعیت</th><th></th></tr>
+                  <tr><th>#</th><th>مشتری</th><th>مبلغ کل</th><th>پیشرفت</th><th>مانده</th><th>وضعیت</th><th>اقدام</th></tr>
                 </thead>
                 <tbody>
-                  {plans.map((p) => (
+                  {filteredPlans.map((p) => (
                     <tr key={p.id} className={selectedId === p.id ? 'row-selected' : undefined} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(p.id)}>
-                      <td>{fa(p.number ?? 0)}</td>
-                      <td>
+                      <td data-label="#">{fa(p.number ?? 0)}</td>
+                      <td className="entity-name">
                         <div className="entity-name">{p.contact_name}</div>
                         <div className="entity-sub">{p.title}</div>
                       </td>
-                      <td className="money-cell">{fa(p.total_amount)}</td>
-                      <td className="money-cell">
+                      <td data-label="مبلغ کل" className="money-cell">{fa(p.total_amount)}</td>
+                      <td data-label="پیشرفت" className="inst-progress-cell">
+                        <ProgressBar paid={Number(p.total_paid)} scheduled={Number(p.total_paid) + Number(p.total_remaining)} />
+                      </td>
+                      <td data-label="مانده" className="money-cell">
                         {fa(p.total_remaining)}
                         {p.overdue_count > 0 && <span className="status-badge tone-danger" style={{ marginRight: 4 }}>{fa(p.overdue_count)} معوق</span>}
                       </td>
-                      <td><span className={`status-badge tone-${PLAN_STATUS[p.status].tone}`}>{PLAN_STATUS[p.status].label}</span></td>
-                      <td>
-                        {p.status === 'active' && (
-                          <button type="button" onClick={(e) => { e.stopPropagation(); void handleCancel(p) }}><Ban size={13} /> لغو</button>
-                        )}
+                      <td data-label="وضعیت"><span className={`status-badge tone-${PLAN_STATUS[p.status].tone}`}>{PLAN_STATUS[p.status].label}</span></td>
+                      <td className="inst-plan-action">
+                        <div className="row-actions">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); printSchedule(p) }}><Printer size={13} /> چاپ</button>
+                          {p.status === 'active' && (
+                            <button type="button" className="icon-btn-danger" onClick={(e) => { e.stopPropagation(); void handleCancel(p) }} title="لغو قرارداد"><Ban size={13} /></button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -243,31 +373,43 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
           icon={CalendarClock}
           title={`زمان‌بندی اقساط — ${selected.contact_name}`}
           description={`قرارداد ${fa(selected.number ?? 0)} · کل ${fa(selected.total_amount)} · پیش‌پرداخت ${fa(selected.down_payment)} · پرداخت‌شده ${fa(selected.total_paid)}`}
-          actions={<button type="button" onClick={() => setSelectedId(null)}><X size={13} /> بستن</button>}
+          actions={
+            <div className="row-actions">
+              <button type="button" onClick={() => printSchedule(selected)}><Printer size={13} /> چاپ جدول</button>
+              <button type="button" onClick={() => setSelectedId(null)}><X size={13} /> بستن</button>
+            </div>
+          }
         >
+          <div className="inst-sched-progress">
+            <ProgressBar paid={Number(selected.total_paid)} scheduled={Number(selected.total_paid) + Number(selected.total_remaining)} />
+            <span className="inst-sched-progress-text">
+              {fa(selected.total_paid)} از {fa(Number(selected.total_paid) + Number(selected.total_remaining))} ریال وصول شده
+              {selected.next_due_date && ` · سررسید بعدی: ${formatJalali(selected.next_due_date)}`}
+            </span>
+          </div>
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table inst-sched-table">
               <thead>
-                <tr><th>قسط</th><th>سررسید</th><th>مبلغ</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th><th></th></tr>
+                <tr><th>قسط</th><th>سررسید</th><th>مبلغ</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th><th>اقدام</th></tr>
               </thead>
               <tbody>
                 {selected.installments.map((inst) => (
                   <Fragment key={inst.id}>
                     <tr>
-                      <td>{fa(inst.seq)}</td>
-                      <td>{formatJalali(inst.due_date)}</td>
-                      <td className="money-cell">{fa(inst.amount)}</td>
-                      <td className="money-cell">{fa(inst.paid_amount)}</td>
-                      <td className="money-cell">{fa(inst.remaining)}</td>
-                      <td><span className={`status-badge tone-${INST_STATUS[inst.status].tone}`}>{INST_STATUS[inst.status].label}</span></td>
-                      <td>
+                      <td data-label="قسط">{fa(inst.seq)}</td>
+                      <td data-label="سررسید">{formatJalali(inst.due_date)}</td>
+                      <td data-label="مبلغ" className="money-cell">{fa(inst.amount)}</td>
+                      <td data-label="پرداخت‌شده" className="money-cell">{fa(inst.paid_amount)}</td>
+                      <td data-label="مانده" className="money-cell">{fa(inst.remaining)}</td>
+                      <td data-label="وضعیت"><span className={`status-badge tone-${INST_STATUS[inst.status].tone}`}>{INST_STATUS[inst.status].label}</span></td>
+                      <td className="inst-inst-action">
                         {selected.status === 'active' && inst.status !== 'paid' && (
                           <button type="button" onClick={() => startPay(inst)}><Wallet size={13} /> پرداخت</button>
                         )}
                       </td>
                     </tr>
                     {payingId === inst.id && (
-                      <tr>
+                      <tr className="inst-pay-row">
                         <td colSpan={7}>
                           <div className="pay-inline">
                             <label>مبلغ<input type="number" min="0" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>
