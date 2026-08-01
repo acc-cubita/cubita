@@ -3835,3 +3835,64 @@ button:disabled {
   .cal-cell { min-height: 68px; padding: 4px; }
   .cal-chip { font-size: 10px; padding: 1px 4px; }
 }
+
+/* ═══════════════ ارتقای تولید و بهای تمام‌شده: بها/حاشیه + برگهٔ بها + موبایل ═══════════════ */
+
+/* دکمهٔ کم‌رنگ (تعویضِ فعال/غیرفعالِ فرمول در حالتِ غیرفعال) */
+.btn-muted { opacity: 0.6; }
+.bom-row-inactive { opacity: 0.62; }
+.bom-components { font-size: 12.5px; color: var(--text-muted); max-width: 260px; }
+
+/* برگهٔ بهای تمام‌شده — ردیف‌های جمع و بهای واحد */
+.prod-cost-table tr.prod-cost-foot td { border-top: 1px solid var(--border-strong); background: var(--surface-2); font-weight: 700; }
+.prod-cost-table tr.prod-cost-total td { border-top: 2px solid var(--text-h); font-size: 15px; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های فرمول/سفارش/برگهٔ بها کارتِ برچسب‌دار می‌شوند ── */
+@media (max-width: 760px) {
+  .bom-table, .bom-table tbody,
+  .prod-order-table, .prod-order-table tbody,
+  .prod-cost-table, .prod-cost-table tbody { display: block; }
+  .bom-table thead, .prod-order-table thead, .prod-cost-table thead { display: none; }
+  .bom-table tr, .prod-order-table tr, .prod-cost-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .bom-table td, .prod-order-table td, .prod-cost-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .bom-table tr td:last-child, .prod-order-table tr td:last-child, .prod-cost-table tr td:last-child { border-bottom: 0; }
+  .bom-table td[data-label]::before, .prod-order-table td[data-label]::before, .prod-cost-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* سرِ کارت (نامِ محصول/جزء) = تمام‌عرض، بدونِ برچسب */
+  .bom-table td.entity-name, .prod-order-table td.entity-name, .prod-cost-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+  }
+  .bom-table td.bom-components { justify-content: flex-start; flex-wrap: wrap; max-width: none; }
+  /* سلولِ اقدام (ویرایش/فعال/حذف و برگهٔ بها) تمام‌عرضِ قابلِ لمس */
+  .bom-table td.bom-actions, .prod-order-table td.prod-order-action { padding-top: 10px; }
+  .bom-table td.bom-actions .row-actions { width: 100%; flex-wrap: wrap; }
+  .bom-table td.bom-actions .row-actions button { flex: 1 1 auto; justify-content: center; }
+  .prod-order-table td.prod-order-action button { width: 100%; justify-content: center; }
+  /* ردیف‌های جمع/بهای واحدِ برگهٔ بها: سلول‌های خالیِ برچسب‌دار پنهان تا کارت شلوغ نشود */
+  .prod-cost-table .prod-cost-foot td:empty, .prod-cost-table .prod-cost-total td:empty { display: none; }
+}

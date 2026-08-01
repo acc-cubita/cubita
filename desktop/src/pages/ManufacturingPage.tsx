@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers } from 'lucide-react'
+import { Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers, Pencil, X, Power, ReceiptText } from 'lucide-react'
 import {
   createBom,
   createProductionOrder,
   deleteBom,
+  updateBom,
   fetchBoms,
   fetchItemsLive,
   fetchProductionOrders,
@@ -18,9 +19,21 @@ import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { ProductionCostDrawer } from '../components/ProductionCostDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+// بهای تمام‌شده‌ی هر واحدِ محصول از میانگینِ موزونِ اجزا (÷ بازده)
+function bomUnitCost(bom: BomRecord, itemById: Map<string, ItemRecord>): number {
+  const yieldQty = Number(bom.yield_qty) || 1
+  let cost = 0
+  for (const l of bom.lines) {
+    const it = itemById.get(l.component_item_id)
+    cost += Number(l.qty) * (it ? Number(it.average_cost) : 0)
+  }
+  return cost / yieldQty
+}
 
 export function ManufacturingPage({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
@@ -101,6 +114,7 @@ function BomsTab({
   itemById: Map<string, ItemRecord>
   onChanged: () => Promise<void>
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [finishedId, setFinishedId] = useState('')
   const [name, setName] = useState('')
   const [yieldQty, setYieldQty] = useState('1')
@@ -115,6 +129,25 @@ function BomsTab({
   }
   function removeLine(i: number) {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))
+  }
+
+  function resetForm() {
+    setEditingId(null)
+    setFinishedId('')
+    setName('')
+    setYieldQty('1')
+    setLines([{ componentId: '', qty: '' }])
+    setMsg(null)
+  }
+
+  function startEdit(b: BomRecord) {
+    setEditingId(b.id)
+    setFinishedId(b.finished_item_id)
+    setName(b.name)
+    setYieldQty(String(Number(b.yield_qty)))
+    setLines(b.lines.map((l) => ({ componentId: l.component_item_id, qty: String(Number(l.qty)) })))
+    setMsg(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function submit(e: React.FormEvent) {
@@ -133,18 +166,21 @@ function BomsTab({
       setMsg('محصولِ نهایی نمی‌تواند جزءِ خودش باشد.')
       return
     }
+    const linePayload = valid.map((l) => ({ component_item_id: l.componentId, qty: Number(l.qty) }))
     try {
-      await createBom(token, {
-        finished_item_id: finishedId,
-        name: name || undefined,
-        yield_qty: Number(yieldQty) || 1,
-        lines: valid.map((l) => ({ component_item_id: l.componentId, qty: Number(l.qty) })),
-      })
-      setFinishedId('')
-      setName('')
-      setYieldQty('1')
-      setLines([{ componentId: '', qty: '' }])
-      setMsg('فرمولِ ساخت ثبت شد.')
+      if (editingId) {
+        await updateBom(token, editingId, { name, yield_qty: Number(yieldQty) || 1, lines: linePayload })
+        setMsg('فرمولِ ساخت ویرایش شد.')
+      } else {
+        await createBom(token, {
+          finished_item_id: finishedId,
+          name: name || undefined,
+          yield_qty: Number(yieldQty) || 1,
+          lines: linePayload,
+        })
+        setMsg('فرمولِ ساخت ثبت شد.')
+      }
+      resetForm()
       await onChanged()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -154,21 +190,35 @@ function BomsTab({
   async function remove(id: string) {
     if (!window.confirm('این فرمولِ ساخت حذف شود؟')) return
     await deleteBom(token, id)
+    if (editingId === id) resetForm()
     await onChanged()
   }
 
+  async function toggleActive(b: BomRecord) {
+    await updateBom(token, b.id, { is_active: !b.is_active })
+    await onChanged()
+  }
+
+  const editingFinishedName = editingId ? itemById.get(finishedId)?.name ?? '—' : ''
+
   return (
     <div className="workspace-split">
-      <SectionCard icon={FlaskConical} title="فرمولِ ساختِ جدید" description="محصول و اجزای سازنده‌اش را تعریف کنید.">
+      <SectionCard
+        icon={editingId ? Pencil : FlaskConical}
+        title={editingId ? 'ویرایشِ فرمولِ ساخت' : 'فرمولِ ساختِ جدید'}
+        description={editingId ? `محصول: ${editingFinishedName}` : 'محصول و اجزای سازنده‌اش را تعریف کنید.'}
+        actions={editingId ? <button type="button" onClick={resetForm}><X size={13} /> انصراف</button> : undefined}
+      >
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
             محصولِ نهایی
-            <select value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required>
+            <select value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
               <option value="">— انتخاب —</option>
               {goodsItems.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
             </select>
+            {editingId && <span className="field-hint">محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.</span>}
           </label>
           <div className="field-row">
             <label>
@@ -181,7 +231,7 @@ function BomsTab({
             </label>
           </div>
 
-          <div className="table-scroll">
+          <div className="entity-table-wrap">
             <table className="invoice-lines">
               <thead>
                 <tr>
@@ -193,7 +243,7 @@ function BomsTab({
               <tbody>
                 {lines.map((l, i) => (
                   <tr key={i}>
-                    <td>
+                    <td data-label="جزء">
                       <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
                         <option value="">— انتخاب کالا —</option>
                         {goodsItems.map((it) => (
@@ -201,7 +251,7 @@ function BomsTab({
                         ))}
                       </select>
                     </td>
-                    <td>
+                    <td data-label="مقدار">
                       <input type="number" min="0" step="any" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} />
                     </td>
                     <td>
@@ -217,45 +267,73 @@ function BomsTab({
 
           <div className="invoice-form-footer">
             <button type="button" onClick={addLine}><Plus size={14} /> افزودن جزء</button>
-            <button type="submit" className="btn-primary"><Save size={14} /> ثبت فرمول</button>
+            <button type="submit" className="btn-primary"><Save size={14} /> {editingId ? 'ذخیرهٔ تغییرات' : 'ثبت فرمول'}</button>
           </div>
           {msg && <div className="hint">{msg}</div>}
         </form>
       </SectionCard>
 
-      <SectionCard icon={Layers} title="فرمول‌های ساخت" description={`${fa(boms.length)} فرمول`}>
+      <SectionCard icon={Layers} title="فرمول‌های ساخت" description={`${fa(boms.length)} فرمول — بهای تمام‌شده و حاشیهٔ سود از میانگینِ موزونِ اجزا`}>
         {boms.length === 0 ? (
           <EmptyState icon={FlaskConical} text="فرمولی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table bom-table">
               <thead>
                 <tr>
                   <th>محصول</th>
                   <th>اجزا</th>
-                  <th>بازده</th>
-                  <th></th>
+                  <th>بهای واحد</th>
+                  <th>حاشیهٔ سود</th>
+                  <th>اقدام</th>
                 </tr>
               </thead>
               <tbody>
-                {boms.map((b) => (
-                  <tr key={b.id}>
-                    <td>
-                      <div className="entity-cell">
-                        <div className="entity-avatar">{(itemById.get(b.finished_item_id)?.name ?? '؟').trim().charAt(0)}</div>
-                        <div>
-                          <div className="entity-name">{itemById.get(b.finished_item_id)?.name ?? '—'}</div>
-                          {b.name && <div className="entity-sub">{b.name}</div>}
+                {boms.map((b) => {
+                  const finished = itemById.get(b.finished_item_id)
+                  const cost = bomUnitCost(b, itemById)
+                  const salePrice = Number(finished?.sales_price ?? 0)
+                  const margin = salePrice - cost
+                  const pct = salePrice > 0 ? (margin / salePrice) * 100 : null
+                  return (
+                    <tr key={b.id} className={b.is_active ? '' : 'bom-row-inactive'}>
+                      <td className="entity-name">
+                        <div className="entity-cell">
+                          <div className="entity-avatar">{(finished?.name ?? '؟').trim().charAt(0)}</div>
+                          <div>
+                            <div className="entity-name">{finished?.name ?? '—'}</div>
+                            <div className="entity-sub">
+                              {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
+                              {!b.is_active && ' · غیرفعال'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>{b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}</td>
-                    <td>{Number(b.yield_qty).toLocaleString('fa-IR')}</td>
-                    <td>
-                      <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td data-label="اجزا" className="bom-components">
+                        {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
+                      </td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
+                      <td data-label="حاشیهٔ سود">
+                        {salePrice <= 0 ? (
+                          <span className="field-hint">قیمت فروش ثبت نشده</span>
+                        ) : (
+                          <span className={`status-badge ${margin >= 0 ? 'tone-success' : 'tone-danger'}`} title={`قیمت فروش: ${fa(salePrice)} — بهای تمام‌شده: ${fa(cost)}`}>
+                            {fa(margin)}{pct != null ? ` (${Math.round(pct)}٪)` : ''}
+                          </span>
+                        )}
+                      </td>
+                      <td className="bom-actions">
+                        <div className="row-actions">
+                          <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
+                          <button type="button" className={b.is_active ? '' : 'btn-muted'} onClick={() => void toggleActive(b)} title={b.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}>
+                            <Power size={13} /> {b.is_active ? 'فعال' : 'غیرفعال'}
+                          </button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -287,6 +365,7 @@ function ProduceTab({
   const [overhead, setOverhead] = useState('')
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
+  const [openOrder, setOpenOrder] = useState<ProductionOrderRecord | null>(null)
 
   useEffect(() => {
     if (!warehouseId && warehouses[0]) setWarehouseId(warehouses[0].id)
@@ -399,12 +478,12 @@ function ProduceTab({
         )}
       </SectionCard>
 
-      <SectionCard icon={Factory} title="سفارش‌های تولید" description={`${fa(orders.length)} سفارش`}>
+      <SectionCard icon={Factory} title="سفارش‌های تولید" description={`${fa(orders.length)} سفارش — روی «برگهٔ بها» بزنید تا ریزِ بهای تمام‌شده را ببینید`}>
         {orders.length === 0 ? (
           <EmptyState icon={Hammer} text="هنوز تولیدی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table prod-order-table">
               <thead>
                 <tr>
                   <th>شماره</th>
@@ -412,16 +491,20 @@ function ProduceTab({
                   <th>تعداد</th>
                   <th>بهای واحد</th>
                   <th>تاریخ</th>
+                  <th>اقدام</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{o.number != null ? o.number.toLocaleString('fa-IR') : '—'}</td>
+                    <td data-label="شماره">{o.number != null ? o.number.toLocaleString('fa-IR') : '—'}</td>
                     <td className="entity-name">{itemById.get(o.finished_item_id)?.name ?? '—'}</td>
-                    <td>{Number(o.qty_produced).toLocaleString('fa-IR')}</td>
-                    <td className="money-cell">{fa(Number(o.unit_cost))}</td>
-                    <td>{formatJalali(o.production_date)}</td>
+                    <td data-label="تعداد">{Number(o.qty_produced).toLocaleString('fa-IR')}</td>
+                    <td data-label="بهای واحد" className="money-cell"><strong>{fa(Number(o.unit_cost))}</strong></td>
+                    <td data-label="تاریخ">{formatJalali(o.production_date)}</td>
+                    <td className="prod-order-action">
+                      <button type="button" onClick={() => setOpenOrder(o)}><ReceiptText size={13} /> برگهٔ بها</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -429,6 +512,10 @@ function ProduceTab({
           </div>
         )}
       </SectionCard>
+
+      {openOrder && (
+        <ProductionCostDrawer order={openOrder} itemById={itemById} onClose={() => setOpenOrder(null)} />
+      )}
     </div>
   )
 }
