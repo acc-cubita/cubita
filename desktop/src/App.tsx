@@ -84,8 +84,8 @@ export default function App() {
           <TrialExpiredScreen onLogout={handleLogout} />
         ) : (
           <>
-            <SubscriptionBanner token={token} />
-            <TrialBanner me={me} />
+            {/* برای حسابِ آزمایشی فقط نوارِ ترایال؛ نوارِ عمومیِ اشتراک تکراری و گیج‌کننده بود. */}
+            {me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}
             <Dashboard token={token} me={me} onLogout={handleLogout} onMeUpdated={setMe} />
           </>
         )}

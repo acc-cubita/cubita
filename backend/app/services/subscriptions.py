@@ -16,6 +16,7 @@
 یک ماه رایگان. این دو هزینه اصلاً هم‌اندازه نیستند. مستأجرهای قدیمی هم که پیش از
 وجود این جدول ساخته شده‌اند نباید با یک استقرار قفل شوند.
 """
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -163,4 +164,7 @@ def trial_info(db: Session, tenant, *, now: datetime | None = None) -> TrialInfo
     expires = sub.expires_at
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
-    return TrialInfo(is_trial=True, days_left=(expires - now).days, expired=now > expires)
+    # سقف (ceil) نه کف: در لحظه‌ی ثبت‌نام ~۱۳٫۹۹ روز مانده که با کف «۱۳ روز» می‌شد و با
+    # وعده‌ی «۱۴ روز رایگان» می‌جنگید. سقف، روزِ صفر را ۱۴ نشان می‌دهد.
+    remaining = (expires - now).total_seconds() / 86400
+    return TrialInfo(is_trial=True, days_left=math.ceil(remaining), expired=now > expires)
