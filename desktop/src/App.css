@@ -3172,3 +3172,95 @@ button:disabled {
   .wh-table td.check-actions { justify-content: center; padding-top: 10px; flex-wrap: wrap; }
   .wh-table td.check-actions input { flex: 1 1 auto; min-width: 0; }
 }
+
+/* ═══════════════ ارتقای حسابداری: چارتِ قابلِ مدیریت + دفتر روزنامه ═══════════════ */
+
+/* چارتِ حساب‌ها — سرفصل و نشانِ سیستمی */
+.chart-group-name { font-weight: 700; color: var(--text-h); display: inline-flex; align-items: center; gap: 6px; }
+.chart-group-icon { color: var(--accent); flex: 0 0 auto; }
+.chart-sys-tag {
+  margin-inline-start: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+/* دفترِ روزنامه — کارتِ باز/بسته‌شونده‌ی هر سند (به‌جای جدولِ فشرده) */
+.journal-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.journal-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.journal-card--voided { opacity: 0.72; }
+.journal-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+}
+.journal-head:hover { background: var(--surface); }
+.journal-head-main { min-width: 0; }
+.journal-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.journal-num { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.journal-date { font-size: 12.5px; color: var(--text-muted); }
+.journal-source { font-size: 11px; }
+.journal-desc { margin-top: 4px; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.journal-head-side { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; color: var(--text-muted); }
+.journal-amount { font-weight: 700; color: var(--text-h); font-variant-numeric: tabular-nums; }
+.journal-detail { border-top: 1px solid var(--border); padding: 8px 14px 12px; }
+.journal-lines-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.journal-lines-table th { text-align: start; color: var(--text-muted); font-weight: 600; padding: 6px 8px; font-size: 12px; }
+.journal-lines-table td { padding: 6px 8px; border-top: 1px solid var(--border); }
+.journal-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+/* موبایل (≤۷۶۰px): چارت و ردیف‌های سند هم کارتِ برچسب‌دار می‌شوند */
+@media (max-width: 760px) {
+  .chart-table, .chart-table tbody,
+  .journal-lines-table, .journal-lines-table tbody { display: block; }
+  .chart-table thead, .journal-lines-table thead { display: none; }
+  .chart-table tr, .journal-lines-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .journal-lines-table tr { background: var(--surface); }
+  .chart-table td, .journal-lines-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .chart-table tr td:last-child, .journal-lines-table tr td:last-child { border-bottom: 0; }
+  .chart-table td[data-label]::before, .journal-lines-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .chart-table td.entity-name, .chart-table td.chart-group-name,
+  .journal-lines-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+  }
+  .chart-table td.entity-name::before, .chart-table td.chart-group-name::before,
+  .journal-lines-table td.entity-name::before { display: none; }
+  /* سلولِ اکشن (بدونِ برچسب) → دکمه‌ها وسط و کامل */
+  .chart-table td.check-actions { justify-content: flex-start; flex-wrap: wrap; padding-top: 10px; }
+  .chart-table td.check-actions input { flex: 1 1 auto; min-width: 0; }
+}

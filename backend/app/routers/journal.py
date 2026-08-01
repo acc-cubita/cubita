@@ -1,5 +1,6 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -10,8 +11,10 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.accounting import JournalEntryIn, JournalEntryOut
+from app.schemas.voiding import VoidIn, VoidOut
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
+from app.services.voiding import void_journal_entry
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
 
@@ -64,3 +67,21 @@ def create_entry(
     db.flush()
     db.refresh(entry)
     return entry
+
+
+@router.post("/{entry_id}/void", response_model=VoidOut)
+def void_entry(
+    entry_id: UUID,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "delete")),
+):
+    """ابطالِ سندِ دستی با ثبتِ سندِ معکوس.
+
+    مجوز عمداً «delete» است (مثلِ ابطالِ فاکتور): اثرِ برگشت‌ناپذیرِ حسابداری دارد و
+    نباید در اختیارِ نقشی باشد که فقط «update» دارد. فقط سندِ دستی؛ سندی که یک ماژول
+    (فاکتور، حقوق، …) ساخته باید از راهِ ابطالِ همان منبع برگردد — سرویس این را گارد
+    می‌کند و ۴۰۹ می‌دهد.
+    """
+    reversal = void_journal_entry(db, entry_id, reason=data.reason, user=user, void_date=data.void_date)
+    return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)

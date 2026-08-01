@@ -334,11 +334,19 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  voided_at: string | null
+  reverses_entry_id: string | null
   lines: JournalEntryLine[]
 }
 
 export const fetchJournalEntries = (token: string) =>
   authedGetAll<JournalEntryRecord>(token, '/api/journal-entries')
+
+/** ابطالِ سندِ دستی با ثبتِ سندِ معکوس. فقط سندِ دستیِ باطل‌نشده؛ وگرنه سرور ۴۰۹ می‌دهد. */
+export const voidJournalEntry = (token: string, entryId: string, reason: string) =>
+  authedSend<{ reversal_entry_id: string; reversal_entry_number: number | null }>(
+    token, 'POST', `/api/journal-entries/${entryId}/void`, { reason },
+  )
 
 export interface CheckRecord {
   id: string
@@ -925,6 +933,31 @@ export const fetchAccountsLive = async (token: string) => {
   const rows = await authedGet<AccountLiveOut[]>(token, '/api/accounts')
   return rows.map((a) => ({ ...a, is_group: a.is_group ? 1 : 0 }))
 }
+
+/** حسابِ کامل (با فعال‌بودن و نقشِ سیستمی) — برای مدیریتِ چارتِ حساب‌ها. */
+export interface ChartAccount {
+  id: string
+  code: string
+  name: string
+  type: string // asset | liability | equity | income | expense
+  is_group: boolean
+  is_active: boolean
+  parent_id: string | null
+  system_role: string | null
+}
+
+export const fetchChartAccounts = (token: string) =>
+  authedGet<ChartAccount[]>(token, '/api/accounts')
+
+export const createAccount = (
+  token: string,
+  data: { code: string; name: string; type: string; is_group?: boolean; parent_id?: string | null },
+) => authedSend<ChartAccount>(token, 'POST', '/api/accounts', data)
+
+export const updateAccount = (token: string, id: string, patch: { name?: string; is_active?: boolean }) =>
+  authedSend<ChartAccount>(token, 'PATCH', `/api/accounts/${id}`, patch)
+
+export const deleteAccount = (token: string, id: string) => authedDelete(token, `/api/accounts/${id}`)
 
 interface WarehouseLiveOut {
   id: string

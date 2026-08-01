@@ -31,6 +31,10 @@ class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     type: Mapped[str] = mapped_column(String(20))
     is_group: Mapped[bool] = mapped_column(default=False)
+    #: حسابِ غیرفعال از فهرست‌های ثبتِ سند پنهان می‌شود ولی تاریخچه‌اش می‌ماند —
+    #: راهی برای بایگانیِ حساب‌هایی که دیگر استفاده نمی‌شوند ولی سند دارند و پاک
+    #: نمی‌شوند. پیش‌فرض فعال؛ حساب‌های موجود بی‌تغییر می‌مانند.
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
     )

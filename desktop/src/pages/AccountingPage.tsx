@@ -1,11 +1,10 @@
 import { useMemo } from 'react'
-import { Inbox, ListTree, BookOpen, CalendarCheck, Building2, Target, FolderKanban, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Building2, Target, FolderKanban, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import type { AccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { JournalEntryForm } from '../components/JournalEntryForm'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
-import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PeriodClosePanel } from '../components/PeriodClosePanel'
 import { FixedAssetsPanel } from '../components/FixedAssetsPanel'
@@ -13,6 +12,8 @@ import { BudgetPanel } from '../components/BudgetPanel'
 import { CostCentersPanel } from '../components/CostCentersPanel'
 import { RecurringEntriesPanel } from '../components/RecurringEntriesPanel'
 import { CurrenciesPanel } from '../components/CurrenciesPanel'
+import { ChartOfAccountsPanel } from '../components/ChartOfAccountsPanel'
+import { JournalDaybookPanel } from '../components/JournalDaybookPanel'
 import { Tabs } from '../components/Tabs'
 import { isElectron } from '../platform'
 
@@ -69,44 +70,16 @@ export function AccountingPage({
             ),
           },
           {
+            key: 'daybook',
+            label: 'دفتر روزنامه',
+            icon: BookOpenCheck,
+            content: <JournalDaybookPanel token={token} accounts={accounts} />,
+          },
+          {
             key: 'chart',
             label: 'چارت حساب‌ها',
             icon: ListTree,
-            content: (
-              <SectionCard
-                icon={ListTree}
-                title={isElectron ? 'چارت حساب‌ها (کش محلی — کار آفلاین)' : 'چارت حساب‌ها'}
-                description="ساختار درختی تمام حساب‌های مالی کسب‌وکار؛ پایه‌ی همه‌ی گزارش‌ها و اسناد است."
-              >
-                {accounts.length === 0 ? (
-                  <EmptyState
-                    icon={ListTree}
-                    text={isElectron ? 'برای دریافت اولین کپی چارت حساب، دکمه‌ی «هم‌گام‌سازی» را بزنید.' : 'چارت حسابی ثبت نشده.'}
-                  />
-                ) : (
-                  <div className="entity-table-wrap">
-                    <table className="entity-table">
-                      <thead>
-                        <tr>
-                          <th>کد</th>
-                          <th>نام</th>
-                          <th>نوع</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {accounts.map((a) => (
-                          <tr key={a.id} className={a.is_group ? 'group-row' : ''}>
-                            <td className="ltr-cell">{a.code}</td>
-                            <td className={a.is_group ? '' : 'entity-name'}>{a.name}</td>
-                            <td>{a.type}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </SectionCard>
-            ),
+            content: <ChartOfAccountsPanel token={token} onChanged={onQueued} />,
           },
           {
             key: 'assets',
