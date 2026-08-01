@@ -12,7 +12,7 @@ from app.rate_limit import (
     limit_signup,
     limit_sms_code,
 )
-from app.deps import Principal, get_current_user, get_principal
+from app.deps import PREMIUM_FEATURES, Principal, get_current_user, get_principal
 from app.models.auth_token import PURPOSE_PASSWORD_RESET, PURPOSE_PHONE_VERIFY
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
@@ -38,6 +38,7 @@ from app.security import create_access_token, record_login, set_password, verify
 from app.services import members, sms
 from app.services.mailer import send_password_reset
 from app.services.provisioning import signup_new_business
+from app.services.subscriptions import trial_info
 from app.services.tokens import (
     CODE_TTL_MINUTES,
     PASSWORD_RESET_HOURS,
@@ -61,8 +62,9 @@ def _active_memberships(db: Session, user: User) -> list[Membership]:
     )
 
 
-def _me_out(principal: Principal) -> MeOut:
+def _me_out(principal: Principal, db: Session) -> MeOut:
     """پاسخِ استانداردِ «من» — یک منبعِ حقیقت برای /me و اندپوینت‌های ویرایشِ پروفایل."""
+    tinfo = trial_info(db, principal.membership.tenant)
     return MeOut(
         id=principal.user.id,
         name=principal.user.name,
@@ -76,6 +78,10 @@ def _me_out(principal: Principal) -> MeOut:
         tenant_name=principal.membership.tenant.name,
         is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
         is_super_admin=principal.user.email.strip().lower() in get_settings().super_admin_emails_list,
+        is_trial=tinfo.is_trial,
+        trial_days_left=tinfo.days_left,
+        trial_expired=tinfo.expired,
+        locked_features=list(PREMIUM_FEATURES) if tinfo.is_trial else [],
     )
 
 
@@ -259,8 +265,8 @@ def change_password(
 
 
 @router.get("/me", response_model=MeOut)
-def me(principal: Principal = Depends(get_principal)):
-    return _me_out(principal)
+def me(principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
+    return _me_out(principal, db)
 
 
 @router.patch("/me", response_model=MeOut)
@@ -297,7 +303,7 @@ def update_profile(
             user.email = new_email
 
     db.flush()
-    return _me_out(principal)
+    return _me_out(principal, db)
 
 
 def _mask_phone(phone: str) -> str:
@@ -353,7 +359,7 @@ def verify_phone(
 
     principal.user.phone_verified_at = datetime.now(timezone.utc)
     db.flush()
-    return _me_out(principal)
+    return _me_out(principal, db)
 
 
 @router.patch("/business", response_model=MeOut)
@@ -372,4 +378,4 @@ def update_business(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "فقط مالک می‌تواند نام کسب‌وکار را تغییر دهد")
     principal.membership.tenant.name = data.name
     db.flush()
-    return _me_out(principal)
+    return _me_out(principal, db)

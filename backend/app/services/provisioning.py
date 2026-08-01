@@ -72,6 +72,7 @@ def signup_new_business(
         # عمداً مبهم: تأیید وجود یا نبود ایمیل به مهاجم فهرست کاربران می‌دهد.
         raise HTTPException(status.HTTP_409_CONFLICT, "امکان ثبت‌نام با این ایمیل نیست")
 
+    settings = get_settings()
     tenant = provision_tenant(
         db,
         name=business_name,
@@ -81,7 +82,18 @@ def signup_new_business(
         owner_name=owner_name,
         # ثبت‌نام مستقیم هنوز پلنی نخریده، پس سقف آزمایشی می‌گیرد. بدون هیچ سقفی،
         # دعوت یک منبع نامحدود است و هر ثبت‌نام رایگان می‌تواند بی‌نهایت کاربر بسازد.
-        max_users=get_settings().signup_default_max_users,
+        max_users=settings.signup_default_max_users,
+        is_trial=True,
+    )
+    # اشتراکِ آزمایشیِ زماندار. بدونِ این، مستأجرِ ثبت‌نامی «none» می‌ماند و طبقِ fail-open
+    # نامحدود کار می‌کند — یعنی هیچ ساعتِ ۱۴روزه‌ای وجود ندارد. plan_id خالی است چون
+    # آزمایشی پلنی نخریده؛ همین تفکیکش از دوره‌ی خریداری‌شده است.
+    subscriptions.grant(
+        db,
+        tenant.id,
+        days=settings.trial_days,
+        note="دوره‌ی آزمایشیِ رایگان",
+        source="trial",
     )
     user = db.query(User).filter(User.email == email).one()
     return tenant, user
@@ -115,9 +127,12 @@ def provision_for_purchase(db: Session, purchase) -> tuple[Tenant, str] | None:
             # از قبل مشتری است — خرید جدید یعنی تمدید/ارتقا، نه کسب‌وکار جدید.
             tenant = db.get(Tenant, membership.tenant_id)
             if tenant is not None:
+                # خرید = تبدیلِ حسابِ آزمایشی به واقعی، همان‌جا و بدونِ از دست رفتنِ دیتا.
+                # این دقیقاً همان «برای حفظِ اطلاعاتت پلن بخر» است که به کاربر وعده دادیم.
+                tenant.is_trial = False
                 if _is_upgrade(tenant.max_users, plan_max_users):
                     tenant.max_users = plan_max_users
-                    db.flush()
+                db.flush()
                 _extend_subscription(db, tenant.id, purchase, note="تمدید/ارتقا")
             return tenant, ""
 

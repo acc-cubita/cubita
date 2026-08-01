@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     # بزرگ‌تر از ۱ اجازه می‌دهد ارزش را بچشد بدون اینکه ثبت‌نام رایگان بی‌سقف شود.
     signup_default_max_users: int = 3
 
+    # حسابِ آزمایشیِ رایگان (۱۴ روزه). trial_days طولِ دوره؛ reminder_days_before چند روز
+    # مانده به انقضا یادآوری برود؛ purge_grace_days چند روز بعد از انقضا (اگر نخرید)
+    # دیتا حذف شود — بافرِ ایمنی تا خریدِ دیرهنگام دیتا را از دست ندهد.
+    trial_days: int = 14
+    trial_reminder_days_before: int = 3
+    trial_purge_grace_days: int = 7
+
     # اعلان ایمیلی به مدیر وقتی یک خرید جدید در سایت تجاری پرداخت می‌شود (SMTP روی Gmail)
     smtp_host: str = ""
     smtp_port: int = 587

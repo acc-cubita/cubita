@@ -35,6 +35,17 @@ class MeOut(BaseModel):
     #: از is_platform_admin و مستقل از آن.
     is_super_admin: bool = False
 
+    #: حسابِ آزمایشیِ رایگان — فرانت با این نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل
+    #: را نشان می‌دهد بی‌آنکه منتظرِ ۴۰۲ بماند.
+    is_trial: bool = False
+    #: روزهای مانده تا انقضای آزمایشی (منفی = گذشته). برای مشتریِ واقعی None.
+    trial_days_left: int | None = None
+    #: دوره‌ی آزمایشی تمام شده — فرانت فقط صفحه‌ی خرید را نشان می‌دهد.
+    trial_expired: bool = False
+    #: قابلیت‌های قفل‌شده در آزمایشی (مثلِ moadian/storefront) — فرانت با این باکسِ «خرید پلن»
+    #: را جای ماژول می‌گذارد. برای مشتریِ واقعی خالی.
+    locked_features: list[str] = []
+
     model_config = {"from_attributes": True}
 
 

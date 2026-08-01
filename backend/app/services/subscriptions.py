@@ -132,3 +132,35 @@ def grant(
 def days_for_period(billing_period: str) -> int:
     """طول دوره بر حسب روز. ماه شمسی و میلادی هر دو تقریبی‌اند و اینجا مهم نیست."""
     return 30 if billing_period == "monthly" else 365
+
+
+@dataclass(frozen=True)
+class TrialInfo:
+    #: آیا این مستأجر حسابِ آزمایشیِ رایگان است
+    is_trial: bool
+    #: روزهای مانده تا انقضای آزمایشی (منفی = گذشته)
+    days_left: int | None
+    #: آیا دوره‌ی آزمایشی تمام شده — **بدونِ مهلتِ ارفاق**. برخلافِ مشتریِ واقعی که
+    #: انقضایش فقط‌خواندنی و با ۱۴ روز ارفاق است، آزمایشی سرِ روزِ ۱۴ کاملاً قفل می‌شود.
+    expired: bool
+
+
+def trial_info(db: Session, tenant, *, now: datetime | None = None) -> TrialInfo:
+    """وضعیتِ آزمایشیِ یک مستأجر. tenant باید `.id` و `.is_trial` داشته باشد.
+
+    آزمایشی عمداً GRACE_DAYS را نادیده می‌گیرد: مهلتِ ارفاق برای مشتریِ واقعیِ دیرکردی
+    است، نه برای دوره‌ی رایگانی که هدفش تبدیل به خرید است.
+    """
+    if not getattr(tenant, "is_trial", False):
+        return TrialInfo(is_trial=False, days_left=None, expired=False)
+
+    now = now or datetime.now(timezone.utc)
+    sub = current_subscription(db, tenant.id)
+    if sub is None:
+        # آزمایشیِ بی‌اشتراک نباید پیش بیاید؛ اگر شد، منقضی فرضش نکن (fail-open).
+        return TrialInfo(is_trial=True, days_left=None, expired=False)
+
+    expires = sub.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return TrialInfo(is_trial=True, days_left=(expires - now).days, expired=now > expires)

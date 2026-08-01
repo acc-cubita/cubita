@@ -11,8 +11,9 @@
   به داده‌ی همه‌ی مشتری‌ها رسید.
 """
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
@@ -52,6 +53,16 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: `Plan.max_users`ی که تعریف شده بود ولی هیچ‌جا خوانده نمی‌شد بهتر است، چون
     #: بدون هیچ سقفی دعوت یک منبع نامحدود است.
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: حسابِ آزمایشیِ رایگان (۱۴ روزه). ثبت‌نامِ خودسرویس True می‌سازد و خریدِ پلن آن را
+    #: False می‌کند (تبدیل به مشتریِ واقعی، در همان جا، بدون از دست رفتنِ دیتا). دو رفتار
+    #: از این پرچم مشتق می‌شوند: مودیان/اتصال‌فروشگاه قفل‌اند، و بعد از انقضا کلِ حساب
+    #: قفل می‌شود (نه فقط‌خواندنی) چون داده‌ی آزمایشی سندِ قانونیِ کسی نیست.
+    is_trial: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
+    #: لحظه‌ی ارسالِ یادآوریِ «نزدیکِ انقضای آزمایشی» — تا کرون هر حساب را فقط یک بار
+    #: یادآوری کند، نه هر روز.
+    trial_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="tenant")
 

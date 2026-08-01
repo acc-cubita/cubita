@@ -11,6 +11,7 @@ from app.models.user import User
 from app.security import decode_access_token
 from app.services.subscriptions import WRITE_ACTIONS
 from app.services.subscriptions import state_for as subscription_state
+from app.services.subscriptions import trial_info
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -101,6 +102,16 @@ def require_permission(module: str, action: str):
         if not principal.role.has_permission(module, action):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
 
+        # آزمایشیِ منقضی: کلِ دفتر قفل می‌شود (خواندن هم)، نه فقط نوشتن. این عمداً
+        # سخت‌گیرانه‌تر از انقضای مشتریِ واقعی است — داده‌ی آزمایشی سندِ قانونیِ کسی
+        # نیست، و هدفِ قفلِ کامل، سوق دادن به خرید است. /me و /subscription و
+        # /billing از require_permission رد نمی‌شوند، پس صفحه‌ی خرید همچنان باز می‌ماند.
+        if principal.membership.tenant.is_trial and trial_info(db, principal.membership.tenant).expired:
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                "دوره‌ی آزمایشیِ رایگان تمام شده است؛ برای ادامه و حفظِ اطلاعات یک پلن تهیه کنید.",
+            )
+
         if action in WRITE_ACTIONS:
             state = subscription_state(db, principal.tenant_id)
             if not state.can_write:
@@ -109,6 +120,29 @@ def require_permission(module: str, action: str):
                     "اشتراک این کسب‌وکار تمام شده است. دفترها و گزارش‌ها در دسترس‌اند "
                     "ولی برای ثبت سند تازه باید اشتراک تمدید شود.",
                 )
+        return principal.user
+
+    return checker
+
+
+#: قابلیت‌هایی که در نسخه‌ی آزمایشی قفل‌اند و فقط با پلنِ خریداری‌شده باز می‌شوند.
+#: کلیدها با locked_features در MeOut و گیتِ فرانت یکی‌اند.
+PREMIUM_FEATURES = ("moadian", "storefront")
+
+
+def require_feature(feature: str):
+    """قابلیتِ فقط-پلن. حسابِ آزمایشی را با ۴۰۲ رد می‌کند تا فرانت باکسِ «خرید پلن» را نشان دهد.
+
+    روی کلِ روترِ مودیان و اتصال‌فروشگاه به‌صورتِ dependencyِ سطحِ روتر می‌نشیند، پس هر
+    اندپوینتِ تازه‌ای هم که به آن روترها اضافه شود خودکار قفل می‌ماند.
+    """
+
+    def checker(principal: Principal = Depends(get_principal)) -> User:
+        if principal.membership.tenant.is_trial:
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                "این قابلیت در نسخه‌ی آزمایشی فعال نیست؛ برای استفاده یک پلن تهیه کنید.",
+            )
         return principal.user
 
     return checker

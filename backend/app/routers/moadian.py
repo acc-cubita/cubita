@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import require_feature, require_permission
 from app.models.user import User
 from app.schemas.moadian import MoadianSettingsIn, MoadianSettingsOut, MoadianSubmissionOut
 from app.services import moadian as service
 
-router = APIRouter(prefix="/api/moadian", tags=["moadian"])
+# کلِ ماژول قابلیتِ فقط-پلن است: حسابِ آزمایشی هنگامِ بازکردنِ آن ۴۰۲ می‌گیرد و فرانت
+# باکسِ «خرید پلن» را نشان می‌دهد. dependencyِ سطحِ روتر هر اندپوینتِ آینده را هم می‌پوشاند.
+router = APIRouter(prefix="/api/moadian", tags=["moadian"], dependencies=[Depends(require_feature("moadian"))])
 
 
 def _settings_out(settings) -> dict:

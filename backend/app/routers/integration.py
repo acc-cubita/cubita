@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import require_feature, require_permission
 from app.models.user import User
 from app.schemas.storefront import StorefrontSettingsIn, StorefrontSettingsOut
 from app.services import storefront_integration as service
 from app.services.storefront_integration import StorefrontConfigError, sync_all
 
-router = APIRouter(prefix="/api/integration", tags=["integration"])
+# قابلیتِ فقط-پلن (مثلِ مودیان): حسابِ آزمایشی قفل است و باکسِ «خرید پلن» می‌بیند.
+router = APIRouter(prefix="/api/integration", tags=["integration"], dependencies=[Depends(require_feature("storefront"))])
 
 
 def _to_out(row) -> StorefrontSettingsOut:
