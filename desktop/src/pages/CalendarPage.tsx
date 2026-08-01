@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  BellRing,
   CalendarCheck2,
   CalendarDays,
   CalendarPlus,
@@ -27,6 +28,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { ReminderCenterPanel } from '../components/ReminderCenterPanel'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
@@ -426,8 +428,8 @@ export function CalendarPage({ token }: { token: string }) {
       {filteredList.length === 0 ? (
         <EmptyState icon={CalendarDays} text="رویدادی مطابق فیلتر پیدا نشد." />
       ) : (
-        <div className="table-scroll">
-        <table>
+        <div className="entity-table-wrap">
+        <table className="entity-table cal-list-table">
           <thead>
             <tr>
               <th>وضعیت</th>
@@ -441,7 +443,7 @@ export function CalendarPage({ token }: { token: string }) {
           <tbody>
             {filteredList.map((ev) => (
               <tr key={ev.id} className={ev.is_done ? 'cal-row-done' : ''}>
-                <td>
+                <td className="cal-status-cell" data-label="وضعیت">
                   <button
                     type="button"
                     className={`cal-done-toggle${ev.is_done ? ' on' : ''}`}
@@ -451,18 +453,18 @@ export function CalendarPage({ token }: { token: string }) {
                     {ev.is_done ? <Check size={14} /> : <RotateCcw size={14} />}
                   </button>
                 </td>
-                <td>{formatJalali(ev.event_date)}</td>
-                <td>{timeRange(ev)}</td>
-                <td>
+                <td data-label="تاریخ">{formatJalali(ev.event_date)}</td>
+                <td data-label="ساعت">{timeRange(ev)}</td>
+                <td className="entity-name">
                   <div className="cal-list-title">{ev.title}</div>
                   {ev.description && <div className="cal-list-desc">{ev.description}</div>}
                 </td>
-                <td>
+                <td data-label="دسته">
                   <span className={`status-badge cal-badge ${CATEGORY_META[ev.category].cls}`}>
                     {CATEGORY_META[ev.category].label}
                   </span>
                 </td>
-                <td>
+                <td className="cal-action-cell">
                   <div className="cal-row-actions">
                     <button type="button" onClick={() => startEdit(ev)}>
                       <Pencil size={13} /> ویرایش
@@ -505,6 +507,12 @@ export function CalendarPage({ token }: { token: string }) {
 
       <Tabs
         tabs={[
+          {
+            key: 'reminders',
+            label: 'کارهای امروز',
+            icon: BellRing,
+            content: <ReminderCenterPanel token={token} />,
+          },
           {
             key: 'calendar',
             label: 'تقویم ماهانه',

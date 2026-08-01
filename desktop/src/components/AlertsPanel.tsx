@@ -8,6 +8,7 @@ import {
   Repeat,
   CalendarClock,
   PackageX,
+  Coins,
 } from 'lucide-react'
 import { fetchAlerts, type AlertCategory, type AlertItem, type Alerts } from '../api'
 import { formatJalali, toFaDigits } from '../lib/jalali'
@@ -19,6 +20,7 @@ const CAT_ICON: Record<AlertCategory, typeof Banknote> = {
   recurring: Repeat,
   calendar: CalendarClock,
   stock: PackageX,
+  installment: Coins,
 }
 
 // danger اول، بعد warning، بعد info — مهم‌ترین‌ها بالای فهرست.

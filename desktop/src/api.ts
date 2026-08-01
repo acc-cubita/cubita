@@ -2121,7 +2121,7 @@ export const runRecurringOne = (token: string, id: string) =>
 
 // --- مرکز هشدارها ---
 
-export type AlertCategory = 'check' | 'receivable' | 'credit' | 'recurring' | 'calendar' | 'stock'
+export type AlertCategory = 'check' | 'receivable' | 'credit' | 'recurring' | 'calendar' | 'stock' | 'installment'
 export type AlertSeverity = 'danger' | 'warning' | 'info'
 
 export interface AlertItem {

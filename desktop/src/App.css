@@ -3713,3 +3713,125 @@ button:disabled {
   .rep-foot td:empty { display: none; }
   .report-period-caption { margin-inline-start: 0; }
 }
+
+/* ═══════════════ ارتقای تقویم و یادآوری: مرکزِ کارهای امروز + موبایل‌ویو ═══════════════ */
+
+.reminder-ok {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border-radius: var(--radius-md, 12px);
+  color: var(--text-h);
+}
+
+/* کارت‌های شمارشِ شدت */
+.reminder-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.reminder-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-2);
+}
+.reminder-kpi span { font-size: 12px; color: var(--text-muted); }
+.reminder-kpi strong { font-size: 20px; font-weight: 800; color: var(--text-h); }
+.reminder-kpi.sev-danger { border-top-color: var(--danger); }
+.reminder-kpi.sev-danger strong { color: var(--danger); }
+.reminder-kpi.sev-warning { border-top-color: var(--warning); }
+.reminder-kpi.sev-info { border-top-color: var(--text-muted); }
+
+/* چیپ‌های فیلترِ دسته */
+.reminder-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.reminder-filters button {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.reminder-filters button.chip-active {
+  background: var(--accent, #2563eb);
+  color: #fff;
+  border-color: var(--accent, #2563eb);
+}
+
+/* فهرستِ یادآوری‌ها — هر ردیف یک کارت با لبه‌ی رنگیِ شدت */
+.reminder-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.reminder-row.sev-danger { border-inline-start-color: var(--danger); }
+.reminder-row.sev-warning { border-inline-start-color: var(--warning); }
+.reminder-row.sev-info { border-inline-start-color: var(--text-muted); }
+.reminder-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--text-muted); }
+.reminder-row.sev-danger .reminder-dot { background: var(--danger); }
+.reminder-row.sev-warning .reminder-dot { background: var(--warning); }
+.reminder-cat-icon { color: var(--text-muted); flex: 0 0 auto; }
+.reminder-body { min-width: 0; flex: 1 1 auto; }
+.reminder-title { font-size: 13.5px; font-weight: 600; color: var(--text-h); }
+.reminder-detail { font-size: 12px; color: var(--text-muted); }
+.reminder-cat-label { color: var(--text); }
+.reminder-date { white-space: nowrap; }
+.reminder-amount { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; font-weight: 700; color: var(--text-h); }
+
+/* ── موبایل (≤۷۶۰px): جدولِ فهرستِ رویدادها کارتِ برچسب‌دار می‌شود ── */
+@media (max-width: 760px) {
+  .cal-list-table, .cal-list-table tbody { display: block; }
+  .cal-list-table thead { display: none; }
+  .cal-list-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .cal-list-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .cal-list-table tr td:last-child { border-bottom: 0; }
+  .cal-list-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* عنوانِ رویداد = سرِ کارت: تمام‌عرض، پررنگ، بدونِ برچسب */
+  .cal-list-table td.entity-name { justify-content: flex-start; flex-wrap: wrap; }
+  /* سلولِ وضعیت و اقدام تمام‌عرضِ قابلِ لمس */
+  .cal-list-table td.cal-action-cell { padding-top: 10px; }
+  .cal-list-table td.cal-action-cell .cal-row-actions { width: 100%; }
+  .cal-list-table td.cal-action-cell .cal-row-actions button:first-child { flex: 1 1 auto; justify-content: center; }
+
+  /* شبکه‌ی ماه جمع‌وجورتر روی موبایل تا خانه‌ها خفه نشوند */
+  .cal-grid { gap: 4px; }
+  .cal-cell { min-height: 68px; padding: 4px; }
+  .cal-chip { font-size: 10px; padding: 1px 4px; }
+}
