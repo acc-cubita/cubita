@@ -3999,3 +3999,70 @@ button:disabled {
   .inst-sched-table tr.inst-pay-row, .inst-sched-table tr.inst-pay-row > td { display: block; border: 0; padding: 0; }
   .inst-sched-table tr.inst-pay-row { margin: -6px 0 12px; }
 }
+
+/* ═══════════════ ارتقای اتصال فروشگاه: وضعیتِ اتصال، نگاشت + موبایل ═══════════════ */
+
+/* بنرِ وضعیتِ اتصال */
+.integration-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--border-strong);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-2);
+}
+.integration-status > div { display: flex; flex-direction: column; gap: 2px; }
+.integration-status strong { color: var(--text-h); font-size: 13.5px; }
+.integration-status span { font-size: 12px; color: var(--text-muted); }
+.integration-status.tone-success { border-inline-start-color: var(--success); }
+.integration-status.tone-warning { border-inline-start-color: var(--warning); }
+.integration-status.tone-muted { border-inline-start-color: var(--text-muted); }
+
+/* کارت‌های نتیجهٔ هم‌گام‌سازی (از report-kpi استفاده می‌کند) + فاصله */
+.integration-result { margin: 6px 0 14px; }
+
+/* جستجوی کالا در نوارِ فیلتر */
+.integration-search { flex: 1 1 140px; min-width: 120px; }
+.integration-num { width: 110px; max-width: 100%; }
+
+/* ── موبایل (≤۷۶۰px): جدولِ نگاشتِ کالا کارتِ برچسب‌دار می‌شود ── */
+@media (max-width: 760px) {
+  .integration-table, .integration-table tbody { display: block; }
+  .integration-table thead { display: none; }
+  .integration-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .integration-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .integration-table tr td:last-child { border-bottom: 0; }
+  .integration-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* نامِ کالا = سرِ کارت */
+  .integration-table td.entity-name { justify-content: flex-start; flex-wrap: wrap; font-weight: 700; color: var(--text-h); }
+  .integration-num { width: 140px; }
+  .integration-table td.integration-action { padding-top: 10px; }
+  .integration-table td.integration-action button { width: 100%; justify-content: center; }
+  .integration-search { flex-basis: 100%; }
+}
