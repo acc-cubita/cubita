@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { BarChart3, Search, Download } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { BarChart3, Search, Download, CalendarRange } from 'lucide-react'
 import { downloadCsv } from '../lib/csv'
 import {
   fetchAging,
@@ -36,7 +36,8 @@ import {
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
-import { formatJalali, isoToJalali, todayIso } from '../lib/jalali'
+import { JalaliDatePicker } from './JalaliDatePicker'
+import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
 
 const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
 const QUARTER_OPTIONS = [
@@ -63,10 +64,51 @@ type ReportKind =
   | 'kardex'
   | 'seasonal'
 
+type PeriodPreset = 'all' | 'month' | 'quarter' | 'year' | 'custom'
+
+// گزارش‌هایی که «به تاریخِ مشخص» هستند (نه بازه‌ای) — بازه‌ی تاریخ برایشان بی‌معناست و
+// فقط تاریخِ پایان (as_of) اهمیت دارد؛ توضیحِ کنارشان هم متفاوت است.
+const POINT_IN_TIME: ReportKind[] = ['balance-sheet', 'inventory', 'receivable-aging', 'payable-aging']
+
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
+
+// آخرین روزِ یک ماهِ شمسی به ISO: اولِ ماهِ بعد منهای یک روز
+function jMonthEndIso(jy: number, jm: number): string {
+  const ny = jm === 12 ? jy + 1 : jy
+  const nm = jm === 12 ? 1 : jm + 1
+  const firstNext = jalaliToIso(ny, nm, 1)
+  const d = new Date(firstNext + 'T00:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+const Q_LABELS = ['بهار', 'تابستان', 'پاییز', 'زمستان']
+
+function resolvePeriod(preset: PeriodPreset, customFrom: string, customTo: string): { from?: string; to?: string; label: string } {
+  const t = isoToJalali(todayIso())
+  switch (preset) {
+    case 'month':
+      return { from: jalaliToIso(t.jy, t.jm, 1), to: jMonthEndIso(t.jy, t.jm), label: `${JALALI_MONTH_NAMES[t.jm - 1]} ${toFaDigits(t.jy)}` }
+    case 'quarter': {
+      const q = Math.floor((t.jm - 1) / 3)
+      const sm = q * 3 + 1
+      return { from: jalaliToIso(t.jy, sm, 1), to: jMonthEndIso(t.jy, sm + 2), label: `${Q_LABELS[q]} ${toFaDigits(t.jy)}` }
+    }
+    case 'year':
+      return { from: jalaliToIso(t.jy, 1, 1), to: jMonthEndIso(t.jy, 12), label: `سال ${toFaDigits(t.jy)}` }
+    case 'custom':
+      return { from: customFrom, to: customTo, label: `${formatJalali(customFrom)} تا ${formatJalali(customTo)}` }
+    case 'all':
+    default:
+      return { label: 'از ابتدا تا امروز' }
+  }
+}
 
 export function Reports({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   const [active, setActive] = useState<ReportKind>('trial-balance')
+  const [preset, setPreset] = useState<PeriodPreset>('all')
+  const [customFrom, setCustomFrom] = useState(todayIso())
+  const [customTo, setCustomTo] = useState(todayIso())
   const [trialBalance, setTrialBalance] = useState<TrialBalanceRow[] | null>(null)
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null)
@@ -91,82 +133,54 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [error, setError] = useState<string | null>(null)
 
   const postableAccounts = accounts.filter((a) => !a.is_group)
+  const period = useMemo(() => resolvePeriod(preset, customFrom, customTo), [preset, customFrom, customTo])
 
-  async function load(kind: ReportKind) {
+  // داده‌ی گزارشِ فعال را با بازه‌ی تاریخِ جاری می‌گیرد. گزارش‌های نیازمندِ انتخاب
+  // (دفتر کل/کاردکس/صورت‌حساب) فقط وقتی شناسه انتخاب شده باشد بارگذاری می‌شوند.
+  async function loadData() {
+    setError(null)
+    const { from, to } = period
+    const asOf = to // برای گزارش‌های «به تاریخِ مشخص» = پایانِ بازه (خالی = امروز)
+    setLoading(true)
+    try {
+      switch (active) {
+        case 'trial-balance': setTrialBalance(await fetchTrialBalance(token, from, to)); break
+        case 'income-statement': setIncomeStatement(await fetchIncomeStatement(token, from, to)); break
+        case 'balance-sheet': setBalanceSheet(await fetchBalanceSheet(token, asOf)); break
+        case 'vat': setVatReport(await fetchVatReport(token, from, to)); break
+        case 'budget': setBudgetReport(await fetchBudgetReport(token, from, to)); break
+        case 'cash-flow': setCashFlow(await fetchCashFlow(token, from, to)); break
+        case 'cost-center': setCostCenterReport(await fetchCostCenterReport(token, from, to)); break
+        case 'receivable-aging': setAging(await fetchAging(token, 'receivable', asOf)); break
+        case 'payable-aging': setAging(await fetchAging(token, 'payable', asOf)); break
+        case 'inventory': setInventory(await fetchInventoryReport(token, asOf)); break
+        case 'general-ledger': if (ledgerAccountId) setGeneralLedger(await fetchGeneralLedger(token, ledgerAccountId, from, to)); break
+        case 'kardex': if (kardexItemId) setKardex(await fetchKardex(token, kardexItemId, from, to)); break
+        case 'contact-statement': if (statementContactId) setContactStatement(await fetchContactStatement(token, statementContactId, from, to)); break
+        case 'seasonal': break // فصلی سال/فصلِ خودش را دارد
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // بارگذاریِ خودکار وقتی گزارشِ فعال یا بازه‌ی تاریخ عوض شود
+  useEffect(() => {
+    void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, period.from, period.to])
+
+  async function selectTab(kind: ReportKind) {
     setActive(kind)
     setError(null)
-    if (kind === 'general-ledger') return // نیاز به انتخاب حساب دارد؛ با دکمه‌ی جدا بارگذاری می‌شود
-    if (kind === 'seasonal') return // نیاز به انتخاب سال/فصل دارد؛ با دکمه‌ی جدا
-    if (kind === 'contact-statement') {
-      // نیاز به انتخاب طرف‌حساب دارد؛ فهرست اشخاص را زنده می‌گیریم، خودِ گزارش با دکمه
-      if (contacts.length === 0) {
-        try {
-          setContacts(await fetchContacts(token))
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-        }
-      }
-      return
-    }
-    if (kind === 'kardex') {
-      // نیاز به انتخاب کالا دارد؛ فهرست کالاها زنده، خودِ کاردکس با دکمه
-      if (items.length === 0) {
-        try {
-          setItems((await fetchItemsLive(token)).filter((i) => !i.is_service))
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-        }
-      }
-      return
-    }
-    setLoading(true)
+    // فهرست‌های موردنیازِ گزارش‌های انتخابی را زنده می‌گیریم
     try {
-      if (kind === 'trial-balance') setTrialBalance(await fetchTrialBalance(token))
-      if (kind === 'income-statement') setIncomeStatement(await fetchIncomeStatement(token))
-      if (kind === 'balance-sheet') setBalanceSheet(await fetchBalanceSheet(token))
-      if (kind === 'vat') setVatReport(await fetchVatReport(token))
-      if (kind === 'budget') setBudgetReport(await fetchBudgetReport(token))
-      if (kind === 'cash-flow') setCashFlow(await fetchCashFlow(token))
-      if (kind === 'cost-center') setCostCenterReport(await fetchCostCenterReport(token))
-      if (kind === 'receivable-aging') setAging(await fetchAging(token, 'receivable'))
-      if (kind === 'payable-aging') setAging(await fetchAging(token, 'payable'))
-      if (kind === 'inventory') setInventory(await fetchInventoryReport(token))
+      if (kind === 'contact-statement' && contacts.length === 0) setContacts(await fetchContacts(token))
+      if (kind === 'kardex' && items.length === 0) setItems((await fetchItemsLive(token)).filter((i) => !i.is_service))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadGeneralLedger() {
-    if (!ledgerAccountId) {
-      setError('ابتدا یک حساب انتخاب کنید.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      setGeneralLedger(await fetchGeneralLedger(token, ledgerAccountId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadKardex() {
-    if (!kardexItemId) {
-      setError('ابتدا یک کالا انتخاب کنید.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      setKardex(await fetchKardex(token, kardexItemId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -175,22 +189,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     setError(null)
     try {
       setSeasonal(await fetchSeasonalReport(token, seasonalYear, seasonalQuarter))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadContactStatement() {
-    if (!statementContactId) {
-      setError('ابتدا یک طرف‌حساب انتخاب کنید.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      setContactStatement(await fetchContactStatement(token, statementContactId))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {
@@ -345,6 +343,21 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     { key: 'seasonal', label: 'معاملات فصلی (م۱۶۹)' },
   ]
 
+  const presets: { key: PeriodPreset; label: string }[] = [
+    { key: 'all', label: 'از ابتدا' },
+    { key: 'month', label: 'این ماه' },
+    { key: 'quarter', label: 'این فصل' },
+    { key: 'year', label: 'امسال' },
+    { key: 'custom', label: 'بازه‌ی دلخواه' },
+  ]
+
+  const isPoint = POINT_IN_TIME.includes(active)
+  const periodCaption = active === 'seasonal'
+    ? null
+    : isPoint
+      ? `به تاریخِ ${period.to ? formatJalali(period.to) : 'امروز'}`
+      : `دوره: ${period.label}`
+
   return (
     <SectionCard icon={BarChart3} title="گزارش‌های حسابداری">
       <p className="hint">این گزارش‌ها همیشه مستقیم و زنده از سرور خوانده می‌شوند (نیاز به اتصال اینترنت دارند).</p>
@@ -353,12 +366,37 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <button
             key={t.key}
             className={active === t.key ? 'btn-primary' : ''}
-            onClick={() => void load(t.key)}
+            onClick={() => void selectTab(t.key)}
           >
             {t.label}
           </button>
         ))}
       </div>
+
+      {active !== 'seasonal' && (
+        <div className="report-period">
+          <span className="report-period-icon"><CalendarRange size={15} /> بازه‌ی زمانی</span>
+          <div className="report-period-presets">
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={preset === p.key ? 'chip-active' : ''}
+                onClick={() => setPreset(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {preset === 'custom' && (
+            <div className="report-period-custom">
+              <label>از<JalaliDatePicker value={customFrom} onChange={setCustomFrom} /></label>
+              <label>تا<JalaliDatePicker value={customTo} onChange={setCustomTo} /></label>
+            </div>
+          )}
+          {periodCaption && <span className="report-period-caption">{periodCaption}{isPoint && preset !== 'all' ? ' · بازه بی‌اثر است (گزارشِ لحظه‌ای)' : ''}</span>}
+        </div>
+      )}
 
       {loading && <p className="hint">در حال بارگذاری...</p>}
       {error && <div className="error">{error}</div>}
@@ -371,7 +409,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
         </div>
       )}
 
-      <div className="table-scroll">
       {active === 'general-ledger' && (
         <div className="check-actions">
           <select value={ledgerAccountId} onChange={(e) => setLedgerAccountId(e.target.value)}>
@@ -382,7 +419,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => void loadGeneralLedger()}>
+          <button type="button" onClick={() => void loadData()}>
             <Search size={13} /> نمایش
           </button>
         </div>
@@ -398,7 +435,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => void loadKardex()}>
+          <button type="button" onClick={() => void loadData()}>
             <Search size={13} /> نمایش
           </button>
         </div>
@@ -409,8 +446,14 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <h3>
             {kardex.item_sku} — {kardex.item_name} ({kardex.unit})
           </h3>
-          <div className="table-scroll">
-            <table>
+          <div className="report-kpis">
+            <div className="report-kpi"><span>موجودی ابتدای دوره</span><strong>{fa(kardex.opening_qty)}</strong></div>
+            <div className="report-kpi"><span>جمع ورود</span><strong className="pos-in">{fa(kardex.total_in)}</strong></div>
+            <div className="report-kpi"><span>جمع خروج</span><strong className="pos-out">{fa(kardex.total_out)}</strong></div>
+            <div className="report-kpi"><span>موجودی پایان دوره</span><strong>{fa(kardex.closing_qty)}</strong></div>
+          </div>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-kardex-table">
               <thead>
                 <tr>
                   <th>تاریخ</th>
@@ -422,27 +465,16 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 </tr>
               </thead>
               <tbody>
-                <tr className="muted-row">
-                  <td colSpan={5}>موجودی ابتدای دوره</td>
-                  <td>{fa(kardex.opening_qty)}</td>
-                </tr>
                 {kardex.lines.map((l, i) => (
                   <tr key={i}>
-                    <td>{formatJalali(l.entry_date)}</td>
-                    <td>{l.source_label}</td>
-                    <td>{Number(l.qty_in) ? fa(l.qty_in) : ''}</td>
-                    <td>{Number(l.qty_out) ? fa(l.qty_out) : ''}</td>
-                    <td>{fa(l.unit_cost)}</td>
-                    <td>{fa(l.balance_qty)}</td>
+                    <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
+                    <td className="entity-name">{l.source_label}</td>
+                    <td data-label="ورود" className="pos-in">{Number(l.qty_in) ? fa(l.qty_in) : '—'}</td>
+                    <td data-label="خروج" className="pos-out">{Number(l.qty_out) ? fa(l.qty_out) : '—'}</td>
+                    <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
+                    <td data-label="موجودی" className="money-cell"><strong>{fa(l.balance_qty)}</strong></td>
                   </tr>
                 ))}
-                <tr>
-                  <td colSpan={2}>جمع</td>
-                  <td>{fa(kardex.total_in)}</td>
-                  <td>{fa(kardex.total_out)}</td>
-                  <td></td>
-                  <td className="invoice-total">{fa(kardex.closing_qty)}</td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -486,8 +518,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               {section.rows.length === 0 ? (
                 <p className="hint">در این فصل معامله‌ای ثبت نشده.</p>
               ) : (
-                <div className="table-scroll">
-                  <table>
+                <div className="entity-table-wrap">
+                  <table className="entity-table rep-seasonal-table">
                     <thead>
                       <tr>
                         <th>طرف حساب</th>
@@ -503,21 +535,25 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                     <tbody>
                       {section.rows.map((r, i) => (
                         <tr key={r.contact_id ?? `agg-${i}`}>
-                          <td>{r.contact_name}</td>
-                          <td>{ENTITY_LABEL[r.entity_type]}</td>
-                          <td>{r.national_id ?? '—'}</td>
-                          <td>{r.economic_code ?? '—'}</td>
-                          <td>{fa(r.invoice_count)}</td>
-                          <td className="money-cell">{fa(r.net)}</td>
-                          <td className="money-cell">{fa(r.vat)}</td>
-                          <td className="money-cell">{fa(r.total)}</td>
+                          <td className="entity-name">{r.contact_name}</td>
+                          <td data-label="شخص">{ENTITY_LABEL[r.entity_type]}</td>
+                          <td data-label="کد/شناسه ملی">{r.national_id ?? '—'}</td>
+                          <td data-label="کد اقتصادی">{r.economic_code ?? '—'}</td>
+                          <td data-label="تعداد">{fa(r.invoice_count)}</td>
+                          <td data-label="خالص" className="money-cell">{fa(r.net)}</td>
+                          <td data-label="مالیات و عوارض" className="money-cell">{fa(r.vat)}</td>
+                          <td data-label="مبلغ کل" className="money-cell">{fa(r.total)}</td>
                         </tr>
                       ))}
-                      <tr>
-                        <td colSpan={5}>جمع {title}</td>
-                        <td className="invoice-total">{fa(section.total_net)}</td>
-                        <td className="invoice-total">{fa(section.total_vat)}</td>
-                        <td className="invoice-total">{fa(section.total_total)}</td>
+                      <tr className="rep-foot">
+                        <td className="entity-name">جمع {title}</td>
+                        <td data-label="شخص"></td>
+                        <td data-label="کد/شناسه ملی"></td>
+                        <td data-label="کد اقتصادی"></td>
+                        <td data-label="تعداد"></td>
+                        <td data-label="خالص" className="invoice-total">{fa(section.total_net)}</td>
+                        <td data-label="مالیات و عوارض" className="invoice-total">{fa(section.total_vat)}</td>
+                        <td data-label="مبلغ کل" className="invoice-total">{fa(section.total_total)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -538,7 +574,7 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => void loadContactStatement()}>
+          <button type="button" onClick={() => void loadData()}>
             <Search size={13} /> نمایش
           </button>
         </div>
@@ -547,8 +583,17 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       {active === 'contact-statement' && contactStatement && (
         <div>
           <h3>{contactStatement.contact_name}</h3>
-          <div className="table-scroll">
-            <table>
+          <div className="report-kpis">
+            <div className="report-kpi"><span>مانده ابتدای دوره</span><strong>{fa(contactStatement.opening_balance)}</strong></div>
+            <div className="report-kpi"><span>جمع بدهکار</span><strong>{fa(contactStatement.total_debit)}</strong></div>
+            <div className="report-kpi"><span>جمع بستانکار</span><strong>{fa(contactStatement.total_credit)}</strong></div>
+            <div className={`report-kpi ${Number(contactStatement.closing_balance) >= 0 ? 'tone-warn' : 'tone-ok'}`}>
+              <span>{Number(contactStatement.closing_balance) >= 0 ? 'مانده پایان (بدهکار به ما)' : 'مانده پایان (طلبکار از ما)'}</span>
+              <strong>{fa(Math.abs(Number(contactStatement.closing_balance)))}</strong>
+            </div>
+          </div>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-stmt-table">
               <thead>
                 <tr>
                   <th>تاریخ</th>
@@ -560,34 +605,19 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 </tr>
               </thead>
               <tbody>
-                <tr className="muted-row">
-                  <td colSpan={5}>مانده ابتدای دوره</td>
-                  <td>{fa(contactStatement.opening_balance)}</td>
-                </tr>
                 {contactStatement.lines.map((l, i) => (
                   <tr key={i}>
-                    <td>{formatJalali(l.txn_date)}</td>
-                    <td>{l.description}</td>
-                    <td>{l.number != null ? fa(l.number) : '—'}</td>
-                    <td>{Number(l.debit) ? fa(l.debit) : ''}</td>
-                    <td>{Number(l.credit) ? fa(l.credit) : ''}</td>
-                    <td>{fa(l.balance)}</td>
+                    <td data-label="تاریخ">{formatJalali(l.txn_date)}</td>
+                    <td className="entity-name">{l.description}</td>
+                    <td data-label="شماره">{l.number != null ? fa(l.number) : '—'}</td>
+                    <td data-label="بدهکار" className="money-cell">{Number(l.debit) ? fa(l.debit) : '—'}</td>
+                    <td data-label="بستانکار" className="money-cell">{Number(l.credit) ? fa(l.credit) : '—'}</td>
+                    <td data-label="مانده" className="money-cell"><strong>{fa(l.balance)}</strong></td>
                   </tr>
                 ))}
-                <tr>
-                  <td colSpan={3}>جمع</td>
-                  <td>{fa(contactStatement.total_debit)}</td>
-                  <td>{fa(contactStatement.total_credit)}</td>
-                  <td></td>
-                </tr>
               </tbody>
             </table>
           </div>
-          <p className="invoice-total">
-            {Number(contactStatement.closing_balance) >= 0
-              ? `مانده‌ی پایان دوره (بدهکار — به ما بدهکار است): ${fa(contactStatement.closing_balance)}`
-              : `مانده‌ی پایان دوره (بستانکار — ما به او بدهکاریم): ${fa(Math.abs(Number(contactStatement.closing_balance)))}`}
-          </p>
         </div>
       )}
 
@@ -596,109 +626,115 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           <h3>
             {generalLedger.account_code} — {generalLedger.account_name}
           </h3>
-          <table>
+          <div className="report-kpis">
+            <div className="report-kpi"><span>مانده ابتدای دوره</span><strong>{fa(generalLedger.opening_balance)}</strong></div>
+            <div className="report-kpi"><span>مانده پایان دوره</span><strong>{fa(generalLedger.closing_balance)}</strong></div>
+          </div>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-gl-table">
+              <thead>
+                <tr>
+                  <th>شماره سند</th>
+                  <th>تاریخ</th>
+                  <th>شرح</th>
+                  <th>بدهکار</th>
+                  <th>بستانکار</th>
+                  <th>مانده</th>
+                </tr>
+              </thead>
+              <tbody>
+                {generalLedger.lines.map((line) => (
+                  <tr key={line.entry_id}>
+                    <td data-label="شماره سند">{line.entry_number ?? '—'}</td>
+                    <td data-label="تاریخ">{formatJalali(line.entry_date)}</td>
+                    <td className="entity-name">{line.description}</td>
+                    <td data-label="بدهکار" className="money-cell">{Number(line.debit) ? fa(line.debit) : '—'}</td>
+                    <td data-label="بستانکار" className="money-cell">{Number(line.credit) ? fa(line.credit) : '—'}</td>
+                    <td data-label="مانده" className="money-cell"><strong>{fa(line.balance)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {active === 'trial-balance' && trialBalance && (
+        <div className="entity-table-wrap">
+          <table className="entity-table rep-tb-table">
             <thead>
               <tr>
-                <th>شماره سند</th>
-                <th>تاریخ</th>
-                <th>شرح</th>
+                <th>کد</th>
+                <th>نام حساب</th>
                 <th>بدهکار</th>
                 <th>بستانکار</th>
                 <th>مانده</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={5}>مانده ابتدای دوره</td>
-                <td>{fa(generalLedger.opening_balance)}</td>
-              </tr>
-              {generalLedger.lines.map((line) => (
-                <tr key={line.entry_id}>
-                  <td>{line.entry_number ?? '—'}</td>
-                  <td>{formatJalali(line.entry_date)}</td>
-                  <td>{line.description}</td>
-                  <td>{fa(line.debit)}</td>
-                  <td>{fa(line.credit)}</td>
-                  <td>{fa(line.balance)}</td>
+              {trialBalance.map((row) => (
+                <tr key={row.account_id}>
+                  <td data-label="کد">{row.account_code}</td>
+                  <td className="entity-name">{row.account_name}</td>
+                  <td data-label="بدهکار" className="money-cell">{fa(row.total_debit)}</td>
+                  <td data-label="بستانکار" className="money-cell">{fa(row.total_credit)}</td>
+                  <td data-label="مانده" className="money-cell"><strong>{fa(row.balance)}</strong></td>
                 </tr>
               ))}
             </tbody>
-          </table>
-          <p className="invoice-total">مانده پایان دوره: {fa(generalLedger.closing_balance)}</p>
-        </div>
-      )}
-
-      {active === 'trial-balance' && trialBalance && (
-        <table>
-          <thead>
-            <tr>
-              <th>کد</th>
-              <th>نام حساب</th>
-              <th>بدهکار</th>
-              <th>بستانکار</th>
-              <th>مانده</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trialBalance.map((row) => (
-              <tr key={row.account_id}>
-                <td>{row.account_code}</td>
-                <td>{row.account_name}</td>
-                <td>{fa(row.total_debit)}</td>
-                <td>{fa(row.total_credit)}</td>
-                <td>{fa(row.balance)}</td>
+            {/* ردیفِ جمع — کلِ کارِ ترازِ آزمایشی همین است: جمعِ بدهکار باید با جمعِ بستانکار
+                برابر باشد، وگرنه دفتر نامتوازن است. ستونِ مانده «ماندهٔ طبیعیِ» هر حساب است و
+                جمعش صفر نمی‌شود، پس عمداً خالی می‌ماند تا گمراه‌کننده نباشد. */}
+            <tfoot>
+              <tr className="rep-foot">
+                <td className="entity-name">جمع</td>
+                <td data-label="کد"></td>
+                <td data-label="بدهکار" className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_debit), 0))}</td>
+                <td data-label="بستانکار" className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_credit), 0))}</td>
+                <td data-label="مانده"></td>
               </tr>
-            ))}
-          </tbody>
-          {/* ردیفِ جمع — کلِ کارِ ترازِ آزمایشی همین است: جمعِ بدهکار باید با جمعِ بستانکار
-              برابر باشد، وگرنه دفتر نامتوازن است. ستونِ مانده «ماندهٔ طبیعیِ» هر حساب است و
-              جمعش صفر نمی‌شود، پس عمداً خالی می‌ماند تا گمراه‌کننده نباشد. */}
-          <tfoot>
-            <tr>
-              <td colSpan={2}>جمع</td>
-              <td className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_debit), 0))}</td>
-              <td className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_credit), 0))}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       )}
 
       {active === 'vat' && vatReport && (
         <div>
-          <p className="hint">خلاصه‌ی مالیات بر ارزش افزوده از ابتدای فعالیت تا امروز — مبنای اظهارنامه و تسویه با سازمان.</p>
-          <table>
-            <tbody>
-              <tr>
-                <td>جمع خالص فروش</td>
-                <td>{fa(vatReport.sales_net)}</td>
-              </tr>
-              <tr>
-                <td>مالیات فروش، پس از کسرِ برگشت</td>
-                <td>{fa(vatReport.output_vat)}</td>
-              </tr>
-              {Number(vatReport.sales_returns_vat) > 0 && (
-                <tr className="muted-row">
-                  <td>— از این میان، مالیاتِ برگشت از فروش (کسرشده)</td>
-                  <td>{fa(vatReport.sales_returns_vat)}</td>
+          <p className="hint">خلاصه‌ی مالیات بر ارزش افزوده در دوره‌ی انتخاب‌شده — مبنای اظهارنامه و تسویه با سازمان.</p>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                <tr>
+                  <td>جمع خالص فروش</td>
+                  <td className="money-cell">{fa(vatReport.sales_net)}</td>
                 </tr>
-              )}
-              <tr>
-                <td>جمع خالص خرید</td>
-                <td>{fa(vatReport.purchase_net)}</td>
-              </tr>
-              <tr>
-                <td>اعتبار مالیاتی خرید، پس از کسرِ برگشت</td>
-                <td>{fa(vatReport.input_vat)}</td>
-              </tr>
-              {Number(vatReport.purchase_returns_vat) > 0 && (
-                <tr className="muted-row">
-                  <td>— از این میان، اعتبارِ برگشت از خرید (کسرشده)</td>
-                  <td>{fa(vatReport.purchase_returns_vat)}</td>
+                <tr>
+                  <td>مالیات فروش، پس از کسرِ برگشت</td>
+                  <td className="money-cell">{fa(vatReport.output_vat)}</td>
                 </tr>
-              )}
-            </tbody>
-          </table>
+                {Number(vatReport.sales_returns_vat) > 0 && (
+                  <tr className="muted-row">
+                    <td>— از این میان، مالیاتِ برگشت از فروش (کسرشده)</td>
+                    <td className="money-cell">{fa(vatReport.sales_returns_vat)}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td>جمع خالص خرید</td>
+                  <td className="money-cell">{fa(vatReport.purchase_net)}</td>
+                </tr>
+                <tr>
+                  <td>اعتبار مالیاتی خرید، پس از کسرِ برگشت</td>
+                  <td className="money-cell">{fa(vatReport.input_vat)}</td>
+                </tr>
+                {Number(vatReport.purchase_returns_vat) > 0 && (
+                  <tr className="muted-row">
+                    <td>— از این میان، اعتبارِ برگشت از خرید (کسرشده)</td>
+                    <td className="money-cell">{fa(vatReport.purchase_returns_vat)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
           <p className="invoice-total">
             {Number(vatReport.net_vat) >= 0
               ? 'مالیات قابل پرداخت به سازمان'
@@ -717,8 +753,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           {budgetReport.rows.length === 0 ? (
             <p className="hint">هنوز بودجه‌ای تعریف نشده. از «حسابداری ← بودجه‌بندی» بودجه اضافه کنید.</p>
           ) : (
-            <div className="table-scroll">
-              <table>
+            <div className="entity-table-wrap">
+              <table className="entity-table rep-budget-table">
                 <thead>
                   <tr>
                     <th>کد</th>
@@ -733,25 +769,27 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 <tbody>
                   {budgetReport.rows.map((r) => (
                     <tr key={r.account_id}>
-                      <td>{r.account_code}</td>
-                      <td>{r.account_name}</td>
-                      <td>{fa(r.budget)}</td>
-                      <td>{fa(r.actual)}</td>
-                      <td>{fa(r.variance)}</td>
-                      <td>{r.variance_pct != null ? `${fa(r.variance_pct)}٪` : '—'}</td>
-                      <td>
+                      <td data-label="کد">{r.account_code}</td>
+                      <td className="entity-name">{r.account_name}</td>
+                      <td data-label="بودجه" className="money-cell">{fa(r.budget)}</td>
+                      <td data-label="عملکرد" className="money-cell">{fa(r.actual)}</td>
+                      <td data-label="انحراف" className="money-cell">{fa(r.variance)}</td>
+                      <td data-label="درصد">{r.variance_pct != null ? `${fa(r.variance_pct)}٪` : '—'}</td>
+                      <td data-label="وضعیت">
                         <span className={`status-badge ${r.favorable ? 'tone-success' : 'tone-danger'}`}>
                           {r.favorable ? 'مطلوب' : 'نامطلوب'}
                         </span>
                       </td>
                     </tr>
                   ))}
-                  <tr>
-                    <td colSpan={2}>جمع</td>
-                    <td>{fa(budgetReport.total_budget)}</td>
-                    <td>{fa(budgetReport.total_actual)}</td>
-                    <td>{fa(budgetReport.total_variance)}</td>
-                    <td colSpan={2}></td>
+                  <tr className="rep-foot">
+                    <td className="entity-name">جمع</td>
+                    <td data-label="کد"></td>
+                    <td data-label="بودجه" className="invoice-total">{fa(budgetReport.total_budget)}</td>
+                    <td data-label="عملکرد" className="invoice-total">{fa(budgetReport.total_actual)}</td>
+                    <td data-label="انحراف" className="invoice-total">{fa(budgetReport.total_variance)}</td>
+                    <td data-label="درصد"></td>
+                    <td data-label="وضعیت"></td>
                   </tr>
                 </tbody>
               </table>
@@ -769,23 +807,27 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
         return (
           <div>
             <p className="hint">
-              ورود (+) و خروج (−) نقد از ابتدای فعالیت تا امروز، به تفکیک سه فعالیت. جمعِ سه فعالیت با تغییرِ ماندهٔ نقد
+              ورود (+) و خروج (−) نقد در دوره‌ی انتخاب‌شده، به تفکیک سه فعالیت. جمعِ سه فعالیت با تغییرِ ماندهٔ نقد
               برابر است.
             </p>
-            <p>ماندهٔ نقد ابتدای دوره: {fa(cashFlow.opening_cash)}</p>
+            <div className="report-kpis">
+              <div className="report-kpi"><span>ماندهٔ نقد ابتدای دوره</span><strong>{fa(cashFlow.opening_cash)}</strong></div>
+              <div className={`report-kpi ${Number(cashFlow.net_change) >= 0 ? 'tone-ok' : 'tone-warn'}`}><span>تغییر خالص نقد</span><strong>{fa(cashFlow.net_change)}</strong></div>
+              <div className="report-kpi"><span>ماندهٔ نقد پایان دوره</span><strong>{fa(cashFlow.closing_cash)}</strong></div>
+            </div>
             {groups.map((g) => (
               <div key={g.title}>
                 <h3>{g.title}</h3>
                 {g.lines.length === 0 ? (
                   <p className="hint">موردی در این فعالیت نبود.</p>
                 ) : (
-                  <div className="table-scroll">
-                    <table>
+                  <div className="entity-table-wrap">
+                    <table className="entity-table rep-2col-table">
                       <tbody>
                         {g.lines.map((l) => (
                           <tr key={l.account_id}>
                             <td>{l.account_code} — {l.account_name}</td>
-                            <td>{fa(l.amount)}</td>
+                            <td className={`money-cell ${Number(l.amount) >= 0 ? 'pos-in' : 'pos-out'}`}>{fa(l.amount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -795,8 +837,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 <p className="invoice-total">جمع {g.title}: {fa(g.total)}</p>
               </div>
             ))}
-            <p className="invoice-total">تغییر خالص نقد در دوره: {fa(cashFlow.net_change)}</p>
-            <p className="invoice-total">ماندهٔ نقد پایان دوره: {fa(cashFlow.closing_cash)}</p>
           </div>
         )
       })()}
@@ -810,8 +850,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           {costCenterReport.rows.length === 0 ? (
             <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «حسابداری ← مراکز هزینه» شروع کنید.</p>
           ) : (
-            <div className="table-scroll">
-              <table>
+            <div className="entity-table-wrap">
+              <table className="entity-table rep-cc-table">
                 <thead>
                   <tr>
                     <th>کد</th>
@@ -823,19 +863,20 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 </thead>
                 <tbody>
                   {costCenterReport.rows.map((r) => (
-                    <tr key={r.cost_center_id ?? 'none'} className={r.cost_center_id ? '' : 'muted-row'}>
-                      <td>{r.cost_center_code || '—'}</td>
-                      <td>{r.cost_center_name}</td>
-                      <td>{fa(r.income)}</td>
-                      <td>{fa(r.expense)}</td>
-                      <td>{fa(r.profit)}</td>
+                    <tr key={r.cost_center_id ?? 'none'}>
+                      <td data-label="کد">{r.cost_center_code || '—'}</td>
+                      <td className="entity-name">{r.cost_center_name}</td>
+                      <td data-label="درآمد" className="money-cell">{fa(r.income)}</td>
+                      <td data-label="هزینه" className="money-cell">{fa(r.expense)}</td>
+                      <td data-label="سود/زیان" className={`money-cell ${Number(r.profit) >= 0 ? 'pos-in' : 'pos-out'}`}><strong>{fa(r.profit)}</strong></td>
                     </tr>
                   ))}
-                  <tr>
-                    <td colSpan={2}>جمع</td>
-                    <td>{fa(costCenterReport.total_income)}</td>
-                    <td>{fa(costCenterReport.total_expense)}</td>
-                    <td>{fa(costCenterReport.total_profit)}</td>
+                  <tr className="rep-foot">
+                    <td className="entity-name">جمع</td>
+                    <td data-label="کد"></td>
+                    <td data-label="درآمد" className="invoice-total">{fa(costCenterReport.total_income)}</td>
+                    <td data-label="هزینه" className="invoice-total">{fa(costCenterReport.total_expense)}</td>
+                    <td data-label="سود/زیان" className="invoice-total">{fa(costCenterReport.total_profit)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -856,8 +897,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               {aging.kind === 'receivable' ? 'مطالبات بازی وجود ندارد.' : 'بدهی بازی وجود ندارد.'}
             </p>
           ) : (
-            <div className="table-scroll">
-              <table>
+            <div className="entity-table-wrap">
+              <table className="entity-table rep-aging-table">
                 <thead>
                   <tr>
                     <th>{aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}</th>
@@ -871,21 +912,21 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 <tbody>
                   {aging.rows.map((r) => (
                     <tr key={r.contact_id}>
-                      <td>{r.contact_name}</td>
-                      <td>{fa(r.current)}</td>
-                      <td>{fa(r.d31_60)}</td>
-                      <td>{fa(r.d61_90)}</td>
-                      <td>{Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(r.over_90)}</span> : fa(r.over_90)}</td>
-                      <td>{fa(r.total)}</td>
+                      <td className="entity-name">{r.contact_name}</td>
+                      <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(r.current)}</td>
+                      <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(r.d31_60)}</td>
+                      <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(r.d61_90)}</td>
+                      <td data-label="بالای ۹۰ روز" className="money-cell">{Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(r.over_90)}</span> : fa(r.over_90)}</td>
+                      <td data-label="جمع" className="money-cell"><strong>{fa(r.total)}</strong></td>
                     </tr>
                   ))}
-                  <tr>
-                    <td>جمع</td>
-                    <td>{fa(aging.total_current)}</td>
-                    <td>{fa(aging.total_31_60)}</td>
-                    <td>{fa(aging.total_61_90)}</td>
-                    <td>{fa(aging.total_over_90)}</td>
-                    <td className="invoice-total">{fa(aging.grand_total)}</td>
+                  <tr className="rep-foot">
+                    <td className="entity-name">جمع</td>
+                    <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(aging.total_current)}</td>
+                    <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(aging.total_31_60)}</td>
+                    <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(aging.total_61_90)}</td>
+                    <td data-label="بالای ۹۰ روز" className="money-cell">{fa(aging.total_over_90)}</td>
+                    <td data-label="جمع" className="invoice-total">{fa(aging.grand_total)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -902,8 +943,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
           {inventory.rows.length === 0 ? (
             <p className="hint">موجودی کالایی برای نمایش نیست.</p>
           ) : (
-            <div className="table-scroll">
-              <table>
+            <div className="entity-table-wrap">
+              <table className="entity-table rep-inv-table">
                 <thead>
                   <tr>
                     <th>کد</th>
@@ -917,17 +958,21 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                 <tbody>
                   {inventory.rows.map((r) => (
                     <tr key={r.item_id}>
-                      <td>{r.sku}</td>
-                      <td>{r.name}</td>
-                      <td>{r.unit}</td>
-                      <td>{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
-                      <td>{fa(r.unit_cost)}</td>
-                      <td>{fa(r.stock_value)}</td>
+                      <td data-label="کد">{r.sku}</td>
+                      <td className="entity-name">{r.name}</td>
+                      <td data-label="واحد">{r.unit}</td>
+                      <td data-label="موجودی">{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(r.unit_cost)}</td>
+                      <td data-label="ارزش" className="money-cell"><strong>{fa(r.stock_value)}</strong></td>
                     </tr>
                   ))}
-                  <tr>
-                    <td colSpan={5}>جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
-                    <td className="invoice-total">{fa(inventory.total_value)}</td>
+                  <tr className="rep-foot">
+                    <td className="entity-name">جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
+                    <td data-label="کد"></td>
+                    <td data-label="واحد"></td>
+                    <td data-label="موجودی"></td>
+                    <td data-label="بهای واحد"></td>
+                    <td data-label="ارزش" className="invoice-total">{fa(inventory.total_value)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -938,79 +983,98 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
 
       {active === 'income-statement' && incomeStatement && (
         <div>
+          <div className="report-kpis">
+            <div className="report-kpi tone-ok"><span>درآمد کل</span><strong>{fa(incomeStatement.total_income)}</strong></div>
+            <div className="report-kpi tone-warn"><span>هزینه کل</span><strong>{fa(incomeStatement.total_expenses)}</strong></div>
+            <div className={`report-kpi ${Number(incomeStatement.net_profit) >= 0 ? 'tone-ok' : 'tone-bad'}`}>
+              <span>{Number(incomeStatement.net_profit) >= 0 ? 'سود خالص' : 'زیان خالص'}</span>
+              <strong>{fa(Math.abs(Number(incomeStatement.net_profit)))}</strong>
+            </div>
+          </div>
           <h3>درآمدها</h3>
-          <table>
-            <tbody>
-              {incomeStatement.income.map((r) => (
-                <tr key={r.account_id}>
-                  <td>{r.account_name}</td>
-                  <td>{fa(r.balance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                {incomeStatement.income.map((r) => (
+                  <tr key={r.account_id}>
+                    <td>{r.account_name}</td>
+                    <td className="money-cell">{fa(r.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <h3>هزینه‌ها</h3>
-          <table>
-            <tbody>
-              {incomeStatement.expenses.map((r) => (
-                <tr key={r.account_id}>
-                  <td>{r.account_name}</td>
-                  <td>{fa(r.balance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                {incomeStatement.expenses.map((r) => (
+                  <tr key={r.account_id}>
+                    <td>{r.account_name}</td>
+                    <td className="money-cell">{fa(r.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="invoice-total">سود/زیان خالص: {fa(incomeStatement.net_profit)}</p>
         </div>
       )}
 
-      {active === 'balance-sheet' && balanceSheet && (
+      {active === 'balance-sheet' && balanceSheet && (() => {
+        const liabPlusEquity = Number(balanceSheet.total_liabilities) + Number(balanceSheet.total_equity) + Number(balanceSheet.current_period_profit)
+        const balanced = Math.abs(Number(balanceSheet.total_assets) - liabPlusEquity) < 1
+        return (
         <div>
+          <div className="report-kpis">
+            <div className="report-kpi tone-ok"><span>جمع دارایی‌ها</span><strong>{fa(balanceSheet.total_assets)}</strong></div>
+            <div className="report-kpi"><span>بدهی + حقوق صاحبان سرمایه</span><strong>{fa(liabPlusEquity)}</strong></div>
+            <div className={`report-kpi ${balanced ? 'tone-ok' : 'tone-bad'}`}>
+              <span>توازن</span><strong>{balanced ? 'تراز است ✓' : 'نامتوازن ✕'}</strong>
+            </div>
+          </div>
           <h3>دارایی‌ها</h3>
-          <table>
-            <tbody>
-              {balanceSheet.assets.map((r) => (
-                <tr key={r.account_id}>
-                  <td>{r.account_name}</td>
-                  <td>{fa(r.balance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p>جمع دارایی‌ها: {fa(balanceSheet.total_assets)}</p>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                {balanceSheet.assets.map((r) => (
+                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="invoice-total">جمع دارایی‌ها: {fa(balanceSheet.total_assets)}</p>
 
           <h3>بدهی‌ها</h3>
-          <table>
-            <tbody>
-              {balanceSheet.liabilities.map((r) => (
-                <tr key={r.account_id}>
-                  <td>{r.account_name}</td>
-                  <td>{fa(r.balance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p>جمع بدهی‌ها: {fa(balanceSheet.total_liabilities)}</p>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                {balanceSheet.liabilities.map((r) => (
+                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="invoice-total">جمع بدهی‌ها: {fa(balanceSheet.total_liabilities)}</p>
 
           <h3>حقوق صاحبان سرمایه</h3>
-          <table>
-            <tbody>
-              {balanceSheet.equity.map((r) => (
-                <tr key={r.account_id}>
-                  <td>{r.account_name}</td>
-                  <td>{fa(r.balance)}</td>
+          <div className="entity-table-wrap">
+            <table className="entity-table rep-2col-table">
+              <tbody>
+                {balanceSheet.equity.map((r) => (
+                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
+                ))}
+                <tr>
+                  <td>سود/زیان دوره جاری</td>
+                  <td className="money-cell">{fa(balanceSheet.current_period_profit)}</td>
                 </tr>
-              ))}
-              <tr>
-                <td>سود/زیان دوره جاری</td>
-                <td>{fa(balanceSheet.current_period_profit)}</td>
-              </tr>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
           <p className="invoice-total">جمع حقوق صاحبان سرمایه: {fa(balanceSheet.total_equity)}</p>
         </div>
-      )}
-      </div>
+        )
+      })()}
     </SectionCard>
   )
 }

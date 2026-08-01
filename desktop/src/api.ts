@@ -200,14 +200,22 @@ export interface SubscriptionStatus {
 
 export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 
-export const fetchTrialBalance = (token: string) =>
-  authedGet<TrialBalanceRow[]>(token, '/api/reports/trial-balance')
+// کمکِ ساختِ کوئری‌استرینگِ بازه‌ی تاریخ (date_from/date_to؛ خالی = از ابتدا تا امروز)
+const rangeQs = (dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams()
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  return qs.toString() ? `?${qs}` : ''
+}
 
-export const fetchIncomeStatement = (token: string) =>
-  authedGet<IncomeStatement>(token, '/api/reports/income-statement')
+export const fetchTrialBalance = (token: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<TrialBalanceRow[]>(token, `/api/reports/trial-balance${rangeQs(dateFrom, dateTo)}`)
 
-export const fetchBalanceSheet = (token: string) =>
-  authedGet<BalanceSheet>(token, '/api/reports/balance-sheet')
+export const fetchIncomeStatement = (token: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<IncomeStatement>(token, `/api/reports/income-statement${rangeQs(dateFrom, dateTo)}`)
+
+export const fetchBalanceSheet = (token: string, asOf?: string) =>
+  authedGet<BalanceSheet>(token, `/api/reports/balance-sheet${asOf ? `?as_of=${asOf}` : ''}`)
 
 export interface VatReport {
   date_from: string | null
@@ -317,8 +325,8 @@ export interface GeneralLedger {
   closing_balance: string
 }
 
-export const fetchGeneralLedger = (token: string, accountId: string) =>
-  authedGet<GeneralLedger>(token, `/api/reports/general-ledger/${accountId}`)
+export const fetchGeneralLedger = (token: string, accountId: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<GeneralLedger>(token, `/api/reports/general-ledger/${accountId}${rangeQs(dateFrom, dateTo)}`)
 
 export interface JournalEntryLine {
   id: string
@@ -1713,8 +1721,8 @@ export interface InventoryReport {
   item_count: number
 }
 
-export const fetchInventoryReport = (token: string) =>
-  authedGet<InventoryReport>(token, '/api/reports/inventory')
+export const fetchInventoryReport = (token: string, asOf?: string) =>
+  authedGet<InventoryReport>(token, `/api/reports/inventory${asOf ? `?as_of=${asOf}` : ''}`)
 
 export interface DashboardMonth {
   jy: number

@@ -3582,3 +3582,134 @@ button:disabled {
   .benefits-table td.benefits-action .row-actions { width: 100%; flex-wrap: wrap; }
   .benefits-table td.benefits-action .row-actions button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ═══════════════ ارتقای گزارش‌ها: بازه‌ی زمانی + کارتِ خلاصه + موبایل‌ویو ═══════════════ */
+
+/* نوارِ انتخابِ بازه‌ی زمانی */
+.report-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 4px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-2);
+}
+.report-period-icon { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.report-period-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.report-period-presets button {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.report-period-presets button.chip-active {
+  background: var(--accent, #2563eb);
+  color: #fff;
+  border-color: var(--accent, #2563eb);
+}
+.report-period-custom { display: flex; flex-wrap: wrap; gap: 10px; }
+.report-period-custom label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.report-period-caption { font-size: 12px; color: var(--text-muted); margin-inline-start: auto; }
+
+/* کارت‌های خلاصه‌ی گزارش (درآمد/هزینه/سود، توازن، ابتدا/انتها…) */
+.report-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 6px 0 16px;
+}
+.report-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-2);
+}
+.report-kpi span { font-size: 12px; color: var(--text-muted); }
+.report-kpi strong { font-size: 18px; font-weight: 800; color: var(--text-h); font-variant-numeric: tabular-nums; }
+.report-kpi.tone-ok { border-top-color: var(--success); }
+.report-kpi.tone-warn { border-top-color: var(--warning); }
+.report-kpi.tone-bad { border-top-color: var(--danger); }
+.report-kpi.tone-bad strong { color: var(--danger); }
+
+/* جدولِ دوستونیِ خلاصه (سود و زیان/ترازنامه/ارزش‌افزوده/جریان نقد) */
+.rep-2col-table td:first-child { color: var(--text); }
+.rep-2col-table td.money-cell { text-align: start; white-space: nowrap; }
+
+/* ردیفِ جمعِ گزارش‌ها */
+.entity-table tr.rep-foot td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 700; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های چندستونیِ گزارش‌ها کارتِ برچسب‌دار می‌شوند ── */
+@media (max-width: 760px) {
+  .rep-tb-table, .rep-tb-table tbody, .rep-tb-table tfoot,
+  .rep-gl-table, .rep-gl-table tbody,
+  .rep-stmt-table, .rep-stmt-table tbody,
+  .rep-kardex-table, .rep-kardex-table tbody,
+  .rep-aging-table, .rep-aging-table tbody,
+  .rep-inv-table, .rep-inv-table tbody,
+  .rep-budget-table, .rep-budget-table tbody,
+  .rep-cc-table, .rep-cc-table tbody,
+  .rep-seasonal-table, .rep-seasonal-table tbody { display: block; }
+  .rep-tb-table thead, .rep-gl-table thead, .rep-stmt-table thead, .rep-kardex-table thead,
+  .rep-aging-table thead, .rep-inv-table thead, .rep-budget-table thead, .rep-cc-table thead,
+  .rep-seasonal-table thead { display: none; }
+  .rep-tb-table tr, .rep-gl-table tr, .rep-stmt-table tr, .rep-kardex-table tr,
+  .rep-aging-table tr, .rep-inv-table tr, .rep-budget-table tr, .rep-cc-table tr,
+  .rep-seasonal-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .rep-tb-table td, .rep-gl-table td, .rep-stmt-table td, .rep-kardex-table td,
+  .rep-aging-table td, .rep-inv-table td, .rep-budget-table td, .rep-cc-table td,
+  .rep-seasonal-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .rep-tb-table tr td:last-child, .rep-gl-table tr td:last-child, .rep-stmt-table tr td:last-child,
+  .rep-kardex-table tr td:last-child, .rep-aging-table tr td:last-child, .rep-inv-table tr td:last-child,
+  .rep-budget-table tr td:last-child, .rep-cc-table tr td:last-child, .rep-seasonal-table tr td:last-child { border-bottom: 0; }
+  .rep-tb-table td[data-label]::before, .rep-gl-table td[data-label]::before, .rep-stmt-table td[data-label]::before,
+  .rep-kardex-table td[data-label]::before, .rep-aging-table td[data-label]::before, .rep-inv-table td[data-label]::before,
+  .rep-budget-table td[data-label]::before, .rep-cc-table td[data-label]::before, .rep-seasonal-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* سرِ کارت (نام حساب/کالا/شرح/طرف حساب) = تمام‌عرض، پررنگ، بدونِ برچسب */
+  .rep-tb-table td.entity-name, .rep-gl-table td.entity-name, .rep-stmt-table td.entity-name,
+  .rep-kardex-table td.entity-name, .rep-aging-table td.entity-name, .rep-inv-table td.entity-name,
+  .rep-budget-table td.entity-name, .rep-cc-table td.entity-name, .rep-seasonal-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  /* ردیفِ جمع روی موبایل هم کارتِ متمایز */
+  .entity-table tr.rep-foot { border-color: var(--text-h); }
+  .entity-table tr.rep-foot td { border-top: 0; background: transparent; }
+  /* پنهان‌کردنِ سلول‌های خالیِ جمع تا کارت شلوغ نشود */
+  .rep-foot td:empty { display: none; }
+  .report-period-caption { margin-inline-start: 0; }
+}
