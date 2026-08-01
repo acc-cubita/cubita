@@ -167,8 +167,8 @@ export function BenefitsPanel({ token }: { token: string }) {
       ) : report.rows.length === 0 ? (
         <EmptyState icon={Gift} text="برای این سال کارمندی با حکم حقوقی یافت نشد." />
       ) : (
-        <div className="table-scroll">
-          <table>
+        <div className="entity-table-wrap">
+          <table className="entity-table benefits-table">
             <thead>
               <tr>
                 <th>کارمند</th>
@@ -184,12 +184,12 @@ export function BenefitsPanel({ token }: { token: string }) {
               {report.rows.map((r) => (
                 <tr key={r.employee_id}>
                   <td className="entity-name">{r.employee_name}</td>
-                  <td className="money-cell">{fa(r.base_salary)}</td>
-                  <td className="money-cell">{fa(r.eidi)}</td>
-                  <td className="money-cell">{fa(r.severance)}</td>
-                  <td className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>{faDays(r.leave_remaining)}</td>
-                  <td className="money-cell">{fa(r.leave_value)}</td>
-                  <td>
+                  <td data-label="حقوق پایه" className="money-cell">{fa(r.base_salary)}</td>
+                  <td data-label="عیدی" className="money-cell">{fa(r.eidi)}</td>
+                  <td data-label="سنوات تا امروز" className="money-cell">{fa(r.severance)}</td>
+                  <td data-label="ماندهٔ مرخصی (روز)" className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>{faDays(r.leave_remaining)}</td>
+                  <td data-label="طلب مرخصی" className="money-cell">{fa(r.leave_value)}</td>
+                  <td className="benefits-action">
                     <div className="row-actions">
                       <button type="button" onClick={() => void handleSeverance(r.employee_id)} title="صدور سنوات">
                         <Coins size={13} /> سنوات
@@ -204,12 +204,12 @@ export function BenefitsPanel({ token }: { token: string }) {
             </tbody>
             <tfoot>
               <tr>
-                <td>جمع</td>
-                <td></td>
-                <td className="money-cell">{fa(report.total_eidi)}</td>
-                <td className="money-cell">{fa(report.total_severance)}</td>
-                <td></td>
-                <td className="money-cell">{fa(report.total_leave_value)}</td>
+                <td className="entity-name">جمع</td>
+                <td data-label="حقوق پایه"></td>
+                <td data-label="عیدی" className="money-cell">{fa(report.total_eidi)}</td>
+                <td data-label="سنوات تا امروز" className="money-cell">{fa(report.total_severance)}</td>
+                <td data-label="ماندهٔ مرخصی (روز)"></td>
+                <td data-label="طلب مرخصی" className="money-cell">{fa(report.total_leave_value)}</td>
                 <td></td>
               </tr>
             </tfoot>

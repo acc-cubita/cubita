@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Users, Save, CalendarPlus, Download } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users, Save, CalendarPlus, Download, FileText } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { PayrollSettingsPanel } from './PayrollSettingsPanel'
+import { PayslipDrawer } from './PayslipDrawer'
 import { formatJalali, isoToJalali, todayIso, JALALI_MONTH_NAMES } from '../lib/jalali'
 import {
   createEmployee,
@@ -37,39 +39,45 @@ export function PayrollPanel({ token }: { token: string }) {
     void refresh()
   }, [])
 
+  const selectedPeriod = periods.find((p) => p.id === selectedPeriodId)
+
   return (
-    <SectionCard icon={Users} title="حقوق و دستمزد">
-      <p className="hint">این بخش نیاز به اتصال اینترنت دارد (مستقیم روی سرور کار می‌کند).</p>
-      {message && <div className="hint">{message}</div>}
+    <>
+      <PayrollSettingsPanel token={token} />
 
-      <EmployeeForm
-        token={token}
-        onCreated={() => {
-          void refresh()
-          setMessage('کارمند ثبت شد.')
-        }}
-      />
+      <SectionCard icon={Users} title="حقوق و دستمزد">
+        <p className="hint">این بخش نیاز به اتصال اینترنت دارد (مستقیم روی سرور کار می‌کند).</p>
+        {message && <div className="hint">{message}</div>}
 
-      <EmployeeList employees={employees} />
+        <EmployeeForm
+          token={token}
+          onCreated={() => {
+            void refresh()
+            setMessage('کارمند ثبت شد.')
+          }}
+        />
 
-      <SalaryContractForm
-        token={token}
-        employees={employees}
-        onCreated={() => setMessage('حکم حقوقی ثبت شد.')}
-      />
+        <EmployeeList employees={employees} />
 
-      <PeriodSection
-        token={token}
-        periods={periods}
-        selectedPeriodId={selectedPeriodId}
-        onSelect={setSelectedPeriodId}
-        onPeriodCreated={() => void refresh()}
-      />
+        <SalaryContractForm
+          token={token}
+          employees={employees}
+          onCreated={() => setMessage('حکم حقوقی ثبت شد.')}
+        />
 
-      {selectedPeriodId && (
-        <PayrollRunPanel token={token} employees={employees} periodId={selectedPeriodId} />
-      )}
-    </SectionCard>
+        <PeriodSection
+          token={token}
+          periods={periods}
+          selectedPeriodId={selectedPeriodId}
+          onSelect={setSelectedPeriodId}
+          onPeriodCreated={() => void refresh()}
+        />
+
+        {selectedPeriodId && (
+          <PayrollRunPanel token={token} employees={employees} period={selectedPeriod} periodId={selectedPeriodId} />
+        )}
+      </SectionCard>
+    </>
   )
 }
 
@@ -136,29 +144,33 @@ function EmployeeForm({ token, onCreated }: { token: string; onCreated: () => vo
 function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
   if (employees.length === 0) return <EmptyState icon={Users} text="پرسنلی ثبت نشده." />
   return (
-    <div className="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>نام</th>
-          <th>کد ملی</th>
-          <th>تاریخ استخدام</th>
-          <th>وضعیت</th>
-        </tr>
-      </thead>
-      <tbody>
-        {employees.map((e) => (
-          <tr key={e.id}>
-            <td>
-              {e.first_name} {e.last_name}
-            </td>
-            <td>{e.national_id}</td>
-            <td>{formatJalali(e.hire_date)}</td>
-            <td>{e.is_active ? 'فعال' : 'غیرفعال'}</td>
+    <div className="entity-table-wrap">
+      <table className="entity-table payroll-emp-table">
+        <thead>
+          <tr>
+            <th>نام</th>
+            <th>کد ملی</th>
+            <th>تاریخ استخدام</th>
+            <th>وضعیت</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {employees.map((e) => (
+            <tr key={e.id}>
+              <td className="entity-name">
+                {e.first_name} {e.last_name}
+              </td>
+              <td data-label="کد ملی">{e.national_id}</td>
+              <td data-label="تاریخ استخدام">{formatJalali(e.hire_date)}</td>
+              <td data-label="وضعیت">
+                <span className={`status-badge ${e.is_active ? 'tone-success' : 'tone-muted'}`}>
+                  {e.is_active ? 'فعال' : 'غیرفعال'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -177,6 +189,7 @@ function SalaryContractForm({
   const [baseSalary, setBaseSalary] = useState('')
   const [housing, setHousing] = useState('0')
   const [food, setFood] = useState('0')
+  const [other, setOther] = useState('0')
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -193,7 +206,7 @@ function SalaryContractForm({
         base_salary: Number(baseSalary),
         housing_allowance: Number(housing) || 0,
         food_allowance: Number(food) || 0,
-        other_allowance: 0,
+        other_allowance: Number(other) || 0,
       })
       setBaseSalary('')
       onCreated()
@@ -231,6 +244,10 @@ function SalaryContractForm({
       <label>
         بن خواربار
         <input type="number" min="0" value={food} onChange={(e) => setFood(e.target.value)} />
+      </label>
+      <label>
+        سایر مزایا
+        <input type="number" min="0" value={other} onChange={(e) => setOther(e.target.value)} />
       </label>
       <div className="invoice-form-footer">
         <button type="submit" className="btn-primary"><Save size={14} /> ثبت حکم</button>
@@ -304,15 +321,20 @@ function PeriodSection({
 function PayrollRunPanel({
   token,
   employees,
+  period,
   periodId,
 }: {
   token: string
   employees: EmployeeRecord[]
+  period: PayrollPeriodRecord | undefined
   periodId: string
 }) {
   const [attendance, setAttendance] = useState<Record<string, { worked: string; overtime: string }>>({})
   const [payslips, setPayslips] = useState<PayslipRecord[]>([])
   const [message, setMessage] = useState<string | null>(null)
+  const [openPayslip, setOpenPayslip] = useState<PayslipRecord | null>(null)
+
+  const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees])
 
   async function refresh() {
     const existing = await fetchAttendance(token, periodId)
@@ -369,58 +391,58 @@ function PayrollRunPanel({
   return (
     <div className="invoice-form">
       <h3>کارکرد و صدور فیش برای دوره‌ی انتخاب‌شده</h3>
-      <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>کارمند</th>
-            <th>روز کارکرد</th>
-            <th>ساعت اضافه‌کار</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((emp) => (
-            <tr key={emp.id}>
-              <td>
-                {emp.first_name} {emp.last_name}
-              </td>
-              <td>
-                <input
-                  type="number"
-                  min="0"
-                  max="31"
-                  value={attendance[emp.id]?.worked ?? '30'}
-                  onChange={(e) =>
-                    setAttendance((prev) => ({
-                      ...prev,
-                      [emp.id]: { worked: e.target.value, overtime: prev[emp.id]?.overtime ?? '0' },
-                    }))
-                  }
-                />
-              </td>
-              <td>
-                <input
-                  type="number"
-                  min="0"
-                  value={attendance[emp.id]?.overtime ?? '0'}
-                  onChange={(e) =>
-                    setAttendance((prev) => ({
-                      ...prev,
-                      [emp.id]: { worked: prev[emp.id]?.worked ?? '30', overtime: e.target.value },
-                    }))
-                  }
-                />
-              </td>
-              <td>
-                <button type="button" onClick={() => void saveAttendance(emp.id)}>
-                  <Save size={13} /> ذخیره کارکرد
-                </button>
-              </td>
+      <div className="entity-table-wrap">
+        <table className="entity-table payroll-attend-table">
+          <thead>
+            <tr>
+              <th>کارمند</th>
+              <th>روز کارکرد</th>
+              <th>ساعت اضافه‌کار</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {employees.map((emp) => (
+              <tr key={emp.id}>
+                <td className="entity-name">
+                  {emp.first_name} {emp.last_name}
+                </td>
+                <td data-label="روز کارکرد">
+                  <input
+                    type="number"
+                    min="0"
+                    max="31"
+                    value={attendance[emp.id]?.worked ?? '30'}
+                    onChange={(e) =>
+                      setAttendance((prev) => ({
+                        ...prev,
+                        [emp.id]: { worked: e.target.value, overtime: prev[emp.id]?.overtime ?? '0' },
+                      }))
+                    }
+                  />
+                </td>
+                <td data-label="ساعت اضافه‌کار">
+                  <input
+                    type="number"
+                    min="0"
+                    value={attendance[emp.id]?.overtime ?? '0'}
+                    onChange={(e) =>
+                      setAttendance((prev) => ({
+                        ...prev,
+                        [emp.id]: { worked: prev[emp.id]?.worked ?? '30', overtime: e.target.value },
+                      }))
+                    }
+                  />
+                </td>
+                <td className="attend-action">
+                  <button type="button" onClick={() => void saveAttendance(emp.id)}>
+                    <Save size={13} /> ذخیره کارکرد
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="invoice-form-footer">
@@ -441,30 +463,50 @@ function PayrollRunPanel({
       {message && <div className="hint">{message}</div>}
 
       {payslips.length > 0 && (
-        <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>شماره فیش</th>
-              <th>ناخالص</th>
-              <th>سهم بیمه کارمند</th>
-              <th>مالیات</th>
-              <th>خالص پرداختی</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payslips.map((p) => (
-              <tr key={p.id}>
-                <td>{p.number}</td>
-                <td>{Number(p.gross_pay).toLocaleString('fa-IR')}</td>
-                <td>{Number(p.insurance_employee_share).toLocaleString('fa-IR')}</td>
-                <td>{Number(p.tax_amount).toLocaleString('fa-IR')}</td>
-                <td>{Number(p.net_pay).toLocaleString('fa-IR')}</td>
+        <div className="entity-table-wrap">
+          <table className="entity-table payslip-table">
+            <thead>
+              <tr>
+                <th>شماره</th>
+                <th>کارمند</th>
+                <th>ناخالص</th>
+                <th>بیمه</th>
+                <th>مالیات</th>
+                <th>خالص پرداختی</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {payslips.map((p) => {
+                const emp = empById.get(p.employee_id)
+                return (
+                  <tr key={p.id}>
+                    <td data-label="شماره">{p.number}</td>
+                    <td className="entity-name">{emp ? `${emp.first_name} ${emp.last_name}` : '—'}</td>
+                    <td data-label="ناخالص" className="money-cell">{Number(p.gross_pay).toLocaleString('fa-IR')}</td>
+                    <td data-label="بیمه" className="money-cell">{Number(p.insurance_employee_share).toLocaleString('fa-IR')}</td>
+                    <td data-label="مالیات" className="money-cell">{Number(p.tax_amount).toLocaleString('fa-IR')}</td>
+                    <td data-label="خالص پرداختی" className="money-cell"><strong>{Number(p.net_pay).toLocaleString('fa-IR')}</strong></td>
+                    <td className="payslip-action">
+                      <button type="button" onClick={() => setOpenPayslip(p)}>
+                        <FileText size={13} /> فیش / چاپ
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+      )}
+
+      {openPayslip && (
+        <PayslipDrawer
+          payslip={openPayslip}
+          employee={empById.get(openPayslip.employee_id)}
+          period={period}
+          onClose={() => setOpenPayslip(null)}
+        />
       )}
     </div>
   )

@@ -564,6 +564,42 @@ export async function downloadInsuranceListCsv(token: string, periodId: string):
   return { filename, blob }
 }
 
+// نرخ‌های بیمه/مالیاتِ حقوق برای هر سالِ شمسی. صدورِ فیش تا وقتی این تنظیمات (با
+// پلکانِ نرخ‌غیرصفر) ثبت نشود، توسط سرور مسدود می‌شود.
+export interface TaxBracket {
+  up_to: string | null // سقفِ تجمعیِ سالانه‌ی مشمول (پس از کسرِ معافیت)؛ null = نامحدود (ردیفِ آخر)
+  rate: string // نرخ بین ۰ و ۱
+}
+
+export interface PayrollSettingsRecord {
+  id: string
+  year: number
+  insurance_employee_rate: string
+  insurance_employer_rate: string
+  tax_exemption_annual: string
+  tax_brackets: TaxBracket[]
+  min_base_wage: string
+  annual_leave_days: number
+  notes: string
+}
+
+export const fetchPayrollSettings = (token: string) =>
+  authedGet<PayrollSettingsRecord[]>(token, '/api/payroll-settings')
+
+export const upsertPayrollSettings = (
+  token: string,
+  data: {
+    year: number
+    insurance_employee_rate: number
+    insurance_employer_rate: number
+    tax_exemption_annual: number
+    tax_brackets: { up_to: number | null; rate: number }[]
+    min_base_wage: number
+    annual_leave_days: number
+    notes: string
+  },
+) => authedSend<PayrollSettingsRecord>(token, 'PUT', '/api/payroll-settings', data)
+
 export interface ItemRecord {
   id: string
   sku: string

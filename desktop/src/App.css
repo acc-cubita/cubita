@@ -3459,3 +3459,126 @@ button:disabled {
   .activities-table td.crm-actions-cell .row-actions button { flex: 1 1 auto; }
   .loyalty-table td.loyalty-action button { width: 100%; justify-content: center; }
 }
+
+/* ═══════════════ ارتقای حقوق و دستمزد: تنظیماتِ بیمه/مالیات + فیشِ چاپی ═══════════════ */
+
+/* نوارِ بالای تنظیمات: سال + وضعیت + بارگذاریِ نمونه */
+.payroll-settings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.payroll-settings-bar label,
+.payroll-settings-grid label,
+.payroll-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.payroll-settings-bar .status-badge { margin-bottom: 4px; }
+
+/* شبکه‌ی فیلدهای عددیِ تنظیمات */
+.payroll-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.payroll-notes { margin-top: 12px; }
+
+/* هشدارِ «تنظیماتِ ناقص» */
+.payroll-warn {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text-h);
+}
+
+/* جدولِ پلکانِ مالیات: ورودی‌ها تمام‌عرضِ سلول */
+.tax-bracket-table input { width: 100%; max-width: 220px; }
+.tax-bracket-table td.tax-bracket-action { width: 44px; text-align: center; }
+
+/* دکمه‌های سرِ درایورِ فیش (چاپ/بستن) */
+.drawer-head-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* جدولِ ریزِ فیش داخلِ درایور: دو ستونی، با ردیفِ جمع و خالص */
+.payslip-lines-table td { padding: 9px 4px; }
+.payslip-lines-table td.money-cell { text-align: start; }
+.payslip-lines-table tr.payslip-subtotal td { border-top: 1px solid var(--border-strong); background: var(--surface-2); font-weight: 700; }
+.payslip-lines-table tr.payslip-net td { border-top: 2px solid var(--text-h); font-size: 15px; }
+
+/* دکمه‌های اکشنِ جدول‌های حقوق روی دسکتاپ */
+.payroll-attend-table td.attend-action button,
+.payslip-table td.payslip-action button { padding: 4px 10px; font-size: 12.5px; }
+.payroll-attend-table input[type="number"] { width: 90px; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های حقوق/مزایا/پلکان کارتِ برچسب‌دار می‌شوند ── */
+@media (max-width: 760px) {
+  .payroll-emp-table, .payroll-emp-table tbody,
+  .payroll-attend-table, .payroll-attend-table tbody,
+  .payslip-table, .payslip-table tbody,
+  .benefits-table, .benefits-table tbody,
+  .tax-bracket-table, .tax-bracket-table tbody { display: block; }
+  .payroll-emp-table thead, .payroll-attend-table thead, .payslip-table thead,
+  .benefits-table thead, .tax-bracket-table thead { display: none; }
+  .benefits-table tfoot, .benefits-table tfoot tr { display: block; }
+  .payroll-emp-table tr, .payroll-attend-table tr, .payslip-table tr,
+  .benefits-table tr, .tax-bracket-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .payroll-emp-table td, .payroll-attend-table td, .payslip-table td,
+  .benefits-table td, .tax-bracket-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .payroll-emp-table tr td:last-child, .payroll-attend-table tr td:last-child,
+  .payslip-table tr td:last-child, .benefits-table tr td:last-child,
+  .tax-bracket-table tr td:last-child { border-bottom: 0; }
+  .payroll-emp-table td[data-label]::before, .payroll-attend-table td[data-label]::before,
+  .payslip-table td[data-label]::before, .benefits-table td[data-label]::before,
+  .tax-bracket-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* نامِ کارمند = سرِ کارت: تمام‌عرض، پررنگ، بدونِ برچسب */
+  .payroll-emp-table td.entity-name, .payroll-attend-table td.entity-name,
+  .payslip-table td.entity-name, .benefits-table td.entity-name {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    font-weight: 700;
+    color: var(--text-h);
+    font-size: 14px;
+  }
+  /* ورودی‌های کارکرد و پلکان روی موبایل جمع‌وجور اما قابل‌لمس */
+  .payroll-attend-table input[type="number"] { width: 120px; }
+  .tax-bracket-table input { max-width: 160px; }
+  .tax-bracket-table td.tax-bracket-action { width: auto; justify-content: flex-end; }
+  /* سلولِ اکشن (ذخیره/فیش/سنوات) تمام‌عرض */
+  .payroll-attend-table td.attend-action, .payslip-table td.payslip-action,
+  .benefits-table td.benefits-action { padding-top: 10px; }
+  .payroll-attend-table td.attend-action button, .payslip-table td.payslip-action button {
+    width: 100%; justify-content: center;
+  }
+  .benefits-table td.benefits-action .row-actions { width: 100%; flex-wrap: wrap; }
+  .benefits-table td.benefits-action .row-actions button { flex: 1 1 auto; justify-content: center; }
+}
