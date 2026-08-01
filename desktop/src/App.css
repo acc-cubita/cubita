@@ -3381,3 +3381,81 @@ button:disabled {
   .aging-table td.aging-action { padding-top: 10px; }
   .aging-table td.aging-action button { width: 100%; justify-content: center; }
 }
+
+/* ═══════════════ ارتقای باشگاه مشتریان: قیفِ فروش، سررسید، تاریخچه‌ی امتیاز ═══════════════ */
+
+/* قیفِ فروش — نوارِ خلاصه‌ی مرحله‌ای (تعداد + ارزشِ تخمینی) */
+.crm-funnel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.crm-funnel-stage {
+  flex: 1 1 120px;
+  min-width: 110px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-2);
+}
+.crm-funnel-stage.tone-success { border-top-color: var(--success); }
+.crm-funnel-stage.tone-warning { border-top-color: var(--warning); }
+.crm-funnel-stage.tone-danger { border-top-color: var(--danger); }
+.crm-funnel-stage.tone-default { border-top-color: var(--accent, #2563eb); }
+.crm-funnel-label { font-size: 12.5px; color: var(--text-muted); }
+.crm-funnel-count { font-size: 22px; font-weight: 800; color: var(--text-h); line-height: 1.3; }
+.crm-funnel-value { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.crm-overdue { margin-inline-start: 8px; font-size: 10.5px; display: inline-flex; align-items: center; gap: 3px; }
+
+/* ── موبایل (≤۷۶۰px): جدول‌های سرنخ/پیگیری/امتیاز کارتِ برچسب‌دار می‌شوند ── */
+@media (max-width: 760px) {
+  .leads-table, .leads-table tbody,
+  .activities-table, .activities-table tbody,
+  .loyalty-table, .loyalty-table tbody { display: block; }
+  .leads-table thead, .activities-table thead, .loyalty-table thead { display: none; }
+  .leads-table tr, .activities-table tr, .loyalty-table tr {
+    display: block;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 4px 12px;
+    margin-bottom: 12px;
+  }
+  .leads-table td, .activities-table td, .loyalty-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    text-align: start;
+  }
+  .leads-table tr td:last-child, .activities-table tr td:last-child, .loyalty-table tr td:last-child { border-bottom: 0; }
+  .leads-table td[data-label]::before, .activities-table td[data-label]::before, .loyalty-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* سلولِ سرِ کارت (نام سرنخ/موضوع/مشتری) بدونِ برچسب */
+  .leads-table td[data-label="سرنخ"], .activities-table td.entity-name, .loyalty-table td[data-label="مشتری"] {
+    justify-content: flex-start; flex-wrap: wrap;
+  }
+  .leads-table td[data-label="سرنخ"]::before,
+  .activities-table td.entity-name::before,
+  .loyalty-table td[data-label="مشتری"]::before { display: none; }
+  /* status-select و سلولِ اکشن تمام‌عرض */
+  .leads-table td[data-label="وضعیت"] .status-select { flex: 1 1 auto; }
+  .leads-table td.crm-actions-cell, .activities-table td.crm-actions-cell, .loyalty-table td.loyalty-action { padding-top: 10px; }
+  .leads-table td.crm-actions-cell .row-actions,
+  .activities-table td.crm-actions-cell .row-actions { width: 100%; flex-wrap: wrap; }
+  .leads-table td.crm-actions-cell .row-actions button,
+  .activities-table td.crm-actions-cell .row-actions button { flex: 1 1 auto; }
+  .loyalty-table td.loyalty-action button { width: 100%; justify-content: center; }
+}

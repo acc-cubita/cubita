@@ -13,6 +13,8 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   Circle,
+  History,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   addLoyaltyTxn,
@@ -42,9 +44,11 @@ import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { LoyaltyHistoryDrawer } from '../components/LoyaltyHistoryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
+const isOverdue = (d: string | null | undefined) => !!d && d < todayIso()
 
 const LEAD_STATUS: Record<LeadStatus, { label: string; tone: string }> = {
   new: { label: 'جدید', tone: 'default' },
@@ -143,6 +147,16 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
     })
   }, [leads, filter])
 
+  // قیفِ فروش: تعداد و ارزشِ تخمینیِ هر مرحله
+  const funnel = useMemo(() => STATUS_ORDER.map((s) => {
+    const inStage = leads.filter((l) => l.status === s)
+    return {
+      status: s,
+      count: inStage.length,
+      value: inStage.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0),
+    }
+  }), [leads])
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
@@ -183,6 +197,16 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
   }
 
   return (
+    <>
+    <div className="crm-funnel">
+      {funnel.map((f) => (
+        <div key={f.status} className={`crm-funnel-stage tone-${LEAD_STATUS[f.status].tone}`}>
+          <div className="crm-funnel-label">{LEAD_STATUS[f.status].label}</div>
+          <div className="crm-funnel-count">{fa(f.count)}</div>
+          <div className="crm-funnel-value">{f.value > 0 ? `${fa(f.value)} ریال` : '—'}</div>
+        </div>
+      ))}
+    </div>
     <div className="workspace-split">
       <SectionCard icon={UserPlus} title="سرنخ جدید" description="یک مشتریِ بالقوه را وارد قیفِ فروش کنید.">
         <form className="invoice-form form-full" onSubmit={submit}>
@@ -254,7 +278,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
           <EmptyState icon={Target} text="سرنخی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table leads-table">
               <thead>
                 <tr>
                   <th>سرنخ</th>
@@ -265,9 +289,12 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((l) => (
+                {filtered.map((l) => {
+                  const open = ['new', 'contacted', 'qualified'].includes(l.status)
+                  const overdue = open && isOverdue(l.next_action_date)
+                  return (
                   <tr key={l.id}>
-                    <td>
+                    <td data-label="سرنخ">
                       <div className="entity-cell">
                         <div className="entity-avatar tone-customer">{l.name.trim().charAt(0) || '؟'}</div>
                         <div>
@@ -276,16 +303,19 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td data-label="وضعیت">
                       <select className="status-select" value={l.status} onChange={(e) => void changeStatus(l.id, e.target.value as LeadStatus)}>
                         {STATUS_ORDER.map((s) => (
                           <option key={s} value={s}>{LEAD_STATUS[s].label}</option>
                         ))}
                       </select>
                     </td>
-                    <td className="money-cell">{Number(l.estimated_value) > 0 ? fa(Number(l.estimated_value)) : '—'}</td>
-                    <td>{l.next_action_date ? formatJalali(l.next_action_date) : '—'}</td>
-                    <td>
+                    <td data-label="ارزش تخمینی" className="money-cell">{Number(l.estimated_value) > 0 ? fa(Number(l.estimated_value)) : '—'}</td>
+                    <td data-label="پیگیری بعدی">
+                      {l.next_action_date ? formatJalali(l.next_action_date) : '—'}
+                      {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
+                    </td>
+                    <td className="crm-actions-cell">
                       <div className="row-actions">
                         {l.converted_contact_id ? (
                           <span className="status-badge tone-success"><UserCheck size={12} /> مشتری شد</span>
@@ -300,13 +330,15 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </SectionCard>
     </div>
+    </>
   )
 }
 
@@ -330,9 +362,15 @@ function ActivitiesTab({
   const [targetType, setTargetType] = useState<'lead' | 'contact'>('lead')
   const [targetId, setTargetId] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'open' | 'overdue' | 'all'>('open')
 
   const leadName = useMemo(() => new Map(leads.map((l) => [l.id, l.name])), [leads])
   const contactName = useMemo(() => new Map(contacts.map((c) => [c.id, c.name])), [contacts])
+  const filteredActivities = useMemo(() => activities.filter((a) => {
+    if (filter === 'open') return !a.done
+    if (filter === 'overdue') return !a.done && isOverdue(a.activity_date)
+    return true
+  }), [activities, filter])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -419,12 +457,23 @@ function ActivitiesTab({
         </form>
       </SectionCard>
 
-      <SectionCard icon={CalendarClock} title="پیگیری‌ها" description={`${fa(activities.length)} مورد`}>
-        {activities.length === 0 ? (
-          <EmptyState icon={CalendarClock} text="پیگیری‌ای ثبت نشده." />
+      <SectionCard
+        icon={CalendarClock}
+        title="پیگیری‌ها"
+        description={`${fa(filteredActivities.length)} مورد`}
+        actions={
+          <div className="seg-toggle">
+            <button type="button" className={filter === 'open' ? 'active' : ''} onClick={() => setFilter('open')}>باز</button>
+            <button type="button" className={filter === 'overdue' ? 'active' : ''} onClick={() => setFilter('overdue')}>عقب‌افتاده</button>
+            <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>همه</button>
+          </div>
+        }
+      >
+        {filteredActivities.length === 0 ? (
+          <EmptyState icon={CalendarClock} text="پیگیری‌ای با این فیلتر نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table activities-table">
               <thead>
                 <tr>
                   <th>موضوع</th>
@@ -435,13 +484,18 @@ function ActivitiesTab({
                 </tr>
               </thead>
               <tbody>
-                {activities.map((a) => (
+                {filteredActivities.map((a) => {
+                  const overdue = !a.done && isOverdue(a.activity_date)
+                  return (
                   <tr key={a.id} className={a.done ? 'row-muted' : ''}>
-                    <td className="entity-name">{a.subject}</td>
-                    <td><span className="status-badge tone-default">{KIND_LABELS[a.kind]}</span></td>
-                    <td>{a.lead_id ? (leadName.get(a.lead_id) ?? 'سرنخ') : a.contact_id ? (contactName.get(a.contact_id) ?? 'مشتری') : '—'}</td>
-                    <td>{formatJalali(a.activity_date)}</td>
-                    <td>
+                    <td data-label="موضوع" className="entity-name">{a.subject}</td>
+                    <td data-label="نوع"><span className="status-badge tone-default">{KIND_LABELS[a.kind]}</span></td>
+                    <td data-label="مرتبط با">{a.lead_id ? (leadName.get(a.lead_id) ?? 'سرنخ') : a.contact_id ? (contactName.get(a.contact_id) ?? 'مشتری') : '—'}</td>
+                    <td data-label="تاریخ">
+                      {formatJalali(a.activity_date)}
+                      {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
+                    </td>
+                    <td className="crm-actions-cell">
                       <div className="row-actions">
                         <button type="button" onClick={() => void toggleDone(a)} title={a.done ? 'بازکردن' : 'انجام شد'}>
                           {a.done ? <CheckCircle2 size={14} /> : <Circle size={14} />} {a.done ? 'انجام‌شده' : 'باز'}
@@ -452,7 +506,8 @@ function ActivitiesTab({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -480,6 +535,7 @@ function LoyaltyTab({
   const [reason, setReason] = useState('')
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
+  const [historyContact, setHistoryContact] = useState<{ id: string; name: string } | null>(null)
 
   // تنظیماتِ کسبِ خودکارِ امتیاز هنگامِ فروش
   const [autoEnabled, setAutoEnabled] = useState(false)
@@ -593,23 +649,29 @@ function LoyaltyTab({
           <EmptyState icon={Gift} text="هنوز امتیازی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table loyalty-table">
               <thead>
                 <tr>
                   <th>مشتری</th>
                   <th>امتیاز فعال</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {balances.map((b) => (
                   <tr key={b.contact_id}>
-                    <td>
+                    <td data-label="مشتری">
                       <div className="entity-cell">
                         <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
                         <div className="entity-name">{b.contact_name}</div>
                       </div>
                     </td>
-                    <td className="money-cell"><strong>{fa(b.balance)}</strong></td>
+                    <td data-label="امتیاز فعال" className="money-cell"><strong>{fa(b.balance)}</strong></td>
+                    <td className="loyalty-action">
+                      <button type="button" onClick={() => setHistoryContact({ id: b.contact_id, name: b.contact_name })}>
+                        <History size={13} /> تاریخچه
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -618,6 +680,8 @@ function LoyaltyTab({
         )}
       </SectionCard>
       </div>
+
+      {historyContact && <LoyaltyHistoryDrawer token={token} contact={historyContact} onClose={() => setHistoryContact(null)} />}
     </>
   )
 }

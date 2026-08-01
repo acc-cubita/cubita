@@ -2303,6 +2303,10 @@ export const addLoyaltyTxn = (
   data: { contact_id: string; points: number; reason?: string; txn_date: string },
 ) => authedSend<LoyaltyTxnRecord>(token, 'POST', '/api/crm/loyalty/transactions', data)
 
+/** گردشِ امتیازِ یک مشتری (کسب/مصرف)، تازه‌ترین اول — برای «تاریخچه‌ی امتیاز». */
+export const fetchLoyaltyTransactions = (token: string, contactId?: string) =>
+  authedGet<LoyaltyTxnRecord[]>(token, `/api/crm/loyalty/transactions${contactId ? `?contact_id=${contactId}` : ''}`)
+
 // ── تولید و بهای تمام‌شده (BOM) ──────────────────────────────────────
 export interface BomLineRecord {
   id: string
