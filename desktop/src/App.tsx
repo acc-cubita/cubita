@@ -42,7 +42,11 @@ export default function App() {
   // مقدار اولیه با تابع داده می‌شود تا *قبل از* اولین رندر خوانده شود؛ با useEffect
   // صفحه‌ی ورود یک لحظه ظاهر می‌شد و بعد جایش عوض می‌شد.
   const [pending, setPending] = useState<PendingAction | null>(readPendingAction)
-  const [authView, setAuthView] = useState<'login' | 'signup'>('login')
+  // درِ ورودیِ ترایال (demo.cubita.ir) با VITE_SIGNUP_FIRST=true مستقیم روی صفحه‌ی
+  // ثبت‌نام باز می‌شود؛ اپِ اصلی (acc.cubita.ir) روی ورود.
+  const [authView, setAuthView] = useState<'login' | 'signup'>(
+    import.meta.env.VITE_SIGNUP_FIRST === 'true' ? 'signup' : 'login',
+  )
 
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
