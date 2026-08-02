@@ -912,6 +912,46 @@ _STATEMENT_KIND_ORDER = {
 }
 
 
+def contact_balance(db: Session, contact_id: UUID) -> Decimal:
+    """ماندهٔ خالصِ طرف‌حساب: مثبت = شخص به ما بدهکار است (طلبِ ما).
+
+    همان قراردادِ علامتِ کارتِ حساب: فروش/برگشتِ‌خرید/پرداختِ‌ما بدهکار، و
+    خرید/برگشتِ‌فروش/دریافت بستانکار. اسنادِ باطل‌شده کنار می‌روند. برای محافظ‌های
+    اقساط استفاده می‌شود تا دریافتی که دریافتنی را منفی می‌کند گرفته شود.
+    """
+    def s(q) -> Decimal:
+        return Decimal(q.scalar() or 0)
+
+    bal = Decimal(0)
+    bal += s(
+        db.query(func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0))
+        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+    )
+    bal -= s(
+        db.query(func.coalesce(func.sum(SalesReturn.total_amount + SalesReturn.tax_amount), 0))
+        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+    )
+    bal -= s(
+        db.query(func.coalesce(func.sum(PurchaseInvoice.total_amount + PurchaseInvoice.tax_amount), 0))
+        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
+    )
+    bal += s(
+        db.query(func.coalesce(func.sum(PurchaseReturn.total_amount + PurchaseReturn.tax_amount), 0))
+        .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
+        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
+    )
+    bal -= s(
+        db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
+        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "receipt")
+    )
+    bal += s(
+        db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
+        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "payment")
+    )
+    return bal
+
+
 def get_contact_statement(
     db: Session, contact_id: UUID, date_from: date | None, date_to: date | None
 ) -> dict:

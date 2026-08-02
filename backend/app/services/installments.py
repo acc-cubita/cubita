@@ -15,6 +15,7 @@ from app.schemas.treasury import TreasuryTransactionIn
 from app.services import treasury as treasury_service
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
+from app.services.reports import contact_balance
 
 
 def _installment_status(inst: Installment, today: date) -> str:
@@ -108,6 +109,18 @@ def create_plan(db: Session, data: InstallmentPlanIn, user: User) -> dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "مشتری یافت نشد")
 
     financed = Decimal(data.total_amount) - Decimal(data.down_payment)
+
+    # قرارداد فقط زمان‌بندیِ وصولِ یک بدهیِ موجود است (از فاکتورِ فروشِ نسیه). بدونِ
+    # این محافظ می‌شد قراردادِ بی‌پشتوانه ساخت و با هر قسط، دریافتنیِ مشتری را منفی
+    # کرد. پس مشتری باید دستِ‌کم به‌اندازهٔ مبلغِ اقساطی به ما بدهکار باشد.
+    bal = contact_balance(db, data.contact_id)
+    if bal < financed:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"ماندهٔ دریافتنیِ این مشتری ({int(bal):,} تومان) کمتر از مبلغِ اقساطی "
+            f"({int(financed):,} تومان) است؛ اول فاکتورِ فروشِ نسیه ثبت کنید.",
+        )
+
     n = data.num_installments
     base = (financed // n)  # تومانِ کامل
     remainder = financed - base * n  # به آخرین قسط اضافه می‌شود
@@ -156,6 +169,17 @@ def pay_installment(db: Session, plan_id: UUID, installment_id: UUID, data: Inst
 
     # دریافتِ خزانه‌ی واقعی: بدهکار صندوق/بانک، بستانکار حساب‌های دریافتنی.
     assert_period_open(db, data.transaction_date)
+
+    # محافظِ اضافه‌دریافت: دریافتی که ماندهٔ دریافتنیِ مشتری را منفی کند رد می‌شود —
+    # همان چیزی که «قسطِ بی‌پشتوانه» می‌سازد و دفتر را خراب می‌کند.
+    bal = contact_balance(db, plan.contact_id)
+    if Decimal(data.amount) > bal:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"این دریافت ({int(data.amount):,} تومان) بیش از ماندهٔ دریافتنیِ مشتری "
+            f"({int(bal):,} تومان) است و آن را منفی می‌کند.",
+        )
+
     treasury_service.create_receipt(
         db,
         TreasuryTransactionIn(

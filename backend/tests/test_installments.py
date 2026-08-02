@@ -8,9 +8,36 @@ def _customer(client):
     return client.post("/api/contacts", json={"name": "مشتری اقساطی", "type": "customer"}).json()["id"]
 
 
-def _plan(client, **overrides):
+_seq = [0]
+
+
+def _backing_sale(client, contact_id, amount):
+    """به مشتری «بدهیِ پشتیبان» می‌دهد — فروشِ نسیه که حساب‌های دریافتنی را بدهکار می‌کند.
+
+    از این پس قراردادِ اقساط بدونِ چنین بدهی رد می‌شود، پس تست‌ها باید اول آن را بسازند.
+    """
+    _seq[0] += 1
+    k = _seq[0]
+    wh = client.post("/api/warehouses", json={"code": f"IW{k}", "name": "انبار اقساط"}).json()["id"]
+    item = client.post("/api/items", json={"sku": f"INST-{k}", "name": "کالای اقساطی", "sales_price": amount}).json()["id"]
+    client.post(
+        "/api/purchase-invoices",
+        json={"invoice_date": str(TODAY), "warehouse_id": wh, "tax_rate": 0, "lines": [{"item_id": item, "qty": 1, "unit_cost": 1}]},
+    )
+    r = client.post(
+        "/api/sales-invoices",
+        json={"invoice_date": str(TODAY), "warehouse_id": wh, "contact_id": contact_id, "tax_rate": 0, "lines": [{"item_id": item, "qty": 1, "unit_price": amount}]},
+    )
+    assert r.status_code in (200, 201), r.text
+
+
+def _plan(client, backing=True, **overrides):
+    contact_id = overrides.pop("contact_id", None) or _customer(client)
+    total = overrides.get("total_amount", 1000000)
+    if backing:
+        _backing_sale(client, contact_id, total)  # بدهیِ پشتیبان تا محافظ رد نشود
     body = {
-        "contact_id": overrides.pop("contact_id", None) or _customer(client),
+        "contact_id": contact_id,
         "title": "خرید یخچال",
         "total_amount": 1000000,
         "down_payment": 0,
@@ -19,9 +46,37 @@ def _plan(client, **overrides):
         "start_date": str(TODAY),
     }
     body.update(overrides)
+    body["contact_id"] = contact_id
     r = client.post("/api/installment-plans", json=body)
     assert r.status_code == 201, r.text
     return r.json()
+
+
+def test_plan_without_backing_receivable_rejected(client):
+    """قراردادِ اقساط بدونِ بدهیِ پشتیبان (فاکتورِ نسیه) باید رد شود."""
+    cust = _customer(client)
+    r = client.post(
+        "/api/installment-plans",
+        json={"contact_id": cust, "total_amount": 500000, "down_payment": 0, "num_installments": 2, "interval_months": 1, "start_date": str(TODAY)},
+    )
+    assert r.status_code == 400
+
+
+def test_installment_receipt_cannot_drive_ar_negative(client):
+    """اگر طلبِ مشتری جدا وصول شده باشد، دریافتِ قسط (که AR را منفی می‌کند) رد می‌شود."""
+    cust = _customer(client)
+    plan = _plan(client, contact_id=cust, total_amount=300000, num_installments=3)  # AR پشتیبان ۳۰۰٬۰۰۰
+    paid = client.post(
+        "/api/treasury/receipts",
+        json={"transaction_date": str(TODAY), "contact_id": cust, "amount": 300000, "method": "cash"},
+    )
+    assert paid.status_code in (200, 201), paid.text  # کلِ طلب جدا وصول شد → AR صفر
+    inst = plan["installments"][0]
+    r = client.post(
+        f"/api/installment-plans/{plan['id']}/installments/{inst['id']}/pay",
+        json={"amount": float(inst["amount"]), "transaction_date": str(TODAY), "method": "cash"},
+    )
+    assert r.status_code == 400  # گاردِ اضافه‌دریافت
 
 
 def test_create_plan_generates_schedule_with_remainder_on_last(client):
