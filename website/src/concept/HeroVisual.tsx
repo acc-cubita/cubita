@@ -62,14 +62,22 @@ export default function HeroVisual() {
         </div>
       </div>
 
-      {/* استکِ سکه */}
-      <div className="cc-layer cc-l-coins" style={{ ['--d' as string]: 1.9 }}>
+      {/* کارتِ خلاصه‌ی چک و بانک */}
+      <div className="cc-layer cc-l-mini" style={{ ['--d' as string]: 1.9 }}>
         <div className="cc-fl" style={{ ['--dur' as string]: '5.5s', ['--dl' as string]: '-1.5s' }}>
-          <div className="cc-coins">
-            <span className="cc-coin" style={{ ['--i' as string]: 3 }} />
-            <span className="cc-coin" style={{ ['--i' as string]: 2 }} />
-            <span className="cc-coin" style={{ ['--i' as string]: 1 }} />
-            <span className="cc-coin cc-coin-top" style={{ ['--i' as string]: 0 }} />
+          <div className="cc-panel cc-mini">
+            <div className="cc-mini-head">
+              <span className="cc-mini-title">چک و بانک</span>
+              <span className="cc-mini-badge">این هفته</span>
+            </div>
+            <div className="cc-mini-row">
+              <span>وصولی</span>
+              <b className="cc-pos">۳۲٬۰۰۰٬۰۰۰</b>
+            </div>
+            <div className="cc-mini-row">
+              <span>پرداختی</span>
+              <b className="cc-neg">۱۸٬۵۰۰٬۰۰۰</b>
+            </div>
           </div>
         </div>
       </div>
@@ -79,7 +87,7 @@ export default function HeroVisual() {
         <div className="cc-fl" style={{ ['--dur' as string]: '6.5s', ['--dl' as string]: '-0.8s' }}>
           <div className="cc-bankcard">
             <span className="cc-chip" />
-            <span className="cc-brand" />
+            <span className="cc-cardbrand" />
             <div className="cc-cardnum">
               <i /><i /><i /><i />
             </div>

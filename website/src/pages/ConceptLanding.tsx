@@ -120,11 +120,11 @@ function BrandMark({ id = 'm' }: { id?: string }) {
       <rect x="7.5" y="17" width="4" height="7.5" rx="2" fill="#fff" fillOpacity="0.82" />
       <rect x="14" y="13" width="4" height="11.5" rx="2" fill="#fff" fillOpacity="0.92" />
       <rect x="20.5" y="9.5" width="4" height="15" rx="2" fill="#fff" />
-      <circle cx="22.5" cy="6.4" r="2.6" fill="#f5c542" />
+      <circle cx="22.5" cy="6.4" r="2.6" fill="#ec4899" />
       <defs>
         <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#5b86ff" />
-          <stop offset="1" stopColor="#2ad4e6" />
+          <stop stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#a855f7" />
         </linearGradient>
       </defs>
     </svg>
