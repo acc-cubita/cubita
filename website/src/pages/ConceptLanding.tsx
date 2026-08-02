@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef } from 'react'
+import { useRef } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import {
   BarChart3,
@@ -13,9 +13,8 @@ import {
   Zap,
   Layers,
 } from 'lucide-react'
+import HeroVisual from '../concept/HeroVisual'
 import '../concept/concept.css'
-
-const HeroScene = lazy(() => import('../concept/HeroScene'))
 
 const TRIAL_URL = 'https://demo.cubita.ir'
 
@@ -38,9 +37,7 @@ function Hero() {
   return (
     <section className="cc-hero">
       <div className="cc-hero-canvas">
-        <Suspense fallback={<div className="cc-hero-canvas-fallback" />}>
-          <HeroScene />
-        </Suspense>
+        <HeroVisual />
       </div>
       <div className="cc-hero-scrim" aria-hidden="true" />
       <motion.div
@@ -55,11 +52,11 @@ function Hero() {
         <h1 className="cc-hero-title">
           حسابداریِ کسب‌وکارت،
           <br />
-          <span className="cc-grad">سه‌بعدی و زنده</span>
+          <span className="cc-grad">یکپارچه و زنده</span>
         </h1>
         <p className="cc-hero-sub">
           فروش، انبار، حسابداری، چک و بانک و صندوق — همه در یک سامانه‌ی یکپارچه‌ی فارسی.
-          بچرخانش، اسکرول کن، و ببین چطور همه‌چیز کنارِ هم کار می‌کند.
+          اسکرول کن و ببین چطور همه‌چیز کنارِ هم کار می‌کند.
         </p>
         <div className="cc-hero-cta">
           <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>

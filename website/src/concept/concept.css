@@ -30,15 +30,170 @@
     radial-gradient(90% 80% at 85% 90%, rgba(245, 197, 66, 0.1), transparent 55%),
     linear-gradient(180deg, var(--cc-bg2), var(--cc-bg));
 }
-.cc-hero-canvas { position: absolute; inset: 0; z-index: 0; }
-.cc-hero-canvas canvas { display: block; touch-action: pan-y; }
-.cc-hero-canvas-fallback {
+.cc-hero-canvas { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+
+/* ===== ویژوالِ سبکِ hero (CSS/SVG، بدونِ WebGL) ===== */
+.cc-visual {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(60% 60% at 50% 45%, rgba(91, 134, 255, 0.18), transparent 70%);
-  animation: cc-pulse 2.4s ease-in-out infinite;
+  top: 50%;
+  left: clamp(14px, 9vw, 130px);
+  transform: translateY(-50%);
+  width: min(480px, 44vw);
+  height: min(520px, 74vh);
+  --px: 0;
+  --py: 0;
 }
-@keyframes cc-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; } }
+.cc-visual-glow {
+  position: absolute;
+  inset: -12% -14%;
+  background:
+    radial-gradient(42% 42% at 42% 40%, rgba(91, 134, 255, 0.34), transparent 70%),
+    radial-gradient(40% 40% at 66% 72%, rgba(42, 212, 230, 0.24), transparent 72%),
+    radial-gradient(34% 34% at 30% 78%, rgba(245, 197, 66, 0.2), transparent 74%);
+  filter: blur(14px);
+  z-index: 0;
+}
+.cc-layer {
+  position: absolute;
+  transform: translate3d(calc(var(--px) * var(--d, 1) * 24px), calc(var(--py) * var(--d, 1) * 24px), 0);
+  transition: transform 0.2s ease-out;
+  will-change: transform;
+  z-index: 1;
+}
+.cc-fl {
+  animation: cc-float var(--dur, 6s) ease-in-out infinite;
+  animation-delay: var(--dl, 0s);
+}
+@keyframes cc-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-13px); } }
+
+/* موقعیتِ لایه‌ها */
+.cc-l-dash { top: 24%; left: 6%; }
+.cc-l-coins { top: 2%; left: 2%; }
+.cc-l-card { top: 64%; left: -2%; }
+.cc-l-chip { top: 8%; left: 58%; }
+.cc-l-inv { top: 62%; left: 52%; }
+
+/* پنلِ شیشه‌ای پایه */
+.cc-panel {
+  background: linear-gradient(160deg, rgba(24, 32, 54, 0.92), rgba(13, 19, 36, 0.86));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+/* کارتِ داشبورد */
+.cc-dash { width: 260px; padding: 18px 18px 16px; }
+.cc-dash-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+.cc-dash-label { display: block; font-size: 12px; color: var(--cc-muted); margin-bottom: 5px; }
+.cc-dash-num { display: block; font-size: 21px; font-weight: 800; color: #fff; letter-spacing: 0.3px; }
+.cc-dash-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7ff0c2;
+  background: rgba(35, 200, 140, 0.16);
+  border: 1px solid rgba(35, 200, 140, 0.35);
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cc-bars { display: flex; align-items: flex-end; gap: 9px; height: 92px; padding: 0 2px; }
+.cc-bar {
+  flex: 1;
+  height: var(--h);
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, var(--cc-teal), var(--cc-blue));
+  box-shadow: 0 0 18px -7px var(--cc-blue);
+  transform-origin: bottom;
+  animation: cc-grow 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--gd, 0s);
+}
+@keyframes cc-grow { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+.cc-dash-foot { display: flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 11.5px; color: var(--cc-muted); }
+.cc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cc-dot-teal { background: var(--cc-teal); }
+.cc-dot-blue { background: var(--cc-blue); margin-right: 8px; }
+.cc-dash-foot-sp { flex: 1; }
+
+/* استکِ سکه */
+.cc-coins { position: relative; width: 104px; height: 92px; }
+.cc-coin {
+  position: absolute;
+  left: 0;
+  top: calc(var(--i) * 15px);
+  width: 104px;
+  height: 34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(60% 90% at 40% 30%, #fff2bf, transparent 60%),
+    linear-gradient(180deg, #ffd75e, #e0a52a 60%, #b9831c);
+  box-shadow: 0 8px 16px -8px rgba(180, 120, 20, 0.8), inset 0 -6px 10px -6px rgba(120, 70, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 220, 130, 0.55);
+}
+.cc-coin-top {
+  display: grid;
+  place-items: center;
+  color: #8a5a10;
+  font-size: 15px;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  z-index: 5;
+}
+
+/* کارتِ بانکی */
+.cc-bankcard {
+  position: relative;
+  width: 190px;
+  height: 118px;
+  border-radius: 16px;
+  padding: 16px;
+  background:
+    radial-gradient(120% 80% at 15% 10%, rgba(255, 255, 255, 0.22), transparent 45%),
+    linear-gradient(135deg, #2a3c66, #16203a 70%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 26px 60px -28px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.cc-bankcard::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -20%;
+  width: 60%;
+  height: 180%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: rotate(18deg);
+  animation: cc-sheen 5.5s ease-in-out infinite;
+}
+@keyframes cc-sheen { 0%, 62%, 100% { left: -30%; } 80% { left: 120%; } }
+.cc-chip { position: absolute; top: 42px; left: 16px; width: 30px; height: 23px; border-radius: 5px; background: linear-gradient(135deg, #ffe38a, #d3a534); box-shadow: inset 0 0 0 1px rgba(120, 80, 0, 0.4); }
+.cc-brand { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe38a, #e0a52a); opacity: 0.9; }
+.cc-cardnum { position: absolute; bottom: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; }
+.cc-cardnum i { width: 26px; height: 7px; border-radius: 3px; background: rgba(255, 255, 255, 0.4); }
+
+/* چیپِ سود */
+.cc-statchip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 15px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(24, 32, 54, 0.95), rgba(13, 19, 36, 0.9));
+  border: 1px solid rgba(35, 200, 140, 0.32);
+  box-shadow: 0 22px 50px -26px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+.cc-statchip-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(35, 200, 140, 0.18); color: #7ff0c2; font-size: 13px; }
+.cc-statchip b { display: block; font-size: 13px; color: #fff; }
+.cc-statchip span { display: block; font-size: 11px; color: var(--cc-muted); }
+
+/* فاکتورِ کوچک */
+.cc-invoice { width: 176px; padding: 15px 15px 14px; }
+.cc-invoice-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
+.cc-invoice-title { font-size: 13px; font-weight: 700; color: #fff; }
+.cc-invoice-no { font-size: 11px; color: var(--cc-blue); font-weight: 600; }
+.cc-invoice-line { display: block; height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); margin-bottom: 9px; }
+.cc-invoice-total { margin-top: 4px; font-size: 12px; font-weight: 700; color: #04121a; background: linear-gradient(90deg, var(--cc-teal), #67e8f9); border-radius: 8px; padding: 7px 10px; text-align: center; }
 .cc-hero-scrim {
   position: absolute;
   inset: 0;
@@ -212,12 +367,24 @@
   .cc-grid, .cc-why-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .cc-hero { justify-content: center; text-align: center; min-height: 92vh; }
-  .cc-hero-content { text-align: center; padding-top: 30vh; }
-  .cc-hero-scrim { background: linear-gradient(180deg, transparent 30%, rgba(7, 11, 22, 0.82) 72%); }
+  .cc-hero { justify-content: center; text-align: center; min-height: 96vh; }
+  .cc-hero-content { text-align: center; padding-top: 46vh; }
+  .cc-hero-scrim { background: linear-gradient(180deg, transparent 34%, rgba(7, 11, 22, 0.86) 66%); }
   .cc-eyebrow { margin-inline: auto; }
   .cc-hero-cta { justify-content: center; }
   .cc-hero-sub { margin-inline: auto; }
+
+  .cc-visual {
+    top: 22%;
+    left: 50%;
+    transform: translate(-50%, 0) scale(0.82);
+    width: min(360px, 88vw);
+    height: 300px;
+  }
+  .cc-l-dash { top: 6%; left: 20%; }
+  .cc-l-coins { top: 0%; left: 4%; }
+  .cc-l-card { top: 58%; left: 8%; }
+  .cc-l-chip, .cc-l-inv { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cc-scroll-hint span { animation: none; }
