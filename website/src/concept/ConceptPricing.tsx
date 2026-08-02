@@ -177,7 +177,7 @@ export function ConceptPricing() {
       </div>
 
       <p className="cc-pricing-note">
-        مطمئن نیستی؟ اول <a href={TRIAL_URL}>۱۴ روز رایگان</a> امتحان کن — بدونِ کارتِ بانکی.
+        مطمئن نیستی؟ اول <a href={TRIAL_URL}>۱۴ روز رایگان</a> امتحان کن.
       </p>
 
       {selected && <PurchaseModal plan={selected} onClose={() => setSelected(null)} />}
