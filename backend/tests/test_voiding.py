@@ -21,7 +21,9 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
+from app.schemas.returns import SalesReturnIn, SalesReturnLineIn
 from app.services.inventory import get_stock_qty, post_purchase_invoice, post_sales_invoice
+from app.services.returns import post_sales_return
 from app.services.voiding import (
     void_journal_entry,
     void_purchase_invoice,
@@ -83,6 +85,43 @@ def trial_balance(db) -> dict:
     for account_id, debit, credit in rows:
         balances[account_id] = balances.get(account_id, Decimal(0)) + Decimal(debit) - Decimal(credit)
     return {k: v for k, v in balances.items() if v != 0}
+
+
+def _return(db, user, inv, item, qty):
+    return post_sales_return(
+        db,
+        SalesReturnIn(
+            return_date=TODAY,
+            sales_invoice_id=inv.id,
+            lines=[SalesReturnLineIn(item_id=item.id, qty=Decimal(qty))],
+        ),
+        user,
+    )
+
+
+# --- محافظِ تعارضِ برگشت/ابطال: نباید یک فروش دوبار معکوس شود -------------------------
+
+
+def test_return_on_voided_invoice_is_blocked(db, user, warehouse, widget):
+    """روی فاکتورِ باطل‌شده نباید برگشت خورد (وگرنه فروش دوبار برمی‌گردد)."""
+    buy(db, user, warehouse, widget, 10, 1000)
+    inv = sell(db, user, warehouse, widget, 5, 5000)
+    void_sales_invoice(db, inv.id, reason="اشتباه", user=user)
+
+    with pytest.raises(HTTPException) as exc:
+        _return(db, user, inv, widget, 2)
+    assert exc.value.status_code == 400
+
+
+def test_void_is_blocked_when_invoice_has_return(db, user, warehouse, widget):
+    """ابطالِ فاکتوری که برگشت خورده باید بسته باشد — اول باید برگشت برگردد."""
+    buy(db, user, warehouse, widget, 10, 1000)
+    inv = sell(db, user, warehouse, widget, 5, 5000)
+    _return(db, user, inv, widget, 2)
+
+    with pytest.raises(HTTPException) as exc:
+        void_sales_invoice(db, inv.id, reason="اشتباه", user=user)
+    assert exc.value.status_code == 409
 
 
 # --- هسته: دفتر باید به حالت قبل برگردد ---------------------------------------------

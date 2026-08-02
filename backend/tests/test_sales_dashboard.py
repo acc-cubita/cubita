@@ -3,9 +3,11 @@ from datetime import date
 from decimal import Decimal
 
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
+from app.schemas.returns import SalesReturnIn, SalesReturnLineIn
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.printing import gregorian_to_jalali
 from app.services.reports import get_sales_dashboard
+from app.services.returns import post_sales_return
 from tests.factories import main_warehouse, make_contact, make_item
 
 TODAY = date.today()
@@ -81,6 +83,34 @@ def test_top_customers_ranked_by_sales(db, user):
     dash = get_sales_dashboard(db, months=12)
     assert dash["top_customers"][0]["name"] == "مشتری بزرگ"
     assert dash["top_customers"][0]["total"] == Decimal(5_000_000)
+
+
+def _return(db, user, inv, item, qty):
+    return post_sales_return(
+        db,
+        SalesReturnIn(
+            return_date=TODAY,
+            sales_invoice_id=inv.id,
+            lines=[SalesReturnLineIn(item_id=item.id, qty=Decimal(qty))],
+        ),
+        user,
+    )
+
+
+def test_returns_reduce_net_sales(db, user):
+    """داشبورد باید فروشِ **خالص** (منهای برگشت) را نشان دهد، نه ناخالص."""
+    wh = main_warehouse(db)
+    item = make_item(db)
+    cust = make_contact(db, name="مشتری")
+    _stock_in(db, user, item, wh, 100, 200_000)
+    inv = _sell(db, user, wh, item, cust, 3, 1_000_000)  # فروش ۳٬۰۰۰٬۰۰۰
+    _return(db, user, inv, item, 1)  # برگشتِ ۱٬۰۰۰٬۰۰۰ → خالص ۲٬۰۰۰٬۰۰۰
+
+    dash = get_sales_dashboard(db, months=12)
+    assert dash["monthly"][-1]["sales"] == Decimal(2_000_000)
+    assert dash["top_items"][0]["revenue"] == Decimal(2_000_000)
+    assert dash["top_items"][0]["qty"] == Decimal(2)
+    assert dash["top_customers"][0]["total"] == Decimal(2_000_000)
 
 
 def test_voided_invoice_excluded(db, user):

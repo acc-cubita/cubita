@@ -27,6 +27,7 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
 from app.services.inventory import lock_items
 from app.services.numbering import next_document_number
@@ -160,6 +161,29 @@ def _guard_not_already_voided(document) -> None:
         raise HTTPException(status.HTTP_409_CONFLICT, "این سند قبلاً باطل شده است")
 
 
+def _guard_no_active_returns(db: Session, document, source_type: str) -> None:
+    """ابطالِ فاکتوری که برگشت خورده را می‌بندد.
+
+    ابطال، خودش کلِ فاکتور را معکوس می‌کند؛ اگر برگشتی هم روی همان فاکتور ثبت شده
+    باشد، همان فروش/خرید **دوبار** برمی‌گردد و ماندهٔ صندوق/فروش (یا خرید) منفیِ
+    بی‌معنا می‌شود. کاربر باید اول سندِ برگشت را برگرداند، بعد فاکتور را باطل کند.
+    """
+    if source_type == "sales_invoice":
+        has_return = db.query(SalesReturn.id).filter(SalesReturn.sales_invoice_id == document.id).first()
+        kind = "برگشت از فروش"
+    elif source_type == "purchase_invoice":
+        has_return = db.query(PurchaseReturn.id).filter(PurchaseReturn.purchase_invoice_id == document.id).first()
+        kind = "برگشت از خرید"
+    else:
+        return
+    if has_return is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"این فاکتور «{kind}» دارد؛ ابطال، فروش را دوباره برمی‌گرداند. "
+            "اول سندِ برگشت را حذف/برگردانید، سپس فاکتور را باطل کنید.",
+        )
+
+
 def _guard_stock_stays_valid(db: Session, moves: list[StockLedger]) -> None:
     """ابطالی که موجودی را منفی کند رد می‌شود.
 
@@ -199,6 +223,7 @@ def _apply_void(
 ) -> JournalEntry:
     """مسیر مشترک ابطال برای هر سندی که سند حسابداری و اثر انبار دارد."""
     _guard_not_already_voided(document)
+    _guard_no_active_returns(db, document, source_type)
 
     # تاریخ ابطال پیش‌فرض همان تاریخ سند است، ولی اگر آن دوره بسته شده باشد کاربر
     # باید تاریخی در دوره‌ی باز بدهد. گارد روی تاریخِ *معکوس* اجرا می‌شود نه تاریخ

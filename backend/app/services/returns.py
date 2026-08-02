@@ -89,6 +89,13 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     invoice = db.get(SalesInvoice, data.sales_invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور فروش یافت نشد")
+    # روی فاکتورِ باطل‌شده نباید برگشت خورد: ابطال، خودش کلِ فروش را معکوس کرده؛ یک
+    # برگشتِ اضافه، فروش را «دوبار» برمی‌گرداند و صندوق/فروش را منفی می‌کند.
+    if invoice.voided_at is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این فاکتور فروش باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
+        )
 
     summary = _sales_invoice_line_summary(db, data.sales_invoice_id)
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
@@ -274,6 +281,11 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     invoice = db.get(PurchaseInvoice, data.purchase_invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور خرید یافت نشد")
+    if invoice.voided_at is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این فاکتور خرید باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
+        )
 
     summary = _purchase_invoice_line_summary(db, data.purchase_invoice_id)
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}

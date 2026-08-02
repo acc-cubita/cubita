@@ -11,7 +11,7 @@ from app.models.banking import BankAccount
 from app.models.cost_center import CostCenter
 from app.models.inventory import Contact, Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
-from app.models.returns import PurchaseReturn, SalesReturn
+from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
 from app.models.treasury import TreasuryTransaction
 from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
 from app.services import chart_codes as cc
@@ -740,6 +740,9 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     # کفِ درشت برای کوئری تا کلِ تاریخ خوانده نشود؛ سطل‌بندیِ دقیق در پایتون است.
     lower = today - timedelta(days=months * 31 + 31)
 
+    # فروش/خرید **خالص** = فاکتورهای باطل‌نشده منهای برگشت‌ها. بدون کسرِ برگشت،
+    # نمودار ناخالص و بیش‌ازواقع می‌شد. برگشتِ فاکتورِ باطل‌شده کنار گذاشته می‌شود
+    # (join روی voided_at IS NULL) چون فروشِ آن فاکتور اصلاً شمرده نشده.
     sales = [Decimal(0)] * months
     purchases = [Decimal(0)] * months
     for inv_date, amount in (
@@ -750,6 +753,15 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
         i = index_of.get(gregorian_to_jalali(inv_date)[:2])
         if i is not None:
             sales[i] += Decimal(amount)
+    for ret_date, amount in (
+        db.query(SalesReturn.return_date, SalesReturn.total_amount)
+        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .all()
+    ):
+        i = index_of.get(gregorian_to_jalali(ret_date)[:2])
+        if i is not None:
+            sales[i] -= Decimal(amount)
     for inv_date, amount in (
         db.query(PurchaseInvoice.invoice_date, PurchaseInvoice.total_amount)
         .filter(PurchaseInvoice.voided_at.is_(None), PurchaseInvoice.invoice_date >= lower)
@@ -758,46 +770,86 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
         i = index_of.get(gregorian_to_jalali(inv_date)[:2])
         if i is not None:
             purchases[i] += Decimal(amount)
+    for ret_date, amount in (
+        db.query(PurchaseReturn.return_date, PurchaseReturn.total_amount)
+        .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
+        .filter(PurchaseInvoice.voided_at.is_(None), PurchaseReturn.return_date >= lower)
+        .all()
+    ):
+        i = index_of.get(gregorian_to_jalali(ret_date)[:2])
+        if i is not None:
+            purchases[i] -= Decimal(amount)
 
     monthly = [
         {"jy": jy, "jm": jm, "sales": sales[i], "purchases": purchases[i]}
         for i, (jy, jm) in enumerate(buckets)
     ]
 
-    # پرفروش‌ترین کالاها بر اساس درآمدِ پس از تخفیف، در همان بازه
+    # پرفروش‌ترین کالاها بر اساس درآمدِ خالص (فروش منهای برگشت)، در همان بازه
     line_revenue = SalesInvoiceLine.qty * SalesInvoiceLine.unit_price - SalesInvoiceLine.discount
-    top_items = [
-        {"item_id": item_id, "name": name, "qty": Decimal(qty), "revenue": Decimal(revenue)}
-        for item_id, name, qty, revenue in (
-            db.query(
-                Item.id,
-                Item.name,
-                func.coalesce(func.sum(SalesInvoiceLine.qty), 0),
-                func.coalesce(func.sum(line_revenue), 0),
-            )
-            .join(SalesInvoiceLine, SalesInvoiceLine.item_id == Item.id)
-            .join(SalesInvoice, SalesInvoiceLine.invoice_id == SalesInvoice.id)
-            .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
-            .group_by(Item.id, Item.name)
-            .order_by(func.coalesce(func.sum(line_revenue), 0).desc())
-            .limit(5)
-            .all()
+    item_agg: dict[UUID, dict] = {}
+    for item_id, name, qty, revenue in (
+        db.query(
+            Item.id,
+            Item.name,
+            func.coalesce(func.sum(SalesInvoiceLine.qty), 0),
+            func.coalesce(func.sum(line_revenue), 0),
         )
-    ]
+        .join(SalesInvoiceLine, SalesInvoiceLine.item_id == Item.id)
+        .join(SalesInvoice, SalesInvoiceLine.invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
+        .group_by(Item.id, Item.name)
+        .all()
+    ):
+        item_agg[item_id] = {"item_id": item_id, "name": name, "qty": Decimal(qty), "revenue": Decimal(revenue)}
+    ret_line_revenue = SalesReturnLine.qty * SalesReturnLine.unit_price
+    for item_id, qty, revenue in (
+        db.query(
+            SalesReturnLine.item_id,
+            func.coalesce(func.sum(SalesReturnLine.qty), 0),
+            func.coalesce(func.sum(ret_line_revenue), 0),
+        )
+        .join(SalesReturn, SalesReturnLine.return_id == SalesReturn.id)
+        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .group_by(SalesReturnLine.item_id)
+        .all()
+    ):
+        agg = item_agg.get(item_id)
+        if agg is not None:
+            agg["qty"] -= Decimal(qty)
+            agg["revenue"] -= Decimal(revenue)
+    top_items = sorted(
+        (a for a in item_agg.values() if a["revenue"] > 0),
+        key=lambda a: a["revenue"],
+        reverse=True,
+    )[:5]
 
-    # بهترین مشتریان بر اساس جمعِ خالصِ فروش (فقط فروشِ اعتباریِ شخص‌دار)
-    top_customers = [
-        {"contact_id": contact_id, "name": name, "total": Decimal(total)}
-        for contact_id, name, total in (
-            db.query(Contact.id, Contact.name, func.coalesce(func.sum(SalesInvoice.total_amount), 0))
-            .join(SalesInvoice, SalesInvoice.contact_id == Contact.id)
-            .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
-            .group_by(Contact.id, Contact.name)
-            .order_by(func.coalesce(func.sum(SalesInvoice.total_amount), 0).desc())
-            .limit(5)
-            .all()
-        )
-    ]
+    # بهترین مشتریان بر اساس جمعِ خالصِ فروش (فروش منهای برگشت، فقط شخص‌دار)
+    cust_agg: dict[UUID, dict] = {}
+    for contact_id, name, total in (
+        db.query(Contact.id, Contact.name, func.coalesce(func.sum(SalesInvoice.total_amount), 0))
+        .join(SalesInvoice, SalesInvoice.contact_id == Contact.id)
+        .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= lower)
+        .group_by(Contact.id, Contact.name)
+        .all()
+    ):
+        cust_agg[contact_id] = {"contact_id": contact_id, "name": name, "total": Decimal(total)}
+    for contact_id, total in (
+        db.query(SalesInvoice.contact_id, func.coalesce(func.sum(SalesReturn.total_amount), 0))
+        .join(SalesReturn, SalesReturn.sales_invoice_id == SalesInvoice.id)
+        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .group_by(SalesInvoice.contact_id)
+        .all()
+    ):
+        agg = cust_agg.get(contact_id)
+        if agg is not None:
+            agg["total"] -= Decimal(total)
+    top_customers = sorted(
+        (a for a in cust_agg.values() if a["total"] > 0),
+        key=lambda a: a["total"],
+        reverse=True,
+    )[:5]
 
     return {"months": months, "monthly": monthly, "top_items": top_items, "top_customers": top_customers}
 
