@@ -24,7 +24,7 @@ SAMPLE_PLANS = [
         "key": "basic",
         "name": "پایه",
         "description": "برای کسب‌وکارهای کوچک که تازه حسابداری منظم را شروع می‌کنند.",
-        "price_toman": 4_800_000,
+        "price_toman": 15_900_000,
         "billing_period": "yearly",
         "max_users": 1,
         "features": [
@@ -39,7 +39,7 @@ SAMPLE_PLANS = [
         "key": "pro",
         "name": "حرفه‌ای",
         "description": "برای کسب‌وکارهایی با چند کاربر هم‌زمان که به چک و بانک و حقوق هم نیاز دارند.",
-        "price_toman": 12_000_000,
+        "price_toman": 29_900_000,
         "billing_period": "yearly",
         "max_users": 5,
         "features": [
@@ -56,7 +56,7 @@ SAMPLE_PLANS = [
         "key": "enterprise",
         "name": "سازمانی",
         "description": "برای مجموعه‌های بزرگ‌تر با چند شعبه/انبار و نیاز به پشتیبانی اختصاصی.",
-        "price_toman": 24_000_000,
+        "price_toman": 43_900_000,
         "billing_period": "yearly",
         "max_users": None,
         "features": [

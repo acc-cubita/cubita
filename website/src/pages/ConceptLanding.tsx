@@ -496,7 +496,7 @@ function Footer() {
         <div className="cc-footer-col">
           <h4>پشتیبانی</h4>
           <a href="#cc-faq">سوالاتِ متداول</a>
-          <a href="mailto:ipnetcity@gmail.com">ipnetcity@gmail.com</a>
+          <a href="mailto:acc.cubita@gmail.com">acc.cubita@gmail.com</a>
         </div>
         <div className="cc-footer-col">
           <h4>قانونی</h4>
