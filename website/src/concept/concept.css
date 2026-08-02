@@ -24,7 +24,7 @@
   min-height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   overflow: hidden;
   background:
     radial-gradient(120% 90% at 20% 10%, rgba(59, 130, 246, 0.16), transparent 55%),
@@ -37,9 +37,10 @@
 .cc-visual {
   position: absolute;
   top: 50%;
-  left: clamp(14px, 9vw, 130px);
+  /* لبه‌ی چپِ ویژوال با لبه‌ی چپِ کادرِ ۱۱۸۰ هم‌تراز می‌شود (نه با لبه‌ی صفحه) */
+  left: max(24px, calc(50% - 566px));
   transform: translateY(-50%);
-  width: min(480px, 44vw);
+  width: min(468px, 42vw);
   height: min(520px, 74vh);
   --px: 0;
   --py: 0;
@@ -193,8 +194,13 @@
 .cc-hero-content {
   position: relative;
   z-index: 2;
-  max-width: min(640px, 92vw);
-  padding: 0 clamp(20px, 6vw, 84px);
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.cc-hero-copy {
+  max-width: 560px;
   text-align: right;
 }
 
@@ -276,7 +282,7 @@
 @keyframes cc-scroll { 0% { opacity: 0; transform: translateY(0); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
 
 /* --- Sections --- */
-.cc-section { position: relative; max-width: 1160px; margin: 0 auto; padding: clamp(70px, 12vw, 130px) clamp(20px, 5vw, 40px); }
+.cc-section { position: relative; max-width: 1180px; margin: 0 auto; padding: clamp(64px, 10vw, 116px) 24px; }
 .cc-section-head { text-align: center; max-width: 640px; margin: 0 auto clamp(40px, 6vw, 64px); }
 .cc-section-head h2 { font-size: clamp(26px, 4vw, 42px); font-weight: 800; margin: 14px 0 12px; letter-spacing: -0.5px; }
 .cc-section-head p { color: var(--cc-muted); font-size: clamp(15px, 2vw, 18px); margin: 0; }
@@ -356,7 +362,8 @@
 }
 @media (max-width: 760px) {
   .cc-hero { justify-content: center; text-align: center; min-height: 96vh; }
-  .cc-hero-content { text-align: center; padding-top: 46vh; }
+  .cc-hero-content { padding-top: 46vh; }
+  .cc-hero-copy { text-align: center; max-width: none; }
   .cc-hero-scrim { background: linear-gradient(180deg, transparent 34%, rgba(6, 7, 20, 0.86) 66%); }
   .cc-eyebrow { margin-inline: auto; }
   .cc-hero-cta { justify-content: center; }
@@ -398,12 +405,12 @@
   border-bottom-color: var(--cc-border);
 }
 .cc-header-in {
-  max-width: 1200px;
+  max-width: 1180px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 12px clamp(16px, 4vw, 32px);
+  padding: 13px 24px;
 }
 .cc-brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 19px; color: var(--cc-text); text-decoration: none; }
 .cc-brand-svg { display: block; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; box-shadow: 0 8px 20px -8px rgba(59, 130, 246, 0.75); }
@@ -422,7 +429,7 @@
 
 /* --- Stats strip --- */
 .cc-stats { border-block: 1px solid var(--cc-border); background: rgba(255, 255, 255, 0.02); }
-.cc-stats-in { max-width: 1160px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 24px clamp(20px, 5vw, 40px); }
+.cc-stats-in { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 24px; }
 .cc-stat { display: flex; align-items: center; gap: 12px; }
 .cc-stat-ico { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--cc-teal); background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.22); }
 .cc-stat b { display: block; font-size: 15px; color: #fff; }
@@ -500,14 +507,14 @@
 
 /* --- Footer --- */
 .cc-site-footer { border-top: 1px solid var(--cc-border); background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.04)); }
-.cc-footer-grid { max-width: 1160px; margin: 0 auto; display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 30px; padding: clamp(44px, 7vw, 70px) clamp(20px, 5vw, 40px) 34px; }
+.cc-footer-grid { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 30px; padding: clamp(44px, 7vw, 70px) 24px 34px; }
 .cc-footer-brand > p { color: var(--cc-muted); font-size: 14px; margin: 14px 0 18px; max-width: 30ch; }
 .cc-enamad { display: inline-block; background: #fff; border-radius: 10px; padding: 6px; width: 90px; }
 .cc-enamad img { width: 100%; height: auto; display: block; }
 .cc-footer-col h4 { font-size: 14px; font-weight: 700; margin: 0 0 14px; }
 .cc-footer-col a { display: block; color: var(--cc-muted); text-decoration: none; font-size: 14px; margin-bottom: 11px; transition: color 0.18s; }
 .cc-footer-col a:hover { color: var(--cc-text); }
-.cc-footer-bottom { max-width: 1160px; margin: 0 auto; border-top: 1px solid var(--cc-border); padding: 22px clamp(20px, 5vw, 40px); color: var(--cc-muted); font-size: 13px; text-align: center; }
+.cc-footer-bottom { max-width: 1180px; margin: 0 auto; border-top: 1px solid var(--cc-border); padding: 22px 24px; color: var(--cc-muted); font-size: 13px; text-align: center; }
 
 /* --- Responsive (بخش‌های جدید) --- */
 @media (max-width: 980px) {

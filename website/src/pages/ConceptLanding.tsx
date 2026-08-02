@@ -205,27 +205,29 @@ function Hero() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
-        <span className="cc-eyebrow">
-          <Sparkles size={15} /> مخصوصِ کسب‌وکارهای ایرانی
-        </span>
-        <h1 className="cc-hero-title">
-          نرم‌افزار حسابداری ابری و آفلاین؛
-          <br />
-          <span className="cc-grad">دقیق، امن، همیشه‌همگام</span>
-        </h1>
-        <p className="cc-hero-sub">
-          کنترل کامل مالی، انبار و مشتریان در یک سامانه ایزوله. با دسکتاپ آفلاین کار کنید و با
-          اتصال مجدد به اینترنت، همه‌چیز را بدون قطع ارتباط هم‌گام سازید.
-        </p>
-        <div className="cc-hero-cta">
-          <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
-            <Sparkles size={17} /> شروعِ ۱۴ روز رایگان
-          </a>
-          <a className="cc-btn cc-btn-ghost" href="#cc-features">
-            امکانات را ببین <ArrowLeft size={16} />
-          </a>
+        <div className="cc-hero-copy">
+          <span className="cc-eyebrow">
+            <Sparkles size={15} /> مخصوصِ کسب‌وکارهای ایرانی
+          </span>
+          <h1 className="cc-hero-title">
+            نرم‌افزار حسابداری ابری و آفلاین؛
+            <br />
+            <span className="cc-grad">دقیق، امن، همیشه‌همگام</span>
+          </h1>
+          <p className="cc-hero-sub">
+            کنترل کامل مالی، انبار و مشتریان در یک سامانه ایزوله. با دسکتاپ آفلاین کار کنید و با
+            اتصال مجدد به اینترنت، همه‌چیز را بدون قطع ارتباط هم‌گام سازید.
+          </p>
+          <div className="cc-hero-cta">
+            <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
+              <Sparkles size={17} /> شروعِ ۱۴ روز رایگان
+            </a>
+            <a className="cc-btn cc-btn-ghost" href="#cc-features">
+              امکانات را ببین <ArrowLeft size={16} />
+            </a>
+          </div>
+          <div className="cc-hero-trust">بدونِ کارتِ بانکی · راه‌اندازیِ چنددقیقه‌ای · وب و دسکتاپ</div>
         </div>
-        <div className="cc-hero-trust">بدونِ کارتِ بانکی · راه‌اندازیِ چنددقیقه‌ای · وب و دسکتاپ</div>
       </motion.div>
       <div className="cc-scroll-hint" aria-hidden="true">
         <span />
