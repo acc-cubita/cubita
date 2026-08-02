@@ -227,11 +227,12 @@
 .cc-eyebrow-center { margin-inline: auto; }
 
 .cc-hero-title {
-  font-size: clamp(34px, 6.2vw, 66px);
-  line-height: 1.15;
+  font-size: clamp(34px, 6.2vw, 64px);
+  line-height: 1.18;
   font-weight: 800;
   margin: 0 0 20px;
   letter-spacing: -0.5px;
+  text-wrap: balance;
 }
 .cc-grad {
   background: linear-gradient(100deg, var(--cc-blue), var(--cc-teal) 55%, var(--cc-gold));
@@ -418,13 +419,7 @@
   padding: 12px clamp(16px, 4vw, 32px);
 }
 .cc-brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 19px; color: var(--cc-text); text-decoration: none; }
-.cc-brand-mark {
-  width: 30px; height: 30px; border-radius: 9px;
-  display: grid; place-items: center;
-  color: #fff; font-weight: 800; font-size: 16px;
-  background: linear-gradient(135deg, var(--cc-blue), var(--cc-teal));
-  box-shadow: 0 8px 20px -8px rgba(91, 134, 255, 0.8);
-}
+.cc-brand-svg { display: block; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; box-shadow: 0 8px 20px -8px rgba(91, 134, 255, 0.75); }
 .cc-nav { display: flex; gap: 26px; margin-inline-start: 10px; }
 .cc-nav a { color: var(--cc-muted); text-decoration: none; font-size: 14.5px; font-weight: 600; transition: color 0.18s; }
 .cc-nav a:hover { color: var(--cc-text); }

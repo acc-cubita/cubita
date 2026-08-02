@@ -112,6 +112,25 @@ const FAQS = [
   { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله، در پلنِ سازمانی. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امور مالیاتی ارسال می‌شوند.' },
 ]
 
+function BrandMark({ id = 'm' }: { id?: string }) {
+  const g = `cc-brandgrad-${id}`
+  return (
+    <svg className="cc-brand-svg" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect width="32" height="32" rx="9" fill={`url(#${g})`} />
+      <rect x="7.5" y="17" width="4" height="7.5" rx="2" fill="#fff" fillOpacity="0.82" />
+      <rect x="14" y="13" width="4" height="11.5" rx="2" fill="#fff" fillOpacity="0.92" />
+      <rect x="20.5" y="9.5" width="4" height="15" rx="2" fill="#fff" />
+      <circle cx="22.5" cy="6.4" r="2.6" fill="#f5c542" />
+      <defs>
+        <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#5b86ff" />
+          <stop offset="1" stopColor="#2ad4e6" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
 function Header() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -127,7 +146,7 @@ function Header() {
     <header className={`cc-header${scrolled ? ' cc-header-solid' : ''}`}>
       <div className="cc-header-in">
         <a href="#" className="cc-brand">
-          <span className="cc-brand-mark">C</span> کوبیتا
+          <BrandMark id="hdr" /> کوبیتا
         </a>
         <nav className="cc-nav" aria-label="منوی اصلی">
           {NAV.map((l) => (
@@ -187,16 +206,16 @@ function Hero() {
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
         <span className="cc-eyebrow">
-          <Sparkles size={15} /> نسلِ تازه‌ی حسابداریِ ابری
+          <Sparkles size={15} /> حسابداریِ ابری و آفلاین، مخصوصِ ایران
         </span>
         <h1 className="cc-hero-title">
-          حسابداریِ کسب‌وکارت،
+          کلِ حساب‌وکتابِ کسب‌وکارت،
           <br />
-          <span className="cc-grad">یکپارچه و زنده</span>
+          <span className="cc-grad">یک‌جا و ساده</span>
         </h1>
         <p className="cc-hero-sub">
-          فروش، انبار، حسابداری، چک و بانک و صندوق — همه در یک سامانه‌ی یکپارچه‌ی فارسی.
-          اسکرول کن و ببین چطور همه‌چیز کنارِ هم کار می‌کند.
+          فروش و فاکتور، انبار، حسابداریِ دوطرفه، چک و بانک و صندوق — همه در یک نرم‌افزارِ فارسی
+          که هم روی مرورگر و هم آفلاین روی دسکتاپ کار می‌کند.
         </p>
         <div className="cc-hero-cta">
           <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
@@ -310,7 +329,7 @@ function Industries() {
 function Features() {
   return (
     <section className="cc-section" id="cc-features">
-      <SectionHead eyebrow="همه‌چیز، یک‌جا" title="یک سامانه برای کلِ دفترِ کسب‌وکار" sub="هر ماژول به‌جای جزیره‌ی جدا، بخشی از یک کلِ به‌هم‌پیوسته است." />
+      <SectionHead eyebrow="همه‌چیز، یک‌جا" title="همه‌ی ابزارِ حسابداری، در یک نرم‌افزار" sub="از فروش و انبار تا چک و بانک و گزارش‌ها — هر بخش با بخش‌های دیگر یکپارچه است و سند خودش را خودکار می‌زند." />
       <div className="cc-grid">
         {FEATURES.map((f, i) => (
           <motion.div
@@ -368,7 +387,7 @@ function WhySection() {
   return (
     <section className="cc-section cc-why" ref={ref}>
       <motion.div className="cc-why-glow" style={{ y }} aria-hidden="true" />
-      <SectionHead eyebrow="چرا کوبیتا" title="ساخته‌شده برای کسب‌وکارهای ایرانی" />
+      <SectionHead eyebrow="چرا کوبیتا" title="ساخته‌شده برای کسب‌وکارهای ایرانی" sub="فارسی، ابری و آفلاین، با پشتیبانی و قیمتِ داخلی — بی‌دردسر و بدونِ پیچیدگیِ نرم‌افزارهای بزرگ." />
       <div className="cc-why-grid">
         {WHY.map((w, i) => (
           <motion.div
@@ -447,7 +466,7 @@ function Footer() {
       <div className="cc-footer-grid">
         <div className="cc-footer-brand">
           <a href="#" className="cc-brand">
-            <span className="cc-brand-mark">C</span> کوبیتا
+            <BrandMark id="ftr" /> کوبیتا
           </a>
           <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی.</p>
           <a
