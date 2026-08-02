@@ -360,25 +360,30 @@
 @media (max-width: 860px) {
   .cc-grid, .cc-why-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 760px) {
-  .cc-hero { justify-content: center; text-align: center; min-height: 96vh; }
-  .cc-hero-content { padding-top: 46vh; }
-  .cc-hero-copy { text-align: center; max-width: none; }
-  .cc-hero-scrim { background: linear-gradient(180deg, transparent 34%, rgba(6, 7, 20, 0.86) 66%); }
+/* زیر ۱۰۸۰px: hero به‌جای کنارِ‌هم، عمودی می‌چیند (ویژوالِ بالا + متنِ پایین)،
+   چون در این عرض‌ها متن و ویژوال کنارِ هم تداخل می‌کردند. */
+@media (max-width: 1080px) {
+  .cc-hero { display: block; min-height: auto; padding: 96px 0 48px; text-align: center; }
+  .cc-hero-canvas { position: relative; inset: auto; height: 340px; }
+  .cc-hero-scrim { display: none; }
+  .cc-scroll-hint { display: none; }
+
+  .cc-hero-content { padding: 22px 24px 0; }
+  .cc-hero-copy { text-align: center; max-width: 520px; margin: 0 auto; }
   .cc-eyebrow { margin-inline: auto; }
   .cc-hero-cta { justify-content: center; }
   .cc-hero-sub { margin-inline: auto; }
 
   .cc-visual {
-    top: 22%;
+    top: 50%;
     left: 50%;
-    transform: translate(-50%, 0) scale(0.82);
-    width: min(360px, 88vw);
+    transform: translate(-50%, -50%) scale(0.9);
+    width: min(360px, 92vw);
     height: 300px;
   }
-  .cc-l-dash { top: 6%; left: 20%; }
-  .cc-l-mini { top: 0%; left: 2%; }
-  .cc-l-card { top: 58%; left: 8%; }
+  .cc-l-dash { top: 8%; left: 18%; }
+  .cc-l-mini { top: 0%; left: 0%; }
+  .cc-l-card { top: 56%; left: 6%; }
   .cc-l-chip, .cc-l-inv { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
