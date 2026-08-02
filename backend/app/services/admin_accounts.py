@@ -112,8 +112,10 @@ def create_account(db: Session, *, business_name: str, owner_name: str, email: s
 
     اگر ایمیل از قبل باشد، signup_new_business با 409 رد می‌کند (پیامِ مبهم، عمداً).
     """
+    # اکانتِ دستیِ مدیر آزمایشی نیست: اشتراکش را همین‌جا با `days` تعیین می‌کنیم، پس
+    # نباید is_trial=True بگیرد (که بنر/قفلِ مؤدیان و کرونِ حذفِ تریال را روشن می‌کند).
     tenant, _user = signup_new_business(
-        db, business_name=business_name, owner_name=owner_name, email=email, password=password
+        db, business_name=business_name, owner_name=owner_name, email=email, password=password, trial=False
     )
     if days > 0:
         subscriptions.grant(db, tenant.id, days=days, note="ساختِ دستی توسط مدیرِ سامانه", source="manual")

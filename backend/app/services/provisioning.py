@@ -58,6 +58,7 @@ def signup_new_business(
     owner_name: str,
     email: str,
     password: str,
+    trial: bool = True,
 ) -> tuple[Tenant, User]:
     """کاربر و کسب‌وکارش را در یک تراکنش می‌سازد.
 
@@ -65,6 +66,11 @@ def signup_new_business(
     شمارنده‌ی سند — در ظاهر سالم است و اولین باری که کاربر بخواهد فاکتور بزند
     شکست می‌خورد. get_db کل درخواست را یک تراکنش می‌کند، پس یا همه‌چیز ساخته
     می‌شود یا هیچ‌چیز.
+
+    `trial`: فقط ثبت‌نامِ مستقیمِ سایت آزمایشی است. اکانتی که مدیرِ سامانه دستی
+    می‌سازد آزمایشی نیست (اشتراکش را خودِ مدیر تعیین می‌کند)، وگرنه اشتباهی بنرِ
+    تریال می‌گیرد، مؤدیان/فروشگاهش قفل می‌شود و حتی در تیررسِ کرونِ حذفِ تریال
+    قرار می‌گیرد.
     """
     email = email.strip().lower()
     existing = db.query(User).filter(User.email == email).first()
@@ -83,18 +89,19 @@ def signup_new_business(
         # ثبت‌نام مستقیم هنوز پلنی نخریده، پس سقف آزمایشی می‌گیرد. بدون هیچ سقفی،
         # دعوت یک منبع نامحدود است و هر ثبت‌نام رایگان می‌تواند بی‌نهایت کاربر بسازد.
         max_users=settings.signup_default_max_users,
-        is_trial=True,
+        is_trial=trial,
     )
     # اشتراکِ آزمایشیِ زماندار. بدونِ این، مستأجرِ ثبت‌نامی «none» می‌ماند و طبقِ fail-open
     # نامحدود کار می‌کند — یعنی هیچ ساعتِ ۱۴روزه‌ای وجود ندارد. plan_id خالی است چون
     # آزمایشی پلنی نخریده؛ همین تفکیکش از دوره‌ی خریداری‌شده است.
-    subscriptions.grant(
-        db,
-        tenant.id,
-        days=settings.trial_days,
-        note="دوره‌ی آزمایشیِ رایگان",
-        source="trial",
-    )
+    if trial:
+        subscriptions.grant(
+            db,
+            tenant.id,
+            days=settings.trial_days,
+            note="دوره‌ی آزمایشیِ رایگان",
+            source="trial",
+        )
     user = db.query(User).filter(User.email == email).one()
     return tenant, user
 
