@@ -69,7 +69,7 @@ export default function HeroVisual() {
             <span className="cc-coin" style={{ ['--i' as string]: 3 }} />
             <span className="cc-coin" style={{ ['--i' as string]: 2 }} />
             <span className="cc-coin" style={{ ['--i' as string]: 1 }} />
-            <span className="cc-coin cc-coin-top" style={{ ['--i' as string]: 0 }}>﷼</span>
+            <span className="cc-coin cc-coin-top" style={{ ['--i' as string]: 0 }} />
           </div>
         </div>
       </div>
