@@ -44,7 +44,9 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(90% 90% at 75% 50%, transparent 40%, rgba(7, 11, 22, 0.72) 100%);
+  background:
+    linear-gradient(90deg, transparent 46%, rgba(7, 11, 22, 0.55) 100%),
+    radial-gradient(65% 100% at 100% 50%, rgba(7, 11, 22, 0.4), transparent 72%);
 }
 .cc-hero-content {
   position: relative;
