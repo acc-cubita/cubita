@@ -206,16 +206,16 @@ function Hero() {
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
         <span className="cc-eyebrow">
-          <Sparkles size={15} /> حسابداریِ ابری و آفلاین، مخصوصِ ایران
+          <Sparkles size={15} /> مخصوصِ کسب‌وکارهای ایرانی
         </span>
         <h1 className="cc-hero-title">
-          کلِ حساب‌وکتابِ کسب‌وکارت،
+          نرم‌افزار حسابداری ابری و آفلاین؛
           <br />
-          <span className="cc-grad">یک‌جا و ساده</span>
+          <span className="cc-grad">دقیق، امن، همیشه‌همگام</span>
         </h1>
         <p className="cc-hero-sub">
-          فروش و فاکتور، انبار، حسابداریِ دوطرفه، چک و بانک و صندوق — همه در یک نرم‌افزارِ فارسی
-          که هم روی مرورگر و هم آفلاین روی دسکتاپ کار می‌کند.
+          کنترل کامل مالی، انبار و مشتریان در یک سامانه ایزوله. با دسکتاپ آفلاین کار کنید و با
+          اتصال مجدد به اینترنت، همه‌چیز را بدون قطع ارتباط هم‌گام سازید.
         </p>
         <div className="cc-hero-cta">
           <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
