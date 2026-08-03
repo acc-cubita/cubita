@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, RefreshCw, UserPlus, CalendarClock, Users, CheckCircle2,
-  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp,
+  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift,
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
@@ -62,6 +62,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [extendId, setExtendId] = useState<string | null>(null)
   const [usersId, setUsersId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'all' | 'trial' | 'paid'>('all')
 
   // فرم ساخت
   const [showCreate, setShowCreate] = useState(false)
@@ -87,12 +88,25 @@ export function AccountsAdminPage({ token }: { token: string }) {
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
     return {
       total: a.length,
-      active: a.filter((x) => x.subscription_status === 'active').length,
+      active: a.filter((x) => !x.is_trial && x.subscription_status === 'active').length,
+      trial: a.filter((x) => x.is_trial).length,
       expiring: a.filter((x) => (x.subscription_status === 'active' || x.subscription_status === 'grace') && x.days_left != null && x.days_left <= 14).length,
       trouble: a.filter((x) => x.subscription_status === 'expired' || x.status === 'suspended').length,
       activeWeek: a.filter((x) => x.last_activity_at != null && new Date(x.last_activity_at).getTime() >= weekAgo).length,
     }
   }, [accounts])
+
+  // شمارشِ فیلترها و فهرستِ فیلترشده — «آزمایشی» همان درخواستِ کاربر برای دیدنِ حساب‌های ۱۴روزه است.
+  const counts = useMemo(() => {
+    const a = accounts ?? []
+    return { all: a.length, trial: a.filter((x) => x.is_trial).length, paid: a.filter((x) => !x.is_trial).length }
+  }, [accounts])
+  const filtered = useMemo(() => {
+    const a = accounts ?? []
+    if (filter === 'trial') return a.filter((x) => x.is_trial)
+    if (filter === 'paid') return a.filter((x) => !x.is_trial)
+    return a
+  }, [accounts, filter])
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setBusyId(id); setError(null); setMessage(null)
@@ -153,6 +167,12 @@ export function AccountsAdminPage({ token }: { token: string }) {
   }
 
   function daysText(a: AdminAccount): string {
+    // حسابِ آزمایشی: روزهای ماندهٔ ترایال (نه اشتراک) را نشان بده — با منطقِ «۱۴روزه».
+    if (a.is_trial) {
+      if (a.trial_expired) return 'آزمایشی تمام شد'
+      if (a.trial_days_left == null) return 'آزمایشیِ رایگان'
+      return `${fa(a.trial_days_left)} روز از ۱۴ روزِ آزمایشی مانده`
+    }
     if (a.subscription_status === 'none') return 'بدون اشتراک'
     if (a.days_left == null) return '—'
     if (a.days_left < 0) return `${fa(Math.abs(a.days_left))} روز از انقضا گذشته`
@@ -170,6 +190,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
       <div className="stat-grid">
         <StatCard icon={<Users size={18} />} label="کل اکانت‌ها" value={fa(kpis.total)} />
         <StatCard icon={<CheckCircle2 size={18} />} label="اشتراکِ فعال" value={fa(kpis.active)} tone="success" />
+        <StatCard icon={<Gift size={18} />} label="آزمایشیِ رایگان (۱۴روزه)" value={fa(kpis.trial)} tone={kpis.trial ? 'warning' : undefined} />
         <StatCard icon={<Activity size={18} />} label="فعال در ۷ روزِ اخیر" value={fa(kpis.activeWeek)} tone={kpis.activeWeek ? 'success' : undefined} />
         <StatCard icon={<Clock size={18} />} label="رو به انقضا (≤۱۴ روز)" value={fa(kpis.expiring)} tone={kpis.expiring ? 'warning' : undefined} />
         <StatCard icon={<AlertTriangle size={18} />} label="منقضی/تعلیق" value={fa(kpis.trouble)} tone={kpis.trouble ? 'danger' : undefined} />
@@ -214,22 +235,38 @@ export function AccountsAdminPage({ token }: { token: string }) {
         {error && <div className="error">{error}</div>}
         {message && <div className="hint">{message}</div>}
 
+        {accounts != null && accounts.length > 0 && (
+          <div className="account-filter" role="tablist" aria-label="فیلترِ اکانت‌ها">
+            <button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>همه ({fa(counts.all)})</button>
+            <button className={`filter-trial${filter === 'trial' ? ' is-active' : ''}`} onClick={() => setFilter('trial')}>آزمایشیِ رایگان ({fa(counts.trial)})</button>
+            <button className={filter === 'paid' ? 'is-active' : ''} onClick={() => setFilter('paid')}>پولی ({fa(counts.paid)})</button>
+          </div>
+        )}
+
         {accounts == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : accounts.length === 0 ? (
           <EmptyState icon={Users} text="هنوز اکانتی ساخته نشده." />
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={Gift} text={filter === 'trial' ? 'هنوز هیچ حسابِ آزمایشی‌ای ساخته نشده.' : 'اکانتی در این فیلتر نیست.'} />
         ) : (
           <div className="account-list">
-            {accounts.map((a) => (
+            {filtered.map((a) => (
               <div key={a.tenant_id} className={`account-card${a.status !== 'active' ? ' account-card--suspended' : ''}`}>
                 <div className="account-head">
                   <div>
                     <div className="account-name">{a.name}</div>
                     <div className="account-owner">{a.owner_name} · {a.owner_email}</div>
                   </div>
-                  <span className={`status-badge tone-${SUB_TONE[a.subscription_status] ?? 'default'}`}>
-                    {SUB_LABEL[a.subscription_status] ?? a.subscription_status}
-                  </span>
+                  {a.is_trial ? (
+                    <span className={`status-badge ${a.trial_expired ? 'tone-danger' : 'tone-trial'}`}>
+                      <Gift size={12} /> {a.trial_expired ? 'آزمایشی منقضی' : 'آزمایشیِ رایگان'}
+                    </span>
+                  ) : (
+                    <span className={`status-badge tone-${SUB_TONE[a.subscription_status] ?? 'default'}`}>
+                      {SUB_LABEL[a.subscription_status] ?? a.subscription_status}
+                    </span>
+                  )}
                 </div>
 
                 <div className="account-meta">

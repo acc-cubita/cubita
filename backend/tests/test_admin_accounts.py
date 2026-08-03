@@ -60,6 +60,38 @@ def test_create_without_days_has_no_subscription(super_client):
     assert r.json()["subscription_status"] == "none"
 
 
+# --- دیدِ آزمایشیِ رایگان -----------------------------------------------------
+
+def test_manual_account_is_not_trial(super_client):
+    """اکانتِ دستیِ مدیر آزمایشی نیست — پرچمِ trial باید خاموش بماند."""
+    row = _create(super_client, email="manual@example.com", days=365).json()
+    assert row["is_trial"] is False
+    assert row["trial_days_left"] is None
+    assert row["trial_expired"] is False
+
+
+def test_self_serve_signup_shows_as_trial(super_client):
+    """ثبت‌نامِ «۱۴ روز رایگان» در فهرستِ مدیریت با پرچمِ آزمایشی و ~۱۴ روز دیده می‌شود."""
+    r = super_client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "کسب‌وکارِ آزمایشی",
+            "owner_name": "مریم احمدی",
+            "email": "trialbiz@example.com",
+            "password": "verylongpassword",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    rows = super_client.get("/api/admin/accounts").json()
+    row = next(x for x in rows if x["owner_email"] == "trialbiz@example.com")
+    assert row["is_trial"] is True
+    assert row["trial_expired"] is False
+    assert row["trial_days_left"] == 14  # ceil در لحظه‌ی ثبت‌نام = ۱۴
+    # فیلترِ فرانت روی همین is_trial کار می‌کند؛ اکانتِ آزمایشی پلن ندارد.
+    assert row["plan_name"] == ""
+
+
 def test_duplicate_email_rejected(super_client):
     assert _create(super_client, email="dup@example.com").status_code == 201
     assert _create(super_client, email="dup@example.com").status_code == 409
@@ -87,6 +119,25 @@ def test_set_expiry_date(super_client):
     r = super_client.post(f"/api/admin/accounts/{tid}/extend", json={"expires_at": "2030-01-01"})
     assert r.status_code == 200, r.text
     assert r.json()["subscription_status"] == "active"
+
+
+def test_extend_clears_trial_flag(super_client):
+    """تمدیدِ دستیِ یک اکانتِ آزمایشی، پرچمِ trial را پاک می‌کند (دیگر آزمایشی نیست)."""
+    super_client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "آزمایشیِ تمدیدی",
+            "owner_name": "رضا",
+            "email": "trial-extend@example.com",
+            "password": "verylongpassword",
+        },
+    )
+    tid = next(r["tenant_id"] for r in super_client.get("/api/admin/accounts").json() if r["owner_email"] == "trial-extend@example.com")
+    r = super_client.post(f"/api/admin/accounts/{tid}/extend", json={"days": 365})
+    assert r.status_code == 200, r.text
+    row = r.json()
+    assert row["is_trial"] is False
+    assert row["trial_days_left"] is None
 
 
 # --- تعلیق/فعال‌سازی ---------------------------------------------------------

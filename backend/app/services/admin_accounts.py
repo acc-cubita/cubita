@@ -42,6 +42,10 @@ def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) ->
     owner = min(members, key=lambda mu: mu[0].created_at or _LONG_AGO)[1] if members else None
     state = subscriptions.state_for(db, tenant.id)
     sub = subscriptions.current_subscription(db, tenant.id)
+    # اطلاعاتِ آزمایشیِ رایگان: حسابِ ۱۴روزه is_trial=True دارد و روزهای مانده‌اش با
+    # همان منطقِ ceilِ trial_info حساب می‌شود (نه days_leftِ اشتراک که floor است و
+    # روزِ صفر را ۱۳ نشان می‌دهد). expired بدونِ مهلتِ ارفاق است.
+    tinfo = subscriptions.trial_info(db, tenant)
 
     logins = [u.last_login_at for _m, u in members if u.last_login_at is not None]
     last_activity = max(logins) if logins else None
@@ -73,6 +77,9 @@ def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) ->
         "expires_at": state.expires_at,
         "days_left": state.days_left,
         "plan_name": sub.plan.name if sub and sub.plan else "",
+        "is_trial": tinfo.is_trial,
+        "trial_days_left": tinfo.days_left,
+        "trial_expired": tinfo.expired,
         "owner_last_login_at": owner.last_login_at if owner else None,
         "last_activity_at": last_activity,
         "users": users,
@@ -124,7 +131,12 @@ def create_account(db: Session, *, business_name: str, owner_name: str, email: s
 
 def extend_account(db: Session, tenant_id: UUID, *, days: int | None = None, expires_at=None) -> None:
     """تمدید (افزودنِ روز، از انتهای دوره‌ی فعلی) یا تعیینِ تاریخِ انقضای مشخص."""
-    _require(db, tenant_id)
+    tenant = _require(db, tenant_id)
+    # تمدیدِ دستیِ مدیر یعنی این اکانت دیگر آزمایشیِ خودسرویس نیست: پرچمِ trial را پاک
+    # می‌کنیم تا (۱) در فهرستِ مدیریت به‌غلط «آزمایشی» دیده نشود، (۲) مؤدیان/اتصال‌فروشگاه
+    # قفل نماند، و (۳) کرونِ حذفِ تریال سراغش نرود. قرینه‌ی provision_for_purchase که با
+    # خریدِ واقعی همین is_trial=False را ست می‌کند.
+    tenant.is_trial = False
     if days:
         subscriptions.grant(db, tenant_id, days=days, note="تمدیدِ دستی توسط مدیرِ سامانه", source="manual")
         return

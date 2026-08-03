@@ -30,6 +30,10 @@ class AccountRowOut(BaseModel):
     expires_at: datetime | None
     days_left: int | None
     plan_name: str
+    #: حسابِ آزمایشیِ رایگانِ ۱۴روزه؟ روزهای مانده با منطقِ ceilِ ترایال (روزِ صفر = ۱۴).
+    is_trial: bool = False
+    trial_days_left: int | None = None
+    trial_expired: bool = False
     #: آخرین ورودِ مالک، و آخرین ورودِ هر کاربرِ اکانت (بیشینه‌ی همه) — NULL یعنی هرگز.
     owner_last_login_at: datetime | None
     last_activity_at: datetime | None

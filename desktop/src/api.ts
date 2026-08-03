@@ -1203,6 +1203,9 @@ export interface AdminAccount {
   expires_at: string | null
   days_left: number | null
   plan_name: string
+  is_trial: boolean
+  trial_days_left: number | null
+  trial_expired: boolean
   owner_last_login_at: string | null
   last_activity_at: string | null
   users: AdminAccountUser[]
