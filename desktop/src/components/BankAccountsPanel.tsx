@@ -6,6 +6,7 @@ import {
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -190,7 +191,7 @@ function BankTransactionForm({
             <option value="withdraw">برداشت</option>
           </select>
         </label>
-        <label>مبلغ<input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label>مبلغ<NumberInput value={amount} onChange={setAmount} /></label>
         <label>حساب مقابل (مثلاً صندوق)
           <select value={counterAccountId} onChange={(e) => setCounterAccountId(e.target.value)}>
             <option value="">— انتخاب —</option>

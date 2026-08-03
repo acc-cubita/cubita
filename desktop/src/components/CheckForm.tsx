@@ -3,6 +3,7 @@ import { Receipt, Save } from 'lucide-react'
 import { createCheckDirect, fetchContacts, type ContactRecord } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 
 export function CheckForm({ token, onQueued }: { token: string; onQueued: () => void }) {
@@ -106,7 +107,7 @@ export function CheckForm({ token, onQueued }: { token: string; onQueued: () => 
         </label>
         <label>
           مبلغ
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <NumberInput value={amount} onChange={setAmount} required />
         </label>
         <label>
           تاریخ صدور

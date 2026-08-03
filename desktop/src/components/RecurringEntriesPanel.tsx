@@ -15,6 +15,7 @@ import {
   type RecurringFrequency,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso, toFaDigits } from '../lib/jalali'
@@ -237,7 +238,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
               </label>
               <label>
                 هر چند دوره یک‌بار
-                <input type="number" min="1" value={interval} onChange={(e) => setIntervalValue(e.target.value)} />
+                <NumberInput value={interval} onChange={setIntervalValue} />
               </label>
             </div>
             <div className="field-row">
@@ -290,19 +291,15 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                       </select>
                     </td>
                     <td>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={line.debit}
-                        onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
+                        onChange={(v) => updateLine(i, { debit: v, credit: '' })}
                       />
                     </td>
                     <td>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={line.credit}
-                        onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
+                        onChange={(v) => updateLine(i, { credit: v, debit: '' })}
                       />
                     </td>
                     <td>

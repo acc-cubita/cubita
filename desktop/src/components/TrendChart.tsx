@@ -10,12 +10,23 @@ export interface TrendSeries {
 const fa = (v: number) => Math.round(v).toLocaleString('fa-IR')
 const faDate = (iso: string) => new Date(iso).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' })
 
+// برچسبِ محورِ عمودی فشرده تا در گوشه‌ی چپ جا شود و با عددِ روی نمودار قاطی نشود.
+function faAxis(v: number): string {
+  const sign = v < 0 ? '−' : ''
+  const a = Math.abs(v)
+  if (a >= 1e9) return sign + (a / 1e9).toLocaleString('fa-IR', { maximumFractionDigits: 1 }) + ' میلیارد'
+  if (a >= 1e6) return sign + Math.round(a / 1e6).toLocaleString('fa-IR') + ' م'
+  if (a >= 1e3) return sign + Math.round(a / 1e3).toLocaleString('fa-IR') + ' هزار'
+  return sign + Math.round(a).toLocaleString('fa-IR')
+}
+
 const WIDTH = 640
 const HEIGHT = 220
 const PAD_TOP = 16
 const PAD_BOTTOM = 28
 const PAD_RIGHT = 8
-const PAD_LEFT = 8
+// گوشه‌ی چپ برای برچسبِ محور (اعداد فشرده) کنار گذاشته می‌شود تا از اعدادِ انتهای خط جدا بماند.
+const PAD_LEFT = 44
 
 export function TrendChart({ series }: { series: TrendSeries[] }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -86,8 +97,8 @@ export function TrendChart({ series }: { series: TrendSeries[] }) {
         {gridValues.map((gv, i) => (
           <g key={i}>
             <line x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={yAt(gv)} y2={yAt(gv)} className="trend-gridline" />
-            <text x={WIDTH - PAD_RIGHT} y={yAt(gv) - 3} className="trend-axis-label" textAnchor="end">
-              {fa(gv)}
+            <text x={PAD_LEFT - 8} y={yAt(gv)} className="trend-axis-label" textAnchor="end" dominantBaseline="central">
+              {faAxis(gv)}
             </text>
           </g>
         ))}

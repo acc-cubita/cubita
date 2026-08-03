@@ -13,6 +13,7 @@ import {
   type StockCountSummary,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
@@ -267,13 +268,11 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
                       <td>{faQty(line.system_qty)}</td>
                       <td>
                         {editable ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
+                          <NumberInput
+                            allowDecimal
                             className="count-input"
                             value={counts[line.id] ?? ''}
-                            onChange={(e) => setCounts((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                            onChange={(v) => setCounts((prev) => ({ ...prev, [line.id]: v }))}
                           />
                         ) : (
                           faQty(line.counted_qty)

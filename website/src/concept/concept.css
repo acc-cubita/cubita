@@ -262,6 +262,9 @@
 .cc-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 50px -14px rgba(59, 130, 246, 0.95); }
 .cc-btn-ghost { background: var(--cc-panel); border-color: var(--cc-border); color: var(--cc-text); }
 .cc-btn-ghost:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.08); }
+/* دکمه‌ی «ورود به برنامه» — رنگِ متمایزِ بنفش (جدا از CTAی اصلیِ آبی‌ـبنفش، ولی جذاب و رنگی). */
+.cc-btn-accent { background: rgba(168, 85, 247, 0.16); border-color: rgba(168, 85, 247, 0.55); color: #f3e9ff; }
+.cc-btn-accent:hover { transform: translateY(-2px); background: rgba(168, 85, 247, 0.28); border-color: rgba(168, 85, 247, 0.85); box-shadow: 0 14px 40px -16px rgba(168, 85, 247, 0.7); }
 .cc-btn-lg { padding: 16px 34px; font-size: 16.5px; }
 
 .cc-scroll-hint {
@@ -425,8 +428,18 @@
 .cc-header-actions { margin-inline-start: auto; display: flex; gap: 10px; }
 .cc-btn-sm { padding: 9px 16px; font-size: 13.5px; border-radius: 11px; }
 .cc-nav-toggle { display: none; margin-inline-start: auto; background: var(--cc-panel); border: 1px solid var(--cc-border); color: var(--cc-text); border-radius: 10px; padding: 7px; cursor: pointer; }
-.cc-nav-mobile { display: flex; flex-direction: column; gap: 10px; padding: 14px clamp(16px, 4vw, 32px) 20px; background: rgba(6, 7, 20, 0.97); border-bottom: 1px solid var(--cc-border); }
-.cc-nav-mobile a:not(.cc-btn) { color: var(--cc-text); text-decoration: none; font-weight: 600; padding: 8px 4px; }
+.cc-nav-mobile { display: flex; flex-direction: column; gap: 10px; padding: 16px clamp(16px, 4vw, 32px) 22px; background: rgba(6, 7, 20, 0.98); border-bottom: 1px solid var(--cc-border); }
+/* آیتم‌ها ردیفِ تمام‌عرض و وسط‌چین می‌شوند تا مثلِ متنِ چسبیده به راستِ صفحه دیده نشوند. */
+.cc-nav-mobile a:not(.cc-btn) {
+  color: var(--cc-text); text-decoration: none; font-weight: 600; font-size: 15.5px;
+  padding: 13px 14px; text-align: center; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035); border: 1px solid var(--cc-border);
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.cc-nav-mobile a:not(.cc-btn):hover { background: rgba(168, 85, 247, 0.12); border-color: rgba(168, 85, 247, 0.4); }
+/* فاصله‌ی کمی پیش از دکمه‌های پایانی تا از فهرست جدا شوند. */
+.cc-nav-mobile .cc-btn { margin-top: 2px; justify-content: center; }
+.cc-nav-mobile .cc-btn:first-of-type { margin-top: 8px; }
 
 /* hero trust line + anchor offset */
 .cc-hero-trust { margin-top: 18px; font-size: 13px; color: var(--cc-muted); }

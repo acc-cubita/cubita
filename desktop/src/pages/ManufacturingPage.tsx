@@ -14,6 +14,7 @@ import {
   type ProductionOrderRecord,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
@@ -227,7 +228,7 @@ function BomsTab({
             </label>
             <label>
               بازده (چند واحد در هر اجرا)
-              <input type="number" min="0" step="any" value={yieldQty} onChange={(e) => setYieldQty(e.target.value)} />
+              <NumberInput allowDecimal value={yieldQty} onChange={setYieldQty} />
             </label>
           </div>
 
@@ -252,7 +253,7 @@ function BomsTab({
                       </select>
                     </td>
                     <td data-label="مقدار">
-                      <input type="number" min="0" step="any" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} />
+                      <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
                     </td>
                     <td>
                       <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
@@ -454,11 +455,11 @@ function ProduceTab({
             <div className="field-row">
               <label>
                 تعدادِ تولید
-                <input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} required />
+                <NumberInput allowDecimal value={qty} onChange={setQty} required />
               </label>
               <label>
                 سربار/دستمزد (اختیاری، ریال)
-                <input type="number" min="0" value={overhead} onChange={(e) => setOverhead(e.target.value)} placeholder="۰" />
+                <NumberInput value={overhead} onChange={setOverhead} placeholder="۰" />
               </label>
             </div>
 

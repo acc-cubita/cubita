@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { downloadCsv, parseCsv } from '../lib/csv'
 import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { Tabs } from '../components/Tabs'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
@@ -302,8 +303,8 @@ function OpeningTab({ token }: { token: string }) {
                     ))}
                   </select>
                 </td>
-                <td><input type="number" min="0" value={l.debit} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, debit: e.target.value, credit: '' } : x))} /></td>
-                <td><input type="number" min="0" value={l.credit} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, credit: e.target.value, debit: '' } : x))} /></td>
+                <td><NumberInput value={l.debit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, debit: v, credit: '' } : x))} /></td>
+                <td><NumberInput value={l.credit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, credit: v, debit: '' } : x))} /></td>
                 <td><button type="button" onClick={() => setLines(lines.filter((_, j) => j !== i))}><Trash2 size={13} /></button></td>
               </tr>
             ))}
@@ -336,8 +337,8 @@ function OpeningTab({ token }: { token: string }) {
                         {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
                       </select>
                     </td>
-                    <td><input type="number" min="0" value={s.qty} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} /></td>
-                    <td><input type="number" min="0" value={s.unit_cost} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, unit_cost: e.target.value } : x))} /></td>
+                    <td><NumberInput value={s.qty} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, qty: v } : x))} /></td>
+                    <td><NumberInput value={s.unit_cost} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, unit_cost: v } : x))} /></td>
                     <td className="money-cell">{fa(toNumber(s.qty) * toNumber(s.unit_cost))}</td>
                     <td><button type="button" onClick={() => setStock(stock.filter((_, j) => j !== i))}><Trash2 size={13} /></button></td>
                   </tr>

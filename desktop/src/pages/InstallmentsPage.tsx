@@ -12,6 +12,7 @@ import {
 } from '../api'
 import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
@@ -269,21 +270,21 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
             <div className="field-row">
               <label>
                 مبلغ کل (ریال)
-                <input type="number" min="0" value={total} onChange={(e) => setTotal(e.target.value)} required />
+                <NumberInput value={total} onChange={setTotal} required />
               </label>
               <label>
                 پیش‌پرداخت
-                <input type="number" min="0" value={down} onChange={(e) => setDown(e.target.value)} placeholder="۰" />
+                <NumberInput value={down} onChange={setDown} placeholder="۰" />
               </label>
             </div>
             <div className="field-row">
               <label>
                 تعداد اقساط
-                <input type="number" min="1" value={count} onChange={(e) => setCount(e.target.value)} required />
+                <NumberInput value={count} onChange={setCount} required />
               </label>
               <label>
                 فاصله (ماه)
-                <input type="number" min="1" value={interval} onChange={(e) => setInterval(e.target.value)} />
+                <NumberInput value={interval} onChange={setInterval} />
               </label>
             </div>
             <label>
@@ -412,7 +413,7 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
                       <tr className="inst-pay-row">
                         <td colSpan={7}>
                           <div className="pay-inline">
-                            <label>مبلغ<input type="number" min="0" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>
+                            <label>مبلغ<NumberInput value={payAmount} onChange={setPayAmount} /></label>
                             <label>تاریخ<JalaliDatePicker value={payDate} onChange={setPayDate} /></label>
                             <label>روش
                               <select value={payMethod} onChange={(e) => setPayMethod(e.target.value as 'cash' | 'bank')}>

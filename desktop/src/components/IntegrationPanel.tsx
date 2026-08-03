@@ -12,6 +12,7 @@ import {
   type SyncResult,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 
 const EMPTY_SETTINGS: StorefrontSettingsIn = {
@@ -199,11 +200,9 @@ export function IntegrationPanel({ token }: { token: string }) {
             <div className="field-row">
               <label>
                 آستانه‌ی سفارش (cutover)
-                <input
-                  type="number"
-                  min="0"
+                <NumberInput
                   value={settings.cutover_order_id || ''}
-                  onChange={(e) => setSettings({ ...settings, cutover_order_id: Number(e.target.value) || 0 })}
+                  onChange={(v) => setSettings({ ...settings, cutover_order_id: Number(v) || 0 })}
                 />
                 <span className="field-hint">سفارش‌های با شماره‌ی کوچک‌تر/مساویِ این مقدار وارد نمی‌شوند (سفارش‌های قدیمیِ پیش از اتصال).</span>
               </label>
@@ -284,21 +283,19 @@ export function IntegrationPanel({ token }: { token: string }) {
                     </td>
                     <td data-label="قیمت فروش" className="money-cell">{Number(item.sales_price).toLocaleString('fa-IR')}</td>
                     <td data-label="بهای تمام‌شده">
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         className="integration-num"
                         value={pendingCost[item.id] ?? String(Number(item.average_cost) || 0)}
-                        onChange={(e) => setPendingCost((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                        onChange={(v) => setPendingCost((prev) => ({ ...prev, [item.id]: v }))}
                       />
                     </td>
                     <td data-label="شناسه محصول در سایت">
-                      <input
-                        type="number"
+                      <NumberInput
+                        group={false}
                         className="integration-num"
                         placeholder="—"
                         value={pendingMapping[item.id] ?? item.storefront_product_id ?? ''}
-                        onChange={(e) => setPendingMapping((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                        onChange={(v) => setPendingMapping((prev) => ({ ...prev, [item.id]: v }))}
                       />
                     </td>
                     <td className="integration-action">

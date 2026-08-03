@@ -12,6 +12,7 @@ import {
   type PriceListRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -155,11 +156,9 @@ export function PriceListsPanel({ token }: { token: string }) {
                     <td className="entity-name">{it.name}</td>
                     <td className="money-cell">{fa(Number(it.sales_price))}</td>
                     <td>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={prices[it.id] ?? ''}
-                        onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))}
+                        onChange={(v) => setPrices((p) => ({ ...p, [it.id]: v }))}
                         placeholder="—"
                         style={{ width: 130 }}
                       />

@@ -39,6 +39,7 @@ import {
   type LoyaltyBalance,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
@@ -231,7 +232,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
             </label>
             <label>
               ارزش تخمینی (ریال)
-              <input type="number" min="0" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
+              <NumberInput value={form.estimated_value} onChange={(v) => setForm({ ...form, estimated_value: v })} />
             </label>
           </div>
           <div className="field-row">
@@ -595,7 +596,7 @@ function LoyaltyTab({
           </label>
           <label>
             به‌ازای هر چند ریال خرید، ۱ امتیاز؟
-            <input type="number" min="0" value={perPoint} onChange={(e) => setPerPoint(e.target.value)} placeholder="مثلاً ۱۰۰۰۰" style={{ width: 140 }} disabled={!autoEnabled} />
+            <NumberInput value={perPoint} onChange={setPerPoint} placeholder="مثلاً ۱۰۰۰۰" style={{ width: 140 }} disabled={!autoEnabled} />
           </label>
           <button type="button" className="btn-primary" onClick={() => void saveSettings()}><Save size={13} /> ذخیره</button>
           {setMsg2 && <span className="hint">{setMsg2}</span>}
@@ -624,7 +625,7 @@ function LoyaltyTab({
             </label>
             <label>
               امتیاز
-              <input type="number" min="1" value={points} onChange={(e) => setPoints(e.target.value)} required />
+              <NumberInput value={points} onChange={setPoints} required />
             </label>
           </div>
           <div className="field-row">

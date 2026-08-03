@@ -3516,7 +3516,7 @@ button:disabled {
 /* دکمه‌های اکشنِ جدول‌های حقوق روی دسکتاپ */
 .payroll-attend-table td.attend-action button,
 .payslip-table td.payslip-action button { padding: 4px 10px; font-size: 12.5px; }
-.payroll-attend-table input[type="number"] { width: 90px; }
+.payroll-attend-table input { width: 90px; }
 
 /* ── موبایل (≤۷۶۰px): جدول‌های حقوق/مزایا/پلکان کارتِ برچسب‌دار می‌شوند ── */
 @media (max-width: 760px) {
@@ -3571,7 +3571,7 @@ button:disabled {
     font-size: 14px;
   }
   /* ورودی‌های کارکرد و پلکان روی موبایل جمع‌وجور اما قابل‌لمس */
-  .payroll-attend-table input[type="number"] { width: 120px; }
+  .payroll-attend-table input { width: 120px; }
   .tax-bracket-table input { max-width: 160px; }
   .tax-bracket-table td.tax-bracket-action { width: auto; justify-content: flex-end; }
   /* سلولِ اکشن (ذخیره/فیش/سنوات) تمام‌عرض */

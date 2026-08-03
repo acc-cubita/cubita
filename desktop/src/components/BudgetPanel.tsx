@@ -9,6 +9,7 @@ import {
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
 import { JALALI_MONTH_NAMES, isoToJalali, jalaliToIso, toFaDigits, todayIso } from '../lib/jalali'
@@ -146,7 +147,7 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
             </label>
             <label>
               مبلغ بودجه
-              <input type="number" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              <NumberInput value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
             </label>
             <label>
               توضیحات

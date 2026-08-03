@@ -30,6 +30,7 @@ import {
 import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
@@ -287,11 +288,9 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           </div>
           <label>
             سقف اعتبار (ریال)
-            <input
-              type="number"
-              min="0"
+            <NumberInput
               value={form.credit_limit || ''}
-              onChange={(e) => setForm({ ...form, credit_limit: Number(e.target.value) || 0 })}
+              onChange={(v) => setForm({ ...form, credit_limit: Number(v) || 0 })}
               placeholder="۰ = بدون سقف"
             />
           </label>
@@ -425,7 +424,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           <div className="field-row">
             <label>
               مبلغ (ریال)
-              <input type="number" min="0" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} required />
+              <NumberInput value={txAmount} onChange={setTxAmount} required />
             </label>
             <label>
               تاریخ

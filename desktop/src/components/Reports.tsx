@@ -36,6 +36,7 @@ import {
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
 
@@ -483,12 +484,10 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
 
       {active === 'seasonal' && (
         <div className="check-actions">
-          <input
-            type="number"
-            min={1300}
-            max={1500}
+          <NumberInput
+            group={false}
             value={seasonalYear}
-            onChange={(e) => setSeasonalYear(Number(e.target.value) || seasonalYear)}
+            onChange={(v) => setSeasonalYear(Number(v) || seasonalYear)}
             placeholder="سال شمسی"
             style={{ width: 110 }}
           />

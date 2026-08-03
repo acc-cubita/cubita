@@ -156,7 +156,7 @@ function Header() {
           ))}
         </nav>
         <div className="cc-header-actions">
-          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-ghost cc-btn-sm">
+          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-accent cc-btn-sm">
             ورود به برنامه
           </a>
           <a href={TRIAL_URL} className="cc-btn cc-btn-primary cc-btn-sm">
@@ -180,7 +180,7 @@ function Header() {
               {l.label}
             </a>
           ))}
-          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-ghost">
+          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-accent">
             ورود به برنامه
           </a>
           <a href={TRIAL_URL} className="cc-btn cc-btn-primary">

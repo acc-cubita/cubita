@@ -4,6 +4,7 @@ import type { AccountCache } from '../electron.d'
 import { createJournalEntryDirect, fetchCostCenters, type CostCenterRecord } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { todayIso } from '../lib/jalali'
 
@@ -153,19 +154,15 @@ export function JournalEntryForm({
                     </select>
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      min="0"
+                    <NumberInput
                       value={line.debit}
-                      onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
+                      onChange={(v) => updateLine(i, { debit: v, credit: '' })}
                     />
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      min="0"
+                    <NumberInput
                       value={line.credit}
-                      onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
+                      onChange={(v) => updateLine(i, { credit: v, debit: '' })}
                     />
                   </td>
                   <td>

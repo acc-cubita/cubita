@@ -15,6 +15,7 @@ import {
   type StockLevel,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
 import { ItemPicker } from '../components/ItemPicker'
@@ -242,7 +243,7 @@ export function PosPage({ token }: { token: string }) {
         )}
         <label>
           مالیات (٪)
-          <input type="number" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} style={{ width: 80 }} />
+          <NumberInput allowDecimal value={taxRate} onChange={setTaxRate} style={{ width: 80 }} />
         </label>
       </div>
 
@@ -305,12 +306,12 @@ export function PosPage({ token }: { token: string }) {
                       <td data-label="تعداد">
                         <div className="pos-qty">
                           <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
-                          <input type="number" min="0" step="any" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value))} />
+                          <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, Number(v))} />
                           <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
                         </div>
                       </td>
                       <td data-label="قیمت واحد">
-                        <input className="pos-price" type="number" min="0" value={l.unitPrice} onChange={(e) => setPrice(l.item.id, Number(e.target.value))} />
+                        <NumberInput className="pos-price" value={l.unitPrice} onChange={(v) => setPrice(l.item.id, Number(v))} />
                       </td>
                       <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
                       <td className="pos-remove-cell">
@@ -330,7 +331,7 @@ export function PosPage({ token }: { token: string }) {
             <label>
               تخفیف
               <div className="qty-with-unit">
-                <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="۰" />
+                <NumberInput value={discount} onChange={setDiscount} placeholder="۰" />
                 <div className="seg-toggle">
                   <button type="button" className={discountMode === 'amount' ? 'active' : ''} onClick={() => setDiscountMode('amount')}>مبلغ</button>
                   <button type="button" className={discountMode === 'percent' ? 'active' : ''} onClick={() => setDiscountMode('percent')}>٪</button>
@@ -359,7 +360,7 @@ export function PosPage({ token }: { token: string }) {
 
           <label className="pos-received">
             مبلغ دریافتی از مشتری (ریال)
-            <input type="number" min="0" value={received} onChange={(e) => setReceived(e.target.value)} placeholder="برای محاسبه‌ی باقی‌مانده" />
+            <NumberInput value={received} onChange={setReceived} placeholder="برای محاسبه‌ی باقی‌مانده" />
           </label>
           {Number(received) > 0 && (
             <div className={`pos-change ${change < 0 ? 'neg' : ''}`}>

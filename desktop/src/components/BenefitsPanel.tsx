@@ -12,6 +12,7 @@ import {
   type EmployeeRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { isoToJalali, todayIso } from '../lib/jalali'
@@ -136,20 +137,20 @@ export function BenefitsPanel({ token }: { token: string }) {
       <div className="benefit-toolbar">
         <label>
           سال (شمسی)
-          <input
-            type="number"
+          <NumberInput
+            group={false}
             value={year}
-            onChange={(e) => setYear(Number(e.target.value) || year)}
+            onChange={(v) => setYear(Number(v) || year)}
             style={{ width: 100 }}
           />
         </label>
         <label>
           حداقل حقوق ماهانه (سقف عیدی)
-          <input type="number" min="0" value={minWage} onChange={(e) => setMinWage(e.target.value)} placeholder="۰ = بدون سقف" />
+          <NumberInput value={minWage} onChange={setMinWage} placeholder="۰ = بدون سقف" />
         </label>
         <label>
           روزهای مرخصی سالانه
-          <input type="number" min="0" value={leaveDays} onChange={(e) => setLeaveDays(e.target.value)} />
+          <NumberInput value={leaveDays} onChange={setLeaveDays} />
         </label>
         <button type="button" onClick={() => void saveSettings()}>
           <Save size={13} /> ذخیره تنظیمات
@@ -236,7 +237,7 @@ export function BenefitsPanel({ token }: { token: string }) {
         </label>
         <label>
           تعداد روز
-          <input type="number" min="0" step="any" value={leaveTaken} onChange={(e) => setLeaveTaken(e.target.value)} style={{ width: 90 }} />
+          <NumberInput allowDecimal value={leaveTaken} onChange={setLeaveTaken} style={{ width: 90 }} />
         </label>
         <label>
           توضیح

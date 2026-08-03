@@ -138,8 +138,8 @@ export function InventoryPage({
                           {stock.map((s) => (
                             <tr key={`${s.item_id}-${s.warehouse_id}`}>
                               <td data-label="کالا" className="entity-name">
-                                {s.item_name}
-                                <span className="unit-suffix ltr-cell"> · {s.item_sku}</span>
+                                <span>{s.item_name}</span>
+                                <div className="entity-sub ltr-cell">{s.item_sku}</div>
                                 {lowIds.has(s.item_id) && <span className="status-badge tone-warning inv-low-badge">نیازمندِ سفارش</span>}
                               </td>
                               <td data-label="انبار">{s.warehouse_name}</td>

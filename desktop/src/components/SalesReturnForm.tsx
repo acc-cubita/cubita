@@ -11,6 +11,7 @@ import {
   type SalesReturnRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
@@ -188,14 +189,11 @@ export function SalesReturnForm({ token }: { token: string }) {
                       <td data-label="باقی‌مانده" className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
                       <td data-label="مقدار برگشتی">
                         <div className="stock-cell">
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            max={remaining}
+                          <NumberInput
+                            allowDecimal
                             disabled={remaining <= 0}
                             value={qtyByItem[r.item_id] ?? ''}
-                            onChange={(e) => setQtyByItem((prev) => ({ ...prev, [r.item_id]: e.target.value }))}
+                            onChange={(v) => setQtyByItem((prev) => ({ ...prev, [r.item_id]: v }))}
                           />
                           {remaining > 0 && (
                             <button type="button" className="link-like" onClick={() => setQtyByItem((prev) => ({ ...prev, [r.item_id]: String(remaining) }))}>همه</button>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Settings, Save, Plus, Trash2, Sparkles, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { fetchPayrollSettings, upsertPayrollSettings, type PayrollSettingsRecord } from '../api'
 import { isoToJalali, todayIso } from '../lib/jalali'
 
@@ -157,7 +158,7 @@ export function PayrollSettingsPanel({
       <div className="payroll-settings-bar">
         <label>
           سال (شمسی)
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value) || year)} style={{ width: 100 }} list="payroll-setting-years" />
+          <NumberInput group={false} value={year} onChange={(v) => setYear(Number(v) || year)} style={{ width: 100 }} list="payroll-setting-years" />
           <datalist id="payroll-setting-years">
             {years.map((y) => <option key={y} value={y} />)}
           </datalist>
@@ -179,25 +180,25 @@ export function PayrollSettingsPanel({
       <div className="payroll-settings-grid">
         <label>
           نرخِ بیمه — سهمِ کارمند (٪)
-          <input type="number" min="0" step="any" value={empRate} onChange={(e) => setEmpRate(e.target.value)} placeholder="مثلاً ۷" />
+          <NumberInput allowDecimal value={empRate} onChange={setEmpRate} placeholder="مثلاً ۷" />
         </label>
         <label>
           نرخِ بیمه — سهمِ کارفرما (٪)
-          <input type="number" min="0" step="any" value={employerRate} onChange={(e) => setEmployerRate(e.target.value)} placeholder="مثلاً ۲۳" />
+          <NumberInput allowDecimal value={employerRate} onChange={setEmployerRate} placeholder="مثلاً ۲۳" />
         </label>
         <label>
           معافیتِ مالیاتیِ سالانه (ریال)
-          <input type="number" min="0" value={exemption} onChange={(e) => setExemption(e.target.value)} />
+          <NumberInput value={exemption} onChange={setExemption} />
           <span className="field-hint">{exemption ? `${fa(exemption)} ریال — ماهانه ≈ ${fa(Number(exemption) / 12)}` : 'مبلغِ سالانه‌ی معاف از مالیات'}</span>
         </label>
         <label>
           حداقلِ حقوقِ ماهانه (پایه‌ی سقفِ عیدی، ریال)
-          <input type="number" min="0" value={minWage} onChange={(e) => setMinWage(e.target.value)} />
+          <NumberInput value={minWage} onChange={setMinWage} />
           <span className="field-hint">{minWage ? `${fa(minWage)} ریال` : '۰ = بدون سقفِ عیدی'}</span>
         </label>
         <label>
           روزهای مرخصیِ استحقاقیِ سالانه
-          <input type="number" min="0" value={leaveDays} onChange={(e) => setLeaveDays(e.target.value)} />
+          <NumberInput value={leaveDays} onChange={setLeaveDays} />
         </label>
       </div>
 
@@ -218,11 +219,11 @@ export function PayrollSettingsPanel({
                     {last ? (
                       <span className="muted">به‌بالا (نامحدود)</span>
                     ) : (
-                      <input type="number" min="0" value={b.up_to} onChange={(e) => setBracket(i, { up_to: e.target.value })} placeholder="سقفِ تجمعی" />
+                      <NumberInput value={b.up_to} onChange={(v) => setBracket(i, { up_to: v })} placeholder="سقفِ تجمعی" />
                     )}
                   </td>
                   <td data-label="نرخ (٪)">
-                    <input type="number" min="0" max="100" step="any" value={b.rate} onChange={(e) => setBracket(i, { rate: e.target.value })} />
+                    <NumberInput allowDecimal value={b.rate} onChange={(v) => setBracket(i, { rate: v })} />
                   </td>
                   <td className="tax-bracket-action">
                     <button type="button" className="icon-btn-danger" title="حذفِ ردیف" onClick={() => removeBracket(i)} disabled={brackets.length <= 1}>

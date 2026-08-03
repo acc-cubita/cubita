@@ -10,6 +10,7 @@ import {
   type StockBatchRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
@@ -116,7 +117,7 @@ export function BatchesPanel({ token }: { token: string }) {
           <div className="field-row">
             <label>
               تعداد
-              <input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
+              <NumberInput allowDecimal value={qty} onChange={setQty} />
             </label>
             <label>
               تاریخِ انقضا

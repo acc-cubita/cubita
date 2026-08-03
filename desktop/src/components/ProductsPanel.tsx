@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Package, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import { createItemLive, deleteItemLive, fetchItemsLive, updateItemLive, type ItemRecord } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
@@ -236,11 +237,9 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           <div className="field-row">
             <label>
               قیمت فروش (ریال، هر {form.unit || 'واحد'})
-              <input
-                type="number"
-                min="0"
+              <NumberInput
                 value={form.salesPrice}
-                onChange={(e) => setForm({ ...form, salesPrice: e.target.value })}
+                onChange={(v) => setForm({ ...form, salesPrice: v })}
                 placeholder="۰"
               />
             </label>
@@ -259,12 +258,10 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             <div className="field-row">
               <label>
                 نقطه‌ی سفارش (حداقلِ موجودی)
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
+                <NumberInput
+                  allowDecimal
                   value={form.reorderPoint}
-                  onChange={(e) => setForm({ ...form, reorderPoint: e.target.value })}
+                  onChange={(v) => setForm({ ...form, reorderPoint: v })}
                   placeholder="۰ = بدون هشدار"
                 />
                 <span className="field-hint">وقتی موجودیِ کل به این عدد یا کمتر برسد، در «نیازمندِ سفارش» هشدار داده می‌شود.</span>

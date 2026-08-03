@@ -6,6 +6,7 @@ import {
 } from '../api'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -92,7 +93,7 @@ export function PettyCashPanel({ token, accounts }: { token: string; accounts: A
                 {postable.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
               </select>
             </label>
-            <label>مبلغ<input type="number" min="0" value={chargeAmount} onChange={(e) => setChargeAmount(e.target.value)} /></label>
+            <label>مبلغ<NumberInput value={chargeAmount} onChange={setChargeAmount} /></label>
             <label>تاریخ<JalaliDatePicker value={chargeDate} onChange={setChargeDate} /></label>
             <div className="invoice-form-footer"><button type="submit" className="btn-primary"><Save size={14} /> شارژ</button></div>
           </form>
@@ -106,7 +107,7 @@ export function PettyCashPanel({ token, accounts }: { token: string; accounts: A
                 {expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
               </select>
             </label>
-            <label>مبلغ<input type="number" min="0" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} /></label>
+            <label>مبلغ<NumberInput value={expenseAmount} onChange={setExpenseAmount} /></label>
             <label>توضیحات<input type="text" value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} /></label>
             <label>تاریخ<JalaliDatePicker value={expenseDate} onChange={setExpenseDate} /></label>
             <div className="invoice-form-footer"><button type="submit" className="btn-primary"><Save size={14} /> ثبت هزینه</button></div>

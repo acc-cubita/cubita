@@ -3,6 +3,7 @@ import { Warehouse, Save } from 'lucide-react'
 import { createStockAdjustment, fetchStockAdjustments, type StockAdjustmentRecord } from '../api'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -99,7 +100,7 @@ export function StockAdjustmentForm({
         </label>
         <label>
           مقدار
-          <input type="number" min="0" step="any" value={qtyDiff} onChange={(e) => setQtyDiff(e.target.value)} />
+          <NumberInput allowDecimal allowNegative value={qtyDiff} onChange={setQtyDiff} />
         </label>
         <label>
           دلیل

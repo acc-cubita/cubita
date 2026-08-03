@@ -10,6 +10,7 @@ import {
   type ExchangeRate,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
@@ -178,7 +179,7 @@ export function CurrenciesPanel({ token }: { token: string }) {
             </div>
             <label>
               نرخ (ریال به‌ازای ۱ واحد)
-              <input type="number" min="0" value={rateValue} onChange={(e) => setRateValue(e.target.value)} placeholder="۸۰۰۰۰۰" />
+              <NumberInput allowDecimal value={rateValue} onChange={setRateValue} placeholder="۸۰۰۰۰۰" />
             </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary">

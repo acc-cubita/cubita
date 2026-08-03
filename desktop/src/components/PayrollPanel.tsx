@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Save, CalendarPlus, Download, FileText } from 'lucide-react'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { PayrollSettingsPanel } from './PayrollSettingsPanel'
@@ -235,19 +236,19 @@ function SalaryContractForm({
       </label>
       <label>
         حقوق پایه
-        <input type="number" min="0" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} />
+        <NumberInput value={baseSalary} onChange={setBaseSalary} />
       </label>
       <label>
         حق مسکن
-        <input type="number" min="0" value={housing} onChange={(e) => setHousing(e.target.value)} />
+        <NumberInput value={housing} onChange={setHousing} />
       </label>
       <label>
         بن خواربار
-        <input type="number" min="0" value={food} onChange={(e) => setFood(e.target.value)} />
+        <NumberInput value={food} onChange={setFood} />
       </label>
       <label>
         سایر مزایا
-        <input type="number" min="0" value={other} onChange={(e) => setOther(e.target.value)} />
+        <NumberInput value={other} onChange={setOther} />
       </label>
       <div className="invoice-form-footer">
         <button type="submit" className="btn-primary"><Save size={14} /> ثبت حکم</button>
@@ -291,7 +292,7 @@ function PeriodSection({
     <div className="invoice-form">
       <h3>دوره‌های حقوقی</h3>
       <form onSubmit={handleCreate} className="check-actions">
-        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 90 }} />
+        <NumberInput group={false} value={year} onChange={(v) => setYear(Number(v))} style={{ width: 90 }} />
         <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
           {JALALI_MONTH_NAMES.map((name, idx) => (
             <option key={idx} value={idx + 1}>
@@ -408,28 +409,23 @@ function PayrollRunPanel({
                   {emp.first_name} {emp.last_name}
                 </td>
                 <td data-label="روز کارکرد">
-                  <input
-                    type="number"
-                    min="0"
-                    max="31"
+                  <NumberInput
                     value={attendance[emp.id]?.worked ?? '30'}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setAttendance((prev) => ({
                         ...prev,
-                        [emp.id]: { worked: e.target.value, overtime: prev[emp.id]?.overtime ?? '0' },
+                        [emp.id]: { worked: v, overtime: prev[emp.id]?.overtime ?? '0' },
                       }))
                     }
                   />
                 </td>
                 <td data-label="ساعت اضافه‌کار">
-                  <input
-                    type="number"
-                    min="0"
+                  <NumberInput
                     value={attendance[emp.id]?.overtime ?? '0'}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setAttendance((prev) => ({
                         ...prev,
-                        [emp.id]: { worked: prev[emp.id]?.worked ?? '30', overtime: e.target.value },
+                        [emp.id]: { worked: prev[emp.id]?.worked ?? '30', overtime: v },
                       }))
                     }
                   />

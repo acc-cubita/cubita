@@ -3,6 +3,7 @@ import { FileText, Plus, Trash2, Save, Store } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { createSalesQuotation, fetchContacts, fetchStockLevels, type ContactRecord, type StockLevel } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { todayIso } from '../lib/jalali'
@@ -222,7 +223,7 @@ export function QuotationForm({
                     </td>
                     <td data-label="تعداد">
                       <div className="qty-with-unit">
-                        <input type="number" min="0" step="any" value={line.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} />
+                        <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(i, { qty: v })} />
                         {line.itemId && <span className="unit-suffix">{unitOf(line.itemId)}</span>}
                       </div>
                     </td>
@@ -243,11 +244,9 @@ export function QuotationForm({
                     )}
                     <td data-label="قیمت واحد">
                       <div className="qty-with-unit">
-                        <input
-                          type="number"
-                          min="0"
+                        <NumberInput
                           value={line.unitPrice}
-                          onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
+                          onChange={(v) => updateLine(i, { unitPrice: v })}
                           title={line.itemId ? `قیمت هر ${unitOf(line.itemId)}` : 'قیمت واحد'}
                         />
                         {line.itemId && (

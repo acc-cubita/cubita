@@ -20,6 +20,7 @@ import {
 } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { todayIso } from '../lib/jalali'
@@ -318,13 +319,10 @@ export function SalesInvoiceForm({
           </label>
           <label>
             نرخ مالیات بر ارزش افزوده (٪)
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="any"
+            <NumberInput
+              allowDecimal
               value={taxRate}
-              onChange={(e) => setTaxRate(e.target.value)}
+              onChange={setTaxRate}
             />
           </label>
           {costCenters.length > 0 && (
@@ -369,7 +367,7 @@ export function SalesInvoiceForm({
               {currencyCode && (
                 <label>
                   نرخ برابری (۱ {currencyCode} = ؟ ریال)
-                  <input type="number" min="0" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} />
+                  <NumberInput allowDecimal value={exchangeRate} onChange={setExchangeRate} />
                 </label>
               )}
             </div>
@@ -404,12 +402,10 @@ export function SalesInvoiceForm({
                   </td>
                   <td data-label="تعداد">
                     <div className="qty-with-unit">
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
+                      <NumberInput
+                        allowDecimal
                         value={line.qty}
-                        onChange={(e) => updateLine(i, { qty: e.target.value })}
+                        onChange={(v) => updateLine(i, { qty: v })}
                       />
                       {unit ? <span className="unit-suffix">{unit}</span> : null}
                     </div>
@@ -425,20 +421,16 @@ export function SalesInvoiceForm({
                     )}
                   </td>
                   <td data-label="قیمت واحد">
-                    <input
-                      type="number"
-                      min="0"
+                    <NumberInput
                       value={line.unitPrice}
-                      onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
+                      onChange={(v) => updateLine(i, { unitPrice: v })}
                       title={(() => { const u = items.find((it) => it.id === line.itemId)?.unit; return u ? `قیمت هر ${u}` : 'قیمت واحد' })()}
                     />
                   </td>
                   <td data-label="تخفیف">
-                    <input
-                      type="number"
-                      min="0"
+                    <NumberInput
                       value={line.discount}
-                      onChange={(e) => updateLine(i, { discount: e.target.value })}
+                      onChange={(v) => updateLine(i, { discount: v })}
                       placeholder="۰"
                     />
                   </td>
@@ -465,11 +457,9 @@ export function SalesInvoiceForm({
             <label className="adj-field">
               تخفیف کل فاکتور
               <div className="qty-with-unit">
-                <input
-                  type="number"
-                  min="0"
+                <NumberInput
                   value={invoiceDiscount}
-                  onChange={(e) => setInvoiceDiscount(e.target.value)}
+                  onChange={setInvoiceDiscount}
                   placeholder="۰"
                 />
                 <div className="seg-toggle">

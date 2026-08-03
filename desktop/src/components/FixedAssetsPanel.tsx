@@ -26,6 +26,7 @@ import {
   type FixedAssetRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -184,15 +185,15 @@ export function FixedAssetsPanel({ token }: { token: string }) {
             </label>
             <label>
               بهای تمام‌شده
-              <input type="number" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
+              <NumberInput value={form.cost} onChange={(v) => setForm({ ...form, cost: v })} />
             </label>
             <label>
               ارزش اسقاط
-              <input type="number" min="0" value={form.salvage_value} onChange={(e) => setForm({ ...form, salvage_value: e.target.value })} />
+              <NumberInput value={form.salvage_value} onChange={(v) => setForm({ ...form, salvage_value: v })} />
             </label>
             <label>
               عمر مفید (ماه)
-              <input type="number" min="1" value={form.useful_life_months} onChange={(e) => setForm({ ...form, useful_life_months: e.target.value })} />
+              <NumberInput value={form.useful_life_months} onChange={(v) => setForm({ ...form, useful_life_months: v })} />
             </label>
             {!editingId && (
               <label>
