@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { fetchAlerts, type AlertCategory, type AlertItem, type Alerts } from '../api'
 import { formatJalali, toFaDigits } from '../lib/jalali'
+import { Pager, usePagination } from './Pager'
 
 const CAT_ICON: Record<AlertCategory, typeof Banknote> = {
   check: Banknote,
@@ -25,7 +26,6 @@ const CAT_ICON: Record<AlertCategory, typeof Banknote> = {
 
 // danger اول، بعد warning، بعد info — مهم‌ترین‌ها بالای فهرست.
 const SEVERITY_ORDER: Record<string, number> = { danger: 0, warning: 1, info: 2 }
-const MAX_SHOWN = 12
 const fa = (v: string) => Math.round(Number(v)).toLocaleString('fa-IR')
 
 export function AlertsPanel({ token }: { token: string }) {
@@ -42,6 +42,12 @@ export function AlertsPanel({ token }: { token: string }) {
     }
   }, [token])
 
+  // هوکِ صفحه‌بندی باید بی‌قید و پیش از هر return زودهنگام صدا زده شود (قاعده‌ی هوک‌ها).
+  const sorted = data
+    ? [...data.items].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
+    : []
+  const { pageItems, page, setPage, pageCount } = usePagination(sorted, 4)
+
   // آفلاین یا خطا: بی‌صدا چیزی نشان نده تا نمای کلی نشکند.
   if (failed || !data) return null
 
@@ -54,10 +60,6 @@ export function AlertsPanel({ token }: { token: string }) {
     )
   }
 
-  const sorted = [...data.items].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
-  const shown = sorted.slice(0, MAX_SHOWN)
-  const rest = data.total - shown.length
-
   return (
     <div className="alerts-card">
       <div className="alerts-head">
@@ -66,7 +68,7 @@ export function AlertsPanel({ token }: { token: string }) {
         <span className="alerts-count">{toFaDigits(data.total)}</span>
       </div>
       <ul className="alerts-list">
-        {shown.map((it: AlertItem, i) => {
+        {pageItems.map((it: AlertItem, i) => {
           const Icon = CAT_ICON[it.category]
           return (
             <li key={i} className={`alert-row sev-${it.severity}`}>
@@ -84,7 +86,7 @@ export function AlertsPanel({ token }: { token: string }) {
           )
         })}
       </ul>
-      {rest > 0 && <div className="alerts-more">و {toFaDigits(rest)} مورد دیگر…</div>}
+      <Pager page={page} pageCount={pageCount} onChange={setPage} />
     </div>
   )
 }

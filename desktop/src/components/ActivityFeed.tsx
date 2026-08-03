@@ -11,6 +11,10 @@ import {
 } from 'lucide-react'
 import type { JournalEntryRecord } from '../api'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
+
+//: سقفِ رویدادهای «اخیر» که در داشبرد قابلِ ورق‌زدن است (۱۰ صفحه‌ی ۴تایی). دفترِ کامل در «گزارش‌ها».
+const MAX_ACTIVITY = 40
 
 const SOURCE_META: Record<string, { label: string; icon: LucideIcon }> = {
   sales_invoice: { label: 'فاکتور فروش', icon: ShoppingCart },
@@ -28,32 +32,36 @@ function entryAmount(entry: JournalEntryRecord): number {
 }
 
 export function ActivityFeed({ entries }: { entries: JournalEntryRecord[] }) {
-  const recent = entries.slice(0, 14)
+  const recent = entries.slice(0, MAX_ACTIVITY)
+  const { pageItems, page, setPage, pageCount } = usePagination(recent, 4)
 
   if (recent.length === 0) {
     return <EmptyState icon={History} text="هنوز سندی ثبت نشده." />
   }
 
   return (
-    <ul className="activity-feed">
-      {recent.map((entry) => {
-        const meta = SOURCE_META[entry.source_type] ?? SOURCE_META.manual
-        const Icon = meta.icon
-        return (
-          <li key={entry.id} className="activity-item">
-            <span className="activity-icon">
-              <Icon size={16} />
-            </span>
-            <div className="activity-body">
-              <div className="activity-title">{entry.description || meta.label}</div>
-              <div className="activity-meta">
-                {meta.label} · {new Date(entry.entry_date).toLocaleDateString('fa-IR')}
+    <>
+      <ul className="activity-feed">
+        {pageItems.map((entry) => {
+          const meta = SOURCE_META[entry.source_type] ?? SOURCE_META.manual
+          const Icon = meta.icon
+          return (
+            <li key={entry.id} className="activity-item">
+              <span className="activity-icon">
+                <Icon size={16} />
+              </span>
+              <div className="activity-body">
+                <div className="activity-title">{entry.description || meta.label}</div>
+                <div className="activity-meta">
+                  {meta.label} · {new Date(entry.entry_date).toLocaleDateString('fa-IR')}
+                </div>
               </div>
-            </div>
-            <div className="activity-amount">{Math.round(entryAmount(entry)).toLocaleString('fa-IR')}</div>
-          </li>
-        )
-      })}
-    </ul>
+              <div className="activity-amount">{Math.round(entryAmount(entry)).toLocaleString('fa-IR')}</div>
+            </li>
+          )
+        })}
+      </ul>
+      <Pager page={page} pageCount={pageCount} onChange={setPage} />
+    </>
   )
 }

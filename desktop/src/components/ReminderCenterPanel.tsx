@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { fetchAlerts, type AlertCategory, type AlertItem, type Alerts } from '../api'
 import { SectionCard } from './SectionCard'
+import { Pager, usePagination } from './Pager'
 import { formatJalali, toFaDigits } from '../lib/jalali'
 
 const CAT_META: Record<AlertCategory, { icon: typeof Banknote; label: string }> = {
@@ -66,6 +67,9 @@ export function ReminderCenterPanel({ token }: { token: string }) {
     [data],
   )
 
+  // صفحه‌بندیِ ۴تایی؛ با عوض‌شدنِ دسته‌ی فیلتر صفحه به اول برمی‌گردد.
+  const { pageItems, page, setPage, pageCount } = usePagination(shown, 4, cat)
+
   return (
     <SectionCard
       icon={BellRing}
@@ -108,7 +112,7 @@ export function ReminderCenterPanel({ token }: { token: string }) {
           </div>
 
           <ul className="reminder-list">
-            {shown.map((it: AlertItem, i) => {
+            {pageItems.map((it: AlertItem, i) => {
               const Icon = CAT_META[it.category]?.icon ?? BellRing
               return (
                 <li key={i} className={`reminder-row sev-${it.severity}`}>
@@ -127,6 +131,7 @@ export function ReminderCenterPanel({ token }: { token: string }) {
               )
             })}
           </ul>
+          <Pager page={page} pageCount={pageCount} onChange={setPage} />
           {shown.length === 0 && <p className="hint">در این دسته موردی نیست.</p>}
         </>
       )}
