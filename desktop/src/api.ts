@@ -401,6 +401,7 @@ export interface CheckRecord {
   status: string
   description: string
   contact_id: string | null
+  contact_name: string | null
   bank_account_id: string | null
 }
 
@@ -1155,6 +1156,7 @@ export const createCheckDirect = (
     issue_date: string
     due_date: string
     description: string
+    contact_id?: string | null
   },
 ) => authedSend<unknown>(token, 'POST', '/api/checks', data)
 

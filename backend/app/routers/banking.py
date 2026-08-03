@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import require_permission
@@ -80,7 +80,7 @@ def list_checks(
 ):
     # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
     items, next_cursor = paginate(
-        db.query(Check),
+        db.query(Check).options(selectinload(Check.contact)),
         [Check.due_date, Check.id],
         params,
         descending=False,

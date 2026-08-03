@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Receipt, Save } from 'lucide-react'
-import { createCheckDirect } from '../api'
+import { createCheckDirect, fetchContacts, type ContactRecord } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
 
 export function CheckForm({ token, onQueued }: { token: string; onQueued: () => void }) {
   const [type, setType] = useState<'receivable' | 'payable'>('receivable')
+  const [contactId, setContactId] = useState('')
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [number, setNumber] = useState('')
   const [bankName, setBankName] = useState('')
   const [amount, setAmount] = useState('')
@@ -14,6 +16,18 @@ export function CheckForm({ token, onQueued }: { token: string; onQueued: () => 
   const [dueDate, setDueDate] = useState('')
   const [description, setDescription] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+
+  // طرف‌حساب‌ها زنده خوانده می‌شوند تا چک به شخص وصل شود؛ بدونِ این وصل، سندِ حسابداری
+  // حسابِ کنترلِ دریافتنی/پرداختنی را جابه‌جا می‌کند ولی مانده‌ی خودِ شخص تکان نمی‌خورد.
+  useEffect(() => {
+    fetchContacts(token)
+      .then(setContacts)
+      .catch(() => setContacts([]))
+  }, [token])
+
+  // چکِ دریافتنی به مشتری مربوط است و پرداختنی به تأمین‌کننده؛ «هردو» در هر دو دیده می‌شود.
+  const wanted = type === 'receivable' ? 'customer' : 'supplier'
+  const contactOptions = contacts.filter((c) => c.type === wanted || c.type === 'both')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -32,6 +46,7 @@ export function CheckForm({ token, onQueued }: { token: string; onQueued: () => 
       issue_date: issueDate,
       due_date: dueDate,
       description,
+      contact_id: contactId || null,
     }
 
     try {
@@ -47,6 +62,7 @@ export function CheckForm({ token, onQueued }: { token: string; onQueued: () => 
       setAmount('')
       setDueDate('')
       setDescription('')
+      setContactId('')
       onQueued()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -58,9 +74,26 @@ export function CheckForm({ token, onQueued }: { token: string; onQueued: () => 
       <form className="invoice-form" onSubmit={handleSubmit}>
         <label>
           نوع چک
-          <select value={type} onChange={(e) => setType(e.target.value as 'receivable' | 'payable')}>
+          <select
+            value={type}
+            onChange={(e) => {
+              setType(e.target.value as 'receivable' | 'payable')
+              setContactId('') // با تغییرِ نوع، فهرستِ طرف‌حساب عوض می‌شود
+            }}
+          >
             <option value="receivable">دریافتنی (از مشتری)</option>
             <option value="payable">پرداختنی (به تأمین‌کننده)</option>
+          </select>
+        </label>
+        <label>
+          {type === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}
+          <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+            <option value="">— بدون طرف‌حساب —</option>
+            {contactOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </label>
         <label>

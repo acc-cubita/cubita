@@ -58,6 +58,11 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     contact: Mapped["Contact | None"] = relationship("Contact")
     bank_account: Mapped["BankAccount | None"] = relationship("BankAccount")
 
+    @property
+    def contact_name(self) -> str | None:
+        """نامِ طرف‌حساب برای نمایش در فهرستِ چک‌ها (خروجیِ CheckOut از همین می‌خواند)."""
+        return self.contact.name if self.contact else None
+
 
 class BankTransaction(TenantMixin, UUIDPKMixin, Base):
     """واریز(+)/برداشت(-) در یک حساب بانکی؛ برای تطبیق بانکی، is_reconciled بعداً علامت زده می‌شود."""

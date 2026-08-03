@@ -6,11 +6,14 @@ import pytest
 from fastapi import HTTPException
 from uuid import uuid4
 
+from app.models.banking import BankAccount
+from app.schemas.banking import CheckIn
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.returns import SalesReturnIn, SalesReturnLineIn
 from app.schemas.treasury import TreasuryTransactionIn
+from app.services.banking import create_check, update_check_status
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
-from app.services.reports import get_contact_statement
+from app.services.reports import contact_balance, get_contact_statement
 from app.services.returns import post_sales_return
 from app.services.treasury import create_payment, create_receipt
 from tests.factories import main_warehouse, make_contact, make_item
@@ -120,6 +123,90 @@ def test_return_shows_as_credit(db, user):
     ret = next(l for l in st["lines"] if l["kind"] == "sales_return")
     assert ret["credit"] == Decimal(1_000_000)
     assert st["closing_balance"] == Decimal(1_000_000)  # ۲م منهای برگشتِ ۱م
+
+
+def test_receivable_check_reduces_customer_balance(db, user):
+    """چکِ دریافتنیِ وصل‌شده به مشتری باید مطالباتِ او را کم کند و در کارت‌حساب دیده شود.
+
+    این همان باگی بود که تستِ سنگین پیدا کرد: چک، حسابِ کنترلِ دریافتنی را کم می‌کرد
+    ولی مانده‌ی خودِ شخص (معین) تکان نمی‌خورد — معین و کل از هم می‌پاشیدند.
+    """
+    wh = main_warehouse(db)
+    item = make_item(db)
+    contact = make_contact(db, name="مشتری چک")
+    _stock_in(db, user, item, wh, 100, 500_000)
+    _sell(db, user, wh, item, contact, 1, 3_000_000, date(2026, 3, 1))  # مطالبات ۳٬۰۰۰٬۰۰۰
+
+    create_check(
+        db,
+        CheckIn(
+            type="receivable", number="C-1", amount=Decimal(1_000_000),
+            issue_date=date(2026, 3, 5), due_date=date(2026, 3, 20), contact_id=contact.id,
+        ),
+        user,
+    )
+
+    assert contact_balance(db, contact.id) == Decimal(2_000_000)  # ۳م منهای چکِ ۱م
+    st = get_contact_statement(db, contact.id, None, None)
+    chk = next(l for l in st["lines"] if l["kind"] == "check_in")
+    assert chk["credit"] == Decimal(1_000_000)
+    assert st["closing_balance"] == Decimal(2_000_000)
+
+
+def test_payable_check_reduces_supplier_payable(db, user):
+    """چکِ پرداختنیِ وصل‌شده به تأمین‌کننده باید بدهیِ ما به او را کم کند (به‌سمتِ صفر)."""
+    wh = main_warehouse(db)
+    item = make_item(db)
+    supplier = make_contact(db, name="تأمین‌کننده چک", type_="supplier")
+    post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date(2026, 3, 1),
+            warehouse_id=wh.id,
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(1), unit_cost=Decimal(5_000_000))],
+        ),
+        user,
+    )
+    create_check(
+        db,
+        CheckIn(
+            type="payable", number="P-1", amount=Decimal(2_000_000),
+            issue_date=date(2026, 3, 3), due_date=date(2026, 3, 25), contact_id=supplier.id,
+        ),
+        user,
+    )
+
+    assert contact_balance(db, supplier.id) == Decimal(-3_000_000)  # -۵م + چکِ ۲م
+    st = get_contact_statement(db, supplier.id, None, None)
+    chk = next(l for l in st["lines"] if l["kind"] == "check_out")
+    assert chk["debit"] == Decimal(2_000_000)
+    assert st["closing_balance"] == Decimal(-3_000_000)
+
+
+def test_bounced_check_does_not_reduce_balance(db, user):
+    """چکِ برگشت‌خورده نباید مانده را کم کند — سندِ برگشت، دریافتنی را احیا کرده است."""
+    wh = main_warehouse(db)
+    item = make_item(db)
+    contact = make_contact(db, name="مشتری چکِ برگشتی")
+    bank = db.query(BankAccount).first()
+    _stock_in(db, user, item, wh, 100, 500_000)
+    _sell(db, user, wh, item, contact, 1, 3_000_000, date(2026, 3, 1))
+
+    chk = create_check(
+        db,
+        CheckIn(
+            type="receivable", number="C-2", amount=Decimal(1_000_000),
+            issue_date=date(2026, 3, 5), due_date=date(2026, 3, 20), contact_id=contact.id,
+        ),
+        user,
+    )
+    update_check_status(db, chk.id, "deposited", bank.id, user)
+    update_check_status(db, chk.id, "bounced", None, user)
+
+    assert contact_balance(db, contact.id) == Decimal(3_000_000)  # چکِ برگشتی مانده را کم نمی‌کند
+    st = get_contact_statement(db, contact.id, None, None)
+    assert all(l["kind"] != "check_in" for l in st["lines"])  # در کارت‌حساب هم نمی‌آید
 
 
 def test_unknown_contact_404(db, user):

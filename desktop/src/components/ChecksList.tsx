@@ -118,6 +118,7 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
                 <tr key={c.id}>
                   <td data-label="نوع" className="entity-name">
                     {c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}
+                    {c.contact_name ? <div className="entity-sub">{c.contact_name}</div> : null}
                   </td>
                   <td data-label="شماره / بانک" className="ltr-cell">{c.number}{c.bank_name ? <div className="entity-sub">{c.bank_name}</div> : null}</td>
                   <td data-label="مبلغ" className="money-cell">{fa(Number(c.amount))}</td>

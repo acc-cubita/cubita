@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
-from app.models.banking import BankAccount
+from app.models.banking import BankAccount, Check
 from app.models.cost_center import CostCenter
 from app.models.inventory import Contact, Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
@@ -909,6 +909,8 @@ _STATEMENT_KIND_ORDER = {
     "purchase_return": 2,
     "receipt": 3,
     "payment": 3,
+    "check_in": 4,
+    "check_out": 4,
 }
 
 
@@ -948,6 +950,20 @@ def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     bal += s(
         db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
         .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "payment")
+    )
+    # چکِ دریافتنیِ غیربرگشتی: مطالباتِ مشتری را کم می‌کند — درست مثلِ دریافتِ نقدی، چون
+    # همان لحظه‌ی ثبت، سندِ حسابداری «حساب‌های دریافتنی» را بستانکار کرده. چکِ برگشتی کنار
+    # می‌رود، چون سندِ برگشت همان دریافتنی را دوباره بدهکار (احیا) می‌کند و اثرش خنثی است.
+    bal -= s(
+        db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
+            Check.contact_id == contact_id, Check.type == "receivable", Check.status != "bounced"
+        )
+    )
+    # چکِ پرداختنیِ غیربرگشتی: بدهیِ ما به تأمین‌کننده را کم می‌کند — مثلِ پرداختِ نقدی.
+    bal += s(
+        db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
+            Check.contact_id == contact_id, Check.type == "payable", Check.status != "bounced"
+        )
     )
     return bal
 
@@ -1018,6 +1034,16 @@ def get_contact_statement(
             add(t_date, "receipt", None, "دریافت وجه", 0, Decimal(amount))  # شخص پرداخت کرد
         else:
             add(t_date, "payment", None, "پرداخت وجه", Decimal(amount), 0)  # ما پرداخت کردیم
+
+    # چک‌های وصل‌شده به این شخص (برگشتی احیا شده و در مانده خنثی است، پس نمایش نمی‌دهیم).
+    # دریافتنی مطالبات را کم می‌کند (بستانکار)؛ پرداختنی بدهیِ ما را کم می‌کند (بدهکار).
+    for c_type, c_number, c_date, c_amount in db.query(
+        Check.type, Check.number, Check.issue_date, Check.amount
+    ).filter(Check.contact_id == contact_id, Check.status != "bounced").all():
+        if c_type == "receivable":
+            add(c_date, "check_in", c_number, "چک دریافتنی", 0, Decimal(c_amount))
+        else:
+            add(c_date, "check_out", c_number, "چک پرداختنی", Decimal(c_amount), 0)
 
     events.sort(key=lambda e: (e["txn_date"], _STATEMENT_KIND_ORDER.get(e["kind"], 99)))
 
@@ -1095,6 +1121,22 @@ def get_aging(db: Session, kind: str, as_of: date | None) -> dict:
         .all()
     )
     for contact_id, amount in returns:
+        pool[contact_id] = pool.get(contact_id, Decimal(0)) + Decimal(amount)
+
+    # چکِ غیربرگشتی هم تسویه است: چکِ دریافتنی مطالبات را کم می‌کند، چکِ پرداختنی بدهی را.
+    check_type = "receivable" if kind == "receivable" else "payable"
+    checks = (
+        db.query(Check.contact_id, func.coalesce(func.sum(Check.amount), 0))
+        .filter(
+            Check.type == check_type,
+            Check.status != "bounced",
+            Check.contact_id.isnot(None),
+            Check.issue_date <= as_of,
+        )
+        .group_by(Check.contact_id)
+        .all()
+    )
+    for contact_id, amount in checks:
         pool[contact_id] = pool.get(contact_id, Decimal(0)) + Decimal(amount)
 
     by_contact: dict = {}

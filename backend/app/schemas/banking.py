@@ -72,6 +72,7 @@ class CheckOut(BaseModel):
     status: str
     description: str
     contact_id: UUID | None
+    contact_name: str | None = None
     bank_account_id: UUID | None
 
     model_config = {"from_attributes": True}
