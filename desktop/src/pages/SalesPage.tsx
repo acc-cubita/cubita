@@ -123,7 +123,7 @@ export function SalesPage({
             key: 'moadian',
             label: 'سامانه مؤدیان',
             icon: Landmark,
-            content: me.locked_features.includes('moadian') ? (
+            content: (me.locked_features ?? []).includes('moadian') ? (
               <FeatureUpsell feature="moadian" />
             ) : (
               <MoadianPanel token={token} />

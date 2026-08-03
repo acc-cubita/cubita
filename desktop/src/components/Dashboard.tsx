@@ -246,7 +246,7 @@ export function Dashboard({
                 title="اتصال فروشگاه"
                 description="موجودی و قیمت را با سایت فروشگاهی هم‌گام کنید و سفارش‌های ثبت‌شده‌ی آنلاین را خودکار به فاکتور فروش تبدیل کنید."
               />
-              {me.locked_features.includes('storefront') ? (
+              {(me.locked_features ?? []).includes('storefront') ? (
                 <FeatureUpsell feature="storefront" />
               ) : (
                 <IntegrationPanel token={token} />
