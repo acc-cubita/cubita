@@ -1528,6 +1528,8 @@ export interface FixedAssetIn {
   salvage_value: number
   useful_life_months: number
   notes: string
+  /** حسابِ تأمینِ خرید (بانک/صندوق/پرداختنی)؛ اگر داده شود سندِ خرید خودکار ثبت می‌شود. */
+  funding_account_id?: string | null
 }
 
 export const fetchFixedAssets = (token: string) => authedGet<FixedAssetRecord[]>(token, '/api/fixed-assets')

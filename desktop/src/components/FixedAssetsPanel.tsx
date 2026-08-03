@@ -16,10 +16,12 @@ import {
   createFixedAsset,
   deleteFixedAsset,
   disposeFixedAsset,
+  fetchChartAccounts,
   fetchDepreciationEntries,
   fetchFixedAssets,
   runDepreciation,
   updateFixedAsset,
+  type ChartAccount,
   type DepreciationEntryRecord,
   type FixedAssetRecord,
 } from '../api'
@@ -31,11 +33,16 @@ import { formatJalali, todayIso } from '../lib/jalali'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
-const EMPTY = { name: '', category: '', acquired_date: todayIso(), cost: '', salvage_value: '0', useful_life_months: '', notes: '' }
+const EMPTY = { name: '', category: '', acquired_date: todayIso(), cost: '', salvage_value: '0', useful_life_months: '', notes: '', funding_account_id: '' }
+
+// حساب‌هایی که می‌شود بابتِ خریدِ دارایی از آن‌ها پرداخت کرد (بر پایه‌ی نقشِ سیستمی،
+// نه کدِ حساب — تا با چارتِ سفارشیِ مشتری هم درست کار کند).
+const FUNDING_ROLES = ['cash', 'bank', 'petty_cash', 'accounts_payable']
 
 export function FixedAssetsPanel({ token }: { token: string }) {
   const [assets, setAssets] = useState<FixedAssetRecord[]>([])
   const [entries, setEntries] = useState<DepreciationEntryRecord[]>([])
+  const [accounts, setAccounts] = useState<ChartAccount[]>([])
   const [form, setForm] = useState({ ...EMPTY })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formMsg, setFormMsg] = useState<string | null>(null)
@@ -44,9 +51,14 @@ export function FixedAssetsPanel({ token }: { token: string }) {
 
   async function refresh() {
     try {
-      const [a, e] = await Promise.all([fetchFixedAssets(token), fetchDepreciationEntries(token)])
+      const [a, e, acc] = await Promise.all([
+        fetchFixedAssets(token),
+        fetchDepreciationEntries(token),
+        fetchChartAccounts(token),
+      ])
       setAssets(a)
       setEntries(e)
+      setAccounts(acc)
     } catch (err) {
       setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -73,6 +85,7 @@ export function FixedAssetsPanel({ token }: { token: string }) {
       salvage_value: String(a.salvage_value),
       useful_life_months: String(a.useful_life_months),
       notes: a.notes,
+      funding_account_id: '', // تأمینِ مالی فقط هنگامِ ثبتِ اولیه معنا دارد، نه ویرایش
     })
   }
 
@@ -87,6 +100,8 @@ export function FixedAssetsPanel({ token }: { token: string }) {
       salvage_value: Number(form.salvage_value) || 0,
       useful_life_months: Number(form.useful_life_months) || 0,
       notes: form.notes,
+      // تأمینِ مالی فقط در ثبتِ اولیه: سندِ خرید را خودکار می‌زند (خالی = بدونِ سند).
+      funding_account_id: form.funding_account_id || null,
     }
     try {
       if (editingId) await updateFixedAsset(token, editingId, payload)
@@ -179,6 +194,20 @@ export function FixedAssetsPanel({ token }: { token: string }) {
               عمر مفید (ماه)
               <input type="number" min="1" value={form.useful_life_months} onChange={(e) => setForm({ ...form, useful_life_months: e.target.value })} />
             </label>
+            {!editingId && (
+              <label>
+                پرداخت از
+                <select value={form.funding_account_id} onChange={(e) => setForm({ ...form, funding_account_id: e.target.value })}>
+                  <option value="">— بدون سند (آورده / قبلاً در دفاتر) —</option>
+                  {accounts
+                    .filter((a) => !a.is_group && FUNDING_ROLES.includes(a.system_role ?? ''))
+                    .sort((x, y) => x.code.localeCompare(y.code))
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                </select>
+              </label>
+            )}
             <label>
               توضیحات
               <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

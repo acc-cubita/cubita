@@ -68,3 +68,27 @@ def test_not_acquired_yet_is_skipped(db, user):
     _make_asset(db, user, acquired=date(2026, 6, 1), cost=1_200_000, life=12)
     res = svc.run_depreciation(db, date(2026, 1, 31), user)  # قبل از تاریخِ تحصیل
     assert res["asset_count"] == 0
+
+
+def test_acquisition_with_funding_posts_balanced_entry(db, user):
+    """با انتخابِ حسابِ تأمین، خریدِ دارایی خودکار سند می‌خورد: بدهکارِ داراییِ ثابت، بستانکارِ همان حساب."""
+    cash = db.query(Account).filter(Account.system_role == cc.CASH).first()
+    svc.create_asset(
+        db,
+        FixedAssetIn(
+            name="سرور", category="تجهیزات", acquired_date=date(2026, 1, 1),
+            cost=Decimal(60_000_000), useful_life_months=60, funding_account_id=cash.id,
+        ),
+        user,
+    )
+    entry = db.query(JournalEntry).filter(JournalEntry.source_type == "asset_acquisition").one()
+    assert sum(l.debit for l in entry.lines) == sum(l.credit for l in entry.lines) == Decimal(60_000_000)
+    fixed = db.query(Account).filter(Account.system_role == cc.FIXED_ASSETS).first()
+    assert any(l.account_id == fixed.id and l.debit == Decimal(60_000_000) for l in entry.lines)
+    assert any(l.account_id == cash.id and l.credit == Decimal(60_000_000) for l in entry.lines)
+
+
+def test_acquisition_without_funding_posts_no_entry(db, user):
+    """بدونِ حسابِ تأمین (دارایی از قبل در دفاتر/آورده)، سندی زده نمی‌شود — رفتارِ قبلی حفظ می‌شود."""
+    _make_asset(db, user, cost=1_200_000)
+    assert db.query(JournalEntry).filter(JournalEntry.source_type == "asset_acquisition").count() == 0

@@ -5,12 +5,13 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.accounting import JournalLine
+from app.models.accounting import Account, JournalLine
 from app.models.assets import DepreciationEntry, FixedAsset
 from app.models.user import User
 from app.schemas.assets import FixedAssetIn
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
+from app.services.period_close import assert_period_open
 
 
 def _accumulated_depreciation_account(db: Session):
@@ -21,6 +22,17 @@ def _accumulated_depreciation_account(db: Session):
         name="استهلاک انباشته",
         acc_type="asset",  # کاهنده‌ی دارایی؛ ماندهٔ بستانکار دارد و جمع دارایی‌ها را کم می‌کند
         parent_code="11",
+    )
+
+
+def _fixed_assets_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.FIXED_ASSETS,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.FIXED_ASSETS],
+        name="دارایی‌های ثابت (بهای تمام‌شده)",
+        acc_type="asset",
+        parent_code="12",
     )
 
 
@@ -95,6 +107,29 @@ def create_asset(db: Session, data: FixedAssetIn, user: User) -> dict:
         created_by_id=user.id,
     )
     db.add(asset)
+    db.flush()
+
+    # سندِ خریدِ دارایی: بدهکارِ «داراییِ ثابت»، بستانکارِ حسابِ تأمین (بانک/صندوق/پرداختنی).
+    # بدونِ این سند، دارایی در دفترِ کل نمی‌نشست و پس از اجرای استهلاک، «استهلاکِ انباشته»
+    # بدونِ اصلِ دارایی می‌ماند و خالصِ دارایی‌های ثابت در ترازنامه منفی می‌شد. اگر حسابِ
+    # تأمین انتخاب نشود (دارایی از قبل در دفاتر است یا آورده)، سندی زده نمی‌شود.
+    if data.funding_account_id is not None and Decimal(data.cost) > 0:
+        funding = db.get(Account, data.funding_account_id)
+        if funding is None or funding.is_group:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حسابِ تأمینِ مالیِ خرید نامعتبر است")
+        assert_period_open(db, data.acquired_date)
+        make_journal_entry(
+            db,
+            data.acquired_date,
+            f"خریدِ داراییِ ثابت: {asset.name}",
+            "asset_acquisition",
+            user,
+            [
+                JournalLine(account_id=_fixed_assets_account(db).id, debit=data.cost, credit=0, description="بهای تمام‌شده‌ی دارایی"),
+                JournalLine(account_id=funding.id, debit=0, credit=data.cost, description=f"بابت خریدِ {asset.name}"),
+            ],
+        )
+
     db.commit()
     db.refresh(asset)
     return to_out(asset)

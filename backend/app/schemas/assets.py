@@ -13,6 +13,10 @@ class FixedAssetIn(BaseModel):
     salvage_value: Decimal = Decimal(0)
     useful_life_months: int
     notes: str = ""
+    #: حسابِ تأمینِ مالیِ خرید (صندوق/بانک/پرداختنی). اگر داده شود، سندِ خرید خودکار
+    #: زده می‌شود: بدهکارِ داراییِ ثابت، بستانکارِ همین حساب. اگر None باشد سندی زده
+    #: نمی‌شود — برای دارایی‌هایی که از قبل در دفاتر هستند یا آورده‌ی مالک‌اند.
+    funding_account_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate(self) -> "FixedAssetIn":
