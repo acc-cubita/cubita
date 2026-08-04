@@ -48,6 +48,7 @@
     categories: () => get('/api/shop/categories'),
     product: (slug) => get('/api/shop/product/' + encodeURIComponent(slug)),
     placeOrder: (order) => post('/api/shop/orders', order),
+    pay: (orderId) => post('/api/shop/orders/' + encodeURIComponent(orderId) + '/pay', {}),
     ShopError,
   }
 })()

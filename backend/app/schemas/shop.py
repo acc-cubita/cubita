@@ -38,6 +38,8 @@ class ShopInfoOut(BaseModel):
     seo_title: str
     seo_description: str
     contact_block: dict
+    #: آیا درگاهِ پرداختِ آنلاینِ فعال دارد؟ سایت با این تصمیم می‌گیرد تسویه را به درگاه ببرد یا سفارشِ دستی.
+    has_online_payment: bool = False
 
 
 class ShopOrderLineIn(BaseModel):

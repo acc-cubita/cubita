@@ -39,6 +39,7 @@ ONLINE_WAREHOUSE_CODE = "ONLINE"
 @dataclass
 class ShopContext:
     tenant_id: UUID
+    slug: str
     storefront: Storefront
 
 
@@ -70,7 +71,7 @@ def resolve_storefront(db: Session, slug: str, key: str) -> ShopContext:
     if storefront.status != "published":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "این فروشگاه هنوز منتشر نشده است")
 
-    return ShopContext(tenant_id=tenant.id, storefront=storefront)
+    return ShopContext(tenant_id=tenant.id, slug=tenant.slug, storefront=storefront)
 
 
 def _to_product_out(isf: ItemStorefront, item: Item, qty: int) -> ShopProductOut:

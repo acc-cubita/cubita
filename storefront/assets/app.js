@@ -224,6 +224,19 @@
           note: fd.get('note') || '',
           lines: cart.map((i) => ({ slug: i.slug, qty: i.qty })),
         })
+        if (INFO.has_online_payment) {
+          try {
+            const r = await api.pay(order.id)
+            saveCart([])
+            window.location.href = r.redirect_url
+            return
+          } catch (e2) {
+            // سفارش ثبت شد ولی شروعِ پرداختِ آنلاین نشد؛ به‌عنوان سفارشِ در انتظار نمایش بده
+            saveCart([])
+            renderOrderPlaced(order)
+            return
+          }
+        }
         saveCart([])
         renderOrderPlaced(order)
       } catch (e) {
@@ -247,6 +260,26 @@
       </div>`
   }
 
+  function renderOrderResult(query) {
+    renderNav()
+    const ok = query.get('status') === 'ok'
+    const code = query.get('code') || ''
+    app.innerHTML = ok
+      ? `<div class="order-done">
+          <div class="check">✓</div>
+          <h1>پرداخت موفق بود</h1>
+          ${code ? `<p>کدِ پیگیری: <strong dir="ltr">${esc(code)}</strong></p>` : ''}
+          <p class="muted">سفارشِ شما ثبت و پرداخت شد. سپاس‌گزاریم!</p>
+          <a class="btn-primary" href="#/">بازگشت به فروشگاه</a>
+        </div>`
+      : `<div class="order-done">
+          <div class="check fail">×</div>
+          <h1>پرداخت ناموفق بود</h1>
+          <p class="muted">مبلغی از حسابِ شما کسر نشد. می‌توانید دوباره تلاش کنید.</p>
+          <a class="btn-primary" href="#/cart">بازگشت به سبد</a>
+        </div>`
+  }
+
   // ── روتر ────────────────────────────────────────────────────────────────
   function route() {
     const h = (location.hash.replace(/^#/, '') || '/')
@@ -257,6 +290,7 @@
     if (parts[0] === 'product' && parts[1]) return renderProduct(decodeURIComponent(parts[1]))
     if (parts[0] === 'cart') return renderCart()
     if (parts[0] === 'checkout') return renderCheckout()
+    if (parts[0] === 'order-result') return renderOrderResult(query)
     return renderHome(query)
   }
 

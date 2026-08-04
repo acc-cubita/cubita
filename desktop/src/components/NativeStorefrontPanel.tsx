@@ -74,6 +74,7 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
   const [seoDesc, setSeoDesc] = useState('')
   const [phone, setPhone] = useState('')
   const [primary, setPrimary] = useState('#E31F24')
+  const [currency, setCurrency] = useState('toman')
   const [allowedOrigin, setAllowedOrigin] = useState('')
 
   // ویرایش‌های محلیِ ردیف‌ها
@@ -87,6 +88,7 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
     setSeoDesc(s.seo_description)
     setPhone(String((s.contact_block as Record<string, unknown>)?.phone ?? ''))
     setPrimary(String((s.theme_config as Record<string, unknown>)?.primary ?? '#E31F24'))
+    setCurrency(String((s.theme_config as Record<string, unknown>)?.currency ?? 'toman'))
     setAllowedOrigin(s.allowed_origin)
   }
 
@@ -135,7 +137,7 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
     guard(async () => {
       const s = await updateNativeStorefront(token, {
         theme_id: sf?.theme_id ?? 'general',
-        theme_config: { ...(sf?.theme_config ?? {}), primary },
+        theme_config: { ...(sf?.theme_config ?? {}), primary, currency },
         seo_title: seoTitle,
         seo_description: seoDesc,
         contact_block: { ...(sf?.contact_block ?? {}), phone },
@@ -322,6 +324,14 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
               <label>تلفنِ تماس</label>
               <input type="text" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="021…" />
             </div>
+          </div>
+          <div className="sf-field">
+            <label>واحدِ پول (نمایش و پرداخت)</label>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <option value="toman">تومان</option>
+              <option value="rial">ریال</option>
+            </select>
+            <span className="field-hint">مبلغِ ارسالی به درگاهِ پرداخت بر این پایه محاسبه می‌شود؛ با واحدِ قیمت‌های حسابداری‌تان یکی باشد.</span>
           </div>
           <div className="sf-actions">
             <button type="button" className="btn-primary" onClick={() => void saveSettings()} disabled={busy}>

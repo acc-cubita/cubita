@@ -9,13 +9,21 @@ TODO(delivery-phase): CORS باید per-storefront بازتاب داده شود 
 مستأجر از `storefronts.allowed_origin`)، چون سایت روی دامنه‌ی خودِ مستأجر است و
 CORالسراسریِ main.py آن را نمی‌شناسد. برای فاز پایه (+تست‌ها که مرورگر نیستند) کافی است.
 """
-from fastapi import APIRouter, Depends, Header
+import uuid
+
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
+from app.models.storefront_native import Storefront, StorefrontOrder
+from app.models.tenant import Tenant
 from app.schemas.shop import ShopCategoryOut, ShopInfoOut, ShopOrderIn, ShopOrderOut, ShopProductOut
 from app.services import shop as service
+from app.services import shop_payment
 from app.services.shop import ShopContext
+from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 router = APIRouter(prefix="/api/shop", tags=["shop"])
 
@@ -31,7 +39,7 @@ def get_shop_context(
 
 
 @router.get("/info", response_model=ShopInfoOut)
-def shop_info(ctx: ShopContext = Depends(get_shop_context)):
+def shop_info(ctx: ShopContext = Depends(get_shop_context), db: Session = Depends(get_db)):
     sf = ctx.storefront
     return ShopInfoOut(
         theme_id=sf.theme_id,
@@ -39,6 +47,7 @@ def shop_info(ctx: ShopContext = Depends(get_shop_context)):
         seo_title=sf.seo_title,
         seo_description=sf.seo_description,
         contact_block=sf.contact_block or {},
+        has_online_payment=shop_payment.has_online_payment(db),
     )
 
 
@@ -69,3 +78,58 @@ def create_order(
         total=int(order.total),
         payment_status=order.payment_status,
     )
+
+
+@router.post("/orders/{order_id}/pay")
+def start_payment(
+    order_id: uuid.UUID, ctx: ShopContext = Depends(get_shop_context), db: Session = Depends(get_db)
+):
+    """شروعِ پرداختِ آنلاین با درگاهِ مستأجر؛ لینکِ درگاه را برمی‌گرداند تا سایت به آن ببرد."""
+    order = db.query(StorefrontOrder).filter(StorefrontOrder.id == order_id).first()
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
+    if order.payment_status != "pending":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این سفارش قابلِ پرداخت نیست")
+    gateway = shop_payment.active_zarinpal(db)
+    if gateway is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "درگاهِ پرداختِ آنلاینِ فعالی تنظیم نشده است")
+
+    settings = get_settings()
+    api_base = (settings.storefront_api_base or settings.backend_url).rstrip("/")
+    callback_url = f"{api_base}/api/shop/pay/callback?shop={ctx.slug}"
+    redirect_url = shop_payment.start_payment(db, order, ctx.storefront, gateway, callback_url)
+    return {"redirect_url": redirect_url}
+
+
+@router.get("/pay/callback")
+def pay_callback(Authority: str = "", Status: str = "", shop: str = "", db: Session = Depends(get_db)):
+    """بازگشتِ زرین‌پال. مستأجر از پارامترِ shop (=slug) پیدا می‌شود (بی‌زمینه)، سپس verify."""
+    tenant = db.query(Tenant).filter(Tenant.slug == shop).first()
+    if tenant is None or tenant.status != "active":
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    bind_session_tenant(db, tenant.id)
+    apply_tenant_to_transaction(db, tenant.id)
+
+    storefront = db.query(Storefront).first()
+    order = db.query(StorefrontOrder).filter(StorefrontOrder.payment_authority == Authority).first()
+    dest = (storefront.allowed_origin if storefront else "") or ""
+
+    def result(ok: bool) -> RedirectResponse:
+        code = order.tracking_code if order else ""
+        target = f"{dest}/#/order-result?status={'ok' if ok else 'failed'}&code={code}" if dest else "/"
+        return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
+
+    if order is None or storefront is None:
+        return result(False)
+    if Status != "OK":
+        order.payment_status = "failed"
+        db.flush()
+        return result(False)
+
+    gateway = shop_payment.active_zarinpal(db)
+    actor = shop_payment.tenant_actor(db, tenant.id)
+    ok = bool(gateway and actor and shop_payment.verify_and_finalize(db, order, storefront, gateway, Authority, actor))
+    if not ok and order.payment_status == "pending":
+        order.payment_status = "failed"
+        db.flush()
+    return result(ok)
