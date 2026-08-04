@@ -63,12 +63,15 @@ export function NumberInput({
   allowDecimal = false,
   allowNegative = false,
   inputMode,
+  className,
   ...rest
 }: Props) {
   const raw = value === null || value === undefined ? '' : String(value)
   return (
     <input
       {...rest}
+      // کلاسِ num-input عدد را راست‌چین می‌کند (RTL)؛ کلاسِ فراخوان هم حفظ می‌شود.
+      className={className ? `num-input ${className}` : 'num-input'}
       type="text"
       dir="ltr"
       inputMode={inputMode ?? (allowDecimal ? 'decimal' : 'numeric')}

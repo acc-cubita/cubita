@@ -98,16 +98,19 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --page: #f5f7fc;
-  --bg: #eef1f8;
-  --surface: #ffffff;
-  --surface-2: #f3f5fb;
-  --surface-hover: #eaeef8;
-  --border: #e5e9f2;
-  --border-strong: #cfd6e6;
+  /* پوسته‌ی روشنِ کم‌خیرگی: کارت‌ها آف‌وایتِ ملایم‌اند (نه سفیدِ خالص) و صفحه یک
+     خاکستری-آبیِ آرام است تا کلِ نما پرنور و خسته‌کننده نباشد؛ کارت‌ها با اختلافِ
+     روشناییِ کم ولی کافی از صفحه جدا می‌شوند. کنتراستِ متن حفظ شده (AA). */
+  --page: #e7eaf2;
+  --bg: #edeff6;
+  --surface: #f6f7fb;
+  --surface-2: #eaedf5;
+  --surface-hover: #e2e6f1;
+  --border: #d8dee9;
+  --border-strong: #c3cbdc;
 
-  --text: #454c68;
-  --text-muted: #6f7695;
+  --text: #414863;
+  --text-muted: #626a89;
   --text-h: #1a1f37;
 
   --accent: #2563eb;
@@ -133,11 +136,11 @@
   --chart-grid: #e5e9f2;
   --chart-axis: #cbd3e3;
 
-  --sidebar-bg: #ffffff;
-  --sidebar-border: #e6e9f2;
+  --sidebar-bg: #edf0f7;
+  --sidebar-border: #dbe1ec;
   --sidebar-active-bg: rgba(37, 99, 235, 0.1);
   --sidebar-active-text: #1d4ed8;
-  --sidebar-text: #6b7291;
+  --sidebar-text: #626a89;
 
   --shadow-sm: rgba(30, 41, 82, 0.07) 0 1px 2px;
   --shadow-md: rgba(30, 41, 82, 0.1) 0 8px 24px -4px, rgba(30, 41, 82, 0.06) 0 2px 6px -2px;
@@ -189,12 +192,23 @@ textarea {
 input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])),
 select,
 textarea {
-  background: var(--bg);
+  /* پس‌زمینه‌ی فیلد از --bg (تیره‌ی «فرورفته») به --surface-2 (ملایم، هم‌رنگِ کارت)
+     تغییر کرد تا با استانداردِ تمیزِ گریدِ اقلام یکدست شود؛ فیلد به‌جای باکسِ سنگین،
+     یک سطحِ سبکِ مرزدار است. */
+  background: var(--surface-2);
   color: var(--text-h);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   font-size: 13.5px;
+}
+
+/* هاورِ فیلد مرز را کمی پررنگ می‌کند (مثلِ سلول‌های گرید)؛ روی فوکوس کنار می‌رود تا
+   حلقه‌ی تأکید برنده باشد. */
+input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])):hover:not(:focus):not(:disabled),
+select:hover:not(:focus):not(:disabled),
+textarea:hover:not(:focus):not(:disabled) {
+  border-color: var(--border-strong);
 }
 
 /* انتخابگرها را از رندرِ نیتیوِ ویندوز درمی‌آوریم: آن رندر رنگِ متن را کامل رعایت
@@ -229,6 +243,12 @@ textarea:focus-visible {
 input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
+}
+
+/* ورودی‌های عددی (NumberInput، همیشه dir=ltr) راست‌چین‌اند تا در فرمِ راست‌به‌چپ
+   عدد به لبه‌ی راست (شروعِ خوانش) بچسبد و ستون‌های عددی زیرِ هم بیایند — رفعِ RTL. */
+.num-input {
+  text-align: right;
 }
 
 table {
