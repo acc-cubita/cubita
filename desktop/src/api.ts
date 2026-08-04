@@ -11,6 +11,8 @@ export interface MeResponse {
   phone: string | null
   //: شماره‌ی موبایلِ فعلی با کدِ پیامکی تأیید شده — برای نشانِ «تأییدشده» و بازیابیِ رمز با پیامک.
   phone_verified: boolean
+  //: ایمیلِ کاربر با کدِ ایمیلی تأیید شده — ثبت‌نامِ خودسرویسِ تازه همیشه true است.
+  email_verified: boolean
   role_key: string
   role_name: string
   permissions: Record<string, string[]>
@@ -62,16 +64,34 @@ export async function login(email: string, password: string): Promise<string> {
 }
 
 /** ثبت‌نامِ خودسرویس — کسب‌وکار و مالکش با هم ساخته می‌شوند و حسابِ آزمایشیِ ۱۴روزه می‌گیرند. */
+/**
+ * گامِ اولِ ثبت‌نام: کدِ تأیید را به ایمیل می‌فرستد (حساب هنوز ساخته نمی‌شود).
+ * برمی‌گرداند که ایمیل واقعاً فرستاده شد و نشانیِ ماسک‌شده را برای نمایش.
+ */
+export async function requestSignupCode(email: string): Promise<{ sent: boolean; email: string; expires_in: number }> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/signup/request-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw new Error(body.detail ?? 'ارسال کد تأیید ناموفق بود')
+  }
+  return res.json()
+}
+
 export async function signup(
   businessName: string,
   ownerName: string,
   email: string,
   password: string,
+  code: string,
 ): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password }),
+    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password, code }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))

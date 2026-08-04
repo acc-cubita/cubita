@@ -15,6 +15,7 @@ from app.main import app
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.security import create_access_token
+from app.services.email_verification import issue_email_code
 from app.services.provisioning import make_slug, signup_new_business
 
 
@@ -47,6 +48,7 @@ def test_signup_creates_a_working_business(anon_client, db):
             "owner_name": "مالک تازه",
             "email": email,
             "password": "AStrongPassword2026",
+            "code": issue_email_code(db, email),
         },
     )
     assert res.status_code == 201, res.text[:300]
@@ -121,9 +123,11 @@ def test_duplicate_email_is_rejected_without_confirming_it_exists(anon_client, d
         "email": email,
         "password": "AStrongPassword2026",
     }
-    assert anon_client.post("/api/auth/signup", json=payload).status_code == 201
+    assert anon_client.post("/api/auth/signup", json={**payload, "code": issue_email_code(db, email)}).status_code == 201
 
-    second = anon_client.post("/api/auth/signup", json={**payload, "business_name": "دومی"})
+    second = anon_client.post(
+        "/api/auth/signup", json={**payload, "business_name": "دومی", "code": issue_email_code(db, email)}
+    )
     assert second.status_code == 409
     # پیام نباید تأیید کند که ایمیل وجود دارد — وگرنه فهرست کاربران قابل استخراج است
     assert "وجود دارد" not in second.json()["detail"]
@@ -131,6 +135,7 @@ def test_duplicate_email_is_rejected_without_confirming_it_exists(anon_client, d
 
 @pytest.mark.parametrize("password", ["short", "123456789"])
 def test_weak_password_is_rejected(anon_client, password):
+    # کدِ معتبرِ صوری می‌دهیم تا ۴۲۲ صریحاً برای رمزِ ضعیف باشد نه فیلدِ گمشده‌ی code.
     res = anon_client.post(
         "/api/auth/signup",
         json={
@@ -138,6 +143,7 @@ def test_weak_password_is_rejected(anon_client, password):
             "owner_name": "مالک",
             "email": f"weak-{uuid.uuid4().hex[:8]}@cubita-test.ir",
             "password": password,
+            "code": "123456",
         },
     )
     assert res.status_code == 422
@@ -153,13 +159,15 @@ def test_persian_business_name_still_produces_a_usable_slug(db):
 def test_two_businesses_with_the_same_name_both_work(anon_client, db):
     name = "فروشگاه تکراری"
     for i in range(2):
+        email = f"same-{i}-{uuid.uuid4().hex[:6]}@cubita-test.ir"
         res = anon_client.post(
             "/api/auth/signup",
             json={
                 "business_name": name,
                 "owner_name": "مالک",
-                "email": f"same-{i}-{uuid.uuid4().hex[:6]}@cubita-test.ir",
+                "email": email,
                 "password": "AStrongPassword2026",
+                "code": issue_email_code(db, email),
             },
         )
         assert res.status_code == 201, f"ثبت‌نام {i} شکست خورد: {res.text[:200]}"

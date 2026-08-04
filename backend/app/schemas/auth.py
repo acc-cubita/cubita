@@ -21,6 +21,9 @@ class MeOut(BaseModel):
     #: آیا شماره‌ی موبایلِ فعلی با کدِ پیامکی تأیید شده — تا فرانت نشانِ «تأییدشده» و
     #: امکانِ بازیابیِ رمز با پیامک را نشان دهد.
     phone_verified: bool = False
+    #: آیا ایمیلِ کاربر با کدِ ایمیلی تأیید شده. ثبت‌نامِ خودسرویسِ تازه همیشه true است
+    #: (کد پیش از ساختِ حساب تأیید می‌شود)؛ حساب‌های قدیمی/دستی می‌توانند false باشند.
+    email_verified: bool = False
     role_key: str
     role_name: str
     permissions: dict
@@ -120,13 +123,29 @@ class BusinessUpdateIn(BaseModel):
         return v.strip()
 
 
+class SignupRequestCodeIn(BaseModel):
+    """گامِ اولِ ثبت‌نام: فقط ایمیل — کدِ تأیید به آن فرستاده می‌شود (حساب هنوز ساخته نمی‌شود)."""
+
+    email: EmailStr
+
+
 class SignupIn(BaseModel):
-    """ثبت‌نام self-serve: کاربر و کسب‌وکارش با هم ساخته می‌شوند."""
+    """گامِ دومِ ثبت‌نام: با کدِ تأییدِ ایمیل، کاربر و کسب‌وکارش ساخته می‌شوند."""
 
     business_name: str
     owner_name: str
     email: EmailStr
     password: str
+    #: کدِ ۶رقمیِ ارسال‌شده به ایمیل در گامِ اول. بدونِ آن هیچ حسابی ساخته نمی‌شود.
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def code_digits_only(cls, v: str) -> str:
+        v = v.strip()
+        if not v.isdigit():
+            raise ValueError("کد تأیید فقط عدد است")
+        return v
 
     @field_validator("password")
     @classmethod

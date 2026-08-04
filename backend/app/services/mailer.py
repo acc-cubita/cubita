@@ -118,6 +118,24 @@ def send_trial_reminder(to: str, name: str, days_left: int, plans_url: str) -> b
     )
 
 
+def send_email_verification_code(to: str, name: str, code: str, valid_minutes: int) -> bool:
+    """کدِ تأییدِ ایمیل هنگامِ ثبت‌نام — تا فقط ایمیلِ واقعی بتواند حساب بسازد.
+
+    برخلافِ لینک‌های بازیابی/دعوت که یک راز ۲۵۶بیتی‌اند، این یک کدِ کوتاهِ عددی است که
+    کاربر دستی وارد می‌کند؛ پس در متنِ ایمیل خودِ کد می‌آید، نه لینک.
+    """
+    greeting = f"{name} عزیز،\n\n" if name and name.strip() else "سلام،\n\n"
+    return send_email(
+        to,
+        "کد تأیید ایمیل — کوبیتا",
+        f"{greeting}"
+        "برای تکمیلِ ثبت‌نام در کوبیتا، کدِ تأیید زیر را در همان صفحه وارد کنید:\n\n"
+        f"    {code}\n\n"
+        f"این کد تا {valid_minutes} دقیقه معتبر است.\n\n"
+        "اگر شما درخواستِ ثبت‌نام نداده‌اید، این ایمیل را نادیده بگیرید.",
+    )
+
+
 def send_welcome_after_purchase(to: str, name: str, tenant_name: str, token: str, valid_days: int) -> bool:
     """اعتبارنامه‌ی مشتری بعد از پرداخت — به خودِ مشتری، نه به مدیر.
 

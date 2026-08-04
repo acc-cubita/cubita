@@ -69,6 +69,12 @@ _password_reset_per_email = SlidingWindowLimiter(max_events=3, window_seconds=36
 #: ارسالِ کدِ پیامکی هزینه‌ی واقعی دارد (هر پیامک از اعتبارِ ملی‌پیامک کم می‌کند)، پس
 #: سقفش سخت‌گیرانه‌تر است: هدف جلوگیری از تخلیه‌ی اعتباب با درخواستِ پیاپیِ کد است.
 _sms_code_limiter = SlidingWindowLimiter(max_events=5, window_seconds=900)
+#: کدِ تأییدِ ایمیلِ ثبت‌نام. سقفِ IP کمی بازتر از پیامک است (ایمیل هزینه‌ی مستقیم ندارد و
+#: کاربر ممکن است ایمیل را تصحیح کند)، ولی جلوی ارسالِ خودکارِ انبوه را می‌گیرد.
+_email_code_limiter = SlidingWindowLimiter(max_events=8, window_seconds=900)
+#: سقفِ جداگانه بر اساس خودِ ایمیل — تا مهاجم از چند IP صندوقِ یک نفر را با کدِ ثبت‌نام
+#: بمباران نکند (خرابکاری علیه قربانی، که سقفِ IP نمی‌بیندش).
+_email_code_per_email = SlidingWindowLimiter(max_events=4, window_seconds=3600)
 
 
 def limit_login(request: Request) -> None:
@@ -85,6 +91,20 @@ def limit_password_reset(request: Request) -> None:
 
 def limit_sms_code(request: Request) -> None:
     _sms_code_limiter.check(f"sms-code:{client_key(request)}")
+
+
+def limit_email_code(request: Request) -> None:
+    _email_code_limiter.check(f"email-code:{client_key(request)}")
+
+
+def limit_email_code_for_email(email: str) -> bool:
+    """False یعنی این ایمیل به سقف خورده. مثلِ بازیابیِ رمز استثنا نمی‌اندازد تا پاسخِ
+    اندپوینت یکنواخت بماند و از روی تفاوتِ ۴۲۹/۲۰۰ نشود وجودِ ایمیل را استخراج کرد."""
+    try:
+        _email_code_per_email.check(f"email-code-email:{email.strip().lower()}")
+        return True
+    except HTTPException:
+        return False
 
 
 def limit_password_reset_for_email(email: str) -> bool:
@@ -108,3 +128,5 @@ def reset_all() -> None:
     _password_reset_limiter.reset()
     _password_reset_per_email.reset()
     _sms_code_limiter.reset()
+    _email_code_limiter.reset()
+    _email_code_per_email.reset()

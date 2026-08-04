@@ -73,15 +73,19 @@ def test_repeated_failed_logins_are_eventually_blocked(client):
     assert statuses.index(429) >= 5, f"محدودیت خیلی زود اعمال شد: {statuses[:6]}"
 
 
-def test_signup_is_capped(client):
+def test_signup_is_capped(client, db):
+    from app.services.email_verification import issue_email_code
+
     def attempt(i: int):
+        email = f"rl-{uuid.uuid4().hex[:8]}@cubita-test.ir"
         return client.post(
             "/api/auth/signup",
             json={
                 "business_name": f"کسب‌وکار {i}",
                 "owner_name": "مالک",
-                "email": f"rl-{uuid.uuid4().hex[:8]}@cubita-test.ir",
+                "email": email,
                 "password": "AStrongPassword2026",
+                "code": issue_email_code(db, email),
             },
         ).status_code
 

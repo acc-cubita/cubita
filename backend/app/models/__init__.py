@@ -8,6 +8,7 @@ from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
+from app.models.email_verification import EmailVerificationCode
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
 from app.models.crm import CrmActivity, Lead, LoyaltySettings, LoyaltyTransaction
 from app.models.currency import Currency, ExchangeRate
@@ -108,6 +109,7 @@ __all__ = [
     "MoadianSubmission",
     "TreasuryTransaction",
     "AuthToken",
+    "EmailVerificationCode",
     "DocumentCounter",
     "IdempotencyKey",
     "AuditLog",

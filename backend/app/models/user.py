@@ -116,6 +116,10 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: مبنای بازیابیِ رمز با پیامک، که فقط به شماره‌ی تأییدشده کد می‌فرستد.
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    #: لحظه‌ی تأییدِ ایمیل. برای ثبت‌نامِ خودسرویسِ تازه همیشه پر است (کد پیش از ساختِ
+    #: حساب تأیید می‌شود). NULL یعنی تأییدنشده — حساب‌های قدیمی یا اکانتِ دستیِ مدیر.
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     #: نسل توکن‌های معتبر. با هر تغییر رمز یکی زیاد می‌شود و همه‌ی توکن‌های نسل قبل
     #: را باطل می‌کند.
     #:

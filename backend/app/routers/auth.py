@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.rate_limit import (
+    limit_email_code,
+    limit_email_code_for_email,
     limit_login,
     limit_password_reset,
     limit_password_reset_for_email,
@@ -24,6 +26,7 @@ from app.schemas.auth import (
     PhoneVerifyIn,
     ProfileUpdateIn,
     SignupIn,
+    SignupRequestCodeIn,
     SwitchTenantIn,
     TenantMembershipOut,
     TokenOut,
@@ -36,7 +39,9 @@ from app.schemas.members import (
 )
 from app.security import create_access_token, record_login, set_password, verify_password
 from app.services import members, sms
-from app.services.mailer import send_password_reset
+from app.services.email_verification import CODE_TTL_MINUTES as EMAIL_CODE_TTL_MINUTES
+from app.services.email_verification import consume_email_code, issue_email_code
+from app.services.mailer import send_email_verification_code, send_password_reset
 from app.services.provisioning import signup_new_business
 from app.services.subscriptions import trial_info
 from app.services.tokens import (
@@ -71,6 +76,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         email=principal.user.email,
         phone=principal.user.phone,
         phone_verified=principal.user.phone_verified_at is not None,
+        email_verified=principal.user.email_verified_at is not None,
         role_key=principal.role.key,
         role_name=principal.role.name,
         permissions=principal.role.permissions,
@@ -85,13 +91,54 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
     )
 
 
+def _mask_email(email: str) -> str:
+    """a***@example.com — پاسخ بگوید کد کجا رفت بی‌آنکه کلِ نشانی را در لاگ/پاسخ تکرار کند."""
+    local, _, domain = email.partition("@")
+    if not domain:
+        return email
+    shown = local[0] if local else ""
+    return f"{shown}{'*' * max(len(local) - 1, 1)}@{domain}"
+
+
+@router.post("/signup/request-code", dependencies=[Depends(limit_email_code)])
+def request_signup_code(data: SignupRequestCodeIn, db: Session = Depends(get_db)):
+    """گامِ اولِ ثبت‌نام: کدِ تأیید را به ایمیل می‌فرستد — هنوز حسابی ساخته نمی‌شود.
+
+    اگر ایمیل قبلاً ثبت شده، همان ۴۰۹ِ مبهمِ signup را می‌دهد (نه پیامِ صریح‌تر) تا
+    درِ استخراجِ فهرستِ کاربران بازتر از امروز نشود. سقفِ جداگانه بر اساسِ خودِ ایمیل هم
+    جلوی بمبارانِ صندوقِ یک نفر را می‌گیرد.
+
+    پاسخ `sent=false` یعنی ایمیل تحویلِ SMTP نشد؛ فرانت باید صادقانه بگوید کد نرفت.
+    """
+    email = data.email.strip().lower()
+
+    if db.query(User).filter(User.email == email).first() is not None:
+        # عمداً مبهم و همسان با پیامِ signup — تأییدِ وجودِ ایمیل، فهرستِ کاربران را لو می‌دهد.
+        raise HTTPException(status.HTTP_409_CONFLICT, "امکان ثبت‌نام با این ایمیل نیست")
+
+    # سقفِ per-email بی‌صدا: اگر خورده باشد وانمود می‌کنیم فرستادیم (پاسخ یکنواخت) ولی
+    # ایمیلِ تازه‌ای نمی‌رود — تا نه بمباران ممکن باشد، نه از تفاوتِ پاسخ چیزی فهمیده شود.
+    if not limit_email_code_for_email(email):
+        return {"sent": True, "email": _mask_email(email), "expires_in": EMAIL_CODE_TTL_MINUTES * 60}
+
+    code = issue_email_code(db, email)
+    sent = send_email_verification_code(email, "", code, EMAIL_CODE_TTL_MINUTES)
+    return {"sent": sent, "email": _mask_email(email), "expires_in": EMAIL_CODE_TTL_MINUTES * 60}
+
+
 @router.post("/signup", response_model=TokenOut, status_code=201, dependencies=[Depends(limit_signup)])
 def signup(data: SignupIn, db: Session = Depends(get_db)):
-    """ثبت‌نام self-serve — کاربر و کسب‌وکارش با هم ساخته می‌شوند.
+    """گامِ دومِ ثبت‌نام self-serve — با کدِ تأییدِ ایمیل، کاربر و کسب‌وکارش ساخته می‌شوند.
 
-    تا امروز مسیر ساخت مشتری جدید فقط `python -m app.seed` روی سرور بود، یعنی
-    تحویل دستی. این اندپوینت همان کار را در یک تراکنش انجام می‌دهد.
+    کد **قبل از** ساختِ حساب سنجیده می‌شود، پس هیچ حسابی با ایمیلِ تأییدنشده به‌وجود
+    نمی‌آید. consume_email_code خودش انقضا و سقفِ تلاش را اعمال و کدِ درست را یک‌بارمصرف می‌کند.
     """
+    if not consume_email_code(db, data.email, data.code):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "کد تأیید نادرست یا منقضی است؛ دوباره کد بگیرید.",
+        )
+
     tenant, user = signup_new_business(
         db,
         business_name=data.business_name,
@@ -99,6 +146,9 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
         email=data.email,
         password=data.password,
     )
+    # ایمیل همین حالا با کد تأیید شد؛ ثبتش می‌کنیم تا نشانِ «تأییدشده» درست باشد.
+    user.email_verified_at = datetime.now(timezone.utc)
+    db.flush()
     return TokenOut(access_token=create_access_token(user, tenant.id))
 
 

@@ -2,6 +2,7 @@
 import pytest
 
 from app.config import get_settings
+from app.services.email_verification import issue_email_code
 
 OWNER = "test-owner@example.invalid"  # = SEED_OWNER_EMAIL
 
@@ -70,7 +71,7 @@ def test_manual_account_is_not_trial(super_client):
     assert row["trial_expired"] is False
 
 
-def test_self_serve_signup_shows_as_trial(super_client):
+def test_self_serve_signup_shows_as_trial(super_client, db):
     """ثبت‌نامِ «۱۴ روز رایگان» در فهرستِ مدیریت با پرچمِ آزمایشی و ~۱۴ روز دیده می‌شود."""
     r = super_client.post(
         "/api/auth/signup",
@@ -79,6 +80,7 @@ def test_self_serve_signup_shows_as_trial(super_client):
             "owner_name": "مریم احمدی",
             "email": "trialbiz@example.com",
             "password": "verylongpassword",
+            "code": issue_email_code(db, "trialbiz@example.com"),
         },
     )
     assert r.status_code == 201, r.text
@@ -121,7 +123,7 @@ def test_set_expiry_date(super_client):
     assert r.json()["subscription_status"] == "active"
 
 
-def test_extend_clears_trial_flag(super_client):
+def test_extend_clears_trial_flag(super_client, db):
     """تمدیدِ دستیِ یک اکانتِ آزمایشی، پرچمِ trial را پاک می‌کند (دیگر آزمایشی نیست)."""
     super_client.post(
         "/api/auth/signup",
@@ -130,6 +132,7 @@ def test_extend_clears_trial_flag(super_client):
             "owner_name": "رضا",
             "email": "trial-extend@example.com",
             "password": "verylongpassword",
+            "code": issue_email_code(db, "trial-extend@example.com"),
         },
     )
     tid = next(r["tenant_id"] for r in super_client.get("/api/admin/accounts").json() if r["owner_email"] == "trial-extend@example.com")

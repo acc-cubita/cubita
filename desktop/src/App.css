@@ -243,6 +243,52 @@
   margin: 0;
 }
 
+/* گامِ دومِ ثبت‌نام: تأییدِ کدِ ایمیل */
+.signup-code-badge {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.signup-code-email {
+  color: var(--accent);
+  font-weight: 700;
+  unicode-bidi: isolate;
+}
+.signup-code-warn {
+  margin: 0;
+}
+.signup-code-input {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.5em;
+  padding: 12px 8px;
+  /* letter-spacing، آخرین رقم را هم از راست فاصله می‌دهد؛ با padding جبران می‌شود */
+  padding-inline-start: calc(8px + 0.5em);
+}
+.signup-code-input::placeholder {
+  letter-spacing: 0.5em;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.signup-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+.signup-code-actions .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .login-card label {
   display: flex;
   flex-direction: column;

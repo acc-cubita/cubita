@@ -38,6 +38,9 @@ GLOBAL_TABLES = frozenset(
         "memberships",
         "platform_admins",
         "auth_tokens",
+        # کدِ تأییدِ ایمیل هم مثلِ auth_tokens *قبل از* ساختِ حساب و بی‌زمینه‌ی مستأجر
+        # اجرا می‌شود (کلیدش ایمیل است نه کاربر)؛ محافظت خودِ کدِ نمک‌خورده است، نه RLS.
+        "email_verification_codes",
         # اشتراک: داده‌ی صفحه‌ی کنترل پلتفرم است، نه دفتر مشتری
         "subscriptions",
     }
