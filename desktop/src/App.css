@@ -2200,14 +2200,21 @@ button:disabled {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  /* هم‌تراز با استانداردِ فیلد: سطحِ ملایمِ هم‌رنگِ کارت، مرز با هاور پررنگ و فوکوسِ حلقه‌دار */
+  background: var(--surface-2);
   color: var(--text-h);
   font-size: 13.5px;
 }
 
 .jalali-date-trigger:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   color: var(--text-h);
+}
+
+.jalali-date-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .jalali-date-placeholder {
