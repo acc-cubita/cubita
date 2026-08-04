@@ -118,6 +118,20 @@ def test_resolve_missing_credentials_is_401(db):
 # ── HTTP end-to-end (روتر + main.py + response_model) ───────────────────────────
 
 
+def test_shop_api_sends_wildcard_cors(db, user, client):
+    _publish(db, "CORSKEY")
+    res = client.get("/api/shop/catalog", headers={"X-Shop-Slug": PRIMARY_SLUG, "X-Shop-Key": "CORSKEY"})
+    assert res.headers.get("access-control-allow-origin") == "*"
+
+    opt = client.options(
+        "/api/shop/catalog",
+        headers={"Origin": "https://any-tenant-host.test", "Access-Control-Request-Method": "GET"},
+    )
+    assert opt.status_code == 204
+    assert opt.headers.get("access-control-allow-origin") == "*"
+    assert "X-Shop-Key" in opt.headers.get("access-control-allow-headers", "")
+
+
 def test_catalog_endpoint_http(db, user, client):
     _publish(db, "HK")
     item = make_item(db, sku="HTTP1", average_cost=222_222)

@@ -68,6 +68,32 @@ app.add_middleware(
     expose_headers=[REQUEST_ID_HEADER],
 )
 
+# CORS سطحِ عمومیِ فروشگاه (`/api/shop/*`) عمداً *باز* است (`*`): این سطح روی دامنه‌ی
+# هاستِ خودِ هر مستأجر اجرا می‌شود (cross-origin) و هیچ کوکی/اعتبارنامه‌ی ambient ندارد —
+# احراز فقط با هدرِ کلیدِ publishable است، پس نه CSRF معنا دارد و نه محدودکردنِ origin
+# مرزِ امنیتی است (خودِ کلید است). CORالسراسریِ بالا فقط دامنه‌های اپ را می‌شناسد، پس
+# این میدل‌ور جدا هدرهای درست را برای مسیرهای فروشگاه می‌گذارد و preflight را پاسخ می‌دهد.
+_SHOP_CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "X-Shop-Slug, X-Shop-Key, Content-Type",
+    "Access-Control-Max-Age": "600",
+}
+
+
+@app.middleware("http")
+async def shop_public_cors(request, call_next):
+    is_shop = request.url.path.startswith("/api/shop")
+    if is_shop and request.method == "OPTIONS":
+        from starlette.responses import Response as _Resp
+
+        return _Resp(status_code=204, headers=_SHOP_CORS)
+    response = await call_next(request)
+    if is_shop:
+        for key, value in _SHOP_CORS.items():
+            response.headers[key] = value
+    return response
+
 app.include_router(auth.router)
 app.include_router(admin_accounts.router)
 app.include_router(members.router)
