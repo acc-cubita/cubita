@@ -30,6 +30,7 @@ import {
 import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { Pager, usePagination } from '../components/Pager'
 import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
@@ -116,6 +117,9 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       }),
     [contacts, filterType, search],
   )
+  // صفحه‌بندیِ جدول‌ها (۱۰ ردیف): فهرستِ اشخاص و فهرستِ تراکنش‌های خزانه.
+  const contactsPg = usePagination(filteredContacts, 10, `${filterType}|${search}`)
+  const txPg = usePagination(transactions, 10)
 
   // شاخص‌های بالای صفحه — از همان داده‌ی موجود محاسبه می‌شوند
   const kpis = useMemo(() => {
@@ -351,7 +355,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                 </tr>
               </thead>
               <tbody>
-                {filteredContacts.map((c) => {
+                {contactsPg.pageItems.map((c) => {
                   const bal = balanceOf(c.id)
                   const limit = Number(c.credit_limit) || 0
                   const overLimit = limit > 0 && (recvMap.get(c.id) ?? 0) > limit
@@ -393,6 +397,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                 })}
               </tbody>
             </table>
+            <Pager page={contactsPg.page} pageCount={contactsPg.pageCount} onChange={contactsPg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -480,7 +485,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
+                {txPg.pageItems.map((t) => (
                   <tr key={t.id}>
                     <td data-label="نوع">
                       <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
@@ -495,6 +500,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
                 ))}
               </tbody>
             </table>
+            <Pager page={txPg.page} pageCount={txPg.pageCount} onChange={txPg.setPage} />
           </div>
         )}
       </SectionCard>

@@ -4,6 +4,7 @@ import { createItemLive, deleteItemLive, fetchItemsLive, updateItemLive, type It
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -67,6 +68,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       }),
     [products, search],
   )
+  // صفحه‌بندیِ جدولِ داده (۱۰ ردیف)؛ با تغییرِ جست‌وجو صفحه به اول برمی‌گردد.
+  const { pageItems, page, setPage, pageCount } = usePagination(filtered, 10, search)
 
   function resetForm() {
     setForm(EMPTY_FORM)
@@ -322,7 +325,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {pageItems.map((p) => (
                   <tr key={p.id}>
                     <td>
                       <div className="entity-cell">
@@ -361,6 +364,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 ))}
               </tbody>
             </table>
+            <Pager page={page} pageCount={pageCount} onChange={setPage} />
           </div>
         )}
       </SectionCard>

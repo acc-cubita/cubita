@@ -12,6 +12,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -20,6 +21,8 @@ const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 export function CurrenciesPanel({ token }: { token: string }) {
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [rates, setRates] = useState<ExchangeRate[]>([])
+  const curPg = usePagination(currencies, 10)
+  const ratePg = usePagination(rates, 10)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -137,7 +140,7 @@ export function CurrenciesPanel({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody>
-                {currencies.map((c) => (
+                {curPg.pageItems.map((c) => (
                   <tr key={c.id}>
                     <td className="entity-name">{c.code}</td>
                     <td>{c.name}</td>
@@ -151,6 +154,7 @@ export function CurrenciesPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={curPg.page} pageCount={curPg.pageCount} onChange={curPg.setPage} />
           </div>
         )}
         {error && <div className="error">{error}</div>}
@@ -202,7 +206,7 @@ export function CurrenciesPanel({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody>
-                {rates.map((r) => (
+                {ratePg.pageItems.map((r) => (
                   <tr key={r.id}>
                     <td className="entity-name">{r.currency_code}</td>
                     <td>{formatJalali(r.rate_date)}</td>
@@ -211,6 +215,7 @@ export function CurrenciesPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={ratePg.page} pageCount={ratePg.pageCount} onChange={ratePg.setPage} />
           </div>
         )}
       </SectionCard>

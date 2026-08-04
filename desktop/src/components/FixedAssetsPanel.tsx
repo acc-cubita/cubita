@@ -29,6 +29,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -43,6 +44,8 @@ const FUNDING_ROLES = ['cash', 'bank', 'petty_cash', 'accounts_payable']
 export function FixedAssetsPanel({ token }: { token: string }) {
   const [assets, setAssets] = useState<FixedAssetRecord[]>([])
   const [entries, setEntries] = useState<DepreciationEntryRecord[]>([])
+  const assetsPg = usePagination(assets, 10)
+  const entriesPg = usePagination(entries, 10)
   const [accounts, setAccounts] = useState<ChartAccount[]>([])
   const [form, setForm] = useState({ ...EMPTY })
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -239,7 +242,7 @@ export function FixedAssetsPanel({ token }: { token: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {assets.map((a) => (
+                  {assetsPg.pageItems.map((a) => (
                     <tr key={a.id} style={a.is_disposed ? { opacity: 0.55 } : undefined}>
                       <td>{a.name}</td>
                       <td>{formatJalali(a.acquired_date)}</td>
@@ -265,6 +268,7 @@ export function FixedAssetsPanel({ token }: { token: string }) {
                   ))}
                 </tbody>
               </table>
+              <Pager page={assetsPg.page} pageCount={assetsPg.pageCount} onChange={assetsPg.setPage} />
             </div>
           )}
         </SectionCard>
@@ -294,7 +298,7 @@ export function FixedAssetsPanel({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {entriesPg.pageItems.map((e) => (
                   <tr key={e.id}>
                     <td>{formatJalali(e.period_date)}</td>
                     <td>{e.asset_name}</td>
@@ -303,6 +307,7 @@ export function FixedAssetsPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={entriesPg.page} pageCount={entriesPg.pageCount} onChange={entriesPg.setPage} />
           </div>
         )}
       </SectionCard>

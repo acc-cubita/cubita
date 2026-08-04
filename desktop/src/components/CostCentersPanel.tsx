@@ -9,11 +9,13 @@ import {
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 const EMPTY = { code: '', name: '', is_active: true, notes: '' }
 
 export function CostCentersPanel({ token }: { token: string }) {
   const [centers, setCenters] = useState<CostCenterRecord[]>([])
+  const pg = usePagination(centers, 10)
   const [form, setForm] = useState({ ...EMPTY })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -117,7 +119,7 @@ export function CostCentersPanel({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody>
-                {centers.map((c) => (
+                {pg.pageItems.map((c) => (
                   <tr key={c.id} style={c.is_active ? undefined : { opacity: 0.55 }}>
                     <td>{c.code || '—'}</td>
                     <td>{c.name}</td>
@@ -136,6 +138,7 @@ export function CostCentersPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

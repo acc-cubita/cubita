@@ -12,6 +12,7 @@ import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
 import { fetchStockLevels, fetchLowStock, type StockLevel, type LowStockRow } from '../api'
 import { SectionCard } from '../components/SectionCard'
+import { Pager, usePagination } from '../components/Pager'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
@@ -36,6 +37,7 @@ export function InventoryPage({
   onChanged?: () => void
 }) {
   const [stock, setStock] = useState<StockLevel[]>([])
+  const stockPg = usePagination(stock, 10)
   const [lowStock, setLowStock] = useState<LowStockRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [kardex, setKardex] = useState<KardexTarget | null>(null)
@@ -135,7 +137,7 @@ export function InventoryPage({
                           </tr>
                         </thead>
                         <tbody>
-                          {stock.map((s) => (
+                          {stockPg.pageItems.map((s) => (
                             <tr key={`${s.item_id}-${s.warehouse_id}`}>
                               <td data-label="کالا" className="entity-name">
                                 <span>{s.item_name}</span>
@@ -161,6 +163,7 @@ export function InventoryPage({
                           ))}
                         </tbody>
                       </table>
+                      <Pager page={stockPg.page} pageCount={stockPg.pageCount} onChange={stockPg.setPage} />
                     </div>
                   )}
                 </SectionCard>

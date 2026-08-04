@@ -3,6 +3,7 @@ import { FileCheck, RefreshCw, ArrowLeftCircle, Printer } from 'lucide-react'
 import { fetchSalesQuotations, fetchContacts, updateQuotationStatus, convertQuotationToInvoice, printSalesQuotation, type SalesQuotationRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -26,6 +27,8 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
   const [contactNames, setContactNames] = useState<Map<string, string>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // صفحه‌بندیِ جدولِ پیش‌فاکتورها (۱۰ ردیف).
+  const pg = usePagination(quotations, 10)
 
   async function refresh() {
     setError(null)
@@ -112,7 +115,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
             </tr>
           </thead>
           <tbody>
-            {quotations.map((q) => (
+            {pg.pageItems.map((q) => (
               <tr key={q.id}>
                 <td>{q.number != null ? q.number.toLocaleString('fa-IR') : '—'}</td>
                 <td className="entity-name">{customerLabel(q)}</td>
@@ -168,6 +171,7 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
             ))}
           </tbody>
         </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

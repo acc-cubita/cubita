@@ -33,6 +33,7 @@ import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { Pager, usePagination } from '../components/Pager'
 import {
   JALALI_MONTH_NAMES,
   JALALI_WEEKDAY_SHORT,
@@ -249,6 +250,8 @@ export function CalendarPage({ token }: { token: string }) {
         return (a.start_time ?? '') < (b.start_time ?? '') ? -1 : 1
       })
   }, [events, filterCategory, showDone, search])
+  // صفحه‌بندیِ فهرستِ رویدادها (۱۰ ردیف)؛ با تغییرِ فیلتر/جست‌وجو به صفحه‌ی اول برمی‌گردد.
+  const evPg = usePagination(filteredList, 10, `${filterCategory}|${showDone}|${search}`)
 
   const eventForm = (
     <SectionCard
@@ -441,7 +444,7 @@ export function CalendarPage({ token }: { token: string }) {
             </tr>
           </thead>
           <tbody>
-            {filteredList.map((ev) => (
+            {evPg.pageItems.map((ev) => (
               <tr key={ev.id} className={ev.is_done ? 'cal-row-done' : ''}>
                 <td className="cal-status-cell" data-label="وضعیت">
                   <button
@@ -478,6 +481,7 @@ export function CalendarPage({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        <Pager page={evPg.page} pageCount={evPg.pageCount} onChange={evPg.setPage} />
         </div>
       )}
     </SectionCard>

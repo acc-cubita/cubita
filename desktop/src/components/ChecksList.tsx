@@ -3,6 +3,7 @@ import { Landmark, RefreshCw } from 'lucide-react'
 import { fetchChecks, updateCheckStatus, type CheckRecord } from '../api'
 import type { BankAccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { Pager, usePagination } from './Pager'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
 
@@ -38,6 +39,8 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
     if (openOnly && !OPEN_STATUSES.has(c.status)) return false
     return true
   }), [checks, typeFilter, openOnly])
+  // صفحه‌بندیِ جدولِ چک‌ها (۱۰ ردیف)؛ با تغییرِ فیلترها به صفحه‌ی اول برمی‌گردد.
+  const pg = usePagination(filtered, 10, `${typeFilter}|${openOnly}`)
 
   async function handleStatusChange(check: CheckRecord, newStatus: string, needsBank: boolean) {
     setError(null)
@@ -114,7 +117,7 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
               <tr><th>نوع</th><th>شماره / بانک</th><th>مبلغ</th><th>سررسید</th><th>وضعیت</th><th>اقدام</th></tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {pg.pageItems.map((c) => (
                 <tr key={c.id}>
                   <td data-label="نوع" className="entity-name">
                     {c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}
@@ -129,6 +132,7 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
               ))}
             </tbody>
           </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

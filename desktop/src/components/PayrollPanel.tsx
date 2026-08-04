@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Save, CalendarPlus, Download, FileText } from 'lucide-react'
 import { SectionCard } from './SectionCard'
+import { Pager, usePagination } from './Pager'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -143,6 +144,7 @@ function EmployeeForm({ token, onCreated }: { token: string; onCreated: () => vo
 }
 
 function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
+  const pg = usePagination(employees, 10)
   if (employees.length === 0) return <EmptyState icon={Users} text="پرسنلی ثبت نشده." />
   return (
     <div className="entity-table-wrap">
@@ -156,7 +158,7 @@ function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
           </tr>
         </thead>
         <tbody>
-          {employees.map((e) => (
+          {pg.pageItems.map((e) => (
             <tr key={e.id}>
               <td className="entity-name">
                 {e.first_name} {e.last_name}
@@ -172,6 +174,7 @@ function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
           ))}
         </tbody>
       </table>
+      <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
     </div>
   )
 }
@@ -332,6 +335,7 @@ function PayrollRunPanel({
 }) {
   const [attendance, setAttendance] = useState<Record<string, { worked: string; overtime: string }>>({})
   const [payslips, setPayslips] = useState<PayslipRecord[]>([])
+  const payslipsPg = usePagination(payslips, 10)
   const [message, setMessage] = useState<string | null>(null)
   const [openPayslip, setOpenPayslip] = useState<PayslipRecord | null>(null)
 
@@ -473,7 +477,7 @@ function PayrollRunPanel({
               </tr>
             </thead>
             <tbody>
-              {payslips.map((p) => {
+              {payslipsPg.pageItems.map((p) => {
                 const emp = empById.get(p.employee_id)
                 return (
                   <tr key={p.id}>
@@ -493,6 +497,7 @@ function PayrollRunPanel({
               })}
             </tbody>
           </table>
+          <Pager page={payslipsPg.page} pageCount={payslipsPg.pageCount} onChange={payslipsPg.setPage} />
         </div>
       )}
 

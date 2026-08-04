@@ -44,6 +44,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
+import { Pager, usePagination } from '../components/Pager'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { LoyaltyHistoryDrawer } from '../components/LoyaltyHistoryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
@@ -147,6 +148,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
       return true
     })
   }, [leads, filter])
+  const leadsPg = usePagination(filtered, 10, filter)
 
   // قیفِ فروش: تعداد و ارزشِ تخمینیِ هر مرحله
   const funnel = useMemo(() => STATUS_ORDER.map((s) => {
@@ -290,7 +292,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((l) => {
+                {leadsPg.pageItems.map((l) => {
                   const open = ['new', 'contacted', 'qualified'].includes(l.status)
                   const overdue = open && isOverdue(l.next_action_date)
                   return (
@@ -335,6 +337,7 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                 })}
               </tbody>
             </table>
+            <Pager page={leadsPg.page} pageCount={leadsPg.pageCount} onChange={leadsPg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -372,6 +375,7 @@ function ActivitiesTab({
     if (filter === 'overdue') return !a.done && isOverdue(a.activity_date)
     return true
   }), [activities, filter])
+  const actPg = usePagination(filteredActivities, 10, filter)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -485,7 +489,7 @@ function ActivitiesTab({
                 </tr>
               </thead>
               <tbody>
-                {filteredActivities.map((a) => {
+                {actPg.pageItems.map((a) => {
                   const overdue = !a.done && isOverdue(a.activity_date)
                   return (
                   <tr key={a.id} className={a.done ? 'row-muted' : ''}>
@@ -511,6 +515,7 @@ function ActivitiesTab({
                 })}
               </tbody>
             </table>
+            <Pager page={actPg.page} pageCount={actPg.pageCount} onChange={actPg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -537,6 +542,7 @@ function LoyaltyTab({
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
   const [historyContact, setHistoryContact] = useState<{ id: string; name: string } | null>(null)
+  const loyaltyPg = usePagination(balances, 10)
 
   // تنظیماتِ کسبِ خودکارِ امتیاز هنگامِ فروش
   const [autoEnabled, setAutoEnabled] = useState(false)
@@ -659,7 +665,7 @@ function LoyaltyTab({
                 </tr>
               </thead>
               <tbody>
-                {balances.map((b) => (
+                {loyaltyPg.pageItems.map((b) => (
                   <tr key={b.contact_id}>
                     <td data-label="مشتری">
                       <div className="entity-cell">
@@ -677,6 +683,7 @@ function LoyaltyTab({
                 ))}
               </tbody>
             </table>
+            <Pager page={loyaltyPg.page} pageCount={loyaltyPg.pageCount} onChange={loyaltyPg.setPage} />
           </div>
         )}
       </SectionCard>

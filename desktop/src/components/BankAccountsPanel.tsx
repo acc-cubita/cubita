@@ -8,6 +8,7 @@ import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { todayIso } from '../lib/jalali'
@@ -23,6 +24,7 @@ const EMPTY: Draft = { name: '', bank_name: '', account_number: '', iban: '' }
 export function BankAccountsPanel({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   const postable = accounts.filter((a) => !a.is_group)
   const [banks, setBanks] = useState<BankAccountRecord[] | null>(null)
+  const pg = usePagination(banks ?? [], 10)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [form, setForm] = useState<Draft>(EMPTY)
@@ -114,7 +116,7 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
                   <tr><th>حساب</th><th>شماره / شبا</th><th>وضعیت</th><th></th></tr>
                 </thead>
                 <tbody>
-                  {banks.map((b) => (
+                  {pg.pageItems.map((b) => (
                     <tr key={b.id}>
                       <td data-label="حساب" className="entity-name">
                         {b.name}
@@ -135,6 +137,7 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
                   ))}
                 </tbody>
               </table>
+              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}
         </SectionCard>

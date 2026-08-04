@@ -12,6 +12,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -27,6 +28,7 @@ export function BatchesPanel({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
   const [batches, setBatches] = useState<StockBatchRecord[]>([])
+  const pg = usePagination(batches, 10)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -146,7 +148,7 @@ export function BatchesPanel({ token }: { token: string }) {
                 <tr><th>کالا</th><th>بچ</th><th>تعداد</th><th>انقضا</th><th></th></tr>
               </thead>
               <tbody>
-                {batches.map((b) => {
+                {pg.pageItems.map((b) => {
                   const d = daysUntil(b.expiry_date)
                   const soon = d !== null && d <= 30
                   const expired = d !== null && d < 0
@@ -172,6 +174,7 @@ export function BatchesPanel({ token }: { token: string }) {
                 })}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

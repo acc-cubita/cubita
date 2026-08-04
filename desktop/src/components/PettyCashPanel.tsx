@@ -9,6 +9,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -50,6 +51,7 @@ export function PettyCashPanel({ token, accounts }: { token: string; accounts: A
     })
     return withRun.reverse()
   }, [txns])
+  const pg = usePagination(rows, 10)
 
   // فرم‌ها
   const [chargeAmount, setChargeAmount] = useState('')
@@ -134,7 +136,7 @@ export function PettyCashPanel({ token, accounts }: { token: string; accounts: A
                 <tr><th>تاریخ</th><th>نوع</th><th>شرح</th><th>مبلغ</th><th>مانده</th></tr>
               </thead>
               <tbody>
-                {rows.map((t) => (
+                {pg.pageItems.map((t) => (
                   <tr key={t.id}>
                     <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
                     <td data-label="نوع">
@@ -151,6 +153,7 @@ export function PettyCashPanel({ token, accounts }: { token: string; accounts: A
                 ))}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

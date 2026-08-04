@@ -15,6 +15,7 @@ import {
   type RecurringFrequency,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { Pager, usePagination } from './Pager'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -39,6 +40,7 @@ const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 
 export function RecurringEntriesPanel({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   const [entries, setEntries] = useState<RecurringEntry[]>([])
+  const entriesPg = usePagination(entries, 10)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -361,7 +363,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {entriesPg.pageItems.map((e) => (
                   <tr key={e.id} className={editingId === e.id ? 'row-selected' : undefined}>
                     <td>
                       <div className="entity-name">{e.title}</div>
@@ -395,6 +397,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                 ))}
               </tbody>
             </table>
+            <Pager page={entriesPg.page} pageCount={entriesPg.pageCount} onChange={entriesPg.setPage} />
           </div>
         )}
       </SectionCard>

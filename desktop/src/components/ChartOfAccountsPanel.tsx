@@ -5,6 +5,7 @@ import {
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -54,6 +55,7 @@ export function ChartOfAccountsPanel({ token, onChanged }: { token: string; onCh
     if (!q) return list
     return list.filter((a) => a.name.includes(q) || a.code.includes(q))
   }, [accounts, search])
+  const pg = usePagination(filtered, 10, search)
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -159,7 +161,7 @@ export function ChartOfAccountsPanel({ token, onChanged }: { token: string; onCh
                 <tr><th>کد</th><th>نام</th><th>نوع</th><th>وضعیت</th><th></th></tr>
               </thead>
               <tbody>
-                {filtered.map((a) => (
+                {pg.pageItems.map((a) => (
                   <tr key={a.id} className={a.is_group ? 'group-row' : ''}>
                     <td data-label="کد" className="ltr-cell">{a.code}</td>
                     <td data-label="نام" className={a.is_group ? 'chart-group-name' : 'entity-name'}>
@@ -191,6 +193,7 @@ export function ChartOfAccountsPanel({ token, onChanged }: { token: string; onCh
                 ))}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

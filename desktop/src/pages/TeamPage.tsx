@@ -10,6 +10,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { Pager, usePagination } from '../components/Pager'
 import { StatCard } from '../components/StatCard'
 
 const STATUS_TONE: Record<Member['status'], 'success' | 'warning' | 'default'> = {
@@ -35,6 +36,7 @@ const STATUS_LABELS: Record<Member['status'], string> = {
 
 export function TeamPage({ token }: { token: string }) {
   const [data, setData] = useState<MemberList | null>(null)
+  const pg = usePagination(data?.members ?? [], 10)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -197,7 +199,7 @@ export function TeamPage({ token }: { token: string }) {
               </tr>
             </thead>
             <tbody>
-              {data.members.map((m) => (
+              {pg.pageItems.map((m) => (
                 <tr key={m.id}>
                   <td>
                     <div className="entity-cell">
@@ -253,6 +255,7 @@ export function TeamPage({ token }: { token: string }) {
               ))}
             </tbody>
           </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

@@ -14,6 +14,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -25,6 +26,8 @@ export function PriceListsPanel({ token }: { token: string }) {
   const [newName, setNewName] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const listsPg = usePagination(lists, 10)
+  const itemsPg = usePagination(items, 10, selectedId)
 
   async function refresh() {
     setError(null)
@@ -111,7 +114,7 @@ export function PriceListsPanel({ token }: { token: string }) {
                 <tr><th>لیست</th><th>وضعیت</th><th></th></tr>
               </thead>
               <tbody>
-                {lists.map((l) => (
+                {listsPg.pageItems.map((l) => (
                   <tr key={l.id} className={l.id === selectedId ? 'row-selected' : ''}>
                     <td>
                       <button type="button" className="link-like" onClick={() => setSelectedId(l.id)}>
@@ -130,6 +133,7 @@ export function PriceListsPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={listsPg.page} pageCount={listsPg.pageCount} onChange={listsPg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -151,7 +155,7 @@ export function PriceListsPanel({ token }: { token: string }) {
                 <tr><th>کالا</th><th>قیمتِ پایه</th><th>قیمتِ این لیست</th></tr>
               </thead>
               <tbody>
-                {items.map((it) => (
+                {itemsPg.pageItems.map((it) => (
                   <tr key={it.id}>
                     <td className="entity-name">{it.name}</td>
                     <td className="money-cell">{fa(Number(it.sales_price))}</td>
@@ -167,6 +171,7 @@ export function PriceListsPanel({ token }: { token: string }) {
                 ))}
               </tbody>
             </table>
+            <Pager page={itemsPg.page} pageCount={itemsPg.pageCount} onChange={itemsPg.setPage} />
           </div>
         )}
         {msg && <div className="hint">{msg}</div>}

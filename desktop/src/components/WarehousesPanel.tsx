@@ -3,6 +3,7 @@ import { Warehouse, Plus, Save, Pencil, X, RefreshCw } from 'lucide-react'
 import { fetchWarehousesAdmin, createWarehouse, updateWarehouse, type WarehouseRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 /**
  * مدیریتِ انبارها — فهرست، ساختِ انبارِ تازه، تغییرِ نام و فعال/غیرفعال‌سازی.
@@ -10,6 +11,7 @@ import { EmptyState } from './EmptyState'
  */
 export function WarehousesPanel({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const [rows, setRows] = useState<WarehouseRecord[] | null>(null)
+  const pg = usePagination(rows ?? [], 10)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [code, setCode] = useState('')
@@ -103,7 +105,7 @@ export function WarehousesPanel({ token, onChanged }: { token: string; onChanged
                 <tr><th>کد</th><th>نام</th><th>وضعیت</th><th></th></tr>
               </thead>
               <tbody>
-                {rows.map((w) => (
+                {pg.pageItems.map((w) => (
                   <tr key={w.id}>
                     <td data-label="کد" className="ltr-cell">{w.code}</td>
                     <td data-label="نام" className="entity-name">
@@ -135,6 +137,7 @@ export function WarehousesPanel({ token, onChanged }: { token: string; onChanged
                 ))}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>
