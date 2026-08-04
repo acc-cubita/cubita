@@ -28,15 +28,34 @@ export interface PurchaseRequest {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail ?? `خطای سرور (${res.status})`)
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const hasBody = init?.body != null
+  // Content-Type فقط وقتی بدنه هست. افزودنش روی GET درخواست را «غیرِ ساده» می‌کند و
+  // مرورگر را وادار به preflightِ OPTIONS می‌کند؛ روی موبایلِ کند این round-tripِ دوم
+  // شکننده است و باعثِ خطای «امکان دریافت پلن‌ها نیست» می‌شد. GET حالا درخواستِ ساده است.
+  const headers = { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers ?? {}) }
+  // فقط GET (idempotent) را retry کن؛ POSTِ خرید را نه، تا تراکنش دوباره ثبت نشود.
+  const attempts = method === 'GET' ? 3 : 1
+
+  let lastErr: unknown
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 12000)
+    try {
+      const res = await fetch(`${API_BASE}${path}`, { ...init, headers, signal: init?.signal ?? controller.signal })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail ?? `خطای سرور (${res.status})`)
+      }
+      return (await res.json()) as T
+    } catch (err) {
+      lastErr = err
+      if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+    } finally {
+      clearTimeout(timer)
+    }
   }
-  return res.json()
+  throw lastErr instanceof Error ? lastErr : new Error('خطا در ارتباط با سرور')
 }
 
 export function fetchPlans(): Promise<Plan[]> {

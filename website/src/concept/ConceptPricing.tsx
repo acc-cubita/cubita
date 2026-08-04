@@ -139,10 +139,19 @@ export function ConceptPricing() {
   const [selected, setSelected] = useState<Plan | null>(null)
   const [period, setPeriod] = useState<BillingPeriod>('yearly')
 
-  useEffect(() => {
+  const [loading, setLoading] = useState(true)
+
+  function load() {
+    setLoadError(null)
+    setLoading(true)
     fetchPlans()
       .then(setPlans)
-      .catch(() => setLoadError('در حال حاضر امکان دریافت لیست پلن‌ها نیست. لطفاً بعداً دوباره تلاش کنید.'))
+      .catch(() => setLoadError('در حال حاضر امکان دریافت لیست پلن‌ها نیست. لطفاً دوباره تلاش کنید.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    load()
   }, [])
 
   const meta = periodMeta(period)
@@ -177,7 +186,15 @@ export function ConceptPricing() {
         ))}
       </div>
 
-      {loadError && <p className="cc-form-error cc-center">{loadError}</p>}
+      {loadError && (
+        <div className="cc-form-error cc-center" role="alert">
+          <span>{loadError}</span>
+          <button type="button" className="cc-btn cc-btn-ghost cc-retry-btn" onClick={load}>
+            تلاش دوباره
+          </button>
+        </div>
+      )}
+      {loading && !loadError && <p className="cc-center cc-pricing-loading">در حال بارگذاری پلن‌ها…</p>}
 
       <div className="cc-pricing-grid">
         {plans.map((plan, i) => {
@@ -190,9 +207,10 @@ export function ConceptPricing() {
             <motion.div
               key={plan.key}
               className={`cc-plan${plan.highlighted ? ' cc-plan-hot' : ''}`}
+              // انیمیشنِ ورود روی mount (نه whileInView): کارت‌ها بعد از fetch رندر می‌شوند و
+              // روی موبایل، تشخیصِ in-view گاهی دیر/غلط بود و کارت‌ها روی opacity:0 گیر می‌کردند.
               initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
             >
               {plan.highlighted && (
