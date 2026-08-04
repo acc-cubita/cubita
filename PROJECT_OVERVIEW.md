@@ -306,6 +306,15 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
 
+- **۱۴۰۵/۰۵/۱۴ (2026-08-04) — «فروشگاهِ بومی»: خطِ بیلد + دانلودِ بسته‌ی سایت:**
+  - **بک‌اند** `GET /api/storefront/site-bundle`: قالبِ `storefront/` را می‌خواند، `assets/config.js` را با
+    `apiBase`(از `storefront_api_base`/`backend_url`)+`slug`+`publishable_key`ِ همین مستأجر جایگزین می‌کند، فایلِ
+    «آموزش-اتصال.txt» می‌افزاید، و **ZIP** برمی‌گرداند (`Response` با `application/zip`). `README.md`ِ داخلی حذف می‌شود.
+    `last_built_at` به‌روز می‌شود. سرویس `services/site_build.py`؛ دو تنظیمِ تازه‌ی `config.py`.
+  - **فرانت:** دکمه‌ی **«ساخت و دانلودِ سایت»** در کارتِ «پیوند و انتشار» (`downloadStorefrontBundle` → Blob → دانلود) +
+    بخشِ **راهنمای اتصال** (details). `.btn-download`/`.sf-guide` CSS.
+  - **تست:** بسته unzip می‌شود و config با slug/keyِ واقعی و **بدونِ placeholderِ REPLACE_WITH** تأیید شد. **۹۶۴ سبز**؛ tsc پاک. **مستقر نشده.**
+
 - **۱۴۰۵/۰۵/۱۴ (2026-08-04) — «فروشگاهِ بومی»: قالبِ سایتِ عمومی (`storefront/`):**
   - قالبِ **بی‌نام‌ونشانِ** فروشگاه که روی هاستِ خودِ مستأجر آپلود می‌شود و از `/api/shop/*` تغذیه می‌کند.
     **⚠️ عمداً نامِ ipnetcity ندارد** (کاربر سایتِ دوربینِ زنده با همین نام روی VPS دارد — [[do-not-touch-ipnetcity]]).

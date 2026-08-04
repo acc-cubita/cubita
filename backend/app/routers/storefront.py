@@ -6,12 +6,14 @@
 """
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.deps import require_feature, require_permission
 from app.models.user import User
+from app.services.site_build import build_site_bundle
 from app.schemas.storefront_native import (
     FulfillmentIn,
     GatewayIn,
@@ -32,7 +34,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=StorefrontSettingsOut)
-def get_settings(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+def read_storefront_settings(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
     return service.to_settings_out(db, service.get_or_create_storefront(db))
 
 
@@ -48,6 +50,25 @@ def update_settings(
 @router.post("/key/rotate", response_model=StorefrontSettingsOut)
 def rotate_key(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
     return service.to_settings_out(db, service.rotate_key(db))
+
+
+@router.get("/site-bundle")
+def site_bundle(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    """بسته‌ی ZIPِ سایتِ فروشگاه با config.jsِ مخصوصِ این کسب‌وکار (apiBase/slug/key)."""
+    sf = service.get_or_create_storefront(db)
+    slug = service.tenant_slug(db)
+    settings = get_settings()
+    api_base = (settings.storefront_api_base or settings.backend_url).rstrip("/")
+    try:
+        data = build_site_bundle(api_base=api_base, slug=slug, key=sf.publishable_key)
+    except FileNotFoundError as err:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(err))
+    service.mark_built(db, sf)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="cubita-storefront-{slug}.zip"'},
+    )
 
 
 @router.post("/publish", response_model=StorefrontSettingsOut)

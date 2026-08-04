@@ -868,6 +868,16 @@ export const updateStorefrontFulfillment = (token: string, id: string, status: s
     fulfillment_status: status,
   })
 
+/** بسته‌ی ZIPِ سایت را می‌گیرد (config.js با apiBase/slug/key این کسب‌وکار بیک شده). */
+export async function downloadStorefrontBundle(token: string): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/storefront/site-bundle`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`ساختِ بسته‌ی سایت ناموفق بود (${res.status})`)
+  const blob = await res.blob()
+  const cd = res.headers.get('Content-Disposition') || ''
+  const m = cd.match(/filename="?([^"]+)"?/)
+  return { blob, filename: m && m[1] ? m[1] : 'cubita-storefront.zip' }
+}
+
 export interface StockAdjustmentRecord {
   id: string
   item_id: string

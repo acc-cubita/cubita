@@ -57,9 +57,22 @@ def get_or_create_storefront(db: Session) -> Storefront:
     return sf
 
 
-def _tenant_slug(db: Session) -> str:
+def tenant_slug(db: Session) -> str:
+    """slugِ مستأجرِ جاری = شناسه‌ی عمومیِ فروشگاه (در سایت بیک می‌شود)."""
     tenant = db.get(Tenant, require_session_tenant(db))
     return tenant.slug if tenant else ""
+
+
+# سازگاریِ داخلی (نامِ قبلی)
+_tenant_slug = tenant_slug
+
+
+def mark_built(db: Session, sf: Storefront) -> Storefront:
+    from datetime import datetime, timezone
+
+    sf.last_built_at = datetime.now(timezone.utc)
+    db.flush()
+    return sf
 
 
 def to_settings_out(db: Session, sf: Storefront) -> StorefrontSettingsOut:

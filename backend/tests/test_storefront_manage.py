@@ -4,6 +4,9 @@
 می‌کند، و بعد همان کالا از سطحِ عمومیِ `/api/shop/*` با کلیدِ همان فروشگاه دیده می‌شود.
 و: مرچنتِ درگاه هرگز در پاسخ برنمی‌گردد.
 """
+import io
+import zipfile
+
 from tests.conftest import PRIMARY_SLUG
 from tests.factories import make_item
 
@@ -101,3 +104,21 @@ def test_gateway_merchant_is_secret(client):
 
 def test_unknown_gateway_rejected(client):
     assert client.put("/api/storefront/gateways/paypal", json={"merchant_id": "x"}).status_code == 400
+
+
+def test_site_bundle_bakes_tenant_config(client):
+    key = client.get("/api/storefront").json()["publishable_key"]
+    res = client.get("/api/storefront/site-bundle")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/zip"
+
+    z = zipfile.ZipFile(io.BytesIO(res.content))
+    names = z.namelist()
+    assert "index.html" in names
+    assert "assets/config.js" in names and "assets/app.js" in names and "assets/style.css" in names
+    assert any("آموزش" in n for n in names), "فایلِ آموزشِ اتصال باید در بسته باشد"
+    assert "README.md" not in names, "سندِ داخلیِ توسعه نباید در بسته‌ی مستأجر باشد"
+
+    cfg = z.read("assets/config.js").decode("utf-8")
+    assert PRIMARY_SLUG in cfg and key in cfg
+    assert "REPLACE_WITH" not in cfg, "config باید با مقادیرِ واقعی جایگزین شده باشد"

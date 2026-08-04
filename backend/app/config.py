@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # تنظیماتِ اتصال به سایتِ فروشگاهی حالا پرمستأجر است (جدولِ storefront_settings)،
     # نه سراسری در .env — تا هر کسب‌وکار فروشگاهِ خودش را وصل کند.
 
+    # فروشگاهِ بومی: پایه‌ی API که در config.js سایتِ دانلودشده بیک می‌شود (سایت با آن به
+    # /api/shop/* وصل می‌شود). خالی = از backend_url استفاده کن. در prod باید https://acc.cubita.ir باشد.
+    storefront_api_base: str = ""
+    # مسیرِ پوشه‌ی قالبِ فروشگاه (storefront/). خالی = پوشه‌ی storefront/ کنارِ ریشه‌ی مخزن.
+    storefront_template_dir: str = ""
+
     # درگاه پرداخت زرین‌پال برای خرید پلن‌های سایت تجاری cubita.ir
     zarinpal_merchant_id: str = "00000000-0000-0000-0000-000000000000"
     zarinpal_sandbox: bool = True

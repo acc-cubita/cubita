@@ -13,9 +13,11 @@ import {
   PowerOff,
   CreditCard,
   Globe,
+  Download,
 } from 'lucide-react'
 import {
   confirmStorefrontOrder,
+  downloadStorefrontBundle,
   fetchNativeStorefront,
   fetchStorefrontGateways,
   fetchStorefrontItems,
@@ -157,6 +159,21 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
       setMessage('کلید تازه ساخته شد — سایتِ دانلودشده را دوباره بسازید.')
     })
 
+  const buildSite = () =>
+    guard(async () => {
+      const { blob, filename } = await downloadStorefrontBundle(token)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      fetchNativeStorefront(token).then(loadSettings).catch(() => {})
+      setMessage('بسته‌ی سایت ساخته و دانلود شد. راهنمای اتصال داخلِ فایلِ «آموزش-اتصال.txt» است.')
+    })
+
   const copyKey = async () => {
     if (!sf) return
     try {
@@ -271,7 +288,20 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
             <button type="button" className={published ? 'btn-danger-soft' : 'btn-primary'} onClick={() => void togglePublish()} disabled={busy}>
               {published ? <><PowerOff size={14} /> لغوِ انتشار</> : <><Rocket size={14} /> انتشار</>}
             </button>
+            <button type="button" className="btn-download" onClick={() => void buildSite()} disabled={busy}>
+              <Download size={14} /> ساخت و دانلودِ سایت
+            </button>
           </div>
+          <details className="sf-guide">
+            <summary>راهنمای اتصالِ سایت به هاست</summary>
+            <ol>
+              <li>دکمه‌ی «ساخت و دانلودِ سایت» را بزنید و فایلِ ZIP را از حالتِ فشرده خارج کنید.</li>
+              <li>فایل‌ها (index.html و پوشه‌ی assets) را در پوشه‌ی اصلیِ هاستِ خود آپلود کنید (public_html).</li>
+              <li>دامنه‌ی سایت را بالا در «originِ مجاز» ثبت و ذخیره کنید، سپس «انتشار» را بزنید.</li>
+              <li>درگاهِ پرداختِ خود را در بخشِ «درگاهِ پرداخت» وارد کنید. تمام!</li>
+            </ol>
+            <p className="field-hint">راهنمای کاملِ گام‌به‌گام داخلِ فایلِ «آموزش-اتصال.txt» در همان بسته هست.</p>
+          </details>
         </SectionCard>
 
         <SectionCard icon={Store} title="ظاهر و سئو" description="عنوان/توضیحِ سئو، رنگِ اصلی و تلفنِ تماسِ فوترِ سایت.">

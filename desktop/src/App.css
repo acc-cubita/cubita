@@ -4358,6 +4358,18 @@ button:disabled {
 }
 .btn-danger-soft:hover { border-color: var(--danger, #d9534f); }
 
+.btn-download {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--accent, #6366f1); color: var(--accent, #6366f1); background: transparent;
+  border-radius: 10px; padding: 9px 16px; font: inherit; font-weight: 700; cursor: pointer;
+}
+.btn-download:hover { background: var(--accent-bg, rgba(99, 102, 241, 0.1)); }
+.btn-download:disabled { opacity: 0.6; cursor: default; }
+
+.sf-guide { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.sf-guide summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--text); }
+.sf-guide ol { margin: 10px 0 4px; padding-inline-start: 20px; color: var(--text-muted); font-size: 13px; line-height: 1.9; }
+
 /* ===== تأییدِ شماره‌ی موبایل (پروفایل) ===== */
 .phone-verify {
   margin-top: -2px;
