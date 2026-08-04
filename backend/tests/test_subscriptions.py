@@ -114,6 +114,7 @@ def test_renewing_after_expiry_starts_from_today(db, tenant_id):
 
 def test_yearly_and_monthly_periods(db):
     assert days_for_period("yearly") == 365
+    assert days_for_period("semiannual") == 180
     assert days_for_period("monthly") == 30
     assert days_for_period("چیز ناشناخته") == 365, "پیش‌فرض ناشناخته باید سالانه باشد"
 

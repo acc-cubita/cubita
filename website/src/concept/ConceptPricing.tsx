@@ -1,11 +1,37 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, X, Sparkles } from 'lucide-react'
-import { fetchPlans, requestPurchase, type Plan } from '../api'
+import { fetchPlans, requestPurchase, type BillingPeriod, type Plan } from '../api'
 
 const TRIAL_URL = 'https://demo.cubita.ir'
 
-function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
+const PERIODS: { key: BillingPeriod; label: string; months: number; save?: string }[] = [
+  { key: 'monthly', label: 'ماهانه', months: 1 },
+  { key: 'semiannual', label: 'شش‌ماهه', months: 6, save: '۱۰٪ تخفیف' },
+  { key: 'yearly', label: 'سالانه', months: 12, save: '۲۰٪ تخفیف' },
+]
+
+const faNum = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+function priceFor(plan: Plan, period: BillingPeriod): number {
+  return Number(plan.prices?.[period] ?? plan.price_toman)
+}
+function monthlyBase(plan: Plan): number {
+  return Number(plan.prices?.monthly ?? 0)
+}
+function periodMeta(period: BillingPeriod) {
+  return PERIODS.find((p) => p.key === period) ?? PERIODS[2]
+}
+
+function PurchaseModal({
+  plan,
+  period,
+  onClose,
+}: {
+  plan: Plan
+  period: BillingPeriod
+  onClose: () => void
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -34,6 +60,7 @@ function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
         customer_email: email,
         customer_phone: phone,
         business_name: business,
+        billing_period: period,
       })
       window.location.href = payment_url
     } catch (err) {
@@ -58,7 +85,7 @@ function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
           <div>
             <h3 id="cc-pm-title">خرید پلن {plan.name}</h3>
             <div className="cc-modal-sub">
-              {Number(plan.price_toman).toLocaleString('fa-IR')} تومان / {plan.billing_period === 'yearly' ? 'سالانه' : 'ماهانه'}
+              {faNum(priceFor(plan, period))} تومان / {periodMeta(period).label}
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="بستن" className="cc-modal-close">
@@ -110,12 +137,15 @@ export function ConceptPricing() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Plan | null>(null)
+  const [period, setPeriod] = useState<BillingPeriod>('yearly')
 
   useEffect(() => {
     fetchPlans()
       .then(setPlans)
       .catch(() => setLoadError('در حال حاضر امکان دریافت لیست پلن‌ها نیست. لطفاً بعداً دوباره تلاش کنید.'))
   }, [])
+
+  const meta = periodMeta(period)
 
   return (
     <section className="cc-section" id="cc-pricing">
@@ -128,59 +158,91 @@ export function ConceptPricing() {
       >
         <span className="cc-eyebrow cc-eyebrow-center">قیمت‌گذاری</span>
         <h2>یک پلن به اندازه‌ی کسب‌وکارت</h2>
-        <p>هر پلن با ۱۴ روز آزمایشِ رایگان شروع می‌شود؛ قیمت‌ها سالانه و به تومان است و هر زمان می‌توانی ارتقا دهی.</p>
+        <p>هر پلن با ۱۴ روز آزمایشِ رایگان شروع می‌شود؛ دوره را انتخاب کن — شش‌ماهه ۱۰٪ و سالانه ۲۰٪ ارزان‌تر است.</p>
       </motion.div>
+
+      <div className="cc-billing-toggle" role="tablist" aria-label="دوره‌ی پرداخت">
+        {PERIODS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            role="tab"
+            aria-selected={period === p.key}
+            className={`cc-billing-opt${period === p.key ? ' is-active' : ''}`}
+            onClick={() => setPeriod(p.key)}
+          >
+            {p.label}
+            {p.save && <span className="cc-billing-save">{p.save}</span>}
+          </button>
+        ))}
+      </div>
 
       {loadError && <p className="cc-form-error cc-center">{loadError}</p>}
 
       <div className="cc-pricing-grid">
-        {plans.map((plan, i) => (
-          <motion.div
-            key={plan.key}
-            className={`cc-plan${plan.highlighted ? ' cc-plan-hot' : ''}`}
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: i * 0.08 }}
-          >
-            {plan.highlighted && (
-              <span className="cc-plan-badge">
-                <Sparkles size={13} /> پیشنهادی
-              </span>
-            )}
-            <div className="cc-plan-name">{plan.name}</div>
-            <div className="cc-plan-desc">{plan.description}</div>
-            <div className="cc-plan-price">
-              <span className="cc-plan-amount">{Number(plan.price_toman).toLocaleString('fa-IR')}</span>
-              <span className="cc-plan-unit">تومان</span>
-            </div>
-            <div className="cc-plan-period">
-              {plan.billing_period === 'yearly' ? 'سالانه' : 'ماهانه'}
-              {plan.max_users ? ` — تا ${plan.max_users} کاربر` : ' — کاربر نامحدود'}
-            </div>
-            <ul className="cc-plan-feats">
-              {plan.features.map((f) => (
-                <li key={f}>
-                  <Check size={16} /> {f}
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className={`cc-btn ${plan.highlighted ? 'cc-btn-primary' : 'cc-btn-ghost'} cc-plan-btn`}
-              onClick={() => setSelected(plan)}
+        {plans.map((plan, i) => {
+          const price = priceFor(plan, period)
+          const mBase = monthlyBase(plan)
+          const full = mBase * meta.months
+          const discount = period !== 'monthly' && full > 0 ? Math.round((1 - price / full) * 100) : 0
+          const perMonth = price / meta.months
+          return (
+            <motion.div
+              key={plan.key}
+              className={`cc-plan${plan.highlighted ? ' cc-plan-hot' : ''}`}
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={{ duration: 0.5, delay: i * 0.08 }}
             >
-              خرید این پلن
-            </button>
-          </motion.div>
-        ))}
+              {plan.highlighted && (
+                <span className="cc-plan-badge">
+                  <Sparkles size={13} /> پیشنهادی
+                </span>
+              )}
+              <div className="cc-plan-name">{plan.name}</div>
+              <div className="cc-plan-desc">{plan.description}</div>
+              <div className="cc-plan-price">
+                <span className="cc-plan-amount">{faNum(price)}</span>
+                <span className="cc-plan-unit">تومان</span>
+              </div>
+              <div className="cc-plan-period">
+                {meta.label}
+                {plan.max_users ? ` — تا ${faNum(plan.max_users)} کاربر` : ' — کاربر نامحدود'}
+              </div>
+              {discount > 0 && (
+                <div className="cc-plan-save">
+                  <span className="cc-plan-old">{faNum(full)}</span>
+                  <span className="cc-plan-save-badge">٪{faNum(discount)} تخفیف</span>
+                </div>
+              )}
+              {period !== 'monthly' && mBase > 0 && (
+                <div className="cc-plan-permonth">معادلِ {faNum(perMonth)} تومان در ماه</div>
+              )}
+              <ul className="cc-plan-feats">
+                {plan.features.map((f) => (
+                  <li key={f}>
+                    <Check size={16} /> {f}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className={`cc-btn ${plan.highlighted ? 'cc-btn-primary' : 'cc-btn-ghost'} cc-plan-btn`}
+                onClick={() => setSelected(plan)}
+              >
+                خرید این پلن
+              </button>
+            </motion.div>
+          )
+        })}
       </div>
 
       <p className="cc-pricing-note">
         مطمئن نیستی؟ اول <a href={TRIAL_URL}>۱۴ روز رایگان</a> امتحان کن.
       </p>
 
-      {selected && <PurchaseModal plan={selected} onClose={() => setSelected(null)} />}
+      {selected && <PurchaseModal plan={selected} period={period} onClose={() => setSelected(null)} />}
     </section>
   )
 }

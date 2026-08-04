@@ -38,13 +38,25 @@ def create_purchase_request(db: Session, data: PurchaseRequestIn) -> tuple[Purch
     if plan is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "پلن یافت نشد")
 
+    # قیمتِ همان دوره‌ای که مشتری انتخاب کرده؛ اگر پلن نگاشتِ قیمت نداشت، به قیمتِ پیش‌فرض
+    # (price_toman = سالانه) برمی‌گردیم تا هرگز مبلغِ صفر به درگاه نرود.
+    period = data.billing_period
+    prices = plan.prices or {}
+    amount = prices.get(period)
+    if amount is None:
+        amount = plan.price_toman
+    amount = int(amount)
+    if amount <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "قیمتِ این دوره برای پلن تعریف نشده است")
+
     purchase = Purchase(
         plan_id=plan.id,
         customer_name=data.customer_name,
         customer_email=data.customer_email,
         customer_phone=data.customer_phone,
         business_name=data.business_name,
-        amount_toman=plan.price_toman,
+        amount_toman=amount,
+        billing_period=period,
         status="pending_payment",
     )
     db.add(purchase)
@@ -56,9 +68,9 @@ def create_purchase_request(db: Session, data: PurchaseRequestIn) -> tuple[Purch
         "request",
         {
             "merchant_id": settings.zarinpal_merchant_id,
-            "amount": int(plan.price_toman) * 10,  # مبلغ به ریال (تومان × ۱۰)
+            "amount": amount * 10,  # مبلغ به ریال (تومان × ۱۰)
             "callback_url": callback_url,
-            "description": f"خرید پلن {plan.name} - Cubita",
+            "description": f"خرید پلن {plan.name} ({period}) - Cubita",
             "metadata": {"email": data.customer_email, "mobile": data.customer_phone},
         },
     )

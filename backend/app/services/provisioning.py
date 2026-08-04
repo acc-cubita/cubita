@@ -168,10 +168,13 @@ def _extend_subscription(db: Session, tenant_id, purchase, *, note: str) -> None
     plan = purchase.plan
     if plan is None:
         return
+    # طولِ اشتراک از دوره‌ای که مشتری *خرید* می‌آید، نه پیش‌فرضِ پلن — وگرنه خریدِ ماهانه
+    # هم یک سال اعتبار می‌گرفت. خریدهای قدیمی که این ستون را ندارند سالانه فرض می‌شوند.
+    period = getattr(purchase, "billing_period", None) or plan.billing_period
     subscriptions.grant(
         db,
         tenant_id,
-        days=subscriptions.days_for_period(plan.billing_period),
+        days=subscriptions.days_for_period(period),
         plan_id=plan.id,
         purchase_id=purchase.id,
         note=note,

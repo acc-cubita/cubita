@@ -12,6 +12,8 @@ class PlanOut(BaseModel):
     description: str
     price_toman: Decimal
     billing_period: str
+    #: نگاشتِ دوره→قیمت (تومان). سایت با کلیدِ دوره‌ی انتخابی از این می‌خواند.
+    prices: dict[str, Decimal] = {}
     max_users: int | None
     features: list[str]
     is_active: bool
@@ -27,11 +29,15 @@ class PurchaseRequestIn(BaseModel):
     customer_email: EmailStr
     customer_phone: str = ""
     business_name: str = ""
+    #: دوره‌ی انتخابیِ مشتری. قیمت و طولِ اشتراک از همین تعیین می‌شوند.
+    billing_period: str = "yearly"
 
     @model_validator(mode="after")
     def validate_required(self) -> "PurchaseRequestIn":
         if not self.customer_name.strip():
             raise ValueError("نام الزامی است")
+        if self.billing_period not in ("monthly", "semiannual", "yearly"):
+            raise ValueError("دوره‌ی صورتحساب نامعتبر است")
         return self
 
 

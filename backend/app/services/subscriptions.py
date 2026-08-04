@@ -130,9 +130,15 @@ def grant(
     return sub
 
 
+#: دوره‌های مجازِ صورتحساب و طولشان به روز. ناشناخته → سالانه (محافظه‌کارانه‌ترین برای فروشنده نیست،
+#: ولی رفتارِ پیش‌فرضِ تاریخی است و تستش هم همین را انتظار دارد).
+BILLING_PERIOD_DAYS = {"monthly": 30, "semiannual": 180, "yearly": 365}
+BILLING_PERIODS = tuple(BILLING_PERIOD_DAYS)
+
+
 def days_for_period(billing_period: str) -> int:
     """طول دوره بر حسب روز. ماه شمسی و میلادی هر دو تقریبی‌اند و اینجا مهم نیست."""
-    return 30 if billing_period == "monthly" else 365
+    return BILLING_PERIOD_DAYS.get(billing_period, 365)
 
 
 @dataclass(frozen=True)

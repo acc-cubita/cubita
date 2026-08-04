@@ -1,5 +1,7 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://acc.cubita.ir'
 
+export type BillingPeriod = 'monthly' | 'semiannual' | 'yearly'
+
 export interface Plan {
   id: string
   key: string
@@ -7,6 +9,8 @@ export interface Plan {
   description: string
   price_toman: string
   billing_period: string
+  //: نگاشتِ دوره→قیمت (تومان). با تعویضِ دوره، قیمتِ همان کارت از این خوانده می‌شود.
+  prices: Partial<Record<BillingPeriod, string>>
   max_users: number | null
   features: string[]
   is_active: boolean
@@ -20,6 +24,7 @@ export interface PurchaseRequest {
   customer_email: string
   customer_phone: string
   business_name: string
+  billing_period: BillingPeriod
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

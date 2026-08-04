@@ -20,8 +20,11 @@ class Plan(UUIDPKMixin, TimestampMixin, Base):
     key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(Text, default="")
-    price_toman: Mapped[float] = mapped_column(Numeric(18, 0))
-    billing_period: Mapped[str] = mapped_column(String(20), default="yearly")  # yearly | monthly
+    price_toman: Mapped[float] = mapped_column(Numeric(18, 0))  # قیمتِ پیش‌فرض (= سالانه) برای خواننده‌های قدیمی
+    billing_period: Mapped[str] = mapped_column(String(20), default="yearly")  # دوره‌ی پیش‌فرضِ نمایش
+    #: نگاشتِ دوره→قیمت (تومان): {"monthly":.., "semiannual":.., "yearly":..}. سایتِ تجاری با
+    #: کلیدِ دوره از این می‌خواند تا تعویضِ ماهانه/شش‌ماهه/سالانه قیمتِ همان کارت را عوض کند.
+    prices: Mapped[dict] = mapped_column(JSONB, default=dict)
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
     features: Mapped[list] = mapped_column(JSONB, default=list)  # لیست ساده‌ای از رشته‌ها برای نمایش در صفحه‌ی قیمت‌گذاری
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -45,6 +48,8 @@ class Purchase(UUIDPKMixin, TimestampMixin, Base):
     business_name: Mapped[str] = mapped_column(String(150), default="")
 
     amount_toman: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: دوره‌ای که مشتری هنگامِ خرید انتخاب کرد؛ طولِ اشتراک از همین خوانده می‌شود.
+    billing_period: Mapped[str] = mapped_column(String(20), default="yearly", server_default="yearly")
     status: Mapped[str] = mapped_column(String(20), default="pending_payment")
 
     zarinpal_authority: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)

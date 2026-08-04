@@ -35,6 +35,7 @@ export function PurchaseModal({ plan, onClose }: { plan: Plan; onClose: () => vo
         customer_email: email,
         customer_phone: phone,
         business_name: business,
+        billing_period: 'yearly',
       })
       window.location.href = payment_url
     } catch (err) {
