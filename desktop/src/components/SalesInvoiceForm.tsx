@@ -386,6 +386,7 @@ export function SalesInvoiceForm({
                 <th>موجودی انبار</th>
                 <th>قیمت واحد</th>
                 <th>تخفیف</th>
+                <th>مبلغ</th>
                 <th></th>
               </tr>
             </thead>
@@ -433,6 +434,16 @@ export function SalesInvoiceForm({
                       onChange={(v) => updateLine(i, { discount: v })}
                       placeholder="۰"
                     />
+                  </td>
+                  <td data-label="مبلغ">
+                    <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
+                      {line.itemId
+                        ? Math.max(
+                            (Number(line.qty) || 0) * (Number(line.unitPrice) || 0) - (Number(line.discount) || 0),
+                            0,
+                          ).toLocaleString('fa-IR')
+                        : '—'}
+                    </span>
                   </td>
                   <td>
                     <button

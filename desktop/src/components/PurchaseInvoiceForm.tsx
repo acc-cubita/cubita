@@ -300,6 +300,7 @@ export function PurchaseInvoiceForm({
                 <th>تعداد</th>
                 <th>بهای واحد</th>
                 <th>تخفیف</th>
+                <th>مبلغ</th>
                 <th></th>
               </tr>
             </thead>
@@ -332,6 +333,16 @@ export function PurchaseInvoiceForm({
                       onChange={(v) => updateLine(i, { discount: v })}
                       placeholder="۰"
                     />
+                  </td>
+                  <td data-label="مبلغ">
+                    <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
+                      {line.itemId
+                        ? Math.max(
+                            (Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0),
+                            0,
+                          ).toLocaleString('fa-IR')
+                        : '—'}
+                    </span>
                   </td>
                   <td>
                     <button

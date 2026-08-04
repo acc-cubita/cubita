@@ -1534,6 +1534,19 @@ button:disabled {
 /* اعداد (NumberInput با dir=ltr) به لبه‌ی راستِ خانه می‌چسبند؛ متنِ فارسی هم طبیعتاً راست است */
 .invoice-lines td input { text-align: right; }
 
+/* سلولِ «مبلغِ ردیف» — متنِ نمایشیِ محاسبه‌شده (نه ورودی). راست‌چین، ارقامِ هم‌عرض،
+   و هم‌پدینگِ ورودی‌ها تا زیرِ هم قرار گیرد. */
+.invoice-lines td .line-amount {
+  display: block;
+  padding: 7px 8px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.invoice-lines td .line-amount.muted { color: var(--text-muted); font-weight: 400; }
+
 /* ── موبایل/عرضِ کم: ورودی‌های ردیفِ فاکتور نباید تا نامرئی‌شدن جمع شوند ──
    بدونِ این کف‌ها، «تعداد» و «قیمت» زیرِ فشارِ ستون‌های زیاد به صفر می‌رسند و عدد
    دیده نمی‌شود. با کفِ عرض، جدول به‌جای فشرده‌شدن داخلِ .table-scroll افقی می‌لغزد و

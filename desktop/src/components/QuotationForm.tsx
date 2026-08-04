@@ -208,6 +208,7 @@ export function QuotationForm({
                 <th>تعداد</th>
                 {stockMode === 'warehouse' && <th>موجودی انبار</th>}
                 <th>قیمت واحد</th>
+                <th>مبلغ</th>
                 <th></th>
               </tr>
             </thead>
@@ -255,6 +256,13 @@ export function QuotationForm({
                           </button>
                         )}
                       </div>
+                    </td>
+                    <td data-label="مبلغ">
+                      <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
+                        {line.itemId
+                          ? ((Number(line.qty) || 0) * (Number(line.unitPrice) || 0)).toLocaleString('fa-IR')
+                          : '—'}
+                      </span>
                     </td>
                     <td>
                       <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف ردیف">
