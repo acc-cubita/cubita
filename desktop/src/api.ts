@@ -747,6 +747,127 @@ export const fetchStorefrontSettings = (token: string) =>
 export const updateStorefrontSettings = (token: string, data: StorefrontSettingsIn) =>
   authedSend<StorefrontSettings>(token, 'PUT', '/api/integration/settings', data)
 
+// ── فروشگاهِ بومیِ کوبیتا (/api/storefront/*) ────────────────────────────────────
+// جدا از اتصالِ بیرونی بالا: این‌جا کاربر فروشگاهِ خودش را می‌سازد و منتشر می‌کند.
+
+export interface NativeStorefront {
+  slug: string
+  theme_id: string
+  theme_config: Record<string, unknown>
+  seo_title: string
+  seo_description: string
+  contact_block: Record<string, unknown>
+  allowed_origin: string
+  /** کلیدِ publishable — در سایتِ استاتیک بیک می‌شود؛ رازِ پنهان نیست. */
+  publishable_key: string
+  status: string // draft | published
+  last_built_at: string | null
+}
+
+export interface NativeStorefrontIn {
+  theme_id: string
+  theme_config: Record<string, unknown>
+  seo_title: string
+  seo_description: string
+  contact_block: Record<string, unknown>
+  allowed_origin: string
+}
+
+export interface StorefrontItem {
+  item_id: string
+  name: string
+  sku: string
+  sales_price: number
+  is_listed: boolean
+  images: string[]
+  long_description: string
+  slug: string
+  sort: number
+  badge: string
+}
+
+export interface StorefrontItemIn {
+  is_listed: boolean
+  images?: string[]
+  long_description?: string
+  slug?: string
+  sort?: number
+  badge?: string
+}
+
+export interface StorefrontGateway {
+  provider: string
+  has_merchant: boolean
+  is_active: boolean
+}
+
+export interface StorefrontOrderLine {
+  item_id: string
+  item_name: string
+  qty: number
+  unit_price: number
+  line_total: number
+}
+
+export interface StorefrontOrder {
+  id: string
+  order_number: number
+  tracking_code: string
+  customer_name: string
+  customer_phone: string
+  customer_email: string
+  shipping_address: string
+  note: string
+  subtotal: number
+  total: number
+  payment_status: string // pending | paid | failed | cancelled
+  fulfillment_status: string // new | confirmed | shipped | done | cancelled
+  sales_invoice_id: string | null
+  created_at: string
+  lines: StorefrontOrderLine[]
+}
+
+export const fetchNativeStorefront = (token: string) =>
+  authedGet<NativeStorefront>(token, '/api/storefront')
+
+export const updateNativeStorefront = (token: string, data: NativeStorefrontIn) =>
+  authedSend<NativeStorefront>(token, 'PUT', '/api/storefront', data)
+
+export const rotateStorefrontKey = (token: string) =>
+  authedSend<NativeStorefront>(token, 'POST', '/api/storefront/key/rotate', {})
+
+export const publishStorefront = (token: string) =>
+  authedSend<NativeStorefront>(token, 'POST', '/api/storefront/publish', {})
+
+export const unpublishStorefront = (token: string) =>
+  authedSend<NativeStorefront>(token, 'POST', '/api/storefront/unpublish', {})
+
+export const fetchStorefrontItems = (token: string) =>
+  authedGet<StorefrontItem[]>(token, '/api/storefront/items')
+
+export const updateStorefrontItem = (token: string, itemId: string, data: StorefrontItemIn) =>
+  authedSend<StorefrontItem>(token, 'PUT', `/api/storefront/items/${itemId}`, data)
+
+export const fetchStorefrontGateways = (token: string) =>
+  authedGet<StorefrontGateway[]>(token, '/api/storefront/gateways')
+
+export const updateStorefrontGateway = (
+  token: string,
+  provider: string,
+  data: { merchant_id: string; is_active: boolean },
+) => authedSend<StorefrontGateway>(token, 'PUT', `/api/storefront/gateways/${provider}`, data)
+
+export const fetchStorefrontOrders = (token: string) =>
+  authedGet<StorefrontOrder[]>(token, '/api/storefront/orders')
+
+export const confirmStorefrontOrder = (token: string, id: string) =>
+  authedSend<StorefrontOrder>(token, 'POST', `/api/storefront/orders/${id}/confirm-payment`, {})
+
+export const updateStorefrontFulfillment = (token: string, id: string, status: string) =>
+  authedSend<StorefrontOrder>(token, 'PUT', `/api/storefront/orders/${id}/fulfillment`, {
+    fulfillment_status: status,
+  })
+
 export interface StockAdjustmentRecord {
   id: string
   item_id: string

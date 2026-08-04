@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard } from 'lucide-react'
+import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2 } from 'lucide-react'
 import {
   fetchAccountsLive,
   fetchBankAccountsLive,
@@ -13,6 +13,8 @@ import { Sidebar, type PageKey } from './Sidebar'
 import { PayrollPanel } from './PayrollPanel'
 import { BenefitsPanel } from './BenefitsPanel'
 import { IntegrationPanel } from './IntegrationPanel'
+import { NativeStorefrontPanel } from './NativeStorefrontPanel'
+import { Tabs } from './Tabs'
 import { FeatureUpsell } from './FeatureUpsell'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
@@ -249,7 +251,22 @@ export function Dashboard({
               {(me.locked_features ?? []).includes('storefront') ? (
                 <FeatureUpsell feature="storefront" />
               ) : (
-                <IntegrationPanel token={token} />
+                <Tabs
+                  tabs={[
+                    {
+                      key: 'build',
+                      label: 'فروشگاهِ کوبیتا (بساز)',
+                      icon: Store,
+                      content: <NativeStorefrontPanel token={token} />,
+                    },
+                    {
+                      key: 'connect',
+                      label: 'اتصال به سایتِ موجود',
+                      icon: Link2,
+                      content: <IntegrationPanel token={token} />,
+                    },
+                  ]}
+                />
               )}
             </div>
           )}
