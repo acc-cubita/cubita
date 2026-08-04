@@ -245,6 +245,17 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
+/* چک‌باکس و رادیو در کلِ برنامه رنگِ برند (accent) بگیرند — به‌جای رنگِ خام/خاکستریِ
+   پیش‌فرضِ مرورگر که به‌ویژه در پوسته‌ی تیره بد دیده می‌شد. accent-color هم تیک/رادیو
+   را رنگ می‌کند و هم در هر دو پوسته درست کار می‌کند. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 /* ورودی‌های عددی (NumberInput، همیشه dir=ltr) راست‌چین‌اند تا در فرمِ راست‌به‌چپ
    عدد به لبه‌ی راست (شروعِ خوانش) بچسبد و ستون‌های عددی زیرِ هم بیایند — رفعِ RTL. */
 .num-input {
