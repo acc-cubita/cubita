@@ -176,8 +176,11 @@ POS از همان مسیرِ فاکتورِ فروش استفاده می‌کن�
 `trial_started_at`/`trial_reminder_sent_at`) · `0052` **تأیید ایمیل هنگام ثبت‌نام** (جدولِ سراسریِ
 `email_verification_codes` — کدِ ۶رقمی پیش از ساختِ حساب؛ کلیدش ایمیل است نه user_id، پس در `auth_tokens`
 نمی‌گنجید — و ستونِ `users.email_verified_at`؛ verify-before-create) · `0053` **قیمت‌گذاریِ چنددوره‌ای**
-(ستونِ `plans.prices` JSONBِ نگاشتِ دوره→قیمت + `purchases.billing_period`؛ ماهانه/شش‌ماهه/سالانه).
-(نسخه‌ی فعلی head = `0053`.)
+(ستونِ `plans.prices` JSONBِ نگاشتِ دوره→قیمت + `purchases.billing_period`؛ ماهانه/شش‌ماهه/سالانه) ·
+`0054` **فروشگاهِ بومیِ کوبیتا — جدول‌های پایه** (۷ جدولِ مستأجرمحور + RLS: `storefronts`, `item_storefront`,
+`storefront_categories`, `storefront_customers`, `storefront_orders`, `storefront_order_lines`, `payment_gateways`؛
+شروعِ فازِ ۰ سازنده‌ی فروشگاه — نقشه در STOREFRONT_PLAN.md؛ مدلِ اتصالِ بیرونیِ `storefront_settings`/0036 دست‌نخورده).
+(نسخه‌ی فعلی head = `0054`.)
 
 ---
 
@@ -302,6 +305,22 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۱۴ (2026-08-04) — «فروشگاهِ بومیِ کوبیتا»: فازِ ۰ (شالوده‌ی بک‌اند) (مهاجرت `0054`):**
+  - **بستر:** بازطراحیِ «اتصال فروشگاه» از مدلِ sync‌شونده‌ی بیرونی به یک **سازنده‌ی فروشگاهِ بومی**؛ کاتالوگ = همان
+    `items`، سفارش → مستقیم فاکتورِ فروش. نقشه‌ی کامل و تصمیم‌ها: **`STOREFRONT_PLAN.md`** ([[storefront-native-rebuild]]).
+    تصمیم‌های قفل‌شده: میزبانی روی هاستِ خودِ مستأجر (ZIP+آموزش)، رندرِ SSG با بازاستفاده از فرانتِ ipnetcity،
+    پرداختِ داخلِ سایت با زرین‌پالِ خودِ مستأجر، اولین قالب «عمومی».
+  - **مدل + مهاجرت `0054`:** ۷ جدولِ مستأجرمحور + RLS روی هر ۷ (`storefronts`, `item_storefront`,
+    `storefront_categories`, `storefront_customers`, `storefront_orders`+`_lines`, `payment_gateways`). فایلِ مدل
+    `app/models/storefront_native.py` (جدا از `storefront.py`ِ اتصالِ بیرونی که برای ipnetcity زنده می‌ماند).
+  - **API عمومیِ باریک** (`app/routers/shop.py` + `services/shop.py` + `schemas/shop.py`): `/api/shop/{info,catalog,
+    categories,product/{slug}}`. **احرازِ کلیدِ publishable** بدونِ کاربر — بوت‌استرَپِ مستأجر از `tenants.slug`
+    (سراسری)، سپس کلید داخلِ زمینه با `secrets.compare_digest`؛ منتشرنشده=۴۰۳. **سریالایزرِ کاست‌پنهان** (`ShopProductOut`
+    هرگز `average_cost`/سود نمی‌دهد). CORS per-storefront عمداً به فازِ تحویل موکول شد (TODO در روتر).
+  - **تست:** ۸ تستِ تازه (کاست‌پنهان، فیلترِ لیست‌شده، موجودی، اعتبارسنجیِ کلید/انتشار، HTTP، و **نشتِ کاتالوگِ بین دو
+    مستأجرِ واقعی**) + پوششِ خودکارِ پارامتریِ نشت روی ۷ جدولِ تازه. **کلِ سوییت ۹۵۱ سبز.** مهاجرت تا head اجرا و RLS
+    (`force=true` + policy) روی هر ۷ جدول راستی‌آزمایی شد. **هنوز روی prod مستقر نشده** (فازِ درحال‌ساخت).
 
 - **۱۴۰۵/۰۵/۱۳ (2026-08-04) — صفحه‌بندیِ عددیِ فهرست‌های داده در کلِ برنامه (کامیت `bfac44a`، فقط فرانت):**
   - **هدف:** تعمیمِ صفحه‌بندیِ «آخرین رویدادها» به همه‌ی فهرست‌های افزودنی؛ با گذر از ۱۰ ردیف، جدول صفحه‌بندیِ

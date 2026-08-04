@@ -39,6 +39,7 @@ from app.routers import (
     recurring,
     reports,
     returns,
+    shop,
     stock_taking,
     subscription,
     transfers,
@@ -100,6 +101,7 @@ app.include_router(manufacturing.router)
 app.include_router(advanced_inventory.router)
 app.include_router(onboarding.router)
 app.include_router(installments.router)
+app.include_router(shop.router)
 
 
 @app.get("/api/health")

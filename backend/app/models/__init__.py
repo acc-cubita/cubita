@@ -38,6 +38,15 @@ from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
 from app.models.stock_count import StockCountLine, StockCountSession
 from app.models.storefront import StorefrontSettings
+from app.models.storefront_native import (
+    ItemStorefront,
+    PaymentGateway,
+    Storefront,
+    StorefrontCategory,
+    StorefrontCustomer,
+    StorefrontOrder,
+    StorefrontOrderLine,
+)
 from app.models.quotations import SalesQuotation, SalesQuotationLine
 from app.models.returns import (
     PurchaseReturn,
@@ -123,4 +132,11 @@ __all__ = [
     "LeaveRecord",
     "BenefitRun",
     "StorefrontSettings",
+    "Storefront",
+    "ItemStorefront",
+    "StorefrontCategory",
+    "StorefrontCustomer",
+    "StorefrontOrder",
+    "StorefrontOrderLine",
+    "PaymentGateway",
 ]
