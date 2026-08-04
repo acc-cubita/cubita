@@ -38,3 +38,27 @@ class ShopInfoOut(BaseModel):
     seo_title: str
     seo_description: str
     contact_block: dict
+
+
+class ShopOrderLineIn(BaseModel):
+    slug: str
+    qty: int
+
+
+class ShopOrderIn(BaseModel):
+    customer_name: str
+    customer_phone: str
+    customer_email: str = ""
+    shipping_address: str = ""
+    note: str = ""
+    lines: list[ShopOrderLineIn]
+
+
+class ShopOrderOut(BaseModel):
+    """رسیدِ سفارشِ ثبت‌شده — قیمت‌ها سمتِ سرور محاسبه شده‌اند، نه از کلاینت."""
+
+    id: str
+    order_number: int
+    tracking_code: str
+    total: int
+    payment_status: str

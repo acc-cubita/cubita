@@ -41,6 +41,7 @@ from app.routers import (
     returns,
     shop,
     stock_taking,
+    storefront,
     subscription,
     transfers,
     treasury,
@@ -102,6 +103,7 @@ app.include_router(advanced_inventory.router)
 app.include_router(onboarding.router)
 app.include_router(installments.router)
 app.include_router(shop.router)
+app.include_router(storefront.router)
 
 
 @app.get("/api/health")

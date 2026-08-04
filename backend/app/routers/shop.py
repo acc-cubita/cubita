@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.shop import ShopCategoryOut, ShopInfoOut, ShopProductOut
+from app.schemas.shop import ShopCategoryOut, ShopInfoOut, ShopOrderIn, ShopOrderOut, ShopProductOut
 from app.services import shop as service
 from app.services.shop import ShopContext
 
@@ -55,3 +55,17 @@ def categories(ctx: ShopContext = Depends(get_shop_context), db: Session = Depen
 @router.get("/product/{slug}", response_model=ShopProductOut)
 def product(slug: str, ctx: ShopContext = Depends(get_shop_context), db: Session = Depends(get_db)):
     return service.get_product(db, slug)
+
+
+@router.post("/orders", response_model=ShopOrderOut, status_code=201)
+def create_order(
+    data: ShopOrderIn, ctx: ShopContext = Depends(get_shop_context), db: Session = Depends(get_db)
+):
+    order = service.place_order(db, data)
+    return ShopOrderOut(
+        id=str(order.id),
+        order_number=order.order_number,
+        tracking_code=order.tracking_code,
+        total=int(order.total),
+        payment_status=order.payment_status,
+    )
