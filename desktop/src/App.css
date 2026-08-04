@@ -465,9 +465,31 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   padding: 8px 12px;
   overflow-y: auto;
+}
+
+/* گروهِ ماژول‌ها: هر گروه یک سرتیترِ کم‌رنگ دارد و آیتم‌هایش را با فاصله‌ی کم
+   کنار هم می‌چیند؛ فاصله‌ی بینِ گروه‌ها بیشتر است تا دسته‌ها از هم جدا دیده شوند. */
+.sidebar-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-nav-group + .sidebar-nav-group {
+  margin-top: 12px;
+}
+
+.sidebar-nav-heading {
+  padding: 4px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  opacity: 0.72;
+  user-select: none;
 }
 
 .sidebar-nav-item {
