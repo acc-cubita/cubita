@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Save, CalendarPlus, Download, FileText } from 'lucide-react'
-import { SectionCard } from './SectionCard'
+import { Users, Save, CalendarPlus, Download, FileText, Gift, Settings } from 'lucide-react'
+import { Tabs } from './Tabs'
+import { BenefitsPanel } from './BenefitsPanel'
 import { Pager, usePagination } from './Pager'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
@@ -43,43 +44,69 @@ export function PayrollPanel({ token }: { token: string }) {
 
   const selectedPeriod = periods.find((p) => p.id === selectedPeriodId)
 
+  // بخش‌ها به‌جای چیده‌شدنِ زیرِ هم، تب‌بندی می‌شوند (مثلِ بقیه‌ی ماژول‌ها). حالتِ مشترک
+  // (پرسنل/دوره‌ها) در همین کامپوننت می‌ماند، پس جابه‌جایی بین تب‌ها داده را از دست نمی‌دهد.
   return (
-    <>
-      <PayrollSettingsPanel token={token} />
-
-      <SectionCard icon={Users} title="حقوق و دستمزد">
-        <p className="hint">این بخش نیاز به اتصال اینترنت دارد (مستقیم روی سرور کار می‌کند).</p>
-        {message && <div className="hint">{message}</div>}
-
-        <EmployeeForm
-          token={token}
-          onCreated={() => {
-            void refresh()
-            setMessage('کارمند ثبت شد.')
-          }}
-        />
-
-        <EmployeeList employees={employees} />
-
-        <SalaryContractForm
-          token={token}
-          employees={employees}
-          onCreated={() => setMessage('حکم حقوقی ثبت شد.')}
-        />
-
-        <PeriodSection
-          token={token}
-          periods={periods}
-          selectedPeriodId={selectedPeriodId}
-          onSelect={setSelectedPeriodId}
-          onPeriodCreated={() => void refresh()}
-        />
-
-        {selectedPeriodId && (
-          <PayrollRunPanel token={token} employees={employees} period={selectedPeriod} periodId={selectedPeriodId} />
-        )}
-      </SectionCard>
-    </>
+    <Tabs
+      tabs={[
+        {
+          key: 'staff',
+          label: 'پرسنل و احکام',
+          icon: Users,
+          content: (
+            <>
+              {message && <div className="hint">{message}</div>}
+              <EmployeeForm
+                token={token}
+                onCreated={() => {
+                  void refresh()
+                  setMessage('کارمند ثبت شد.')
+                }}
+              />
+              <EmployeeList employees={employees} />
+              <SalaryContractForm
+                token={token}
+                employees={employees}
+                onCreated={() => setMessage('حکم حقوقی ثبت شد.')}
+              />
+            </>
+          ),
+        },
+        {
+          key: 'run',
+          label: 'کارکرد و صدور فیش',
+          icon: CalendarPlus,
+          content: (
+            <>
+              <PeriodSection
+                token={token}
+                periods={periods}
+                selectedPeriodId={selectedPeriodId}
+                onSelect={setSelectedPeriodId}
+                onPeriodCreated={() => void refresh()}
+              />
+              {selectedPeriodId ? (
+                <PayrollRunPanel token={token} employees={employees} period={selectedPeriod} periodId={selectedPeriodId} />
+              ) : (
+                <p className="hint">یک دوره را انتخاب یا ایجاد کنید تا جدولِ کارکرد و صدورِ فیش نمایش داده شود.</p>
+              )}
+            </>
+          ),
+        },
+        {
+          key: 'benefits',
+          label: 'مزایا',
+          icon: Gift,
+          content: <BenefitsPanel token={token} />,
+        },
+        {
+          key: 'settings',
+          label: 'تنظیماتِ حقوق',
+          icon: Settings,
+          content: <PayrollSettingsPanel token={token} onSaved={() => void refresh()} />,
+        },
+      ]}
+    />
   )
 }
 
