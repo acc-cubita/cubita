@@ -37,6 +37,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { StatCard } from './StatCard'
 import { Pager, usePagination } from './Pager'
+import { StorefrontGallery } from './StorefrontGallery'
 
 const fa = (n: string | number) => Number(n).toLocaleString('fa-IR')
 
@@ -147,6 +148,20 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
       setMessage('تنظیمات ذخیره شد.')
     })
 
+  const selectTheme = (themeId: string) =>
+    guard(async () => {
+      const s = await updateNativeStorefront(token, {
+        theme_id: themeId,
+        theme_config: { ...(sf?.theme_config ?? {}), primary, currency },
+        seo_title: seoTitle,
+        seo_description: seoDesc,
+        contact_block: { ...(sf?.contact_block ?? {}), phone },
+        allowed_origin: allowedOrigin,
+      })
+      loadSettings(s)
+      setMessage('قالب انتخاب شد.')
+    })
+
   const togglePublish = () =>
     guard(async () => {
       const s = published ? await unpublishStorefront(token) : await publishStorefront(token)
@@ -242,6 +257,8 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
 
   return (
     <div className="storefront-native">
+      <StorefrontGallery activeThemeId={sf.theme_id} onSelect={selectTheme} busy={busy} />
+
       <div className={`integration-status tone-${published ? 'success' : 'warning'}`}>
         {published ? <CheckCircle2 size={18} /> : <PowerOff size={18} />}
         <div>

@@ -16,6 +16,7 @@ import { IntegrationPanel } from './IntegrationPanel'
 import { NativeStorefrontPanel } from './NativeStorefrontPanel'
 import { Tabs } from './Tabs'
 import { FeatureUpsell } from './FeatureUpsell'
+import { StorefrontGallery } from './StorefrontGallery'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
 import { PageHeader } from './PageHeader'
@@ -249,7 +250,10 @@ export function Dashboard({
                 description="موجودی و قیمت را با سایت فروشگاهی هم‌گام کنید و سفارش‌های ثبت‌شده‌ی آنلاین را خودکار به فاکتور فروش تبدیل کنید."
               />
               {(me.locked_features ?? []).includes('storefront') ? (
-                <FeatureUpsell feature="storefront" />
+                <>
+                  <StorefrontGallery locked />
+                  <FeatureUpsell feature="storefront" />
+                </>
               ) : (
                 <Tabs
                   tabs={[

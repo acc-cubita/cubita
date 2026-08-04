@@ -122,3 +122,38 @@ def test_site_bundle_bakes_tenant_config(client):
     cfg = z.read("assets/config.js").decode("utf-8")
     assert PRIMARY_SLUG in cfg and key in cfg
     assert "REPLACE_WITH" not in cfg, "config باید با مقادیرِ واقعی جایگزین شده باشد"
+
+
+def test_site_bundle_has_seo_prerender(client, db):
+    """بسته باید اسنپ‌شاتِ سئو داشته باشد: متا/JSON-LD در index، صفحه‌ی استاتیکِ کالا،
+    robots/sitemap/llms — تا خزنده‌ها بدونِ اجرای JS محتوا ببینند."""
+    client.put(
+        "/api/storefront",
+        json={
+            "theme_id": "general",
+            "theme_config": {"primary": "#123456", "brand_name": "فروشگاهِ آزمون", "currency": "toman"},
+            "seo_title": "فروشگاهِ آزمون | بهترین‌ها",
+            "seo_description": "توضیحِ سئوِ فروشگاه",
+            "contact_block": {"phone": "02112345678"},
+            "allowed_origin": "https://myshop.example",
+        },
+    )
+    item = make_item(db, sku="SEO-1", name="کالای سئو", sales_price=50_000)
+    client.put(f"/api/storefront/items/{item.id}", json={"is_listed": True, "slug": "seo-1"})
+    client.post("/api/storefront/publish")
+
+    z = zipfile.ZipFile(io.BytesIO(client.get("/api/storefront/site-bundle").content))
+    names = z.namelist()
+    assert "robots.txt" in names and "sitemap.xml" in names and "llms.txt" in names
+    assert "p/seo-1/index.html" in names, "صفحه‌ی استاتیکِ خزنده‌پذیرِ کالا باید باشد"
+
+    index = z.read("index.html").decode("utf-8")
+    assert 'property="og:title"' in index and "application/ld+json" in index
+    assert '"@type":"ItemList"' in index and "کالای سئو" in index, "بلوکِ پیش‌رندرِ کالا باید در index باشد"
+
+    product = z.read("p/seo-1/index.html").decode("utf-8")
+    assert '"@type":"Product"' in product and '"priceCurrency":"IRR"' in product
+    assert '"price":500000' in product, "۵۰٬۰۰۰ تومان باید ۵۰۰٬۰۰۰ ریال در JSON-LD شود"
+
+    sitemap = z.read("sitemap.xml").decode("utf-8")
+    assert "https://myshop.example/" in sitemap and "https://myshop.example/p/seo-1/" in sitemap

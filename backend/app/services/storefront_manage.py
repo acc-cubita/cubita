@@ -75,6 +75,41 @@ def mark_built(db: Session, sf: Storefront) -> Storefront:
     return sf
 
 
+def build_seo_context(db: Session, sf: Storefront):
+    """SeoContext زمانِ بیلد را از تنظیماتِ فروشگاه + کاتالوگِ عمومی می‌سازد.
+
+    از `shop.list_catalog` (همان دیدِ عمومیِ سایت) استفاده می‌کند تا اسنپ‌شاتِ سئو
+    دقیقاً با چیزی که خریدار می‌بیند یکی باشد."""
+    from app.services import shop as shop_service  # داخل تابع تا وابستگیِ حلقه‌ای نشود
+    from app.services.seo_render import SeoContext, SeoProduct
+
+    theme = sf.theme_config or {}
+    contact = sf.contact_block or {}
+    products = [
+        SeoProduct(
+            slug=p.slug,
+            title=p.title,
+            price=int(p.price or 0),
+            description=p.description or "",
+            image=(p.images[0] if p.images else ""),
+            category=p.category or "",
+            in_stock=not p.out_of_stock,
+        )
+        for p in shop_service.list_catalog(db)
+    ]
+    return SeoContext(
+        slug=tenant_slug(db),
+        brand=str(theme.get("brand_name") or sf.seo_title or "فروشگاه"),
+        seo_title=sf.seo_title or "",
+        seo_description=sf.seo_description or "",
+        primary=str(theme.get("primary") or "#2563eb"),
+        phone=str(contact.get("phone") or ""),
+        origin=(sf.allowed_origin or "").strip(),
+        currency=str(theme.get("currency") or "toman"),
+        products=products,
+    )
+
+
 def to_settings_out(db: Session, sf: Storefront) -> StorefrontSettingsOut:
     return StorefrontSettingsOut(
         slug=_tenant_slug(db),

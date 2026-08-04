@@ -59,8 +59,9 @@ def site_bundle(db: Session = Depends(get_db), _=Depends(require_permission("inv
     slug = service.tenant_slug(db)
     settings = get_settings()
     api_base = (settings.storefront_api_base or settings.backend_url).rstrip("/")
+    seo = service.build_seo_context(db, sf)
     try:
-        data = build_site_bundle(api_base=api_base, slug=slug, key=sf.publishable_key)
+        data = build_site_bundle(api_base=api_base, slug=slug, key=sf.publishable_key, seo=seo)
     except FileNotFoundError as err:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(err))
     service.mark_built(db, sf)

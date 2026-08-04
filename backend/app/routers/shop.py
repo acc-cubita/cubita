@@ -10,7 +10,7 @@ CORS این مسیرها در `main.py` (میدل‌ورِ `shop_public_cors`) �
 """
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from app.models.tenant import Tenant
 from app.schemas.shop import ShopCategoryOut, ShopInfoOut, ShopOrderIn, ShopOrderOut, ShopProductOut
 from app.services import shop as service
 from app.services import shop_payment
+from app.services.payment_providers import get_provider
 from app.services.shop import ShopContext
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
@@ -89,28 +90,48 @@ def start_payment(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
     if order.payment_status != "pending":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این سفارش قابلِ پرداخت نیست")
-    gateway = shop_payment.active_zarinpal(db)
+    gateway = shop_payment.active_gateway(db)
     if gateway is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "درگاهِ پرداختِ آنلاینِ فعالی تنظیم نشده است")
 
     settings = get_settings()
     api_base = (settings.storefront_api_base or settings.backend_url).rstrip("/")
-    callback_url = f"{api_base}/api/shop/pay/callback?shop={ctx.slug}"
+    callback_url = f"{api_base}/api/shop/pay/callback?shop={ctx.slug}&provider={gateway.provider}"
     redirect_url = shop_payment.start_payment(db, order, ctx.storefront, gateway, callback_url)
     return {"redirect_url": redirect_url}
 
 
-@router.get("/pay/callback")
-def pay_callback(Authority: str = "", Status: str = "", shop: str = "", db: Session = Depends(get_db)):
-    """بازگشتِ زرین‌پال. مستأجر از پارامترِ shop (=slug) پیدا می‌شود (بی‌زمینه)، سپس verify."""
+@router.api_route("/pay/callback", methods=["GET", "POST"])
+async def pay_callback(request: Request, db: Session = Depends(get_db)):
+    """بازگشتِ درگاه (هر سه provider). مستأجر از پارامترِ shop (=slug) بی‌زمینه پیدا،
+    provider مشخص، و پارامترها با آداپتورِ همان درگاه پارس و verify می‌شوند.
+
+    GET برای زرین‌پال/زیبال و POSTِ فرم برای آی‌دی‌پی؛ پارامترهای query و form ادغام می‌شوند.
+    """
+    params: dict[str, str] = dict(request.query_params)
+    if request.method == "POST":
+        form = await request.form()
+        params.update({k: str(v) for k, v in form.items()})
+
+    shop = params.get("shop", "")
+    provider_key = params.get("provider", "zarinpal")
+    provider = get_provider(provider_key)
+
     tenant = db.query(Tenant).filter(Tenant.slug == shop).first()
-    if tenant is None or tenant.status != "active":
+    if tenant is None or tenant.status != "active" or provider is None:
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
     bind_session_tenant(db, tenant.id)
     apply_tenant_to_transaction(db, tenant.id)
 
+    parsed = provider.parse_callback(params)
     storefront = db.query(Storefront).first()
-    order = db.query(StorefrontOrder).filter(StorefrontOrder.payment_authority == Authority).first()
+    order = (
+        db.query(StorefrontOrder)
+        .filter(StorefrontOrder.payment_authority == parsed.authority)
+        .first()
+        if parsed.authority
+        else None
+    )
     dest = (storefront.allowed_origin if storefront else "") or ""
 
     def result(ok: bool) -> RedirectResponse:
@@ -120,14 +141,15 @@ def pay_callback(Authority: str = "", Status: str = "", shop: str = "", db: Sess
 
     if order is None or storefront is None:
         return result(False)
-    if Status != "OK":
-        order.payment_status = "failed"
-        db.flush()
+    if not parsed.ok_signal:
+        if order.payment_status == "pending":
+            order.payment_status = "failed"
+            db.flush()
         return result(False)
 
-    gateway = shop_payment.active_zarinpal(db)
+    gateway = shop_payment.gateway_for(db, provider_key)
     actor = shop_payment.tenant_actor(db, tenant.id)
-    ok = bool(gateway and actor and shop_payment.verify_and_finalize(db, order, storefront, gateway, Authority, actor))
+    ok = bool(gateway and actor and shop_payment.verify_and_finalize(db, order, storefront, gateway, parsed.authority, actor))
     if not ok and order.payment_status == "pending":
         order.payment_status = "failed"
         db.flush()

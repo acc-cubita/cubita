@@ -306,6 +306,19 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
 
+- **۱۴۰۵/۰۵/۱۴ (2026-08-04) — «فروشگاهِ بومی» فازِ ۲: زیبال/آی‌دی‌پی + پیش‌رندرِ سئو + گالری/دموی زنده:**
+  - **درگاه‌های چندگانه:** `services/payment_providers.py` — لایه‌ی آداپتور (start/parse_callback/verify) برای **زرین‌پال + زیبال + آی‌دی‌پی**.
+    `shop_payment.py` provider-agnostic شد (`active_gateway`/`gateway_for`)؛ callbackِ `/api/shop/pay/callback` به **GET+POST** تعمیم یافت
+    (POSTِ فرمِ آی‌دی‌پی) و با `?provider=` تفکیک می‌شود. بدونِ مهاجرتِ DB (جدولِ `payment_gateways` از قبل هر سه را می‌پذیرفت).
+  - **پیش‌رندرِ سئو:** `services/seo_render.py` — زمانِ بیلد، index.html با متای OG/Twitter + JSON-LD (Store+ItemList) و بلوکِ پیش‌رندرِ کالاها
+    غنی می‌شود؛ برای هر کالا `p/<slug>/index.html` (Product+BreadcrumbList JSON-LD، ری‌دایرکتِ نرم به SPA)؛ `robots.txt`/`sitemap.xml`/`llms.txt`.
+    `build_site_bundle(seo=…)` این‌ها را داخلِ ZIP می‌گذارد.
+  - **گالری/مارکت‌پلیس:** `components/StorefrontGallery.tsx` — کارتِ قالب با پیش‌نمایشِ مینیاتوری، ویژگی‌ها، «پیش‌نمایشِ زنده» و «انتخاب»
+    (برای آزمایشی: CTAی خرید پلن). بالای تبِ «بساز» و بالای FeatureUpsellِ آزمایشی. دسکتاپ+وب، موبایلِ ≤۷۶۰ تأییدِ بصری‌شده (تیره/روشن).
+  - **دموی خوداتکا:** قالب حالتِ `demo:true` گرفت (`storefront/assets/api.js` از `window.SHOP_DEMO` می‌خواند)؛ `storefront-demo/config.js`
+    داده‌ی نمونه (۸ کالا، تصاویرِ SVGِ درون‌خطی) دارد → سایتِ دموی بدونِ بک‌اند برای میزبانی روی VPS.
+  - تست: **۹۷۸ سبز** (+۷: zibal/idpay/seo). tsc پاک.
+
 - **۱۴۰۵/۰۵/۱۴ (2026-08-04) — 🚀 استقرارِ «فروشگاهِ بومی» روی prod + دمو (مهاجرت 0054 زنده):**
   - **prod (acc.cubita.ir):** `deploy.sh production` اجرا شد — بکاپ، مهاجرت **0053→0054**، نسخه‌ی نهایی 0054،
     health ok، **RLS روی ۷۳ جدول** (۶۶→۷۳)، بکاپِ بعد از استقرار سالم. راستی‌آزماییِ زنده: `/api/shop/catalog`=۴۰۱،

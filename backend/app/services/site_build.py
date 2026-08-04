@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 from app.config import get_settings
+from app.services.seo_render import SeoContext, enrich_index, extra_files
 
 # فایل‌هایی از قالب که در بسته‌ی مستأجر نمی‌آیند (سندِ داخلیِ توسعه / جایگزین‌شونده).
 _SKIP = {"README.md", "assets/config.js"}
@@ -60,7 +61,9 @@ def _config_js(api_base: str, slug: str, key: str) -> str:
     )
 
 
-def build_site_bundle(*, api_base: str, slug: str, key: str) -> bytes:
+def build_site_bundle(*, api_base: str, slug: str, key: str, seo: SeoContext | None = None) -> bytes:
+    """ZIPِ سایت را می‌سازد. اگر `seo` بدهیم، index.html با متا/پیش‌رندر غنی می‌شود و
+    فایل‌های سئو (robots/sitemap/llms + صفحه‌ی استاتیکِ هر کالا) هم اضافه می‌شوند."""
     tpl = _template_dir()
     if not tpl.exists():
         raise FileNotFoundError(f"قالبِ فروشگاه یافت نشد: {tpl}")
@@ -73,7 +76,13 @@ def build_site_bundle(*, api_base: str, slug: str, key: str) -> bytes:
             rel = path.relative_to(tpl).as_posix()
             if rel in _SKIP:
                 continue
+            if rel == "index.html" and seo is not None:
+                z.writestr(rel, enrich_index(path.read_text(encoding="utf-8"), seo))
+                continue
             z.writestr(rel, path.read_bytes())
         z.writestr("assets/config.js", _config_js(api_base, slug, key))
         z.writestr("آموزش-اتصال.txt", _TUTORIAL.format(slug=slug))
+        if seo is not None:
+            for rel, content in extra_files(seo).items():
+                z.writestr(rel, content)
     return buf.getvalue()

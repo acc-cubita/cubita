@@ -4370,6 +4370,53 @@ button:disabled {
 .sf-guide summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--text); }
 .sf-guide ol { margin: 10px 0 4px; padding-inline-start: 20px; color: var(--text-muted); font-size: 13px; line-height: 1.9; }
 
+/* ===== گالریِ قالب‌های فروشگاه (مارکت‌پلیس) ===== */
+.storefront-gallery { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 18px; }
+.sg-header { margin-bottom: 14px; }
+.sg-title { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.sg-title h2 { font-size: 16px; }
+.sg-sub { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.85; }
+.sg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.sg-item { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-2); transition: border-color .15s, box-shadow .15s; }
+.sg-item:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+.sg-item.active { border-color: var(--accent); }
+
+/* پیش‌نمایشِ مینیاتوریِ قالب — با رنگِ همان قالب (--sg-a/--sg-b) */
+.sg-preview { padding: 14px 14px 0; background: linear-gradient(135deg, color-mix(in srgb, var(--sg-a) 16%, var(--surface)), color-mix(in srgb, var(--sg-b) 10%, var(--surface))); }
+.sg-bar { display: flex; gap: 5px; margin-bottom: 8px; }
+.sg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.sg-head { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px 8px 0 0; padding: 8px 10px; }
+.sg-logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--sg-a), var(--sg-b)); }
+.sg-search { flex: 1; height: 12px; border-radius: 6px; background: var(--surface-2); }
+.sg-cart { width: 26px; height: 14px; border-radius: 5px; background: var(--sg-a); }
+.sg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: var(--surface); border: 1px solid var(--border); border-top: 0; padding: 10px; }
+.sg-card { display: flex; flex-direction: column; gap: 5px; }
+.sg-img { aspect-ratio: 1; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--sg-a) 38%, var(--surface-2)), color-mix(in srgb, var(--sg-b) 38%, var(--surface-2))); }
+.sg-line { height: 7px; width: 80%; border-radius: 4px; background: var(--border-strong); }
+.sg-price { height: 7px; width: 45%; border-radius: 4px; background: var(--sg-a); }
+
+.sg-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.sg-name-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sg-name-row h3 { font-size: 14.5px; }
+.sg-active-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 700; color: var(--success); background: var(--success-bg); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.sg-tagline { margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.7; }
+.sg-features { list-style: none; margin: 2px 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.sg-features li { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); }
+.sg-features li svg { color: var(--success); flex-shrink: 0; }
+.sg-price-row { margin-top: 2px; }
+.sg-price-badge { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-bg); padding: 3px 10px; border-radius: 999px; }
+.sg-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; flex-wrap: wrap; }
+.sg-actions .btn-primary, .sg-actions .btn-ghost { flex: 1; min-width: 130px; }
+
+.btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--border-strong); color: var(--text); background: transparent; border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 760px) {
+  .sg-cards { grid-template-columns: 1fr; }
+  .sg-features { grid-template-columns: 1fr; }
+  .sg-actions { flex-direction: column; }
+}
+
 /* ===== تأییدِ شماره‌ی موبایل (پروفایل) ===== */
 .phone-verify {
   margin-top: -2px;
