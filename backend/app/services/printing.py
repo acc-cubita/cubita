@@ -146,8 +146,9 @@ body {
 .head { display: flex; justify-content: space-between; align-items: flex-start;
         border-bottom: 3px solid #2563eb; padding-bottom: 14px; margin-bottom: 18px; }
 .brand-block { display: flex; align-items: center; gap: 12px; }
-.logo { width: 48px; height: 48px; border-radius: 13px; background: #2563eb; color: #fff;
-        display: grid; place-items: center; font-size: 23px; font-weight: 800; flex: 0 0 auto; }
+.logo { width: 48px; height: 48px; border-radius: 13px; background: #2563eb;
+        display: grid; place-items: center; flex: 0 0 auto; }
+.logo svg { display: block; }
 .title { font-size: 22px; font-weight: 800; margin: 0; color: #2563eb; line-height: 1.2; }
 .biz { color: #475569; font-size: 12.5px; margin-top: 3px; }
 .meta { text-align: left; font-size: 12px; }
@@ -173,6 +174,9 @@ tfoot tr.grand td { background: #eef4ff; color: #1d4ed8; font-size: 14px; border
 
 .words { border: 1px dashed #c7d2fe; background: #f5f8ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; }
 .words strong { color: #1d4ed8; }
+.notes { border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 12px; padding: 10px 14px; margin: 18px 0 4px; }
+.notes .lbl { display: block; color: #2563eb; font-weight: 700; font-size: 11px; margin-bottom: 3px; letter-spacing: .2px; }
+.notes .txt { color: #0f172a; }
 .signs { display: flex; gap: 16px; margin-top: 34px; }
 .sign { flex: 1; border-top: 1.5px solid #cbd5e1; padding-top: 8px; text-align: center; color: #64748b; }
 .footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #eef2f7;
@@ -261,7 +265,25 @@ def render_invoice(
         rows.append(f"<tr class='grand'><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
     totals_rows = "".join(rows)
 
-    logo_letter = escape((business_name.strip()[:1] or "ک"))
+    # نشانِ برندِ برداری (برگه/فاکتور) — جای‌گزینِ حرفِ اول، هم‌ظاهر با خروجیِ PDF.
+    logo_svg = (
+        '<svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">'
+        '<path d="M9 4.5h9.6L23.5 9.4V26A1.5 1.5 0 0 1 22 27.5H9A1.5 1.5 0 0 1 7.5 26V6A1.5 1.5 0 0 1 9 4.5z" fill="#fff"/>'
+        '<path d="M18.6 4.6v3.4A1.4 1.4 0 0 0 20 9.4h3.3z" fill="#bcd0f7"/>'
+        '<rect x="11" y="14" width="10" height="1.8" rx="0.9" fill="#2563eb"/>'
+        '<rect x="11" y="17.8" width="10" height="1.8" rx="0.9" fill="#2563eb"/>'
+        '<rect x="11" y="21.6" width="6" height="1.8" rx="0.9" fill="#2563eb"/>'
+        "</svg>"
+    )
+
+    # «شرح» به بالای امضاها منتقل می‌شود؛ فقط وقتی متنی باشد نمایش داده می‌شود.
+    note = (description or "").strip()
+    notes_block = (
+        f"<div class='notes'><span class='lbl'>شرح</span>"
+        f"<div class='txt'>{escape(note)}</div></div>"
+        if note
+        else ""
+    )
 
     return f"""<!doctype html>
 <html lang="fa" dir="rtl">
@@ -278,7 +300,7 @@ def render_invoice(
   {currency_banner}
   <div class="head">
     <div class="brand-block">
-      <div class="logo">{logo_letter}</div>
+      <div class="logo">{logo_svg}</div>
       <div>
         <h1 class="title">{escape(kind)}</h1>
         <div class="biz">{escape(business_name)}</div>
@@ -295,10 +317,6 @@ def render_invoice(
       <h2>طرف حساب</h2>
       <div class="big">{escape(party_name)}</div>
       <div class="sub">{escape(party_detail)}</div>
-    </div>
-    <div class="party">
-      <h2>شرح</h2>
-      <div>{escape(description) or "—"}</div>
     </div>
   </div>
 
@@ -324,6 +342,8 @@ def render_invoice(
   </table>
 
   <div class="words">مبلغ به حروف: <strong>{amount_in_words(grand_total)}</strong> ریال</div>
+
+  {notes_block}
 
   <div class="signs">
     <div class="sign">مهر و امضای فروشنده</div>

@@ -52,6 +52,17 @@ def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _fix_zwnj(text):
+    """جای‌گزینیِ نیم‌فاصله (ZWNJ, U+200C) با فاصله‌ی معمولی برای خروجیِ PDF.
+
+    موتورِ شکل‌دهیِ fpdf2 (uharfbuzz) کاراکترِ U+200C را به‌خاطرِ اسکریپتِ جداگانه‌اش
+    دور می‌ریزد و در نتیجه کلماتی مثل «پیش‌فاکتور» یا «قدرت‌گرفته» چسبیده چاپ می‌شوند.
+    یک فاصله‌ی معمولی هم خوانا است و هم مطمئناً جداکننده — پس واژه‌ها دیگر نمی‌چسبند.
+    (نمای HTML این مشکل را ندارد چون مرورگر ZWNJ را درست می‌فهمد.)
+    """
+    return text.replace("‌", " ") if isinstance(text, str) else text
+
+
 class _InvoicePDF(FPDF):
     def __init__(self):
         super().__init__(format="A4")
@@ -61,6 +72,13 @@ class _InvoicePDF(FPDF):
         self.add_font("Vazir", "B", _BOLD)
         self.set_text_shaping(True)
         self.add_page()
+
+    # همه‌ی متن‌ها از این دو مسیر عبور می‌کنند؛ ZWNJ را یک‌جا پاک می‌کنیم.
+    def cell(self, w=None, h=None, text="", *args, **kwargs):
+        return super().cell(w, h, _fix_zwnj(text), *args, **kwargs)
+
+    def multi_cell(self, w=None, h=None, text="", *args, **kwargs):
+        return super().multi_cell(w, h, _fix_zwnj(text), *args, **kwargs)
 
     @property
     def right(self) -> float:
@@ -87,6 +105,47 @@ class _InvoicePDF(FPDF):
 
 def _usable(pdf: _InvoicePDF) -> float:
     return pdf.w - pdf.l_margin - pdf.r_margin
+
+
+_FOLD = (191, 211, 248)  # گوشه‌ی تاخورده‌ی برگه (آبیِ روشن)
+
+
+def _draw_doc_logo(pdf: _InvoicePDF, x0: float, y0: float, size: float) -> None:
+    """نشانِ برند: مربعِ آبیِ گِردگوشه با نمادِ «برگه/فاکتور» سفید در میان.
+
+    جای‌گزینِ حرفِ اولِ نامِ کسب‌وکار — یک المانِ گرافیکیِ برداری که در هر خروجی یکسان
+    و بی‌نیاز از فایلِ بیرونی کشیده می‌شود و با نمای HTML هم‌ظاهر است.
+    """
+    # مربعِ آبیِ گِردگوشه
+    pdf.set_fill_color(*_ACCENT)
+    pdf.rect(x0, y0, size, size, "F", round_corners=True, corner_radius=size * 0.23)
+
+    # کارتِ سفید با گوشه‌ی تاخورده
+    cw, ch = size * 0.5, size * 0.64
+    cx1 = x0 + (size - cw) / 2
+    cy1 = y0 + (size - ch) / 2
+    cx2, cy2 = cx1 + cw, cy1 + ch
+    fold = cw * 0.34
+    pdf.set_fill_color(*_WHITE)
+    pdf.polygon(
+        [(cx1, cy1), (cx2 - fold, cy1), (cx2, cy1 + fold), (cx2, cy2), (cx1, cy2)],
+        style="F",
+    )
+    pdf.set_fill_color(*_FOLD)
+    pdf.polygon(
+        [(cx2 - fold, cy1), (cx2, cy1 + fold), (cx2 - fold, cy1 + fold)],
+        style="F",
+    )
+
+    # سه خطِ آبی (نشانه‌ی متنِ فاکتور)
+    pdf.set_draw_color(*_ACCENT)
+    pdf.set_line_width(size * 0.04)
+    lx1, lx2 = cx1 + cw * 0.18, cx2 - cw * 0.18
+    step = ch * 0.2
+    ly = cy1 + ch * 0.42
+    pdf.line(lx1, ly, lx2, ly)
+    pdf.line(lx1, ly + step, lx2, ly + step)
+    pdf.line(lx1, ly + 2 * step, lx1 + (lx2 - lx1) * 0.55, ly + 2 * step)
 
 
 def render_invoice_pdf(
@@ -118,13 +177,8 @@ def render_invoice_pdf(
     grand_total = subtotal + tax + rnd
 
     # --- سربرگ: لوگوی برند + عنوان + شماره/تاریخِ سمتِ چپ + خطِ برند ---
-    logo = 14
-    pdf.set_fill_color(*_ACCENT)
-    pdf.rect(right - logo, 13, logo, logo, "F")
-    pdf.set_text_color(*_WHITE)
-    pdf.set_font("Vazir", "B", 17)
-    pdf.set_xy(right - logo, 15.5)
-    pdf.cell(logo, 8, (business_name.strip()[:1] or "ک"), align="C")
+    logo = 15
+    _draw_doc_logo(pdf, right - logo, 12.5, logo)
 
     pdf.set_text_color(*_ACCENT)
     pdf.set_font("Vazir", "B", 20)
@@ -171,27 +225,24 @@ def render_invoice_pdf(
         pdf.cell(usable, 8, currency_line, border=1, align="R", fill=True)
         y += 12
 
-    # --- طرف حساب و شرح (دو جعبه با پس‌زمینه‌ی ملایم و عنوانِ برند) ---
-    box_w = (usable - 6) / 2
-    box_h = 18
-    for idx, (heading, body) in enumerate(
-        [("طرف حساب", f"{party_name}\n{party_detail}".strip()), ("شرح", description or "—")]
-    ):
-        # جعبه‌ی راست اول (idx=0 راست، idx=1 چپ)
-        bx = right - box_w if idx == 0 else pdf.l_margin
-        pdf.set_fill_color(*_ZEBRA)
-        pdf.set_draw_color(*_LINE)
-        pdf.set_line_width(0.2)
-        pdf.rect(bx, y, box_w, box_h, "DF")
-        pdf.set_xy(bx + 3, y + 1.8)
-        pdf.set_font("Vazir", "B", 8.5)
-        pdf.set_text_color(*_ACCENT)
-        pdf.cell(box_w - 6, 5, heading, align="R")
-        pdf.set_xy(bx + 3, y + 6.8)
-        pdf.set_font("Vazir", "B", 10)
-        pdf.set_text_color(*_INK)
-        pdf.multi_cell(box_w - 6, 5, _truncate(body.replace("\n", " — "), 90), align="R")
-    y += box_h + 6
+    # --- طرف حساب (کارتِ تمام‌عرض با پس‌زمینه‌ی ملایم و عنوانِ برند) ---
+    # «شرح» به بالای امضاها منتقل شده تا این‌جا فقط طرف حساب دیده شود.
+    box_w = (usable - 6) / 2  # عرضِ ستونِ امضاها در پایین از همین‌جا می‌آید
+    party_h = 16
+    pdf.set_fill_color(*_ZEBRA)
+    pdf.set_draw_color(*_LINE)
+    pdf.set_line_width(0.2)
+    pdf.rect(pdf.l_margin, y, usable, party_h, "DF")
+    pdf.set_xy(pdf.l_margin + 3, y + 2)
+    pdf.set_font("Vazir", "B", 8.5)
+    pdf.set_text_color(*_ACCENT)
+    pdf.cell(usable - 6, 5, "طرف حساب", align="R")
+    pdf.set_xy(pdf.l_margin + 3, y + 7.2)
+    pdf.set_font("Vazir", "B", 11)
+    pdf.set_text_color(*_INK)
+    party_text = party_name + (f" — {party_detail}" if party_detail else "")
+    pdf.cell(usable - 6, 6, _truncate(party_text, 95), align="R")
+    y += party_h + 6
 
     # --- جدول اقلام: سربرگِ برند با متنِ سفید، بدنه با راه‌راهِ ملایم ---
     pdf.set_font("Vazir", "B", 9)
@@ -252,7 +303,22 @@ def render_invoice_pdf(
     pdf.set_font("Vazir", "", 10)
     pdf.set_text_color(*_INK)
     pdf.cell(usable - 6, 5, f"مبلغ به حروف: {amount_in_words(grand_total)} ریال", align="R")
-    y += 20
+    y += 15
+
+    # --- شرح (بالای امضاها، فقط اگر متنی باشد) ---
+    note = (description or "").strip()
+    if note:
+        pdf.set_font("Vazir", "B", 8.5)
+        pdf.set_text_color(*_ACCENT)
+        pdf.set_xy(pdf.l_margin, y)
+        pdf.cell(usable, 5, "شرح", align="R")
+        pdf.set_font("Vazir", "", 9.5)
+        pdf.set_text_color(*_INK)
+        pdf.set_xy(pdf.l_margin, y + 5)
+        pdf.multi_cell(usable, 5, _truncate(note, 220), align="R")
+        y = pdf.get_y() + 8
+    else:
+        y += 3
 
     # --- امضاها (با خطِ محلِ امضا) ---
     for sx in (right - box_w, pdf.l_margin):

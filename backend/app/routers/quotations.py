@@ -95,8 +95,8 @@ def _quotation_render_kwargs(db: Session, principal: Principal, quotation: Sales
         invoice_date=quotation.quotation_date,
         party_name=name,
         party_detail=detail,
-        # توضیحاتِ کاربر؛ اگر خالی بود فقط «پیش‌فاکتور» — بدونِ جمله‌ی پیش‌فرض.
-        description=quotation.description or "پیش‌فاکتور",
+        # توضیحاتِ کاربر؛ اگر خالی بود، بخشِ «شرح» (بالای امضاها) اصلاً نمایش داده نمی‌شود.
+        description=quotation.description or "",
         lines=[
             {
                 "name": line.item.name,
