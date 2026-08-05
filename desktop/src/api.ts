@@ -1400,6 +1400,7 @@ export interface ContactRecord {
   address: string
   tax_id: string | null
   is_active: boolean
+  birthday: string | null
   credit_limit: string
   default_price_list_id: string | null
   entity_type: 'real' | 'legal'
@@ -1415,6 +1416,7 @@ export interface ContactIn {
   email: string | null
   address: string
   tax_id: string | null
+  birthday?: string | null
   credit_limit: number
   default_price_list_id?: string | null
   entity_type?: 'real' | 'legal'
@@ -2553,11 +2555,22 @@ export const fetchLoyaltyBalances = (token: string) =>
 export interface LoyaltySettings {
   is_enabled: boolean
   amount_per_point: string
+  tier_basis: 'points' | 'spend'
+  tier_discount_auto: boolean
+  birthday_gift_points: number
 }
 export const fetchLoyaltySettings = (token: string) =>
   authedGet<LoyaltySettings>(token, '/api/crm/loyalty/settings')
-export const setLoyaltySettings = (token: string, data: { is_enabled: boolean; amount_per_point: number }) =>
-  authedSend<LoyaltySettings>(token, 'PUT', '/api/crm/loyalty/settings', data)
+export const setLoyaltySettings = (
+  token: string,
+  data: {
+    is_enabled: boolean
+    amount_per_point: number
+    tier_basis?: 'points' | 'spend'
+    tier_discount_auto?: boolean
+    birthday_gift_points?: number
+  },
+) => authedSend<LoyaltySettings>(token, 'PUT', '/api/crm/loyalty/settings', data)
 export const addLoyaltyTxn = (
   token: string,
   data: { contact_id: string; points: number; reason?: string; txn_date: string },
@@ -2566,6 +2579,108 @@ export const addLoyaltyTxn = (
 /** گردشِ امتیازِ یک مشتری (کسب/مصرف)، تازه‌ترین اول — برای «تاریخچه‌ی امتیاز». */
 export const fetchLoyaltyTransactions = (token: string, contactId?: string) =>
   authedGet<LoyaltyTxnRecord[]>(token, `/api/crm/loyalty/transactions${contactId ? `?contact_id=${contactId}` : ''}`)
+
+// ── ابزارهای پیشرفته‌ی باشگاه ────────────────────────────────────────
+export type CustomerSegment = 'champion' | 'loyal' | 'at_risk' | 'new' | 'dormant' | 'regular'
+export interface SegmentCustomer {
+  contact_id: string
+  contact_name: string
+  recency_days: number
+  frequency: number
+  monetary: string
+  last_purchase: string | null
+  r: number
+  f: number
+  m: number
+  segment: CustomerSegment
+}
+export interface SegmentSummaryRow {
+  segment: CustomerSegment
+  count: number
+  monetary: string
+}
+export interface RfmResult {
+  customers: SegmentCustomer[]
+  summary: SegmentSummaryRow[]
+  total_customers: number
+}
+export const fetchSegments = (token: string) => authedGet<RfmResult>(token, '/api/crm/segments')
+
+export interface LoyaltyTier {
+  id: string
+  name: string
+  threshold: string
+  discount_percent: string
+  sort_order: number
+}
+export interface TierInput {
+  name: string
+  threshold: number
+  discount_percent: number
+  sort_order?: number
+}
+export const fetchTiers = (token: string) => authedGet<LoyaltyTier[]>(token, '/api/crm/loyalty/tiers')
+export const createTier = (token: string, data: TierInput) =>
+  authedSend<LoyaltyTier>(token, 'POST', '/api/crm/loyalty/tiers', data)
+export const updateTier = (token: string, id: string, data: TierInput) =>
+  authedSend<LoyaltyTier>(token, 'PUT', `/api/crm/loyalty/tiers/${id}`, data)
+export const deleteTier = (token: string, id: string) => authedDelete(token, `/api/crm/loyalty/tiers/${id}`)
+
+export interface TierMember {
+  contact_id: string
+  contact_name: string
+  value: string
+  tier_id: string
+  tier_name: string
+  discount_percent: string
+}
+export const fetchTierMembers = (token: string) =>
+  authedGet<TierMember[]>(token, '/api/crm/loyalty/tier-members')
+export interface ContactTier {
+  basis: 'points' | 'spend'
+  value: string
+  tier_id: string | null
+  tier_name: string | null
+  discount_percent: string
+}
+export const fetchContactTier = (token: string, contactId: string) =>
+  authedGet<ContactTier>(token, `/api/crm/loyalty/tier/${contactId}`)
+
+export type RewardKind = 'discount' | 'gift' | 'other'
+export interface LoyaltyReward {
+  id: string
+  name: string
+  points_cost: number
+  kind: RewardKind
+  value: string
+  is_active: boolean
+}
+export interface RewardInput {
+  name: string
+  points_cost: number
+  kind: RewardKind
+  value: string
+  is_active: boolean
+}
+export const fetchRewards = (token: string) => authedGet<LoyaltyReward[]>(token, '/api/crm/loyalty/rewards')
+export const createReward = (token: string, data: RewardInput) =>
+  authedSend<LoyaltyReward>(token, 'POST', '/api/crm/loyalty/rewards', data)
+export const updateReward = (token: string, id: string, data: RewardInput) =>
+  authedSend<LoyaltyReward>(token, 'PUT', `/api/crm/loyalty/rewards/${id}`, data)
+export const deleteReward = (token: string, id: string) => authedDelete(token, `/api/crm/loyalty/rewards/${id}`)
+export const redeemReward = (token: string, data: { contact_id: string; reward_id: string; txn_date?: string }) =>
+  authedSend<LoyaltyTxnRecord>(token, 'POST', '/api/crm/loyalty/redeem', data)
+
+export interface BirthdayRow {
+  contact_id: string
+  contact_name: string
+  birthday: string
+  next_birthday: string
+  days_until: number
+  turning_age: number
+}
+export const fetchBirthdays = (token: string, days = 30) =>
+  authedGet<BirthdayRow[]>(token, `/api/crm/birthdays?days=${days}`)
 
 // ── تولید و بهای تمام‌شده (BOM) ──────────────────────────────────────
 export interface BomLineRecord {

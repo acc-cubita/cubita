@@ -5,12 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.crm import CrmActivity, Lead, LoyaltyTransaction
+from app.models.crm import CrmActivity, Lead, LoyaltyReward, LoyaltyTier, LoyaltyTransaction
 from app.models.user import User
 from app.schemas.crm import (
     ActivityIn,
     ActivityOut,
     ActivityUpdateIn,
+    BirthdayOut,
+    ContactTierOut,
     ConvertLeadOut,
     LeadIn,
     LeadOut,
@@ -20,6 +22,13 @@ from app.schemas.crm import (
     LoyaltySettingsOut,
     LoyaltyTxnIn,
     LoyaltyTxnOut,
+    RedeemIn,
+    RewardIn,
+    RewardOut,
+    RfmOut,
+    TierIn,
+    TierMemberOut,
+    TierOut,
 )
 from app.services import crm as service
 
@@ -207,4 +216,158 @@ def set_loyalty_settings(
     db: Session = Depends(get_db),
     _=Depends(require_permission("crm", "update")),
 ):
-    return service.set_loyalty_settings(db, data.is_enabled, data.amount_per_point)
+    return service.set_loyalty_settings(
+        db,
+        data.is_enabled,
+        data.amount_per_point,
+        tier_basis=data.tier_basis,
+        tier_discount_auto=data.tier_discount_auto,
+        birthday_gift_points=data.birthday_gift_points,
+    )
+
+
+# ── بخش‌بندیِ مشتریان (RFM) ─────────────────────────────
+@router.get("/segments", response_model=RfmOut)
+def customer_segments(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return service.rfm_segments(db)
+
+
+# ── سطوحِ باشگاه ────────────────────────────────────────
+@router.get("/loyalty/tiers", response_model=list[TierOut])
+def list_tiers(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return db.query(LoyaltyTier).order_by(LoyaltyTier.threshold.asc()).all()
+
+
+@router.post("/loyalty/tiers", response_model=TierOut, status_code=201)
+def create_tier(
+    data: TierIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "create")),
+):
+    tier = LoyaltyTier(**data.model_dump())
+    db.add(tier)
+    db.flush()
+    db.refresh(tier)
+    return tier
+
+
+@router.put("/loyalty/tiers/{tier_id}", response_model=TierOut)
+def update_tier(
+    tier_id: UUID,
+    data: TierIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "update")),
+):
+    tier = db.get(LoyaltyTier, tier_id)
+    if tier is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سطح یافت نشد")
+    for key, value in data.model_dump().items():
+        setattr(tier, key, value)
+    db.flush()
+    db.refresh(tier)
+    return tier
+
+
+@router.delete("/loyalty/tiers/{tier_id}", status_code=204)
+def delete_tier(
+    tier_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "delete")),
+):
+    tier = db.get(LoyaltyTier, tier_id)
+    if tier is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سطح یافت نشد")
+    db.delete(tier)
+
+
+@router.get("/loyalty/tier-members", response_model=list[TierMemberOut])
+def tier_members(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return service.tier_members(db)
+
+
+@router.get("/loyalty/tier/{contact_id}", response_model=ContactTierOut)
+def contact_tier(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return service.customer_tier(db, contact_id)
+
+
+# ── کاتالوگِ جوایز و بازخرید ──────────────────────────
+@router.get("/loyalty/rewards", response_model=list[RewardOut])
+def list_rewards(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return db.query(LoyaltyReward).order_by(LoyaltyReward.points_cost.asc()).all()
+
+
+@router.post("/loyalty/rewards", response_model=RewardOut, status_code=201)
+def create_reward(
+    data: RewardIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "create")),
+):
+    reward = LoyaltyReward(**data.model_dump())
+    db.add(reward)
+    db.flush()
+    db.refresh(reward)
+    return reward
+
+
+@router.put("/loyalty/rewards/{reward_id}", response_model=RewardOut)
+def update_reward(
+    reward_id: UUID,
+    data: RewardIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "update")),
+):
+    reward = db.get(LoyaltyReward, reward_id)
+    if reward is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جایزه یافت نشد")
+    for key, value in data.model_dump().items():
+        setattr(reward, key, value)
+    db.flush()
+    db.refresh(reward)
+    return reward
+
+
+@router.delete("/loyalty/rewards/{reward_id}", status_code=204)
+def delete_reward(
+    reward_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "delete")),
+):
+    reward = db.get(LoyaltyReward, reward_id)
+    if reward is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جایزه یافت نشد")
+    db.delete(reward)
+
+
+@router.post("/loyalty/redeem", response_model=LoyaltyTxnOut, status_code=201)
+def redeem_reward(
+    data: RedeemIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("crm", "create")),
+):
+    return service.redeem_reward(db, data.contact_id, data.reward_id, user, data.txn_date)
+
+
+# ── تولدهای پیشِ‌رو ────────────────────────────────────
+@router.get("/birthdays", response_model=list[BirthdayOut])
+def birthdays(
+    days: int = Query(30, ge=1, le=366),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("crm", "view")),
+):
+    return service.upcoming_birthdays(db, days)

@@ -47,6 +47,12 @@ import { EmptyState } from '../components/EmptyState'
 import { Pager, usePagination } from '../components/Pager'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { LoyaltyHistoryDrawer } from '../components/LoyaltyHistoryDrawer'
+import { SegmentsPanel } from '../components/SegmentsPanel'
+import { LoyaltyTiersPanel } from '../components/LoyaltyTiersPanel'
+import { RewardsPanel } from '../components/RewardsPanel'
+import { BirthdaysPanel } from '../components/BirthdaysPanel'
+import { PieChart, Medal, Ticket, Cake } from 'lucide-react'
+import type { LoyaltySettings } from '../api'
 import { formatJalali, todayIso } from '../lib/jalali'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -138,6 +144,10 @@ export function CrmPage({ token }: { token: string }) {
           { key: 'leads', label: 'سرنخ‌ها', icon: Target, content: <LeadsTab token={token} leads={leads} onChanged={refresh} /> },
           { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock, content: <ActivitiesTab token={token} activities={activities} leads={leads} contacts={contacts} onChanged={refresh} /> },
           { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift, content: <LoyaltyTab token={token} balances={balances} contacts={contacts} onChanged={refresh} onApplyDelta={applyLoyaltyDelta} /> },
+          { key: 'segments', label: 'بخش‌بندی', icon: PieChart, content: <SegmentsPanel token={token} /> },
+          { key: 'tiers', label: 'سطوح باشگاه', icon: Medal, content: <LoyaltyTiersPanel token={token} /> },
+          { key: 'rewards', label: 'جوایز', icon: Ticket, content: <RewardsPanel token={token} contacts={contacts} onRedeemed={refresh} /> },
+          { key: 'birthdays', label: 'تولدها', icon: Cake, content: <BirthdaysPanel token={token} contacts={contacts} onChanged={refresh} /> },
         ]}
       />
     </div>
@@ -561,10 +571,14 @@ function LoyaltyTab({
   const [autoEnabled, setAutoEnabled] = useState(false)
   const [perPoint, setPerPoint] = useState('')
   const [setMsg2, setSetMsg2] = useState<string | null>(null)
+  // شیءِ کاملِ تنظیمات را نگه می‌داریم تا هنگامِ ذخیره، فیلدهای سطوح/تولد (که در تب‌های
+  // دیگر تنظیم می‌شوند) صفر نشوند — چون سرور کلِ ردیف را بازنویسی می‌کند.
+  const [fullSettings, setFullSettings] = useState<LoyaltySettings | null>(null)
 
   useEffect(() => {
     fetchLoyaltySettings(token)
       .then((s) => {
+        setFullSettings(s)
         setAutoEnabled(s.is_enabled)
         setPerPoint(Number(s.amount_per_point) ? String(Number(s.amount_per_point)) : '')
       })
@@ -574,7 +588,13 @@ function LoyaltyTab({
   async function saveSettings() {
     setSetMsg2(null)
     try {
-      await setLoyaltySettings(token, { is_enabled: autoEnabled, amount_per_point: Number(perPoint) || 0 })
+      await setLoyaltySettings(token, {
+        is_enabled: autoEnabled,
+        amount_per_point: Number(perPoint) || 0,
+        tier_basis: fullSettings?.tier_basis ?? 'points',
+        tier_discount_auto: fullSettings?.tier_discount_auto ?? false,
+        birthday_gift_points: fullSettings?.birthday_gift_points ?? 0,
+      })
       setSetMsg2('تنظیماتِ کسبِ خودکار ذخیره شد.')
     } catch (err) {
       setSetMsg2(err instanceof Error ? err.message : 'خطای ناشناخته')

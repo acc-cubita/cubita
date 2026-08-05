@@ -46,6 +46,7 @@ class ContactIn(BaseModel):
     email: str | None = None
     address: str = ""
     tax_id: str | None = None
+    birthday: date | None = None
     credit_limit: Decimal = Decimal(0)
     default_price_list_id: UUID | None = None
     entity_type: str = "real"
@@ -83,6 +84,7 @@ class ContactOut(BaseModel):
     email: str | None
     address: str
     tax_id: str | None
+    birthday: date | None
     is_active: bool
     credit_limit: Decimal
     default_price_list_id: UUID | None

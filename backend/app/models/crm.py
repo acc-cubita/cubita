@@ -23,6 +23,10 @@ from app.models.tenant import TenantMixin
 LEAD_STATUSES = ("new", "contacted", "qualified", "won", "lost")
 #: انواعِ فعالیت/پیگیری
 ACTIVITY_KINDS = ("call", "meeting", "note", "task")
+#: مبنای تعیینِ سطحِ باشگاه: امتیازِ فعال یا خریدِ سالانه
+TIER_BASES = ("points", "spend")
+#: نوعِ جایزه در کاتالوگ
+REWARD_KINDS = ("discount", "gift", "other")
 
 
 class Lead(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -96,7 +100,38 @@ class LoyaltyTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     reason: Mapped[str] = mapped_column(String(200), default="", server_default="")
     txn_date: Mapped[date_] = mapped_column(Date)
+    #: اگر این تراکنش «بازخریدِ جایزه» باشد، به همان جایزه گره می‌خورد (وگرنه None).
+    reward_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("loyalty_rewards.id", ondelete="SET NULL"), nullable=True
+    )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class LoyaltyTier(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """سطحِ باشگاه (برنز/نقره/طلا/…). مشتری بر پایه‌ی مبنای انتخابی (امتیاز یا خریدِ
+    سالانه) بالاترین سطحی را می‌گیرد که آستانه‌اش را رد کرده؛ هر سطح تخفیفِ خودش را دارد."""
+
+    __tablename__ = "loyalty_tiers"
+
+    name: Mapped[str] = mapped_column(String(60))
+    #: آستانه‌ی این سطح بر حسبِ مبنا (امتیاز یا ریالِ خریدِ سالانه).
+    threshold: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class LoyaltyReward(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """جایزه‌ی قابلِ بازخرید با امتیاز — «۵۰۰ امتیاز = تخفیفِ ۱۰٪» یا «۱۰۰۰ امتیاز = هدیه»."""
+
+    __tablename__ = "loyalty_rewards"
+
+    name: Mapped[str] = mapped_column(String(120))
+    points_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: discount = درصدِ تخفیف، gift = هدیه، other = دلخواه.
+    kind: Mapped[str] = mapped_column(String(10), default="gift", server_default="gift")
+    #: توضیح یا مقدار (مثلاً «۱۰» برای تخفیفِ ۱۰٪، یا شرحِ هدیه).
+    value: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class LoyaltySettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -112,3 +147,9 @@ class LoyaltySettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     #: چند تومان خرید = ۱ امتیاز (مثلاً ۱۰۰۰۰ یعنی هر ۱۰هزار تومان یک امتیاز)
     amount_per_point: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: مبنای سطحِ باشگاه: "points" (امتیازِ فعال) یا "spend" (خریدِ ۱۲ ماهِ اخیر).
+    tier_basis: Mapped[str] = mapped_column(String(10), default="points", server_default="points")
+    #: اگر فعال باشد، فرمِ فاکتورِ فروش تخفیفِ سطحِ مشتری را پیشنهاد می‌دهد.
+    tier_discount_auto: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: امتیازِ هدیه‌ی تولد (۰ = غیرفعال).
+    birthday_gift_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

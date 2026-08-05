@@ -48,6 +48,8 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     address: Mapped[str] = mapped_column(Text, default="")
     tax_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: تاریخِ تولدِ مشتری (باشگاه مشتریان: هدیه/یادآوریِ تولد). NULL = وارد نشده.
+    birthday: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     #: سقفِ مجازِ مانده‌ی مطالبات از این مشتری (ریال). صفر = بدون سقف / بدون هشدار.
     credit_limit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     #: لیستِ قیمتِ پیش‌فرضِ این مشتری — در فاکتورِ فروش و صندوق خودکار اعمال می‌شود.

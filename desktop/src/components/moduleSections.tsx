@@ -39,6 +39,10 @@ import {
   CalendarDays,
   ListChecks,
   FileUp,
+  PieChart,
+  Medal,
+  Ticket,
+  Cake,
   type LucideIcon,
 } from 'lucide-react'
 import type { PageKey } from './Sidebar'
@@ -103,6 +107,10 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'leads', label: 'سرنخ‌ها', icon: Target },
     { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock },
     { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift },
+    { key: 'segments', label: 'بخش‌بندی', icon: PieChart },
+    { key: 'tiers', label: 'سطوح باشگاه', icon: Medal },
+    { key: 'rewards', label: 'جوایز', icon: Ticket },
+    { key: 'birthdays', label: 'تولدها', icon: Cake },
   ],
   manufacturing: [
     { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical },

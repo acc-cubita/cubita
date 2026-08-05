@@ -10,7 +10,14 @@ from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.email_verification import EmailVerificationCode
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
-from app.models.crm import CrmActivity, Lead, LoyaltySettings, LoyaltyTransaction
+from app.models.crm import (
+    CrmActivity,
+    Lead,
+    LoyaltyReward,
+    LoyaltySettings,
+    LoyaltyTier,
+    LoyaltyTransaction,
+)
 from app.models.currency import Currency, ExchangeRate
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine
 from app.models.installments import Installment, InstallmentPlan
@@ -67,6 +74,8 @@ __all__ = [
     "CrmActivity",
     "LoyaltyTransaction",
     "LoyaltySettings",
+    "LoyaltyTier",
+    "LoyaltyReward",
     "Bom",
     "BomLine",
     "ProductionOrder",
