@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { FileText, Plus, Trash2, Save, Store } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import { createSalesQuotation, fetchContacts, fetchStockLevels, type ContactRecord, type StockLevel } from '../api'
+import {
+  createSalesQuotation,
+  updateSalesQuotation,
+  fetchContacts,
+  fetchStockLevels,
+  type ContactRecord,
+  type SalesQuotationRecord,
+  type StockLevel,
+} from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -21,11 +29,15 @@ export function QuotationForm({
   warehouses,
   items,
   onCreated,
+  editing = null,
+  onDoneEditing,
 }: {
   token: string
   warehouses: WarehouseCache[]
   items: ItemCache[]
   onCreated: () => void
+  editing?: SalesQuotationRecord | null
+  onDoneEditing?: () => void
 }) {
   const [warehouseId, setWarehouseId] = useState('')
   const [quotationDate, setQuotationDate] = useState(todayIso())
@@ -59,6 +71,42 @@ export function QuotationForm({
       .then(setStockLevels)
       .catch(() => setStockLevels([]))
   }, [token])
+
+  function resetForm() {
+    setWarehouseId('')
+    setQuotationDate(todayIso())
+    setValidUntil('')
+    setDescription('')
+    setLines([{ itemId: '', qty: '1', unitPrice: '' }])
+    setCustomerMode('list')
+    setContactId('')
+    setCustomerName('')
+  }
+
+  // پرکردنِ فرم هنگامِ ویرایش (فقط با تغییرِ پیش‌فاکتورِ انتخاب‌شده، نه هر رندر).
+  useEffect(() => {
+    if (!editing) return
+    setWarehouseId(editing.warehouse_id)
+    setQuotationDate(editing.quotation_date)
+    setValidUntil(editing.valid_until ?? '')
+    setDescription(editing.description ?? '')
+    if (editing.contact_id) {
+      setCustomerMode('list')
+      setContactId(editing.contact_id)
+      setCustomerName('')
+    } else {
+      setCustomerMode('manual')
+      setCustomerName(editing.customer_name ?? '')
+      setContactId('')
+    }
+    setLines(
+      editing.lines.length
+        ? editing.lines.map((l) => ({ itemId: l.item_id, qty: String(Number(l.qty)), unitPrice: String(Number(l.unit_price)) }))
+        : [{ itemId: '', qty: '1', unitPrice: '' }],
+    )
+    setMessage(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id])
 
   function unitOf(itemId: string): string {
     return items.find((it) => it.id === itemId)?.unit || ''
@@ -121,34 +169,44 @@ export function QuotationForm({
       return
     }
 
+    const payload = {
+      quotation_date: quotationDate,
+      valid_until: validUntil || null,
+      warehouse_id: effectiveWarehouseId,
+      contact_id: customerMode === 'list' ? (contactId || null) : null,
+      customer_name: customerMode === 'manual' ? (customerName.trim() || null) : null,
+      description,
+      lines: validLines.map((l) => ({
+        item_id: l.itemId,
+        qty: Number(l.qty),
+        unit_price: Number(l.unitPrice) || 0,
+        description: '',
+      })),
+    }
+
     try {
-      await createSalesQuotation(token, {
-        quotation_date: quotationDate,
-        valid_until: validUntil || null,
-        warehouse_id: effectiveWarehouseId,
-        contact_id: customerMode === 'list' ? (contactId || null) : null,
-        customer_name: customerMode === 'manual' ? (customerName.trim() || null) : null,
-        description,
-        lines: validLines.map((l) => ({
-          item_id: l.itemId,
-          qty: Number(l.qty),
-          unit_price: Number(l.unitPrice) || 0,
-          description: '',
-        })),
-      })
-      setLines([{ itemId: '', qty: '1', unitPrice: '' }])
-      setDescription('')
-      setContactId('')
-      setCustomerName('')
-      setMessage('پیش‌فاکتور ثبت شد.')
-      onCreated()
+      if (editing) {
+        await updateSalesQuotation(token, editing.id, payload)
+        onCreated()
+        onDoneEditing?.()
+        resetForm()
+        setMessage('پیش‌فاکتور ویرایش شد.')
+      } else {
+        await createSalesQuotation(token, payload)
+        resetForm()
+        setMessage('پیش‌فاکتور ثبت شد.')
+        onCreated()
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }
 
   return (
-    <SectionCard icon={FileText} title="ثبت پیش‌فاکتور فروش">
+    <SectionCard
+      icon={FileText}
+      title={editing ? `ویرایشِ پیش‌فاکتور${editing.number != null ? ' شماره ' + editing.number.toLocaleString('fa-IR') : ''}` : 'ثبت پیش‌فاکتور فروش'}
+    >
       {warehouses.length === 0 || items.length === 0 ? (
         <p className="hint">قبل از ثبت پیش‌فاکتور، یک‌بار «هم‌گام‌سازی» کنید تا انبار و کالاها در دسترس باشند.</p>
       ) : (
@@ -281,8 +339,13 @@ export function QuotationForm({
               <Plus size={14} /> افزودن ردیف
             </button>
             <span className="invoice-total">جمع کل: {fa(total)} ریال</span>
+            {editing && (
+              <button type="button" onClick={() => { resetForm(); setMessage(null); onDoneEditing?.() }}>
+                انصراف از ویرایش
+              </button>
+            )}
             <button type="submit" className="btn-primary">
-              <Save size={14} /> ثبت پیش‌فاکتور
+              <Save size={14} /> {editing ? 'ذخیرهٔ ویرایش' : 'ثبت پیش‌فاکتور'}
             </button>
           </div>
 

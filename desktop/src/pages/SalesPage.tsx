@@ -5,8 +5,7 @@ import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
-import { QuotationForm } from '../components/QuotationForm'
-import { QuotationsList } from '../components/QuotationsList'
+import { QuotationsTab } from '../components/QuotationsTab'
 import { SalesReturnForm } from '../components/SalesReturnForm'
 import { MoadianPanel } from '../components/MoadianPanel'
 import { FeatureUpsell } from '../components/FeatureUpsell'
@@ -106,12 +105,7 @@ export function SalesPage({
             key: 'quotations',
             label: 'پیش‌فاکتور',
             icon: FileText,
-            content: (
-              <>
-                <QuotationForm token={token} warehouses={warehouses} items={items} onCreated={onQueued} />
-                <QuotationsList token={token} onConverted={handleQueued} />
-              </>
-            ),
+            content: <QuotationsTab token={token} warehouses={warehouses} items={items} onQueued={handleQueued} />,
           },
           {
             key: 'returns',

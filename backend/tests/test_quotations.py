@@ -100,3 +100,53 @@ def test_convert_empty_description_stays_empty(client):
     q = _quote(client, wh, item).json()
     inv = client.post(f"/api/sales-quotations/{q['id']}/convert").json()
     assert inv["description"] == ""
+
+
+def test_update_quotation_edits_lines_total_and_customer(client):
+    wh, item = _wh(client), _item(client)
+    q = _quote(client, wh, item).json()  # qty 3 × 5000 = 15000
+    assert float(q["total_amount"]) == 15000
+
+    r = client.put(
+        f"/api/sales-quotations/{q['id']}",
+        json={
+            "quotation_date": TODAY,
+            "warehouse_id": wh,
+            "customer_name": "مشتریِ ویرایش‌شده",
+            "description": "به‌روزشده",
+            "lines": [{"item_id": item, "qty": 5, "unit_price": 5000, "description": ""}],
+        },
+    )
+    assert r.status_code == 200, r.text
+    updated = r.json()
+    assert float(updated["total_amount"]) == 25000  # ۵ × ۵۰۰۰
+    assert updated["customer_name"] == "مشتریِ ویرایش‌شده"
+    assert updated["description"] == "به‌روزشده"
+    assert updated["number"] == q["number"]  # شماره ثابت می‌ماند
+    assert len(updated["lines"]) == 1 and float(updated["lines"][0]["qty"]) == 5
+
+
+def test_update_quotation_blocked_after_convert(client):
+    wh, item = _wh(client), _item(client)
+    _buy(client, wh, item)
+    q = _quote(client, wh, item).json()
+    client.post(f"/api/sales-quotations/{q['id']}/convert")
+    r = client.put(
+        f"/api/sales-quotations/{q['id']}",
+        json={
+            "quotation_date": TODAY,
+            "warehouse_id": wh,
+            "lines": [{"item_id": item, "qty": 1, "unit_price": 5000, "description": ""}],
+        },
+    )
+    assert r.status_code == 400
+    assert "تبدیل" in r.json()["detail"]
+
+
+def test_quotation_pdf_endpoint(client):
+    wh, item = _wh(client), _item(client)
+    q = _quote(client, wh, item, customer_name="آقای رضایی").json()
+    r = client.get(f"/api/sales-quotations/{q['id']}/pdf")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("application/pdf")
+    assert r.content[:4] == b"%PDF"  # امضای فایلِ PDF

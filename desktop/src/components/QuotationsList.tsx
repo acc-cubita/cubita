@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
-import { FileCheck, RefreshCw, ArrowLeftCircle, Printer } from 'lucide-react'
-import { fetchSalesQuotations, fetchContacts, updateQuotationStatus, convertQuotationToInvoice, printSalesQuotation, type SalesQuotationRecord } from '../api'
+import { FileCheck, RefreshCw, ArrowLeftCircle, Printer, FileDown, Pencil } from 'lucide-react'
+import {
+  fetchSalesQuotations,
+  fetchContacts,
+  updateQuotationStatus,
+  convertQuotationToInvoice,
+  printSalesQuotation,
+  downloadSalesQuotationPdf,
+  type SalesQuotationRecord,
+} from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
@@ -22,7 +30,15 @@ const STATUS_TONE: Record<string, string> = {
   converted: 'success',
 }
 
-export function QuotationsList({ token, onConverted }: { token: string; onConverted: () => void }) {
+export function QuotationsList({
+  token,
+  onConverted,
+  onEdit,
+}: {
+  token: string
+  onConverted: () => void
+  onEdit: (quotation: SalesQuotationRecord) => void
+}) {
   const [quotations, setQuotations] = useState<SalesQuotationRecord[]>([])
   const [contactNames, setContactNames] = useState<Map<string, string>>(new Map())
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +84,15 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
     setError(null)
     try {
       await printSalesQuotation(token, id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  async function handlePdf(q: SalesQuotationRecord) {
+    setError(null)
+    try {
+      await downloadSalesQuotationPdf(token, q.id, q.number)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -132,6 +157,14 @@ export function QuotationsList({ token, onConverted }: { token: string; onConver
                     <button type="button" onClick={() => void handlePrint(q.id)}>
                       <Printer size={13} /> چاپ
                     </button>
+                    <button type="button" onClick={() => void handlePdf(q)}>
+                      <FileDown size={13} /> PDF
+                    </button>
+                    {q.status !== 'converted' && (
+                      <button type="button" onClick={() => onEdit(q)}>
+                        <Pencil size={13} /> ویرایش
+                      </button>
+                    )}
                     {q.status === 'draft' && (
                       <>
                         <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'sent')}>

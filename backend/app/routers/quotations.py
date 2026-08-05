@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -12,8 +12,14 @@ from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import SalesInvoiceOut
 from app.schemas.quotations import SalesQuotationIn, SalesQuotationOut, SalesQuotationStatusUpdateIn
+from app.services.pdf_invoice import render_invoice_pdf
 from app.services.printing import render_invoice
-from app.services.quotations import convert_quotation_to_invoice, create_quotation, update_quotation_status
+from app.services.quotations import (
+    convert_quotation_to_invoice,
+    create_quotation,
+    update_quotation,
+    update_quotation_status,
+)
 
 router = APIRouter(tags=["quotations"])
 
@@ -39,6 +45,16 @@ def create_sales_quotation(
     user: User = Depends(require_permission("invoices", "create")),
 ):
     return create_quotation(db, data, user)
+
+
+@router.put("/api/sales-quotations/{quotation_id}", response_model=SalesQuotationOut)
+def edit_sales_quotation(
+    quotation_id: UUID,
+    data: SalesQuotationIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "update")),
+):
+    return update_quotation(db, quotation_id, data, user)
 
 
 @router.patch("/api/sales-quotations/{quotation_id}/status", response_model=SalesQuotationOut)
@@ -69,18 +85,10 @@ def _quotation_party(db: Session, quotation: SalesQuotation) -> tuple[str, str]:
     return (quotation.customer_name or "مشتری"), ""
 
 
-@router.get("/api/sales-quotations/{quotation_id}/print", response_class=HTMLResponse)
-def print_quotation(
-    quotation_id: UUID,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    _=Depends(require_permission("invoices", "view")),
-):
-    quotation = db.get(SalesQuotation, quotation_id)
-    if quotation is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "پیش‌فاکتور یافت نشد")
+def _quotation_render_kwargs(db: Session, principal: Principal, quotation: SalesQuotation) -> dict:
+    """آرگومان‌های مشترکِ رندرِ پیش‌فاکتور برای هر دو خروجیِ HTML و PDF."""
     name, detail = _quotation_party(db, quotation)
-    html = render_invoice(
+    return dict(
         kind="پیش‌فاکتور",
         business_name=principal.membership.tenant.name,
         number=quotation.number,
@@ -102,4 +110,38 @@ def print_quotation(
         ],
         total=quotation.total_amount,
     )
+
+
+@router.get("/api/sales-quotations/{quotation_id}/print", response_class=HTMLResponse)
+def print_quotation(
+    quotation_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    quotation = db.get(SalesQuotation, quotation_id)
+    if quotation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "پیش‌فاکتور یافت نشد")
+    html = render_invoice(**_quotation_render_kwargs(db, principal, quotation))
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/sales-quotations/{quotation_id}/pdf")
+def pdf_quotation(
+    quotation_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    quotation = db.get(SalesQuotation, quotation_id)
+    if quotation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "پیش‌فاکتور یافت نشد")
+    pdf_bytes = render_invoice_pdf(**_quotation_render_kwargs(db, principal, quotation))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="quotation-{quotation.number}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )

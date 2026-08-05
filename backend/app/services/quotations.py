@@ -59,6 +59,47 @@ def create_quotation(db: Session, data: SalesQuotationIn, user: User) -> SalesQu
     return quotation
 
 
+def update_quotation(db: Session, quotation_id: UUID, data: SalesQuotationIn, user: User) -> SalesQuotation:
+    """محتوای پیش‌فاکتور را ویرایش می‌کند (طرف‌حساب، تاریخ، توضیح، ردیف‌ها).
+
+    تا وقتی پیش‌فاکتور به فاکتور تبدیل نشده باشد قابلِ ویرایش است؛ پس از تبدیل، چون
+    فاکتورِ قطعی و سندِ مالی ساخته شده، دیگر ویرایش مجاز نیست. شماره و created_by ثابت می‌مانند.
+    """
+    quotation = db.get(SalesQuotation, quotation_id)
+    if quotation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "پیش‌فاکتور یافت نشد")
+    if quotation.status == "converted" or quotation.converted_invoice_id is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "پیش‌فاکتورِ تبدیل‌شده به فاکتور قابلِ ویرایش نیست")
+
+    items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
+    for line in data.lines:
+        if line.item_id not in items_by_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
+
+    # جایگزینیِ کاملِ ردیف‌ها (cascade=delete-orphan ردیف‌های قبلی را پاک می‌کند).
+    total_amount = Decimal(0)
+    new_lines: list[SalesQuotationLine] = []
+    for line in data.lines:
+        total_amount += line.qty * line.unit_price
+        new_lines.append(
+            SalesQuotationLine(
+                item_id=line.item_id, qty=line.qty, unit_price=line.unit_price, description=line.description
+            )
+        )
+    quotation.lines = new_lines
+
+    quotation.quotation_date = data.quotation_date
+    quotation.valid_until = data.valid_until
+    quotation.contact_id = data.contact_id
+    quotation.customer_name = (data.customer_name or None) if not data.contact_id else None
+    quotation.warehouse_id = data.warehouse_id
+    quotation.description = data.description
+    quotation.total_amount = total_amount
+    db.flush()
+    db.refresh(quotation)
+    return quotation
+
+
 def update_quotation_status(db: Session, quotation_id: UUID, new_status: str, user: User) -> SalesQuotation:
     quotation = db.get(SalesQuotation, quotation_id)
     if quotation is None:

@@ -925,18 +925,21 @@ export interface SalesQuotationRecord {
 export const fetchSalesQuotations = (token: string) =>
   authedGetAll<SalesQuotationRecord>(token, '/api/sales-quotations')
 
-export const createSalesQuotation = (
-  token: string,
-  data: {
-    quotation_date: string
-    valid_until: string | null
-    warehouse_id: string
-    contact_id?: string | null
-    customer_name?: string | null
-    description: string
-    lines: { item_id: string; qty: number; unit_price: number; description: string }[]
-  },
-) => authedSend<SalesQuotationRecord>(token, 'POST', '/api/sales-quotations', data)
+export interface SalesQuotationInput {
+  quotation_date: string
+  valid_until: string | null
+  warehouse_id: string
+  contact_id?: string | null
+  customer_name?: string | null
+  description: string
+  lines: { item_id: string; qty: number; unit_price: number; description: string }[]
+}
+
+export const createSalesQuotation = (token: string, data: SalesQuotationInput) =>
+  authedSend<SalesQuotationRecord>(token, 'POST', '/api/sales-quotations', data)
+
+export const updateSalesQuotation = (token: string, quotationId: string, data: SalesQuotationInput) =>
+  authedSend<SalesQuotationRecord>(token, 'PUT', `/api/sales-quotations/${quotationId}`, data)
 
 export const updateQuotationStatus = (token: string, quotationId: string, status: string) =>
   authedSend<SalesQuotationRecord>(token, 'PATCH', `/api/sales-quotations/${quotationId}/status`, { status })
@@ -2190,6 +2193,9 @@ export const downloadSalesInvoicePdf = (token: string, invoiceId: string, number
 
 export const downloadPurchaseInvoicePdf = (token: string, invoiceId: string, number: number | null) =>
   downloadInvoicePdf(token, `/api/purchase-invoices/${invoiceId}/pdf`, `فاکتور-خرید-${number ?? invoiceId}.pdf`)
+
+export const downloadSalesQuotationPdf = (token: string, quotationId: string, number: number | null) =>
+  downloadInvoicePdf(token, `/api/sales-quotations/${quotationId}/pdf`, `پیش‌فاکتور-${number ?? quotationId}.pdf`)
 
 // --- انبارگردانی (شمارش فیزیکی موجودی) ---
 
