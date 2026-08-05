@@ -130,38 +130,62 @@ def amount_in_words(value) -> str:
     return " و ".join(parts)
 
 
+# رنگِ برند (آبیِ کوبیتا). در HTML و PDF یکسان استفاده می‌شود تا هر دو خروجی هم‌ظاهر باشند.
+_ACCENT = "#2563eb"
+
 _STYLE = """
-@page { size: A4; margin: 14mm; }
+@page { size: A4; margin: 12mm; }
 * { box-sizing: border-box; }
 body {
   font-family: Vazirmatn, Tahoma, "Segoe UI", sans-serif;
-  direction: rtl; color: #111; margin: 0; font-size: 12px; line-height: 1.7;
+  direction: rtl; color: #1e293b; margin: 0; font-size: 12px; line-height: 1.75; background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
-.sheet { max-width: 190mm; margin: 0 auto; padding: 8mm; }
+.sheet { max-width: 190mm; margin: 0 auto; padding: 6mm 8mm; }
+
 .head { display: flex; justify-content: space-between; align-items: flex-start;
-        border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
-.title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+        border-bottom: 3px solid #2563eb; padding-bottom: 14px; margin-bottom: 18px; }
+.brand-block { display: flex; align-items: center; gap: 12px; }
+.logo { width: 48px; height: 48px; border-radius: 13px; background: #2563eb; color: #fff;
+        display: grid; place-items: center; font-size: 23px; font-weight: 800; flex: 0 0 auto; }
+.title { font-size: 22px; font-weight: 800; margin: 0; color: #2563eb; line-height: 1.2; }
+.biz { color: #475569; font-size: 12.5px; margin-top: 3px; }
 .meta { text-align: left; font-size: 12px; }
-.meta div { margin-bottom: 2px; }
-.parties { display: flex; gap: 16px; margin-bottom: 14px; }
-.party { flex: 1; border: 1px solid #bbb; border-radius: 4px; padding: 8px 10px; }
-.party h2 { font-size: 12px; margin: 0 0 4px; color: #555; font-weight: 600; }
-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: right; }
-th { background: #f2f2f2; font-weight: 600; }
+.meta .chip { display: block; background: #eef2fb; border: 1px solid #d7def5; border-radius: 9px;
+              padding: 6px 13px; margin-bottom: 7px; white-space: nowrap; }
+.meta .chip span { color: #64748b; }
+.meta .chip strong { color: #0f172a; }
+
+.parties { display: flex; gap: 14px; margin-bottom: 16px; }
+.party { flex: 1; border: 1px solid #e2e8f0; border-radius: 12px; padding: 11px 14px; background: #f8fafc; }
+.party h2 { font-size: 11px; margin: 0 0 5px; color: #2563eb; font-weight: 700; letter-spacing: .2px; }
+.party .big { font-weight: 700; font-size: 13.5px; color: #0f172a; }
+.party .sub { color: #64748b; }
+
+table { width: 100%; border-collapse: collapse; margin-bottom: 14px;
+        border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+thead th { background: #2563eb; color: #fff; font-weight: 600; padding: 9px 8px; text-align: right; font-size: 11.5px; }
+tbody td { border-bottom: 1px solid #eef2f7; padding: 8px; text-align: right; }
+tbody tr:nth-child(even) td { background: #f8fafc; }
 td.num, th.num { text-align: center; font-variant-numeric: tabular-nums; }
-tfoot td { font-weight: 700; background: #fafafa; }
-.words { border: 1px solid #bbb; border-radius: 4px; padding: 8px 10px; margin-bottom: 14px; }
-.signs { display: flex; gap: 16px; margin-top: 28px; }
-.sign { flex: 1; border-top: 1px solid #888; padding-top: 6px; text-align: center; color: #555; }
-.voided { color: #b00; border: 2px solid #b00; border-radius: 4px;
-          padding: 6px 10px; margin-bottom: 12px; font-weight: 700; }
-.currency-note { background: #f2f6ff; border: 1px solid #b8c8e8; border-radius: 4px;
-          padding: 6px 10px; margin-bottom: 12px; font-weight: 600; }
-.toolbar { text-align: center; margin: 12px 0 20px; }
-.toolbar button { font: inherit; padding: 8px 22px; cursor: pointer;
-                  border: 1px solid #111; background: #111; color: #fff; border-radius: 6px; }
-@media print { .toolbar { display: none; } body { font-size: 11px; } }
+tfoot td { padding: 7px 10px; font-weight: 700; background: #f1f5f9; border-bottom: 1px solid #e8edf5; }
+tfoot tr.grand td { background: #eef4ff; color: #1d4ed8; font-size: 14px; border-top: 2px solid #2563eb; border-bottom: 0; }
+
+.words { border: 1px dashed #c7d2fe; background: #f5f8ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; }
+.words strong { color: #1d4ed8; }
+.signs { display: flex; gap: 16px; margin-top: 34px; }
+.sign { flex: 1; border-top: 1.5px solid #cbd5e1; padding-top: 8px; text-align: center; color: #64748b; }
+.footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #eef2f7;
+          text-align: center; color: #94a3b8; font-size: 10.5px; }
+.voided { color: #dc2626; border: 2px solid #dc2626; background: #fef2f2; border-radius: 10px;
+          padding: 8px 12px; margin-bottom: 14px; font-weight: 700; text-align: center; }
+.currency-note { background: #f2f6ff; border: 1px solid #b8c8e8; border-radius: 10px;
+          padding: 7px 12px; margin-bottom: 12px; font-weight: 600; }
+.toolbar { text-align: center; margin: 14px 0 22px; }
+.toolbar button { font: inherit; padding: 9px 26px; cursor: pointer; border: 0;
+                  background: #2563eb; color: #fff; border-radius: 10px; font-weight: 700;
+                  box-shadow: 0 4px 12px -4px rgba(37,99,235,.5); }
+@media print { .toolbar { display: none; } body { font-size: 11px; } .sheet { padding: 0; } }
 """
 
 
@@ -232,10 +256,12 @@ def render_invoice(
             rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
         if rnd != 0:
             rows.append(f"<tr><td colspan='7'>گِرد کردن (ریال)</td><td class='num'>{fa_number(rnd)}</td></tr>")
-        rows.append(f"<tr><td colspan='7'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
+        rows.append(f"<tr class='grand'><td colspan='7'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
     else:
-        rows.append(f"<tr><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
+        rows.append(f"<tr class='grand'><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
     totals_rows = "".join(rows)
+
+    logo_letter = escape((business_name.strip()[:1] or "ک"))
 
     return f"""<!doctype html>
 <html lang="fa" dir="rtl">
@@ -251,21 +277,24 @@ def render_invoice(
   {banner}
   {currency_banner}
   <div class="head">
-    <div>
-      <h1 class="title">{escape(kind)}</h1>
-      <div>{escape(business_name)}</div>
+    <div class="brand-block">
+      <div class="logo">{logo_letter}</div>
+      <div>
+        <h1 class="title">{escape(kind)}</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
     </div>
     <div class="meta">
-      <div>شماره: <strong>{fa_number(number)}</strong></div>
-      <div>تاریخ: <strong>{format_jalali(invoice_date)}</strong></div>
+      <div class="chip"><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>
+      <div class="chip"><span>تاریخ</span> &nbsp;<strong>{format_jalali(invoice_date)}</strong></div>
     </div>
   </div>
 
   <div class="parties">
     <div class="party">
       <h2>طرف حساب</h2>
-      <div><strong>{escape(party_name)}</strong></div>
-      <div>{escape(party_detail)}</div>
+      <div class="big">{escape(party_name)}</div>
+      <div class="sub">{escape(party_detail)}</div>
     </div>
     <div class="party">
       <h2>شرح</h2>
@@ -300,6 +329,8 @@ def render_invoice(
     <div class="sign">مهر و امضای فروشنده</div>
     <div class="sign">مهر و امضای خریدار</div>
   </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
 </div>
 </body>
 </html>"""
