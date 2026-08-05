@@ -93,6 +93,16 @@ export function CrmPage({ token }: { token: string }) {
     }
   }
 
+  // به‌روزرسانیِ خوش‌بینانه‌ی مانده‌ی امتیاز: مقدار دقیقاً همان delta است، پس بلافاصله
+  // در جدول اعمالش می‌کنیم تا کاربر منتظرِ رفت‌وبرگشتِ شبکه (onChanged) نماند.
+  function applyLoyaltyDelta(contactId: string, delta: number, contactName: string) {
+    setBalances((prev) =>
+      prev.some((b) => b.contact_id === contactId)
+        ? prev.map((b) => (b.contact_id === contactId ? { ...b, balance: b.balance + delta } : b))
+        : [...prev, { contact_id: contactId, contact_name: contactName, balance: delta }],
+    )
+  }
+
   useEffect(() => {
     void refresh()
   }, [])
@@ -126,7 +136,7 @@ export function CrmPage({ token }: { token: string }) {
         tabs={[
           { key: 'leads', label: 'سرنخ‌ها', icon: Target, content: <LeadsTab token={token} leads={leads} onChanged={refresh} /> },
           { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock, content: <ActivitiesTab token={token} activities={activities} leads={leads} contacts={contacts} onChanged={refresh} /> },
-          { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift, content: <LoyaltyTab token={token} balances={balances} contacts={contacts} onChanged={refresh} /> },
+          { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift, content: <LoyaltyTab token={token} balances={balances} contacts={contacts} onChanged={refresh} onApplyDelta={applyLoyaltyDelta} /> },
         ]}
       />
     </div>
@@ -529,11 +539,13 @@ function LoyaltyTab({
   balances,
   contacts,
   onChanged,
+  onApplyDelta,
 }: {
   token: string
   balances: LoyaltyBalance[]
   contacts: ContactRecord[]
   onChanged: () => Promise<void>
+  onApplyDelta: (contactId: string, delta: number, contactName: string) => void
 }) {
   const [contactId, setContactId] = useState('')
   const [mode, setMode] = useState<'earn' | 'redeem'>('earn')
@@ -577,16 +589,19 @@ function LoyaltyTab({
       return
     }
     try {
+      const delta = mode === 'earn' ? p : -p
       await addLoyaltyTxn(token, {
         contact_id: contactId,
-        points: mode === 'earn' ? p : -p,
+        points: delta,
         reason: reason || (mode === 'earn' ? 'کسب امتیاز' : 'استفاده از امتیاز'),
         txn_date: date,
       })
+      // مانده را همان لحظه در جدول اصلاح کن (delta دقیق است)، بعد در پس‌زمینه با سرور تطبیق بده.
+      onApplyDelta(contactId, delta, contacts.find((c) => c.id === contactId)?.name ?? '')
       setPoints('')
       setReason('')
       setMsg(mode === 'earn' ? 'امتیاز به مشتری اضافه شد.' : 'امتیاز از مشتری کسر شد.')
-      await onChanged()
+      void onChanged()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
