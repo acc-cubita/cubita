@@ -524,7 +524,18 @@
 .sidebar-acc + .sidebar-acc,
 .sidebar-acc + .sidebar-nav-solo,
 .sidebar-nav-solo + .sidebar-nav-solo {
-  margin-top: 3px;
+  margin-top: 6px;
+}
+
+/* گروهِ باز به یک «کارتِ» جداگانه تبدیل می‌شود تا مرزِ گروه و زیرمجموعه‌اش برای چشم
+   روشن باشد؛ گروه‌های بسته فقط یک ردیفِ سرتیترند. */
+.sidebar-acc {
+  border-radius: 14px;
+}
+.sidebar-acc.open {
+  background: var(--surface-2);
+  border: 1px solid var(--sidebar-border);
+  padding: 2px 5px 6px;
 }
 
 .sidebar-acc-header {
@@ -532,14 +543,14 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border: none;
   background: transparent;
   color: var(--sidebar-text);
-  border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
   text-align: right;
   cursor: pointer;
   transition: background 0.14s, color 0.14s;
@@ -550,15 +561,23 @@
   color: var(--text-h);
 }
 
+/* آیکنِ گروه داخلِ یک چیپِ گِردگوشه — تا از آیکنِ سرراستِ ماژول‌ها (سطحِ دوم) جدا دیده شود. */
 .sidebar-acc-header .acc-ico {
-  display: flex;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-hover);
   color: var(--text-muted);
-  transition: color 0.14s;
+  flex-shrink: 0;
+  transition: background 0.14s, color 0.14s;
 }
 
 .sidebar-acc-header:hover .acc-ico,
 .sidebar-acc.open > .sidebar-acc-header .acc-ico,
 .sidebar-acc-header.has-active .acc-ico {
+  background: var(--accent-bg);
   color: var(--accent);
 }
 
@@ -566,6 +585,7 @@
   flex: 1;
 }
 
+.sidebar-acc.open > .sidebar-acc-header,
 .sidebar-acc-header.has-active {
   color: var(--text-h);
 }
@@ -605,10 +625,8 @@
   flex-direction: column;
   gap: 2px;
   padding-block: 2px;
-  margin-inline-start: 18px;
-  margin-inline-end: 4px;
-  padding-inline-start: 8px;
-  border-inline-start: 1.5px solid var(--sidebar-border);
+  margin-inline-start: 6px;
+  padding-inline-start: 4px;
 }
 
 /* ---------- سطح‌سوم: ماژولِ تب‌دار + زیرمنوی تب‌ها ---------- */
@@ -3936,6 +3954,18 @@ button:disabled {
 .rfm-pip-5 { background: #22c55e; }
 
 .tier-pct { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
+
+/* یادداشتِ تخفیفِ سطحِ باشگاه روی فرمِ فاکتور */
+.tier-discount-hint {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-bg);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
 
 .link-btn {
   border: none; background: transparent; padding: 4px 6px; cursor: pointer;

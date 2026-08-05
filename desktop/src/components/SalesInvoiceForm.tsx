@@ -4,10 +4,12 @@ import type { ItemCache, WarehouseCache } from '../electron.d'
 import {
   createSalesInvoiceDirect,
   fetchContacts,
+  fetchContactTier,
   fetchCostCenters,
   fetchCreditStatus,
   fetchCurrencies,
   fetchLatestRate,
+  fetchLoyaltySettings,
   fetchPriceListItems,
   fetchStockLevels,
   newIdempotencyKey,
@@ -61,6 +63,11 @@ export function SalesInvoiceForm({
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = useState('')
   const [credit, setCredit] = useState<CreditStatus | null>(null)
+  // تخفیفِ خودکارِ سطحِ باشگاه (اگر در تنظیماتِ باشگاه فعال باشد).
+  const [tierAuto, setTierAuto] = useState(false)
+  const [autoTier, setAutoTier] = useState<{ name: string; pct: number } | null>(null)
+  const autoTierActiveRef = useRef(false)
+  const suppressTierRef = useRef(false)
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [currencyCode, setCurrencyCode] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1')
@@ -80,6 +87,8 @@ export function SalesInvoiceForm({
   useEffect(() => {
     if (!prefill) return
     setWarehouseId(prefill.warehouse_id)
+    // رونوشت: تخفیفِ سطح را روی این فاکتور اعمال نکن (تخفیفِ سطری از فاکتورِ اصلی می‌آید).
+    suppressTierRef.current = true
     setContactId(prefill.contact_id ?? '')
     setTaxRate(String(Number(prefill.tax_rate)))
     setCurrencyCode('')
@@ -151,6 +160,54 @@ export function SalesInvoiceForm({
       cancelled = true
     }
   }, [token, contactId])
+
+  // آیا «پیشنهادِ خودکارِ تخفیفِ سطح» در تنظیماتِ باشگاه روشن است؟
+  useEffect(() => {
+    fetchLoyaltySettings(token)
+      .then((s) => setTierAuto(!!s.tier_discount_auto))
+      .catch(() => {})
+  }, [token])
+
+  function applyAutoTier(v: { name: string; pct: number } | null) {
+    setAutoTier(v)
+    autoTierActiveRef.current = v != null
+  }
+
+  // با انتخابِ مشتری، تخفیفِ سطحش را (اگر داشته باشد) روی تخفیفِ کلِ فاکتور می‌نشانیم؛
+  // با عوض/برداشتنِ مشتری هم اگر تخفیف از سطح آمده بود پاکش می‌کنیم — تا تخفیفِ دستی
+  // برای مشتریِ بی‌سطح دست‌نخورده بماند. (روی رونوشت اعمال نمی‌شود.)
+  useEffect(() => {
+    if (suppressTierRef.current) {
+      suppressTierRef.current = false
+      return
+    }
+    if (!tierAuto) return
+    if (!contactId) {
+      if (autoTierActiveRef.current) {
+        setInvoiceDiscount('')
+        applyAutoTier(null)
+      }
+      return
+    }
+    let cancelled = false
+    fetchContactTier(token, contactId)
+      .then((t) => {
+        if (cancelled) return
+        const pct = Number(t.discount_percent) || 0
+        if (t.tier_name && pct > 0) {
+          setInvoiceDiscountMode('percent')
+          setInvoiceDiscount(String(pct))
+          applyAutoTier({ name: t.tier_name, pct })
+        } else if (autoTierActiveRef.current) {
+          setInvoiceDiscount('')
+          applyAutoTier(null)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token, contactId, tierAuto])
   // کلید یکتاسازی به *این فاکتور* گره می‌خورد، نه به هر تلاش شبکه‌ای.
   //
   // اگر ثبت با خطا برگردد و کاربر دوباره دکمه را بزند، همان کلید می‌رود — چون
@@ -349,6 +406,11 @@ export function SalesInvoiceForm({
                   </option>
                 ))}
               </select>
+              {autoTier && (
+                <span className="tier-discount-hint">
+                  🎖️ سطحِ {autoTier.name} — تخفیفِ {autoTier.pct.toLocaleString('fa-IR')}٪ اعمال شد
+                </span>
+              )}
             </label>
           )}
           {currencies.length > 0 && (
