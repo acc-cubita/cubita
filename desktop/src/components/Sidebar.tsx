@@ -23,8 +23,15 @@ import {
   LogOut,
   Sun,
   Moon,
+  ChevronDown,
+  ShoppingBag,
+  Boxes,
+  Wallet,
+  Database,
+  Wrench,
+  Settings,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from '../lib/theme'
 
 export type PageKey =
@@ -51,11 +58,12 @@ export type PageKey =
   | 'help'
 
 type NavItem = { key: PageKey; label: string; icon: ReactNode }
-type NavGroup = { heading: string; items: NavItem[] }
+type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
 
 // چیدمانِ ماژول‌ها گروه‌بندی‌شده است تا کاربر به‌جای اسکنِ یک فهرستِ تختِ بلند،
-// چشمش روی «دسته» بیفتد. ترتیبِ گروه‌ها بر اساسِ گردشِ کار است: پرکاربردِ روزمره
-// (فروش/خرید) بالا، مالی وسط، اطلاعات و گزارش، و ابزارِ کم‌استفاده (راه‌اندازی) ته.
+// چشمش روی «دسته» بیفتد. هر گروه یک آکاردئونِ کشویی است: سرتیتر همیشه دیده می‌شود و
+// با کلیک، ماژول‌هایش باز/بسته می‌شوند. ترتیبِ گروه‌ها بر اساسِ گردشِ کار است: پرکاربردِ
+// روزمره (فروش/خرید) بالا، مالی وسط، اطلاعات و گزارش، و ابزارِ کم‌استفاده ته.
 const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'میزکار',
@@ -63,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'فروش و مشتریان',
+    icon: <ShoppingBag size={17} />,
     items: [
       { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
@@ -73,6 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'خرید و انبار',
+    icon: <Boxes size={17} />,
     items: [
       { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
       { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
@@ -81,6 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'مالی و بانکی',
+    icon: <Wallet size={17} />,
     items: [
       { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
       { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },
@@ -89,6 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'اطلاعات و گزارش',
+    icon: <Database size={17} />,
     items: [
       { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
@@ -96,6 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'ابزار',
+    icon: <Wrench size={17} />,
     items: [
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
       { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
@@ -153,9 +166,19 @@ export function Sidebar({
   ]
   const groups: NavGroup[] = [
     ...NAV_GROUPS,
-    ...(adminItems.length ? [{ heading: 'مدیریت سامانه', items: adminItems }] : []),
+    ...(adminItems.length
+      ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }]
+      : []),
   ]
   const { theme, toggle } = useTheme()
+
+  // آکاردئون: فقط یک گروه هم‌زمان باز است تا نوار کوتاه بماند. به‌صورتِ پیش‌فرض،
+  // گروهی که صفحه‌ی فعال در آن است باز می‌شود؛ و با تغییرِ صفحه‌ی فعال هم‌گام می‌ماند.
+  const activeGroup = groups.find((g) => g.items.some((i) => i.key === active))?.heading ?? null
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroup)
+  useEffect(() => {
+    if (activeGroup) setOpenGroup(activeGroup)
+  }, [activeGroup])
 
   const renderItem = (item: NavItem) => (
     <button
@@ -172,6 +195,37 @@ export function Sidebar({
     </button>
   )
 
+  const renderGroup = (group: NavGroup) => {
+    // گروهِ تک‌آیتم (مثلِ داشبورد) نیازی به آکاردئون ندارد؛ مستقیم دیده می‌شود.
+    if (group.items.length === 1) {
+      return (
+        <div className="sidebar-nav-solo" key={group.heading}>
+          {renderItem(group.items[0])}
+        </div>
+      )
+    }
+    const isOpen = openGroup === group.heading
+    const hasActive = group.items.some((i) => i.key === active)
+    return (
+      <div className={`sidebar-acc${isOpen ? ' open' : ''}`} key={group.heading}>
+        <button
+          type="button"
+          className={`sidebar-acc-header${hasActive ? ' has-active' : ''}`}
+          aria-expanded={isOpen}
+          onClick={() => setOpenGroup((h) => (h === group.heading ? null : group.heading))}
+        >
+          <span className="acc-ico">{group.icon}</span>
+          <span className="acc-label">{group.heading}</span>
+          {hasActive && !isOpen && <span className="acc-dot" aria-hidden="true" />}
+          <ChevronDown className="acc-chev" size={16} />
+        </button>
+        <div className="sidebar-acc-panel">
+          <div className="acc-inner">{group.items.map(renderItem)}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       {open && <div className="sidebar-overlay" onClick={onClose} aria-hidden="true" />}
@@ -182,12 +236,7 @@ export function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {groups.map((group) => (
-          <div className="sidebar-nav-group" key={group.heading}>
-            <div className="sidebar-nav-heading">{group.heading}</div>
-            {group.items.map(renderItem)}
-          </div>
-        ))}
+        {groups.map(renderGroup)}
         <div className="sidebar-nav-divider" />
         <div className="sidebar-nav-group">{SECONDARY_NAV_ITEMS.map(renderItem)}</div>
       </nav>

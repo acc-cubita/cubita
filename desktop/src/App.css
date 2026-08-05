@@ -517,6 +517,100 @@
   font-weight: 600;
 }
 
+/* ---------- آکاردئونِ گروه‌ها ---------- */
+/* هر گروه یک سرتیترِ کلیک‌پذیر است؛ با کلیک، کشوی ماژول‌هایش با انیمیشنِ نرم
+   باز/بسته می‌شود. تنها یک گروه هم‌زمان باز است تا نوار جمع‌وجور بماند. */
+.sidebar-nav-solo + .sidebar-acc,
+.sidebar-acc + .sidebar-acc,
+.sidebar-acc + .sidebar-nav-solo,
+.sidebar-nav-solo + .sidebar-nav-solo {
+  margin-top: 3px;
+}
+
+.sidebar-acc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--sidebar-text);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: right;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+
+.sidebar-acc-header:hover {
+  background: var(--surface-hover);
+  color: var(--text-h);
+}
+
+.sidebar-acc-header .acc-ico {
+  display: flex;
+  color: var(--text-muted);
+  transition: color 0.14s;
+}
+
+.sidebar-acc-header:hover .acc-ico,
+.sidebar-acc.open > .sidebar-acc-header .acc-ico,
+.sidebar-acc-header.has-active .acc-ico {
+  color: var(--accent);
+}
+
+.sidebar-acc-header .acc-label {
+  flex: 1;
+}
+
+.sidebar-acc-header.has-active {
+  color: var(--text-h);
+}
+
+.sidebar-acc-header .acc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.sidebar-acc-header .acc-chev {
+  color: var(--text-muted);
+  transition: transform 0.22s ease, color 0.14s;
+}
+
+.sidebar-acc.open > .sidebar-acc-header .acc-chev {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+/* کشوی زیرمنو: انیمیشنِ ارتفاعِ خودکار با گریدِ 0fr↔1fr (بدونِ max-height دستی) */
+.sidebar-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+
+.sidebar-acc.open > .sidebar-acc-panel {
+  grid-template-rows: 1fr;
+}
+
+.sidebar-acc-panel > .acc-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-block: 2px;
+  margin-inline-start: 18px;
+  margin-inline-end: 4px;
+  padding-inline-start: 8px;
+  border-inline-start: 1.5px solid var(--sidebar-border);
+}
+
 .sidebar-footer {
   padding: 14px 16px;
   border-top: 1px solid var(--sidebar-border);
