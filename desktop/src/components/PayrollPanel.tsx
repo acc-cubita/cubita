@@ -48,6 +48,7 @@ export function PayrollPanel({ token }: { token: string }) {
   // (پرسنل/دوره‌ها) در همین کامپوننت می‌ماند، پس جابه‌جایی بین تب‌ها داده را از دست نمی‌دهد.
   return (
     <Tabs
+      syncPage="payroll"
       tabs={[
         {
           key: 'staff',

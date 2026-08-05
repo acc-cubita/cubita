@@ -10,6 +10,7 @@ import {
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
+import { NavSectionContext } from './navContext'
 import { PayrollPanel } from './PayrollPanel'
 import { IntegrationPanel } from './IntegrationPanel'
 import { NativeStorefrontPanel } from './NativeStorefrontPanel'
@@ -73,6 +74,13 @@ export function Dashboard({
   onMeUpdated: (me: MeResponse) => void
 }) {
   const [page, setPage] = useState<PageKey>('overview')
+  // تبِ فعالِ صفحه (زیرمنوی سطح‌سوم). null یعنی تبِ پیش‌فرض (اولین). با NavSectionContext
+  // بین سایدبار و نوارِ تبِ داخلِ صفحه دوطرفه هم‌گام می‌شود.
+  const [section, setSection] = useState<string | null>(null)
+  const navigate = (p: PageKey, s: string | null = null) => {
+    setPage(p)
+    setSection(s)
+  }
   const [navOpen, setNavOpen] = useState(false)
   const [accounts, setAccounts] = useState<AccountCache[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseCache[]>([])
@@ -134,10 +142,12 @@ export function Dashboard({
     .filter((e) => !e.synced).length
 
   return (
+    <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
     <div className="app-shell">
       <Sidebar
         active={page}
-        onNavigate={setPage}
+        activeSection={section}
+        onNavigate={navigate}
         userName={me.name}
         roleName={me.role_name}
         isPlatformAdmin={me.is_platform_admin}
@@ -254,6 +264,7 @@ export function Dashboard({
                 </>
               ) : (
                 <Tabs
+                  syncPage="integration"
                   tabs={[
                     {
                       key: 'build',
@@ -301,5 +312,6 @@ export function Dashboard({
         </main>
       </div>
     </div>
+    </NavSectionContext.Provider>
   )
 }

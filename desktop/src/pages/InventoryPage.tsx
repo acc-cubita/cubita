@@ -97,6 +97,7 @@ export function InventoryPage({
       </div>
 
       <Tabs
+        syncPage="inventory"
         tabs={[
           {
             key: 'products',

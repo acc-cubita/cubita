@@ -92,6 +92,7 @@ export function ManufacturingPage({ token }: { token: string }) {
       </div>
 
       <Tabs
+        syncPage="manufacturing"
         tabs={[
           { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical, content: <BomsTab token={token} boms={boms} goodsItems={goodsItems} itemById={itemById} onChanged={refresh} /> },
           { key: 'produce', label: 'تولید', icon: Hammer, content: <ProduceTab token={token} boms={boms} orders={orders} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },

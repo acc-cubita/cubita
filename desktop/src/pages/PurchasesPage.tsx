@@ -65,6 +65,7 @@ export function PurchasesPage({
       </div>
 
       <Tabs
+        syncPage="purchases"
         tabs={[
           {
             key: 'invoices',

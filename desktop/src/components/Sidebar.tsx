@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from '../lib/theme'
+import { MODULE_SECTIONS } from './moduleSections'
 
 export type PageKey =
   | 'overview'
@@ -138,6 +139,7 @@ const SECONDARY_NAV_ITEMS: NavItem[] = [
 
 export function Sidebar({
   active,
+  activeSection,
   onNavigate,
   userName,
   roleName,
@@ -148,7 +150,9 @@ export function Sidebar({
   onClose,
 }: {
   active: PageKey
-  onNavigate: (page: PageKey) => void
+  /** تبِ فعالِ صفحه (زیرمنوی سطح‌سوم)؛ null یعنی تبِ پیش‌فرض (اولین). */
+  activeSection: string | null
+  onNavigate: (page: PageKey, section?: string) => void
   userName: string
   roleName: string
   isPlatformAdmin: boolean
@@ -180,7 +184,18 @@ export function Sidebar({
     if (activeGroup) setOpenGroup(activeGroup)
   }, [activeGroup])
 
-  const renderItem = (item: NavItem) => (
+  // سطح‌سوم: کدام ماژول زیرمنوی تب‌هایش باز است. فقط یکی هم‌زمان، و ماژولِ فعال
+  // (اگر تب‌دار باشد) خودکار باز می‌شود.
+  const [openModule, setOpenModule] = useState<PageKey | null>(
+    MODULE_SECTIONS[active] ? active : null,
+  )
+  useEffect(() => {
+    // ماژولِ فعالِ تب‌دار باز می‌شود؛ رفتن به یک صفحه‌ی بدونِ تب، زیرمنوی بازِ قبلی را می‌بندد.
+    setOpenModule(MODULE_SECTIONS[active] ? active : null)
+  }, [active])
+
+  // برگِ ساده (بدونِ زیرمنو): داشبورد، صندوق، گزارش‌ها، آیتم‌های ثانویه و مدیریتی.
+  const renderLeaf = (item: NavItem) => (
     <button
       key={item.key}
       type="button"
@@ -195,12 +210,63 @@ export function Sidebar({
     </button>
   )
 
+  // ماژول: اگر تب‌دار باشد، یک آکاردئونِ سطح‌دوم با زیرمنوی تب‌ها (سطح‌سوم)؛ وگرنه برگِ ساده.
+  const renderModule = (item: NavItem) => {
+    const sections = MODULE_SECTIONS[item.key]
+    if (!sections) return renderLeaf(item)
+    const isCurrent = active === item.key
+    const isOpen = openModule === item.key
+    // تبِ فعال: صریح، وگرنه (وقتی هنوز تبی انتخاب نشده) اولین تب.
+    const activeSecKey = isCurrent ? activeSection ?? sections[0]?.key : null
+    return (
+      <div className={`sidebar-mod${isOpen ? ' open' : ''}`} key={item.key}>
+        <button
+          type="button"
+          className={`sidebar-mod-header${isCurrent ? ' current' : ''}`}
+          aria-expanded={isOpen}
+          // طبقِ خواسته: کلیک روی ماژول → رفتن به تبِ اول + بازشدنِ زیرمنو.
+          // درِ کشو را نمی‌بندیم تا کاربر بتواند بلافاصله یک تب را انتخاب کند.
+          onClick={() => {
+            onNavigate(item.key)
+            setOpenModule(item.key)
+          }}
+        >
+          {item.icon}
+          <span className="mod-label">{item.label}</span>
+          {isCurrent && !isOpen && <span className="acc-dot" aria-hidden="true" />}
+          <ChevronDown className="mod-chev" size={15} />
+        </button>
+        <div className="sidebar-mod-panel">
+          <div className="mod-inner">
+            {sections.map((s) => {
+              const Icon = s.icon
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  className={`sidebar-subitem${activeSecKey === s.key ? ' active' : ''}`}
+                  onClick={() => {
+                    onNavigate(item.key, s.key)
+                    onClose?.()
+                  }}
+                >
+                  <Icon size={15} />
+                  <span>{s.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderGroup = (group: NavGroup) => {
     // گروهِ تک‌آیتم (مثلِ داشبورد) نیازی به آکاردئون ندارد؛ مستقیم دیده می‌شود.
     if (group.items.length === 1) {
       return (
         <div className="sidebar-nav-solo" key={group.heading}>
-          {renderItem(group.items[0])}
+          {renderModule(group.items[0])}
         </div>
       )
     }
@@ -220,7 +286,7 @@ export function Sidebar({
           <ChevronDown className="acc-chev" size={16} />
         </button>
         <div className="sidebar-acc-panel">
-          <div className="acc-inner">{group.items.map(renderItem)}</div>
+          <div className="acc-inner">{group.items.map(renderModule)}</div>
         </div>
       </div>
     )
@@ -238,7 +304,7 @@ export function Sidebar({
       <nav className="sidebar-nav">
         {groups.map(renderGroup)}
         <div className="sidebar-nav-divider" />
-        <div className="sidebar-nav-group">{SECONDARY_NAV_ITEMS.map(renderItem)}</div>
+        <div className="sidebar-nav-group">{SECONDARY_NAV_ITEMS.map(renderLeaf)}</div>
       </nav>
 
       <div className="sidebar-footer">

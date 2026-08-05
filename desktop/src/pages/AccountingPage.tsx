@@ -49,6 +49,7 @@ export function AccountingPage({
       </div>
 
       <Tabs
+        syncPage="accounting"
         tabs={[
           {
             key: 'journal',

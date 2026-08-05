@@ -526,6 +526,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       </div>
 
       <Tabs
+        syncPage="contacts"
         tabs={[
           { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
           { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins, content: treasuryTab },

@@ -377,6 +377,7 @@ export function OnboardingPage({ token }: { token: string }) {
         description="کسب‌وکارتان را سریع راه‌اندازی کنید: فهرستِ کالا و اشخاص را گروهی وارد کنید و مانده‌های اول دوره را ثبت کنید."
       />
       <Tabs
+        syncPage="onboarding"
         tabs={[
           { key: 'items', label: 'ورود گروهی کالا', icon: FileUp, content: <ImportTab token={token} kind="items" /> },
           { key: 'contacts', label: 'ورود گروهی اشخاص', icon: FileUp, content: <ImportTab token={token} kind="contacts" /> },

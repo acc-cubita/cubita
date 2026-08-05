@@ -133,6 +133,7 @@ export function CrmPage({ token }: { token: string }) {
       </div>
 
       <Tabs
+        syncPage="crm"
         tabs={[
           { key: 'leads', label: 'سرنخ‌ها', icon: Target, content: <LeadsTab token={token} leads={leads} onChanged={refresh} /> },
           { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock, content: <ActivitiesTab token={token} activities={activities} leads={leads} contacts={contacts} onChanged={refresh} /> },

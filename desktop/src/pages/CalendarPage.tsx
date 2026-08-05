@@ -510,6 +510,7 @@ export function CalendarPage({ token }: { token: string }) {
       </div>
 
       <Tabs
+        syncPage="calendar"
         tabs={[
           {
             key: 'reminders',

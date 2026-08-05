@@ -71,6 +71,7 @@ export function BankingPage({
       </div>
 
       <Tabs
+        syncPage="banking"
         tabs={[
           {
             key: 'checks',
