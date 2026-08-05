@@ -612,22 +612,13 @@
 }
 
 /* ---------- سطح‌سوم: ماژولِ تب‌دار + زیرمنوی تب‌ها ---------- */
-/* سرتیترِ ماژول مثلِ یک آیتمِ ناوبری است، به‌علاوه‌ی یک چورونِ چرخان. */
+/* سرتیترِ ماژول دو دکمه دارد: «نام» (رفتن + بازکردن) و «فلش» (فقط باز/بستن). */
 .sidebar-mod-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  background: transparent;
-  color: var(--sidebar-text);
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
-  text-align: right;
-  cursor: pointer;
+  color: var(--sidebar-text);
   transition: background 0.14s, color 0.14s;
-  font-family: inherit;
 }
 
 .sidebar-mod-header:hover {
@@ -635,28 +626,62 @@
   color: var(--text-h);
 }
 
-.sidebar-mod-header .mod-label {
-  flex: 1;
-}
-
-.sidebar-mod-header > svg:first-child {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  transition: color 0.14s;
-}
-
-.sidebar-mod-header:hover > svg:first-child,
-.sidebar-mod-header.current > svg:first-child {
-  color: var(--accent);
-}
-
 .sidebar-mod-header.current {
   color: var(--text-h);
   font-weight: 600;
 }
 
-.sidebar-mod-header .mod-chev {
+.sidebar-mod-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: right;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-mod-main .mod-label {
+  flex: 1;
+}
+
+.sidebar-mod-main > svg {
   color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.14s;
+}
+
+.sidebar-mod-header:hover .sidebar-mod-main > svg,
+.sidebar-mod-header.current .sidebar-mod-main > svg {
+  color: var(--accent);
+}
+
+/* فلشِ باز/بست — هدفِ کلیکِ مجزا؛ روی hover کمی برجسته می‌شود تا کلیک‌پذیر بودنش پیدا باشد. */
+.sidebar-mod-toggle {
+  display: flex;
+  align-items: center;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.14s, background 0.14s;
+}
+
+.sidebar-mod-toggle:hover {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.sidebar-mod-toggle .mod-chev {
   flex-shrink: 0;
   transition: transform 0.22s ease, color 0.14s;
 }

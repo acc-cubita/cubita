@@ -220,22 +220,32 @@ export function Sidebar({
     const activeSecKey = isCurrent ? activeSection ?? sections[0]?.key : null
     return (
       <div className={`sidebar-mod${isOpen ? ' open' : ''}`} key={item.key}>
-        <button
-          type="button"
-          className={`sidebar-mod-header${isCurrent ? ' current' : ''}`}
-          aria-expanded={isOpen}
-          // طبقِ خواسته: کلیک روی ماژول → رفتن به تبِ اول + بازشدنِ زیرمنو.
-          // درِ کشو را نمی‌بندیم تا کاربر بتواند بلافاصله یک تب را انتخاب کند.
-          onClick={() => {
-            onNavigate(item.key)
-            setOpenModule(item.key)
-          }}
-        >
-          {item.icon}
-          <span className="mod-label">{item.label}</span>
-          {isCurrent && !isOpen && <span className="acc-dot" aria-hidden="true" />}
-          <ChevronDown className="mod-chev" size={15} />
-        </button>
+        {/* سرتیترِ ماژول دو ناحیه‌ی کلیک دارد: نامِ ماژول → رفتن به تبِ اول + بازکردن؛
+            فلش → فقط باز/بستنِ زیرمنو (بدونِ جابه‌جایی). دو دکمه‌ی مجزا چون دکمه در
+            دکمه HTML معتبر نیست. درِ کشوی موبایل باز می‌ماند تا کاربر تب را انتخاب کند. */}
+        <div className={`sidebar-mod-header${isCurrent ? ' current' : ''}`}>
+          <button
+            type="button"
+            className="sidebar-mod-main"
+            onClick={() => {
+              onNavigate(item.key)
+              setOpenModule(item.key)
+            }}
+          >
+            {item.icon}
+            <span className="mod-label">{item.label}</span>
+            {isCurrent && !isOpen && <span className="acc-dot" aria-hidden="true" />}
+          </button>
+          <button
+            type="button"
+            className="sidebar-mod-toggle"
+            aria-label={isOpen ? 'بستنِ زیرمنو' : 'بازکردنِ زیرمنو'}
+            aria-expanded={isOpen}
+            onClick={() => setOpenModule((m) => (m === item.key ? null : item.key))}
+          >
+            <ChevronDown className="mod-chev" size={15} />
+          </button>
+        </div>
         <div className="sidebar-mod-panel">
           <div className="mod-inner">
             {sections.map((s) => {
