@@ -1,6 +1,13 @@
 import { useState } from 'react'
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, ShoppingCart, BookOpen, Landmark } from 'lucide-react'
-import { login, fetchMe, requestPasswordReset, type MeResponse } from '../api'
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, ShoppingCart, BookOpen, Landmark, Smartphone, Phone, KeyRound } from 'lucide-react'
+import {
+  login,
+  fetchMe,
+  requestPasswordReset,
+  requestPasswordResetSms,
+  resetPasswordSms,
+  type MeResponse,
+} from '../api'
 
 const FEATURES = [
   { icon: ShoppingCart, text: 'فروش، خرید و انبارداری یکپارچه' },
@@ -22,6 +29,14 @@ export function LoginScreen({
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'login' | 'forgot'>('login')
   const [notice, setNotice] = useState<string | null>(null)
+  // بازیابیِ رمز دو راه دارد: ایمیل (لینک) یا پیامک (کدِ درون‌برنامه‌ای). فلوی پیامکی
+  // خودش دو گام است: گرفتنِ شماره، سپس کد + رمزِ تازه.
+  const [forgotMethod, setForgotMethod] = useState<'email' | 'sms'>('email')
+  const [phone, setPhone] = useState('')
+  const [smsStep, setSmsStep] = useState<'phone' | 'code'>('phone')
+  const [code, setCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,7 +70,53 @@ export function LoginScreen({
     }
   }
 
+  // گامِ اولِ پیامکی: شماره را می‌فرستد؛ پاسخ یکنواخت است (وجودِ شماره را لو نمی‌دهد)،
+  // پس در هر حال به گامِ کد می‌رویم تا رابط چیزی را که اندپوینت پنهان کرده فاش نکند.
+  async function handleRequestSms(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await requestPasswordResetSms(phone)
+      setNotice(res.detail)
+      setSmsStep('code')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // گامِ دومِ پیامکی: کد + رمزِ تازه؛ در صورتِ موفقیت توکن می‌گیریم و مستقیم وارد می‌شویم.
+  async function handleResetSms(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const { access_token } = await resetPasswordSms(phone, code, newPassword)
+      await window.cubita?.setAuthToken(access_token)
+      const meRes = await fetchMe(access_token)
+      onLoggedIn(access_token, meRes)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (mode === 'forgot') {
+    // با تعویضِ روش یا بازگشت، حالتِ گذرا پاک می‌شود تا پیام/کدِ قبلی نماند.
+    const clearTransient = () => {
+      setError(null)
+      setNotice(null)
+      setCode('')
+      setNewPassword('')
+    }
+    const switchMethod = (m: 'email' | 'sms') => {
+      setForgotMethod(m)
+      setSmsStep('phone')
+      clearTransient()
+    }
     return (
       <div className="login-shell">
         <div className="login-brand">
@@ -67,52 +128,163 @@ export function LoginScreen({
           <div className="login-brand-content">
             <div className="login-brand-mark">C</div>
             <h2 className="login-brand-title">کوبیتا</h2>
-            <p className="login-brand-tagline">لینک بازیابی را برایتان ایمیل می‌کنیم</p>
+            <p className="login-brand-tagline">
+              {forgotMethod === 'email'
+                ? 'لینک بازیابی را برایتان ایمیل می‌کنیم'
+                : 'کد بازیابی را برایتان پیامک می‌کنیم'}
+            </p>
           </div>
         </div>
 
         <div className="login-form-panel">
-          <form className="login-card" onSubmit={handleForgot}>
+          <div className="login-card">
             <h1>بازیابی رمز عبور</h1>
-            <p className="login-card-subtitle">
-              ایمیل حسابتان را وارد کنید. لینک بازیابی تا یک ساعت معتبر است.
-            </p>
 
-            <label>
-              ایمیل
-              <div className="input-with-icon">
-                <Mail size={16} className="input-icon" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoFocus
-                  required
-                />
-              </div>
-            </label>
+            <div className="seg-toggle login-method-toggle">
+              <button
+                type="button"
+                className={forgotMethod === 'email' ? 'active' : ''}
+                onClick={() => switchMethod('email')}
+              >
+                <Mail size={14} /> ایمیل
+              </button>
+              <button
+                type="button"
+                className={forgotMethod === 'sms' ? 'active' : ''}
+                onClick={() => switchMethod('sms')}
+              >
+                <Smartphone size={14} /> پیامک
+              </button>
+            </div>
 
-            {error && <div className="error">{error}</div>}
-            {notice && <div className="notice">{notice}</div>}
+            {forgotMethod === 'email' && (
+              <form onSubmit={handleForgot} className="login-card-form">
+                <p className="login-card-subtitle">
+                  ایمیل حسابتان را وارد کنید. لینک بازیابی تا یک ساعت معتبر است.
+                </p>
+                <label>
+                  ایمیل
+                  <div className="input-with-icon">
+                    <Mail size={16} className="input-icon" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoFocus
+                      required
+                    />
+                  </div>
+                </label>
+                {error && <div className="error">{error}</div>}
+                {notice && <div className="notice">{notice}</div>}
+                <button type="submit" className="btn-primary login-submit" disabled={loading}>
+                  {loading ? 'در حال ارسال...' : 'ارسال لینک بازیابی'}
+                  {!loading && <ArrowLeft size={15} />}
+                </button>
+              </form>
+            )}
 
-            <button type="submit" className="btn-primary login-submit" disabled={loading}>
-              {loading ? 'در حال ارسال...' : 'ارسال لینک بازیابی'}
-              {!loading && <ArrowLeft size={15} />}
-            </button>
+            {forgotMethod === 'sms' && smsStep === 'phone' && (
+              <form onSubmit={handleRequestSms} className="login-card-form">
+                <p className="login-card-subtitle">
+                  شماره‌ی موبایلی که قبلاً در پروفایل «تأیید» کرده‌اید را وارد کنید. کد تا ۵ دقیقه معتبر است.
+                </p>
+                <label>
+                  شماره موبایل
+                  <div className="input-with-icon">
+                    <Phone size={16} className="input-icon" />
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                      autoFocus
+                      required
+                    />
+                  </div>
+                </label>
+                {error && <div className="error">{error}</div>}
+                <button type="submit" className="btn-primary login-submit" disabled={loading}>
+                  {loading ? 'در حال ارسال...' : 'ارسال کد'}
+                  {!loading && <ArrowLeft size={15} />}
+                </button>
+              </form>
+            )}
+
+            {forgotMethod === 'sms' && smsStep === 'code' && (
+              <form onSubmit={handleResetSms} className="login-card-form">
+                {notice && <div className="notice">{notice}</div>}
+                <label>
+                  کد پیامک‌شده
+                  <div className="input-with-icon">
+                    <KeyRound size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="۶ رقم"
+                      autoFocus
+                      required
+                    />
+                  </div>
+                </label>
+                <label>
+                  رمز عبور تازه
+                  <div className="input-with-icon">
+                    <Lock size={16} className="input-icon" />
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="حداقل ۱۰ کاراکتر"
+                      minLength={10}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="input-icon-toggle"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      aria-label={showNewPassword ? 'پنهان‌کردن رمز' : 'نمایش رمز'}
+                      tabIndex={-1}
+                    >
+                      {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </label>
+                {error && <div className="error">{error}</div>}
+                <button type="submit" className="btn-primary login-submit" disabled={loading}>
+                  {loading ? 'در حال ثبت...' : 'ثبت رمز تازه و ورود'}
+                  {!loading && <ArrowLeft size={15} />}
+                </button>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    setSmsStep('phone')
+                    clearTransient()
+                  }}
+                >
+                  شماره را اشتباه زدم / ارسال دوباره‌ی کد
+                </button>
+              </form>
+            )}
 
             <button
               type="button"
               className="link-button"
               onClick={() => {
                 setMode('login')
-                setError(null)
-                setNotice(null)
+                setSmsStep('phone')
+                clearTransient()
               }}
             >
               بازگشت به صفحه‌ی ورود
             </button>
-          </form>
+          </div>
         </div>
       </div>
     )

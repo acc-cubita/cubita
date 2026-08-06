@@ -2122,6 +2122,15 @@ export const requestPasswordReset = (email: string) =>
 export const resetPassword = (token: string, password: string) =>
   anonPost<{ access_token: string }>('/api/auth/reset-password', { token, password })
 
+/** بازیابیِ رمز با پیامک — گامِ اول: کدِ ۶رقمی به شماره‌ی تأییدشده می‌رود. پاسخ عمداً
+ *  یکنواخت است (وجود/نبودِ شماره را لو نمی‌دهد). */
+export const requestPasswordResetSms = (phone: string) =>
+  anonPost<{ detail: string }>('/api/auth/forgot-password/sms', { phone })
+
+/** گامِ دوم: کد + رمزِ تازه را می‌فرستد و در صورتِ درستی توکنِ ورود برمی‌گرداند. */
+export const resetPasswordSms = (phone: string, code: string, password: string) =>
+  anonPost<{ access_token: string }>('/api/auth/reset-password/sms', { phone, code, password })
+
 export const acceptInvite = (token: string, password: string, name?: string) =>
   anonPost<{ access_token: string }>('/api/auth/accept-invite', { token, password, name: name || null })
 

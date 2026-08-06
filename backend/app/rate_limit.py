@@ -75,6 +75,12 @@ _email_code_limiter = SlidingWindowLimiter(max_events=8, window_seconds=900)
 #: سقفِ جداگانه بر اساس خودِ ایمیل — تا مهاجم از چند IP صندوقِ یک نفر را با کدِ ثبت‌نام
 #: بمباران نکند (خرابکاری علیه قربانی، که سقفِ IP نمی‌بیندش).
 _email_code_per_email = SlidingWindowLimiter(max_events=4, window_seconds=3600)
+#: بازیابیِ رمز با پیامک — سقفِ جداگانه بر اساس خودِ شماره (قرینه‌ی نسخه‌ی ایمیلی)، تا
+#: مهاجم از چند IP شماره‌ی یک قربانیِ مشخص را با پیامکِ کد بمباران و اعتبار را تخلیه نکند.
+_password_reset_per_phone = SlidingWindowLimiter(max_events=3, window_seconds=3600)
+#: راستی‌آزماییِ کدِ بازیابیِ پیامکی — سقفِ IP روی خودِ «سنجشِ کد». `consume_code` سقفِ ۵
+#: تلاش را per-code دارد؛ این، حدسِ توزیع‌شده از یک IP روی چند شماره را هم می‌بندد.
+_sms_reset_verify_limiter = SlidingWindowLimiter(max_events=10, window_seconds=900)
 
 
 def limit_login(request: Request) -> None:
@@ -121,12 +127,28 @@ def limit_password_reset_for_email(email: str) -> bool:
         return False
 
 
+def limit_password_reset_for_phone(phone: str) -> bool:
+    """False یعنی این شماره به سقف خورده. مثلِ نسخه‌ی ایمیلی استثنا نمی‌اندازد تا پاسخِ
+    اندپوینتِ بازیابیِ پیامکی یکنواخت بماند و از تفاوتِ ۴۲۹/۲۰۲ وجودِ شماره لو نرود."""
+    try:
+        _password_reset_per_phone.check(f"reset-phone:{phone}")
+        return True
+    except HTTPException:
+        return False
+
+
+def limit_sms_reset_verify(request: Request) -> None:
+    _sms_reset_verify_limiter.check(f"sms-reset-verify:{client_key(request)}")
+
+
 def reset_all() -> None:
     """فقط برای تست — وگرنه تست‌ها به‌خاطر سقف مشترک روی هم اثر می‌گذارند."""
     _login_limiter.reset()
     _signup_limiter.reset()
     _password_reset_limiter.reset()
     _password_reset_per_email.reset()
+    _password_reset_per_phone.reset()
+    _sms_reset_verify_limiter.reset()
     _sms_code_limiter.reset()
     _email_code_limiter.reset()
     _email_code_per_email.reset()

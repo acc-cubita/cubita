@@ -83,6 +83,22 @@ class ResetPasswordIn(BaseModel):
     _check = field_validator("password")(validate_password)
 
 
+class ForgotPasswordSmsIn(BaseModel):
+    """بازیابیِ رمز با پیامک: به‌جای ایمیل، شماره‌ی موبایلِ تأییدشده را می‌گیرد."""
+
+    phone: str
+
+
+class ResetPasswordSmsIn(BaseModel):
+    """گامِ دومِ بازیابیِ پیامکی: کدِ ۶رقمی + رمزِ تازه، همراهِ همان شماره."""
+
+    phone: str
+    code: str
+    password: str
+
+    _check = field_validator("password")(validate_password)
+
+
 class ChangePasswordIn(BaseModel):
     current_password: str
     new_password: str

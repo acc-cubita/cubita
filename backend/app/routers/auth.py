@@ -11,11 +11,17 @@ from app.rate_limit import (
     limit_login,
     limit_password_reset,
     limit_password_reset_for_email,
+    limit_password_reset_for_phone,
     limit_signup,
     limit_sms_code,
+    limit_sms_reset_verify,
 )
 from app.deps import PREMIUM_FEATURES, Principal, get_current_user, get_principal
-from app.models.auth_token import PURPOSE_PASSWORD_RESET, PURPOSE_PHONE_VERIFY
+from app.models.auth_token import (
+    PURPOSE_PASSWORD_RESET,
+    PURPOSE_PHONE_VERIFY,
+    PURPOSE_SMS_PASSWORD_RESET,
+)
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.schemas.auth import (
@@ -35,7 +41,9 @@ from app.schemas.members import (
     AcceptInviteIn,
     ChangePasswordIn,
     ForgotPasswordIn,
+    ForgotPasswordSmsIn,
     ResetPasswordIn,
+    ResetPasswordSmsIn,
 )
 from app.security import create_access_token, record_login, set_password, verify_password
 from app.services import members, sms
@@ -272,6 +280,73 @@ def reset_password(data: ResetPasswordIn, db: Session = Depends(get_db)):
     user = db.get(User, token.user_id)
     if user is None or not user.active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این لینک نامعتبر یا منقضی شده است")
+
+    set_password(user, data.password)
+    db.flush()
+
+    memberships = _active_memberships(db, user)
+    if not memberships:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در هیچ کسب‌وکاری ندارید")
+
+    record_login(user)
+    return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
+
+
+def _verified_user_by_phone(db: Session, phone: str) -> User | None:
+    """کاربرِ فعالِ دارای این شماره — فقط اگر شماره «تأییدشده» و **یکتا** باشد.
+
+    دو شرط عمدی: (۱) شماره باید قبلاً با OTP تأیید شده باشد، وگرنه هرکس با دانستنِ
+    شماره‌ی قربانی می‌تواند برایش کدِ بازیابی بفرستد یا رمزش را عوض کند — شماره‌ی
+    تأییدنشده اثباتِ مالکیت نیست. (۲) اگر بیش از یک حساب به این شماره خورد، نمی‌دانیم
+    کد را برای کدام صادر کنیم، پس هیچ‌کدام؛ ابهام باید مثلِ «نبود» رفتار کند نه اینکه
+    به‌شانس یکی را انتخاب کنیم.
+    """
+    users = (
+        db.query(User)
+        .filter(
+            User.phone == phone,
+            User.phone_verified_at.is_not(None),
+            User.active.is_(True),
+        )
+        .all()
+    )
+    return users[0] if len(users) == 1 else None
+
+
+@router.post("/forgot-password/sms", status_code=202, dependencies=[Depends(limit_sms_code)])
+def forgot_password_sms(data: ForgotPasswordSmsIn, db: Session = Depends(get_db)):
+    """کدِ بازیابیِ رمز را پیامک می‌کند — همیشه ۲۰۲ و پیامِ یکسان (قرینه‌ی نسخه‌ی ایمیلی).
+
+    پاسخ عمداً به وجود/نبودِ شماره حساس نیست تا این اندپوینت به ابزارِ فهرست‌برداری
+    تبدیل نشود؛ به همین دلیل سقفِ per-phone هم بی‌صدا رد می‌شود. کد فقط برای شماره‌ی
+    «تأییدشده‌ی یکتا» می‌رود (نگاه کن به `_verified_user_by_phone`). الگوی پیامکِ همان
+    کدِ فعال‌سازی بازاستفاده می‌شود، پس نیازی به الگوی تازه در پنلِ ملی‌پیامک نیست.
+    """
+    phone = sms.normalize_phone(data.phone)
+    if phone is not None and limit_password_reset_for_phone(phone):
+        user = _verified_user_by_phone(db, phone)
+        if user is not None:
+            code = issue_code(db, user_id=user.id, purpose=PURPOSE_SMS_PASSWORD_RESET)
+            sms.send_verification_code(phone, code)
+
+    return {"detail": "اگر این شماره در سیستم ثبت و تأیید شده باشد، کد بازیابی برایش ارسال شد"}
+
+
+@router.post("/reset-password/sms", response_model=TokenOut, dependencies=[Depends(limit_sms_reset_verify)])
+def reset_password_sms(data: ResetPasswordSmsIn, db: Session = Depends(get_db)):
+    """کدِ پیامکی را می‌سنجد، رمزِ تازه را ست و کاربر را وارد می‌کند (مثلِ بازیابیِ ایمیلی).
+
+    خطای یکسان برای «شماره ناموجود/تأییدنشده» و «کدِ غلط یا منقضی» تا از تفاوتِ پیام
+    وجودِ شماره استخراج نشود. `consume_code` خودش سقفِ ۵ تلاش و انقضا و یک‌بارمصرفی را
+    اعمال می‌کند. ورودِ خودکار عمدی است: کسی که همین حالا مالکیتِ شماره را اثبات کرده
+    لازم نیست رمزِ تازه‌اش را دوباره تایپ کند تا وارد شود.
+    """
+    phone = sms.normalize_phone(data.phone)
+    user = _verified_user_by_phone(db, phone) if phone is not None else None
+    if user is None or not consume_code(
+        db, user_id=user.id, purpose=PURPOSE_SMS_PASSWORD_RESET, code=data.code
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کد نادرست یا منقضی است")
 
     set_password(user, data.password)
     db.flush()

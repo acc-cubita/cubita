@@ -243,6 +243,26 @@
   margin: 0;
 }
 
+/* فرمِ داخلِ کارتِ بازیابی — چیدمانِ فیلدها مثلِ خودِ کارت (فلکسِ ستونی با فاصله). */
+.login-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* انتخابگرِ روشِ بازیابی (ایمیل/پیامک) — تمام‌عرض با دو دکمه‌ی هم‌اندازه. */
+.login-method-toggle {
+  width: 100%;
+  margin: 4px 0 14px;
+}
+.login-method-toggle button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
 /* گامِ دومِ ثبت‌نام: تأییدِ کدِ ایمیل */
 .signup-code-badge {
   width: 54px;
