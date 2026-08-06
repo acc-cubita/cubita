@@ -537,6 +537,13 @@
   border: 1px solid var(--sidebar-border);
   padding: 2px 5px 6px;
 }
+/* در پوسته‌ی روشن، surface-2 تقریباً هم‌رنگِ نوارِ کناری است و کارت دیده نمی‌شود؛ پس
+   کارتِ سفید (surface) با کادرِ پررنگ‌تر و سایه‌ی ملایم می‌گذاریم تا شناور و جدا دیده شود. */
+:root[data-theme='light'] .sidebar-acc.open {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
 
 .sidebar-acc-header {
   display: flex;
