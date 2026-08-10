@@ -115,6 +115,8 @@ class ItemIn(BaseModel):
     barcode: str | None = None
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). ۰ = بدونِ هشدار.
     reorder_point: Decimal = Decimal(0)
+    #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid، ۱۳رقمیِ مؤدیان). خالی = پیش‌فرضِ کسب‌وکار.
+    tax_stuff_id: str = ""
 
     @field_validator("barcode")
     @classmethod
@@ -146,6 +148,7 @@ class ItemOut(BaseModel):
     barcode: str | None
     storefront_product_id: int | None
     reorder_point: Decimal
+    tax_stuff_id: str
 
     model_config = {"from_attributes": True}
 
@@ -165,6 +168,7 @@ class ItemUpdateIn(BaseModel):
     barcode: str | None = None
     storefront_product_id: int | None = None
     reorder_point: Decimal | None = None
+    tax_stuff_id: str | None = None
 
     @field_validator("barcode")
     @classmethod

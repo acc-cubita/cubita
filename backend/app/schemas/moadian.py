@@ -10,6 +10,10 @@ class MoadianSettingsIn(BaseModel):
     national_id: str = ""
     #: خالی بگذارید تا کلیدِ ذخیره‌شده دست‌نخورده بماند؛ مقدارِ تازه جایگزینش می‌شود.
     private_key_pem: str | None = None
+    #: گواهیِ امضا (PEM)؛ خالی = دست‌نخورده. برای هدرِ `x5c` لازم است.
+    certificate_pem: str | None = None
+    #: شناسه‌ی پیش‌فرضِ کالا/خدمتِ مالیاتی (sstid، ۱۳رقمی) برای ردیف‌هایی که کدِ خودشان را ندارند.
+    default_stuff_id: str = ""
     is_sandbox: bool = True
     is_active: bool = False
     base_url_override: str = ""
@@ -27,11 +31,23 @@ class MoadianSettingsOut(BaseModel):
     economic_code: str
     national_id: str
     has_private_key: bool
+    has_certificate: bool
+    default_stuff_id: str
     is_sandbox: bool
     is_active: bool
     base_url_override: str
     last_serial: int
     effective_base_url: str
+
+
+class MoadianConnectionTestOut(BaseModel):
+    """نتیجه‌ی «تستِ اتصال» — بدونِ ارسالِ صورتحساب، فقط احراز هویت با سامانه."""
+
+    ok: bool
+    environment: str
+    status_code: int | None
+    message: str
+    server_key_id: str | None
 
 
 class MoadianSubmissionOut(BaseModel):

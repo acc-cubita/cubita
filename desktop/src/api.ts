@@ -679,6 +679,7 @@ export interface ItemRecord {
   barcode: string | null
   storefront_product_id: number | null
   reorder_point: string
+  tax_stuff_id: string
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -697,6 +698,7 @@ export interface ItemIn {
   sales_price?: number
   barcode?: string | null
   reorder_point?: number
+  tax_stuff_id?: string
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
@@ -706,7 +708,7 @@ export const createItemLive = (token: string, data: ItemIn) =>
 export const updateItemLive = (
   token: string,
   itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number },
+  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
@@ -1995,6 +1997,10 @@ export interface MoadianSettingsRecord {
   national_id: string
   /** کلید خصوصی هرگز از سرور برنمی‌گردد؛ فقط وجودش گزارش می‌شود. */
   has_private_key: boolean
+  /** گواهیِ امضا هم فقط وجود/نبودش گزارش می‌شود. */
+  has_certificate: boolean
+  /** شناسه‌ی پیش‌فرضِ کالا/خدمتِ ۱۳رقمی (وقتی کالایی کدِ خودش را ندارد). */
+  default_stuff_id: string
   is_sandbox: boolean
   is_active: boolean
   base_url_override: string
@@ -2008,6 +2014,10 @@ export interface MoadianSettingsIn {
   national_id: string
   /** خالی = کلیدِ ذخیره‌شده دست‌نخورده بماند. */
   private_key_pem?: string
+  /** خالی = گواهیِ ذخیره‌شده دست‌نخورده بماند. */
+  certificate_pem?: string
+  /** شناسه‌ی پیش‌فرضِ کالا/خدمتِ ۱۳رقمی برای ردیف‌هایی که کدِ خودشان را ندارند. */
+  default_stuff_id: string
   is_sandbox: boolean
   is_active: boolean
   base_url_override: string
@@ -2025,8 +2035,19 @@ export interface MoadianSubmissionRecord {
   sent_at: string | null
 }
 
+export interface MoadianConnectionTest {
+  ok: boolean
+  environment: string
+  status_code: number | null
+  message: string
+  server_key_id: string | null
+}
+
 export const fetchMoadianSettings = (token: string) =>
   authedGet<MoadianSettingsRecord>(token, '/api/moadian/settings')
+
+export const testMoadianConnection = (token: string) =>
+  authedSend<MoadianConnectionTest>(token, 'POST', '/api/moadian/test-connection', {})
 
 export const updateMoadianSettings = (token: string, data: MoadianSettingsIn) =>
   authedSend<MoadianSettingsRecord>(token, 'PUT', '/api/moadian/settings', data)
@@ -2036,6 +2057,9 @@ export const fetchMoadianSubmissions = (token: string) =>
 
 export const submitInvoiceToMoadian = (token: string, invoiceId: string) =>
   authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/submit/${invoiceId}`, {})
+
+export const inquireMoadianStatus = (token: string, submissionId: string) =>
+  authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/inquiry/${submissionId}`, {})
 
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 

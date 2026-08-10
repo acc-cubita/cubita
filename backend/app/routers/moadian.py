@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import require_feature, require_permission
 from app.models.user import User
-from app.schemas.moadian import MoadianSettingsIn, MoadianSettingsOut, MoadianSubmissionOut
+from app.schemas.moadian import (
+    MoadianConnectionTestOut,
+    MoadianSettingsIn,
+    MoadianSettingsOut,
+    MoadianSubmissionOut,
+)
 from app.services import moadian as service
 
 # کلِ ماژول قابلیتِ فقط-پلن است: حسابِ آزمایشی هنگامِ بازکردنِ آن ۴۰۲ می‌گیرد و فرانت
@@ -20,6 +25,8 @@ def _settings_out(settings) -> dict:
         "economic_code": settings.economic_code,
         "national_id": settings.national_id,
         "has_private_key": bool((settings.private_key_pem or "").strip()),
+        "has_certificate": bool((settings.certificate_pem or "").strip()),
+        "default_stuff_id": settings.default_stuff_id or "",
         "is_sandbox": settings.is_sandbox,
         "is_active": settings.is_active,
         "base_url_override": settings.base_url_override,
@@ -48,15 +55,27 @@ def update_settings(
     settings.memory_id = data.memory_id.strip().upper()
     settings.economic_code = data.economic_code.strip()
     settings.national_id = data.national_id.strip()
+    settings.default_stuff_id = data.default_stuff_id.strip()
     settings.is_sandbox = data.is_sandbox
     settings.is_active = data.is_active
     settings.base_url_override = data.base_url_override.strip()
-    # None یا رشته‌ی خالی یعنی «دست نزن» — تا ذخیره‌ی فرم، کلید را پاک نکند.
+    # None یا رشته‌ی خالی یعنی «دست نزن» — تا ذخیره‌ی فرم، کلید/گواهی را پاک نکند.
     if data.private_key_pem and data.private_key_pem.strip():
         settings.private_key_pem = data.private_key_pem.strip()
+    if data.certificate_pem and data.certificate_pem.strip():
+        settings.certificate_pem = data.certificate_pem.strip()
     db.commit()
     db.refresh(settings)
     return _settings_out(settings)
+
+
+@router.post("/test-connection", response_model=MoadianConnectionTestOut)
+def test_connection(
+    db: Session = Depends(get_db),
+    # فقط احراز هویت را می‌سنجد و چیزی نمی‌فرستد؛ همان مجوزِ مشاهده کافی است.
+    _=Depends(require_permission("moadian", "view")),
+):
+    return service.test_connection(db)
 
 
 @router.get("/submissions", response_model=list[MoadianSubmissionOut])
@@ -75,3 +94,13 @@ def submit_invoice(
     user: User = Depends(require_permission("moadian", "approve")),
 ):
     return service.submit_invoice(db, invoice_id, user)
+
+
+@router.post("/inquiry/{submission_id}", response_model=MoadianSubmissionOut)
+def inquire_status(
+    submission_id: UUID,
+    db: Session = Depends(get_db),
+    # استعلام فقط وضعیت را می‌خواند؛ همان مجوزِ مشاهده کافی است.
+    _=Depends(require_permission("moadian", "view")),
+):
+    return service.inquire_status(db, submission_id)

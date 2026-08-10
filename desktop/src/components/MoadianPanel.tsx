@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Landmark, Save, Send, ShieldCheck, ShieldAlert, FileCheck2 } from 'lucide-react'
+import { Landmark, Save, Send, ShieldCheck, ShieldAlert, FileCheck2, PlugZap } from 'lucide-react'
 import {
   fetchMoadianSettings,
   fetchMoadianSubmissions,
   fetchSalesInvoices,
+  inquireMoadianStatus,
   submitInvoiceToMoadian,
+  testMoadianConnection,
   updateMoadianSettings,
   type MoadianSettingsRecord,
   type MoadianSubmissionRecord,
@@ -38,6 +40,8 @@ const EMPTY_FORM = {
   economic_code: '',
   national_id: '',
   private_key_pem: '',
+  certificate_pem: '',
+  default_stuff_id: '',
   is_sandbox: true,
   is_active: false,
   base_url_override: '',
@@ -51,6 +55,8 @@ export function MoadianPanel({ token }: { token: string }) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [sendMsg, setSendMsg] = useState<string | null>(null)
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [testing, setTesting] = useState(false)
 
   async function refresh() {
     try {
@@ -68,6 +74,8 @@ export function MoadianPanel({ token }: { token: string }) {
         economic_code: s.economic_code,
         national_id: s.national_id,
         private_key_pem: '',
+        certificate_pem: '',
+        default_stuff_id: s.default_stuff_id,
         is_sandbox: s.is_sandbox,
         is_active: s.is_active,
         base_url_override: s.base_url_override,
@@ -90,6 +98,32 @@ export function MoadianPanel({ token }: { token: string }) {
       await refresh()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  async function handleTestConnection() {
+    setTestMsg(null)
+    setTesting(true)
+    try {
+      const res = await testMoadianConnection(token)
+      setTestMsg({ ok: res.ok, text: res.message })
+    } catch (err) {
+      setTestMsg({ ok: false, text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function handleInquire(id: string) {
+    setSendMsg(null)
+    try {
+      const res = await inquireMoadianStatus(token, id)
+      setSendMsg(
+        `وضعیت به‌روز شد: ${STATUS_LABEL[res.status] ?? res.status}${res.error_message ? ` — ${res.error_message}` : ''}`,
+      )
+      await refresh()
+    } catch (err) {
+      setSendMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }
 
@@ -159,12 +193,31 @@ export function MoadianPanel({ token }: { token: string }) {
               <input value={form.economic_code} onChange={(e) => setForm({ ...form, economic_code: e.target.value })} />
             </label>
             <label>
+              شناسه‌ی پیش‌فرضِ کالا/خدمت (۱۳ رقمی)
+              <input
+                value={form.default_stuff_id}
+                onChange={(e) => setForm({ ...form, default_stuff_id: e.target.value })}
+                placeholder="اختیاری — برای کالاهایی که کدِ اختصاصی ندارند"
+                inputMode="numeric"
+              />
+              <span className="field-hint">هر کالا می‌تواند کدِ خودش را داشته باشد؛ این کد فقط جایگزینِ کالاهای بدونِ کد است.</span>
+            </label>
+            <label>
               کلید خصوصی (PEM)
               <textarea
                 rows={4}
                 value={form.private_key_pem}
                 onChange={(e) => setForm({ ...form, private_key_pem: e.target.value })}
                 placeholder={settings?.has_private_key ? '••• کلید ثبت شده — برای تغییر، کلید تازه را بچسبانید' : '-----BEGIN PRIVATE KEY-----'}
+              />
+            </label>
+            <label>
+              گواهیِ امضا (Certificate — PEM)
+              <textarea
+                rows={4}
+                value={form.certificate_pem}
+                onChange={(e) => setForm({ ...form, certificate_pem: e.target.value })}
+                placeholder={settings?.has_certificate ? '••• گواهی ثبت شده — برای تغییر، گواهی تازه را بچسبانید' : '-----BEGIN CERTIFICATE-----'}
               />
             </label>
             <label>
@@ -193,7 +246,30 @@ export function MoadianPanel({ token }: { token: string }) {
             </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary"><Save size={14} /> ذخیره تنظیمات</button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void handleTestConnection()}
+                disabled={testing}
+                title="فقط احراز هویت با سامانه را می‌سنجد — بدونِ مصرفِ سریال یا ارسالِ فاکتور"
+              >
+                <PlugZap size={14} /> {testing ? 'در حالِ آزمایش…' : 'تستِ اتصال'}
+              </button>
             </div>
+            {testMsg && (
+              <div className={`hint ${testMsg.ok ? 'tone-success' : 'tone-danger'}`}>
+                {testMsg.ok ? '✅ ' : '⚠️ '}
+                {testMsg.text}
+              </div>
+            )}
+            {settings && (!settings.has_private_key || !settings.has_certificate) && (
+              <div className="hint">
+                برای ارسال، هم «کلید خصوصی» و هم «گواهیِ امضا» لازم است
+                {settings.has_private_key ? '' : ' — کلید هنوز ثبت نشده'}
+                {settings.has_certificate ? '' : ' — گواهی هنوز ثبت نشده'}
+                .
+              </div>
+            )}
             {!form.is_sandbox && (
               <div className="hint">
                 ⚠️ محیط واقعی انتخاب شده — صورتحساب‌ها به سامانه‌ی رسمی سازمان امور مالیاتی ارسال می‌شوند.
@@ -243,6 +319,7 @@ export function MoadianPanel({ token }: { token: string }) {
                   <th>وضعیت</th>
                   <th>شماره مرجع</th>
                   <th>توضیح</th>
+                  <th>استعلام</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,6 +335,15 @@ export function MoadianPanel({ token }: { token: string }) {
                     </td>
                     <td>{s.reference_number || '—'}</td>
                     <td>{s.error_message || '—'}</td>
+                    <td>
+                      {s.reference_number ? (
+                        <button type="button" className="btn-ghost btn-sm" onClick={() => void handleInquire(s.id)}>
+                          استعلام وضعیت
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

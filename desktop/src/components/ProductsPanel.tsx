@@ -24,10 +24,11 @@ interface DraftForm {
   salesPrice: string
   barcode: string
   reorderPoint: string
+  taxStuffId: string
   isService: boolean
 }
 
-const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', reorderPoint: '', isService: false }
+const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', reorderPoint: '', taxStuffId: '', isService: false }
 
 /**
  * مدیریتِ کالاها/محصولات — ثبت، ویرایش و فعال/غیرفعال‌سازی.
@@ -87,6 +88,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       salesPrice: String(Number(p.sales_price) || ''),
       barcode: p.barcode ?? '',
       reorderPoint: String(Number(p.reorder_point) || ''),
+      taxStuffId: p.tax_stuff_id ?? '',
       isService: p.is_service,
     })
     setMessage(null)
@@ -111,6 +113,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           sales_price: Number(form.salesPrice) || 0,
           barcode: form.barcode.trim() || null,
           reorder_point: Number(form.reorderPoint) || 0,
+          tax_stuff_id: form.taxStuffId.trim(),
         })
         setMessage('کالا ویرایش شد.')
       } else {
@@ -123,6 +126,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           sales_price: Number(form.salesPrice) || 0,
           barcode: form.barcode.trim() || null,
           reorder_point: Number(form.reorderPoint) || 0,
+          tax_stuff_id: form.taxStuffId.trim(),
         })
         setMessage('کالای جدید ثبت شد.')
       }
@@ -256,6 +260,20 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 inputMode="numeric"
               />
             </label>
+          </div>
+          <div className="field-row">
+            <label>
+              شناسه کالا/خدمتِ مالیاتی (مؤدیان، ۱۳ رقمی)
+              <input
+                type="text"
+                value={form.taxStuffId}
+                onChange={(e) => setForm({ ...form, taxStuffId: e.target.value })}
+                placeholder="اختیاری — برای ارسال به سامانه مؤدیان لازم است"
+                inputMode="numeric"
+              />
+              <span className="field-hint">خالی بماند، «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود.</span>
+            </label>
+            <span aria-hidden="true" />
           </div>
           {!form.isService && (
             <div className="field-row">

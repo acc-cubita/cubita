@@ -36,6 +36,7 @@ export function QuickItemForm({
   const [unit, setUnit] = useState('عدد')
   const [salesPrice, setSalesPrice] = useState('')
   const [barcode, setBarcode] = useState('')
+  const [taxStuffId, setTaxStuffId] = useState('')
   const [isService, setIsService] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +65,7 @@ export function QuickItemForm({
         sales_price: Number(salesPrice) || 0,
         barcode: barcode.trim() || null,
         reorder_point: 0,
+        tax_stuff_id: taxStuffId.trim(),
       })
       onCreated(item)
     } catch (err) {
@@ -151,6 +153,16 @@ export function QuickItemForm({
                 />
               </label>
             </div>
+            <label>
+              شناسه کالا/خدمتِ مالیاتی (مؤدیان، ۱۳ رقمی — اختیاری)
+              <input
+                type="text"
+                value={taxStuffId}
+                onChange={(e) => setTaxStuffId(e.target.value)}
+                placeholder="برای ارسال به مؤدیان لازم است — بعداً هم می‌شود در «کالاها» واردش کرد"
+                inputMode="numeric"
+              />
+            </label>
             <label className="cal-check-inline">
               <input
                 type="checkbox"

@@ -94,6 +94,10 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: معنا دارد، نه خدمت. اعشاری‌پذیر چون واحد می‌تواند متر/کیلوگرم باشد.
     reorder_point: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
 
+    #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid) — کدِ رسمیِ ۱۳رقمیِ سامانه مؤدیان برای این کالا.
+    #: خالی = از «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود. راز نیست.
+    tax_stuff_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
+
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
 

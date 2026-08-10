@@ -35,6 +35,12 @@ class MoadianSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     national_id: Mapped[str] = mapped_column(String(20), default="")
     #: کلید خصوصیِ PEM برای امضای بسته — راز؛ هرگز در پاسخ API برنمی‌گردد.
     private_key_pem: Mapped[str] = mapped_column(Text, default="")
+    #: گواهیِ امضای X.509 (PEM) که در هدرِ `x5c` بسته‌های JWS/توکن قرار می‌گیرد.
+    #: پروتکل v2 هم کلید خصوصی و هم گواهیِ متناظر را لازم دارد.
+    certificate_pem: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: شناسه‌ی پیش‌فرضِ کالا/خدمتِ مالیاتی (sstid، ۱۳رقمی) — وقتی کالایی کدِ اختصاصیِ خودش
+    #: را ندارد، این کد در بسته‌ی صورتحساب جایش می‌نشیند. راز نیست.
+    default_stuff_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
     #: محیطِ ارسال. پیش‌فرض سندباکس است تا ارسالِ ناخواسته به سامانه‌ی واقعی رخ ندهد.
     is_sandbox: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     #: تا وقتی فعال نشده، هیچ ارسالی انجام نمی‌شود.
