@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PackagePlus, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import {
@@ -11,13 +11,15 @@ import {
   type ContactRecord,
   type CostCenterRecord,
   type Currency,
+  type ItemRecord,
   type PurchaseInvoiceRecord,
 } from '../api'
 import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { ItemPicker } from './ItemPicker'
+import { ItemPicker, type PickableItem } from './ItemPicker'
+import { QuickItemForm } from './QuickItemForm'
 import { todayIso } from '../lib/jalali'
 
 interface DraftLine {
@@ -57,6 +59,24 @@ export function PurchaseInvoiceForm({
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [currencyCode, setCurrencyCode] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1')
+  // کالاهایی که همین حالا داخلِ همین فاکتور ساخته شده‌اند. کشِ سراسری (به‌ویژه در
+  // دسکتاپِ آفلاین) تا هم‌گام‌سازیِ بعدی به‌روز نمی‌شود، پس کالای تازه را محلی نگه
+  // می‌داریم تا بلافاصله در همین فرم قابلِ انتخاب باشد. dedupe در pickItems انجام می‌شود.
+  const [extraItems, setExtraItems] = useState<ItemRecord[]>([])
+  // فرمِ ساختِ سریع باز است؟ برای کدام ردیف و با چه نامِ اولیه‌ای.
+  const [quickAdd, setQuickAdd] = useState<{ lineIndex: number; name: string } | null>(null)
+
+  // فهرستِ انتخاب = کالاهای تازه‌ساز + کشِ سراسری، بدونِ تکرارِ شناسه.
+  const pickItems = useMemo<PickableItem[]>(() => {
+    const seen = new Set<string>()
+    const out: PickableItem[] = []
+    for (const it of [...extraItems, ...items]) {
+      if (seen.has(it.id)) continue
+      seen.add(it.id)
+      out.push(it)
+    }
+    return out
+  }, [extraItems, items])
 
   // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد, انتخاب‌گر پنهان و فاکتور بدون مرکز است.
   useEffect(() => {
@@ -218,8 +238,11 @@ export function PurchaseInvoiceForm({
 
   return (
     <SectionCard icon={PackagePlus} title="ثبت فاکتور خرید">
-      {warehouses.length === 0 || items.length === 0 ? (
-        <p className="hint">قبل از ثبت فاکتور، یک‌بار «هم‌گام‌سازی» کنید تا انبار و کالاها در دسترس باشند.</p>
+      {warehouses.length === 0 ? (
+        <p className="hint">
+          قبل از ثبت فاکتور، حداقل یک انبار لازم است
+          {isElectron ? '؛ یک‌بار «هم‌گام‌سازی» کنید تا انبارها در دسترس باشند.' : '.'}
+        </p>
       ) : (
         <form className="invoice-form" onSubmit={handleSubmit}>
           <label>
@@ -308,7 +331,12 @@ export function PurchaseInvoiceForm({
               {lines.map((line, i) => (
                 <tr key={i}>
                   <td data-label="کالا">
-                    <ItemPicker items={items} value={line.itemId} onChange={(id) => updateLine(i, { itemId: id })} />
+                    <ItemPicker
+                      items={pickItems}
+                      value={line.itemId}
+                      onChange={(id) => updateLine(i, { itemId: id })}
+                      onCreateNew={(name) => setQuickAdd({ lineIndex: i, name })}
+                    />
                   </td>
                   <td data-label="تعداد">
                     <div className="qty-with-unit">
@@ -404,6 +432,21 @@ export function PurchaseInvoiceForm({
 
           {message && <div className="hint">{message}</div>}
         </form>
+      )}
+
+      {quickAdd && (
+        <QuickItemForm
+          token={token}
+          initialName={quickAdd.name}
+          onCreated={(item) => {
+            // کالای تازه را محلی نگه دار تا فوری قابلِ انتخاب باشد، و همان‌جا در ردیفِ
+            // مربوط انتخابش کن. کشِ سراسری هنگامِ ثبتِ فاکتور (onQueued) تازه می‌شود.
+            setExtraItems((prev) => [item, ...prev])
+            updateLine(quickAdd.lineIndex, { itemId: item.id })
+            setQuickAdd(null)
+          }}
+          onClose={() => setQuickAdd(null)}
+        />
       )}
     </SectionCard>
   )

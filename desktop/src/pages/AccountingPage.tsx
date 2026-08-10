@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Building2, Target, FolderKanban, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Target, FolderKanban, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import type { AccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { JournalEntryForm } from '../components/JournalEntryForm'
@@ -7,7 +7,6 @@ import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
 import { PeriodClosePanel } from '../components/PeriodClosePanel'
-import { FixedAssetsPanel } from '../components/FixedAssetsPanel'
 import { BudgetPanel } from '../components/BudgetPanel'
 import { CostCentersPanel } from '../components/CostCentersPanel'
 import { RecurringEntriesPanel } from '../components/RecurringEntriesPanel'
@@ -81,12 +80,6 @@ export function AccountingPage({
             label: 'چارت حساب‌ها',
             icon: ListTree,
             content: <ChartOfAccountsPanel token={token} onChanged={onQueued} />,
-          },
-          {
-            key: 'assets',
-            label: 'دارایی ثابت',
-            icon: Building2,
-            content: <FixedAssetsPanel token={token} />,
           },
           {
             key: 'budget',

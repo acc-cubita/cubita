@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X } from 'lucide-react'
+import { Search, X, Plus } from 'lucide-react'
 
 /** حداقلِ شکلی که برای انتخابِ کالا لازم است.
  *
@@ -49,6 +49,7 @@ export function ItemPicker({
   onChange,
   placeholder = '— انتخاب کالا —',
   disabledIds,
+  onCreateNew,
 }: {
   items: PickableItem[]
   value: string
@@ -56,6 +57,10 @@ export function ItemPicker({
   placeholder?: string
   /** شناسه‌هایی که نباید دوباره انتخاب شوند (مثلاً کالایی که در ردیفِ دیگری هست). */
   disabledIds?: Set<string>
+  /** اگر داده شود، ته پاپ‌آور دکمه‌ی «ساختِ کالای جدید» می‌آید و با کلیک، متنِ فعلیِ
+   *  جست‌وجو را به بالادست می‌دهد (تا فرمِ ساختِ سریع را با همان نام باز کند). فقط
+   *  فرم‌هایی که این را می‌دهند (مثلِ خرید) این گزینه را می‌بینند. */
+  onCreateNew?: (query: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -236,6 +241,20 @@ export function ItemPicker({
                 })
               )}
             </ul>
+            {onCreateNew && (
+              <button
+                type="button"
+                className="item-picker-create"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onCreateNew(query.trim())
+                  setOpen(false)
+                }}
+              >
+                <Plus size={14} />
+                {query.trim() ? `ساختِ کالای «${query.trim()}»` : 'ساختِ کالای جدید'}
+              </button>
+            )}
           </div>,
           document.body,
         )}

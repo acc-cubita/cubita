@@ -8,6 +8,7 @@ import {
   UsersRound,
   BookOpen,
   Landmark,
+  Building2,
   Users,
   HeartHandshake,
   Factory,
@@ -47,6 +48,7 @@ export type PageKey =
   | 'manufacturing'
   | 'accounting'
   | 'banking'
+  | 'fixedassets'
   | 'payroll'
   | 'integration'
   | 'billing'
@@ -96,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
       { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },
+      { key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> },
       { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
     ],
   },

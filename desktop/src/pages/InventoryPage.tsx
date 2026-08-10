@@ -10,6 +10,7 @@ import { ProductsPanel } from '../components/ProductsPanel'
 import { LowStockPanel } from '../components/LowStockPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
+import { KardexPanel } from '../components/KardexPanel'
 import { fetchStockLevels, fetchLowStock, type StockLevel, type LowStockRow } from '../api'
 import { SectionCard } from '../components/SectionCard'
 import { Pager, usePagination } from '../components/Pager'
@@ -214,6 +215,12 @@ export function InventoryPage({
                 </SectionCard>
               </div>
             ),
+          },
+          {
+            key: 'kardex',
+            label: 'کاردکس',
+            icon: History,
+            content: <KardexPanel token={token} items={items} />,
           },
           {
             key: 'low',

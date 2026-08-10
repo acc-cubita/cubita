@@ -4952,3 +4952,30 @@ button:disabled {
   .feature-upsell { margin: 16px auto; padding: 24px 18px; }
   .trial-lock-card { padding: 28px 20px; }
 }
+
+/* ── ساختِ کالای جدید از داخلِ انتخاب‌گرِ کالا (فرمِ خرید) ─────────────────── */
+/* دکمه‌ی همیشه‌مرئیِ ته پاپ‌آور: کالای تازه را بدونِ ترکِ فاکتور می‌سازد. */
+.item-picker-create {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: right;
+}
+.item-picker-create:hover { background: var(--accent-bg); }
+
+/* مودالِ ساختِ سریعِ کالا — باریک‌تر از draverِ استاندارد چون فرمِ کوچکی است. */
+.drawer-panel--narrow { width: min(480px, 100%); }
+
+/* انتخاب‌گرِ کالا در تبِ «کاردکس». */
+.kardex-picker { max-width: 360px; margin-bottom: 14px; }

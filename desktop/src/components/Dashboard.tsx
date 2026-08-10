@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2 } from 'lucide-react'
+import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2, Building2 } from 'lucide-react'
 import {
   fetchAccountsLive,
   fetchBankAccountsLive,
@@ -19,6 +19,7 @@ import { FeatureUpsell } from './FeatureUpsell'
 import { StorefrontGallery } from './StorefrontGallery'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
+import { FixedAssetsPanel } from './FixedAssetsPanel'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
 import { CalendarPage } from '../pages/CalendarPage'
@@ -50,6 +51,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   manufacturing: 'تولید و بهای تمام‌شده',
   accounting: 'حسابداری',
   banking: 'چک و بانک',
+  fixedassets: 'دارایی ثابت',
   payroll: 'حقوق و دستمزد',
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
@@ -223,6 +225,16 @@ export function Dashboard({
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
+          {page === 'fixedassets' && (
+            <div className="page">
+              <PageHeader
+                icon={Building2}
+                title="دارایی ثابت"
+                description="اموال و دارایی‌های سرمایه‌ای را ثبت کنید؛ استهلاکِ دوره‌ای و اسنادِ مرتبط خودکار محاسبه و صادر می‌شود."
+              />
+              <FixedAssetsPanel token={token} />
+            </div>
+          )}
           {page === 'accounting' && (
             <AccountingPage
               token={token}
