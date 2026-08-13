@@ -488,7 +488,7 @@ export function CalendarPage({ token }: { token: string }) {
   )
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={CalendarDays}
         title="تقویم و یادآوری"

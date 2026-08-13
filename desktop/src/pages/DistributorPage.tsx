@@ -47,7 +47,7 @@ const EMPTY_FORM = {
 /** ماژولِ «پخشِ من» — کاتالوگ (تکی/پک) + تنظیماتِ تسویه. فقط حسابِ distributor. */
 export function DistributorPage({ token, items }: { token: string; items: ItemCache[] }) {
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Truck}
         title="پخشِ من"

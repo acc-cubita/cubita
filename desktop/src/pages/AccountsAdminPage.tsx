@@ -190,7 +190,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
   }
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={ShieldCheck}
         title="مدیریت اکانت‌ها"

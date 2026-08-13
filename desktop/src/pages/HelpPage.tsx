@@ -495,7 +495,7 @@ export function HelpPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={HelpCircle}
         title="راهنما"

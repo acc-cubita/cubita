@@ -50,7 +50,7 @@ export function PurchasesPage({
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={PackagePlus}
         title="خرید"

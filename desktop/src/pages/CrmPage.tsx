@@ -122,7 +122,7 @@ export function CrmPage({ token }: { token: string }) {
   }, [leads, balances, activities])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Users}
         title="باشگاه مشتریان (CRM)"

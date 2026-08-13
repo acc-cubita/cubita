@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export interface TrendSeries {
   key: string
@@ -20,16 +20,32 @@ function faAxis(v: number): string {
   return sign + Math.round(a).toLocaleString('fa-IR')
 }
 
-const WIDTH = 640
-const HEIGHT = 220
+const HEIGHT = 240
 const PAD_TOP = 16
-const PAD_BOTTOM = 28
-const PAD_RIGHT = 8
-// گوشه‌ی چپ برای برچسبِ محور (اعداد فشرده) کنار گذاشته می‌شود تا از اعدادِ انتهای خط جدا بماند.
-const PAD_LEFT = 44
+const PAD_BOTTOM = 26
+const PAD_RIGHT = 12
+// گوشه‌ی چپ برای برچسبِ محور (اعداد فشرده) کنار گذاشته می‌شود.
+const PAD_LEFT = 48
 
+// نمودارِ «سطحی» (area) با پُرشدگیِ گرادیانی — به‌جای خطِ ساده. عرضِ واقعیِ ظرف را
+// اندازه می‌گیرد (ResizeObserver) تا viewBox = پیکسل شود؛ نتیجه: متنِ تیز، بدونِ کشیدگی
+// و بدونِ سرریز از پنل. مختصات در فضای W×HEIGHT (نه viewBoxِ ثابتِ کشیده) محاسبه می‌شود.
 export function TrendChart({ series }: { series: TrendSeries[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(560)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    setWidth(el.clientWidth)
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width
+      if (w && w > 0) setWidth(w)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const { dates, aligned, minValue, maxValue } = useMemo(() => {
     const dateSet = new Set<string>()
@@ -56,7 +72,8 @@ export function TrendChart({ series }: { series: TrendSeries[] }) {
     return <p className="hint">هنوز داده‌ای برای نمودار ثبت نشده.</p>
   }
 
-  const plotW = WIDTH - PAD_LEFT - PAD_RIGHT
+  const W = Math.max(width, 240)
+  const plotW = W - PAD_LEFT - PAD_RIGHT
   const plotH = HEIGHT - PAD_TOP - PAD_BOTTOM
 
   const xAt = (i: number) => PAD_LEFT + (dates.length === 1 ? plotW / 2 : (i / (dates.length - 1)) * plotW)
@@ -65,25 +82,25 @@ export function TrendChart({ series }: { series: TrendSeries[] }) {
   const gridLines = 4
   const gridValues = Array.from({ length: gridLines + 1 }, (_, i) => minValue + ((maxValue - minValue) * i) / gridLines)
 
-  function pathFor(values: number[]) {
+  function lineFor(values: number[]) {
     return values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ')
   }
 
   function areaFor(values: number[]) {
-    const line = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ')
+    const line = lineFor(values)
     return `${line} L ${xAt(values.length - 1)} ${yAt(minValue)} L ${xAt(0)} ${yAt(minValue)} Z`
   }
 
   function handleMove(e: React.MouseEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
-    const ratio = Math.min(1, Math.max(0, (x - PAD_LEFT) / plotW))
+    const ratio = Math.min(1, Math.max(0, x / rect.width))
     const idx = Math.round(ratio * (dates.length - 1))
     setHoverIndex(idx)
   }
 
   return (
-    <div className="trend-chart">
+    <div className="trend-chart" ref={wrapRef}>
       <div className="trend-legend">
         {series.map((s) => (
           <div key={s.key} className="trend-legend-item">
@@ -93,10 +110,19 @@ export function TrendChart({ series }: { series: TrendSeries[] }) {
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="trend-chart-svg" preserveAspectRatio="none">
+      <svg width={W} height={HEIGHT} viewBox={`0 0 ${W} ${HEIGHT}`} className="trend-chart-svg">
+        <defs>
+          {series.map((s) => (
+            <linearGradient key={`grad-${s.key}`} id={`trend-grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={s.color} stopOpacity={0.34} />
+              <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
+            </linearGradient>
+          ))}
+        </defs>
+
         {gridValues.map((gv, i) => (
           <g key={i}>
-            <line x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={yAt(gv)} y2={yAt(gv)} className="trend-gridline" />
+            <line x1={PAD_LEFT} x2={W - PAD_RIGHT} y1={yAt(gv)} y2={yAt(gv)} className="trend-gridline" />
             <text x={PAD_LEFT - 8} y={yAt(gv)} className="trend-axis-label" textAnchor="end" dominantBaseline="central">
               {faAxis(gv)}
             </text>
@@ -104,10 +130,18 @@ export function TrendChart({ series }: { series: TrendSeries[] }) {
         ))}
 
         {series.map((s, si) => (
-          <path key={`area-${s.key}`} d={areaFor(aligned[si])} fill={s.color} opacity={0.1} stroke="none" />
+          <path key={`area-${s.key}`} d={areaFor(aligned[si])} fill={`url(#trend-grad-${s.key})`} stroke="none" />
         ))}
         {series.map((s, si) => (
-          <path key={`line-${s.key}`} d={pathFor(aligned[si])} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          <path
+            key={`line-${s.key}`}
+            d={lineFor(aligned[si])}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
         ))}
 
         {series.map((s, si) => {

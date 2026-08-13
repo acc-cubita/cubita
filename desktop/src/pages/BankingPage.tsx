@@ -51,7 +51,7 @@ export function BankingPage({
   }, [checks, bankAccounts])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Landmark}
         title="چک و بانک"

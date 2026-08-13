@@ -508,7 +508,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   )
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={UsersRound}
         title="اشخاص"

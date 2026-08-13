@@ -270,23 +270,19 @@ export function Sidebar({
         </div>
         <div className="sidebar-mod-panel">
           <div className="mod-inner">
-            {sections.map((s) => {
-              const Icon = s.icon
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  className={`sidebar-subitem${activeSecKey === s.key ? ' active' : ''}`}
-                  onClick={() => {
-                    onNavigate(item.key, s.key)
-                    onClose?.()
-                  }}
-                >
-                  <Icon size={15} />
-                  <span>{s.label}</span>
-                </button>
-              )
-            })}
+            {sections.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                className={`sidebar-subitem${activeSecKey === s.key ? ' active' : ''}`}
+                onClick={() => {
+                  onNavigate(item.key, s.key)
+                  onClose?.()
+                }}
+              >
+                <span>{s.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

@@ -239,7 +239,7 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
   ]
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={CalendarClock}
         title="فروش اقساطی"

@@ -25,7 +25,7 @@ export function ProfilePage({
   const isOwner = Boolean(me.permissions['*'])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={UserCircle}
         title="پروفایل من"

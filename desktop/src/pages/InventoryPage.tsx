@@ -72,7 +72,7 @@ export function InventoryPage({
   const lowIds = useMemo(() => new Set(lowStock.map((r) => r.item_id)), [lowStock])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Warehouse}
         title="انبار"

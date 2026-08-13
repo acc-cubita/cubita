@@ -75,7 +75,7 @@ export function ManufacturingPage({ token }: { token: string }) {
   }, [boms, orders])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Factory}
         title="تولید و بهای تمام‌شده"

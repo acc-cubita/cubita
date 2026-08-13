@@ -26,65 +26,90 @@
 :root {
   color-scheme: dark;
 
-  /* پایه — نیلی-بنفش تیره (هماهنگ با سایت تجاری cubita.ir) */
-  --page: #060714;
-  --bg: #090a1c;
-  --surface: #12142c;
-  --surface-2: #191c3d;
-  --surface-hover: #212550;
-  --border: #262a52;
-  --border-strong: #363b70;
+  /* پایه — VSCode «Dark Modern» ۲۰۲۶ (خاکستری‌های خنثیِ ادیتور)
+     Side Bar/Activity #181818، ادیتور #1f1f1f، ویجت/کارت #252526 */
+  --page: #181818;
+  --bg: #1f1f1f;
+  --surface: #252526;
+  --surface-2: #2d2d2d;
+  --surface-hover: #2f3336;
+  --border: #2b2b2b;
+  --border-strong: #3c3c3c;
 
-  /* متن */
-  --text: #a9aecb;
-  /* روی surface-2 دقیقاً ۴.۹۸:۱ (بالای آستانه‌ی WCAG AA)؛ مقدار قبلی #6c7196 فقط ۳.۴۸:۱ بود */
-  --text-muted: #848abd;
-  --text-h: #f5f6fc;
+  /* متن — foreground #cccccc، توضیحی #9d9d9d، تأکید سفید */
+  --text: #cccccc;
+  --text-muted: #9d9d9d;
+  --text-h: #ffffff;
 
-  /* برند/عملیات */
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-bg: rgba(59, 130, 246, 0.16);
-  --accent-text: #060714;
+  /* برند/عملیات — آبیِ VSCode (button/focus #0078d4، لینکِ روشن #4daafc) */
+  --accent: #0078d4;
+  --accent-hover: #4daafc;
+  --accent-bg: rgba(0, 120, 212, 0.16);
+  --accent-text: #ffffff;
 
-  /* دومین رنگ برند — تزئینی (گرادیان لوگو/دکمه‌ی اصلی، پس‌زمینه‌ی نوری) */
-  --accent-2: #a855f7;
-  --accent-2-hover: #c084fc;
-  --accent-3: #ec4899;
+  /* دومین رنگ برند — تزئینی؛ از رنگ‌های سینتکسِ VSCode (بنفش/فیروزه‌ای) */
+  --accent-2: #b180d7;
+  --accent-2-hover: #c9a2e8;
+  --accent-3: #4ec9b0;
 
-  /* وضعیت‌های مالی (status — ثابت، هیچ‌وقت برای سری داده استفاده نمی‌شود) */
-  --success: #22c55e;
-  --success-bg: rgba(34, 197, 94, 0.14);
-  --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.14);
-  --warning: #fbbf24;
-  --warning-bg: rgba(251, 191, 36, 0.14);
+  /* وضعیت‌های مالی (status — از رنگ‌های charts.* در VSCode Dark Modern) */
+  --success: #89d185;
+  --success-bg: rgba(137, 209, 133, 0.15);
+  --danger: #f14c4c;
+  --danger-bg: rgba(241, 76, 76, 0.15);
+  --warning: #cca700;
+  --warning-bg: rgba(204, 167, 0, 0.16);
 
-  /* رنگ‌های دسته‌ای نمودار (validated — references/palette.md، ترتیب ثابت) */
-  --series-1: #3b82f6;
-  --series-1-text: #86b6ef;
-  --series-2: #22c55e;
-  --series-2-text: #5fc7a3;
-  --chart-grid: #262a52;
-  --chart-axis: #383e56;
+  /* رنگ‌های دسته‌ای نمودار (charts.* در VSCode — آبی، سبز؛ ترتیب ثابت) */
+  --series-1: #3794ff;
+  --series-1-text: #6cb6ff;
+  --series-2: #89d185;
+  --series-2-text: #89d185;
+  --chart-grid: #2b2b2b;
+  --chart-axis: #808080;
 
-  /* نوار کناری */
-  --sidebar-bg: #060714;
-  --sidebar-border: #1c2043;
-  --sidebar-active-bg: rgba(59, 130, 246, 0.16);
-  --sidebar-active-text: #60a5fa;
-  --sidebar-text: #7c86a3;
+  /* نوار کناری — Side Bar #181818، انتخابِ خاکستریِ Explorer #37373d */
+  --sidebar-bg: #181818;
+  --sidebar-border: #2b2b2b;
+  --sidebar-active-bg: #37373d;
+  --sidebar-active-text: #ffffff;
+  --sidebar-text: #cccccc;
 
-  --shadow-sm: rgba(0, 0, 0, 0.3) 0 1px 2px;
-  --shadow-md: rgba(0, 0, 0, 0.45) 0 8px 24px -4px, rgba(0, 0, 0, 0.3) 0 2px 6px -2px;
+  --shadow-sm: rgba(0, 0, 0, 0.36) 0 1px 2px;
+  --shadow-md: rgba(0, 0, 0, 0.44) 0 4px 14px -3px, rgba(0, 0, 0, 0.3) 0 1px 4px -1px;
 
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* گریدِ فاصله ۴pt — همه‌ی padding/gap/margin از این پله‌ها ساخته می‌شود */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* مقیاسِ فونتِ صحیح (بدونِ نیم‌پیکسل) — تراکمِ «فشرده»ی اپ‌های داده‌محور */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 30px;
+  --lh: 1.5;
+  --lh-tight: 1.25;
+
+  /* ارتفاعِ استانداردِ کنترل‌ها — input/select/button روی یک خط می‌نشینند */
+  --control-h: 32px;
 
   --sans: 'Vazirmatn UI', 'Segoe UI', Tahoma, sans-serif;
 
-  font: 14.5px/1.75 var(--sans);
+  font: var(--fs-base)/var(--lh) var(--sans);
   color: var(--text);
   background: var(--page);
   font-synthesis: none;
@@ -98,52 +123,51 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  /* پوسته‌ی روشنِ کم‌خیرگی: کارت‌ها آف‌وایتِ ملایم‌اند (نه سفیدِ خالص) و صفحه یک
-     خاکستری-آبیِ آرام است تا کلِ نما پرنور و خسته‌کننده نباشد؛ کارت‌ها با اختلافِ
-     روشناییِ کم ولی کافی از صفحه جدا می‌شوند. کنتراستِ متن حفظ شده (AA). */
-  --page: #e7eaf2;
-  --bg: #edeff6;
-  --surface: #f6f7fb;
-  --surface-2: #eaedf5;
-  --surface-hover: #e2e6f1;
-  --border: #d8dee9;
-  --border-strong: #c3cbdc;
+  /* VSCode «Light Modern» ۲۰۲۶: ادیتورِ سفید، کروم خاکستریِ روشن (#f8f8f8)،
+     کارت‌های سفید که با مرزِ ظریف (#e5e5e5) از پس‌زمینه جدا می‌شوند. */
+  --page: #e8e8e8;
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --surface-2: #f8f8f8;
+  --surface-hover: #f2f2f2;
+  --border: #e5e5e5;
+  --border-strong: #cecece;
 
-  --text: #414863;
-  --text-muted: #626a89;
-  --text-h: #1a1f37;
+  --text: #3b3b3b;
+  --text-muted: #767676;
+  --text-h: #1f1f1f;
 
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-bg: rgba(37, 99, 235, 0.1);
+  --accent: #005fb8;
+  --accent-hover: #0258a8;
+  --accent-bg: rgba(0, 95, 184, 0.1);
   --accent-text: #ffffff;
 
-  --accent-2: #9333ea;
-  --accent-2-hover: #7c3aed;
-  --accent-3: #db2777;
+  --accent-2: #8657c9;
+  --accent-2-hover: #6f42c1;
+  --accent-3: #0e8a7a;
 
-  --success: #15a34a;
-  --success-bg: rgba(21, 163, 74, 0.11);
-  --danger: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.09);
-  --warning: #c2740a;
-  --warning-bg: rgba(217, 119, 6, 0.13);
+  --success: #388a34;
+  --success-bg: rgba(56, 138, 52, 0.1);
+  --danger: #e51400;
+  --danger-bg: rgba(229, 20, 0, 0.08);
+  --warning: #bf8803;
+  --warning-bg: rgba(191, 136, 3, 0.12);
 
-  --series-1: #2563eb;
-  --series-1-text: #1d4ed8;
-  --series-2: #15a34a;
-  --series-2-text: #15803d;
-  --chart-grid: #e5e9f2;
-  --chart-axis: #cbd3e3;
+  --series-1: #005fb8;
+  --series-1-text: #005fb8;
+  --series-2: #388a34;
+  --series-2-text: #2d6e2a;
+  --chart-grid: #e5e5e5;
+  --chart-axis: #767676;
 
-  --sidebar-bg: #edf0f7;
-  --sidebar-border: #dbe1ec;
-  --sidebar-active-bg: rgba(37, 99, 235, 0.1);
-  --sidebar-active-text: #1d4ed8;
-  --sidebar-text: #626a89;
+  --sidebar-bg: #f8f8f8;
+  --sidebar-border: #e5e5e5;
+  --sidebar-active-bg: #e8e8e8;
+  --sidebar-active-text: #1f1f1f;
+  --sidebar-text: #3b3b3b;
 
-  --shadow-sm: rgba(30, 41, 82, 0.07) 0 1px 2px;
-  --shadow-md: rgba(30, 41, 82, 0.1) 0 8px 24px -4px, rgba(30, 41, 82, 0.06) 0 2px 6px -2px;
+  --shadow-sm: rgba(0, 0, 0, 0.08) 0 1px 2px;
+  --shadow-md: rgba(0, 0, 0, 0.12) 0 4px 14px -3px, rgba(0, 0, 0, 0.07) 0 1px 4px -1px;
 }
 
 * {
@@ -167,7 +191,17 @@ h3 {
   font-family: var(--sans);
   font-weight: 600;
   color: var(--text-h);
+  line-height: var(--lh-tight);
   margin: 0;
+}
+h1 {
+  font-size: var(--fs-2xl);
+}
+h2 {
+  font-size: var(--fs-xl);
+}
+h3 {
+  font-size: var(--fs-lg);
 }
 
 button {
@@ -199,8 +233,9 @@ textarea {
   color: var(--text-h);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 13.5px;
+  padding: 6px var(--sp-3);
+  min-height: var(--control-h);
+  font-size: var(--fs-base);
 }
 
 /* هاورِ فیلد مرز را کمی پررنگ می‌کند (مثلِ سلول‌های گرید)؛ روی فوکوس کنار می‌رود تا
@@ -219,7 +254,7 @@ select {
   appearance: none;
   -webkit-appearance: none;
   font-weight: 500;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c86a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23868686' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: left 10px center;
   background-size: 15px;

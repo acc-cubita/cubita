@@ -37,7 +37,7 @@ const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = 
  */
 export function MarketplacePage({ token }: { token: string }) {
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Store}
         title="بازارِ خرید"

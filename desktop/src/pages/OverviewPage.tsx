@@ -84,7 +84,7 @@ export function OverviewPage({
   }, [token])
 
   return (
-    <div className="page">
+    <div className="page dash">
       <div className="page-welcome">
         <h1>خوش آمدید، {userName}</h1>
         <p className="hint">

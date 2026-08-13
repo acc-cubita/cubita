@@ -33,7 +33,7 @@ export function AccountingPage({
   }, [accounts])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={BookOpen}
         title="حسابداری"

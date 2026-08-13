@@ -90,7 +90,7 @@ export function TeamPage({ token }: { token: string }) {
   }, [data])
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={UsersRound}
         title="کاربران"

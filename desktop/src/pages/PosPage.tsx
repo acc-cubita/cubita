@@ -205,7 +205,7 @@ export function PosPage({ token }: { token: string }) {
   }
 
   return (
-    <div className="page">
+    <div className="page panels">
       <PageHeader
         icon={Store}
         title="صندوق فروشگاهی"
