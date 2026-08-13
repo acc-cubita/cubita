@@ -22,6 +22,9 @@ export interface MeResponse {
   is_platform_admin: boolean
   //: سوپرادمینِ کلِ سامانه (فقط مالک) — گیتِ ماژولِ «مدیریت اکانت‌ها».
   is_super_admin: boolean
+  //: نوعِ حساب در بازارِ عمده‌فروشی: standard | distributor (پخش‌کننده) | retailer (فروشگاه).
+  //: ماژول‌های «پخشِ من» / «بازارِ خرید» با این گیت می‌شوند.
+  tenant_kind: string
   //: حسابِ آزمایشیِ رایگان — نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل از این مشتق می‌شوند.
   is_trial: boolean
   //: روزهای مانده تا انقضای آزمایشی (منفی = گذشته). برای مشتریِ واقعی null.
@@ -1353,6 +1356,7 @@ export interface AdminAccount {
   name: string
   slug: string
   status: string // active | suspended | cancelled
+  kind: string // standard | distributor | retailer
   owner_name: string
   owner_email: string
   created_at: string
@@ -1375,8 +1379,11 @@ export const fetchAdminAccounts = (token: string) =>
 
 export const createAdminAccount = (
   token: string,
-  data: { business_name: string; owner_name: string; email: string; password: string; days: number },
+  data: { business_name: string; owner_name: string; email: string; password: string; days: number; kind?: string },
 ) => authedSend<AdminAccount>(token, 'POST', '/api/admin/accounts', data)
+
+export const setAdminAccountKind = (token: string, tenantId: string, kind: string) =>
+  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/kind`, { kind })
 
 export const extendAdminAccount = (
   token: string,
@@ -2812,3 +2819,185 @@ export const createStockBatch = (
   data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
 ) => authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
 export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
+
+// --- بازارِ عمده‌فروشی (پخش‌کننده ↔ فروشگاه) --------------------------------------
+
+export interface MarketplaceSettings {
+  display_name: string
+  settlement_mode: 'credit' | 'online'
+  is_active: boolean
+}
+
+export interface ListingComponent {
+  item_id: string
+  item_name: string
+  qty: string
+}
+
+export interface Listing {
+  id: string
+  kind: 'single' | 'pack'
+  title: string
+  code: string
+  unit: string
+  wholesale_price: string
+  currency_code: string
+  description: string
+  images: string[]
+  category: string
+  is_published: boolean
+  item_id: string | null
+  components: ListingComponent[]
+}
+
+export interface ListingIn {
+  kind: 'single' | 'pack'
+  title: string
+  code?: string
+  unit?: string
+  wholesale_price: number
+  currency_code?: string
+  description?: string
+  images?: string[]
+  category?: string
+  is_published?: boolean
+  item_id?: string | null
+  components?: { item_id: string; qty: number }[]
+}
+
+// سمتِ پخش‌کننده
+export const fetchMpSettings = (token: string) =>
+  authedGet<MarketplaceSettings>(token, '/api/marketplace/distributor/settings')
+
+export const updateMpSettings = (token: string, data: MarketplaceSettings) =>
+  authedSend<MarketplaceSettings>(token, 'PUT', '/api/marketplace/distributor/settings', data)
+
+export const fetchMpListings = (token: string) =>
+  authedGet<Listing[]>(token, '/api/marketplace/distributor/listings')
+
+export const createMpListing = (token: string, data: ListingIn) =>
+  authedSend<Listing>(token, 'POST', '/api/marketplace/distributor/listings', data)
+
+export const updateMpListing = (token: string, id: string, data: ListingIn) =>
+  authedSend<Listing>(token, 'PUT', `/api/marketplace/distributor/listings/${id}`, data)
+
+export const setMpListingPublished = (token: string, id: string, published: boolean) =>
+  authedSend<Listing>(token, 'POST', `/api/marketplace/distributor/listings/${id}/publish?is_published=${published}`, {})
+
+export const deleteMpListing = (token: string, id: string) =>
+  authedDelete(token, `/api/marketplace/distributor/listings/${id}`)
+
+// --- اتصال‌ها و کاتالوگِ سمتِ فروشگاه (M3) --------------------------------------
+
+export type MpConnectionStatus = 'pending' | 'approved' | 'rejected' | 'blocked'
+
+export interface DistributorCard {
+  tenant_id: string
+  display_name: string
+  connection_status: MpConnectionStatus | null
+}
+
+export interface MpConnection {
+  id: string
+  distributor_tenant_id: string
+  retailer_tenant_id: string
+  distributor_name: string
+  retailer_name: string
+  status: MpConnectionStatus
+  requested_by: 'retailer' | 'distributor'
+}
+
+export interface CatalogListing {
+  id: string
+  distributor_tenant_id: string
+  distributor_name: string
+  kind: 'single' | 'pack'
+  title: string
+  code: string
+  unit: string
+  wholesale_price: string
+  currency_code: string
+  description: string
+  images: string[]
+  category: string
+  components: { item_name: string; qty: string }[]
+}
+
+// سمتِ پخش‌کننده — اتصال‌ها
+export const fetchMpDistributorConnections = (token: string) =>
+  authedGet<MpConnection[]>(token, '/api/marketplace/distributor/connections')
+
+export const setMpConnectionStatus = (token: string, id: string, status: 'approved' | 'rejected' | 'blocked') =>
+  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${id}/status`, { status })
+
+// سمتِ فروشگاه — کشف/اتصال/کاتالوگ
+export const fetchMpDistributors = (token: string) =>
+  authedGet<DistributorCard[]>(token, '/api/marketplace/retailer/distributors')
+
+export const fetchMpRetailerConnections = (token: string) =>
+  authedGet<MpConnection[]>(token, '/api/marketplace/retailer/connections')
+
+export const requestMpConnection = (token: string, distributor_tenant_id: string) =>
+  authedSend<MpConnection>(token, 'POST', '/api/marketplace/retailer/connections', { distributor_tenant_id })
+
+export const fetchMpCatalog = (token: string, distributorId?: string) =>
+  authedGet<CatalogListing[]>(
+    token,
+    `/api/marketplace/retailer/catalog${distributorId ? `?distributor_id=${distributorId}` : ''}`,
+  )
+
+// --- سفارش‌ها (M4) --------------------------------------------------------------
+
+export type MpOrderStatus = 'placed' | 'confirmed' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+
+export interface MpOrderLine {
+  listing_id: string | null
+  title: string
+  unit_price: string
+  qty: string
+  line_total: string
+}
+
+export interface MpOrder {
+  id: string
+  distributor_tenant_id: string
+  retailer_tenant_id: string
+  distributor_name: string
+  retailer_name: string
+  order_number: number
+  status: MpOrderStatus
+  settlement_mode: 'credit' | 'online'
+  payment_status: 'unpaid' | 'paid' | 'refunded'
+  note: string
+  subtotal: string
+  total: string
+  distributor_sales_invoice_id: string | null
+  retailer_purchase_invoice_id: string | null
+  lines: MpOrderLine[]
+}
+
+export interface MpOrderPlaceIn {
+  distributor_tenant_id: string
+  lines: { listing_id: string; qty: number }[]
+  note?: string
+}
+
+// سمتِ فروشگاه
+export const placeMpOrder = (token: string, data: MpOrderPlaceIn) =>
+  authedSend<MpOrder>(token, 'POST', '/api/marketplace/retailer/orders', data)
+
+export const fetchMpRetailerOrders = (token: string) =>
+  authedGet<MpOrder[]>(token, '/api/marketplace/retailer/orders')
+
+export const payMpOrder = (token: string, id: string) =>
+  authedSend<{ redirect_url: string }>(token, 'POST', `/api/marketplace/retailer/orders/${id}/pay`, {})
+
+// سمتِ پخش‌کننده
+export const fetchMpDistributorOrders = (token: string) =>
+  authedGet<MpOrder[]>(token, '/api/marketplace/distributor/orders')
+
+export const confirmMpOrder = (token: string, id: string) =>
+  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, {})
+
+export const rejectMpOrder = (token: string, id: string) =>
+  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})

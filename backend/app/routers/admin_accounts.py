@@ -16,6 +16,7 @@ from app.schemas.admin_accounts import (
     CreateAccountIn,
     ExtendIn,
     ResetPasswordIn,
+    SetKindIn,
     StatusIn,
 )
 from app.services import admin_accounts
@@ -46,7 +47,20 @@ def create_account(
         email=str(data.email),
         password=data.password,
         days=data.days,
+        kind=data.kind,
     )
+    return AccountRowOut(**admin_accounts.account_row(db, tenant_id))
+
+
+@router.post("/{tenant_id}/kind", response_model=AccountRowOut)
+def set_kind(
+    tenant_id: UUID,
+    data: SetKindIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """تغییرِ نوعِ حسابِ بازار (standard | distributor | retailer)."""
+    admin_accounts.set_kind(db, tenant_id, kind=data.kind)
     return AccountRowOut(**admin_accounts.account_row(db, tenant_id))
 
 

@@ -457,8 +457,9 @@
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 20px 18px;
+  gap: 9px;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar-brand-mark {
@@ -486,44 +487,53 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 8px 12px;
+  padding: 6px 6px 10px;
   overflow-y: auto;
 }
 
-/* گروهِ ماژول‌ها: هر گروه یک سرتیترِ کم‌رنگ دارد و آیتم‌هایش را با فاصله‌ی کم
-   کنار هم می‌چیند؛ فاصله‌ی بینِ گروه‌ها بیشتر است تا دسته‌ها از هم جدا دیده شوند. */
+/* هر گروه یک «پوشه»ی Explorer است: سرتیترِ کم‌رنگ + آیتم‌های تودرتو با فاصله‌ی کم. */
 .sidebar-nav-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .sidebar-nav-group + .sidebar-nav-group {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .sidebar-nav-heading {
-  padding: 4px 12px 4px;
+  padding: 4px 8px;
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
   color: var(--text-muted);
   opacity: 0.72;
   user-select: none;
 }
 
+/* ردیفِ برگ (بدونِ زیرمنو) — جمع‌وجور و تختِ سرتاسری، مثلِ «فایل» در Explorer. */
 .sidebar-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
   border: none;
   background: transparent;
   color: var(--sidebar-text);
-  border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  border-radius: 4px;
+  font-size: 13px;
   text-align: right;
-  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sidebar-nav-item > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.1s;
 }
 
 .sidebar-nav-item:hover {
@@ -537,6 +547,10 @@
   font-weight: 600;
 }
 
+.sidebar-nav-item.active > svg {
+  color: var(--sidebar-active-text);
+}
+
 /* ---------- آکاردئونِ گروه‌ها ---------- */
 /* هر گروه یک سرتیترِ کلیک‌پذیر است؛ با کلیک، کشوی ماژول‌هایش با انیمیشنِ نرم
    باز/بسته می‌شود. تنها یک گروه هم‌زمان باز است تا نوار جمع‌وجور بماند. */
@@ -544,43 +558,30 @@
 .sidebar-acc + .sidebar-acc,
 .sidebar-acc + .sidebar-nav-solo,
 .sidebar-nav-solo + .sidebar-nav-solo {
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
-/* گروهِ باز به یک «کارتِ» جداگانه تبدیل می‌شود تا مرزِ گروه و زیرمجموعه‌اش برای چشم
-   روشن باشد؛ گروه‌های بسته فقط یک ردیفِ سرتیترند. */
+/* گروه‌ها تخت‌اند (مثلِ Explorer)، نه کارت — مرزِ گروه با تورفتگی و خطِّ راهنما دیده می‌شود. */
 .sidebar-acc {
-  border-radius: 14px;
-}
-.sidebar-acc.open {
-  background: var(--surface-2);
-  border: 1px solid var(--sidebar-border);
-  padding: 2px 5px 6px;
-}
-/* در پوسته‌ی روشن، surface-2 تقریباً هم‌رنگِ نوارِ کناری است و کارت دیده نمی‌شود؛ پس
-   کارتِ سفید (surface) با کادرِ پررنگ‌تر و سایه‌ی ملایم می‌گذاریم تا شناور و جدا دیده شود. */
-:root[data-theme='light'] .sidebar-acc.open {
-  background: var(--surface);
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
 }
 
+/* سرتیترِ گروه = «سکشن‌هدرِ» VSCode: کوچک، درشت، کم‌رنگ، با twistie در لبه‌ی پیشرو. */
 .sidebar-acc-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 5px 8px;
   border: none;
   background: transparent;
-  color: var(--sidebar-text);
-  border-radius: 10px;
-  font-size: 12px;
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.02em;
   text-align: right;
   cursor: pointer;
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.12s, color 0.12s;
 }
 
 .sidebar-acc-header:hover {
@@ -588,23 +589,19 @@
   color: var(--text-h);
 }
 
-/* آیکنِ گروه داخلِ یک چیپِ گِردگوشه — تا از آیکنِ سرراستِ ماژول‌ها (سطحِ دوم) جدا دیده شود. */
+/* آیکنِ گروه تخت است (بدونِ چیپ) — مثلِ آیکنِ پوشه در Explorer. */
 .sidebar-acc-header .acc-ico {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--surface-hover);
   color: var(--text-muted);
+  opacity: 0.9;
   flex-shrink: 0;
-  transition: background 0.14s, color 0.14s;
+  transition: color 0.12s;
 }
 
 .sidebar-acc-header:hover .acc-ico,
 .sidebar-acc.open > .sidebar-acc-header .acc-ico,
 .sidebar-acc-header.has-active .acc-ico {
-  background: var(--accent-bg);
   color: var(--accent);
 }
 
@@ -618,20 +615,25 @@
 }
 
 .sidebar-acc-header .acc-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
 }
 
+/* twistie: در لبه‌ی پیشرو (order:-1)؛ بسته = چرخیده به کنار، باز = رو به پایین. */
 .sidebar-acc-header .acc-chev {
+  order: -1;
+  width: 15px;
+  height: 15px;
   color: var(--text-muted);
-  transition: transform 0.22s ease, color 0.14s;
+  transform: rotate(-90deg);
+  transition: transform 0.18s ease, color 0.12s;
 }
 
 .sidebar-acc.open > .sidebar-acc-header .acc-chev {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
   color: var(--accent);
 }
 
@@ -639,21 +641,23 @@
 .sidebar-acc-panel {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.22s ease;
+  transition: grid-template-rows 0.2s ease;
 }
 
 .sidebar-acc.open > .sidebar-acc-panel {
   grid-template-rows: 1fr;
 }
 
+/* محتوای گروه: تودرفته با خطِّ راهنمای عمودی (مثلِ خطوطِ تورفتگیِ Explorer). */
 .sidebar-acc-panel > .acc-inner {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-block: 2px;
-  margin-inline-start: 6px;
-  padding-inline-start: 4px;
+  gap: 1px;
+  padding-block: 1px;
+  margin-inline-start: 13px;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid var(--sidebar-border);
 }
 
 /* ---------- سطح‌سوم: ماژولِ تب‌دار + زیرمنوی تب‌ها ---------- */
@@ -661,9 +665,9 @@
 .sidebar-mod-header {
   display: flex;
   align-items: center;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   color: var(--sidebar-text);
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.1s, color 0.1s;
 }
 
 .sidebar-mod-header:hover {
@@ -676,21 +680,25 @@
   font-weight: 600;
 }
 
+.sidebar-mod-header.current .mod-label {
+  color: var(--sidebar-active-text);
+}
+
 .sidebar-mod-main {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 5px 8px;
   border: none;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   text-align: right;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
 }
 
 .sidebar-mod-main .mod-label {
@@ -698,9 +706,11 @@
 }
 
 .sidebar-mod-main > svg {
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: color 0.14s;
+  transition: color 0.1s;
 }
 
 .sidebar-mod-header:hover .sidebar-mod-main > svg,
@@ -708,39 +718,42 @@
   color: var(--accent);
 }
 
-/* فلشِ باز/بست — هدفِ کلیکِ مجزا؛ روی hover کمی برجسته می‌شود تا کلیک‌پذیر بودنش پیدا باشد. */
+/* twistie در لبه‌ی پیشرو (order:-1) — هدفِ کلیکِ مجزا برای باز/بست، مثلِ پوشه در Explorer. */
 .sidebar-mod-toggle {
+  order: -1;
   display: flex;
   align-items: center;
-  padding: 9px 10px;
+  padding: 5px 3px 5px 4px;
   border: none;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: color 0.14s, background 0.14s;
+  border-radius: 4px;
+  transition: color 0.1s;
 }
 
 .sidebar-mod-toggle:hover {
   color: var(--accent);
-  background: var(--accent-bg);
 }
 
 .sidebar-mod-toggle .mod-chev {
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
-  transition: transform 0.22s ease, color 0.14s;
+  transform: rotate(-90deg);
+  transition: transform 0.18s ease, color 0.1s;
 }
 
 .sidebar-mod.open > .sidebar-mod-header .mod-chev {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
   color: var(--accent);
 }
 
-/* کشوی تب‌ها — همان انیمیشنِ ارتفاعِ خودکار، یک پله تودرتوتر. */
+/* کشوی تب‌ها — همان انیمیشنِ ارتفاعِ خودکار، یک پله تودرتوتر با خطِّ راهنما. */
 .sidebar-mod-panel {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.2s ease;
+  transition: grid-template-rows 0.18s ease;
 }
 
 .sidebar-mod.open > .sidebar-mod-panel {
@@ -752,34 +765,41 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding-block: 2px;
-  margin-inline-start: 13px;
-  padding-inline-start: 9px;
-  border-inline-start: 1.5px solid var(--sidebar-border);
+  padding-block: 1px;
+  margin-inline-start: 15px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--sidebar-border);
 }
 
-/* برگِ تب (سطح‌سوم) — کمی کوچک‌تر و کم‌رنگ‌تر از ماژول. */
+/* برگِ ماژولِ بدونِ تب داخلِ گروه — هم‌ترازِ برچسبِ ماژول‌های تب‌دار (جای twistie). */
+.acc-inner > .sidebar-nav-item {
+  padding-inline-start: 30px;
+}
+
+/* برگِ تب — جمع‌وجور و کم‌رنگ‌تر از ماژول. */
 .sidebar-subitem {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 4px 8px;
   border: none;
   background: transparent;
   color: var(--sidebar-text);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   font-size: 12.5px;
   text-align: right;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.1s, color 0.1s;
   font-family: inherit;
 }
 
 .sidebar-subitem > svg {
+  width: 15px;
+  height: 15px;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: color 0.12s;
+  transition: color 0.1s;
 }
 
 .sidebar-subitem:hover {
@@ -1932,6 +1952,19 @@ button:disabled {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* جمعِ کلِ سبدِ خریدِ بازار */
+.cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.cart-total strong { font-size: 15px; }
 
 .invoice-totals {
   display: flex;

@@ -59,6 +59,7 @@ def signup_new_business(
     email: str,
     password: str,
     trial: bool = True,
+    kind: str = "standard",
 ) -> tuple[Tenant, User]:
     """کاربر و کسب‌وکارش را در یک تراکنش می‌سازد.
 
@@ -90,6 +91,7 @@ def signup_new_business(
         # دعوت یک منبع نامحدود است و هر ثبت‌نام رایگان می‌تواند بی‌نهایت کاربر بسازد.
         max_users=settings.signup_default_max_users,
         is_trial=trial,
+        kind=kind,
     )
     # اشتراکِ آزمایشیِ زماندار. بدونِ این، مستأجرِ ثبت‌نامی «none» می‌ماند و طبقِ fail-open
     # نامحدود کار می‌کند — یعنی هیچ ساعتِ ۱۴روزه‌ای وجود ندارد. plan_id خالی است چون

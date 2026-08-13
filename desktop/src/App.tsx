@@ -36,6 +36,15 @@ function readPendingAction(): PendingAction | null {
   return { action, token }
 }
 
+/** درِ ورودیِ ترایال از سایتِ مارکتینگ: `acc.cubita.ir/?signup` باید مستقیم روی صفحه‌ی
+ *  ثبت‌نام باز شود (نه ورود). این کار ورودِ ترایال را روی prod متمرکز می‌کند به‌جای
+ *  اینکه از demo.cubita.ir (دیتابیسِ جدا) رد شود. */
+function wantsSignup(): boolean {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  return params.has('signup') || params.get('action') === 'signup'
+}
+
 export default function App() {
   const [token, setToken] = useState<string | null>(null)
   const [me, setMe] = useState<MeResponse | null>(null)
@@ -45,7 +54,7 @@ export default function App() {
   // درِ ورودیِ ترایال (demo.cubita.ir) با VITE_SIGNUP_FIRST=true مستقیم روی صفحه‌ی
   // ثبت‌نام باز می‌شود؛ اپِ اصلی (acc.cubita.ir) روی ورود.
   const [authView, setAuthView] = useState<'login' | 'signup'>(
-    import.meta.env.VITE_SIGNUP_FIRST === 'true' ? 'signup' : 'login',
+    import.meta.env.VITE_SIGNUP_FIRST === 'true' || wantsSignup() ? 'signup' : 'login',
   )
 
   function handleAuthenticated(newToken: string, newMe: MeResponse) {

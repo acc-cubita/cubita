@@ -147,6 +147,7 @@ def provision_tenant(
     owner_name: str = "مدیر سیستم",
     max_users: int | None = None,
     is_trial: bool = False,
+    kind: str = "standard",
 ) -> Tenant:
     """یک مستأجر کامل و آماده‌ی کار می‌سازد.
 
@@ -158,7 +159,9 @@ def provision_tenant(
     """
     tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
     if tenant is None:
-        tenant = Tenant(name=name, slug=slug, status="active", max_users=max_users, is_trial=is_trial)
+        tenant = Tenant(
+            name=name, slug=slug, status="active", max_users=max_users, is_trial=is_trial, kind=kind
+        )
         db.add(tenant)
         db.flush()
 

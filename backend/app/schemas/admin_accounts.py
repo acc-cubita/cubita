@@ -6,6 +6,9 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 MIN_PASSWORD = 10  # هم‌راستا با SignupIn
 
+#: نوعِ حسابِ بازارِ عمده‌فروشی (انحصاری). standard = کسب‌وکارِ عادی.
+MARKETPLACE_KINDS = ("standard", "distributor", "retailer")
+
 
 class AccountUserOut(BaseModel):
     """یک کاربرِ اکانت به‌همراه آخرین فعالیت — برای بخشِ «کاربرها» در پنلِ مدیریت."""
@@ -21,6 +24,7 @@ class AccountRowOut(BaseModel):
     name: str
     slug: str
     status: str  # active | suspended | cancelled (وضعیتِ کسب‌وکار)
+    kind: str = "standard"  # standard | distributor | retailer
     owner_name: str
     owner_email: str
     created_at: datetime
@@ -47,12 +51,21 @@ class CreateAccountIn(BaseModel):
     password: str
     #: طولِ اشتراکِ اولیه به روز. ۰ = بدونِ اشتراک (وضعیتِ «none»؛ نوشتن باز است).
     days: int = 365
+    #: نوعِ حسابِ بازار: standard | distributor | retailer.
+    kind: str = "standard"
 
     @field_validator("password")
     @classmethod
     def pw_len(cls, v: str) -> str:
         if len(v) < MIN_PASSWORD:
             raise ValueError(f"رمز عبور باید حداقل {MIN_PASSWORD} کاراکتر باشد")
+        return v
+
+    @field_validator("kind")
+    @classmethod
+    def kind_valid(cls, v: str) -> str:
+        if v not in MARKETPLACE_KINDS:
+            raise ValueError("نوعِ حساب نامعتبر است")
         return v
 
     @field_validator("business_name", "owner_name")
@@ -82,6 +95,18 @@ class ExtendIn(BaseModel):
         if self.days is not None and (self.days <= 0 or self.days > 3650):
             raise ValueError("تعداد روز نامعتبر است")
         return self
+
+
+class SetKindIn(BaseModel):
+    """تغییرِ نوعِ حسابِ بازار (سوپرادمین)."""
+    kind: str
+
+    @field_validator("kind")
+    @classmethod
+    def valid(cls, v: str) -> str:
+        if v not in MARKETPLACE_KINDS:
+            raise ValueError("نوعِ حساب نامعتبر است")
+        return v
 
 
 class StatusIn(BaseModel):

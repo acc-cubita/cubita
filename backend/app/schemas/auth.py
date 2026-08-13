@@ -38,6 +38,10 @@ class MeOut(BaseModel):
     #: از is_platform_admin و مستقل از آن.
     is_super_admin: bool = False
 
+    #: نوعِ حساب در بازارِ عمده‌فروشی: standard | distributor (پخش‌کننده) | retailer (فروشگاه).
+    #: فرانت با این ماژول‌های «پخشِ من» / «بازارِ خرید» را در ساید‌بار نشان می‌دهد.
+    tenant_kind: str = "standard"
+
     #: حسابِ آزمایشیِ رایگان — فرانت با این نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل
     #: را نشان می‌دهد بی‌آنکه منتظرِ ۴۰۲ بماند.
     is_trial: bool = False

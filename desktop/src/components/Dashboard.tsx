@@ -33,6 +33,8 @@ import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
+import { DistributorPage } from '../pages/DistributorPage'
+import { MarketplacePage } from '../pages/MarketplacePage'
 import { AccountingPage } from '../pages/AccountingPage'
 import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
@@ -52,6 +54,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   accounting: 'حسابداری',
   banking: 'چک و بانک',
   fixedassets: 'دارایی ثابت',
+  distributor: 'پخشِ من',
+  marketplace: 'بازارِ خرید',
   payroll: 'حقوق و دستمزد',
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
@@ -154,6 +158,7 @@ export function Dashboard({
         roleName={me.role_name}
         isPlatformAdmin={me.is_platform_admin}
         isSuperAdmin={me.is_super_admin}
+        tenantKind={me.tenant_kind}
         onLogout={onLogout}
         open={navOpen}
         onClose={() => setNavOpen(false)}
@@ -225,6 +230,8 @@ export function Dashboard({
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
+          {page === 'distributor' && me.tenant_kind === 'distributor' && <DistributorPage token={token} items={items} />}
+          {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} />}
           {page === 'fixedassets' && (
             <div className="page">
               <PageHeader

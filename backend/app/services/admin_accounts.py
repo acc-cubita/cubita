@@ -68,6 +68,7 @@ def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) ->
         "name": tenant.name,
         "slug": tenant.slug,
         "status": tenant.status,
+        "kind": tenant.kind,
         "owner_name": owner.name if owner else "",
         "owner_email": owner.email if owner else "",
         "created_at": tenant.created_at,
@@ -114,19 +115,29 @@ def _require(db: Session, tenant_id: UUID) -> Tenant:
     return tenant
 
 
-def create_account(db: Session, *, business_name: str, owner_name: str, email: str, password: str, days: int) -> UUID:
+def create_account(
+    db: Session, *, business_name: str, owner_name: str, email: str, password: str, days: int, kind: str = "standard"
+) -> UUID:
     """کسب‌وکار + کاربرِ مالک را می‌سازد و در صورتِ نیاز اشتراکِ اولیه می‌دهد.
 
     اگر ایمیل از قبل باشد، signup_new_business با 409 رد می‌کند (پیامِ مبهم، عمداً).
+    `kind`: نوعِ حسابِ بازار (standard | distributor | retailer).
     """
     # اکانتِ دستیِ مدیر آزمایشی نیست: اشتراکش را همین‌جا با `days` تعیین می‌کنیم، پس
     # نباید is_trial=True بگیرد (که بنر/قفلِ مؤدیان و کرونِ حذفِ تریال را روشن می‌کند).
     tenant, _user = signup_new_business(
-        db, business_name=business_name, owner_name=owner_name, email=email, password=password, trial=False
+        db, business_name=business_name, owner_name=owner_name, email=email, password=password, trial=False, kind=kind
     )
     if days > 0:
         subscriptions.grant(db, tenant.id, days=days, note="ساختِ دستی توسط مدیرِ سامانه", source="manual")
     return tenant.id
+
+
+def set_kind(db: Session, tenant_id: UUID, *, kind: str) -> None:
+    """نوعِ حسابِ بازار (standard | distributor | retailer) را تغییر می‌دهد."""
+    tenant = _require(db, tenant_id)
+    tenant.kind = kind
+    db.flush()
 
 
 def extend_account(db: Session, tenant_id: UUID, *, days: int | None = None, expires_at=None) -> None:

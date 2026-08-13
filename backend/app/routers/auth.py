@@ -92,6 +92,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         tenant_name=principal.membership.tenant.name,
         is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
         is_super_admin=principal.user.email.strip().lower() in get_settings().super_admin_emails_list,
+        tenant_kind=principal.membership.tenant.kind,
         is_trial=tinfo.is_trial,
         trial_days_left=tinfo.days_left,
         trial_expired=tinfo.expired,

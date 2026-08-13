@@ -30,6 +30,7 @@ from app.routers import (
     inventory,
     invoices,
     journal,
+    marketplace,
     members,
     moadian,
     onboarding,
@@ -130,6 +131,7 @@ app.include_router(onboarding.router)
 app.include_router(installments.router)
 app.include_router(shop.router)
 app.include_router(storefront.router)
+app.include_router(marketplace.router)
 
 
 @app.get("/api/health")

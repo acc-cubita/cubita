@@ -92,6 +92,17 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'currencies', label: 'ارزها و نرخ ارز', icon: Coins },
     { key: 'close', label: 'بستن دوره‌ی مالی', icon: CalendarCheck },
   ],
+  distributor: [
+    { key: 'catalog', label: 'کاتالوگ', icon: Package },
+    { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList },
+    { key: 'connections', label: 'اتصال‌ها', icon: Link2 },
+    { key: 'settings', label: 'تنظیمات', icon: Settings },
+  ],
+  marketplace: [
+    { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store },
+    { key: 'catalog', label: 'کاتالوگ', icon: Package },
+    { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList },
+  ],
   banking: [
     { key: 'checks', label: 'چک‌ها', icon: ScrollText },
     { key: 'accounts', label: 'حساب‌های بانکی', icon: Landmark },

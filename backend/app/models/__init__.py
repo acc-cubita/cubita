@@ -29,6 +29,15 @@ from app.models.invoices import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from app.models.marketplace import (
+    MarketplaceConnection,
+    MarketplaceItemLink,
+    MarketplaceListing,
+    MarketplaceListingComponent,
+    MarketplaceOrder,
+    MarketplaceOrderLine,
+    MarketplaceSettings,
+)
 from app.models.moadian import MoadianSettings, MoadianSubmission
 from app.models.period_close import FiscalPeriodClose
 from app.models.payroll import (
@@ -148,4 +157,11 @@ __all__ = [
     "StorefrontOrder",
     "StorefrontOrderLine",
     "PaymentGateway",
+    "MarketplaceSettings",
+    "MarketplaceListing",
+    "MarketplaceListingComponent",
+    "MarketplaceConnection",
+    "MarketplaceOrder",
+    "MarketplaceOrderLine",
+    "MarketplaceItemLink",
 ]

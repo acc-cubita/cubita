@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
-  resetAdminAccountPassword, deleteAdminAccount, type AdminAccount,
+  resetAdminAccountPassword, deleteAdminAccount, setAdminAccountKind, type AdminAccount,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -25,6 +25,10 @@ const STATUS_LABEL: Record<string, string> = {
   active: 'فعال', suspended: 'تعلیق‌شده', cancelled: 'لغوشده',
 }
 const EXTEND_PRESETS = [30, 90, 180, 365]
+
+const KIND_LABEL: Record<string, string> = {
+  standard: 'عادی', distributor: 'پخش‌کننده', retailer: 'فروشگاه',
+}
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
   active: 'فعال', invited: 'دعوت‌شده', disabled: 'غیرفعال',
@@ -71,6 +75,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [days, setDays] = useState('365')
+  const [kind, setKind] = useState('standard')
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -126,10 +131,10 @@ export function AccountsAdminPage({ token }: { token: string }) {
     setError(null); setMessage(null)
     try {
       const created = await createAdminAccount(token, {
-        business_name: bizName, owner_name: ownerName, email, password, days: Number(days) || 0,
+        business_name: bizName, owner_name: ownerName, email, password, days: Number(days) || 0, kind,
       })
-      setMessage(`اکانت «${created.name}» ساخته شد. رمزِ اولیه را به مالک بدهید.`)
-      setBizName(''); setOwnerName(''); setEmail(''); setPassword(''); setDays('365')
+      setMessage(`اکانت «${created.name}» (${KIND_LABEL[created.kind] ?? created.kind}) ساخته شد. رمزِ اولیه را به مالک بدهید.`)
+      setBizName(''); setOwnerName(''); setEmail(''); setPassword(''); setDays('365'); setKind('standard')
       setShowCreate(false)
       await refresh()
     } catch (err) {
@@ -147,6 +152,11 @@ export function AccountsAdminPage({ token }: { token: string }) {
     if (next === 'suspended' && !window.confirm(`اکانت «${a.name}» تعلیق شود؟ مالک تا فعال‌سازیِ دوباره نمی‌تواند وارد شود.`)) return
     void run(a.tenant_id, () => setAdminAccountStatus(token, a.tenant_id, next),
       next === 'suspended' ? `«${a.name}» تعلیق شد.` : `«${a.name}» فعال شد.`)
+  }
+
+  function changeKind(a: AdminAccount, next: string) {
+    if (next === a.kind) return
+    void run(a.tenant_id, () => setAdminAccountKind(token, a.tenant_id, next), `نوعِ «${a.name}» به «${KIND_LABEL[next] ?? next}» تغییر کرد.`)
   }
 
   function resetPw(a: AdminAccount) {
@@ -217,6 +227,14 @@ export function AccountsAdminPage({ token }: { token: string }) {
                 <option value="0">بدون اشتراک</option>
               </select>
             </label>
+            <label>
+              نوعِ حساب (بازارِ عمده‌فروشی)
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="standard">عادی</option>
+                <option value="distributor">پخش‌کننده (ماژولِ «پخشِ من»)</option>
+                <option value="retailer">فروشگاه (ماژولِ «بازارِ خرید»)</option>
+              </select>
+            </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary"><UserPlus size={14} /> ساخت اکانت</button>
             </div>
@@ -273,6 +291,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
                   <span><CalendarClock size={13} /> انقضا: {a.expires_at ? formatJalali(a.expires_at.slice(0, 10)) : '—'} <strong>({daysText(a)})</strong></span>
                   <span><Activity size={13} /> آخرین فعالیت: <strong>{lastSeenText(a.last_activity_at)}</strong></span>
                   <span>پلن: {a.plan_name || '—'}</span>
+                  <span>نوع: <strong>{KIND_LABEL[a.kind] ?? a.kind}</strong></span>
                   <span><Users size={13} /> {fa(a.user_count)}{a.max_users != null ? ` / ${fa(a.max_users)}` : ''} کاربر</span>
                   <span>ساخت: {formatJalali(a.created_at.slice(0, 10))}</span>
                   {a.status !== 'active' && <span className="account-suspended-tag">{STATUS_LABEL[a.status] ?? a.status}</span>}
@@ -322,6 +341,17 @@ export function AccountsAdminPage({ token }: { token: string }) {
                   <button type="button" disabled={busyId === a.tenant_id} onClick={() => resetPw(a)}>
                     <KeyRound size={13} /> رمز جدید
                   </button>
+                  <select
+                    className="account-kind-select"
+                    value={a.kind}
+                    disabled={busyId === a.tenant_id}
+                    onChange={(e) => changeKind(a, e.target.value)}
+                    title="نوعِ حساب در بازارِ عمده‌فروشی"
+                  >
+                    <option value="standard">نوع: عادی</option>
+                    <option value="distributor">نوع: پخش‌کننده</option>
+                    <option value="retailer">نوع: فروشگاه</option>
+                  </select>
                   <button type="button" className="icon-btn-danger" disabled={busyId === a.tenant_id} onClick={() => doDelete(a)}>
                     <Trash2 size={13} /> حذف
                   </button>

@@ -31,6 +31,7 @@ import {
   Database,
   Wrench,
   Settings,
+  Truck,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from '../lib/theme'
@@ -49,6 +50,8 @@ export type PageKey =
   | 'accounting'
   | 'banking'
   | 'fixedassets'
+  | 'distributor'
+  | 'marketplace'
   | 'payroll'
   | 'integration'
   | 'billing'
@@ -148,6 +151,7 @@ export function Sidebar({
   roleName,
   isPlatformAdmin,
   isSuperAdmin,
+  tenantKind,
   onLogout,
   open = false,
   onClose,
@@ -160,6 +164,8 @@ export function Sidebar({
   roleName: string
   isPlatformAdmin: boolean
   isSuperAdmin: boolean
+  /** نوعِ حساب در بازار: standard | distributor | retailer — گیتِ ماژول‌های بازار. */
+  tenantKind: string
   onLogout: () => void
   /** فقط در وبِ باریک (موبایل) معنا دارد: نوار کناری کشوی روی‌هم می‌شود. */
   open?: boolean
@@ -171,8 +177,21 @@ export function Sidebar({
     ...(isPlatformAdmin ? PLATFORM_ADMIN_NAV_ITEMS : []),
     ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : []),
   ]
+  // ماژول‌های بازارِ عمده‌فروشی — فقط برای حسابِ متناظر (انحصاری): پخش‌کننده «پخشِ من»،
+  // فروشگاه «بازارِ خرید». حسابِ standard هیچ‌کدام را نمی‌بیند.
+  const marketplaceItems: NavItem[] = [
+    ...(tenantKind === 'distributor'
+      ? [{ key: 'distributor' as PageKey, label: 'پخشِ من', icon: <Truck size={18} /> }]
+      : []),
+    ...(tenantKind === 'retailer'
+      ? [{ key: 'marketplace' as PageKey, label: 'بازارِ خرید', icon: <Store size={18} /> }]
+      : []),
+  ]
   const groups: NavGroup[] = [
     ...NAV_GROUPS,
+    ...(marketplaceItems.length
+      ? [{ heading: 'بازارِ عمده‌فروشی', icon: <Truck size={17} />, items: marketplaceItems }]
+      : []),
     ...(adminItems.length
       ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }]
       : []),

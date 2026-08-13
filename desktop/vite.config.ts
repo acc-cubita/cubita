@@ -11,20 +11,26 @@ const electron = electronSimple as unknown as (options: ElectronSimpleOptions) =
 export default defineConfig({
   plugins: [
     react(),
-    electron({
-      main: {
-        entry: 'electron/main.ts',
-        vite: {
-          build: {
-            // better-sqlite3 یک native addon است؛ باندل‌کردنش داخل main.js باعث می‌شود require دینامیک فایل
-            // .node را در زمان اجرا پیدا نکند، پس باید بیرون از باندل بماند و از node_modules عادی require شود.
-            rollupOptions: { external: ['better-sqlite3'] },
-          },
-        },
-      },
-      preload: {
-        input: 'electron/preload.ts',
-      },
-    }),
+    // در حالتِ WEB_ONLY (تستِ سریعِ مرورگری) پلاگینِ Electron لود نمی‌شود تا پردازه‌ی
+    // electron باز/بسته نشود و سرورِ vite پایدار بماند. پیش‌فرض (بدونِ متغیر) بی‌تغییر.
+    ...(process.env.WEB_ONLY
+      ? []
+      : [
+          electron({
+            main: {
+              entry: 'electron/main.ts',
+              vite: {
+                build: {
+                  // better-sqlite3 یک native addon است؛ باندل‌کردنش داخل main.js باعث می‌شود require دینامیک فایل
+                  // .node را در زمان اجرا پیدا نکند، پس باید بیرون از باندل بماند و از node_modules عادی require شود.
+                  rollupOptions: { external: ['better-sqlite3'] },
+                },
+              },
+            },
+            preload: {
+              input: 'electron/preload.ts',
+            },
+          }),
+        ]),
   ],
 })

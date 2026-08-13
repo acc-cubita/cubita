@@ -45,6 +45,15 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | suspended | cancelled
 
+    #: نوعِ حساب در بازارِ عمده‌فروشیِ درون‌پلتفرمی — انحصاری:
+    #:   standard    = کسب‌وکارِ عادی (پیش‌فرض؛ حساب‌های موجود بی‌تغییر می‌مانند)
+    #:   distributor = شرکتِ پخش (کاتالوگ منتشر می‌کند، سفارش می‌گیرد) → ماژولِ «پخشِ من»
+    #:   retailer    = فروشگاه (از پخش‌کننده‌ها سفارش می‌دهد) → ماژولِ «بازارِ خرید»
+    #: ماژول‌های بازار با همین فیلد گیت می‌شوند (مثلِ locked_features برای مؤدیان/فروشگاه‌ساز).
+    kind: Mapped[str] = mapped_column(
+        String(20), default="standard", server_default="standard", nullable=False
+    )
+
     #: سقف کاربران. NULL یعنی نامحدود (پلن سازمانی).
     #:
     #: این مقدار موقع ساخت مستأجر از `Plan.max_users` گرفته می‌شود و بعد از آن ثابت

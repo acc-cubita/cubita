@@ -43,6 +43,16 @@ GLOBAL_TABLES = frozenset(
         "email_verification_codes",
         # اشتراک: داده‌ی صفحه‌ی کنترل پلتفرم است، نه دفتر مشتری
         "subscriptions",
+        # بازارِ عمده‌فروشیِ درون‌پلتفرمی: عمداً میان‌مستأجری است (پخش‌کننده منتشر می‌کند،
+        # فروشگاهِ مستأجرِ دیگری می‌بیند/سفارش می‌دهد). RLSِ per-tenant اینجا معنا ندارد؛
+        # جداسازی در کدِ روتر با فیلترِ صریحِ tenant + نقش + وضعیتِ اتصال است (تستِ نشتی الزامی).
+        "marketplace_settings",
+        "marketplace_listings",
+        "marketplace_listing_components",
+        "marketplace_connections",
+        "marketplace_orders",
+        "marketplace_order_lines",
+        "marketplace_item_links",
     }
 )
 
