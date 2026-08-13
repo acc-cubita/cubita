@@ -13,9 +13,11 @@
 نوشتنِ سند در دو دفتر (روی تأییدِ سفارش) با `tenant_scope` انجام می‌شود؛ اینجا فقط داده.
 """
 import uuid
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    DateTime,
     ForeignKey,
     Integer,
     Numeric,
@@ -34,6 +36,7 @@ CONNECTION_STATUSES = ("pending", "approved", "rejected", "blocked")
 ORDER_STATUSES = ("placed", "confirmed", "rejected", "shipped", "received", "cancelled")
 SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
+COMMISSION_STATUSES = ("pending", "settled")
 
 
 class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
@@ -215,3 +218,31 @@ class MarketplaceItemLink(UUIDPKMixin, TimestampMixin, Base):
     retailer_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
     )
+
+
+class MarketplaceCommission(UUIDPKMixin, TimestampMixin, Base):
+    """کمیسیونِ پلتفرم (۲٪) روی هر سفارشِ قطعی‌شده‌ی بازار — لایه‌ی سراسری (بدونِ RLS).
+
+    یک رکورد به‌ازای هر سفارش (`order_id` یکتا) هنگامِ قطعی‌شدن ثبت می‌شود؛ ماهانه
+    (به‌تفکیکِ ماهِ شمسی در `period`) توسطِ سوپرادمین با واریزِ دستی تسویه می‌شود.
+    `rate`/`base_amount`/`amount` اسنپ‌شات‌اند تا تغییرِ نرخ روی سابقه اثر نگذارد.
+    عمداً هیچ سندی در دفترِ خودِ پخش‌کننده نمی‌خورد — فقط همین دفترِ پلتفرمی.
+    """
+
+    __tablename__ = "marketplace_commissions"
+    __table_args__ = (UniqueConstraint("order_id", name="uq_mp_commission_order"),)
+
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_orders.id", ondelete="CASCADE"), index=True
+    )
+    distributor_tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    # ماهِ شمسی به شکلِ ASCIIِ مرتب‌شونده: "1405-05" — گروه‌بندی/سورت پایدار می‌ماند.
+    period: Mapped[str] = mapped_column(String(7), index=True)
+    base_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    rate: Mapped[float] = mapped_column(Numeric(6, 4), default=0.02)
+    amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    settle_note: Mapped[str] = mapped_column(String(300), default="", server_default="")

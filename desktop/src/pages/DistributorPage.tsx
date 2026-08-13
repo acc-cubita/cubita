@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Truck, Package, Boxes, Plus, Trash2, Save, Pencil, X, Eye, EyeOff, Settings as SettingsIcon,
-  Link2, Check, Ban, Store, ClipboardList, CheckCircle2,
+  Link2, Check, Ban, Store, ClipboardList, CheckCircle2, Percent, AlertCircle,
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
   confirmMpOrder, createMpListing, deleteMpListing, fetchMpDistributorConnections,
-  fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, rejectMpOrder,
+  fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, fetchMyMpCommissions, rejectMpOrder,
   setMpConnectionStatus, setMpListingPublished, updateMpListing, updateMpSettings,
-  type Listing, type ListingIn, type MarketplaceSettings, type MpConnection, type MpOrder,
+  type Listing, type ListingIn, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -17,6 +17,7 @@ import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
+import { ImageUploader } from '../components/ImageUploader'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -35,12 +36,16 @@ export const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: strin
 }
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
+// "1405-05" → "۱۴۰۵/۰۵"
+const faPeriod = (p: string) =>
+  p.replace('-', '/').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
 
 interface PackRow { itemId: string; qty: string }
 const EMPTY_FORM = {
   kind: 'single' as 'single' | 'pack',
   title: '', code: '', unit: 'عدد', wholesalePrice: '', category: '', isPublished: true,
   itemId: '',
+  images: [] as string[],
   components: [{ itemId: '', qty: '1' }] as PackRow[],
 }
 
@@ -59,6 +64,7 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
           { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} items={items} /> },
           { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, content: <OrdersPanel token={token} /> },
           { key: 'connections', label: 'اتصال‌ها', icon: Link2, content: <ConnectionsPanel token={token} /> },
+          { key: 'commission', label: 'کمیسیون', icon: Percent, content: <CommissionPanel token={token} /> },
           { key: 'settings', label: 'تنظیمات', icon: SettingsIcon, content: <SettingsPanel token={token} /> },
         ]}
       />
@@ -88,7 +94,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
     packs: listings.filter((l) => l.kind === 'pack').length,
   }), [listings])
 
-  function reset() { setForm({ ...EMPTY_FORM, components: [{ itemId: '', qty: '1' }] }); setEditingId(null); setMsg(null) }
+  function reset() { setForm({ ...EMPTY_FORM, images: [], components: [{ itemId: '', qty: '1' }] }); setEditingId(null); setMsg(null) }
 
   function startEdit(l: Listing) {
     setEditingId(l.id)
@@ -98,6 +104,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
       wholesalePrice: String(Number(l.wholesale_price) || ''),
       category: l.category, isPublished: l.is_published,
       itemId: l.item_id ?? '',
+      images: l.images ?? [],
       components: l.kind === 'pack' && l.components.length
         ? l.components.map((c) => ({ itemId: c.item_id, qty: String(Number(c.qty)) }))
         : [{ itemId: '', qty: '1' }],
@@ -128,6 +135,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
       wholesale_price: Number(form.wholesalePrice) || 0,
       category: form.category.trim(),
       is_published: form.isPublished,
+      images: form.images,
       item_id: form.kind === 'single' ? form.itemId : null,
       components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: Number(r.qty) })) : [],
     }
@@ -220,6 +228,9 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                 <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
               </label>
             </div>
+            <label>عکس‌های محصول (اختیاری)
+              <ImageUploader value={form.images} onChange={(imgs) => setForm({ ...form, images: imgs })} />
+            </label>
             <label className="cal-check-inline">
               <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
               منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
@@ -243,11 +254,18 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                   {listings.map((l) => (
                     <tr key={l.id}>
                       <td>
-                        <div className="entity-name">{l.title}</div>
-                        <div className="entity-sub">
-                          {l.kind === 'pack'
-                            ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
-                            : (itemName.get(l.item_id ?? '') ?? '—')}
+                        <div className="entity-with-thumb">
+                          {l.images?.[0]
+                            ? <img className="list-thumb" src={l.images[0]} alt="" />
+                            : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
+                          <div>
+                            <div className="entity-name">{l.title}</div>
+                            <div className="entity-sub">
+                              {l.kind === 'pack'
+                                ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
+                                : (itemName.get(l.item_id ?? '') ?? '—')}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td>{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
@@ -341,7 +359,11 @@ function OrdersPanel({ token }: { token: string }) {
                 <tbody>
                   {o.lines.map((ln, i) => (
                     <tr key={i}>
-                      <td>{ln.title}</td>
+                      <td>
+                        {ln.image
+                          ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
+                          : ln.title}
+                      </td>
                       <td className="money-cell">{faMoney(ln.unit_price)}</td>
                       <td>{Number(ln.qty).toLocaleString('fa-IR')}</td>
                       <td className="money-cell">{faMoney(ln.line_total)}</td>
@@ -467,6 +489,73 @@ function ConnectionsPanel({ token }: { token: string }) {
             <table className="entity-table">
               <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
               <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} />)}</tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+    </>
+  )
+}
+
+function CommissionPanel({ token }: { token: string }) {
+  const [rows, setRows] = useState<MpCommissionPeriod[]>([])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    fetchMyMpCommissions(token)
+      .then(setRows)
+      .catch((e) => setError(e instanceof Error ? e.message : 'خطای ناشناخته'))
+  }, [token])
+
+  const totalAll = rows.reduce((s, r) => s + r.total_amount, 0)
+  const totalPending = rows.reduce((s, r) => s + r.pending_amount, 0)
+
+  return (
+    <>
+      <div className="stat-grid">
+        <StatCard icon={<Percent size={18} />} label="کلِ کمیسیونِ ۲٪" value={faMoney(totalAll)} hint="ریال" />
+        <StatCard
+          icon={<AlertCircle size={18} />}
+          label="پرداخت‌نشده"
+          value={faMoney(totalPending)}
+          tone={totalPending > 0 ? 'warning' : 'success'}
+          hint="ریال — باید به حسابِ پلتفرم واریز شود"
+        />
+      </div>
+      {error && <div className="error">{error}</div>}
+      <SectionCard
+        icon={Percent}
+        title="صورتِ کمیسیونِ ماهانه (۲٪)"
+        description="۲٪ از جمعِ سفارش‌های قطعی‌شده‌ی هر ماه، کمیسیونِ پلتفرم (کوبیتا) است و باید ماهانه به حسابِ ما واریز شود. پس از واریز و تأیید، وضعیت «تسویه‌شده» می‌شود."
+      >
+        {rows.length === 0 ? (
+          <EmptyState icon={Percent} text="هنوز سفارشِ قطعی‌ای ندارید؛ کمیسیونی ثبت نشده است." />
+        ) : (
+          <div className="entity-table-wrap">
+            <table className="entity-table">
+              <thead>
+                <tr>
+                  <th>ماه</th>
+                  <th>سفارش‌ها</th>
+                  <th>جمعِ فاکتورها</th>
+                  <th>کمیسیونِ ۲٪</th>
+                  <th>وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.period}>
+                    <td>{faPeriod(r.period)}</td>
+                    <td>{faMoney(r.order_count)}</td>
+                    <td className="money-cell">{faMoney(r.total_base)}</td>
+                    <td className="money-cell">{faMoney(r.total_amount)}</td>
+                    <td>
+                      <span className={`status-badge ${r.status === 'settled' ? 'tone-success' : 'tone-warning'}`}>
+                        {r.status === 'settled' ? 'تسویه‌شده' : 'پرداخت‌نشده'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         )}

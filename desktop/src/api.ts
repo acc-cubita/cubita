@@ -2953,6 +2953,7 @@ export type MpOrderStatus = 'placed' | 'confirmed' | 'rejected' | 'shipped' | 'r
 export interface MpOrderLine {
   listing_id: string | null
   title: string
+  image?: string | null
   unit_price: string
   qty: string
   line_total: string
@@ -3001,3 +3002,46 @@ export const confirmMpOrder = (token: string, id: string) =>
 
 export const rejectMpOrder = (token: string, id: string) =>
   authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})
+
+// ── کمیسیونِ پلتفرم (۲٪) ───────────────────────────────────────────────
+export interface MpCommissionPeriod {
+  distributor_tenant_id: string
+  distributor_name: string
+  period: string // "1405-05"
+  order_count: number
+  total_base: number
+  total_amount: number
+  pending_amount: number
+  settled_amount: number
+  status: 'pending' | 'settled'
+}
+
+export interface MpCommissionOverview {
+  total_amount: number
+  pending_amount: number
+  settled_amount: number
+  distributor_count: number
+  rate: number
+}
+
+// سوپرادمین (مالکِ سامانه)
+export const fetchMpCommissionOverview = (token: string) =>
+  authedGet<MpCommissionOverview>(token, '/api/marketplace/admin/commissions/overview')
+
+export const fetchMpCommissions = (token: string) =>
+  authedGet<MpCommissionPeriod[]>(token, '/api/marketplace/admin/commissions')
+
+export const settleMpCommission = (
+  token: string,
+  data: { distributor_tenant_id: string; period: string; note?: string },
+) =>
+  authedSend<{ distributor_tenant_id: string; period: string; count: number; amount: number }>(
+    token,
+    'POST',
+    '/api/marketplace/admin/commissions/settle',
+    data,
+  )
+
+// پخش‌کننده — صورتِ کمیسیونِ خودش
+export const fetchMyMpCommissions = (token: string) =>
+  authedGet<MpCommissionPeriod[]>(token, '/api/marketplace/distributor/commissions')

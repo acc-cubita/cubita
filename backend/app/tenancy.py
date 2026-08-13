@@ -53,6 +53,7 @@ GLOBAL_TABLES = frozenset(
         "marketplace_orders",
         "marketplace_order_lines",
         "marketplace_item_links",
+        "marketplace_commissions",
     }
 )
 

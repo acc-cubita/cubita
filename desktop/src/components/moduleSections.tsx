@@ -1,6 +1,7 @@
 import {
   ShoppingCart,
   FileText,
+  Percent,
   Undo2,
   Landmark,
   PackagePlus,
@@ -96,6 +97,7 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'catalog', label: 'کاتالوگ', icon: Package },
     { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList },
     { key: 'connections', label: 'اتصال‌ها', icon: Link2 },
+    { key: 'commission', label: 'کمیسیون', icon: Percent },
     { key: 'settings', label: 'تنظیمات', icon: Settings },
   ],
   marketplace: [

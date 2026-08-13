@@ -32,6 +32,7 @@ import {
   Wrench,
   Settings,
   Truck,
+  Percent,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme } from '../lib/theme'
@@ -56,6 +57,7 @@ export type PageKey =
   | 'integration'
   | 'billing'
   | 'accounts'
+  | 'mpcommission'
   | 'reports'
   | 'onboarding'
   | 'calendar'
@@ -135,6 +137,7 @@ const PLATFORM_ADMIN_NAV_ITEMS: NavItem[] = [
 // ادمینِ پلتفرم. برای هیچ کاربرِ دیگری، حتی ادمین‌های پلتفرم، دیده نمی‌شود.
 const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
   { key: 'accounts', label: 'مدیریت اکانت‌ها', icon: <ShieldCheck size={18} /> },
+  { key: 'mpcommission', label: 'کمیسیونِ بازار', icon: <Percent size={18} /> },
 ]
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [

@@ -210,11 +210,18 @@ function Catalog({ token }: { token: string }) {
                 {shown.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      <div className="entity-name">{l.title}</div>
-                      <div className="entity-sub">
-                        {l.kind === 'pack'
-                          ? `${faNum(l.components.length)} قلم: ${l.components.map((c) => `${c.item_name}×${faNum(c.qty)}`).join('، ')}`
-                          : `${l.unit}${l.category ? ` — ${l.category}` : ''}`}
+                      <div className="entity-with-thumb">
+                        {l.images?.[0]
+                          ? <img className="list-thumb" src={l.images[0]} alt="" />
+                          : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
+                        <div>
+                          <div className="entity-name">{l.title}</div>
+                          <div className="entity-sub">
+                            {l.kind === 'pack'
+                              ? `${faNum(l.components.length)} قلم: ${l.components.map((c) => `${c.item_name}×${faNum(c.qty)}`).join('، ')}`
+                              : `${l.unit}${l.category ? ` — ${l.category}` : ''}`}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td>{l.distributor_name}</td>
@@ -332,7 +339,11 @@ function Orders({ token }: { token: string }) {
                             <tbody>
                               {o.lines.map((ln, i) => (
                                 <tr key={i}>
-                                  <td>{ln.title}</td>
+                                  <td>
+                                    {ln.image
+                                      ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
+                                      : ln.title}
+                                  </td>
                                   <td className="money-cell">{faMoney(ln.unit_price)}</td>
                                   <td>{faNum(ln.qty)}</td>
                                   <td className="money-cell">{faMoney(ln.line_total)}</td>

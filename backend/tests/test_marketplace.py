@@ -12,6 +12,7 @@ import pytest
 from app.models.inventory import Item, Warehouse
 from app.models.invoices import PurchaseInvoice
 from app.models.marketplace import (
+    MarketplaceCommission,
     MarketplaceConnection,
     MarketplaceItemLink,
     MarketplaceListing,
@@ -247,6 +248,81 @@ def test_publish_update_delete(as_distributor, db):
     assert len(as_distributor.get("/api/marketplace/distributor/listings").json()) == 0
 
 
+# ── عکسِ لیستینگ: فشرده و سقف‌دار (تا فضای پایگاه‌داده باد نکند) ─────────
+# یک PNGِ ۱×۱ (چند ده بایت) به‌عنوانِ عکسِ معتبرِ کوچک.
+_TINY_PNG = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+def test_listing_accepts_small_image_and_roundtrips(as_distributor, db):
+    it = _make_item(db, "SKU-IMG", "کالای عکس‌دار")
+    created = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={
+            "kind": "single",
+            "title": "عکس‌دار",
+            "wholesale_price": 1000,
+            "item_id": str(it.id),
+            "images": [_TINY_PNG],
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert len(body["images"]) == 1
+    assert body["images"][0].startswith("data:image/png;base64,")
+    # روی خواندنِ دوباره هم عکس می‌ماند.
+    lid = body["id"]
+    listed = as_distributor.get("/api/marketplace/distributor/listings").json()
+    assert listed[0]["images"] == body["images"]
+    # حذفِ عکس در ویرایش.
+    upd = as_distributor.put(
+        f"/api/marketplace/distributor/listings/{lid}",
+        json={"kind": "single", "title": "عکس‌دار", "wholesale_price": 1000, "item_id": str(it.id), "images": []},
+    )
+    assert upd.status_code == 200 and upd.json()["images"] == []
+
+
+def test_listing_rejects_too_many_images(as_distributor, db):
+    it = _make_item(db, "SKU-IMG5", "پنج‌عکس")
+    r = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={
+            "kind": "single", "title": "x", "wholesale_price": 1, "item_id": str(it.id),
+            "images": [_TINY_PNG] * 5,  # سقف ۴ است
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_listing_rejects_non_data_uri_image(as_distributor, db):
+    it = _make_item(db, "SKU-IMGU", "لینک‌عکس")
+    r = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={
+            "kind": "single", "title": "x", "wholesale_price": 1, "item_id": str(it.id),
+            "images": ["https://example.com/x.jpg"],  # فقط data URI مجاز است، نه لینک
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_listing_rejects_oversize_image(as_distributor, db):
+    import base64 as _b64
+
+    it = _make_item(db, "SKU-IMGBIG", "عکسِ درشت")
+    big = "data:image/jpeg;base64," + _b64.b64encode(b"\x00" * (500 * 1024)).decode()  # ~۵۰۰KB > سقف
+    r = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={
+            "kind": "single", "title": "x", "wholesale_price": 1, "item_id": str(it.id),
+            "images": [big],
+        },
+    )
+    assert r.status_code == 422
+
+
 # ── M3: اتصال‌ها و کاتالوگِ سمتِ فروشگاه ───────────────────────────────
 def test_retailer_endpoints_forbidden_for_non_retailer(client):
     # مستأجرِ پیش‌فرض standard است → اندپوینت‌های فروشگاه ۴۰۳.
@@ -433,6 +509,26 @@ def test_place_order_requires_approval_and_records_lines(as_retailer, distributo
     # در «سفارش‌های من» دیده می‌شود.
     orders = as_retailer.get("/api/marketplace/retailer/orders").json()
     assert any(o["id"] == body["id"] for o in orders)
+
+
+def test_order_line_carries_listing_image(as_retailer, distributor_tenant, db):
+    # عکسِ نخستِ لیستینگ باید در ردیف‌های سفارش (از روی listing_id) دیده شود.
+    did = distributor_tenant
+    listing = db.query(MarketplaceListing).filter(MarketplaceListing.distributor_tenant_id == did).first()
+    listing.images = [_TINY_PNG]
+    db.flush()
+    _approve(db, did, _primary_id(db))
+
+    r = as_retailer.post(
+        "/api/marketplace/retailer/orders",
+        json={"distributor_tenant_id": str(did), "lines": [{"listing_id": str(listing.id), "qty": 1}]},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["lines"][0]["image"] == _TINY_PNG
+    # از نمای فهرست هم می‌آید.
+    orders = as_retailer.get("/api/marketplace/retailer/orders").json()
+    line = next(o for o in orders if o["id"] == r.json()["id"])["lines"][0]
+    assert line["image"] == _TINY_PNG
 
 
 def test_confirm_order_posts_two_sided_and_is_idempotent(as_distributor, retailer_tenant, db, user):
@@ -788,3 +884,166 @@ def test_retailer_cannot_place_order_for_unapproved_listing(as_retailer, db):
         json={"distributor_tenant_id": str(d.id), "lines": [{"listing_id": str(listing.id), "qty": 1}]},
     )
     assert r.status_code == 403
+
+
+# ══════════ کمیسیونِ پلتفرم (۲٪) ══════════════════════════════════════════
+@pytest.fixture
+def super_client(client, user, monkeypatch):
+    """همان کلاینت، ولی کاربرش سوپرادمین می‌شود (ایمیلِ کاربر در فهرست)."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "super_admin_emails", user.email)
+    return client
+
+
+def _confirm_sale(as_distributor, retailer_id, db, user, wholesale=8000, qty=10):
+    """پخش‌کننده‌ی PRIMARY را آماده و یک سفارش را قطعی می‌کند؛ (order, primary_id) را می‌دهد."""
+    primary_id = _primary_id(db)
+    if db.query(MarketplaceSettings).filter_by(distributor_tenant_id=primary_id).first() is None:
+        db.add(MarketplaceSettings(distributor_tenant_id=primary_id, display_name="پخشِ اصلی", is_active=True))
+    item = _make_item(db, f"DIST-{uuid.uuid4().hex[:6]}", "کالای پخش")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(1000), unit_cost=Decimal(1000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id,
+        kind="single",
+        title="کالای پخش عمده",
+        unit="عدد",
+        wholesale_price=wholesale,
+        is_published=True,
+        distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای پخش", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db,
+        retailer_id,
+        OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(qty))]),
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200, r.text
+    return order, primary_id
+
+
+def test_commission_recorded_at_2pct_on_confirm(as_distributor, retailer_tenant, db, user):
+    order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user, wholesale=8000, qty=10)
+    rows = db.query(MarketplaceCommission).filter_by(order_id=order.id).all()
+    assert len(rows) == 1
+    c = rows[0]
+    assert Decimal(c.base_amount) == Decimal(80000)  # ۸٬۰۰۰ × ۱۰
+    assert Decimal(c.amount) == Decimal(1600)  # ۲٪
+    assert Decimal(c.rate) == Decimal("0.02")
+    assert c.status == "pending"
+    assert c.distributor_tenant_id == primary_id
+    assert c.period and len(c.period) == 7
+
+
+def test_commission_idempotent_on_reconfirm(as_distributor, retailer_tenant, db, user):
+    order, _ = _confirm_sale(as_distributor, retailer_tenant, db, user)
+    # تأییدِ دوباره idempotent است → رکوردِ دومِ کمیسیون ساخته نشود.
+    as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert db.query(MarketplaceCommission).filter_by(order_id=order.id).count() == 1
+
+
+def test_commission_summary_overview_and_settle(as_distributor, retailer_tenant, db, user):
+    order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user, wholesale=8000, qty=10)
+    period = db.query(MarketplaceCommission).filter_by(order_id=order.id).one().period
+
+    summary = svc.commission_summary(db)
+    row = next(r for r in summary if r["distributor_tenant_id"] == primary_id and r["period"] == period)
+    assert row["total_amount"] == 1600
+    assert row["pending_amount"] == 1600
+    assert row["status"] == "pending"
+
+    ov = svc.commission_overview(db)
+    assert ov["pending_amount"] >= 1600
+    assert ov["rate"] == 0.02
+
+    res = svc.settle_commission_period(db, primary_id, period, note="واریز شبا ۱۲۳")
+    assert res["amount"] == 1600 and res["count"] == 1
+    settled = db.query(MarketplaceCommission).filter_by(order_id=order.id).one()
+    assert settled.status == "settled" and settled.settled_at is not None and settled.settle_note == "واریز شبا ۱۲۳"
+
+    # بعد از تسویه، summary همان ماه را settled نشان دهد و pending صفر شود.
+    row2 = next(r for r in svc.commission_summary(db) if r["distributor_tenant_id"] == primary_id and r["period"] == period)
+    assert row2["pending_amount"] == 0 and row2["settled_amount"] == 1600 and row2["status"] == "settled"
+
+
+def test_settle_empty_period_404(as_distributor, retailer_tenant, db, user):
+    _confirm_sale(as_distributor, retailer_tenant, db, user)
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as ei:
+        svc.settle_commission_period(db, _primary_id(db), "1300-01", note="")
+    assert ei.value.status_code == 404
+
+
+def test_admin_commission_endpoints_require_super_admin(as_distributor, retailer_tenant, db, user, client):
+    _confirm_sale(as_distributor, retailer_tenant, db, user)
+    # کاربرِ عادی (نه سوپرادمین) → ۴۰۳ روی همه‌ی اندپوینت‌های admin.
+    assert client.get("/api/marketplace/admin/commissions").status_code == 403
+    assert client.get("/api/marketplace/admin/commissions/overview").status_code == 403
+    assert client.post("/api/marketplace/admin/commissions/settle", json={}).status_code in (403, 422)
+
+
+def test_admin_can_view_and_settle_via_endpoint(as_distributor, retailer_tenant, db, user, super_client):
+    order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user, wholesale=8000, qty=10)
+    period = db.query(MarketplaceCommission).filter_by(order_id=order.id).one().period
+
+    ov = super_client.get("/api/marketplace/admin/commissions/overview")
+    assert ov.status_code == 200 and ov.json()["pending_amount"] >= 1600
+
+    lst = super_client.get("/api/marketplace/admin/commissions").json()
+    assert any(r["period"] == period and r["total_amount"] == 1600 for r in lst)
+
+    s = super_client.post(
+        "/api/marketplace/admin/commissions/settle",
+        json={"distributor_tenant_id": str(primary_id), "period": period, "note": "واریز نقدی"},
+    )
+    assert s.status_code == 200, s.text
+    assert s.json()["amount"] == 1600
+    assert db.query(MarketplaceCommission).filter_by(order_id=order.id).one().status == "settled"
+
+
+def test_distributor_sees_only_own_commissions(as_distributor, retailer_tenant, db, user, distributor_tenant):
+    order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user)
+    # کمیسیونِ یک پخش‌کننده‌ی دیگر (روی یک سفارشِ جدا) — نباید در صورتِ PRIMARY بیاید.
+    other = distributor_tenant
+    other_order = MarketplaceOrder(
+        distributor_tenant_id=other,
+        retailer_tenant_id=retailer_tenant,
+        order_number=999,
+        status="confirmed",
+        subtotal=Decimal(500000),
+        total=Decimal(500000),
+    )
+    db.add(other_order)
+    db.flush()
+    db.add(
+        MarketplaceCommission(
+            order_id=other_order.id,
+            distributor_tenant_id=other,
+            period="1405-01",
+            base_amount=Decimal(500000),
+            rate=Decimal("0.02"),
+            amount=Decimal(10000),
+            status="pending",
+        )
+    )
+    db.flush()
+    r = as_distributor.get("/api/marketplace/distributor/commissions")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body, "پخش‌کننده باید صورتِ کمیسیونِ خودش را ببیند"
+    assert all(row["distributor_tenant_id"] == str(primary_id) for row in body)
+    assert not any(row["distributor_tenant_id"] == str(other) for row in body)

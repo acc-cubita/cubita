@@ -29,6 +29,7 @@ import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
+import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
 import { SalesPage } from '../pages/SalesPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
@@ -60,6 +61,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
   accounts: 'مدیریت اکانت‌ها',
+  mpcommission: 'کمیسیونِ بازار',
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
   team: 'کاربران',
@@ -313,6 +315,7 @@ export function Dashboard({
             </div>
           )}
           {page === 'accounts' && me.is_super_admin && <AccountsAdminPage token={token} />}
+          {page === 'mpcommission' && me.is_super_admin && <MarketplaceCommissionPage token={token} />}
           {page === 'reports' && (
             <div className="page">
               <PageHeader

@@ -5,16 +5,20 @@
 اما اعتبارسنجیِ «کالا مالِ خودِ پخش‌کننده است» از RLS استفاده می‌کند: چون در نشستِ بسته‌شده
 به مستأجرِ پخش‌کننده، کوئریِ `Item` فقط کالاهای خودش را برمی‌گرداند.
 """
-from datetime import date
-from decimal import ROUND_CEILING, Decimal
+from datetime import date, datetime, timezone
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.config import get_settings as get_app_settings
+from app.jalali import gregorian_to_jalali
 from app.models.banking import BankAccount
 from app.models.inventory import Contact, Item, Warehouse
 from app.models.marketplace import (
+    MarketplaceCommission,
     MarketplaceConnection,
     MarketplaceItemLink,
     MarketplaceListing,
@@ -689,6 +693,8 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
     order.distributor_sales_invoice_id = sales_invoice_id
     order.retailer_purchase_invoice_id = purchase_invoice_id
     order.status = "confirmed"
+    # کمیسیونِ ۲٪ِ پلتفرم روی این سفارشِ قطعی‌شده (یک بار، سراسری، بدونِ سند در دفترِ پخش‌کننده)
+    _record_commission(db, order)
     db.flush()
     return conn
 
@@ -898,6 +904,18 @@ def reject_order(db: Session, distributor_tenant_id: UUID, order_id: UUID) -> Ma
 
 
 def order_dict(db: Session, order: MarketplaceOrder) -> dict:
+    # عکسِ نخستِ هر ردیف از روی لیستینگ (snapshot نمی‌شود تا سبک بماند). لیستینگ
+    # جدولِ سراسری است، پس از نشستِ هر مستأجری خواندنش مجاز است؛ اگر لیستینگ بعداً
+    # حذف شده باشد (`listing_id` = NULL) عکس هم نیست — رفتارِ درست همان None است.
+    listing_ids = [ln.listing_id for ln in order.lines if ln.listing_id is not None]
+    thumb: dict = {}
+    if listing_ids:
+        for lid, images in (
+            db.query(MarketplaceListing.id, MarketplaceListing.images)
+            .filter(MarketplaceListing.id.in_(listing_ids))
+            .all()
+        ):
+            thumb[lid] = (images or [None])[0]
     return {
         "id": order.id,
         "distributor_tenant_id": order.distributor_tenant_id,
@@ -920,7 +938,140 @@ def order_dict(db: Session, order: MarketplaceOrder) -> dict:
                 "unit_price": ln.unit_price,
                 "qty": ln.qty,
                 "line_total": ln.line_total,
+                "image": thumb.get(ln.listing_id),
             }
             for ln in order.lines
         ],
+    }
+
+
+# ══════════ کمیسیونِ پلتفرم (۲٪) ══════════════════════════════════════════
+def _commission_rate() -> Decimal:
+    return Decimal(str(get_app_settings().marketplace_commission_rate))
+
+
+def _current_period() -> str:
+    """ماهِ شمسیِ جاری به شکلِ ASCIIِ مرتب‌شونده «1405-05»."""
+    jy, jm, _ = gregorian_to_jalali(date.today())
+    return f"{jy:04d}-{jm:02d}"
+
+
+def _record_commission(db: Session, order: MarketplaceOrder) -> MarketplaceCommission:
+    """کمیسیونِ ۲٪ روی یک سفارشِ قطعی‌شده — idempotent (یک رکورد به‌ازای هر سفارش).
+
+    سراسری است (بدونِ RLS) و هیچ سندی در دفترِ پخش‌کننده نمی‌زند؛ فقط دفترِ پلتفرم.
+    """
+    existing = db.query(MarketplaceCommission).filter_by(order_id=order.id).first()
+    if existing is not None:
+        return existing
+    rate = _commission_rate()
+    base = Decimal(order.total)
+    amount = (base * rate).to_integral_value(rounding=ROUND_HALF_UP)
+    row = MarketplaceCommission(
+        order_id=order.id,
+        distributor_tenant_id=order.distributor_tenant_id,
+        period=_current_period(),
+        base_amount=base,
+        rate=rate,
+        amount=amount,
+        status="pending",
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def commission_summary(db: Session, distributor_tenant_id: UUID | None = None) -> list[dict]:
+    """جمعِ کمیسیون به‌تفکیکِ (پخش‌کننده، ماه). اگر distributor بدهی، فقط همان."""
+    pending_amt = func.coalesce(
+        func.sum(case((MarketplaceCommission.status == "pending", MarketplaceCommission.amount), else_=0)),
+        0,
+    )
+    q = db.query(
+        MarketplaceCommission.distributor_tenant_id.label("distributor_tenant_id"),
+        MarketplaceCommission.period.label("period"),
+        func.count().label("order_count"),
+        func.coalesce(func.sum(MarketplaceCommission.base_amount), 0).label("total_base"),
+        func.coalesce(func.sum(MarketplaceCommission.amount), 0).label("total_amount"),
+        pending_amt.label("pending_amount"),
+    )
+    if distributor_tenant_id is not None:
+        q = q.filter(MarketplaceCommission.distributor_tenant_id == distributor_tenant_id)
+    q = q.group_by(
+        MarketplaceCommission.distributor_tenant_id, MarketplaceCommission.period
+    ).order_by(MarketplaceCommission.period.desc())
+
+    out: list[dict] = []
+    for r in q.all():
+        pending = Decimal(r.pending_amount)
+        total = Decimal(r.total_amount)
+        out.append(
+            {
+                "distributor_tenant_id": r.distributor_tenant_id,
+                "distributor_name": distributor_display_name(db, r.distributor_tenant_id),
+                "period": r.period,
+                "order_count": int(r.order_count),
+                "total_base": int(r.total_base),
+                "total_amount": int(total),
+                "pending_amount": int(pending),
+                "settled_amount": int(total - pending),
+                "status": "settled" if pending == 0 else "pending",
+            }
+        )
+    return out
+
+
+def commission_overview(db: Session) -> dict:
+    """جمعِ کلِ کمیسیون‌ها برای سرصفحه‌ی پنلِ سوپرادمین."""
+    total = Decimal(db.query(func.coalesce(func.sum(MarketplaceCommission.amount), 0)).scalar() or 0)
+    pending = Decimal(
+        db.query(func.coalesce(func.sum(MarketplaceCommission.amount), 0))
+        .filter(MarketplaceCommission.status == "pending")
+        .scalar()
+        or 0
+    )
+    distributor_count = (
+        db.query(func.count(func.distinct(MarketplaceCommission.distributor_tenant_id))).scalar() or 0
+    )
+    return {
+        "total_amount": int(total),
+        "pending_amount": int(pending),
+        "settled_amount": int(total - pending),
+        "distributor_count": int(distributor_count),
+        "rate": float(_commission_rate()),
+    }
+
+
+def settle_commission_period(
+    db: Session, distributor_tenant_id: UUID, period: str, note: str = ""
+) -> dict:
+    """تسویه‌ی دستی: همه‌ی کمیسیون‌های pendingِ (پخش‌کننده، ماه) را settled می‌کند.
+
+    فقط سوپرادمین صدا می‌زند (گاردِ روتر). idempotent: ردیف‌های settled دوباره لمس نمی‌شوند.
+    """
+    rows = (
+        db.query(MarketplaceCommission)
+        .filter(
+            MarketplaceCommission.distributor_tenant_id == distributor_tenant_id,
+            MarketplaceCommission.period == period,
+            MarketplaceCommission.status == "pending",
+        )
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کمیسیونِ پرداخت‌نشده‌ای برای این ماه نیست")
+    now = datetime.now(timezone.utc)
+    clean_note = (note or "").strip()[:300]
+    total = Decimal(0)
+    for r in rows:
+        r.status = "settled"
+        r.settled_at = now
+        r.settle_note = clean_note
+        total += Decimal(r.amount)
+    db.flush()
+    return {
+        "distributor_tenant_id": distributor_tenant_id,
+        "period": period,
+        "count": len(rows),
+        "amount": int(total),
     }
