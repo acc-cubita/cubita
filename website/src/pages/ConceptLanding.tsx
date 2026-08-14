@@ -37,7 +37,9 @@ import HeroVisual from '../concept/HeroVisual'
 import { ConceptPricing } from '../concept/ConceptPricing'
 import '../concept/concept.css'
 
-const TRIAL_URL = 'https://demo.cubita.ir'
+// ورودِ ترایال روی prod متمرکز است: acc.cubita.ir با ?signup مستقیم روی صفحه‌ی ثبت‌نام
+// باز می‌شود. (قبلاً به demo.cubita.ir می‌رفت که دیتابیسِ جدا داشت و ورود را خراب می‌کرد.)
+const TRIAL_URL = 'https://acc.cubita.ir/?signup'
 const APP_URL = 'https://acc.cubita.ir'
 
 const NAV = [
@@ -491,7 +493,7 @@ function Footer() {
           <a href="#cc-features">امکانات</a>
           <a href="#cc-how">شروعِ کار</a>
           <a href="#cc-pricing">پلن‌ها و قیمت‌ها</a>
-          <a href={TRIAL_URL}>دموی رایگان</a>
+          <a href={TRIAL_URL}>شروعِ رایگان</a>
         </div>
         <div className="cc-footer-col">
           <h4>پشتیبانی</h4>

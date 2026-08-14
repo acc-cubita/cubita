@@ -3,7 +3,9 @@ import { motion } from 'framer-motion'
 import { Check, X, Sparkles } from 'lucide-react'
 import { fetchPlans, requestPurchase, type BillingPeriod, type Plan } from '../api'
 
-const TRIAL_URL = 'https://demo.cubita.ir'
+// ورودِ ترایال روی prod متمرکز است: acc.cubita.ir با ?signup مستقیم روی صفحه‌ی ثبت‌نام
+// باز می‌شود. (قبلاً به demo.cubita.ir می‌رفت که دیتابیسِ جدا داشت و ورود را خراب می‌کرد.)
+const TRIAL_URL = 'https://acc.cubita.ir/?signup'
 
 const PERIODS: { key: BillingPeriod; label: string; months: number; save?: string }[] = [
   { key: 'monthly', label: 'ماهانه', months: 1 },
