@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# استقرار کوبیتا روی VPS — با برگشت خودکار اگر چیزی بشکند.
+#
+# اجرا روی سرور، به‌عنوان root:
+#   /opt/hesabdari/deploy.sh production
+#   /opt/hesabdari/deploy.sh demo
+#
+# پیش‌نیاز: /tmp/cubita_code.tgz و /tmp/cubita_web_<پروفایل>.tgz آپلود شده باشند.
+#
+# **چرا پروفایل و نه دو اسکریپت:** تا وقتی دو نسخه‌ی جدا بود، دمو هشت مهاجرت عقب
+# ماند و کسی متوجه نشد — از جمله نقشِ «دمو» که هنوز wildcard داشت. دو اسکریپتِ
+# موازی همیشه واگرا می‌شوند، چون فقط یکی‌شان موقع تغییر به چشم می‌آید.
+#
+# **چرا سرویس متوقف می‌شود:** مهاجرت ۰۰۱۵ ستون tenant_id را NOT NULL می‌کند و کد
+# قدیمی آن را پر نمی‌کند. پس پنجره‌ای هست که در آن اسکیمای تازه + کد قدیمی یعنی
+# هر نوشتنی خطا می‌دهد. چند ثانیه است، ولی صفر کردنش درست‌تر از کوچک کردنش است.
+#
+# **برگشت:** اگر هر گامی شکست بخورد، کد به آرشیو قبل از استقرار برمی‌گردد و سرویس
+# دوباره بالا می‌آید. مهاجرت‌های alembic هرکدام در تراکنش خودشان اجرا می‌شوند، پس
+# مهاجرتِ شکست‌خورده خودش را برمی‌گرداند. اگر پایگاه‌داده نیاز به بازیابی داشت،
+# دستورش در پایان چاپ می‌شود — عمداً خودکار نیست، چون بازیابی خودکارِ اشتباه
+# می‌تواند وضعیت را بدتر کند.
+set -euo pipefail
+
+# --- پروفایل مقصد ------------------------------------------------------------------
+# fail closed روی پروفایل ناشناخته، به همان دلیلی که config.py روی ENV ناشناخته
+# بالا نمی‌آید: یک تایپو نباید به «یک چیزی را یک‌جایی مستقر کن» ترجمه شود.
+PROFILE="${1:-}"
+case "$PROFILE" in
+    production)
+        APP_DIR=/opt/hesabdari
+        SERVICE=hesabdari-backend
+        OS_USER=hesabdari
+        DB_NAME=hesabdari
+        PORT=8001
+        APP_URL=https://acc.cubita.ir
+        ;;
+    demo)
+        APP_DIR=/opt/cubita-demo
+        SERVICE=cubita-demo-backend
+        OS_USER=cubitademo
+        DB_NAME=cubita_demo
+        PORT=8002
+        APP_URL=https://demo.cubita.ir
+        ;;
+    *)
+        echo "استفاده: $0 {production|demo}" >&2
+        [[ -n "$PROFILE" ]] && echo "پروفایل ناشناخته: ${PROFILE}" >&2
+        exit 2
+        ;;
+esac
+
+CODE_TGZ=/tmp/cubita_code.tgz
+WEB_TGZ="/tmp/cubita_web_${PROFILE}.tgz"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+ARCHIVE="$APP_DIR/rollback_code_$STAMP.tgz"
+BACKUP_BEFORE=""
+
+say() { echo; echo "=== $* ==="; }
+
+rollback() {
+    echo
+    echo "!!! استقرار شکست خورد — برگشت به وضعیت قبل" >&2
+    if [[ -f "$ARCHIVE" ]]; then
+        # پوشه‌ها اول خالی می‌شوند و بعد آرشیو باز می‌شود.
+        #
+        # نسخه‌ی اول فقط `tar xzf` روی پوشه می‌زد، و tar فایل‌هایی را که در آرشیو
+        # نیستند پاک نمی‌کند. نتیجه‌اش یک حالت *ترکیبی* بود: main.py قدیمی کنار
+        # فایل‌های تازه‌ای که هرگز وجود نداشتند. آن حالت از هر دو نسخه بدتر است،
+        # چون نه قدیمی است نه جدید و هیچ‌کدام از دو مسیر تست‌شده نیست.
+        rm -rf "$APP_DIR/app" "$APP_DIR/alembic"
+        tar xzf "$ARCHIVE" -C "$APP_DIR"
+        chown -R "$OS_USER:$OS_USER" "$APP_DIR/app" "$APP_DIR/alembic" 2>/dev/null || true
+        echo "کد برگردانده شد از: $ARCHIVE" >&2
+    fi
+    systemctl start "$SERVICE" 2>/dev/null || true
+    sleep 3
+    echo "وضعیت سرویس: $(systemctl is-active $SERVICE)" >&2
+    if [[ -n "$BACKUP_BEFORE" ]]; then
+        cat >&2 <<MSG
+
+اگر اسکیمای پایگاه‌داده هم عوض شده و باید برگردد، دستی اجرا کنید:
+  sudo -u postgres pg_restore -d $DB_NAME --clean --if-exists "$BACKUP_BEFORE"
+MSG
+    fi
+    exit 1
+}
+trap rollback ERR
+
+say "پروفایل: $PROFILE  ($APP_DIR، سرویس $SERVICE، پایگاه‌داده $DB_NAME، پورت $PORT)"
+
+# --- ۰. ورودی‌ها ------------------------------------------------------------------
+# قبل از دست زدن به هر چیزی. نبودِ آرشیو وب نباید بعد از توقف سرویس کشف شود.
+[[ -f "$CODE_TGZ" ]] || { echo "آرشیو کد پیدا نشد: $CODE_TGZ" >&2; exit 1; }
+[[ -f "$WEB_TGZ" ]] || { echo "آرشیو وبِ این پروفایل پیدا نشد: $WEB_TGZ" >&2; exit 1; }
+
+# backup.sh ممکن است هنوز روی این مقصد نصب نشده باشد. استقرار بدون پشتیبان انجام
+# نمی‌شود — نه با هشدار، اصلاً.
+BACKUP_SH="$APP_DIR/backup.sh"
+[[ -x "$BACKUP_SH" ]] || BACKUP_SH="$APP_DIR/scripts/backup.sh"
+[[ -x "$BACKUP_SH" ]] || { echo "backup.sh روی $APP_DIR پیدا نشد؛ استقرار بدون پشتیبان انجام نمی‌شود." >&2; exit 1; }
+
+# --- ۱. پشتیبان تأییدشده، قبل از هر تغییر ---------------------------------------
+say "۱/۷ پشتیبان‌گیری تأییدشده"
+BACKUP_DB_NAME="$DB_NAME" "$BACKUP_SH" "$APP_DIR/backups"
+# `|| true` لازم است: با انباشته‌شدنِ ده‌ها بکاپ، `head -1` زودتر لوله را می‌بندد و
+# `ls` سیگنالِ SIGPIPE (خروجِ ۱۴۱) می‌گیرد؛ زیرِ `pipefail` این کلِ استقرار را
+# «شکست‌خورده» می‌کند در حالی که خروجی (اولین خط) درست گرفته شده. با تعدادِ کمِ
+# بکاپ این خطا خودش را نشان نمی‌داد چون head قبل از پرشدنِ بافرِ لوله می‌خواند.
+BACKUP_BEFORE="$(ls -t "$APP_DIR"/backups/*.dump | head -1 || true)"
+echo "پشتیبانِ برگشت: $BACKUP_BEFORE"
+
+# --- ۲. آرشیو کد فعلی ------------------------------------------------------------
+say "۲/۷ آرشیو کد فعلی"
+tar czf "$ARCHIVE" -C "$APP_DIR" app alembic alembic.ini web .env
+echo "آرشیو: $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
+
+# --- ۳. توقف سرویس ---------------------------------------------------------------
+say "۳/۷ توقف سرویس"
+systemctl stop "$SERVICE"
+echo "وضعیت: $(systemctl is-active $SERVICE || true)"
+
+# --- ۴. استقرار کد ----------------------------------------------------------------
+say "۴/۷ استقرار کد بک‌اند و وب"
+# به همان دلیلِ rollback: پوشه اول خالی، بعد استخراج. وگرنه ماژولی که در نسخه‌ی
+# تازه حذف شده باشد روی دیسک می‌ماند و ممکن است هنوز import شود.
+rm -rf "$APP_DIR/app" "$APP_DIR/alembic"
+tar xzf "$CODE_TGZ" -C "$APP_DIR" app alembic alembic.ini scripts
+chown -R "$OS_USER:$OS_USER" "$APP_DIR/app" "$APP_DIR/alembic"
+rm -rf "$APP_DIR/web.old" && cp -a "$APP_DIR/web" "$APP_DIR/web.old"
+rm -rf "$APP_DIR/web" && mkdir -p "$APP_DIR/web"
+tar xzf "$WEB_TGZ" -C "$APP_DIR/web"
+echo "مهاجرت‌ها روی دیسک: $(ls "$APP_DIR"/alembic/versions/*.py | wc -l)"
+echo "فایل‌های وب: $(find "$APP_DIR/web" -type f | wc -l)"
+
+# آدرس API موقع build داخل باندل می‌نشیند (Vite هر VITE_* را همان‌جا جایگزین
+# می‌کند). یعنی build اشتباه یک SPA سالم می‌سازد که به بک‌اند *دیگری* وصل است —
+# اگر باندل دمو به acc.cubita.ir برود، بازدیدکننده‌ی دمو روی داده‌ی واقعی کار
+# می‌کند و هیچ‌چیز خطا نمی‌دهد. تنها نشانه‌اش همین رشته داخل فایل JS است.
+if ! grep -rqF "$APP_URL" "$APP_DIR/web"/assets/*.js 2>/dev/null; then
+    echo "باندل وب به $APP_URL اشاره نمی‌کند — احتمالاً build پروفایل دیگری است." >&2
+    grep -rhoE 'https://[a-z.]*cubita[a-z.]*' "$APP_DIR/web"/assets/*.js 2>/dev/null | sort -u | head >&2
+    false
+fi
+echo "باندل وب به $APP_URL اشاره می‌کند ✓"
+
+# --- ۵. تنظیمات ------------------------------------------------------------------
+say "۵/۷ تنظیمات"
+grep -q '^APP_URL=' "$APP_DIR/.env" || echo "APP_URL=$APP_URL" >> "$APP_DIR/.env"
+grep '^APP_URL=' "$APP_DIR/.env"
+
+# --- ۶. مهاجرت --------------------------------------------------------------------
+say "۶/۷ مهاجرت پایگاه‌داده"
+cd "$APP_DIR"
+sudo -u "$OS_USER" "$APP_DIR/venv/bin/python" -m alembic upgrade head 2>&1 | grep -E "Running upgrade|ERROR" || true
+
+# نسخه‌ی انتظار از خودِ مهاجرت‌ها خوانده می‌شود، نه از یک عدد هاردکدشده.
+#
+# نسخه‌ی اول این خط `== "0018"` بود و بعد مهاجرت ۰۰۱۹ اضافه شد. نتیجه این بود که
+# مهاجرت‌ها با موفقیت تا ۰۰۱۹ اجرا شدند و بعد همین گارد استقرار را «شکست‌خورده»
+# اعلام کرد و کد را برگرداند — یعنی دقیقاً همان حالت خطرناکی ساخته شد که کل
+# توقف سرویس برای اجتناب از آن بود: اسکیمای تازه با کد قدیمی. هر ثابتی که باید
+# همراه چیز دیگری به‌روز شود، دیر یا زود به‌روز نمی‌شود.
+EXPECTED="$(sudo -u "$OS_USER" "$APP_DIR/venv/bin/python" -m alembic heads 2>/dev/null | awk '{print $1}' | head -1)"
+VERSION="$(sudo -u postgres psql -d "$DB_NAME" -tAc 'select version_num from alembic_version;' | tr -d ' ')"
+echo "نسخه‌ی نهایی: $VERSION (انتظار: $EXPECTED)"
+[[ -n "$EXPECTED" && "$VERSION" == "$EXPECTED" ]] \
+    || { echo "نسخه‌ی مهاجرت $VERSION است ولی head برابر $EXPECTED" >&2; false; }
+
+# --- ۷. راه‌اندازی و راستی‌آزمایی ---------------------------------------------------
+say "۷/۷ راه‌اندازی و راستی‌آزمایی"
+systemctl start "$SERVICE"
+for i in $(seq 1 30); do
+    sleep 1
+    curl -sf "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break
+    [[ $i -eq 30 ]] && { echo "سرویس بعد از ۳۰ ثانیه پاسخ نداد" >&2; false; }
+done
+echo "health: $(curl -s http://127.0.0.1:$PORT/api/health)"
+
+# اندپوینت‌های تازه باید وجود داشته باشند (۴۰۱/۴۲۲ یعنی هست ولی احراز هویت لازم دارد؛
+# ۴۰۴ یعنی کد قدیمی هنوز اجرا می‌شود، که یعنی استقرار در عمل انجام نشده).
+for path in /api/members /api/auth/forgot-password; do
+    CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$path")"
+    echo "  $path → $CODE"
+    [[ "$CODE" == "404" ]] && { echo "اندپوینت تازه پیدا نشد — کد قدیمی اجرا می‌شود" >&2; false; }
+done
+
+RLS="$(sudo -u postgres psql -d "$DB_NAME" -tAc "select count(*) filter (where relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r';" | tr -d ' ')"
+echo "  جدول‌های با FORCE RLS: $RLS"
+[[ "$RLS" -ge 30 ]] || { echo "RLS روی تعداد کافی جدول فعال نشد" >&2; false; }
+
+say "پشتیبان‌گیری بعد از استقرار (با RLS فعال — آزمون واقعی)"
+BACKUP_DB_NAME="$DB_NAME" "$APP_DIR/scripts/backup.sh" "$APP_DIR/backups"
+
+trap - ERR
+echo
+echo "════════════════════════════════════════════"
+echo " استقرار موفق — پروفایل $PROFILE، نسخه $VERSION"
+echo " برگشت کد: $ARCHIVE"
+echo " پشتیبان قبل از استقرار: $BACKUP_BEFORE"
+echo "════════════════════════════════════════════"

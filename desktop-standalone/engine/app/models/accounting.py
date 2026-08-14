@@ -1,0 +1,95 @@
+import uuid
+from datetime import date as date_
+
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
+from app.models.tenant import TenantMixin
+
+ACCOUNT_TYPES = ("asset", "liability", "equity", "income", "expense")
+
+
+class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک گره در چارت حساب‌ها. is_group=True یعنی سرفصل (فقط برای دسته‌بندی)، نه ثبت سند مستقیم روی آن."""
+
+    __tablename__ = "accounts"
+    __table_args__ = (
+        CheckConstraint(f"type IN {ACCOUNT_TYPES}", name="ck_accounts_type"),
+        UniqueConstraint("tenant_id", "code", name="uq_accounts_tenant_code"),
+        # هر نقش در هر کسب‌وکار فقط یک حساب دارد. بدون این قید، دو حساب با نقش
+        # «صندوق» ممکن بود وجود داشته باشد و ثبت خودکار بی‌قاعده یکی را برمی‌داشت.
+        UniqueConstraint("tenant_id", "system_role", name="uq_accounts_tenant_system_role"),
+    )
+
+    code: Mapped[str] = mapped_column(String(20), index=True)
+    #: نقش معنایی برای ثبت خودکار (cash، inventory، cogs و…). برای حساب‌های معمولی
+    #: و سرفصل‌ها NULL است — قید یکتا روی NULL اعمال نمی‌شود، پس تعدادشان آزاد است.
+    system_role: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str] = mapped_column(String(20))
+    is_group: Mapped[bool] = mapped_column(default=False)
+    #: حسابِ غیرفعال از فهرست‌های ثبتِ سند پنهان می‌شود ولی تاریخچه‌اش می‌ماند —
+    #: راهی برای بایگانیِ حساب‌هایی که دیگر استفاده نمی‌شوند ولی سند دارند و پاک
+    #: نمی‌شوند. پیش‌فرض فعال؛ حساب‌های موجود بی‌تغییر می‌مانند.
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+
+    parent: Mapped["Account | None"] = relationship(remote_side="Account.id", back_populates="children")
+    children: Mapped[list["Account"]] = relationship(back_populates="parent")
+
+
+class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+    """سند حسابداری: واحد اتمی هر رویداد مالی. دفتر روزنامه/کل/تراز همه از JournalLine مشتق می‌شوند."""
+
+    __tablename__ = "journal_entries"
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_journal_entries_tenant_number"),
+    )
+
+    number: Mapped[int | None] = mapped_column(nullable=True, index=True)  # شماره رسمی، فقط سرور اختصاص می‌دهد
+    entry_date: Mapped[date_] = mapped_column(Date, default=date_.today)
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    # منشأ سند: مثلاً "sales_invoice" / "manual" / "payroll" برای ردیابی این‌که کدام ماژول این سند را خودکار ساخته
+    source_type: Mapped[str] = mapped_column(String(50), default="manual")
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    #: اگر این سند، معکوسِ سند دیگری باشد. رابطه یک‌طرفه و صریح است تا در دفتر
+    #: روزنامه بتوان جفتِ «اصلی و معکوس» را نشان داد؛ جمعشان همیشه صفر است.
+    reverses_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+
+    lines: Mapped[list["JournalLine"]] = relationship(
+        back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.id"
+    )
+
+
+class JournalLine(TenantMixin, UUIDPKMixin, Base):
+    __tablename__ = "journal_lines"
+    __table_args__ = (
+        CheckConstraint("debit >= 0 AND credit >= 0", name="ck_journal_lines_nonnegative"),
+        CheckConstraint("NOT (debit > 0 AND credit > 0)", name="ck_journal_lines_one_sided"),
+    )
+
+    entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
+    account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
+    #: مرکز هزینه/پروژه؛ از سطحِ سند به ردیف به ارث می‌رسد. NULL = بدون مرکز.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True, index=True
+    )
+
+    debit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    credit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    entry: Mapped["JournalEntry"] = relationship(back_populates="lines")
+    account: Mapped["Account"] = relationship()

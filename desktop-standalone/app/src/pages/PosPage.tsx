@@ -1,0 +1,382 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store } from 'lucide-react'
+import {
+  createSalesInvoiceDirect,
+  fetchContacts,
+  fetchItemsLive,
+  fetchPriceListItems,
+  fetchPriceLists,
+  fetchStockLevels,
+  fetchWarehousesLive,
+  newIdempotencyKey,
+  type ContactRecord,
+  type ItemRecord,
+  type PriceListRecord,
+  type StockLevel,
+} from '../api'
+import { PageHeader } from '../components/PageHeader'
+import { NumberInput } from '../components/NumberInput'
+import { SectionCard } from '../components/SectionCard'
+import { EmptyState } from '../components/EmptyState'
+import { ItemPicker } from '../components/ItemPicker'
+import { todayIso } from '../lib/jalali'
+
+const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+interface CartLine {
+  item: ItemRecord
+  qty: number
+  unitPrice: number
+}
+
+export function PosPage({ token }: { token: string }) {
+  const [items, setItems] = useState<ItemRecord[]>([])
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [warehouseId, setWarehouseId] = useState('')
+  const [contactId, setContactId] = useState('') // '' = مشتریِ گذری (فروشِ نقدی)
+  const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
+  const [priceListId, setPriceListId] = useState('') // '' = قیمتِ پایه
+  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
+  const [taxRate, setTaxRate] = useState('10')
+  const [discount, setDiscount] = useState('')
+  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
+  const [roundStep, setRoundStep] = useState(0)
+  const [cart, setCart] = useState<CartLine[]>([])
+  const [scan, setScan] = useState('')
+  const [pick, setPick] = useState('')
+  const [received, setReceived] = useState('')
+  const [message, setMessage] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const scanRef = useRef<HTMLInputElement>(null)
+  const idem = useRef(newIdempotencyKey())
+
+  useEffect(() => {
+    fetchItemsLive(token).then((its) => setItems(its.filter((i) => i.is_active && !i.is_service))).catch(() => {})
+    fetchWarehousesLive(token)
+      .then((ws) => {
+        setWarehouses(ws)
+        if (ws[0]) setWarehouseId(ws[0].id)
+      })
+      .catch(() => {})
+    fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.type !== 'supplier'))).catch(() => {})
+    fetchPriceLists(token).then((ls) => setPriceLists(ls.filter((l) => l.is_active))).catch(() => {})
+    fetchStockLevels(token).then(setStockLevels).catch(() => setStockLevels([]))
+    scanRef.current?.focus()
+  }, [token])
+
+  // موجودیِ در دسترسِ یک کالا در انبارِ انتخاب‌شده — تا فروشنده کسری را همان لحظه ببیند.
+  function availableStock(itemId: string): number | null {
+    if (!warehouseId) return null
+    const row = stockLevels.find((s) => s.item_id === itemId && s.warehouse_id === warehouseId)
+    return row ? Number(row.qty) : 0
+  }
+
+  // با انتخابِ لیستِ قیمت، قیمت‌های آن لیست بار می‌شود و سبد دوباره قیمت‌گذاری می‌شود
+  useEffect(() => {
+    if (!priceListId) {
+      setPriceMap(new Map())
+      return
+    }
+    fetchPriceListItems(token, priceListId)
+      .then((rows) => setPriceMap(new Map(rows.map((r) => [r.item_id, Number(r.price)]))))
+      .catch(() => setPriceMap(new Map()))
+  }, [token, priceListId])
+
+  // با انتخابِ مشتری، اگر لیستِ قیمتِ پیش‌فرض داشته باشد، خودکار همان انتخاب می‌شود
+  useEffect(() => {
+    const c = contacts.find((x) => x.id === contactId)
+    if (c && c.default_price_list_id) setPriceListId(c.default_price_list_id)
+  }, [contactId, contacts])
+
+  function priceFor(it: ItemRecord): number {
+    return priceMap.get(it.id) ?? Number(it.sales_price) ?? 0
+  }
+
+  // وقتی لیستِ قیمت عوض شد، قیمتِ ردیف‌های داخلِ سبد را هم به‌روزرسانی کن
+  useEffect(() => {
+    setCart((prev) => prev.map((l) => ({ ...l, unitPrice: priceMap.get(l.item.id) ?? Number(l.item.sales_price) ?? 0 })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceMap])
+
+  // نگاشتِ بارکد و کدِ کالا برای جست‌وجوی فوریِ سمتِ کلاینت (بدونِ رفت‌وبرگشتِ شبکه در هر اسکن)
+  const codeMap = useMemo(() => {
+    const m = new Map<string, ItemRecord>()
+    for (const it of items) {
+      if (it.barcode) m.set(it.barcode, it)
+      m.set(it.sku, it)
+    }
+    return m
+  }, [items])
+
+  function addItem(it: ItemRecord) {
+    setCart((prev) => {
+      const idx = prev.findIndex((l) => l.item.id === it.id)
+      if (idx >= 0) {
+        const copy = [...prev]
+        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 }
+        return copy
+      }
+      return [...prev, { item: it, qty: 1, unitPrice: priceFor(it) }]
+    })
+  }
+
+  function handleScan(e: React.FormEvent) {
+    e.preventDefault()
+    const code = scan.trim()
+    if (!code) return
+    const it = codeMap.get(code)
+    if (it) {
+      addItem(it)
+      setFlash(null)
+    } else {
+      setFlash(`کالایی با بارکد/کد «${code}» یافت نشد`)
+    }
+    setScan('')
+    scanRef.current?.focus()
+  }
+
+  function setQty(id: string, qty: number) {
+    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, qty: Math.max(0, qty) } : l)).filter((l) => l.qty > 0))
+  }
+  function setPrice(id: string, price: number) {
+    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, unitPrice: Math.max(0, price) } : l)))
+  }
+  function remove(id: string) {
+    setCart((prev) => prev.filter((l) => l.item.id !== id))
+  }
+
+  const subtotal = cart.reduce((s, l) => s + l.qty * l.unitPrice, 0)
+  const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
+  const discountInput = Number(discount) || 0
+  const discountAmount = Math.min(
+    discountMode === 'percent' ? Math.round((subtotal * discountInput) / 100) : discountInput,
+    subtotal,
+  )
+  const netAfterDiscount = subtotal - discountAmount
+  const tax = Math.round((netAfterDiscount * taxRateNum) / 100)
+  const grandBeforeRound = netAfterDiscount + tax
+  // رند فقط به پایین (به نفعِ مشتری)
+  const roundAdjust = roundStep > 0 ? Math.floor(grandBeforeRound / roundStep) * roundStep - grandBeforeRound : 0
+  const total = grandBeforeRound + roundAdjust
+  const change = Number(received) ? Number(received) - total : 0
+  const itemCount = cart.reduce((s, l) => s + l.qty, 0)
+
+  async function complete() {
+    setMessage(null)
+    if (cart.length === 0) {
+      setMessage('سبد خالی است.')
+      return
+    }
+    if (!warehouseId) {
+      setMessage('انبار را انتخاب کنید.')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = (await createSalesInvoiceDirect(
+        token,
+        {
+          invoice_date: todayIso(),
+          warehouse_id: warehouseId,
+          tax_rate: taxRateNum,
+          contact_id: contactId || null,
+          invoice_discount: discountAmount,
+          rounding: roundAdjust,
+          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
+        },
+        idem.current,
+      )) as { number?: number }
+      idem.current = newIdempotencyKey()
+      const num = res?.number != null ? res.number.toLocaleString('fa-IR') : '—'
+      setMessage(`فروش ثبت شد ✓ فاکتور شماره ${num}${change > 0 ? ` — بازگردانده به مشتری: ${fa(change)} ریال` : ''}`)
+      setCart([])
+      setReceived('')
+      setDiscount('')
+      setRoundStep(0)
+      scanRef.current?.focus()
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader
+        icon={Store}
+        title="صندوق فروشگاهی"
+        description="بارکد کالا را اسکن کنید یا از فهرست انتخاب کنید؛ با یک کلیک، فروش ثبت و سند حسابداری و کسر موجودی خودکار انجام می‌شود."
+      />
+
+      <div className="pos-toolbar">
+        <label>
+          انبار
+          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          مشتری
+          <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+            <option value="">مشتریِ گذری (نقدی)</option>
+            {contacts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        {priceLists.length > 0 && (
+          <label>
+            لیست قیمت
+            <select value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>
+              <option value="">قیمتِ پایه</option>
+              {priceLists.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          مالیات (٪)
+          <NumberInput allowDecimal value={taxRate} onChange={setTaxRate} style={{ width: 80 }} />
+        </label>
+      </div>
+
+      <div className="pos-grid">
+        <SectionCard icon={ScanLine} title="اسکن و سبد خرید" description={`${fa(itemCount)} قلم در سبد`}>
+          <form className="pos-scan" onSubmit={handleScan}>
+            <ScanLine size={18} />
+            <input
+              ref={scanRef}
+              type="text"
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              placeholder="بارکد را اسکن یا تایپ کنید و Enter بزنید…"
+              inputMode="numeric"
+              autoFocus
+            />
+            <button type="submit" className="btn-primary"><Plus size={15} /> افزودن</button>
+          </form>
+
+          <div className="pos-pick">
+            <ItemPicker
+              items={items}
+              value={pick}
+              onChange={(id) => { const it = items.find((i) => i.id === id); if (it) addItem(it); setPick('') }}
+              placeholder="— افزودن از فهرست کالاها —"
+            />
+          </div>
+
+          {flash && <div className="pos-flash">{flash}</div>}
+
+          {cart.length === 0 ? (
+            <EmptyState icon={ShoppingCart} text="سبد خالی است — یک بارکد اسکن کنید." />
+          ) : (
+            <div className="entity-table-wrap">
+              <table className="entity-table pos-cart">
+                <thead>
+                  <tr>
+                    <th>کالا</th>
+                    <th>تعداد</th>
+                    <th>قیمت واحد</th>
+                    <th>جمع</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map((l) => {
+                    const avail = availableStock(l.item.id)
+                    const over = avail != null && l.qty > avail
+                    return (
+                    <tr key={l.item.id}>
+                      <td className="entity-name">
+                        {l.item.name}
+                        {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
+                        {avail != null && (
+                          <div className={over ? 'stock-warn' : 'unit-suffix'}>
+                            موجودی: {avail.toLocaleString('fa-IR')}{over ? ' — بیش از موجودی' : ''}
+                          </div>
+                        )}
+                      </td>
+                      <td data-label="تعداد">
+                        <div className="pos-qty">
+                          <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
+                          <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, Number(v))} />
+                          <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
+                        </div>
+                      </td>
+                      <td data-label="قیمت واحد">
+                        <NumberInput className="pos-price" value={l.unitPrice} onChange={(v) => setPrice(l.item.id, Number(v))} />
+                      </td>
+                      <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
+                      <td className="pos-remove-cell">
+                        <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /> <span className="pos-remove-text">حذف</span></button>
+                      </td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard icon={Wallet} title="تسویه">
+          <div className="pos-adjust">
+            <label>
+              تخفیف
+              <div className="qty-with-unit">
+                <NumberInput value={discount} onChange={setDiscount} placeholder="۰" />
+                <div className="seg-toggle">
+                  <button type="button" className={discountMode === 'amount' ? 'active' : ''} onClick={() => setDiscountMode('amount')}>مبلغ</button>
+                  <button type="button" className={discountMode === 'percent' ? 'active' : ''} onClick={() => setDiscountMode('percent')}>٪</button>
+                </div>
+              </div>
+            </label>
+            <label>
+              رند (به پایین)
+              <div className="seg-toggle">
+                {[0, 1000, 5000, 10000].map((s) => (
+                  <button key={s} type="button" className={roundStep === s ? 'active' : ''} onClick={() => setRoundStep(s)}>
+                    {s === 0 ? 'بدون' : s.toLocaleString('fa-IR')}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+
+          <div className="pos-summary">
+            <div className="pos-row"><span>جمع کالاها</span><strong>{fa(subtotal)}</strong></div>
+            {discountAmount > 0 && <div className="pos-row"><span>تخفیف</span><strong>−{fa(discountAmount)}</strong></div>}
+            <div className="pos-row"><span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪)</span><strong>{fa(tax)}</strong></div>
+            {roundAdjust !== 0 && <div className="pos-row"><span>گِرد کردن</span><strong>{fa(roundAdjust)}</strong></div>}
+            <div className="pos-row pos-total"><span>مبلغ قابل پرداخت</span><strong>{fa(total)}</strong></div>
+          </div>
+
+          <label className="pos-received">
+            مبلغ دریافتی از مشتری (ریال)
+            <NumberInput value={received} onChange={setReceived} placeholder="برای محاسبه‌ی باقی‌مانده" />
+          </label>
+          {Number(received) > 0 && (
+            <div className={`pos-change ${change < 0 ? 'neg' : ''}`}>
+              {change >= 0 ? `باقی‌مانده به مشتری: ${fa(change)} ریال` : `کسری: ${fa(-change)} ریال`}
+            </div>
+          )}
+
+          <button type="button" className="btn-primary pos-checkout" onClick={() => void complete()} disabled={busy || cart.length === 0}>
+            <CheckCircle2 size={16} /> تکمیل فروش
+          </button>
+          {message && <div className="hint">{message}</div>}
+          <p className="hint pos-note">
+            بدون انتخاب مشتری، فروش «نقدی» ثبت می‌شود و مبلغ به صندوق می‌رود. با انتخاب مشتری، فروش به حساب او (نسیه) ثبت می‌شود.
+          </p>
+        </SectionCard>
+      </div>
+    </div>
+  )
+}
