@@ -2163,9 +2163,10 @@ button:disabled {
   border-bottom-right-radius: var(--radius-lg);
 }
 
-/* هر پنلِ سطح‌بالا padding می‌گیرد، جز نوارِ آمار و تب‌ها که padding داخلیِ خودشان
-   را دارند — تا div‌های ساده (نوارِ فیلتر، خطا، …) هم بی‌فاصله به لبه نچسبند. */
-.page.panels > *:not(.stat-grid):not(.tabs) {
+/* هر پنلِ سطح‌بالا padding می‌گیرد، جز نوارِ آمار و تب‌ها و شبکه‌ی صندوق که padding
+   داخلیِ خودشان را دارند — تا div‌های ساده (نوارِ فیلتر، خطا، …) هم بی‌فاصله به لبه نچسبند.
+   pos-grid باید padding:0 بماند وگرنه پس‌زمینه‌ی خاکستریِ جداکننده‌اش دورِ کارت‌ها لو می‌رود. */
+.page.panels > *:not(.stat-grid):not(.tabs):not(.pos-grid) {
   padding: var(--sp-5);
 }
 
@@ -6395,6 +6396,15 @@ button:disabled {
   border-radius: var(--radius-lg);
   padding: clamp(20px, 1.6vw, 28px);
   box-shadow: var(--shadow-md);
+}
+/* استثناء: در صندوقِ فروشگاهی (pos-grid) دو ستون، تختِ سطحِ پنل‌اند نه کارتِ شناور —
+   سایه/گوشه‌گِردِ کارتِ Tipalti را نباید بگیرند. ویژگیِ عمداً (0,4,1) با اسکوپِ پوسته‌ی
+   افقی (تنها پوسته‌ی Tipalti) انتخاب شده تا از restyleِ کارتِ Tipalti (0,3,1) قوی‌تر
+   باشد ولی از قواعدِ گِردیِ گوشه‌های پایین (0,5,1) ضعیف‌تر بماند؛ پس فقط گوشه‌های
+   بالا/داخلی تخت می‌شوند و دو گوشه‌ی پایینِ بیرونی هم‌شکلِ کادر گِرد می‌مانند. */
+.app-shell--topnav .page.panels .pos-grid > section {
+  box-shadow: none;
+  border-radius: 0;
 }
 :root[data-theme='tipalti'] .section-card-header {
   margin-bottom: 18px;
