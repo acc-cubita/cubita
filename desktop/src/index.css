@@ -75,6 +75,14 @@
   --sidebar-active-text: #ffffff;
   --sidebar-text: #cccccc;
 
+  /* نوارِ افقیِ بالا (چیدمانِ topnav) — به‌صورتِ پیش‌فرض از نوارِ کناری ارث می‌برد؛
+     تمِ topnav-محور (مثلِ Tipalti) این‌ها را جدا بازتعریف می‌کند. */
+  --topnav-bg: var(--sidebar-bg);
+  --topnav-text: var(--sidebar-text);
+  --topnav-muted: var(--text-muted);
+  --topnav-active: var(--accent);
+  --topnav-hover: var(--surface-hover);
+
   --shadow-sm: rgba(0, 0, 0, 0.36) 0 1px 2px;
   --shadow-md: rgba(0, 0, 0, 0.44) 0 4px 14px -3px, rgba(0, 0, 0, 0.3) 0 1px 4px -1px;
 
@@ -168,6 +176,93 @@
 
   --shadow-sm: rgba(0, 0, 0, 0.08) 0 1px 2px;
   --shadow-md: rgba(0, 0, 0, 0.12) 0 4px 14px -3px, rgba(0, 0, 0, 0.07) 0 1px 4px -1px;
+}
+
+/* ── پوسته‌ی Tipalti — سرمه‌ای/طلایی، محتوای روشن، چیدمانِ نوارِ افقی ─────────
+   نوارِ بالا و کناری سرمه‌ای (#16223d)، دکمه‌های اصلی طلایی (متنِ تیره روی طلایی)،
+   محتوای روشن با کارت‌های سفید و گوشه‌های نرم‌تر. الهام از Tipalti؛ چیدمان از Xero. */
+:root[data-theme='tipalti'] {
+  color-scheme: light;
+
+  --page: #f4f5f7;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-hover: #f1f3f6;
+  --border: #e6e8ec;
+  --border-strong: #d5d9e0;
+
+  --text: #42526e;
+  --text-muted: #6b778c;
+  --text-h: #16223d;
+
+  /* برند/عملیات — طلاییِ Tipalti؛ روی طلایی، متنِ سرمه‌ایِ تیره خوانا می‌ماند */
+  --accent: #ffc72c;
+  --accent-hover: #f0b400;
+  --accent-bg: rgba(255, 199, 44, 0.18);
+  --accent-text: #16223d;
+
+  --accent-2: #4c6ef5;
+  --accent-2-hover: #3b5bdb;
+  --accent-3: #12b886;
+
+  --success: #2f9e44;
+  --success-bg: rgba(47, 158, 68, 0.12);
+  --danger: #e03131;
+  --danger-bg: rgba(224, 49, 49, 0.1);
+  --warning: #f08c00;
+  --warning-bg: rgba(240, 140, 0, 0.14);
+
+  --series-1: #4c6ef5;
+  --series-1-text: #3b5bdb;
+  --series-2: #2f9e44;
+  --series-2-text: #2b8a3e;
+  --chart-grid: #e6e8ec;
+  --chart-axis: #6b778c;
+
+  /* اگر روزی این تم سایدباری هم شود، نوارِ کناری سرمه‌ای بماند */
+  --sidebar-bg: #16223d;
+  --sidebar-border: #24304d;
+  --sidebar-active-bg: #24304d;
+  --sidebar-active-text: #ffffff;
+  --sidebar-text: #c7cfdd;
+
+  /* نوارِ افقیِ بالا — سرمه‌ای با تأکیدِ طلایی */
+  --topnav-bg: #16223d;
+  --topnav-text: #e6eaf2;
+  --topnav-muted: #9fb0c9;
+  --topnav-active: #ffc72c;
+  --topnav-hover: rgba(255, 255, 255, 0.08);
+
+  --shadow-sm: rgba(16, 24, 40, 0.06) 0 1px 2px;
+  --shadow-md: rgba(16, 24, 40, 0.1) 0 6px 20px -4px, rgba(16, 24, 40, 0.06) 0 2px 6px -2px;
+
+  /* گردیِ نرم‌ترِ Tipalti/Xero */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ── مقیاسِ «هوادار»ِ Xero/Tipalti ─────────────────────────────────────
+     برخلافِ تراکمِ فشرده‌ی پوسته‌ی پیش‌فرض (base=13)، محتوای Xero درشت‌تر و
+     بازتر است. چون همه‌ی فونت/فاصله‌ها از همین توکن‌ها ساخته می‌شوند، بالا
+     بردنِ این پله‌ها کلِ صفحه‌ها را یک‌جا هوادار می‌کند. shorthandِ `font:` روی
+     همان ریشه با var(--fs-base) بازمحاسبه می‌شود، پس پایه‌ی متن هم بزرگ می‌شود. */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 21px;
+  --fs-2xl: 26px;
+  --fs-3xl: 32px;
+  --lh: 1.6;
+
+  /* کنترل‌های بلندتر و راحت‌تر (ورودی/انتخابگر/دکمه) */
+  --control-h: 36px;
+
+  /* فاصله‌ی کمی بازتر بینِ اجزای صفحه */
+  --sp-5: 26px;
+  --sp-6: 36px;
 }
 
 * {

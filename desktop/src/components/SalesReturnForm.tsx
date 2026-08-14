@@ -1,125 +1,19 @@
-import { useEffect, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import { Undo2, Save, RefreshCw, Printer } from 'lucide-react'
-import {
-  createSalesReturn,
-  fetchReturnable,
-  fetchSalesInvoices,
-  fetchSalesReturns,
-  printSalesReturn,
-  type ReturnableLine,
-  type SalesInvoiceRecord,
-  type SalesReturnRecord,
-} from '../api'
+import type { ReturnableLine } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { formatJalali, todayIso } from '../lib/jalali'
+import { formatJalali } from '../lib/jalali'
+import { useSalesReturnDraft, type SalesReturnDraft } from '../lib/salesReturnDraft'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
+/** فرمِ کلاسیکِ «برگشت از فروش» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
+ *  [useSalesReturnDraft] است تا با ویزاردِ نسخه‌ی جدید یک‌دست بماند. */
 export function SalesReturnForm({ token }: { token: string }) {
-  const [invoices, setInvoices] = useState<SalesInvoiceRecord[]>([])
-  const [returns, setReturns] = useState<SalesReturnRecord[]>([])
-  const [invoiceId, setInvoiceId] = useState('')
-  const [returnable, setReturnable] = useState<ReturnableLine[]>([])
-  const [returnDate, setReturnDate] = useState(todayIso())
-  const [description, setDescription] = useState('')
-  const [qtyByItem, setQtyByItem] = useState<Record<string, string>>({})
-  const [message, setMessage] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const selectedInvoice = invoices.find((inv) => inv.id === invoiceId) ?? null
-  // نگاشتِ شناسه‌ی فاکتور → شماره، برای ستونِ «فاکتور اصلی» در فهرستِ برگشت‌ها
-  const invoiceNumberById = new Map(invoices.map((inv) => [inv.id, inv.number]))
-
-  async function refresh() {
-    try {
-      const [invoiceList, returnList] = await Promise.all([fetchSalesInvoices(token), fetchSalesReturns(token)])
-      setInvoices(invoiceList)
-      setReturns(returnList)
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
-  // با انتخابِ فاکتور، باقی‌ماندهٔ قابلِ برگشتِ هر کالا زنده خوانده می‌شود.
-  useEffect(() => {
-    setQtyByItem({})
-    if (!invoiceId) {
-      setReturnable([])
-      return
-    }
-    let cancelled = false
-    fetchReturnable(token, invoiceId)
-      .then((rows) => !cancelled && setReturnable(rows))
-      .catch(() => !cancelled && setReturnable([]))
-    return () => {
-      cancelled = true
-    }
-  }, [token, invoiceId])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-
-    if (!selectedInvoice) {
-      setMessage('یک فاکتور فروش انتخاب کنید.')
-      return
-    }
-    const lines = Object.entries(qtyByItem)
-      .filter(([, qty]) => Number(qty) > 0)
-      .map(([itemId, qty]) => ({ item_id: itemId, qty: Number(qty) }))
-    if (lines.length === 0) {
-      setMessage('حداقل مقدار برگشتی یک ردیف را وارد کنید.')
-      return
-    }
-    // بیش از باقی‌مانده را سمتِ کلاینت هم می‌گیریم تا کاربر پیش از رفت‌وبرگشت بفهمد.
-    const over = lines.find((l) => {
-      const r = returnable.find((x) => x.item_id === l.item_id)
-      return r && l.qty > Number(r.remaining)
-    })
-    if (over) {
-      setMessage('مقدار برگشتی نمی‌تواند از باقی‌ماندهٔ قابلِ برگشت بیشتر باشد.')
-      return
-    }
-
-    setBusy(true)
-    try {
-      await createSalesReturn(token, {
-        return_date: returnDate,
-        sales_invoice_id: selectedInvoice.id,
-        description,
-        lines,
-      })
-      setQtyByItem({})
-      setDescription('')
-      setMessage('برگشت از فروش با موفقیت ثبت شد.')
-      await refresh()
-      // باقی‌مانده‌ها را هم تازه کن
-      const rows = await fetchReturnable(token, selectedInvoice.id)
-      setReturnable(rows)
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handlePrint(id: string) {
-    setMessage(null)
-    try {
-      await printSalesReturn(token, id)
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  const anyReturnable = returnable.some((r) => Number(r.remaining) > 0)
+  const r = useSalesReturnDraft({ token })
 
   return (
     <SectionCard
@@ -127,20 +21,26 @@ export function SalesReturnForm({ token }: { token: string }) {
       title="برگشت از فروش"
       description="بابت یک فاکتور فروش مشخص؛ موجودی برمی‌گردد و درآمد/بهای تمام‌شده معکوس می‌شود."
       actions={
-        <button onClick={() => void refresh()}>
+        <button onClick={() => void r.refresh()}>
           <RefreshCw size={13} /> به‌روزرسانی
         </button>
       }
     >
-      {invoices.length === 0 ? (
+      {r.invoices.length === 0 ? (
         <p className="hint">هنوز هیچ فاکتور فروشی ثبت نشده است.</p>
       ) : (
-        <form className="invoice-form" onSubmit={handleSubmit}>
+        <form
+          className="invoice-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void r.submit()
+          }}
+        >
           <label>
             فاکتور فروش
-            <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}>
+            <select value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
               <option value="">— انتخاب فاکتور —</option>
-              {invoices.map((inv) => (
+              {r.invoices.map((inv) => (
                 <option key={inv.id} value={inv.id}>
                   شماره {inv.number ?? '—'} — {formatJalali(inv.invoice_date)} — {Number(inv.total_amount).toLocaleString('fa-IR')}
                 </option>
@@ -149,111 +49,131 @@ export function SalesReturnForm({ token }: { token: string }) {
           </label>
           <label>
             تاریخ برگشت
-            <JalaliDatePicker value={returnDate} onChange={setReturnDate} />
+            <JalaliDatePicker value={r.returnDate} onChange={r.setReturnDate} />
           </label>
           <label>
             توضیحات
-            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input type="text" value={r.description} onChange={(e) => r.setDescription(e.target.value)} />
           </label>
 
-          {selectedInvoice && Number(selectedInvoice.tax_amount) > 0 && (
+          {r.selectedInvoice && Number(r.selectedInvoice.tax_amount) > 0 && (
             <div className="hint">
-              این فاکتور {Number(selectedInvoice.tax_rate).toLocaleString('fa-IR')}٪ مالیات بر ارزش افزوده دارد؛ مالیاتِ متناسب با مقدارِ برگشتی هم خودکار برمی‌گردد.
+              این فاکتور {Number(r.selectedInvoice.tax_rate).toLocaleString('fa-IR')}٪ مالیات بر ارزش افزوده دارد؛ مالیاتِ متناسب با مقدارِ برگشتی هم خودکار برمی‌گردد.
             </div>
           )}
-          {selectedInvoice && !anyReturnable && (
+          {r.selectedInvoice && !r.anyReturnable && (
             <div className="hint">همه‌ی اقلامِ این فاکتور قبلاً به‌طور کامل برگشت خورده‌اند.</div>
           )}
-          {selectedInvoice && returnable.length > 0 && (
-            <div className="table-scroll">
-            <table className="invoice-lines">
-              <thead>
-                <tr>
-                  <th>کالا</th>
-                  <th>فروخته‌شده</th>
-                  <th>قبلاً برگشتی</th>
-                  <th>باقی‌مانده</th>
-                  <th>مقدار برگشتی</th>
-                </tr>
-              </thead>
-              <tbody>
-                {returnable.map((r) => {
-                  const remaining = Number(r.remaining)
-                  const entered = Number(qtyByItem[r.item_id] ?? 0)
-                  const over = entered > remaining
-                  return (
-                    <tr key={r.item_id}>
-                      <td className="entity-name" data-label="کالا">{r.item_name} {r.unit && <span className="unit-suffix">/ {r.unit}</span>}</td>
-                      <td data-label="فروخته‌شده">{fa(Number(r.sold))}</td>
-                      <td data-label="قبلاً برگشتی">{fa(Number(r.already_returned))}</td>
-                      <td data-label="باقی‌مانده" className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
-                      <td data-label="مقدار برگشتی">
-                        <div className="stock-cell">
-                          <NumberInput
-                            allowDecimal
-                            disabled={remaining <= 0}
-                            value={qtyByItem[r.item_id] ?? ''}
-                            onChange={(v) => setQtyByItem((prev) => ({ ...prev, [r.item_id]: v }))}
-                          />
-                          {remaining > 0 && (
-                            <button type="button" className="link-like" onClick={() => setQtyByItem((prev) => ({ ...prev, [r.item_id]: String(remaining) }))}>همه</button>
-                          )}
-                          {over && <div className="stock-warn">بیش از باقی‌مانده</div>}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            </div>
-          )}
+          {r.selectedInvoice && r.returnable.length > 0 && <ReturnableTable r={r} />}
 
           <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !anyReturnable}>
+            <button type="submit" className="btn-primary" disabled={r.busy || !r.anyReturnable}>
               <Save size={14} /> ثبت برگشت
             </button>
           </div>
-          {message && <div className="hint">{message}</div>}
+          {r.message && <div className="hint">{r.message}</div>}
         </form>
       )}
 
-      {returns.length === 0 ? (
-        <EmptyState icon={Undo2} text="برگشتی از فروش ثبت نشده." />
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>شماره</th>
-                <th>تاریخ</th>
-                <th>فاکتور اصلی</th>
-                <th>خالص</th>
-                <th>مالیات</th>
-                <th>جمع کل</th>
-                <th>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {returns.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.number != null ? r.number.toLocaleString('fa-IR') : '—'}</td>
-                  <td>{formatJalali(r.return_date)}</td>
-                  <td>{(invoiceNumberById.get(r.sales_invoice_id) ?? '—')?.toLocaleString('fa-IR') ?? '—'}</td>
-                  <td>{Number(r.total_amount).toLocaleString('fa-IR')}</td>
-                  <td>{Number(r.tax_amount).toLocaleString('fa-IR')}</td>
-                  <td>{(Number(r.total_amount) + Number(r.tax_amount)).toLocaleString('fa-IR')}</td>
-                  <td>
-                    <button type="button" onClick={() => void handlePrint(r.id)}>
-                      <Printer size={13} /> چاپ
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <SalesReturnsList r={r} />
     </SectionCard>
+  )
+}
+
+/** جدولِ اقلامِ قابلِ برگشت با ورودِ مقدار — مشترکِ فرم و ویزاردِ فروش و خرید (شکلِ
+ *  حداقلی تا هر دو draft ساختاراً جور شوند). */
+export function ReturnableTable({
+  r,
+}: {
+  r: {
+    returnable: ReturnableLine[]
+    qtyByItem: Record<string, string>
+    setQtyByItem: Dispatch<SetStateAction<Record<string, string>>>
+  }
+}) {
+  return (
+    <div className="table-scroll">
+      <table className="invoice-lines">
+        <thead>
+          <tr>
+            <th>کالا</th>
+            <th>فروخته‌شده</th>
+            <th>قبلاً برگشتی</th>
+            <th>باقی‌مانده</th>
+            <th>مقدار برگشتی</th>
+          </tr>
+        </thead>
+        <tbody>
+          {r.returnable.map((row) => {
+            const remaining = Number(row.remaining)
+            const entered = Number(r.qtyByItem[row.item_id] ?? 0)
+            const over = entered > remaining
+            return (
+              <tr key={row.item_id}>
+                <td className="entity-name" data-label="کالا">{row.item_name} {row.unit && <span className="unit-suffix">/ {row.unit}</span>}</td>
+                <td data-label="فروخته‌شده">{fa(Number(row.sold))}</td>
+                <td data-label="قبلاً برگشتی">{fa(Number(row.already_returned))}</td>
+                <td data-label="باقی‌مانده" className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
+                <td data-label="مقدار برگشتی">
+                  <div className="stock-cell">
+                    <NumberInput
+                      allowDecimal
+                      disabled={remaining <= 0}
+                      value={r.qtyByItem[row.item_id] ?? ''}
+                      onChange={(v) => r.setQtyByItem((prev) => ({ ...prev, [row.item_id]: v }))}
+                    />
+                    {remaining > 0 && (
+                      <button type="button" className="link-like" onClick={() => r.setQtyByItem((prev) => ({ ...prev, [row.item_id]: String(remaining) }))}>همه</button>
+                    )}
+                    {over && <div className="stock-warn">بیش از باقی‌مانده</div>}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** فهرستِ برگشت‌های گذشته — مشترکِ فرم و ویزارد. */
+export function SalesReturnsList({ r }: { r: SalesReturnDraft }) {
+  if (r.returns.length === 0) {
+    return <EmptyState icon={Undo2} text="برگشتی از فروش ثبت نشده." />
+  }
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>شماره</th>
+            <th>تاریخ</th>
+            <th>فاکتور اصلی</th>
+            <th>خالص</th>
+            <th>مالیات</th>
+            <th>جمع کل</th>
+            <th>عملیات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {r.returns.map((row) => (
+            <tr key={row.id}>
+              <td>{row.number != null ? row.number.toLocaleString('fa-IR') : '—'}</td>
+              <td>{formatJalali(row.return_date)}</td>
+              <td>{(r.invoiceNumberById.get(row.sales_invoice_id) ?? '—')?.toLocaleString('fa-IR') ?? '—'}</td>
+              <td>{Number(row.total_amount).toLocaleString('fa-IR')}</td>
+              <td>{Number(row.tax_amount).toLocaleString('fa-IR')}</td>
+              <td>{(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}</td>
+              <td>
+                <button type="button" onClick={() => void r.handlePrint(row.id)}>
+                  <Printer size={13} /> چاپ
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

@@ -4,6 +4,10 @@ import { fetchSalesSummary, type MeResponse, type SalesInvoiceRecord, type Sales
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
+import { SalesInvoiceWizard } from '../components/wizard/SalesInvoiceWizard'
+import { SalesReturnWizard } from '../components/wizard/SalesReturnWizard'
+import { MoadianWizard } from '../components/wizard/MoadianWizard'
+import { useTheme } from '../lib/theme'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { QuotationsTab } from '../components/QuotationsTab'
 import { SalesReturnForm } from '../components/SalesReturnForm'
@@ -53,6 +57,8 @@ export function SalesPage({
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
+  // در «نسخه‌ی جدید» (پوسته‌ی guided) ثبتِ فاکتور مرحله‌ای است؛ در کلاسیک همان فرمِ تک‌صفحه.
+  const guided = useTheme().theme.content === 'guided'
 
   return (
     <div className="page panels">
@@ -80,14 +86,25 @@ export function SalesPage({
             content: (
               <>
                 <div ref={formRef}>
-                  <SalesInvoiceForm
-                    token={token}
-                    warehouses={warehouses}
-                    items={items}
-                    onQueued={handleQueued}
-                    prefill={prefill}
-                    onPrefillConsumed={() => setPrefill(null)}
-                  />
+                  {guided ? (
+                    <SalesInvoiceWizard
+                      token={token}
+                      warehouses={warehouses}
+                      items={items}
+                      onQueued={handleQueued}
+                      prefill={prefill}
+                      onPrefillConsumed={() => setPrefill(null)}
+                    />
+                  ) : (
+                    <SalesInvoiceForm
+                      token={token}
+                      warehouses={warehouses}
+                      items={items}
+                      onQueued={handleQueued}
+                      prefill={prefill}
+                      onPrefillConsumed={() => setPrefill(null)}
+                    />
+                  )}
                 </div>
                 <InvoiceList key={reloadKey} token={token} me={me} kind="sales" items={items} onDuplicate={handleDuplicate} />
                 {isElectron && (
@@ -112,7 +129,7 @@ export function SalesPage({
             key: 'returns',
             label: 'برگشت از فروش',
             icon: Undo2,
-            content: <SalesReturnForm token={token} />,
+            content: guided ? <SalesReturnWizard token={token} /> : <SalesReturnForm token={token} />,
           },
           {
             key: 'moadian',
@@ -120,6 +137,8 @@ export function SalesPage({
             icon: Landmark,
             content: (me.locked_features ?? []).includes('moadian') ? (
               <FeatureUpsell feature="moadian" />
+            ) : guided ? (
+              <MoadianWizard token={token} />
             ) : (
               <MoadianPanel token={token} />
             ),

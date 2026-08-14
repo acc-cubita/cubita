@@ -4,6 +4,9 @@ import { fetchPurchaseSummary, type MeResponse, type PurchaseInvoiceRecord, type
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { PurchaseInvoiceForm } from '../components/PurchaseInvoiceForm'
+import { PurchaseInvoiceWizard } from '../components/wizard/PurchaseInvoiceWizard'
+import { PurchaseReturnWizard } from '../components/wizard/PurchaseReturnWizard'
+import { useTheme } from '../lib/theme'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
 import { OutboxList } from '../components/OutboxList'
@@ -48,6 +51,7 @@ export function PurchasesPage({
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
+  const guided = useTheme().theme.content === 'guided'
 
   return (
     <div className="page panels">
@@ -74,14 +78,25 @@ export function PurchasesPage({
             content: (
               <>
                 <div ref={formRef}>
-                  <PurchaseInvoiceForm
-                    token={token}
-                    warehouses={warehouses}
-                    items={items}
-                    onQueued={handleQueued}
-                    prefill={prefill}
-                    onPrefillConsumed={() => setPrefill(null)}
-                  />
+                  {guided ? (
+                    <PurchaseInvoiceWizard
+                      token={token}
+                      warehouses={warehouses}
+                      items={items}
+                      onQueued={handleQueued}
+                      prefill={prefill}
+                      onPrefillConsumed={() => setPrefill(null)}
+                    />
+                  ) : (
+                    <PurchaseInvoiceForm
+                      token={token}
+                      warehouses={warehouses}
+                      items={items}
+                      onQueued={handleQueued}
+                      prefill={prefill}
+                      onPrefillConsumed={() => setPrefill(null)}
+                    />
+                  )}
                 </div>
                 <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} onDuplicate={handleDuplicate} />
                 {isElectron && (
@@ -100,7 +115,7 @@ export function PurchasesPage({
             key: 'returns',
             label: 'برگشت از خرید',
             icon: Undo2,
-            content: <PurchaseReturnForm token={token} />,
+            content: guided ? <PurchaseReturnWizard token={token} /> : <PurchaseReturnForm token={token} />,
           },
         ]}
       />

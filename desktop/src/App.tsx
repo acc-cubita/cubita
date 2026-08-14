@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import type { MeResponse } from './api'
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { fetchMe, type MeResponse } from './api'
+import { loadStoredToken, storeToken } from './lib/session'
 import { LoginScreen } from './components/LoginScreen'
 import { SignupScreen } from './components/SignupScreen'
 import { SetPasswordScreen } from './components/SetPasswordScreen'
@@ -46,27 +48,64 @@ function wantsSignup(): boolean {
 }
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(null)
-  const [me, setMe] = useState<MeResponse | null>(null)
   // مقدار اولیه با تابع داده می‌شود تا *قبل از* اولین رندر خوانده شود؛ با useEffect
   // صفحه‌ی ورود یک لحظه ظاهر می‌شد و بعد جایش عوض می‌شد.
   const [pending, setPending] = useState<PendingAction | null>(readPendingAction)
+  // توکن از localStorage بازیابی می‌شود (فقط وب) تا رفرش، کاربر را از حساب بیرون نیندازد.
+  // وقتی لینکِ بازیابیِ رمز باز است، جلسه‌ی ذخیره‌شده را نادیده می‌گیریم تا آن فلو مقدم بماند.
+  const [token, setToken] = useState<string | null>(() => (pending ? null : loadStoredToken()))
+  const [me, setMe] = useState<MeResponse | null>(null)
+  // توکنِ بازیابی‌شده باید با سرور اعتبارسنجی شود (fetchMe)؛ تا آن زمان به‌جای فلاش‌خوردنِ
+  // صفحه‌ی ورود، یک اسپلشِ کوتاه نشان می‌دهیم.
+  const [restoring, setRestoring] = useState<boolean>(() => !pending && !!loadStoredToken())
   // درِ ورودیِ ترایال (demo.cubita.ir) با VITE_SIGNUP_FIRST=true مستقیم روی صفحه‌ی
   // ثبت‌نام باز می‌شود؛ اپِ اصلی (acc.cubita.ir) روی ورود.
   const [authView, setAuthView] = useState<'login' | 'signup'>(
     import.meta.env.VITE_SIGNUP_FIRST === 'true' || wantsSignup() ? 'signup' : 'login',
   )
 
+  // با یک توکنِ بازیابی‌شده اما بدونِ `me`، کاربر را از سرور می‌خوانیم. اگر توکن باطل/منقضی
+  // شده باشد، پاکش می‌کنیم و به صفحه‌ی ورود برمی‌گردیم (بدونِ حلقه‌ی بی‌پایان).
+  useEffect(() => {
+    if (!token || me) {
+      setRestoring(false)
+      return
+    }
+    if (!restoring) return
+    let cancelled = false
+    fetchMe(token)
+      .then((res) => {
+        if (cancelled) return
+        setMe(res)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setToken(null)
+        storeToken(null)
+        setMe(null)
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, me, restoring])
+
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
+    storeToken(newToken)
     setMe(newMe)
     setPending(null)
+    setRestoring(false)
     setAuthView('login')
   }
 
   function handleLogout() {
     setToken(null)
+    storeToken(null)
     setMe(null)
+    setRestoring(false)
   }
 
   return (
@@ -81,6 +120,11 @@ export default function App() {
             onDone={handleAuthenticated}
             onCancel={() => setPending(null)}
           />
+        ) : restoring ? (
+          <div className="app-boot">
+            <Loader2 className="spin" size={28} />
+            <p>در حال بازیابی جلسه…</p>
+          </div>
         ) : !token || !me ? (
           authView === 'signup' ? (
             <SignupScreen onDone={handleAuthenticated} onBackToLogin={() => setAuthView('login')} />

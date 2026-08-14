@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
+import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
+import { TransferWizard } from '../components/wizard/TransferWizard'
+import { useTheme } from '../lib/theme'
 import { StockCountPanel } from '../components/StockCountPanel'
 import { PriceListsPanel } from '../components/PriceListsPanel'
 import { BatchesPanel } from '../components/BatchesPanel'
@@ -70,6 +73,7 @@ export function InventoryPage({
 
   // شناسه‌ی کالاهایی که هشدارِ کسری دارند — برای نشانِ «سفارش» در جدولِ موجودی
   const lowIds = useMemo(() => new Set(lowStock.map((r) => r.item_id)), [lowStock])
+  const guided = useTheme().theme.content === 'guided'
 
   return (
     <div className="page panels">
@@ -244,7 +248,9 @@ export function InventoryPage({
             key: 'adjust',
             label: 'تعدیل دستی',
             icon: ClipboardList,
-            content: (
+            content: guided ? (
+              <StockAdjustmentWizard token={token} warehouses={warehouses} items={items} onAdjusted={() => void refreshStock()} />
+            ) : (
               <StockAdjustmentForm token={token} warehouses={warehouses} items={items} onAdjusted={() => void refreshStock()} />
             ),
           },
@@ -252,7 +258,11 @@ export function InventoryPage({
             key: 'transfer',
             label: 'انتقال بین انبار',
             icon: ArrowLeftRight,
-            content: <TransferForm token={token} warehouses={warehouses} items={items} />,
+            content: guided ? (
+              <TransferWizard token={token} warehouses={warehouses} items={items} />
+            ) : (
+              <TransferForm token={token} warehouses={warehouses} items={items} />
+            ),
           },
           {
             key: 'pricelists',

@@ -10,6 +10,8 @@ import {
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
+import { TopNav } from './TopNav'
+import { useTheme } from '../lib/theme'
 import { NavSectionContext } from './navContext'
 import { PayrollPanel } from './PayrollPanel'
 import { IntegrationPanel } from './IntegrationPanel'
@@ -22,6 +24,7 @@ import { Reports } from './Reports'
 import { FixedAssetsPanel } from './FixedAssetsPanel'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
+import { GuidedDashboard } from './GuidedDashboard'
 import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
@@ -41,6 +44,7 @@ import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
 import { TeamPage } from '../pages/TeamPage'
 import { ProfilePage } from '../pages/ProfilePage'
+import { ThemeGallery } from './ThemeGallery'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -67,6 +71,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   team: 'کاربران',
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',
+  theme: 'ظاهر و پوسته',
   help: 'راهنما',
 }
 
@@ -149,56 +154,28 @@ export function Dashboard({
     .flat()
     .filter((e) => !e.synced).length
 
-  return (
-    <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
-    <div className="app-shell">
-      <Sidebar
-        active={page}
-        activeSection={section}
-        onNavigate={navigate}
-        userName={me.name}
-        roleName={me.role_name}
-        isPlatformAdmin={me.is_platform_admin}
-        isSuperAdmin={me.is_super_admin}
-        tenantKind={me.tenant_kind}
-        onLogout={onLogout}
-        open={navOpen}
-        onClose={() => setNavOpen(false)}
-      />
+  const { theme } = useTheme()
 
-      <div className="app-main">
-        <header className="topbar">
-          <div className="topbar-start">
-            <button
-              type="button"
-              className="nav-toggle"
-              onClick={() => setNavOpen(true)}
-              aria-label="باز کردن منو"
-            >
-              <Menu size={20} />
-            </button>
-            <h1 className="topbar-title">{PAGE_TITLES[page]}</h1>
-          </div>
-          <div className="topbar-actions">
-            {syncStatus && <span className="sync-status">{syncStatus}</span>}
-            {isElectron && (
-              <button className="btn-primary" onClick={handleSync} disabled={syncing}>
-                <RefreshCw size={15} className={syncing ? 'spin' : ''} />
-                هم‌گام‌سازی
-              </button>
-            )}
-          </div>
-        </header>
-
-        <main className="app-content">
-          {page === 'overview' && (
-            <OverviewPage
-              token={token}
-              userName={me.name}
-              pendingOutboxCount={pendingOutboxCount}
-              itemsCount={items.length}
-            />
-          )}
+  // محتوای صفحه مستقل از نوعِ چیدمان است؛ فقط کرومِ اطراف (نوارِ کناری یا افقی) عوض می‌شود.
+  const pageContent = (
+    <>
+          {page === 'overview' &&
+            (theme.content === 'guided' ? (
+              <GuidedDashboard
+                token={token}
+                userName={me.name}
+                pendingOutboxCount={pendingOutboxCount}
+                itemsCount={items.length}
+                onNavigate={navigate}
+              />
+            ) : (
+              <OverviewPage
+                token={token}
+                userName={me.name}
+                pendingOutboxCount={pendingOutboxCount}
+                itemsCount={items.length}
+              />
+            ))}
           {page === 'sales' && (
             <SalesPage
               token={token}
@@ -235,7 +212,7 @@ export function Dashboard({
           {page === 'distributor' && me.tenant_kind === 'distributor' && <DistributorPage token={token} items={items} />}
           {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} />}
           {page === 'fixedassets' && (
-            <div className="page">
+            <div className="page panels">
               <PageHeader
                 icon={Building2}
                 title="دارایی ثابت"
@@ -262,7 +239,7 @@ export function Dashboard({
             />
           )}
           {page === 'payroll' && (
-            <div className="page">
+            <div className="page panels">
               <PageHeader
                 icon={Users}
                 title="حقوق و دستمزد"
@@ -272,7 +249,7 @@ export function Dashboard({
             </div>
           )}
           {page === 'integration' && (
-            <div className="page">
+            <div className="page panels">
               <PageHeader
                 icon={Store}
                 title="اتصال فروشگاه"
@@ -305,7 +282,7 @@ export function Dashboard({
             </div>
           )}
           {page === 'billing' && me.is_platform_admin && (
-            <div className="page">
+            <div className="page panels">
               <PageHeader
                 icon={CreditCard}
                 title="خریدهای سایت تجاری"
@@ -317,7 +294,7 @@ export function Dashboard({
           {page === 'accounts' && me.is_super_admin && <AccountsAdminPage token={token} />}
           {page === 'mpcommission' && me.is_super_admin && <MarketplaceCommissionPage token={token} />}
           {page === 'reports' && (
-            <div className="page">
+            <div className="page panels">
               <PageHeader
                 icon={BarChart3}
                 title="گزارش‌ها"
@@ -330,10 +307,73 @@ export function Dashboard({
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
+          {page === 'theme' && <ThemeGallery />}
           {page === 'help' && <HelpPage />}
-        </main>
-      </div>
-    </div>
+    </>
+  )
+
+  return (
+    <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
+      {theme.shell === 'topnav' ? (
+        <div className="app-shell app-shell--topnav">
+          <TopNav
+            active={page}
+            onNavigate={navigate}
+            userName={me.name}
+            roleName={me.role_name}
+            businessName={me.tenant_name}
+            isPlatformAdmin={me.is_platform_admin}
+            isSuperAdmin={me.is_super_admin}
+            tenantKind={me.tenant_kind}
+            onLogout={onLogout}
+            onSync={isElectron ? handleSync : undefined}
+            syncing={syncing}
+            syncStatus={syncStatus}
+          />
+          <main className="app-content">{pageContent}</main>
+        </div>
+      ) : (
+        <div className="app-shell">
+          <Sidebar
+            active={page}
+            activeSection={section}
+            onNavigate={navigate}
+            userName={me.name}
+            roleName={me.role_name}
+            isPlatformAdmin={me.is_platform_admin}
+            isSuperAdmin={me.is_super_admin}
+            tenantKind={me.tenant_kind}
+            onLogout={onLogout}
+            open={navOpen}
+            onClose={() => setNavOpen(false)}
+          />
+          <div className="app-main">
+            <header className="topbar">
+              <div className="topbar-start">
+                <button
+                  type="button"
+                  className="nav-toggle"
+                  onClick={() => setNavOpen(true)}
+                  aria-label="باز کردن منو"
+                >
+                  <Menu size={20} />
+                </button>
+                <h1 className="topbar-title">{PAGE_TITLES[page]}</h1>
+              </div>
+              <div className="topbar-actions">
+                {syncStatus && <span className="sync-status">{syncStatus}</span>}
+                {isElectron && (
+                  <button className="btn-primary" onClick={handleSync} disabled={syncing}>
+                    <RefreshCw size={15} className={syncing ? 'spin' : ''} />
+                    هم‌گام‌سازی
+                  </button>
+                )}
+              </div>
+            </header>
+            <main className="app-content">{pageContent}</main>
+          </div>
+        </div>
+      )}
     </NavSectionContext.Provider>
   )
 }

@@ -315,6 +315,122 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
 
+- **۱۴۰۵/۰۵/۲۴ (2026-08-14) — «نسخه‌ی جدید»: ساختارِ مرحله‌ای (ویزارد) + داشبوردِ اقدام‌محور برای پوسته‌ی Tipalti (فقط فرانت):**
+  - **ایده:** برای پوسته‌ی Tipalti یک «نسخه/ساختارِ جدید» — محتوای مرکزیِ صفحه‌ها به روشِ **مرحله‌ای (ویزارد)** با تاییدِ
+    مرحله‌به‌مرحله (الهام از گردشِ Tipalti bill review) + داشبوردِ **اقدام‌محور**. گِیت‌شده به تم: فیلدِ تازه‌ی
+    `content:'classic'|'guided'` روی `ThemeDef` ([lib/theme.ts](desktop/src/lib/theme.ts))؛ تنها `tipalti` = `guided`، پس تیره/روشن
+    **دقیقاً مثلِ قبل** (فرمِ تک‌صفحه‌ای، overviewِ کلاسیک) می‌مانند.
+  - **چارچوبِ ویزارد (تازه [TaskFlow.tsx](desktop/src/components/wizard/TaskFlow.tsx)):** استپرِ شماره‌دار (انجام‌شده✓/فعال/پیشِ‌رو، بازگشت آزاد،
+    پرش به جلو نه) + بدنه‌ی مرحله‌ی فعال + **پنلِ پیش‌نمایشِ زنده‌ی کناری** + فوترِ «قبلی/تایید و ادامه/ثبت». اعلامی و قابل‌استفاده‌ی مجدد.
+  - **تسکِ مرجع — فاکتور فروش:** منطق از فرمِ کلاسیک به هوکِ مشترکِ [useSalesInvoiceDraft](desktop/src/lib/salesInvoiceDraft.ts)
+    استخراج شد (یک منبعِ حقیقت — کلاسیک هم همان را مصرف می‌کند؛ `CreditBanner` صادر شد). [SalesInvoiceWizard.tsx](desktop/src/components/wizard/SalesInvoiceWizard.tsx)
+    چهار مرحله: سربرگ/طرف‌حساب ← اقلام (گِیت: ≥۱ ردیفِ معتبر) ← تخفیف/مالیات/پرداخت ← بازبینی و ثبت. ثبت همان مسیرِ فعلی (سرور/صفِ آفلاین).
+    [SalesPage](desktop/src/pages/SalesPage.tsx) تبِ فاکتور را `guided?Wizard:Form` شاخه می‌زند.
+  - **داشبوردِ اقدام‌محور (تازه [GuidedDashboard.tsx](desktop/src/components/GuidedDashboard.tsx)):** خوش‌آمد + ۴ KPI (بازاستفاده‌ی
+    `StatCard` + `fetchTrialBalance/IncomeStatement`) + **مرکزِ اقدام** (لانچرها از [taskRegistry.tsx](desktop/src/lib/taskRegistry.tsx) → `onNavigate`)
+    + **صفِ کارها** (بازاستفاده‌ی `AlertsPanel`). [Dashboard](desktop/src/components/Dashboard.tsx) overview را `guided?GuidedDashboard:OverviewPage` شاخه می‌زند.
+  - **استایل:** بلوکِ تازه در [App.css](desktop/src/App.css) (`.taskflow*`, `.live-preview*`, `.action-hub/-card`, `.guided-dash`) — کاملاً
+    اسکوپ‌شده به `:root[data-theme='tipalti']` + موبایل (استپرِ فشرده «مرحله n از m» + پنلِ پیش‌نمایش زیرِ بدنه).
+  - **راستی‌آزمایی:** typecheck app+electron ✓، build ✓؛ Playwright روی هارنسِ CSSِ واقعی (دسکتاپ ۱۴۴۰: استپرِ سه‌حالته + پنلِ پیش‌نمایش +
+    اکشن‌هابِ ۶تایی؛ موبایل ۳۹۰px: پنلِ بالا + کارت‌های ردیف)، بدونِ سرریزِ افقی. کلاسیک ساختاراً دست‌نخورده (اجزای قبلی).
+  - **استقرار (فقط‌فرانت):** سواپِ دستیِ وب روی `acc.cubita.ir` + آینه‌ی `demo.cubita.ir`؛ بدونِ قطعی/بک‌اند/دیتابیس؛ `web.old` نقطه‌ی بازگشت.
+    تأییدِ زنده: هر دو `index--mCrWluA.js` + `index-DoC1pmub.css`؛ کلاس‌های `.taskflow-step-num`/`.action-hub-grid` و رشته‌های ویزارد در باندلِ زنده.
+  - **رفعِ باگِ تقویم (پیرو بازخورد):** پاپ‌اورِ `JalaliDatePicker` روی فیلدهای باریک اعدادِ سمتِ چپ را بیرون می‌ریخت. ریشه:
+    سلولِ روز یک `<button>` بود و `min-height:var(--control-h)` (۳۶px در Tipalti) می‌گرفت و `aspect-ratio:1` این را به عرض هم
+    تحمیل می‌کرد، پس ۷ سلول (۲۶۴px) از عرضِ پاپ‌اور بیرون می‌زد. رفع در [App.css](desktop/src/App.css): `.jalali-date-cell{min-height:0;min-width:0}`
+    (+`max-width:100%` روی پاپ‌اور تا از عرضِ فیلد بیرون نزند). تأییدِ Playwright: `gridOverflows:false`، تقویم کاملاً داخلِ کارت.
+    مستقر روی prod+demo — باندلِ `index-Dvntd2zy.js` + `index-BopNAvE8.css`.
+  - **موجِ دومِ تسک‌ها (همان روز) — پیش‌فاکتور + برگشت از فروش + سامانه مؤدیان (فقط فرانت):** هر سه با همان الگو (هوکِ مشترک +
+    ویزارد + شاخه‌ی guided/classic) مرحله‌ای شدند؛ کلاسیک دست‌نخورده.
+    - **پیش‌فاکتور:** [useQuotationDraft](desktop/src/lib/quotationDraft.ts) + [QuotationWizard](desktop/src/components/wizard/QuotationWizard.tsx)
+      (مشتری/سربرگ ← اقلام ← بازبینی)؛ شاخه در [QuotationsTab](desktop/src/components/QuotationsTab.tsx)؛ حالتِ ویرایش هم پشتیبانی می‌شود.
+    - **برگشت از فروش:** [useSalesReturnDraft](desktop/src/lib/salesReturnDraft.ts) + [SalesReturnWizard](desktop/src/components/wizard/SalesReturnWizard.tsx)
+      (انتخاب فاکتور ← اقلام برگشتی ← بازبینی)؛ جدولِ قابل‌برگشت و فهرستِ برگشت‌ها به‌صورتِ اجزای صادرشده مشترک شد.
+    - **سامانه مؤدیان:** [useMoadianPanel](desktop/src/lib/moadianPanel.ts) + [MoadianWizard](desktop/src/components/wizard/MoadianWizard.tsx)
+      (اعتبارنامه ← محیط و تستِ اتصال ← ارسال صورتحساب) با **`allowJump`** (مراحل مستقل، پرشِ آزاد) — چون کاربرِ قبلاً تنظیم‌کرده
+      باید مستقیم به «ارسال» برود؛ KPIها بالای ویزارد و تاریخچه‌ی ارسال‌ها زیرِ آن. `MoadianPanel` به اجزای صادرشده (Stats/Credential/
+      Toggles/Hints/Send/History) شکسته شد تا پنل و ویزارد یک منبع داشته باشند. قابلیتِ تازه‌ی [TaskFlow](desktop/src/components/wizard/TaskFlow.tsx): پراپِ `allowJump`.
+    - **راستی‌آزمایی/استقرار:** typecheck app+electron ✓، build ✓؛ Playwright روی چیدمانِ مرحله‌ی مؤدیان (textareaها) و جدولِ برگشت
+      بدونِ سرریز. مستقر روی prod+demo — باندلِ `index-Do_398IF.js` + `index-BopNAvE8.css`.
+  - **حذفِ بالای تب‌ها در صفحه‌های ماژول (پیرو بازخورد؛ فقط guided):** سربرگ (آیکن+عنوان+توضیح) و ردیفِ KPI بالای تب‌ها در
+    صفحه‌های ماژول برداشته شد تا محتوا/تب‌ها مستقیم بالا بیایند (داشبورد خودش KPI دارد و نوارِ بالا ماژولِ فعال را نشان می‌دهد).
+    یک بلوکِ CSS در [App.css](desktop/src/App.css): `:root[data-theme='tipalti'] .app-content > .page:has(> .tabs) > .page-header,
+    …> .stat-grid { display:none }`. با `:has(> .tabs)` فقط صفحه‌های تب‌دار هدف‌اند — داشبوردِ اقدام‌محور (بدونِ .tabs) و
+    stat-gridهای داخلِ تب (مثلِ KPIهای مؤدیان) دست‌نخورده. تأییدِ Playwright: header/stat-grid بالا `none`، تب‌ها و KPIِ داخلِ تب سالم.
+    مستقر — باندلِ `index-D57zMc_3.js` + `index-CIJv54H0.css`.
+  - **موجِ سومِ تسک‌ها (خرید و انبار؛ فقط فرانت):** چهار فرمِ ثبت با همان الگو (هوکِ مشترک + ویزارد + شاخه‌ی guided/classic)
+    مرحله‌ای شدند؛ پنل‌های فهرست/گزارشِ انبار (کالاها/موجودی/کاردکس/…) عمداً همان ماندند.
+    - **فاکتور خرید:** [usePurchaseInvoiceDraft](desktop/src/lib/purchaseInvoiceDraft.ts) + [PurchaseInvoiceWizard](desktop/src/components/wizard/PurchaseInvoiceWizard.tsx)
+      (سربرگ/تأمین‌کننده ← اقلام ← مالیات/تخفیف ← بازبینی)؛ ساختِ سریعِ کالا (QuickItemForm) حفظ شد.
+    - **برگشت از خرید:** [usePurchaseReturnDraft](desktop/src/lib/purchaseReturnDraft.ts) + [PurchaseReturnWizard](desktop/src/components/wizard/PurchaseReturnWizard.tsx)؛
+      جدولِ اقلامِ قابلِ برگشت (`ReturnableTable`) به شکلِ حداقلی عمومی شد تا بینِ فروش و خرید مشترک باشد.
+    - **تعدیل دستیِ موجودی:** [useStockAdjustmentDraft](desktop/src/lib/stockAdjustmentDraft.ts) + [StockAdjustmentWizard](desktop/src/components/wizard/StockAdjustmentWizard.tsx) (کالا/انبار ← مقدار/دلیل).
+    - **انتقال بین انبار:** [useTransferDraft](desktop/src/lib/transferDraft.ts) + [TransferWizard](desktop/src/components/wizard/TransferWizard.tsx) (مبدأ/مقصد ← اقلام).
+    - شاخه در [PurchasesPage](desktop/src/pages/PurchasesPage.tsx) و [InventoryPage](desktop/src/pages/InventoryPage.tsx). راستی‌آزمایی: typecheck app+electron ✓،
+      build ✓، Playwright روی چیدمانِ انتقال (سطرهای select) و تعدیل بدونِ سرریز. مستقر روی prod+demo — باندلِ `index-CuiJl_so.js` + `index-CIJv54H0.css`.
+  - **رفعِ خروج از حساب هنگامِ رفرشِ مرورگر (فقط فرانت):** روی وب توکنِ ورود هیچ‌جا ذخیره نمی‌شد — با هر «رفرش»
+    `token` دوباره `null` می‌شد و کاربر به صفحه‌ی ورود پرت می‌شد. راه‌حل: هلپرِ تازه‌ی [session.ts](desktop/src/lib/session.ts)
+    توکن را در `localStorage` (کلیدِ `cubita.auth.token`) نگه می‌دارد — **فقط وب**؛ در Electron همان مسیرِ `window.cubita.setAuthToken`
+    (دیتابیسِ محلی + موتورِ همگام‌سازی) دست‌نخورده می‌ماند. [App.tsx](desktop/src/App.tsx): توکن با تابعِ اولیه از storage خوانده
+    می‌شود؛ یک `useEffect` آن را با `fetchMe` اعتبارسنجی می‌کند (توکنِ باطل → پاک و بازگشت به ورود، بدونِ حلقه)؛ تا آن لحظه به‌جای
+    فلاش‌خوردنِ صفحه‌ی ورود یک اسپلشِ کوتاه (`.app-boot`) نشان داده می‌شود؛ ورود/ثبت‌نام ذخیره و خروج پاک می‌کند. لینکِ بازیابیِ
+    رمز مقدم می‌ماند (جلسه‌ی ذخیره‌شده نادیده گرفته می‌شود). راستی‌آزمایی: Playwright (بدونِ توکن→ورود بدونِ گیرکردن؛ توکنِ نامعتبر→
+    اسپلش سپس پاک‌شدن و بازگشت به ورود). مستقر — باندلِ `index-DE4uN1yx.js`.
+  - **یکدست‌سازیِ ظاهرِ «دارایی ثابت» و «حقوق و دستمزد» با بقیه‌ی صفحه‌ها (فقط فرانت):** این دو صفحه در [Dashboard.tsx](desktop/src/components/Dashboard.tsx)
+    با `className="page"` رندر می‌شدند نه `"page panels"` — پس سطحِ سفیدِ یکپارچه‌ی پنلی (که ۱۹ صفحه‌ی دیگر دارند) را نداشتند:
+    دارایی ثابت «روی یک کارت» جمع نمی‌شد و حقوق‌ودستمزد کارتِ سفیدِ زیرِ محتوا نداشت. اصلاح: افزودنِ کلاسِ `panels` به هر دو
+    (بدونِ تغییرِ CSS؛ همان قواعدِ اثبات‌شده‌ی `.page.panels`). مستقر — باندلِ `index-It8HFdjs.js`.
+  - **حذفِ سربرگ/KPI بالای *همه‌ی* صفحه‌های guided + یکدست‌سازیِ سه صفحه‌ی باقی‌مانده (فقط فرانت):** پیرو بازخورد،
+    قاعده‌ی حذفِ بالای صفحه در [App.css](desktop/src/App.css) از `:has(> .tabs)` به `:not(.guided-dash)` گسترده شد تا صفحه‌های
+    **بدونِ تب** هم (دارایی ثابت، گزارش‌ها، …) سربرگ و ردیفِ KPI‌شان حذف شود — نوارِ بالا خودش ماژولِ فعال را نشان می‌دهد.
+    داشبوردِ اقدام‌محور (`.guided-dash`) مستثنا؛ stat-gridهای داخلِ تب (KPIهای مؤدیان) چون فرزندِ مستقیمِ `.page` نیستند دست‌نخورده.
+    همچنین `panels` به سه صفحه‌ی `integration`/`billing`/`reports` در [Dashboard.tsx](desktop/src/components/Dashboard.tsx) افزوده شد (هر سه
+    یک `<section>`/محتوای ساده برمی‌گردانند که قواعدِ پنل پوششش می‌دهند). راستی‌آزمایی: هارنسِ Playwright روی CSSِ واقعی —
+    سربرگ+KPIِ صفحه‌ی بدونِ تب `display:none`، فرم/فهرست دیده می‌شوند، و KPIِ داشبورد و KPIِ درون‌تبِ مؤدیان دست‌نخورده (PASS).
+    مستقر — باندلِ `index-CyTTGY0X.js` + `index-Dkj4UhRk.css`.
+  - **فازِ بعد:** تبدیلِ بقیه‌ی تسک‌ها (دریافت‌وپرداخت/سند/…) با همان `TaskFlow`؛ لایه‌ی تاییدِ چندنقشی؛ ماندگاریِ پیش‌نویس.
+
+- **۱۴۰۵/۰۵/۲۴ (2026-08-14) — سیستمِ «پوسته/تم» + تمِ Tipalti (سرمه‌ای/طلایی) با چیدمانِ افقیِ Xero (فقط فرانت):**
+  - **ایده:** یک بخشِ «ظاهر و پوسته» که بشود تم‌های تازه اضافه کرد؛ اولین تمِ تازه ظاهرِ رقیب را می‌سازد: **پالتِ Tipalti**
+    (نوارِ سرمه‌ای #16223d + دکمه‌های طلاییِ #ffc72c با متنِ تیره، محتوای روشن) روی **چیدمانِ افقیِ Xero** (نوارِ منوی افقیِ بالا
+    با دراپ‌داون، بدونِ نوارِ کناری). فارسی/RTL با ماژول‌های خودمان. **انتخابی** — پیش‌فرضِ VSCodeِ تیره دست‌نخورده.
+  - **رجیستریِ تم ([lib/theme.ts](desktop/src/lib/theme.ts)):** تم از یک صفتِ ساده به `ThemeDef` (id/label/kind/**shell**/swatches)
+    ارتقا یافت؛ `THEMES` رجیستریِ سه‌تایی (dark/light/tipalti). افزودنِ تمِ تازه = یک ردیف اینجا + یک بلوکِ `:root[data-theme='id']`.
+    حالتِ تم **سراسری/مشترک** با `useSyncExternalStore` تا تعویضِ تم، **چیدمان را زنده** عوض کند (نه فقط رنگ).
+  - **توکن‌ها ([index.css](desktop/src/index.css)):** بلوکِ `tipalti` (کلِ توکن‌های موجود + `--topnav-*` تازه). چون هیچ
+    کامپوننتی رنگِ ثابت ندارد، همین بلوک کلِ برنامه را تمی می‌کند.
+  - **چیدمان:** مدلِ ناوبریِ مشترک به [lib/navModel.tsx](desktop/src/lib/navModel.tsx) منتقل شد (Sidebar و TopNav هر دو از
+    `buildNav` می‌خوانند). [TopNav.tsx](desktop/src/components/TopNav.tsx) تازه: نوارِ افقیِ سرمه‌ای با دراپ‌داونِ گروه‌ها،
+    جست‌وجوی سریعِ ماژول، سوییچرِ کسب‌وکار، منوی کاربر، و **کشوی همبرگریِ موبایل** (≤۱۰۲۴px). [Dashboard.tsx](desktop/src/components/Dashboard.tsx)
+    بر اساسِ `theme.shell` بینِ نوارِ کناری و افقی شاخه می‌زند؛ سویچِ رندرِ صفحه مشترک ماند.
+  - **بخشِ «ظاهر و پوسته»:** [ThemeGallery.tsx](desktop/src/components/ThemeGallery.tsx) — کارت‌های تم با پیش‌نمایشِ کوچکِ
+    رنگ+چیدمان؛ صفحه‌ی `theme` (nav ثانویه) و از منوی کاربرِ TopNav.
+  - **راستی‌آزمایی:** تایپ‌چکِ app+electron ✓، build ✓، لینت تمیز؛ اسکرین‌شاتِ Playwright (دسکتاپ: نوارِ سرمه‌ای + دراپ‌داونِ
+    باز + دکمه‌های طلایی؛ موبایلِ ۳۹۰px: کشوی همبرگری). پیش‌فرضِ تیره/سایدبار دست‌نخورده. باندلِ `index-CA3HKH89.js`.
+  - **دنباله (همان روز) — بازطراحیِ «محتوای صفحه» به سبکِ Xero/Tipalti (فقط فرانت):** فقط رنگ‌ونوار کافی نبود؛ درونِ صفحه‌ها
+    هم باید مثلِ اسکرین‌شات‌های رقیب «هوادار» شود. چون همه‌چیز توکن‌محور است، بلوکِ `:root[data-theme='tipalti']` در
+    [index.css](desktop/src/index.css) حالا **مقیاسِ فونت/فاصله/ارتفاعِ کنترل** را هم بازتعریف می‌کند (base 13→14px, lh 1.6,
+    control-h 36px, تیترها درشت‌تر) — چون `font:` روی همان ریشه با `var(--fs-base)` بازمحاسبه می‌شود، کلِ متنِ برنامه یک‌جا بزرگ
+    می‌شود. + بلوکِ اسکوپ‌شده در [App.css](desktop/src/App.css) برای صیقلِ ساختاری: سرصفحه‌ی درشتِ Xero با آیکونِ آرامِ طلایی‌تینت
+    (نه گرادیانِ رنگین‌کمانی)، کارت‌های سایه‌محورِ گوشه‌نرمِ شناور، جدول‌های ردیف‌بلندِ روشن، KPIهای عددِدرشت، و **تب‌های زیرخط‌دارِ
+    Xero** (به‌جای کپسول‌های جعبه‌ای؛ فقط دسکتاپ — موبایل کپسولِ گریدی می‌ماند). همه با پیشوندِ تم اسکوپ‌اند؛ پوسته‌های پیش‌فرض
+    (تیره/روشن) با اسکرین‌شات تأیید شد که **بایت‌به‌بایت دست‌نخورده** ماندند (تب‌های پیل، تراکمِ ۱۳px، آبیِ VSCode). Playwright
+    روی صفحه‌ی نمونه‌ی ماژول (سرصفحه + KPI + تب + جدول + فرم) در دسکتاپ ۱۲۸۰ و موبایل ۳۹۰px بدونِ سرریزِ افقی.
+  - **رفعِ عرضِ محتوا (پیرو بازخوردِ زنده):** در چیدمانِ topnav سایدبار حذف شده ولی `.page` هنوز `max-width`ِ چیدمانِ سایدباری
+    (`clamp(1160,82vw,1760)`) را داشت، پس محتوا باریک می‌ماند و به‌اندازه‌ی جای سایدبارِ قبلی کنارش خالی می‌شد (کاربر: «کارت‌ها
+    رفتن سمت راست و جای منوی قبلی سمت چپ خالی مونده»). دو قاعده‌ی اسکوپ‌شده به **شِل** (نه تم): (۱) `.app-shell--topnav
+    .app-content > .page { max-width: none }` تا محتوا کلِ عرضِ آزادشده را پر کند و کارت‌ها بزرگ‌تر شوند؛ (۲) `scrollbar-gutter:
+    stable both-edges` روی `.app-content`ِ topnav تا اسکرول‌بارِ عمودیِ RTL (که سمتِ چپ می‌آید) فاصله‌ی دو طرف را نامتوازن نکند.
+    تستِ ۱۹۱۲px: عرضِ صفحه ۱۷۷۲px، حاشیه‌ی چپ/راست ۷۰/۷۰. باندلِ `index-CTfOx7R-.js` + `index-Dtota8w7.css`.
+  - **استقرار (فقط‌فرانت):** کلِ این batch (بازطراحیِ محتوا + تمام‌عرض) با سواپِ دستیِ وب روی `acc.cubita.ir` مستقر و به
+    `demo.cubita.ir` آینه شد؛ بدونِ قطعی، بدونِ لمسِ بک‌اند/دیتابیس. تأییدِ زنده: هر دو سایت `index-Dtota8w7.css` را می‌دهند و
+    CSSِ زنده شاملِ `max-width:none` و `scrollbar-gutter` است. (رگرسیون: `web.old` روی سرور نقطه‌ی بازگشت.)
+  - **حذفِ toggleِ سریعِ روز/شب + بزرگ‌کردنِ همبرگرِ موبایل:** چون بخشِ «ظاهر و پوسته» هر سه تم را می‌دهد، دکمه‌های سریعِ
+    تیره/روشن از فوترِ [Sidebar.tsx](desktop/src/components/Sidebar.tsx) و منوی کاربرِ [TopNav.tsx](desktop/src/components/TopNav.tsx)
+    حذف شدند (importهای `useTheme`/`Sun`/`Moon` هم پاک شد). **هیچ تمی از رجیستری حذف نشد** — dark/light/tipalti دست‌نخورده و
+    «ظاهر و پوسته» تنها مسیرِ تعویض شد. همبرگرِ TopNav از ۳۸→**۴۴px** (هدفِ لمسیِ استاندارد) + آیکونِ ۲۰→۲۴. مستقر روی prod+demo،
+    تأییدِ زنده: برچسب‌های toggle از JS رفت، هر سه تم مانده، همبرگر ۴۴px. باندلِ `index-CTkX9q6t.js` + `index-6zXlyWMY.css`.
+
 - **۱۴۰۵/۰۵/۲۴ (2026-08-14) — اتصالِ سیستمِ حسابداری به دستگاهِ کارتخوان (POS Terminal) (مهاجرت `0064`):**
   - **ایده:** فروشگاه‌دار با یک دکمه مبلغِ فاکتور را به دستگاهِ کارتخوان می‌فرستد؛ مشتری کارت می‌کشد؛ نتیجه **خودکار به‌صورتِ رسیدِ بانکی**
     در حسابداری می‌نشیند (با شماره‌ی مرجع/RRN برای مغایرت‌گیری). دکمه در **سه جا**: صندوقِ فروشگاهی، فرمِ فاکتورِ فروش، و «دریافت وجه».

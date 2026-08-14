@@ -1,29 +1,16 @@
-import { useEffect, useState } from 'react'
 import { FileText, Plus, Trash2, Save, Store } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import {
-  createSalesQuotation,
-  updateSalesQuotation,
-  fetchContacts,
-  fetchStockLevels,
-  type ContactRecord,
-  type SalesQuotationRecord,
-  type StockLevel,
-} from '../api'
+import type { SalesQuotationRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
-import { todayIso } from '../lib/jalali'
-
-interface DraftLine {
-  itemId: string
-  qty: string
-  unitPrice: string
-}
+import { useQuotationDraft } from '../lib/quotationDraft'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
+/** فرمِ کلاسیکِ «ثبت/ویرایشِ پیش‌فاکتور» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
+ *  [useQuotationDraft] است تا با ویزاردِ نسخه‌ی جدید یک‌دست بماند. */
 export function QuotationForm({
   token,
   warehouses,
@@ -39,168 +26,7 @@ export function QuotationForm({
   editing?: SalesQuotationRecord | null
   onDoneEditing?: () => void
 }) {
-  const [warehouseId, setWarehouseId] = useState('')
-  const [quotationDate, setQuotationDate] = useState(todayIso())
-  const [validUntil, setValidUntil] = useState('')
-  const [description, setDescription] = useState('')
-  const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitPrice: '' }])
-  const [message, setMessage] = useState<string | null>(null)
-
-  // مشتری: از فهرستِ اشخاص یا دستی
-  const [customerMode, setCustomerMode] = useState<'list' | 'manual'>('list')
-  const [contacts, setContacts] = useState<ContactRecord[]>([])
-  const [contactId, setContactId] = useState('')
-  const [customerName, setCustomerName] = useState('')
-
-  // موجودی: خواندن از انبار یا دستی
-  const [stockMode, setStockMode] = useState<'warehouse' | 'manual'>('warehouse')
-  const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
-
-  const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
-
-  // مشتری‌ها زنده خوانده می‌شوند؛ آفلاین که نشد، فهرست خالی و کاربر می‌تواند دستی وارد کند.
-  useEffect(() => {
-    fetchContacts(token)
-      .then((rows) => setContacts(rows.filter((c) => c.type !== 'supplier')))
-      .catch(() => setContacts([]))
-  }, [token])
-
-  // موجودیِ انبار زنده خوانده می‌شود؛ آفلاین که نشد، حالتِ «از انبار» چیزی نشان نمی‌دهد.
-  useEffect(() => {
-    fetchStockLevels(token)
-      .then(setStockLevels)
-      .catch(() => setStockLevels([]))
-  }, [token])
-
-  function resetForm() {
-    setWarehouseId('')
-    setQuotationDate(todayIso())
-    setValidUntil('')
-    setDescription('')
-    setLines([{ itemId: '', qty: '1', unitPrice: '' }])
-    setCustomerMode('list')
-    setContactId('')
-    setCustomerName('')
-  }
-
-  // پرکردنِ فرم هنگامِ ویرایش (فقط با تغییرِ پیش‌فاکتورِ انتخاب‌شده، نه هر رندر).
-  useEffect(() => {
-    if (!editing) return
-    setWarehouseId(editing.warehouse_id)
-    setQuotationDate(editing.quotation_date)
-    setValidUntil(editing.valid_until ?? '')
-    setDescription(editing.description ?? '')
-    if (editing.contact_id) {
-      setCustomerMode('list')
-      setContactId(editing.contact_id)
-      setCustomerName('')
-    } else {
-      setCustomerMode('manual')
-      setCustomerName(editing.customer_name ?? '')
-      setContactId('')
-    }
-    setLines(
-      editing.lines.length
-        ? editing.lines.map((l) => ({ itemId: l.item_id, qty: String(Number(l.qty)), unitPrice: String(Number(l.unit_price)) }))
-        : [{ itemId: '', qty: '1', unitPrice: '' }],
-    )
-    setMessage(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing?.id])
-
-  function unitOf(itemId: string): string {
-    return items.find((it) => it.id === itemId)?.unit || ''
-  }
-
-  // کالای خدماتی موجودیِ انبار ندارد (is_service در کش عدد ۰/۱ است).
-  function isService(itemId: string): boolean {
-    return !!items.find((it) => it.id === itemId)?.is_service
-  }
-
-  // موجودیِ در دسترسِ یک کالا در انبارِ انتخاب‌شده.
-  function availableStock(itemId: string): number | null {
-    if (!itemId || !effectiveWarehouseId) return null
-    const row = stockLevels.find((s) => s.item_id === itemId && s.warehouse_id === effectiveWarehouseId)
-    return row ? Number(row.qty) : 0
-  }
-
-  function updateLine(index: number, patch: Partial<DraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
-  }
-
-  // انتخابِ کالا: قیمتِ واحد خودکار از قیمتِ فروشِ همان کالا در انبار پر می‌شود (قابلِ ویرایش).
-  function chooseLineItem(index: number, itemId: string) {
-    if (!itemId) {
-      updateLine(index, { itemId: '', unitPrice: '' })
-      return
-    }
-    const it = items.find((x) => x.id === itemId)
-    const price = it ? Number(it.sales_price) : 0
-    updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
-  }
-
-  // بازگرداندنِ قیمت به قیمتِ انبار (دکمه‌ی کنارِ قیمت).
-  function useInventoryPrice(index: number, itemId: string) {
-    const it = items.find((x) => x.id === itemId)
-    if (it) updateLine(index, { unitPrice: String(Number(it.sales_price)) })
-  }
-
-  function addLine() {
-    setLines((prev) => [...prev, { itemId: '', qty: '1', unitPrice: '' }])
-  }
-
-  function removeLine(index: number) {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev))
-  }
-
-  const total = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitPrice) || 0), 0)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-
-    if (!effectiveWarehouseId) {
-      setMessage('ابتدا هم‌گام‌سازی کنید تا انبار در دسترس باشد.')
-      return
-    }
-    const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0)
-    if (validLines.length === 0) {
-      setMessage('حداقل یک ردیف معتبر (کالا + تعداد) لازم است.')
-      return
-    }
-
-    const payload = {
-      quotation_date: quotationDate,
-      valid_until: validUntil || null,
-      warehouse_id: effectiveWarehouseId,
-      contact_id: customerMode === 'list' ? (contactId || null) : null,
-      customer_name: customerMode === 'manual' ? (customerName.trim() || null) : null,
-      description,
-      lines: validLines.map((l) => ({
-        item_id: l.itemId,
-        qty: Number(l.qty),
-        unit_price: Number(l.unitPrice) || 0,
-        description: '',
-      })),
-    }
-
-    try {
-      if (editing) {
-        await updateSalesQuotation(token, editing.id, payload)
-        onCreated()
-        onDoneEditing?.()
-        resetForm()
-        setMessage('پیش‌فاکتور ویرایش شد.')
-      } else {
-        await createSalesQuotation(token, payload)
-        resetForm()
-        setMessage('پیش‌فاکتور ثبت شد.')
-        onCreated()
-      }
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+  const q = useQuotationDraft({ token, warehouses, items, onCreated, editing, onDoneEditing })
 
   return (
     <SectionCard
@@ -210,27 +36,33 @@ export function QuotationForm({
       {warehouses.length === 0 || items.length === 0 ? (
         <p className="hint">قبل از ثبت پیش‌فاکتور، یک‌بار «هم‌گام‌سازی» کنید تا انبار و کالاها در دسترس باشند.</p>
       ) : (
-        <form className="invoice-form" onSubmit={handleSubmit}>
+        <form
+          className="invoice-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void q.submit()
+          }}
+        >
           {/* ── مشتری: از فهرست یا دستی ── */}
           <label>
             مشتری
             <div className="seg-toggle">
-              <button type="button" className={customerMode === 'list' ? 'active' : ''} onClick={() => setCustomerMode('list')}>از فهرست اشخاص</button>
-              <button type="button" className={customerMode === 'manual' ? 'active' : ''} onClick={() => setCustomerMode('manual')}>دستی</button>
+              <button type="button" className={q.customerMode === 'list' ? 'active' : ''} onClick={() => q.setCustomerMode('list')}>از فهرست اشخاص</button>
+              <button type="button" className={q.customerMode === 'manual' ? 'active' : ''} onClick={() => q.setCustomerMode('manual')}>دستی</button>
             </div>
-            {customerMode === 'list' ? (
-              <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+            {q.customerMode === 'list' ? (
+              <select value={q.contactId} onChange={(e) => q.setContactId(e.target.value)}>
                 <option value="">— بدون مشتری —</option>
-                {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                {q.contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
             ) : (
-              <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="نام مشتری را بنویسید" />
+              <input type="text" value={q.customerName} onChange={(e) => q.setCustomerName(e.target.value)} placeholder="نام مشتری را بنویسید" />
             )}
           </label>
 
           <label>
             انبار
-            <select value={effectiveWarehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            <select value={q.effectiveWarehouseId} onChange={(e) => q.setWarehouseId(e.target.value)}>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
@@ -238,118 +70,116 @@ export function QuotationForm({
           </label>
           <label>
             تاریخ پیشنهاد
-            <JalaliDatePicker value={quotationDate} onChange={setQuotationDate} />
+            <JalaliDatePicker value={q.quotationDate} onChange={q.setQuotationDate} />
           </label>
           <label>
             اعتبار تا
-            <JalaliDatePicker value={validUntil} onChange={setValidUntil} placeholder="بدون محدودیت" />
+            <JalaliDatePicker value={q.validUntil} onChange={q.setValidUntil} placeholder="بدون محدودیت" />
           </label>
           <label>
             توضیحات
-            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input type="text" value={q.description} onChange={(e) => q.setDescription(e.target.value)} />
           </label>
 
           {/* ── حالتِ موجودی ── */}
           <label>
             موجودی
             <div className="seg-toggle">
-              <button type="button" className={stockMode === 'warehouse' ? 'active' : ''} onClick={() => setStockMode('warehouse')}>از موجودی انبار</button>
-              <button type="button" className={stockMode === 'manual' ? 'active' : ''} onClick={() => setStockMode('manual')}>دستی</button>
+              <button type="button" className={q.stockMode === 'warehouse' ? 'active' : ''} onClick={() => q.setStockMode('warehouse')}>از موجودی انبار</button>
+              <button type="button" className={q.stockMode === 'manual' ? 'active' : ''} onClick={() => q.setStockMode('manual')}>دستی</button>
             </div>
           </label>
 
           <div className="table-scroll">
-          <table className="invoice-lines">
-            <thead>
-              <tr>
-                <th>کالا</th>
-                <th>تعداد</th>
-                {stockMode === 'warehouse' && <th>موجودی انبار</th>}
-                <th>قیمت واحد</th>
-                <th>مبلغ</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, i) => {
-                const service = isService(line.itemId)
-                const avail = stockMode === 'warehouse' && !service ? availableStock(line.itemId) : null
-                const over = avail != null && Number(line.qty) > avail
-                return (
-                  <tr key={i}>
-                    <td data-label="کالا">
-                      <ItemPicker items={items} value={line.itemId} onChange={(id) => chooseLineItem(i, id)} />
-                    </td>
-                    <td data-label="تعداد">
-                      <div className="qty-with-unit">
-                        <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(i, { qty: v })} />
-                        {line.itemId && <span className="unit-suffix">{unitOf(line.itemId)}</span>}
-                      </div>
-                    </td>
-                    {stockMode === 'warehouse' && (
-                      <td data-label="موجودی انبار">
-                        {!line.itemId ? '—' : service ? (
-                          <span className="unit-suffix">خدمات (بدون موجودی)</span>
-                        ) : (
-                          <div className="stock-cell">
-                            <span className={over ? 'stock-over' : 'stock-ok'}>{avail != null ? fa(avail) : '—'} {unitOf(line.itemId)}</span>
-                            {avail != null && avail > 0 && (
-                              <button type="button" className="link-like" onClick={() => updateLine(i, { qty: String(avail) })}>استفاده</button>
-                            )}
-                            {over && <div className="stock-warn">بیش از موجودی</div>}
-                          </div>
-                        )}
+            <table className="invoice-lines">
+              <thead>
+                <tr>
+                  <th>کالا</th>
+                  <th>تعداد</th>
+                  {q.stockMode === 'warehouse' && <th>موجودی انبار</th>}
+                  <th>قیمت واحد</th>
+                  <th>مبلغ</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.lines.map((line, i) => {
+                  const service = q.isService(line.itemId)
+                  const avail = q.stockMode === 'warehouse' && !service ? q.availableStock(line.itemId) : null
+                  const over = avail != null && Number(line.qty) > avail
+                  return (
+                    <tr key={i}>
+                      <td data-label="کالا">
+                        <ItemPicker items={items} value={line.itemId} onChange={(id) => q.chooseLineItem(i, id)} />
                       </td>
-                    )}
-                    <td data-label="قیمت واحد">
-                      <div className="qty-with-unit">
-                        <NumberInput
-                          value={line.unitPrice}
-                          onChange={(v) => updateLine(i, { unitPrice: v })}
-                          title={line.itemId ? `قیمت هر ${unitOf(line.itemId)}` : 'قیمت واحد'}
-                        />
-                        {line.itemId && (
-                          <button type="button" className="link-like" title="قیمتِ انبار" onClick={() => useInventoryPrice(i, line.itemId)}>
-                            <Store size={12} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td data-label="مبلغ">
-                      <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
-                        {line.itemId
-                          ? ((Number(line.qty) || 0) * (Number(line.unitPrice) || 0)).toLocaleString('fa-IR')
-                          : '—'}
-                      </span>
-                    </td>
-                    <td>
-                      <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف ردیف">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      <td data-label="تعداد">
+                        <div className="qty-with-unit">
+                          <NumberInput allowDecimal value={line.qty} onChange={(v) => q.updateLine(i, { qty: v })} />
+                          {line.itemId && <span className="unit-suffix">{q.unitOf(line.itemId)}</span>}
+                        </div>
+                      </td>
+                      {q.stockMode === 'warehouse' && (
+                        <td data-label="موجودی انبار">
+                          {!line.itemId ? '—' : service ? (
+                            <span className="unit-suffix">خدمات (بدون موجودی)</span>
+                          ) : (
+                            <div className="stock-cell">
+                              <span className={over ? 'stock-over' : 'stock-ok'}>{avail != null ? fa(avail) : '—'} {q.unitOf(line.itemId)}</span>
+                              {avail != null && avail > 0 && (
+                                <button type="button" className="link-like" onClick={() => q.updateLine(i, { qty: String(avail) })}>استفاده</button>
+                              )}
+                              {over && <div className="stock-warn">بیش از موجودی</div>}
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      <td data-label="قیمت واحد">
+                        <div className="qty-with-unit">
+                          <NumberInput
+                            value={line.unitPrice}
+                            onChange={(v) => q.updateLine(i, { unitPrice: v })}
+                            title={line.itemId ? `قیمت هر ${q.unitOf(line.itemId)}` : 'قیمت واحد'}
+                          />
+                          {line.itemId && (
+                            <button type="button" className="link-like" title="قیمتِ انبار" onClick={() => q.useInventoryPrice(i, line.itemId)}>
+                              <Store size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td data-label="مبلغ">
+                        <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
+                          {line.itemId ? ((Number(line.qty) || 0) * (Number(line.unitPrice) || 0)).toLocaleString('fa-IR') : '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" className="icon-btn-danger" onClick={() => q.removeLine(i)} disabled={q.lines.length === 1} aria-label="حذف ردیف">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
 
           <div className="invoice-form-footer">
-            <button type="button" onClick={addLine}>
+            <button type="button" onClick={q.addLine}>
               <Plus size={14} /> افزودن ردیف
             </button>
-            <span className="invoice-total">جمع کل: {fa(total)} ریال</span>
+            <span className="invoice-total">جمع کل: {fa(q.total)} ریال</span>
             {editing && (
-              <button type="button" onClick={() => { resetForm(); setMessage(null); onDoneEditing?.() }}>
+              <button type="button" onClick={() => { q.resetForm(); q.setMessage(null); onDoneEditing?.() }}>
                 انصراف از ویرایش
               </button>
             )}
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="btn-primary" disabled={q.submitting}>
               <Save size={14} /> {editing ? 'ذخیرهٔ ویرایش' : 'ثبت پیش‌فاکتور'}
             </button>
           </div>
 
-          {message && <div className="hint">{message}</div>}
+          {q.message && <div className="hint">{q.message}</div>}
         </form>
       )}
     </SectionCard>

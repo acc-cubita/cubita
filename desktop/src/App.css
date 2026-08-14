@@ -966,6 +966,22 @@ button:disabled {
   }
 }
 
+/* اسپلشِ کوتاهِ بازیابیِ جلسه (هنگامِ اعتبارسنجیِ توکنِ ذخیره‌شده روی وب) */
+.app-boot {
+  flex: 1;
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+.app-boot p {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
 /* ---------- کارت/بخش ---------- */
 
 .page section {
@@ -2840,6 +2856,10 @@ button:disabled {
   top: calc(100% + 6px);
   inset-inline-start: 0;
   width: 250px;
+  /* روی فیلدهای باریک‌تر از ۲۵۰px (مثلِ ستون‌های ۲۲۰pxِ گریدِ فرم) پاپ‌اور از لبه‌ی
+     فیلد بیرون می‌زد و اعدادِ سمتِ چپ سرریز می‌شدند؛ این سقف پاپ‌اور را به عرضِ فیلد
+     محدود می‌کند تا هرگز بیرون نریزد. روی فیلدهای پهن‌تر همان ۲۵۰px می‌ماند. */
+  max-width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -2904,6 +2924,12 @@ button:disabled {
   font-size: var(--fs-sm);
   padding: 0;
   font-variant-numeric: tabular-nums;
+  /* سلول یک <button> است و از استایلِ سراسری min-height:var(--control-h) می‌گرفت؛
+     با aspect-ratio:1 این ارتفاع به عرض هم تحمیل می‌شد و ۷ سلول از عرضِ پاپ‌اور بیرون
+     می‌زد (اعداد سمتِ چپ سرریز). با صفر کردنِ min-height/min-width سلول با ستونِ ۱fr
+     کوچک می‌شود و شبکه درونِ پاپ‌اور جا می‌گیرد. */
+  min-height: 0;
+  min-width: 0;
 }
 
 .jalali-date-cell:not(.empty):hover {
@@ -3501,6 +3527,518 @@ button:disabled {
   background: var(--warning-bg, rgba(210, 150, 40, 0.12));
   color: var(--warning);
   line-height: 1.8;
+}
+
+/* ── گالریِ پوسته/تم ───────────────────────────────────────────────────── */
+.theme-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-4);
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  text-align: start;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.theme-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+.theme-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+/* پیش‌نمایشِ کوچکِ برنامه: نوار (بالا یا کنار) + بدنه با کارت و دکمه */
+.theme-card-preview {
+  height: 96px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border);
+}
+.theme-card-preview[data-shell='topnav'] {
+  flex-direction: column;
+}
+.theme-card-preview[data-shell='topnav'] .tp-nav {
+  flex-direction: row;
+  align-items: center;
+  height: 22px;
+  width: 100%;
+}
+.theme-card-preview[data-shell='sidebar'] {
+  flex-direction: row-reverse;
+}
+.theme-card-preview[data-shell='sidebar'] .tp-nav {
+  flex-direction: column;
+  width: 28px;
+  height: 100%;
+}
+.tp-nav {
+  display: flex;
+  gap: 5px;
+  padding: 6px;
+  flex-shrink: 0;
+}
+.tp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.tp-line {
+  height: 4px;
+  width: 22px;
+  align-self: center;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.theme-card-preview[data-shell='sidebar'] .tp-line {
+  width: 16px;
+}
+.tp-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.tp-panel {
+  flex: 1;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.tp-btn {
+  height: 12px;
+  width: 46px;
+  border-radius: 4px;
+}
+.theme-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-weight: 700;
+  color: var(--text-h);
+}
+.theme-check {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.theme-card-meta {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.theme-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* ── نوارِ افقیِ بالا (چیدمانِ topnav / Xero) ──────────────────────────────── */
+.app-shell--topnav {
+  flex-direction: column;
+}
+/* در چیدمانِ نوارِ افقی سایدباری وجود ندارد، پس محتوا نباید با max-widthِ چیدمانِ
+   سایدباری باریک بماند و کنارِ آن (به‌اندازه‌ی جای سایدبارِ قبلی) خالی رها شود. سقفِ
+   عرض را برمی‌داریم تا .page کلِ عرضِ آزادشده را پر کند و کارت‌ها بزرگ‌تر شوند —
+   فاصله‌ی دو طرف فقط padding و گاترِ متقارنِ .app-content است. */
+.app-shell--topnav .app-content > .page {
+  max-width: none;
+}
+/* اسکرول‌بارِ عمودیِ محتوا در RTL سمتِ چپ ظاهر می‌شود و فقط از یک سمت جا می‌خورد؛
+   با رزروِ گاتر در هر دو لبه، padding و فضای دو طرف برابر می‌ماند — چه اسکرول‌بار
+   باشد چه نباشد. */
+.app-shell--topnav .app-content {
+  scrollbar-gutter: stable both-edges;
+}
+.topnav {
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
+  background: var(--topnav-bg);
+  color: var(--topnav-text);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.topnav-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 56px;
+  padding: 0 clamp(12px, 2vw, 24px);
+}
+.topnav-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  /* هدفِ لمسیِ استاندارد (۴۴px) تا در موبایل راحت زده شود */
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--topnav-text);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.topnav-hamburger:hover {
+  background: var(--topnav-hover);
+}
+.topnav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--topnav-text);
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.topnav-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: var(--fs-md);
+}
+.topnav-brand-name {
+  font-size: var(--fs-md);
+}
+.topnav-menu {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: 8px;
+  /* overflow نباید مخفی/auto شود وگرنه دراپ‌داونِ absolute بریده می‌شود؛ در عوض زیرِ
+     ۱۰۲۴px کلِ منو به کشوی همبرگری می‌رود تا سرریز رخ ندهد. */
+  overflow: visible;
+}
+.topnav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--topnav-muted);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.topnav-item:hover {
+  background: var(--topnav-hover);
+  color: var(--topnav-text);
+}
+.topnav-item.open {
+  background: var(--topnav-hover);
+  color: var(--topnav-text);
+}
+.topnav-item.active {
+  color: var(--topnav-active);
+}
+.topnav-item-chev {
+  opacity: 0.7;
+  transition: transform 0.12s;
+}
+.topnav-item.open .topnav-item-chev {
+  transform: rotate(180deg);
+}
+.topnav-dd {
+  position: relative;
+}
+.topnav-dd-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  min-width: 224px;
+  padding: 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.topnav-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.topnav-dd-item:hover {
+  background: var(--surface-hover);
+}
+.topnav-dd-item.active {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 700;
+}
+.topnav-dd-ico {
+  display: inline-flex;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.topnav-dd-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+.topnav-dd-danger {
+  color: var(--danger);
+}
+.topnav-dd-danger .topnav-dd-ico {
+  color: var(--danger);
+}
+.topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  flex-shrink: 0;
+}
+.topnav-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--topnav-muted);
+}
+.topnav-search input {
+  width: 130px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--topnav-text);
+  font: inherit;
+}
+.topnav-search input::placeholder {
+  color: var(--topnav-muted);
+}
+.topnav-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.topnav-org {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--topnav-text);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.topnav-org-name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topnav-sync {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--topnav-text);
+  cursor: pointer;
+}
+.topnav-sync:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+.topnav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--topnav-text);
+  cursor: pointer;
+}
+.topnav-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.topnav-user-wrap .topnav-dd-panel,
+.topnav-user-panel {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+.topnav-user-head {
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.topnav-user-name {
+  font-weight: 700;
+  color: var(--text-h);
+}
+.topnav-user-role {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+/* کشوی موبایل */
+.topnav-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 70;
+}
+.topnav-mobile {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: min(300px, 86vw);
+  background: var(--topnav-bg);
+  color: var(--topnav-text);
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
+}
+.topnav-mobile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+.topnav-mobile-head button {
+  border: none;
+  background: transparent;
+  color: var(--topnav-text);
+  cursor: pointer;
+}
+.topnav-mobile-body {
+  padding: 8px;
+}
+.topnav-mobile-group {
+  padding: 6px 0;
+}
+.topnav-mobile-group + .topnav-mobile-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.topnav-mobile-heading {
+  padding: 6px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--topnav-muted);
+}
+.topnav-mobile-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--topnav-text);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+}
+.topnav-mobile-item:hover {
+  background: var(--topnav-hover);
+}
+.topnav-mobile-item.active {
+  background: var(--topnav-hover);
+  color: var(--topnav-active);
+  font-weight: 700;
+}
+.topnav-mobile-item .topnav-dd-ico {
+  color: inherit;
+  opacity: 0.85;
+}
+.topnav-mobile-item.topnav-dd-danger {
+  color: var(--danger);
+}
+/* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو. جست‌وجو/نامِ کسب‌وکار دیرتر (۷۶۰) پنهان می‌شوند. */
+@media (max-width: 1024px) {
+  .topnav-menu {
+    display: none;
+  }
+  .topnav-hamburger {
+    display: inline-flex;
+  }
+}
+@media (max-width: 760px) {
+  .topnav-search,
+  .topnav-org {
+    display: none;
+  }
+  .topnav-inner {
+    height: 52px;
+  }
 }
 
 /* ── محدودیت‌های سفارش (فرمِ کاتالوگ) + نشانه در کاتالوگِ فروشگاه ──────── */
@@ -5814,3 +6352,429 @@ button:disabled {
 
 /* انتخاب‌گرِ کالا در تبِ «کاردکس». */
 .kardex-picker { max-width: 360px; margin-bottom: 14px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   پوسته‌ی Tipalti — بازطراحیِ «محتوای صفحه» به سبکِ Xero/Tipalti
+   ───────────────────────────────────────────────────────────────────────────
+   رنگ و مقیاسِ فونت/فاصله از توکن‌های :root[data-theme='tipalti'] در index.css
+   می‌آیند؛ این‌جا فقط ساختارِ درون‌صفحه‌ای صیقل می‌خورد تا حسِ هوادار، کارتیِ شناور
+   و جدول‌های روشنِ Xero را بدهد. همه با پیشوندِ تم اسکوپ‌اند تا پوسته‌های پیش‌فرض
+   (تیره/روشن، چیدمانِ سایدبار) دقیقاً دست‌نخورده بمانند. تخصیصِ پیشوند از قواعدِ
+   پایه بالاتر است، پس بدونِ نیاز به ترتیب برنده می‌شوند. */
+
+/* فاصله‌ی صفحه هوادارتر (مثلِ فضای خالیِ گشاده‌ی Xero) */
+:root[data-theme='tipalti'] .app-content {
+  padding: clamp(28px, 2.4vw, 48px) clamp(32px, 3.2vw, 60px) 56px;
+}
+:root[data-theme='tipalti'] .page {
+  gap: 24px;
+}
+
+/* سرصفحه‌ی صفحه — عنوانِ درشتِ Xero + آیکونِ آرامِ طلایی‌تینت (نه گرادیانِ رنگین‌کمانی) */
+:root[data-theme='tipalti'] .page-header {
+  gap: 16px;
+}
+:root[data-theme='tipalti'] .page-header h1 {
+  font-size: clamp(24px, 1.3vw + 17px, 32px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+:root[data-theme='tipalti'] .page-header-desc {
+  font-size: var(--fs-md);
+  max-width: 70ch;
+}
+:root[data-theme='tipalti'] .page-header-icon {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+/* کارت‌ها — سفید، شناور روی خاکستریِ نرم، سایه‌محور و گوشه‌نرم */
+:root[data-theme='tipalti'] .page section {
+  border-radius: var(--radius-lg);
+  padding: clamp(20px, 1.6vw, 28px);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme='tipalti'] .section-card-header {
+  margin-bottom: 18px;
+}
+:root[data-theme='tipalti'] .section-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+/* جدول‌ها — ردیف‌های بلندتر، سرستونِ آرام، خطوطِ ظریف (استانداردِ Xero) */
+:root[data-theme='tipalti'] .page th,
+:root[data-theme='tipalti'] .page td {
+  padding: 14px 12px;
+}
+:root[data-theme='tipalti'] .page th {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border-strong);
+}
+:root[data-theme='tipalti'] .page tbody tr:not(.group-row):hover td {
+  background: var(--surface-2);
+}
+
+/* کارت‌های KPI — عددِ درشت‌ترِ Tipalti، کارتِ گوشه‌نرم‌تر */
+:root[data-theme='tipalti'] .stat-card {
+  border-radius: var(--radius-lg);
+  padding: clamp(20px, 1.5vw, 28px);
+}
+:root[data-theme='tipalti'] .stat-card-value {
+  font-size: clamp(26px, 1.5vw + 17px, 34px);
+}
+
+/* تب‌ها — نوارِ زیرخط‌دارِ Xero به‌جای کپسول‌های جعبه‌ای. فقط دسکتاپ؛ روی موبایل
+   (≤۷۶۰) tab-list به گریدِ هم‌عرض تبدیل می‌شود که با زیرخط جور نیست، پس همان‌جا
+   کپسولِ استاندارد می‌ماند. */
+@media (min-width: 761px) {
+  :root[data-theme='tipalti'] .tab-list {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    gap: 2px;
+  }
+  :root[data-theme='tipalti'] .tab-list .tab {
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    margin-bottom: -1px;
+    padding: 12px 18px;
+    color: var(--text-muted);
+  }
+  :root[data-theme='tipalti'] .tab-list .tab:hover {
+    background: transparent;
+    color: var(--text-h);
+  }
+  :root[data-theme='tipalti'] .tab-list .tab.active,
+  :root[data-theme='tipalti'] .tab-list .tab.active:hover {
+    background: transparent;
+    color: var(--text-h);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   «نسخه‌ی جدید» (فقط پوسته‌ی Tipalti / حالتِ guided): ویزاردِ کارِ مرحله‌ای +
+   داشبوردِ اقدام‌محور. همه اسکوپ‌شده به تم تا پوسته‌های کلاسیک دست‌نخورده بمانند.
+   این کلاس‌ها فقط در حالتِ guided (زیرِ Tipalti) رندر می‌شوند؛ پیشوندِ تم برای
+   اطمینانِ کامل از عدمِ نشت است. */
+
+/* ── ویزارد (TaskFlow) ─────────────────────────────────────────────────── */
+:root[data-theme='tipalti'] .taskflow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: clamp(20px, 1.6vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+:root[data-theme='tipalti'] .taskflow-title {
+  font-size: var(--fs-lg);
+  margin-bottom: 18px;
+}
+
+/* استپرِ شماره‌دار (دسکتاپ) */
+:root[data-theme='tipalti'] .taskflow-steps {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:root[data-theme='tipalti'] .taskflow-step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+:root[data-theme='tipalti'] .taskflow-step:last-child {
+  flex: 0 0 auto;
+}
+:root[data-theme='tipalti'] .taskflow-step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+:root[data-theme='tipalti'] .taskflow-step-btn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+:root[data-theme='tipalti'] .taskflow-step-btn:hover:not(:disabled) {
+  color: var(--text-h);
+  background: transparent;
+  border: none;
+}
+:root[data-theme='tipalti'] .taskflow-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+:root[data-theme='tipalti'] .taskflow-step-label {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* خطِ رابط بینِ مراحل (فضای بازمانده‌ی هر مرحله را پر می‌کند) */
+:root[data-theme='tipalti'] .taskflow-step:not(:last-child)::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  min-width: 16px;
+  margin: 0 10px;
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+/* مرحله‌ی انجام‌شده: چیپِ طلایی + برچسبِ پررنگ + خطِ رابطِ طلایی */
+:root[data-theme='tipalti'] .taskflow-step.is-done .taskflow-step-num {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+:root[data-theme='tipalti'] .taskflow-step.is-done .taskflow-step-label {
+  color: var(--text);
+}
+:root[data-theme='tipalti'] .taskflow-step.is-done::after {
+  background: var(--accent);
+}
+/* مرحله‌ی فعال: چیپِ طلایی با هاله + برچسبِ سرمه‌ایِ پررنگ */
+:root[data-theme='tipalti'] .taskflow-step.is-active .taskflow-step-num {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px var(--accent-bg);
+}
+:root[data-theme='tipalti'] .taskflow-step.is-active .taskflow-step-label {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+:root[data-theme='tipalti'] .taskflow-step-mobile {
+  display: none;
+}
+
+/* بدنه + پنلِ پیش‌نمایشِ کناری (side-by-side) */
+:root[data-theme='tipalti'] .taskflow-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 340px);
+  gap: var(--sp-5);
+  align-items: start;
+}
+:root[data-theme='tipalti'] .taskflow-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+:root[data-theme='tipalti'] .taskflow-step-sub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+:root[data-theme='tipalti'] .taskflow-preview {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  align-self: start;
+}
+:root[data-theme='tipalti'] .taskflow-block-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--warning);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+:root[data-theme='tipalti'] .taskflow-message {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+/* فوترِ ناوبری */
+:root[data-theme='tipalti'] .taskflow-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-4);
+}
+:root[data-theme='tipalti'] .taskflow-footer-spacer {
+  flex: 1;
+}
+:root[data-theme='tipalti'] .taskflow-back {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+}
+:root[data-theme='tipalti'] .taskflow-next {
+  min-width: 150px;
+  justify-content: center;
+}
+
+/* پنلِ پیش‌نمایشِ زنده‌ی سند (محتوای داخلِ .taskflow-preview) */
+:root[data-theme='tipalti'] .live-preview-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 var(--sp-3);
+}
+:root[data-theme='tipalti'] .live-preview-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  padding: 5px 0;
+}
+:root[data-theme='tipalti'] .live-preview-row span:first-child {
+  color: var(--text-muted);
+}
+:root[data-theme='tipalti'] .live-preview-row strong {
+  color: var(--text-h);
+  font-weight: 600;
+}
+:root[data-theme='tipalti'] .live-preview-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--sp-3) 0;
+}
+:root[data-theme='tipalti'] .live-preview-total {
+  font-size: var(--fs-md);
+}
+:root[data-theme='tipalti'] .live-preview-total strong {
+  color: var(--accent-hover);
+}
+
+/* ── داشبوردِ اقدام‌محور ───────────────────────────────────────────────── */
+:root[data-theme='tipalti'] .guided-dash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+:root[data-theme='tipalti'] .guided-welcome h1 {
+  font-size: clamp(24px, 1.3vw + 17px, 32px);
+  margin-bottom: 4px;
+}
+:root[data-theme='tipalti'] .guided-welcome .hint {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+:root[data-theme='tipalti'] .action-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+:root[data-theme='tipalti'] .action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: right;
+  padding: clamp(16px, 1.4vw, 22px);
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+:root[data-theme='tipalti'] .action-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
+  color: inherit;
+}
+:root[data-theme='tipalti'] .action-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+:root[data-theme='tipalti'] .action-card-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-h);
+}
+:root[data-theme='tipalti'] .action-card-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: var(--lh);
+}
+
+/* ── موبایل (≤۷۶۰): استپرِ فشرده + پنلِ پیش‌نمایش زیرِ بدنه ───────────────── */
+@media (max-width: 760px) {
+  :root[data-theme='tipalti'] .taskflow-steps {
+    display: none;
+  }
+  :root[data-theme='tipalti'] .taskflow-step-mobile {
+    display: block;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-h);
+    background: var(--accent-bg);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+  }
+  :root[data-theme='tipalti'] .taskflow-main {
+    grid-template-columns: 1fr;
+  }
+  :root[data-theme='tipalti'] .taskflow-preview {
+    position: static;
+    order: -1;
+  }
+  :root[data-theme='tipalti'] .taskflow-next {
+    min-width: 120px;
+  }
+}
+
+/* «نسخه‌ی جدید» — حذفِ سربرگ و ردیفِ KPI بالای *همه‌ی* صفحه‌های ماژول (نه فقط تب‌دارها):
+   سربرگ (آیکن+عنوان+توضیح) و نوارِ آمار برداشته می‌شود تا محتوا (تب‌ها/ویزارد/فرم) مستقیم
+   بالای صفحه بیاید؛ نوارِ بالا خودش ماژولِ فعال را نشان می‌دهد پس سربرگِ درون‌صفحه تکراری است.
+   فقط پوسته‌ی Tipalti (guided). داشبوردِ اقدام‌محور (.guided-dash) خودش خوش‌آمد+KPI دارد و
+   با :not(.guided-dash) مستثناست؛ stat-gridهای داخلِ تب (مثلِ KPIهای مؤدیان) چون فرزندِ
+   مستقیمِ .page نیستند دست‌نخورده می‌مانند. */
+:root[data-theme='tipalti'] .app-content > .page:not(.guided-dash) > .page-header,
+:root[data-theme='tipalti'] .app-content > .page:not(.guided-dash) > .stat-grid {
+  display: none;
+}

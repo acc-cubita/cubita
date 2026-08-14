@@ -1,150 +1,10 @@
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  ScanLine,
-  CalendarClock,
-  PackagePlus,
-  Warehouse,
-  UsersRound,
-  BookOpen,
-  Landmark,
-  Building2,
-  Users,
-  HeartHandshake,
-  Factory,
-  Store,
-  BarChart3,
-  CalendarDays,
-  CreditCard,
-  Rocket,
-  HelpCircle,
-  UserCog,
-  UserCircle,
-  ShieldCheck,
-  LogOut,
-  Sun,
-  Moon,
-  ChevronDown,
-  ShoppingBag,
-  Boxes,
-  Wallet,
-  Database,
-  Wrench,
-  Settings,
-  Truck,
-  Percent,
-} from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
-import { useTheme } from '../lib/theme'
+import { LogOut, ChevronDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { MODULE_SECTIONS } from './moduleSections'
+import { buildNav, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
 
-export type PageKey =
-  | 'overview'
-  | 'sales'
-  | 'pos'
-  | 'installments'
-  | 'purchases'
-  | 'contacts'
-  | 'crm'
-  | 'inventory'
-  | 'manufacturing'
-  | 'accounting'
-  | 'banking'
-  | 'fixedassets'
-  | 'distributor'
-  | 'marketplace'
-  | 'payroll'
-  | 'integration'
-  | 'billing'
-  | 'accounts'
-  | 'mpcommission'
-  | 'reports'
-  | 'onboarding'
-  | 'calendar'
-  | 'team'
-  | 'profile'
-  | 'help'
-
-type NavItem = { key: PageKey; label: string; icon: ReactNode }
-type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
-
-// چیدمانِ ماژول‌ها گروه‌بندی‌شده است تا کاربر به‌جای اسکنِ یک فهرستِ تختِ بلند،
-// چشمش روی «دسته» بیفتد. هر گروه یک آکاردئونِ کشویی است: سرتیتر همیشه دیده می‌شود و
-// با کلیک، ماژول‌هایش باز/بسته می‌شوند. ترتیبِ گروه‌ها بر اساسِ گردشِ کار است: پرکاربردِ
-// روزمره (فروش/خرید) بالا، مالی وسط، اطلاعات و گزارش، و ابزارِ کم‌استفاده ته.
-const NAV_GROUPS: NavGroup[] = [
-  {
-    heading: 'میزکار',
-    items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
-  },
-  {
-    heading: 'فروش و مشتریان',
-    icon: <ShoppingBag size={17} />,
-    items: [
-      { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
-      { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
-      { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
-      { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
-      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
-    ],
-  },
-  {
-    heading: 'خرید و انبار',
-    icon: <Boxes size={17} />,
-    items: [
-      { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
-      { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
-      { key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> },
-    ],
-  },
-  {
-    heading: 'مالی و بانکی',
-    icon: <Wallet size={17} />,
-    items: [
-      { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
-      { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },
-      { key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> },
-      { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
-    ],
-  },
-  {
-    heading: 'اطلاعات و گزارش',
-    icon: <Database size={17} />,
-    items: [
-      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
-      { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
-    ],
-  },
-  {
-    heading: 'ابزار',
-    icon: <Wrench size={17} />,
-    items: [
-      { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
-      { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
-    ],
-  },
-]
-
-// این تب کنترل‌پنل فروش خودِ کوبیتاست، نه یک ویژگی برای مشتری‌ها. تا امروز فقط
-// روی role_key === 'owner' شرط داشت، یعنی هر صاحب کسب‌وکاری (نه فقط خودِ کوبیتا)
-// آن را در ساید‌بار می‌دید و کلیک می‌کرد تا از بک‌اند ۴۰۳ بگیرد — بک‌اند درست
-// محافظت می‌کرد، ولی UI چیزی نشان می‌داد که هرگز قرار نبود مال او باشد.
-const PLATFORM_ADMIN_NAV_ITEMS: NavItem[] = [
-  { key: 'billing', label: 'خریدهای سایت تجاری', icon: <CreditCard size={18} /> },
-]
-
-// ماژولِ «مدیریت اکانت‌ها» فقط برای سوپرادمینِ سامانه (مالک) — سخت‌گیرانه‌تر از
-// ادمینِ پلتفرم. برای هیچ کاربرِ دیگری، حتی ادمین‌های پلتفرم، دیده نمی‌شود.
-const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
-  { key: 'accounts', label: 'مدیریت اکانت‌ها', icon: <ShieldCheck size={18} /> },
-  { key: 'mpcommission', label: 'کمیسیونِ بازار', icon: <Percent size={18} /> },
-]
-
-const SECONDARY_NAV_ITEMS: NavItem[] = [
-  { key: 'profile', label: 'پروفایل من', icon: <UserCircle size={18} /> },
-  { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
-  { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
-]
+// PageKey از navModel می‌آید؛ برای سازگاریِ importهای موجود (Dashboard/Tabs/…) از این‌جا هم صادر می‌شود.
+export type { PageKey } from '../lib/navModel'
 
 export function Sidebar({
   active,
@@ -174,32 +34,8 @@ export function Sidebar({
   open?: boolean
   onClose?: () => void
 }) {
-  // آیتم‌های ادمین (مشروط) در گروهِ اختصاصیِ خودشان ته فهرست می‌آیند تا از ماژول‌های
-  // عملیاتیِ کاربرِ عادی جدا باشند و فقط برای مالک/ادمین دیده شوند.
-  const adminItems = [
-    ...(isPlatformAdmin ? PLATFORM_ADMIN_NAV_ITEMS : []),
-    ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : []),
-  ]
-  // ماژول‌های بازارِ عمده‌فروشی — فقط برای حسابِ متناظر (انحصاری): پخش‌کننده «پخشِ من»،
-  // فروشگاه «بازارِ خرید». حسابِ standard هیچ‌کدام را نمی‌بیند.
-  const marketplaceItems: NavItem[] = [
-    ...(tenantKind === 'distributor'
-      ? [{ key: 'distributor' as PageKey, label: 'پخشِ من', icon: <Truck size={18} /> }]
-      : []),
-    ...(tenantKind === 'retailer'
-      ? [{ key: 'marketplace' as PageKey, label: 'بازارِ خرید', icon: <Store size={18} /> }]
-      : []),
-  ]
-  const groups: NavGroup[] = [
-    ...NAV_GROUPS,
-    ...(marketplaceItems.length
-      ? [{ heading: 'بازارِ عمده‌فروشی', icon: <Truck size={17} />, items: marketplaceItems }]
-      : []),
-    ...(adminItems.length
-      ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }]
-      : []),
-  ]
-  const { theme, toggle } = useTheme()
+  // ناوبری (گروه‌ها + آیتم‌های ثانویه) از منبعِ مشترکِ navModel با گیتِ نقش/نوعِ حساب.
+  const { groups, secondary } = buildNav({ isPlatformAdmin, isSuperAdmin, tenantKind })
 
   // آکاردئون: فقط یک گروه هم‌زمان باز است تا نوار کوتاه بماند. به‌صورتِ پیش‌فرض،
   // گروهی که صفحه‌ی فعال در آن است باز می‌شود؛ و با تغییرِ صفحه‌ی فعال هم‌گام می‌ماند.
@@ -335,7 +171,7 @@ export function Sidebar({
       <nav className="sidebar-nav">
         {groups.map(renderGroup)}
         <div className="sidebar-nav-divider" />
-        <div className="sidebar-nav-group">{SECONDARY_NAV_ITEMS.map(renderLeaf)}</div>
+        <div className="sidebar-nav-group">{secondary.map(renderLeaf)}</div>
       </nav>
 
       <div className="sidebar-footer">
@@ -346,15 +182,6 @@ export function Sidebar({
             <div className="sidebar-user-role">{roleName}</div>
           </div>
         </div>
-        <button
-          type="button"
-          className="sidebar-icon-btn"
-          onClick={toggle}
-          title={theme === 'dark' ? 'پوسته‌ی روشن' : 'پوسته‌ی تیره'}
-          aria-label="تغییر پوسته"
-        >
-          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-        </button>
         <button type="button" className="sidebar-logout" onClick={onLogout} title="خروج">
           <LogOut size={17} />
         </button>

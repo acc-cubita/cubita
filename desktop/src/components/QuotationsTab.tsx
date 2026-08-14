@@ -2,7 +2,9 @@ import { useRef, useState } from 'react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import type { SalesQuotationRecord } from '../api'
 import { QuotationForm } from './QuotationForm'
+import { QuotationWizard } from './wizard/QuotationWizard'
 import { QuotationsList } from './QuotationsList'
+import { useTheme } from '../lib/theme'
 
 /**
  * تبِ پیش‌فاکتور: فرمِ ثبت/ویرایش + فهرست را کنارِ هم می‌گذارد و حالتِ ویرایش را نگه می‌دارد.
@@ -23,6 +25,7 @@ export function QuotationsTab({
   const [editing, setEditing] = useState<SalesQuotationRecord | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const topRef = useRef<HTMLDivElement>(null)
+  const guided = useTheme().theme.content === 'guided'
 
   function afterChange() {
     onQueued()
@@ -36,14 +39,25 @@ export function QuotationsTab({
 
   return (
     <div ref={topRef}>
-      <QuotationForm
-        token={token}
-        warehouses={warehouses}
-        items={items}
-        onCreated={afterChange}
-        editing={editing}
-        onDoneEditing={() => setEditing(null)}
-      />
+      {guided ? (
+        <QuotationWizard
+          token={token}
+          warehouses={warehouses}
+          items={items}
+          onCreated={afterChange}
+          editing={editing}
+          onDoneEditing={() => setEditing(null)}
+        />
+      ) : (
+        <QuotationForm
+          token={token}
+          warehouses={warehouses}
+          items={items}
+          onCreated={afterChange}
+          editing={editing}
+          onDoneEditing={() => setEditing(null)}
+        />
+      )}
       <QuotationsList key={reloadKey} token={token} onConverted={afterChange} onEdit={startEdit} />
     </div>
   )
