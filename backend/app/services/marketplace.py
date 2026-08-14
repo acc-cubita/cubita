@@ -131,6 +131,9 @@ def create_listing(db: Session, distributor_tenant_id: UUID, data) -> Marketplac
         images=data.images or [],
         category=data.category.strip(),
         is_published=data.is_published,
+        min_order_qty=data.min_order_qty,
+        max_order_qty=data.max_order_qty,
+        daily_order_limit=data.daily_order_limit,
         distributor_item_id=single_id,
     )
     for iid, qty, name in comps:
@@ -156,6 +159,9 @@ def update_listing(db: Session, distributor_tenant_id: UUID, listing_id: UUID, d
     listing.images = data.images or []
     listing.category = data.category.strip()
     listing.is_published = data.is_published
+    listing.min_order_qty = data.min_order_qty
+    listing.max_order_qty = data.max_order_qty
+    listing.daily_order_limit = data.daily_order_limit
     listing.distributor_item_id = single_id
 
     # اجزا کاملاً جایگزین می‌شوند (delete-orphan آن‌ها را پاک می‌کند).
@@ -195,6 +201,9 @@ def listing_dict(listing: MarketplaceListing) -> dict:
         "images": listing.images or [],
         "category": listing.category,
         "is_published": listing.is_published,
+        "min_order_qty": listing.min_order_qty,
+        "max_order_qty": listing.max_order_qty,
+        "daily_order_limit": listing.daily_order_limit,
         "item_id": listing.distributor_item_id,
         "components": [
             {"item_id": c.distributor_item_id, "item_name": c.item_name, "qty": c.qty}
@@ -394,6 +403,9 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
                 "description": l.description,
                 "images": l.images or [],
                 "category": l.category,
+                "min_order_qty": l.min_order_qty,
+                "max_order_qty": l.max_order_qty,
+                "daily_order_limit": l.daily_order_limit,
                 "components": [{"item_name": c.item_name, "qty": c.qty} for c in l.components],
             }
         )
@@ -414,6 +426,31 @@ def list_orders(
     if retailer_tenant_id is not None:
         q = q.filter(MarketplaceOrder.retailer_tenant_id == retailer_tenant_id)
     return q.order_by(MarketplaceOrder.created_at.desc()).all()
+
+
+def _fmt_qty(x: Decimal) -> str:
+    """نمایشِ خوانا برای پیامِ خطا: عددِ صحیح بدونِ اعشار، وگرنه نرمال‌شده."""
+    x = Decimal(x)
+    return str(int(x)) if x == x.to_integral_value() else str(x.normalize())
+
+
+def _orders_today_with_listing(db: Session, retailer_tenant_id: UUID, listing_id: UUID) -> int:
+    """تعدادِ سفارش‌های امروزِ این فروشگاه که شاملِ این لیستینگ‌اند (به‌جز رد/لغوشده).
+
+    پایه‌ی سقفِ «دفعاتِ سفارش در روز». امروز از `current_date`ِ پایگاه‌داده گرفته می‌شود
+    تا مرزِ روز با created_at (timestamptz) در همان منطقه‌ی زمانیِ نشست هم‌خوان بماند.
+    """
+    return (
+        db.query(func.count(func.distinct(MarketplaceOrder.id)))
+        .join(MarketplaceOrderLine, MarketplaceOrderLine.order_id == MarketplaceOrder.id)
+        .filter(
+            MarketplaceOrder.retailer_tenant_id == retailer_tenant_id,
+            MarketplaceOrderLine.listing_id == listing_id,
+            MarketplaceOrder.status.notin_(("rejected", "cancelled")),
+            MarketplaceOrder.created_at >= func.current_date(),
+        )
+        .scalar()
+    ) or 0
 
 
 def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder:
@@ -440,15 +477,33 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
         listing = listings.get(ln.listing_id)
         if listing is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "یکی از اقلامِ سفارش در کاتالوگِ این پخش‌کننده نیست")
+        # محدودیت‌های سفارش‌گذاریِ پخش‌کننده روی این لیستینگ (۰ = بی‌حد).
+        qty = Decimal(ln.qty)
+        minq = Decimal(listing.min_order_qty or 0)
+        maxq = Decimal(listing.max_order_qty or 0)
+        if minq > 0 and qty < minq:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"حداقلِ سفارشِ «{listing.title}» {_fmt_qty(minq)} است"
+            )
+        if maxq > 0 and qty > maxq:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"حداکثرِ سفارشِ «{listing.title}» در هر بار {_fmt_qty(maxq)} است"
+            )
+        if listing.daily_order_limit and listing.daily_order_limit > 0:
+            if _orders_today_with_listing(db, retailer_tenant_id, listing.id) >= listing.daily_order_limit:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"برای «{listing.title}» فقط {listing.daily_order_limit} بار در روز می‌توانید سفارش دهید",
+                )
         unit_price = Decimal(listing.wholesale_price)
-        line_total = unit_price * Decimal(ln.qty)
+        line_total = unit_price * qty
         subtotal += line_total
         order_lines.append(
             MarketplaceOrderLine(
                 listing_id=listing.id,
                 title=listing.title,
                 unit_price=unit_price,
-                qty=Decimal(ln.qty),
+                qty=qty,
                 line_total=line_total,
             )
         )
@@ -699,8 +754,17 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
     return conn
 
 
-def confirm_order(db: Session, distributor_tenant_id: UUID, distributor_user: User, order_id: UUID) -> MarketplaceOrder:
-    """پخش‌کننده سفارشِ اعتباری را تأیید می‌کند → پستِ دوطرفه.
+def confirm_order(
+    db: Session,
+    distributor_tenant_id: UUID,
+    distributor_user: User,
+    order_id: UUID,
+    cash_percent: Decimal = Decimal(0),
+) -> MarketplaceOrder:
+    """پخش‌کننده سفارشِ اعتباری را تأیید می‌کند → پستِ دوطرفه + تسویه‌ی سهمِ نقد.
+
+    `cash_percent` (۰..۱۰۰): چند درصد از فاکتور همین حالا نقد دریافت می‌شود؛ بقیه اعتباری
+    (طلب/بدهی) می‌ماند. سهمِ نقد در خزانه‌ی هر دو طرف سند می‌خورد.
 
     idempotent: تأییدِ دوباره فاکتورِ دوم نمی‌سازد. قفلِ ردیفِ سفارش رقابتِ همزمان را هم می‌بندد.
     سفارشِ آنلاین باید اول توسطِ فروشگاه پرداخت شود (callback خودش آن را نهایی می‌کند).
@@ -720,7 +784,13 @@ def confirm_order(db: Session, distributor_tenant_id: UUID, distributor_user: Us
     if order.settlement_mode == "online" and order.payment_status != "paid":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارشِ آنلاین باید ابتدا توسطِ فروشگاه پرداخت شود")
 
-    _fulfill(db, order, distributor_user)
+    conn = _fulfill(db, order, distributor_user)
+    # سهمِ نقد (٪ روی جمعِ فاکتور) را همان لحظه در خزانه‌ی هر دو طرف ثبت کن؛ بقیه اعتباری.
+    pct = min(max(Decimal(cash_percent or 0), Decimal(0)), Decimal(100))
+    cash_amount = (Decimal(order.total) * pct / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
+    cash_amount = min(cash_amount, Decimal(order.total))
+    _settle_cash(db, order, conn, cash_amount)
+    order.cash_amount = cash_amount
     db.flush()
     return order
 
@@ -884,7 +954,48 @@ def _finalize_paid_order(db: Session, order: MarketplaceOrder, ref: str) -> None
     order.payment_status = "paid"
     order.payment_ref = ref or ""
     order.status = "confirmed"
+    order.cash_amount = amount  # آنلاین = کاملاً نقد تسویه شده
     db.flush()
+
+
+def _settle_cash(db: Session, order: MarketplaceOrder, conn: MarketplaceConnection, cash_amount: Decimal) -> None:
+    """سهمِ نقدِ سفارش را در خزانه‌ی هر دو طرف ثبت می‌کند (هنگام تأیید توسطِ پخش‌کننده):
+    دریافتِ نقدِ پخش‌کننده + پرداختِ نقدِ فروشگاه. مانده‌ی باقی‌مانده اعتباری/طلب می‌ماند.
+    الگو دقیقاً مثلِ تسویه‌ی آنلاین است، فقط مبلغ جزئی و بابتِ «نقد».
+    """
+    cash_amount = Decimal(cash_amount)
+    if cash_amount <= 0:
+        return
+    today = date.today()
+    tag = f"سفارشِ بازار #{order.order_number}"
+    with tenant_scope(db, order.distributor_tenant_id):
+        method, bank_id = _money_method(db)
+        treasury.create_receipt(
+            db,
+            TreasuryTransactionIn(
+                transaction_date=today,
+                contact_id=conn.distributor_customer_contact_id,
+                amount=cash_amount,
+                method=method,
+                bank_account_id=bank_id,
+                description=f"دریافتِ نقدیِ {tag}",
+            ),
+            _tenant_actor(db, order.distributor_tenant_id),
+        )
+    with tenant_scope(db, order.retailer_tenant_id):
+        method, bank_id = _money_method(db)
+        treasury.create_payment(
+            db,
+            TreasuryTransactionIn(
+                transaction_date=today,
+                contact_id=conn.retailer_supplier_contact_id,
+                amount=cash_amount,
+                method=method,
+                bank_account_id=bank_id,
+                description=f"پرداختِ نقدیِ {tag}",
+            ),
+            _tenant_actor(db, order.retailer_tenant_id),
+        )
 
 
 def reject_order(db: Session, distributor_tenant_id: UUID, order_id: UUID) -> MarketplaceOrder:
@@ -929,6 +1040,7 @@ def order_dict(db: Session, order: MarketplaceOrder) -> dict:
         "note": order.note,
         "subtotal": order.subtotal,
         "total": order.total,
+        "cash_amount": order.cash_amount,
         "distributor_sales_invoice_id": order.distributor_sales_invoice_id,
         "retailer_purchase_invoice_id": order.retailer_purchase_invoice_id,
         "lines": [

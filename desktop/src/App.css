@@ -1183,6 +1183,9 @@ button:disabled {
   border-radius: 8px;
   overflow: hidden;
   width: fit-content;
+  /* کلیدِ دوحالته یک ابزارِ ثابت است: در ردیف‌های تنگ نباید له/بریده شود یا از کادر
+     بیرون بزند — به‌جایش ورودیِ کنارش جمع می‌شود یا کلید به خطِ بعد می‌رود (flex-wrap). */
+  flex-shrink: 0;
 }
 .seg-toggle button {
   border: none;
@@ -1424,7 +1427,7 @@ button:disabled {
   gap: 4px;
   font-size: var(--fs-sm);
 }
-.adj-field .qty-with-unit { gap: 8px; }
+.adj-field .qty-with-unit { gap: 8px; flex-wrap: wrap; }
 .adj-field input { width: 130px; }
 
 /* کنترل‌های تخفیف و رند در صندوقِ فروشگاهی */
@@ -3355,6 +3358,281 @@ button:disabled {
   margin-top: 2px;
 }
 
+/* ── بنرِ هشدارِ «غیرفعال در بازار» (ماژولِ پخشِ من) ────────────────────
+   داخلِ .page.panels یک پنلِ تمام‌عرض است؛ padding از قانونِ پنل‌ها می‌آید،
+   فقط پس‌زمینه‌ی هشدار را بازنویسی می‌کنیم (specificity بالاتر از `> *`). */
+.page.panels > .mp-inactive-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--warning-bg);
+}
+.mp-inactive-banner > svg { color: var(--warning); flex: none; }
+.mp-inactive-banner-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.mp-inactive-banner-text strong { color: var(--text-h); }
+.mp-inactive-banner button { flex: none; white-space: nowrap; }
+@media (max-width: 560px) {
+  .page.panels > .mp-inactive-banner { flex-wrap: wrap; }
+  .mp-inactive-banner button { width: 100%; justify-content: center; }
+}
+
+/* ── مودالِ عمومی (دیالوگِ تأییدِ سفارش با تقسیمِ نقد/اعتباری) ──────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+.modal-card {
+  width: min(460px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-strong);
+  font-weight: 600;
+}
+.modal-head span { display: inline-flex; align-items: center; gap: 6px; }
+.modal-head button {
+  min-height: 0;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.modal-head button:hover { color: var(--text-h); }
+.modal-body {
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border-strong);
+}
+.cash-split-row { display: flex; align-items: center; gap: var(--sp-3); }
+.cash-split-row input[type='range'] { flex: 1; accent-color: var(--accent); }
+.cash-pct-box { display: inline-flex; align-items: center; gap: 4px; }
+.cash-pct-box .num-input { width: 66px; text-align: center; }
+.cash-split-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.cash-split-preview > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3);
+  background: var(--surface-2);
+  text-align: center;
+}
+.cash-split-preview span { font-size: var(--fs-xs); color: var(--text-muted); }
+.cash-split-preview strong { font-size: var(--fs-lg); color: var(--text-h); }
+
+/* ── مودالِ پرداخت با کارتخوان ─────────────────────────────────────────── */
+.card-pay-amount {
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.card-pay-amount strong { font-size: var(--fs-lg); color: var(--text-h); }
+.card-pay-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  line-height: 1.8;
+}
+.card-pay-note.big { flex-direction: column; text-align: center; gap: var(--sp-3); padding: var(--sp-4); color: var(--text-h); }
+.card-pay-note svg, .card-pay-err svg, .card-pay-ok svg { flex-shrink: 0; }
+.card-pay-hint { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.8; }
+.card-pay-ok {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-4);
+  border-radius: var(--radius-md);
+  background: var(--good-bg, rgba(34, 160, 100, 0.12));
+  color: var(--good, #2fa564);
+  font-weight: 700;
+  text-align: center;
+}
+.card-pay-meta { font-weight: 400; font-size: var(--fs-xs); color: var(--text-muted); }
+.card-pay-err {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg, rgba(210, 150, 40, 0.12));
+  color: var(--warning);
+  line-height: 1.8;
+}
+
+/* ── محدودیت‌های سفارش (فرمِ کاتالوگ) + نشانه در کاتالوگِ فروشگاه ──────── */
+.mp-limits {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+  margin: 0;
+}
+.mp-limits legend { font-size: var(--fs-sm); color: var(--text-muted); padding: 0 6px; }
+.mp-limit-hint { color: var(--warning); }
+
+/* ── کارت‌های محصولِ کاتالوگِ فروشگاه (نمای فروشگاهِ اینترنتی) ──────────── */
+/* در نمای «بازارِ خرید» کاتالوگ ستونِ پهن می‌گیرد و سبد سایدبارِ باریک می‌شود. */
+.workspace-split.shop { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
+@media (max-width: 760px) { .workspace-split.shop { grid-template-columns: 1fr; } }
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+  gap: var(--sp-4);
+}
+.product-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.product-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transform: translateY(-3px);
+}
+.product-card-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+}
+.product-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.product-card-noimg {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px);
+}
+.product-card-badge {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: var(--fs-xs);
+}
+.product-card-cat {
+  position: absolute;
+  inset-block-end: 8px;
+  inset-inline-end: 8px;
+  max-width: 72%;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.product-card-body {
+  padding: var(--sp-3) var(--sp-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.product-card-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-h);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.product-card-dist {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.product-card-sub { font-size: var(--fs-xs); color: var(--text-muted); }
+.product-card-limit { font-size: var(--fs-xs); color: var(--warning); }
+.product-card-price {
+  margin-top: auto;
+  padding-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.product-card-price strong { font-size: var(--fs-xl); color: var(--text-h); font-weight: 700; }
+.product-card-foot { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.product-add { width: 100%; justify-content: center; }
+.product-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.product-qty button {
+  min-height: 0;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+}
+.product-qty button:hover { background: var(--surface-hover); color: var(--accent); }
+.product-qty span { font-weight: 700; color: var(--text-h); }
+
 /* ── ردیفِ محصول با تصویرِ کوچک (کاتالوگِ بازار) ─────────────────────── */
 .entity-with-thumb {
   display: flex;
@@ -3706,18 +3984,140 @@ button:disabled {
 .pos-scan {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 4px;
 }
 .pos-scan svg { color: var(--accent); flex-shrink: 0; }
 .pos-scan input {
-  flex: 1;
+  flex: 1 1 150px;
   min-width: 0;
   font-size: var(--fs-lg);
   padding: 12px 14px;
 }
 .pos-scan .btn-primary { flex-shrink: 0; }
+.pos-cam-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
 .pos-pick { margin: 10px 0 4px; }
+
+/* ── دکمه‌ی اسکن کنارِ فیلدِ بارکد (فرمِ کالا) ─────────────────────────── */
+.barcode-field {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.barcode-field input {
+  flex: 1;
+  min-width: 0;
+}
+.barcode-scan-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  padding: 0;
+  color: var(--accent);
+}
+
+/* ── نمای اسکنِ بارکد با دوربین (مودالِ تمام‌صفحه) ─────────────────────── */
+.scanner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+}
+.scanner-box {
+  width: min(440px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.scanner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-strong);
+  font-weight: 600;
+}
+.scanner-head span { display: inline-flex; align-items: center; gap: 6px; }
+.scanner-head button {
+  min-height: 0;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.scanner-head button:hover { color: var(--text-h); }
+.scanner-stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scanner-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* کادرِ نشانه‌گیری وسطِ تصویر */
+.scanner-reticle {
+  position: absolute;
+  inset-block: 22%;
+  inset-inline: 14%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
+}
+.scanner-hint {
+  position: absolute;
+  inset-block-end: var(--sp-3);
+  inset-inline: 0;
+  text-align: center;
+  color: #fff;
+  font-size: var(--fs-sm);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.scanner-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  text-align: center;
+  color: #fff;
+  background: rgba(18, 18, 18, 0.94);
+}
+.scanner-error svg { color: #f1c40f; }
+.scanner-error p { max-width: 34ch; line-height: 1.7; color: #e6e6e6; }
+.scanner-last {
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.scanner-last .ltr-cell { color: var(--text-h); font-weight: 600; }
 .pos-pick select { width: 100%; }
 .pos-flash {
   margin: 8px 0;
@@ -3788,6 +4188,10 @@ button:disabled {
   padding: 13px;
   font-size: 15px;
 }
+/* دو دکمه‌ی تسویه: نقدی و کارتخوان. روی موبایل زیرِ هم می‌شوند. */
+.pos-checkout-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: 8px; }
+.pos-checkout-actions .pos-checkout { margin-top: 0; flex: 1 1 auto; }
+.pos-card-btn { flex: 1 1 auto; justify-content: center; padding: 13px; font-size: 15px; }
 .pos-note { margin-top: 10px; font-size: var(--fs-sm); line-height: 1.7; }
 /* روی دسکتاپ فقط آیکنِ سطلِ حذف؛ متنِ «حذف» مخصوصِ کارتِ موبایل است */
 .pos-remove-text { display: none; }

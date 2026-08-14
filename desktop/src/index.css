@@ -280,6 +280,36 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
+/* ── راهنمای بلندِ داخلِ ورودی از کادر «بیرون‌زده/بریده» دیده نشود ──────────
+   ۱) متنِ سرریز (راهنما یا مقدار) با «…» داخلِ کادر تمام شود، نه بُرشِ ناگهانی روی لبه.
+   ۲) فیلدهای «برچسب-بالای-ورودی» (برچسبی که مستقیماً یک ورودیِ متنی/انتخابگر/تکست‌اریا
+      دارد) ستونی و ورودی تمام‌عرض شوند تا جمله‌ی راهنما کامل جا شود.
+   استثناها: چک‌باکس/رادیو/رنج/رنگ/تاریخ؛ عرض‌های inline (مثلِ NumberInputِ باریک) با
+   تخصیصِ بالاترِ style حفظ می‌شوند؛ فیلترهای نوارابزار (ورودیِ بی‌برچسب) دست‌نخورده می‌مانند. */
+input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])),
+select,
+textarea {
+  text-overflow: ellipsis;
+}
+input::placeholder {
+  text-overflow: ellipsis;
+}
+
+label:has(> input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='date']):not([type='time']))),
+label:has(> select),
+label:has(> textarea) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+label > input:where(:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='date']):not([type='time'])),
+label > select,
+label > textarea {
+  width: 100%;
+  min-width: 0;
+}
+
 /* چک‌باکس و رادیو در کلِ برنامه رنگِ برند (accent) بگیرند — به‌جای رنگِ خام/خاکستریِ
    پیش‌فرضِ مرورگر که به‌ویژه در پوسته‌ی تیره بد دیده می‌شد. accent-color هم تیک/رادیو
    را رنگ می‌کند و هم در هر دو پوسته درست کار می‌کند. */

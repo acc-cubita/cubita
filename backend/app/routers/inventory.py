@@ -71,8 +71,10 @@ def list_contacts(
     params: PageParams = Depends(),
     _=Depends(require_permission("invoices", "view")),
 ):
-    # نام یکتا نیست، پس id تساوی را می‌شکند
-    items, next_cursor = paginate(db.query(Contact), [Contact.name, Contact.id], params, descending=False)
+    # نام یکتا نیست، پس id تساوی را می‌شکند. طرف‌حساب‌های سیستمی (مثلِ «فروشِ کارتیِ
+    # گذری») از فهرستِ کاربر پنهان می‌مانند.
+    query = db.query(Contact).filter(Contact.is_system.is_(False))
+    items, next_cursor = paginate(query, [Contact.name, Contact.id], params, descending=False)
     return Page(items=items, next_cursor=next_cursor)
 
 

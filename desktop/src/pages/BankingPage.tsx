@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Inbox, Landmark, ScrollText, GitCompareArrows, CalendarClock, Wallet } from 'lucide-react'
+import { Inbox, Landmark, ScrollText, GitCompareArrows, CalendarClock, Wallet, CreditCard } from 'lucide-react'
 import { fetchChecks, type CheckRecord } from '../api'
 import type { AccountCache, BankAccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
@@ -10,6 +10,7 @@ const ACTIVE_CHECK = new Set(['in_hand', 'deposited', 'issued'])
 import { OutboxList } from '../components/OutboxList'
 import { ChecksList } from '../components/ChecksList'
 import { BankAccountsPanel } from '../components/BankAccountsPanel'
+import { PosTerminalsPanel } from '../components/PosTerminalsPanel'
 import { PettyCashPanel } from '../components/PettyCashPanel'
 import { ReconciliationPanel } from '../components/ReconciliationPanel'
 import { SectionCard } from '../components/SectionCard'
@@ -98,6 +99,12 @@ export function BankingPage({
             label: 'حساب‌های بانکی',
             icon: Landmark,
             content: <BankAccountsPanel token={token} accounts={accounts} />,
+          },
+          {
+            key: 'pos',
+            label: 'کارتخوان‌ها',
+            icon: CreditCard,
+            content: <PosTerminalsPanel token={token} bankAccounts={bankAccounts} />,
           },
           {
             key: 'petty',

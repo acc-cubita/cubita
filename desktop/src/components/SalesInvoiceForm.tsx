@@ -21,6 +21,7 @@ import {
   type StockLevel,
 } from '../api'
 import { isElectron } from '../platform'
+import { CardPaymentButton } from './CardPaymentDialog'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -576,6 +577,15 @@ export function SalesInvoiceForm({
                 <span className="hint">معادل ریالی: {baseGrandTotal.toLocaleString('fa-IR')}</span>
               )}
             </div>
+            {contactId && baseGrandTotal > 0 && (
+              <CardPaymentButton
+                token={token}
+                amount={baseGrandTotal}
+                contactId={contactId}
+                description="پرداختِ کارتیِ فاکتورِ فروش"
+                onPaid={() => setMessage('پرداختِ کارتی روی حسابِ این مشتری ثبت شد. برای ثبتِ خودِ فاکتور، «ثبت فاکتور» را بزنید.')}
+              />
+            )}
             <button type="submit" className="btn-primary"><Save size={14} /> ثبت فاکتور</button>
           </div>
 

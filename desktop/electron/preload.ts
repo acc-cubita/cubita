@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld('cubita', {
   listCachedWarehouses: () => ipcRenderer.invoke('warehouses:listCached'),
   listCachedItems: () => ipcRenderer.invoke('items:listCached'),
   listCachedBankAccounts: () => ipcRenderer.invoke('bankAccounts:listCached'),
+  // پلِ کارتخوان — فقط در دسکتاپ تعریف می‌شود؛ در نسخه‌ی وب window.cubita وجود ندارد،
+  // پس رابط کاربری با feature-detect دکمه را «فقط دسکتاپ» نشان می‌دهد.
+  posTerminal: {
+    pay: (profile: unknown, amountRial: number, refId: string) =>
+      ipcRenderer.invoke('pos:pay', profile, amountRial, refId),
+    status: (profile: unknown) => ipcRenderer.invoke('pos:status', profile),
+  },
 })
 
 contextBridge.exposeInMainWorld('windowControls', {

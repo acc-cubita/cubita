@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store } from 'lucide-react'
+import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store, Camera } from 'lucide-react'
 import {
   createSalesInvoiceDirect,
   fetchContacts,
@@ -13,12 +13,15 @@ import {
   type ItemRecord,
   type PriceListRecord,
   type StockLevel,
+  type TreasuryTransactionRecord,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { NumberInput } from '../components/NumberInput'
 import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
 import { ItemPicker } from '../components/ItemPicker'
+import { BarcodeScanner } from '../components/BarcodeScanner'
+import { CardPaymentButton } from '../components/CardPaymentDialog'
 import { todayIso } from '../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
@@ -45,6 +48,7 @@ export function PosPage({ token }: { token: string }) {
   const [roundStep, setRoundStep] = useState(0)
   const [cart, setCart] = useState<CartLine[]>([])
   const [scan, setScan] = useState('')
+  const [scanning, setScanning] = useState(false) // نمای دوربینِ اسکن باز است؟
   const [pick, setPick] = useState('')
   const [received, setReceived] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -123,17 +127,23 @@ export function PosPage({ token }: { token: string }) {
     })
   }
 
-  function handleScan(e: React.FormEvent) {
-    e.preventDefault()
-    const code = scan.trim()
-    if (!code) return
-    const it = codeMap.get(code)
+  // جست‌وجوی کد (بارکد/SKU) و افزودن به سبد — مشترکِ ورودِ دستی و دوربین.
+  function lookupAndAdd(code: string): boolean {
+    const c = code.trim()
+    if (!c) return false
+    const it = codeMap.get(c)
     if (it) {
       addItem(it)
-      setFlash(null)
-    } else {
-      setFlash(`کالایی با بارکد/کد «${code}» یافت نشد`)
+      setFlash(`«${it.name}» افزوده شد`)
+      return true
     }
+    setFlash(`کالایی با بارکد/کد «${c}» یافت نشد`)
+    return false
+  }
+
+  function handleScan(e: React.FormEvent) {
+    e.preventDefault()
+    lookupAndAdd(scan)
     setScan('')
     scanRef.current?.focus()
   }
@@ -204,6 +214,43 @@ export function PosPage({ token }: { token: string }) {
     }
   }
 
+  // پرداختِ کارتی: رسیدِ بانکی از قبل (در مودال) ثبت شده؛ حالا فاکتورِ فروش را علیهِ
+  // همان طرف‌حساب (انتخاب‌شده یا طرف‌حسابِ گذریِ برگشتی) می‌سازیم تا دریافتنی صفر شود.
+  async function completeAfterCard(txn: TreasuryTransactionRecord) {
+    if (cart.length === 0 || !warehouseId) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = (await createSalesInvoiceDirect(
+        token,
+        {
+          invoice_date: todayIso(),
+          warehouse_id: warehouseId,
+          tax_rate: taxRateNum,
+          contact_id: contactId || txn.contact_id,
+          invoice_discount: discountAmount,
+          rounding: roundAdjust,
+          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
+        },
+        idem.current,
+      )) as { number?: number }
+      idem.current = newIdempotencyKey()
+      const num = res?.number != null ? res.number.toLocaleString('fa-IR') : '—'
+      setMessage(`فروشِ کارتی ثبت شد ✓ فاکتور شماره ${num} — مرجعِ پرداخت: ${txn.reference_no ?? '—'}`)
+      setCart([])
+      setReceived('')
+      setDiscount('')
+      setRoundStep(0)
+      scanRef.current?.focus()
+    } catch (err) {
+      setMessage(
+        `پرداخت ثبت شد (مرجع ${txn.reference_no ?? '—'}) اما ثبتِ فاکتور خطا داد: ${err instanceof Error ? err.message : 'خطای ناشناخته'} — لطفاً فاکتور را دستی تکمیل کنید.`,
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="page panels">
       <PageHeader
@@ -260,8 +307,18 @@ export function PosPage({ token }: { token: string }) {
               inputMode="numeric"
               autoFocus
             />
+            <button type="button" className="pos-cam-btn" onClick={() => setScanning(true)} title="اسکن با دوربین">
+              <Camera size={15} /> دوربین
+            </button>
             <button type="submit" className="btn-primary"><Plus size={15} /> افزودن</button>
           </form>
+
+          {scanning && (
+            <BarcodeScanner
+              onDetected={(code) => lookupAndAdd(code)}
+              onClose={() => { setScanning(false); scanRef.current?.focus() }}
+            />
+          )}
 
           <div className="pos-pick">
             <ItemPicker
@@ -368,9 +425,20 @@ export function PosPage({ token }: { token: string }) {
             </div>
           )}
 
-          <button type="button" className="btn-primary pos-checkout" onClick={() => void complete()} disabled={busy || cart.length === 0}>
-            <CheckCircle2 size={16} /> تکمیل فروش
-          </button>
+          <div className="pos-checkout-actions">
+            <button type="button" className="btn-primary pos-checkout" onClick={() => void complete()} disabled={busy || cart.length === 0}>
+              <CheckCircle2 size={16} /> تکمیل فروش (نقدی)
+            </button>
+            <CardPaymentButton
+              token={token}
+              amount={total}
+              contactId={contactId || null}
+              description="فروشِ صندوقِ فروشگاهی — پرداختِ کارتی"
+              className="btn-ghost pos-card-btn"
+              disabled={busy || cart.length === 0 || !warehouseId}
+              onPaid={(txn) => void completeAfterCard(txn)}
+            />
+          </div>
           {message && <div className="hint">{message}</div>}
           <p className="hint pos-note">
             بدون انتخاب مشتری، فروش «نقدی» ثبت می‌شود و مبلغ به صندوق می‌رود. با انتخاب مشتری، فروش به حساب او (نسیه) ثبت می‌شود.

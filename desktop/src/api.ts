@@ -1600,6 +1600,13 @@ export interface TreasuryTransactionRecord {
   bank_account_id: string | null
   description: string
   journal_entry_id: string
+  // متادیتای کارت (فقط برای رسیدِ کارتخوان پر می‌شود)
+  paid_via?: string | null
+  reference_no?: string | null
+  trace_no?: string | null
+  card_mask?: string | null
+  terminal_no?: string | null
+  psp?: string | null
 }
 
 export interface TreasuryTransactionIn {
@@ -1619,6 +1626,66 @@ export const createTreasuryReceipt = (token: string, data: TreasuryTransactionIn
 
 export const createTreasuryPayment = (token: string, data: TreasuryTransactionIn) =>
   authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/payments', data)
+
+// --- کارتخوان (POS) -----------------------------------------------------------------
+// اتصالِ سخت‌افزار فقط در نسخه‌ی دسکتاپ (window.cubita.posTerminal) رخ می‌دهد؛ ثبتِ
+// حسابداری سرور-ساید است و در هر دو نسخه یکسان دیده می‌شود.
+
+export type PosTransport = 'simulator' | 'network' | 'serial' | 'sdk'
+
+export interface PosTerminalRecord {
+  id: string
+  label: string
+  psp: string
+  transport: PosTransport
+  host: string
+  port: number
+  com_port: string
+  bank_account_id: string | null
+  is_active: boolean
+  is_default: boolean
+}
+
+export interface PosTerminalIn {
+  label?: string
+  psp?: string
+  transport?: PosTransport
+  host?: string
+  port?: number
+  com_port?: string
+  bank_account_id?: string | null
+  is_active?: boolean
+  is_default?: boolean
+}
+
+export const fetchPosTerminals = (token: string) =>
+  authedGet<PosTerminalRecord[]>(token, '/api/pos-terminals')
+
+export const createPosTerminal = (token: string, data: PosTerminalIn) =>
+  authedSend<PosTerminalRecord>(token, 'POST', '/api/pos-terminals', data)
+
+export const updatePosTerminal = (token: string, id: string, data: PosTerminalIn) =>
+  authedSend<PosTerminalRecord>(token, 'PATCH', `/api/pos-terminals/${id}`, data)
+
+export const deletePosTerminal = (token: string, id: string) =>
+  authedDelete(token, `/api/pos-terminals/${id}`)
+
+/** پرداختِ کارتیِ موفق → ثبتِ رسیدِ بانکی. contact_id خالی = فروشِ گذری (طرف‌حسابِ سیستمی). */
+export interface CardPaymentIn {
+  transaction_date: string
+  amount: number
+  bank_account_id: string
+  contact_id?: string | null
+  reference_no: string
+  trace_no?: string
+  card_mask?: string
+  terminal_no?: string
+  psp?: string
+  description?: string
+}
+
+export const recordCardPayment = (token: string, data: CardPaymentIn) =>
+  authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/card-payment', data)
 
 // --- تقویم و یادآوری ---------------------------------------------------------------
 // مثل اشخاص، مسیرِ مستقیمِ API است و در هر دو پلتفرم (Electron و وب) یکسان کار می‌کند.
@@ -2846,6 +2913,9 @@ export interface Listing {
   images: string[]
   category: string
   is_published: boolean
+  min_order_qty: string
+  max_order_qty: string
+  daily_order_limit: number
   item_id: string | null
   components: ListingComponent[]
 }
@@ -2861,6 +2931,9 @@ export interface ListingIn {
   images?: string[]
   category?: string
   is_published?: boolean
+  min_order_qty?: number
+  max_order_qty?: number
+  daily_order_limit?: number
   item_id?: string | null
   components?: { item_id: string; qty: number }[]
 }
@@ -2920,6 +2993,9 @@ export interface CatalogListing {
   description: string
   images: string[]
   category: string
+  min_order_qty: string
+  max_order_qty: string
+  daily_order_limit: number
   components: { item_name: string; qty: string }[]
 }
 
@@ -2972,6 +3048,7 @@ export interface MpOrder {
   note: string
   subtotal: string
   total: string
+  cash_amount: string
   distributor_sales_invoice_id: string | null
   retailer_purchase_invoice_id: string | null
   lines: MpOrderLine[]
@@ -2997,8 +3074,8 @@ export const payMpOrder = (token: string, id: string) =>
 export const fetchMpDistributorOrders = (token: string) =>
   authedGet<MpOrder[]>(token, '/api/marketplace/distributor/orders')
 
-export const confirmMpOrder = (token: string, id: string) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, {})
+export const confirmMpOrder = (token: string, id: string, cashPercent = 0) =>
+  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
 
 export const rejectMpOrder = (token: string, id: string) =>
   authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})

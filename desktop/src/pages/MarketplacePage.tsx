@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, CreditCard } from 'lucide-react'
+import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard } from 'lucide-react'
 import {
   fetchMpCatalog, fetchMpDistributors, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
   type CatalogListing, type DistributorCard, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
@@ -13,6 +13,15 @@ import { NumberInput } from '../components/NumberInput'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
+
+/** خلاصه‌ی محدودیت‌های سفارشِ یک لیستینگ برای نمایش به فروشگاه (خالی = بی‌حد). */
+function orderLimitHint(l: CatalogListing): string {
+  const parts: string[] = []
+  if (Number(l.min_order_qty) > 0) parts.push(`حداقل ${faNum(l.min_order_qty)}`)
+  if (Number(l.max_order_qty) > 0) parts.push(`حداکثر ${faNum(l.max_order_qty)}`)
+  if (l.daily_order_limit > 0) parts.push(`${faNum(l.daily_order_limit)} سفارش در روز`)
+  return parts.length ? `محدودیت: ${parts.join(' — ')}` : ''
+}
 
 const STATUS_BADGE: Record<MpConnectionStatus, { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -184,7 +193,7 @@ function Catalog({ token }: { token: string }) {
   }
 
   return (
-    <div className="workspace-split">
+    <div className="workspace-split shop">
       <SectionCard
         icon={Package}
         title="کاتالوگِ پخش‌کننده‌های متصل"
@@ -203,37 +212,44 @@ function Catalog({ token }: { token: string }) {
             text={loading ? 'در حال بارگذاری…' : 'کاتالوگی برای نمایش نیست — تا پخش‌کننده‌ای اتصالتان را تأیید نکند و محصولی منتشر نکند، اینجا خالی است.'}
           />
         ) : (
-          <div className="entity-table-wrap">
-            <table className="entity-table">
-              <thead><tr><th>محصول</th><th>پخش‌کننده</th><th>نوع</th><th>قیمتِ عمده</th><th></th></tr></thead>
-              <tbody>
-                {shown.map((l) => (
-                  <tr key={l.id}>
-                    <td>
-                      <div className="entity-with-thumb">
-                        {l.images?.[0]
-                          ? <img className="list-thumb" src={l.images[0]} alt="" />
-                          : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
-                        <div>
-                          <div className="entity-name">{l.title}</div>
-                          <div className="entity-sub">
-                            {l.kind === 'pack'
-                              ? `${faNum(l.components.length)} قلم: ${l.components.map((c) => `${c.item_name}×${faNum(c.qty)}`).join('، ')}`
-                              : `${l.unit}${l.category ? ` — ${l.category}` : ''}`}
-                          </div>
-                        </div>
+          <div className="product-grid">
+            {shown.map((l) => {
+              const line = cart[l.id]
+              const qty = Number(line?.qty) || 0
+              return (
+                <article className="product-card" key={l.id}>
+                  <div className="product-card-media">
+                    {l.images?.[0]
+                      ? <img src={l.images[0]} alt={l.title} loading="lazy" />
+                      : <div className="product-card-noimg"><Package size={30} /></div>}
+                    {l.kind === 'pack' && <span className="product-card-badge"><Boxes size={12} /> پک</span>}
+                    {l.category && <span className="product-card-cat">{l.category}</span>}
+                  </div>
+                  <div className="product-card-body">
+                    <h4 className="product-card-title" title={l.title}>{l.title}</h4>
+                    <div className="product-card-dist"><Store size={12} /> {l.distributor_name}</div>
+                    <div className="product-card-sub">
+                      {l.kind === 'pack'
+                        ? `${faNum(l.components.length)} قلم در پک`
+                        : l.unit}
+                    </div>
+                    {orderLimitHint(l) && <div className="product-card-limit">{orderLimitHint(l)}</div>}
+                    <div className="product-card-price"><strong>{faMoney(l.wholesale_price)}</strong> ریال</div>
+                  </div>
+                  <div className="product-card-foot">
+                    {qty > 0 ? (
+                      <div className="product-qty">
+                        <button type="button" aria-label="کم" onClick={() => (qty <= 1 ? removeLine(l.id) : setQty(l.id, String(qty - 1)))}><Minus size={15} /></button>
+                        <span>{faNum(qty)}</span>
+                        <button type="button" aria-label="زیاد" onClick={() => addToCart(l)}><Plus size={15} /></button>
                       </div>
-                    </td>
-                    <td>{l.distributor_name}</td>
-                    <td>{l.kind === 'pack' ? <><Boxes size={13} /> پک</> : 'تکی'}</td>
-                    <td className="money-cell">{faMoney(l.wholesale_price)}</td>
-                    <td>
-                      <button type="button" onClick={() => addToCart(l)}><Plus size={13} /> افزودن</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ) : (
+                      <button type="button" className="btn-primary product-add" onClick={() => addToCart(l)}><Plus size={14} /> افزودن به سبد</button>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
           </div>
         )}
       </SectionCard>

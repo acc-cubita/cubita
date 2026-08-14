@@ -24,6 +24,33 @@ class TreasuryTransactionIn(BaseModel):
         return self
 
 
+class CardPaymentIn(BaseModel):
+    """پرداختِ کارتیِ موفق از دستگاهِ کارتخوان — رسیدِ بانکی ثبت می‌کند.
+
+    contact_id خالی = فروشِ گذری (بدونِ طرف‌حساب): سرور طرف‌حسابِ سیستمیِ «فروشِ کارتیِ
+    گذری» را می‌سازد/می‌یابد. reference_no (RRN) کلیدِ idempotency است.
+    """
+
+    transaction_date: date
+    amount: Decimal
+    bank_account_id: UUID  # حسابِ تسویه‌ی کارتخوان (رسید به معینِ همین می‌خورد)
+    contact_id: UUID | None = None
+    reference_no: str  # شماره‌ی مرجع/پیگیری (RRN)
+    trace_no: str = ""
+    card_mask: str = ""
+    terminal_no: str = ""
+    psp: str = ""
+    description: str = ""
+
+    @model_validator(mode="after")
+    def validate_fields(self) -> "CardPaymentIn":
+        if self.amount <= 0:
+            raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد")
+        if not (self.reference_no or "").strip():
+            raise ValueError("شماره‌ی مرجعِ تراکنش (RRN) الزامی است")
+        return self
+
+
 class TreasuryTransactionOut(BaseModel):
     id: UUID
     type: str
@@ -35,6 +62,13 @@ class TreasuryTransactionOut(BaseModel):
     bank_account_id: UUID | None
     description: str
     journal_entry_id: UUID
+    # متادیتای پرداختِ کارتی (اگر از کارتخوان آمده باشد)
+    paid_via: str | None = None
+    reference_no: str | None = None
+    trace_no: str | None = None
+    card_mask: str | None = None
+    terminal_no: str | None = None
+    psp: str | None = None
 
     model_config = {"from_attributes": True}
 

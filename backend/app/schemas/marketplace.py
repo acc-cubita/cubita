@@ -98,6 +98,10 @@ class ListingIn(BaseModel):
     images: list = []
     category: str = ""
     is_published: bool = False
+    #: محدودیت‌های سفارش‌گذاری (۰ = بدونِ محدودیت).
+    min_order_qty: Decimal = Decimal(0)
+    max_order_qty: Decimal = Decimal(0)
+    daily_order_limit: int = 0
     #: برای single: کالای متناظر. برای pack تهی (اجزا در components).
     item_id: UUID | None = None
     components: list[ListingComponentIn] = []
@@ -120,6 +124,10 @@ class ListingIn(BaseModel):
             raise ValueError("عنوانِ لیستینگ الزامی است")
         if self.wholesale_price < 0:
             raise ValueError("قیمتِ عمده نمی‌تواند منفی باشد")
+        if self.min_order_qty < 0 or self.max_order_qty < 0 or self.daily_order_limit < 0:
+            raise ValueError("محدودیت‌های سفارش نمی‌توانند منفی باشند")
+        if self.min_order_qty > 0 and self.max_order_qty > 0 and self.max_order_qty < self.min_order_qty:
+            raise ValueError("حداکثرِ سفارش نباید از حداقلِ سفارش کمتر باشد")
         if self.kind == "single":
             if self.item_id is None:
                 raise ValueError("برای کالای تکی، انتخابِ کالا الزامی است")
@@ -141,6 +149,9 @@ class ListingOut(BaseModel):
     images: list
     category: str
     is_published: bool
+    min_order_qty: Decimal
+    max_order_qty: Decimal
+    daily_order_limit: int
     item_id: UUID | None
     components: list[ListingComponentOut]
 
@@ -204,6 +215,9 @@ class CatalogListingOut(BaseModel):
     description: str
     images: list
     category: str
+    min_order_qty: Decimal
+    max_order_qty: Decimal
+    daily_order_limit: int
     components: list[CatalogComponentOut]
 
 
@@ -255,9 +269,24 @@ class OrderOut(BaseModel):
     note: str
     subtotal: Decimal
     total: Decimal
+    #: سهمِ نقدِ تسویه‌شده هنگام تأیید (ریال)؛ بقیه اعتباری/طلب است.
+    cash_amount: Decimal
     distributor_sales_invoice_id: UUID | None
     retailer_purchase_invoice_id: UUID | None
     lines: list[OrderLineOut]
+
+
+class OrderConfirmIn(BaseModel):
+    """بدنه‌ی اختیاریِ تأییدِ سفارش — درصدِ نقد که پخش‌کننده تعیین می‌کند (۰..۱۰۰)."""
+
+    cash_percent: Decimal = Decimal(0)
+
+    @field_validator("cash_percent")
+    @classmethod
+    def _pct(cls, v: Decimal) -> Decimal:
+        if v < 0 or v > 100:
+            raise ValueError("درصدِ نقد باید بین ۰ تا ۱۰۰ باشد")
+        return v
 
 
 # ── کمیسیونِ پلتفرم (۲٪) ───────────────────────────────────────────────

@@ -40,6 +40,7 @@ from app.models.marketplace import (
 )
 from app.models.moadian import MoadianSettings, MoadianSubmission
 from app.models.period_close import FiscalPeriodClose
+from app.models.pos_terminal import PosTerminal
 from app.models.payroll import (
     Attendance,
     BenefitRun,
@@ -119,6 +120,7 @@ __all__ = [
     "Payslip",
     "SalaryContract",
     "FiscalPeriodClose",
+    "PosTerminal",
     "SalesQuotation",
     "SalesQuotationLine",
     "PurchaseReturn",

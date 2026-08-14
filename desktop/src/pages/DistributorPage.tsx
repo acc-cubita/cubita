@@ -15,6 +15,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
+import { useNavSection } from '../components/navContext'
 import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
 import { ImageUploader } from '../components/ImageUploader'
@@ -46,11 +47,19 @@ const EMPTY_FORM = {
   title: '', code: '', unit: 'عدد', wholesalePrice: '', category: '', isPublished: true,
   itemId: '',
   images: [] as string[],
+  minOrderQty: '', maxOrderQty: '', dailyOrderLimit: '',
   components: [{ itemId: '', qty: '1' }] as PackRow[],
 }
 
 /** ماژولِ «پخشِ من» — کاتالوگ (تکی/پک) + تنظیماتِ تسویه. فقط حسابِ distributor. */
 export function DistributorPage({ token, items }: { token: string; items: ItemCache[] }) {
+  const nav = useNavSection()
+  // فعال‌بودنِ حضور در بازار — برای بنرِ هشدار. null=هنوز نمی‌دانیم (بنر نشان نده).
+  const [active, setActive] = useState<boolean | null>(null)
+  useEffect(() => {
+    void fetchMpSettings(token).then((s) => setActive(s.is_active)).catch(() => {})
+  }, [token])
+
   return (
     <div className="page panels">
       <PageHeader
@@ -58,6 +67,20 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
         title="پخشِ من"
         description="محصولاتتان را (تکی یا در قالبِ پکِ چندمحصولی) در بازار منتشر کنید. با تأییدِ سفارشِ فروشگاه، کالا از انبارِ شما کم و به انبارِ او افزوده می‌شود."
       />
+
+      {active === false && (
+        <div className="mp-inactive-banner">
+          <AlertCircle size={20} />
+          <div className="mp-inactive-banner-text">
+            <strong>حضورِ شما در بازار غیرفعال است.</strong>{' '}
+            تا آن را فعال نکنید، هیچ فروشگاهی شما را نمی‌بیند و نمی‌تواند درخواستِ اتصال یا سفارش بدهد — حتی اگر کاتالوگتان منتشر شده باشد.
+          </div>
+          <button type="button" className="btn-primary" onClick={() => nav?.setSection('settings')}>
+            <SettingsIcon size={14} /> فعال‌سازی در تنظیمات
+          </button>
+        </div>
+      )}
+
       <Tabs
         syncPage="distributor"
         tabs={[
@@ -65,7 +88,7 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
           { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, content: <OrdersPanel token={token} /> },
           { key: 'connections', label: 'اتصال‌ها', icon: Link2, content: <ConnectionsPanel token={token} /> },
           { key: 'commission', label: 'کمیسیون', icon: Percent, content: <CommissionPanel token={token} /> },
-          { key: 'settings', label: 'تنظیمات', icon: SettingsIcon, content: <SettingsPanel token={token} /> },
+          { key: 'settings', label: 'تنظیمات', icon: SettingsIcon, content: <SettingsPanel token={token} onActiveChange={setActive} /> },
         ]}
       />
     </div>
@@ -105,6 +128,9 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
       category: l.category, isPublished: l.is_published,
       itemId: l.item_id ?? '',
       images: l.images ?? [],
+      minOrderQty: Number(l.min_order_qty) ? String(Number(l.min_order_qty)) : '',
+      maxOrderQty: Number(l.max_order_qty) ? String(Number(l.max_order_qty)) : '',
+      dailyOrderLimit: Number(l.daily_order_limit) ? String(Number(l.daily_order_limit)) : '',
       components: l.kind === 'pack' && l.components.length
         ? l.components.map((c) => ({ itemId: c.item_id, qty: String(Number(c.qty)) }))
         : [{ itemId: '', qty: '1' }],
@@ -136,6 +162,9 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
       category: form.category.trim(),
       is_published: form.isPublished,
       images: form.images,
+      min_order_qty: Number(form.minOrderQty) || 0,
+      max_order_qty: Number(form.maxOrderQty) || 0,
+      daily_order_limit: Number(form.dailyOrderLimit) || 0,
       item_id: form.kind === 'single' ? form.itemId : null,
       components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: Number(r.qty) })) : [],
     }
@@ -231,6 +260,23 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
             <label>عکس‌های محصول (اختیاری)
               <ImageUploader value={form.images} onChange={(imgs) => setForm({ ...form, images: imgs })} />
             </label>
+
+            <fieldset className="mp-limits">
+              <legend>محدودیتِ سفارش (اختیاری — ۰/خالی یعنی بدون محدودیت)</legend>
+              <div className="field-row">
+                <label>حداقلِ هر سفارش
+                  <NumberInput allowDecimal value={form.minOrderQty} onChange={(v) => setForm({ ...form, minOrderQty: v })} placeholder="بدون حداقل" />
+                </label>
+                <label>حداکثرِ هر سفارش
+                  <NumberInput allowDecimal value={form.maxOrderQty} onChange={(v) => setForm({ ...form, maxOrderQty: v })} placeholder="بدون سقف" />
+                </label>
+                <label>سقفِ دفعاتِ سفارش در روز
+                  <NumberInput value={form.dailyOrderLimit} onChange={(v) => setForm({ ...form, dailyOrderLimit: v })} placeholder="بدون سقف" />
+                </label>
+              </div>
+              <span className="field-hint">هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد؛ و در هر روز حداکثر به تعدادِ تعیین‌شده می‌تواند سفارش ثبت کند.</span>
+            </fieldset>
+
             <label className="cal-check-inline">
               <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
               منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
@@ -292,11 +338,59 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
   )
 }
 
+/** دیالوگِ تأییدِ سفارش با تعیینِ درصدِ نقد/اعتباری (سهمِ نقد در خزانه ثبت می‌شود). */
+function CashConfirmDialog({
+  order, busy, onCancel, onConfirm,
+}: {
+  order: MpOrder
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (cashPct: number) => void
+}) {
+  const [pct, setPct] = useState('0')
+  const total = Number(order.total) || 0
+  const p = Math.min(Math.max(Number(pct) || 0, 0), 100)
+  const cash = Math.round((total * p) / 100)
+  const credit = total - cash
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onCancel}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <span><Check size={16} /> تأییدِ سفارشِ #{order.order_number}</span>
+          <button type="button" onClick={onCancel} aria-label="بستن"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint">با تأیید، کالا از انبارِ شما کم و فاکتورِ فروش صادر می‌شود. مبلغِ کل: <strong className="money-cell">{faMoney(total)}</strong> ریال.</p>
+          <label>درصدِ نقد (بقیه اعتباری ثبت می‌شود)
+            <div className="cash-split-row">
+              <input type="range" min={0} max={100} step={5} value={p} onChange={(e) => setPct(e.target.value)} />
+              <div className="cash-pct-box"><NumberInput value={pct} onChange={setPct} /><span>٪</span></div>
+            </div>
+          </label>
+          <div className="cash-split-preview">
+            <div><span>نقد ({faMoney(p)}٪)</span><strong className="money-cell">{faMoney(cash)}</strong></div>
+            <div><span>اعتباری</span><strong className="money-cell">{faMoney(credit)}</strong></div>
+          </div>
+          {order.settlement_mode === 'online' && (
+            <p className="field-hint">این سفارش «آنلاین» است و از راهِ درگاه تسویه می‌شود؛ درصدِ نقد اینجا اثری ندارد.</p>
+          )}
+        </div>
+        <div className="modal-foot">
+          <button type="button" onClick={onCancel}>انصراف</button>
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => onConfirm(p)}><Check size={14} /> تأیید و صدور فاکتور</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OrdersPanel({ token }: { token: string }) {
   const [orders, setOrders] = useState<MpOrder[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<MpOrder | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -310,13 +404,20 @@ function OrdersPanel({ token }: { token: string }) {
     confirmed: orders.filter((o) => o.status === 'confirmed').length,
   }), [orders])
 
-  async function act(o: MpOrder, kind: 'confirm' | 'reject') {
-    if (kind === 'confirm' && !window.confirm(`سفارشِ #${o.order_number} تأیید شود؟ با تأیید، کالا از انبارِ شما کم و فاکتورِ فروش صادر می‌شود.`)) return
-    if (kind === 'reject' && !window.confirm(`سفارشِ #${o.order_number} رد شود؟`)) return
+  async function reject(o: MpOrder) {
+    if (!window.confirm(`سفارشِ #${o.order_number} رد شود؟`)) return
+    setBusy(o.id); setError(null)
+    try { await rejectMpOrder(token, o.id); await refresh() }
+    catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
+    finally { setBusy(null) }
+  }
+
+  // تأیید با سهمِ نقد (٪) که در دیالوگ گرفته می‌شود؛ بقیه اعتباری ثبت می‌شود.
+  async function doConfirm(o: MpOrder, cashPct: number) {
     setBusy(o.id); setError(null)
     try {
-      if (kind === 'confirm') await confirmMpOrder(token, o.id)
-      else await rejectMpOrder(token, o.id)
+      await confirmMpOrder(token, o.id, cashPct)
+      setConfirmTarget(null)
       await refresh()
     } catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
     finally { setBusy(null) }
@@ -342,8 +443,8 @@ function OrdersPanel({ token }: { token: string }) {
             <div className="check-actions">
               {o.status === 'placed' ? (
                 <>
-                  <button type="button" className="btn-primary" disabled={busy === o.id} onClick={() => void act(o, 'confirm')}><Check size={13} /> تأیید</button>
-                  <button type="button" disabled={busy === o.id} onClick={() => void act(o, 'reject')}><X size={13} /> رد</button>
+                  <button type="button" className="btn-primary" disabled={busy === o.id} onClick={() => setConfirmTarget(o)}><Check size={13} /> تأیید</button>
+                  <button type="button" disabled={busy === o.id} onClick={() => void reject(o)}><X size={13} /> رد</button>
                 </>
               ) : o.status === 'confirmed' ? (
                 <span className="entity-sub"><CheckCircle2 size={13} /> فاکتور صادر شد</span>
@@ -371,6 +472,11 @@ function OrdersPanel({ token }: { token: string }) {
                   ))}
                 </tbody>
               </table>
+              {o.status === 'confirmed' && (
+                <p className="hint">
+                  تسویه — نقد: <span className="money-cell">{faMoney(o.cash_amount)}</span> ریال، اعتباری: <span className="money-cell">{faMoney(Number(o.total) - Number(o.cash_amount))}</span> ریال
+                </p>
+              )}
               {o.note && <p className="hint">یادداشتِ فروشگاه: {o.note}</p>}
             </td>
           </tr>
@@ -381,6 +487,14 @@ function OrdersPanel({ token }: { token: string }) {
 
   return (
     <>
+      {confirmTarget && (
+        <CashConfirmDialog
+          order={confirmTarget}
+          busy={busy === confirmTarget.id}
+          onCancel={() => setConfirmTarget(null)}
+          onConfirm={(pct) => void doConfirm(confirmTarget, pct)}
+        />
+      )}
       <div className="stat-grid">
         <StatCard icon={<ClipboardList size={18} />} label="در انتظارِ تأیید" value={faMoney(kpis.placed)} tone="warning" />
         <StatCard icon={<CheckCircle2 size={18} />} label="تأییدشده" value={faMoney(kpis.confirmed)} tone="success" />
@@ -564,17 +678,25 @@ function CommissionPanel({ token }: { token: string }) {
   )
 }
 
-function SettingsPanel({ token }: { token: string }) {
+function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChange?: (active: boolean) => void }) {
   const [settings, setSettings] = useState<MarketplaceSettings>({ display_name: '', settlement_mode: 'credit', is_active: false })
   const [msg, setMsg] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { void fetchMpSettings(token).then(setSettings).catch(() => {}) }, [token])
+  useEffect(() => {
+    void fetchMpSettings(token).then((s) => { setSettings(s); onActiveChange?.(s.is_active) }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null); setSaving(true)
-    try { setSettings(await updateMpSettings(token, settings)); setMsg('تنظیمات ذخیره شد.') }
+    try {
+      const s = await updateMpSettings(token, settings)
+      setSettings(s)
+      onActiveChange?.(s.is_active)
+      setMsg('تنظیمات ذخیره شد.')
+    }
     catch (e2) { setMsg(e2 instanceof Error ? e2.message : 'خطای ناشناخته') }
     finally { setSaving(false) }
   }

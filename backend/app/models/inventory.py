@@ -48,6 +48,9 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     address: Mapped[str] = mapped_column(Text, default="")
     tax_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: طرف‌حسابِ سیستمی (خودکار ساخته‌شده، مثلِ «فروشِ کارتیِ گذری») — از فهرست/فرم‌های
+    #: کاربر پنهان می‌ماند تا با مشتریانِ واقعی قاطی نشود.
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     #: تاریخِ تولدِ مشتری (باشگاه مشتریان: هدیه/یادآوریِ تولد). NULL = وارد نشده.
     birthday: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     #: سقفِ مجازِ مانده‌ی مطالبات از این مشتری (ریال). صفر = بدون سقف / بدون هشدار.

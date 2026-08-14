@@ -24,6 +24,8 @@ import {
   queueSalesInvoice,
 } from './sync.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
+import { driverFor } from './pos/drivers.js'
+import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
 // acc.cubita.ir و acc.ipnetcity.ir به یک بک‌اند می‌روند، ولی رندرر روی
 // acc.cubita.ir ساخته می‌شود و این خط دامنه‌ی قدیمی را داشت. دو دامنه‌ی متفاوت در
@@ -52,6 +54,13 @@ function createWindow() {
 
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximizedChanged', true))
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximizedChanged', false))
+
+  // اجازه‌ی دوربین برای بارکدخوانِ صندوقِ فروشگاهی. الکترون به‌صورتِ پیش‌فرض هر
+  // درخواستِ media را رد می‌کند؛ بدونِ این هندلر، دکمه‌ی «اسکن با دوربین» در دسکتاپ
+  // بی‌صدا کار نمی‌کرد. فقط media (دوربین/میکروفون) مجاز می‌شود، نه هر مجوزِ دیگری.
+  const ses = mainWindow.webContents.session
+  ses.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'))
+  ses.setPermissionCheckHandler((_wc, permission) => permission === 'media')
 
   // منوی کلیک‌راست سفارشی (فارسی) روی فیلدهای متنی و متن انتخاب‌شده
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -200,6 +209,29 @@ ipcMain.handle('items:listCached', () => {
 
 ipcMain.handle('bankAccounts:listCached', () => {
   return getLocalDb().prepare('SELECT * FROM bank_accounts_cache ORDER BY name').all()
+})
+
+// --- کارتخوان (POS): پلِ سخت‌افزار فقط در دسکتاپ ---
+// خطاها هرگز از IPC پرتاب نمی‌شوند؛ به نتیجه‌ی ساختاریافته تبدیل می‌شوند تا رابط
+// کاربری همیشه پیامِ روشن نشان دهد نه یک reject خام.
+
+ipcMain.handle(
+  'pos:pay',
+  async (_evt, profile: PosTerminalProfile, amountRial: number, refId: string): Promise<PayResult> => {
+    try {
+      return await driverFor(profile).pay(amountRial, refId)
+    } catch (err) {
+      return { approved: false, message: err instanceof Error ? err.message : 'خطای ناشناخته در ارتباط با کارتخوان' }
+    }
+  },
+)
+
+ipcMain.handle('pos:status', async (_evt, profile: PosTerminalProfile): Promise<PosStatus> => {
+  try {
+    return await driverFor(profile).status()
+  } catch (err) {
+    return { online: false, message: err instanceof Error ? err.message : 'خطای ناشناخته در ارتباط با کارتخوان' }
+  }
 })
 
 // --- به‌روزرسانی ---

@@ -36,6 +36,7 @@ from app.routers import (
     onboarding,
     payroll,
     period_close,
+    pos_terminals,
     quotations,
     recurring,
     reports,
@@ -113,6 +114,7 @@ app.include_router(period_close.router)
 app.include_router(integration.router)
 app.include_router(billing.router)
 app.include_router(treasury.router)
+app.include_router(pos_terminals.router)
 app.include_router(audit.router)
 app.include_router(subscription.router)
 app.include_router(calendar.router)

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, FileText } from 'lucide-react'
 import { fetchContactStatement, type ContactStatement } from '../api'
 import { formatJalali } from '../lib/jalali'
+import { CardPaymentButton } from './CardPaymentDialog'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 const faSigned = (s: string) => {
@@ -31,13 +32,15 @@ export function ContactStatementDrawer({
   const [data, setData] = useState<ContactStatement | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let alive = true
-    fetchContactStatement(token, contact.id)
-      .then((r) => { if (alive) setData(r) })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'خطای ناشناخته') })
-    return () => { alive = false }
+  const load = useCallback(() => {
+    return fetchContactStatement(token, contact.id)
+      .then((r) => setData(r))
+      .catch((e) => setError(e instanceof Error ? e.message : 'خطای ناشناخته'))
   }, [token, contact.id])
+
+  useEffect(() => {
+    void load()
+  }, [load])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -68,6 +71,18 @@ export function ContactStatementDrawer({
                 <div className="kardex-stat"><span>ماندهٔ اول دوره</span><strong>{faSigned(data.opening_balance)}</strong></div>
                 <div className="kardex-stat"><span>ماندهٔ فعلی</span><strong>{faSigned(data.closing_balance)}</strong></div>
               </div>
+              {Math.round(Number(data.closing_balance) || 0) > 0 && (
+                <div className="drawer-collect">
+                  <CardPaymentButton
+                    token={token}
+                    amount={Math.round(Number(data.closing_balance))}
+                    contactId={contact.id}
+                    description={`دریافتِ کارتی — ${contact.name}`}
+                    className="btn-primary"
+                    onPaid={() => void load()}
+                  />
+                </div>
+              )}
               {data.lines.length === 0 ? (
                 <p className="muted">این طرف حساب هیچ گردشی ندارد.</p>
               ) : (

@@ -33,6 +33,7 @@ from app.schemas.marketplace import (
     ListingOut,
     MarketplaceSettingsIn,
     MarketplaceSettingsOut,
+    OrderConfirmIn,
     OrderOut,
     OrderPlaceIn,
 )
@@ -222,11 +223,16 @@ def distributor_orders(
 @router.post("/distributor/orders/{order_id}/confirm", response_model=OrderOut)
 def confirm_order(
     order_id: UUID,
+    body: OrderConfirmIn | None = None,
     principal: Principal = Depends(distributor_principal),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("marketplace", "approve")),
 ):
-    order = svc.confirm_order(db, principal.tenant_id, principal.user, order_id)
+    # بدنه اختیاری است؛ نبودنش یعنی «۰٪ نقد» (کاملاً اعتباری، رفتارِ قبلی).
+    cash_percent = body.cash_percent if body is not None else None
+    order = svc.confirm_order(
+        db, principal.tenant_id, principal.user, order_id, cash_percent if cash_percent is not None else 0
+    )
     return OrderOut(**svc.order_dict(db, order))
 
 

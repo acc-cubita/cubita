@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { Package, Pencil, Plus, Save, Trash2, X, Camera } from 'lucide-react'
 import { createItemLive, deleteItemLive, fetchItemsLive, updateItemLive, type ItemRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { BarcodeScanner } from './BarcodeScanner'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -46,6 +47,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
   const [editingId, setEditingId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [scanning, setScanning] = useState(false) // نمای دوربینِ اسکنِ بارکد باز است؟
 
   async function refresh() {
     setError(null)
@@ -252,14 +254,26 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             </label>
             <label>
               بارکد (برای صندوق فروشگاهی)
-              <input
-                type="text"
-                value={form.barcode}
-                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                placeholder="اسکن یا تایپ — اختیاری"
-                inputMode="numeric"
-              />
+              <div className="barcode-field">
+                <input
+                  type="text"
+                  value={form.barcode}
+                  onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                  placeholder="اسکن یا تایپ — اختیاری"
+                  inputMode="numeric"
+                />
+                <button type="button" className="barcode-scan-btn" onClick={() => setScanning(true)} title="اسکن با دوربین" aria-label="اسکن با دوربین">
+                  <Camera size={16} />
+                </button>
+              </div>
             </label>
+            {scanning && (
+              <BarcodeScanner
+                once
+                onDetected={(code) => setForm((f) => ({ ...f, barcode: code }))}
+                onClose={() => setScanning(false)}
+              />
+            )}
           </div>
           <div className="field-row">
             <label>

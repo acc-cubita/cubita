@@ -78,6 +78,13 @@ class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
     category: Mapped[str] = mapped_column(String(100), default="", server_default="")
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
+    #: محدودیت‌های سفارش‌گذاری که پخش‌کننده روی همین لیستینگ می‌گذارد (۰ = بدونِ محدودیت):
+    #:   min/max_order_qty = کف/سقفِ تعداد در هر سفارش
+    #:   daily_order_limit = حداکثر دفعاتِ سفارشِ این کالا در یک روز، به‌ازای هر فروشگاه
+    min_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    max_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    daily_order_limit: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     #: برای single: کالای متناظرِ خودِ پخش‌کننده (برای کسر از انبارش هنگامِ تأیید). برای
     #: pack تهی است (اجزا در components‌اند).
     distributor_item_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -161,6 +168,9 @@ class MarketplaceOrder(UUIDPKMixin, TimestampMixin, Base):
     payment_ref: Mapped[str] = mapped_column(String(120), default="", server_default="")
     subtotal: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: سهمِ نقدِ تسویه‌شده هنگام تأیید (ریال). بقیه (total − cash_amount) اعتباری/طلب می‌ماند.
+    #: پخش‌کننده این درصد را موقعِ تأییدِ سفارش تعیین می‌کند؛ سندِ خزانه‌ی هر دو طرف با آن می‌خورد.
+    cash_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     #: فاکتورهای متناظر پس از تأیید — هرکدام در دفترِ مستأجرِ خودش (FKِ سراسری→جدولِ مستأجری).
     distributor_sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(

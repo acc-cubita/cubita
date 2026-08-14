@@ -38,6 +38,38 @@ export interface OutboxEntry {
   sync_error: string | null
 }
 
+export interface PosTerminalProfileClient {
+  transport: 'simulator' | 'network' | 'serial' | 'sdk'
+  host?: string
+  port?: number
+  comPort?: string
+  psp?: string
+  simulateOutcome?: 'approve' | 'decline'
+  simulateDelayMs?: number
+}
+
+export interface CardPayResult {
+  approved: boolean
+  message?: string
+  rrn?: string
+  traceNo?: string
+  cardMask?: string
+  terminalNo?: string
+  datetime?: string
+  psp?: string
+  raw?: unknown
+}
+
+export interface PosStatusResult {
+  online: boolean
+  message?: string
+}
+
+export interface PosTerminalBridge {
+  pay: (profile: PosTerminalProfileClient, amountRial: number, refId: string) => Promise<CardPayResult>
+  status: (profile: PosTerminalProfileClient) => Promise<PosStatusResult>
+}
+
 export interface CubitaBridge {
   setAuthToken: (token: string | null) => Promise<void>
   pullAll: () => Promise<void>
@@ -54,6 +86,7 @@ export interface CubitaBridge {
   listCachedWarehouses: () => Promise<WarehouseCache[]>
   listCachedItems: () => Promise<ItemCache[]>
   listCachedBankAccounts: () => Promise<BankAccountCache[]>
+  posTerminal?: PosTerminalBridge
 }
 
 export interface WindowControlsBridge {

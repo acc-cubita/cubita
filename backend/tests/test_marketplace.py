@@ -603,6 +603,142 @@ def test_confirm_order_posts_two_sided_and_is_idempotent(as_distributor, retaile
         assert db.query(PurchaseInvoice).count() == 1
 
 
+# ── محدودیت‌های سفارش‌گذاریِ لیستینگ (کف/سقف/دفعاتِ روزانه) ─────────────
+def test_listing_order_limits_roundtrip(as_distributor, db):
+    it = _make_item(db, "LIM-1", "کالای محدود")
+    r = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={
+            "kind": "single", "title": "محدود", "wholesale_price": 1000, "item_id": str(it.id),
+            "min_order_qty": 5, "max_order_qty": 20, "daily_order_limit": 3,
+        },
+    )
+    assert r.status_code == 201, r.text
+    b = r.json()
+    assert float(b["min_order_qty"]) == 5 and float(b["max_order_qty"]) == 20 and b["daily_order_limit"] == 3
+    # حداکثر < حداقل → ۴۲۲.
+    bad = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={"kind": "single", "title": "x", "wholesale_price": 1, "item_id": str(it.id), "min_order_qty": 10, "max_order_qty": 5},
+    )
+    assert bad.status_code == 422
+
+
+def test_place_order_enforces_min_max_qty(as_retailer, distributor_tenant, db):
+    did = distributor_tenant
+    listing = db.query(MarketplaceListing).filter(MarketplaceListing.distributor_tenant_id == did).first()
+    listing.min_order_qty = 5
+    listing.max_order_qty = 20
+    db.flush()
+    _approve(db, did, _primary_id(db))
+
+    def place(q):
+        return as_retailer.post(
+            "/api/marketplace/retailer/orders",
+            json={"distributor_tenant_id": str(did), "lines": [{"listing_id": str(listing.id), "qty": q}]},
+        )
+
+    assert place(3).status_code == 400   # زیرِ حداقل
+    assert place(25).status_code == 400  # بالای حداکثر
+    assert place(10).status_code == 201  # مجاز
+
+
+def test_place_order_enforces_daily_order_limit(as_retailer, distributor_tenant, db):
+    did = distributor_tenant
+    listing = db.query(MarketplaceListing).filter(MarketplaceListing.distributor_tenant_id == did).first()
+    listing.daily_order_limit = 2
+    db.flush()
+    _approve(db, did, _primary_id(db))
+
+    def place():
+        return as_retailer.post(
+            "/api/marketplace/retailer/orders",
+            json={"distributor_tenant_id": str(did), "lines": [{"listing_id": str(listing.id), "qty": 1}]},
+        )
+
+    assert place().status_code == 201
+    assert place().status_code == 201
+    assert place().status_code == 400  # سومین سفارشِ امروز → عبور از سقفِ روزانه
+
+
+# ── تقسیمِ نقد/اعتباری هنگام تأیید ──────────────────────────────────────
+def test_confirm_with_cash_split_records_treasury(as_distributor, retailer_tenant, db, user):
+    primary_id = _primary_id(db)
+    retailer_id = retailer_tenant
+    db.add(MarketplaceSettings(distributor_tenant_id=primary_id, is_active=True))
+    item = _make_item(db, "CASH-1", "کالای نقد")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(100), unit_cost=Decimal(5000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="نقد عمده",
+        unit="عدد", wholesale_price=8000, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای نقد", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+
+    order = svc.place_order(
+        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(10))])
+    )
+    assert Decimal(order.total) == Decimal(80000)
+
+    # تأیید با ۲۵٪ نقد → ۲۰٬۰۰۰ نقد، بقیه اعتباری.
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm", json={"cash_percent": 25})
+    assert r.status_code == 200, r.text
+    assert Decimal(r.json()["cash_amount"]) == Decimal(20000)
+
+    # سمتِ پخش‌کننده: سندِ دریافتِ نقدِ ۲۰٬۰۰۰.
+    with tenant_scope(db, primary_id):
+        receipts = db.query(TreasuryTransaction).filter(TreasuryTransaction.type == "receipt").all()
+        assert any(Decimal(t.amount) == Decimal(20000) for t in receipts)
+    # سمتِ فروشگاه: سندِ پرداختِ نقدِ ۲۰٬۰۰۰.
+    with tenant_scope(db, retailer_id):
+        payments = db.query(TreasuryTransaction).filter(TreasuryTransaction.type == "payment").all()
+        assert any(Decimal(t.amount) == Decimal(20000) for t in payments)
+
+
+def test_confirm_full_credit_records_no_treasury(as_distributor, retailer_tenant, db, user):
+    # ۰٪ نقد (پیش‌فرض، بدونِ بدنه) → هیچ سندِ خزانه‌ای، cash_amount صفر.
+    primary_id = _primary_id(db)
+    retailer_id = retailer_tenant
+    db.add(MarketplaceSettings(distributor_tenant_id=primary_id, is_active=True))
+    item = _make_item(db, "CRED-1", "کالای اعتباری")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(), warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(20), unit_cost=Decimal(1000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="اعتباری عمده",
+        unit="عدد", wholesale_price=3000, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای اعتباری", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(2))])
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")  # بدونِ بدنه
+    assert r.status_code == 200, r.text
+    assert Decimal(r.json()["cash_amount"]) == Decimal(0)
+    with tenant_scope(db, primary_id):
+        assert db.query(TreasuryTransaction).count() == 0
+
+
 def test_confirm_fails_without_distributor_stock(as_distributor, retailer_tenant, db):
     primary_id = _primary_id(db)
     retailer_id = retailer_tenant

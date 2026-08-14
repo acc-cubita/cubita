@@ -6,7 +6,7 @@ from app.deps import require_permission
 from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
-from app.schemas.treasury import TreasuryTransactionIn, TreasuryTransactionOut
+from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn, TreasuryTransactionOut
 from app.services import treasury as treasury_service
 
 router = APIRouter(tags=["treasury"])
@@ -24,6 +24,12 @@ def _to_out(txn) -> TreasuryTransactionOut:
         bank_account_id=txn.bank_account_id,
         description=txn.description,
         journal_entry_id=txn.journal_entry_id,
+        paid_via=txn.paid_via,
+        reference_no=txn.reference_no,
+        trace_no=txn.trace_no,
+        card_mask=txn.card_mask,
+        terminal_no=txn.terminal_no,
+        psp=txn.psp,
     )
 
 
@@ -57,3 +63,14 @@ def create_payment(
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
     return _to_out(treasury_service.create_payment(db, data, user))
+
+
+@router.post("/api/treasury/card-payment", response_model=TreasuryTransactionOut, status_code=201)
+def create_card_payment(
+    data: CardPaymentIn,
+    db: Session = Depends(get_db),
+    # پرداختِ کارتی بخشی از «فروش» است، پس با مجوزِ فروش گیت می‌شود تا صندوق‌دار هم
+    # (که checks_bank ندارد) بتواند کارت بکشد و رسیدِ بانکی خودکار ثبت شود.
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    return _to_out(treasury_service.record_card_payment(db, data, user))
