@@ -6437,34 +6437,34 @@ button:disabled {
 /* ═══════════════════════════════════════════════════════════════════════════
    پوسته‌ی Tipalti — بازطراحیِ «محتوای صفحه» به سبکِ Xero/Tipalti
    ───────────────────────────────────────────────────────────────────────────
-   رنگ و مقیاسِ فونت/فاصله از توکن‌های :root[data-theme='tipalti'] در index.css
+   رنگ و مقیاسِ فونت/فاصله از توکن‌های :root[data-structure='guided'] در index.css
    می‌آیند؛ این‌جا فقط ساختارِ درون‌صفحه‌ای صیقل می‌خورد تا حسِ هوادار، کارتیِ شناور
    و جدول‌های روشنِ Xero را بدهد. همه با پیشوندِ تم اسکوپ‌اند تا پوسته‌های پیش‌فرض
    (تیره/روشن، چیدمانِ سایدبار) دقیقاً دست‌نخورده بمانند. تخصیصِ پیشوند از قواعدِ
    پایه بالاتر است، پس بدونِ نیاز به ترتیب برنده می‌شوند. */
 
 /* فاصله‌ی صفحه هوادارتر (مثلِ فضای خالیِ گشاده‌ی Xero) */
-:root[data-theme='tipalti'] .app-content {
+:root[data-structure='guided'] .app-content {
   padding: clamp(28px, 2.4vw, 48px) clamp(32px, 3.2vw, 60px) 56px;
 }
-:root[data-theme='tipalti'] .page {
+:root[data-structure='guided'] .page {
   gap: 24px;
 }
 
 /* سرصفحه‌ی صفحه — عنوانِ درشتِ Xero + آیکونِ آرامِ طلایی‌تینت (نه گرادیانِ رنگین‌کمانی) */
-:root[data-theme='tipalti'] .page-header {
+:root[data-structure='guided'] .page-header {
   gap: 16px;
 }
-:root[data-theme='tipalti'] .page-header h1 {
+:root[data-structure='guided'] .page-header h1 {
   font-size: clamp(24px, 1.3vw + 17px, 32px);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-:root[data-theme='tipalti'] .page-header-desc {
+:root[data-structure='guided'] .page-header-desc {
   font-size: var(--fs-md);
   max-width: 70ch;
 }
-:root[data-theme='tipalti'] .page-header-icon {
+:root[data-structure='guided'] .page-header-icon {
   background: var(--accent-bg);
   color: var(--text-h);
   border-radius: var(--radius-md);
@@ -6472,7 +6472,7 @@ button:disabled {
 }
 
 /* کارت‌ها — سفید، شناور روی خاکستریِ نرم، سایه‌محور و گوشه‌نرم */
-:root[data-theme='tipalti'] .page section {
+:root[data-structure='guided'] .page section {
   border-radius: var(--radius-lg);
   padding: clamp(20px, 1.6vw, 28px);
   box-shadow: var(--shadow-md);
@@ -6492,7 +6492,7 @@ button:disabled {
   border-radius: 0;
 }
 /* دکمه‌های اکشنِ اتصالِ فروشگاه هم مثلِ فوترِ فرم‌ها هم‌اندازه شوند تا صفحه یکدست باشد */
-:root[data-theme='tipalti'] .sf-actions button {
+:root[data-structure='guided'] .sf-actions button {
   min-width: 150px;
   justify-content: center;
 }
@@ -6503,18 +6503,18 @@ button:disabled {
    #۳ دکمه‌های نوارِ اکشنِ کارت‌ها هم‌اندازه (min-widthِ معتدل — نه به‌بزرگیِ فوتر).
    #۴ زیرعنوانِ ظریفِ گروهِ فیلدها/بخش‌ها برای اسکن‌پذیری.
    #۵ ریتمِ عمودیِ یکدستِ مرحله‌ی بازبینی. */
-:root[data-theme='tipalti'] .invoice-form .field-full {
+:root[data-structure='guided'] .invoice-form .field-full {
   grid-column: 1 / -1;
 }
-:root[data-theme='tipalti'] .invoice-form-footer .btn-primary,
-:root[data-theme='tipalti'] .sf-actions .btn-primary {
+:root[data-structure='guided'] .invoice-form-footer .btn-primary,
+:root[data-structure='guided'] .sf-actions .btn-primary {
   order: -1;
 }
-:root[data-theme='tipalti'] .header-actions button {
+:root[data-structure='guided'] .header-actions button {
   min-width: 104px;
   justify-content: center;
 }
-:root[data-theme='tipalti'] .form-subhead {
+:root[data-structure='guided'] .form-subhead {
   grid-column: 1 / -1;
   margin: 8px 0 0;
   padding-bottom: 6px;
@@ -6523,18 +6523,18 @@ button:disabled {
   font-weight: 700;
   color: var(--text-muted);
 }
-:root[data-theme='tipalti'] .review-step {
+:root[data-structure='guided'] .review-step {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-:root[data-theme='tipalti'] .review-step .form-subhead {
+:root[data-structure='guided'] .review-step .form-subhead {
   margin: 0;
 }
 
 /* جفتِ فیلد با ارتفاعِ نابرابر (مثلِ «مشتری» با کلیدِ حالت + «انبار»): با align-items:end
    کادرهای ورودی‌شان ته‌به‌ته تراز می‌شوند تا انبار دقیقاً روبروی مشتری بیفتد. */
-:root[data-theme='tipalti'] .field-pair {
+:root[data-structure='guided'] .field-pair {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6544,53 +6544,53 @@ button:disabled {
 
 /* کارت‌های آماریِ داخلِ تب (مثلِ بودجه‌بندی) مینیمال‌تر — نه KPIِ درشتِ بالای صفحه؛
    padding و فونتِ عدد کوچک‌تر و کارتِ سبکِ مرزدار به‌جای کارتِ درشتِ سایه‌دار. */
-:root[data-theme='tipalti'] .page.panels .tab-panel .stat-grid {
+:root[data-structure='guided'] .page.panels .tab-panel .stat-grid {
   gap: 12px;
 }
-:root[data-theme='tipalti'] .page.panels .tab-panel .stat-card {
+:root[data-structure='guided'] .page.panels .tab-panel .stat-card {
   padding: 12px 16px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: none;
 }
-:root[data-theme='tipalti'] .page.panels .tab-panel .stat-card-value {
+:root[data-structure='guided'] .page.panels .tab-panel .stat-card-value {
   font-size: var(--fs-xl);
 }
 
 @media (max-width: 760px) {
-  :root[data-theme='tipalti'] .field-pair {
+  :root[data-structure='guided'] .field-pair {
     grid-template-columns: 1fr;
   }
 }
-:root[data-theme='tipalti'] .section-card-header {
+:root[data-structure='guided'] .section-card-header {
   margin-bottom: 18px;
 }
-:root[data-theme='tipalti'] .section-card-icon {
+:root[data-structure='guided'] .section-card-icon {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
 }
 
 /* جدول‌ها — ردیف‌های بلندتر، سرستونِ آرام، خطوطِ ظریف (استانداردِ Xero) */
-:root[data-theme='tipalti'] .page th,
-:root[data-theme='tipalti'] .page td {
+:root[data-structure='guided'] .page th,
+:root[data-structure='guided'] .page td {
   padding: 14px 12px;
 }
-:root[data-theme='tipalti'] .page th {
+:root[data-structure='guided'] .page th {
   font-size: var(--fs-xs);
   letter-spacing: 0.02em;
   border-bottom: 1px solid var(--border-strong);
 }
-:root[data-theme='tipalti'] .page tbody tr:not(.group-row):hover td {
+:root[data-structure='guided'] .page tbody tr:not(.group-row):hover td {
   background: var(--surface-2);
 }
 
 /* کارت‌های KPI — عددِ درشت‌ترِ Tipalti، کارتِ گوشه‌نرم‌تر */
-:root[data-theme='tipalti'] .stat-card {
+:root[data-structure='guided'] .stat-card {
   border-radius: var(--radius-lg);
   padding: clamp(20px, 1.5vw, 28px);
 }
-:root[data-theme='tipalti'] .stat-card-value {
+:root[data-structure='guided'] .stat-card-value {
   font-size: clamp(26px, 1.5vw + 17px, 34px);
 }
 
@@ -6598,7 +6598,7 @@ button:disabled {
    (≤۷۶۰) tab-list به گریدِ هم‌عرض تبدیل می‌شود که با زیرخط جور نیست، پس همان‌جا
    کپسولِ استاندارد می‌ماند. */
 @media (min-width: 761px) {
-  :root[data-theme='tipalti'] .tab-list {
+  :root[data-structure='guided'] .tab-list {
     background: transparent;
     border: none;
     border-bottom: 1px solid var(--border);
@@ -6607,7 +6607,7 @@ button:disabled {
     padding: 0;
     gap: 2px;
   }
-  :root[data-theme='tipalti'] .tab-list .tab {
+  :root[data-structure='guided'] .tab-list .tab {
     border: none;
     border-bottom: 3px solid transparent;
     border-radius: 0;
@@ -6615,12 +6615,12 @@ button:disabled {
     padding: 12px 18px;
     color: var(--text-muted);
   }
-  :root[data-theme='tipalti'] .tab-list .tab:hover {
+  :root[data-structure='guided'] .tab-list .tab:hover {
     background: transparent;
     color: var(--text-h);
   }
-  :root[data-theme='tipalti'] .tab-list .tab.active,
-  :root[data-theme='tipalti'] .tab-list .tab.active:hover {
+  :root[data-structure='guided'] .tab-list .tab.active,
+  :root[data-structure='guided'] .tab-list .tab.active:hover {
     background: transparent;
     color: var(--text-h);
     border-bottom-color: var(--accent);
@@ -6635,7 +6635,7 @@ button:disabled {
    اطمینانِ کامل از عدمِ نشت است. */
 
 /* ── ویزارد (TaskFlow) ─────────────────────────────────────────────────── */
-:root[data-theme='tipalti'] .taskflow {
+:root[data-structure='guided'] .taskflow {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -6645,29 +6645,29 @@ button:disabled {
   flex-direction: column;
   gap: var(--sp-5);
 }
-:root[data-theme='tipalti'] .taskflow-title {
+:root[data-structure='guided'] .taskflow-title {
   font-size: var(--fs-lg);
   margin-bottom: 18px;
 }
 
 /* استپرِ شماره‌دار (دسکتاپ) */
-:root[data-theme='tipalti'] .taskflow-steps {
+:root[data-structure='guided'] .taskflow-steps {
   display: flex;
   align-items: center;
   list-style: none;
   margin: 0;
   padding: 0;
 }
-:root[data-theme='tipalti'] .taskflow-step {
+:root[data-structure='guided'] .taskflow-step {
   display: flex;
   align-items: center;
   flex: 1;
   min-width: 0;
 }
-:root[data-theme='tipalti'] .taskflow-step:last-child {
+:root[data-structure='guided'] .taskflow-step:last-child {
   flex: 0 0 auto;
 }
-:root[data-theme='tipalti'] .taskflow-step-btn {
+:root[data-structure='guided'] .taskflow-step-btn {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -6680,16 +6680,16 @@ button:disabled {
   color: var(--text-muted);
   cursor: pointer;
 }
-:root[data-theme='tipalti'] .taskflow-step-btn:disabled {
+:root[data-structure='guided'] .taskflow-step-btn:disabled {
   cursor: default;
   opacity: 1;
 }
-:root[data-theme='tipalti'] .taskflow-step-btn:hover:not(:disabled) {
+:root[data-structure='guided'] .taskflow-step-btn:hover:not(:disabled) {
   color: var(--text-h);
   background: transparent;
   border: none;
 }
-:root[data-theme='tipalti'] .taskflow-step-num {
+:root[data-structure='guided'] .taskflow-step-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6704,14 +6704,14 @@ button:disabled {
   border: 1px solid var(--border-strong);
   transition: background 0.15s, color 0.15s, box-shadow 0.15s, border-color 0.15s;
 }
-:root[data-theme='tipalti'] .taskflow-step-label {
+:root[data-structure='guided'] .taskflow-step-label {
   font-size: var(--fs-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* خطِ رابط بینِ مراحل (فضای بازمانده‌ی هر مرحله را پر می‌کند) */
-:root[data-theme='tipalti'] .taskflow-step:not(:last-child)::after {
+:root[data-structure='guided'] .taskflow-step:not(:last-child)::after {
   content: '';
   flex: 1;
   height: 2px;
@@ -6721,52 +6721,52 @@ button:disabled {
   border-radius: 2px;
 }
 /* مرحله‌ی انجام‌شده: چیپِ طلایی + برچسبِ پررنگ + خطِ رابطِ طلایی */
-:root[data-theme='tipalti'] .taskflow-step.is-done .taskflow-step-num {
+:root[data-structure='guided'] .taskflow-step.is-done .taskflow-step-num {
   background: var(--accent);
   color: var(--accent-text);
   border-color: transparent;
 }
-:root[data-theme='tipalti'] .taskflow-step.is-done .taskflow-step-label {
+:root[data-structure='guided'] .taskflow-step.is-done .taskflow-step-label {
   color: var(--text);
 }
-:root[data-theme='tipalti'] .taskflow-step.is-done::after {
+:root[data-structure='guided'] .taskflow-step.is-done::after {
   background: var(--accent);
 }
 /* مرحله‌ی فعال: چیپِ طلایی با هاله + برچسبِ سرمه‌ایِ پررنگ */
-:root[data-theme='tipalti'] .taskflow-step.is-active .taskflow-step-num {
+:root[data-structure='guided'] .taskflow-step.is-active .taskflow-step-num {
   background: var(--accent);
   color: var(--accent-text);
   border-color: transparent;
   box-shadow: 0 0 0 4px var(--accent-bg);
 }
-:root[data-theme='tipalti'] .taskflow-step.is-active .taskflow-step-label {
+:root[data-structure='guided'] .taskflow-step.is-active .taskflow-step-label {
   color: var(--text-h);
   font-weight: 600;
 }
 
-:root[data-theme='tipalti'] .taskflow-step-mobile {
+:root[data-structure='guided'] .taskflow-step-mobile {
   display: none;
 }
 
 /* بدنه + پنلِ پیش‌نمایشِ کناری (side-by-side) */
-:root[data-theme='tipalti'] .taskflow-main {
+:root[data-structure='guided'] .taskflow-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 340px);
   gap: var(--sp-5);
   align-items: start;
 }
-:root[data-theme='tipalti'] .taskflow-body {
+:root[data-structure='guided'] .taskflow-body {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   min-width: 0;
 }
-:root[data-theme='tipalti'] .taskflow-step-sub {
+:root[data-structure='guided'] .taskflow-step-sub {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text-muted);
 }
-:root[data-theme='tipalti'] .taskflow-preview {
+:root[data-structure='guided'] .taskflow-preview {
   position: sticky;
   top: 0;
   background: var(--surface-2);
@@ -6775,7 +6775,7 @@ button:disabled {
   padding: var(--sp-4);
   align-self: start;
 }
-:root[data-theme='tipalti'] .taskflow-block-hint {
+:root[data-structure='guided'] .taskflow-block-hint {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--warning);
@@ -6783,7 +6783,7 @@ button:disabled {
   align-items: center;
   gap: 6px;
 }
-:root[data-theme='tipalti'] .taskflow-message {
+:root[data-structure='guided'] .taskflow-message {
   font-size: var(--fs-sm);
   color: var(--text-muted);
   background: var(--surface-2);
@@ -6793,24 +6793,24 @@ button:disabled {
 }
 
 /* فوترِ ناوبری */
-:root[data-theme='tipalti'] .taskflow-footer {
+:root[data-structure='guided'] .taskflow-footer {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   border-top: 1px solid var(--border);
   padding-top: var(--sp-4);
 }
-:root[data-theme='tipalti'] .taskflow-footer-spacer {
+:root[data-structure='guided'] .taskflow-footer-spacer {
   flex: 1;
 }
-:root[data-theme='tipalti'] .taskflow-back {
+:root[data-structure='guided'] .taskflow-back {
   border: 1px solid var(--border-strong);
   background: transparent;
 }
 /* دکمه‌های ناوبریِ ویزارد هم‌اندازه: «قبلی» و «تأیید و ادامه/ثبت» کفِ عرضِ یکسان و
    محتوای وسط‌چین می‌گیرند تا جفتِ ناوبری متقارن و منظم دیده شود. */
-:root[data-theme='tipalti'] .taskflow-back,
-:root[data-theme='tipalti'] .taskflow-next {
+:root[data-structure='guided'] .taskflow-back,
+:root[data-structure='guided'] .taskflow-next {
   min-width: 150px;
   justify-content: center;
 }
@@ -6820,82 +6820,82 @@ button:disabled {
    ردیفِ آخرش نیمه‌خالی و ناهموار می‌شد؛ حالا فیلدها جفت‌جفت زیرِ هم تراز می‌شوند و نظمِ
    صفحه بالا می‌رود. روی موبایل تک‌ستون. دکمه‌های فوترِ فرم هم کفِ عرضِ یکسان می‌گیرند تا
    مجموعه‌ی دکمه‌ها یکدست باشند. (فقط پوسته‌ی Tipalti؛ کلاسیک همان auto-fit می‌ماند.) */
-:root[data-theme='tipalti'] .invoice-form {
+:root[data-structure='guided'] .invoice-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 20px;
 }
-:root[data-theme='tipalti'] .invoice-form-footer {
+:root[data-structure='guided'] .invoice-form-footer {
   grid-column: 1 / -1;
   justify-content: flex-start;
 }
-:root[data-theme='tipalti'] .invoice-form-footer button {
+:root[data-structure='guided'] .invoice-form-footer button {
   min-width: 150px;
   justify-content: center;
 }
 @media (max-width: 760px) {
-  :root[data-theme='tipalti'] .invoice-form {
+  :root[data-structure='guided'] .invoice-form {
     grid-template-columns: 1fr;
   }
-  :root[data-theme='tipalti'] .invoice-form-footer button {
+  :root[data-structure='guided'] .invoice-form-footer button {
     min-width: 0;
     flex: 1 1 auto;
   }
 }
 
 /* پنلِ پیش‌نمایشِ زنده‌ی سند (محتوای داخلِ .taskflow-preview) */
-:root[data-theme='tipalti'] .live-preview-title {
+:root[data-structure='guided'] .live-preview-title {
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-muted);
   margin: 0 0 var(--sp-3);
 }
-:root[data-theme='tipalti'] .live-preview-row {
+:root[data-structure='guided'] .live-preview-row {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   font-size: var(--fs-sm);
   padding: 5px 0;
 }
-:root[data-theme='tipalti'] .live-preview-row span:first-child {
+:root[data-structure='guided'] .live-preview-row span:first-child {
   color: var(--text-muted);
 }
-:root[data-theme='tipalti'] .live-preview-row strong {
+:root[data-structure='guided'] .live-preview-row strong {
   color: var(--text-h);
   font-weight: 600;
 }
-:root[data-theme='tipalti'] .live-preview-divider {
+:root[data-structure='guided'] .live-preview-divider {
   height: 1px;
   background: var(--border);
   margin: var(--sp-3) 0;
 }
-:root[data-theme='tipalti'] .live-preview-total {
+:root[data-structure='guided'] .live-preview-total {
   font-size: var(--fs-md);
 }
-:root[data-theme='tipalti'] .live-preview-total strong {
+:root[data-structure='guided'] .live-preview-total strong {
   color: var(--accent-hover);
 }
 
 /* ── داشبوردِ اقدام‌محور ───────────────────────────────────────────────── */
-:root[data-theme='tipalti'] .guided-dash {
+:root[data-structure='guided'] .guided-dash {
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
 }
-:root[data-theme='tipalti'] .guided-welcome h1 {
+:root[data-structure='guided'] .guided-welcome h1 {
   font-size: clamp(24px, 1.3vw + 17px, 32px);
   margin-bottom: 4px;
 }
-:root[data-theme='tipalti'] .guided-welcome .hint {
+:root[data-structure='guided'] .guided-welcome .hint {
   color: var(--text-muted);
   font-size: var(--fs-md);
 }
-:root[data-theme='tipalti'] .action-hub-grid {
+:root[data-structure='guided'] .action-hub-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--sp-4);
   margin-top: var(--sp-3);
 }
-:root[data-theme='tipalti'] .action-card {
+:root[data-structure='guided'] .action-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -6910,13 +6910,13 @@ button:disabled {
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
-:root[data-theme='tipalti'] .action-card:hover {
+:root[data-structure='guided'] .action-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: var(--accent);
   color: inherit;
 }
-:root[data-theme='tipalti'] .action-card-icon {
+:root[data-structure='guided'] .action-card-icon {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
@@ -6927,12 +6927,12 @@ button:disabled {
   justify-content: center;
   flex-shrink: 0;
 }
-:root[data-theme='tipalti'] .action-card-title {
+:root[data-structure='guided'] .action-card-title {
   font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-h);
 }
-:root[data-theme='tipalti'] .action-card-desc {
+:root[data-structure='guided'] .action-card-desc {
   font-size: var(--fs-sm);
   color: var(--text-muted);
   line-height: var(--lh);
@@ -6940,10 +6940,10 @@ button:disabled {
 
 /* ── موبایل (≤۷۶۰): استپرِ فشرده + پنلِ پیش‌نمایش زیرِ بدنه ───────────────── */
 @media (max-width: 760px) {
-  :root[data-theme='tipalti'] .taskflow-steps {
+  :root[data-structure='guided'] .taskflow-steps {
     display: none;
   }
-  :root[data-theme='tipalti'] .taskflow-step-mobile {
+  :root[data-structure='guided'] .taskflow-step-mobile {
     display: block;
     font-size: var(--fs-sm);
     font-weight: 600;
@@ -6952,29 +6952,29 @@ button:disabled {
     border-radius: var(--radius-md);
     padding: 10px 14px;
   }
-  :root[data-theme='tipalti'] .taskflow-main {
+  :root[data-structure='guided'] .taskflow-main {
     grid-template-columns: 1fr;
   }
-  :root[data-theme='tipalti'] .taskflow-preview {
+  :root[data-structure='guided'] .taskflow-preview {
     position: static;
     order: -1;
   }
-  :root[data-theme='tipalti'] .taskflow-next {
+  :root[data-structure='guided'] .taskflow-next {
     min-width: 120px;
   }
   /* موبایل: گاترِ خاکستریِ بیرونی و paddingِ درونِ کارت‌ها فشرده می‌شود تا کارت‌ها
      تقریباً تمامِ عرضِ نمایشگر را بگیرند — نه یک کادرِ کوچک با خاکستریِ زیادِ دور و بر.
      (پیش‌فرضِ Tipalti برای دسکتاپ هوادار است: clamp کفِ ۳۲px افقی داشت که روی موبایل
      زیادی بود؛ اینجا برای ≤۷۶۰ کوچک می‌شود.) */
-  :root[data-theme='tipalti'] .app-content {
+  :root[data-structure='guided'] .app-content {
     padding: 12px 10px 28px;
     /* رزروِ گاترِ دو لبه (برای تقارنِ دسکتاپ) روی موبایل فضای باریک را هدر می‌دهد؛
        اسکرول‌بارِ موبایل روی‌هم‌افتاده و بی‌عرض است، پس رزرو لازم نیست. */
     scrollbar-gutter: auto;
   }
-  :root[data-theme='tipalti'] .page.panels > *:not(.stat-grid):not(.tabs):not(.pos-grid),
-  :root[data-theme='tipalti'] .page.panels > .page-header,
-  :root[data-theme='tipalti'] .page.panels .tab-panel {
+  :root[data-structure='guided'] .page.panels > *:not(.stat-grid):not(.tabs):not(.pos-grid),
+  :root[data-structure='guided'] .page.panels > .page-header,
+  :root[data-structure='guided'] .page.panels .tab-panel {
     padding: 16px;
   }
 }
@@ -6985,8 +6985,8 @@ button:disabled {
    فقط پوسته‌ی Tipalti (guided). داشبوردِ اقدام‌محور (.guided-dash) خودش خوش‌آمد+KPI دارد و
    با :not(.guided-dash) مستثناست؛ stat-gridهای داخلِ تب (مثلِ KPIهای مؤدیان) چون فرزندِ
    مستقیمِ .page نیستند دست‌نخورده می‌مانند. */
-:root[data-theme='tipalti'] .app-content > .page:not(.guided-dash) > .page-header,
-:root[data-theme='tipalti'] .app-content > .page:not(.guided-dash) > .stat-grid {
+:root[data-structure='guided'] .app-content > .page:not(.guided-dash) > .page-header,
+:root[data-structure='guided'] .app-content > .page:not(.guided-dash) > .stat-grid {
   display: none;
 }
 

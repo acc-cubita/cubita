@@ -16,36 +16,40 @@ export interface ThemeDef {
   swatches: [string, string, string]
 }
 
-/** رجیستریِ تم‌ها. ترتیبِ نمایش در گالری همین است. */
+/** رجیستریِ تم‌ها. ترتیبِ نمایش در گالری همین است.
+ *  هر سه تم اکنون «ساختارِ جدید» را دارند (shell=topnav + content=guided): همان منوها،
+ *  صفحه‌ها و کارهای مرحله‌ایِ تمِ Tipalti. تنها تفاوتِ سه تم، «پالتِ رنگ» است که از بلوکِ
+ *  توکنِ متناظر در index.css می‌آید؛ مقیاسِ هوادار (فونت/فاصله/گِردی) مشترک است و در
+ *  `:root[data-structure='guided']` تعریف شده. */
 export const THEMES: ThemeDef[] = [
   {
+    id: 'tipalti',
+    label: 'Tipalti — سرمه‌ای/طلایی (پیش‌فرض)',
+    kind: 'light',
+    shell: 'topnav',
+    content: 'guided',
+    swatches: ['#16223d', '#ffc72c', '#ffffff'],
+  },
+  {
     id: 'dark',
-    label: 'تیره (پیش‌فرض)',
+    label: 'تیره',
     kind: 'dark',
-    shell: 'sidebar',
-    content: 'classic',
+    shell: 'topnav',
+    content: 'guided',
     swatches: ['#181818', '#0078d4', '#252526'],
   },
   {
     id: 'light',
     label: 'روشن',
     kind: 'light',
-    shell: 'sidebar',
-    content: 'classic',
-    swatches: ['#f8f8f8', '#005fb8', '#ffffff'],
-  },
-  {
-    id: 'tipalti',
-    label: 'Tipalti — سرمه‌ای/طلایی',
-    kind: 'light',
     shell: 'topnav',
     content: 'guided',
-    swatches: ['#16223d', '#ffc72c', '#ffffff'],
+    swatches: ['#f8f8f8', '#005fb8', '#ffffff'],
   },
 ]
 
 const KEY = 'cubita-theme'
-const DEFAULT_ID = 'dark'
+const DEFAULT_ID = 'tipalti'
 
 export function getTheme(id: string): ThemeDef {
   return THEMES.find((t) => t.id === id) ?? THEMES[0]
@@ -65,7 +69,12 @@ export function getStoredThemeId(): string {
 /** تم را روی سند اعمال و ذخیره می‌کند. در main.tsx پیش از render صدا زده می‌شود تا
  *  صفحه بدونِ «پرش» با تمِ درست بالا بیاید. */
 export function applyTheme(id: string): void {
+  const theme = getTheme(id)
   document.documentElement.setAttribute('data-theme', id)
+  // `data-structure` جدا از رنگ است: قواعدِ ساختاریِ «نسخه‌ی جدید» (App.css) به این
+  // صفت وصل‌اند، نه به id تم. پس هر تمی با content='guided' همان ساختار را می‌گیرد و فقط
+  // پالتِ رنگش (از data-theme) فرق می‌کند.
+  document.documentElement.setAttribute('data-structure', theme.content)
   try {
     localStorage.setItem(KEY, id)
   } catch {
