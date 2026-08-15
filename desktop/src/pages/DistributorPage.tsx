@@ -5,10 +5,10 @@ import {
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
-  confirmMpOrder, createMpListing, deleteMpListing, fetchMpDistributorConnections,
+  confirmMpOrder, deleteMpListing, fetchMpDistributorConnections,
   fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, fetchMyMpCommissions, rejectMpOrder,
-  setMpConnectionStatus, setMpListingPublished, updateMpListing, updateMpSettings,
-  type Listing, type ListingIn, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder,
+  setMpConnectionStatus, setMpListingPublished, updateMpSettings,
+  type Listing, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -20,6 +20,9 @@ import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
 import { ImageUploader } from '../components/ImageUploader'
 import { Pager, usePagination } from '../components/Pager'
+import { ListingWizard } from '../components/wizard/ListingWizard'
+import { useListingDraft } from '../lib/listingDraft'
+import { useTheme } from '../lib/theme'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -41,16 +44,6 @@ const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa
 // "1405-05" → "۱۴۰۵/۰۵"
 const faPeriod = (p: string) =>
   p.replace('-', '/').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
-
-interface PackRow { itemId: string; qty: string }
-const EMPTY_FORM = {
-  kind: 'single' as 'single' | 'pack',
-  title: '', code: '', unit: 'عدد', wholesalePrice: '', category: '', isPublished: true,
-  itemId: '',
-  images: [] as string[],
-  minOrderQty: '', maxOrderQty: '', dailyOrderLimit: '',
-  components: [{ itemId: '', qty: '1' }] as PackRow[],
-}
 
 /** ماژولِ «پخشِ من» — کاتالوگ (تکی/پک) + تنظیماتِ تسویه. فقط حسابِ distributor. */
 export function DistributorPage({ token, items }: { token: string; items: ItemCache[] }) {
@@ -97,12 +90,9 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
 }
 
 function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
+  const guided = useTheme().theme.content === 'guided'
   const [listings, setListings] = useState<Listing[]>([])
-  const [form, setForm] = useState({ ...EMPTY_FORM })
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -110,6 +100,10 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
     catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
+
+  // منطقِ مشترکِ فرم (state + submit) — همان هوکی که ویزارد هم مصرف می‌کند.
+  const draft = useListingDraft({ token, onSaved: refresh })
+  const { form, setForm } = draft
 
   const itemName = useMemo(() => new Map(items.map((i) => [i.id, i.name])), [items])
   const kpis = useMemo(() => ({
@@ -120,67 +114,6 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
   // صفحه‌بندیِ کاتالوگِ لیستینگ‌ها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
   const pg = usePagination(listings, 10)
 
-  function reset() { setForm({ ...EMPTY_FORM, images: [], components: [{ itemId: '', qty: '1' }] }); setEditingId(null); setMsg(null) }
-
-  function startEdit(l: Listing) {
-    setEditingId(l.id)
-    setForm({
-      kind: l.kind,
-      title: l.title, code: l.code, unit: l.unit,
-      wholesalePrice: String(Number(l.wholesale_price) || ''),
-      category: l.category, isPublished: l.is_published,
-      itemId: l.item_id ?? '',
-      images: l.images ?? [],
-      minOrderQty: Number(l.min_order_qty) ? String(Number(l.min_order_qty)) : '',
-      maxOrderQty: Number(l.max_order_qty) ? String(Number(l.max_order_qty)) : '',
-      dailyOrderLimit: Number(l.daily_order_limit) ? String(Number(l.daily_order_limit)) : '',
-      components: l.kind === 'pack' && l.components.length
-        ? l.components.map((c) => ({ itemId: c.item_id, qty: String(Number(c.qty)) }))
-        : [{ itemId: '', qty: '1' }],
-    })
-    setMsg(null)
-  }
-
-  function setPackRow(i: number, patch: Partial<PackRow>) {
-    setForm((f) => ({ ...f, components: f.components.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }))
-  }
-  const addPackRow = () => setForm((f) => ({ ...f, components: [...f.components, { itemId: '', qty: '1' }] }))
-  const removePackRow = (i: number) =>
-    setForm((f) => ({ ...f, components: f.components.length > 1 ? f.components.filter((_, idx) => idx !== i) : f.components }))
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setMsg(null)
-    if (!form.title.trim()) { setMsg('عنوان الزامی است.'); return }
-    if (form.kind === 'single' && !form.itemId) { setMsg('برای کالای تکی، انتخابِ کالا الزامی است.'); return }
-    const packRows = form.components.filter((r) => r.itemId && Number(r.qty) > 0)
-    if (form.kind === 'pack' && packRows.length === 0) { setMsg('پک حداقل یک جزءِ معتبر لازم دارد.'); return }
-
-    const payload: ListingIn = {
-      kind: form.kind,
-      title: form.title.trim(),
-      code: form.code.trim(),
-      unit: form.unit.trim() || 'عدد',
-      wholesale_price: Number(form.wholesalePrice) || 0,
-      category: form.category.trim(),
-      is_published: form.isPublished,
-      images: form.images,
-      min_order_qty: Number(form.minOrderQty) || 0,
-      max_order_qty: Number(form.maxOrderQty) || 0,
-      daily_order_limit: Number(form.dailyOrderLimit) || 0,
-      item_id: form.kind === 'single' ? form.itemId : null,
-      components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: Number(r.qty) })) : [],
-    }
-    setSaving(true)
-    try {
-      if (editingId) await updateMpListing(token, editingId, payload)
-      else await createMpListing(token, payload)
-      reset()
-      await refresh()
-    } catch (e2) { setMsg(e2 instanceof Error ? e2.message : 'خطای ناشناخته') }
-    finally { setSaving(false) }
-  }
-
   async function togglePublish(l: Listing) {
     setError(null)
     try { await setMpListingPublished(token, l.id, !l.is_published); await refresh() }
@@ -189,9 +122,150 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
   async function remove(l: Listing) {
     if (!window.confirm(`لیستینگِ «${l.title}» حذف شود؟`)) return
     setError(null)
-    try { await deleteMpListing(token, l.id); if (editingId === l.id) reset(); await refresh() }
+    try { await deleteMpListing(token, l.id); if (draft.editingId === l.id) draft.reset(); await refresh() }
     catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
   }
+
+  // فرمِ کلاسیک (پوسته‌های تیره/روشن) — منطق از هوکِ مشترک.
+  const formCard = (
+    <SectionCard
+      icon={draft.editingId ? Pencil : Plus}
+      title={draft.editingId ? 'ویرایشِ لیستینگ' : 'لیستینگِ جدید'}
+      description="کالای تکی یا پکِ چندمحصولی را از روی کالاهای انبارِ خودتان منتشر کنید."
+      actions={draft.editingId ? <button onClick={draft.reset}><X size={13} /> انصراف</button> : undefined}
+    >
+      <form className="invoice-form form-full" onSubmit={(e) => { e.preventDefault(); void draft.submit() }}>
+        <label>
+          نوعِ لیستینگ
+          <div className="seg-toggle">
+            <button type="button" className={form.kind === 'single' ? 'active' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'single' }))}>کالای تکی</button>
+            <button type="button" className={form.kind === 'pack' ? 'active' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'pack' }))}>پکِ چندمحصولی</button>
+          </div>
+        </label>
+        <div className="field-row">
+          <label>عنوان
+            <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="عنوانِ نمایشیِ بازار" required />
+          </label>
+          <label>کد (اختیاری)
+            <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="کدِ داخلی" />
+          </label>
+        </div>
+
+        {form.kind === 'single' ? (
+          <div className="field-row">
+            <label>کالا (از انبارِ خودتان)
+              <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id })} />
+            </label>
+            <label>واحد
+              <input type="text" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+            </label>
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table className="invoice-lines">
+              <thead><tr><th>کالا</th><th>تعداد در پک</th><th></th></tr></thead>
+              <tbody>
+                {form.components.map((r, i) => (
+                  <tr key={i}>
+                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
+                    <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
+                    <td><button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button type="button" onClick={draft.addPackRow}><Plus size={14} /> افزودن جزء</button>
+          </div>
+        )}
+
+        <div className="field-row">
+          <label>قیمتِ عمده (ریال{form.kind === 'pack' ? '، کلِ پک' : '، هر واحد'})
+            <NumberInput value={form.wholesalePrice} onChange={(v) => setForm({ ...form, wholesalePrice: v })} placeholder="۰" />
+          </label>
+          <label>دسته (اختیاری)
+            <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          </label>
+        </div>
+        <label>عکس‌های محصول (اختیاری)
+          <ImageUploader value={form.images} onChange={(imgs) => setForm({ ...form, images: imgs })} />
+        </label>
+
+        <fieldset className="mp-limits">
+          <legend>محدودیتِ سفارش (اختیاری — ۰/خالی یعنی بدون محدودیت)</legend>
+          <div className="field-row">
+            <label>حداقلِ هر سفارش
+              <NumberInput allowDecimal value={form.minOrderQty} onChange={(v) => setForm({ ...form, minOrderQty: v })} placeholder="بدون حداقل" />
+            </label>
+            <label>حداکثرِ هر سفارش
+              <NumberInput allowDecimal value={form.maxOrderQty} onChange={(v) => setForm({ ...form, maxOrderQty: v })} placeholder="بدون سقف" />
+            </label>
+            <label>سقفِ دفعاتِ سفارش در روز
+              <NumberInput value={form.dailyOrderLimit} onChange={(v) => setForm({ ...form, dailyOrderLimit: v })} placeholder="بدون سقف" />
+            </label>
+          </div>
+          <span className="field-hint">هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد؛ و در هر روز حداکثر به تعدادِ تعیین‌شده می‌تواند سفارش ثبت کند.</span>
+        </fieldset>
+
+        <label className="cal-check-inline">
+          <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
+          منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
+        </label>
+        <div className="invoice-form-footer">
+          <button type="submit" className="btn-primary" disabled={draft.saving}><Save size={14} /> {draft.editingId ? 'ذخیره' : 'ثبت لیستینگ'}</button>
+        </div>
+        {draft.msg && <div className="hint">{draft.msg}</div>}
+      </form>
+    </SectionCard>
+  )
+
+  const listCard = (
+    <SectionCard icon={Package} title="کاتالوگ" description={`${faMoney(listings.length)} لیستینگ`}>
+      {error && <div className="error">{error}</div>}
+      {listings.length === 0 ? (
+        <EmptyState icon={Package} text="هنوز لیستینگی نساخته‌اید — از فرمِ کنار، اولین محصول یا پک را منتشر کنید." />
+      ) : (
+        <div className="entity-table-wrap">
+          <table className="entity-table">
+            <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
+            <tbody>
+              {pg.pageItems.map((l) => (
+                <tr key={l.id}>
+                  <td>
+                    <div className="entity-with-thumb">
+                      {l.images?.[0]
+                        ? <img className="list-thumb" src={l.images[0]} alt="" />
+                        : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
+                      <div>
+                        <div className="entity-name">{l.title}</div>
+                        <div className="entity-sub">
+                          {l.kind === 'pack'
+                            ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
+                            : (itemName.get(l.item_id ?? '') ?? '—')}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
+                  <td className="money-cell">{faMoney(l.wholesale_price)}</td>
+                  <td>
+                    <span className={`status-badge ${l.is_published ? 'tone-success' : 'tone-warning'}`}>{l.is_published ? 'منتشرشده' : 'پیش‌نویس'}</span>
+                  </td>
+                  <td>
+                    <div className="check-actions">
+                      <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
+                      <button type="button" onClick={() => draft.startEdit(l)}><Pencil size={13} /> ویرایش</button>
+                      <button type="button" className="icon-btn-danger" onClick={() => void remove(l)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+        </div>
+      )}
+    </SectionCard>
+  )
 
   return (
     <>
@@ -201,143 +275,17 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
         <StatCard icon={<Boxes size={18} />} label="پک‌ها" value={faMoney(kpis.packs)} />
       </div>
 
-      <div className="workspace-split">
-        <SectionCard
-          icon={editingId ? Pencil : Plus}
-          title={editingId ? 'ویرایشِ لیستینگ' : 'لیستینگِ جدید'}
-          description="کالای تکی یا پکِ چندمحصولی را از روی کالاهای انبارِ خودتان منتشر کنید."
-          actions={editingId ? <button onClick={reset}><X size={13} /> انصراف</button> : undefined}
-        >
-          <form className="invoice-form form-full" onSubmit={submit}>
-            <label>
-              نوعِ لیستینگ
-              <div className="seg-toggle">
-                <button type="button" className={form.kind === 'single' ? 'active' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'single' }))}>کالای تکی</button>
-                <button type="button" className={form.kind === 'pack' ? 'active' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'pack' }))}>پکِ چندمحصولی</button>
-              </div>
-            </label>
-            <div className="field-row">
-              <label>عنوان
-                <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="عنوانِ نمایشیِ بازار" required />
-              </label>
-              <label>کد (اختیاری)
-                <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="کدِ داخلی" />
-              </label>
-            </div>
-
-            {form.kind === 'single' ? (
-              <div className="field-row">
-                <label>کالا (از انبارِ خودتان)
-                  <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id })} />
-                </label>
-                <label>واحد
-                  <input type="text" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-                </label>
-              </div>
-            ) : (
-              <div className="table-scroll">
-                <table className="invoice-lines">
-                  <thead><tr><th>کالا</th><th>تعداد در پک</th><th></th></tr></thead>
-                  <tbody>
-                    {form.components.map((r, i) => (
-                      <tr key={i}>
-                        <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => setPackRow(i, { itemId: id })} /></td>
-                        <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => setPackRow(i, { qty: v })} /></td>
-                        <td><button type="button" className="icon-btn-danger" onClick={() => removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button type="button" onClick={addPackRow}><Plus size={14} /> افزودن جزء</button>
-              </div>
-            )}
-
-            <div className="field-row">
-              <label>قیمتِ عمده (ریال{form.kind === 'pack' ? '، کلِ پک' : '، هر واحد'})
-                <NumberInput value={form.wholesalePrice} onChange={(v) => setForm({ ...form, wholesalePrice: v })} placeholder="۰" />
-              </label>
-              <label>دسته (اختیاری)
-                <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-              </label>
-            </div>
-            <label>عکس‌های محصول (اختیاری)
-              <ImageUploader value={form.images} onChange={(imgs) => setForm({ ...form, images: imgs })} />
-            </label>
-
-            <fieldset className="mp-limits">
-              <legend>محدودیتِ سفارش (اختیاری — ۰/خالی یعنی بدون محدودیت)</legend>
-              <div className="field-row">
-                <label>حداقلِ هر سفارش
-                  <NumberInput allowDecimal value={form.minOrderQty} onChange={(v) => setForm({ ...form, minOrderQty: v })} placeholder="بدون حداقل" />
-                </label>
-                <label>حداکثرِ هر سفارش
-                  <NumberInput allowDecimal value={form.maxOrderQty} onChange={(v) => setForm({ ...form, maxOrderQty: v })} placeholder="بدون سقف" />
-                </label>
-                <label>سقفِ دفعاتِ سفارش در روز
-                  <NumberInput value={form.dailyOrderLimit} onChange={(v) => setForm({ ...form, dailyOrderLimit: v })} placeholder="بدون سقف" />
-                </label>
-              </div>
-              <span className="field-hint">هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد؛ و در هر روز حداکثر به تعدادِ تعیین‌شده می‌تواند سفارش ثبت کند.</span>
-            </fieldset>
-
-            <label className="cal-check-inline">
-              <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
-              منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
-            </label>
-            <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary" disabled={saving}><Save size={14} /> {editingId ? 'ذخیره' : 'ثبت لیستینگ'}</button>
-            </div>
-            {msg && <div className="hint">{msg}</div>}
-          </form>
-        </SectionCard>
-
-        <SectionCard icon={Package} title="کاتالوگ" description={`${faMoney(listings.length)} لیستینگ`}>
-          {error && <div className="error">{error}</div>}
-          {listings.length === 0 ? (
-            <EmptyState icon={Package} text="هنوز لیستینگی نساخته‌اید — از فرمِ کنار، اولین محصول یا پک را منتشر کنید." />
-          ) : (
-            <div className="entity-table-wrap">
-              <table className="entity-table">
-                <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
-                <tbody>
-                  {pg.pageItems.map((l) => (
-                    <tr key={l.id}>
-                      <td>
-                        <div className="entity-with-thumb">
-                          {l.images?.[0]
-                            ? <img className="list-thumb" src={l.images[0]} alt="" />
-                            : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
-                          <div>
-                            <div className="entity-name">{l.title}</div>
-                            <div className="entity-sub">
-                              {l.kind === 'pack'
-                                ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
-                                : (itemName.get(l.item_id ?? '') ?? '—')}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
-                      <td className="money-cell">{faMoney(l.wholesale_price)}</td>
-                      <td>
-                        <span className={`status-badge ${l.is_published ? 'tone-success' : 'tone-warning'}`}>{l.is_published ? 'منتشرشده' : 'پیش‌نویس'}</span>
-                      </td>
-                      <td>
-                        <div className="check-actions">
-                          <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
-                          <button type="button" onClick={() => startEdit(l)}><Pencil size={13} /> ویرایش</button>
-                          <button type="button" className="icon-btn-danger" onClick={() => void remove(l)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-            </div>
-          )}
-        </SectionCard>
-      </div>
+      {guided ? (
+        <>
+          <ListingWizard draft={draft} items={items} />
+          {listCard}
+        </>
+      ) : (
+        <div className="workspace-split">
+          {formCard}
+          {listCard}
+        </div>
+      )}
     </>
   )
 }
