@@ -17,6 +17,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { Pager, usePagination } from '../components/Pager'
 import { formatJalali, toFaDigits } from '../lib/jalali'
 
 const fa = (n: string | number) => Number(n).toLocaleString('fa-IR')
@@ -99,6 +100,9 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
       return p.status === filter
     })
   }, [plans, filter])
+
+  // صفحه‌بندیِ فهرستِ قراردادها (۱۰ در هر صفحه)؛ با تغییرِ فیلتر به اولِ فهرست برمی‌گردد.
+  const plansPg = usePagination(filteredPlans, 10, filter)
 
   const filterCounts = useMemo(() => ({
     all: plans.length,
@@ -336,7 +340,7 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
                   <tr><th>#</th><th>مشتری</th><th>مبلغ کل</th><th>پیشرفت</th><th>مانده</th><th>وضعیت</th><th>اقدام</th></tr>
                 </thead>
                 <tbody>
-                  {filteredPlans.map((p) => (
+                  {plansPg.pageItems.map((p) => (
                     <tr key={p.id} className={selectedId === p.id ? 'row-selected' : undefined} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(p.id)}>
                       <td data-label="#">{fa(p.number ?? 0)}</td>
                       <td className="entity-name">
@@ -364,6 +368,7 @@ export function InstallmentsPage({ token, bankAccounts }: { token: string; bankA
                   ))}
                 </tbody>
               </table>
+              <Pager page={plansPg.page} pageCount={plansPg.pageCount} onChange={plansPg.setPage} />
             </div>
           )}
         </SectionCard>

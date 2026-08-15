@@ -13,6 +13,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 const fa = (n: number | string) => Math.round(Number(n)).toLocaleString('fa-IR')
 
@@ -100,6 +101,8 @@ export function RewardsPanel({
   }
 
   const activeRewards = rewards.filter((r) => r.is_active)
+  // صفحه‌بندیِ کاتالوگِ جوایز (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(rewards, 10)
 
   return (
     <>
@@ -179,7 +182,7 @@ export function RewardsPanel({
                 </tr>
               </thead>
               <tbody>
-                {rewards.map((r) => (
+                {pg.pageItems.map((r) => (
                   <tr key={r.id} className={r.is_active ? '' : 'row-muted'}>
                     <td data-label="جایزه">
                       <div className="entity-name">{r.name}</div>
@@ -199,6 +202,7 @@ export function RewardsPanel({
                 ))}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

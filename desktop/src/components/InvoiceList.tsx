@@ -18,6 +18,7 @@ import {
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 
 export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
@@ -55,6 +56,8 @@ export function InvoiceList({
   const canVoid = can(me, 'invoices', 'delete')
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? id
   const columnCount = isSales ? 8 : 7
+  // صفحه‌بندیِ فهرستِ فاکتورها (۱۰ در هر صفحه)؛ با تعویضِ نوع (فروش/خرید) به اولِ فهرست برمی‌گردد.
+  const pg = usePagination(rows ?? [], 10, kind)
 
   async function refresh() {
     try {
@@ -154,7 +157,7 @@ export function InvoiceList({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {pg.pageItems.map((row) => {
               const isOpen = expanded === row.id
               const net = Number(row.total_amount)
               const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
@@ -228,6 +231,7 @@ export function InvoiceList({
             })}
           </tbody>
           </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

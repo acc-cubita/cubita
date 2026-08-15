@@ -20,6 +20,7 @@ import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
+import { Pager, usePagination } from '../components/Pager'
 import { ProductionCostDrawer } from '../components/ProductionCostDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -202,6 +203,8 @@ function BomsTab({
   }
 
   const editingFinishedName = editingId ? itemById.get(finishedId)?.name ?? '—' : ''
+  // صفحه‌بندیِ فرمول‌های ساخت (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const bomsPg = usePagination(boms, 10)
 
   return (
     <div className="workspace-split">
@@ -291,7 +294,7 @@ function BomsTab({
                 </tr>
               </thead>
               <tbody>
-                {boms.map((b) => {
+                {bomsPg.pageItems.map((b) => {
                   const finished = itemById.get(b.finished_item_id)
                   const cost = bomUnitCost(b, itemById)
                   const salePrice = Number(finished?.sales_price ?? 0)
@@ -338,6 +341,7 @@ function BomsTab({
                 })}
               </tbody>
             </table>
+            <Pager page={bomsPg.page} pageCount={bomsPg.pageCount} onChange={bomsPg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -375,6 +379,8 @@ function ProduceTab({
 
   const activeBoms = boms.filter((b) => b.is_active)
   const selectedBom = boms.find((b) => b.id === bomId)
+  // صفحه‌بندیِ سفارش‌های تولید (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const ordersPg = usePagination(orders, 10)
 
   // پیش‌نمایشِ بهای تمام‌شده از میانگینِ موزونِ اجزا (سمتِ کلاینت)
   const preview = useMemo(() => {
@@ -497,7 +503,7 @@ function ProduceTab({
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
+                {ordersPg.pageItems.map((o) => (
                   <tr key={o.id}>
                     <td data-label="شماره">{o.number != null ? o.number.toLocaleString('fa-IR') : '—'}</td>
                     <td className="entity-name">{itemById.get(o.finished_item_id)?.name ?? '—'}</td>
@@ -511,6 +517,7 @@ function ProduceTab({
                 ))}
               </tbody>
             </table>
+            <Pager page={ordersPg.page} pageCount={ordersPg.pageCount} onChange={ordersPg.setPage} />
           </div>
         )}
       </SectionCard>

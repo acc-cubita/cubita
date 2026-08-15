@@ -12,6 +12,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JALALI_MONTH_NAMES, isoToJalali, jalaliToIso, toFaDigits, todayIso } from '../lib/jalali'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -98,6 +99,8 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
   }
 
   const totalBudget = lines.reduce((s, l) => s + Number(l.amount), 0)
+  // صفحه‌بندیِ ردیف‌های بودجه (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(lines, 10)
 
   return (
     <>
@@ -175,7 +178,7 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((l) => (
+                  {pg.pageItems.map((l) => (
                     <tr key={l.id}>
                       <td>{l.account_code} — {l.account_name}</td>
                       <td>{monthLabel(l.period_date)}</td>
@@ -190,6 +193,7 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
                   ))}
                 </tbody>
               </table>
+              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}
         </SectionCard>

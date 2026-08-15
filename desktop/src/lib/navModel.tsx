@@ -80,7 +80,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
       { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
-      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
     ],
   },
   {
@@ -114,6 +113,7 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'ابزار',
     icon: <Wrench size={17} />,
     items: [
+      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
       { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
     ],

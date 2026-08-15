@@ -2,6 +2,7 @@ import { Landmark, Save, Send, ShieldCheck, ShieldAlert, FileCheck2, PlugZap } f
 import { SectionCard } from './SectionCard'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 import { useMoadianPanel, MOADIAN_STATUS_LABEL, MOADIAN_STATUS_TONE, type MoadianPanelState } from '../lib/moadianPanel'
 
@@ -210,6 +211,8 @@ export function MoadianSend({ m, showButton = true }: { m: MoadianPanelState; sh
 
 /** تاریخچه‌ی ارسال‌ها — مشترکِ پنل و ویزارد. */
 export function MoadianHistory({ m }: { m: MoadianPanelState }) {
+  // صفحه‌بندیِ تاریخچه (۱۰ ردیف در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(m.submissions, 10)
   return (
     <SectionCard icon={FileCheck2} title="تاریخچه ارسال‌ها" description={`${fa(m.submissions.length)} ارسال`}>
       {m.submissions.length === 0 ? (
@@ -229,7 +232,7 @@ export function MoadianHistory({ m }: { m: MoadianPanelState }) {
               </tr>
             </thead>
             <tbody>
-              {m.submissions.map((s) => (
+              {pg.pageItems.map((s) => (
                 <tr key={s.id}>
                   <td>{formatJalali(s.invoice_date)}</td>
                   <td>{s.tax_id}</td>
@@ -252,6 +255,7 @@ export function MoadianHistory({ m }: { m: MoadianPanelState }) {
               ))}
             </tbody>
           </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

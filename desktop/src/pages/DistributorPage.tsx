@@ -19,6 +19,7 @@ import { useNavSection } from '../components/navContext'
 import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
 import { ImageUploader } from '../components/ImageUploader'
+import { Pager, usePagination } from '../components/Pager'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -116,6 +117,8 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
     published: listings.filter((l) => l.is_published).length,
     packs: listings.filter((l) => l.kind === 'pack').length,
   }), [listings])
+  // صفحه‌بندیِ کاتالوگِ لیستینگ‌ها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(listings, 10)
 
   function reset() { setForm({ ...EMPTY_FORM, images: [], components: [{ itemId: '', qty: '1' }] }); setEditingId(null); setMsg(null) }
 
@@ -297,7 +300,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
               <table className="entity-table">
                 <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
                 <tbody>
-                  {listings.map((l) => (
+                  {pg.pageItems.map((l) => (
                     <tr key={l.id}>
                       <td>
                         <div className="entity-with-thumb">
@@ -330,6 +333,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                   ))}
                 </tbody>
               </table>
+              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}
         </SectionCard>

@@ -12,6 +12,7 @@ import type { BankAccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 interface Draft {
   label: string
@@ -70,6 +71,9 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // صفحه‌بندیِ کارتخوان‌ها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(terminals ?? [], 10)
 
   function startEdit(t: PosTerminalRecord) {
     setEditingId(t.id)
@@ -317,7 +321,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                   </tr>
                 </thead>
                 <tbody>
-                  {terminals.map((t) => {
+                  {pg.pageItems.map((t) => {
                     const bank = bankAccounts.find((b) => b.id === t.bank_account_id)
                     return (
                       <tr key={t.id}>
@@ -352,6 +356,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                   })}
                 </tbody>
               </table>
+              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}
         </SectionCard>

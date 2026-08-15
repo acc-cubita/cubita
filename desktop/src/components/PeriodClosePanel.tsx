@@ -3,6 +3,7 @@ import { Lock, RefreshCw } from 'lucide-react'
 import { createPeriodClose, fetchPeriodCloses, type FiscalPeriodCloseRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -25,6 +26,8 @@ export function PeriodClosePanel({ token }: { token: string }) {
   }, [])
 
   const latestClose = closes[0]
+  // صفحه‌بندیِ دوره‌های بسته‌شده (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(closes, 10)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -93,7 +96,7 @@ export function PeriodClosePanel({ token }: { token: string }) {
             </tr>
           </thead>
           <tbody>
-            {closes.map((c) => (
+            {pg.pageItems.map((c) => (
               <tr key={c.id}>
                 <td>{formatJalali(c.closing_date)}</td>
                 <td>{Number(c.net_profit).toLocaleString('fa-IR')}</td>
@@ -102,6 +105,7 @@ export function PeriodClosePanel({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

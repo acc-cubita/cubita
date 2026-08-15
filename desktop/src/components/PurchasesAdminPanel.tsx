@@ -3,6 +3,7 @@ import { CreditCard, CheckCircle2 } from 'lucide-react'
 import { fetchAdminPurchases, fulfillPurchase, type PurchaseRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 
 const STATUS_LABELS: Record<string, string> = {
   pending_payment: 'در انتظار پرداخت',
@@ -44,6 +45,8 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
   }
 
   const paidCount = purchases.filter((p) => p.status === 'paid').length
+  // صفحه‌بندیِ خریدها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(purchases, 10)
 
   return (
     <SectionCard
@@ -77,7 +80,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
             </tr>
           </thead>
           <tbody>
-            {purchases.map((p) => (
+            {pg.pageItems.map((p) => (
               <tr key={p.id}>
                 <td>{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
                 <td>
@@ -118,6 +121,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

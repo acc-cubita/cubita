@@ -15,6 +15,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 
@@ -130,6 +131,8 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
   }
 
   const editable = selected?.status === 'open'
+  // صفحه‌بندیِ جلسه‌های انبارگردانی (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const sessionsPg = usePagination(sessions, 10)
 
   // مغایرت و ارزش را زنده از شمارشِ در حال ویرایش حساب می‌کنیم تا کاربر همان لحظه ببیند.
   const liveRows = useMemo(() => {
@@ -192,7 +195,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((s) => (
+                {sessionsPg.pageItems.map((s) => (
                   <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
                     <td className="entity-name">{s.warehouse_name}</td>
                     <td>{formatJalali(s.count_date)}</td>
@@ -208,6 +211,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
                 ))}
               </tbody>
             </table>
+            <Pager page={sessionsPg.page} pageCount={sessionsPg.pageCount} onChange={sessionsPg.setPage} />
           </div>
         )}
         {error && <div className="error">{error}</div>}

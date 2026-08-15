@@ -11,6 +11,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
+import { Pager, usePagination } from '../components/Pager'
 import { formatJalali } from '../lib/jalali'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -112,6 +113,8 @@ export function AccountsAdminPage({ token }: { token: string }) {
     if (filter === 'paid') return a.filter((x) => !x.is_trial)
     return a
   }, [accounts, filter])
+  // صفحه‌بندیِ اکانت‌ها (۱۰ در هر صفحه)؛ با تغییرِ فیلتر به اولِ فهرست برمی‌گردد.
+  const pg = usePagination(filtered, 10, filter)
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setBusyId(id); setError(null); setMessage(null)
@@ -269,7 +272,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
           <EmptyState icon={Gift} text={filter === 'trial' ? 'هنوز هیچ حسابِ آزمایشی‌ای ساخته نشده.' : 'اکانتی در این فیلتر نیست.'} />
         ) : (
           <div className="account-list">
-            {filtered.map((a) => (
+            {pg.pageItems.map((a) => (
               <div key={a.tenant_id} className={`account-card${a.status !== 'active' ? ' account-card--suspended' : ''}`}>
                 <div className="account-head">
                   <div>
@@ -358,6 +361,7 @@ export function AccountsAdminPage({ token }: { token: string }) {
                 </div>
               </div>
             ))}
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

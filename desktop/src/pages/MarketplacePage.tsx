@@ -10,6 +10,7 @@ import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { NumberInput } from '../components/NumberInput'
+import { Pager, usePagination } from '../components/Pager'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -81,6 +82,8 @@ function Distributors({ token }: { token: string }) {
     connected: dists.filter((d) => d.connection_status === 'approved').length,
     pending: dists.filter((d) => d.connection_status === 'pending').length,
   }), [dists])
+  // صفحه‌بندیِ پخش‌کننده‌ها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(dists, 10)
 
   async function connect(d: DistributorCard) {
     setBusy(d.tenant_id); setError(null)
@@ -106,7 +109,7 @@ function Distributors({ token }: { token: string }) {
             <table className="entity-table">
               <thead><tr><th>پخش‌کننده</th><th>وضعیت</th><th></th></tr></thead>
               <tbody>
-                {dists.map((d) => {
+                {pg.pageItems.map((d) => {
                   const st = d.connection_status
                   const badge = st ? STATUS_BADGE[st] : null
                   const canRequest = st === null || st === 'rejected'
@@ -130,6 +133,7 @@ function Distributors({ token }: { token: string }) {
                 })}
               </tbody>
             </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>
@@ -161,6 +165,8 @@ function Catalog({ token }: { token: string }) {
     if (!q) return items
     return items.filter((l) => l.title.includes(q) || l.distributor_name.includes(q) || l.category.includes(q))
   }, [items, query])
+  // صفحه‌بندیِ کاتالوگ (۱۲ کارت در هر صفحه)؛ با تغییرِ جست‌وجو به اولِ فهرست برمی‌گردد.
+  const catalogPg = usePagination(shown, 12, query)
 
   function addToCart(l: CatalogListing) {
     setMsg(null)
@@ -213,7 +219,7 @@ function Catalog({ token }: { token: string }) {
           />
         ) : (
           <div className="product-grid">
-            {shown.map((l) => {
+            {catalogPg.pageItems.map((l) => {
               const line = cart[l.id]
               const qty = Number(line?.qty) || 0
               return (
@@ -252,6 +258,7 @@ function Catalog({ token }: { token: string }) {
             })}
           </div>
         )}
+        <Pager page={catalogPg.page} pageCount={catalogPg.pageCount} onChange={catalogPg.setPage} />
       </SectionCard>
 
       <SectionCard icon={ShoppingCart} title="سبدِ سفارش" description="سفارش‌ها بر اساسِ پخش‌کننده جدا ثبت می‌شوند.">
@@ -303,6 +310,8 @@ function Orders({ token }: { token: string }) {
     catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
+  // صفحه‌بندیِ سفارش‌های من (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(orders, 10)
 
   async function pay(o: MpOrder) {
     setPaying(o.id); setError(null)
@@ -328,7 +337,7 @@ function Orders({ token }: { token: string }) {
           <table className="entity-table">
             <thead><tr><th>سفارش</th><th>پخش‌کننده</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
-              {orders.map((o) => {
+              {pg.pageItems.map((o) => {
                 const badge = ORDER_BADGE[o.status]
                 const open = expanded === o.id
                 const canPay = o.settlement_mode === 'online' && o.payment_status === 'unpaid' && o.status === 'placed'
@@ -376,6 +385,7 @@ function Orders({ token }: { token: string }) {
               })}
             </tbody>
           </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>

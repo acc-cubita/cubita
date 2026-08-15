@@ -4,6 +4,7 @@ import { fetchJournalEntries, voidJournalEntry, type JournalEntryRecord } from '
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
+import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
@@ -31,6 +32,9 @@ export function JournalDaybookPanel({ token, accounts }: { token: string; accoun
     for (const a of accounts) m.set(a.id, a)
     return m
   }, [accounts])
+
+  // صفحه‌بندیِ اسناد (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  const pg = usePagination(entries ?? [], 10)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -84,7 +88,7 @@ export function JournalDaybookPanel({ token, accounts }: { token: string; accoun
         <EmptyState icon={BookOpenCheck} text="هنوز سندی ثبت نشده." />
       ) : (
         <div className="journal-list">
-          {entries.map((e) => {
+          {pg.pageItems.map((e) => {
             const open = openId === e.id
             const voided = e.voided_at != null
             const isReversal = e.reverses_entry_id != null
@@ -140,6 +144,7 @@ export function JournalDaybookPanel({ token, accounts }: { token: string; accoun
               </div>
             )
           })}
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
     </SectionCard>
