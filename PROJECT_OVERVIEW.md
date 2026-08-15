@@ -315,6 +315,27 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
 
+- **۱۴۰۵/۰۵/۲۴ (2026-08-15) — ویزاردِ «ثبت لیستینگ» در پخشِ من (کامیت `76826b2`، فقط فرانت):**
+  - هوکِ مشترکِ [useListingDraft](desktop/src/lib/listingDraft.ts) (state + اعتبارسنجی + submit) از فرمِ `Catalog`ِ
+    [DistributorPage](desktop/src/pages/DistributorPage.tsx) استخراج شد تا فرمِ کلاسیک و ویزارد یک منبعِ منطق داشته باشند.
+  - [ListingWizard](desktop/src/components/wizard/ListingWizard.tsx) روی `TaskFlow`: چهار مرحله (نوع و مشخصات / قیمت و عکس /
+    محدودیت و انتشار / بازبینی و ثبت) + پیش‌نمایشِ زنده؛ «ویرایش»ِ فهرست هم به همین ویزارد می‌رود. `Catalog` در پوسته‌ی
+    `guided` ویزارد و در تیره/روشن همان فرمِ کلاسیک را می‌دهد (لیستِ کاتالوگ در هر دو یکی است).
+  - **استقرار:** tsc پاک (app+electron)؛ باندل `index-BiWeeG2l.js`. سواپِ فقط‌وب روی prod+دمو؛ هر دو ۲۰۰.
+
+- **۱۴۰۵/۰۵/۲۴ (2026-08-15) — تکمیلِ صفحه‌بندیِ ۱۰تایی برای فهرست‌های جامانده + جابه‌جاییِ «اتصال فروشگاه» (کامیت `7bacfa7`، فقط فرانت):**
+  - **صفحه‌بندی:** ارتقای `bfac44a` بعضی فهرست‌های انباشتیِ تازه/جامانده را نداشت. با همان `usePagination`/`Pager` (۱۰ ردیف،
+    مثلِ چارتِ حساب‌ها) به این‌ها هم افزوده شد: **دفتر روزنامه** ([JournalDaybookPanel](desktop/src/components/JournalDaybookPanel.tsx))،
+    **فاکتورها** ([InvoiceList](desktop/src/components/InvoiceList.tsx))، **تاریخچه‌ی مؤدیان** ([MoadianPanel](desktop/src/components/MoadianPanel.tsx))،
+    **قراردادهای اقساط** ([InstallmentsPage](desktop/src/pages/InstallmentsPage.tsx))، **بودجه** ([BudgetPanel](desktop/src/components/BudgetPanel.tsx))،
+    **جلسه‌های انبارگردانی** ([StockCountPanel](desktop/src/components/StockCountPanel.tsx))، **دوره‌های بسته‌شده** ([PeriodClosePanel](desktop/src/components/PeriodClosePanel.tsx))،
+    **جوایز** ([RewardsPanel](desktop/src/components/RewardsPanel.tsx))، **کارتخوان‌ها** ([PosTerminalsPanel](desktop/src/components/PosTerminalsPanel.tsx))،
+    **فرمول‌ها و سفارش‌های تولید** ([ManufacturingPage](desktop/src/pages/ManufacturingPage.tsx))، **مدیریت اکانت‌ها** ([AccountsAdminPage](desktop/src/pages/AccountsAdminPage.tsx))،
+    **خریدهای سایت** ([PurchasesAdminPanel](desktop/src/components/PurchasesAdminPanel.tsx))، و جدول‌های بازار (پخش‌کننده/کاتالوگ/سفارش‌های من در [MarketplacePage](desktop/src/pages/MarketplacePage.tsx)؛ لیستینگ در [DistributorPage](desktop/src/pages/DistributorPage.tsx)).
+    **کنار گذاشته‌شده به‌عمد:** جدول‌های گزارشی با جمعِ tfoot (مزایا/کمیسیون/تراز/سود‌وزیان/سنین/دفترکل)، جدول‌های ویرایشیِ کاری (ردیف‌های فاکتور/سند/BOM/سبد)، و صف‌های کوتاهِ pending/done.
+  - **ناوبری:** «اتصال فروشگاه» از گروهِ «فروش و مشتریان» به گروهِ «ابزار» منتقل شد ([navModel.tsx](desktop/src/lib/navModel.tsx)) — منبعِ واحدِ هر دو پوسته.
+  - **استقرار:** tsc پاک؛ باندل `index-C-PfCxU0.js`. سواپِ فقط‌وب روی prod+دمو؛ هر دو ۲۰۰.
+
 - **۱۴۰۵/۰۵/۲۴ (2026-08-14) — «نسخه‌ی جدید»: ساختارِ مرحله‌ای (ویزارد) + داشبوردِ اقدام‌محور برای پوسته‌ی Tipalti (فقط فرانت):**
   - **ایده:** برای پوسته‌ی Tipalti یک «نسخه/ساختارِ جدید» — محتوای مرکزیِ صفحه‌ها به روشِ **مرحله‌ای (ویزارد)** با تاییدِ
     مرحله‌به‌مرحله (الهام از گردشِ Tipalti bill review) + داشبوردِ **اقدام‌محور**. گِیت‌شده به تم: فیلدِ تازه‌ی
