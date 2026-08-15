@@ -6776,6 +6776,21 @@ button:disabled {
   :root[data-theme='tipalti'] .taskflow-next {
     min-width: 120px;
   }
+  /* موبایل: گاترِ خاکستریِ بیرونی و paddingِ درونِ کارت‌ها فشرده می‌شود تا کارت‌ها
+     تقریباً تمامِ عرضِ نمایشگر را بگیرند — نه یک کادرِ کوچک با خاکستریِ زیادِ دور و بر.
+     (پیش‌فرضِ Tipalti برای دسکتاپ هوادار است: clamp کفِ ۳۲px افقی داشت که روی موبایل
+     زیادی بود؛ اینجا برای ≤۷۶۰ کوچک می‌شود.) */
+  :root[data-theme='tipalti'] .app-content {
+    padding: 12px 10px 28px;
+    /* رزروِ گاترِ دو لبه (برای تقارنِ دسکتاپ) روی موبایل فضای باریک را هدر می‌دهد؛
+       اسکرول‌بارِ موبایل روی‌هم‌افتاده و بی‌عرض است، پس رزرو لازم نیست. */
+    scrollbar-gutter: auto;
+  }
+  :root[data-theme='tipalti'] .page.panels > *:not(.stat-grid):not(.tabs):not(.pos-grid),
+  :root[data-theme='tipalti'] .page.panels > .page-header,
+  :root[data-theme='tipalti'] .page.panels .tab-panel {
+    padding: 16px;
+  }
 }
 
 /* «نسخه‌ی جدید» — حذفِ سربرگ و ردیفِ KPI بالای *همه‌ی* صفحه‌های ماژول (نه فقط تب‌دارها):
