@@ -33,7 +33,7 @@ import {
   Wallet,
   Users,
 } from 'lucide-react'
-import HeroVisual from '../concept/HeroVisual'
+import { HeroCluster } from '../components/HeroCluster'
 import { ConceptPricing } from '../concept/ConceptPricing'
 import '../concept/concept.css'
 
@@ -122,11 +122,11 @@ function BrandMark({ id = 'm' }: { id?: string }) {
       <rect x="7.5" y="17" width="4" height="7.5" rx="2" fill="#fff" fillOpacity="0.82" />
       <rect x="14" y="13" width="4" height="11.5" rx="2" fill="#fff" fillOpacity="0.92" />
       <rect x="20.5" y="9.5" width="4" height="15" rx="2" fill="#fff" />
-      <circle cx="22.5" cy="6.4" r="2.6" fill="#ec4899" />
+      <circle cx="22.5" cy="6.4" r="2.6" fill="#a78bfa" />
       <defs>
         <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3b82f6" />
-          <stop offset="1" stopColor="#a855f7" />
+          <stop stopColor="#ffe6a6" />
+          <stop offset="1" stopColor="#ef9f10" />
         </linearGradient>
       </defs>
     </svg>
@@ -197,42 +197,61 @@ function Header() {
 function Hero() {
   return (
     <section className="cc-hero">
-      <div className="cc-hero-canvas">
-        <HeroVisual />
-      </div>
-      <div className="cc-hero-scrim" aria-hidden="true" />
-      <motion.div
-        className="cc-hero-content"
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-      >
-        <div className="cc-hero-copy">
+      <div className="cc-hero-bg" aria-hidden="true" />
+      <div className="cc-hero-inner">
+        <motion.div
+          className="cc-hero-copy"
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+        >
           <span className="cc-eyebrow">
-            <Sparkles size={15} /> مخصوصِ کسب‌وکارهای ایرانی
+            <Sparkles size={15} /> سامانه‌ی یکپارچه‌ی مالی و بازار عمده‌فروشی
           </span>
           <h1 className="cc-hero-title">
-            نرم‌افزار حسابداری ابری و آفلاین؛
+            <span className="cc-grad">حسابداریِ ساخته‌شده برای کسب‌وکار،</span>
             <br />
-            <span className="cc-grad">دقیق، امن، همیشه‌همگام</span>
+            بدونِ پیچیدگی
           </h1>
           <p className="cc-hero-sub">
-            کنترل کامل مالی، انبار و مشتریان در یک سامانه ایزوله. با دسکتاپ آفلاین کار کنید و با
-            اتصال مجدد به اینترنت، همه‌چیز را بدون قطع ارتباط هم‌گام سازید.
+            کوبیتا عملیاتِ مالیِ کسب‌وکارتان را به یک مزیتِ رقابتی تبدیل می‌کند — فروش، خرید و انبار،
+            حسابداریِ دوطرفه، چک و خزانه و بازارِ عمده‌فروشی، همه در یک سامانه‌ی متصل؛ روی دسکتاپ و
+            وب، حتی بدونِ اینترنت.
           </p>
           <div className="cc-hero-cta">
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
               <Sparkles size={17} /> شروعِ ۱۴ روز رایگان
             </a>
-            <a className="cc-btn cc-btn-ghost" href="#cc-features">
-              امکانات را ببین <ArrowLeft size={16} />
+            <a className="cc-btn cc-btn-ghost" href="#cc-pricing">
+              پلن‌ها و قیمت‌ها <ArrowLeft size={16} />
             </a>
           </div>
-          <div className="cc-hero-trust">راه‌اندازیِ چنددقیقه‌ای · وب و دسکتاپ · پشتیبانیِ فارسی</div>
-        </div>
-      </motion.div>
-      <div className="cc-scroll-hint" aria-hidden="true">
-        <span />
+          <div className="cc-hero-feats">
+            <a href="#cc-features" className="cc-feat cc-feat--emerald">
+              <div className="cc-feat-h">
+                <Layers size={17} /> اتوماسیونِ فروش و انبار
+                <ArrowLeft size={15} className="cc-feat-arrow" />
+              </div>
+              <p>فاکتور، موجودی و خزانه را در یک گردشِ خودکار و یکپارچه به هم وصل کنید.</p>
+            </a>
+            <a href="#cc-industries" className="cc-feat cc-feat--violet">
+              <div className="cc-feat-h">
+                <Store size={17} /> بازارِ عمده‌فروشی B2B
+                <ArrowLeft size={15} className="cc-feat-arrow" />
+              </div>
+              <p>خرید و فروشِ عمده بین کسب‌وکارها، با تسویه و کمیسیونِ خودکار.</p>
+            </a>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="cc-hero-visual"
+          initial={{ opacity: 0, scale: 0.94 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }}
+        >
+          <HeroCluster />
+        </motion.div>
       </div>
     </section>
   )
