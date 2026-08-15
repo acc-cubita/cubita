@@ -4427,7 +4427,8 @@ button:disabled {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 2px 6px;
     padding: 1px 0;
     border: 0;
     white-space: normal;
@@ -4436,6 +4437,8 @@ button:disabled {
     line-height: 1.5;
     min-width: 0;
   }
+  /* مقدارِ بلند (پول/درصد) به‌جای بیرون‌زدن از کارت، داخلِ خانه به خطِ بعد می‌رود */
+  table.cards-on-mobile td > * { min-width: 0; overflow-wrap: anywhere; }
   table.cards-on-mobile td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
@@ -4481,6 +4484,11 @@ button:disabled {
   table.cards-on-mobile td.card-full::before { display: none; }
   /* سلولِ بی‌معنی روی موبایل (مثلِ ستونِ فلشِ باز/بسته) حذف شود */
   table.cards-on-mobile td.card-hide { display: none; }
+  /* نشانِ وضعیت همیشه افقی و پیل‌مانند بماند (نه چندخطیِ دایره‌ای)؛ خانه‌اش تمام‌عرض
+     می‌شود تا برچسبِ بلند مثلِ «تبدیل به فاکتور» یک‌خطی جا شود. */
+  table.cards-on-mobile .status-badge { white-space: nowrap; }
+  table.cards-on-mobile td:has(> .status-badge),
+  table.cards-on-mobile td:has(> span > .status-badge) { grid-column: 1 / -1; }
 }
 
 /* بنر سقف اعتبار در فرم فاکتور فروش */
