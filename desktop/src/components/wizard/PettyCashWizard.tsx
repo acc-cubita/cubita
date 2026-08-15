@@ -67,7 +67,7 @@ export function PettyCashWizard({ token, accounts }: { token: string; accounts: 
                 </select>
               </label>
               <label>مبلغ<NumberInput value={d.expenseAmount} onChange={d.setExpenseAmount} /></label>
-              <label>توضیحات<input type="text" value={d.expenseDescription} onChange={(e) => d.setExpenseDescription(e.target.value)} /></label>
+              <label className="field-full">توضیحات<input type="text" value={d.expenseDescription} onChange={(e) => d.setExpenseDescription(e.target.value)} /></label>
               <label>تاریخ<JalaliDatePicker value={d.expenseDate} onChange={d.setExpenseDate} /></label>
             </div>
           ),

@@ -6416,6 +6416,41 @@ button:disabled {
   min-width: 150px;
   justify-content: center;
 }
+
+/* ── صیقلِ نظمِ فرم‌ها (نسخه‌ی جدید) ───────────────────────────────────────
+   #۱ فیلدهای بلند (توضیحات/یادداشت) تمام‌عرضِ گرید می‌شوند تا ریتمِ فرم نشکند.
+   #۲ دکمه‌ی اصلی همیشه در لبه‌ی شروعِ فوتر (راستِ RTL) تا چشمِ کاربر ثابت بماند.
+   #۳ دکمه‌های نوارِ اکشنِ کارت‌ها هم‌اندازه (min-widthِ معتدل — نه به‌بزرگیِ فوتر).
+   #۴ زیرعنوانِ ظریفِ گروهِ فیلدها/بخش‌ها برای اسکن‌پذیری.
+   #۵ ریتمِ عمودیِ یکدستِ مرحله‌ی بازبینی. */
+:root[data-theme='tipalti'] .invoice-form .field-full {
+  grid-column: 1 / -1;
+}
+:root[data-theme='tipalti'] .invoice-form-footer .btn-primary,
+:root[data-theme='tipalti'] .sf-actions .btn-primary {
+  order: -1;
+}
+:root[data-theme='tipalti'] .header-actions button {
+  min-width: 104px;
+  justify-content: center;
+}
+:root[data-theme='tipalti'] .form-subhead {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+:root[data-theme='tipalti'] .review-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+:root[data-theme='tipalti'] .review-step .form-subhead {
+  margin: 0;
+}
 :root[data-theme='tipalti'] .section-card-header {
   margin-bottom: 18px;
 }

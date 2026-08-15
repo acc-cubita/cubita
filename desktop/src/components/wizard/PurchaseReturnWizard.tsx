@@ -105,7 +105,7 @@ function InvoiceStep({ r }: { r: PurchaseReturnDraft }) {
         تاریخ برگشت
         <JalaliDatePicker value={r.returnDate} onChange={r.setReturnDate} />
       </label>
-      <label>
+      <label className="field-full">
         توضیحات
         <input type="text" value={r.description} onChange={(e) => r.setDescription(e.target.value)} />
       </label>

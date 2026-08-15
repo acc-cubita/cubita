@@ -114,7 +114,7 @@ function HeaderStep({ q, warehouses }: { q: QuotationDraft; warehouses: Warehous
         اعتبار تا
         <JalaliDatePicker value={q.validUntil} onChange={q.setValidUntil} placeholder="بدون محدودیت" />
       </label>
-      <label>
+      <label className="field-full">
         توضیحات
         <input type="text" value={q.description} onChange={(e) => q.setDescription(e.target.value)} />
       </label>

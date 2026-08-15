@@ -55,7 +55,7 @@ export function TransferWizard({
             تاریخ حواله
             <JalaliDatePicker value={d.transferDate} onChange={d.setTransferDate} />
           </label>
-          <label>
+          <label className="field-full">
             توضیحات
             <input type="text" value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
           </label>

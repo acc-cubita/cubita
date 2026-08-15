@@ -65,7 +65,7 @@ export function CheckWizard({ token, onQueued }: { token: string; onQueued: () =
             تاریخ سررسید
             <JalaliDatePicker value={d.dueDate} onChange={d.setDueDate} />
           </label>
-          <label>
+          <label className="field-full">
             توضیحات
             <input type="text" value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
           </label>

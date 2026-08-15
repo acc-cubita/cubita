@@ -326,6 +326,7 @@ function ReviewStep({ d, items, warehouses }: { d: SalesInvoiceDraft; items: Ite
   const validLines = d.lines.filter((l) => l.itemId && Number(l.qty) > 0)
   return (
     <div className="review-step">
+      <p className="form-subhead">طرف‌حساب</p>
       <div className="review-facts">
         <div className="live-preview-row">
           <span>مشتری</span>
@@ -346,6 +347,7 @@ function ReviewStep({ d, items, warehouses }: { d: SalesInvoiceDraft; items: Ite
           </div>
         )}
       </div>
+      <p className="form-subhead">اقلام</p>
       <div className="table-scroll">
         <table>
           <thead>
