@@ -4436,9 +4436,20 @@ button:disabled {
     font-size: var(--fs-sm);
     line-height: 1.5;
     min-width: 0;
+    /* متنِ بلندِ بدونِ فاصله (مثلِ پیامِ خطای مؤدیان) هم می‌شکند تا از کارت بیرون نزند */
+    overflow-wrap: anywhere;
   }
   /* مقدارِ بلند (پول/درصد) به‌جای بیرون‌زدن از کارت، داخلِ خانه به خطِ بعد می‌رود */
   table.cards-on-mobile td > * { min-width: 0; overflow-wrap: anywhere; }
+  /* خانه‌ی متن‌محورِ بلند (توضیح/شماره‌مرجع/پیام) تمام‌عرضِ کارت می‌شود و برچسب بالای
+     مقدار می‌نشیند تا متنِ بلند در تمامِ پهنا راحت بشکند و هرگز سرریز نکند. */
+  table.cards-on-mobile td.card-wide {
+    grid-column: 1 / -1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  table.cards-on-mobile td.card-wide[data-label]::before { margin-bottom: 1px; }
   table.cards-on-mobile td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);

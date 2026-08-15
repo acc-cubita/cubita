@@ -83,7 +83,7 @@ export function PurchaseReturnsList({ r }: { r: PurchaseReturnDraft }) {
   }
   return (
     <div className="table-scroll">
-      <table>
+      <table className="cards-on-mobile">
         <thead>
           <tr>
             <th>شماره</th>
@@ -98,13 +98,13 @@ export function PurchaseReturnsList({ r }: { r: PurchaseReturnDraft }) {
         <tbody>
           {r.returns.map((row) => (
             <tr key={row.id}>
-              <td>{row.number != null ? row.number.toLocaleString('fa-IR') : '—'}</td>
-              <td>{formatJalali(row.return_date)}</td>
-              <td>{(r.invoiceNumberById.get(row.purchase_invoice_id) ?? '—')?.toLocaleString('fa-IR') ?? '—'}</td>
-              <td>{Number(row.total_amount).toLocaleString('fa-IR')}</td>
-              <td>{Number(row.tax_amount).toLocaleString('fa-IR')}</td>
-              <td>{(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}</td>
-              <td>
+              <td className="card-title" data-label="شماره">برگشت {row.number != null ? '#' + row.number.toLocaleString('fa-IR') : '—'}</td>
+              <td data-label="تاریخ">{formatJalali(row.return_date)}</td>
+              <td data-label="فاکتور اصلی">{(r.invoiceNumberById.get(row.purchase_invoice_id) ?? '—')?.toLocaleString('fa-IR') ?? '—'}</td>
+              <td data-label="خالص">{Number(row.total_amount).toLocaleString('fa-IR')}</td>
+              <td data-label="مالیات">{Number(row.tax_amount).toLocaleString('fa-IR')}</td>
+              <td data-label="جمع کل">{(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}</td>
+              <td className="card-actions">
                 <button type="button" onClick={() => void r.handlePrint(row.id)}>
                   <Printer size={13} /> چاپ
                 </button>

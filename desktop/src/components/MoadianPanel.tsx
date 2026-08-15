@@ -240,8 +240,8 @@ export function MoadianHistory({ m }: { m: MoadianPanelState }) {
                   <td data-label="وضعیت">
                     <span className={`status-badge ${MOADIAN_STATUS_TONE[s.status] ?? ''}`}>{MOADIAN_STATUS_LABEL[s.status] ?? s.status}</span>
                   </td>
-                  <td data-label="شماره مرجع">{s.reference_number || '—'}</td>
-                  <td data-label="توضیح">{s.error_message || '—'}</td>
+                  <td className="card-wide" data-label="شماره مرجع">{s.reference_number || '—'}</td>
+                  <td className="card-wide" data-label="توضیح">{s.error_message || '—'}</td>
                   <td className="card-actions">
                     {s.reference_number ? (
                       <button type="button" className="btn-ghost btn-sm" onClick={() => void m.inquire(s.id)}>
