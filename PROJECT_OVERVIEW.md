@@ -405,7 +405,17 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
     مشخصات ← بها/استهلاک، با تخمینِ استهلاکِ ماهانه؛ `FixedAssetFields`/`FixedAssetsList`/`DepreciationRun` مشترک؛ ویرایش از فهرست
     (با `formVersion`) ویزارد را به مرحله‌ی اول برمی‌گرداند. شاخه‌ها در `BankingPage`/`AccountingPage`/`Dashboard`.
     راستی‌آزمایی: typecheck (app+electron) ✓، build ✓، رشته‌های هر ۴ ویزارد در JSِ زنده تأیید شد. مستقر — باندلِ `index-ChBxvt53.js`.
-  - **فازِ بعد:** حقوق و دستمزد (پرسنل/حکم/کارکرد)؛ لایه‌ی تاییدِ چندنقشی؛ ماندگاریِ پیش‌نویسِ نیمه‌کاره.
+  - **موجِ پنجمِ تسک‌ها (حقوق و دستمزد؛ فقط فرانت):** [PayrollPanel](desktop/src/components/PayrollPanel.tsx) که مونولیت بود بازنویسی شد؛
+    منطق به سه هوک رفت و زیرکامپوننت‌های مشترک اکسپورت شدند تا کلاسیک و ویزارد یک منبع داشته باشند:
+    (۱) **افزودن پرسنل** ([employeeDraft](desktop/src/lib/employeeDraft.ts) + [EmployeeWizard](desktop/src/components/wizard/EmployeeWizard.tsx)): هویت ← استخدام؛
+    (۲) **ثبت حکم حقوقی** ([salaryContractDraft](desktop/src/lib/salaryContractDraft.ts) + [SalaryContractWizard](desktop/src/components/wizard/SalaryContractWizard.tsx)):
+    کارمند/تاریخ ← حقوق و مزایا، با تخمینِ ناخالص؛
+    (۳) **کارکرد و صدور فیش** ([payrollRunDraft](desktop/src/lib/payrollRunDraft.ts) + [PayrollRunWizard](desktop/src/components/wizard/PayrollRunWizard.tsx)):
+    ویزاردِ سه‌مرحله‌یِ واقعی — دوره ← کارکردِ همه‌ی پرسنل ← صدور فیش (دکمه‌ی صدور = ثبتِ فوترِ مرحله‌ی آخر)؛ بدونِ پنلِ کناری
+    چون جدول‌ها پهن‌اند؛ `PeriodPicker`/`AttendanceTable`/`PayslipResults` مشترک؛ draftِ فرایند در سطحِ پنل نگه‌داشته می‌شود تا
+    با جابه‌جایی بین تب‌ها حفظ شود. تب‌های «مزایا»/«تنظیماتِ حقوق» دست‌نخورده. شاخه‌ها در `PayrollPanel`.
+    راستی‌آزمایی: typecheck (app+electron) ✓، build ✓، رشته‌های هر ۳ ویزارد در JSِ زنده تأیید شد. مستقر — باندلِ `index-tCPoOFt8.js`.
+  - **فازِ بعد:** لایه‌ی تاییدِ چندنقشی (گردش‌کار)؛ ماندگاریِ پیش‌نویسِ نیمه‌کاره؛ کامندپالتِ سراسری.
 
 - **۱۴۰۵/۰۵/۲۴ (2026-08-14) — سیستمِ «پوسته/تم» + تمِ Tipalti (سرمه‌ای/طلایی) با چیدمانِ افقیِ Xero (فقط فرانت):**
   - **ایده:** یک بخشِ «ظاهر و پوسته» که بشود تم‌های تازه اضافه کرد؛ اولین تمِ تازه ظاهرِ رقیب را می‌سازد: **پالتِ Tipalti**
