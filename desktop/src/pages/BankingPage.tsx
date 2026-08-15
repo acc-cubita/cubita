@@ -4,6 +4,8 @@ import { fetchChecks, type CheckRecord } from '../api'
 import type { AccountCache, BankAccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { CheckForm } from '../components/CheckForm'
+import { CheckWizard } from '../components/wizard/CheckWizard'
+import { useTheme } from '../lib/theme'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 const ACTIVE_CHECK = new Set(['in_hand', 'deposited', 'issued'])
@@ -12,6 +14,7 @@ import { ChecksList } from '../components/ChecksList'
 import { BankAccountsPanel } from '../components/BankAccountsPanel'
 import { PosTerminalsPanel } from '../components/PosTerminalsPanel'
 import { PettyCashPanel } from '../components/PettyCashPanel'
+import { PettyCashWizard } from '../components/wizard/PettyCashWizard'
 import { ReconciliationPanel } from '../components/ReconciliationPanel'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -35,6 +38,7 @@ export function BankingPage({
   useEffect(() => {
     void fetchChecks(token).then(setChecks).catch(() => {})
   }, [])
+  const guided = useTheme().theme.content === 'guided'
   const kpis = useMemo(() => {
     const active = checks.filter((c) => ACTIVE_CHECK.has(c.status))
     const recv = active.filter((c) => c.type === 'receivable')
@@ -80,7 +84,7 @@ export function BankingPage({
             icon: ScrollText,
             content: (
               <>
-                <CheckForm token={token} onQueued={onQueued} />
+                {guided ? <CheckWizard token={token} onQueued={onQueued} /> : <CheckForm token={token} onQueued={onQueued} />}
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -110,7 +114,11 @@ export function BankingPage({
             key: 'petty',
             label: 'تنخواه‌گردان',
             icon: Wallet,
-            content: <PettyCashPanel token={token} accounts={accounts} />,
+            content: guided ? (
+              <PettyCashWizard token={token} accounts={accounts} />
+            ) : (
+              <PettyCashPanel token={token} accounts={accounts} />
+            ),
           },
           {
             key: 'reconciliation',

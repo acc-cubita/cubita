@@ -395,7 +395,17 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
     سایه/گوشه‌گِردِ کارت را به ستون‌ها برمی‌گرداند → قاعده‌ی `.app-shell--topnav … .pos-grid>section` (عمداً ۰,۴,۱:
     قوی‌تر از restyle، ضعیف‌تر از قواعدِ ۰,۵,۱ گوشه‌های پایین) تختش کرد. تأیید با هارنسِ Playwright.
     مستقر — باندلِ `index-jqe6zXhX.js` + `index-gfutZmFb.css`.
-  - **فازِ بعد:** تبدیلِ بقیه‌ی تسک‌ها (دریافت‌وپرداخت/سند/…) با همان `TaskFlow`؛ لایه‌ی تاییدِ چندنقشی؛ ماندگاریِ پیش‌نویس.
+  - **موجِ چهارمِ تسک‌ها (مالی و بانکی؛ فقط فرانت):** چهار فرمِ ثبت با همان الگو (هوکِ مشترک + ویزارد + شاخه‌ی guided/classic):
+    (۱) **ثبت چک** ([checkDraft](desktop/src/lib/checkDraft.ts) + [CheckWizard](desktop/src/components/wizard/CheckWizard.tsx)): نوع/طرف‌حساب ← مشخصاتِ چک؛
+    (۲) **ثبت سند حسابداری** ([journalEntryDraft](desktop/src/lib/journalEntryDraft.ts) + [JournalEntryWizard](desktop/src/components/wizard/JournalEntryWizard.tsx)):
+    سربرگ ← ردیف‌ها و موازنه (گِیتِ متوازن‌بودن + پیش‌نمایشِ بدهکار/بستانکار)؛ `JournalLinesTable` مشترکِ فرم و ویزارد؛
+    (۳) **تنخواه‌گردان** ([pettyCashDraft](desktop/src/lib/pettyCashDraft.ts) + [PettyCashWizard](desktop/src/components/wizard/PettyCashWizard.tsx)):
+    نوعِ گردش (شارژ/هزینه) ← جزئیات، با پیش‌نمایشِ «موجودیِ بعد»؛ `PettyCashLedger` مشترک؛
+    (۴) **دارایی ثابت** ([fixedAssetDraft](desktop/src/lib/fixedAssetDraft.ts) + [FixedAssetWizard](desktop/src/components/wizard/FixedAssetWizard.tsx)):
+    مشخصات ← بها/استهلاک، با تخمینِ استهلاکِ ماهانه؛ `FixedAssetFields`/`FixedAssetsList`/`DepreciationRun` مشترک؛ ویرایش از فهرست
+    (با `formVersion`) ویزارد را به مرحله‌ی اول برمی‌گرداند. شاخه‌ها در `BankingPage`/`AccountingPage`/`Dashboard`.
+    راستی‌آزمایی: typecheck (app+electron) ✓، build ✓، رشته‌های هر ۴ ویزارد در JSِ زنده تأیید شد. مستقر — باندلِ `index-ChBxvt53.js`.
+  - **فازِ بعد:** حقوق و دستمزد (پرسنل/حکم/کارکرد)؛ لایه‌ی تاییدِ چندنقشی؛ ماندگاریِ پیش‌نویسِ نیمه‌کاره.
 
 - **۱۴۰۵/۰۵/۲۴ (2026-08-14) — سیستمِ «پوسته/تم» + تمِ Tipalti (سرمه‌ای/طلایی) با چیدمانِ افقیِ Xero (فقط فرانت):**
   - **ایده:** یک بخشِ «ظاهر و پوسته» که بشود تم‌های تازه اضافه کرد؛ اولین تمِ تازه ظاهرِ رقیب را می‌سازد: **پالتِ Tipalti**

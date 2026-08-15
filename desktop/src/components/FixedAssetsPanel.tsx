@@ -1,316 +1,209 @@
-import { useEffect, useState } from 'react'
-import {
-  Building2,
-  Plus,
-  Pencil,
-  X,
-  Save,
-  Trash2,
-  PackageX,
-  Landmark,
-  TrendingDown,
-  Wallet,
-  Play,
-} from 'lucide-react'
-import {
-  createFixedAsset,
-  deleteFixedAsset,
-  disposeFixedAsset,
-  fetchChartAccounts,
-  fetchDepreciationEntries,
-  fetchFixedAssets,
-  runDepreciation,
-  updateFixedAsset,
-  type ChartAccount,
-  type DepreciationEntryRecord,
-  type FixedAssetRecord,
-} from '../api'
+import { Building2, Plus, Pencil, X, Save, Trash2, PackageX, Landmark, TrendingDown, Wallet, Play } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { formatJalali, todayIso } from '../lib/jalali'
+import { formatJalali } from '../lib/jalali'
+import { useFixedAssetDraft, type FixedAssetDraft } from '../lib/fixedAssetDraft'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
-const EMPTY = { name: '', category: '', acquired_date: todayIso(), cost: '', salvage_value: '0', useful_life_months: '', notes: '', funding_account_id: '' }
-
-// حساب‌هایی که می‌شود بابتِ خریدِ دارایی از آن‌ها پرداخت کرد (بر پایه‌ی نقشِ سیستمی،
-// نه کدِ حساب — تا با چارتِ سفارشیِ مشتری هم درست کار کند).
-const FUNDING_ROLES = ['cash', 'bank', 'petty_cash', 'accounts_payable']
-
+/** «دارایی ثابت» (پوسته‌های تیره/روشن) — فرمِ ثبت/ویرایش + فهرست + اجرای استهلاک.
+ *  منطق در هوکِ مشترکِ [useFixedAssetDraft]. */
 export function FixedAssetsPanel({ token }: { token: string }) {
-  const [assets, setAssets] = useState<FixedAssetRecord[]>([])
-  const [entries, setEntries] = useState<DepreciationEntryRecord[]>([])
-  const assetsPg = usePagination(assets, 10)
-  const entriesPg = usePagination(entries, 10)
-  const [accounts, setAccounts] = useState<ChartAccount[]>([])
-  const [form, setForm] = useState({ ...EMPTY })
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [formMsg, setFormMsg] = useState<string | null>(null)
-  const [periodDate, setPeriodDate] = useState(todayIso())
-  const [runMsg, setRunMsg] = useState<string | null>(null)
-
-  async function refresh() {
-    try {
-      const [a, e, acc] = await Promise.all([
-        fetchFixedAssets(token),
-        fetchDepreciationEntries(token),
-        fetchChartAccounts(token),
-      ])
-      setAssets(a)
-      setEntries(e)
-      setAccounts(acc)
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
-  function resetForm() {
-    setForm({ ...EMPTY })
-    setEditingId(null)
-    setFormMsg(null)
-  }
-
-  function startEdit(a: FixedAssetRecord) {
-    setEditingId(a.id)
-    setFormMsg(null)
-    setForm({
-      name: a.name,
-      category: a.category,
-      acquired_date: a.acquired_date,
-      cost: String(a.cost),
-      salvage_value: String(a.salvage_value),
-      useful_life_months: String(a.useful_life_months),
-      notes: a.notes,
-      funding_account_id: '', // تأمینِ مالی فقط هنگامِ ثبتِ اولیه معنا دارد، نه ویرایش
-    })
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFormMsg(null)
-    const payload = {
-      name: form.name,
-      category: form.category,
-      acquired_date: form.acquired_date,
-      cost: Number(form.cost) || 0,
-      salvage_value: Number(form.salvage_value) || 0,
-      useful_life_months: Number(form.useful_life_months) || 0,
-      notes: form.notes,
-      // تأمینِ مالی فقط در ثبتِ اولیه: سندِ خرید را خودکار می‌زند (خالی = بدونِ سند).
-      funding_account_id: form.funding_account_id || null,
-    }
-    try {
-      if (editingId) await updateFixedAsset(token, editingId, payload)
-      else await createFixedAsset(token, payload)
-      resetForm()
-      await refresh()
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  async function handleDispose(a: FixedAssetRecord) {
-    if (!window.confirm(`دارایی «${a.name}» واگذارشده علامت بخورد؟ (دیگر مستهلک نمی‌شود)`)) return
-    try {
-      await disposeFixedAsset(token, a.id, todayIso())
-      await refresh()
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  async function handleDelete(a: FixedAssetRecord) {
-    if (!window.confirm(`دارایی «${a.name}» حذف شود؟`)) return
-    try {
-      await deleteFixedAsset(token, a.id)
-      await refresh()
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  async function handleRun() {
-    setRunMsg(null)
-    try {
-      const res = await runDepreciation(token, periodDate)
-      setRunMsg(
-        res.asset_count === 0
-          ? 'برای این دوره داراییِ قابل‌استهلاکی نبود (یا قبلاً ثبت شده).'
-          : `استهلاک ${fa(res.asset_count)} دارایی ثبت شد؛ جمع ${fa(res.total_amount)} — سند شماره ${res.journal_entry_number != null ? fa(res.journal_entry_number) : '—'}.`,
-      )
-      await refresh()
-    } catch (err) {
-      setRunMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  const active = assets.filter((a) => !a.is_disposed)
-  const totalCost = active.reduce((s, a) => s + Number(a.cost), 0)
-  const totalAccum = active.reduce((s, a) => s + Number(a.accumulated_depreciation), 0)
-  const totalBook = active.reduce((s, a) => s + Number(a.book_value), 0)
+  const d = useFixedAssetDraft({ token })
 
   return (
     <>
       <div className="stat-grid">
-        <StatCard icon={<Landmark size={18} />} label="تعداد دارایی فعال" value={fa(active.length)} hint="واگذارنشده" />
-        <StatCard icon={<Building2 size={18} />} label="بهای تمام‌شده" value={fa(totalCost)} tone="default" />
-        <StatCard icon={<TrendingDown size={18} />} label="استهلاک انباشته" value={fa(totalAccum)} tone="warning" />
-        <StatCard icon={<Wallet size={18} />} label="ارزش دفتری" value={fa(totalBook)} tone="success" />
+        <StatCard icon={<Landmark size={18} />} label="تعداد دارایی فعال" value={fa(d.active.length)} hint="واگذارنشده" />
+        <StatCard icon={<Building2 size={18} />} label="بهای تمام‌شده" value={fa(d.totalCost)} tone="default" />
+        <StatCard icon={<TrendingDown size={18} />} label="استهلاک انباشته" value={fa(d.totalAccum)} tone="warning" />
+        <StatCard icon={<Wallet size={18} />} label="ارزش دفتری" value={fa(d.totalBook)} tone="success" />
       </div>
 
       <div className="workspace-split">
         <SectionCard
-          icon={editingId ? Pencil : Plus}
-          title={editingId ? 'ویرایش دارایی' : 'دارایی ثابت جدید'}
+          icon={d.editingId ? Pencil : Plus}
+          title={d.editingId ? 'ویرایش دارایی' : 'دارایی ثابت جدید'}
           description="خودرو، تجهیزات، ساختمان و ... — استهلاک خط مستقیم بر پایه‌ی عمر مفید."
-          actions={editingId ? <button onClick={resetForm}><X size={13} /> انصراف</button> : undefined}
+          actions={d.editingId ? <button onClick={d.resetForm}><X size={13} /> انصراف</button> : undefined}
         >
-          <form className="invoice-form form-full" onSubmit={handleSubmit}>
-            <label>
-              نام دارایی
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="مثلاً وانت نیسان" />
-            </label>
-            <label>
-              دسته
-              <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="وسیله نقلیه" />
-            </label>
-            <label>
-              تاریخ تحصیل
-              <JalaliDatePicker value={form.acquired_date} onChange={(v) => setForm({ ...form, acquired_date: v })} />
-            </label>
-            <label>
-              بهای تمام‌شده
-              <NumberInput value={form.cost} onChange={(v) => setForm({ ...form, cost: v })} />
-            </label>
-            <label>
-              ارزش اسقاط
-              <NumberInput value={form.salvage_value} onChange={(v) => setForm({ ...form, salvage_value: v })} />
-            </label>
-            <label>
-              عمر مفید (ماه)
-              <NumberInput value={form.useful_life_months} onChange={(v) => setForm({ ...form, useful_life_months: v })} />
-            </label>
-            {!editingId && (
-              <label>
-                پرداخت از
-                <select value={form.funding_account_id} onChange={(e) => setForm({ ...form, funding_account_id: e.target.value })}>
-                  <option value="">— بدون سند (آورده / قبلاً در دفاتر) —</option>
-                  {accounts
-                    .filter((a) => !a.is_group && FUNDING_ROLES.includes(a.system_role ?? ''))
-                    .sort((x, y) => x.code.localeCompare(y.code))
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                </select>
-              </label>
-            )}
-            <label>
-              توضیحات
-              <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </label>
+          <form
+            className="invoice-form form-full"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void d.submit()
+            }}
+          >
+            <FixedAssetFields d={d} />
             <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary"><Save size={14} /> {editingId ? 'ذخیره' : 'ثبت دارایی'}</button>
+              <button type="submit" className="btn-primary" disabled={d.submitting}><Save size={14} /> {d.editingId ? 'ذخیره' : 'ثبت دارایی'}</button>
             </div>
-            {formMsg && <div className="hint">{formMsg}</div>}
+            {d.formMsg && <div className="hint">{d.formMsg}</div>}
           </form>
         </SectionCard>
 
-        <SectionCard icon={Landmark} title="فهرست دارایی‌ها" description={`${fa(assets.length)} قلم دارایی`}>
-          {assets.length === 0 ? (
-            <EmptyState icon={Landmark} text="هنوز دارایی ثابتی ثبت نشده." />
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>نام</th>
-                    <th>تحصیل</th>
-                    <th>بها</th>
-                    <th>ماهانه</th>
-                    <th>انباشته</th>
-                    <th>ارزش دفتری</th>
-                    <th>وضعیت</th>
-                    <th>عملیات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assetsPg.pageItems.map((a) => (
-                    <tr key={a.id} style={a.is_disposed ? { opacity: 0.55 } : undefined}>
-                      <td>{a.name}</td>
-                      <td>{formatJalali(a.acquired_date)}</td>
-                      <td>{fa(a.cost)}</td>
-                      <td>{fa(a.monthly_depreciation)}</td>
-                      <td>{fa(a.accumulated_depreciation)}</td>
-                      <td>{fa(a.book_value)}</td>
-                      <td>
-                        <span className={`status-badge ${a.is_disposed ? 'tone-danger' : a.fully_depreciated ? 'tone-warning' : 'tone-success'}`}>
-                          {a.is_disposed ? 'واگذارشده' : a.fully_depreciated ? 'مستهلک کامل' : 'فعال'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="check-actions">
-                          <button type="button" onClick={() => startEdit(a)} aria-label="ویرایش"><Pencil size={13} /></button>
-                          {!a.is_disposed && (
-                            <button type="button" onClick={() => void handleDispose(a)} aria-label="واگذاری"><PackageX size={13} /></button>
-                          )}
-                          <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(a)} aria-label="حذف"><Trash2 size={13} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Pager page={assetsPg.page} pageCount={assetsPg.pageCount} onChange={assetsPg.setPage} />
-            </div>
-          )}
+        <SectionCard icon={Landmark} title="فهرست دارایی‌ها" description={`${fa(d.assets.length)} قلم دارایی`}>
+          <FixedAssetsList d={d} />
         </SectionCard>
       </div>
 
-      <SectionCard
-        icon={Play}
-        title="اجرای استهلاک دوره"
-        description="یک تاریخ (معمولاً پایان ماه) انتخاب کنید؛ برای همه‌ی دارایی‌های فعال یک سند استهلاک ثبت می‌شود. هر دوره فقط یک‌بار."
-      >
-        <div className="check-actions">
-          <div style={{ maxWidth: 220, flex: '1 1 180px' }}>
-            <JalaliDatePicker value={periodDate} onChange={setPeriodDate} />
-          </div>
-          <button type="button" className="btn-primary" onClick={() => void handleRun()}><Play size={14} /> ثبت استهلاک این دوره</button>
-        </div>
-        {runMsg && <div className="hint">{runMsg}</div>}
-
-        {entries.length > 0 && (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>دوره</th>
-                  <th>دارایی</th>
-                  <th>مبلغ استهلاک</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entriesPg.pageItems.map((e) => (
-                  <tr key={e.id}>
-                    <td>{formatJalali(e.period_date)}</td>
-                    <td>{e.asset_name}</td>
-                    <td>{fa(e.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={entriesPg.page} pageCount={entriesPg.pageCount} onChange={entriesPg.setPage} />
-          </div>
-        )}
-      </SectionCard>
+      <DepreciationRun d={d} />
     </>
+  )
+}
+
+/** فیلدهای فرمِ دارایی (بدون فوتر) — مشترکِ فرمِ کلاسیک و ویزارد. */
+export function FixedAssetFields({ d, splitStep }: { d: FixedAssetDraft; splitStep?: 'identity' | 'valuation' }) {
+  const showIdentity = splitStep !== 'valuation'
+  const showValuation = splitStep !== 'identity'
+  return (
+    <>
+      {showIdentity && (
+        <>
+          <label>
+            نام دارایی
+            <input value={d.form.name} onChange={(e) => d.setFormField('name', e.target.value)} placeholder="مثلاً وانت نیسان" />
+          </label>
+          <label>
+            دسته
+            <input value={d.form.category} onChange={(e) => d.setFormField('category', e.target.value)} placeholder="وسیله نقلیه" />
+          </label>
+          <label>
+            تاریخ تحصیل
+            <JalaliDatePicker value={d.form.acquired_date} onChange={(v) => d.setFormField('acquired_date', v)} />
+          </label>
+          <label>
+            توضیحات
+            <input value={d.form.notes} onChange={(e) => d.setFormField('notes', e.target.value)} />
+          </label>
+        </>
+      )}
+      {showValuation && (
+        <>
+          <label>
+            بهای تمام‌شده
+            <NumberInput value={d.form.cost} onChange={(v) => d.setFormField('cost', v)} />
+          </label>
+          <label>
+            ارزش اسقاط
+            <NumberInput value={d.form.salvage_value} onChange={(v) => d.setFormField('salvage_value', v)} />
+          </label>
+          <label>
+            عمر مفید (ماه)
+            <NumberInput value={d.form.useful_life_months} onChange={(v) => d.setFormField('useful_life_months', v)} />
+          </label>
+          {!d.editingId && (
+            <label>
+              پرداخت از
+              <select value={d.form.funding_account_id} onChange={(e) => d.setFormField('funding_account_id', e.target.value)}>
+                <option value="">— بدون سند (آورده / قبلاً در دفاتر) —</option>
+                {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
+/** جدولِ فهرستِ دارایی‌ها با اکشن‌ها — مشترکِ فرم و ویزارد. */
+export function FixedAssetsList({ d }: { d: FixedAssetDraft }) {
+  const pg = usePagination(d.assets, 10)
+  if (d.assets.length === 0) {
+    return <EmptyState icon={Landmark} text="هنوز دارایی ثابتی ثبت نشده." />
+  }
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>نام</th>
+            <th>تحصیل</th>
+            <th>بها</th>
+            <th>ماهانه</th>
+            <th>انباشته</th>
+            <th>ارزش دفتری</th>
+            <th>وضعیت</th>
+            <th>عملیات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pg.pageItems.map((a) => (
+            <tr key={a.id} style={a.is_disposed ? { opacity: 0.55 } : undefined}>
+              <td>{a.name}</td>
+              <td>{formatJalali(a.acquired_date)}</td>
+              <td>{fa(a.cost)}</td>
+              <td>{fa(a.monthly_depreciation)}</td>
+              <td>{fa(a.accumulated_depreciation)}</td>
+              <td>{fa(a.book_value)}</td>
+              <td>
+                <span className={`status-badge ${a.is_disposed ? 'tone-danger' : a.fully_depreciated ? 'tone-warning' : 'tone-success'}`}>
+                  {a.is_disposed ? 'واگذارشده' : a.fully_depreciated ? 'مستهلک کامل' : 'فعال'}
+                </span>
+              </td>
+              <td>
+                <div className="check-actions">
+                  <button type="button" onClick={() => d.startEdit(a)} aria-label="ویرایش"><Pencil size={13} /></button>
+                  {!a.is_disposed && (
+                    <button type="button" onClick={() => void d.handleDispose(a)} aria-label="واگذاری"><PackageX size={13} /></button>
+                  )}
+                  <button type="button" className="icon-btn-danger" onClick={() => void d.handleDelete(a)} aria-label="حذف"><Trash2 size={13} /></button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+    </div>
+  )
+}
+
+/** بخشِ «اجرای استهلاک دوره» با تاریخچه — مشترکِ فرم و ویزارد. */
+export function DepreciationRun({ d }: { d: FixedAssetDraft }) {
+  const pg = usePagination(d.entries, 10)
+  return (
+    <SectionCard
+      icon={Play}
+      title="اجرای استهلاک دوره"
+      description="یک تاریخ (معمولاً پایان ماه) انتخاب کنید؛ برای همه‌ی دارایی‌های فعال یک سند استهلاک ثبت می‌شود. هر دوره فقط یک‌بار."
+    >
+      <div className="check-actions">
+        <div style={{ maxWidth: 220, flex: '1 1 180px' }}>
+          <JalaliDatePicker value={d.periodDate} onChange={d.setPeriodDate} />
+        </div>
+        <button type="button" className="btn-primary" onClick={() => void d.handleRun()}><Play size={14} /> ثبت استهلاک این دوره</button>
+      </div>
+      {d.runMsg && <div className="hint">{d.runMsg}</div>}
+
+      {d.entries.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>دوره</th>
+                <th>دارایی</th>
+                <th>مبلغ استهلاک</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pg.pageItems.map((e) => (
+                <tr key={e.id}>
+                  <td>{formatJalali(e.period_date)}</td>
+                  <td>{e.asset_name}</td>
+                  <td>{fa(e.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+        </div>
+      )}
+    </SectionCard>
   )
 }

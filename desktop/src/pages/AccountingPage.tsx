@@ -3,6 +3,8 @@ import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Target, Folder
 import type { AccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { JournalEntryForm } from '../components/JournalEntryForm'
+import { JournalEntryWizard } from '../components/wizard/JournalEntryWizard'
+import { useTheme } from '../lib/theme'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -27,6 +29,7 @@ export function AccountingPage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
+  const guided = useTheme().theme.content === 'guided'
   const kpis = useMemo(() => {
     const by = (t: string) => accounts.filter((a) => a.type === t).length
     return { total: accounts.length, assets: by('asset'), income: by('income'), expense: by('expense') }
@@ -56,7 +59,11 @@ export function AccountingPage({
             icon: BookOpen,
             content: (
               <>
-                <JournalEntryForm token={token} accounts={accounts} onQueued={onQueued} />
+                {guided ? (
+                  <JournalEntryWizard token={token} accounts={accounts} onQueued={onQueued} />
+                ) : (
+                  <JournalEntryForm token={token} accounts={accounts} onQueued={onQueued} />
+                )}
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
