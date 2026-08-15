@@ -10,6 +10,7 @@ import {
   type StockLevel,
 } from '../api'
 import { todayIso } from './jalali'
+import { usePersistentState } from './usePersistentState'
 
 export interface QuotationDraftLine {
   itemId: string
@@ -36,19 +37,21 @@ export function useQuotationDraft({
   editing?: SalesQuotationRecord | null
   onDoneEditing?: () => void
 }) {
-  const [warehouseId, setWarehouseId] = useState('')
-  const [quotationDate, setQuotationDate] = useState(todayIso())
-  const [validUntil, setValidUntil] = useState('')
-  const [description, setDescription] = useState('')
-  const [lines, setLines] = useState<QuotationDraftLine[]>([{ itemId: '', qty: '1', unitPrice: '' }])
+  // در حالتِ ویرایش، پیش‌نویسِ ماندگار نباید بنشیند (تا دیتای ویرایش را نیالاید).
+  const persistOff = !!editing
+  const [warehouseId, setWarehouseId] = usePersistentState('cubita.draft.quotation.warehouseId', '', persistOff)
+  const [quotationDate, setQuotationDate] = usePersistentState('cubita.draft.quotation.quotationDate', todayIso(), persistOff)
+  const [validUntil, setValidUntil] = usePersistentState('cubita.draft.quotation.validUntil', '', persistOff)
+  const [description, setDescription] = usePersistentState('cubita.draft.quotation.description', '', persistOff)
+  const [lines, setLines] = usePersistentState<QuotationDraftLine[]>('cubita.draft.quotation.lines', [{ itemId: '', qty: '1', unitPrice: '' }], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // مشتری: از فهرستِ اشخاص یا دستی
-  const [customerMode, setCustomerMode] = useState<'list' | 'manual'>('list')
+  const [customerMode, setCustomerMode] = usePersistentState<'list' | 'manual'>('cubita.draft.quotation.customerMode', 'list', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
-  const [contactId, setContactId] = useState('')
-  const [customerName, setCustomerName] = useState('')
+  const [contactId, setContactId] = usePersistentState('cubita.draft.quotation.contactId', '', persistOff)
+  const [customerName, setCustomerName] = usePersistentState('cubita.draft.quotation.customerName', '', persistOff)
 
   // موجودی: خواندن از انبار یا دستی
   const [stockMode, setStockMode] = useState<'warehouse' | 'manual'>('warehouse')

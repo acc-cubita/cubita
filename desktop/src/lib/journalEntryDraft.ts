@@ -3,6 +3,7 @@ import type { AccountCache } from '../electron.d'
 import { createJournalEntryDirect, fetchCostCenters, type CostCenterRecord } from '../api'
 import { isElectron } from '../platform'
 import { todayIso } from './jalali'
+import { usePersistentState } from './usePersistentState'
 
 export interface JournalDraftLine {
   accountId: string
@@ -22,13 +23,14 @@ export function useJournalEntryDraft({
   accounts: AccountCache[]
   onQueued: () => void
 }) {
-  const [description, setDescription] = useState('')
-  const [entryDate, setEntryDate] = useState(todayIso())
-  const [lines, setLines] = useState<JournalDraftLine[]>([emptyLine(), emptyLine()])
+  // ورودی‌های کاربر ماندگار می‌شوند (رفرش/جابه‌جایی پیش‌نویس را نمی‌برد)؛ داده‌ی سرور و پیام/در‌حال‌ثبت نه.
+  const [description, setDescription] = usePersistentState('cubita.draft.journal.description', '')
+  const [entryDate, setEntryDate] = usePersistentState('cubita.draft.journal.entryDate', todayIso())
+  const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', [emptyLine(), emptyLine()])
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
-  const [costCenterId, setCostCenterId] = useState('')
+  const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.journal.costCenterId', '')
 
   const postableAccounts = accounts.filter((a) => !a.is_group)
 

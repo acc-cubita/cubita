@@ -21,6 +21,7 @@ import {
 } from '../api'
 import { isElectron } from '../platform'
 import { todayIso } from './jalali'
+import { usePersistentState } from './usePersistentState'
 
 export interface DraftLine {
   itemId: string
@@ -50,19 +51,21 @@ export function useSalesInvoiceDraft({
   prefill?: SalesInvoiceRecord | null
   onPrefillConsumed?: () => void
 }) {
-  const [warehouseId, setWarehouseId] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(todayIso())
-  const [taxRate, setTaxRate] = useState('10')
-  const [invoiceDiscount, setInvoiceDiscount] = useState('')
-  const [invoiceDiscountMode, setInvoiceDiscountMode] = useState<'amount' | 'percent'>('amount')
-  const [roundStep, setRoundStep] = useState(0) // ۰ = بدون رند
-  const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', unitPrice: '', discount: '' }])
+  // در حالتِ رونوشت (prefill) پیش‌نویسِ ماندگار نباید بنشیند تا دیتای رونوشت را نیالاید.
+  const persistOff = !!prefill
+  const [warehouseId, setWarehouseId] = usePersistentState('cubita.draft.salesInvoice.warehouseId', '', persistOff)
+  const [invoiceDate, setInvoiceDate] = usePersistentState('cubita.draft.salesInvoice.invoiceDate', todayIso(), persistOff)
+  const [taxRate, setTaxRate] = usePersistentState('cubita.draft.salesInvoice.taxRate', '10', persistOff)
+  const [invoiceDiscount, setInvoiceDiscount] = usePersistentState('cubita.draft.salesInvoice.invoiceDiscount', '', persistOff)
+  const [invoiceDiscountMode, setInvoiceDiscountMode] = usePersistentState<'amount' | 'percent'>('cubita.draft.salesInvoice.invoiceDiscountMode', 'amount', persistOff)
+  const [roundStep, setRoundStep] = usePersistentState('cubita.draft.salesInvoice.roundStep', 0, persistOff) // ۰ = بدون رند
+  const [lines, setLines] = usePersistentState<DraftLine[]>('cubita.draft.salesInvoice.lines', [{ itemId: '', qty: '1', unitPrice: '', discount: '' }], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
-  const [costCenterId, setCostCenterId] = useState('')
+  const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.salesInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
-  const [contactId, setContactId] = useState('')
+  const [contactId, setContactId] = usePersistentState('cubita.draft.salesInvoice.contactId', '', persistOff)
   const [credit, setCredit] = useState<CreditStatus | null>(null)
   // تخفیفِ خودکارِ سطحِ باشگاه (اگر در تنظیماتِ باشگاه فعال باشد).
   const [tierAuto, setTierAuto] = useState(false)

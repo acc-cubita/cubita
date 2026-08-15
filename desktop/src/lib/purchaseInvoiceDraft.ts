@@ -16,6 +16,7 @@ import {
 import { isElectron } from '../platform'
 import type { PickableItem } from '../components/ItemPicker'
 import { todayIso } from './jalali'
+import { usePersistentState } from './usePersistentState'
 
 export interface PurchaseDraftLine {
   itemId: string
@@ -43,18 +44,20 @@ export function usePurchaseInvoiceDraft({
   prefill?: PurchaseInvoiceRecord | null
   onPrefillConsumed?: () => void
 }) {
-  const [warehouseId, setWarehouseId] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(todayIso())
-  const [taxRate, setTaxRate] = useState('10')
-  const [invoiceDiscount, setInvoiceDiscount] = useState('')
-  const [invoiceDiscountMode, setInvoiceDiscountMode] = useState<'amount' | 'percent'>('amount')
-  const [lines, setLines] = useState<PurchaseDraftLine[]>([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
+  // در حالتِ رونوشت (prefill) پیش‌نویسِ ماندگار نباید بنشیند تا دیتای رونوشت را نیالاید.
+  const persistOff = !!prefill
+  const [warehouseId, setWarehouseId] = usePersistentState('cubita.draft.purchaseInvoice.warehouseId', '', persistOff)
+  const [invoiceDate, setInvoiceDate] = usePersistentState('cubita.draft.purchaseInvoice.invoiceDate', todayIso(), persistOff)
+  const [taxRate, setTaxRate] = usePersistentState('cubita.draft.purchaseInvoice.taxRate', '10', persistOff)
+  const [invoiceDiscount, setInvoiceDiscount] = usePersistentState('cubita.draft.purchaseInvoice.invoiceDiscount', '', persistOff)
+  const [invoiceDiscountMode, setInvoiceDiscountMode] = usePersistentState<'amount' | 'percent'>('cubita.draft.purchaseInvoice.invoiceDiscountMode', 'amount', persistOff)
+  const [lines, setLines] = usePersistentState<PurchaseDraftLine[]>('cubita.draft.purchaseInvoice.lines', [{ itemId: '', qty: '1', unitCost: '', discount: '' }], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
-  const [costCenterId, setCostCenterId] = useState('')
+  const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.purchaseInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
-  const [contactId, setContactId] = useState('')
+  const [contactId, setContactId] = usePersistentState('cubita.draft.purchaseInvoice.contactId', '', persistOff)
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [currencyCode, setCurrencyCode] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1')
