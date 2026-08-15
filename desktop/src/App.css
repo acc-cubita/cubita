@@ -6397,14 +6397,24 @@ button:disabled {
   padding: clamp(20px, 1.6vw, 28px);
   box-shadow: var(--shadow-md);
 }
-/* استثناء: در صندوقِ فروشگاهی (pos-grid) دو ستون، تختِ سطحِ پنل‌اند نه کارتِ شناور —
-   سایه/گوشه‌گِردِ کارتِ Tipalti را نباید بگیرند. ویژگیِ عمداً (0,4,1) با اسکوپِ پوسته‌ی
-   افقی (تنها پوسته‌ی Tipalti) انتخاب شده تا از restyleِ کارتِ Tipalti (0,3,1) قوی‌تر
-   باشد ولی از قواعدِ گِردیِ گوشه‌های پایین (0,5,1) ضعیف‌تر بماند؛ پس فقط گوشه‌های
-   بالا/داخلی تخت می‌شوند و دو گوشه‌ی پایینِ بیرونی هم‌شکلِ کادر گِرد می‌مانند. */
+/* بخش‌های درونِ پنل در پوسته‌ی افقی (Tipalti/guided) تختِ سطحِ پنل‌اند، نه کارتِ شناور؛
+   restyleِ کارتِ Tipalti (:root[...] .page section، ویژگی 0,3,1) نباید سایه/گوشه‌ی گِرد به
+   آن‌ها بدهد. ویژگیِ عمداً (0,4,1) با اسکوپِ پوسته‌ی افقی از restyle قوی‌تر است ولی از قواعدِ
+   (0,5,1) گوشه‌های خاصِ صندوق ضعیف‌تر می‌ماند. این نظمِ «پنلِ تخت» را برای همه‌ی صفحه‌ها
+   (اتصال فروشگاه، گزارش‌ها، دارایی ثابت، صندوق و ...) یکدست می‌کند — وگرنه بعضی صفحه‌ها
+   کارت‌های شناورِ سایه‌دار نشان می‌دادند و بعضی تخت. */
+.app-shell--topnav .page.panels > section,
+.app-shell--topnav .page.panels .tab-panel section,
+.app-shell--topnav .page.panels .workspace-split > section,
+.app-shell--topnav .page.panels .split-2col > section,
 .app-shell--topnav .page.panels .pos-grid > section {
   box-shadow: none;
   border-radius: 0;
+}
+/* دکمه‌های اکشنِ اتصالِ فروشگاه هم مثلِ فوترِ فرم‌ها هم‌اندازه شوند تا صفحه یکدست باشد */
+:root[data-theme='tipalti'] .sf-actions button {
+  min-width: 150px;
+  justify-content: center;
 }
 :root[data-theme='tipalti'] .section-card-header {
   margin-bottom: 18px;
