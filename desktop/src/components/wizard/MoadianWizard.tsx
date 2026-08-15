@@ -1,7 +1,6 @@
 import { Save, PlugZap } from 'lucide-react'
 import { useMoadianPanel, type MoadianPanelState } from '../../lib/moadianPanel'
 import {
-  MoadianStats,
   MoadianCredentialFields,
   MoadianToggles,
   MoadianHints,
@@ -66,7 +65,6 @@ export function MoadianWizard({ token }: { token: string }) {
 
   return (
     <>
-      <MoadianStats m={m} />
       <TaskFlow
         title="سامانه مؤدیان"
         steps={steps}

@@ -85,6 +85,7 @@ export function QuotationWizard({
 function HeaderStep({ q, warehouses }: { q: QuotationDraft; warehouses: WarehouseCache[] }) {
   return (
     <div className="invoice-form">
+      <div className="field-pair">
       <label>
         مشتری
         <div className="seg-toggle">
@@ -106,6 +107,7 @@ function HeaderStep({ q, warehouses }: { q: QuotationDraft; warehouses: Warehous
           {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
         </select>
       </label>
+      </div>
       <label>
         تاریخ پیشنهاد
         <JalaliDatePicker value={q.quotationDate} onChange={q.setQuotationDate} />

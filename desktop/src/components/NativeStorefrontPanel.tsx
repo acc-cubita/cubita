@@ -35,7 +35,6 @@ import {
   type StorefrontOrder,
 } from '../api'
 import { SectionCard } from './SectionCard'
-import { StatCard } from './StatCard'
 import { Pager, usePagination } from './Pager'
 import { StorefrontGallery } from './StorefrontGallery'
 
@@ -112,8 +111,6 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
   }, [])
 
   const published = sf?.status === 'published'
-  const listedCount = useMemo(() => items.filter((i) => i.is_listed).length, [items])
-  const pendingOrders = useMemo(() => orders.filter((o) => o.payment_status === 'pending').length, [orders])
 
   const filteredItems = useMemo(
     () => items.filter((i) => !search || i.name.includes(search) || i.sku.includes(search)),
@@ -269,13 +266,6 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
               : 'برای اینکه سایتِ دانلودشده کار کند، پس از تنظیم، «انتشار» را بزنید.'}
           </span>
         </div>
-      </div>
-
-      <div className="stat-grid">
-        <StatCard icon={<Store size={18} />} label="وضعیتِ فروشگاه" value={published ? 'منتشرشده' : 'پیش‌نویس'} tone={published ? 'success' : 'default'} />
-        <StatCard icon={<Package size={18} />} label="کالاهای روی سایت" value={fa(listedCount)} tone="success" />
-        <StatCard icon={<ShoppingBag size={18} />} label="کل سفارش‌ها" value={fa(orders.length)} />
-        <StatCard icon={<CreditCard size={18} />} label="در انتظارِ پرداخت" value={fa(pendingOrders)} tone={pendingOrders > 0 ? 'warning' : 'default'} />
       </div>
 
       {message && <div className="hint storefront-msg">{message}</div>}

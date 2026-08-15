@@ -6451,6 +6451,37 @@ button:disabled {
 :root[data-theme='tipalti'] .review-step .form-subhead {
   margin: 0;
 }
+
+/* جفتِ فیلد با ارتفاعِ نابرابر (مثلِ «مشتری» با کلیدِ حالت + «انبار»): با align-items:end
+   کادرهای ورودی‌شان ته‌به‌ته تراز می‌شوند تا انبار دقیقاً روبروی مشتری بیفتد. */
+:root[data-theme='tipalti'] .field-pair {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+  align-items: end;
+}
+
+/* کارت‌های آماریِ داخلِ تب (مثلِ بودجه‌بندی) مینیمال‌تر — نه KPIِ درشتِ بالای صفحه؛
+   padding و فونتِ عدد کوچک‌تر و کارتِ سبکِ مرزدار به‌جای کارتِ درشتِ سایه‌دار. */
+:root[data-theme='tipalti'] .page.panels .tab-panel .stat-grid {
+  gap: 12px;
+}
+:root[data-theme='tipalti'] .page.panels .tab-panel .stat-card {
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+:root[data-theme='tipalti'] .page.panels .tab-panel .stat-card-value {
+  font-size: var(--fs-xl);
+}
+
+@media (max-width: 760px) {
+  :root[data-theme='tipalti'] .field-pair {
+    grid-template-columns: 1fr;
+  }
+}
 :root[data-theme='tipalti'] .section-card-header {
   margin-bottom: 18px;
 }
