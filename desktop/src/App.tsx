@@ -52,12 +52,16 @@ export default function App() {
   // صفحه‌ی ورود یک لحظه ظاهر می‌شد و بعد جایش عوض می‌شد.
   const [pending, setPending] = useState<PendingAction | null>(readPendingAction)
   // توکن از localStorage بازیابی می‌شود (فقط وب) تا رفرش، کاربر را از حساب بیرون نیندازد.
-  // وقتی لینکِ بازیابیِ رمز باز است، جلسه‌ی ذخیره‌شده را نادیده می‌گیریم تا آن فلو مقدم بماند.
-  const [token, setToken] = useState<string | null>(() => (pending ? null : loadStoredToken()))
+  // وقتی لینکِ بازیابیِ رمز (`pending`) یا درِ ورودیِ ترایال (`?signup`) باز است، جلسه‌ی
+  // ذخیره‌شده را نادیده می‌گیریم تا آن صفحه مقدم بماند — وگرنه بازیابیِ جلسه، بازدیدکننده‌ی
+  // واردشده را مستقیم به داشبورد می‌برد و فرمِ ثبت‌نام/ورود هرگز باز نمی‌شود. توکن در
+  // localStorage دست‌نخورده می‌ماند (پاک نمی‌شود)، فقط برای رندرِ اولیه کنار گذاشته می‌شود.
+  const forceAuthScreen = pending != null || wantsSignup()
+  const [token, setToken] = useState<string | null>(() => (forceAuthScreen ? null : loadStoredToken()))
   const [me, setMe] = useState<MeResponse | null>(null)
   // توکنِ بازیابی‌شده باید با سرور اعتبارسنجی شود (fetchMe)؛ تا آن زمان به‌جای فلاش‌خوردنِ
   // صفحه‌ی ورود، یک اسپلشِ کوتاه نشان می‌دهیم.
-  const [restoring, setRestoring] = useState<boolean>(() => !pending && !!loadStoredToken())
+  const [restoring, setRestoring] = useState<boolean>(() => !forceAuthScreen && !!loadStoredToken())
   // درِ ورودیِ ترایال (demo.cubita.ir) با VITE_SIGNUP_FIRST=true مستقیم روی صفحه‌ی
   // ثبت‌نام باز می‌شود؛ اپِ اصلی (acc.cubita.ir) روی ورود.
   const [authView, setAuthView] = useState<'login' | 'signup'>(
