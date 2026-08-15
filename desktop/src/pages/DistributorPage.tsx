@@ -225,12 +225,12 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
         <EmptyState icon={Package} text="هنوز لیستینگی نساخته‌اید — از فرمِ کنار، اولین محصول یا پک را منتشر کنید." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table">
+          <table className="entity-table cards-on-mobile">
             <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
               {pg.pageItems.map((l) => (
                 <tr key={l.id}>
-                  <td>
+                  <td className="card-title">
                     <div className="entity-with-thumb">
                       {l.images?.[0]
                         ? <img className="list-thumb" src={l.images[0]} alt="" />
@@ -245,12 +245,12 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                       </div>
                     </div>
                   </td>
-                  <td>{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
-                  <td className="money-cell">{faMoney(l.wholesale_price)}</td>
-                  <td>
+                  <td data-label="نوع">{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
+                  <td data-label="قیمتِ عمده" className="money-cell">{faMoney(l.wholesale_price)}</td>
+                  <td data-label="وضعیت">
                     <span className={`status-badge ${l.is_published ? 'tone-success' : 'tone-warning'}`}>{l.is_published ? 'منتشرشده' : 'پیش‌نویس'}</span>
                   </td>
-                  <td>
+                  <td className="card-actions">
                     <div className="check-actions">
                       <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
                       <button type="button" onClick={() => draft.startEdit(l)}><Pencil size={13} /> ویرایش</button>
@@ -384,14 +384,14 @@ function OrdersPanel({ token }: { token: string }) {
     return (
       <>
         <tr>
-          <td>
-            <button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>#{o.order_number}</button>
+          <td className="card-title">
+            <button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>سفارش #{o.order_number}</button>
             <div className="entity-sub">{o.retailer_name}</div>
           </td>
-          <td className="money-cell">{faMoney(o.total)}</td>
-          <td><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
-          <td>{o.settlement_mode === 'online' ? 'آنلاین' : 'اعتباری'}</td>
-          <td>
+          <td data-label="مبلغ" className="money-cell">{faMoney(o.total)}</td>
+          <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+          <td data-label="تسویه">{o.settlement_mode === 'online' ? 'آنلاین' : 'اعتباری'}</td>
+          <td className="card-actions">
             <div className="check-actions">
               {o.status === 'placed' ? (
                 <>
@@ -406,7 +406,7 @@ function OrdersPanel({ token }: { token: string }) {
         </tr>
         {open && (
           <tr className="detail-row">
-            <td colSpan={5}>
+            <td className="card-full" colSpan={5}>
               <table className="entity-table nested">
                 <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
                 <tbody>
@@ -457,7 +457,7 @@ function OrdersPanel({ token }: { token: string }) {
           <EmptyState icon={ClipboardList} text="سفارشِ در انتظاری ندارید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
               <tbody>{pending.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
             </table>
@@ -469,7 +469,7 @@ function OrdersPanel({ token }: { token: string }) {
           <EmptyState icon={ClipboardList} text="هنوز سفارشی رسیدگی نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
               <tbody>{done.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
             </table>
@@ -506,12 +506,12 @@ function ConnectionsPanel({ token }: { token: string }) {
     const badge = CONN_BADGE[c.status]
     return (
       <tr>
-        <td>
+        <td className="card-title">
           <div className="entity-name">{c.retailer_name}</div>
           <div className="entity-sub">{c.requested_by === 'retailer' ? 'درخواست از سمتِ فروشگاه' : 'دعوت از سمتِ شما'}</div>
         </td>
-        <td><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
-        <td>
+        <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+        <td className="card-actions">
           <div className="check-actions">
             {actionable && (
               <>
@@ -539,7 +539,7 @@ function ConnectionsPanel({ token }: { token: string }) {
           <EmptyState icon={Store} text="درخواستِ اتصالِ تازه‌ای ندارید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
               <tbody>{pending.map((c) => <ConnRow key={c.id} c={c} actionable />)}</tbody>
             </table>
@@ -552,7 +552,7 @@ function ConnectionsPanel({ token }: { token: string }) {
           <EmptyState icon={Store} text="هنوز فروشگاهی تأیید نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
               <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} />)}</tbody>
             </table>
@@ -597,7 +597,7 @@ function CommissionPanel({ token }: { token: string }) {
           <EmptyState icon={Percent} text="هنوز سفارشِ قطعی‌ای ندارید؛ کمیسیونی ثبت نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>ماه</th>
@@ -610,11 +610,11 @@ function CommissionPanel({ token }: { token: string }) {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.period}>
-                    <td>{faPeriod(r.period)}</td>
-                    <td>{faMoney(r.order_count)}</td>
-                    <td className="money-cell">{faMoney(r.total_base)}</td>
-                    <td className="money-cell">{faMoney(r.total_amount)}</td>
-                    <td>
+                    <td className="card-title" data-label="ماه">{faPeriod(r.period)}</td>
+                    <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                    <td data-label="جمعِ فاکتورها" className="money-cell">{faMoney(r.total_base)}</td>
+                    <td data-label="کمیسیونِ ۲٪" className="money-cell">{faMoney(r.total_amount)}</td>
+                    <td data-label="وضعیت">
                       <span className={`status-badge ${r.status === 'settled' ? 'tone-success' : 'tone-warning'}`}>
                         {r.status === 'settled' ? 'تسویه‌شده' : 'پرداخت‌نشده'}
                       </span>

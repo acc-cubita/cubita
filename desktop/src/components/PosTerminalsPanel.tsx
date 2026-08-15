@@ -311,7 +311,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             <EmptyState icon={CreditCard} text="هنوز کارتخوانی ثبت نشده." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table">
+              <table className="entity-table cards-on-mobile">
                 <thead>
                   <tr>
                     <th>دستگاه</th>
@@ -325,7 +325,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                     const bank = bankAccounts.find((b) => b.id === t.bank_account_id)
                     return (
                       <tr key={t.id}>
-                        <td data-label="دستگاه" className="entity-name">
+                        <td data-label="دستگاه" className="entity-name card-title">
                           {t.label || 'کارتخوان'}
                           {t.is_default && <span className="unit-suffix"> · پیش‌فرض</span>}
                           {bank && <div className="entity-sub">تسویه: {bank.name}</div>}
@@ -343,7 +343,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                             {t.is_active ? 'فعال' : 'غیرفعال'}
                           </span>
                         </td>
-                        <td className="check-actions">
+                        <td className="check-actions card-actions">
                           <button type="button" onClick={() => startEdit(t)}>
                             <Pencil size={13} /> ویرایش
                           </button>

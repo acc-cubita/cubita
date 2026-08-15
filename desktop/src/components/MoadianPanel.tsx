@@ -219,7 +219,7 @@ export function MoadianHistory({ m }: { m: MoadianPanelState }) {
         <EmptyState icon={FileCheck2} text="هنوز صورتحسابی ارسال نشده." />
       ) : (
         <div className="table-scroll">
-          <table>
+          <table className="cards-on-mobile">
             <thead>
               <tr>
                 <th>تاریخ فاکتور</th>
@@ -234,15 +234,15 @@ export function MoadianHistory({ m }: { m: MoadianPanelState }) {
             <tbody>
               {pg.pageItems.map((s) => (
                 <tr key={s.id}>
-                  <td>{formatJalali(s.invoice_date)}</td>
-                  <td>{s.tax_id}</td>
-                  <td>{fa(s.serial)}</td>
-                  <td>
+                  <td className="card-title" data-label="تاریخ فاکتور">{formatJalali(s.invoice_date)}</td>
+                  <td data-label="شناسه مالیاتی">{s.tax_id}</td>
+                  <td data-label="سریال">{fa(s.serial)}</td>
+                  <td data-label="وضعیت">
                     <span className={`status-badge ${MOADIAN_STATUS_TONE[s.status] ?? ''}`}>{MOADIAN_STATUS_LABEL[s.status] ?? s.status}</span>
                   </td>
-                  <td>{s.reference_number || '—'}</td>
-                  <td>{s.error_message || '—'}</td>
-                  <td>
+                  <td data-label="شماره مرجع">{s.reference_number || '—'}</td>
+                  <td data-label="توضیح">{s.error_message || '—'}</td>
+                  <td className="card-actions">
                     {s.reference_number ? (
                       <button type="button" className="btn-ghost btn-sm" onClick={() => void m.inquire(s.id)}>
                         استعلام وضعیت

@@ -143,7 +143,7 @@ export function InvoiceList({
         <EmptyState icon={FileText} text="هنوز فاکتوری ثبت نشده." />
       ) : (
         <div className="table-scroll">
-          <table>
+          <table className="cards-on-mobile">
           <thead>
             <tr>
               <th style={{ width: 28 }}></th>
@@ -171,11 +171,12 @@ export function InvoiceList({
                 className="invoice-row"
                 onClick={() => setExpanded(isOpen ? null : row.id)}
               >
-                <td>{isOpen ? <ChevronDown size={15} /> : <ChevronLeft size={15} />}</td>
-                <td>{row.number ?? '—'}</td>
-                <td>{formatJalali(row.invoice_date)}</td>
-                <td className="entity-name">{partyLabel(row)}</td>
+                <td className="card-hide">{isOpen ? <ChevronDown size={15} /> : <ChevronLeft size={15} />}</td>
+                <td data-label="شماره">{row.number ?? '—'}</td>
+                <td data-label="تاریخ">{formatJalali(row.invoice_date)}</td>
+                <td className="entity-name card-title" data-label="طرف حساب">{partyLabel(row)}</td>
                 <td
+                  data-label="مبلغ"
                   title={
                     Number(row.tax_amount) > 0
                       ? `خالص ${fa(net)} + مالیات ${fa(Number(row.tax_amount))}`
@@ -185,15 +186,15 @@ export function InvoiceList({
                   {fa(grand)}
                 </td>
                 {isSales && (
-                  <td className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
+                  <td data-label="سود" className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
                     {fa(profit)}
                     <span className="unit-suffix"> ({margin.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)</span>
                   </td>
                 )}
-                <td>
+                <td data-label="وضعیت">
                   {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : 'معتبر'}
                 </td>
-                <td onClick={(e) => e.stopPropagation()}>
+                <td className="card-actions" onClick={(e) => e.stopPropagation()}>
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(row.id)}>
                       <Printer size={13} /> چاپ
@@ -221,7 +222,7 @@ export function InvoiceList({
               </tr>
               {isOpen && (
                 <tr className="invoice-detail-row">
-                  <td colSpan={columnCount}>
+                  <td className="card-full" colSpan={columnCount}>
                     <InvoiceDetail row={row} isSales={isSales} itemName={itemName} />
                   </td>
                 </tr>

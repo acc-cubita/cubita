@@ -171,7 +171,7 @@ export function RewardsPanel({
           <EmptyState icon={Gift} text="جایزه‌ای تعریف نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table rewards-table">
+            <table className="entity-table rewards-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>جایزه</th>
@@ -184,7 +184,7 @@ export function RewardsPanel({
               <tbody>
                 {pg.pageItems.map((r) => (
                   <tr key={r.id} className={r.is_active ? '' : 'row-muted'}>
-                    <td data-label="جایزه">
+                    <td className="card-title" data-label="جایزه">
                       <div className="entity-name">{r.name}</div>
                       <div className="entity-sub">{rewardValue(r)}</div>
                     </td>
@@ -195,8 +195,8 @@ export function RewardsPanel({
                         {r.is_active ? <><ToggleRight size={15} /> فعال</> : <><ToggleLeft size={15} /> غیرفعال</>}
                       </button>
                     </td>
-                    <td>
-                      <button type="button" className="icon-btn-danger" onClick={() => void remove(r.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                    <td className="card-actions">
+                      <button type="button" className="icon-btn-danger" onClick={() => void remove(r.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
                     </td>
                   </tr>
                 ))}

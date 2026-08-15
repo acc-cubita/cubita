@@ -106,7 +106,7 @@ function Distributors({ token }: { token: string }) {
           <EmptyState icon={Store} text="هنوز پخش‌کننده‌ی فعالی در بازار نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead><tr><th>پخش‌کننده</th><th>وضعیت</th><th></th></tr></thead>
               <tbody>
                 {pg.pageItems.map((d) => {
@@ -115,9 +115,9 @@ function Distributors({ token }: { token: string }) {
                   const canRequest = st === null || st === 'rejected'
                   return (
                     <tr key={d.tenant_id}>
-                      <td><div className="entity-name">{d.display_name}</div></td>
-                      <td>{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
-                      <td>
+                      <td className="card-title"><div className="entity-name">{d.display_name}</div></td>
+                      <td data-label="وضعیت">{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
+                      <td className="card-actions">
                         <div className="check-actions">
                           {canRequest && (
                             <button type="button" className="btn-primary" disabled={busy === d.tenant_id} onClick={() => void connect(d)}>
@@ -334,7 +334,7 @@ function Orders({ token }: { token: string }) {
         <EmptyState icon={ClipboardList} text="هنوز سفارشی ثبت نکرده‌اید — از تبِ کاتالوگ سفارش دهید." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table">
+          <table className="entity-table cards-on-mobile">
             <thead><tr><th>سفارش</th><th>پخش‌کننده</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
               {pg.pageItems.map((o) => {
@@ -344,11 +344,11 @@ function Orders({ token }: { token: string }) {
                 return (
                   <Fragment key={o.id}>
                     <tr>
-                      <td><button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>#{faNum(o.order_number)}</button></td>
-                      <td>{o.distributor_name}</td>
-                      <td className="money-cell">{faMoney(o.total)}</td>
-                      <td><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
-                      <td>
+                      <td className="card-title"><button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>سفارش #{faNum(o.order_number)}</button></td>
+                      <td data-label="پخش‌کننده">{o.distributor_name}</td>
+                      <td data-label="مبلغ" className="money-cell">{faMoney(o.total)}</td>
+                      <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+                      <td className="card-actions">
                         {canPay && (
                           <button type="button" className="btn-primary" disabled={paying === o.id} onClick={() => void pay(o)}>
                             <CreditCard size={13} /> پرداختِ آنلاین
@@ -358,7 +358,7 @@ function Orders({ token }: { token: string }) {
                     </tr>
                     {open && (
                       <tr>
-                        <td colSpan={5}>
+                        <td className="card-full" colSpan={5}>
                           <table className="entity-table">
                             <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
                             <tbody>

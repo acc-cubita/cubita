@@ -127,7 +127,7 @@ export function QuotationsList({
         <EmptyState icon={FileCheck} text="پیش‌فاکتوری ثبت نشده." />
       ) : (
         <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr>
               <th>شماره</th>
@@ -142,17 +142,17 @@ export function QuotationsList({
           <tbody>
             {pg.pageItems.map((q) => (
               <tr key={q.id}>
-                <td>{q.number != null ? q.number.toLocaleString('fa-IR') : '—'}</td>
-                <td className="entity-name">{customerLabel(q)}</td>
-                <td>{formatJalali(q.quotation_date)}</td>
-                <td>{formatJalali(q.valid_until)}</td>
-                <td>{Number(q.total_amount).toLocaleString('fa-IR')}</td>
-                <td>
+                <td data-label="شماره">{q.number != null ? q.number.toLocaleString('fa-IR') : '—'}</td>
+                <td className="entity-name card-title" data-label="مشتری">{customerLabel(q)}</td>
+                <td data-label="تاریخ">{formatJalali(q.quotation_date)}</td>
+                <td data-label="اعتبار تا">{formatJalali(q.valid_until)}</td>
+                <td data-label="مبلغ">{Number(q.total_amount).toLocaleString('fa-IR')}</td>
+                <td data-label="وضعیت">
                   <span className={`status-badge tone-${STATUS_TONE[q.status] ?? 'default'}`}>
                     {STATUS_LABELS[q.status] ?? q.status}
                   </span>
                 </td>
-                <td>
+                <td className="card-actions">
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(q.id)}>
                       <Printer size={13} /> چاپ

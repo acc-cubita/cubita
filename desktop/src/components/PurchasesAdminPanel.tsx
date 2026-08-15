@@ -67,7 +67,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
         <EmptyState icon={CreditCard} text="هنوز هیچ خریدی ثبت نشده است." />
       ) : (
         <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr>
               <th>تاریخ</th>
@@ -82,8 +82,8 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
           <tbody>
             {pg.pageItems.map((p) => (
               <tr key={p.id}>
-                <td>{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
-                <td>
+                <td data-label="تاریخ">{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
+                <td className="card-title" data-label="مشتری">
                   {p.customer_name}
                   <br />
                   <span className="hint">{p.customer_email}{p.customer_phone ? ` — ${p.customer_phone}` : ''}</span>
@@ -94,10 +94,10 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
                     </>
                   )}
                 </td>
-                <td>{p.plan_name}</td>
-                <td>{Number(p.amount_toman).toLocaleString('fa-IR')}</td>
-                <td>{STATUS_LABELS[p.status] ?? p.status}</td>
-                <td>
+                <td data-label="پلن">{p.plan_name}</td>
+                <td data-label="مبلغ (تومان)">{Number(p.amount_toman).toLocaleString('fa-IR')}</td>
+                <td data-label="وضعیت">{STATUS_LABELS[p.status] ?? p.status}</td>
+                <td data-label="یادداشت">
                   {p.status === 'paid' ? (
                     <input
                       type="text"
@@ -110,7 +110,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
                     p.admin_notes || '—'
                   )}
                 </td>
-                <td>
+                <td className="card-actions">
                   {p.status === 'paid' && (
                     <button type="button" onClick={() => void handleFulfill(p.id)}>
                       <CheckCircle2 size={13} /> تحویل داده شد

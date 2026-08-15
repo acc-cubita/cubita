@@ -4403,6 +4403,86 @@ button:disabled {
   }
 }
 
+/* ═══ موبایل (≤۷۶۰px): فهرست‌های تخت به‌جای اسکرولِ افقی، کارتِ فشرده‌ی برچسب‌دار می‌شوند ═══
+   یک ابزارِ عمومی: به خودِ <table> کلاسِ .cards-on-mobile بده و هر <td> صفتِ data-label
+   بگیرد. سلولِ سرِ کارت .card-title (تمام‌عرض، بالای کارت)، سلولِ دکمه‌ها .card-actions
+   (تمام‌عرض، ته)، ردیفِ جزئیاتِ بازشده .card-full، سلولِ بی‌معنی .card-hide.
+   چیدمانِ گرید ۲ستونه‌ی برچسب:مقدار — جمع‌وجور و حرفه‌ای، بدونِ اسکرولِ افقی. */
+@media (max-width: 760px) {
+  table.cards-on-mobile,
+  table.cards-on-mobile tbody { display: block; }
+  table.cards-on-mobile thead { display: none; }
+  table.cards-on-mobile tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 12px;
+    align-items: baseline;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    padding: 5px 10px 7px;
+    margin-bottom: 7px;
+  }
+  table.cards-on-mobile td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 1px 0;
+    border: 0;
+    white-space: normal;
+    text-align: start;
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    min-width: 0;
+  }
+  table.cards-on-mobile td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* سرِ کارت: عنوان پررنگ، تمام‌عرض، همیشه بالا، بدونِ برچسب */
+  table.cards-on-mobile td.card-title {
+    order: -1;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-weight: 700;
+    color: var(--text-h);
+    font-size: var(--fs-sm);
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.cards-on-mobile td.card-title::before { display: none; }
+  /* سلولِ دکمه‌ها: تمام‌عرض، همیشه ته، کنترل‌های قابل‌لمس ولی جمع‌وجور.
+     چه دکمه‌ها مستقیم داخلِ td باشند چه داخلِ .check-actions/.row-actions. */
+  table.cards-on-mobile td.card-actions {
+    order: 90;
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding-top: 6px;
+    margin-top: 3px;
+    border-top: 1px solid var(--border);
+  }
+  table.cards-on-mobile td.card-actions::before { display: none; }
+  table.cards-on-mobile td.card-actions > * { flex: 1 1 auto; }
+  table.cards-on-mobile td.card-actions .check-actions,
+  table.cards-on-mobile td.card-actions .row-actions { display: flex; width: 100%; flex-wrap: wrap; gap: 5px; }
+  table.cards-on-mobile td.card-actions button,
+  table.cards-on-mobile td.card-actions select { flex: 1 1 auto; padding: 5px 8px; font-size: var(--fs-xs); }
+  /* ردیفِ جزئیاتِ بازشده (colSpan) تمام‌عرض و بلوکی */
+  table.cards-on-mobile td.card-full { order: 91; grid-column: 1 / -1; display: block; }
+  table.cards-on-mobile td.card-full::before { display: none; }
+  /* سلولِ بی‌معنی روی موبایل (مثلِ ستونِ فلشِ باز/بسته) حذف شود */
+  table.cards-on-mobile td.card-hide { display: none; }
+}
+
 /* بنر سقف اعتبار در فرم فاکتور فروش */
 .credit-banner {
   display: flex;

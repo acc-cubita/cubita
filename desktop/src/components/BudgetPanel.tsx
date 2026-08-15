@@ -168,7 +168,7 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
             <EmptyState icon={Target} text="هنوز بودجه‌ای تعریف نشده." />
           ) : (
             <div className="table-scroll">
-              <table>
+              <table className="cards-on-mobile">
                 <thead>
                   <tr>
                     <th>حساب</th>
@@ -180,10 +180,10 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
                 <tbody>
                   {pg.pageItems.map((l) => (
                     <tr key={l.id}>
-                      <td>{l.account_code} — {l.account_name}</td>
-                      <td>{monthLabel(l.period_date)}</td>
-                      <td>{fa(l.amount)}</td>
-                      <td>
+                      <td className="card-title" data-label="حساب">{l.account_code} — {l.account_name}</td>
+                      <td data-label="دوره">{monthLabel(l.period_date)}</td>
+                      <td data-label="مبلغ بودجه">{fa(l.amount)}</td>
+                      <td className="card-actions">
                         <div className="check-actions">
                           <button type="button" onClick={() => startEdit(l)} aria-label="ویرایش"><Pencil size={13} /></button>
                           <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(l)} aria-label="حذف"><Trash2 size={13} /></button>

@@ -87,7 +87,7 @@ export function PeriodClosePanel({ token }: { token: string }) {
         <EmptyState icon={Lock} text="هنوز هیچ دوره‌ای بسته نشده." />
       ) : (
         <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr>
               <th>تاریخ بستن</th>
@@ -98,9 +98,9 @@ export function PeriodClosePanel({ token }: { token: string }) {
           <tbody>
             {pg.pageItems.map((c) => (
               <tr key={c.id}>
-                <td>{formatJalali(c.closing_date)}</td>
-                <td>{Number(c.net_profit).toLocaleString('fa-IR')}</td>
-                <td>{c.notes}</td>
+                <td className="card-title" data-label="تاریخ بستن">{formatJalali(c.closing_date)}</td>
+                <td data-label="سود/زیان خالص">{Number(c.net_profit).toLocaleString('fa-IR')}</td>
+                <td data-label="یادداشت">{c.notes}</td>
               </tr>
             ))}
           </tbody>

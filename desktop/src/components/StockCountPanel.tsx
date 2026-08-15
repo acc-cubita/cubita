@@ -185,7 +185,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
           <EmptyState icon={ClipboardCheck} text="هنوز جلسه‌ای ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>انبار</th>
@@ -197,12 +197,12 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
               <tbody>
                 {sessionsPg.pageItems.map((s) => (
                   <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
-                    <td className="entity-name">{s.warehouse_name}</td>
-                    <td>{formatJalali(s.count_date)}</td>
-                    <td>
+                    <td className="entity-name card-title">{s.warehouse_name}</td>
+                    <td data-label="تاریخ">{formatJalali(s.count_date)}</td>
+                    <td data-label="وضعیت">
                       <span className={`status-badge ${STATUS_TONE[s.status]}`}>{STATUS_LABEL[s.status]}</span>
                     </td>
-                    <td>
+                    <td className="card-actions">
                       <button type="button" onClick={() => void openSession(s.id)}>
                         باز کردن
                       </button>
@@ -252,7 +252,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
               </span>
             </div>
             <div className="entity-table-wrap">
-              <table className="entity-table">
+              <table className="entity-table cards-on-mobile">
                 <thead>
                   <tr>
                     <th>کالا</th>
@@ -265,12 +265,12 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
                 <tbody>
                   {liveRows.map(({ line, variance, value }) => (
                     <tr key={line.id}>
-                      <td>
+                      <td className="card-title">
                         <div className="entity-name">{line.item_name}</div>
                         <div className="entity-sub">{line.item_sku} · {line.unit}</div>
                       </td>
-                      <td>{faQty(line.system_qty)}</td>
-                      <td>
+                      <td data-label="سیستمی">{faQty(line.system_qty)}</td>
+                      <td data-label="شمارش">
                         {editable ? (
                           <NumberInput
                             allowDecimal
@@ -282,11 +282,11 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
                           faQty(line.counted_qty)
                         )}
                       </td>
-                      <td className={variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}>
+                      <td data-label="مغایرت" className={variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}>
                         {variance > 0 ? '+' : ''}
                         {faQty(variance)}
                       </td>
-                      <td className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>{faInt(value)}</td>
+                      <td data-label="ارزش مغایرت" className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>{faInt(value)}</td>
                     </tr>
                   ))}
                 </tbody>
