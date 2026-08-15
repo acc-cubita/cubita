@@ -321,13 +321,15 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
             </table>
             </div>
 
-            <div className="invoice-form-footer">
-              <button type="button" onClick={() => setLines((prev) => [...prev, emptyLine()])}>
-                <Plus size={14} /> افزودن ردیف
-              </button>
-              <span className={isBalanced ? 'invoice-total' : 'invoice-total error'}>
-                بدهکار: {fa(totalDebit)} / بستانکار: {fa(totalCredit)}
-              </span>
+            <div className="invoice-form-footer je-lines-footer">
+              <div className="je-add-col">
+                <button type="button" onClick={() => setLines((prev) => [...prev, emptyLine()])}>
+                  <Plus size={14} /> افزودن ردیف
+                </button>
+                <span className={isBalanced ? 'invoice-total' : 'invoice-total error'}>
+                  بدهکار: {fa(totalDebit)} / بستانکار: {fa(totalCredit)}
+                </span>
+              </div>
               <button type="submit" className="btn-primary">
                 <Save size={14} /> {editingId ? 'ذخیره تغییرات' : 'ثبت قالب'}
               </button>

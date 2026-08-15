@@ -288,14 +288,14 @@ function OpeningTab({ token }: { token: string }) {
 
       <h4 style={{ marginTop: 12 }}>مانده‌ی حساب‌ها</h4>
       <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr><th>حساب</th><th>بدهکار</th><th>بستانکار</th><th></th></tr>
           </thead>
           <tbody>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td>
+                <td className="card-wide" data-label="حساب">
                   <select value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, account_id: e.target.value } : x))}>
                     <option value="">— انتخاب حساب —</option>
                     {postable.map((a) => (
@@ -303,9 +303,9 @@ function OpeningTab({ token }: { token: string }) {
                     ))}
                   </select>
                 </td>
-                <td><NumberInput value={l.debit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, debit: v, credit: '' } : x))} /></td>
-                <td><NumberInput value={l.credit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, credit: v, debit: '' } : x))} /></td>
-                <td><button type="button" onClick={() => setLines(lines.filter((_, j) => j !== i))}><Trash2 size={13} /></button></td>
+                <td data-label="بدهکار"><NumberInput value={l.debit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, debit: v, credit: '' } : x))} /></td>
+                <td data-label="بستانکار"><NumberInput value={l.credit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, credit: v, debit: '' } : x))} /></td>
+                <td className="card-actions"><button type="button" onClick={() => setLines(lines.filter((_, j) => j !== i))}><Trash2 size={13} /> حذف</button></td>
               </tr>
             ))}
           </tbody>
@@ -318,29 +318,29 @@ function OpeningTab({ token }: { token: string }) {
       {warehouses.length > 0 && (
         <>
           <div className="table-scroll">
-            <table>
+            <table className="cards-on-mobile">
               <thead>
                 <tr><th>کالا</th><th>انبار</th><th>تعداد</th><th>بهای واحد</th><th>ارزش</th><th></th></tr>
               </thead>
               <tbody>
                 {stock.map((s, i) => (
                   <tr key={i}>
-                    <td>
+                    <td className="card-wide" data-label="کالا">
                       <select value={s.item_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, item_id: e.target.value } : x))}>
                         <option value="">— انتخاب کالا —</option>
                         {items.map((it) => (<option key={it.id} value={it.id}>{it.sku} — {it.name}</option>))}
                       </select>
                     </td>
-                    <td>
+                    <td className="card-wide" data-label="انبار">
                       <select value={s.warehouse_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, warehouse_id: e.target.value } : x))}>
                         <option value="">— انبار —</option>
                         {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
                       </select>
                     </td>
-                    <td><NumberInput value={s.qty} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, qty: v } : x))} /></td>
-                    <td><NumberInput value={s.unit_cost} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, unit_cost: v } : x))} /></td>
-                    <td className="money-cell">{fa(toNumber(s.qty) * toNumber(s.unit_cost))}</td>
-                    <td><button type="button" onClick={() => setStock(stock.filter((_, j) => j !== i))}><Trash2 size={13} /></button></td>
+                    <td data-label="تعداد"><NumberInput value={s.qty} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, qty: v } : x))} /></td>
+                    <td data-label="بهای واحد"><NumberInput value={s.unit_cost} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, unit_cost: v } : x))} /></td>
+                    <td className="money-cell" data-label="ارزش">{fa(toNumber(s.qty) * toNumber(s.unit_cost))}</td>
+                    <td className="card-actions"><button type="button" onClick={() => setStock(stock.filter((_, j) => j !== i))}><Trash2 size={13} /> حذف</button></td>
                   </tr>
                 ))}
               </tbody>

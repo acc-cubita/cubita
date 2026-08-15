@@ -4450,6 +4450,10 @@ button:disabled {
     gap: 2px;
   }
   table.cards-on-mobile td.card-wide[data-label]::before { margin-bottom: 1px; }
+  /* ویرایشگرها (مثلِ «مانده‌ی اول دوره»): input/select داخلِ خانه‌ی کارت فضای باقی را
+     پر می‌کنند تا قابلِ‌لمس و بی‌سرریز باشند. */
+  table.cards-on-mobile td > input:not([type='radio']):not([type='checkbox']),
+  table.cards-on-mobile td > select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
   table.cards-on-mobile td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
@@ -5681,6 +5685,13 @@ button:disabled {
 .report-period-custom label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--text-muted); }
 .report-period-caption { font-size: var(--fs-sm); color: var(--text-muted); margin-inline-start: auto; }
 
+/* گزارش‌های دوستونیِ برچسب:مقدار (مالیات بر ارزش افزوده، جریان وجوه نقد و…) روی موبایل
+   به‌جای اسکرولِ افقی، برچسبِ بلند را می‌شکنند و عدد سمتِ چپ می‌ماند. */
+@media (max-width: 760px) {
+  .rep-2col-table td { white-space: normal; overflow-wrap: anywhere; }
+  .rep-2col-table td.money-cell { white-space: nowrap; }
+}
+
 /* کارت‌های خلاصه‌ی گزارش (درآمد/هزینه/سود، توازن، ابتدا/انتها…) */
 .report-kpis {
   display: grid;
@@ -6872,6 +6883,23 @@ button:disabled {
     min-width: 0;
     flex: 1 1 auto;
   }
+}
+
+/* فوترِ ردیف‌های سند (اسنادِ تکرارشونده و…): «افزودن ردیف» و جمعِ بدهکار/بستانکار در یک
+   ستونِ وسط‌چین می‌نشینند تا جمع‌ها دقیقاً زیرِ دکمه و وسط باشند؛ دکمه‌ی ثبت کنارش. */
+.je-add-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+/* جمع‌ها دقیقاً وسطِ زیرِ دکمه: margin-inline-start:auto ی .invoice-total را خنثی می‌کنیم */
+.je-add-col > .invoice-total { margin-inline-start: 0; text-align: center; }
+/* در این فوتر، دکمه‌ی ثبت بعد از گروهِ «افزودن ردیف + جمع‌ها» بیاید، نه بالای آن */
+:root[data-structure='guided'] .je-lines-footer .btn-primary { order: 0; }
+.je-lines-footer { align-items: flex-start; }
+@media (max-width: 760px) {
+  .je-lines-footer .je-add-col { flex: 1 1 100%; }
 }
 
 /* پنلِ پیش‌نمایشِ زنده‌ی سند (محتوای داخلِ .taskflow-preview) */
