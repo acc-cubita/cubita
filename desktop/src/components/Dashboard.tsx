@@ -26,6 +26,7 @@ import { FixedAssetWizard } from './wizard/FixedAssetWizard'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
 import { GuidedDashboard } from './GuidedDashboard'
+import { CommandPalette } from './CommandPalette'
 import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
@@ -332,6 +333,7 @@ export function Dashboard({
             syncStatus={syncStatus}
           />
           <main className="app-content">{pageContent}</main>
+          {theme.content === 'guided' && <CommandPalette me={me} onNavigate={navigate} />}
         </div>
       ) : (
         <div className="app-shell">
