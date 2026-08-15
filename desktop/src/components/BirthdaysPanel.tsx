@@ -159,7 +159,7 @@ export function BirthdaysPanel({
             <EmptyState icon={CalendarHeart} text="تولدی در این بازه نیست." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table birthdays-table">
+              <table className="entity-table birthdays-table cards-on-mobile">
                 <thead>
                   <tr>
                     <th>مشتری</th>
@@ -171,7 +171,7 @@ export function BirthdaysPanel({
                 <tbody>
                   {rows.map((b) => (
                     <tr key={b.contact_id}>
-                      <td data-label="مشتری">
+                      <td className="card-title" data-label="مشتری">
                         <div className="entity-cell">
                           <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
                           <div>
@@ -188,7 +188,7 @@ export function BirthdaysPanel({
                           <span>{fa(b.days_until)} روز</span>
                         )}
                       </td>
-                      <td>
+                      <td className="card-actions">
                         {giftPoints > 0 && (
                           <button type="button" onClick={() => void giveGift(b.contact_id)} title={`هدیه‌ی ${fa(giftPoints)} امتیاز`}>
                             <Gift size={13} /> هدیه

@@ -189,7 +189,7 @@ export function TeamPage({ token }: { token: string }) {
           <p className="muted">در حال بارگذاری…</p>
         ) : (
           <div className="entity-table-wrap">
-          <table className="entity-table">
+          <table className="entity-table cards-on-mobile">
             <thead>
               <tr>
                 <th>کاربر</th>
@@ -201,7 +201,7 @@ export function TeamPage({ token }: { token: string }) {
             <tbody>
               {pg.pageItems.map((m) => (
                 <tr key={m.id}>
-                  <td>
+                  <td className="card-title">
                     <div className="entity-cell">
                       <div className="entity-avatar">{m.name.trim().charAt(0) || '؟'}</div>
                       <div>
@@ -213,7 +213,7 @@ export function TeamPage({ token }: { token: string }) {
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td data-label="نقش">
                     <select
                       value={m.role_key}
                       disabled={busy}
@@ -232,10 +232,10 @@ export function TeamPage({ token }: { token: string }) {
                       )}
                     </select>
                   </td>
-                  <td>
+                  <td data-label="وضعیت">
                     <span className={`status-badge tone-${STATUS_TONE[m.status]}`}>{STATUS_LABELS[m.status]}</span>
                   </td>
-                  <td>
+                  <td className="card-actions">
                     {!m.is_me && (
                       <button
                         type="button"

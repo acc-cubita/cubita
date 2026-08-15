@@ -197,7 +197,7 @@ export function LoyaltyTiersPanel({ token }: { token: string }) {
           <EmptyState icon={Medal} text="هنوز مشتری‌ای به سطحی نرسیده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>مشتری</th>
@@ -209,7 +209,7 @@ export function LoyaltyTiersPanel({ token }: { token: string }) {
               <tbody>
                 {membersPg.pageItems.map((m) => (
                   <tr key={m.contact_id}>
-                    <td data-label="مشتری">
+                    <td className="card-title" data-label="مشتری">
                       <div className="entity-cell">
                         <div className="entity-avatar tone-customer">{m.contact_name.trim().charAt(0) || '؟'}</div>
                         <div className="entity-name">{m.contact_name}</div>

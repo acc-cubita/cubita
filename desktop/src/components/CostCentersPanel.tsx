@@ -109,7 +109,7 @@ export function CostCentersPanel({ token }: { token: string }) {
           <EmptyState icon={FolderKanban} text="هنوز مرکزی تعریف نشده." />
         ) : (
           <div className="table-scroll">
-            <table>
+            <table className="cards-on-mobile">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -121,14 +121,14 @@ export function CostCentersPanel({ token }: { token: string }) {
               <tbody>
                 {pg.pageItems.map((c) => (
                   <tr key={c.id} style={c.is_active ? undefined : { opacity: 0.55 }}>
-                    <td>{c.code || '—'}</td>
-                    <td>{c.name}</td>
-                    <td>
+                    <td data-label="کد">{c.code || '—'}</td>
+                    <td className="card-title">{c.name}</td>
+                    <td data-label="وضعیت">
                       <span className={`status-badge ${c.is_active ? 'tone-success' : 'tone-warning'}`}>
                         {c.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
-                    <td>
+                    <td className="card-actions">
                       <div className="check-actions">
                         <button type="button" onClick={() => startEdit(c)} aria-label="ویرایش"><Pencil size={13} /></button>
                         <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(c)} aria-label="حذف"><Trash2 size={13} /></button>

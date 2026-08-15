@@ -99,7 +99,7 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
           <EmptyState icon={Check} text="کمیسیونِ دریافت‌نشده‌ای نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>پخش‌کننده</th>
@@ -115,12 +115,12 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
                   const key = `${r.distributor_tenant_id}|${r.period}`
                   return (
                     <tr key={key}>
-                      <td className="entity-name">{r.distributor_name}</td>
-                      <td>{faPeriod(r.period)}</td>
-                      <td>{faMoney(r.order_count)}</td>
-                      <td className="money-cell">{faMoney(r.total_base)}</td>
-                      <td className="money-cell">{faMoney(r.pending_amount)}</td>
-                      <td>
+                      <td className="entity-name card-title">{r.distributor_name}</td>
+                      <td data-label="ماه">{faPeriod(r.period)}</td>
+                      <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                      <td className="money-cell" data-label="جمعِ فاکتورها">{faMoney(r.total_base)}</td>
+                      <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.pending_amount)}</td>
+                      <td className="card-actions">
                         <button type="button" className="btn-primary" disabled={busy === key} onClick={() => void settle(r)}>
                           <Check size={13} /> تسویه
                         </button>
@@ -139,7 +139,7 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
           <EmptyState icon={Wallet} text="هنوز موردی تسویه نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>پخش‌کننده</th>
@@ -152,11 +152,11 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
               <tbody>
                 {settledRows.map((r) => (
                   <tr key={`${r.distributor_tenant_id}|${r.period}`}>
-                    <td className="entity-name">{r.distributor_name}</td>
-                    <td>{faPeriod(r.period)}</td>
-                    <td>{faMoney(r.order_count)}</td>
-                    <td className="money-cell">{faMoney(r.total_amount)}</td>
-                    <td>
+                    <td className="entity-name card-title">{r.distributor_name}</td>
+                    <td data-label="ماه">{faPeriod(r.period)}</td>
+                    <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                    <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.total_amount)}</td>
+                    <td data-label="وضعیت">
                       <span className="status-badge tone-success">تسویه‌شده</span>
                     </td>
                   </tr>

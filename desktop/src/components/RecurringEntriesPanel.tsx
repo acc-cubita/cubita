@@ -352,7 +352,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
           <EmptyState icon={Repeat} text="هنوز قالبی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>عنوان</th>
@@ -365,17 +365,17 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
               <tbody>
                 {entriesPg.pageItems.map((e) => (
                   <tr key={e.id} className={editingId === e.id ? 'row-selected' : undefined}>
-                    <td>
+                    <td className="card-title">
                       <div className="entity-name">{e.title}</div>
                       {!e.is_active && <span className="entity-sub">غیرفعال</span>}
                     </td>
-                    <td>{freqText(e.frequency, e.interval)}</td>
-                    <td>
+                    <td data-label="تناوب">{freqText(e.frequency, e.interval)}</td>
+                    <td data-label="سررسید بعدی">
                       {formatJalali(e.next_run_date)}
                       {e.is_due && <span className="status-badge tone-warning due-badge">سررسید</span>}
                     </td>
-                    <td className="money-cell">{fa(e.amount)}</td>
-                    <td>
+                    <td className="money-cell" data-label="مبلغ">{fa(e.amount)}</td>
+                    <td className="card-actions">
                       <div className="row-actions">
                         <button type="button" onClick={() => startEdit(e)} aria-label="ویرایش">
                           <Pencil size={13} />

@@ -188,7 +188,7 @@ export function InventoryPage({
                     />
                   ) : (
                     <div className="entity-table-wrap">
-                      <table className="entity-table">
+                      <table className="entity-table cards-on-mobile">
                         <thead>
                           <tr>
                             <th>کالا</th>
@@ -199,7 +199,7 @@ export function InventoryPage({
                         <tbody>
                           {items.map((i) => (
                             <tr key={i.id}>
-                              <td>
+                              <td className="card-title">
                                 <div className="entity-cell">
                                   <div className="entity-avatar">{i.name.trim().charAt(0) || '؟'}</div>
                                   <div>
@@ -208,8 +208,8 @@ export function InventoryPage({
                                   </div>
                                 </div>
                               </td>
-                              <td>{i.unit}</td>
-                              <td className="money-cell">{faMoney(Number(i.sales_price))}</td>
+                              <td data-label="واحد">{i.unit}</td>
+                              <td className="money-cell" data-label="قیمت فروش">{faMoney(Number(i.sales_price))}</td>
                             </tr>
                           ))}
                         </tbody>

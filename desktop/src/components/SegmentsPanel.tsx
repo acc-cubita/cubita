@@ -102,7 +102,7 @@ export function SegmentsPanel({ token }: { token: string }) {
           <EmptyState icon={Users} text={loading ? 'در حال محاسبه…' : 'مشتریِ دارای خرید برای این دسته نیست.'} />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table segments-table">
+            <table className="entity-table segments-table cards-on-mobile">
               <thead>
                 <tr>
                   <th>مشتری</th>
@@ -120,7 +120,7 @@ export function SegmentsPanel({ token }: { token: string }) {
                   const meta = SEGMENT_META[c.segment]
                   return (
                     <tr key={c.contact_id}>
-                      <td data-label="مشتری">
+                      <td className="card-title" data-label="مشتری">
                         <div className="entity-cell">
                           <div className="entity-avatar tone-customer">{c.contact_name.trim().charAt(0) || '؟'}</div>
                           <div className="entity-name">{c.contact_name}</div>

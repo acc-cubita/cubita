@@ -143,7 +143,7 @@ export function BatchesPanel({ token }: { token: string }) {
           <EmptyState icon={CalendarClock} text="بچی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr><th>کالا</th><th>بچ</th><th>تعداد</th><th>انقضا</th><th></th></tr>
               </thead>
@@ -154,10 +154,10 @@ export function BatchesPanel({ token }: { token: string }) {
                   const expired = d !== null && d < 0
                   return (
                     <tr key={b.id}>
-                      <td className="entity-name">{itemById.get(b.item_id)?.name ?? '—'}</td>
-                      <td className="ltr-cell">{b.batch_number}</td>
-                      <td>{Number(b.qty).toLocaleString('fa-IR')}</td>
-                      <td>
+                      <td className="entity-name card-title">{itemById.get(b.item_id)?.name ?? '—'}</td>
+                      <td className="ltr-cell" data-label="بچ">{b.batch_number}</td>
+                      <td data-label="تعداد">{Number(b.qty).toLocaleString('fa-IR')}</td>
+                      <td data-label="انقضا">
                         {b.expiry_date ? (
                           <span className={`status-badge ${expired ? 'tone-danger' : soon ? 'tone-warning' : 'tone-success'}`}>
                             {(expired || soon) && <AlertTriangle size={12} />}
@@ -166,8 +166,8 @@ export function BatchesPanel({ token }: { token: string }) {
                           </span>
                         ) : '—'}
                       </td>
-                      <td>
-                        <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                      <td className="card-actions">
+                        <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
                       </td>
                     </tr>
                   )

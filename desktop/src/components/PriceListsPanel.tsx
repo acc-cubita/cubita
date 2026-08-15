@@ -109,25 +109,25 @@ export function PriceListsPanel({ token }: { token: string }) {
           <EmptyState icon={Tags} text="لیستی ساخته نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr><th>لیست</th><th>وضعیت</th><th></th></tr>
               </thead>
               <tbody>
                 {listsPg.pageItems.map((l) => (
                   <tr key={l.id} className={l.id === selectedId ? 'row-selected' : ''}>
-                    <td>
+                    <td className="card-title">
                       <button type="button" className="link-like" onClick={() => setSelectedId(l.id)}>
                         <strong className="entity-name">{l.name}</strong>
                       </button>
                     </td>
-                    <td>
+                    <td data-label="وضعیت">
                       <button type="button" onClick={() => void updatePriceList(token, l.id, { is_active: !l.is_active }).then(refresh)}>
                         <span className={`status-badge ${l.is_active ? 'tone-success' : 'tone-warning'}`}>{l.is_active ? 'فعال' : 'غیرفعال'}</span>
                       </button>
                     </td>
-                    <td>
-                      <button type="button" className="icon-btn-danger" onClick={() => void removeList(l.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                    <td className="card-actions">
+                      <button type="button" className="icon-btn-danger" onClick={() => void removeList(l.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
                     </td>
                   </tr>
                 ))}
@@ -150,16 +150,16 @@ export function PriceListsPanel({ token }: { token: string }) {
           <EmptyState icon={Tags} text="کالایی برای قیمت‌گذاری نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table">
+            <table className="entity-table cards-on-mobile">
               <thead>
                 <tr><th>کالا</th><th>قیمتِ پایه</th><th>قیمتِ این لیست</th></tr>
               </thead>
               <tbody>
                 {itemsPg.pageItems.map((it) => (
                   <tr key={it.id}>
-                    <td className="entity-name">{it.name}</td>
-                    <td className="money-cell">{fa(Number(it.sales_price))}</td>
-                    <td>
+                    <td className="entity-name card-title">{it.name}</td>
+                    <td className="money-cell" data-label="قیمتِ پایه">{fa(Number(it.sales_price))}</td>
+                    <td data-label="قیمتِ این لیست">
                       <NumberInput
                         value={prices[it.id] ?? ''}
                         onChange={(v) => setPrices((p) => ({ ...p, [it.id]: v }))}
