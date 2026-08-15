@@ -197,7 +197,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                   <div>
                     <h3>ردیف‌های صورت‌حساب بدون تطبیق</h3>
                     <div className="table-scroll">
-                    <table>
+                    <table className="cards-on-mobile">
                       <thead>
                         <tr>
                           <th></th>
@@ -209,7 +209,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                       <tbody>
                         {summary.unmatched_statement_lines.map((line) => (
                           <tr key={line.id}>
-                            <td>
+                            <td data-label="انتخاب">
                               <input
                                 type="radio"
                                 name="stmt-line"
@@ -217,9 +217,9 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                                 onChange={() => setSelectedLineId(line.id)}
                               />
                             </td>
-                            <td>{formatJalali(line.line_date)}</td>
-                            <td>{Number(line.amount).toLocaleString('fa-IR')}</td>
-                            <td>{line.description}</td>
+                            <td data-label="تاریخ">{formatJalali(line.line_date)}</td>
+                            <td data-label="مبلغ">{Number(line.amount).toLocaleString('fa-IR')}</td>
+                            <td className="card-title">{line.description}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -230,7 +230,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                   <div>
                     <h3>تراکنش‌های سیستم بدون تطبیق</h3>
                     <div className="table-scroll">
-                    <table>
+                    <table className="cards-on-mobile">
                       <thead>
                         <tr>
                           <th></th>
@@ -243,7 +243,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                       <tbody>
                         {summary.unreconciled_system_transactions.map((txn) => (
                           <tr key={txn.id}>
-                            <td>
+                            <td data-label="انتخاب">
                               <input
                                 type="radio"
                                 name="sys-txn"
@@ -251,10 +251,10 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                                 onChange={() => setSelectedTxnId(txn.id)}
                               />
                             </td>
-                            <td>{formatJalali(txn.transaction_date)}</td>
-                            <td>{Number(txn.amount).toLocaleString('fa-IR')}</td>
-                            <td>{txn.description}</td>
-                            <td></td>
+                            <td data-label="تاریخ">{formatJalali(txn.transaction_date)}</td>
+                            <td data-label="مبلغ">{Number(txn.amount).toLocaleString('fa-IR')}</td>
+                            <td className="card-title">{txn.description}</td>
+                            <td className="card-hide"></td>
                           </tr>
                         ))}
                       </tbody>
@@ -268,7 +268,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                 <>
                   <h3 style={{ marginTop: 16 }}>ردیف‌های تطبیق‌شده</h3>
                   <div className="table-scroll">
-                  <table>
+                  <table className="cards-on-mobile">
                     <thead>
                       <tr>
                         <th>تاریخ</th>
@@ -280,17 +280,17 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                     <tbody>
                       {matchedLines.map((line) => (
                         <tr key={line.id}>
-                          <td>{formatJalali(line.line_date)}</td>
-                          <td>{Number(line.amount).toLocaleString('fa-IR')}</td>
-                          <td>{line.description}</td>
-                          <td>
+                          <td data-label="تاریخ">{formatJalali(line.line_date)}</td>
+                          <td data-label="مبلغ">{Number(line.amount).toLocaleString('fa-IR')}</td>
+                          <td className="card-title">{line.description}</td>
+                          <td className="card-actions">
                             <button
                               type="button"
                               className="icon-btn-danger"
                               onClick={() => void handleUnmatch(line.id)}
                               aria-label="لغو تطبیق"
                             >
-                              <Unlink size={14} />
+                              <Unlink size={14} /> لغو تطبیق
                             </button>
                           </td>
                         </tr>
