@@ -6651,9 +6651,39 @@ button:disabled {
   border: 1px solid var(--border-strong);
   background: transparent;
 }
+/* دکمه‌های ناوبریِ ویزارد هم‌اندازه: «قبلی» و «تأیید و ادامه/ثبت» کفِ عرضِ یکسان و
+   محتوای وسط‌چین می‌گیرند تا جفتِ ناوبری متقارن و منظم دیده شود. */
+:root[data-theme='tipalti'] .taskflow-back,
 :root[data-theme='tipalti'] .taskflow-next {
   min-width: 150px;
   justify-content: center;
+}
+
+/* ── نظمِ فرم‌ها و دکمه‌های اکشن (نسخه‌ی جدید) ─────────────────────────────
+   کادرهای ورودی در یک گریدِ دوستونیِ *منظم* می‌نشینند — به‌جای auto-fitِ سه‌ستونی که
+   ردیفِ آخرش نیمه‌خالی و ناهموار می‌شد؛ حالا فیلدها جفت‌جفت زیرِ هم تراز می‌شوند و نظمِ
+   صفحه بالا می‌رود. روی موبایل تک‌ستون. دکمه‌های فوترِ فرم هم کفِ عرضِ یکسان می‌گیرند تا
+   مجموعه‌ی دکمه‌ها یکدست باشند. (فقط پوسته‌ی Tipalti؛ کلاسیک همان auto-fit می‌ماند.) */
+:root[data-theme='tipalti'] .invoice-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+:root[data-theme='tipalti'] .invoice-form-footer {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+:root[data-theme='tipalti'] .invoice-form-footer button {
+  min-width: 150px;
+  justify-content: center;
+}
+@media (max-width: 760px) {
+  :root[data-theme='tipalti'] .invoice-form {
+    grid-template-columns: 1fr;
+  }
+  :root[data-theme='tipalti'] .invoice-form-footer button {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
 }
 
 /* پنلِ پیش‌نمایشِ زنده‌ی سند (محتوای داخلِ .taskflow-preview) */
