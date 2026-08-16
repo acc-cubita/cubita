@@ -22,6 +22,7 @@ export function TopNav({
   isPlatformAdmin,
   isSuperAdmin,
   tenantKind,
+  mpUnread = 0,
   onLogout,
   onSync,
   syncing,
@@ -35,12 +36,20 @@ export function TopNav({
   isPlatformAdmin: boolean
   isSuperAdmin: boolean
   tenantKind: string
+  /** پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشان روی منوی «بازارِ خرید»/«پخشِ من». */
+  mpUnread?: number
   onLogout: () => void
   onSync?: () => void
   syncing?: boolean
   syncStatus?: string
 }) {
   const { groups, secondary } = buildNav({ isPlatformAdmin, isSuperAdmin, tenantKind })
+
+  // نشانِ خوانده‌نشده فقط روی ماژول‌های بازار (پخش‌کننده/فروشگاه) و وقتی عدد > ۰ است.
+  const navBadge = (key: PageKey) =>
+    mpUnread > 0 && (key === 'marketplace' || key === 'distributor') ? (
+      <span className="nav-badge">{mpUnread > 99 ? '۹۹+' : mpUnread.toLocaleString('fa-IR')}</span>
+    ) : null
 
   // یک منوی بازِ هم‌زمان: نامِ گروه، یا '__user__'، یا null. + کشوی موبایل جدا.
   const [open, setOpen] = useState<string | null>(null)
@@ -120,6 +129,7 @@ export function TopNav({
                   onClick={() => go(only.key)}
                 >
                   {only.label}
+                  {navBadge(only.key)}
                 </button>
               )
             }
@@ -146,6 +156,7 @@ export function TopNav({
                       >
                         <span className="topnav-dd-ico">{item.icon}</span>
                         <span>{item.label}</span>
+                        {navBadge(item.key)}
                       </button>
                     ))}
                   </div>
@@ -250,6 +261,7 @@ export function TopNav({
                     >
                       <span className="topnav-dd-ico">{item.icon}</span>
                       <span>{item.label}</span>
+                      {navBadge(item.key)}
                     </button>
                   ))}
                 </div>

@@ -4,6 +4,7 @@ import {
   fetchAccountsLive,
   fetchBankAccountsLive,
   fetchItemsWithPricingLive,
+  fetchMpUnread,
   fetchWarehousesLive,
   type MeResponse,
 } from '../api'
@@ -97,6 +98,10 @@ export function Dashboard({
     setSection(s)
   }
   const [navOpen, setNavOpen] = useState(false)
+  // شمارِ پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشانِ آن روی منوی «بازارِ خرید»/«پخشِ من».
+  // فقط برای حسابِ بازار پول می‌شود؛ هر ~۲۵ ثانیه + با هر جابه‌جاییِ صفحه (تا پس از
+  // خواندنِ پیام‌ها زود به‌روز شود). آفلاین/خطا بی‌صدا رد می‌شود.
+  const [mpUnread, setMpUnread] = useState(0)
   const [accounts, setAccounts] = useState<AccountCache[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseCache[]>([])
   const [items, setItems] = useState<ItemCache[]>([])
@@ -107,6 +112,21 @@ export function Dashboard({
   const [checkOutbox, setCheckOutbox] = useState<OutboxEntry[]>([])
   const [syncStatus, setSyncStatus] = useState<string>('')
   const [syncing, setSyncing] = useState(false)
+
+  // نشانِ خوانده‌نشده‌ی گفتگوی بازار: فقط برای حسابِ پخش‌کننده/فروشگاه پول می‌شود.
+  // `page` در وابستگی‌ها هست تا با هر جابه‌جایی (مثلاً بعد از خواندنِ پیام‌ها) فوراً به‌روز شود.
+  useEffect(() => {
+    if (me.tenant_kind !== 'distributor' && me.tenant_kind !== 'retailer') return
+    let cancelled = false
+    const load = () => {
+      fetchMpUnread(token)
+        .then((n) => { if (!cancelled) setMpUnread(n) })
+        .catch(() => {})
+    }
+    load()
+    const id = window.setInterval(load, 25000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [token, me.tenant_kind, page])
 
   async function refreshFromLocalCache() {
     if (isElectron) {
@@ -327,6 +347,7 @@ export function Dashboard({
             isPlatformAdmin={me.is_platform_admin}
             isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
+            mpUnread={mpUnread}
             onLogout={onLogout}
             onSync={isElectron ? handleSync : undefined}
             syncing={syncing}
