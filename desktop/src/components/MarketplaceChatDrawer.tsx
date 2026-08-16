@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MessageSquare, X, Send, Loader2, AlertCircle } from 'lucide-react'
-import { fetchMpMessages, sendMpMessage, type MpMessage } from '../api'
+import type { MpMessage, MpMessagesPage } from '../api'
 
 const POLL_MS = 4000
 
@@ -14,21 +14,26 @@ const faTime = (iso: string) => {
 }
 
 /**
- * کشوی گفتگوی یک اتصالِ بازار (فروشگاه↔پخش‌کننده) — یک رشته‌ی متنیِ دائم به‌ازای هر اتصالِ
- * approved. تحویلِ زنده با **پول‌کردن** هر چند ثانیه است (نه WebSocket)؛ باز/پول‌کردنِ رشته
- * روی سرور آن را «خوانده» می‌کند، پس `onSeen` به والد می‌گوید نشانِ خوانده‌نشده را نو کند.
- * فقط آنلاین کار می‌کند (چت ذاتاً برخط است).
+ * کشوی گفتگوی بازار — یک رشته‌ی متنی که با **پول‌کردنِ** هر چند ثانیه (نه WebSocket) زنده
+ * می‌ماند. عمداً از خودِ رشته بی‌خبر است: والد `loadMessages`/`sendMessage` را می‌دهد تا هم
+ * برای رشته‌ی اتصال و هم رشته‌ی سفارش با یک کامپوننت کار کند. باز/پول‌کردن روی سرور رشته را
+ * «خوانده» می‌کند، پس `onSeen` به والد می‌گوید نشانِ خوانده‌نشده را نو کند. فقط آنلاین.
  */
 export function MarketplaceChatDrawer({
-  token,
-  connectionId,
-  partnerName,
+  threadKey,
+  title,
+  subtitle,
+  loadMessages,
+  sendMessage,
   onClose,
   onSeen,
 }: {
-  token: string
-  connectionId: string
-  partnerName: string
+  /** شناسه‌ی پایدارِ رشته (مثلِ `conn:<id>` یا `order:<id>`) — مبنای ری‌ستِ افکتِ پول. */
+  threadKey: string
+  title: string
+  subtitle?: string
+  loadMessages: (afterIso?: string) => Promise<MpMessagesPage>
+  sendMessage: (body: string) => Promise<MpMessage>
   onClose: () => void
   onSeen?: () => void
 }) {
@@ -42,6 +47,12 @@ export function MarketplaceChatDrawer({
   const listRef = useRef<HTMLDivElement>(null)
   const onSeenRef = useRef(onSeen)
   onSeenRef.current = onSeen
+  // توابعِ بارگیری/ارسال در ref می‌مانند تا هویتِ تازه‌شان در هر رندر، افکتِ پول را ری‌ست نکند؛
+  // افکت فقط به `threadKey` وابسته است.
+  const loadRef = useRef(loadMessages)
+  loadRef.current = loadMessages
+  const sendRef = useRef(sendMessage)
+  sendRef.current = sendMessage
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -61,7 +72,7 @@ export function MarketplaceChatDrawer({
 
     const poll = async () => {
       try {
-        const page = await fetchMpMessages(token, connectionId, lastTs.current ?? undefined)
+        const page = await loadRef.current(lastTs.current ?? undefined)
         if (cancelled) return
         setError(null)
         if (page.messages.length) {
@@ -77,7 +88,7 @@ export function MarketplaceChatDrawer({
       }
     }
 
-    fetchMpMessages(token, connectionId)
+    loadRef.current()
       .then((page) => {
         if (cancelled) return
         setMyRole(page.my_role)
@@ -99,7 +110,7 @@ export function MarketplaceChatDrawer({
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [token, connectionId, scrollToBottom])
+  }, [threadKey, scrollToBottom])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -115,7 +126,7 @@ export function MarketplaceChatDrawer({
     setSending(true)
     setError(null)
     try {
-      const msg = await sendMpMessage(token, connectionId, body)
+      const msg = await sendRef.current(body)
       setMessages((prev) => [...prev, msg])
       lastTs.current = msg.created_at
       setInput('')
@@ -125,7 +136,7 @@ export function MarketplaceChatDrawer({
     } finally {
       setSending(false)
     }
-  }, [input, sending, token, connectionId, scrollToBottom])
+  }, [input, sending, scrollToBottom])
 
   return createPortal(
     <div className="drawer-overlay" onClick={onClose}>
@@ -139,8 +150,8 @@ export function MarketplaceChatDrawer({
           <div className="drawer-title">
             <MessageSquare size={17} />
             <div>
-              <div className="drawer-title-main">گفتگو: {partnerName}</div>
-              <div className="drawer-title-sub">پیام‌های بین شما و طرفِ مقابل</div>
+              <div className="drawer-title-main">{title}</div>
+              <div className="drawer-title-sub">{subtitle ?? 'پیام‌های بین شما و طرفِ مقابل'}</div>
             </div>
           </div>
           <button type="button" className="drawer-close" onClick={onClose} aria-label="بستن">

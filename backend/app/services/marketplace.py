@@ -457,7 +457,8 @@ def unread_count(db: Session, conn: MarketplaceConnection, role: str) -> int:
 
 
 def total_unread(db: Session, tenant_id: UUID, role: str) -> int:
-    """جمعِ خوانده‌نشده‌ی همه‌ی اتصال‌های approvedِ این tenant در نقشِ داده‌شده — برای نشانِ نویگیشن."""
+    """جمعِ خوانده‌نشده‌ی این tenant برای نشانِ نویگیشن — هم رشته‌های کلیِ اتصال و هم
+    رشته‌های سطحِ سفارش."""
     side = (
         MarketplaceConnection.distributor_tenant_id
         if role == "distributor"
@@ -468,7 +469,22 @@ def total_unread(db: Session, tenant_id: UUID, role: str) -> int:
         .filter(side == tenant_id, MarketplaceConnection.status == "approved")
         .all()
     )
-    return sum(unread_count(db, c, role) for c in conns)
+    conn_unread = sum(unread_count(db, c, role) for c in conns)
+
+    # رشته‌های سفارش — فقط سفارش‌هایی که اصلاً پیام دارند (تا روی هر سفارشِ بی‌گفتگو کوئری نزنیم).
+    order_side = (
+        MarketplaceOrder.distributor_tenant_id
+        if role == "distributor"
+        else MarketplaceOrder.retailer_tenant_id
+    )
+    chatted = db.query(MarketplaceMessage.order_id).filter(MarketplaceMessage.order_id.isnot(None)).distinct()
+    orders = (
+        db.query(MarketplaceOrder)
+        .filter(order_side == tenant_id, MarketplaceOrder.id.in_(chatted))
+        .all()
+    )
+    order_unread = sum(order_unread_count(db, o, role) for o in orders)
+    return conn_unread + order_unread
 
 
 def message_dict(msg: MarketplaceMessage) -> dict:
@@ -479,6 +495,88 @@ def message_dict(msg: MarketplaceMessage) -> dict:
         "body": msg.body,
         "created_at": msg.created_at,
     }
+
+
+# ── گفتگوی زیرِ هر سفارش — رشته‌ی جدا به‌ازای هر سفارش (هر دو سمتِ همان سفارش) ──────
+def load_order_for_member(db: Session, tenant_id: UUID, order_id: UUID) -> tuple[MarketplaceOrder, str]:
+    """سفارش را برای یکی از دو سمتش + نقشِ فراخوان برمی‌گرداند (وگرنه ۴۰۴).
+
+    برخلافِ گفتگوی اتصال، اینجا گیتِ وضعیت نیست: طرفین درباره‌ی سفارش در هر وضعیتی
+    (ثبت‌شده/تأییدشده/ردشده/…) می‌توانند حرف بزنند.
+    """
+    order = db.get(MarketplaceOrder, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
+    if tenant_id == order.distributor_tenant_id:
+        role = "distributor"
+    elif tenant_id == order.retailer_tenant_id:
+        role = "retailer"
+    else:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
+    return order, role
+
+
+def list_order_messages(db: Session, order_id: UUID, after: datetime | None = None) -> list[MarketplaceMessage]:
+    q = db.query(MarketplaceMessage).filter(MarketplaceMessage.order_id == order_id)
+    if after is not None:
+        q = q.filter(MarketplaceMessage.created_at > after)
+    return q.order_by(MarketplaceMessage.created_at.asc()).all()
+
+
+def _last_order_message(db: Session, order_id: UUID) -> MarketplaceMessage | None:
+    return (
+        db.query(MarketplaceMessage)
+        .filter(MarketplaceMessage.order_id == order_id)
+        .order_by(MarketplaceMessage.created_at.desc())
+        .first()
+    )
+
+
+def mark_order_read(db: Session, order: MarketplaceOrder, role: str, when: datetime | None = None) -> None:
+    ts = when or datetime.now(timezone.utc)
+    if role == "distributor":
+        order.distributor_last_read_at = ts
+    else:
+        order.retailer_last_read_at = ts
+    db.flush()
+
+
+def post_order_message(
+    db: Session,
+    order: MarketplaceOrder,
+    *,
+    sender_tenant_id: UUID,
+    sender_role: str,
+    sender_user_id: UUID | None,
+    body: str,
+) -> MarketplaceMessage:
+    text = (body or "").strip()
+    if not text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "متنِ پیام خالی است")
+    text = text[:MESSAGE_MAX_LEN]
+    msg = MarketplaceMessage(
+        order_id=order.id,
+        sender_tenant_id=sender_tenant_id,
+        sender_role=sender_role,
+        sender_user_id=sender_user_id,
+        body=text,
+    )
+    db.add(msg)
+    mark_order_read(db, order, sender_role)  # فرستنده پیامِ خودش را خوانده فرض می‌شود
+    db.flush()
+    return msg
+
+
+def order_unread_count(db: Session, order: MarketplaceOrder, role: str) -> int:
+    last_read = order.distributor_last_read_at if role == "distributor" else order.retailer_last_read_at
+    other_role = "retailer" if role == "distributor" else "distributor"
+    q = db.query(func.count(MarketplaceMessage.id)).filter(
+        MarketplaceMessage.order_id == order.id,
+        MarketplaceMessage.sender_role == other_role,
+    )
+    if last_read is not None:
+        q = q.filter(MarketplaceMessage.created_at > last_read)
+    return int(q.scalar() or 0)
 
 
 # ── کاتالوگِ سمتِ فروشگاه ──────────────────────────────────────────────
@@ -1145,7 +1243,7 @@ def reject_order(db: Session, distributor_tenant_id: UUID, order_id: UUID) -> Ma
     return order
 
 
-def order_dict(db: Session, order: MarketplaceOrder) -> dict:
+def order_dict(db: Session, order: MarketplaceOrder, viewer_tenant_id: UUID | None = None) -> dict:
     # عکسِ نخستِ هر ردیف از روی لیستینگ (snapshot نمی‌شود تا سبک بماند). لیستینگ
     # جدولِ سراسری است، پس از نشستِ هر مستأجری خواندنش مجاز است؛ اگر لیستینگ بعداً
     # حذف شده باشد (`listing_id` = NULL) عکس هم نیست — رفتارِ درست همان None است.
@@ -1158,8 +1256,19 @@ def order_dict(db: Session, order: MarketplaceOrder) -> dict:
             .all()
         ):
             thumb[lid] = (images or [None])[0]
+    # گفتگوی سفارش: خوانده‌نشده و آخرین پیام برای سمتِ بیننده (اگر مشخص باشد).
+    unread = 0
+    last = _last_order_message(db, order.id)
+    if viewer_tenant_id is not None:
+        if viewer_tenant_id == order.distributor_tenant_id:
+            unread = order_unread_count(db, order, "distributor")
+        elif viewer_tenant_id == order.retailer_tenant_id:
+            unread = order_unread_count(db, order, "retailer")
     return {
         "id": order.id,
+        "unread_count": unread,
+        "last_message_at": last.created_at if last else None,
+        "last_message_preview": (last.body[:80] if last else ""),
         "distributor_tenant_id": order.distributor_tenant_id,
         "retailer_tenant_id": order.retailer_tenant_id,
         "distributor_name": distributor_display_name(db, order.distributor_tenant_id),

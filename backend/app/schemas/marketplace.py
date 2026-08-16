@@ -290,6 +290,10 @@ class OrderLineOut(BaseModel):
 
 class OrderOut(BaseModel):
     id: UUID
+    # گفتگوی سفارش: برای سمتِ بیننده محاسبه می‌شود؛ پیش‌فرض‌ها برای پاسخ‌هایی که بیننده ندارند امن‌اند.
+    unread_count: int = 0
+    last_message_at: datetime | None = None
+    last_message_preview: str = ""
     distributor_tenant_id: UUID
     retailer_tenant_id: UUID
     distributor_name: str

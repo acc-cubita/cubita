@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard, MessageSquare } from 'lucide-react'
 import {
   fetchMpCatalog, fetchMpDistributors, fetchMpRetailerConnections, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
+  fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
   type CatalogListing, type DistributorCard, type MpConnection, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
@@ -157,9 +158,10 @@ function Distributors({ token }: { token: string }) {
 
       {chatConn && (
         <MarketplaceChatDrawer
-          token={token}
-          connectionId={chatConn.id}
-          partnerName={chatConn.distributor_name}
+          threadKey={`conn:${chatConn.id}`}
+          title={`گفتگو: ${chatConn.distributor_name}`}
+          loadMessages={(after) => fetchMpMessages(token, chatConn.id, after)}
+          sendMessage={(body) => sendMpMessage(token, chatConn.id, body)}
           onClose={() => { setChatConn(null); void refresh() }}
         />
       )}
@@ -329,6 +331,7 @@ function Orders({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [paying, setPaying] = useState<string | null>(null)
+  const [chatOrder, setChatOrder] = useState<MpOrder | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -349,6 +352,7 @@ function Orders({ token }: { token: string }) {
   }
 
   return (
+    <>
     <SectionCard
       icon={ClipboardList}
       title="سفارش‌های من"
@@ -380,6 +384,10 @@ function Orders({ token }: { token: string }) {
                             <CreditCard size={13} /> پرداختِ آنلاین
                           </button>
                         )}
+                        <button type="button" className="mp-chat-btn" onClick={() => setChatOrder(o)}>
+                          <MessageSquare size={13} /> گفتگو
+                          {o.unread_count > 0 && <span className="mp-unread">{o.unread_count.toLocaleString('fa-IR')}</span>}
+                        </button>
                       </td>
                     </tr>
                     {open && (
@@ -415,5 +423,16 @@ function Orders({ token }: { token: string }) {
         </div>
       )}
     </SectionCard>
+    {chatOrder && (
+      <MarketplaceChatDrawer
+        threadKey={`order:${chatOrder.id}`}
+        title={`گفتگوی سفارش #${faNum(chatOrder.order_number)}`}
+        subtitle={chatOrder.distributor_name}
+        loadMessages={(after) => fetchMpOrderMessages(token, chatOrder.id, after)}
+        sendMessage={(body) => sendMpOrderMessage(token, chatOrder.id, body)}
+        onClose={() => { setChatOrder(null); void refresh() }}
+      />
+    )}
+    </>
   )
 }

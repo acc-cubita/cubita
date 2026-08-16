@@ -221,6 +221,40 @@ def post_connection_message(
     return MessageOut(**svc.message_dict(msg))
 
 
+# ── گفتگوی زیرِ هر سفارش — رشته‌ی جدا؛ هر دو سمتِ همان سفارش (بدونِ گیتِ وضعیت) ──
+@router.get("/orders/{order_id}/messages", response_model=MessagesPage)
+def get_order_messages(
+    order_id: UUID,
+    after: datetime | None = None,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    order, role = svc.load_order_for_member(db, principal.tenant_id, order_id)
+    msgs = svc.list_order_messages(db, order.id, after)
+    svc.mark_order_read(db, order, role)
+    return MessagesPage(my_role=role, messages=[MessageOut(**svc.message_dict(m)) for m in msgs])
+
+
+@router.post("/orders/{order_id}/messages", response_model=MessageOut, status_code=201)
+def create_order_message(
+    order_id: UUID,
+    data: MessageIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "create")),
+):
+    order, role = svc.load_order_for_member(db, principal.tenant_id, order_id)
+    msg = svc.post_order_message(
+        db,
+        order,
+        sender_tenant_id=principal.tenant_id,
+        sender_role=role,
+        sender_user_id=principal.user.id,
+        body=data.body,
+    )
+    return MessageOut(**svc.message_dict(msg))
+
+
 @router.get("/unread", response_model=int)
 def marketplace_unread(
     principal: Principal = Depends(get_principal),
@@ -249,7 +283,7 @@ def retailer_orders(
     db: Session = Depends(get_db),
 ):
     orders = svc.list_orders(db, retailer_tenant_id=principal.tenant_id)
-    return [OrderOut(**svc.order_dict(db, o)) for o in orders]
+    return [OrderOut(**svc.order_dict(db, o, principal.tenant_id)) for o in orders]
 
 
 @router.post("/retailer/orders", response_model=OrderOut, status_code=201)
@@ -270,7 +304,7 @@ def distributor_orders(
     db: Session = Depends(get_db),
 ):
     orders = svc.list_orders(db, distributor_tenant_id=principal.tenant_id)
-    return [OrderOut(**svc.order_dict(db, o)) for o in orders]
+    return [OrderOut(**svc.order_dict(db, o, principal.tenant_id)) for o in orders]
 
 
 @router.post("/distributor/orders/{order_id}/confirm", response_model=OrderOut)

@@ -186,8 +186,9 @@ POS از همان مسیرِ فاکتورِ فروش استفاده می‌کن�
 (۶ ستونِ متادیتای کارت روی `treasury_transactions` — `paid_via`/`reference_no(RRN)`/`trace_no`/`card_mask`/`terminal_no`/`psp`
 + ایندکسِ یکتای جزئیِ `(tenant_id, reference_no)`؛ جدولِ تازه‌ی `pos_terminals` مستأجرمحور + RLS؛ و `contacts.is_system`
 برای طرف‌حسابِ سیستمیِ «فروشِ کارتیِ گذری»). ·
-`0065` **گفتگوی بازار** (جدولِ سراسریِ `marketplace_messages` + دو ستونِ `*_last_read_at` روی `marketplace_connections`؛ چتِ متنیِ دوطرفه به‌ازای هر اتصالِ approved).
-(نسخه‌ی فعلی head = `0065`.)
+`0065` **گفتگوی بازار** (جدولِ سراسریِ `marketplace_messages` + دو ستونِ `*_last_read_at` روی `marketplace_connections`؛ چتِ متنیِ دوطرفه به‌ازای هر اتصالِ approved). ·
+`0066` **گفتگوی زیرِ هر سفارش** (`marketplace_messages.order_id` + `connection_id` تهی‌پذیر + CheckConstraintِ «دقیقاً یک رشته»؛ دو ستونِ `*_last_read_at` روی `marketplace_orders`؛ رشته‌ی گفتگوی جدا برای هر سفارش).
+(نسخه‌ی فعلی head = `0066`.)
 
 ---
 
@@ -515,6 +516,14 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
     حذف شدند (importهای `useTheme`/`Sun`/`Moon` هم پاک شد). **هیچ تمی از رجیستری حذف نشد** — dark/light/tipalti دست‌نخورده و
     «ظاهر و پوسته» تنها مسیرِ تعویض شد. همبرگرِ TopNav از ۳۸→**۴۴px** (هدفِ لمسیِ استاندارد) + آیکونِ ۲۰→۲۴. مستقر روی prod+demo،
     تأییدِ زنده: برچسب‌های toggle از JS رفت، هر سه تم مانده، همبرگر ۴۴px. باندلِ `index-CTkX9q6t.js` + `index-6zXlyWMY.css`.
+
+- **۱۴۰۵/۰۵/۲۶ (2026-08-16) — گفتگوی زیرِ هر سفارشِ بازار + نشانِ خوانده‌نشده روی منو (مهاجرت `0066`):**
+  - **ایده:** علاوه بر رشته‌ی کلیِ اتصال، حالا هر **سفارش** رشته‌ی گفتگوی جداگانه‌ی خودش را دارد (برای هماهنگیِ دقیقِ همان سفارش). و یک **نشانِ خوانده‌نشده** روی منوی «بازارِ خرید»/«پخشِ من» رسیدنِ پیامِ تازه را هرجای برنامه نشان می‌دهد.
+  - **مدلِ داده:** `marketplace_messages.order_id` (FK→سفارش، CASCADE) افزوده و `connection_id` تهی‌پذیر شد؛ `CheckConstraint`ِ `num_nonnulls(connection_id, order_id)=1` تضمین می‌کند هر پیام دقیقاً به یک رشته تعلق دارد. دو ستونِ `distributor/retailer_last_read_at` روی `marketplace_orders` برای شمارشِ خوانده‌نشده‌ی رشته‌ی همان سفارش.
+  - **بک‌اند:** `load_order_for_member` (بی‌گیتِ وضعیت — طرفین در هر وضعیتی حرف می‌زنند) + `list/post_order_message`، `mark_order_read`، `order_unread_count`؛ `order_dict` حالا `unread_count`/`last_message_*`ِ سمتِ بیننده را می‌دهد؛ `total_unread` (نشانِ منو) هم رشته‌های اتصال و هم رشته‌های سفارش را جمع می‌زند. اندپوینت‌ها: `GET/POST /api/marketplace/orders/{id}/messages`.
+  - **فرانت:** [MarketplaceChatDrawer](desktop/src/components/MarketplaceChatDrawer.tsx) به **callback-محور** بازطراحی شد (`threadKey`/`loadMessages`/`sendMessage`) تا با یک کامپوننت هم رشته‌ی اتصال و هم رشته‌ی سفارش کار کند. دکمه‌ی «گفتگو» + نشانِ خوانده‌نشده روی هر ردیفِ سفارش در [DistributorPage](desktop/src/pages/DistributorPage.tsx) و [MarketplacePage](desktop/src/pages/MarketplacePage.tsx). نشانِ منو در [TopNav](desktop/src/components/TopNav.tsx) با پولِ ~۲۵ ثانیه‌ایِ `GET /unread` در [Dashboard](desktop/src/components/Dashboard.tsx).
+  - **راستی‌آزمایی:** ۵۷ تستِ بازار (۵ تازه برای گفتگوی سفارش: ارسال/فهرست، جداسازیِ ۴۰۴، بی‌گیتِ وضعیت، خوانده‌نشده در فهرستِ سفارش، جمعِ `/unread`) + drift سبز؛ اجرای زنده‌ی محلیِ دوطرفه: نشانِ منو «۲» (اتصال+سفارش)، نشانِ ردیفِ سفارش «۱»، بازکردنِ کشو و ارسالِ پاسخ.
+  - **استقرار:** بک‌اند روی prod (diffِ ایمنی → `alembic 0065→0066` → ری‌استارت) + باندلِ وبِ `index-Bfb7JEHN.js` روی `acc.cubita.ir` + آینه‌ی `demo.cubita.ir`؛ health ok، اندپوینت‌ها زنده (۴۰۱)، هر دو سایت ۲۰۰.
 
 - **۱۴۰۵/۰۵/۲۵ (2026-08-15) — گفتگوی زنده‌ی متنی بین فروشگاه و پخش‌کننده در بازار (مهاجرت `0065`):**
   - **ایده:** روی هر اتصالِ **approvedِ** بازار یک **رشته‌ی گفتگوی متنیِ دائم** بین دو کسب‌وکار — برای هماهنگیِ موجودی/قیمت/ارسال/سؤالِ سفارش.

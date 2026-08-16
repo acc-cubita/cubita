@@ -17,6 +17,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -179,6 +180,11 @@ class MarketplaceOrder(UUIDPKMixin, TimestampMixin, Base):
     #: پخش‌کننده این درصد را موقعِ تأییدِ سفارش تعیین می‌کند؛ سندِ خزانه‌ی هر دو طرف با آن می‌خورد.
     cash_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
+    #: زمانِ آخرین خواندنِ رشته‌ی گفتگوی این سفارش توسطِ هر سمت — مبنای شمارشِ خوانده‌نشده
+    #: (جدا از رشته‌ی کلیِ اتصال؛ هر سفارش گفتگوی خودش را دارد).
+    distributor_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retailer_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     #: فاکتورهای متناظر پس از تأیید — هرکدام در دفترِ مستأجرِ خودش (FKِ سراسری→جدولِ مستأجری).
     distributor_sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sales_invoices.id", ondelete="SET NULL"), nullable=True
@@ -277,10 +283,19 @@ class MarketplaceMessage(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "marketplace_messages"
     __table_args__ = (
         Index("ix_mp_messages_connection_created", "connection_id", "created_at"),
+        Index("ix_mp_messages_order_created", "order_id", "created_at"),
+        # هر پیام دقیقاً به یک رشته تعلق دارد: یا رشته‌ی کلیِ اتصال (connection_id) یا
+        # رشته‌ی یک سفارش (order_id) — نه هر دو، نه هیچ‌کدام.
+        CheckConstraint("num_nonnulls(connection_id, order_id) = 1", name="ck_mp_messages_one_thread"),
     )
 
-    connection_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("marketplace_connections.id", ondelete="CASCADE")
+    #: رشته‌ی کلیِ اتصال (فروشگاه↔پخش‌کننده). برای پیامِ سطحِ سفارش تهی است.
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_connections.id", ondelete="CASCADE"), nullable=True
+    )
+    #: رشته‌ی گفتگوی یک سفارشِ مشخص. برای پیامِ رشته‌ی کلیِ اتصال تهی است.
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_orders.id", ondelete="CASCADE"), nullable=True
     )
     sender_tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     sender_role: Mapped[str] = mapped_column(String(20))  # distributor | retailer

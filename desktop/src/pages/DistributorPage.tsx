@@ -8,6 +8,7 @@ import {
   confirmMpOrder, deleteMpListing, fetchMpDistributorConnections,
   fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, fetchMyMpCommissions, rejectMpOrder,
   setMpConnectionStatus, setMpListingPublished, updateMpSettings,
+  fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
   type Listing, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
@@ -344,6 +345,7 @@ function OrdersPanel({ token }: { token: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<MpOrder | null>(null)
+  const [chatOrder, setChatOrder] = useState<MpOrder | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -402,6 +404,10 @@ function OrdersPanel({ token }: { token: string }) {
               ) : o.status === 'confirmed' ? (
                 <span className="entity-sub"><CheckCircle2 size={13} /> فاکتور صادر شد</span>
               ) : null}
+              <button type="button" className="mp-chat-btn" onClick={() => setChatOrder(o)}>
+                <MessageSquare size={13} /> گفتگو
+                {o.unread_count > 0 && <span className="mp-unread">{o.unread_count.toLocaleString('fa-IR')}</span>}
+              </button>
             </div>
           </td>
         </tr>
@@ -446,6 +452,16 @@ function OrdersPanel({ token }: { token: string }) {
           busy={busy === confirmTarget.id}
           onCancel={() => setConfirmTarget(null)}
           onConfirm={(pct) => void doConfirm(confirmTarget, pct)}
+        />
+      )}
+      {chatOrder && (
+        <MarketplaceChatDrawer
+          threadKey={`order:${chatOrder.id}`}
+          title={`گفتگوی سفارش #${chatOrder.order_number.toLocaleString('fa-IR')}`}
+          subtitle={chatOrder.retailer_name}
+          loadMessages={(after) => fetchMpOrderMessages(token, chatOrder.id, after)}
+          sendMessage={(body) => sendMpOrderMessage(token, chatOrder.id, body)}
+          onClose={() => { setChatOrder(null); void refresh() }}
         />
       )}
       <div className="stat-grid">
@@ -570,9 +586,10 @@ function ConnectionsPanel({ token }: { token: string }) {
 
       {chatConn && (
         <MarketplaceChatDrawer
-          token={token}
-          connectionId={chatConn.id}
-          partnerName={chatConn.retailer_name}
+          threadKey={`conn:${chatConn.id}`}
+          title={`گفتگو: ${chatConn.retailer_name}`}
+          loadMessages={(after) => fetchMpMessages(token, chatConn.id, after)}
+          sendMessage={(body) => sendMpMessage(token, chatConn.id, body)}
           onClose={() => { setChatConn(null); void refresh() }}
         />
       )}

@@ -1284,3 +1284,62 @@ def test_marketplace_unread_endpoint(as_distributor, db, retailer_tenant):
         sender_user_id=None, body="پیام",
     )
     assert as_distributor.get("/api/marketplace/unread").json() == 1
+
+
+# ── گفتگوی زیرِ هر سفارش ──────────────────────────────────────────────
+def test_order_chat_send_and_list(as_distributor, db, retailer_tenant):
+    order = _order(db, _primary_id(db), retailer_tenant, 101)
+    r = as_distributor.post(
+        f"/api/marketplace/orders/{order.id}/messages", json={"body": "سفارش تأیید شد"}
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["sender_role"] == "distributor"
+    body = as_distributor.get(f"/api/marketplace/orders/{order.id}/messages").json()
+    assert body["my_role"] == "distributor"
+    assert [m["body"] for m in body["messages"]] == ["سفارش تأیید شد"]
+
+
+def test_order_chat_works_regardless_of_status(as_distributor, db, retailer_tenant):
+    # برخلافِ گفتگوی اتصال، رشته‌ی سفارش گیتِ وضعیت ندارد (حتی روی سفارشِ ردشده).
+    order = _order(db, _primary_id(db), retailer_tenant, 102, status="rejected")
+    assert as_distributor.get(f"/api/marketplace/orders/{order.id}/messages").status_code == 200
+    assert as_distributor.post(
+        f"/api/marketplace/orders/{order.id}/messages", json={"body": "چرا رد شد؟"}
+    ).status_code == 201
+
+
+def test_order_chat_isolation_third_party(as_distributor, db):
+    other_d = _bare_tenant(db, "distributor")
+    other_r = _bare_tenant(db, "retailer")
+    order = _order(db, other_d.id, other_r.id, 103)
+    assert as_distributor.get(f"/api/marketplace/orders/{order.id}/messages").status_code == 404
+    assert as_distributor.post(
+        f"/api/marketplace/orders/{order.id}/messages", json={"body": "x"}
+    ).status_code == 404
+
+
+def test_order_chat_unread_in_order_list(as_distributor, db, retailer_tenant):
+    order = _order(db, _primary_id(db), retailer_tenant, 104)
+    svc.post_order_message(
+        db, order, sender_tenant_id=retailer_tenant, sender_role="retailer",
+        sender_user_id=None, body="کِی ارسال می‌شه؟",
+    )
+    rows = as_distributor.get("/api/marketplace/distributor/orders").json()
+    row = next(o for o in rows if o["id"] == str(order.id))
+    assert row["unread_count"] == 1
+    assert row["last_message_preview"] == "کِی ارسال می‌شه؟"
+    # باز کردنِ رشته → خوانده می‌شود.
+    as_distributor.get(f"/api/marketplace/orders/{order.id}/messages")
+    rows = as_distributor.get("/api/marketplace/distributor/orders").json()
+    row = next(o for o in rows if o["id"] == str(order.id))
+    assert row["unread_count"] == 0
+
+
+def test_unread_endpoint_includes_order_threads(as_distributor, db, retailer_tenant):
+    order = _order(db, _primary_id(db), retailer_tenant, 105)
+    assert as_distributor.get("/api/marketplace/unread").json() == 0
+    svc.post_order_message(
+        db, order, sender_tenant_id=retailer_tenant, sender_role="retailer",
+        sender_user_id=None, body="پیامِ سفارش",
+    )
+    assert as_distributor.get("/api/marketplace/unread").json() == 1

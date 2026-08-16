@@ -3082,6 +3082,10 @@ export interface MpOrder {
   distributor_sales_invoice_id: string | null
   retailer_purchase_invoice_id: string | null
   lines: MpOrderLine[]
+  // گفتگوی سفارش (برای سمتِ بیننده محاسبه می‌شود).
+  unread_count: number
+  last_message_at: string | null
+  last_message_preview: string
 }
 
 export interface MpOrderPlaceIn {
@@ -3109,6 +3113,16 @@ export const confirmMpOrder = (token: string, id: string, cashPercent = 0) =>
 
 export const rejectMpOrder = (token: string, id: string) =>
   authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})
+
+// گفتگوی زیرِ هر سفارش — رشته‌ی جدا؛ هر دو سمتِ همان سفارش (بدونِ گیتِ وضعیت).
+export const fetchMpOrderMessages = (token: string, orderId: string, afterIso?: string) =>
+  authedGet<MpMessagesPage>(
+    token,
+    `/api/marketplace/orders/${orderId}/messages${afterIso ? `?after=${encodeURIComponent(afterIso)}` : ''}`,
+  )
+
+export const sendMpOrderMessage = (token: string, orderId: string, body: string) =>
+  authedSend<MpMessage>(token, 'POST', `/api/marketplace/orders/${orderId}/messages`, { body })
 
 // ── کمیسیونِ پلتفرم (۲٪) ───────────────────────────────────────────────
 export interface MpCommissionPeriod {
