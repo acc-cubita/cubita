@@ -5096,6 +5096,101 @@ button:disabled {
 }
 .drawer-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px 28px; }
 
+/* ── گفتگوی بازار (کشوی چتِ فروشگاه↔پخش‌کننده) ── توکن‌محور، پس هر سه تم را می‌گیرد */
+.mp-chat-panel { width: min(460px, 100%); }
+.mp-chat-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+}
+.mp-chat-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+.mp-chat-msg { max-width: 82%; display: flex; flex-direction: column; gap: 2px; }
+/* در RTL: پیامِ من سمتِ چپ (flex-end)، پیامِ طرفِ مقابل سمتِ راست (flex-start). */
+.mp-chat-msg.mine { align-self: flex-end; align-items: flex-end; }
+.mp-chat-msg.theirs { align-self: flex-start; align-items: flex-start; }
+.mp-chat-bubble {
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mp-chat-msg.theirs .mp-chat-bubble {
+  background: var(--surface-hover);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-start-start-radius: 4px;
+}
+.mp-chat-msg.mine .mp-chat-bubble {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-start-end-radius: 4px;
+}
+.mp-chat-time { font-size: 10.5px; color: var(--text-muted); padding: 0 4px; }
+.mp-chat-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  background: var(--danger-bg);
+  flex: 0 0 auto;
+}
+.mp-chat-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.mp-chat-composer textarea {
+  flex: 1 1 auto;
+  resize: none;
+  max-height: 120px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+.mp-chat-send { flex: 0 0 auto; padding: 11px 15px; }
+/* دکمه‌ی «گفتگو» روی ردیفِ اتصال + نشانِ خوانده‌نشده */
+.mp-chat-btn { display: inline-flex; align-items: center; gap: 5px; }
+.mp-unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+@media (max-width: 760px) {
+  .mp-chat-panel { width: 100%; }
+}
+
 /* خلاصه‌ی کاردکس (اول/ورود/خروج/پایان) */
 .kardex-summary {
   display: grid;

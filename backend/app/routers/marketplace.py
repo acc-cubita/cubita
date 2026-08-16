@@ -7,6 +7,7 @@
 مالکیت همیشه با فیلترِ صریحِ `distributor_tenant_id == principal.tenant_id` تضمین می‌شود،
 چون این جدول‌ها RLS ندارند.
 """
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -33,6 +34,9 @@ from app.schemas.marketplace import (
     ListingOut,
     MarketplaceSettingsIn,
     MarketplaceSettingsOut,
+    MessageIn,
+    MessageOut,
+    MessagesPage,
     OrderConfirmIn,
     OrderOut,
     OrderPlaceIn,
@@ -136,7 +140,7 @@ def distributor_connections(
     db: Session = Depends(get_db),
 ):
     conns = svc.list_connections(db, distributor_tenant_id=principal.tenant_id)
-    return [ConnectionOut(**svc.connection_dict(db, c)) for c in conns]
+    return [ConnectionOut(**svc.connection_dict(db, c, principal.tenant_id)) for c in conns]
 
 
 @router.post("/distributor/connections/{connection_id}/status", response_model=ConnectionOut)
@@ -148,7 +152,7 @@ def set_connection_status(
     _: User = Depends(require_permission("marketplace", "update")),
 ):
     conn = svc.set_connection_status(db, principal.tenant_id, connection_id, data.status)
-    return ConnectionOut(**svc.connection_dict(db, conn))
+    return ConnectionOut(**svc.connection_dict(db, conn, principal.tenant_id))
 
 
 # ── کشف/اتصال/کاتالوگ: سمتِ فروشگاه ───────────────────────────────────
@@ -166,7 +170,7 @@ def retailer_connections(
     db: Session = Depends(get_db),
 ):
     conns = svc.list_connections(db, retailer_tenant_id=principal.tenant_id)
-    return [ConnectionOut(**svc.connection_dict(db, c)) for c in conns]
+    return [ConnectionOut(**svc.connection_dict(db, c, principal.tenant_id)) for c in conns]
 
 
 @router.post("/retailer/connections", response_model=ConnectionOut, status_code=201)
@@ -177,7 +181,56 @@ def request_connection(
     _: User = Depends(require_permission("marketplace", "create")),
 ):
     conn = svc.request_connection(db, principal.tenant_id, data.distributor_tenant_id)
-    return ConnectionOut(**svc.connection_dict(db, conn))
+    return ConnectionOut(**svc.connection_dict(db, conn, principal.tenant_id))
+
+
+# ── گفتگوی اتصال (فروشگاه↔پخش‌کننده) — رشته‌ی مشترک؛ هر دو سمت ──────────
+# این اندپوینت‌ها نقشِ خاص نمی‌خواهند: هر عضوی از یکی از دو سمتِ اتصالِ approved می‌تواند
+# بخواند/بفرستد. مالکیت با `load_connection_for_member` (تطبیقِ tenant با یکی از دو سمت) است.
+@router.get("/connections/{connection_id}/messages", response_model=MessagesPage)
+def list_connection_messages(
+    connection_id: UUID,
+    after: datetime | None = None,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    conn, role = svc.load_connection_for_member(db, principal.tenant_id, connection_id)
+    msgs = svc.list_messages(db, conn.id, after)
+    # باز/پول‌کردنِ رشته = خواندنش؛ نشانِ خوانده‌نشده صفر می‌شود.
+    svc.mark_read(db, conn, role)
+    return MessagesPage(my_role=role, messages=[MessageOut(**svc.message_dict(m)) for m in msgs])
+
+
+@router.post("/connections/{connection_id}/messages", response_model=MessageOut, status_code=201)
+def post_connection_message(
+    connection_id: UUID,
+    data: MessageIn,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "create")),
+):
+    conn, role = svc.load_connection_for_member(db, principal.tenant_id, connection_id)
+    msg = svc.post_message(
+        db,
+        conn,
+        sender_tenant_id=principal.tenant_id,
+        sender_role=role,
+        sender_user_id=principal.user.id,
+        body=data.body,
+    )
+    return MessageOut(**svc.message_dict(msg))
+
+
+@router.get("/unread", response_model=int)
+def marketplace_unread(
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """جمعِ پیام‌های خوانده‌نشده‌ی همه‌ی اتصال‌های approvedِ این حساب — برای نشانِ نویگیشن."""
+    kind = principal.membership.tenant.kind
+    if kind not in ("distributor", "retailer"):
+        return 0
+    return svc.total_unread(db, principal.tenant_id, kind)
 
 
 @router.get("/retailer/catalog", response_model=list[CatalogListingOut])

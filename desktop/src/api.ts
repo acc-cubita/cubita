@@ -2970,6 +2970,19 @@ export interface DistributorCard {
   connection_status: MpConnectionStatus | null
 }
 
+export interface MpMessage {
+  id: string
+  sender_role: 'distributor' | 'retailer'
+  sender_user_id: string | null
+  body: string
+  created_at: string
+}
+
+export interface MpMessagesPage {
+  my_role: 'distributor' | 'retailer'
+  messages: MpMessage[]
+}
+
 export interface MpConnection {
   id: string
   distributor_tenant_id: string
@@ -2978,6 +2991,10 @@ export interface MpConnection {
   retailer_name: string
   status: MpConnectionStatus
   requested_by: 'retailer' | 'distributor'
+  // گفتگو (برای سمتِ بیننده محاسبه می‌شود؛ فقط اتصالِ approved).
+  unread_count: number
+  last_message_at: string | null
+  last_message_preview: string
 }
 
 export interface CatalogListing {
@@ -3015,6 +3032,19 @@ export const fetchMpRetailerConnections = (token: string) =>
 
 export const requestMpConnection = (token: string, distributor_tenant_id: string) =>
   authedSend<MpConnection>(token, 'POST', '/api/marketplace/retailer/connections', { distributor_tenant_id })
+
+// گفتگوی اتصال (مشترک بین فروشگاه و پخش‌کننده) — رشته‌ی دائم به‌ازای هر اتصالِ approved.
+export const fetchMpMessages = (token: string, connectionId: string, afterIso?: string) =>
+  authedGet<MpMessagesPage>(
+    token,
+    `/api/marketplace/connections/${connectionId}/messages${afterIso ? `?after=${encodeURIComponent(afterIso)}` : ''}`,
+  )
+
+export const sendMpMessage = (token: string, connectionId: string, body: string) =>
+  authedSend<MpMessage>(token, 'POST', `/api/marketplace/connections/${connectionId}/messages`, { body })
+
+// جمعِ پیام‌های خوانده‌نشده‌ی همه‌ی اتصال‌های approved — برای نشانِ نویگیشن.
+export const fetchMpUnread = (token: string) => authedGet<number>(token, '/api/marketplace/unread')
 
 export const fetchMpCatalog = (token: string, distributorId?: string) =>
   authedGet<CatalogListing[]>(

@@ -1,6 +1,7 @@
 """بازارِ عمده‌فروشی — شکلِ ورودی/خروجیِ سمتِ پخش‌کننده (M2)."""
 import base64
 import re
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -192,6 +193,37 @@ class ConnectionOut(BaseModel):
     retailer_name: str
     status: str
     requested_by: str
+    # گفتگو: برای سمتِ بیننده محاسبه می‌شود (فقط اتصالِ approved). پیش‌فرض‌ها برای پاسخ‌هایی
+    # که بیننده ندارند (مثلِ تغییرِ وضعیت) امن‌اند.
+    unread_count: int = 0
+    last_message_at: datetime | None = None
+    last_message_preview: str = ""
+
+
+# ── گفتگوی اتصال ──────────────────────────────────────────────────────
+class MessageIn(BaseModel):
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def _nonempty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("متنِ پیام خالی است")
+        return v
+
+
+class MessageOut(BaseModel):
+    id: UUID
+    sender_role: str
+    sender_user_id: UUID | None = None
+    body: str
+    created_at: datetime
+
+
+class MessagesPage(BaseModel):
+    my_role: str
+    messages: list[MessageOut]
 
 
 # ── کاتالوگِ سمتِ فروشگاه (M3) ────────────────────────────────────────

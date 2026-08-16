@@ -23,6 +23,7 @@ from app.models.marketplace import (
     MarketplaceItemLink,
     MarketplaceListing,
     MarketplaceListingComponent,
+    MarketplaceMessage,
     MarketplaceOrder,
     MarketplaceOrderLine,
     MarketplaceSettings,
@@ -338,7 +339,16 @@ def list_connections(db: Session, *, distributor_tenant_id: UUID | None = None, 
     return q.order_by(MarketplaceConnection.created_at.desc()).all()
 
 
-def connection_dict(db: Session, conn: MarketplaceConnection) -> dict:
+def connection_dict(db: Session, conn: MarketplaceConnection, viewer_tenant_id: UUID | None = None) -> dict:
+    # وقتی بیننده مشخص است، شمارشِ خوانده‌نشده و آخرین پیام را هم می‌دهیم تا فهرستِ اتصال‌ها
+    # نشانِ گفتگو داشته باشد (بدونِ یک فراخوانِ جدا). فقط اتصالِ approved گفتگو دارد.
+    unread = 0
+    last = _last_message(db, conn.id)
+    if viewer_tenant_id is not None and conn.status == "approved":
+        if viewer_tenant_id == conn.distributor_tenant_id:
+            unread = unread_count(db, conn, "distributor")
+        elif viewer_tenant_id == conn.retailer_tenant_id:
+            unread = unread_count(db, conn, "retailer")
     return {
         "id": conn.id,
         "distributor_tenant_id": conn.distributor_tenant_id,
@@ -347,6 +357,127 @@ def connection_dict(db: Session, conn: MarketplaceConnection) -> dict:
         "retailer_name": _tenant_name(db, conn.retailer_tenant_id),
         "status": conn.status,
         "requested_by": conn.requested_by,
+        "unread_count": unread,
+        "last_message_at": last.created_at if last else None,
+        "last_message_preview": (last.body[:80] if last else ""),
+    }
+
+
+# ── گفتگوی اتصال (فروشگاه↔پخش‌کننده) — رشته‌ی دائم به‌ازای هر اتصالِ approved ──────
+MESSAGE_MAX_LEN = 4000
+
+
+def load_connection_for_member(
+    db: Session, tenant_id: UUID, connection_id: UUID
+) -> tuple[MarketplaceConnection, str]:
+    """اتصال را برای عضوی از یکی از دو سمت + نقشِ فراخوان ('distributor'|'retailer') برمی‌گرداند.
+
+    اگر tenant هیچ‌کدام از دو سمتِ اتصال نباشد → ۴۰۴ (نه ۴۰۳ افشاگر: وجودِ اتصالِ دیگران را
+    لو نمی‌دهد). گفتگو فقط روی اتصالِ approved باز است.
+    """
+    conn = db.get(MarketplaceConnection, connection_id)
+    if conn is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "اتصال یافت نشد")
+    if tenant_id == conn.distributor_tenant_id:
+        role = "distributor"
+    elif tenant_id == conn.retailer_tenant_id:
+        role = "retailer"
+    else:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "اتصال یافت نشد")
+    if conn.status != "approved":
+        raise HTTPException(status.HTTP_409_CONFLICT, "گفتگو فقط روی اتصالِ تأییدشده باز است")
+    return conn, role
+
+
+def list_messages(
+    db: Session, connection_id: UUID, after: datetime | None = None
+) -> list[MarketplaceMessage]:
+    q = db.query(MarketplaceMessage).filter(MarketplaceMessage.connection_id == connection_id)
+    if after is not None:
+        q = q.filter(MarketplaceMessage.created_at > after)
+    return q.order_by(MarketplaceMessage.created_at.asc()).all()
+
+
+def _last_message(db: Session, connection_id: UUID) -> MarketplaceMessage | None:
+    return (
+        db.query(MarketplaceMessage)
+        .filter(MarketplaceMessage.connection_id == connection_id)
+        .order_by(MarketplaceMessage.created_at.desc())
+        .first()
+    )
+
+
+def post_message(
+    db: Session,
+    conn: MarketplaceConnection,
+    *,
+    sender_tenant_id: UUID,
+    sender_role: str,
+    sender_user_id: UUID | None,
+    body: str,
+) -> MarketplaceMessage:
+    text = (body or "").strip()
+    if not text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "متنِ پیام خالی است")
+    text = text[:MESSAGE_MAX_LEN]
+    msg = MarketplaceMessage(
+        connection_id=conn.id,
+        sender_tenant_id=sender_tenant_id,
+        sender_role=sender_role,
+        sender_user_id=sender_user_id,
+        body=text,
+    )
+    db.add(msg)
+    # فرستنده رشته را خوانده فرض می‌شود (پیامِ خودش خوانده‌نشده حساب نشود).
+    mark_read(db, conn, sender_role)
+    db.flush()
+    return msg
+
+
+def mark_read(db: Session, conn: MarketplaceConnection, role: str, when: datetime | None = None) -> None:
+    ts = when or datetime.now(timezone.utc)
+    if role == "distributor":
+        conn.distributor_last_read_at = ts
+    else:
+        conn.retailer_last_read_at = ts
+    db.flush()
+
+
+def unread_count(db: Session, conn: MarketplaceConnection, role: str) -> int:
+    """پیام‌های خوانده‌نشده‌ی این سمت = پیام‌های سمتِ مقابل که بعد از last_readِ من ثبت شده‌اند."""
+    last_read = conn.distributor_last_read_at if role == "distributor" else conn.retailer_last_read_at
+    other_role = "retailer" if role == "distributor" else "distributor"
+    q = db.query(func.count(MarketplaceMessage.id)).filter(
+        MarketplaceMessage.connection_id == conn.id,
+        MarketplaceMessage.sender_role == other_role,
+    )
+    if last_read is not None:
+        q = q.filter(MarketplaceMessage.created_at > last_read)
+    return int(q.scalar() or 0)
+
+
+def total_unread(db: Session, tenant_id: UUID, role: str) -> int:
+    """جمعِ خوانده‌نشده‌ی همه‌ی اتصال‌های approvedِ این tenant در نقشِ داده‌شده — برای نشانِ نویگیشن."""
+    side = (
+        MarketplaceConnection.distributor_tenant_id
+        if role == "distributor"
+        else MarketplaceConnection.retailer_tenant_id
+    )
+    conns = (
+        db.query(MarketplaceConnection)
+        .filter(side == tenant_id, MarketplaceConnection.status == "approved")
+        .all()
+    )
+    return sum(unread_count(db, c, role) for c in conns)
+
+
+def message_dict(msg: MarketplaceMessage) -> dict:
+    return {
+        "id": msg.id,
+        "sender_role": msg.sender_role,
+        "sender_user_id": msg.sender_user_id,
+        "body": msg.body,
+        "created_at": msg.created_at,
     }
 
 

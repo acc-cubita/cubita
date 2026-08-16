@@ -51,6 +51,18 @@ def _bare_tenant(db, kind: str, name: str = "مستأجر") -> Tenant:
     return t
 
 
+def _connection(db, distributor_id, retailer_id, status="approved") -> MarketplaceConnection:
+    c = MarketplaceConnection(
+        distributor_tenant_id=distributor_id,
+        retailer_tenant_id=retailer_id,
+        status=status,
+        requested_by="retailer",
+    )
+    db.add(c)
+    db.flush()
+    return c
+
+
 @pytest.fixture
 def as_distributor(client, db):
     """مستأجرِ اصلیِ تست را پخش‌کننده می‌کند و همان client را برمی‌گرداند."""
@@ -1183,3 +1195,92 @@ def test_distributor_sees_only_own_commissions(as_distributor, retailer_tenant, 
     assert body, "پخش‌کننده باید صورتِ کمیسیونِ خودش را ببیند"
     assert all(row["distributor_tenant_id"] == str(primary_id) for row in body)
     assert not any(row["distributor_tenant_id"] == str(other) for row in body)
+
+
+# ── گفتگوی اتصال (فروشگاه↔پخش‌کننده) ──────────────────────────────────
+def test_chat_send_and_list(as_distributor, db, retailer_tenant):
+    conn = _connection(db, _primary_id(db), retailer_tenant, "approved")
+    r = as_distributor.post(
+        f"/api/marketplace/connections/{conn.id}/messages",
+        json={"body": "سلام، سفارش آماده است"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["sender_role"] == "distributor"
+
+    r = as_distributor.get(f"/api/marketplace/connections/{conn.id}/messages")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["my_role"] == "distributor"
+    assert [m["body"] for m in body["messages"]] == ["سلام، سفارش آماده است"]
+
+
+def test_chat_empty_body_rejected(as_distributor, db, retailer_tenant):
+    conn = _connection(db, _primary_id(db), retailer_tenant, "approved")
+    r = as_distributor.post(
+        f"/api/marketplace/connections/{conn.id}/messages", json={"body": "   "}
+    )
+    assert r.status_code == 422
+
+
+def test_chat_only_approved_can_talk(as_distributor, db, retailer_tenant):
+    conn = _connection(db, _primary_id(db), retailer_tenant, "pending")
+    assert as_distributor.get(f"/api/marketplace/connections/{conn.id}/messages").status_code == 409
+    assert (
+        as_distributor.post(
+            f"/api/marketplace/connections/{conn.id}/messages", json={"body": "x"}
+        ).status_code
+        == 409
+    )
+
+
+def test_chat_isolation_third_party(as_distributor, db):
+    # اتصالِ بینِ دو مستأجرِ دیگر؛ پخش‌کننده‌ی primary عضوِ آن نیست → ۴۰۴ (نه افشای وجود).
+    other_d = _bare_tenant(db, "distributor")
+    other_r = _bare_tenant(db, "retailer")
+    conn = _connection(db, other_d.id, other_r.id, "approved")
+    assert as_distributor.get(f"/api/marketplace/connections/{conn.id}/messages").status_code == 404
+    assert (
+        as_distributor.post(
+            f"/api/marketplace/connections/{conn.id}/messages", json={"body": "x"}
+        ).status_code
+        == 404
+    )
+
+
+def test_chat_unread_then_marked_read(as_distributor, db, retailer_tenant):
+    conn = _connection(db, _primary_id(db), retailer_tenant, "approved")
+    # فروشگاه پیام می‌دهد (شبیه‌سازی با سرویس، چون clientِ تست فقط primary است).
+    svc.post_message(
+        db, conn, sender_tenant_id=retailer_tenant, sender_role="retailer",
+        sender_user_id=None, body="کِی می‌رسه؟",
+    )
+    conns = as_distributor.get("/api/marketplace/distributor/connections").json()
+    row = next(c for c in conns if c["id"] == str(conn.id))
+    assert row["unread_count"] == 1
+    assert row["last_message_preview"] == "کِی می‌رسه؟"
+
+    # باز کردنِ رشته → خوانده می‌شود.
+    as_distributor.get(f"/api/marketplace/connections/{conn.id}/messages")
+    conns = as_distributor.get("/api/marketplace/distributor/connections").json()
+    row = next(c for c in conns if c["id"] == str(conn.id))
+    assert row["unread_count"] == 0
+
+
+def test_chat_retailer_side(as_retailer, db, distributor_tenant):
+    conn = _connection(db, distributor_tenant, _primary_id(db), "approved")
+    r = as_retailer.post(
+        f"/api/marketplace/connections/{conn.id}/messages", json={"body": "سفارش را ثبت کردم"}
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["sender_role"] == "retailer"
+    assert as_retailer.get(f"/api/marketplace/connections/{conn.id}/messages").json()["my_role"] == "retailer"
+
+
+def test_marketplace_unread_endpoint(as_distributor, db, retailer_tenant):
+    conn = _connection(db, _primary_id(db), retailer_tenant, "approved")
+    assert as_distributor.get("/api/marketplace/unread").json() == 0
+    svc.post_message(
+        db, conn, sender_tenant_id=retailer_tenant, sender_role="retailer",
+        sender_user_id=None, body="پیام",
+    )
+    assert as_distributor.get("/api/marketplace/unread").json() == 1

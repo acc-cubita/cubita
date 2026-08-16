@@ -34,6 +34,7 @@ from app.models.marketplace import (
     MarketplaceItemLink,
     MarketplaceListing,
     MarketplaceListingComponent,
+    MarketplaceMessage,
     MarketplaceOrder,
     MarketplaceOrderLine,
     MarketplaceSettings,
@@ -166,4 +167,5 @@ __all__ = [
     "MarketplaceOrder",
     "MarketplaceOrderLine",
     "MarketplaceItemLink",
+    "MarketplaceMessage",
 ]

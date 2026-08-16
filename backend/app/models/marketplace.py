@@ -19,6 +19,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -37,6 +38,7 @@ ORDER_STATUSES = ("placed", "confirmed", "rejected", "shipped", "received", "can
 SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
 COMMISSION_STATUSES = ("pending", "settled")
+MESSAGE_SENDER_ROLES = ("distributor", "retailer")
 
 
 class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
@@ -142,6 +144,11 @@ class MarketplaceConnection(UUIDPKMixin, TimestampMixin, Base):
     retailer_supplier_contact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+
+    #: زمانِ آخرین‌باری که هر سمت رشته‌ی گفتگوی این اتصال را خواند — مبنای شمارشِ پیامِ
+    #: خوانده‌نشده (خوانده‌نشده‌ی هر سمت = پیام‌های بعد از این زمان که فرستنده‌شان سمتِ مقابل است).
+    distributor_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retailer_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MarketplaceOrder(UUIDPKMixin, TimestampMixin, Base):
@@ -256,3 +263,26 @@ class MarketplaceCommission(UUIDPKMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     settle_note: Mapped[str] = mapped_column(String(300), default="", server_default="")
+
+
+class MarketplaceMessage(UUIDPKMixin, TimestampMixin, Base):
+    """پیامِ گفتگوی یک اتصالِ بازار (فروشگاه↔پخش‌کننده) — لایه‌ی سراسری (بدونِ RLS).
+
+    یک رشته‌ی گفتگوی دائم به‌ازای هر `MarketplaceConnection`. `sender_role` تعیین می‌کند
+    پیام از کدام سمت است. جداسازی در کدِ روتر با بررسیِ عضویتِ فراخوان در همان اتصال انجام
+    می‌شود، نه RLS. `sender_user_id` فقط برای نمایش/رد است (نه FK، چون میان‌مستأجری است).
+    ایندکسِ مرکبِ (connection_id, created_at) هم لیستِ رشته و هم کوئریِ `after` را می‌پوشاند.
+    """
+
+    __tablename__ = "marketplace_messages"
+    __table_args__ = (
+        Index("ix_mp_messages_connection_created", "connection_id", "created_at"),
+    )
+
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_connections.id", ondelete="CASCADE")
+    )
+    sender_tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    sender_role: Mapped[str] = mapped_column(String(20))  # distributor | retailer
+    sender_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    body: Mapped[str] = mapped_column(Text)

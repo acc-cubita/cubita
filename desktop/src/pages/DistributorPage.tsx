@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Truck, Package, Boxes, Plus, Trash2, Save, Pencil, X, Eye, EyeOff, Settings as SettingsIcon,
-  Link2, Check, Ban, Store, ClipboardList, CheckCircle2, Percent, AlertCircle,
+  Link2, Check, Ban, Store, ClipboardList, CheckCircle2, Percent, AlertCircle, MessageSquare,
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
@@ -21,6 +21,7 @@ import { NumberInput } from '../components/NumberInput'
 import { ImageUploader } from '../components/ImageUploader'
 import { Pager, usePagination } from '../components/Pager'
 import { ListingWizard } from '../components/wizard/ListingWizard'
+import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 import { useListingDraft } from '../lib/listingDraft'
 import { useTheme } from '../lib/theme'
 
@@ -484,6 +485,7 @@ function ConnectionsPanel({ token }: { token: string }) {
   const [conns, setConns] = useState<MpConnection[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [chatConn, setChatConn] = useState<MpConnection | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -520,7 +522,13 @@ function ConnectionsPanel({ token }: { token: string }) {
               </>
             )}
             {c.status === 'approved' && (
-              <button type="button" className="icon-btn-danger" disabled={busy === c.id} onClick={() => void act(c, 'blocked')}><Ban size={13} /> مسدود</button>
+              <>
+                <button type="button" className="mp-chat-btn" onClick={() => setChatConn(c)}>
+                  <MessageSquare size={13} /> گفتگو
+                  {c.unread_count > 0 && <span className="mp-unread">{c.unread_count.toLocaleString('fa-IR')}</span>}
+                </button>
+                <button type="button" className="icon-btn-danger" disabled={busy === c.id} onClick={() => void act(c, 'blocked')}><Ban size={13} /> مسدود</button>
+              </>
             )}
             {(c.status === 'rejected' || c.status === 'blocked') && (
               <button type="button" className="btn-primary" disabled={busy === c.id} onClick={() => void act(c, 'approved')}><Check size={13} /> تأیید</button>
@@ -559,6 +567,15 @@ function ConnectionsPanel({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+
+      {chatConn && (
+        <MarketplaceChatDrawer
+          token={token}
+          connectionId={chatConn.id}
+          partnerName={chatConn.retailer_name}
+          onClose={() => { setChatConn(null); void refresh() }}
+        />
+      )}
     </>
   )
 }

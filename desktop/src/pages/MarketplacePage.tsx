@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard } from 'lucide-react'
+import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard, MessageSquare } from 'lucide-react'
 import {
-  fetchMpCatalog, fetchMpDistributors, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
-  type CatalogListing, type DistributorCard, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
+  fetchMpCatalog, fetchMpDistributors, fetchMpRetailerConnections, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
+  type CatalogListing, type DistributorCard, type MpConnection, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -11,6 +11,7 @@ import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { NumberInput } from '../components/NumberInput'
 import { Pager, usePagination } from '../components/Pager'
+import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -67,15 +68,23 @@ export function MarketplacePage({ token }: { token: string }) {
 
 function Distributors({ token }: { token: string }) {
   const [dists, setDists] = useState<DistributorCard[]>([])
+  const [conns, setConns] = useState<MpConnection[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [chatConn, setChatConn] = useState<MpConnection | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
-    try { setDists(await fetchMpDistributors(token)) }
-    catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
+    try {
+      const [d, c] = await Promise.all([fetchMpDistributors(token), fetchMpRetailerConnections(token)])
+      setDists(d)
+      setConns(c)
+    } catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
+
+  // نگاشتِ پخش‌کننده → اتصال (برای دکمه‌ی گفتگو روی کارتِ پخش‌کننده‌ی متصل).
+  const connByDist = useMemo(() => new Map(conns.map((c) => [c.distributor_tenant_id, c])), [conns])
 
   const kpis = useMemo(() => ({
     total: dists.length,
@@ -124,6 +133,14 @@ function Distributors({ token }: { token: string }) {
                               <Link2 size={13} /> درخواستِ اتصال
                             </button>
                           )}
+                          {st === 'approved' && connByDist.get(d.tenant_id) && (
+                            <button type="button" className="mp-chat-btn" onClick={() => setChatConn(connByDist.get(d.tenant_id)!)}>
+                              <MessageSquare size={13} /> گفتگو
+                              {(connByDist.get(d.tenant_id)!.unread_count ?? 0) > 0 && (
+                                <span className="mp-unread">{connByDist.get(d.tenant_id)!.unread_count.toLocaleString('fa-IR')}</span>
+                              )}
+                            </button>
+                          )}
                           {st === 'pending' && <span className="entity-sub">منتظرِ تأیید…</span>}
                           {st === 'blocked' && <span className="entity-sub">اتصالِ شما مسدود شده</span>}
                         </div>
@@ -137,6 +154,15 @@ function Distributors({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+
+      {chatConn && (
+        <MarketplaceChatDrawer
+          token={token}
+          connectionId={chatConn.id}
+          partnerName={chatConn.distributor_name}
+          onClose={() => { setChatConn(null); void refresh() }}
+        />
+      )}
     </>
   )
 }
