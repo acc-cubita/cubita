@@ -164,6 +164,8 @@ export function Dashboard({
       await window.cubita.pullAll()
       const result = await window.cubita.pushOutbox()
       await refreshFromLocalCache()
+      // نسخه‌ی پشتیبانِ محلیِ خودکار پس از هر همگام‌سازیِ موفق (فقط مالک؛ سرور بقیه را ۴۰۳ می‌کند).
+      if (me.permissions?.['*']) window.cubita.backupAuto().catch(() => {})
       if (!silent) setSyncStatus(`sync کامل شد — ارسال‌شده: ${result.pushed}, ناموفق: ${result.failed}`)
     } catch (err) {
       if (!silent) setSyncStatus(`خطا در sync: ${err instanceof Error ? err.message : String(err)}`)

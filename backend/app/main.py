@@ -16,6 +16,7 @@ from app.routers import (
     assets,
     audit,
     auth,
+    backup,
     banking,
     benefits,
     billing,
@@ -116,6 +117,7 @@ app.include_router(billing.router)
 app.include_router(treasury.router)
 app.include_router(pos_terminals.router)
 app.include_router(audit.router)
+app.include_router(backup.router)
 app.include_router(subscription.router)
 app.include_router(calendar.router)
 app.include_router(assets.router)

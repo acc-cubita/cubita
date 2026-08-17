@@ -23,6 +23,7 @@ import {
   queuePurchaseInvoice,
   queueSalesInvoice,
 } from './sync.js'
+import { autoSnapshot, listLocalBackups, openBackupsFolder, restoreFromFile, saveToFile } from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
 import { driverFor } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
@@ -210,6 +211,14 @@ ipcMain.handle('items:listCached', () => {
 ipcMain.handle('bankAccounts:listCached', () => {
   return getLocalDb().prepare('SELECT * FROM bank_accounts_cache ORDER BY name').all()
 })
+
+// --- پشتیبان‌گیری/بازیابیِ محلی ---
+const backupConfig = () => ({ apiBaseUrl: API_BASE_URL, getToken: () => authToken })
+ipcMain.handle('backup:auto', () => autoSnapshot(backupConfig()))
+ipcMain.handle('backup:saveToFile', () => saveToFile(backupConfig(), mainWindow))
+ipcMain.handle('backup:listLocal', () => listLocalBackups())
+ipcMain.handle('backup:openFolder', () => openBackupsFolder())
+ipcMain.handle('backup:restoreFromFile', () => restoreFromFile(backupConfig(), mainWindow))
 
 // --- کارتخوان (POS): پلِ سخت‌افزار فقط در دسکتاپ ---
 // خطاها هرگز از IPC پرتاب نمی‌شوند؛ به نتیجه‌ی ساختاریافته تبدیل می‌شوند تا رابط

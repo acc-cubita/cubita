@@ -687,6 +687,13 @@ export interface ItemRecord {
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
 
+/** پشتیبان‌گیری: خروجیِ کاملِ داده‌ی کسب‌وکار (فقط مالک؛ در وب برای دانلودِ فایل). */
+export const fetchBackupExport = (token: string) => authedGet<Record<string, unknown>>(token, '/api/backup/export')
+
+/** بازیابی: فایلِ پشتیبان را می‌فرستد و داده را *جایگزین* می‌کند (فقط مالک). */
+export const importBackup = (token: string, data: unknown) =>
+  authedSend<{ restored: boolean; total_rows: number }>(token, 'POST', '/api/backup/import', data)
+
 /** جست‌وجوی کالا با بارکد (اسکن در صندوقِ فروشگاهی). ۴۰۴ اگر پیدا نشود. */
 export const fetchItemByBarcode = (token: string, code: string) =>
   authedGet<ItemRecord>(token, `/api/items/by-barcode?code=${encodeURIComponent(code)}`)

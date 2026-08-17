@@ -86,7 +86,19 @@ export interface CubitaBridge {
   listCachedWarehouses: () => Promise<WarehouseCache[]>
   listCachedItems: () => Promise<ItemCache[]>
   listCachedBankAccounts: () => Promise<BankAccountCache[]>
+  backupAuto: () => Promise<LocalBackup>
+  backupSaveToFile: () => Promise<{ saved: boolean; path?: string }>
+  backupListLocal: () => Promise<LocalBackup[]>
+  backupOpenFolder: () => Promise<void>
+  backupRestoreFromFile: () => Promise<{ restored: boolean; canceled?: boolean; message: string }>
   posTerminal?: PosTerminalBridge
+}
+
+export interface LocalBackup {
+  file: string
+  path: string
+  size: number
+  mtime: number
 }
 
 export interface WindowControlsBridge {
