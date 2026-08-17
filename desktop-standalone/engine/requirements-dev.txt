@@ -1,4 +1,0 @@
--r requirements.txt
-
-# تست‌ها روی PostgreSQL واقعی اجرا می‌شوند (نه SQLite) — جزئیات در tests/conftest.py
-pytest==9.1.1
