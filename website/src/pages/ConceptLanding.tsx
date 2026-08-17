@@ -32,6 +32,7 @@ import {
   DatabaseZap,
   Wallet,
   Users,
+  Download,
 } from 'lucide-react'
 import { HeroCluster } from '../components/HeroCluster'
 import { ConceptPricing } from '../concept/ConceptPricing'
@@ -41,6 +42,8 @@ import '../concept/concept.css'
 // باز می‌شود. (قبلاً به demo.cubita.ir می‌رفت که دیتابیسِ جدا داشت و ورود را خراب می‌کرد.)
 const TRIAL_URL = 'https://acc.cubita.ir/?signup'
 const APP_URL = 'https://acc.cubita.ir'
+// لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپِ ویندوز (فایلِ سرور روی هر انتشار به‌روز می‌شود).
+const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
 
 const NAV = [
   { href: '#cc-features', label: 'امکانات' },
@@ -222,8 +225,8 @@ function Hero() {
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
               <Sparkles size={17} /> شروعِ ۱۴ روز رایگان
             </a>
-            <a className="cc-btn cc-btn-ghost" href="#cc-pricing">
-              پلن‌ها و قیمت‌ها <ArrowLeft size={16} />
+            <a className="cc-btn cc-btn-ghost" href={DOWNLOAD_URL} download>
+              <Download size={16} /> دانلودِ نرم‌افزار (ویندوز)
             </a>
           </div>
           <div className="cc-hero-feats">
@@ -475,9 +478,14 @@ function FinalCta() {
       >
         <h2>همین امروز، رایگان شروع کن</h2>
         <p>۱۴ روز کاملِ رایگان. اگر پسندیدی، همه‌ی اطلاعاتت حفظ می‌شود.</p>
-        <a className="cc-btn cc-btn-primary cc-btn-lg" href={TRIAL_URL}>
-          <Sparkles size={18} /> شروعِ ۱۴ روز رایگان
-        </a>
+        <div className="cc-final-cta-btns">
+          <a className="cc-btn cc-btn-primary cc-btn-lg" href={TRIAL_URL}>
+            <Sparkles size={18} /> شروعِ ۱۴ روز رایگان
+          </a>
+          <a className="cc-btn cc-btn-ghost cc-btn-lg" href={DOWNLOAD_URL} download>
+            <Download size={17} /> دانلودِ نرم‌افزار (ویندوز)
+          </a>
+        </div>
       </motion.div>
     </section>
   )

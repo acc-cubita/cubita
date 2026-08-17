@@ -7,9 +7,13 @@ import {
   RefreshCw,
   LogOut,
   Building2,
+  Download,
 } from 'lucide-react'
 import { buildNav, type PageKey } from '../lib/navModel'
 import { isElectron } from '../platform'
+
+/** لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپ (روی هر انتشار همین می‌ماند؛ فایلِ سرور به‌روز می‌شود). */
+export const DESKTOP_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
 
 /** نوارِ ناوبریِ افقیِ بالا (چیدمانِ Xero) — جایگزینِ نوارِ کناری وقتی تمِ فعال
  *  `shell === 'topnav'` باشد. از همان مدلِ ناوبریِ مشترک (buildNav) می‌خواند. */
@@ -193,6 +197,18 @@ export function TopNav({
               <Building2 size={15} />
               <span className="topnav-org-name">{businessName}</span>
             </span>
+          )}
+
+          {!isElectron && (
+            <a
+              href={DESKTOP_DOWNLOAD_URL}
+              className="topnav-download"
+              title="دانلودِ نسخه‌ی دسکتاپِ کوبیتا (ویندوز) — کار با برنامه حتی بدونِ مرورگر"
+              download
+            >
+              <Download size={16} />
+              <span className="topnav-download-txt">دانلودِ دسکتاپ</span>
+            </a>
           )}
 
           {isElectron && onSync && (
