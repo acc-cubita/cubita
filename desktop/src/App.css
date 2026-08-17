@@ -31,6 +31,9 @@
   background: var(--sidebar-bg);
   border-bottom: 1px solid var(--sidebar-border);
   -webkit-app-region: drag;
+  /* استانداردِ ویندوز: لوگو سمتِ چپ، دکمه‌های پنجره (کوچک/بزرگ/بستن) سمتِ راست.
+     چون کلِ برنامه RTL است، اینجا به LTR سوییچ می‌کنیم تا این چیدمان درست شود. */
+  direction: ltr;
 }
 
 .titlebar-drag {
@@ -4064,6 +4067,17 @@ button:disabled {
 }
 .topnav-mobile-item.topnav-dd-danger {
   color: var(--danger);
+}
+/* عرض‌های میانی (سایزِ پیش‌فرضِ پنجره ۱۲۸۰): نامِ کسب‌وکار پنهان و آیتم‌ها کمی فشرده‌تر
+   تا نوارِ افقی سرریز نکند و همه‌ی منوها کامل دیده شوند (بدونِ رفتن به همبرگر). */
+@media (max-width: 1440px) {
+  .topnav-org { display: none; }
+  .topnav-item { padding: 0 9px; }
+  .topnav-menu { gap: 0; }
+}
+/* کمی باریک‌تر: جست‌وجوی ماژول هم کنار می‌رود تا در کلِ بازه‌ی ۱۰۲۵–۱۴۴۰ منوها کامل جا شوند. */
+@media (max-width: 1200px) {
+  .topnav-search { display: none; }
 }
 /* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو. جست‌وجو/نامِ کسب‌وکار دیرتر (۷۶۰) پنهان می‌شوند. */
 @media (max-width: 1024px) {
