@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "کوبیتا — نرم‌افزار حسابداری آفلاین/آنلاین",
   "author": "ipnetcity.ir",
   "main": "dist-electron/main.js",
@@ -67,14 +67,23 @@
     "artifactName": "${productName}-Setup-${version}.${ext}",
     "win": {
       "target": "nsis",
-      "signAndEditExecutable": false,
+      "icon": "build/icon.ico",
+      "signExecutable": false,
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "کوبیتا",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "license": "build/license.txt",
+      "include": "build/installer.nsh",
+      "warningsAsErrors": false
     }
   }
 }
