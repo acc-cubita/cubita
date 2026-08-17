@@ -84,6 +84,7 @@ request-id) · `app/seed.py` (داده‌ی اولیه).
 | `treasury` | `/api/treasury` | دریافت/پرداخت وجه به اشخاص + **پرداختِ کارتی** (`/card-payment`: رسیدِ بانکی از کارتخوان، idempotent روی RRN) |
 | `pos_terminals` | `/api/pos-terminals` | CRUD دستگاه‌های کارتخوان (نام/روشِ اتصال/host:port/حسابِ تسویه) — پیکربندی سرور-ساید |
 | `audit` | `/api/audit` | دفتر ردِ حسابرسی (فقط‌افزودنی) |
+| `backup` | `/api/backup` | پشتیبان‌گیری/بازیابیِ کاملِ کسب‌وکار — `export` (JSONِ همه‌ی جدول‌های مستأجر، عمومی با تکیه بر RLS)، `import` (جایگزینیِ اتمیک)؛ فقط مالک |
 | `subscription` | `/api/subscription` | وضعیت اشتراک کسب‌وکار (`can_write`, `days_left`, ...) |
 | `calendar` | `/api/calendar-events` | تقویم و یادآوری — CRUD رویداد (list با بازه‌ی `from`/`to`، toggle-done، حذف) |
 | `onboarding` | `/api` | راه‌اندازی — ورودِ گروهیِ کالا/اشخاص (`/import/items`، `/import/contacts`) و مانده‌های اول دوره (`/opening-balances` + status) |
@@ -316,6 +317,18 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۲۶ (2026-08-17) — پشتیبان‌گیری/بازیابیِ کامل + ذخیره‌ی محلیِ خودکار (کامیت `1d99b5e`، دسکتاپ v1.2.4):**
+  - **بک‌اند:** روترِ [backup.py](backend/app/routers/backup.py) — `GET /api/backup/export` با پیمایشِ `Base.metadata.sorted_tables`
+    و تکیه بر RLS، کلِ داده‌ی مستأجر را در یک JSON می‌دهد (بدونِ برشمردنِ دستیِ جدول‌ها؛ جدولِ تازه خودکار پوشش می‌گیرد).
+    `POST /api/backup/import` = جایگزینیِ کامل: پاک‌کردن (معکوسِ FK) سپس درج (والد پیش از فرزند + مرتب‌سازیِ self-refِ چارتِ حساب)،
+    tenant_id بازنگاشت، پرچمِ `app.audit_purge` برای پاک‌کردنِ دفترِ حسابرسی؛ همه در یک تراکنش (خطا → rollbackِ کامل، داده‌ی قبلی سالم).
+    جدول‌های ساختاریِ ارجاع‌شده از جدول‌های سراسری (مثلِ `roles` ← `memberships`) خودکار کنار می‌مانند. هر دو فقط `role.key=='owner'`.
+    تستِ round-trip روی Postgres واقعی: [test_backup.py](backend/tests/test_backup.py). **۱۱۰۷ تستِ بک‌اند سبز.** بدونِ مهاجرت (فقط روتر).
+  - **دسکتاپ:** [electron/backup.ts](desktop/electron/backup.ts) — پس از هر همگام‌سازیِ موفق یک نسخه در `userData/backups` می‌نویسد و
+    ۲۰ نسخه‌ی آخر را نگه می‌دارد؛ IPC: `backup:auto|saveToFile|listLocal|openFolder|restoreFromFile`. کارتِ [BackupCard](desktop/src/components/BackupCard.tsx)
+    در پروفایلِ مالک: ذخیره روی کامپیوتر (دیالوگ)، پوشه‌ی پشتیبان‌ها، بازیابی از فایل (تأییدِ صریح). **وب:** دانلودِ Blob + بازیابی با `<input file>`.
+  - **استقرار:** بک‌اندِ prod (surgical؛ safety-diffِ main.py = فقط ۲ افزوده)، وبِ acc+demo، نصب‌کننده‌ی ۱.۲.۴ روی فید. تأیید: `export`/`import`=۴۰۱ بی‌توکن.
 
 - **۱۴۰۵/۰۵/۲۴ (2026-08-15) — «ساختارِ جدید» روی هر سه تم + Tipalti پیش‌فرض (کامیت `80ac8eb`، فقط فرانت):**
   - **هدف:** ساختارِ تمِ جدید (نوارِ افقی + کارهای مرحله‌ای + داشبوردِ اقدام‌محور + کارت‌های موبایل) روی
