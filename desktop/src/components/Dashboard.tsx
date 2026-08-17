@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2, Building2 } from 'lucide-react'
 import {
   fetchAccountsLive,
@@ -112,6 +112,8 @@ export function Dashboard({
   const [checkOutbox, setCheckOutbox] = useState<OutboxEntry[]>([])
   const [syncStatus, setSyncStatus] = useState<string>('')
   const [syncing, setSyncing] = useState(false)
+  // نگهبانِ اجرای یک‌بارِ همگام‌سازیِ خودکارِ بدو ورود (در برابرِ دوباره‌مانت‌شدن).
+  const didAutoSyncRef = useRef(false)
 
   // نشانِ خوانده‌نشده‌ی گفتگوی بازار: فقط برای حسابِ پخش‌کننده/فروشگاه پول می‌شود.
   // `page` در وابستگی‌ها هست تا با هر جابه‌جایی (مثلاً بعد از خواندنِ پیام‌ها) فوراً به‌روز شود.
@@ -153,16 +155,18 @@ export function Dashboard({
     }
   }
 
-  async function handleSync() {
+  // silent=true برای همگام‌سازیِ خودکارِ بدو ورود: بی‌سروصدا (بدونِ متنِ خطا/موفقیت)،
+  // ولی چرخِ نشانگر همچنان می‌چرخد تا کاربر بداند در حالِ بارگیری است.
+  async function handleSync(silent = false) {
     setSyncing(true)
-    setSyncStatus('در حال هم‌گام‌سازی...')
+    if (!silent) setSyncStatus('در حال هم‌گام‌سازی...')
     try {
       await window.cubita.pullAll()
       const result = await window.cubita.pushOutbox()
       await refreshFromLocalCache()
-      setSyncStatus(`sync کامل شد — ارسال‌شده: ${result.pushed}, ناموفق: ${result.failed}`)
+      if (!silent) setSyncStatus(`sync کامل شد — ارسال‌شده: ${result.pushed}, ناموفق: ${result.failed}`)
     } catch (err) {
-      setSyncStatus(`خطا در sync: ${err instanceof Error ? err.message : String(err)}`)
+      if (!silent) setSyncStatus(`خطا در sync: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSyncing(false)
     }
@@ -170,6 +174,13 @@ export function Dashboard({
 
   useEffect(() => {
     void refreshFromLocalCache()
+    // در دسکتاپ یک‌بار خودکار همگام‌سازی کن تا کالا/انبار/چارتِ حساب در کش بیاید و
+    // فرم‌های ویزارد بدونِ زدنِ دستیِ «همگام‌سازی» آماده باشند. آفلاین → بی‌سروصدا رد می‌شود.
+    if (isElectron && !didAutoSyncRef.current) {
+      didAutoSyncRef.current = true
+      void handleSync(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const pendingOutboxCount = [journalOutbox, invoiceOutbox, purchaseOutbox, checkOutbox]
@@ -349,7 +360,7 @@ export function Dashboard({
             tenantKind={me.tenant_kind}
             mpUnread={mpUnread}
             onLogout={onLogout}
-            onSync={isElectron ? handleSync : undefined}
+            onSync={isElectron ? () => handleSync() : undefined}
             syncing={syncing}
             syncStatus={syncStatus}
           />
@@ -387,7 +398,7 @@ export function Dashboard({
               <div className="topbar-actions">
                 {syncStatus && <span className="sync-status">{syncStatus}</span>}
                 {isElectron && (
-                  <button className="btn-primary" onClick={handleSync} disabled={syncing}>
+                  <button className="btn-primary" onClick={() => handleSync()} disabled={syncing}>
                     <RefreshCw size={15} className={syncing ? 'spin' : ''} />
                     هم‌گام‌سازی
                   </button>
