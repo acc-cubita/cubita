@@ -10,6 +10,36 @@ interface SyncConfig {
   getToken: () => string | null
 }
 
+// بعضی اندپوینت‌ها آرایه‌ی خام می‌دهند (accounts/warehouses/bank-accounts) و بعضی
+// پاسخِ صفحه‌بندی‌شده‌ی keyset `{ items, next_cursor }` (items). این تابع هر دو را
+// می‌شناسد و اندپوینتِ صفحه‌بندی‌شده را تا آخرین صفحه دنبال می‌کند تا کشِ آفلاین کامل
+// شود، نه فقط صفحه‌ی اول. پیش‌ازاین فقط شکلِ آرایه فرض می‌شد و روی پاسخِ صفحه‌بندی‌شده
+// «g is not iterable» می‌داد.
+async function fetchAllRows<T>(config: SyncConfig, endpoint: string, token: string): Promise<T[]> {
+  const all: T[] = []
+  const sep = endpoint.includes('?') ? '&' : '?'
+  let cursor: string | null = null
+
+  for (;;) {
+    const url = `${config.apiBaseUrl}${endpoint}${sep}limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error(`pull ${endpoint} failed: ${res.status}`)
+    const data = (await res.json()) as unknown
+
+    if (Array.isArray(data)) {
+      all.push(...(data as T[]))
+      break
+    }
+
+    const page = data as { items?: T[]; next_cursor?: string | null }
+    if (Array.isArray(page.items)) all.push(...page.items)
+    cursor = page.next_cursor ?? null
+    if (!cursor) break
+  }
+
+  return all
+}
+
 async function pullTable<T extends { id: string }>(
   config: SyncConfig,
   endpoint: string,
@@ -20,11 +50,7 @@ async function pullTable<T extends { id: string }>(
   const token = config.getToken()
   if (!token) return
 
-  const res = await fetch(`${config.apiBaseUrl}${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`pull ${endpoint} failed: ${res.status}`)
-  const items = (await res.json()) as T[]
+  const items = await fetchAllRows<T>(config, endpoint, token)
 
   const db = getLocalDb()
   const cols = ['id', ...columns]

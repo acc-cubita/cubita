@@ -4068,12 +4068,20 @@ button:disabled {
 .topnav-mobile-item.topnav-dd-danger {
   color: var(--danger);
 }
-/* عرض‌های میانی (سایزِ پیش‌فرضِ پنجره ۱۲۸۰): نامِ کسب‌وکار پنهان و آیتم‌ها کمی فشرده‌تر
-   تا نوارِ افقی سرریز نکند و همه‌ی منوها کامل دیده شوند (بدونِ رفتن به همبرگر). */
+/* عرض‌های میانی (سایزِ پیش‌فرضِ پنجره ۱۲۸۰): نامِ کسب‌وکار پنهان می‌شود و خودِ منوها
+   کوچک‌تر (فونت/فاصله/چِوران ریزتر) تا همه‌ی گروه‌ها — حتی برای پخش‌کننده/فروشگاه که
+   گروهِ «بازارِ عمده‌فروشی» را هم دارند — کامل روی یک خط جا شوند و از چپ سرریز نکنند،
+   بی‌آنکه به کشوی همبرگری برویم. */
 @media (max-width: 1440px) {
   .topnav-org { display: none; }
-  .topnav-item { padding: 0 9px; }
-  .topnav-menu { gap: 0; }
+  .topnav-menu { gap: 0; margin-inline-start: 4px; }
+  .topnav-item { padding: 0 7px; gap: 3px; font-size: 13px; }
+  .topnav-item .topnav-item-chev { width: 13px; height: 13px; margin-inline-start: -1px; }
+  .topnav-actions { gap: 6px; }
+  .topnav-brand { padding: 0 4px; }
+  .topnav-brand-name { font-size: 14px; }
+  .topnav-search { padding: 0 8px; }
+  .topnav-search input { width: 96px; }
 }
 /* کمی باریک‌تر: جست‌وجوی ماژول هم کنار می‌رود تا در کلِ بازه‌ی ۱۰۲۵–۱۴۴۰ منوها کامل جا شوند. */
 @media (max-width: 1200px) {
