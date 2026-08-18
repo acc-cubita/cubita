@@ -11,3 +11,8 @@ export type ContactsStackParams = {
   ContactsList: undefined
   ContactDetail: { id: string; name: string }
 }
+
+export type MarketStackParams = {
+  MarketHome: undefined
+  Chat: { scope: 'connection' | 'order'; id: string; title: string }
+}

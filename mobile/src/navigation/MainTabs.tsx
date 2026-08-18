@@ -1,17 +1,16 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
+import { useQuery } from '@tanstack/react-query'
 import { HomeScreen } from '../screens/HomeScreen'
 import { MoreScreen } from '../screens/MoreScreen'
-import { Placeholder } from '../screens/Placeholder'
 import { ReportsStack } from './ReportsStack'
 import { ContactsStack } from './ContactsStack'
+import { MarketStack } from './MarketStack'
+import { useAuth } from '../auth/AuthContext'
+import { fetchUnread } from '../api/marketplace'
 import { colors, font } from '../theme'
 
 const Tab = createBottomTabNavigator()
-
-const MarketScreen = () => (
-  <Placeholder title="بازار و گفتگو" note="اتصال‌ها، سفارش‌ها و چتِ فروشگاه↔پخش در نسخه‌ی بعدی." />
-)
 
 type IconName = keyof typeof Ionicons.glyphMap
 const ICONS: Record<string, IconName> = {
@@ -23,6 +22,18 @@ const ICONS: Record<string, IconName> = {
 }
 
 export function MainTabs() {
+  const { me } = useAuth()
+  const isMarket = me?.tenant_kind === 'distributor' || me?.tenant_kind === 'retailer'
+
+  // نشانِ خوانده‌نشده‌ی چتِ بازار روی تبِ «بازار» — پولِ سبک هر ~۲۵ ثانیه.
+  const unreadQ = useQuery({
+    queryKey: ['mp-unread'],
+    queryFn: fetchUnread,
+    enabled: isMarket,
+    refetchInterval: 25_000,
+  })
+  const unread = isMarket ? unreadQ.data ?? 0 : 0
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -44,7 +55,11 @@ export function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'خانه' }} />
       <Tab.Screen name="Reports" component={ReportsStack} options={{ title: 'گزارش' }} />
-      <Tab.Screen name="Market" component={MarketScreen} options={{ title: 'بازار' }} />
+      <Tab.Screen
+        name="Market"
+        component={MarketStack}
+        options={{ title: 'بازار', tabBarBadge: unread > 0 ? (unread > 99 ? '۹۹+' : unread.toLocaleString('fa-IR')) : undefined }}
+      />
       <Tab.Screen name="Contacts" component={ContactsStack} options={{ title: 'اشخاص' }} />
       <Tab.Screen name="More" component={MoreScreen} options={{ title: 'بیشتر' }} />
     </Tab.Navigator>

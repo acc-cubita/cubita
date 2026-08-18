@@ -210,3 +210,64 @@ export interface ContactStatement {
   total_credit: string
   closing_balance: string
 }
+
+// ── بازارِ عمده‌فروشی + گفتگو ───────────────────────────────────────────────
+
+/** ConnectionOut — اتصالِ پخش‌کننده↔فروشگاه. */
+export interface MpConnection {
+  id: string
+  distributor_tenant_id: string
+  retailer_tenant_id: string
+  distributor_name: string
+  retailer_name: string
+  status: string // pending | approved | rejected | blocked
+  requested_by: string
+  unread_count: number
+  last_message_at: string | null
+  last_message_preview: string
+}
+
+export interface MpOrderLine {
+  listing_id: string | null
+  title: string
+  unit_price: string
+  qty: string
+  line_total: string
+  image: string | null
+}
+
+/** OrderOut — سفارشِ عمده. */
+export interface MpOrder {
+  id: string
+  unread_count: number
+  last_message_at: string | null
+  last_message_preview: string
+  distributor_tenant_id: string
+  retailer_tenant_id: string
+  distributor_name: string
+  retailer_name: string
+  order_number: number
+  status: string // pending | confirmed | rejected | ...
+  settlement_mode: string
+  payment_status: string
+  note: string
+  subtotal: string
+  total: string
+  cash_amount: string
+  lines: MpOrderLine[]
+}
+
+/** MessageOut — یک پیامِ چت. */
+export interface MpMessage {
+  id: string
+  sender_role: string // distributor | retailer
+  sender_user_id: string | null
+  body: string
+  created_at: string
+}
+
+/** MessagesPage — my_role مشخص می‌کند کدام حباب «مالِ من» است. */
+export interface MpMessagesPage {
+  my_role: string
+  messages: MpMessage[]
+}
