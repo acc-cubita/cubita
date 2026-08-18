@@ -32,8 +32,11 @@
       "expo-font",
       [
         "expo-local-authentication",
-        { "faceIDPermission": "برای بازکردنِ امنِ اپ از تشخیصِ چهره استفاده می‌شود." }
-      ]
+        {
+          "faceIDPermission": "برای بازکردنِ امنِ اپ از تشخیصِ چهره استفاده می‌شود."
+        }
+      ],
+      "expo-sharing"
     ]
   }
 }

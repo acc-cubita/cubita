@@ -161,3 +161,52 @@ export interface InventoryReport {
   total_value: string
   item_count: number
 }
+
+// ── اشخاص (طرف‌حساب‌ها) ────────────────────────────────────────────────────
+
+/** آیتمِ GET /api/contacts (Page[ContactOut]) */
+export interface Contact {
+  id: string
+  name: string
+  type: string // customer | supplier | both
+  phone: string | null
+  email: string | null
+  address: string
+  is_active: boolean
+  credit_limit: string
+  entity_type: string
+  national_id: string | null
+}
+
+/** GET /api/contacts/{id}/credit */
+export interface CreditStatus {
+  contact_id: string
+  name: string
+  credit_limit: string
+  outstanding: string // ماندهٔ طلبِ ما از این شخص
+  available: string
+  over_limit: boolean
+}
+
+export interface ContactStatementLine {
+  txn_date: string
+  kind: string // sales_invoice | sales_return | purchase_invoice | purchase_return | receipt | payment
+  number: number | null
+  description: string
+  debit: string
+  credit: string
+  balance: string // ماندهٔ در حال اجرا؛ مثبت = شخص به ما بدهکار است
+}
+
+/** GET /api/reports/contact-statement/{id} */
+export interface ContactStatement {
+  contact_id: string
+  contact_name: string
+  date_from: string | null
+  date_to: string | null
+  opening_balance: string
+  lines: ContactStatementLine[]
+  total_debit: string
+  total_credit: string
+  closing_balance: string
+}

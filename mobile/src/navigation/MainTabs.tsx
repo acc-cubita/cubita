@@ -4,15 +4,13 @@ import { HomeScreen } from '../screens/HomeScreen'
 import { MoreScreen } from '../screens/MoreScreen'
 import { Placeholder } from '../screens/Placeholder'
 import { ReportsStack } from './ReportsStack'
+import { ContactsStack } from './ContactsStack'
 import { colors, font } from '../theme'
 
 const Tab = createBottomTabNavigator()
 
 const MarketScreen = () => (
   <Placeholder title="بازار و گفتگو" note="اتصال‌ها، سفارش‌ها و چتِ فروشگاه↔پخش در نسخه‌ی بعدی." />
-)
-const ContactsScreen = () => (
-  <Placeholder title="اشخاص" note="فهرستِ مشتریان و مانده‌ی حساب‌ها در نسخه‌ی بعدی." />
 )
 
 type IconName = keyof typeof Ionicons.glyphMap
@@ -47,7 +45,7 @@ export function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'خانه' }} />
       <Tab.Screen name="Reports" component={ReportsStack} options={{ title: 'گزارش' }} />
       <Tab.Screen name="Market" component={MarketScreen} options={{ title: 'بازار' }} />
-      <Tab.Screen name="Contacts" component={ContactsScreen} options={{ title: 'اشخاص' }} />
+      <Tab.Screen name="Contacts" component={ContactsStack} options={{ title: 'اشخاص' }} />
       <Tab.Screen name="More" component={MoreScreen} options={{ title: 'بیشتر' }} />
     </Tab.Navigator>
   )

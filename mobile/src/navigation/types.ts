@@ -1,8 +1,13 @@
-// پارامترهای استکِ گزارش‌ها — منبعِ واحدِ تایپِ ناوبری.
+// پارامترهای استک‌ها — منبعِ واحدِ تایپِ ناوبری.
 export type ReportsStackParams = {
   ReportsList: undefined
   IncomeStatement: undefined
   BalanceSheet: undefined
   Aging: { kind: 'receivable' | 'payable' }
   Inventory: undefined
+}
+
+export type ContactsStackParams = {
+  ContactsList: undefined
+  ContactDetail: { id: string; name: string }
 }
