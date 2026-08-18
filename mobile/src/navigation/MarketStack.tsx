@@ -18,7 +18,7 @@ export function MarketStack() {
       }}
     >
       <Stack.Screen name="MarketHome" component={MarketHomeScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title })} />
+      <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title ?? 'گفتگو' })} />
     </Stack.Navigator>
   )
 }

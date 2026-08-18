@@ -1,4 +1,4 @@
-import { NavigationContainer, DarkTheme, type Theme as NavTheme } from '@react-navigation/native'
+import { NavigationContainer, DarkTheme, type LinkingOptions, type Theme as NavTheme } from '@react-navigation/native'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useAuth } from '../auth/AuthContext'
 import { LoginScreen } from '../screens/LoginScreen'
@@ -19,6 +19,22 @@ const navTheme: NavTheme = {
   },
 }
 
+// deep-link — پایه برای بازکردنِ مستقیمِ چت/اشخاص از روی اعلان یا لینک (cubita://).
+// تحویلِ Push در M1 می‌آید؛ این نگاشت از حالا آماده است.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const linking: LinkingOptions<any> = {
+  prefixes: ['cubita://', 'https://acc.cubita.ir'],
+  config: {
+    screens: {
+      Home: 'home',
+      Reports: { screens: { ReportsList: 'reports' } },
+      Contacts: { screens: { ContactsList: 'contacts', ContactDetail: 'contacts/:id' } },
+      Market: { screens: { MarketHome: 'market', Chat: 'chat/:scope/:id' } },
+      More: 'more',
+    },
+  },
+}
+
 function Splash() {
   return (
     <View style={styles.splash}>
@@ -34,7 +50,7 @@ export function RootNavigator() {
   if (status === 'unauth') return <LoginScreen />
   if (status === 'locked') return <LockScreen />
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} linking={linking}>
       <MainTabs />
     </NavigationContainer>
   )

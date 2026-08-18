@@ -9,10 +9,6 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0b0b0d",
     "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#0b0b0d",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ir.cubita.app"
@@ -36,7 +32,16 @@
           "faceIDPermission": "برای بازکردنِ امنِ اپ از تشخیصِ چهره استفاده می‌شود."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b0b0d"
+        }
+      ]
     ]
   }
 }

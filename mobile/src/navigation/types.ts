@@ -14,5 +14,5 @@ export type ContactsStackParams = {
 
 export type MarketStackParams = {
   MarketHome: undefined
-  Chat: { scope: 'connection' | 'order'; id: string; title: string }
+  Chat: { scope: 'connection' | 'order'; id: string; title?: string }
 }
