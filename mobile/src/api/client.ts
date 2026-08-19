@@ -1,15 +1,25 @@
 import { API_BASE_URL } from './config'
 import type { Page } from './types'
 
-// کلاینتِ نازکِ HTTP: تزریقِ توکن، مدیریتِ خطا، و پیمایشِ صفحه‌بندیِ keyset.
-// رفرشِ خودکارِ توکن در M1 (پس از افزودنِ رفرش‌توکنِ بک‌اند) به همین‌جا اضافه می‌شود.
+// کلاینتِ نازکِ HTTP: تزریقِ توکن، رفرشِ خودکار روی ۴۰۱، مدیریتِ خطا، و پیمایشِ keyset.
 
 let accessToken: string | null = null
-export function setAccessToken(token: string | null): void {
-  accessToken = token
+let refreshToken: string | null = null
+
+/** هر دو توکنِ نشست را ست می‌کند (یا با null پاک می‌کند). */
+export function setTokens(access: string | null, refresh: string | null): void {
+  accessToken = access
+  refreshToken = refresh
 }
 
-// وقتی توکن نامعتبر/منقضی شد (۴۰۱)، لایه‌ی احراز هویت باید کاربر را خارج کند.
+// وقتی رفرشِ چرخشی توکنِ تازه داد، لایه‌ی احراز باید آن را ماندگار (SecureStore) کند
+// تا با بستنِ اپ از دست نرود.
+let onTokens: ((access: string, refresh: string) => void) | null = null
+export function setOnTokens(cb: ((access: string, refresh: string) => void) | null): void {
+  onTokens = cb
+}
+
+// وقتی حتی رفرش هم نتوانست نشست را زنده کند، لایه‌ی احراز باید کاربر را خارج کند.
 let onUnauthorized: (() => void) | null = null
 export function setOnUnauthorized(cb: (() => void) | null): void {
   onUnauthorized = cb
@@ -25,7 +35,44 @@ function isApiError(e: unknown): e is ApiError {
 }
 export { isApiError }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+// مسیرهای احرازی که خودشان با ۴۰۱ حرف می‌زنند (رمزِ غلط، رفرشِ باطل) — نباید رفرش/خروج
+// را تریگر کنند؛ پیامِ خطای خودِ سرور باید به کاربر برسد.
+function isAuthPath(path: string): boolean {
+  return (
+    path.startsWith('/api/auth/login') ||
+    path.startsWith('/api/auth/refresh') ||
+    path.startsWith('/api/auth/logout')
+  )
+}
+
+// رفرشِ تک‌پروازه: چند درخواستِ همزمان که ۴۰۱ می‌گیرند فقط یک بار رفرش را صدا می‌زنند.
+let refreshing: Promise<boolean> | null = null
+
+async function doRefresh(): Promise<boolean> {
+  if (!refreshToken) return false
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) return false
+    const j = (await res.json()) as { access_token: string; refresh_token?: string }
+    accessToken = j.access_token
+    if (j.refresh_token) refreshToken = j.refresh_token
+    onTokens?.(accessToken, refreshToken as string)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function tryRefresh(): Promise<boolean> {
+  if (!refreshing) refreshing = doRefresh().finally(() => (refreshing = null))
+  return refreshing
+}
+
+async function request<T>(method: string, path: string, body?: unknown, isRetry = false): Promise<T> {
   let res: Response
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
@@ -40,7 +87,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw { status: 0, message: 'اتصال به سرور برقرار نشد. اینترنت را بررسی کنید.' } as ApiError
   }
 
-  if (res.status === 401) {
+  if (res.status === 401 && !isAuthPath(path)) {
+    // یک بار با رفرش‌توکن، accessِ تازه بگیر و همان درخواست را دوباره بزن.
+    if (!isRetry && (await tryRefresh())) {
+      return request<T>(method, path, body, true)
+    }
     onUnauthorized?.()
     throw { status: 401, message: 'نشست منقضی شده است؛ دوباره وارد شوید.' } as ApiError
   }

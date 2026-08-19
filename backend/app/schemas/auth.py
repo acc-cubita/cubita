@@ -11,6 +11,21 @@ class LoginIn(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    #: فقط برای «همیشه‌واردمانده»ی اپ موبایل پر می‌شود (مسیرِ login). وب/دسکتاپ آن را
+    #: نادیده می‌گیرند. accessِ ۸ساعته که منقضی شد، اپ با این، بی‌ورودِ دوباره refresh می‌کند.
+    refresh_token: str | None = None
+
+
+class RefreshIn(BaseModel):
+    """تعویضِ رفرشِ معتبر با یک accessِ تازه (+ رفرشِ چرخشیِ تازه)."""
+
+    refresh_token: str
+
+
+class LogoutIn(BaseModel):
+    """ابطالِ رفرشِ نشست (خروج از اپ موبایل)."""
+
+    refresh_token: str
 
 
 class MeOut(BaseModel):

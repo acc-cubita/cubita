@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     melipayamak_sender: str = ""
     melipayamak_otp_pattern_id: str = ""
 
+    # اعلانِ Push اپ موبایل (FCM HTTP v1) — سراسری، مثلِ SMTP/پیامک یک حسابِ خودِ کوبیتاست.
+    # خالی = Push غیرفعال (no-op، بی‌خطا). fcm_project_id شناسه‌ی پروژه‌ی Firebase و
+    # fcm_credentials_file مسیرِ فایلِ JSONِ service-account است (کلید هرگز در مخزن نیست).
+    fcm_project_id: str = ""
+    fcm_credentials_file: str = ""
+
+    @property
+    def push_enabled(self) -> bool:
+        return bool(self.fcm_project_id and self.fcm_credentials_file)
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"

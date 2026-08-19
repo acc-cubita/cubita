@@ -8,6 +8,7 @@ from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
+from app.models.device_token import DeviceToken
 from app.models.email_verification import EmailVerificationCode
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
 from app.models.crm import (
@@ -52,6 +53,7 @@ from app.models.payroll import (
     Payslip,
     SalaryContract,
 )
+from app.models.refresh_token import RefreshToken
 from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
 from app.models.stock_count import StockCountLine, StockCountSession
@@ -139,6 +141,8 @@ __all__ = [
     "MoadianSubmission",
     "TreasuryTransaction",
     "AuthToken",
+    "RefreshToken",
+    "DeviceToken",
     "EmailVerificationCode",
     "DocumentCounter",
     "IdempotencyKey",

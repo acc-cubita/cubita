@@ -27,10 +27,12 @@ from app.models.user import Role, User
 from app.schemas.auth import (
     BusinessUpdateIn,
     LoginIn,
+    LogoutIn,
     MeOut,
     PhoneSendCodeIn,
     PhoneVerifyIn,
     ProfileUpdateIn,
+    RefreshIn,
     SignupIn,
     SignupRequestCodeIn,
     SwitchTenantIn,
@@ -47,6 +49,7 @@ from app.schemas.members import (
 )
 from app.security import create_access_token, record_login, set_password, verify_password
 from app.services import members, sms
+from app.services import refresh as refresh_svc
 from app.services.email_verification import CODE_TTL_MINUTES as EMAIL_CODE_TTL_MINUTES
 from app.services.email_verification import consume_email_code, issue_email_code
 from app.services.mailer import send_email_verification_code, send_password_reset
@@ -174,7 +177,31 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
     # توکن همیشه به یک کسب‌وکار مشخص گره می‌خورد. کاربری که چند عضویت دارد با
     # اولی وارد می‌شود و بعد می‌تواند از /switch-tenant جابه‌جا شود.
     record_login(user)
-    return TokenOut(access_token=create_access_token(user, memberships[0].tenant_id))
+    tenant_id = memberships[0].tenant_id
+    # رفرش فقط برای «همیشه‌واردمانده»ی اپ موبایل است؛ وب/دسکتاپ آن را نادیده می‌گیرند.
+    refresh = refresh_svc.issue_refresh(db, user=user, tenant_id=tenant_id)
+    return TokenOut(access_token=create_access_token(user, tenant_id), refresh_token=refresh)
+
+
+@router.post("/refresh", response_model=TokenOut)
+def refresh(data: RefreshIn, db: Session = Depends(get_db)):
+    """رفرشِ معتبر را با یک accessِ تازه + رفرشِ چرخشیِ تازه تعویض می‌کند.
+
+    عمداً بدونِ get_principal: کلاینت اینجا accessِ منقضی دارد و فقط رفرش را می‌فرستد.
+    اعتبارسنجی (وجود، ابطال، انقضا، نسلِ رمز، عضویتِ فعال) در سرویسِ refresh است؛
+    هر شکستی یک ۴۰۱ِ یکسان می‌گیرد تا تفاوتِ پیام چیزی لو ندهد.
+    """
+    result = refresh_svc.rotate(db, data.refresh_token)
+    if result is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "نشست نامعتبر است؛ دوباره وارد شوید")
+    user, tenant_id, new_refresh = result
+    return TokenOut(access_token=create_access_token(user, tenant_id), refresh_token=new_refresh)
+
+
+@router.post("/logout", status_code=204)
+def logout(data: LogoutIn, db: Session = Depends(get_db)):
+    """خروجِ اپ موبایل: رفرش را باطل می‌کند. بی‌صدا و همیشه ۲۰۴ (رفرشِ ناموجود هم «باطل»)."""
+    refresh_svc.revoke(db, data.refresh_token)
 
 
 @router.get("/tenants", response_model=list[TenantMembershipOut])

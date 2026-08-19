@@ -42,6 +42,7 @@ from app.schemas.marketplace import (
     OrderPlaceIn,
 )
 from app.services import marketplace as svc
+from app.services import push
 
 router = APIRouter(prefix="/api/marketplace", tags=["marketplace"])
 
@@ -181,6 +182,15 @@ def request_connection(
     _: User = Depends(require_permission("marketplace", "create")),
 ):
     conn = svc.request_connection(db, principal.tenant_id, data.distributor_tenant_id)
+    # اعلانِ Push به پخش‌کننده فقط روی درخواستِ تازه‌ی pending (نه کلیکِ بی‌اثرِ دوباره).
+    if conn.status == "pending" and conn.requested_by == "retailer":
+        push.safe_notify_tenant(
+            db,
+            conn.distributor_tenant_id,
+            title="درخواستِ اتصالِ تازه",
+            body=f"«{svc._tenant_name(db, principal.tenant_id)}» می‌خواهد به شما متصل شود",
+            data={"route": "market"},
+        )
     return ConnectionOut(**svc.connection_dict(db, conn, principal.tenant_id))
 
 
@@ -218,6 +228,16 @@ def post_connection_message(
         sender_user_id=principal.user.id,
         body=data.body,
     )
+    # اعلان به سمتِ مقابلِ همین اتصال (deep-link به همان رشته‌ی گفتگو).
+    other_tenant = conn.retailer_tenant_id if role == "distributor" else conn.distributor_tenant_id
+    push.safe_notify_tenant(
+        db,
+        other_tenant,
+        title="پیامِ تازه در بازار",
+        body=msg.body[:120],
+        data={"route": f"chat/connection/{conn.id}"},
+        exclude_user_id=principal.user.id,
+    )
     return MessageOut(**svc.message_dict(msg))
 
 
@@ -251,6 +271,16 @@ def create_order_message(
         sender_role=role,
         sender_user_id=principal.user.id,
         body=data.body,
+    )
+    # اعلان به سمتِ مقابلِ همین سفارش (deep-link به رشته‌ی گفتگوی سفارش).
+    other_tenant = order.retailer_tenant_id if role == "distributor" else order.distributor_tenant_id
+    push.safe_notify_tenant(
+        db,
+        other_tenant,
+        title=f"پیامِ تازه — سفارش #{order.order_number}",
+        body=msg.body[:120],
+        data={"route": f"chat/order/{order.id}"},
+        exclude_user_id=principal.user.id,
     )
     return MessageOut(**svc.message_dict(msg))
 
@@ -294,6 +324,14 @@ def place_order(
     _: User = Depends(require_permission("marketplace", "create")),
 ):
     order = svc.place_order(db, principal.tenant_id, data)
+    # اعلانِ سفارشِ تازه به پخش‌کننده.
+    push.safe_notify_tenant(
+        db,
+        order.distributor_tenant_id,
+        title="سفارشِ تازه",
+        body=f"سفارش #{order.order_number} از «{svc._tenant_name(db, principal.tenant_id)}»",
+        data={"route": "market"},
+    )
     return OrderOut(**svc.order_dict(db, order))
 
 

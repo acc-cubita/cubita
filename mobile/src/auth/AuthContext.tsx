@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import * as SecureStore from 'expo-secure-store'
 import * as LocalAuthentication from 'expo-local-authentication'
-import { fetchMe, login as apiLogin } from '../api/auth'
-import { setAccessToken, setOnUnauthorized } from '../api/client'
+import { fetchMe, login as apiLogin, logout as apiLogout } from '../api/auth'
+import { setOnTokens, setOnUnauthorized, setTokens } from '../api/client'
 import type { Me } from '../api/types'
 
 const ACCESS_KEY = 'cubita.access'
+const REFRESH_KEY = 'cubita.refresh'
 
 type Status = 'restoring' | 'unauth' | 'locked' | 'authed'
 
@@ -24,11 +25,19 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null)
 
+async function persistTokens(access: string, refresh: string): Promise<void> {
+  await Promise.all([
+    SecureStore.setItemAsync(ACCESS_KEY, access),
+    SecureStore.setItemAsync(REFRESH_KEY, refresh),
+  ])
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('restoring')
   const [me, setMe] = useState<Me | null>(null)
   const [biometricAvailable, setBiometricAvailable] = useState(false)
-  const tokenRef = useRef<string | null>(null)
+  // آخرین رفرش‌توکن — برای صدا زدنِ خروجِ سمتِ سرور. رفرشِ چرخشی این را به‌روز نگه می‌دارد.
+  const refreshRef = useRef<string | null>(null)
 
   const loadMe = useCallback(async () => {
     const m = await fetchMe()
@@ -36,52 +45,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return m
   }, [])
 
-  const signOut = useCallback(async () => {
-    tokenRef.current = null
-    setAccessToken(null)
+  const clearSession = useCallback(async () => {
+    refreshRef.current = null
+    setTokens(null, null)
     setMe(null)
-    await SecureStore.deleteItemAsync(ACCESS_KEY)
+    await Promise.all([
+      SecureStore.deleteItemAsync(ACCESS_KEY),
+      SecureStore.deleteItemAsync(REFRESH_KEY),
+    ])
     setStatus('unauth')
   }, [])
 
-  // ۴۰۱ از هر درخواستی → خروجِ خودکار.
+  const signOut = useCallback(async () => {
+    // خروجِ سمتِ سرور: رفرش را باطل کن تا نشست واقعاً بسته شود (بهترین‌تلاش).
+    const refresh = refreshRef.current
+    if (refresh) {
+      try {
+        await apiLogout(refresh)
+      } catch {
+        // شبکه/باطل‌بودن مانعِ خروجِ محلی نمی‌شود.
+      }
+    }
+    await clearSession()
+  }, [clearSession])
+
+  // رفرشِ چرخشیِ کلاینت توکنِ تازه داد → ماندگارش کن تا با بستنِ اپ از دست نرود.
+  useEffect(() => {
+    setOnTokens((access, refresh) => {
+      refreshRef.current = refresh
+      void persistTokens(access, refresh)
+    })
+    return () => setOnTokens(null)
+  }, [])
+
+  // ۴۰۱ که حتی رفرش هم نتوانست زنده‌اش کند → خروجِ محلی (بدونِ صدا زدنِ سرور؛ رفرش مرده است).
   useEffect(() => {
     setOnUnauthorized(() => {
-      void signOut()
+      void clearSession()
     })
     return () => setOnUnauthorized(null)
-  }, [signOut])
+  }, [clearSession])
 
   // بازیابیِ نشست در بدو اجرا.
   useEffect(() => {
     void (async () => {
-      const [hasHw, enrolled, stored] = await Promise.all([
+      const [hasHw, enrolled, storedAccess, storedRefresh] = await Promise.all([
         LocalAuthentication.hasHardwareAsync(),
         LocalAuthentication.isEnrolledAsync(),
         SecureStore.getItemAsync(ACCESS_KEY),
+        SecureStore.getItemAsync(REFRESH_KEY),
       ])
       const canBio = hasHw && enrolled
       setBiometricAvailable(canBio)
 
-      if (!stored) {
+      if (!storedAccess) {
         setStatus('unauth')
         return
       }
-      tokenRef.current = stored
-      setAccessToken(stored)
+      refreshRef.current = storedRefresh
+      setTokens(storedAccess, storedRefresh)
       if (canBio) {
         // نشستِ برگشتی: پیش از نمایشِ داده، قفلِ بیومتریک.
         setStatus('locked')
       } else {
         try {
+          // اگر accessِ ۸ساعته منقضی باشد، کلاینت خودش با رفرش زنده‌اش می‌کند.
           await loadMe()
           setStatus('authed')
         } catch {
-          await signOut()
+          await clearSession()
         }
       }
     })()
-  }, [loadMe, signOut])
+  }, [loadMe, clearSession])
 
   const unlock = useCallback(async (): Promise<boolean> => {
     const res = await LocalAuthentication.authenticateAsync({
@@ -94,17 +130,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('authed')
       return true
     } catch {
-      await signOut()
+      await clearSession()
       return false
     }
-  }, [loadMe, signOut])
+  }, [loadMe, clearSession])
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      const { access_token } = await apiLogin(email.trim(), password)
-      tokenRef.current = access_token
-      setAccessToken(access_token)
-      await SecureStore.setItemAsync(ACCESS_KEY, access_token)
+      const { access_token, refresh_token } = await apiLogin(email.trim(), password)
+      const refresh = refresh_token ?? ''
+      refreshRef.current = refresh
+      setTokens(access_token, refresh)
+      await persistTokens(access_token, refresh)
       await loadMe()
       setStatus('authed')
     },

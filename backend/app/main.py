@@ -25,6 +25,7 @@ from app.routers import (
     cost_centers,
     crm,
     currencies,
+    devices,
     installments,
     integration,
     manufacturing,
@@ -136,6 +137,7 @@ app.include_router(installments.router)
 app.include_router(shop.router)
 app.include_router(storefront.router)
 app.include_router(marketplace.router)
+app.include_router(devices.router)
 
 
 @app.get("/api/health")
