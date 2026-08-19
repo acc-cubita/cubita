@@ -335,6 +335,10 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
   - **سمتِ اپ:** کلاینت خودش روی ۴۰۱ **رفرشِ تک‌پروازه** می‌زند و درخواست را یک بار دوباره اجرا می‌کند؛ AuthContext هر دو توکن را در
     SecureStore نگه می‌دارد و توکنِ چرخیده را ماندگار می‌کند؛ خروج، رفرش را سمتِ سرور هم باطل می‌کند. (ثبتِ توکنِ FCM سمتِ اپ نیازمندِ
     پروژه‌ی Firebase است و به فازِ بعد موکول شد؛ زیرساختِ بک‌اند و اندپوینت آماده است.)
+  - **اتصال از شبکه‌ی داخلی:** [config.ts](mobile/src/api/config.ts) دیگر آدرسِ بک‌اند را hardcode نمی‌کند — سه لایه: `EXPO_PUBLIC_API_BASE_URL`
+    (پینِ صریح برای APKِ داخلی) → کشفِ خودکارِ IPِ ماشینِ توسعه از `Constants.expoConfig.hostUri` در حالتِ توسعه (Expo Go روی همان WiFi،
+    بک‌اند روی `:8000`؛ localhost→`10.0.2.2` برای امولاتور) → prod (`https://acc.cubita.ir`). پلاگینِ `expo-build-properties` با
+    `android.usesCleartextTraffic:true` تا APKِ داخلی روی HTTP وصل شود (prod همچنان HTTPS، پس ترافیکِ واقعی رمزنگاری‌شده می‌ماند).
   - **راستی‌آزمایی:** **۱۱۲۳ تستِ بک‌اند سبز** (۱۶ تازه: [test_refresh_token.py](backend/tests/test_refresh_token.py)،
     [test_devices.py](backend/tests/test_devices.py)، [test_push.py](backend/tests/test_push.py))؛ drift/isolation سبز (هر دو جدول در
     `GLOBAL_TABLES`). اپ: `tsc` پاک + باندلِ Metro موفق. **استقرارِ prod در انتظارِ برگشتِ VPS است.**
