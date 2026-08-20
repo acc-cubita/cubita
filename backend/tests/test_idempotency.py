@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.models.accounting import JournalEntry
 from app.models.idempotency import IdempotencyKey
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.services.idempotency import HEADER, request_fingerprint
@@ -273,6 +274,8 @@ def test_two_concurrent_requests_create_only_one_invoice(tenant_id, warehouse, w
             cleanup.query(IdempotencyKey).filter(IdempotencyKey.key == key).delete()
             for it in cleanup.query(Item).filter(Item.sku == "IDEM-CONC").all():
                 cleanup.query(StockLedger).filter(StockLedger.item_id == it.id).delete()
+                # هر خرید یک بارِ ورودی (StockBatch) می‌سازد که به کالا FK دارد؛ پیش از حذفِ کالا برود.
+                cleanup.query(StockBatch).filter(StockBatch.item_id == it.id).delete()
                 cleanup.delete(it)
             cleanup.commit()
 

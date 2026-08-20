@@ -103,6 +103,11 @@ class SalesInvoiceOut(BaseModel):
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
     voided_at: datetime | None = None
     void_reason: str = ""
+    #: ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زده. `created_by_id` همیشه هست؛
+    #: نام/نقش را روتر پُر می‌کند (join به users/memberships)، پس برای پاسخِ خام None می‌مانند.
+    created_by_id: UUID | None = None
+    created_by_name: str | None = None
+    created_by_role: str | None = None
     lines: list[SalesInvoiceLineOut]
 
     model_config = {"from_attributes": True}
@@ -216,6 +221,10 @@ class PurchaseInvoiceOut(BaseModel):
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""
+    #: ثبت‌کننده‌ی فاکتور — نام/نقش را روتر پُر می‌کند (join به users/memberships).
+    created_by_id: UUID | None = None
+    created_by_name: str | None = None
+    created_by_role: str | None = None
     lines: list[PurchaseInvoiceLineOut]
 
     model_config = {"from_attributes": True}

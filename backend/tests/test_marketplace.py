@@ -1144,6 +1144,77 @@ def test_admin_commission_endpoints_require_super_admin(as_distributor, retailer
     assert client.post("/api/marketplace/admin/commissions/settle", json={}).status_code in (403, 422)
 
 
+# ── انتقالِ خودکارِ بارکد از پخش‌کننده به فروشگاه هنگامِ تأییدِ سفارش ─────────
+def _confirm_sale_with_barcode(as_distributor, retailer_id, db, user, barcode):
+    primary_id = _primary_id(db)
+    if db.query(MarketplaceSettings).filter_by(distributor_tenant_id=primary_id).first() is None:
+        db.add(MarketplaceSettings(distributor_tenant_id=primary_id, display_name="پخشِ اصلی", is_active=True))
+    item = _make_item(db, f"DIST-{uuid.uuid4().hex[:6]}", "کالای بارکددارِ پخش")
+    item.barcode = barcode  # پخش‌کننده بارکد را روی کالای خودش دارد
+    db.flush()
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(100), unit_cost=Decimal(1000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="بارکددار", unit="عدد",
+        wholesale_price=8000, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای بارکددار", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(3))])
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200, r.text
+    return item, retailer_id
+
+
+def test_barcode_carried_to_retailer_item_on_confirm(as_distributor, retailer_tenant, db, user):
+    """بارکدِ کالای پخش‌کننده باید خودکار روی کالای متناظرِ فروشگاه بنشیند (بدونِ تنظیمِ دستی)."""
+    dist_item, retailer_id = _confirm_sale_with_barcode(as_distributor, retailer_tenant, db, user, "6267777777779")
+    link = (
+        db.query(MarketplaceItemLink)
+        .filter(MarketplaceItemLink.retailer_tenant_id == retailer_id, MarketplaceItemLink.distributor_item_id == dist_item.id)
+        .one()
+    )
+    with tenant_scope(db, retailer_id):
+        ret_item = db.get(Item, link.retailer_item_id)
+        assert ret_item.barcode == "6267777777779"
+
+
+def test_barcode_carry_skipped_on_collision(as_distributor, retailer_tenant, db, user):
+    """اگر همان بارکد در انبارِ فروشگاه قبلاً برای کالای دیگری باشد، انتقال انجام نمی‌شود (تصادمِ یکتایی)."""
+    retailer_id = retailer_tenant
+    primary_id = _primary_id(db)
+    # فروشگاه از قبل کالایی با همان بارکد دارد.
+    with tenant_scope(db, retailer_id):
+        existing = Item(sku="RET-OWN", name="کالای خودِ فروشگاه", unit="عدد", sales_price=0, barcode="6268888888886")
+        db.add(existing)
+        db.flush()
+    # tenant_scope بایندینگِ نشست را بازنمی‌گرداند؛ صریحاً PRIMARY را برمی‌گردانیم تا
+    # کالای پخش‌کننده در دفترِ خودش ساخته شود (نه در دفترِ فروشگاه).
+    bind_session_tenant(db, primary_id)
+    apply_tenant_to_transaction(db, primary_id)
+    dist_item, _ = _confirm_sale_with_barcode(as_distributor, retailer_id, db, user, "6268888888886")
+    link = (
+        db.query(MarketplaceItemLink)
+        .filter(MarketplaceItemLink.retailer_tenant_id == retailer_id, MarketplaceItemLink.distributor_item_id == dist_item.id)
+        .one()
+    )
+    with tenant_scope(db, retailer_id):
+        ret_item = db.get(Item, link.retailer_item_id)
+        assert ret_item.barcode is None  # تصادم → بارکد منتقل نشد، ولی سفارش قطعی شد
+
+
 def test_admin_can_view_and_settle_via_endpoint(as_distributor, retailer_tenant, db, user, super_client):
     order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user, wholesale=8000, qty=10)
     period = db.query(MarketplaceCommission).filter_by(order_id=order.id).one().period

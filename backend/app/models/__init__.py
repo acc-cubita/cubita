@@ -10,7 +10,7 @@ from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.device_token import DeviceToken
 from app.models.email_verification import EmailVerificationCode
-from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch
+from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, StockBatchSerial
 from app.models.crm import (
     CrmActivity,
     Lead,
@@ -98,6 +98,7 @@ __all__ = [
     "PriceList",
     "PriceListItem",
     "StockBatch",
+    "StockBatchSerial",
     "FixedAsset",
     "DepreciationEntry",
     "Role",

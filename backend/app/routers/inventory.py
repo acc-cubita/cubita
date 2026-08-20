@@ -139,8 +139,28 @@ def item_by_barcode(
     return item
 
 
+def _assert_barcode_free(db: Session, barcode: str | None, exclude_id: UUID | None = None) -> None:
+    """اگر بارکد پرشده باشد و کالای دیگری همان را داشته باشد، خطای روشن می‌دهد.
+
+    بازتابِ نرمِ ایندکسِ یکتای `uq_items_tenant_barcode` — تا کاربر به‌جای خطای خامِ
+    یکتاییِ پایگاه‌داده پیامِ فارسیِ روشن ببیند. ایندکس همچنان پشتیبانِ نهایی است.
+    """
+    if not barcode:
+        return
+    q = db.query(Item.id, Item.name).filter(Item.barcode == barcode)
+    if exclude_id is not None:
+        q = q.filter(Item.id != exclude_id)
+    dup = q.first()
+    if dup is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"این بارکد قبلاً برای کالای «{dup.name}» ثبت شده است؛ هر بارکد فقط برای یک کالا مجاز است.",
+        )
+
+
 @router.post("/api/items", response_model=ItemOut, status_code=201)
 def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "create"))):
+    _assert_barcode_free(db, data.barcode)
     item = Item(**data.model_dump())
     db.add(item)
     db.flush()
@@ -158,7 +178,10 @@ def update_item(
     item = db.get(Item, item_id)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    if "barcode" in fields:
+        _assert_barcode_free(db, fields["barcode"], exclude_id=item.id)
+    for key, value in fields.items():
         setattr(item, key, value)
     db.flush()
     db.refresh(item)

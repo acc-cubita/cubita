@@ -17,6 +17,7 @@ from decimal import Decimal
 import pytest
 
 from app.models.accounting import JournalEntry, JournalLine
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
 from app.models.user import User
@@ -72,6 +73,9 @@ def _purge_items(*item_ids) -> None:
             session.query(inv_model).filter(inv_model.id.in_(inv_ids)).delete(synchronize_session=False)
 
         session.query(StockLedger).filter(StockLedger.item_id.in_(ids)).delete(synchronize_session=False)
+        # هر خرید حالا یک بارِ ورودی (StockBatch) می‌سازد که به کالا FK دارد؛ پیش از حذفِ کالا
+        # پاک شود (سریال‌های کارتنش با ondelete CASCADE خودکار می‌روند).
+        session.query(StockBatch).filter(StockBatch.item_id.in_(ids)).delete(synchronize_session=False)
         session.query(Item).filter(Item.id.in_(ids)).delete(synchronize_session=False)
 
         entry_ids = [e for e in entry_ids if e is not None]

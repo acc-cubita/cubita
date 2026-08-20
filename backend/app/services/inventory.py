@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PURCHASE_INVOICE, DOC_SALES_INVOICE
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Item, StockAdjustment, StockLedger
 from app.models.invoices import (
     PurchaseInvoice,
@@ -349,6 +350,8 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     total_discount = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
     stock_moves: list[StockLedger] = []
+    # هر ردیفِ کالا یک «بارِ ورودی» جدا می‌سازد تا کسری/معیوب قابلِ ردیابی به همان بار باشد.
+    batch_seeds: list[dict] = []
 
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
@@ -383,6 +386,14 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                     entry_date=data.invoice_date,
                     source_type="purchase_invoice",
                 )
+            )
+            batch_seeds.append(
+                {
+                    "item_id": line.item_id,
+                    "qty": Decimal(line.qty),
+                    "unit_cost": effective_unit_cost.quantize(Decimal(1)),
+                    "idx": idx + 1,
+                }
             )
 
     tax_amount = compute_tax(total_amount, data.tax_rate)
@@ -456,6 +467,24 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for move in stock_moves:
         move.source_id = invoice.id
         db.add(move)
+
+    # یک بارِ ورودی به‌ازای هر ردیفِ کالا (نه خدمت). شماره‌ی بار خودکار = P{شماره‌فاکتور}-{ردیف}؛
+    # اپراتور بعداً می‌تواند سریالِ کارتن و کسری/معیوب را روی همین بار ثبت کند.
+    for seed in batch_seeds:
+        db.add(
+            StockBatch(
+                item_id=seed["item_id"],
+                warehouse_id=data.warehouse_id,
+                batch_number=f"P{number}-{seed['idx']}",
+                qty=seed["qty"],
+                received_qty=seed["qty"],
+                unit_cost=seed["unit_cost"],
+                source_type="purchase_invoice",
+                source_id=invoice.id,
+                received_date=data.invoice_date,
+                created_by_id=user.id,
+            )
+        )
 
     db.flush()
     db.refresh(invoice)

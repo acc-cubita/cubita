@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store, Camera } from 'lucide-react'
+import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store, Camera, Printer } from 'lucide-react'
 import {
   createSalesInvoiceDirect,
   fetchContacts,
@@ -11,6 +11,7 @@ import {
   newIdempotencyKey,
   type ContactRecord,
   type ItemRecord,
+  type MeResponse,
   type PriceListRecord,
   type StockLevel,
   type TreasuryTransactionRecord,
@@ -22,7 +23,8 @@ import { EmptyState } from '../components/EmptyState'
 import { ItemPicker } from '../components/ItemPicker'
 import { BarcodeScanner } from '../components/BarcodeScanner'
 import { CardPaymentButton } from '../components/CardPaymentDialog'
-import { todayIso } from '../lib/jalali'
+import { PosReceipt, type ReceiptData } from '../components/PosReceipt'
+import { todayIso, formatJalali } from '../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -32,7 +34,7 @@ interface CartLine {
   unitPrice: number
 }
 
-export function PosPage({ token }: { token: string }) {
+export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   const [items, setItems] = useState<ItemRecord[]>([])
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
   const [contacts, setContacts] = useState<ContactRecord[]>([])
@@ -54,8 +56,53 @@ export function PosPage({ token }: { token: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // آخرین رسیدِ چاپ‌شدنی (برای چاپِ خودکار بعد از فروش و دکمه‌ی چاپِ دوباره)
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null)
+  const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem('pos_auto_print') !== '0')
   const scanRef = useRef<HTMLInputElement>(null)
   const idem = useRef(newIdempotencyKey())
+
+  function toggleAutoPrint() {
+    setAutoPrint((v) => {
+      localStorage.setItem('pos_auto_print', v ? '0' : '1')
+      return !v
+    })
+  }
+
+  // چاپ: رسید در یک بلوکِ مخفی رندر می‌شود و فقط هنگامِ چاپ دیده می‌شود (@media print).
+  // یک tick صبر می‌کنیم تا DOM به‌روز شود، بعد window.print — روی دسکتاپ (الکترون) و وب یکسان.
+  function printReceipt(data: ReceiptData) {
+    setReceipt(data)
+    setTimeout(() => window.print(), 60)
+  }
+
+  function buildReceipt(
+    num: number | null | undefined,
+    cashier: string | null | undefined,
+    payment: 'cash' | 'card',
+    reference?: string | null,
+  ): ReceiptData {
+    const now = new Date()
+    return {
+      storeName: me.tenant_name,
+      cashier: cashier || me.name,
+      date: formatJalali(todayIso()),
+      time: now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+      invoiceNumber: num != null ? num.toLocaleString('fa-IR') : '—',
+      customer: contacts.find((c) => c.id === contactId)?.name ?? 'مشتریِ نقدی',
+      lines: cart.map((l) => ({ name: l.item.name, unit: l.item.unit, qty: l.qty, unitPrice: l.unitPrice, total: l.qty * l.unitPrice })),
+      subtotal,
+      discount: discountAmount,
+      taxRate: taxRateNum,
+      tax,
+      rounding: roundAdjust,
+      total,
+      received: payment === 'cash' && Number(received) > 0 ? Number(received) : null,
+      change: payment === 'cash' && Number(received) > 0 ? change : null,
+      payment,
+      reference: reference ?? null,
+    }
+  }
 
   useEffect(() => {
     fetchItemsLive(token).then((its) => setItems(its.filter((i) => i.is_active && !i.is_service))).catch(() => {})
@@ -198,10 +245,14 @@ export function PosPage({ token }: { token: string }) {
           lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
         },
         idem.current,
-      )) as { number?: number }
+      )) as { number?: number; created_by_name?: string | null }
       idem.current = newIdempotencyKey()
       const num = res?.number != null ? res.number.toLocaleString('fa-IR') : '—'
+      // رسید را پیش از خالی‌کردنِ سبد بساز (snapshot می‌گیرد)
+      const data = buildReceipt(res?.number, res?.created_by_name, 'cash')
       setMessage(`فروش ثبت شد ✓ فاکتور شماره ${num}${change > 0 ? ` — بازگردانده به مشتری: ${fa(change)} ریال` : ''}`)
+      if (autoPrint) printReceipt(data)
+      else setReceipt(data)
       setCart([])
       setReceived('')
       setDiscount('')
@@ -233,10 +284,13 @@ export function PosPage({ token }: { token: string }) {
           lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
         },
         idem.current,
-      )) as { number?: number }
+      )) as { number?: number; created_by_name?: string | null }
       idem.current = newIdempotencyKey()
       const num = res?.number != null ? res.number.toLocaleString('fa-IR') : '—'
+      const data = buildReceipt(res?.number, res?.created_by_name, 'card', txn.reference_no)
       setMessage(`فروشِ کارتی ثبت شد ✓ فاکتور شماره ${num} — مرجعِ پرداخت: ${txn.reference_no ?? '—'}`)
+      if (autoPrint) printReceipt(data)
+      else setReceipt(data)
       setCart([])
       setReceived('')
       setDiscount('')
@@ -439,12 +493,27 @@ export function PosPage({ token }: { token: string }) {
               onPaid={(txn) => void completeAfterCard(txn)}
             />
           </div>
+
+          <div className="pos-print-row">
+            <label className="pos-autoprint" title="بعد از هر فروش، رسید روی پرینترِ حرارتی چاپ می‌شود">
+              <input type="checkbox" checked={autoPrint} onChange={toggleAutoPrint} />
+              چاپِ خودکارِ رسید بعد از فروش
+            </label>
+            {receipt && (
+              <button type="button" className="btn-ghost pos-reprint" onClick={() => window.print()}>
+                <Printer size={14} /> چاپِ رسیدِ آخر
+              </button>
+            )}
+          </div>
           {message && <div className="hint">{message}</div>}
           <p className="hint pos-note">
             بدون انتخاب مشتری، فروش «نقدی» ثبت می‌شود و مبلغ به صندوق می‌رود. با انتخاب مشتری، فروش به حساب او (نسیه) ثبت می‌شود.
           </p>
         </SectionCard>
       </div>
+
+      {/* رسیدِ حرارتی — فقط هنگامِ چاپ دیده می‌شود (@media print در App.css) */}
+      {receipt && <PosReceipt data={receipt} />}
     </div>
   )
 }

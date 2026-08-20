@@ -257,8 +257,13 @@ function InvoiceDetail({
   const profit = net - cost
   const margin = net > 0 ? (profit / net) * 100 : 0
 
+  const creator = row.created_by_name
+    ? `${row.created_by_name}${row.created_by_role ? ` (${row.created_by_role})` : ''}`
+    : null
+
   return (
     <div className="invoice-detail">
+      {creator && <div className="invoice-detail-desc">ثبت‌کننده: {creator}</div>}
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
       <table className="invoice-detail-table">
         <thead>

@@ -55,7 +55,15 @@ class PriceListItem(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """ثبتِ یک بچ/سریِ کالا با تاریخِ انقضا — برای ردیابی و هشدارِ انقضا."""
+    """یک **بارِ ورودیِ کالا** (بچ/سری) — هر خرید جداگانه ثبت می‌شود تا اگر کسری/معیوب/
+    ضایعات پیش آمد، معلوم شود کدام بار مشکل داشته است. همچنین تاریخِ انقضا و سریال‌های
+    کارتنِ همان بار را نگه می‌دارد.
+
+    `qty` = مقدارِ **باقی‌مانده‌ی سالمِ** این بار (received_qty منهای کسری/معیوبِ ثبت‌شده).
+    `received_qty` = مقدارِ اولیه‌ای که هنگامِ ورود ثبت شد. اختلافشان = مجموعِ کسری/معیوب.
+    این جدول «دفترِ ردیابیِ بار» است، نه موتورِ مصرفِ بچ‌محور: فروش، بچِ خاصی را مصرف
+    نمی‌کند؛ موتورِ اصلیِ موجودی همان میانگینِ موزون می‌ماند.
+    """
 
     __tablename__ = "stock_batches"
 
@@ -64,6 +72,39 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     batch_number: Mapped[str] = mapped_column(String(80))
     expiry_date: Mapped[date_ | None] = mapped_column(Date, nullable=True, index=True)
     qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    #: مقدارِ اولیه‌ی ورودیِ این بار (پیش از کسر کسری/معیوب). با qty برابر است تا وقتی
+    #: تعدیلی ثبت شود.
+    received_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    #: بهای واحدِ این بار (ریالِ صحیح) — از فاکتورِ خرید snapshot می‌شود؛ برای مبلغِ زیانِ
+    #: کسری/معیوب و گزارشِ ارزشِ بار.
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: منشأِ بار: purchase_invoice | manual | marketplace. با source_id به سندِ مبدأ می‌رسد.
+    source_type: Mapped[str] = mapped_column(String(30), default="manual", server_default="manual")
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     received_date: Mapped[date_] = mapped_column(Date)
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    serials: Mapped[list["StockBatchSerial"]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan", order_by="StockBatchSerial.serial"
+    )
+
+
+class StockBatchSerial(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """سریالِ کارتنِ یک بار — هر کارتن یک ردیف. اپراتورِ انبار دستی اضافه می‌کند
+    (یا با تولیدِ توالیِ خودکار). وضعیت: ok = سالم، defect = معیوب."""
+
+    __tablename__ = "stock_batch_serials"
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "batch_id", "serial", name="uq_batch_serials_batch_serial"),
+    )
+
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="CASCADE"), index=True
+    )
+    serial: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20), default="ok", server_default="ok")  # ok | defect
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    batch: Mapped["StockBatch"] = relationship(back_populates="serials")

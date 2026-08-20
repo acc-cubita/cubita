@@ -987,6 +987,10 @@ export interface SalesInvoiceRecord {
   tax_amount: string
   voided_at: string | null
   void_reason: string
+  /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
+  created_by_id: string | null
+  created_by_name: string | null
+  created_by_role: string | null
   lines: (InvoiceLineRecord & { unit_price: string; unit_cost: string })[]
 }
 
@@ -1023,6 +1027,10 @@ export interface PurchaseInvoiceRecord {
   tax_amount: string
   voided_at: string | null
   void_reason: string
+  /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
+  created_by_id: string | null
+  created_by_name: string | null
+  created_by_role: string | null
   lines: (InvoiceLineRecord & { unit_cost: string })[]
 }
 
@@ -2869,7 +2877,21 @@ export interface StockBatchRecord {
   batch_number: string
   expiry_date: string | null
   qty: string
+  received_qty: string
+  unit_cost: string
+  source_type: string // purchase_invoice | manual | marketplace
+  source_id: string | null
   received_date: string
+  notes: string
+  defect_qty: string
+  serial_count: number
+}
+
+export interface BatchSerialRecord {
+  id: string
+  batch_id: string
+  serial: string
+  status: string // ok | defect
   notes: string
 }
 
@@ -2892,7 +2914,32 @@ export const createStockBatch = (
   token: string,
   data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
 ) => authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
+export const updateStockBatch = (
+  token: string,
+  id: string,
+  data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
+) => authedSend<StockBatchRecord>(token, 'PATCH', `/api/stock-batches/${id}`, data)
 export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
+
+// سریالِ کارتنِ یک بار
+export const fetchBatchSerials = (token: string, batchId: string) =>
+  authedGet<BatchSerialRecord[]>(token, `/api/stock-batches/${batchId}/serials`)
+export const addBatchSerials = (
+  token: string,
+  batchId: string,
+  data: { serials?: string[]; prefix?: string; start?: number; count?: number; pad?: number },
+) => authedSend<BatchSerialRecord[]>(token, 'POST', `/api/stock-batches/${batchId}/serials`, data)
+export const setBatchSerialStatus = (token: string, serialId: string, status: 'ok' | 'defect') =>
+  authedSend<BatchSerialRecord>(token, 'PATCH', `/api/stock-batch-serials/${serialId}`, { status })
+export const deleteBatchSerial = (token: string, serialId: string) =>
+  authedDelete(token, `/api/stock-batch-serials/${serialId}`)
+
+// کسری/معیوب/ضایعاتِ یک بار (از موجودی و حسابداری کم می‌شود)
+export const adjustBatch = (
+  token: string,
+  batchId: string,
+  data: { qty: number; reason: 'shortage' | 'defect' | 'wastage'; notes?: string; adjustment_date: string },
+) => authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/adjust`, data)
 
 // --- بازارِ عمده‌فروشی (پخش‌کننده ↔ فروشگاه) --------------------------------------
 

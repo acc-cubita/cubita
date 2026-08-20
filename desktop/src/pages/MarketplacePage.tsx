@@ -176,6 +176,7 @@ function Catalog({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState('')
+  const [selectedCat, setSelectedCat] = useState('') // '' = همه‌ی دسته‌ها
   const [cart, setCart] = useState<Record<string, CartLine>>({})
   const [placing, setPlacing] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -188,13 +189,23 @@ function Catalog({ token }: { token: string }) {
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
 
+  // دسته‌های موجود در کاتالوگ (برای فیلترِ سریع). خالی‌ها کنار می‌مانند.
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    for (const l of items) { const c = l.category?.trim(); if (c) set.add(c) }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fa'))
+  }, [items])
+
   const shown = useMemo(() => {
     const q = query.trim()
-    if (!q) return items
-    return items.filter((l) => l.title.includes(q) || l.distributor_name.includes(q) || l.category.includes(q))
-  }, [items, query])
-  // صفحه‌بندیِ کاتالوگ (۱۲ کارت در هر صفحه)؛ با تغییرِ جست‌وجو به اولِ فهرست برمی‌گردد.
-  const catalogPg = usePagination(shown, 12, query)
+    return items.filter((l) => {
+      if (selectedCat && (l.category?.trim() || '') !== selectedCat) return false
+      if (!q) return true
+      return l.title.includes(q) || l.distributor_name.includes(q) || l.category.includes(q)
+    })
+  }, [items, query, selectedCat])
+  // صفحه‌بندیِ کاتالوگ (۱۲ کارت در هر صفحه)؛ با تغییرِ جست‌وجو/دسته به اولِ فهرست برمی‌گردد.
+  const catalogPg = usePagination(shown, 12, `${query}|${selectedCat}`)
 
   function addToCart(l: CatalogListing) {
     setMsg(null)
@@ -240,10 +251,31 @@ function Catalog({ token }: { token: string }) {
         }
       >
         {error && <div className="error">{error}</div>}
+        {categories.length > 0 && (
+          <div className="cat-chips" role="tablist" aria-label="دسته‌بندی">
+            <button
+              type="button"
+              className={`cat-chip${selectedCat === '' ? ' active' : ''}`}
+              onClick={() => setSelectedCat('')}
+            >
+              همه
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`cat-chip${selectedCat === c ? ' active' : ''}`}
+                onClick={() => setSelectedCat(selectedCat === c ? '' : c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
         {shown.length === 0 ? (
           <EmptyState
             icon={Package}
-            text={loading ? 'در حال بارگذاری…' : 'کاتالوگی برای نمایش نیست — تا پخش‌کننده‌ای اتصالتان را تأیید نکند و محصولی منتشر نکند، اینجا خالی است.'}
+            text={loading ? 'در حال بارگذاری…' : selectedCat ? `کالایی در دستهٔ «${selectedCat}» نیست.` : 'کاتالوگی برای نمایش نیست — تا پخش‌کننده‌ای اتصالتان را تأیید نکند و محصولی منتشر نکند، اینجا خالی است.'}
           />
         ) : (
           <div className="product-grid">

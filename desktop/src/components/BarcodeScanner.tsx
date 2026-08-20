@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Camera, ScanLine } from 'lucide-react'
+import { X, Camera, ScanLine, Flashlight } from 'lucide-react'
+
+// فرمت‌های رایجِ خرده‌فروشی + Code128/QR. دادنِ فهرستِ صریح به BarcodeDetector روی
+// گوشیِ اندروید تشخیص را به‌شکلِ محسوسی سریع‌تر و پایدارتر می‌کند تا حالتِ پیش‌فرض
+// (همه‌ی فرمت‌ها) که کندتر و لغزنده‌تر است.
+const WANTED_FORMATS = [
+  'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar', 'qr_code',
+]
 
 /**
  * اسکنِ بارکد با دوربینِ دستگاه — برای صندوقِ فروشگاهی و فرمِ کالا.
@@ -25,10 +32,13 @@ export function BarcodeScanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number | null>(null)
+  const lastDetectAt = useRef(0)
   const last = useRef<{ code: string; t: number }>({ code: '', t: 0 })
   const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting')
   const [errText, setErrText] = useState('')
   const [lastHit, setLastHit] = useState('')
+  const [torchOn, setTorchOn] = useState(false)
+  const [torchAvailable, setTorchAvailable] = useState(false)
 
   const stop = useCallback(() => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
@@ -36,6 +46,19 @@ export function BarcodeScanner({
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
   }, [])
+
+  const toggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    const next = !torchOn
+    try {
+      // torch در تایپِ استانداردِ MediaTrackConstraintSet نیست؛ روی اندروید کار می‌کند.
+      await track.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints)
+      setTorchOn(next)
+    } catch {
+      /* برخی دستگاه‌ها فلاش را با دوربین هم‌زمان نمی‌دهند — بی‌صدا رد شو */
+    }
+  }, [torchOn])
 
   const close = useCallback(() => {
     stop()
@@ -63,7 +86,16 @@ export function BarcodeScanner({
 
       let detector: BarcodeDetector
       try {
-        detector = new Detector()
+        // فرمت‌های پشتیبانی‌شده را می‌گیریم و فقط فرمت‌های موردنیازِ خرده‌فروشی را می‌دهیم.
+        let formats = WANTED_FORMATS
+        try {
+          const supported = await Detector.getSupportedFormats()
+          const filtered = WANTED_FORMATS.filter((f) => supported.includes(f))
+          if (filtered.length) formats = filtered
+        } catch {
+          /* getSupportedFormats نبود — با فهرستِ پیش‌فرض ادامه بده */
+        }
+        detector = new Detector({ formats })
       } catch {
         setErrText('راه‌اندازیِ بارکدخوان ناموفق بود.')
         setStatus('error')
@@ -72,7 +104,12 @@ export function BarcodeScanner({
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
+          // رزولوشنِ بالاتر = بارکدِ واضح‌تر و تشخیصِ مطمئن‌تر روی گوشی.
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
           audio: false,
         })
         if (cancelled) {
@@ -80,6 +117,10 @@ export function BarcodeScanner({
           return
         }
         streamRef.current = stream
+        const track = stream.getVideoTracks()[0]
+        // آیا فلاشِ دوربین در دسترس است؟ (اکثرِ گوشی‌های اندروید بله)
+        const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean }
+        if (caps.torch) setTorchAvailable(true)
         const v = videoRef.current
         if (!v) return
         v.srcObject = stream
@@ -89,6 +130,14 @@ export function BarcodeScanner({
         const tick = async () => {
           const v2 = videoRef.current
           if (cancelled || !v2) return
+          // throttle به ~۸ بار در ثانیه: detect روی هر فریمِ 720p گوشی را داغ و کند
+          // می‌کند بی‌آنکه دقت بهتر شود.
+          const now0 = performance.now()
+          if (now0 - lastDetectAt.current < 120) {
+            rafRef.current = requestAnimationFrame(() => void tick())
+            return
+          }
+          lastDetectAt.current = now0
           try {
             const codes = await detector.detect(v2)
             if (codes.length) {
@@ -139,7 +188,20 @@ export function BarcodeScanner({
       <div className="scanner-box" onClick={(e) => e.stopPropagation()}>
         <div className="scanner-head">
           <span><ScanLine size={16} /> اسکنِ بارکد با دوربین</span>
-          <button type="button" onClick={close} aria-label="بستن"><X size={18} /></button>
+          <div className="scanner-head-actions">
+            {torchAvailable && (
+              <button
+                type="button"
+                onClick={() => void toggleTorch()}
+                aria-label={torchOn ? 'خاموش‌کردنِ فلاش' : 'روشن‌کردنِ فلاش'}
+                className={torchOn ? 'torch-on' : undefined}
+                title="فلاش"
+              >
+                <Flashlight size={17} />
+              </button>
+            )}
+            <button type="button" onClick={close} aria-label="بستن"><X size={18} /></button>
+          </div>
         </div>
         <div className="scanner-stage">
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}

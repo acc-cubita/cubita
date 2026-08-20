@@ -822,6 +822,14 @@ def _find_or_create_supplier(db: Session, conn: MarketplaceConnection, distribut
     return contact
 
 
+def _barcode_free(db: Session, barcode: str, exclude_id: UUID | None = None) -> bool:
+    """آیا این بارکد در انبارِ جاری (scopeِ فروشگاه) آزاد است؟ برای انتقالِ بی‌تصادمِ بارکد."""
+    q = db.query(Item.id).filter(Item.barcode == barcode)
+    if exclude_id is not None:
+        q = q.filter(Item.id != exclude_id)
+    return q.first() is None
+
+
 def _resolve_retailer_item(
     db: Session,
     retailer_tenant_id: UUID,
@@ -830,11 +838,17 @@ def _resolve_retailer_item(
     name: str,
     unit: str,
     price: Decimal,
+    barcode: str | None = None,
 ) -> Item:
     """کالای متناظرِ فروشگاه را برمی‌گرداند؛ بارِ اول می‌سازد و لینک می‌کند (درونِ scopeِ فروشگاه).
 
     نگاشتِ ضدِتکرار در `marketplace_item_links` است: هر کالای پخش‌کننده در انبارِ فروشگاه
     فقط یک کالای متناظر می‌سازد؛ سفارش‌های بعدی همان کالا را پیدا و تعدادش را اضافه می‌کنند.
+
+    `barcode` (بارکدِ کالای پخش‌کننده) هنگامِ ساختِ کالای تازه منتقل می‌شود تا فروشگاه
+    مجبور نباشد دستی تنظیمش کند؛ اگر همان بارکد در انبارِ فروشگاه قبلاً برای کالای دیگری
+    باشد، از انتقال صرف‌نظر می‌شود (تصادم با یکتاییِ بارکد). برای کالای لینک‌شده‌ی قبلی که
+    هنوز بارکد ندارد هم به‌صورتِ فرصت‌طلبانه پُر می‌شود.
     """
     link = (
         db.query(MarketplaceItemLink)
@@ -847,6 +861,10 @@ def _resolve_retailer_item(
     if link is not None:
         item = db.get(Item, link.retailer_item_id)
         if item is not None:
+            # بک‌فیلِ بارکد روی کالای موجود اگر هنوز خالی است و بارکد آزاد است
+            if barcode and not item.barcode and _barcode_free(db, barcode, exclude_id=item.id):
+                item.barcode = barcode
+                db.flush()
             return item
 
     item = Item(
@@ -855,6 +873,7 @@ def _resolve_retailer_item(
         unit=(unit or "عدد"),
         sales_price=price,
         average_cost=0,
+        barcode=(barcode if (barcode and _barcode_free(db, barcode)) else None),
     )
     db.add(item)
     db.flush()
@@ -941,6 +960,13 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
             )
             for f in fulfillment
         ]
+        # بارکدِ کالاهای پخش‌کننده را همین‌جا (در scopeِ خودش، جایی که RLS اجازه می‌دهد)
+        # می‌خوانیم تا هنگامِ ساختِ کالای متناظرِ فروشگاه خودکار منتقل شود.
+        dist_item_ids = {f["distributor_item_id"] for f in fulfillment}
+        barcodes = {
+            iid: bc
+            for iid, bc in db.query(Item.id, Item.barcode).filter(Item.id.in_(dist_item_ids)).all()
+        }
         sales_invoice = post_sales_invoice(
             db,
             SalesInvoiceIn(
@@ -958,7 +984,8 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
         purchase_lines = []
         for f in fulfillment:
             ret_item = _resolve_retailer_item(
-                db, retailer_id, distributor_id, f["distributor_item_id"], f["name"], f["unit"], f["unit_price"]
+                db, retailer_id, distributor_id, f["distributor_item_id"], f["name"], f["unit"], f["unit_price"],
+                barcode=barcodes.get(f["distributor_item_id"]),
             )
             purchase_lines.append(
                 PurchaseInvoiceLineIn(

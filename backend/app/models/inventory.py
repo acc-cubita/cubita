@@ -7,11 +7,13 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    Index,
     Numeric,
     Sequence,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,6 +80,16 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_items_tenant_sku"),
+        # بارکد در سطحِ مستأجر یکتاست — دو کالا نباید بارکدِ یکسان بگیرند، وگرنه اسکن
+        # مبهم می‌شود و «آخرین کالای ذخیره‌شده» را می‌آورد. ایندکسِ جزئی چون بارکدِ
+        # خالی NULL است و چند کالای بی‌بارکد مجازند (فقط ردیف‌های دارای بارکد یکتا).
+        Index(
+            "uq_items_tenant_barcode",
+            "tenant_id",
+            "barcode",
+            unique=True,
+            postgresql_where=text("barcode IS NOT NULL"),
+        ),
     )
 
     sku: Mapped[str] = mapped_column(String(50), index=True)
@@ -147,6 +159,11 @@ class StockAdjustment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # از average_cost کالا در لحظه‌ی ثبت snapshot می‌شود
     reason: Mapped[str] = mapped_column(Text, default="")
     adjustment_date: Mapped[date_] = mapped_column(Date, default=date_.today)
+    #: اگر این تعدیل بابتِ کسری/معیوب/ضایعاتِ یک بارِ مشخص است، به همان بچ گره می‌خورد
+    #: تا معلوم شود کدام بار مشکل داشته. NULL = تعدیلِ عمومی (انبارگردانی).
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

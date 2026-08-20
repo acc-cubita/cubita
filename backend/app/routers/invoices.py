@@ -8,7 +8,8 @@ from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact
 from app.models.invoices import PurchaseInvoice, SalesInvoice
-from app.models.user import User
+from app.models.tenant import Membership
+from app.models.user import Role, User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import (
     PurchaseInvoiceIn,
@@ -31,6 +32,33 @@ from app.services.voiding import void_purchase_invoice, void_sales_invoice
 router = APIRouter(tags=["invoices"])
 
 
+def _attach_creators(db: Session, invoices: list) -> None:
+    """نام و نقشِ ثبت‌کننده را روی هر فاکتور می‌نشاند (برای نمایشِ «چه کسی زد»).
+
+    فیلدها روی خودِ نمونه‌ی ORM ست می‌شوند (mapped نیستند، پس persist نمی‌شوند) و
+    Pydantic با from_attributes می‌خواندشان. نقش از memberships (سراسری/بی‌RLS، پس با
+    فیلترِ صریحِ tenant_id) گرفته می‌شود؛ همه‌ی فاکتورهای پاسخ در یک مستأجرند.
+    """
+    ids = {inv.created_by_id for inv in invoices if getattr(inv, "created_by_id", None)}
+    if not ids:
+        return
+    names = {uid: name for uid, name in db.query(User.id, User.name).filter(User.id.in_(ids)).all()}
+    roles: dict = {}
+    tenant_ids = {inv.tenant_id for inv in invoices}
+    for tid in tenant_ids:
+        rows = (
+            db.query(Membership.user_id, Role.name)
+            .join(Role, Role.id == Membership.role_id)
+            .filter(Membership.user_id.in_(ids), Membership.tenant_id == tid)
+            .all()
+        )
+        for uid, rname in rows:
+            roles[uid] = rname
+    for inv in invoices:
+        inv.created_by_name = names.get(inv.created_by_id)
+        inv.created_by_role = roles.get(inv.created_by_id)
+
+
 @router.get("/api/sales-invoices", response_model=Page[SalesInvoiceOut])
 def list_sales_invoices(
     db: Session = Depends(get_db),
@@ -42,6 +70,7 @@ def list_sales_invoices(
         [SalesInvoice.invoice_date, SalesInvoice.number],
         params,
     )
+    _attach_creators(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -61,7 +90,7 @@ def create_sales_invoice(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return idempotent(
+    invoice = idempotent(
         db,
         request,
         user,
@@ -70,6 +99,8 @@ def create_sales_invoice(
         run=lambda: post_sales_invoice(db, data, user),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
+    _attach_creators(db, [invoice])
+    return invoice
 
 
 @router.get("/api/purchase-invoices", response_model=Page[PurchaseInvoiceOut])
@@ -83,6 +114,7 @@ def list_purchase_invoices(
         [PurchaseInvoice.invoice_date, PurchaseInvoice.number],
         params,
     )
+    _attach_creators(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -102,7 +134,7 @@ def create_purchase_invoice(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return idempotent(
+    invoice = idempotent(
         db,
         request,
         user,
@@ -111,6 +143,8 @@ def create_purchase_invoice(
         run=lambda: post_purchase_invoice(db, data, user),
         replay=lambda rid: db.get(PurchaseInvoice, rid),
     )
+    _attach_creators(db, [invoice])
+    return invoice
 
 
 @router.post("/api/sales-invoices/{invoice_id}/void", response_model=VoidOut)

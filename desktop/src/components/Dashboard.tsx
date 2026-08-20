@@ -221,7 +221,7 @@ export function Dashboard({
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
-          {page === 'pos' && <PosPage token={token} />}
+          {page === 'pos' && <PosPage token={token} me={me} />}
           {page === 'purchases' && (
             <PurchasesPage
               token={token}

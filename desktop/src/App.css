@@ -4760,6 +4760,7 @@ button:disabled {
   font-weight: 600;
 }
 .scanner-head span { display: inline-flex; align-items: center; gap: 6px; }
+.scanner-head-actions { display: inline-flex; align-items: center; gap: 2px; }
 .scanner-head button {
   min-height: 0;
   padding: 4px;
@@ -4769,6 +4770,7 @@ button:disabled {
   cursor: pointer;
 }
 .scanner-head button:hover { color: var(--text-h); }
+.scanner-head button.torch-on { color: var(--accent, #ffc72c); }
 .scanner-stage {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -7366,4 +7368,181 @@ button:disabled {
   .cmdk-item-kind {
     display: none;
   }
+}
+
+/* ── کاتالوگِ بازار: چیپ‌های فیلترِ دسته ─────────────────────────────── */
+.cat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+.cat-chip {
+  min-height: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-2, transparent);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cat-chip:hover { color: var(--text-h); border-color: var(--accent, #ffc72c); }
+.cat-chip.active {
+  background: var(--accent, #ffc72c);
+  border-color: var(--accent, #ffc72c);
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+/* ── جزئیاتِ بارِ ورودی (بچ): خلاصه، سریالِ کارتن ───────────────────── */
+.batch-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.batch-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-2, transparent);
+}
+.batch-summary span { font-size: var(--fs-xs); color: var(--text-muted); }
+.batch-summary strong { font-size: var(--fs-md); }
+.batch-summary .batch-defect strong { color: var(--danger, #d9534f); }
+@media (max-width: 760px) {
+  .batch-summary { grid-template-columns: repeat(2, 1fr); }
+  .batch-seq { flex-wrap: wrap; }
+}
+.drawer-section { margin-top: var(--sp-4); }
+.drawer-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.batch-serial-input { display: flex; flex-direction: column; gap: 4px; }
+.batch-serial-input textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  direction: ltr;
+  text-align: left;
+}
+.batch-seq label { min-width: 0; }
+.batch-serial-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--sp-3);
+}
+.batch-serial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+}
+.batch-serial-chip.defect {
+  border-color: var(--danger, #d9534f);
+  color: var(--danger, #d9534f);
+  background: color-mix(in srgb, var(--danger, #d9534f) 8%, transparent);
+}
+.batch-serial-chip button {
+  min-height: 0;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+}
+.batch-serial-chip button:hover { color: var(--danger, #d9534f); }
+
+/* ── صندوق: کنترل‌های چاپِ رسید ─────────────────────────────────────── */
+.pos-print-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+.pos-autoprint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.pos-autoprint input { width: 16px; height: 16px; accent-color: var(--accent, #ffc72c); }
+.pos-reprint { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── رسیدِ حرارتیِ ۸۰م‌م ────────────────────────────────────────────── */
+/* روی صفحه مخفی است؛ فقط هنگامِ چاپ دیده می‌شود. */
+.pos-receipt-print { display: none; }
+
+@media print {
+  /* همه‌ی رابط پنهان، فقط رسید چاپ شود */
+  body * { visibility: hidden !important; }
+  .pos-receipt-print, .pos-receipt-print * { visibility: visible !important; }
+
+  .pos-receipt-print {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 2mm 3mm;
+    background: #fff;
+    color: #000;
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+  @page { size: 80mm auto; margin: 0; }
+
+  .pos-receipt-print .rc-store { text-align: center; font-size: 15px; font-weight: 700; }
+  .pos-receipt-print .rc-title { text-align: center; font-size: 12px; margin-bottom: 4px; }
+  .pos-receipt-print .rc-meta div,
+  .pos-receipt-print .rc-totals div,
+  .pos-receipt-print .rc-pay div {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .pos-receipt-print .rc-meta span:first-child,
+  .pos-receipt-print .rc-pay span:first-child { color: #333; }
+  .pos-receipt-print .rc-sep {
+    border-top: 1px dashed #000;
+    margin: 4px 0;
+  }
+  .pos-receipt-print .rc-items { width: 100%; border-collapse: collapse; }
+  .pos-receipt-print .rc-items th,
+  .pos-receipt-print .rc-items td {
+    padding: 1px 0;
+    text-align: right;
+    vertical-align: top;
+    font-size: 11px;
+  }
+  .pos-receipt-print .rc-items th { font-weight: 700; border-bottom: 1px solid #000; }
+  .pos-receipt-print .rc-items .rc-qty,
+  .pos-receipt-print .rc-items .rc-price,
+  .pos-receipt-print .rc-items .rc-sum { text-align: left; white-space: nowrap; }
+  .pos-receipt-print .rc-items .rc-name { width: 45%; word-break: break-word; }
+  .pos-receipt-print .rc-grand { font-weight: 700; font-size: 13px; margin-top: 2px; }
+  .pos-receipt-print .rc-foot { text-align: center; margin-top: 8px; font-size: 11px; }
+  .pos-receipt-print .rc-foot .rc-brand { margin-top: 2px; font-weight: 700; letter-spacing: 0.5px; }
 }
