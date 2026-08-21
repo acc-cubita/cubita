@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "کوبیتا — نرم‌افزار حسابداری آفلاین/آنلاین",
   "author": "ipnetcity.ir",
   "main": "dist-electron/main.js",
