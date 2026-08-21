@@ -15,6 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from app.migration_utils import rls_disabled
 from app.tenancy import rls_statements
 
 revision: str = "0070"
@@ -29,8 +30,12 @@ def upgrade() -> None:
     op.add_column("stock_batches", sa.Column("unit_cost", sa.Numeric(18, 0), server_default="0", nullable=False))
     op.add_column("stock_batches", sa.Column("source_type", sa.String(30), server_default="manual", nullable=False))
     op.add_column("stock_batches", sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=True))
-    # بک‌فیل: مقدارِ اولیه‌ی ردیف‌های موجود = مقدارِ فعلی
-    op.execute("UPDATE stock_batches SET received_qty = qty")
+    # بک‌فیل: مقدارِ اولیه‌ی ردیف‌های موجود = مقدارِ فعلی. stock_batches تحتِ FORCE RLS
+    # است و این migration بی‌زمینه‌ی مستأجر اجرا می‌شود؛ بدونِ برداشتنِ موقتِ RLS این UPDATE
+    # ۰ ردیف می‌گرفت و بارهای موجود received_qty=0 می‌ماندند (defect_qty غلط).
+    conn = op.get_bind()
+    with rls_disabled(conn, ["stock_batches"]):
+        conn.execute(sa.text("UPDATE stock_batches SET received_qty = qty"))
 
     # ── stock_adjustments.batch_id ──
     op.add_column("stock_adjustments", sa.Column("batch_id", postgresql.UUID(as_uuid=True), nullable=True))

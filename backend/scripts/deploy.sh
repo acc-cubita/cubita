@@ -152,7 +152,11 @@ grep '^APP_URL=' "$APP_DIR/.env"
 # --- ۶. مهاجرت --------------------------------------------------------------------
 say "۶/۷ مهاجرت پایگاه‌داده"
 cd "$APP_DIR"
-sudo -u "$OS_USER" "$APP_DIR/venv/bin/python" -m alembic upgrade head 2>&1 | grep -E "Running upgrade|ERROR" || true
+# لاگِ کامل در فایل می‌ماند تا اگر مهاجرت شکست خورد، خطای واقعی (نه فقط خطوطِ upgrade)
+# دیده شود. نسخه‌ی قبلی فقط "Running upgrade|ERROR" را grep می‌کرد و traceback گم می‌شد.
+MIGRATE_LOG="/tmp/cubita_migrate_${PROFILE}.log"
+sudo -u "$OS_USER" "$APP_DIR/venv/bin/python" -m alembic upgrade head > "$MIGRATE_LOG" 2>&1 || true
+grep -E "Running upgrade|ERROR|Error|error:" "$MIGRATE_LOG" || true
 
 # نسخه‌ی انتظار از خودِ مهاجرت‌ها خوانده می‌شود، نه از یک عدد هاردکدشده.
 #
@@ -165,7 +169,9 @@ EXPECTED="$(sudo -u "$OS_USER" "$APP_DIR/venv/bin/python" -m alembic heads 2>/de
 VERSION="$(sudo -u postgres psql -d "$DB_NAME" -tAc 'select version_num from alembic_version;' | tr -d ' ')"
 echo "نسخه‌ی نهایی: $VERSION (انتظار: $EXPECTED)"
 [[ -n "$EXPECTED" && "$VERSION" == "$EXPECTED" ]] \
-    || { echo "نسخه‌ی مهاجرت $VERSION است ولی head برابر $EXPECTED" >&2; false; }
+    || { echo "نسخه‌ی مهاجرت $VERSION است ولی head برابر $EXPECTED" >&2; \
+         echo "── خطای واقعیِ مهاجرت (۴۰ خطِ آخرِ $MIGRATE_LOG) ──" >&2; \
+         tail -n 40 "$MIGRATE_LOG" >&2; false; }
 
 # --- ۷. راه‌اندازی و راستی‌آزمایی ---------------------------------------------------
 say "۷/۷ راه‌اندازی و راستی‌آزمایی"

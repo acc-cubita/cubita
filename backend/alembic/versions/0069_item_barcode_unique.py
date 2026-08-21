@@ -18,6 +18,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from app.migration_utils import rls_disabled
+
 revision: str = "0069"
 down_revision: Union[str, None] = "0068"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -26,23 +28,32 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ۱) خالی‌کردنِ بارکدِ تکراری‌ها (نگه‌داشتن روی جدیدترین کالای هر گروه)
-    op.execute(
-        """
-        WITH ranked AS (
-            SELECT id,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY tenant_id, barcode
-                       ORDER BY created_at DESC, id DESC
-                   ) AS rn
-            FROM items
-            WHERE barcode IS NOT NULL
+    #
+    # items تحتِ FORCE RLS است و این migration بدونِ زمینه‌ی مستأجر اجرا می‌شود، پس یک
+    # UPDATEِ خام هیچ ردیفی را نمی‌بیند (۰ ردیف) — de-dup بی‌اثر می‌شد و بعد CREATE UNIQUE
+    # INDEX (که DDL است و همه‌ی ردیف‌ها را می‌بیند) روی بارکدهای تکراریِ واقعی شکست می‌خورد.
+    # پس مثلِ 0039/0043/0072 موقتاً RLS را برمی‌داریم تا پاک‌سازی همه‌ی مستأجرها را بگیرد.
+    conn = op.get_bind()
+    with rls_disabled(conn, ["items"]):
+        conn.execute(
+            sa.text(
+                """
+                WITH ranked AS (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY tenant_id, barcode
+                               ORDER BY created_at DESC, id DESC
+                           ) AS rn
+                    FROM items
+                    WHERE barcode IS NOT NULL
+                )
+                UPDATE items
+                SET barcode = NULL
+                FROM ranked
+                WHERE items.id = ranked.id AND ranked.rn > 1
+                """
+            )
         )
-        UPDATE items
-        SET barcode = NULL
-        FROM ranked
-        WHERE items.id = ranked.id AND ranked.rn > 1
-        """
-    )
     # ۲) ایندکسِ یکتای جزئی
     op.create_index(
         "uq_items_tenant_barcode",
