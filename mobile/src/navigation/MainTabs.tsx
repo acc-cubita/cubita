@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 import { HomeScreen } from '../screens/HomeScreen'
 import { MoreScreen } from '../screens/MoreScreen'
@@ -23,6 +24,8 @@ const ICONS: Record<string, IconName> = {
 
 export function MainTabs() {
   const { me } = useAuth()
+  // insetِ پایینِ اندروید (نوارِ ناوبری/ژست). بدونِ این، نوارِ تب زیرِ نوارِ سیستم می‌افتد.
+  const insets = useSafeAreaInsets()
   const isMarket = me?.tenant_kind === 'distributor' || me?.tenant_kind === 'retailer'
 
   // نشانِ خوانده‌نشده‌ی چتِ بازار روی تبِ «بازار» — پولِ سبک هر ~۲۵ ثانیه.
@@ -43,8 +46,8 @@ export function MainTabs() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 62,
-          paddingBottom: 8,
+          height: 62 + insets.bottom,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: font.size.xs, fontWeight: font.weight.semibold },
