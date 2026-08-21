@@ -192,8 +192,9 @@ POS از همان مسیرِ فاکتورِ فروش استفاده می‌کن�
 `0067` **رفرش‌توکنِ نشست** (جدولِ سراسریِ `refresh_tokens`) · `0068` **توکنِ دستگاهِ Push/FCM** (جدولِ سراسریِ `device_tokens`) ·
 `0069` **بارکدِ یکتای کالا** (ایندکسِ جزئیِ `uq_items_tenant_barcode` روی `(tenant_id, barcode)` where barcode not null؛ با پاک‌سازیِ تکراری‌های موجود) ·
 `0070` **جداسازیِ بارِ ورودی + سریالِ کارتن** (ستون‌های `received_qty`/`unit_cost`/`source_type`/`source_id` روی `stock_batches`؛ جدولِ `stock_batch_serials` مستأجرمحور + RLS؛ ستونِ `stock_adjustments.batch_id`) ·
-`0071` **زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف/تاریخِ بچ** (جدول‌های سراسریِ `marketplace_zones`/`marketplace_returns`/`marketplace_return_lines`؛ `marketplace_connections.zone_id`؛ `marketplace_settings.{return_policy,return_window_days,next_return_number}`؛ `marketplace_listings.consumer_price`؛ `stock_batches.{consumer_price,production_date}`).
-(نسخه‌ی فعلی head = `0071`.)
+`0071` **زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف/تاریخِ بچ** (جدول‌های سراسریِ `marketplace_zones`/`marketplace_returns`/`marketplace_return_lines`؛ `marketplace_connections.zone_id`؛ `marketplace_settings.{return_policy,return_window_days,next_return_number}`؛ `marketplace_listings.consumer_price`؛ `stock_batches.{consumer_price,production_date}`) ·
+`0072` **نقشِ «مامور حمل/انتقال» + گردشِ کارِ تحویل** (بک‌فیلِ نقشِ سراسریِ `delivery_agent` برای همه‌ی مستأجرها با `rls_disabled`؛ `marketplace_settings.require_delivery`؛ `marketplace_orders.{delivered_at,delivered_by_name}`).
+(نسخه‌ی فعلی head = `0072`.)
 
 ---
 
@@ -321,6 +322,23 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۳۰ (2026-08-21) — نقشِ «مامور حمل/انتقال» + گردشِ کارِ تحویل در بازار (بک‌اند + دسکتاپ/وب؛ کامیت‌های محلی، در انتظارِ پوش):**
+  - **(۱) نقشِ «مامور حمل/انتقال» (`delivery_agent`):** نقشِ تازه با دسترسیِ فقط «بازار: view + deliver» به `DEFAULT_ROLES` افزوده شد
+    و مهاجرت `0072` آن را برای همه‌ی مستأجرهای موجود بک‌فیل می‌کند (درجِ میان‌مستأجری با `rls_disabled`، مثلِ 0039/0043). اکشنِ
+    اختصاصیِ `deliver` تا مامور حمل نتواند سفارش تأیید/رد یا مرجوعی تأیید کند (آن‌ها `approve` می‌خواهند). `require_permission` حالا
+    تاپلِ اکشن هم می‌پذیرد؛ اندپوینتِ تحویل با `("deliver","approve")` باز می‌شود (مالک هم می‌تواند تحویل بزند). `deliver` به `WRITE_ACTIONS` رفت.
+  - **(۲) گردشِ کارِ تحویل (`require_delivery`، اختیاری per-distributor):** با روشن‌بودن، تأییدِ سفارشِ اعتباری فقط آن را می‌پذیرد
+    (بدونِ سند)؛ **ورودِ کالا به انبارِ فروشگاه + پستِ دوطرفه + تسویه‌ی نقدِ COD** هنگامِ ثبتِ «تحویل» (`deliver_order`) انجام می‌شود.
+    `marketplace_orders.{delivered_at,delivered_by_name}` برای پاسخ‌گویی. سفارشِ از قبل سنددار (مثلِ آنلاینِ پرداخت‌شده) با تحویل فقط
+    علامت می‌خورد، سند دوباره نمی‌سازد. خاموش = رفتارِ قبلی دست‌نخورده. مرجوعی حالا روی `delivered` هم مجاز است (شرط: فاکتورِ خرید صادر شده).
+    UI: تاگلِ گردشِ کار + راهنمای نقشِ مامور حمل در تنظیماتِ پخش‌کننده؛ دکمه‌ی «تحویل شد» + دیالوگِ نقدِ تحویل روی سفارشِ منتظرِ تحویل
+    ([DistributorPage](desktop/src/pages/DistributorPage.tsx))؛ نمایشِ «تأییدشده — در انتظارِ تحویل» و «تحویل‌شده» سمتِ فروشگاه.
+  - **(۳) بارکد (مورد قبلیِ کاربر، قبلاً در `b94328a` انجام‌شده — تأیید شد):** یکتاییِ بارکد با ۴۰۹ و نامِ کالای متصادم (`_assert_barcode_free`
+    + ایندکسِ `uq_items_tenant_barcode` مهاجرت `0069`) و انتقالِ خودکارِ بارکد به کالای فروشگاه هنگامِ فروش (`_resolve_retailer_item`).
+  - **راستی‌آزمایی:** **۱۱۵۸ تستِ بک‌اند سبز** (۴ تازه: تعویقِ سند تا تحویل + idempotency، ردِ تحویلِ تأییدنشده، تحویلِ سفارشِ از قبل سنددار،
+    مجوزِ نقشِ مامور حمل)؛ `tsc -b` + `vite build` دسکتاپ پاک؛ مهاجرت `0072` روی DBِ محلی اعمال و بک‌فیلِ نقش تأیید شد.
+    **استقرارِ prod در انتظارِ برگشتِ VPS.** (head = `0072`.)
 
 - **۱۴۰۵/۰۵/۲۹ (2026-08-20) — زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف‌کننده/تاریخِ بچ (بک‌اند + دسکتاپ/وب؛ کامیت‌های محلی، در انتظارِ پوش):**
   - **(۱) زونِ ارسال (پخش‌کننده):** پخش‌کننده زون‌های خودش را تعریف می‌کند (نه نقشه) و هر فروشگاهِ متصل را در یک زون می‌گذارد.

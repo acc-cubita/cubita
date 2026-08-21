@@ -35,7 +35,7 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 
 LISTING_KINDS = ("single", "pack")
 CONNECTION_STATUSES = ("pending", "approved", "rejected", "blocked")
-ORDER_STATUSES = ("placed", "confirmed", "rejected", "shipped", "received", "cancelled")
+ORDER_STATUSES = ("placed", "confirmed", "delivered", "rejected", "shipped", "received", "cancelled")
 SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
 COMMISSION_STATUSES = ("pending", "settled")
@@ -58,6 +58,10 @@ class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
     settlement_mode: Mapped[str] = mapped_column(String(20), default="credit", server_default="credit")
     #: تا فعال نشود، پخش‌کننده در بازار دیده نمی‌شود و درخواستِ اتصال نمی‌گیرد.
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: گردشِ کارِ «تحویل با مامور حمل»: اگر روشن باشد، تأییدِ سفارشِ اعتباری فقط آن را
+    #: می‌پذیرد (بدونِ سند)؛ ورودِ کالا به انبارِ فروشگاه و تسویه‌ی نقدی هنگامِ ثبتِ تحویل
+    #: توسطِ «مامور حمل/انتقال» انجام می‌شود. خاموش = رفتارِ قبلی (تأیید = سند + ورودِ انبار).
+    require_delivery: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     #: شماره‌ی سفارشِ بعدی (شمارنده‌ی نمایشیِ per-distributor).
     next_order_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     #: متنِ سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود (شرایط، استثناها، ...).
@@ -200,6 +204,11 @@ class MarketplaceOrder(UUIDPKMixin, TimestampMixin, Base):
     #: (جدا از رشته‌ی کلیِ اتصال؛ هر سفارش گفتگوی خودش را دارد).
     distributor_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     retailer_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    #: تحویلِ بار (گردشِ کارِ «مامور حمل»). هنگامِ ثبتِ تحویل پر می‌شوند: زمان و نامِ
+    #: ثبت‌کننده‌ی تحویل (اسنپ‌شات، برای پاسخ‌گویی). تا وقتی تحویل ثبت نشده NULL/خالی‌اند.
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_by_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
 
     #: فاکتورهای متناظر پس از تأیید — هرکدام در دفترِ مستأجرِ خودش (FKِ سراسری→جدولِ مستأجری).
     distributor_sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(

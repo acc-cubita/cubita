@@ -2956,6 +2956,8 @@ export interface MarketplaceSettings {
   display_name: string
   settlement_mode: 'credit' | 'online'
   is_active: boolean
+  //: گردشِ کارِ «تحویل با مامور حمل» — ورودِ کالا به انبارِ فروشگاه هنگامِ ثبتِ تحویل.
+  require_delivery?: boolean
   return_policy?: string
   return_window_days?: number
 }
@@ -3186,7 +3188,7 @@ export const fetchMpCatalog = (token: string, distributorId?: string) =>
 
 // --- سفارش‌ها (M4) --------------------------------------------------------------
 
-export type MpOrderStatus = 'placed' | 'confirmed' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+export type MpOrderStatus = 'placed' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
 
 export interface MpOrderLine {
   id: string | null
@@ -3212,6 +3214,9 @@ export interface MpOrder {
   subtotal: string
   total: string
   cash_amount: string
+  //: تحویلِ بار (گردشِ کارِ مامور حمل) — تا تحویل ثبت نشده خالی‌اند.
+  delivered_at: string | null
+  delivered_by_name: string
   return_policy: string
   return_window_days: number
   distributor_sales_invoice_id: string | null
@@ -3245,6 +3250,10 @@ export const fetchMpDistributorOrders = (token: string) =>
 
 export const confirmMpOrder = (token: string, id: string, cashPercent = 0) =>
   authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
+
+// ثبتِ تحویل توسطِ مامور حمل/انتقال — ورودِ کالا به انبارِ فروشگاه اینجا انجام می‌شود.
+export const deliverMpOrder = (token: string, id: string, cashPercent = 0) =>
+  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/deliver`, { cash_percent: cashPercent })
 
 export const rejectMpOrder = (token: string, id: string) =>
   authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})

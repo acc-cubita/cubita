@@ -39,6 +39,7 @@ from app.schemas.marketplace import (
     MessageOut,
     MessagesPage,
     OrderConfirmIn,
+    OrderDeliverIn,
     OrderOut,
     OrderPlaceIn,
     ReturnOut,
@@ -417,6 +418,31 @@ def confirm_order(
     cash_percent = body.cash_percent if body is not None else None
     order = svc.confirm_order(
         db, principal.tenant_id, principal.user, order_id, cash_percent if cash_percent is not None else 0
+    )
+    return OrderOut(**svc.order_dict(db, order))
+
+
+@router.post("/distributor/orders/{order_id}/deliver", response_model=OrderOut)
+def deliver_order(
+    order_id: UUID,
+    body: OrderDeliverIn | None = None,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    # «مامور حمل» با اکشنِ اختصاصیِ deliver، و مالک/مدیر با approve — هر کدام کافی است.
+    _: User = Depends(require_permission("marketplace", ("deliver", "approve"))),
+):
+    """ثبتِ تحویلِ سفارش توسطِ مامور حمل/انتقال — ورودِ کالا به انبارِ فروشگاه اینجا انجام می‌شود."""
+    from decimal import Decimal
+
+    cash_percent = body.cash_percent if body is not None else Decimal(0)
+    order = svc.deliver_order(db, principal.tenant_id, principal.user, order_id, cash_percent)
+    # اعلانِ Push به فروشگاه: بار تحویل و به انبارش اضافه شد.
+    push.safe_notify_tenant(
+        db,
+        order.retailer_tenant_id,
+        title="سفارش تحویل شد",
+        body=f"سفارش #{order.order_number} تحویل و به انبارتان اضافه شد",
+        data={"route": "market"},
     )
     return OrderOut(**svc.order_dict(db, order))
 

@@ -74,6 +74,7 @@ def update_settings(db: Session, distributor_tenant_id: UUID, data) -> Marketpla
     row.display_name = data.display_name.strip()
     row.settlement_mode = data.settlement_mode
     row.is_active = data.is_active
+    row.require_delivery = data.require_delivery
     row.return_policy = data.return_policy.strip()
     row.return_window_days = data.return_window_days
     db.flush()
@@ -1067,12 +1068,21 @@ def confirm_order(
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
-    if order.status == "confirmed":
+    if order.status in ("confirmed", "delivered"):
         return order  # بی‌اثر بودنِ تأییدِ دوباره
     if order.status != "placed":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط سفارشِ ثبت‌شده قابلِ تأیید است")
     if order.settlement_mode == "online" and order.payment_status != "paid":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارشِ آنلاین باید ابتدا توسطِ فروشگاه پرداخت شود")
+
+    # گردشِ کارِ «تحویل با مامور حمل»: سفارشِ اعتباری فقط پذیرفته می‌شود؛ سند/ورودِ انبار و
+    # تسویه هنگامِ ثبتِ تحویل (deliver_order) انجام می‌شود، نه اینجا. آنلاین از این مسیر
+    # نمی‌گذرد (با پرداخت نهایی می‌شود)، پس فقط credit را معوق می‌کنیم.
+    settings = get_settings(db, distributor_tenant_id)
+    if settings.require_delivery and order.settlement_mode == "credit":
+        order.status = "confirmed"
+        db.flush()
+        return order
 
     conn = _fulfill(db, order, distributor_user)
     # سهمِ نقد (٪ روی جمعِ فاکتور) را همان لحظه در خزانه‌ی هر دو طرف ثبت کن؛ بقیه اعتباری.
@@ -1081,6 +1091,51 @@ def confirm_order(
     cash_amount = min(cash_amount, Decimal(order.total))
     _settle_cash(db, order, conn, cash_amount)
     order.cash_amount = cash_amount
+    db.flush()
+    return order
+
+
+def deliver_order(
+    db: Session,
+    distributor_tenant_id: UUID,
+    actor_user: User,
+    order_id: UUID,
+    cash_percent: Decimal = Decimal(0),
+) -> MarketplaceOrder:
+    """مامور حمل/انتقال (یا مالک) تحویلِ یک سفارشِ تأییدشده را ثبت می‌کند.
+
+    این نقطه‌ی «ورودِ کالا به انبارِ فروشگاه» در گردشِ کارِ تحویل است: اگر سفارش هنوز
+    سند نخورده (مسیرِ require_delivery)، همین‌جا پستِ دوطرفه انجام و سهمِ نقدِ دریافتی
+    (COD) در خزانه‌ی دو طرف ثبت می‌شود. اگر از قبل سند خورده باشد (مثلِ سفارشِ آنلاینِ
+    پرداخت‌شده)، فقط تحویل علامت می‌خورد و سند دوباره ساخته نمی‌شود.
+
+    idempotent: تحویلِ دوباره فاکتور/تسویه‌ی دوم نمی‌سازد. قفلِ ردیف رقابتِ همزمان را می‌بندد.
+    """
+    order = (
+        _order_query(db)
+        .filter(MarketplaceOrder.id == order_id, MarketplaceOrder.distributor_tenant_id == distributor_tenant_id)
+        .with_for_update()
+        .first()
+    )
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
+    if order.status == "delivered":
+        return order  # بی‌اثر بودنِ تحویلِ دوباره
+    if order.status != "confirmed":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط سفارشِ تأییدشده قابلِ تحویل است")
+
+    # اگر هنوز سند نخورده، همین‌جا پستِ دوطرفه + تسویه‌ی نقدِ تحویل. وگرنه فقط علامتِ تحویل.
+    if order.retailer_purchase_invoice_id is None:
+        conn = _fulfill(db, order, actor_user)
+        pct = min(max(Decimal(cash_percent or 0), Decimal(0)), Decimal(100))
+        cash_amount = (Decimal(order.total) * pct / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
+        cash_amount = min(cash_amount, Decimal(order.total))
+        _settle_cash(db, order, conn, cash_amount)
+        order.cash_amount = cash_amount
+
+    order.delivered_at = datetime.now(timezone.utc)
+    order.delivered_by_name = (actor_user.name or "")[:200]
+    order.status = "delivered"
     db.flush()
     return order
 
@@ -1348,6 +1403,8 @@ def order_dict(db: Session, order: MarketplaceOrder, viewer_tenant_id: UUID | No
         "subtotal": order.subtotal,
         "total": order.total,
         "cash_amount": order.cash_amount,
+        "delivered_at": order.delivered_at,
+        "delivered_by_name": order.delivered_by_name,
         "return_policy": (dsettings.return_policy if dsettings else ""),
         "return_window_days": (dsettings.return_window_days if dsettings else 0),
         "distributor_sales_invoice_id": order.distributor_sales_invoice_id,
@@ -1629,8 +1686,10 @@ def _returned_qty_by_line(db: Session, order_id: UUID) -> dict[UUID, Decimal]:
 def request_return(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceReturn:
     """فروشگاه روی یک سفارشِ تأییدشده درخواستِ مرجوعی می‌دهد (کامل یا پارشال)."""
     order = _get_own_order(db, data.order_id, retailer_tenant_id=retailer_tenant_id)
-    if order.status != "confirmed":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرجوعی فقط روی سفارشِ تأییدشده ممکن است")
+    # مرجوعی فقط پس از رسیدنِ کالا به فروشگاه: در حالتِ عادی status=confirmed و در گردشِ
+    # کارِ تحویل status=delivered؛ در هر دو، فاکتورِ خرید صادر شده (شرطِ لازمِ approve).
+    if order.status not in ("confirmed", "delivered") or order.retailer_purchase_invoice_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرجوعی فقط پس از تأیید و صدورِ فاکتور/تحویلِ سفارش ممکن است")
 
     settings = get_settings(db, order.distributor_tenant_id)
     if settings.return_window_days and settings.return_window_days > 0:

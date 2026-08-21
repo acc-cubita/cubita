@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
-  confirmMpOrder, deleteMpListing, fetchMpDistributorConnections,
+  confirmMpOrder, deliverMpOrder, deleteMpListing, fetchMpDistributorConnections,
   fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, fetchMyMpCommissions, rejectMpOrder,
   setMpConnectionStatus, setMpListingPublished, updateMpSettings,
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
@@ -28,6 +28,7 @@ import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 import { MpZonesPanel } from '../components/MpZonesPanel'
 import { MpDistributorReturns } from '../components/MpDistributorReturns'
 import { useListingDraft } from '../lib/listingDraft'
+import { formatJalali } from '../lib/jalali'
 import { useTheme } from '../lib/theme'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
@@ -40,6 +41,7 @@ const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }
 export const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = {
   placed: { label: 'ثبت‌شده', tone: 'tone-warning' },
   confirmed: { label: 'تأییدشده', tone: 'tone-success' },
+  delivered: { label: 'تحویل‌شده', tone: 'tone-success' },
   rejected: { label: 'ردشده', tone: 'tone-danger' },
   shipped: { label: 'ارسال‌شده', tone: 'tone-success' },
   received: { label: 'تحویل‌شده', tone: 'tone-success' },
@@ -310,12 +312,13 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
   )
 }
 
-/** دیالوگِ تأییدِ سفارش با تعیینِ درصدِ نقد/اعتباری (سهمِ نقد در خزانه ثبت می‌شود). */
+/** دیالوگِ تأیید/تحویلِ سفارش با تعیینِ درصدِ نقد/اعتباری (سهمِ نقد در خزانه ثبت می‌شود). */
 function CashConfirmDialog({
-  order, busy, onCancel, onConfirm,
+  order, busy, mode = 'confirm', onCancel, onConfirm,
 }: {
   order: MpOrder
   busy: boolean
+  mode?: 'confirm' | 'deliver'
   onCancel: () => void
   onConfirm: (cashPct: number) => void
 }) {
@@ -324,17 +327,23 @@ function CashConfirmDialog({
   const p = Math.min(Math.max(Number(pct) || 0, 0), 100)
   const cash = Math.round((total * p) / 100)
   const credit = total - cash
+  const deliver = mode === 'deliver'
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onCancel}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <span><Check size={16} /> تأییدِ سفارشِ #{order.order_number}</span>
+          <span>{deliver ? <Truck size={16} /> : <Check size={16} />} {deliver ? 'ثبتِ تحویلِ سفارشِ' : 'تأییدِ سفارشِ'} #{order.order_number}</span>
           <button type="button" onClick={onCancel} aria-label="بستن"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <p className="hint">با تأیید، کالا از انبارِ شما کم و فاکتورِ فروش صادر می‌شود. مبلغِ کل: <strong className="money-cell">{faMoney(total)}</strong> ریال.</p>
-          <label>درصدِ نقد (بقیه اعتباری ثبت می‌شود)
+          <p className="hint">
+            {deliver
+              ? 'با ثبتِ تحویل، کالا به انبارِ فروشگاه اضافه و اسنادِ فروش/خرید صادر می‌شود. سهمِ نقدِ دریافتی هنگامِ تحویل را وارد کنید. '
+              : 'با تأیید، کالا از انبارِ شما کم و فاکتورِ فروش صادر می‌شود. '}
+            مبلغِ کل: <strong className="money-cell">{faMoney(total)}</strong> ریال.
+          </p>
+          <label>{deliver ? 'درصدِ نقدِ دریافتی هنگامِ تحویل (بقیه اعتباری)' : 'درصدِ نقد (بقیه اعتباری ثبت می‌شود)'}
             <div className="cash-split-row">
               <input type="range" min={0} max={100} step={5} value={p} onChange={(e) => setPct(e.target.value)} />
               <div className="cash-pct-box"><NumberInput value={pct} onChange={setPct} /><span>٪</span></div>
@@ -350,7 +359,9 @@ function CashConfirmDialog({
         </div>
         <div className="modal-foot">
           <button type="button" onClick={onCancel}>انصراف</button>
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => onConfirm(p)}><Check size={14} /> تأیید و صدور فاکتور</button>
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => onConfirm(p)}>
+            {deliver ? <><Truck size={14} /> ثبتِ تحویل</> : <><Check size={14} /> تأیید و صدور فاکتور</>}
+          </button>
         </div>
       </div>
     </div>
@@ -363,6 +374,7 @@ function OrdersPanel({ token }: { token: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<MpOrder | null>(null)
+  const [deliverTarget, setDeliverTarget] = useState<MpOrder | null>(null)
   const [chatOrder, setChatOrder] = useState<MpOrder | null>(null)
 
   const refresh = useCallback(async () => {
@@ -396,6 +408,17 @@ function OrdersPanel({ token }: { token: string }) {
     finally { setBusy(null) }
   }
 
+  // ثبتِ تحویل (مامور حمل) — ورودِ کالا به انبارِ فروشگاه + سهمِ نقدِ دریافتی هنگامِ تحویل.
+  async function doDeliver(o: MpOrder, cashPct: number) {
+    setBusy(o.id); setError(null)
+    try {
+      await deliverMpOrder(token, o.id, cashPct)
+      setDeliverTarget(null)
+      await refresh()
+    } catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
+    finally { setBusy(null) }
+  }
+
   const pending = orders.filter((o) => o.status === 'placed')
   const done = orders.filter((o) => o.status !== 'placed')
 
@@ -419,8 +442,13 @@ function OrdersPanel({ token }: { token: string }) {
                   <button type="button" className="btn-primary" disabled={busy === o.id} onClick={() => setConfirmTarget(o)}><Check size={13} /> تأیید</button>
                   <button type="button" disabled={busy === o.id} onClick={() => void reject(o)}><X size={13} /> رد</button>
                 </>
+              ) : o.status === 'confirmed' && !o.retailer_purchase_invoice_id ? (
+                // گردشِ کارِ تحویل: تأیید شده ولی هنوز تحویل/سند نخورده — «مامور حمل» تحویل می‌زند.
+                <button type="button" className="btn-primary" disabled={busy === o.id} onClick={() => setDeliverTarget(o)}><Truck size={13} /> تحویل شد</button>
               ) : o.status === 'confirmed' ? (
                 <span className="entity-sub"><CheckCircle2 size={13} /> فاکتور صادر شد</span>
+              ) : o.status === 'delivered' ? (
+                <span className="entity-sub"><Truck size={13} /> تحویل شد</span>
               ) : null}
               <button type="button" className="mp-chat-btn" onClick={() => setChatOrder(o)}>
                 <MessageSquare size={13} /> گفتگو
@@ -449,10 +477,16 @@ function OrdersPanel({ token }: { token: string }) {
                   ))}
                 </tbody>
               </table>
-              {o.status === 'confirmed' && (
+              {o.status === 'confirmed' && !o.retailer_purchase_invoice_id && (
+                <p className="hint"><Truck size={13} /> در انتظارِ تحویل توسطِ مامور حمل — با ثبتِ تحویل، کالا به انبارِ فروشگاه اضافه و اسناد صادر می‌شود.</p>
+              )}
+              {o.retailer_purchase_invoice_id && (
                 <p className="hint">
                   تسویه — نقد: <span className="money-cell">{faMoney(o.cash_amount)}</span> ریال، اعتباری: <span className="money-cell">{faMoney(Number(o.total) - Number(o.cash_amount))}</span> ریال
                 </p>
+              )}
+              {o.status === 'delivered' && o.delivered_by_name && (
+                <p className="hint"><Truck size={13} /> تحویل توسطِ «{o.delivered_by_name}»{o.delivered_at ? ` — ${formatJalali(o.delivered_at)}` : ''}</p>
               )}
               {o.note && <p className="hint">یادداشتِ فروشگاه: {o.note}</p>}
             </td>
@@ -470,6 +504,15 @@ function OrdersPanel({ token }: { token: string }) {
           busy={busy === confirmTarget.id}
           onCancel={() => setConfirmTarget(null)}
           onConfirm={(pct) => void doConfirm(confirmTarget, pct)}
+        />
+      )}
+      {deliverTarget && (
+        <CashConfirmDialog
+          order={deliverTarget}
+          mode="deliver"
+          busy={busy === deliverTarget.id}
+          onCancel={() => setDeliverTarget(null)}
+          onConfirm={(pct) => void doDeliver(deliverTarget, pct)}
         />
       )}
       {chatOrder && (
@@ -744,6 +787,19 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
           <input type="checkbox" checked={settings.is_active} onChange={(e) => setSettings({ ...settings, is_active: e.target.checked })} />
           حضور در بازار فعال باشد (فروشگاه‌ها بتوانند پیدا و درخواستِ اتصال بدهند)
         </label>
+
+        <fieldset className="mp-limits">
+          <legend>تحویلِ بار (مامور حمل)</legend>
+          <label className="cal-check-inline">
+            <input type="checkbox" checked={settings.require_delivery ?? false} onChange={(e) => setSettings({ ...settings, require_delivery: e.target.checked })} />
+            گردشِ کارِ «تحویل با مامور حمل» فعال باشد
+          </label>
+          <span className="field-hint">
+            با فعال‌کردن، تأییدِ سفارشِ اعتباری فقط آن را می‌پذیرد؛ ورودِ کالا به انبارِ فروشگاه و
+            صدورِ فاکتور هنگامِ ثبتِ «تحویل» انجام می‌شود. برای اپراتورِ حمل، در «مدیریتِ کاربران» نقشِ
+            «مامور حمل/انتقال» را بدهید تا فقط بتواند سفارش‌ها را ببیند و تحویل را ثبت کند.
+          </span>
+        </fieldset>
 
         <fieldset className="mp-limits">
           <legend>سیاستِ مرجوعی</legend>

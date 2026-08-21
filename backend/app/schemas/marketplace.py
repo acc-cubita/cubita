@@ -52,6 +52,8 @@ class MarketplaceSettingsIn(BaseModel):
     display_name: str = ""
     settlement_mode: str = "credit"  # credit | online
     is_active: bool = False
+    #: گردشِ کارِ «تحویل با مامور حمل» — ورودِ کالا به انبارِ فروشگاه هنگامِ ثبتِ تحویل.
+    require_delivery: bool = False
     #: سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود، و مهلتِ مرجوعی به روز (۰ = بی‌محدودیت).
     return_policy: str = ""
     return_window_days: int = 0
@@ -75,6 +77,7 @@ class MarketplaceSettingsOut(BaseModel):
     display_name: str
     settlement_mode: str
     is_active: bool
+    require_delivery: bool = False
     return_policy: str = ""
     return_window_days: int = 0
 
@@ -414,6 +417,9 @@ class OrderOut(BaseModel):
     total: Decimal
     #: سهمِ نقدِ تسویه‌شده هنگام تأیید (ریال)؛ بقیه اعتباری/طلب است.
     cash_amount: Decimal
+    #: تحویلِ بار (گردشِ کارِ مامور حمل) — زمان و ثبت‌کننده‌ی تحویل. تا تحویل ثبت نشده خالی‌اند.
+    delivered_at: datetime | None = None
+    delivered_by_name: str = ""
     #: سیاست/مهلتِ مرجوعیِ پخش‌کننده (برای نمایش به فروشگاه هنگامِ ثبتِ مرجوعی).
     return_policy: str = ""
     return_window_days: int = 0
@@ -424,6 +430,19 @@ class OrderOut(BaseModel):
 
 class OrderConfirmIn(BaseModel):
     """بدنه‌ی اختیاریِ تأییدِ سفارش — درصدِ نقد که پخش‌کننده تعیین می‌کند (۰..۱۰۰)."""
+
+    cash_percent: Decimal = Decimal(0)
+
+    @field_validator("cash_percent")
+    @classmethod
+    def _pct(cls, v: Decimal) -> Decimal:
+        if v < 0 or v > 100:
+            raise ValueError("درصدِ نقد باید بین ۰ تا ۱۰۰ باشد")
+        return v
+
+
+class OrderDeliverIn(BaseModel):
+    """بدنه‌ی اختیاریِ ثبتِ تحویل — سهمِ نقدِ دریافت‌شده هنگامِ تحویل (COD)، ۰..۱۰۰."""
 
     cash_percent: Decimal = Decimal(0)
 

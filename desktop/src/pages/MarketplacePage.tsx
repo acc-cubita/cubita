@@ -37,6 +37,7 @@ const STATUS_BADGE: Record<MpConnectionStatus, { label: string; tone: string }> 
 const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = {
   placed: { label: 'ثبت‌شده، در انتظارِ تأییدِ پخش‌کننده', tone: 'tone-warning' },
   confirmed: { label: 'تأییدشده — به انبارتان اضافه شد', tone: 'tone-success' },
+  delivered: { label: 'تحویل‌شده — به انبارتان اضافه شد', tone: 'tone-success' },
   rejected: { label: 'ردشده', tone: 'tone-danger' },
   shipped: { label: 'ارسال‌شده', tone: 'tone-success' },
   received: { label: 'تحویل‌شده', tone: 'tone-success' },
@@ -409,7 +410,11 @@ function Orders({ token }: { token: string }) {
             <thead><tr><th>سفارش</th><th>پخش‌کننده</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
               {pg.pageItems.map((o) => {
-                const badge = ORDER_BADGE[o.status]
+                // در گردشِ کارِ تحویل، سفارشِ «تأییدشده» تا وقتی فاکتور نخورده هنوز به انبار نرسیده.
+                const awaitingDelivery = o.status === 'confirmed' && !o.retailer_purchase_invoice_id
+                const badge = awaitingDelivery
+                  ? { label: 'تأییدشده — در انتظارِ تحویل', tone: 'tone-warning' }
+                  : ORDER_BADGE[o.status]
                 const open = expanded === o.id
                 const canPay = o.settlement_mode === 'online' && o.payment_status === 'unpaid' && o.status === 'placed'
                 return (

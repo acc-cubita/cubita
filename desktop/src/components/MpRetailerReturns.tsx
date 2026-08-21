@@ -42,7 +42,11 @@ export function MpRetailerReturns({ token }: { token: string }) {
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
 
-  const confirmedOrders = useMemo(() => orders.filter((o) => o.status === 'confirmed'), [orders])
+  // مرجوعی فقط پس از رسیدنِ کالا: تأییدشده‌ی سنددار یا تحویل‌شده (گردشِ کارِ مامور حمل).
+  const confirmedOrders = useMemo(
+    () => orders.filter((o) => (o.status === 'confirmed' || o.status === 'delivered') && o.retailer_purchase_invoice_id),
+    [orders],
+  )
   const selected = useMemo(() => confirmedOrders.find((o) => o.id === orderId) ?? null, [confirmedOrders, orderId])
   const pg = usePagination(returns, 10)
 

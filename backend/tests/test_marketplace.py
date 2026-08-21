@@ -622,6 +622,131 @@ def test_confirm_order_posts_two_sided_and_is_idempotent(as_distributor, retaile
         assert db.query(PurchaseInvoice).count() == 1
 
 
+# ── گردشِ کارِ «تحویل با مامور حمل» (require_delivery) ───────────────────
+def _setup_delivery_scenario(db, user, primary_id, retailer_id, *, require_delivery: bool):
+    """پخش‌کننده‌ی PRIMARY: تنظیمات + کالا با موجودی + لیستینگِ منتشرشده + اتصالِ approved + سفارشِ ثبت‌شده."""
+    db.add(MarketplaceSettings(
+        distributor_tenant_id=primary_id, display_name="پخشِ اصلی", is_active=True, require_delivery=require_delivery,
+    ))
+    item = _make_item(db, "DIST-DLV", "کالای تحویل")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(100), unit_cost=Decimal(5000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="کالای تحویل عمده", unit="عدد",
+        wholesale_price=8000, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای تحویل", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db, retailer_id,
+        OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(10))]),
+    )
+    return item, main_wh, order
+
+
+def test_require_delivery_defers_stock_until_deliver(as_distributor, retailer_tenant, db, user):
+    """با require_delivery: تأیید فقط می‌پذیرد (بدونِ سند/انبار)؛ ورودِ کالا هنگامِ ثبتِ تحویل است."""
+    primary_id = _primary_id(db)
+    retailer_id = retailer_tenant
+    item, main_wh, order = _setup_delivery_scenario(db, user, primary_id, retailer_id, require_delivery=True)
+
+    # تأیید: پذیرفته می‌شود ولی هیچ سندی نمی‌خورد.
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "confirmed"
+    assert body["distributor_sales_invoice_id"] is None
+    assert body["retailer_purchase_invoice_id"] is None
+    # انبارِ پخش‌کننده هنوز دست‌نخورده و فروشگاه هنوز فاکتوری ندارد.
+    with tenant_scope(db, primary_id):
+        assert inventory_service.get_stock_qty(db, item.id, main_wh.id) == Decimal(100)
+    with tenant_scope(db, retailer_id):
+        assert db.query(PurchaseInvoice).count() == 0
+
+    # تحویل (سهمِ نقدِ ۵۰٪): اینجا سند دوطرفه + ورودِ انبارِ فروشگاه رخ می‌دهد.
+    d = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/deliver", json={"cash_percent": 50})
+    assert d.status_code == 200, d.text
+    db_ = d.json()
+    assert db_["status"] == "delivered"
+    assert db_["distributor_sales_invoice_id"] and db_["retailer_purchase_invoice_id"]
+    assert db_["delivered_by_name"] and db_["delivered_at"]
+    assert Decimal(db_["cash_amount"]) == Decimal(40000)  # ۵۰٪ از ۸۰٬۰۰۰
+
+    with tenant_scope(db, primary_id):
+        assert inventory_service.get_stock_qty(db, item.id, main_wh.id) == Decimal(90)
+    link = (
+        db.query(MarketplaceItemLink)
+        .filter(MarketplaceItemLink.retailer_tenant_id == retailer_id, MarketplaceItemLink.distributor_item_id == item.id)
+        .one()
+    )
+    with tenant_scope(db, retailer_id):
+        assert inventory_service.get_total_stock_qty(db, link.retailer_item_id) == Decimal(10)
+        assert db.query(PurchaseInvoice).count() == 1
+
+    # تحویلِ دوباره idempotent — فاکتورِ دوم نمی‌سازد.
+    d2 = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/deliver", json={"cash_percent": 50})
+    assert d2.status_code == 200
+    assert d2.json()["retailer_purchase_invoice_id"] == db_["retailer_purchase_invoice_id"]
+    with tenant_scope(db, retailer_id):
+        assert db.query(PurchaseInvoice).count() == 1
+
+
+def test_deliver_rejects_unconfirmed_order(as_distributor, retailer_tenant, db, user):
+    """تحویلِ سفارشی که هنوز تأیید نشده → ۴۰۰."""
+    primary_id = _primary_id(db)
+    _, _, order = _setup_delivery_scenario(db, user, primary_id, retailer_tenant, require_delivery=True)
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/deliver")
+    assert r.status_code == 400, r.text
+
+
+def test_deliver_on_already_fulfilled_marks_without_reposting(as_distributor, retailer_tenant, db, user):
+    """بدونِ require_delivery: تأیید سند می‌زند؛ تحویلِ بعدی فقط علامت می‌خورد، سند دوباره نمی‌سازد."""
+    primary_id = _primary_id(db)
+    retailer_id = retailer_tenant
+    _, _, order = _setup_delivery_scenario(db, user, primary_id, retailer_id, require_delivery=False)
+
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200 and r.json()["retailer_purchase_invoice_id"]
+    inv_id = r.json()["retailer_purchase_invoice_id"]
+    with tenant_scope(db, retailer_id):
+        assert db.query(PurchaseInvoice).count() == 1
+
+    d = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/deliver")
+    assert d.status_code == 200, d.text
+    assert d.json()["status"] == "delivered"
+    assert d.json()["retailer_purchase_invoice_id"] == inv_id  # همان فاکتور، بدونِ ساختِ دوباره
+    assert d.json()["delivered_by_name"]
+    with tenant_scope(db, retailer_id):
+        assert db.query(PurchaseInvoice).count() == 1
+
+
+def test_delivery_agent_role_can_deliver_not_confirm():
+    """نقشِ «مامور حمل» فقط deliver دارد نه approve؛ مالک با wildcard هر دو را دارد."""
+    from app.models.user import DEFAULT_ROLES, Role
+
+    da_def = next(r for r in DEFAULT_ROLES if r["key"] == "delivery_agent")
+    da = Role(key="delivery_agent", name=da_def["name"], permissions=da_def["permissions"])
+    assert da.has_permission("marketplace", "deliver") is True
+    assert da.has_permission("marketplace", "view") is True
+    assert da.has_permission("marketplace", "approve") is False  # نمی‌تواند تأیید/رد کند
+    assert da.has_permission("inventory", "view") is False
+
+    owner_def = next(r for r in DEFAULT_ROLES if r["key"] == "owner")
+    owner = Role(key="owner", name=owner_def["name"], permissions=owner_def["permissions"])
+    # مالک deliver اختصاصی ندارد ولی approve دارد؛ اندپوینتِ تحویل با تاپلِ (deliver, approve) بازش می‌کند.
+    assert owner.has_permission("marketplace", "approve") is True
+
+
 # ── محدودیت‌های سفارش‌گذاریِ لیستینگ (کف/سقف/دفعاتِ روزانه) ─────────────
 def test_listing_order_limits_roundtrip(as_distributor, db):
     it = _make_item(db, "LIM-1", "کالای محدود")

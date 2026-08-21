@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models.tenant import Membership, Tenant
-from app.models.user import Role, User
+from app.models.user import DEFAULT_ROLES, Role, User
 from app.security import create_access_token
 from app.services.email_verification import issue_email_code
 from app.services.provisioning import make_slug, signup_new_business
@@ -110,7 +110,7 @@ def test_signup_provisions_everything_needed_to_post(anon_client, db):
 
     assert db.query(Account).filter(Account.tenant_id == tenant.id).count() > 20
     assert db.query(Warehouse).filter(Warehouse.tenant_id == tenant.id).count() == 2
-    assert db.query(Role).filter(Role.tenant_id == tenant.id).count() == 6
+    assert db.query(Role).filter(Role.tenant_id == tenant.id).count() == len(DEFAULT_ROLES)
     counters = db.query(DocumentCounter).filter(DocumentCounter.tenant_id == tenant.id).count()
     assert counters == len(DOC_TYPES), f"شمارنده‌ها ناقص‌اند: {counters} از {len(DOC_TYPES)}"
 

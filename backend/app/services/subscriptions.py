@@ -30,7 +30,7 @@ GRACE_DAYS = 14
 
 #: اکشن‌هایی که داده‌ی مالی می‌سازند یا عوض می‌کنند. خواندن اینجا نیست و عمداً
 #: هرگز محدود نمی‌شود.
-WRITE_ACTIONS = frozenset({"create", "update", "delete", "approve"})
+WRITE_ACTIONS = frozenset({"create", "update", "delete", "approve", "deliver"})
 
 
 @dataclass(frozen=True)

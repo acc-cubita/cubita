@@ -84,22 +84,27 @@ def get_current_user(principal: Principal = Depends(get_principal)) -> User:
     return principal.user
 
 
-def require_permission(module: str, action: str):
+def require_permission(module: str, action: "str | tuple[str, ...]"):
     """مجوز در سطح داده‌ی یک مستأجر. هرگز برای اندپوینت‌های کنترل‌پنل پلتفرم استفاده نشود.
 
     اعمال اشتراک هم اینجاست و نه در تک‌تک سرویس‌ها: یک نقطه‌ی گلوگاه یعنی مسیر
     تازه‌ای که کسی اضافه کند خودکار پوشش می‌گیرد. پخش کردنش در سرویس‌ها یعنی
     اولین اندپوینتی که فراموش شود، یک در باز است.
 
+    `action` می‌تواند یک اکشن باشد یا چند اکشنِ جایگزین (تاپل): اگر نقشِ کاربر **هر یک**
+    از آن‌ها را داشته باشد کافی است — مثلاً اندپوینتِ «تحویل» که هم با اکشنِ اختصاصیِ
+    `deliver` (مامور حمل) و هم با `approve` (مالک/مدیر) باز می‌شود.
+
     **خواندن هرگز محدود نمی‌شود.** فقط اکشن‌های نوشتن. دفتر مالی سند قانونی خودِ
     مشتری است و قفل کردنش پشت پرداخت، گروگان گرفتن چیزی است که مال ما نیست.
     """
+    actions: tuple[str, ...] = (action,) if isinstance(action, str) else tuple(action)
 
     def checker(
         principal: Principal = Depends(get_principal),
         db: Session = Depends(get_db),
     ) -> User:
-        if not principal.role.has_permission(module, action):
+        if not any(principal.role.has_permission(module, a) for a in actions):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
 
         # آزمایشیِ منقضی: کلِ دفتر قفل می‌شود (خواندن هم)، نه فقط نوشتن. این عمداً
@@ -112,7 +117,7 @@ def require_permission(module: str, action: str):
                 "دوره‌ی آزمایشیِ رایگان تمام شده است؛ برای ادامه و حفظِ اطلاعات یک پلن تهیه کنید.",
             )
 
-        if action in WRITE_ACTIONS:
+        if any(a in WRITE_ACTIONS for a in actions):
             state = subscription_state(db, principal.tenant_id)
             if not state.can_write:
                 raise HTTPException(
