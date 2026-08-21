@@ -25,6 +25,7 @@ const ROLES = [
   { key: 'accountant', label: 'حسابدار' },
   { key: 'salesperson', label: 'فروشنده/صندوق‌دار' },
   { key: 'warehouse_keeper', label: 'انباردار' },
+  { key: 'delivery_agent', label: 'مامور حمل/انتقال' },
   { key: 'payroll_officer', label: 'مسئول حقوق و دستمزد' },
 ]
 
