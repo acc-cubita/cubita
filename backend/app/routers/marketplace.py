@@ -34,12 +34,18 @@ from app.schemas.marketplace import (
     ListingOut,
     MarketplaceSettingsIn,
     MarketplaceSettingsOut,
+    ConnectionZoneIn,
     MessageIn,
     MessageOut,
     MessagesPage,
     OrderConfirmIn,
     OrderOut,
     OrderPlaceIn,
+    ReturnOut,
+    ReturnRejectIn,
+    ReturnRequestIn,
+    ZoneIn,
+    ZoneOut,
 )
 from app.services import marketplace as svc
 from app.services import push
@@ -153,6 +159,60 @@ def set_connection_status(
     _: User = Depends(require_permission("marketplace", "update")),
 ):
     conn = svc.set_connection_status(db, principal.tenant_id, connection_id, data.status)
+    return ConnectionOut(**svc.connection_dict(db, conn, principal.tenant_id))
+
+
+# ── زون‌های ارسال: سمتِ پخش‌کننده ──────────────────────────────────────
+@router.get("/distributor/zones", response_model=list[ZoneOut])
+def list_zones(
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+):
+    return [ZoneOut(**z) for z in svc.list_zones(db, principal.tenant_id)]
+
+
+@router.post("/distributor/zones", response_model=ZoneOut, status_code=201)
+def create_zone(
+    data: ZoneIn,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "create")),
+):
+    z = svc.create_zone(db, principal.tenant_id, data)
+    return ZoneOut(id=z.id, name=z.name, notes=z.notes, connection_count=0)
+
+
+@router.put("/distributor/zones/{zone_id}", response_model=ZoneOut)
+def update_zone(
+    zone_id: UUID,
+    data: ZoneIn,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "update")),
+):
+    z = svc.update_zone(db, principal.tenant_id, zone_id, data)
+    return ZoneOut(id=z.id, name=z.name, notes=z.notes)
+
+
+@router.delete("/distributor/zones/{zone_id}", status_code=204)
+def delete_zone(
+    zone_id: UUID,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "delete")),
+):
+    svc.delete_zone(db, principal.tenant_id, zone_id)
+
+
+@router.post("/distributor/connections/{connection_id}/zone", response_model=ConnectionOut)
+def assign_connection_zone(
+    connection_id: UUID,
+    data: ConnectionZoneIn,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "update")),
+):
+    conn = svc.assign_zone(db, principal.tenant_id, connection_id, data.zone_id)
     return ConnectionOut(**svc.connection_dict(db, conn, principal.tenant_id))
 
 
@@ -370,6 +430,73 @@ def reject_order(
 ):
     order = svc.reject_order(db, principal.tenant_id, order_id)
     return OrderOut(**svc.order_dict(db, order))
+
+
+# ── مرجوعی: سمتِ فروشگاه (درخواست) ────────────────────────────────────
+@router.get("/retailer/returns", response_model=list[ReturnOut])
+def retailer_returns(
+    principal: Principal = Depends(retailer_principal),
+    db: Session = Depends(get_db),
+):
+    return [ReturnOut(**svc.return_dict(db, r)) for r in svc.list_returns(db, retailer_tenant_id=principal.tenant_id)]
+
+
+@router.post("/retailer/returns", response_model=ReturnOut, status_code=201)
+def request_return(
+    data: ReturnRequestIn,
+    principal: Principal = Depends(retailer_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "create")),
+):
+    ret = svc.request_return(db, principal.tenant_id, data)
+    push.safe_notify_tenant(
+        db,
+        ret.distributor_tenant_id,
+        title="درخواستِ مرجوعی",
+        body=f"مرجوعی #{ret.return_number} از «{svc._tenant_name(db, principal.tenant_id)}»",
+        data={"route": "market"},
+    )
+    return ReturnOut(**svc.return_dict(db, ret))
+
+
+# ── مرجوعی: سمتِ پخش‌کننده (تأیید/رد) ──────────────────────────────────
+@router.get("/distributor/returns", response_model=list[ReturnOut])
+def distributor_returns(
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+):
+    return [ReturnOut(**svc.return_dict(db, r)) for r in svc.list_returns(db, distributor_tenant_id=principal.tenant_id)]
+
+
+@router.post("/distributor/returns/{return_id}/approve", response_model=ReturnOut)
+def approve_return(
+    return_id: UUID,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "approve")),
+):
+    ret = svc.approve_return(db, principal.tenant_id, principal.user, return_id)
+    push.safe_notify_tenant(
+        db, ret.retailer_tenant_id, title="مرجوعی تأیید شد",
+        body=f"مرجوعی #{ret.return_number} تأیید شد", data={"route": "market"},
+    )
+    return ReturnOut(**svc.return_dict(db, ret))
+
+
+@router.post("/distributor/returns/{return_id}/reject", response_model=ReturnOut)
+def reject_return(
+    return_id: UUID,
+    body: ReturnRejectIn | None = None,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "update")),
+):
+    ret = svc.reject_return(db, principal.tenant_id, return_id, body.response_note if body else "")
+    push.safe_notify_tenant(
+        db, ret.retailer_tenant_id, title="مرجوعی رد شد",
+        body=f"مرجوعی #{ret.return_number} رد شد", data={"route": "market"},
+    )
+    return ReturnOut(**svc.return_dict(db, ret))
 
 
 # ── پرداختِ آنلاین (M5) ────────────────────────────────────────────────

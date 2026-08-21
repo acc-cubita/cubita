@@ -191,8 +191,9 @@ POS از همان مسیرِ فاکتورِ فروش استفاده می‌کن�
 `0066` **گفتگوی زیرِ هر سفارش** (`marketplace_messages.order_id` + `connection_id` تهی‌پذیر + CheckConstraintِ «دقیقاً یک رشته»؛ دو ستونِ `*_last_read_at` روی `marketplace_orders`؛ رشته‌ی گفتگوی جدا برای هر سفارش).
 `0067` **رفرش‌توکنِ نشست** (جدولِ سراسریِ `refresh_tokens`) · `0068` **توکنِ دستگاهِ Push/FCM** (جدولِ سراسریِ `device_tokens`) ·
 `0069` **بارکدِ یکتای کالا** (ایندکسِ جزئیِ `uq_items_tenant_barcode` روی `(tenant_id, barcode)` where barcode not null؛ با پاک‌سازیِ تکراری‌های موجود) ·
-`0070` **جداسازیِ بارِ ورودی + سریالِ کارتن** (ستون‌های `received_qty`/`unit_cost`/`source_type`/`source_id` روی `stock_batches`؛ جدولِ `stock_batch_serials` مستأجرمحور + RLS؛ ستونِ `stock_adjustments.batch_id`).
-(نسخه‌ی فعلی head = `0070`.)
+`0070` **جداسازیِ بارِ ورودی + سریالِ کارتن** (ستون‌های `received_qty`/`unit_cost`/`source_type`/`source_id` روی `stock_batches`؛ جدولِ `stock_batch_serials` مستأجرمحور + RLS؛ ستونِ `stock_adjustments.batch_id`) ·
+`0071` **زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف/تاریخِ بچ** (جدول‌های سراسریِ `marketplace_zones`/`marketplace_returns`/`marketplace_return_lines`؛ `marketplace_connections.zone_id`؛ `marketplace_settings.{return_policy,return_window_days,next_return_number}`؛ `marketplace_listings.consumer_price`؛ `stock_batches.{consumer_price,production_date}`).
+(نسخه‌ی فعلی head = `0071`.)
 
 ---
 
@@ -320,6 +321,21 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۲۹ (2026-08-20) — زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف‌کننده/تاریخِ بچ (بک‌اند + دسکتاپ/وب؛ کامیت‌های محلی، در انتظارِ پوش):**
+  - **(۱) زونِ ارسال (پخش‌کننده):** پخش‌کننده زون‌های خودش را تعریف می‌کند (نه نقشه) و هر فروشگاهِ متصل را در یک زون می‌گذارد.
+    جدولِ سراسریِ `marketplace_zones` + `marketplace_connections.zone_id`. سرویس/روترِ CRUD + تخصیص. UI: تبِ «زون‌ها» ([MpZonesPanel](desktop/src/components/MpZonesPanel.tsx))
+    + انتخابگرِ زون در تبِ «اتصال‌ها».
+  - **(۲) مرجوعیِ بازار (درخواستِ فروشگاه → تأییدِ پخش‌کننده):** جدول‌های سراسریِ `marketplace_returns`/`marketplace_return_lines`.
+    `request_return` (پارشال به‌ازای ردیف، با اعمالِ مهلتِ روز و سقفِ باقی‌مانده)، `approve_return` (پستِ دوطرفه با بازاستفاده از
+    `post_sales_return`/`post_purchase_return`)، `reject_return`. سیاستِ مرجوعی (متن + مهلتِ روز) روی `marketplace_settings` و در تنظیماتِ پخش‌کننده.
+    UI: تبِ «مرجوعی‌ها»ی پخش‌کننده ([MpDistributorReturns](desktop/src/components/MpDistributorReturns.tsx)) و تبِ «مرجوعی»ِ فروشگاه
+    ([MpRetailerReturns](desktop/src/components/MpRetailerReturns.tsx)؛ سیاست + مهلت را می‌بیند). `OrderLineOut.id` و سیاست به `OrderOut` افزوده شد.
+  - **(۳) قیمتِ مصرف‌کننده + تاریخِ بچ:** `marketplace_listings.consumer_price` → روی کاتالوگ **حاشیه‌ی سود** (خرید/فروش/درصد) دیده می‌شود و
+    هنگامِ تأییدِ سفارش **خودکار روی بچِ فروشگاه** می‌نشیند (`_fulfill`). `stock_batches.{consumer_price,production_date}` + فرمِ بارِ دستی
+    (تاریخِ تولید/انقضا، قیمتِ خرید، قیمتِ مصرف) و نمایشِ حاشیه‌ی سود در درایورِ بار.
+  - **راستی‌آزمایی:** **۱۱۵۴ تستِ بک‌اند سبز** (۸ تازه: زون CRUD/گیت، قیمتِ مصرف روی کاتالوگ و بچ، مرجوعیِ دوطرفه/سقف/مهلت/رد، سیاست)؛
+    `tsc -b` + `vite build` دسکتاپ پاک. **استقرارِ prod در انتظارِ برگشتِ VPS.** (head = `0071`.)
 
 - **۱۴۰۵/۰۵/۲۸ (2026-08-19) — دسته‌بندیِ کاتالوگِ بازار + جداسازیِ بارِ ورودی/سریالِ کارتن (کامیت‌های محلی، در انتظارِ پوش):**
   - **(۱) فیلترِ دسته در کاتالوگِ بازار:** در تبِ «کاتالوگ»ِ [بازارِ خرید](desktop/src/pages/MarketplacePage.tsx)، ردیفِ چیپ‌های دسته

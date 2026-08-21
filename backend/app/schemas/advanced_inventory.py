@@ -63,7 +63,11 @@ class StockBatchIn(BaseModel):
     warehouse_id: UUID
     batch_number: str
     expiry_date: date | None = None
+    production_date: date | None = None
     qty: Decimal = Decimal(0)
+    #: قیمتِ خرید (بهای واحد) و قیمتِ مصرف‌کننده — برای حاشیه‌ی سود. اختیاری در ورودِ دستی.
+    unit_cost: Decimal = Decimal(0)
+    consumer_price: Decimal = Decimal(0)
     received_date: date
     notes: str = ""
 
@@ -84,6 +88,8 @@ class StockBatchOut(BaseModel):
     qty: Decimal
     received_qty: Decimal = Decimal(0)
     unit_cost: Decimal = Decimal(0)
+    consumer_price: Decimal = Decimal(0)
+    production_date: date | None = None
     source_type: str = "manual"
     source_id: UUID | None = None
     received_date: date

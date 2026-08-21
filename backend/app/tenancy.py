@@ -62,6 +62,10 @@ GLOBAL_TABLES = frozenset(
         # گفتگوی فروشگاه↔پخش‌کننده هم میان‌مستأجری است (یک رشته‌ی مشترکِ دو تنانت)؛
         # جداسازی در روتر با بررسیِ عضویتِ فراخوان در اتصال است، نه RLS.
         "marketplace_messages",
+        # زون (تقسیم‌بندیِ ارسالِ پخش‌کننده) و مرجوعیِ بازار هم میان‌مستأجری‌اند.
+        "marketplace_zones",
+        "marketplace_returns",
+        "marketplace_return_lines",
     }
 )
 

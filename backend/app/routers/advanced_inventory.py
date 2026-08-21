@@ -201,6 +201,8 @@ def update_stock_batch(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "بار یافت نشد")
     batch.batch_number = data.batch_number
     batch.expiry_date = data.expiry_date
+    batch.production_date = data.production_date
+    batch.consumer_price = data.consumer_price
     batch.notes = data.notes
     db.flush()
     db.refresh(batch)

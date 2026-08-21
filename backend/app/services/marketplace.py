@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings as get_app_settings
 from app.jalali import gregorian_to_jalali
 from app.models.banking import BankAccount
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Contact, Item, Warehouse
 from app.models.marketplace import (
     MarketplaceCommission,
@@ -26,7 +27,10 @@ from app.models.marketplace import (
     MarketplaceMessage,
     MarketplaceOrder,
     MarketplaceOrderLine,
+    MarketplaceReturn,
+    MarketplaceReturnLine,
     MarketplaceSettings,
+    MarketplaceZone,
 )
 from app.models.storefront_native import PaymentGateway
 from app.models.tenant import Membership, Tenant
@@ -37,9 +41,16 @@ from app.schemas.invoices import (
     SalesInvoiceIn,
     SalesInvoiceLineIn,
 )
+from app.schemas.returns import (
+    PurchaseReturnIn,
+    PurchaseReturnLineIn,
+    SalesReturnIn,
+    SalesReturnLineIn,
+)
 from app.schemas.treasury import TreasuryTransactionIn
 from app.services import treasury
 from app.services.inventory import _allocate_discount, post_purchase_invoice, post_sales_invoice
+from app.services.returns import post_purchase_return, post_sales_return
 from app.services.payment_providers import ProviderError, get_provider
 from app.tenant_context import tenant_scope
 
@@ -63,6 +74,8 @@ def update_settings(db: Session, distributor_tenant_id: UUID, data) -> Marketpla
     row.display_name = data.display_name.strip()
     row.settlement_mode = data.settlement_mode
     row.is_active = data.is_active
+    row.return_policy = data.return_policy.strip()
+    row.return_window_days = data.return_window_days
     db.flush()
     return row
 
@@ -127,6 +140,7 @@ def create_listing(db: Session, distributor_tenant_id: UUID, data) -> Marketplac
         code=data.code.strip(),
         unit=(data.unit.strip() or "عدد"),
         wholesale_price=data.wholesale_price,
+        consumer_price=data.consumer_price,
         currency_code=data.currency_code.strip(),
         description=data.description,
         images=data.images or [],
@@ -155,6 +169,7 @@ def update_listing(db: Session, distributor_tenant_id: UUID, listing_id: UUID, d
     listing.code = data.code.strip()
     listing.unit = data.unit.strip() or "عدد"
     listing.wholesale_price = data.wholesale_price
+    listing.consumer_price = data.consumer_price
     listing.currency_code = data.currency_code.strip()
     listing.description = data.description
     listing.images = data.images or []
@@ -197,6 +212,7 @@ def listing_dict(listing: MarketplaceListing) -> dict:
         "code": listing.code,
         "unit": listing.unit,
         "wholesale_price": listing.wholesale_price,
+        "consumer_price": listing.consumer_price,
         "currency_code": listing.currency_code,
         "description": listing.description,
         "images": listing.images or [],
@@ -349,6 +365,7 @@ def connection_dict(db: Session, conn: MarketplaceConnection, viewer_tenant_id: 
             unread = unread_count(db, conn, "distributor")
         elif viewer_tenant_id == conn.retailer_tenant_id:
             unread = unread_count(db, conn, "retailer")
+    zone = db.get(MarketplaceZone, conn.zone_id) if conn.zone_id else None
     return {
         "id": conn.id,
         "distributor_tenant_id": conn.distributor_tenant_id,
@@ -357,6 +374,8 @@ def connection_dict(db: Session, conn: MarketplaceConnection, viewer_tenant_id: 
         "retailer_name": _tenant_name(db, conn.retailer_tenant_id),
         "status": conn.status,
         "requested_by": conn.requested_by,
+        "zone_id": conn.zone_id,
+        "zone_name": zone.name if zone else None,
         "unread_count": unread,
         "last_message_at": last.created_at if last else None,
         "last_message_preview": (last.body[:80] if last else ""),
@@ -628,6 +647,7 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
                 "code": l.code,
                 "unit": l.unit,
                 "wholesale_price": l.wholesale_price,
+                "consumer_price": l.consumer_price,
                 "currency_code": l.currency_code,
                 "description": l.description,
                 "images": l.images or [],
@@ -924,6 +944,8 @@ def _explode_order(order: MarketplaceOrder, listings: dict) -> list[dict]:
                     "units": units,
                     "unit_price": unit_price,
                     "discount": discount,
+                    # قیمتِ مصرف‌کننده فقط برای لیستینگِ تکی معنا دارد (پک را نمی‌توان بینِ اجزا تقسیم کرد).
+                    "consumer_price": (Decimal(listing.consumer_price) if len(comps) == 1 else Decimal(0)),
                 }
             )
     return fulfillment
@@ -982,11 +1004,15 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
         supplier = _find_or_create_supplier(db, conn, distributor_id)
         ret_wh = _default_warehouse(db, retailer_id)
         purchase_lines = []
+        consumer_by_item: dict[UUID, Decimal] = {}  # کالای فروشگاه → قیمتِ مصرف‌کننده (برای بچ)
         for f in fulfillment:
             ret_item = _resolve_retailer_item(
                 db, retailer_id, distributor_id, f["distributor_item_id"], f["name"], f["unit"], f["unit_price"],
                 barcode=barcodes.get(f["distributor_item_id"]),
             )
+            cp = f.get("consumer_price") or Decimal(0)
+            if cp > 0:
+                consumer_by_item[ret_item.id] = cp
             purchase_lines.append(
                 PurchaseInvoiceLineIn(
                     item_id=ret_item.id, qty=f["units"], unit_cost=f["unit_price"], discount=f["discount"]
@@ -1000,6 +1026,14 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
             retailer_user,
         )
         purchase_invoice_id = purchase_invoice.id
+        # قیمتِ مصرف‌کننده‌ی اعلامیِ پخش‌کننده را روی بارهای تازه‌ی این خرید می‌نشانیم
+        # (خودکار، مثلِ کارِ ویزیتور: خرید X، فروش Y). بچ‌ها را post_purchase_invoice ساخته.
+        if consumer_by_item:
+            for batch in db.query(StockBatch).filter(StockBatch.source_id == purchase_invoice_id).all():
+                cp = consumer_by_item.get(batch.item_id)
+                if cp and cp > 0:
+                    batch.consumer_price = cp
+            db.flush()
 
     order.distributor_sales_invoice_id = sales_invoice_id
     order.retailer_purchase_invoice_id = purchase_invoice_id
@@ -1291,6 +1325,12 @@ def order_dict(db: Session, order: MarketplaceOrder, viewer_tenant_id: UUID | No
             unread = order_unread_count(db, order, "distributor")
         elif viewer_tenant_id == order.retailer_tenant_id:
             unread = order_unread_count(db, order, "retailer")
+    # سیاستِ مرجوعیِ پخش‌کننده (تا فروشگاه هنگامِ ثبتِ مرجوعی ببیندش).
+    dsettings = (
+        db.query(MarketplaceSettings)
+        .filter(MarketplaceSettings.distributor_tenant_id == order.distributor_tenant_id)
+        .first()
+    )
     return {
         "id": order.id,
         "unread_count": unread,
@@ -1308,10 +1348,13 @@ def order_dict(db: Session, order: MarketplaceOrder, viewer_tenant_id: UUID | No
         "subtotal": order.subtotal,
         "total": order.total,
         "cash_amount": order.cash_amount,
+        "return_policy": (dsettings.return_policy if dsettings else ""),
+        "return_window_days": (dsettings.return_window_days if dsettings else 0),
         "distributor_sales_invoice_id": order.distributor_sales_invoice_id,
         "retailer_purchase_invoice_id": order.retailer_purchase_invoice_id,
         "lines": [
             {
+                "id": ln.id,
                 "listing_id": ln.listing_id,
                 "title": ln.title,
                 "unit_price": ln.unit_price,
@@ -1453,4 +1496,319 @@ def settle_commission_period(
         "period": period,
         "count": len(rows),
         "amount": int(total),
+    }
+
+
+# ── زونِ ارسال (پخش‌کننده) ──────────────────────────────────────────────
+def list_zones(db: Session, distributor_tenant_id: UUID) -> list[dict]:
+    """زون‌های این پخش‌کننده + تعدادِ فروشگاه‌های هر زون."""
+    zones = (
+        db.query(MarketplaceZone)
+        .filter(MarketplaceZone.distributor_tenant_id == distributor_tenant_id)
+        .order_by(MarketplaceZone.name)
+        .all()
+    )
+    counts = dict(
+        db.query(MarketplaceConnection.zone_id, func.count(MarketplaceConnection.id))
+        .filter(
+            MarketplaceConnection.distributor_tenant_id == distributor_tenant_id,
+            MarketplaceConnection.zone_id.isnot(None),
+        )
+        .group_by(MarketplaceConnection.zone_id)
+        .all()
+    )
+    return [
+        {"id": z.id, "name": z.name, "notes": z.notes, "connection_count": int(counts.get(z.id, 0))}
+        for z in zones
+    ]
+
+
+def _get_own_zone(db: Session, distributor_tenant_id: UUID, zone_id: UUID) -> MarketplaceZone:
+    z = (
+        db.query(MarketplaceZone)
+        .filter(MarketplaceZone.id == zone_id, MarketplaceZone.distributor_tenant_id == distributor_tenant_id)
+        .first()
+    )
+    if z is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "زون یافت نشد")
+    return z
+
+
+def create_zone(db: Session, distributor_tenant_id: UUID, data) -> MarketplaceZone:
+    dup = (
+        db.query(MarketplaceZone.id)
+        .filter(MarketplaceZone.distributor_tenant_id == distributor_tenant_id, MarketplaceZone.name == data.name)
+        .first()
+    )
+    if dup is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "زونی با این نام از قبل هست")
+    z = MarketplaceZone(distributor_tenant_id=distributor_tenant_id, name=data.name, notes=data.notes.strip())
+    db.add(z)
+    db.flush()
+    return z
+
+
+def update_zone(db: Session, distributor_tenant_id: UUID, zone_id: UUID, data) -> MarketplaceZone:
+    z = _get_own_zone(db, distributor_tenant_id, zone_id)
+    dup = (
+        db.query(MarketplaceZone.id)
+        .filter(
+            MarketplaceZone.distributor_tenant_id == distributor_tenant_id,
+            MarketplaceZone.name == data.name,
+            MarketplaceZone.id != zone_id,
+        )
+        .first()
+    )
+    if dup is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "زونی با این نام از قبل هست")
+    z.name = data.name
+    z.notes = data.notes.strip()
+    db.flush()
+    return z
+
+
+def delete_zone(db: Session, distributor_tenant_id: UUID, zone_id: UUID) -> None:
+    z = _get_own_zone(db, distributor_tenant_id, zone_id)
+    db.delete(z)  # اتصال‌های این زون با ondelete SET NULL بدونِ زون می‌شوند
+    db.flush()
+
+
+def assign_zone(db: Session, distributor_tenant_id: UUID, connection_id: UUID, zone_id: UUID | None) -> MarketplaceConnection:
+    """پخش‌کننده یک فروشگاهِ متصل را در یک زون می‌گذارد (یا زون را برمی‌دارد)."""
+    conn = (
+        db.query(MarketplaceConnection)
+        .filter(
+            MarketplaceConnection.id == connection_id,
+            MarketplaceConnection.distributor_tenant_id == distributor_tenant_id,
+        )
+        .first()
+    )
+    if conn is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "اتصال یافت نشد")
+    if zone_id is not None:
+        _get_own_zone(db, distributor_tenant_id, zone_id)  # باید مالِ خودِ پخش‌کننده باشد
+    conn.zone_id = zone_id
+    db.flush()
+    return conn
+
+
+# ── مرجوعیِ بازار (فروشگاه درخواست، پخش‌کننده تأیید) ─────────────────────
+def _get_own_order(db: Session, order_id: UUID, *, retailer_tenant_id: UUID | None = None,
+                   distributor_tenant_id: UUID | None = None) -> MarketplaceOrder:
+    q = db.query(MarketplaceOrder).filter(MarketplaceOrder.id == order_id)
+    if retailer_tenant_id is not None:
+        q = q.filter(MarketplaceOrder.retailer_tenant_id == retailer_tenant_id)
+    if distributor_tenant_id is not None:
+        q = q.filter(MarketplaceOrder.distributor_tenant_id == distributor_tenant_id)
+    order = q.first()
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
+    return order
+
+
+def _next_return_number(db: Session, distributor_tenant_id: UUID) -> int:
+    s = get_settings(db, distributor_tenant_id)
+    n = s.next_return_number or 1
+    s.next_return_number = n + 1
+    db.flush()
+    return n
+
+
+def _returned_qty_by_line(db: Session, order_id: UUID) -> dict[UUID, Decimal]:
+    """مجموعِ مقدارِ مرجوع‌شده (درخواست‌شده یا تأییدشده، نه ردشده) به‌ازای هر ردیفِ سفارش."""
+    rows = (
+        db.query(MarketplaceReturnLine.order_line_id, func.coalesce(func.sum(MarketplaceReturnLine.qty), 0))
+        .join(MarketplaceReturn, MarketplaceReturn.id == MarketplaceReturnLine.return_id)
+        .filter(MarketplaceReturn.order_id == order_id, MarketplaceReturn.status != "rejected")
+        .group_by(MarketplaceReturnLine.order_line_id)
+        .all()
+    )
+    return {lid: Decimal(q) for lid, q in rows}
+
+
+def request_return(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceReturn:
+    """فروشگاه روی یک سفارشِ تأییدشده درخواستِ مرجوعی می‌دهد (کامل یا پارشال)."""
+    order = _get_own_order(db, data.order_id, retailer_tenant_id=retailer_tenant_id)
+    if order.status != "confirmed":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرجوعی فقط روی سفارشِ تأییدشده ممکن است")
+
+    settings = get_settings(db, order.distributor_tenant_id)
+    if settings.return_window_days and settings.return_window_days > 0:
+        confirmed_at = order.updated_at or order.created_at
+        if confirmed_at is not None:
+            elapsed = (datetime.now(timezone.utc) - confirmed_at).days
+            if elapsed > settings.return_window_days:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"مهلتِ مرجوعیِ این پخش‌کننده {settings.return_window_days} روز است و گذشته",
+                )
+
+    lines_by_id = {ol.id: ol for ol in order.lines}
+    already = _returned_qty_by_line(db, order.id)
+    ret = MarketplaceReturn(
+        order_id=order.id,
+        distributor_tenant_id=order.distributor_tenant_id,
+        retailer_tenant_id=retailer_tenant_id,
+        return_number=_next_return_number(db, order.distributor_tenant_id),
+        status="requested",
+        reason=(data.reason or "").strip(),
+    )
+    total = Decimal(0)
+    for rl in data.lines:
+        ol = lines_by_id.get(rl.order_line_id)
+        if ol is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "ردیفِ مرجوعی به این سفارش تعلق ندارد")
+        remaining = Decimal(ol.qty) - already.get(ol.id, Decimal(0))
+        if rl.qty > remaining:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"مقدارِ مرجوعیِ «{ol.title}» از باقی‌مانده‌ی قابلِ‌مرجوع ({remaining}) بیشتر است",
+            )
+        line_total = (Decimal(ol.unit_price) * rl.qty).to_integral_value()
+        total += line_total
+        ret.lines.append(
+            MarketplaceReturnLine(
+                order_line_id=ol.id, title=ol.title, unit_price=ol.unit_price, qty=rl.qty, line_total=line_total
+            )
+        )
+    ret.total = total
+    db.add(ret)
+    db.flush()
+    return ret
+
+
+def _explode_return(db: Session, order: MarketplaceOrder, ret: MarketplaceReturn) -> dict[UUID, Decimal]:
+    """ردیف‌های مرجوعی را به «کالای پخش‌کننده → مقدار» باز می‌کند (مثلِ _explode_order برای مقدارِ مرجوع)."""
+    lines_by_id = {ol.id: ol for ol in order.lines}
+    listing_ids = {lines_by_id[rl.order_line_id].listing_id for rl in ret.lines if lines_by_id.get(rl.order_line_id)}
+    listings = {l.id: l for l in db.query(MarketplaceListing).filter(MarketplaceListing.id.in_(listing_ids)).all()}
+    dist_items: dict[UUID, Decimal] = {}
+    for rl in ret.lines:
+        ol = lines_by_id.get(rl.order_line_id)
+        listing = listings.get(ol.listing_id) if ol else None
+        if listing is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "لیستینگِ این قلم دیگر موجود نیست؛ مرجوعیِ خودکار ممکن نیست")
+        for comp in listing.components:
+            dist_items[comp.distributor_item_id] = dist_items.get(comp.distributor_item_id, Decimal(0)) + Decimal(comp.qty) * Decimal(rl.qty)
+    return dist_items
+
+
+def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: User, return_id: UUID) -> MarketplaceReturn:
+    """پخش‌کننده مرجوعی را تأیید می‌کند: برگشتِ فروش (دفترِ پخش‌کننده) + برگشتِ خرید (دفترِ فروشگاه)."""
+    ret = (
+        db.query(MarketplaceReturn)
+        .filter(MarketplaceReturn.id == return_id, MarketplaceReturn.distributor_tenant_id == distributor_tenant_id)
+        .first()
+    )
+    if ret is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "مرجوعی یافت نشد")
+    if ret.status != "requested":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این مرجوعی قبلاً پردازش شده است")
+    order = db.get(MarketplaceOrder, ret.order_id)
+    if order is None or order.distributor_sales_invoice_id is None or order.retailer_purchase_invoice_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتورهای سفارش برای مرجوعی در دسترس نیست")
+
+    dist_items = _explode_return(db, order, ret)
+    today = date.today()
+    tag = f"مرجوعیِ بازار #{ret.return_number}"
+
+    with tenant_scope(db, ret.distributor_tenant_id):
+        sr = post_sales_return(
+            db,
+            SalesReturnIn(
+                return_date=today,
+                sales_invoice_id=order.distributor_sales_invoice_id,
+                description=tag,
+                lines=[SalesReturnLineIn(item_id=iid, qty=qty) for iid, qty in dist_items.items()],
+            ),
+            distributor_user,
+        )
+        sales_return_id = sr.id
+
+    with tenant_scope(db, ret.retailer_tenant_id):
+        retailer_user = _tenant_actor(db, ret.retailer_tenant_id)
+        ret_lines = []
+        for dist_item_id, qty in dist_items.items():
+            link = (
+                db.query(MarketplaceItemLink)
+                .filter(
+                    MarketplaceItemLink.retailer_tenant_id == ret.retailer_tenant_id,
+                    MarketplaceItemLink.distributor_item_id == dist_item_id,
+                )
+                .first()
+            )
+            if link is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالای متناظرِ فروشگاه برای مرجوعی پیدا نشد")
+            ret_lines.append(PurchaseReturnLineIn(item_id=link.retailer_item_id, qty=qty))
+        pr = post_purchase_return(
+            db,
+            PurchaseReturnIn(
+                return_date=today,
+                purchase_invoice_id=order.retailer_purchase_invoice_id,
+                description=tag,
+                lines=ret_lines,
+            ),
+            retailer_user,
+        )
+        purchase_return_id = pr.id
+
+    ret.distributor_sales_return_id = sales_return_id
+    ret.retailer_purchase_return_id = purchase_return_id
+    ret.status = "approved"
+    db.flush()
+    return ret
+
+
+def reject_return(db: Session, distributor_tenant_id: UUID, return_id: UUID, response_note: str) -> MarketplaceReturn:
+    ret = (
+        db.query(MarketplaceReturn)
+        .filter(MarketplaceReturn.id == return_id, MarketplaceReturn.distributor_tenant_id == distributor_tenant_id)
+        .first()
+    )
+    if ret is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "مرجوعی یافت نشد")
+    if ret.status != "requested":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این مرجوعی قبلاً پردازش شده است")
+    ret.status = "rejected"
+    ret.response_note = (response_note or "").strip()
+    db.flush()
+    return ret
+
+
+def list_returns(db: Session, *, distributor_tenant_id: UUID | None = None,
+                 retailer_tenant_id: UUID | None = None) -> list[MarketplaceReturn]:
+    q = db.query(MarketplaceReturn)
+    if distributor_tenant_id is not None:
+        q = q.filter(MarketplaceReturn.distributor_tenant_id == distributor_tenant_id)
+    if retailer_tenant_id is not None:
+        q = q.filter(MarketplaceReturn.retailer_tenant_id == retailer_tenant_id)
+    return q.order_by(MarketplaceReturn.created_at.desc()).all()
+
+
+def return_dict(db: Session, ret: MarketplaceReturn) -> dict:
+    order = db.get(MarketplaceOrder, ret.order_id)
+    return {
+        "id": ret.id,
+        "order_id": ret.order_id,
+        "order_number": order.order_number if order else 0,
+        "distributor_tenant_id": ret.distributor_tenant_id,
+        "retailer_tenant_id": ret.retailer_tenant_id,
+        "distributor_name": distributor_display_name(db, ret.distributor_tenant_id),
+        "retailer_name": _tenant_name(db, ret.retailer_tenant_id),
+        "return_number": ret.return_number,
+        "status": ret.status,
+        "reason": ret.reason,
+        "response_note": ret.response_note,
+        "total": ret.total,
+        "created_at": ret.created_at,
+        "lines": [
+            {
+                "order_line_id": rl.order_line_id,
+                "title": rl.title,
+                "unit_price": rl.unit_price,
+                "qty": rl.qty,
+                "line_total": rl.line_total,
+            }
+            for rl in ret.lines
+        ],
     }

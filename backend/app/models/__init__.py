@@ -38,7 +38,10 @@ from app.models.marketplace import (
     MarketplaceMessage,
     MarketplaceOrder,
     MarketplaceOrderLine,
+    MarketplaceReturn,
+    MarketplaceReturnLine,
     MarketplaceSettings,
+    MarketplaceZone,
 )
 from app.models.moadian import MoadianSettings, MoadianSubmission
 from app.models.period_close import FiscalPeriodClose
@@ -173,4 +176,7 @@ __all__ = [
     "MarketplaceOrderLine",
     "MarketplaceItemLink",
     "MarketplaceMessage",
+    "MarketplaceZone",
+    "MarketplaceReturn",
+    "MarketplaceReturnLine",
 ]

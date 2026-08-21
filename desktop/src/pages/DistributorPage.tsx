@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Truck, Package, Boxes, Plus, Trash2, Save, Pencil, X, Eye, EyeOff, Settings as SettingsIcon,
   Link2, Check, Ban, Store, ClipboardList, CheckCircle2, Percent, AlertCircle, MessageSquare,
+  MapPin, Undo2,
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
@@ -9,7 +10,8 @@ import {
   fetchMpDistributorOrders, fetchMpListings, fetchMpSettings, fetchMyMpCommissions, rejectMpOrder,
   setMpConnectionStatus, setMpListingPublished, updateMpSettings,
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
-  type Listing, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder,
+  fetchMpZones, assignMpConnectionZone,
+  type Listing, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder, type MpZone,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -23,6 +25,8 @@ import { ImageUploader } from '../components/ImageUploader'
 import { Pager, usePagination } from '../components/Pager'
 import { ListingWizard } from '../components/wizard/ListingWizard'
 import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
+import { MpZonesPanel } from '../components/MpZonesPanel'
+import { MpDistributorReturns } from '../components/MpDistributorReturns'
 import { useListingDraft } from '../lib/listingDraft'
 import { useTheme } from '../lib/theme'
 
@@ -82,7 +86,9 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
         tabs={[
           { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} items={items} /> },
           { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, content: <OrdersPanel token={token} /> },
+          { key: 'returns', label: 'مرجوعی‌ها', icon: Undo2, content: <MpDistributorReturns token={token} /> },
           { key: 'connections', label: 'اتصال‌ها', icon: Link2, content: <ConnectionsPanel token={token} /> },
+          { key: 'zones', label: 'زون‌ها', icon: MapPin, content: <MpZonesPanel token={token} /> },
           { key: 'commission', label: 'کمیسیون', icon: Percent, content: <CommissionPanel token={token} /> },
           { key: 'settings', label: 'تنظیمات', icon: SettingsIcon, content: <SettingsPanel token={token} onActiveChange={setActive} /> },
         ]}
@@ -184,10 +190,22 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
           <label>قیمتِ عمده (ریال{form.kind === 'pack' ? '، کلِ پک' : '، هر واحد'})
             <NumberInput value={form.wholesalePrice} onChange={(v) => setForm({ ...form, wholesalePrice: v })} placeholder="۰" />
           </label>
-          <label>دسته (اختیاری)
-            <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          <label>قیمتِ مصرف‌کننده (اختیاری)
+            <NumberInput value={form.consumerPrice} onChange={(v) => setForm({ ...form, consumerPrice: v })} placeholder="برای نمایشِ حاشیه‌ی سود" />
+            {(() => {
+              const buy = Number(form.wholesalePrice) || 0
+              const sell = Number(form.consumerPrice) || 0
+              if (buy > 0 && sell > buy) {
+                const pct = ((sell - buy) / sell) * 100
+                return <span className="hint">حاشیه‌ی سود: {faMoney(sell - buy)} ({pct.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)</span>
+              }
+              return null
+            })()}
           </label>
         </div>
+        <label>دسته (اختیاری)
+          <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+        </label>
         <label>عکس‌های محصول (اختیاری)
           <ImageUploader value={form.images} onChange={(imgs) => setForm({ ...form, images: imgs })} />
         </label>
@@ -499,13 +517,18 @@ function OrdersPanel({ token }: { token: string }) {
 
 function ConnectionsPanel({ token }: { token: string }) {
   const [conns, setConns] = useState<MpConnection[]>([])
+  const [zones, setZones] = useState<MpZone[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chatConn, setChatConn] = useState<MpConnection | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
-    try { setConns(await fetchMpDistributorConnections(token)) }
+    try {
+      const [cs, zs] = await Promise.all([fetchMpDistributorConnections(token), fetchMpZones(token).catch(() => [])])
+      setConns(cs)
+      setZones(zs)
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
   }, [token])
   useEffect(() => { void refresh() }, [refresh])
@@ -520,7 +543,14 @@ function ConnectionsPanel({ token }: { token: string }) {
     finally { setBusy(null) }
   }
 
-  function ConnRow({ c, actionable }: { c: MpConnection; actionable: boolean }) {
+  async function assignZone(c: MpConnection, zoneId: string) {
+    setBusy(c.id); setError(null)
+    try { await assignMpConnectionZone(token, c.id, zoneId || null); await refresh() }
+    catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }
+    finally { setBusy(null) }
+  }
+
+  function ConnRow({ c, actionable, showZone }: { c: MpConnection; actionable: boolean; showZone?: boolean }) {
     const badge = CONN_BADGE[c.status]
     return (
       <tr>
@@ -529,6 +559,16 @@ function ConnectionsPanel({ token }: { token: string }) {
           <div className="entity-sub">{c.requested_by === 'retailer' ? 'درخواست از سمتِ فروشگاه' : 'دعوت از سمتِ شما'}</div>
         </td>
         <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+        {showZone && (
+          <td data-label="زون">
+            {c.status === 'approved' ? (
+              <select value={c.zone_id ?? ''} disabled={busy === c.id} onChange={(e) => void assignZone(c, e.target.value)}>
+                <option value="">— بدونِ زون —</option>
+                {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select>
+            ) : '—'}
+          </td>
+        )}
         <td className="card-actions">
           <div className="check-actions">
             {actionable && (
@@ -571,14 +611,14 @@ function ConnectionsPanel({ token }: { token: string }) {
         )}
       </SectionCard>
 
-      <SectionCard icon={Store} title="فروشگاه‌های متصل" description="اتصال‌های تأییدشده، ردشده یا مسدود.">
+      <SectionCard icon={Store} title="فروشگاه‌های متصل" description="اتصال‌های تأییدشده، ردشده یا مسدود. برای مدیریتِ سریع‌ترِ ارسال، هر فروشگاهِ متصل را در یک زون بگذارید.">
         {others.length === 0 ? (
           <EmptyState icon={Store} text="هنوز فروشگاهی تأیید نشده است." />
         ) : (
           <div className="entity-table-wrap">
             <table className="entity-table cards-on-mobile">
-              <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
-              <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} />)}</tbody>
+              <thead><tr><th>فروشگاه</th><th>وضعیت</th><th>زون</th><th></th></tr></thead>
+              <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} showZone />)}</tbody>
             </table>
           </div>
         )}
@@ -704,6 +744,22 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
           <input type="checkbox" checked={settings.is_active} onChange={(e) => setSettings({ ...settings, is_active: e.target.checked })} />
           حضور در بازار فعال باشد (فروشگاه‌ها بتوانند پیدا و درخواستِ اتصال بدهند)
         </label>
+
+        <fieldset className="mp-limits">
+          <legend>سیاستِ مرجوعی</legend>
+          <label>متنِ سیاستِ مرجوعی (به فروشگاه نشان داده می‌شود)
+            <textarea
+              value={settings.return_policy ?? ''}
+              onChange={(e) => setSettings({ ...settings, return_policy: e.target.value })}
+              rows={3}
+              placeholder="مثلاً: مرجوعی تا ۷ روز، فقط کالای سالم و در بسته‌بندیِ اصلی."
+            />
+          </label>
+          <label>مهلتِ مرجوعی (روز — ۰ یعنی بدونِ محدودیت)
+            <NumberInput value={String(settings.return_window_days ?? 0)} onChange={(v) => setSettings({ ...settings, return_window_days: Number(v) || 0 })} placeholder="۰" />
+          </label>
+        </fieldset>
+
         <div className="invoice-form-footer">
           <button type="submit" className="btn-primary" disabled={saving}><Save size={14} /> ذخیره تنظیمات</button>
         </div>

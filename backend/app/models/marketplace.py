@@ -40,6 +40,7 @@ SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
 COMMISSION_STATUSES = ("pending", "settled")
 MESSAGE_SENDER_ROLES = ("distributor", "retailer")
+RETURN_STATUSES = ("requested", "approved", "rejected")
 
 
 class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
@@ -59,6 +60,13 @@ class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     #: شماره‌ی سفارشِ بعدی (شمارنده‌ی نمایشیِ per-distributor).
     next_order_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    #: متنِ سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود (شرایط، استثناها، ...).
+    return_policy: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: مهلتِ مرجوعی به روز از تاریخِ تأییدِ سفارش. ۰ = بدونِ محدودیتِ زمانی. سیستم این را
+    #: هنگامِ درخواستِ مرجوعیِ فروشگاه اعمال می‌کند (بعد از این مهلت، درخواست رد می‌شود).
+    return_window_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: شماره‌ی مرجوعیِ بعدی (شمارنده‌ی نمایشیِ per-distributor).
+    next_return_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
@@ -73,8 +81,11 @@ class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(300))
     code: Mapped[str] = mapped_column(String(60), default="", server_default="")
     unit: Mapped[str] = mapped_column(String(20), default="عدد", server_default="عدد")
-    #: قیمتِ عمده (ریال) — برای single قیمتِ هر واحد، برای pack قیمتِ کلِ پک.
+    #: قیمتِ عمده (ریال) — برای single قیمتِ هر واحد، برای pack قیمتِ کلِ پک. «قیمتِ خرید»ِ فروشگاه.
     wholesale_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: قیمتِ مصرف‌کننده‌ی پیشنهادی (فروش) که پخش‌کننده اعلام می‌کند — روی کاتالوگ حاشیه‌ی سود
+    #: (فروش − خرید) به فروشگاه نشان داده می‌شود و هنگامِ تأییدِ سفارش روی بچِ فروشگاه می‌نشیند. ۰ = اعلام‌نشده.
+    consumer_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     currency_code: Mapped[str] = mapped_column(String(10), default="", server_default="")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     images: Mapped[list] = mapped_column(JSONB, default=list)
@@ -133,6 +144,11 @@ class MarketplaceConnection(UUIDPKMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|approved|rejected|blocked
     #: چه کسی درخواست داد — retailer (فروشگاه) یا distributor (دعوت).
     requested_by: Mapped[str] = mapped_column(String(20), default="retailer")
+    #: زونِ ارسال که پخش‌کننده این فروشگاه را در آن گذاشته (برای مدیریتِ سریع‌ترِ ارسال).
+    #: فقط پخش‌کننده تعیین می‌کند؛ NULL = بدونِ زون. FKِ سراسری به marketplace_zones.
+    zone_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_zones.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     #: طرف‌حسابِ خودکارِ دو سمت، تا سفارش‌های پیاپیِ همین رابطه روی یک طرف‌حساب جمع شوند
     #: (نه یک طرف‌حسابِ تازه به‌ازای هر سفارش). هرکدام Contactِ tenantِ خودش است (نه FK،
@@ -301,3 +317,81 @@ class MarketplaceMessage(UUIDPKMixin, TimestampMixin, Base):
     sender_role: Mapped[str] = mapped_column(String(20))  # distributor | retailer
     sender_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     body: Mapped[str] = mapped_column(Text)
+
+
+class MarketplaceZone(UUIDPKMixin, TimestampMixin, Base):
+    """زونِ ارسال که یک پخش‌کننده برای تقسیم‌بندیِ فروشگاه‌هایش تعریف می‌کند — لایه‌ی سراسری.
+
+    نه نقشه و نه جغرافیا؛ فقط یک تقسیم‌بندیِ نام‌گذاری‌شده‌ی خودِ پخش‌کننده (مثلاً «منطقه‌ی
+    شرق»). هر فروشگاهِ متصل با تصمیمِ پخش‌کننده در یک زون می‌نشیند تا ارسالِ بار سریع‌تر
+    مدیریت شود. `zone_id` روی `MarketplaceConnection` به این اشاره می‌کند.
+    """
+
+    __tablename__ = "marketplace_zones"
+    __table_args__ = (
+        UniqueConstraint("distributor_tenant_id", "name", name="uq_mp_zone_distributor_name"),
+    )
+
+    distributor_tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+class MarketplaceReturn(UUIDPKMixin, TimestampMixin, Base):
+    """درخواستِ مرجوعیِ یک سفارشِ بازار — لایه‌ی سراسری.
+
+    فروشگاه روی یک سفارشِ تأییدشده درخواستِ مرجوعی (کامل یا پارشال، به‌ازای ردیف) می‌دهد؛
+    پخش‌کننده تأیید یا رد می‌کند. با تأیید، در دو دفتر برگشتِ فروش (سمتِ پخش‌کننده) و برگشتِ
+    خرید (سمتِ فروشگاه) ثبت و لینک می‌شود.
+    """
+
+    __tablename__ = "marketplace_returns"
+
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_orders.id", ondelete="CASCADE"), index=True
+    )
+    distributor_tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    retailer_tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    return_number: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="requested")  # requested|approved|rejected
+    reason: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: پاسخِ پخش‌کننده هنگامِ رد (یا یادداشتِ تأیید).
+    response_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+
+    #: برگشت‌های متناظر پس از تأیید — هرکدام در دفترِ مستأجرِ خودش (FKِ سراسری→جدولِ مستأجری).
+    distributor_sales_return_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_returns.id", ondelete="SET NULL"), nullable=True
+    )
+    retailer_purchase_return_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_returns.id", ondelete="SET NULL"), nullable=True
+    )
+
+    lines: Mapped[list["MarketplaceReturnLine"]] = relationship(
+        back_populates="return_", cascade="all, delete-orphan"
+    )
+
+
+class MarketplaceReturnLine(UUIDPKMixin, Base):
+    """ردیفِ مرجوعی — به ردیفِ سفارش اشاره می‌کند و مقدارِ مرجوع‌شده را نگه می‌دارد."""
+
+    __tablename__ = "marketplace_return_lines"
+
+    return_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_returns.id", ondelete="CASCADE"), index=True
+    )
+    order_line_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("marketplace_order_lines.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), default="")  # snapshot
+    unit_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0)
+    line_total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+
+    return_: Mapped["MarketplaceReturn"] = relationship(back_populates="lines")

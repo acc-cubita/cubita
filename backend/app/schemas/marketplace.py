@@ -52,6 +52,9 @@ class MarketplaceSettingsIn(BaseModel):
     display_name: str = ""
     settlement_mode: str = "credit"  # credit | online
     is_active: bool = False
+    #: سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود، و مهلتِ مرجوعی به روز (۰ = بی‌محدودیت).
+    return_policy: str = ""
+    return_window_days: int = 0
 
     @field_validator("settlement_mode")
     @classmethod
@@ -60,11 +63,20 @@ class MarketplaceSettingsIn(BaseModel):
             raise ValueError("نحوه‌ی تسویه نامعتبر است")
         return v
 
+    @field_validator("return_window_days")
+    @classmethod
+    def _window(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("مهلتِ مرجوعی نمی‌تواند منفی باشد")
+        return v
+
 
 class MarketplaceSettingsOut(BaseModel):
     display_name: str
     settlement_mode: str
     is_active: bool
+    return_policy: str = ""
+    return_window_days: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -94,6 +106,8 @@ class ListingIn(BaseModel):
     code: str = ""
     unit: str = "عدد"
     wholesale_price: Decimal = Decimal(0)
+    #: قیمتِ مصرف‌کننده‌ی پیشنهادی (فروش) — برای نمایشِ حاشیه‌ی سود روی کاتالوگ. ۰ = اعلام‌نشده.
+    consumer_price: Decimal = Decimal(0)
     currency_code: str = ""
     description: str = ""
     images: list = []
@@ -125,6 +139,8 @@ class ListingIn(BaseModel):
             raise ValueError("عنوانِ لیستینگ الزامی است")
         if self.wholesale_price < 0:
             raise ValueError("قیمتِ عمده نمی‌تواند منفی باشد")
+        if self.consumer_price < 0:
+            raise ValueError("قیمتِ مصرف‌کننده نمی‌تواند منفی باشد")
         if self.min_order_qty < 0 or self.max_order_qty < 0 or self.daily_order_limit < 0:
             raise ValueError("محدودیت‌های سفارش نمی‌توانند منفی باشند")
         if self.min_order_qty > 0 and self.max_order_qty > 0 and self.max_order_qty < self.min_order_qty:
@@ -145,6 +161,7 @@ class ListingOut(BaseModel):
     code: str
     unit: str
     wholesale_price: Decimal
+    consumer_price: Decimal = Decimal(0)
     currency_code: str
     description: str
     images: list
@@ -193,11 +210,97 @@ class ConnectionOut(BaseModel):
     retailer_name: str
     status: str
     requested_by: str
+    #: زونِ ارسال که پخش‌کننده این فروشگاه را در آن گذاشته (فقط سمتِ پخش‌کننده معنا دارد).
+    zone_id: UUID | None = None
+    zone_name: str | None = None
     # گفتگو: برای سمتِ بیننده محاسبه می‌شود (فقط اتصالِ approved). پیش‌فرض‌ها برای پاسخ‌هایی
     # که بیننده ندارند (مثلِ تغییرِ وضعیت) امن‌اند.
     unread_count: int = 0
     last_message_at: datetime | None = None
     last_message_preview: str = ""
+
+
+# ── زونِ ارسال (پخش‌کننده) ─────────────────────────────────────────────
+class ZoneIn(BaseModel):
+    name: str
+    notes: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("نامِ زون الزامی است")
+        return v
+
+
+class ZoneOut(BaseModel):
+    id: UUID
+    name: str
+    notes: str
+    #: تعدادِ فروشگاه‌های متصلِ این زون (روتر پُر می‌کند).
+    connection_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ConnectionZoneIn(BaseModel):
+    """تخصیصِ زون به یک اتصال — None = برداشتنِ زون."""
+    zone_id: UUID | None = None
+
+
+# ── مرجوعیِ بازار ───────────────────────────────────────────────────────
+class ReturnRequestLineIn(BaseModel):
+    order_line_id: UUID
+    qty: Decimal
+
+    @field_validator("qty")
+    @classmethod
+    def _qty(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مقدارِ مرجوعی باید مثبت باشد")
+        return v
+
+
+class ReturnRequestIn(BaseModel):
+    order_id: UUID
+    lines: list[ReturnRequestLineIn]
+    reason: str = ""
+
+    @model_validator(mode="after")
+    def _shape(self) -> "ReturnRequestIn":
+        if not self.lines:
+            raise ValueError("مرجوعی باید حداقل یک ردیف داشته باشد")
+        return self
+
+
+class ReturnRejectIn(BaseModel):
+    response_note: str = ""
+
+
+class ReturnLineOut(BaseModel):
+    order_line_id: UUID
+    title: str
+    unit_price: Decimal
+    qty: Decimal
+    line_total: Decimal
+
+
+class ReturnOut(BaseModel):
+    id: UUID
+    order_id: UUID
+    order_number: int
+    distributor_tenant_id: UUID
+    retailer_tenant_id: UUID
+    distributor_name: str
+    retailer_name: str
+    return_number: int
+    status: str  # requested | approved | rejected
+    reason: str
+    response_note: str
+    total: Decimal
+    created_at: datetime
+    lines: list[ReturnLineOut]
 
 
 # ── گفتگوی اتصال ──────────────────────────────────────────────────────
@@ -243,6 +346,8 @@ class CatalogListingOut(BaseModel):
     code: str
     unit: str
     wholesale_price: Decimal
+    #: قیمتِ مصرف‌کننده‌ی پیشنهادی — فروشگاه با آن حاشیه‌ی سود را روی کاتالوگ می‌بیند. ۰ = اعلام‌نشده.
+    consumer_price: Decimal = Decimal(0)
     currency_code: str
     description: str
     images: list
@@ -279,6 +384,8 @@ class OrderPlaceIn(BaseModel):
 
 
 class OrderLineOut(BaseModel):
+    #: شناسه‌ی ردیفِ سفارش — برای درخواستِ مرجوعیِ پارشال لازم است.
+    id: UUID | None = None
     listing_id: UUID | None
     title: str
     unit_price: Decimal
@@ -307,6 +414,9 @@ class OrderOut(BaseModel):
     total: Decimal
     #: سهمِ نقدِ تسویه‌شده هنگام تأیید (ریال)؛ بقیه اعتباری/طلب است.
     cash_amount: Decimal
+    #: سیاست/مهلتِ مرجوعیِ پخش‌کننده (برای نمایش به فروشگاه هنگامِ ثبتِ مرجوعی).
+    return_policy: str = ""
+    return_window_days: int = 0
     distributor_sales_invoice_id: UUID | None
     retailer_purchase_invoice_id: UUID | None
     lines: list[OrderLineOut]

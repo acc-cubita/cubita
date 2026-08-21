@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Item, Warehouse
 from app.models.invoices import PurchaseInvoice
 from app.models.marketplace import (
@@ -18,13 +19,19 @@ from app.models.marketplace import (
     MarketplaceListing,
     MarketplaceListingComponent,
     MarketplaceOrder,
+    MarketplaceReturn,
     MarketplaceSettings,
 )
 from app.models.storefront_native import PaymentGateway
 from app.models.tenant import Tenant
 from app.models.treasury import TreasuryTransaction
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn
-from app.schemas.marketplace import OrderLineIn, OrderPlaceIn
+from app.schemas.marketplace import (
+    OrderLineIn,
+    OrderPlaceIn,
+    ReturnRequestIn,
+    ReturnRequestLineIn,
+)
 from app.seed import provision_tenant
 from app.services import inventory as inventory_service
 from app.services import marketplace as svc
@@ -1414,3 +1421,222 @@ def test_unread_endpoint_includes_order_threads(as_distributor, db, retailer_ten
         sender_user_id=None, body="پیامِ سفارش",
     )
     assert as_distributor.get("/api/marketplace/unread").json() == 1
+
+
+# ── زونِ ارسال (پخش‌کننده) ──────────────────────────────────────────────
+def test_zone_crud_and_assign(as_distributor, retailer_tenant, db):
+    primary_id = _primary_id(db)
+    retailer_id = retailer_tenant
+    _approve(db, primary_id, retailer_id)
+
+    # ساختِ زون
+    r = as_distributor.post("/api/marketplace/distributor/zones", json={"name": "منطقهٔ شرق", "notes": "بازارِ بزرگ"})
+    assert r.status_code == 201, r.text
+    zone_id = r.json()["id"]
+    assert r.json()["name"] == "منطقهٔ شرق"
+
+    # نامِ تکراری → ۴۰۹
+    assert as_distributor.post("/api/marketplace/distributor/zones", json={"name": "منطقهٔ شرق"}).status_code == 409
+
+    # فهرست
+    zones = as_distributor.get("/api/marketplace/distributor/zones").json()
+    assert len(zones) == 1 and zones[0]["connection_count"] == 0
+
+    # تخصیصِ اتصال به زون
+    conn = db.query(MarketplaceConnection).filter(
+        MarketplaceConnection.distributor_tenant_id == primary_id,
+        MarketplaceConnection.retailer_tenant_id == retailer_id,
+    ).one()
+    r = as_distributor.post(f"/api/marketplace/distributor/connections/{conn.id}/zone", json={"zone_id": zone_id})
+    assert r.status_code == 200, r.text
+    assert r.json()["zone_id"] == zone_id and r.json()["zone_name"] == "منطقهٔ شرق"
+
+    # حالا شمارشِ اتصالِ زون ۱ است
+    zones = as_distributor.get("/api/marketplace/distributor/zones").json()
+    assert zones[0]["connection_count"] == 1
+
+    # ویرایش
+    r = as_distributor.put(f"/api/marketplace/distributor/zones/{zone_id}", json={"name": "منطقهٔ غرب"})
+    assert r.status_code == 200 and r.json()["name"] == "منطقهٔ غرب"
+
+    # حذفِ زون → اتصال بدونِ زون می‌شود (SET NULL)
+    assert as_distributor.delete(f"/api/marketplace/distributor/zones/{zone_id}").status_code == 204
+    db.expire_all()
+    conn2 = db.get(MarketplaceConnection, conn.id)
+    assert conn2.zone_id is None
+
+
+def test_zone_only_distributor(as_retailer):
+    # حسابِ فروشگاه (standard→retailer) نباید به زون‌های پخش‌کننده دسترسی داشته باشد
+    assert as_retailer.get("/api/marketplace/distributor/zones").status_code == 403
+
+
+# ── قیمتِ مصرف‌کننده روی کاتالوگ + انتقال به بچ ──────────────────────────
+def _confirm_with_consumer(as_distributor, retailer_id, db, user, wholesale=10000, consumer=14000, qty=10):
+    primary_id = _primary_id(db)
+    if db.query(MarketplaceSettings).filter_by(distributor_tenant_id=primary_id).first() is None:
+        db.add(MarketplaceSettings(distributor_tenant_id=primary_id, display_name="پخشِ اصلی", is_active=True))
+    item = _make_item(db, f"CP-{uuid.uuid4().hex[:6]}", "کالای قیمت‌دار")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(), warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(100), unit_cost=Decimal(wholesale))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="قیمت‌دار", unit="عدد",
+        wholesale_price=wholesale, consumer_price=consumer, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای قیمت‌دار", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(qty))])
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200, r.text
+    return item, listing, order, retailer_id
+
+
+def test_consumer_price_on_catalog_and_batch(as_distributor, retailer_tenant, db, user):
+    item, listing, order, retailer_id = _confirm_with_consumer(as_distributor, retailer_tenant, db, user)
+
+    # روی کاتالوگ قیمتِ مصرف‌کننده دیده می‌شود (حاشیه‌ی سود)
+    with tenant_scope(db, retailer_id):
+        cat = svc.list_catalog(db, retailer_id)
+    row = next(c for c in cat if c["id"] == listing.id)
+    assert float(row["wholesale_price"]) == 10000 and float(row["consumer_price"]) == 14000
+
+    # قیمتِ مصرف‌کننده خودکار روی بچِ فروشگاه نشست
+    link = db.query(MarketplaceItemLink).filter(
+        MarketplaceItemLink.retailer_tenant_id == retailer_id,
+        MarketplaceItemLink.distributor_item_id == item.id,
+    ).one()
+    with tenant_scope(db, retailer_id):
+        batch = db.query(StockBatch).filter(StockBatch.item_id == link.retailer_item_id).first()
+        assert batch is not None
+        assert float(batch.consumer_price) == 14000
+        assert float(batch.unit_cost) == 10000  # قیمتِ خرید
+
+
+# ── مرجوعیِ بازار (درخواستِ فروشگاه → تأییدِ پخش‌کننده) ───────────────────
+def _confirm_for_return(as_distributor, retailer_id, db, user, wholesale=8000, qty=10):
+    primary_id = _primary_id(db)
+    if db.query(MarketplaceSettings).filter_by(distributor_tenant_id=primary_id).first() is None:
+        db.add(MarketplaceSettings(distributor_tenant_id=primary_id, display_name="پخشِ اصلی", is_active=True))
+    item = _make_item(db, f"RT-{uuid.uuid4().hex[:6]}", "کالای مرجوعی")
+    main_wh = db.query(Warehouse).filter(Warehouse.code == "MAIN").one()
+    inventory_service.post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(), warehouse_id=main_wh.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(1000), unit_cost=Decimal(5000))],
+        ),
+        user,
+    )
+    listing = MarketplaceListing(
+        distributor_tenant_id=primary_id, kind="single", title="مرجوعی", unit="عدد",
+        wholesale_price=wholesale, is_published=True, distributor_item_id=item.id,
+    )
+    listing.components.append(MarketplaceListingComponent(distributor_item_id=item.id, item_name="کالای مرجوعی", qty=1))
+    db.add(listing)
+    db.flush()
+    _approve(db, primary_id, retailer_id)
+    order = svc.place_order(
+        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(qty))])
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm")
+    assert r.status_code == 200, r.text
+    return item, order, main_wh, primary_id
+
+
+def test_return_full_flow_two_sided(as_distributor, retailer_tenant, db, user):
+    retailer_id = retailer_tenant
+    item, order, main_wh, primary_id = _confirm_for_return(as_distributor, retailer_id, db, user, qty=10)
+
+    # بعد از تأیید: انبارِ پخش‌کننده ۹۹۰، انبارِ فروشگاه ۱۰
+    with tenant_scope(db, primary_id):
+        assert inventory_service.get_stock_qty(db, item.id, main_wh.id) == Decimal(990)
+    link = db.query(MarketplaceItemLink).filter(
+        MarketplaceItemLink.retailer_tenant_id == retailer_id, MarketplaceItemLink.distributor_item_id == item.id,
+    ).one()
+    with tenant_scope(db, retailer_id):
+        assert inventory_service.get_total_stock_qty(db, link.retailer_item_id) == Decimal(10)
+
+    # فروشگاه درخواستِ مرجوعیِ ۴ تا می‌دهد (سطحِ سرویس؛ فروشگاه تنانتِ دیگری است)
+    ret = svc.request_return(
+        db, retailer_id,
+        ReturnRequestIn(order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(4))], reason="معیوب"),
+    )
+    assert ret.status == "requested" and float(ret.total) == 32000  # ۸۰۰۰×۴
+
+    # پخش‌کننده تأیید می‌کند
+    r = as_distributor.post(f"/api/marketplace/distributor/returns/{ret.id}/approve")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "approved"
+
+    # دو طرفه اثر کرد: انبارِ پخش‌کننده ۹۹۴ (۴ برگشت)، انبارِ فروشگاه ۶
+    with tenant_scope(db, primary_id):
+        assert inventory_service.get_stock_qty(db, item.id, main_wh.id) == Decimal(994)
+    with tenant_scope(db, retailer_id):
+        assert inventory_service.get_total_stock_qty(db, link.retailer_item_id) == Decimal(6)
+
+
+def test_return_over_qty_rejected(as_distributor, retailer_tenant, db, user):
+    retailer_id = retailer_tenant
+    item, order, main_wh, primary_id = _confirm_for_return(as_distributor, retailer_id, db, user, qty=5)
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as ei:
+        svc.request_return(
+            db, retailer_id,
+            ReturnRequestIn(order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(6))]),
+        )
+    assert ei.value.status_code == 400
+
+
+def test_return_window_enforced(as_distributor, retailer_tenant, db, user):
+    from datetime import datetime, timedelta, timezone
+    retailer_id = retailer_tenant
+    item, order, main_wh, primary_id = _confirm_for_return(as_distributor, retailer_id, db, user, qty=5)
+    # مهلتِ ۷ روز؛ سفارش را ۱۰ روز قبل «تأییدشده» جا می‌زنیم
+    svc.get_settings(db, primary_id).return_window_days = 7
+    order.updated_at = datetime.now(timezone.utc) - timedelta(days=10)
+    db.flush()
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as ei:
+        svc.request_return(
+            db, retailer_id,
+            ReturnRequestIn(order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(1))]),
+        )
+    assert ei.value.status_code == 400 and "مهلت" in ei.value.detail
+
+
+def test_return_reject(as_distributor, retailer_tenant, db, user):
+    retailer_id = retailer_tenant
+    item, order, main_wh, primary_id = _confirm_for_return(as_distributor, retailer_id, db, user, qty=5)
+    ret = svc.request_return(
+        db, retailer_id,
+        ReturnRequestIn(order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(2))]),
+    )
+    r = as_distributor.post(f"/api/marketplace/distributor/returns/{ret.id}/reject", json={"response_note": "خارج از شرایط"})
+    assert r.status_code == 200 and r.json()["status"] == "rejected"
+    # ردشده → انبار دست‌نخورده (۹۹۵ پخش‌کننده)
+    with tenant_scope(db, primary_id):
+        assert inventory_service.get_stock_qty(db, item.id, main_wh.id) == Decimal(995)
+    db_ret = db.get(MarketplaceReturn, ret.id)
+    assert db_ret.status == "rejected" and db_ret.response_note == "خارج از شرایط"
+
+
+def test_return_policy_in_settings(as_distributor, db):
+    r = as_distributor.put(
+        "/api/marketplace/distributor/settings",
+        json={"display_name": "پخش", "settlement_mode": "credit", "is_active": True,
+              "return_policy": "مرجوعی تا ۷ روز، فقط سالم", "return_window_days": 7},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["return_policy"] == "مرجوعی تا ۷ روز، فقط سالم"
+    assert r.json()["return_window_days"] == 7

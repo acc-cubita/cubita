@@ -7467,6 +7467,26 @@ button:disabled {
 }
 .batch-serial-chip button:hover { color: var(--danger, #d9534f); }
 
+/* ── بازار: حاشیه‌ی سود روی کارتِ کاتالوگ + جعبه‌ی سیاستِ مرجوعی ─────── */
+.product-card-margin {
+  font-size: var(--fs-xs);
+  color: var(--success, #3fa34d);
+  margin-top: 2px;
+}
+.product-card-margin strong { color: var(--success, #3fa34d); }
+.mp-policy-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-3);
+  margin: var(--sp-2) 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-2, transparent);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 /* ── صندوق: کنترل‌های چاپِ رسید ─────────────────────────────────────── */
 .pos-print-row {
   display: flex;

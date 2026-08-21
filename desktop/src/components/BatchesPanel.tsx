@@ -44,7 +44,10 @@ export function BatchesPanel({ token }: { token: string }) {
   const [warehouseId, setWarehouseId] = useState('')
   const [batchNumber, setBatchNumber] = useState('')
   const [expiry, setExpiry] = useState('')
+  const [production, setProduction] = useState('')
   const [qty, setQty] = useState('')
+  const [unitCost, setUnitCost] = useState('')
+  const [consumerPrice, setConsumerPrice] = useState('')
   const [received, setReceived] = useState(todayIso())
 
   async function refresh() {
@@ -81,13 +84,19 @@ export function BatchesPanel({ token }: { token: string }) {
         warehouse_id: warehouseId,
         batch_number: batchNumber.trim(),
         expiry_date: expiry || null,
+        production_date: production || null,
         qty: Number(qty) || 0,
+        unit_cost: Number(unitCost) || 0,
+        consumer_price: Number(consumerPrice) || 0,
         received_date: received,
       })
       setBatchNumber('')
       setExpiry('')
+      setProduction('')
       setQty('')
-      setMsg('بچ ثبت شد.')
+      setUnitCost('')
+      setConsumerPrice('')
+      setMsg('بار ثبت شد.')
       await refresh()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -130,6 +139,30 @@ export function BatchesPanel({ token }: { token: string }) {
             <label>
               تعداد
               <NumberInput allowDecimal value={qty} onChange={setQty} />
+            </label>
+            <label>
+              قیمتِ خرید (واحد)
+              <NumberInput value={unitCost} onChange={setUnitCost} placeholder="۰" />
+            </label>
+          </div>
+          <div className="field-row">
+            <label>
+              قیمتِ مصرف‌کننده
+              <NumberInput value={consumerPrice} onChange={setConsumerPrice} placeholder="برای حاشیه‌ی سود" />
+            </label>
+            {(() => {
+              const buy = Number(unitCost) || 0, sell = Number(consumerPrice) || 0
+              if (buy > 0 && sell > buy) {
+                const pct = ((sell - buy) / sell) * 100
+                return <div className="hint" style={{ alignSelf: 'end' }}>سود: {fa(sell - buy)} ({pct.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)</div>
+              }
+              return <div />
+            })()}
+          </div>
+          <div className="field-row">
+            <label>
+              تاریخِ تولید
+              <JalaliDatePicker value={production || todayIso()} onChange={setProduction} />
             </label>
             <label>
               تاریخِ انقضا

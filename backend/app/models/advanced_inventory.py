@@ -76,8 +76,13 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: تعدیلی ثبت شود.
     received_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
     #: بهای واحدِ این بار (ریالِ صحیح) — از فاکتورِ خرید snapshot می‌شود؛ برای مبلغِ زیانِ
-    #: کسری/معیوب و گزارشِ ارزشِ بار.
+    #: کسری/معیوب و گزارشِ ارزشِ بار. همان «قیمتِ خرید» است.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: قیمتِ مصرف‌کننده (فروشِ پیشنهادی) برای این بار — تا حاشیه‌ی سود (فروش − خرید) معلوم
+    #: باشد. هنگامِ خریدِ بازار خودکار از قیمتِ لیستینگ می‌آید؛ در ورودِ دستی وارد می‌شود. ۰ = نامشخص.
+    consumer_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تاریخِ تولیدِ این بار (اختیاری) — کنارِ تاریخِ انقضا برای ردیابیِ عمرِ کالا.
+    production_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     #: منشأِ بار: purchase_invoice | manual | marketplace. با source_id به سندِ مبدأ می‌رسد.
     source_type: Mapped[str] = mapped_column(String(30), default="manual", server_default="manual")
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

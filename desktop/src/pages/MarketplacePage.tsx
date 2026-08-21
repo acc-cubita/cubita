@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard, MessageSquare } from 'lucide-react'
+import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard, MessageSquare, Undo2 } from 'lucide-react'
 import {
   fetchMpCatalog, fetchMpDistributors, fetchMpRetailerConnections, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
@@ -13,6 +13,7 @@ import { Tabs } from '../components/Tabs'
 import { NumberInput } from '../components/NumberInput'
 import { Pager, usePagination } from '../components/Pager'
 import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
+import { MpRetailerReturns } from '../components/MpRetailerReturns'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -61,6 +62,7 @@ export function MarketplacePage({ token }: { token: string }) {
           { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store, content: <Distributors token={token} /> },
           { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} /> },
           { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList, content: <Orders token={token} /> },
+          { key: 'returns', label: 'مرجوعی', icon: Undo2, content: <MpRetailerReturns token={token} /> },
         ]}
       />
     </div>
@@ -301,6 +303,13 @@ function Catalog({ token }: { token: string }) {
                     </div>
                     {orderLimitHint(l) && <div className="product-card-limit">{orderLimitHint(l)}</div>}
                     <div className="product-card-price"><strong>{faMoney(l.wholesale_price)}</strong> ریال</div>
+                    {Number(l.consumer_price) > Number(l.wholesale_price) && (
+                      <div className="product-card-margin">
+                        مصرف‌کننده: {faMoney(l.consumer_price)} · سود{' '}
+                        <strong>{faMoney(Number(l.consumer_price) - Number(l.wholesale_price))}</strong>
+                        {' '}({(((Number(l.consumer_price) - Number(l.wholesale_price)) / Number(l.consumer_price)) * 100).toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)
+                      </div>
+                    )}
                   </div>
                   <div className="product-card-foot">
                     {qty > 0 ? (

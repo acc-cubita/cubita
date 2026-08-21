@@ -153,7 +153,17 @@ export function BatchDetailDrawer({
             <div><span>ورودی</span><strong>{fa(batch.received_qty)}</strong></div>
             <div><span>باقی‌مانده</span><strong>{fa(batch.qty)}</strong></div>
             <div className={Number(batch.defect_qty) > 0 ? 'batch-defect' : ''}><span>کسری/معیوب</span><strong>{fa(batch.defect_qty)}</strong></div>
-            <div><span>بهای واحد</span><strong>{fa(batch.unit_cost)}</strong></div>
+            <div><span>قیمتِ خرید</span><strong>{fa(batch.unit_cost)}</strong></div>
+            {Number(batch.consumer_price) > 0 && <div><span>قیمتِ مصرف</span><strong>{fa(batch.consumer_price)}</strong></div>}
+            {Number(batch.consumer_price) > Number(batch.unit_cost) && Number(batch.unit_cost) > 0 && (
+              <div>
+                <span>حاشیه‌ی سود</span>
+                <strong className="stock-ok">
+                  {fa(Number(batch.consumer_price) - Number(batch.unit_cost))}
+                  {' '}({(((Number(batch.consumer_price) - Number(batch.unit_cost)) / Number(batch.consumer_price)) * 100).toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)
+                </strong>
+              </div>
+            )}
           </div>
 
           {/* سریالِ کارتن */}

@@ -2879,6 +2879,8 @@ export interface StockBatchRecord {
   qty: string
   received_qty: string
   unit_cost: string
+  consumer_price: string
+  production_date: string | null
   source_type: string // purchase_invoice | manual | marketplace
   source_id: string | null
   received_date: string
@@ -2910,15 +2912,22 @@ export const fetchStockBatches = (token: string, itemId?: string) =>
   authedGet<StockBatchRecord[]>(token, `/api/stock-batches${itemId ? `?item_id=${itemId}` : ''}`)
 export const fetchExpiringBatches = (token: string, days = 30) =>
   authedGet<StockBatchRecord[]>(token, `/api/stock-batches/expiring?days=${days}`)
-export const createStockBatch = (
-  token: string,
-  data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
-) => authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
-export const updateStockBatch = (
-  token: string,
-  id: string,
-  data: { item_id: string; warehouse_id: string; batch_number: string; expiry_date?: string | null; qty?: number; received_date: string; notes?: string },
-) => authedSend<StockBatchRecord>(token, 'PATCH', `/api/stock-batches/${id}`, data)
+export interface StockBatchIn {
+  item_id: string
+  warehouse_id: string
+  batch_number: string
+  expiry_date?: string | null
+  production_date?: string | null
+  qty?: number
+  unit_cost?: number
+  consumer_price?: number
+  received_date: string
+  notes?: string
+}
+export const createStockBatch = (token: string, data: StockBatchIn) =>
+  authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
+export const updateStockBatch = (token: string, id: string, data: StockBatchIn) =>
+  authedSend<StockBatchRecord>(token, 'PATCH', `/api/stock-batches/${id}`, data)
 export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
 
 // سریالِ کارتنِ یک بار
@@ -2947,6 +2956,8 @@ export interface MarketplaceSettings {
   display_name: string
   settlement_mode: 'credit' | 'online'
   is_active: boolean
+  return_policy?: string
+  return_window_days?: number
 }
 
 export interface ListingComponent {
@@ -2962,6 +2973,7 @@ export interface Listing {
   code: string
   unit: string
   wholesale_price: string
+  consumer_price: string
   currency_code: string
   description: string
   images: string[]
@@ -2980,6 +2992,7 @@ export interface ListingIn {
   code?: string
   unit?: string
   wholesale_price: number
+  consumer_price?: number
   currency_code?: string
   description?: string
   images?: string[]
@@ -3045,6 +3058,9 @@ export interface MpConnection {
   retailer_name: string
   status: MpConnectionStatus
   requested_by: 'retailer' | 'distributor'
+  // زونِ ارسال (فقط سمتِ پخش‌کننده معنا دارد).
+  zone_id: string | null
+  zone_name: string | null
   // گفتگو (برای سمتِ بیننده محاسبه می‌شود؛ فقط اتصالِ approved).
   unread_count: number
   last_message_at: string | null
@@ -3060,6 +3076,7 @@ export interface CatalogListing {
   code: string
   unit: string
   wholesale_price: string
+  consumer_price: string
   currency_code: string
   description: string
   images: string[]
@@ -3076,6 +3093,67 @@ export const fetchMpDistributorConnections = (token: string) =>
 
 export const setMpConnectionStatus = (token: string, id: string, status: 'approved' | 'rejected' | 'blocked') =>
   authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${id}/status`, { status })
+
+// --- زونِ ارسال (پخش‌کننده) --------------------------------------
+export interface MpZone {
+  id: string
+  name: string
+  notes: string
+  connection_count: number
+}
+export const fetchMpZones = (token: string) =>
+  authedGet<MpZone[]>(token, '/api/marketplace/distributor/zones')
+export const createMpZone = (token: string, data: { name: string; notes?: string }) =>
+  authedSend<MpZone>(token, 'POST', '/api/marketplace/distributor/zones', data)
+export const updateMpZone = (token: string, id: string, data: { name: string; notes?: string }) =>
+  authedSend<MpZone>(token, 'PUT', `/api/marketplace/distributor/zones/${id}`, data)
+export const deleteMpZone = (token: string, id: string) =>
+  authedDelete(token, `/api/marketplace/distributor/zones/${id}`)
+export const assignMpConnectionZone = (token: string, connectionId: string, zoneId: string | null) =>
+  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${connectionId}/zone`, { zone_id: zoneId })
+
+// --- مرجوعیِ بازار --------------------------------------
+export type MpReturnStatus = 'requested' | 'approved' | 'rejected'
+export interface MpReturnLine {
+  order_line_id: string
+  title: string
+  unit_price: string
+  qty: string
+  line_total: string
+}
+export interface MpReturn {
+  id: string
+  order_id: string
+  order_number: number
+  distributor_tenant_id: string
+  retailer_tenant_id: string
+  distributor_name: string
+  retailer_name: string
+  return_number: number
+  status: MpReturnStatus
+  reason: string
+  response_note: string
+  total: string
+  created_at: string
+  lines: MpReturnLine[]
+}
+export interface MpReturnRequestIn {
+  order_id: string
+  lines: { order_line_id: string; qty: number }[]
+  reason?: string
+}
+// سمتِ فروشگاه
+export const fetchMpRetailerReturns = (token: string) =>
+  authedGet<MpReturn[]>(token, '/api/marketplace/retailer/returns')
+export const requestMpReturn = (token: string, data: MpReturnRequestIn) =>
+  authedSend<MpReturn>(token, 'POST', '/api/marketplace/retailer/returns', data)
+// سمتِ پخش‌کننده
+export const fetchMpDistributorReturns = (token: string) =>
+  authedGet<MpReturn[]>(token, '/api/marketplace/distributor/returns')
+export const approveMpReturn = (token: string, id: string) =>
+  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/approve`, {})
+export const rejectMpReturn = (token: string, id: string, response_note?: string) =>
+  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/reject`, { response_note: response_note ?? '' })
 
 // سمتِ فروشگاه — کشف/اتصال/کاتالوگ
 export const fetchMpDistributors = (token: string) =>
@@ -3111,6 +3189,7 @@ export const fetchMpCatalog = (token: string, distributorId?: string) =>
 export type MpOrderStatus = 'placed' | 'confirmed' | 'rejected' | 'shipped' | 'received' | 'cancelled'
 
 export interface MpOrderLine {
+  id: string | null
   listing_id: string | null
   title: string
   image?: string | null
@@ -3133,6 +3212,8 @@ export interface MpOrder {
   subtotal: string
   total: string
   cash_amount: string
+  return_policy: string
+  return_window_days: number
   distributor_sales_invoice_id: string | null
   retailer_purchase_invoice_id: string | null
   lines: MpOrderLine[]

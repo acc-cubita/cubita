@@ -14,6 +14,7 @@ export interface ListingFormState {
   code: string
   unit: string
   wholesalePrice: string
+  consumerPrice: string
   category: string
   isPublished: boolean
   itemId: string
@@ -30,6 +31,7 @@ export const EMPTY_LISTING_FORM: ListingFormState = {
   code: '',
   unit: 'عدد',
   wholesalePrice: '',
+  consumerPrice: '',
   category: '',
   isPublished: true,
   itemId: '',
@@ -64,6 +66,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       code: l.code,
       unit: l.unit,
       wholesalePrice: String(Number(l.wholesale_price) || ''),
+      consumerPrice: Number(l.consumer_price) ? String(Number(l.consumer_price)) : '',
       category: l.category,
       isPublished: l.is_published,
       itemId: l.item_id ?? '',
@@ -99,6 +102,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       code: form.code.trim(),
       unit: form.unit.trim() || 'عدد',
       wholesale_price: Number(form.wholesalePrice) || 0,
+      consumer_price: Number(form.consumerPrice) || 0,
       category: form.category.trim(),
       is_published: form.isPublished,
       images: form.images,
