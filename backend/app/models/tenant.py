@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from app.database import Base
@@ -72,6 +72,19 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: لحظه‌ی ارسالِ یادآوریِ «نزدیکِ انقضای آزمایشی» — تا کرون هر حساب را فقط یک بار
     #: یادآوری کند، نه هر روز.
     trial_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    #: ── شخصی‌سازیِ پنل بر اساسِ صنف/شرکت (سرویسِ منطق: app/services/modules.py) ──
+    #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها را تعیین می‌کند (general | manufacturing | ...).
+    industry: Mapped[str] = mapped_column(
+        String(30), default="general", server_default="general", nullable=False
+    )
+    #: ترجیحِ نمایشِ مالک: فهرستِ کلیدِ ماژول‌های اختیاریِ *روشن*. NULL = شخصی‌سازی‌نشده →
+    #: همه‌ی ماژول‌های مجاز دیده می‌شوند (سازگاریِ عقب‌رو). core هرگز این‌جا نمی‌آید.
+    enabled_modules: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    #: «حقِ دسترسی»: ماژول‌های محدودی که سوپرادمین به این اکانت داده (مثلِ تولید).
+    granted_modules: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="tenant")
 

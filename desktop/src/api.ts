@@ -33,6 +33,13 @@ export interface MeResponse {
   trial_expired: boolean
   //: قابلیت‌های قفل‌شده در آزمایشی (moadian/storefront) — جای ماژول باکسِ «خرید پلن» می‌آید.
   locked_features: string[]
+  //: ── شخصی‌سازیِ پنل ──
+  //: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
+  industry: string
+  //: کلیدِ ماژول‌های *روشن* (ترجیحِ مالک، شاملِ core). ناوبری با این فیلتر می‌شود.
+  enabled_modules: string[]
+  //: کلیدِ ماژول‌های *مجاز* (حقِ دسترسی). نمایشِ نهایی = enabled ∩ allowed.
+  allowed_modules: string[]
 }
 
 //: صفحه‌ی پلن‌ها و خرید روی سایتِ تجاری. خریدِ کاربرِ آزمایشی با همین ایمیل، حسابش را
@@ -1372,6 +1379,9 @@ export interface AdminAccount {
   slug: string
   status: string // active | suspended | cancelled
   kind: string // standard | distributor | retailer
+  //: صنف (قالبِ ماژول‌ها) و ماژول‌های محدودِ گرنت‌شده — شخصی‌سازیِ سوپرادمین.
+  industry: string
+  granted_modules: string[]
   owner_name: string
   owner_email: string
   created_at: string
@@ -1414,6 +1424,36 @@ export const resetAdminAccountPassword = (token: string, tenantId: string, passw
 
 export const deleteAdminAccount = (token: string, tenantId: string) =>
   authedDelete(token, `/api/admin/accounts/${tenantId}`)
+
+//: صنفِ اکانت را می‌گذارد (ماژول‌ها به قالبِ صنف بازنشانی + محدودهای قالب گرنت می‌شوند).
+export const setAdminAccountIndustry = (token: string, tenantId: string, industry: string) =>
+  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/industry`, { industry })
+
+//: «حقِ دسترسی»ِ ماژول‌های محدود را می‌گذارد (فهرستِ کاملِ محدودهای مجاز، نه افزایشی).
+export const setAdminAccountModules = (token: string, tenantId: string, granted: string[]) =>
+  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/modules`, { granted })
+
+// ── شخصی‌سازیِ پنل توسطِ مالک ──
+
+//: وضعیتِ کاملِ ماژول‌های کسب‌وکار — منبعِ صفحه‌ی «شخصی‌سازیِ پنل».
+export interface ModulesState {
+  industry: string
+  //: کلیدِ ماژول‌های روشن (ترجیحِ مالک، شاملِ core).
+  enabled: string[]
+  //: کلیدِ ماژول‌های مجاز (حقِ دسترسی).
+  allowed: string[]
+  //: رجیستریِ سرور (منبعِ واحد).
+  core: string[]
+  optional: string[]
+  restricted: string[]
+  industries: string[]
+}
+
+export const fetchModules = (token: string) => authedGet<ModulesState>(token, '/api/modules')
+
+//: ترجیحِ نمایشِ مالک را ذخیره می‌کند (فهرستِ کلیدِ ماژول‌های اختیاریِ روشن).
+export const updateModules = (token: string, enabled: string[]) =>
+  authedSend<ModulesState>(token, 'PUT', '/api/modules', { enabled })
 
 export interface ContactRecord {
   id: string

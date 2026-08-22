@@ -30,6 +30,7 @@ import {
   Truck,
   Percent,
   Palette,
+  SlidersHorizontal,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -58,6 +59,7 @@ export type PageKey =
   | 'onboarding'
   | 'calendar'
   | 'team'
+  | 'modules'
   | 'profile'
   | 'help'
   | 'theme'
@@ -138,17 +140,43 @@ export const SECONDARY_NAV_ITEMS: NavItem[] = [
   { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
 ]
 
-/** فهرستِ گروه‌ها و آیتم‌های ثانویه را با گیتِ نقش/نوعِ حساب می‌سازد. Sidebar و TopNav
- *  هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
+//: ورودیِ «شخصی‌سازیِ پنل» — فقط برای مالک (روشن/خاموش‌کردنِ ماژول‌ها).
+const MODULES_SETTINGS_ITEM: NavItem = {
+  key: 'modules',
+  label: 'شخصی‌سازیِ پنل',
+  icon: <SlidersHorizontal size={18} />,
+}
+
+/** فهرستِ گروه‌ها و آیتم‌های ثانویه را با گیتِ نقش/نوعِ حساب و شخصی‌سازیِ ماژول می‌سازد.
+ *  Sidebar و TopNav هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
 export function buildNav({
   isPlatformAdmin,
   isSuperAdmin,
   tenantKind,
+  enabledModules = [],
+  allowedModules = [],
+  isOwner = false,
 }: {
   isPlatformAdmin: boolean
   isSuperAdmin: boolean
   tenantKind: string
+  //: کلیدِ ماژول‌های روشن/مجازِ کسب‌وکار (از MeResponse). خالی = فیلتر نکن (fail-open).
+  enabledModules?: string[]
+  allowedModules?: string[]
+  //: مالکِ کسب‌وکار — گیتِ ورودیِ «شخصی‌سازیِ پنل».
+  isOwner?: boolean
 }): { groups: NavGroup[]; secondary: NavItem[] } {
+  // نمایشِ نهاییِ یک ماژولِ کسب‌وکار = روشن ∩ مجاز. اگر داده نیامده باشد فیلتر نمی‌کنیم (fail-open).
+  const filterModules = enabledModules.length > 0 && allowedModules.length > 0
+  const allowed = new Set(allowedModules)
+  const visible = new Set(enabledModules.filter((k) => allowed.has(k)))
+  const isVisible = (key: PageKey) => !filterModules || visible.has(key)
+
+  const businessGroups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => isVisible(i.key)),
+  })).filter((g) => g.items.length > 0)
+
   const adminItems = [
     ...(isPlatformAdmin ? PLATFORM_ADMIN_NAV_ITEMS : []),
     ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : []),
@@ -163,11 +191,19 @@ export function buildNav({
       : []),
   ]
   const groups: NavGroup[] = [
-    ...NAV_GROUPS,
+    ...businessGroups,
     ...(marketplaceItems.length
       ? [{ heading: 'بازارِ عمده‌فروشی', icon: <Truck size={17} />, items: marketplaceItems }]
       : []),
     ...(adminItems.length ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }] : []),
   ]
-  return { groups, secondary: SECONDARY_NAV_ITEMS }
+
+  // ورودیِ شخصی‌سازی درست بعد از «کاربران» می‌نشیند (فقط مالک).
+  const secondary: NavItem[] = []
+  for (const item of SECONDARY_NAV_ITEMS) {
+    secondary.push(item)
+    if (item.key === 'team' && isOwner) secondary.push(MODULES_SETTINGS_ITEM)
+  }
+
+  return { groups, secondary }
 }

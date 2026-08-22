@@ -1,7 +1,18 @@
 """تولید و بهای تمام‌شده — BOM و سفارشِ تولید."""
 from datetime import date
 
+import pytest
+
 TODAY = str(date.today())
+
+
+@pytest.fixture(autouse=True)
+def _grant_manufacturing(db, tenant_id):
+    """«تولید» ماژولِ محدود است (require_module)؛ برای این تست‌ها به مستأجرِ آزمون گرنت می‌شود."""
+    from app.models.tenant import Tenant
+
+    db.get(Tenant, tenant_id).granted_modules = ["manufacturing"]
+    db.flush()
 
 
 def _wh(client):

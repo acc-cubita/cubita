@@ -194,7 +194,8 @@ POS از همان مسیرِ فاکتورِ فروش استفاده می‌کن�
 `0070` **جداسازیِ بارِ ورودی + سریالِ کارتن** (ستون‌های `received_qty`/`unit_cost`/`source_type`/`source_id` روی `stock_batches`؛ جدولِ `stock_batch_serials` مستأجرمحور + RLS؛ ستونِ `stock_adjustments.batch_id`) ·
 `0071` **زونِ مشتری + مرجوعیِ بازار + قیمتِ مصرف/تاریخِ بچ** (جدول‌های سراسریِ `marketplace_zones`/`marketplace_returns`/`marketplace_return_lines`؛ `marketplace_connections.zone_id`؛ `marketplace_settings.{return_policy,return_window_days,next_return_number}`؛ `marketplace_listings.consumer_price`؛ `stock_batches.{consumer_price,production_date}`) ·
 `0072` **نقشِ «مامور حمل/انتقال» + گردشِ کارِ تحویل** (بک‌فیلِ نقشِ سراسریِ `delivery_agent` برای همه‌ی مستأجرها با `rls_disabled`؛ `marketplace_settings.require_delivery`؛ `marketplace_orders.{delivered_at,delivered_by_name}`).
-(نسخه‌ی فعلی head = `0072`.)
+`0073` **شخصی‌سازیِ پنل بر اساسِ صنف/شرکت** (`tenants.{industry,enabled_modules,granted_modules}`؛ بک‌فیل: حساب‌های دارای BOM/سفارشِ تولید گرنتِ `manufacturing` می‌گیرند تا دسترسی‌شان قطع نشود، با `rls_disabled` روی `boms`/`production_orders`).
+(نسخه‌ی فعلی head = `0073`.)
 
 ---
 
@@ -322,6 +323,20 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۳۱ (2026-08-22) — شخصی‌سازیِ پنل بر اساسِ صنف/شرکت (بک‌اند + دسکتاپ/وب):**
+  - **دو لایه‌ی ماژول:** «حقِ دسترسی» (entitlement) که سوپرادمین برای ماژول‌های **محدود** می‌دهد + در بک‌اند گیت می‌شود
+    (`require_module` روی روترِ تولید → بدونِ گرنت ۴۰۳)، و «نمایش» (preference) که **مالک** برای کلِ کسب‌وکار روشن/خاموش می‌کند
+    (فقط پنهان از منو، بی‌حذفِ داده).
+  - **رجیستریِ واحد** `app/services/modules.py`: `CORE` (داشبورد/اشخاص/گزارش) · `OPTIONAL` (۱۴) · `RESTRICTED` (`manufacturing`) · ۵ قالبِ صنفی.
+  - **مدل/مهاجرت `0073`:** `tenants.{industry,enabled_modules(NULL=همه، سازگاریِ عقب‌رو),granted_modules}`؛ بک‌فیلِ گرنتِ تولید برای
+    حساب‌های دارای BOM/سفارشِ تولید.
+  - **API:** `MeOut.{industry,enabled_modules,allowed_modules}` · `GET/PUT /api/modules` (فقط مالک) · سوپرادمین:
+    `POST /api/admin/accounts/{id}/{industry,modules}`.
+  - **فرانت:** `buildNav` ناوبری را با `enabled ∩ allowed` فیلتر می‌کند (Sidebar/TopNav/CommandPalette) · صفحه‌ی «شخصی‌سازیِ پنل»
+    (مالک) · انتخابِ صنف + گرنتِ تولید در «مدیریت اکانت‌ها» (سوپرادمین).
+  - **راستی‌آزمایی:** ۱۱۶۷ تستِ بک‌اند (+۹ تستِ ماژول) سبز؛ مهاجرت `0073` up/down روی DBِ محلی؛ `tsc -b`+`vite build` پاک؛
+    جریانِ کاملِ احرازشده روی سرورِ زنده (‏`/me`، `GET/PUT /api/modules`، گیتِ ۴۰۳، گرنت→۲۰۰). (head = `0073`.)
 
 - **۱۴۰۵/۰۵/۳۰ (2026-08-21) — نقشِ «مامور حمل/انتقال» + گردشِ کارِ تحویل در بازار (بک‌اند + دسکتاپ/وب؛ کامیت‌های محلی، در انتظارِ پوش):**
   - **(۱) نقشِ «مامور حمل/انتقال» (`delivery_agent`):** نقشِ تازه با دسترسیِ فقط «بازار: view + deliver» به `DEFAULT_ROLES` افزوده شد

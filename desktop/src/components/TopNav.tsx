@@ -26,6 +26,9 @@ export function TopNav({
   isPlatformAdmin,
   isSuperAdmin,
   tenantKind,
+  enabledModules,
+  allowedModules,
+  isOwner,
   mpUnread = 0,
   onLogout,
   onSync,
@@ -40,6 +43,10 @@ export function TopNav({
   isPlatformAdmin: boolean
   isSuperAdmin: boolean
   tenantKind: string
+  /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
+  enabledModules?: string[]
+  allowedModules?: string[]
+  isOwner?: boolean
   /** پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشان روی منوی «بازارِ خرید»/«پخشِ من». */
   mpUnread?: number
   onLogout: () => void
@@ -47,7 +54,14 @@ export function TopNav({
   syncing?: boolean
   syncStatus?: string
 }) {
-  const { groups, secondary } = buildNav({ isPlatformAdmin, isSuperAdmin, tenantKind })
+  const { groups, secondary } = buildNav({
+    isPlatformAdmin,
+    isSuperAdmin,
+    tenantKind,
+    enabledModules,
+    allowedModules,
+    isOwner,
+  })
 
   // نشانِ خوانده‌نشده فقط روی ماژول‌های بازار (پخش‌کننده/فروشگاه) و وقتی عدد > ۰ است.
   const navBadge = (key: PageKey) =>

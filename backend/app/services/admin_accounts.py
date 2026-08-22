@@ -16,6 +16,7 @@ from app.models.subscription import Subscription
 from app.models.tenant import Membership, Tenant
 from app.models.user import User
 from app.security import set_password
+from app.services import modules as modules_service
 from app.services import subscriptions
 from app.services.provisioning import purge_tenant, signup_new_business
 
@@ -69,6 +70,8 @@ def _row(db: Session, tenant: Tenant, members: list[tuple[Membership, User]]) ->
         "slug": tenant.slug,
         "status": tenant.status,
         "kind": tenant.kind,
+        "industry": tenant.industry,
+        "granted_modules": list(tenant.granted_modules or []),
         "owner_name": owner.name if owner else "",
         "owner_email": owner.email if owner else "",
         "created_at": tenant.created_at,
@@ -137,6 +140,24 @@ def set_kind(db: Session, tenant_id: UUID, *, kind: str) -> None:
     """نوعِ حسابِ بازار (standard | distributor | retailer) را تغییر می‌دهد."""
     tenant = _require(db, tenant_id)
     tenant.kind = kind
+    db.flush()
+
+
+def set_industry(db: Session, tenant_id: UUID, *, industry: str) -> None:
+    """صنفِ اکانت را می‌گذارد و ماژول‌ها را به قالبِ همان صنف بازنشانی می‌کند
+    (شاملِ گرنتِ ماژول‌های محدودِ داخلِ قالب — اختیارِ سوپرادمین)."""
+    tenant = _require(db, tenant_id)
+    try:
+        modules_service.set_industry(tenant, industry)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
+    db.flush()
+
+
+def set_grants(db: Session, tenant_id: UUID, *, granted: list[str]) -> None:
+    """«حقِ دسترسی»ِ ماژول‌های محدود را برای اکانت می‌گذارد (فقط سوپرادمین)."""
+    tenant = _require(db, tenant_id)
+    modules_service.set_grants(tenant, granted)
     db.flush()
 
 

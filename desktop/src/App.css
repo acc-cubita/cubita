@@ -7566,3 +7566,82 @@ button:disabled {
   .pos-receipt-print .rc-foot { text-align: center; margin-top: 8px; font-size: 11px; }
   .pos-receipt-print .rc-foot .rc-brand { margin-top: 2px; font-weight: 700; letter-spacing: 0.5px; }
 }
+
+/* ── شخصی‌سازیِ پنل (ModulesPage) ── */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.module-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, background 0.15s;
+}
+.module-row.on { border-color: var(--accent); background: var(--accent-soft); }
+.module-row.locked { opacity: 0.75; }
+.module-row-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.module-row.on .module-row-icon { color: var(--accent); }
+.module-row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.module-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.module-badge.locked { color: var(--accent-text); background: var(--accent-bg); }
+.module-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px 4px 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.module-toggle:disabled { cursor: default; opacity: 0.6; }
+.module-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.module-toggle-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.15s;
+}
+.module-toggle.on .module-toggle-knob { background: var(--accent-text); }
+.module-toggle-text { font-size: var(--fs-xs); }
+.module-save-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 4px 4px;
+  position: sticky;
+  bottom: 0;
+}

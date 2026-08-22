@@ -15,6 +15,9 @@ export function Sidebar({
   isPlatformAdmin,
   isSuperAdmin,
   tenantKind,
+  enabledModules,
+  allowedModules,
+  isOwner,
   onLogout,
   open = false,
   onClose,
@@ -29,13 +32,24 @@ export function Sidebar({
   isSuperAdmin: boolean
   /** نوعِ حساب در بازار: standard | distributor | retailer — گیتِ ماژول‌های بازار. */
   tenantKind: string
+  /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
+  enabledModules?: string[]
+  allowedModules?: string[]
+  isOwner?: boolean
   onLogout: () => void
   /** فقط در وبِ باریک (موبایل) معنا دارد: نوار کناری کشوی روی‌هم می‌شود. */
   open?: boolean
   onClose?: () => void
 }) {
-  // ناوبری (گروه‌ها + آیتم‌های ثانویه) از منبعِ مشترکِ navModel با گیتِ نقش/نوعِ حساب.
-  const { groups, secondary } = buildNav({ isPlatformAdmin, isSuperAdmin, tenantKind })
+  // ناوبری (گروه‌ها + آیتم‌های ثانویه) از منبعِ مشترکِ navModel با گیتِ نقش/نوعِ حساب/ماژول.
+  const { groups, secondary } = buildNav({
+    isPlatformAdmin,
+    isSuperAdmin,
+    tenantKind,
+    enabledModules,
+    allowedModules,
+    isOwner,
+  })
 
   // آکاردئون: فقط یک گروه هم‌زمان باز است تا نوار کوتاه بماند. به‌صورتِ پیش‌فرض،
   // گروهی که صفحه‌ی فعال در آن است باز می‌شود؛ و با تغییرِ صفحه‌ی فعال هم‌گام می‌ماند.

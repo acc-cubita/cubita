@@ -49,6 +49,7 @@ from app.schemas.members import (
 )
 from app.security import create_access_token, record_login, set_password, verify_password
 from app.services import members, sms
+from app.services import modules as modules_service
 from app.services import refresh as refresh_svc
 from app.services.email_verification import CODE_TTL_MINUTES as EMAIL_CODE_TTL_MINUTES
 from app.services.email_verification import consume_email_code, issue_email_code
@@ -100,6 +101,9 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         trial_days_left=tinfo.days_left,
         trial_expired=tinfo.expired,
         locked_features=list(PREMIUM_FEATURES) if tinfo.is_trial else [],
+        industry=principal.membership.tenant.industry,
+        enabled_modules=modules_service.enabled_modules(principal.membership.tenant),
+        allowed_modules=sorted(modules_service.allowed_modules(principal.membership.tenant)),
     )
 
 

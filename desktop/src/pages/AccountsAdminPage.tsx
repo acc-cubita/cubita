@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, RefreshCw, UserPlus, CalendarClock, Users, CheckCircle2,
-  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift,
+  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift, Factory,
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
-  resetAdminAccountPassword, deleteAdminAccount, setAdminAccountKind, type AdminAccount,
+  resetAdminAccountPassword, deleteAdminAccount, setAdminAccountKind,
+  setAdminAccountIndustry, setAdminAccountModules, type AdminAccount,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -29,6 +30,11 @@ const EXTEND_PRESETS = [30, 90, 180, 365]
 
 const KIND_LABEL: Record<string, string> = {
   standard: 'عادی', distributor: 'پخش‌کننده', retailer: 'فروشگاه',
+}
+
+//: صنف‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند. تغییرِ صنف ماژول‌ها را به قالبِ همان صنف بازنشانی می‌کند.
+const INDUSTRY_LABEL: Record<string, string> = {
+  general: 'عمومی', manufacturing: 'تولیدی', retail: 'خرده‌فروشی', services: 'خدماتی', distribution: 'پخش',
 }
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
@@ -160,6 +166,23 @@ export function AccountsAdminPage({ token }: { token: string }) {
   function changeKind(a: AdminAccount, next: string) {
     if (next === a.kind) return
     void run(a.tenant_id, () => setAdminAccountKind(token, a.tenant_id, next), `نوعِ «${a.name}» به «${KIND_LABEL[next] ?? next}» تغییر کرد.`)
+  }
+
+  function changeIndustry(a: AdminAccount, next: string) {
+    if (next === a.industry) return
+    if (!window.confirm(`صنفِ «${a.name}» به «${INDUSTRY_LABEL[next] ?? next}» تغییر کند؟ ماژول‌های پنل به قالبِ این صنف بازنشانی می‌شوند.`)) return
+    void run(a.tenant_id, () => setAdminAccountIndustry(token, a.tenant_id, next), `صنفِ «${a.name}» به «${INDUSTRY_LABEL[next] ?? next}» تغییر کرد.`)
+  }
+
+  //: گرنت/لغوِ ماژولِ محدودِ «تولید». فهرستِ کاملِ محدودهای مجاز فرستاده می‌شود (نه افزایشی).
+  function toggleManufacturing(a: AdminAccount) {
+    const has = a.granted_modules.includes('manufacturing')
+    const next = has ? a.granted_modules.filter((m) => m !== 'manufacturing') : [...a.granted_modules, 'manufacturing']
+    void run(
+      a.tenant_id,
+      () => setAdminAccountModules(token, a.tenant_id, next),
+      has ? `ماژولِ تولیدِ «${a.name}» غیرفعال شد.` : `ماژولِ تولید به «${a.name}» داده شد.`,
+    )
   }
 
   function resetPw(a: AdminAccount) {
@@ -355,6 +378,26 @@ export function AccountsAdminPage({ token }: { token: string }) {
                     <option value="distributor">نوع: پخش‌کننده</option>
                     <option value="retailer">نوع: فروشگاه</option>
                   </select>
+                  <select
+                    className="account-kind-select"
+                    value={a.industry}
+                    disabled={busyId === a.tenant_id}
+                    onChange={(e) => changeIndustry(a, e.target.value)}
+                    title="صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها"
+                  >
+                    {Object.entries(INDUSTRY_LABEL).map(([k, label]) => (
+                      <option key={k} value={k}>صنف: {label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={a.granted_modules.includes('manufacturing') ? 'is-on' : ''}
+                    disabled={busyId === a.tenant_id}
+                    onClick={() => toggleManufacturing(a)}
+                    title="گرنتِ ماژولِ محدودِ «تولید»"
+                  >
+                    <Factory size={13} /> تولید: {a.granted_modules.includes('manufacturing') ? 'فعال' : 'خاموش'}
+                  </button>
                   <button type="button" className="icon-btn-danger" disabled={busyId === a.tenant_id} onClick={() => doDelete(a)}>
                     <Trash2 size={13} /> حذف
                   </button>

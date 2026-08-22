@@ -35,6 +35,7 @@ from app.routers import (
     marketplace,
     members,
     moadian,
+    modules,
     onboarding,
     payroll,
     period_close,
@@ -101,6 +102,7 @@ async def shop_public_cors(request, call_next):
 app.include_router(auth.router)
 app.include_router(admin_accounts.router)
 app.include_router(members.router)
+app.include_router(modules.router)
 app.include_router(accounts.router)
 app.include_router(journal.router)
 app.include_router(inventory.router)

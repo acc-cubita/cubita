@@ -68,6 +68,15 @@ class MeOut(BaseModel):
     #: را جای ماژول می‌گذارد. برای مشتریِ واقعی خالی.
     locked_features: list[str] = []
 
+    #: ── شخصی‌سازیِ پنل (app/services/modules.py) ──
+    #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
+    industry: str = "general"
+    #: کلیدِ ماژول‌های *روشن* (ترجیحِ مالک، شاملِ core). فرانت ناوبری را با این فیلتر می‌کند.
+    enabled_modules: list[str] = []
+    #: کلیدِ ماژول‌های *مجاز* (حقِ دسترسی). فرانت با تفاوتِ enabled/allowed «قفل» را نشان می‌دهد؛
+    #: نمایشِ نهایی = enabled ∩ allowed.
+    allowed_modules: list[str] = []
+
     model_config = {"from_attributes": True}
 
 

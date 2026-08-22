@@ -16,6 +16,8 @@ from app.schemas.admin_accounts import (
     CreateAccountIn,
     ExtendIn,
     ResetPasswordIn,
+    SetGrantsIn,
+    SetIndustryIn,
     SetKindIn,
     StatusIn,
 )
@@ -61,6 +63,30 @@ def set_kind(
 ):
     """تغییرِ نوعِ حسابِ بازار (standard | distributor | retailer)."""
     admin_accounts.set_kind(db, tenant_id, kind=data.kind)
+    return AccountRowOut(**admin_accounts.account_row(db, tenant_id))
+
+
+@router.post("/{tenant_id}/industry", response_model=AccountRowOut)
+def set_industry(
+    tenant_id: UUID,
+    data: SetIndustryIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """تغییرِ صنف — ماژول‌ها را به قالبِ همان صنف بازنشانی و محدودهای قالب را گرنت می‌کند."""
+    admin_accounts.set_industry(db, tenant_id, industry=data.industry)
+    return AccountRowOut(**admin_accounts.account_row(db, tenant_id))
+
+
+@router.post("/{tenant_id}/modules", response_model=AccountRowOut)
+def set_grants(
+    tenant_id: UUID,
+    data: SetGrantsIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """گرنتِ «حقِ دسترسی»ِ ماژول‌های محدود (مثلِ تولید) به اکانت."""
+    admin_accounts.set_grants(db, tenant_id, granted=data.granted)
     return AccountRowOut(**admin_accounts.account_row(db, tenant_id))
 
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import require_module, require_permission
 from app.models.inventory import Item
 from app.models.manufacturing import Bom, BomLine, ProductionOrder
 from app.models.user import User
@@ -17,7 +17,11 @@ from app.schemas.manufacturing import (
 )
 from app.services import manufacturing as service
 
-router = APIRouter(prefix="/api", tags=["manufacturing"])
+router = APIRouter(
+    prefix="/api",
+    tags=["manufacturing"],
+    dependencies=[Depends(require_module("manufacturing"))],
+)
 
 
 # ── فرمولِ ساخت (BOM) ───────────────────────────────────

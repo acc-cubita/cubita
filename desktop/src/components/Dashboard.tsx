@@ -46,6 +46,7 @@ import { AccountingPage } from '../pages/AccountingPage'
 import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
 import { TeamPage } from '../pages/TeamPage'
+import { ModulesPage } from '../pages/ModulesPage'
 import { ProfilePage } from '../pages/ProfilePage'
 import { ThemeGallery } from './ThemeGallery'
 
@@ -72,6 +73,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
   team: 'کاربران',
+  modules: 'شخصی‌سازیِ پنل',
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',
   theme: 'ظاهر و پوسته',
@@ -341,6 +343,7 @@ export function Dashboard({
           {page === 'onboarding' && <OnboardingPage token={token} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
+          {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'theme' && <ThemeGallery />}
           {page === 'help' && <HelpPage />}
@@ -360,6 +363,9 @@ export function Dashboard({
             isPlatformAdmin={me.is_platform_admin}
             isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
+            enabledModules={me.enabled_modules}
+            allowedModules={me.allowed_modules}
+            isOwner={me.role_key === 'owner'}
             mpUnread={mpUnread}
             onLogout={onLogout}
             onSync={isElectron ? () => handleSync() : undefined}
@@ -380,6 +386,9 @@ export function Dashboard({
             isPlatformAdmin={me.is_platform_admin}
             isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
+            enabledModules={me.enabled_modules}
+            allowedModules={me.allowed_modules}
+            isOwner={me.role_key === 'owner'}
             onLogout={onLogout}
             open={navOpen}
             onClose={() => setNavOpen(false)}

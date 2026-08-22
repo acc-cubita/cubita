@@ -153,6 +153,26 @@ def require_feature(feature: str):
     return checker
 
 
+def require_module(module: str):
+    """گیتِ «حقِ دسترسی»ِ ماژول‌های محدود (مثلِ تولید) در بک‌اند.
+
+    خواسته‌ی «ترکیبی»: خاموش‌کردنِ ماژول‌های عادی فقط منو را پنهان می‌کند، ولی ماژولی که
+    سوپرادمین نداده باید در سرور هم بسته باشد. روی روترِ ماژولِ محدود به‌صورتِ dependencyِ
+    سطحِ روتر می‌نشیند (مثلِ require_feature). ماژولِ گرنت‌نشده → ۴۰۳.
+    """
+    from app.services import modules as modules_service
+
+    def checker(principal: Principal = Depends(get_principal)) -> User:
+        if module not in modules_service.allowed_modules(principal.membership.tenant):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "این ماژول برای حسابِ شما فعال نیست؛ برای فعال‌سازی با پشتیبانی تماس بگیرید.",
+            )
+        return principal.user
+
+    return checker
+
+
 def require_platform_admin(user: User = Depends(get_current_user)) -> User:
     """مجوز کنترل‌پنل فروش خودِ کوبیتا — عمداً به RBAC مستأجر وابسته نیست.
 

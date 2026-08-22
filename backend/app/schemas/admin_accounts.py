@@ -25,6 +25,9 @@ class AccountRowOut(BaseModel):
     slug: str
     status: str  # active | suspended | cancelled (وضعیتِ کسب‌وکار)
     kind: str = "standard"  # standard | distributor | retailer
+    #: صنف (قالبِ ماژول‌ها) و ماژول‌های محدودِ گرنت‌شده — کنترل‌پنلِ شخصی‌سازیِ سوپرادمین.
+    industry: str = "general"
+    granted_modules: list[str] = []
     owner_name: str
     owner_email: str
     created_at: datetime
@@ -106,6 +109,35 @@ class SetKindIn(BaseModel):
     def valid(cls, v: str) -> str:
         if v not in MARKETPLACE_KINDS:
             raise ValueError("نوعِ حساب نامعتبر است")
+        return v
+
+
+class SetIndustryIn(BaseModel):
+    """تغییرِ صنف (بازنشانیِ ماژول‌ها به قالبِ صنف) — سوپرادمین."""
+    industry: str
+
+    @field_validator("industry")
+    @classmethod
+    def valid(cls, v: str) -> str:
+        from app.services.modules import INDUSTRY_TEMPLATES
+
+        if v not in INDUSTRY_TEMPLATES:
+            raise ValueError("صنفِ نامعتبر است")
+        return v
+
+
+class SetGrantsIn(BaseModel):
+    """گرنتِ ماژول‌های محدود به اکانت — سوپرادمین. فهرستِ کاملِ محدودهای مجاز (نه افزایشی)."""
+    granted: list[str]
+
+    @field_validator("granted")
+    @classmethod
+    def valid(cls, v: list[str]) -> list[str]:
+        from app.services.modules import RESTRICTED_MODULES
+
+        bad = [k for k in v if k not in RESTRICTED_MODULES]
+        if bad:
+            raise ValueError("ماژولِ محدودِ نامعتبر: " + ", ".join(bad))
         return v
 
 
