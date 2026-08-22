@@ -42,3 +42,8 @@ yarn-error.*
 
 # فیدِ آپدیتِ درون‌برنامه‌ای (APK + latest.json) — روی سرور منتشر می‌شود، در گیت نه.
 /release
+
+# کلیدهای Firebase/FCM — هرگز در مخزن نروند.
+google-services.json
+fcm-service-account*.json
+*-firebase-adminsdk-*.json
