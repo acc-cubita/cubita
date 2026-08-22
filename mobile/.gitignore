@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# فیدِ آپدیتِ درون‌برنامه‌ای (APK + latest.json) — روی سرور منتشر می‌شود، در گیت نه.
+/release

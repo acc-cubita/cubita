@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './src/auth/AuthContext'
+import { AppUpdateProvider } from './src/update/AppUpdateProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { colors } from './src/theme'
 
@@ -24,8 +25,10 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <StatusBar style="light" />
-            <RootNavigator />
+            <AppUpdateProvider>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </AppUpdateProvider>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
