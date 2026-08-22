@@ -3,6 +3,8 @@ import * as SecureStore from 'expo-secure-store'
 import * as LocalAuthentication from 'expo-local-authentication'
 import { fetchMe, login as apiLogin, logout as apiLogout } from '../api/auth'
 import { setOnTokens, setOnUnauthorized, setTokens } from '../api/client'
+import { registerDevice, unregisterDevice } from '../api/devices'
+import { getFcmToken } from '../push/notifications'
 import type { Me } from '../api/types'
 
 const ACCESS_KEY = 'cubita.access'
@@ -38,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [biometricAvailable, setBiometricAvailable] = useState(false)
   // آخرین رفرش‌توکن — برای صدا زدنِ خروجِ سمتِ سرور. رفرشِ چرخشی این را به‌روز نگه می‌دارد.
   const refreshRef = useRef<string | null>(null)
+  // توکنِ FCMِ ثبت‌شده‌ی این دستگاه — برای لغوِ ثبت هنگامِ خروج.
+  const deviceTokenRef = useRef<string | null>(null)
 
   const loadMe = useCallback(async () => {
     const m = await fetchMe()
@@ -57,6 +61,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    // لغوِ ثبتِ دستگاه پیش از بستنِ نشست تا این گوشی دیگر Push نگیرد (بهترین‌تلاش).
+    const deviceToken = deviceTokenRef.current
+    if (deviceToken) {
+      try {
+        await unregisterDevice(deviceToken)
+      } catch {
+        // خروجِ محلی نباید به لغوِ اعلان گره بخورد.
+      }
+      deviceTokenRef.current = null
+    }
     // خروجِ سمتِ سرور: رفرش را باطل کن تا نشست واقعاً بسته شود (بهترین‌تلاش).
     const refresh = refreshRef.current
     if (refresh) {
@@ -118,6 +132,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })()
   }, [loadMe, clearSession])
+
+  // پس از احراز، دستگاه را برای Push ثبت کن. بهترین‌تلاش: اگر مجوز رد شود یا FCM هنوز
+  // کانفیگ نشده باشد، getFcmToken برابرِ null است و بی‌صدا رد می‌شویم.
+  useEffect(() => {
+    if (status !== 'authed') return
+    let cancelled = false
+    void (async () => {
+      const token = await getFcmToken()
+      if (cancelled || !token) return
+      deviceTokenRef.current = token
+      try {
+        await registerDevice(token)
+      } catch {
+        // ثبتِ اعلان نباید مانعِ استفاده از اپ شود.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [status])
 
   const unlock = useCallback(async (): Promise<boolean> => {
     const res = await LocalAuthentication.authenticateAsync({

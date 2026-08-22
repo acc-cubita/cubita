@@ -4,6 +4,8 @@ import { useAuth } from '../auth/AuthContext'
 import { LoginScreen } from '../screens/LoginScreen'
 import { LockScreen } from '../screens/LockScreen'
 import { MainTabs } from './MainTabs'
+import { navigationRef } from './navigationRef'
+import { PushGate } from '../push/notifications'
 import { BrandMark } from '../ui/BrandMark'
 import { colors } from '../theme'
 
@@ -50,8 +52,10 @@ export function RootNavigator() {
   if (status === 'unauth') return <LoginScreen />
   if (status === 'locked') return <LockScreen />
   return (
-    <NavigationContainer theme={navTheme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
       <MainTabs />
+      {/* بی‌نمایش: deep-linkِ لمسِ اعلان + تازه‌کردنِ نشانِ خوانده‌نشده. داخلِ کانتینر تا ناوبری آماده باشد. */}
+      <PushGate />
     </NavigationContainer>
   )
 }
