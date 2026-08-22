@@ -327,6 +327,17 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
 
+- **۱۴۰۵/۰۵/۳۱ (2026-08-22) — Push فعال شد + مرکزِ هشدارها روی موبایل (کامیت‌های `d7ab664`، `69110b0`):**
+  - **FCM فعال:** پروژه‌ی Firebase `acc-cubita` وصل شد (google-services + پلاگینِ گریدل؛ سرویس‌اکانت روی prod،
+    `FCM_PROJECT_ID`/`FCM_CREDENTIALS_FILE` در `.env`؛ `google-auth`+`requests` در requirements). تستِ مینتِ OAuth موفق.
+    نسخه‌ی ۱.۲.۰ با Push منتشر شد. [[mobile-app]]
+  - **دایجستِ روزانه‌ی هشدارها (Push):** `services/alert_digest.py` + `alert_digest_cron.py` (`python -m app.alert_digest_cron`)
+    برای هر مستأجرِ **دارای دستگاه**، در `tenant_scope` هشدارهای danger/warning را می‌سنجد و یک Push خلاصه با
+    `route=alerts` می‌فرستد (بی‌حالت؛ ضدنویز = زمان‌بندیِ روزانه). تایمرِ systemd `cubita-alert-digest.timer`
+    روزانه ۰۴:۳۰ UTC (۰۸:۰۰ تهران). اجرای زنده‌ی prod تأیید شد (`tenants:1, pushed:0`).
+  - **اپ (نسخه ۱.۳.۰ / versionCode 4):** `AlertsScreen` (فهرستِ کاملِ `/api/alerts`، مرتب بر شدت) + `HomeStack`
+    (تبِ خانه استک شد) + کارتِ هشدارِ خانه قابلِ‌لمس + deep-linkِ `route=alerts` هنگامِ لمسِ اعلان.
+
 - **۱۴۰۵/۰۵/۳۱ (2026-08-22) — آپدیتِ خودکارِ درون‌برنامه‌ایِ اپ اندروید (کامیت `57dab0d`):**
   - **هدف:** پایانِ نصبِ دستی. اپ خودش را از سرورِ خودمان به‌روز می‌کند — همان الگوی دسکتاپ (electron-updater از `/updates`)،
     و نه GitHub/EAS، چون دسترسی از ایران باید مطمئن بماند.
