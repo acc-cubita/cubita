@@ -270,6 +270,9 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 - **استقرار سایت معرفی:** build محلی `website/` → آرشیو → آپلود `/tmp` → جابه‌جایی
   داخل `/opt/cubita-marketing` (`dist.old` نقطه‌ی برگشت). جزئیات کامل + روش SSH با
   رمز در حافظه‌ی پروژه (`vps-deployment`).
+- **فیدِ به‌روزرسانی:** `/opt/hesabdari/updates/` از `acc.cubita.ir/updates/` سرو می‌شود (nginx: `root /opt/hesabdari`).
+  دسکتاپ = `latest.yml` + `Cubita-Setup*.exe`؛ **اندروید = `updates/android/latest.json` + `cubita-vN.apk`** (هر دو `latest.*`
+  با قاعده‌ی no-cacheِ اختصاصی). آپلود با `scp … root@62.60.129.39:/opt/hesabdari/updates[/android]/`.
 - **CI:** `.github/workflows/ci.yml` فقط تست/بیلد، **بدون استقرار خودکار**.
 - **پرداخت:** زرین‌پال با **مرچنتِ اختصاصیِ کوبیتا** (`50f3a131-…`) — روی prod در `/opt/hesabdari/.env`
   (`ZARINPAL_MERCHANT_ID`، `SANDBOX=false`، callback روی acc.cubita.ir، ریدایرکت روی cubita.ir). زنده و بارگذاری‌شده.
@@ -323,6 +326,20 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 ---
 
 ## ۱۰. تاریخچه‌ی ارتقاها (با هر تغییر مهم اینجا یک ردیف اضافه کن)
+
+- **۱۴۰۵/۰۵/۳۱ (2026-08-22) — آپدیتِ خودکارِ درون‌برنامه‌ایِ اپ اندروید (کامیت `57dab0d`):**
+  - **هدف:** پایانِ نصبِ دستی. اپ خودش را از سرورِ خودمان به‌روز می‌کند — همان الگوی دسکتاپ (electron-updater از `/updates`)،
+    و نه GitHub/EAS، چون دسترسی از ایران باید مطمئن بماند.
+  - **کلاینت (`mobile/src/update/`):** `updater.ts` مانیفستِ `latest.json` را می‌خواند، `versionCode`ِ نصب‌شده را
+    (`expo-application`) می‌سنجد، APK را resumable دانلود می‌کند (`expo-file-system/legacy`) و با `content://` از FileProviderِ
+    خودِ expo-file-system + `expo-intent-launcher` (`ACTION_INSTALL_PACKAGE`) نصب می‌کند. `AppUpdateProvider.tsx` = بررسیِ
+    خودکارِ بی‌صدا در بدو اجرا + مودالِ برندی (نسخه/توضیح/نوارِ پیشرفت/اجباری). «بیشتر» = نسخه‌ی واقعی + دکمه‌ی بررسیِ دستی.
+  - **پیش‌نیازِ نیتیو:** `app.json` → `version 1.1.0`، `android.versionCode 2`، مجوزِ `REQUEST_INSTALL_PACKAGES`. کلیدِ امضا باید
+    ثابت بماند (`android/app/debug.keystore`)؛ **هرگز `expo prebuild --clean` نه** — امضا عوض می‌شود و آپدیتِ درجا می‌شکند.
+  - **سرور:** `/opt/hesabdari/updates/android/` (کنارِ فیدِ دسکتاپ) + قاعده‌ی no-cacheِ nginx برای `latest.json`
+    (قرینه‌ی `latest.yml`). نسخه‌ی راه‌اندازِ ۱.۱.۰ (versionCode 2، ۹۵MB) منتشر و از HTTPS تأیید شد.
+  - **روالِ انتشار:** `bash mobile/scripts/release-apk.sh "توضیح"` → بیلد + `release/{cubita-vN.apk,latest.json}` → `scp` به سرور.
+    versionCode باید هر بار +۱ شود.
 
 - **۱۴۰۵/۰۵/۳۱ (2026-08-22) — شخصی‌سازیِ پنل بر اساسِ صنف/شرکت (بک‌اند + دسکتاپ/وب):**
   - **دو لایه‌ی ماژول:** «حقِ دسترسی» (entitlement) که سوپرادمین برای ماژول‌های **محدود** می‌دهد + در بک‌اند گیت می‌شود
