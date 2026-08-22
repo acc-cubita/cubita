@@ -166,6 +166,9 @@ class SignupIn(BaseModel):
     password: str
     #: کدِ ۶رقمیِ ارسال‌شده به ایمیل در گامِ اول. بدونِ آن هیچ حسابی ساخته نمی‌شود.
     code: str
+    #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌های پنل را تعیین می‌کند. ماژول‌های محدود (تولید)
+    #: با اعلامِ صنف خودکار باز نمی‌شوند؛ آن‌ها فقط با گرنتِ سوپرادمین فعال می‌شوند.
+    industry: str = "general"
 
     @field_validator("code")
     @classmethod
@@ -173,6 +176,15 @@ class SignupIn(BaseModel):
         v = v.strip()
         if not v.isdigit():
             raise ValueError("کد تأیید فقط عدد است")
+        return v
+
+    @field_validator("industry")
+    @classmethod
+    def industry_valid(cls, v: str) -> str:
+        from app.services.modules import INDUSTRY_TEMPLATES
+
+        if v not in INDUSTRY_TEMPLATES:
+            raise ValueError("صنفِ نامعتبر است")
         return v
 
     @field_validator("password")

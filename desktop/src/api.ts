@@ -100,11 +100,12 @@ export async function signup(
   email: string,
   password: string,
   code: string,
+  industry: string,
 ): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password, code }),
+    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password, code, industry }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))

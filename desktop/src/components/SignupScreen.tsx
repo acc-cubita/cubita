@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, MailCheck, RefreshCw } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, MailCheck, RefreshCw, Factory } from 'lucide-react'
 import { requestSignupCode, signup, fetchMe, type MeResponse } from '../api'
 
 const MIN_PASSWORD_LENGTH = 10
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 60
+
+//: صنف‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند. قالبِ پیش‌فرضِ ماژول‌های پنل را تعیین می‌کند.
+const INDUSTRIES = [
+  { key: 'general', label: 'عمومی (همه‌ی ماژول‌ها)' },
+  { key: 'retail', label: 'خرده‌فروشی' },
+  { key: 'services', label: 'خدماتی' },
+  { key: 'manufacturing', label: 'تولیدی' },
+  { key: 'distribution', label: 'پخش / بازرگانی' },
+]
 
 /**
  * ثبت‌نامِ «۱۴ روز رایگان» با تأییدِ ایمیل — verify-before-create.
@@ -21,6 +30,7 @@ export function SignupScreen({
 }) {
   const [step, setStep] = useState<'details' | 'code'>('details')
   const [businessName, setBusinessName] = useState('')
+  const [industry, setIndustry] = useState('general')
   const [ownerName, setOwnerName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -92,7 +102,7 @@ export function SignupScreen({
     setError(null)
     setLoading(true)
     try {
-      const t = await signup(businessName.trim(), ownerName.trim(), email.trim(), password, code.trim())
+      const t = await signup(businessName.trim(), ownerName.trim(), email.trim(), password, code.trim(), industry)
       await window.cubita?.setAuthToken(t)
       onDone(t, await fetchMe(t))
     } catch (err) {
@@ -156,6 +166,19 @@ export function SignupScreen({
                   required
                 />
               </div>
+            </label>
+
+            <label>
+              صنفِ کسب‌وکار
+              <div className="input-with-icon">
+                <Factory size={16} className="input-icon" />
+                <select value={industry} onChange={(e) => setIndustry(e.target.value)}>
+                  {INDUSTRIES.map((it) => (
+                    <option key={it.key} value={it.key}>{it.label}</option>
+                  ))}
+                </select>
+              </div>
+              <span className="field-hint">ماژول‌های پنل بر اساسِ صنف تنظیم می‌شوند؛ بعداً از «شخصی‌سازیِ پنل» قابلِ تغییر است.</span>
             </label>
 
             <label>

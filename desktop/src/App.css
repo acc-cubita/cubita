@@ -333,7 +333,8 @@
   pointer-events: none;
 }
 
-.input-with-icon input {
+.input-with-icon input,
+.input-with-icon select {
   width: 100%;
   padding: 11px 14px;
   padding-inline-start: 38px;
@@ -345,7 +346,8 @@
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.input-with-icon input:focus {
+.input-with-icon input:focus,
+.input-with-icon select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);

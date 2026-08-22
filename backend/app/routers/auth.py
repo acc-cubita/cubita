@@ -162,6 +162,9 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
         email=data.email,
         password=data.password,
     )
+    # صنفِ اعلام‌شده قالبِ ماژول‌ها را می‌گذارد؛ ماژولِ محدود (تولید) خودکار گرنت نمی‌شود
+    # (grant_restricted=False) — آن فقط با تأییدِ سوپرادمین باز می‌شود.
+    modules_service.set_industry(tenant, data.industry, grant_restricted=False)
     # ایمیل همین حالا با کد تأیید شد؛ ثبتش می‌کنیم تا نشانِ «تأییدشده» درست باشد.
     user.email_verified_at = datetime.now(timezone.utc)
     db.flush()

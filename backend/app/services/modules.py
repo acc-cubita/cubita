@@ -127,17 +127,23 @@ def set_enabled(tenant: "Tenant", keys: list[str]) -> list[str]:
     return clean
 
 
-def set_industry(tenant: "Tenant", industry: str) -> None:
-    """صنف را می‌گذارد، نمایش را به قالبِ همان صنف بازنشانی می‌کند، و ماژول‌های محدودِ
-    داخلِ قالب را گرنت می‌کند (فراخوانِ این تابع سوپرادمین است و اجازه‌ی گرنت دارد)."""
+def set_industry(tenant: "Tenant", industry: str, *, grant_restricted: bool = True) -> None:
+    """صنف را می‌گذارد و نمایش را به قالبِ همان صنف بازنشانی می‌کند.
+
+    `grant_restricted`: اگر True (پیش‌فرض، فراخوانِ سوپرادمین) ماژول‌های محدودِ داخلِ قالب
+    هم گرنت می‌شوند. در **ثبت‌نامِ خودسرویس** با False صدا می‌شود تا کاربر با اعلامِ صنف،
+    ماژولِ محدود (مثلِ تولید) را خودش باز نکند — آن در نمایش می‌ماند ولی تا گرنتِ سوپرادمین
+    «قفل» است.
+    """
     if industry not in INDUSTRY_TEMPLATES:
         raise ValueError("صنفِ نامعتبر")
     template = INDUSTRY_TEMPLATES[industry]
     tenant.industry = industry
     tenant.enabled_modules = [k for k in OPTIONAL_MODULES if k in set(template)]
-    granted = set(tenant.granted_modules or [])
-    granted.update(k for k in template if k in RESTRICTED_MODULES)
-    tenant.granted_modules = sorted(granted)
+    if grant_restricted:
+        granted = set(tenant.granted_modules or [])
+        granted.update(k for k in template if k in RESTRICTED_MODULES)
+        tenant.granted_modules = sorted(granted)
 
 
 def set_grants(tenant: "Tenant", granted_keys: list[str]) -> list[str]:

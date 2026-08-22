@@ -92,6 +92,61 @@ def test_set_industry_applies_template_and_grants(db, tenant_id):
     assert "pos" not in tenant.enabled_modules
 
 
+def test_set_industry_signup_variant_does_not_grant_restricted(db, tenant_id):
+    """مسیرِ ثبت‌نام: قالب اعمال می‌شود ولی محدودها گرنت نمی‌شوند (قفل تا تأییدِ سوپرادمین)."""
+    tenant = _tenant(db, tenant_id)
+    svc.set_industry(tenant, "manufacturing", grant_restricted=False)
+    assert tenant.industry == "manufacturing"
+    assert "manufacturing" in tenant.enabled_modules  # در نمایش
+    assert "manufacturing" not in svc.allowed_modules(tenant)  # ولی مجاز نیست
+
+
+def _signup(db, industry: str):
+    """ثبت‌نامِ کاملِ خودسرویس با صنف، سپس /me — کلاینتِ ناشناسِ محلی روی همان session."""
+    import uuid
+
+    from fastapi.testclient import TestClient
+
+    from app.database import get_db
+    from app.main import app
+    from app.services.email_verification import issue_email_code
+
+    email = f"ind-{uuid.uuid4().hex[:8]}@cubita-test.ir"
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        c = TestClient(app)
+        res = c.post(
+            "/api/auth/signup",
+            json={
+                "business_name": "کسب‌وکارِ تست",
+                "owner_name": "مالک",
+                "email": email,
+                "password": "AStrongPassword2026",
+                "code": issue_email_code(db, email),
+                "industry": industry,
+            },
+        )
+        assert res.status_code == 201, res.text[:300]
+        c.headers.update({"Authorization": f"Bearer {res.json()['access_token']}"})
+        return c.get("/api/auth/me").json()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_signup_applies_industry_template(db):
+    me = _signup(db, "retail")
+    assert me["industry"] == "retail"
+    assert "pos" in me["enabled_modules"]  # قالبِ خرده‌فروشی صندوق دارد
+    assert "manufacturing" not in me["enabled_modules"]  # و تولید ندارد
+
+
+def test_signup_manufacturing_industry_does_not_self_grant(db):
+    me = _signup(db, "manufacturing")
+    assert me["industry"] == "manufacturing"
+    assert "manufacturing" in me["enabled_modules"]  # در نمایش
+    assert "manufacturing" not in me["allowed_modules"]  # ولی قفل (بدونِ گرنت)
+
+
 def test_set_grants_only_restricted(db, tenant_id):
     tenant = _tenant(db, tenant_id)
     svc.set_grants(tenant, ["manufacturing", "sales", "nope"])
