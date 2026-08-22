@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
-import { HomeScreen } from '../screens/HomeScreen'
+import { HomeStack } from './HomeStack'
 import { MoreScreen } from '../screens/MoreScreen'
 import { ReportsStack } from './ReportsStack'
 import { ContactsStack } from './ContactsStack'
@@ -56,7 +56,7 @@ export function MainTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'خانه' }} />
+      <Tab.Screen name="Home" component={HomeStack} options={{ title: 'خانه' }} />
       <Tab.Screen name="Reports" component={ReportsStack} options={{ title: 'گزارش' }} />
       <Tab.Screen
         name="Market"

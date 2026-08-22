@@ -28,7 +28,7 @@ const linking: LinkingOptions<any> = {
   prefixes: ['cubita://', 'https://acc.cubita.ir'],
   config: {
     screens: {
-      Home: 'home',
+      Home: { screens: { Dashboard: 'home', Alerts: 'alerts' } },
       Reports: { screens: { ReportsList: 'reports' } },
       Contacts: { screens: { ContactsList: 'contacts', ContactDetail: 'contacts/:id' } },
       Market: { screens: { MarketHome: 'market', Chat: 'chat/:scope/:id' } },

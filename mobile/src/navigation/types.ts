@@ -1,4 +1,9 @@
 // پارامترهای استک‌ها — منبعِ واحدِ تایپِ ناوبری.
+export type HomeStackParams = {
+  Dashboard: undefined
+  Alerts: undefined
+}
+
 export type ReportsStackParams = {
   ReportsList: undefined
   IncomeStatement: undefined

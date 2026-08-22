@@ -23,5 +23,11 @@ export function navigateFromRoute(route?: string): void {
   // خانه‌ی بازار (اتصال/سفارشِ تازه، مرجوعی، …)
   if (parts[0] === 'market') {
     navigationRef.dispatch(CommonActions.navigate('Market', { screen: 'MarketHome' }))
+    return
+  }
+
+  // دایجستِ روزانه‌ی هشدارها → صفحه‌ی هشدارها (تبِ خانه)
+  if (parts[0] === 'alerts') {
+    navigationRef.dispatch(CommonActions.navigate('Home', { screen: 'Alerts' }))
   }
 }

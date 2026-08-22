@@ -1,11 +1,14 @@
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../auth/AuthContext'
 import { fetchAlerts, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
 import { isApiError } from '../api/client'
 import type { AlertItem } from '../api/types'
+import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card } from '../ui'
 import { MonthlyTrendChart } from '../ui/MonthlyTrendChart'
 import { colors, faMoney, faNum, spacing } from '../theme'
@@ -13,6 +16,7 @@ import { colors, faMoney, faNum, spacing } from '../theme'
 // داشبوردِ مدیر: شاخص‌ها + روندِ فروش + هشدارها + پرفروش‌ها. آنلاین‌محور با react-query.
 export function HomeScreen() {
   const { me } = useAuth()
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParams>>()
 
   const summaryQ = useQuery({ queryKey: ['sales-summary'], queryFn: fetchSalesSummary })
   const dashQ = useQuery({ queryKey: ['sales-dashboard'], queryFn: () => fetchSalesDashboard(12) })
@@ -79,7 +83,11 @@ export function HomeScreen() {
           </Card>
         ) : null}
 
-        <AlertsCard items={alertsQ.data?.items ?? []} total={alertsQ.data?.total ?? 0} />
+        <AlertsCard
+          items={alertsQ.data?.items ?? []}
+          total={alertsQ.data?.total ?? 0}
+          onPress={() => nav.navigate('Alerts')}
+        />
 
         {dashQ.data && dashQ.data.top_items.length > 0 ? (
           <Card>
@@ -131,41 +139,51 @@ function KpiCard({
   )
 }
 
-function AlertsCard({ items, total }: { items: AlertItem[]; total: number }) {
+function AlertsCard({ items, total, onPress }: { items: AlertItem[]; total: number; onPress: () => void }) {
   const toneOf = (sev: string) =>
     sev === 'danger' ? colors.danger : sev === 'warning' ? colors.warning : colors.violet
   return (
-    <Card>
-      <View style={styles.alertHead}>
-        <AppText variant="heading">هشدارها</AppText>
-        {total > 0 ? (
-          <View style={styles.alertCount}>
-            <AppText variant="label" color={colors.onAccent}>
-              {faNum(total)}
+    <Pressable onPress={onPress} android_ripple={{ color: colors.surfaceAlt }}>
+      <Card>
+        <View style={styles.alertHead}>
+          <View style={styles.alertHeadStart}>
+            <AppText variant="heading">هشدارها</AppText>
+            {total > 0 ? (
+              <View style={styles.alertCount}>
+                <AppText variant="label" color={colors.onAccent}>
+                  {faNum(total)}
+                </AppText>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.seeAll}>
+            <AppText variant="label" color={colors.textMuted}>
+              مشاهده‌ی همه
             </AppText>
+            <Ionicons name="chevron-back" size={16} color={colors.textMuted} />
           </View>
-        ) : null}
-      </View>
-      {items.length === 0 ? (
-        <AppText variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-          هشداری نیست — همه‌چیز مرتب است ✅
-        </AppText>
-      ) : (
-        items.slice(0, 5).map((a, i) => (
-          <View key={`${a.category}-${a.ref_id}-${i}`} style={styles.alertRow}>
-            <Ionicons name="ellipse" size={9} color={toneOf(a.severity)} style={{ marginTop: 6 }} />
-            <View style={{ flex: 1 }}>
-              <AppText variant="body" weight="semibold" numberOfLines={1}>
-                {a.title}
-              </AppText>
-              <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
-                {a.detail}
-              </AppText>
+        </View>
+        {items.length === 0 ? (
+          <AppText variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+            هشداری نیست — همه‌چیز مرتب است ✅
+          </AppText>
+        ) : (
+          items.slice(0, 5).map((a, i) => (
+            <View key={`${a.category}-${a.ref_id}-${i}`} style={styles.alertRow}>
+              <Ionicons name="ellipse" size={9} color={toneOf(a.severity)} style={{ marginTop: 6 }} />
+              <View style={{ flex: 1 }}>
+                <AppText variant="body" weight="semibold" numberOfLines={1}>
+                  {a.title}
+                </AppText>
+                <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
+                  {a.detail}
+                </AppText>
+              </View>
             </View>
-          </View>
-        ))
-      )}
-    </Card>
+          ))
+        )}
+      </Card>
+    </Pressable>
   )
 }
 
@@ -183,6 +201,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   alertHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  alertHeadStart: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   alertCount: {
     minWidth: 24,
     height: 22,
