@@ -1,37 +1,37 @@
 import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, View } from 'react-native'
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import { fetchContacts } from '../api/contacts'
-import type { Contact } from '../api/types'
+import { fetchItems } from '../api/invoices'
+import type { Item } from '../api/types'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Center, TextField } from '../ui'
-import { colors, radius, spacing } from '../theme'
+import { colors, faMoney, radius, spacing } from '../theme'
 
-// انتخابِ طرف‌حساب برای فرمِ خزانه. با انتخاب، به صفحه‌ی خزانه برمی‌گردد و طرف‌حساب را
-// به‌عنوانِ param پاس می‌دهد (merge تا نوعِ تراکنش حفظ شود).
-export function ContactPickerScreen() {
+// انتخابِ کالا برای ردیفِ فاکتور. با انتخاب، به فرمِ فاکتور برمی‌گردد (merge تا
+// ردیف‌های ثبت‌شده و طرف‌حساب حفظ شوند).
+export function ItemPickerScreen() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParams>>()
-  const route = useRoute<RouteProp<HomeStackParams, 'ContactPicker'>>()
-  const returnTo = route.params?.returnTo ?? 'Treasury'
   const [q, setQ] = useState('')
-  const contactsQ = useQuery({ queryKey: ['contacts'], queryFn: fetchContacts })
+  const itemsQ = useQuery({ queryKey: ['items'], queryFn: fetchItems })
 
   const filtered = useMemo(() => {
-    const all = contactsQ.data ?? []
+    const all = (itemsQ.data ?? []).filter((i) => i.is_active)
     const term = q.trim()
     if (!term) return all
-    return all.filter((c) => c.name.includes(term) || (c.phone ?? '').includes(term))
-  }, [contactsQ.data, q])
+    return all.filter(
+      (i) => i.name.includes(term) || i.sku.includes(term) || (i.barcode ?? '').includes(term),
+    )
+  }, [itemsQ.data, q])
 
-  const pick = (c: Contact) => {
-    // merge: نوعِ تراکنش (receipt/payment) که از قبل روی صفحه‌ی خزانه ست شده حفظ می‌شود
-    // و فقط طرف‌حساب اضافه می‌گردد.
+  const pick = (it: Item) => {
     nav.navigate(
-      returnTo,
-      { pickedContact: { id: c.id, name: c.name } } as never,
+      'NewInvoice',
+      {
+        pickedItem: { id: it.id, name: it.name, unit: it.unit, sales_price: it.sales_price },
+      } as never,
       { merge: true },
     )
   }
@@ -39,9 +39,9 @@ export function ContactPickerScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.searchWrap}>
-        <TextField placeholder="جست‌وجوی نام یا شماره…" value={q} onChangeText={setQ} autoFocus />
+        <TextField placeholder="جست‌وجوی نام، کد یا بارکد…" value={q} onChangeText={setQ} autoFocus />
       </View>
-      {contactsQ.isLoading ? (
+      {itemsQ.isLoading ? (
         <Center>
           <AppText variant="body" color={colors.textMuted}>
             در حال بارگذاری…
@@ -50,13 +50,13 @@ export function ContactPickerScreen() {
       ) : filtered.length === 0 ? (
         <Center>
           <AppText variant="body" color={colors.textMuted}>
-            طرف‌حسابی پیدا نشد.
+            کالایی پیدا نشد.
           </AppText>
         </Center>
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(c) => c.id}
+          keyExtractor={(i) => i.id}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => (
@@ -65,12 +65,13 @@ export function ContactPickerScreen() {
                 <AppText variant="body" weight="semibold" numberOfLines={1}>
                   {item.name}
                 </AppText>
-                {item.phone ? (
-                  <AppText variant="caption" color={colors.textMuted}>
-                    {item.phone}
-                  </AppText>
-                ) : null}
+                <AppText variant="caption" color={colors.textMuted}>
+                  {item.sku} · {item.unit}
+                </AppText>
               </View>
+              <AppText variant="label" color={colors.accent}>
+                {faMoney(item.sales_price)}
+              </AppText>
               <Ionicons name="chevron-back" size={18} color={colors.textFaint} />
             </Pressable>
           )}

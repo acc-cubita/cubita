@@ -69,6 +69,58 @@ export interface TreasuryTxn {
   method: string
 }
 
+// ── فاکتورِ فروش ──────────────────────────────────────────────────────────
+
+/** GET /api/warehouses */
+export interface Warehouse {
+  id: string
+  code: string
+  name: string
+  is_active: boolean
+}
+
+/** GET /api/items (صفحه‌بندیِ keyset) — فقط فیلدهای موردنیازِ فاکتور. */
+export interface Item {
+  id: string
+  sku: string
+  name: string
+  unit: string
+  sales_price: string
+  is_active: boolean
+  barcode: string | null
+}
+
+/** ردیفِ فاکتور — منطبق بر SalesInvoiceLineIn. */
+export interface SalesInvoiceLineIn {
+  item_id: string
+  qty: string
+  unit_price: string
+  discount?: string
+  description?: string
+}
+
+/** بدنه‌ی POST /api/sales-invoices — منطبق بر SalesInvoiceIn. */
+export interface SalesInvoiceIn {
+  invoice_date: string // YYYY-MM-DD
+  warehouse_id: string
+  contact_id?: string | null
+  description?: string
+  lines: SalesInvoiceLineIn[]
+  tax_rate?: string
+  invoice_discount?: string
+}
+
+/** پاسخِ فاکتور — فقط فیلدهای موردنیازِ اپ (منطبق بر SalesInvoiceOut). */
+export interface SalesInvoiceOut {
+  id: string
+  number: number | null
+  invoice_date: string
+  /** جمعِ خالصِ ردیف‌ها پس از تخفیف (پیش از مالیات). */
+  total_amount: string
+  tax_amount: string
+  rounding: string
+}
+
 // ── گزارش‌ها و شاخص‌ها (اعدادِ مالی به‌صورتِ رشته می‌آیند تا دقت حفظ شود) ──────
 
 /** GET /api/sales-invoices/summary */

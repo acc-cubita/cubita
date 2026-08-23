@@ -3,6 +3,8 @@ import { HomeScreen } from '../screens/HomeScreen'
 import { AlertsScreen } from '../screens/AlertsScreen'
 import { TreasuryScreen } from '../screens/TreasuryScreen'
 import { ContactPickerScreen } from '../screens/ContactPickerScreen'
+import { NewInvoiceScreen } from '../screens/NewInvoiceScreen'
+import { ItemPickerScreen } from '../screens/ItemPickerScreen'
 import { colors, font } from '../theme'
 import type { HomeStackParams } from './types'
 
@@ -31,6 +33,8 @@ export function HomeStack() {
         component={ContactPickerScreen}
         options={{ title: 'انتخابِ طرف‌حساب' }}
       />
+      <Stack.Screen name="NewInvoice" component={NewInvoiceScreen} options={{ title: 'فاکتورِ فروش' }} />
+      <Stack.Screen name="ItemPicker" component={ItemPickerScreen} options={{ title: 'انتخابِ کالا' }} />
     </Stack.Navigator>
   )
 }

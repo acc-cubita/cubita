@@ -96,7 +96,7 @@ export function TreasuryScreen() {
             {isReceipt ? 'دریافت از' : 'پرداخت به'}
           </AppText>
           <Pressable
-            onPress={() => nav.navigate('ContactPicker')}
+            onPress={() => nav.navigate('ContactPicker', { returnTo: 'Treasury' })}
             android_ripple={{ color: colors.surfaceAlt }}
             style={styles.picker}
           >

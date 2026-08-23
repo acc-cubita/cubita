@@ -69,6 +69,16 @@ export function HomeScreen() {
           </Card>
         ) : null}
 
+        {me && hasPermission(me, 'invoices', 'create') ? (
+          <QuickAction
+            label="فاکتورِ فروش"
+            icon="receipt-outline"
+            tone={colors.accent}
+            onPress={() => nav.navigate('NewInvoice')}
+            wide
+          />
+        ) : null}
+
         {me && hasPermission(me, 'checks_bank', 'create') ? (
           <View style={styles.quickRow}>
             <QuickAction
@@ -162,14 +172,21 @@ function QuickAction({
   icon,
   tone,
   onPress,
+  wide,
 }: {
   label: string
   icon: keyof typeof Ionicons.glyphMap
   tone: string
   onPress: () => void
+  /** دکمه‌ی تمام‌عرض (کنشِ اصلی) به‌جای نیمِ ردیف. */
+  wide?: boolean
 }) {
   return (
-    <Pressable onPress={onPress} android_ripple={{ color: colors.surfaceAlt }} style={styles.quickBtn}>
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: colors.surfaceAlt }}
+      style={[styles.quickBtn, wide && styles.quickBtnWide]}
+    >
       <Ionicons name={icon} size={22} color={tone} />
       <AppText variant="label" weight="semibold">
         {label}
@@ -245,6 +262,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  quickBtnWide: { flex: 0, borderColor: colors.accent },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

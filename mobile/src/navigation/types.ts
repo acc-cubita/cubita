@@ -3,7 +3,10 @@ export type HomeStackParams = {
   Dashboard: undefined
   Alerts: undefined
   Treasury: { type: 'receipt' | 'payment'; pickedContact?: { id: string; name: string } }
-  ContactPicker: undefined
+  /** returnTo: به کدام صفحه برگردد (پیش‌فرض: خزانه). */
+  ContactPicker: { returnTo?: 'Treasury' | 'NewInvoice' } | undefined
+  NewInvoice: { pickedContact?: { id: string; name: string }; pickedItem?: { id: string; name: string; unit: string; sales_price: string } } | undefined
+  ItemPicker: undefined
 }
 
 export type ReportsStackParams = {
