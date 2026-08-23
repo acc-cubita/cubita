@@ -2,6 +2,8 @@
 export type HomeStackParams = {
   Dashboard: undefined
   Alerts: undefined
+  Treasury: { type: 'receipt' | 'payment'; pickedContact?: { id: string; name: string } }
+  ContactPicker: undefined
 }
 
 export type ReportsStackParams = {

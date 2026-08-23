@@ -38,6 +38,37 @@ export interface Page<T> {
 
 export const isOwner = (me: Me): boolean => Boolean(me.permissions['*'])
 
+/** مجوزِ منبع/کنش را می‌سنجد (مالک با «*» همه را دارد). */
+export const hasPermission = (me: Me, resource: string, action: string): boolean =>
+  Boolean(me.permissions['*']) || Boolean(me.permissions[resource]?.includes(action))
+
+// ── خزانه: دریافت/پرداخت ─────────────────────────────────────────────────
+
+/** GET /api/bank-accounts (فهرستِ ساده). */
+export interface BankAccount {
+  id: string
+  name: string
+}
+
+/** بدنه‌ی POST /api/treasury/{receipts|payments} — منطبق بر TreasuryTransactionIn. */
+export interface TreasuryTxnIn {
+  transaction_date: string // YYYY-MM-DD
+  contact_id: string
+  amount: string
+  method: 'cash' | 'bank'
+  bank_account_id?: string | null
+  description?: string
+}
+
+/** پاسخِ تراکنشِ خزانه — منطبق بر TreasuryTransactionOut (فقط فیلدهای موردنیاز). */
+export interface TreasuryTxn {
+  id: string
+  type: string
+  contact_name: string
+  amount: string
+  method: string
+}
+
 // ── گزارش‌ها و شاخص‌ها (اعدادِ مالی به‌صورتِ رشته می‌آیند تا دقت حفظ شود) ──────
 
 /** GET /api/sales-invoices/summary */

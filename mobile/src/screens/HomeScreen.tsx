@@ -8,10 +8,11 @@ import { useAuth } from '../auth/AuthContext'
 import { fetchAlerts, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
 import { isApiError } from '../api/client'
 import type { AlertItem } from '../api/types'
+import { hasPermission } from '../api/types'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card } from '../ui'
 import { MonthlyTrendChart } from '../ui/MonthlyTrendChart'
-import { colors, faMoney, faNum, spacing } from '../theme'
+import { colors, faMoney, faNum, radius, spacing } from '../theme'
 
 // داشبوردِ مدیر: شاخص‌ها + روندِ فروش + هشدارها + پرفروش‌ها. آنلاین‌محور با react-query.
 export function HomeScreen() {
@@ -66,6 +67,23 @@ export function HomeScreen() {
               <Button label="تلاش دوباره" variant="ghost" onPress={refetchAll} />
             </View>
           </Card>
+        ) : null}
+
+        {me && hasPermission(me, 'checks_bank', 'create') ? (
+          <View style={styles.quickRow}>
+            <QuickAction
+              label="ثبتِ دریافت"
+              icon="arrow-down-circle"
+              tone={colors.success}
+              onPress={() => nav.navigate('Treasury', { type: 'receipt' })}
+            />
+            <QuickAction
+              label="ثبتِ پرداخت"
+              icon="arrow-up-circle"
+              tone={colors.danger}
+              onPress={() => nav.navigate('Treasury', { type: 'payment' })}
+            />
+          </View>
         ) : null}
 
         <View style={styles.kpiRow}>
@@ -139,6 +157,27 @@ function KpiCard({
   )
 }
 
+function QuickAction({
+  label,
+  icon,
+  tone,
+  onPress,
+}: {
+  label: string
+  icon: keyof typeof Ionicons.glyphMap
+  tone: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable onPress={onPress} android_ripple={{ color: colors.surfaceAlt }} style={styles.quickBtn}>
+      <Ionicons name={icon} size={22} color={tone} />
+      <AppText variant="label" weight="semibold">
+        {label}
+      </AppText>
+    </Pressable>
+  )
+}
+
 function AlertsCard({ items, total, onPress }: { items: AlertItem[]; total: number; onPress: () => void }) {
   const toneOf = (sev: string) =>
     sev === 'danger' ? colors.danger : sev === 'warning' ? colors.warning : colors.violet
@@ -193,6 +232,19 @@ const styles = StyleSheet.create({
   header: { gap: 2, marginBottom: spacing.sm },
   kpiRow: { flexDirection: 'row', gap: spacing.md },
   kpi: { flex: 1 },
+  quickRow: { flexDirection: 'row', gap: spacing.md },
+  quickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
