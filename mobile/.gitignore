@@ -47,3 +47,8 @@ yarn-error.*
 google-services.json
 fcm-service-account*.json
 *-firebase-adminsdk-*.json
+
+# کلیدِ امضای انتشار — با گم شدنش دیگر نمی‌توان آپدیتِ همین اپ را منتشر کرد.
+*.keystore
+*.jks
+keystore.properties

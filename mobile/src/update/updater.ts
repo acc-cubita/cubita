@@ -26,6 +26,10 @@ export interface UpdateManifest {
   apkUrl: string
   notes?: string
   mandatory?: boolean
+  /** این نسخه با کلیدِ امضای متفاوتی امضا شده — اندروید نصبِ درجا را رد می‌کند و
+   *  کاربر باید یک‌بار نسخه‌ی قبلی را حذف کند. بدونِ این هشدار، نصب بی‌توضیح شکست
+   *  می‌خورد و کاربر فکر می‌کند اپ خراب است. */
+  reinstall?: boolean
 }
 
 /** versionCodeِ نسخه‌ی نصب‌شده (روی اندروید یک عددِ صحیحِ یکنواخت است). */
@@ -60,6 +64,7 @@ export async function fetchManifest(): Promise<UpdateManifest> {
     apkUrl: resolveUrl(j.apkUrl),
     notes: typeof j.notes === 'string' ? j.notes : undefined,
     mandatory: Boolean(j.mandatory),
+    reinstall: Boolean(j.reinstall),
   }
 }
 

@@ -219,6 +219,19 @@ function ModalBody({
         ) : null}
       </View>
 
+      {info.reinstall ? (
+        <View style={styles.reinstallBox}>
+          <AppText variant="label" color={colors.warning} weight="bold">
+            این نسخه نصبِ دوباره می‌خواهد
+          </AppText>
+          <AppText variant="caption" color={colors.textMuted} style={styles.center}>
+            به‌دلیلِ تغییرِ کلیدِ امنیتیِ برنامه، اندروید اجازه‌ی نصب روی نسخه‌ی فعلی را نمی‌دهد.
+            پس از دانلود، اگر نصب انجام نشد یک‌بار «کوبیتا» را حذف و دوباره نصب کنید.
+            اطلاعاتِ شما روی سرور است و از بین نمی‌رود.
+          </AppText>
+        </View>
+      ) : null}
+
       {info.notes ? (
         <ScrollView style={styles.notes} contentContainerStyle={{ paddingVertical: spacing.xs }}>
           <AppText variant="body" color={colors.textMuted}>
@@ -289,6 +302,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   notes: { maxHeight: 140, alignSelf: 'stretch' },
+  reinstallBox: {
+    alignSelf: 'stretch',
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    alignItems: 'center',
+  },
   progressWrap: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.xs },
   progressTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },

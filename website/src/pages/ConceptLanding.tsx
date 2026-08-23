@@ -44,6 +44,8 @@ const TRIAL_URL = 'https://acc.cubita.ir/?signup'
 const APP_URL = 'https://acc.cubita.ir'
 // لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپِ ویندوز (فایلِ سرور روی هر انتشار به‌روز می‌شود).
 const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
+// همان الگو برای اپ اندروید: cubita-latest.apk روی هر انتشار به آخرین نسخه اشاره می‌کند.
+const ANDROID_APK_URL = 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
 
 const NAV = [
   { href: '#cc-features', label: 'امکانات' },
@@ -71,6 +73,13 @@ const PLATFORMS = [
     title: 'اپِ دسکتاپِ آفلاین',
     desc: 'اینترنت قطع شد؟ اپِ دسکتاپ آفلاین کار می‌کند و با اتصالِ مجدد خودکار هم‌گام می‌شود.',
     points: ['کارِ کاملاً آفلاین', 'هم‌گام‌سازیِ خودکار', 'سرعتِ بالای محلی'],
+  },
+  {
+    icon: Smartphone,
+    title: 'اپِ اندروید',
+    desc: 'نبضِ کسب‌وکار در جیبِ تو: داشبورد و گزارش، ثبتِ فاکتور و دریافت/پرداخت، و هشدارها به‌صورتِ اعلانِ زنده.',
+    points: ['ثبتِ فاکتور و دریافت در حرکت', 'اعلانِ زنده‌ی هشدارها', 'به‌روزرسانیِ خودکار'],
+    download: ANDROID_APK_URL,
   },
 ]
 
@@ -299,7 +308,7 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
 function Platforms() {
   return (
     <section className="cc-section" id="cc-platforms">
-      <SectionHead eyebrow="همه‌جا در دسترس" title="یک حساب، روی وب و دسکتاپ" sub="هرجا راحت‌تری کار کن؛ داده‌ات همیشه بینِ هر دو نسخه هم‌گام است." />
+      <SectionHead eyebrow="همه‌جا در دسترس" title="یک حساب، روی وب، دسکتاپ و موبایل" sub="هرجا راحت‌تری کار کن؛ داده‌ات همیشه بینِ هر سه نسخه هم‌گام است." />
       <div className="cc-platforms">
         {PLATFORMS.map((p, i) => (
           <motion.div
@@ -320,6 +329,11 @@ function Platforms() {
                 <li key={pt}>{pt}</li>
               ))}
             </ul>
+            {'download' in p && p.download ? (
+              <a className="cc-btn cc-btn-ghost cc-platform-dl" href={p.download}>
+                <Download size={16} /> دانلودِ اپ اندروید
+              </a>
+            ) : null}
           </motion.div>
         ))}
       </div>

@@ -1,15 +1,17 @@
-import { Globe, MonitorDown, Check } from 'lucide-react'
+import { Globe, MonitorDown, Smartphone, Check } from 'lucide-react'
 
-/** «دو نسخه از نظر تکنولوژی» — قرینه‌ی بخشِ ابری/ویندوزِ رقیب، ولی برای کوبیتا: وب و دسکتاپ. */
+/** سه نسخه: وب (ابری)، دسکتاپ (ویندوز) و اپ اندروید. */
 export function Platforms() {
   const appUrl = import.meta.env.VITE_APP_URL ?? 'https://acc.cubita.ir'
   const demoUrl = import.meta.env.VITE_DEMO_URL ?? 'https://demo.cubita.ir'
+  // APKِ اندروید از همان فیدی می‌آید که آپدیتِ درون‌برنامه‌ای از آن می‌خواند.
+  const apkUrl = import.meta.env.VITE_ANDROID_APK_URL ?? 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
 
   return (
     <section id="platforms">
       <div className="container">
         <div className="section-head">
-          <span className="eyebrow">یک حساب، دو نسخه</span>
+          <span className="eyebrow">یک حساب، سه نسخه</span>
           <h2>هرجا که هستید، به کسب‌وکارتان وصل باشید</h2>
           <p>یک بار ثبت‌نام کنید و از هر دستگاهی وارد شوید؛ داده‌ها همیشه یکی هستند و هم‌گام می‌مانند.</p>
         </div>
@@ -45,6 +47,23 @@ export function Platforms() {
             </ul>
             <div className="platform-actions">
               <a href="#pricing" className="btn btn-primary">شروع رایگان</a>
+              <a href="#features" className="btn btn-outline">امکانات</a>
+            </div>
+          </article>
+
+          <article className="platform-card">
+            <span className="platform-icon platform-icon-3">
+              <Smartphone size={26} />
+            </span>
+            <h3>اپ اندروید</h3>
+            <p>نبضِ کسب‌وکار در جیبِ شما: داشبورد و گزارش‌ها، ثبتِ فاکتور و دریافت/پرداخت، و هشدارهای مهم به‌صورتِ اعلانِ زنده.</p>
+            <ul className="platform-list">
+              <li><Check size={16} /> ثبتِ فاکتور و دریافت/پرداخت در حرکت</li>
+              <li><Check size={16} /> اعلانِ زنده‌ی هشدارها و پیام‌ها</li>
+              <li><Check size={16} /> به‌روزرسانیِ خودکار از داخلِ برنامه</li>
+            </ul>
+            <div className="platform-actions">
+              <a href={apkUrl} className="btn btn-primary">دانلودِ مستقیم (APK)</a>
               <a href="#features" className="btn btn-outline">امکانات</a>
             </div>
           </article>

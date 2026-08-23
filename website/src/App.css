@@ -1599,7 +1599,7 @@ section {
 /* ── نسخه‌ها: وب / دسکتاپ ── */
 .platforms-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 22px;
 }
 .platform-card {
@@ -1625,6 +1625,7 @@ section {
   background: var(--accent-bg);
 }
 .platform-icon-2 { color: var(--accent-2-hover); background: var(--accent-2-bg); }
+.platform-icon-3 { color: var(--violet); background: color-mix(in oklab, var(--violet) 14%, transparent); }
 .platform-card h3 { font-size: 20px; margin: 4px 0 0; color: var(--text-h); }
 .platform-card > p { color: var(--text); line-height: 1.9; margin: 0; }
 .platform-list {
@@ -1711,9 +1712,15 @@ section {
 .trial-cta-text p { margin: 0; color: var(--text); line-height: 1.9; }
 .trial-cta-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* سه کارتِ نسخه‌ها روی تبلت دوستونه می‌شوند (سومی تمام‌عرض)، و روی موبایل تک‌ستونه. */
+@media (max-width: 1040px) {
+  .platforms-grid { grid-template-columns: repeat(2, 1fr); }
+  .platforms-grid > .platform-card:last-child { grid-column: 1 / -1; }
+}
 @media (max-width: 780px) {
   .platforms-grid,
   .solutions-grid { grid-template-columns: 1fr; }
+  .platforms-grid > .platform-card:last-child { grid-column: auto; }
   .trial-cta { padding: 26px 22px; }
   .trial-cta-text h2 { font-size: 21px; }
 }
