@@ -22,11 +22,30 @@
 """
 import logging
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _smtp_connection(settings):
+    """اتصالِ SMTP بر پایه‌ی پورت: ۴۶۵ رمزنگاری‌شده از بایتِ اول، بقیه STARTTLS.
+
+    **چرا این تفکیک لازم شد:** روی سرورِ prod، پورتِ ۵۸۷ دست‌ندادنِ TCP و بنر را رد
+    می‌کند ولی به‌محضِ اولین فرمانِ متن‌باز (`EHLO`) اتصال بی‌صدا قطع می‌شود — یعنی
+    گفتگوی SMTPِ رمزنگاری‌نشده فیلتر می‌شود و ایمیل با تایم‌اوت شکست می‌خورد. روی
+    ۴۶۵ کلِ جلسه از همان بایتِ اول داخلِ TLS است، پس چیزی برای فیلتر شدن دیده
+    نمی‌شود و ارسال زیرِ یک ثانیه انجام می‌شود.
+    """
+    if settings.smtp_port == 465:
+        return smtplib.SMTP_SSL(
+            settings.smtp_host, settings.smtp_port, timeout=20, context=ssl.create_default_context()
+        )
+    server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20)
+    server.starttls(context=ssl.create_default_context())
+    return server
 
 
 def send_email(to: str, subject: str, body: str) -> bool:
@@ -53,8 +72,7 @@ def send_email(to: str, subject: str, body: str) -> bool:
     message.set_content(body)
 
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
-            server.starttls()
+        with _smtp_connection(settings) as server:
             server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(message)
         return True
