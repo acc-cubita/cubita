@@ -227,8 +227,8 @@ function Hero() {
           </h1>
           <p className="cc-hero-sub">
             کوبیتا عملیاتِ مالیِ کسب‌وکارتان را به یک مزیتِ رقابتی تبدیل می‌کند — فروش، خرید و انبار،
-            حسابداریِ دوطرفه، چک و خزانه و بازارِ عمده‌فروشی، همه در یک سامانه‌ی متصل؛ روی دسکتاپ و
-            وب، حتی بدونِ اینترنت.
+            حسابداریِ دوطرفه، چک و خزانه و بازارِ عمده‌فروشی، همه در یک سامانه‌ی متصل؛ روی وب، دسکتاپ و
+            موبایل، حتی بدونِ اینترنت.
           </p>
           <div className="cc-hero-cta">
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
@@ -236,6 +236,9 @@ function Hero() {
             </a>
             <a className="cc-btn cc-btn-ghost" href={DOWNLOAD_URL} download>
               <Download size={16} /> دانلودِ نرم‌افزار (ویندوز)
+            </a>
+            <a className="cc-btn cc-btn-ghost" href={ANDROID_APK_URL}>
+              <Smartphone size={16} /> اپِ اندروید
             </a>
           </div>
           <div className="cc-hero-feats">
@@ -498,6 +501,9 @@ function FinalCta() {
           </a>
           <a className="cc-btn cc-btn-ghost cc-btn-lg" href={DOWNLOAD_URL} download>
             <Download size={17} /> دانلودِ نرم‌افزار (ویندوز)
+          </a>
+          <a className="cc-btn cc-btn-ghost cc-btn-lg" href={ANDROID_APK_URL}>
+            <Smartphone size={17} /> اپِ اندروید
           </a>
         </div>
       </motion.div>
