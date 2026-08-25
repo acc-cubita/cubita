@@ -23,14 +23,16 @@ import {
   PackagePlus,
   ShoppingBag,
   Boxes,
-  Wallet,
-  Database,
-  Wrench,
   Settings,
   Truck,
   Percent,
   Palette,
   SlidersHorizontal,
+  HandCoins,
+  HardHat,
+  ClipboardList,
+  Building,
+  FileSpreadsheet,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -48,6 +50,8 @@ export type PageKey =
   | 'accounting'
   | 'banking'
   | 'fixedassets'
+  | 'contracting'
+  | 'moadian'
   | 'distributor'
   | 'marketplace'
   | 'payroll'
@@ -75,52 +79,90 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
   },
   {
-    heading: 'فروش و مشتریان',
+    heading: 'مشتریان و فروش',
     icon: <ShoppingBag size={17} />,
     items: [
       { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
       { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
+      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
     ],
   },
   {
-    heading: 'خرید و انبار',
+    heading: 'تامین‌کنندگان و انبار',
     icon: <Boxes size={17} />,
     items: [
       { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
       { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
-      { key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> },
     ],
   },
   {
-    heading: 'مالی و بانکی',
-    icon: <Wallet size={17} />,
+    heading: 'سفارش کار',
+    icon: <ClipboardList size={17} />,
+    items: [{ key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> }],
+  },
+  {
+    heading: 'دریافت و پرداخت',
+    icon: <HandCoins size={17} />,
+    items: [{ key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> }],
+  },
+  {
+    heading: 'دارایی ثابت',
+    icon: <Building2 size={17} />,
+    items: [{ key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> }],
+  },
+  {
+    heading: 'حسابداری',
+    icon: <BookOpen size={17} />,
     items: [
       { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
-      { key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> },
-      { key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> },
-      { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
-    ],
-  },
-  {
-    heading: 'اطلاعات و گزارش',
-    icon: <Database size={17} />,
-    items: [
-      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
     ],
   },
   {
-    heading: 'ابزار',
-    icon: <Wrench size={17} />,
+    heading: 'حقوق و دستمزد',
+    icon: <Users size={17} />,
+    items: [{ key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> }],
+  },
+  {
+    heading: 'پیمانکاری',
+    icon: <HardHat size={17} />,
+    items: [{ key: 'contracting', label: 'پیمانکاری', icon: <HardHat size={18} /> }],
+  },
+  {
+    heading: 'سامانه مؤدیان',
+    icon: <FileSpreadsheet size={17} />,
+    items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
+  },
+  {
+    heading: 'شرکت',
+    icon: <Building size={17} />,
     items: [
-      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
+      { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
       { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
     ],
   },
+  {
+    heading: 'تنظیمات',
+    icon: <Settings size={17} />,
+    items: [
+      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
+      { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
+      { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
+    ],
+  },
 ]
+
+//: کلیدهایی که با سیستمِ شخصی‌سازیِ ماژول گیت می‌شوند. بقیه‌ی ورودی‌های منو (کاربران،
+//: تنظیمات، راهنما، ماژول‌های تازه‌ای که هنوز در رجیستریِ بک‌اند نیستند) همیشه دیده
+//: می‌شوند — وگرنه با روشنِ‌شدن فیلتر، ناوبریِ سیستمی هم ناپدید می‌شد.
+const GATED_MODULE_KEYS = new Set<PageKey>([
+  'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',
+  'manufacturing', 'accounting', 'banking', 'fixedassets', 'payroll',
+  'integration', 'calendar', 'onboarding', 'contacts', 'reports',
+])
 
 // تبِ کنترل‌پنلِ فروشِ خودِ کوبیتا (نه فیچرِ مشتری) — فقط برای ادمینِ پلتفرم.
 export const PLATFORM_ADMIN_NAV_ITEMS: NavItem[] = [
@@ -133,11 +175,10 @@ export const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
   { key: 'mpcommission', label: 'کمیسیونِ بازار', icon: <Percent size={18} /> },
 ]
 
+//: ورودی‌های پایینِ سایدبار/منوی کاربر. «ظاهر» و «راهنما» به گروهِ «تنظیمات» منتقل
+//: شدند تا در ساختارِ تازه‌ی ماژول‌ها یک‌جا جمع باشند.
 export const SECONDARY_NAV_ITEMS: NavItem[] = [
   { key: 'profile', label: 'پروفایل من', icon: <UserCircle size={18} /> },
-  { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
-  { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
-  { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
 ]
 
 //: ورودیِ «شخصی‌سازیِ پنل» — فقط برای مالک (روشن/خاموش‌کردنِ ماژول‌ها).
@@ -170,7 +211,8 @@ export function buildNav({
   const filterModules = enabledModules.length > 0 && allowedModules.length > 0
   const allowed = new Set(allowedModules)
   const visible = new Set(enabledModules.filter((k) => allowed.has(k)))
-  const isVisible = (key: PageKey) => !filterModules || visible.has(key)
+  const isVisible = (key: PageKey) =>
+    !filterModules || !GATED_MODULE_KEYS.has(key) || visible.has(key)
 
   const businessGroups = NAV_GROUPS.map((g) => ({
     ...g,
@@ -198,12 +240,11 @@ export function buildNav({
     ...(adminItems.length ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }] : []),
   ]
 
-  // ورودیِ شخصی‌سازی درست بعد از «کاربران» می‌نشیند (فقط مالک).
-  const secondary: NavItem[] = []
-  for (const item of SECONDARY_NAV_ITEMS) {
-    secondary.push(item)
-    if (item.key === 'team' && isOwner) secondary.push(MODULES_SETTINGS_ITEM)
+  // «شخصی‌سازیِ پنل» (فقط مالک) به انتهای گروهِ «تنظیمات» اضافه می‌شود.
+  if (isOwner) {
+    const settings = groups.find((g) => g.heading === 'تنظیمات')
+    if (settings) settings.items = [...settings.items, MODULES_SETTINGS_ITEM]
   }
 
-  return { groups, secondary }
+  return { groups, secondary: [...SECONDARY_NAV_ITEMS] }
 }

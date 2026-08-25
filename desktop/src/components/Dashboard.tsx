@@ -33,6 +33,8 @@ import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
+import { ContractingPage } from '../pages/ContractingPage'
+import { MoadianPage } from '../pages/MoadianPage'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
@@ -63,6 +65,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   accounting: 'حسابداری',
   banking: 'چک و بانک',
   fixedassets: 'دارایی ثابت',
+  contracting: 'پیمانکاری',
+  moadian: 'سامانه مؤدیان',
   distributor: 'پخشِ من',
   marketplace: 'بازارِ خرید',
   payroll: 'حقوق و دستمزد',
@@ -340,6 +344,8 @@ export function Dashboard({
               <Reports token={token} accounts={accounts} />
             </div>
           )}
+          {page === 'contracting' && <ContractingPage />}
+          {page === 'moadian' && <MoadianPage token={token} />}
           {page === 'onboarding' && <OnboardingPage token={token} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
