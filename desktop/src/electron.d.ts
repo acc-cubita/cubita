@@ -86,12 +86,44 @@ export interface CubitaBridge {
   listCachedWarehouses: () => Promise<WarehouseCache[]>
   listCachedItems: () => Promise<ItemCache[]>
   listCachedBankAccounts: () => Promise<BankAccountCache[]>
-  backupAuto: () => Promise<LocalBackup>
+  backupAuto: () => Promise<BackupAutoResult>
   backupSaveToFile: () => Promise<{ saved: boolean; path?: string }>
   backupListLocal: () => Promise<LocalBackup[]>
   backupOpenFolder: () => Promise<void>
   backupRestoreFromFile: () => Promise<{ restored: boolean; canceled?: boolean; message: string }>
+  backupNow: () => Promise<LocalBackup>
+  backupStatus: () => Promise<BackupStatus>
+  backupGetSettings: () => Promise<BackupSettings>
+  backupSetSettings: (patch: Partial<BackupSettings>) => Promise<BackupSettings>
+  backupChooseDir: () => Promise<{ dir?: string; canceled?: boolean }>
+  backupResetDir: () => Promise<BackupSettings>
+  backupDeleteLocal: (file: string) => Promise<{ deleted: boolean }>
+  backupRestoreFromLocal: (file: string) => Promise<{ restored: boolean; message: string }>
   posTerminal?: PosTerminalBridge
+}
+
+/** تنظیماتِ پشتیبانِ خودکار — آینه‌ی `BackupSettings` در electron/backup.ts. */
+export interface BackupSettings {
+  enabled: boolean
+  /** کمینه‌ی فاصله‌ی دو نسخه‌ی خودکار (ساعت). ۰ = هر بار همگام‌سازی. */
+  everyHours: number
+  keep: number
+  /** خالی = پوشه‌ی پیش‌فرضِ برنامه. */
+  dir: string
+}
+
+export type BackupAutoResult =
+  | { taken: true; backup: LocalBackup }
+  | { taken: false; reason: 'disabled' | 'too-soon' | 'no-token'; nextAt?: number }
+
+export interface BackupStatus {
+  dir: string
+  count: number
+  totalSize: number
+  last: LocalBackup | null
+  /** زمانِ نسخه‌ی خودکارِ بعدی؛ null یعنی زمان‌بندی فعال نیست. */
+  nextAt: number | null
+  settings: BackupSettings
 }
 
 export interface LocalBackup {

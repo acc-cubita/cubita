@@ -10,7 +10,6 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
-import { BackupCard } from '../components/BackupCard'
 
 export function ProfilePage({
   token,
@@ -36,7 +35,6 @@ export function ProfilePage({
         <UserInfoCard token={token} me={me} onMeUpdated={onMeUpdated} />
         <div className="profile-side">
           {isOwner && <BusinessCard token={token} me={me} onMeUpdated={onMeUpdated} />}
-          {isOwner && <BackupCard token={token} />}
         </div>
       </div>
     </div>

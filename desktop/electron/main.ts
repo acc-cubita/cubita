@@ -23,7 +23,22 @@ import {
   queuePurchaseInvoice,
   queueSalesInvoice,
 } from './sync.js'
-import { autoSnapshot, listLocalBackups, openBackupsFolder, restoreFromFile, saveToFile } from './backup.js'
+import {
+  autoSnapshot,
+  backupStatus,
+  chooseDir,
+  deleteLocal,
+  getSettings,
+  listLocalBackups,
+  openBackupsFolder,
+  resetDir,
+  restoreFromFile,
+  restoreFromLocal,
+  saveToFile,
+  setSettings,
+  snapshotNow,
+  type BackupSettings,
+} from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
 import { driverFor } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
@@ -219,6 +234,26 @@ ipcMain.handle('backup:saveToFile', () => saveToFile(backupConfig(), mainWindow)
 ipcMain.handle('backup:listLocal', () => listLocalBackups())
 ipcMain.handle('backup:openFolder', () => openBackupsFolder())
 ipcMain.handle('backup:restoreFromFile', () => restoreFromFile(backupConfig(), mainWindow))
+ipcMain.handle('backup:now', () => snapshotNow(backupConfig()))
+ipcMain.handle('backup:status', () => backupStatus())
+ipcMain.handle('backup:getSettings', () => getSettings())
+ipcMain.handle('backup:setSettings', (_e, patch: Partial<BackupSettings>) => setSettings(patch))
+ipcMain.handle('backup:chooseDir', () => chooseDir(mainWindow))
+ipcMain.handle('backup:resetDir', () => resetDir())
+ipcMain.handle('backup:deleteLocal', (_e, file: string) => deleteLocal(file))
+ipcMain.handle('backup:restoreFromLocal', (_e, file: string) => restoreFromLocal(backupConfig(), file))
+
+// زمان‌بندِ پشتیبانِ خودکار.
+//
+// پیش از این، نسخه‌ی خودکار فقط *پس از همگام‌سازی* گرفته می‌شد؛ یعنی کاربری که یک
+// هفته همگام‌سازی نمی‌کرد یک هفته بی‌پشتیبان می‌ماند. حالا یک تیکِ ساعتی هم هست و
+// خودِ `autoSnapshot` تصمیم می‌گیرد که نوبتش رسیده یا نه (طبقِ فاصله‌ی تنظیم‌شده)،
+// پس این تیک هیچ‌وقت بیش از حد نسخه نمی‌سازد. خطا عمداً بلعیده می‌شود: کارِ
+// پس‌زمینه نباید به کاربر خطا نشان بدهد.
+const BACKUP_TICK_MS = 60 * 60 * 1000
+setInterval(() => {
+  void autoSnapshot(backupConfig()).catch(() => {})
+}, BACKUP_TICK_MS)
 
 // --- کارتخوان (POS): پلِ سخت‌افزار فقط در دسکتاپ ---
 // خطاها هرگز از IPC پرتاب نمی‌شوند؛ به نتیجه‌ی ساختاریافته تبدیل می‌شوند تا رابط

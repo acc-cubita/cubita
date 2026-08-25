@@ -8011,3 +8011,66 @@ button:disabled {
   white-space: nowrap;
 }
 .pw-recovery-state { margin-inline-start: auto; flex-shrink: 0; color: var(--text-muted); font-size: var(--fs-xs); }
+
+
+/* ── پشتیبان‌گیری خودکار ─────────────────────────────────────────────────────
+   کارتِ تنظیمات (کلید، فاصله، تعداد، پوشه)، کارتِ وضعیت، و جدولِ نسخه‌ها. */
+.bk-settings { display: flex; flex-direction: column; gap: 14px; }
+.bk-settings > label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
+.bk-hint { color: var(--text-muted); font-size: var(--fs-xs); }
+
+.bk-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.bk-switch input { width: auto; margin-top: 2px; flex-shrink: 0; }
+.bk-switch > span { display: flex; flex-direction: column; gap: 2px; }
+.bk-switch strong { color: var(--text-h); font-size: var(--fs-sm); font-weight: 700; }
+
+.bk-dir { display: flex; flex-direction: column; gap: 6px; }
+.bk-dir-label { font-size: var(--fs-sm); }
+.bk-dir-path {
+  display: block;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  direction: ltr;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-dir-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-dir-actions button { font-size: var(--fs-xs); }
+
+.bk-status { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
+.bk-status li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+  font-size: var(--fs-sm);
+}
+.bk-status li:last-child { border-bottom: none; padding-bottom: 0; }
+.bk-status span { color: var(--text-muted); }
+.bk-status strong { color: var(--text-h); font-weight: 700; text-align: left; }
+
+/* نامِ فایل لاتین است؛ در متنِ راست‌چین باید LTR بماند وگرنه به‌هم می‌ریزد. */
+.bk-file { direction: ltr; text-align: left; font-size: var(--fs-xs); color: var(--text-muted); }
+/* پیامِ چندخطی (مثلِ مسیرِ فایلِ ذخیره‌شده) باید شکستِ خطش حفظ شود. */
+.bk-msg { white-space: pre-wrap; word-break: break-word; }
+
+/* دکمه‌ی «بازیابی از فایل» در وب یک <label> رویِ input مخفی است. */
+.bk-file-btn { cursor: pointer; }

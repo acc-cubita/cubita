@@ -23,6 +23,14 @@ contextBridge.exposeInMainWorld('cubita', {
   backupListLocal: () => ipcRenderer.invoke('backup:listLocal'),
   backupOpenFolder: () => ipcRenderer.invoke('backup:openFolder'),
   backupRestoreFromFile: () => ipcRenderer.invoke('backup:restoreFromFile'),
+  backupNow: () => ipcRenderer.invoke('backup:now'),
+  backupStatus: () => ipcRenderer.invoke('backup:status'),
+  backupGetSettings: () => ipcRenderer.invoke('backup:getSettings'),
+  backupSetSettings: (patch: unknown) => ipcRenderer.invoke('backup:setSettings', patch),
+  backupChooseDir: () => ipcRenderer.invoke('backup:chooseDir'),
+  backupResetDir: () => ipcRenderer.invoke('backup:resetDir'),
+  backupDeleteLocal: (file: string) => ipcRenderer.invoke('backup:deleteLocal', file),
+  backupRestoreFromLocal: (file: string) => ipcRenderer.invoke('backup:restoreFromLocal', file),
   // پلِ کارتخوان — فقط در دسکتاپ تعریف می‌شود؛ در نسخه‌ی وب window.cubita وجود ندارد،
   // پس رابط کاربری با feature-detect دکمه را «فقط دسکتاپ» نشان می‌دهد.
   posTerminal: {
