@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2, Building2 } from 'lucide-react'
 import {
   fetchAccountsLive,
@@ -11,6 +11,7 @@ import {
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
+import { buildNav } from '../lib/navModel'
 import { TopNav } from './TopNav'
 import { useTheme } from '../lib/theme'
 import { NavSectionContext } from './navContext'
@@ -357,8 +358,23 @@ export function Dashboard({
     </>
   )
 
+  // همان مدلِ ناوبریِ نوار/سایدبار — کارتِ «عملیات» هم صفحه‌های هم‌گروه را از این‌جا
+  // می‌گیرد، پس دقیقاً همان چیزی را نشان می‌دهد که منو نشان می‌داد.
+  const navGroups = useMemo(
+    () =>
+      buildNav({
+        isPlatformAdmin: me.is_platform_admin,
+        isSuperAdmin: me.is_super_admin,
+        tenantKind: me.tenant_kind,
+        enabledModules: me.enabled_modules,
+        allowedModules: me.allowed_modules,
+        isOwner: me.role_key === 'owner',
+      }).groups,
+    [me.is_platform_admin, me.is_super_admin, me.tenant_kind, me.enabled_modules, me.allowed_modules, me.role_key],
+  )
+
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
-  const panelsClass = hasModulePanels(page) ? ' app-shell--panels' : ''
+  const panelsClass = hasModulePanels(page, navGroups) ? ' app-shell--panels' : ''
 
   return (
     <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
@@ -388,6 +404,8 @@ export function Dashboard({
               page={page}
               section={section}
               onSelectSection={(key) => setSection(key)}
+              onNavigate={navigate}
+              groups={navGroups}
               token={token}
             />
             <main className="app-content">{pageContent}</main>
@@ -416,6 +434,8 @@ export function Dashboard({
             page={page}
             section={section}
             onSelectSection={(key) => setSection(key)}
+            onNavigate={navigate}
+            groups={navGroups}
             token={token}
           />
           <div className="app-main">

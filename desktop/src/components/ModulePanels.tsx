@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
-import { MODULE_SECTIONS } from './moduleSections'
+import { MODULE_SECTIONS, type SectionDef } from './moduleSections'
 import { MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
+import type { NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
 /**
@@ -18,15 +19,26 @@ import type { PageKey } from './Sidebar'
 
 const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
 
+/** گروهِ ناوبری‌ای که این صفحه داخلش است (صفحه‌های حسابِ کاربری در هیچ گروهی نیستند). */
+const groupOf = (groups: NavGroup[], page: PageKey) =>
+  groups.find((g) => g.items.some((i) => i.key === page)) ?? null
+
 /**
  * آیا این ماژول اصلاً دو کارت دارد؟
  *
  * پوسته با همین تصمیم کلاسِ `app-shell--panels` را می‌گذارد و CSS فقط آن‌وقت نوارِ تب
  * را پنهان می‌کند. اگر این‌جا false باشد ولی نوارِ تب پنهان شده بود، صفحه بدونِ هیچ
  * راهِ جابه‌جایی بینِ بخش‌ها می‌ماند — پس تصمیم باید یک‌جا و مشترک باشد.
+ *
+ * گروهِ چندصفحه‌ای هم کارت می‌گیرد حتی اگر صفحه‌ی فعلی نه بخش داشته باشد نه فهرست:
+ * با حذفِ دراپ‌داونِ نوارِ بالا، کارتِ «عملیات» تنها راهِ رسیدن به صفحه‌های هم‌گروه است.
  */
-export function hasModulePanels(page: PageKey): boolean {
-  return (MODULE_SECTIONS[page]?.length ?? 0) > 0 || MODULE_LISTS[page] !== undefined
+export function hasModulePanels(page: PageKey, groups: NavGroup[]): boolean {
+  return (
+    (groupOf(groups, page)?.items.length ?? 0) > 1 ||
+    (MODULE_SECTIONS[page]?.length ?? 0) > 0 ||
+    MODULE_LISTS[page] !== undefined
+  )
 }
 
 type Collapsed = { ops: boolean; list: boolean }
@@ -45,11 +57,15 @@ export function ModulePanels({
   page,
   section,
   onSelectSection,
+  onNavigate,
+  groups,
   token,
 }: {
   page: PageKey
   section: string | null
   onSelectSection: (key: string) => void
+  onNavigate: (page: PageKey) => void
+  groups: NavGroup[]
   token: string
 }) {
   const [collapsed, setCollapsed] = useState<Collapsed>(loadCollapsed)
@@ -66,14 +82,18 @@ export function ModulePanels({
 
   const sections = MODULE_SECTIONS[page] ?? []
   const activeSection = section ?? sections[0]?.key ?? null
+  // صفحه‌های هم‌گروه فقط وقتی فهرست می‌شوند که بیش از یکی باشند؛ گروهِ تک‌صفحه‌ای
+  // در نوارِ بالا هم با نامِ خودش دیده می‌شود، پس تکرارش در کارت بی‌فایده است.
+  const siblings = groupOf(groups, page)?.items ?? []
+  const pages = siblings.length > 1 ? siblings : []
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
-  if (!hasModulePanels(page)) return null
+  if (!hasModulePanels(page, groups)) return null
 
   return (
     <div className="mod-panels">
-      {sections.length > 0 && (
+      {(sections.length > 0 || pages.length > 0) && (
         <section className={`mod-panel${collapsed.ops ? ' collapsed' : ''}`}>
           <button
             type="button"
@@ -87,20 +107,24 @@ export function ModulePanels({
             <ChevronRight size={15} className="mod-panel-chev" />
           </button>
           <div className="mod-panel-body">
-            {sections.map((s) => {
-              const Icon = s.icon
-              return (
+            {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
+                پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
+            {pages.map((it) => (
+              <Fragment key={it.key}>
                 <button
-                  key={s.key}
                   type="button"
-                  className={`mod-op${activeSection === s.key ? ' active' : ''}`}
-                  onClick={() => onSelectSection(s.key)}
+                  className={`mod-op${it.key === page ? ' active' : ''}`}
+                  onClick={() => onNavigate(it.key)}
                 >
-                  <Icon size={16} />
-                  <span>{s.label}</span>
+                  {it.icon}
+                  <span>{it.label}</span>
                 </button>
-              )
-            })}
+                {it.key === page && sections.length > 0 && (
+                  <div className="mod-sub">{sectionButtons(sections, activeSection, onSelectSection)}</div>
+                )}
+              </Fragment>
+            ))}
+            {pages.length === 0 && sectionButtons(sections, activeSection, onSelectSection)}
           </div>
         </section>
       )}
@@ -123,6 +147,28 @@ export function ModulePanels({
       </section>
     </div>
   )
+}
+
+/** دکمه‌های بخشِ صفحه‌ی فعال — چه تنها باشند چه تودرتو زیرِ نامِ صفحه. */
+function sectionButtons(
+  sections: SectionDef[],
+  activeSection: string | null,
+  onSelectSection: (key: string) => void,
+) {
+  return sections.map((s) => {
+    const Icon = s.icon
+    return (
+      <button
+        key={s.key}
+        type="button"
+        className={`mod-op${activeSection === s.key ? ' active' : ''}`}
+        onClick={() => onSelectSection(s.key)}
+      >
+        <Icon size={16} />
+        <span>{s.label}</span>
+      </button>
+    )
+  })
 }
 
 function ListPanel({ token, page, section }: { token: string; page: PageKey; section: string | null }) {

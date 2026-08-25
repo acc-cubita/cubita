@@ -7682,7 +7682,7 @@ button:disabled {
    زیرمنوهای زیاد، «فهرست» را از صفحه بیرون می‌راند. */
 .mod-panels > .mod-panel:not(.mod-panel--list) {
   flex: 0 1 auto;
-  max-height: 50%;
+  max-height: 60%;
 }
 /* «فهرست» باقیِ ارتفاع را پر می‌کند. */
 .mod-panel--list { flex: 1 1 auto; }
@@ -7750,6 +7750,19 @@ button:disabled {
   font-weight: 700;
 }
 .mod-op.active > svg { color: var(--accent); }
+
+/* بخش‌های صفحه‌ی فعال، تودرتو زیرِ نامِ خودش — یک پله تورفتگی با خطِ راهنما تا
+   پیدا باشد به کدام صفحه تعلق دارند. */
+.mod-sub {
+  margin: 2px 0 4px;
+  padding-inline-start: 9px;
+  border-inline-start: 1px solid var(--border);
+  margin-inline-start: 13px;
+}
+.mod-sub .mod-op {
+  padding: 7px 9px;
+  font-size: var(--fs-xs);
+}
 
 /* — فهرست — */
 .mod-list-label {

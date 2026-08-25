@@ -134,52 +134,29 @@ export function TopNav({
         </button>
 
         <nav className="topnav-menu">
+          {/* دراپ‌داونِ زیرمنو حذف شد: کلیک روی ماژول مستقیم واردش می‌شود و زیرمنوها
+              در کارتِ «عملیات» باز می‌شوند — یک جا، نه دو جا. */}
           {groups.map((group) => {
             const hasActive = group.items.some((i) => i.key === active)
-            // گروهِ تک‌آیتم (داشبورد) دکمه‌ی مستقیم است، نه دراپ‌داون.
-            if (group.items.length === 1) {
-              const only = group.items[0]
-              return (
-                <button
-                  key={group.heading}
-                  type="button"
-                  className={`topnav-item${active === only.key ? ' active' : ''}`}
-                  onClick={() => go(only.key)}
-                >
-                  {only.label}
-                  {navBadge(only.key)}
-                </button>
-              )
-            }
-            const isOpen = open === group.heading
+            const first = group.items[0]
+            // گروهِ تک‌آیتم نامِ خودِ آیتم را می‌گیرد؛ بقیه نامِ ماژول را.
+            const label = group.items.length === 1 ? first.label : group.heading
+            // نشانِ خوانده‌نشده روی نامِ ماژول می‌نشیند، چون آیتمِ بازار دیگر
+            // در نوار دیده نمی‌شود.
+            const badgeKey = group.items.find(
+              (i) => i.key === 'marketplace' || i.key === 'distributor',
+            )?.key
             return (
-              <div className="topnav-dd" key={group.heading}>
-                <button
-                  type="button"
-                  className={`topnav-item${hasActive ? ' active' : ''}${isOpen ? ' open' : ''}`}
-                  aria-expanded={isOpen}
-                  onClick={() => setOpen((o) => (o === group.heading ? null : group.heading))}
-                >
-                  {group.heading}
-                  <ChevronDown size={15} className="topnav-item-chev" />
-                </button>
-                {isOpen && (
-                  <div className="topnav-dd-panel">
-                    {group.items.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        className={`topnav-dd-item${active === item.key ? ' active' : ''}`}
-                        onClick={() => go(item.key)}
-                      >
-                        <span className="topnav-dd-ico">{item.icon}</span>
-                        <span>{item.label}</span>
-                        {navBadge(item.key)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <button
+                key={group.heading}
+                type="button"
+                className={`topnav-item${hasActive ? ' active' : ''}`}
+                // اگر همین حالا داخلِ این ماژول هستیم، کلیک نباید از صفحه‌ی فعلی بپراند.
+                onClick={() => go(hasActive ? active : first.key)}
+              >
+                {label}
+                {badgeKey ? navBadge(badgeKey) : null}
+              </button>
             )
           })}
         </nav>
