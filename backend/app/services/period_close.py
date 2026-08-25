@@ -19,7 +19,15 @@ def get_latest_close_date(db: Session) -> date | None:
 
 
 def assert_period_open(db: Session, entry_date: date) -> None:
-    """باید در ابتدای هر عملیاتی که سند حسابداری/تاریخچه‌ی مالی می‌سازد صدا زده شود تا از ثبت در دوره‌ی بسته‌شده جلوگیری کند."""
+    """باید در ابتدای هر عملیاتی که سند حسابداری/تاریخچه‌ی مالی می‌سازد صدا زده شود تا از ثبت در دوره‌ی بسته‌شده جلوگیری کند.
+
+    دو قفل پشتِ سرِ هم: تاریخ باید در یک **سال مالیِ باز** باشد (اگر سال مالی تعریف
+    شده باشد) و بعد از آخرین **بستنِ دوره**. ایمپورت داخلِ تابع است چون سرویسِ سال
+    مالی برای بستن به همین ماژول نیاز دارد.
+    """
+    from app.services.fiscal_year import assert_within_fiscal_year
+
+    assert_within_fiscal_year(db, entry_date)
     latest = get_latest_close_date(db)
     if latest is not None and entry_date <= latest:
         raise HTTPException(

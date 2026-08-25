@@ -44,6 +44,7 @@ from app.models.marketplace import (
     MarketplaceZone,
 )
 from app.models.moadian import MoadianSettings, MoadianSubmission
+from app.models.fiscal_year import FiscalYear
 from app.models.period_close import FiscalPeriodClose
 from app.models.pos_terminal import PosTerminal
 from app.models.payroll import (
@@ -127,6 +128,7 @@ __all__ = [
     "Payslip",
     "SalaryContract",
     "FiscalPeriodClose",
+    "FiscalYear",
     "PosTerminal",
     "SalesQuotation",
     "SalesQuotationLine",

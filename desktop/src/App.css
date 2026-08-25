@@ -7825,3 +7825,87 @@ button:disabled {
   .mod-panels { display: none; }
   .app-shell--panels .app-content .tabs > .tab-list { display: flex; }
 }
+
+
+/* ── سال مالی ────────────────────────────────────────────────────────────────
+   نوارِ وضعیت + فرمِ ساختِ دوره + جدولِ سال‌ها. رنگ‌ها از توکن‌های وضعیتِ خودِ تم
+   می‌آیند تا در همه‌ی پوسته‌ها درست بماند. */
+.fy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.fy-note > svg { flex-shrink: 0; margin-top: 2px; color: var(--text-muted); }
+.fy-note p { margin: 4px 0 0; color: var(--text-muted); }
+.fy-note--ok { border-color: var(--success); background: var(--success-bg); }
+.fy-note--ok > svg { color: var(--success); }
+.fy-note--warn { border-color: var(--warning); background: var(--warning-bg); }
+.fy-note--warn > svg { color: var(--warning); }
+.fy-note--err { border-color: var(--danger); background: var(--danger-bg); }
+.fy-note--err > svg { color: var(--danger); }
+
+/* پیشنهادِ بازه — یک کلیک تا پرشدنِ فرم. */
+.fy-suggest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  text-align: right;
+  cursor: pointer;
+}
+.fy-suggest:hover { border-style: solid; }
+.fy-suggest > svg { flex-shrink: 0; color: var(--accent); }
+
+.fy-form-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.fy-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+.fy-check input { width: auto; }
+
+.fy-badge {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.fy-badge--active { background: var(--accent-bg); color: var(--accent-text); }
+.fy-badge--open { background: var(--success-bg); color: var(--success); }
+.fy-badge--closed { background: var(--surface-3); color: var(--text-muted); }
+
+.fy-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.fy-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+}

@@ -36,6 +36,7 @@ import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { ContractingPage } from '../pages/ContractingPage'
 import { MoadianPage } from '../pages/MoadianPage'
+import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
@@ -83,6 +84,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',
   theme: 'ظاهر و پوسته',
+  fiscalyear: 'سال مالی',
   help: 'راهنما',
 }
 
@@ -353,6 +355,7 @@ export function Dashboard({
           {page === 'team' && <TeamPage token={token} />}
           {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
+          {page === 'fiscalyear' && <FiscalYearPage token={token} />}
           {page === 'theme' && <ThemeGallery />}
           {page === 'help' && <HelpPage />}
     </>

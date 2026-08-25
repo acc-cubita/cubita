@@ -3,6 +3,7 @@ import {
   fetchContacts,
   fetchCrmActivities,
   fetchEmployees,
+  fetchFiscalYears,
   fetchFixedAssets,
   fetchInstallmentPlans,
   fetchItemsLive,
@@ -220,6 +221,14 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `${r.first_name} ${r.last_name}`.trim(),
       subtitle: r.phone || r.national_id || '—',
       meta: r.is_active === false ? 'غیرفعال' : 'فعال',
+    })),
+  },
+  fiscalyear: {
+    __default: def('سال‌های مالی', fetchFiscalYears, (r) => ({
+      id: r.id,
+      title: r.title,
+      subtitle: `${day(r.start_date)} تا ${day(r.end_date)}`,
+      meta: r.status === 'closed' ? 'بسته' : r.is_active ? 'جاری' : 'باز',
     })),
   },
   moadian: {

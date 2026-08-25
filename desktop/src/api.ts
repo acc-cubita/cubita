@@ -541,6 +541,62 @@ export const fetchPeriodCloses = (token: string) => authedGet<FiscalPeriodCloseR
 export const createPeriodClose = (token: string, data: { closing_date: string; notes: string }) =>
   authedSend<FiscalPeriodCloseRecord>(token, 'POST', '/api/fiscal-period-closes', data)
 
+// ── سال مالی ────────────────────────────────────────────────────────────────
+
+export interface FiscalYearRecord {
+  id: string
+  title: string
+  start_date: string
+  end_date: string
+  status: 'open' | 'closed'
+  is_active: boolean
+  notes: string
+  opening_entry_id: string | null
+  closing_entry_id: string | null
+  closed_at: string | null
+  entry_count: number
+}
+
+export interface FiscalYearSuggestion {
+  jalali_year: number
+  title: string
+  start_date: string
+  end_date: string
+  days: number
+  is_leap: boolean
+}
+
+export const fetchFiscalYears = (token: string) =>
+  authedGet<FiscalYearRecord[]>(token, '/api/fiscal-years')
+
+export const fetchFiscalYearSuggestion = (token: string) =>
+  authedGet<FiscalYearSuggestion>(token, '/api/fiscal-years/suggest')
+
+export const createFiscalYear = (
+  token: string,
+  data: { title: string; start_date: string; end_date: string; notes?: string; activate?: boolean },
+) => authedSend<FiscalYearRecord>(token, 'POST', '/api/fiscal-years', data)
+
+export const updateFiscalYear = (
+  token: string,
+  id: string,
+  data: { title?: string; start_date?: string; end_date?: string; notes?: string },
+) => authedSend<FiscalYearRecord>(token, 'PATCH', `/api/fiscal-years/${id}`, data)
+
+export const activateFiscalYear = (token: string, id: string) =>
+  authedSend<FiscalYearRecord>(token, 'POST', `/api/fiscal-years/${id}/activate`, {})
+
+export const carryForwardFiscalYear = (token: string, id: string) =>
+  authedSend<{ journal_entry_id: string; line_count: number; total: string }>(
+    token, 'POST', `/api/fiscal-years/${id}/carry-forward`, {},
+  )
+
+export const closeFiscalYear = (token: string, id: string) =>
+  authedSend<FiscalYearRecord>(token, 'POST', `/api/fiscal-years/${id}/close`, {})
+
+export const deleteFiscalYear = (token: string, id: string) =>
+  authedDelete(token, `/api/fiscal-years/${id}`)
+
 export interface EmployeeRecord {
   id: string
   first_name: string
