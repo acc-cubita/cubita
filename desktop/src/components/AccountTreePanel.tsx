@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
@@ -125,7 +125,11 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [showInactive, setShowInactive] = useState(true)
+  // درخت پیش‌فرض **بسته** است: با ۶۰+ حساب، بازبودنِ همه یعنی دیواری از ردیف که
+  // هیچ ساختاری نشان نمی‌دهد. کاربر هر سرفصلی را که لازم دارد باز می‌کند.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  //: فقط بارِ اول جمع می‌شود؛ به‌روزرسانی‌های بعدی نباید آنچه کاربر باز کرده را ببندند.
+  const didCollapseRef = useRef(false)
   const [ledger, setLedger] = useState<{ id: string; code: string; name: string } | null>(null)
   const [busy, setBusy] = useState(false)
   /** سرفصلی که فرمِ «افزودن زیرحساب» زیرش باز است. */
@@ -155,6 +159,21 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   }, [refresh, token])
 
   const roots = useMemo(() => buildTree(accounts ?? [], balances), [accounts, balances])
+
+  useEffect(() => {
+    if (didCollapseRef.current || roots.length === 0) return
+    didCollapseRef.current = true
+    const ids: string[] = []
+    const walk = (list: Node[]) =>
+      list.forEach((n) => {
+        if (n.children.length) {
+          ids.push(n.id)
+          walk(n.children)
+        }
+      })
+    walk(roots)
+    setCollapsed(new Set(ids))
+  }, [roots])
   const visibleIds = useMemo(() => matchingIds(roots, search), [roots, search])
 
   async function run(action: () => Promise<string>) {
