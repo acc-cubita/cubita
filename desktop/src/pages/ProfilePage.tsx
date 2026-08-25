@@ -10,7 +10,6 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
-import { ChangePasswordCard } from '../components/ChangePasswordCard'
 import { BackupCard } from '../components/BackupCard'
 
 export function ProfilePage({
@@ -30,14 +29,13 @@ export function ProfilePage({
       <PageHeader
         icon={UserCircle}
         title="پروفایل من"
-        description="نام، ایمیل و اطلاعات تماسِ حسابتان را ویرایش کنید و رمز عبور را عوض کنید."
+        description="نام، ایمیل و اطلاعات تماسِ حسابتان را ویرایش کنید. تغییرِ رمز عبور صفحه‌ی خودش را دارد: تنظیمات ← تغییر کلمه عبور."
       />
 
       <div className="workspace-split">
         <UserInfoCard token={token} me={me} onMeUpdated={onMeUpdated} />
         <div className="profile-side">
           {isOwner && <BusinessCard token={token} me={me} onMeUpdated={onMeUpdated} />}
-          <ChangePasswordCard token={token} me={me} />
           {isOwner && <BackupCard token={token} />}
         </div>
       </div>

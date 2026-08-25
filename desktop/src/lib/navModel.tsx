@@ -15,6 +15,7 @@ import {
   HardHat,
   HeartHandshake,
   HelpCircle,
+  KeyRound,
   Landmark,
   LayoutDashboard,
   PackagePlus,
@@ -69,6 +70,7 @@ export type PageKey =
   | 'help'
   | 'theme'
   | 'fiscalyear'
+  | 'password'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -151,6 +153,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <Settings size={17} />,
     items: [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
+      { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
       { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
       { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
       { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },

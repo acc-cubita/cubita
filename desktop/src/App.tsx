@@ -143,7 +143,16 @@ export default function App() {
           <>
             {/* برای حسابِ آزمایشی فقط نوارِ ترایال؛ نوارِ عمومیِ اشتراک تکراری و گیج‌کننده بود. */}
             {me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}
-            <Dashboard token={token} me={me} onLogout={handleLogout} onMeUpdated={setMe} />
+            <Dashboard
+              token={token}
+              me={me}
+              onLogout={handleLogout}
+              onMeUpdated={setMe}
+              onTokenRenewed={(t) => {
+                setToken(t)
+                storeToken(t)
+              }}
+            />
           </>
         )}
       </div>

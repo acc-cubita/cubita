@@ -7909,3 +7909,105 @@ button:disabled {
   gap: 4px;
   font-size: var(--fs-xs);
 }
+
+
+/* ── تغییر کلمه عبور ─────────────────────────────────────────────────────────
+   فیلدِ رمز با دکمه‌ی چشم، سنجه‌ی قدرت، و فهرستِ زنده‌ی قاعده‌ها. رنگ‌ها از
+   توکن‌های وضعیتِ تم می‌آیند تا در هر پوسته درست بماند. */
+.pw-field { position: relative; display: block; }
+.pw-field input { width: 100%; padding-inline-end: 34px; }
+.pw-eye {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 0;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pw-eye:hover { color: var(--accent); }
+
+.pw-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+}
+.pw-match.ok { color: var(--success); }
+.pw-match.bad { color: var(--danger); }
+
+.pw-strength { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pw-bars { display: flex; gap: 4px; flex: 1; }
+.pw-bars > span {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background 0.15s ease;
+}
+/* رنگِ نوارها با امتیاز عوض می‌شود: قرمز → کهربایی → سبز. */
+.pw-bars[data-score='1'] > span.on { background: var(--danger); }
+.pw-bars[data-score='2'] > span.on { background: var(--warning); }
+.pw-bars[data-score='3'] > span.on,
+.pw-bars[data-score='4'] > span.on { background: var(--success); }
+.pw-strength-label { flex-shrink: 0; font-size: var(--fs-xs); color: var(--text-muted); }
+
+.pw-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 3px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pw-rules li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.pw-rules li.ok { color: var(--success); }
+
+.pw-caps {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--warning);
+}
+.pw-caps--ok { color: var(--success); }
+
+.pw-facts { margin: 0; padding-inline-start: 16px; display: flex; flex-direction: column; gap: 8px; }
+.pw-facts li { font-size: var(--fs-sm); color: var(--text-muted); }
+.pw-facts strong { color: var(--text-h); font-weight: 700; }
+
+.pw-recovery { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pw-recovery li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+.pw-recovery li > svg { flex-shrink: 0; }
+.pw-recovery li.ok > svg { color: var(--success); }
+.pw-recovery li.warn > svg { color: var(--warning); }
+.pw-recovery li > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pw-recovery strong { color: var(--text-h); font-weight: 700; }
+.pw-recovery-value {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pw-recovery-state { margin-inline-start: auto; flex-shrink: 0; color: var(--text-muted); font-size: var(--fs-xs); }

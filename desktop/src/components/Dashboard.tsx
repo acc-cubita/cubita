@@ -37,6 +37,7 @@ import { OnboardingPage } from '../pages/OnboardingPage'
 import { ContractingPage } from '../pages/ContractingPage'
 import { MoadianPage } from '../pages/MoadianPage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
+import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
@@ -85,6 +86,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   onboarding: 'راه‌اندازی',
   theme: 'ظاهر و پوسته',
   fiscalyear: 'سال مالی',
+  password: 'تغییر کلمه عبور',
   help: 'راهنما',
 }
 
@@ -93,11 +95,14 @@ export function Dashboard({
   me,
   onLogout,
   onMeUpdated,
+  onTokenRenewed,
 }: {
   token: string
   me: MeResponse
   onLogout: () => void
   onMeUpdated: (me: MeResponse) => void
+  /** توکنِ تازه‌ی سرور (مثلاً پس از تغییرِ رمز) را در نشستِ برنامه می‌نشاند. */
+  onTokenRenewed?: (token: string) => void
 }) {
   const [page, setPage] = useState<PageKey>('overview')
   // تبِ فعالِ صفحه (زیرمنوی سطح‌سوم). null یعنی تبِ پیش‌فرض (اولین). با NavSectionContext
@@ -356,6 +361,9 @@ export function Dashboard({
           {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'fiscalyear' && <FiscalYearPage token={token} />}
+          {page === 'password' && (
+            <ChangePasswordPage token={token} me={me} onTokenRenewed={onTokenRenewed} />
+          )}
           {page === 'theme' && <ThemeGallery />}
           {page === 'help' && <HelpPage />}
     </>
