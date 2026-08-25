@@ -106,6 +106,12 @@ class Membership(UUIDPKMixin, TimestampMixin, Base):
     role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("roles.id"))
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | invited | disabled
 
+    #: مجوزِ اختصاصیِ همین کاربر در همین کسب‌وکار. NULL یعنی «همان مجوزِ نقش» —
+    #: پس عضویت‌های موجود دقیقاً مثل قبل رفتار می‌کنند. مقدارِ غیرِ NULL کاملاً
+    #: جایگزینِ مجوزِ نقش می‌شود، نه اینکه با آن ادغام شود: ادغام یعنی مالک هرگز
+    #: نمی‌تواند دسترسی‌ای را که نقش می‌دهد *بگیرد*.
+    permissions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     tenant: Mapped["Tenant"] = relationship(back_populates="memberships")
     user: Mapped["User"] = relationship(back_populates="memberships")  # noqa: F821
     role: Mapped["Role"] = relationship()  # noqa: F821

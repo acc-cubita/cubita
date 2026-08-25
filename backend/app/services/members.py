@@ -24,6 +24,7 @@ from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.security import hash_password, record_login, set_password
 from app.services import tokens
+from app.services.permissions import sanitize as sanitize_permissions
 
 #: ماژول مجوز. هیچ نقش پیش‌فرضی جز «مالک» آن را ندارد، چون فقط مالک wildcard دارد —
 #: یعنی مدیریت کاربر به‌طور پیش‌فرض فقط دست مالک است، بدون نیاز به تغییر seed.
@@ -100,6 +101,78 @@ def _get_member(db: Session, tenant_id: UUID, membership_id: UUID) -> Membership
     return membership
 
 
+def list_roles(db: Session, tenant_id: UUID) -> list[tuple[Role, int]]:
+    """نقش‌های این کسب‌وکار به‌همراه شمارِ اعضای هر کدام.
+
+    نقش‌ها مستأجرمحورند (هر کسب‌وکار نسخه‌ی خودش را از DEFAULT_ROLES می‌گیرد)، پس
+    رابط کاربری نباید فهرست را حدس بزند.
+    """
+    roles = db.query(Role).filter(Role.tenant_id == tenant_id).order_by(Role.key).all()
+    counts: dict[UUID, int] = {}
+    for m in _tenant_memberships(db, tenant_id).filter(Membership.status.in_(SEAT_STATUSES)).all():
+        counts[m.role_id] = counts.get(m.role_id, 0) + 1
+    return [(r, counts.get(r.id, 0)) for r in roles]
+
+
+def effective_permissions(membership: Membership) -> dict:
+    """مجوزِ مؤثرِ یک عضویت — همان چیزی که deps هنگامِ بررسیِ دسترسی می‌بیند."""
+    return membership.permissions or (membership.role.permissions or {})
+
+
+def set_permissions(
+    db: Session, *, tenant_id: UUID, membership_id: UUID, permissions: dict | None, actor: User
+) -> Membership:
+    """دسترسیِ اختصاصیِ یک عضو را می‌نشاند یا برمی‌گرداند به مجوزِ نقش.
+
+    دو گارد، هر دو در برابرِ قفل‌شدنِ بیرونی:
+
+    ۱. **روی خودت نه.** کاربر نمی‌تواند دسترسیِ خودش را عوض کند. بدونِ این، یک
+       اشتباهِ ساده (برداشتنِ تیکِ «مدیریت کاربران») همان لحظه اجرا می‌شود و دیگر
+       راهی برای برگرداندنش از داخلِ برنامه نمی‌ماند. جلوگیری از خودارتقایی هم
+       رایگان از همین قاعده می‌آید.
+    ۲. **آخرین مالکِ فعال.** حتی توسطِ شخصِ دیگر هم نباید محدود شود، وگرنه کسب‌وکار
+       بدونِ هیچ مدیری می‌ماند — همان چیزی که `_guard_last_owner` می‌پاید.
+    """
+    membership = _get_member(db, tenant_id, membership_id)
+    clean = sanitize_permissions(permissions)
+
+    if membership.user_id == actor.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "دسترسیِ خودتان را نمی‌توانید تغییر دهید؛ این کار باید توسط مدیرِ دیگری انجام شود",
+        )
+
+    if (
+        clean is not None
+        and membership.role.key == OWNER_ROLE_KEY
+        and membership.status == "active"
+        and _active_owner_count(db, tenant_id, excluding=membership.id) == 0
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این تنها مالکِ فعالِ کسب‌وکار است؛ محدودکردنِ دسترسی او کسب‌وکار را بدون مدیر می‌گذارد",
+        )
+
+    membership.permissions = clean
+    db.flush()
+    return membership
+
+
+def resend_invite(db: Session, *, tenant_id: UUID, membership_id: UUID) -> tuple[Membership, str]:
+    """توکنِ دعوتِ تازه برای عضوی که هنوز دعوت را نپذیرفته.
+
+    بدونِ این، کاربری که ایمیلِ دعوت را گم کرده بود گیر می‌کرد: `invite_member` روی
+    عضوِ موجود ۴۰۹ می‌دهد و هیچ راهِ دیگری برای صدورِ لینکِ تازه نبود.
+    """
+    membership = _get_member(db, tenant_id, membership_id)
+    if membership.status != "invited":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این کاربر دعوت را پذیرفته است؛ ارسال دوباره‌ی دعوت معنا ندارد",
+        )
+    return membership, tokens.issue_invite(db, membership.user_id, tenant_id)
+
+
 def invite_member(
     db: Session,
     *,
@@ -108,6 +181,7 @@ def invite_member(
     email: str,
     name: str,
     role_key: str,
+    permissions: dict | None = None,
 ) -> tuple[Membership, str]:
     """کاربر را به این کسب‌وکار دعوت می‌کند و توکن پذیرش را برمی‌گرداند.
 
@@ -151,6 +225,8 @@ def invite_member(
     else:
         membership = Membership(user_id=user.id, tenant_id=tenant_id, role_id=role.id, status="invited")
         db.add(membership)
+    # دسترسیِ اختصاصی همان لحظه‌ی دعوت تعیین می‌شود، نه در یک مرحله‌ی بعدیِ فراموش‌شدنی.
+    membership.permissions = sanitize_permissions(permissions)
     db.flush()
 
     return membership, tokens.issue_invite(db, user.id, tenant_id)

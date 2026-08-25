@@ -22,6 +22,24 @@ class MemberOut(BaseModel):
     role_name: str
     status: str
     is_me: bool
+    #: مجوزِ مؤثر (اختصاصی اگر باشد، وگرنه مجوزِ نقش).
+    permissions: dict[str, list[str]] = {}
+    #: دسترسیِ این کاربر دستی تنظیم شده و دیگر از نقش پیروی نمی‌کند.
+    custom_permissions: bool = False
+
+
+class RoleOut(BaseModel):
+    """نقشِ واقعیِ همین کسب‌وکار — نه فهرستِ سختِ‌کدشده در رابط کاربری.
+
+    `permissions` هم برمی‌گردد تا صفحه‌ی کاربران بتواند *نشان بدهد* هر نقش چه اجازه‌ای
+    می‌دهد. مالک باید پیش از دادنِ دسترسی بداند دارد چه می‌دهد.
+    """
+
+    key: str
+    name: str
+    permissions: dict[str, list[str]]
+    #: چند کاربرِ فعال/دعوت‌شده همین حالا این نقش را دارند.
+    member_count: int
 
 
 class SeatsOut(BaseModel):
@@ -36,10 +54,31 @@ class MemberListOut(BaseModel):
     seats: SeatsOut
 
 
+class PermissionActionOut(BaseModel):
+    key: str
+    label: str
+
+
+class PermissionModuleOut(BaseModel):
+    """یک ماژولِ مجوز با اکشن‌هایی که واقعاً پشتیبانی می‌کند."""
+
+    key: str
+    label: str
+    hint: str | None = None
+    actions: list[PermissionActionOut]
+
+
+class SetPermissionsIn(BaseModel):
+    #: None یعنی «برگرد به مجوزِ نقش».
+    permissions: dict[str, list[str]] | None = None
+
+
 class InviteIn(BaseModel):
     email: EmailStr
     name: str
     role_key: str
+    #: دسترسیِ اختصاصی به‌جای مجوزِ نقش. None یعنی همان نقش.
+    permissions: dict[str, list[str]] | None = None
 
     @field_validator("name")
     @classmethod

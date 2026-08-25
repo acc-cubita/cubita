@@ -145,7 +145,6 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'شرکت',
     icon: <Building size={17} />,
     items: [
-      { key: 'team', label: 'کاربران', icon: <UserCog size={18} /> },
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
       { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
     ],
@@ -155,6 +154,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <Settings size={17} />,
     items: [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
+      { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
       { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
       { key: 'backup', label: 'پشتیبان‌گیری خودکار', icon: <DatabaseBackup size={18} /> },
       { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },

@@ -2249,6 +2249,8 @@ export const inquireMoadianStatus = (token: string, submissionId: string) =>
 
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 
+export type PermissionMap = Record<string, string[]>
+
 export interface Member {
   id: string
   user_id: string
@@ -2258,6 +2260,24 @@ export interface Member {
   role_name: string
   status: 'active' | 'invited' | 'disabled'
   is_me: boolean
+  /** دسترسیِ مؤثر — اختصاصی اگر تنظیم شده باشد، وگرنه مجوزِ نقش. */
+  permissions: PermissionMap
+  /** دسترسی دستی تنظیم شده و دیگر از نقش پیروی نمی‌کند. */
+  custom_permissions: boolean
+}
+
+export interface RoleInfo {
+  key: string
+  name: string
+  permissions: PermissionMap
+  member_count: number
+}
+
+export interface PermissionModule {
+  key: string
+  label: string
+  hint: string | null
+  actions: { key: string; label: string }[]
 }
 
 export interface MemberList {
@@ -2267,8 +2287,24 @@ export interface MemberList {
 
 export const fetchMembers = (token: string) => authedGet<MemberList>(token, '/api/members')
 
-export const inviteMember = (token: string, data: { email: string; name: string; role_key: string }) =>
-  authedSend<{ member: Member; email_sent: boolean }>(token, 'POST', '/api/members/invite', data)
+export const fetchRoles = (token: string) => authedGet<RoleInfo[]>(token, '/api/members/roles')
+
+export const fetchPermissionModules = (token: string) =>
+  authedGet<PermissionModule[]>(token, '/api/members/permission-modules')
+
+export const inviteMember = (
+  token: string,
+  data: { email: string; name: string; role_key: string; permissions?: PermissionMap | null },
+) => authedSend<{ member: Member; email_sent: boolean }>(token, 'POST', '/api/members/invite', data)
+
+export const resendInvite = (token: string, membershipId: string) =>
+  authedSend<{ member: Member; email_sent: boolean }>(
+    token, 'POST', `/api/members/${membershipId}/resend-invite`, {},
+  )
+
+/** `null` یعنی بازگشت به مجوزِ نقش. */
+export const setMemberPermissions = (token: string, membershipId: string, permissions: PermissionMap | null) =>
+  authedSend<Member>(token, 'PATCH', `/api/members/${membershipId}/permissions`, { permissions })
 
 export const changeMemberRole = (token: string, membershipId: string, roleKey: string) =>
   authedSend<Member>(token, 'PATCH', `/api/members/${membershipId}/role`, { role_key: roleKey })

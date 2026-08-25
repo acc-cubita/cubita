@@ -81,7 +81,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   mpcommission: 'کمیسیونِ بازار',
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
-  team: 'کاربران',
+  team: 'کاربران و دسترسی‌ها',
   modules: 'شخصی‌سازیِ پنل',
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',

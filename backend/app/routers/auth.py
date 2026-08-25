@@ -91,7 +91,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         email_verified=principal.user.email_verified_at is not None,
         role_key=principal.role.key,
         role_name=principal.role.name,
-        permissions=principal.role.permissions,
+        permissions=principal.permissions,
         tenant_id=principal.tenant_id,
         tenant_name=principal.membership.tenant.name,
         is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
@@ -534,7 +534,7 @@ def update_business(
     ندارند نامِ کسب‌وکار را عوض کنند. فقط مستأجرِ جاری دست می‌خورد، پس جدولِ سراسریِ
     tenants امن می‌ماند.
     """
-    if "*" not in principal.role.permissions:
+    if "*" not in principal.permissions:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "فقط مالک می‌تواند نام کسب‌وکار را تغییر دهد")
     principal.membership.tenant.name = data.name
     db.flush()

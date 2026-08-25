@@ -25,6 +25,17 @@ class Principal:
         self.membership = membership
         self.tenant_id = membership.tenant_id
         self.role = membership.role
+        #: مجوزِ **مؤثر**: اگر برای این عضویت مجوزِ اختصاصی تعریف شده باشد همان،
+        #: وگرنه مجوزِ نقش. هر بررسیِ دسترسی باید از این عبور کند نه از role.
+        self.permissions: dict = membership.permissions or (membership.role.permissions or {})
+
+    def has_permission(self, module: str, action: str) -> bool:
+        """همان معناشناسیِ `Role.has_permission`، ولی روی مجوزِ مؤثر."""
+        for key in (module, "*"):
+            actions = self.permissions.get(key)
+            if actions and (action in actions or "*" in actions):
+                return True
+        return False
 
 
 def get_principal(
@@ -104,7 +115,7 @@ def require_permission(module: str, action: "str | tuple[str, ...]"):
         principal: Principal = Depends(get_principal),
         db: Session = Depends(get_db),
     ) -> User:
-        if not any(principal.role.has_permission(module, a) for a in actions):
+        if not any(principal.has_permission(module, a) for a in actions):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
 
         # آزمایشیِ منقضی: کلِ دفتر قفل می‌شود (خواندن هم)، نه فقط نوشتن. این عمداً
