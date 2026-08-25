@@ -13,7 +13,7 @@ import { BudgetPanel } from '../components/BudgetPanel'
 import { CostCentersPanel } from '../components/CostCentersPanel'
 import { RecurringEntriesPanel } from '../components/RecurringEntriesPanel'
 import { CurrenciesPanel } from '../components/CurrenciesPanel'
-import { ChartOfAccountsPanel } from '../components/ChartOfAccountsPanel'
+import { AccountTreePanel } from '../components/AccountTreePanel'
 import { JournalDaybookPanel } from '../components/JournalDaybookPanel'
 import { Tabs } from '../components/Tabs'
 import { isElectron } from '../platform'
@@ -84,9 +84,9 @@ export function AccountingPage({
           },
           {
             key: 'chart',
-            label: 'چارت حساب‌ها',
+            label: 'درختواره حساب‌ها',
             icon: ListTree,
-            content: <ChartOfAccountsPanel token={token} onChanged={onQueued} />,
+            content: <AccountTreePanel token={token} onChanged={onQueued} />,
           },
           {
             key: 'budget',

@@ -64,7 +64,7 @@ export function ModulePanels({
   page: PageKey
   section: string | null
   onSelectSection: (key: string) => void
-  onNavigate: (page: PageKey) => void
+  onNavigate: (page: PageKey, section?: string | null) => void
   groups: NavGroup[]
   token: string
 }) {
@@ -84,7 +84,8 @@ export function ModulePanels({
   const activeSection = section ?? sections[0]?.key ?? null
   // صفحه‌های هم‌گروه فقط وقتی فهرست می‌شوند که بیش از یکی باشند؛ گروهِ تک‌صفحه‌ای
   // در نوارِ بالا هم با نامِ خودش دیده می‌شود، پس تکرارش در کارت بی‌فایده است.
-  const siblings = groupOf(groups, page)?.items ?? []
+  const group = groupOf(groups, page)
+  const siblings = group?.items ?? []
   const pages = siblings.length > 1 ? siblings : []
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
@@ -109,21 +110,51 @@ export function ModulePanels({
           <div className="mod-panel-body">
             {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
                 پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
-            {pages.map((it) => (
-              <Fragment key={it.key}>
-                <button
-                  type="button"
-                  className={`mod-op${it.key === page ? ' active' : ''}`}
-                  onClick={() => onNavigate(it.key)}
-                >
-                  {it.icon}
-                  <span>{it.label}</span>
-                </button>
-                {it.key === page && sections.length > 0 && (
-                  <div className="mod-sub">{sectionButtons(sections, activeSection, onSelectSection)}</div>
-                )}
-              </Fragment>
-            ))}
+            {pages.map((it) => {
+              // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
+              // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
+              // مستقیم در سطحِ اول می‌نشینند.
+              const redundant = it.label === group?.heading
+              const own = MODULE_SECTIONS[it.key] ?? []
+              if (redundant && own.length > 0) {
+                return (
+                  <Fragment key={it.key}>
+                    {own.map((s) => {
+                      const Icon = s.icon
+                      const on = it.key === page && activeSection === s.key
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          className={`mod-op${on ? ' active' : ''}`}
+                          onClick={() =>
+                            it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key)
+                          }
+                        >
+                          <Icon size={16} />
+                          <span>{s.label}</span>
+                        </button>
+                      )
+                    })}
+                  </Fragment>
+                )
+              }
+              return (
+                <Fragment key={it.key}>
+                  <button
+                    type="button"
+                    className={`mod-op${it.key === page ? ' active' : ''}`}
+                    onClick={() => onNavigate(it.key)}
+                  >
+                    {it.icon}
+                    <span>{it.label}</span>
+                  </button>
+                  {it.key === page && own.length > 0 && (
+                    <div className="mod-sub">{sectionButtons(own, activeSection, onSelectSection)}</div>
+                  )}
+                </Fragment>
+              )
+            })}
             {pages.length === 0 && sectionButtons(sections, activeSection, onSelectSection)}
           </div>
         </section>

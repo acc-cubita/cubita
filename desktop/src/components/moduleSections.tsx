@@ -20,7 +20,6 @@ import {
   GitCompareArrows,
   Hammer,
   HandCoins,
-  Hash,
   History,
   Landmark,
   Link2,
@@ -84,14 +83,10 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'pricelists', label: 'لیست قیمت', icon: Tags },
     { key: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
   ],
-  coding: [
-    { key: 'chart', label: 'کدینگ حساب‌ها', icon: ListTree },
-    { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: Hash },
-  ],
   accounting: [
     { key: 'journal', label: 'ثبت سند', icon: BookOpen },
     { key: 'daybook', label: 'دفتر روزنامه', icon: BookOpenCheck },
-    { key: 'chart', label: 'چارت حساب‌ها', icon: ListTree },
+    { key: 'chart', label: 'درختواره حساب‌ها', icon: ListTree },
     { key: 'budget', label: 'بودجه‌بندی', icon: Target },
     { key: 'cost-centers', label: 'مراکز هزینه', icon: FolderKanban },
     { key: 'recurring', label: 'اسناد تکرارشونده', icon: Repeat },

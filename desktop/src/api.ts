@@ -1292,6 +1292,28 @@ export const updateAccount = (token: string, id: string, patch: { name?: string;
 
 export const deleteAccount = (token: string, id: string) => authedDelete(token, `/api/accounts/${id}`)
 
+/** تغییرِ کدِ حساب — «کدینگ». امن است چون ثبتِ خودکار حساب را با نقشش می‌شناسد نه با کدش. */
+export const changeAccountCode = (token: string, id: string, code: string) =>
+  authedSend<ChartAccount>(token, 'PATCH', `/api/accounts/${id}/code`, { code })
+
+/** قالبِ آماده‌ی کدینگِ صنفی. */
+export interface ChartTemplate {
+  key: string
+  label: string
+  hint: string
+  total: number
+  /** چند حساب از این قالب هنوز در چارت نیست. */
+  missing: number
+}
+
+export const fetchChartTemplates = (token: string) =>
+  authedGet<ChartTemplate[]>(token, '/api/accounts/templates')
+
+export const applyChartTemplate = (token: string, key: string) =>
+  authedSend<{ created: number; skipped: number; codes: string[] }>(
+    token, 'POST', `/api/accounts/templates/${key}`, {},
+  )
+
 interface WarehouseLiveOut {
   id: string
   code: string

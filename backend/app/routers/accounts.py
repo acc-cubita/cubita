@@ -8,8 +8,132 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.accounting import Account, JournalLine
 from app.schemas.accounting import AccountCreateIn, AccountOut, AccountUpdateIn
+from app.services import chart_templates as templates
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
+
+
+class AccountCodeIn(BaseModel):
+    code: str
+
+
+class ChartTemplateOut(BaseModel):
+    key: str
+    label: str
+    hint: str
+    #: چند حساب در این قالب تعریف شده (بدونِ سرفصل‌های مشترک).
+    total: int
+    #: چند تای آن‌ها هنوز در چارتِ این کسب‌وکار نیست.
+    missing: int
+
+
+class ApplyTemplateOut(BaseModel):
+    created: int
+    skipped: int
+    #: کدهایی که تازه ساخته شدند — تا رابط کاربری دقیقاً بگوید چه اضافه شد.
+    codes: list[str]
+
+
+def _missing_rows(db: Session, key: str):
+    """ردیف‌هایی از قالب که کدشان هنوز در چارت نیست."""
+    existing = {code for (code,) in db.query(Account.code).all()}
+    return [row for row in templates.rows_for(key) if row[0] not in existing]
+
+
+@router.get("/templates", response_model=list[ChartTemplateOut])
+def list_templates(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """قالب‌های آماده‌ی کدینگ و اینکه از هرکدام چند حساب هنوز ساخته نشده."""
+    out = []
+    for key, meta in templates.TEMPLATES.items():
+        rows = templates.rows_for(key)
+        out.append(
+            ChartTemplateOut(
+                key=key,
+                label=meta["label"],
+                hint=meta["hint"],
+                # سرفصل‌های مشترک جزوِ «تعدادِ قالب» شمرده نمی‌شوند؛ آن‌ها زیرساخت‌اند.
+                total=len(templates.COMMON) + len(meta["rows"]),
+                missing=len([r for r in _missing_rows(db, key) if not r[3]]),
+            )
+        )
+    return out
+
+
+@router.post("/templates/{key}", response_model=ApplyTemplateOut)
+def apply_template(
+    key: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "create")),
+):
+    """حساب‌های نبودِ یک قالب را می‌سازد.
+
+    حسابِ موجود هرگز دست نمی‌خورد و نقشِ سیستمی داده نمی‌شود، پس اجرای دوباره بی‌اثر
+    و بی‌خطر است. والد با کد پیدا می‌شود و اگر نبود، خودش ساخته می‌شود — به همین دلیل
+    ترتیبِ ردیف‌ها (والد پیش از فرزند) در قالب رعایت شده است.
+    """
+    try:
+        rows = templates.rows_for(key)
+    except KeyError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "قالبِ کدینگ پیدا نشد") from None
+
+    by_code: dict[str, Account] = {a.code: a for a in db.query(Account).all()}
+    created: list[str] = []
+    skipped = 0
+
+    for code, name, acc_type, is_group, parent_code in rows:
+        if code in by_code:
+            skipped += 1
+            continue
+        parent = by_code.get(parent_code) if parent_code else None
+        account = Account(
+            code=code,
+            name=name,
+            type=acc_type,
+            is_group=is_group,
+            is_active=True,
+            parent_id=parent.id if parent else None,
+        )
+        db.add(account)
+        db.flush()
+        by_code[code] = account
+        created.append(code)
+
+    return ApplyTemplateOut(created=len(created), skipped=skipped, codes=created)
+
+
+@router.patch("/{account_id}/code", response_model=AccountOut)
+def change_code(
+    account_id: UUID,
+    data: AccountCodeIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "update")),
+):
+    """تغییرِ کدِ حساب — همان «کدینگ» که حسابدارها با رویه‌ی خودشان انجام می‌دهند.
+
+    امن است چون منطقِ ثبتِ خودکار حساب را با `system_role` پیدا می‌کند نه با کد
+    (توضیحش در services/chart_codes). کدِ تکراری با ۴۰۹ رد می‌شود.
+    """
+    account = db.get(Account, account_id)
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب پیدا نشد")
+
+    new_code = data.code.strip()
+    if not new_code:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کد حساب نمی‌تواند خالی باشد")
+    if new_code == account.code:
+        return account
+    if db.query(Account).filter(Account.code == new_code, Account.id != account.id).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, f"کد {new_code} برای حساب دیگری استفاده شده است")
+
+    account.code = new_code
+    db.flush()
+    db.refresh(account)
+    return account
+
 
 
 @router.get("", response_model=list[AccountOut])

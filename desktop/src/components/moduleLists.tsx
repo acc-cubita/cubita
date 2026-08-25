@@ -262,8 +262,7 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       meta: MEMBER_STATUS[r.status] ?? r.status,
     })),
   },
-  coding: {
-    // هر دو بخشِ این ماژول یک فهرست دارند: قاعده‌های شماره‌گذاری.
+  numbering: {
     __default: def('روش‌های شماره‌گذاری', fetchNumbering, (r) => ({
       id: r.doc_type,
       title: r.label,

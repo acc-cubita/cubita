@@ -8149,3 +8149,73 @@ button:disabled {
 .nm-set input { width: 110px; }
 .nm-set button { font-size: var(--fs-xs); }
 .nm-invalid { display: block; margin-top: 3px; color: var(--danger); font-size: var(--fs-xs); }
+
+
+/* ── درختواره‌ی حساب‌ها ──────────────────────────────────────────────────────
+   ردیفِ درختی با تورفتگیِ عمق، دکمه‌ی باز/بسته، و کدِ لاتینِ چپ‌چین. */
+.tree-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tree-toggle:hover { color: var(--accent); background: transparent; }
+.tree-toggle--leaf { opacity: 0.3; cursor: default; }
+.tree-code {
+  flex-shrink: 0;
+  min-width: 46px;
+  direction: ltr;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.tree-level { color: var(--text-muted); font-size: var(--fs-xs); }
+.tree-balance { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tree-table tbody tr.group-row .tree-code,
+.tree-table tbody tr.group-row .chart-group-name { font-weight: 700; }
+.tree-inactive { margin-bottom: 8px; }
+
+/* ردیفِ درجاییِ «افزودنِ زیرحساب» زیرِ همان سرفصل. */
+.tree-add-row > td { background: var(--surface-2); }
+.tree-add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tree-add-label { color: var(--text-muted); font-size: var(--fs-xs); }
+.tree-add input[type='text'],
+.tree-add input:not([type]) { width: 160px; }
+.tree-add button { font-size: var(--fs-xs); }
+
+/* ── قالب‌های آماده‌ی کدینگ ───────────────────────────────────────────────── */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tpl-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: right;
+  cursor: pointer;
+}
+.tpl-card:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); }
+.tpl-card:disabled { cursor: default; opacity: 0.7; }
+.tpl-title { color: var(--text-h); font-size: var(--fs-sm); font-weight: 700; }
+.tpl-hint { color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.6; }
+.tpl-meta { margin-top: 2px; color: var(--accent-text); font-size: var(--fs-xs); font-weight: 700; }
+.tpl-card.done .tpl-meta { color: var(--success); }
