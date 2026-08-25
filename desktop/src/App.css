@@ -409,7 +409,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
@@ -431,21 +431,21 @@
   /* افقی کلیپ می‌شود تا هیچ محتوایِ پهنی کلِ ناحیه‌ی محتوا را افقی نلغزاند؛
      جدول‌ها داخلِ ظرفِ .table-scroll خودشان می‌لغزند، پس چیزی بریده نمی‌شود. */
   overflow-x: hidden;
-  padding: clamp(24px, 2vw, 40px) clamp(28px, 3vw, 52px) 40px;
+  padding: clamp(16px, 1.3vw, 24px) clamp(18px, 2vw, 32px) 28px;
 }
 
 .page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   /* هرگز از اندازه‌ی پیش‌فرض کوچک‌تر نمی‌شود؛ روی صفحه‌های بزرگ‌تر/بزرگ‌شده متناسب رشد می‌کند */
   max-width: clamp(1160px, 82vw, 1760px);
   width: 100%;
 }
 
 .page-welcome h1 {
-  font-size: clamp(21px, 1vw + 15px, 26px);
-  margin-bottom: 4px;
+  font-size: clamp(18px, 0.7vw + 13px, 22px);
+  margin-bottom: 2px;
 }
 
 /* ---------- نوار کناری ---------- */
@@ -905,7 +905,7 @@
 /* ---------- دکمه‌ها (سراسری) ---------- */
 
 button {
-  padding: 0 var(--sp-4);
+  padding: 0 var(--sp-3);
   min-height: var(--control-h);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -929,7 +929,7 @@ button:disabled {
 }
 
 .btn-file {
-  padding: 0 var(--sp-4);
+  padding: 0 var(--sp-3);
   min-height: var(--control-h);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -993,7 +993,7 @@ button:disabled {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--sp-5);
+  padding: var(--sp-4);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1010,8 +1010,8 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
   /* روی باریک، عنوان و اکشن‌ها (مثل جست‌وجو) به خطِ بعد می‌روند به‌جای سرریز */
   flex-wrap: wrap;
 }
@@ -1702,14 +1702,14 @@ button:disabled {
 /* ---------- جدول‌ها ---------- */
 
 .page table {
-  margin-top: 12px;
+  margin-top: 10px;
   font-size: var(--fs-base);
 }
 
 .page th,
 .page td {
   text-align: right;
-  padding: 9px 8px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -2570,12 +2570,12 @@ button:disabled {
 .page-header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 10px;
 }
 
 .page-header-icon {
-  width: clamp(38px, 2.4vw, 46px);
-  height: clamp(38px, 2.4vw, 46px);
+  width: clamp(30px, 1.8vw, 36px);
+  height: clamp(30px, 1.8vw, 36px);
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--series-1), var(--accent) 60%, var(--series-2));
   color: #fff;
@@ -2587,8 +2587,8 @@ button:disabled {
 }
 
 .page-header h1 {
-  font-size: clamp(19px, 0.9vw + 14px, 23px);
-  margin-bottom: 4px;
+  font-size: clamp(16px, 0.6vw + 12px, 19px);
+  margin-bottom: 2px;
 }
 
 .page-header-desc {
@@ -3691,8 +3691,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  height: 56px;
-  padding: 0 clamp(12px, 2vw, 24px);
+  height: 46px;
+  padding: 0 clamp(10px, 1.5vw, 18px);
 }
 .topnav-hamburger {
   display: none;
@@ -3792,8 +3792,8 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 36px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 10px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -6658,25 +6658,25 @@ button:disabled {
    (تیره/روشن، چیدمانِ سایدبار) دقیقاً دست‌نخورده بمانند. تخصیصِ پیشوند از قواعدِ
    پایه بالاتر است، پس بدونِ نیاز به ترتیب برنده می‌شوند. */
 
-/* فاصله‌ی صفحه هوادارتر (مثلِ فضای خالیِ گشاده‌ی Xero) */
+/* فاصله‌ی صفحه — هوای کافی بدونِ هدررفتِ فضا */
 :root[data-structure='guided'] .app-content {
-  padding: clamp(28px, 2.4vw, 48px) clamp(32px, 3.2vw, 60px) 56px;
+  padding: clamp(16px, 1.3vw, 24px) clamp(18px, 2vw, 32px) 28px;
 }
 :root[data-structure='guided'] .page {
-  gap: 24px;
+  gap: 14px;
 }
 
 /* سرصفحه‌ی صفحه — عنوانِ درشتِ Xero + آیکونِ آرامِ طلایی‌تینت (نه گرادیانِ رنگین‌کمانی) */
 :root[data-structure='guided'] .page-header {
-  gap: 16px;
+  gap: 10px;
 }
 :root[data-structure='guided'] .page-header h1 {
-  font-size: clamp(24px, 1.3vw + 17px, 32px);
+  font-size: clamp(16px, 0.6vw + 12px, 19px);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 :root[data-structure='guided'] .page-header-desc {
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   max-width: 70ch;
 }
 :root[data-structure='guided'] .page-header-icon {
@@ -6689,8 +6689,8 @@ button:disabled {
 /* کارت‌ها — سفید، شناور روی خاکستریِ نرم، سایه‌محور و گوشه‌نرم */
 :root[data-structure='guided'] .page section {
   border-radius: var(--radius-lg);
-  padding: clamp(20px, 1.6vw, 28px);
-  box-shadow: var(--shadow-md);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-sm);
 }
 /* بخش‌های درونِ پنل در پوسته‌ی افقی (Tipalti/guided) تختِ سطحِ پنل‌اند، نه کارتِ شناور؛
    restyleِ کارتِ Tipalti (:root[...] .page section، ویژگی 0,3,1) نباید سایه/گوشه‌ی گِرد به
@@ -6778,18 +6778,18 @@ button:disabled {
   }
 }
 :root[data-structure='guided'] .section-card-header {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 :root[data-structure='guided'] .section-card-icon {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
 }
 
 /* جدول‌ها — ردیف‌های بلندتر، سرستونِ آرام، خطوطِ ظریف (استانداردِ Xero) */
 :root[data-structure='guided'] .page th,
 :root[data-structure='guided'] .page td {
-  padding: 14px 12px;
+  padding: 7px 10px;
 }
 :root[data-structure='guided'] .page th {
   font-size: var(--fs-xs);
@@ -6803,10 +6803,10 @@ button:disabled {
 /* کارت‌های KPI — عددِ درشت‌ترِ Tipalti، کارتِ گوشه‌نرم‌تر */
 :root[data-structure='guided'] .stat-card {
   border-radius: var(--radius-lg);
-  padding: clamp(20px, 1.5vw, 28px);
+  padding: clamp(12px, 1vw, 16px);
 }
 :root[data-structure='guided'] .stat-card-value {
-  font-size: clamp(26px, 1.5vw + 17px, 34px);
+  font-size: clamp(19px, 0.8vw + 13px, 24px);
 }
 
 /* تب‌ها — نوارِ زیرخط‌دارِ Xero به‌جای کپسول‌های جعبه‌ای. فقط دسکتاپ؛ روی موبایل
@@ -6827,7 +6827,7 @@ button:disabled {
     border-bottom: 3px solid transparent;
     border-radius: 0;
     margin-bottom: -1px;
-    padding: 12px 18px;
+    padding: 8px 14px;
     color: var(--text-muted);
   }
   :root[data-structure='guided'] .tab-list .tab:hover {
@@ -6854,15 +6854,15 @@ button:disabled {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: clamp(20px, 1.6vw, 28px);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
+  gap: var(--sp-4);
 }
 :root[data-structure='guided'] .taskflow-title {
   font-size: var(--fs-lg);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 /* استپرِ شماره‌دار (دسکتاپ) */
@@ -7696,7 +7696,7 @@ button:disabled {
   gap: 8px;
   flex-shrink: 0;
   width: 100%;
-  padding: 12px 12px;
+  padding: 9px 10px;
   border: none;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
@@ -7730,7 +7730,7 @@ button:disabled {
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 6px 9px;
   margin-bottom: 2px;
   border: 1px solid transparent;
   border-radius: 8px;
