@@ -7657,28 +7657,38 @@ button:disabled {
 
 
 /* ── دو کارتِ ماژول: «عملیات» و «فهرست» ──────────────────────────────────
-   بینِ سایدبار و ناحیه‌ی محتوا می‌نشینند. هرکدام عرضِ ثابت دارد و جداگانه
-   جمع‌شدنی است؛ جمع‌شده فقط یک نوارِ باریکِ عمودی می‌ماند تا کاربر بداند
-   هست و بتواند بازش کند. */
+   یک ستونِ باریک کنارِ ناحیه‌ی محتوا؛ «فهرست» *زیرِ* «عملیات» می‌نشیند، نه
+   کنارش. «عملیات» به‌اندازه‌ی زیرمنوهایش بلند می‌شود (تا سقفِ نیمِ ستون) و
+   «فهرست» باقیِ ارتفاع را می‌گیرد و خودش می‌لغزد. هرکدام جداگانه جمع‌شدنی
+   است؛ جمع‌شده فقط سرتیترش می‌ماند تا بشود دوباره بازش کرد. */
 .mod-panels {
   display: flex;
+  flex-direction: column;
+  width: 252px;
   flex-shrink: 0;
   height: 100%;
   overflow: hidden;
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
 }
 
 .mod-panel {
-  width: 224px;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--surface);
-  border-inline-end: 1px solid var(--border);
-  transition: width 0.18s ease;
+  border-block-end: 1px solid var(--border);
 }
-.mod-panel--list { width: 260px; }
-.mod-panel.collapsed { width: 40px; }
+/* «عملیات» به‌اندازه‌ی محتوا، ولی هرگز بیشتر از نیمِ ستون — وگرنه ماژولی با
+   زیرمنوهای زیاد، «فهرست» را از صفحه بیرون می‌راند. */
+.mod-panels > .mod-panel:not(.mod-panel--list) {
+  flex: 0 1 auto;
+  max-height: 50%;
+}
+/* «فهرست» باقیِ ارتفاع را پر می‌کند. */
+.mod-panel--list { flex: 1 1 auto; }
+.mod-panels > .mod-panel:last-child { border-block-end: none; }
+/* جمع‌شده فقط سرتیتر است، پس نه رشد می‌کند و نه سقفِ ارتفاع لازم دارد. */
+.mod-panel.collapsed { flex: 0 0 auto; max-height: none; }
 
 .mod-panel-head {
   display: flex;
@@ -7699,13 +7709,13 @@ button:disabled {
 }
 .mod-panel-head > svg { flex-shrink: 0; }
 .mod-panel-title { flex: 1; white-space: nowrap; }
-.mod-panel-chev { transition: transform 0.18s ease; }
-.mod-panel.collapsed .mod-panel-chev { transform: rotate(180deg); }
+/* باز = چورون رو به پایین، جمع = رو به کنار (آکاردئونِ عمودی). */
+.mod-panel-chev { transition: transform 0.18s ease; transform: rotate(90deg); }
+.mod-panel.collapsed .mod-panel-chev { transform: rotate(0deg); }
 
-/* جمع‌شده: فقط آیکنِ سرتیتر می‌ماند و بدنه پنهان می‌شود. */
-.mod-panel.collapsed .mod-panel-title,
+/* جمع‌شده: سرتیتر می‌ماند (جای افقی هست) و فقط بدنه پنهان می‌شود. */
 .mod-panel.collapsed .mod-panel-body { display: none; }
-.mod-panel.collapsed .mod-panel-head { justify-content: center; padding-inline: 0; }
+.mod-panel.collapsed .mod-panel-head { border-bottom: none; }
 
 .mod-panel-body {
   flex: 1;
@@ -7798,7 +7808,7 @@ button:disabled {
 
 /* روی نمایشگرِ باریک این دو ستون جا نمی‌شوند و عرضِ فرم را می‌بلعند؛ کنار می‌روند
    و ناوبری همان سایدبار/کشو می‌ماند (نوارِ تب هم دوباره برمی‌گردد). */
-@media (max-width: 1180px) {
+@media (max-width: 1024px) {
   .mod-panels { display: none; }
   .app-shell--panels .app-content .tabs > .tab-list { display: flex; }
 }
