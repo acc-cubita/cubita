@@ -35,6 +35,7 @@ import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { ContractingPage } from '../pages/ContractingPage'
 import { MoadianPage } from '../pages/MoadianPage'
+import { ModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
@@ -398,6 +399,12 @@ export function Dashboard({
             onLogout={onLogout}
             open={navOpen}
             onClose={() => setNavOpen(false)}
+          />
+          <ModulePanels
+            page={page}
+            section={section}
+            onSelectSection={(key) => setSection(key)}
+            token={token}
           />
           <div className="app-main">
             <header className="topbar">

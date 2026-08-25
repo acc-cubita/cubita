@@ -7647,3 +7647,151 @@ button:disabled {
   position: sticky;
   bottom: 0;
 }
+
+
+/* ── دو کارتِ ماژول: «عملیات» و «فهرست» ──────────────────────────────────
+   بینِ سایدبار و ناحیه‌ی محتوا می‌نشینند. هرکدام عرضِ ثابت دارد و جداگانه
+   جمع‌شدنی است؛ جمع‌شده فقط یک نوارِ باریکِ عمودی می‌ماند تا کاربر بداند
+   هست و بتواند بازش کند. */
+.mod-panels {
+  display: flex;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mod-panel {
+  width: 224px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  transition: width 0.18s ease;
+}
+.mod-panel--list { width: 260px; }
+.mod-panel.collapsed { width: 40px; }
+
+.mod-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 12px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-family: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.mod-panel-head > svg { flex-shrink: 0; }
+.mod-panel-title { flex: 1; white-space: nowrap; }
+.mod-panel-chev { transition: transform 0.18s ease; }
+.mod-panel.collapsed .mod-panel-chev { transform: rotate(180deg); }
+
+/* جمع‌شده: فقط آیکنِ سرتیتر می‌ماند و بدنه پنهان می‌شود. */
+.mod-panel.collapsed .mod-panel-title,
+.mod-panel.collapsed .mod-panel-body { display: none; }
+.mod-panel.collapsed .mod-panel-head { justify-content: center; padding-inline: 0; }
+
+.mod-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* — عملیات — */
+.mod-op {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.mod-op:hover { background: var(--surface-3); }
+.mod-op > svg { flex-shrink: 0; color: var(--text-muted); }
+.mod-op.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.mod-op.active > svg { color: var(--accent); }
+
+/* — فهرست — */
+.mod-list-label {
+  padding: 2px 4px 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.mod-list { display: flex; flex-direction: column; gap: 4px; }
+.mod-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.mod-list-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mod-list-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-list-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-list-meta {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.mod-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+/* نوارِ تبِ داخلِ صفحه با کارتِ «عملیات» تکراری می‌شود — همان انتخاب، دو جا.
+   خودِ محتوای تب سرِ جایش رندر می‌شود؛ فقط نوار پنهان می‌شود. */
+.app-shell:not(.app-shell--topnav) .app-content .tabs > .tab-list { display: none; }
+
+/* روی نمایشگرِ باریک این دو ستون جا نمی‌شوند و عرضِ فرم را می‌بلعند؛ کنار می‌روند
+   و ناوبری همان سایدبار/کشو می‌ماند (نوارِ تب هم دوباره برمی‌گردد). */
+@media (max-width: 1180px) {
+  .mod-panels { display: none; }
+  .app-shell:not(.app-shell--topnav) .app-content .tabs > .tab-list { display: flex; }
+}
