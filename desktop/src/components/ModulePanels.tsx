@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
 import { MODULE_SECTIONS } from './moduleSections'
-import { listDefFor, type ListRow } from './moduleLists'
+import { MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
 import type { PageKey } from './Sidebar'
 
 /**
@@ -17,6 +17,17 @@ import type { PageKey } from './Sidebar'
  */
 
 const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
+
+/**
+ * آیا این ماژول اصلاً دو کارت دارد؟
+ *
+ * پوسته با همین تصمیم کلاسِ `app-shell--panels` را می‌گذارد و CSS فقط آن‌وقت نوارِ تب
+ * را پنهان می‌کند. اگر این‌جا false باشد ولی نوارِ تب پنهان شده بود، صفحه بدونِ هیچ
+ * راهِ جابه‌جایی بینِ بخش‌ها می‌ماند — پس تصمیم باید یک‌جا و مشترک باشد.
+ */
+export function hasModulePanels(page: PageKey): boolean {
+  return (MODULE_SECTIONS[page]?.length ?? 0) > 0 || MODULE_LISTS[page] !== undefined
+}
 
 type Collapsed = { ops: boolean; list: boolean }
 
@@ -55,11 +66,10 @@ export function ModulePanels({
 
   const sections = MODULE_SECTIONS[page] ?? []
   const activeSection = section ?? sections[0]?.key ?? null
-  const listDef = listDefFor(page, activeSection)
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
-  if (sections.length === 0 && !listDef) return null
+  if (!hasModulePanels(page)) return null
 
   return (
     <div className="mod-panels">

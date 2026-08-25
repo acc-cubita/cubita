@@ -35,7 +35,7 @@ import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { ContractingPage } from '../pages/ContractingPage'
 import { MoadianPage } from '../pages/MoadianPage'
-import { ModulePanels } from './ModulePanels'
+import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
@@ -357,10 +357,13 @@ export function Dashboard({
     </>
   )
 
+  // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
+  const panelsClass = hasModulePanels(page) ? ' app-shell--panels' : ''
+
   return (
     <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
       {theme.shell === 'topnav' ? (
-        <div className="app-shell app-shell--topnav">
+        <div className={`app-shell app-shell--topnav${panelsClass}`}>
           <TopNav
             active={page}
             onNavigate={navigate}
@@ -379,11 +382,20 @@ export function Dashboard({
             syncing={syncing}
             syncStatus={syncStatus}
           />
-          <main className="app-content">{pageContent}</main>
+          {/* دو کارت باید کنارِ محتوا بنشینند، نه زیرِ نوار؛ پس یک ردیفِ افقی زیرِ نوار. */}
+          <div className="app-body">
+            <ModulePanels
+              page={page}
+              section={section}
+              onSelectSection={(key) => setSection(key)}
+              token={token}
+            />
+            <main className="app-content">{pageContent}</main>
+          </div>
           {theme.content === 'guided' && <CommandPalette me={me} onNavigate={navigate} />}
         </div>
       ) : (
-        <div className="app-shell">
+        <div className={`app-shell${panelsClass}`}>
           <Sidebar
             active={page}
             activeSection={section}

@@ -3672,6 +3672,13 @@ button:disabled {
 .app-shell--topnav .app-content {
   scrollbar-gutter: stable both-edges;
 }
+/* در چیدمانِ نوارِ افقی، کارت‌های «عملیات» و «فهرست» باید کنارِ محتوا بنشینند نه زیرِ
+   نوار؛ پس محتوا و کارت‌ها با هم داخلِ یک ردیفِ افقیِ زیرِ نوار قرار می‌گیرند. */
+.app-shell--topnav > .app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
 .topnav {
   position: relative;
   z-index: 50;
@@ -7787,11 +7794,11 @@ button:disabled {
 
 /* نوارِ تبِ داخلِ صفحه با کارتِ «عملیات» تکراری می‌شود — همان انتخاب، دو جا.
    خودِ محتوای تب سرِ جایش رندر می‌شود؛ فقط نوار پنهان می‌شود. */
-.app-shell:not(.app-shell--topnav) .app-content .tabs > .tab-list { display: none; }
+.app-shell--panels .app-content .tabs > .tab-list { display: none; }
 
 /* روی نمایشگرِ باریک این دو ستون جا نمی‌شوند و عرضِ فرم را می‌بلعند؛ کنار می‌روند
    و ناوبری همان سایدبار/کشو می‌ماند (نوارِ تب هم دوباره برمی‌گردد). */
 @media (max-width: 1180px) {
   .mod-panels { display: none; }
-  .app-shell:not(.app-shell--topnav) .app-content .tabs > .tab-list { display: flex; }
+  .app-shell--panels .app-content .tabs > .tab-list { display: flex; }
 }
