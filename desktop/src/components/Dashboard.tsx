@@ -39,6 +39,7 @@ import { MoadianPage } from '../pages/MoadianPage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
+import { AccountCodingPage } from '../pages/AccountCodingPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
@@ -89,6 +90,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   fiscalyear: 'سال مالی',
   password: 'تغییر کلمه عبور',
   backup: 'پشتیبان‌گیری خودکار',
+  coding: 'کدینگ حسابداری',
   help: 'راهنما',
 }
 
@@ -364,6 +366,7 @@ export function Dashboard({
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'fiscalyear' && <FiscalYearPage token={token} />}
           {page === 'backup' && <BackupPage token={token} me={me} />}
+          {page === 'coding' && <AccountCodingPage token={token} />}
           {page === 'password' && (
             <ChangePasswordPage token={token} me={me} onTokenRenewed={onTokenRenewed} />
           )}

@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   HandCoins,
   HardHat,
+  Hash,
   HeartHandshake,
   HelpCircle,
   KeyRound,
@@ -73,6 +74,7 @@ export type PageKey =
   | 'fiscalyear'
   | 'password'
   | 'backup'
+  | 'coding'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -154,6 +156,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <Settings size={17} />,
     items: [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
+      { key: 'coding', label: 'کدینگ حسابداری', icon: <Hash size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
       { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
       { key: 'backup', label: 'پشتیبان‌گیری خودکار', icon: <DatabaseBackup size={18} /> },

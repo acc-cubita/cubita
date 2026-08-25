@@ -8143,3 +8143,9 @@ button:disabled {
 
 .tm-perm-sum { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); }
 .tm-editor-footer { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* تنظیمِ شماره‌ی بعدیِ سند — ورودیِ کوتاه کنارِ دکمه‌ی ثبت. */
+.nm-set { display: flex; align-items: center; gap: 6px; }
+.nm-set input { width: 110px; }
+.nm-set button { font-size: var(--fs-xs); }
+.nm-invalid { display: block; margin-top: 3px; color: var(--danger); font-size: var(--fs-xs); }

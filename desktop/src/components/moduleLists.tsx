@@ -4,6 +4,8 @@ import {
   fetchCrmActivities,
   fetchEmployees,
   fetchFiscalYears,
+  fetchMembers,
+  fetchNumbering,
   fetchFixedAssets,
   fetchInstallmentPlans,
   fetchItemsLive,
@@ -23,6 +25,7 @@ import {
   fetchTreasuryTransactions,
 } from '../api'
 import type { PageKey } from './Sidebar'
+import { isElectron } from '../platform'
 import { formatJalali } from '../lib/jalali'
 
 /**
@@ -44,6 +47,21 @@ const MOADIAN_STATUS: Record<string, string> = {
 }
 
 const day = (d: unknown) => (typeof d === 'string' && d ? formatJalali(d) : '—')
+
+const MEMBER_STATUS: Record<string, string> = {
+  active: 'فعال', invited: 'در انتظار دعوت', disabled: 'غیرفعال',
+}
+
+/** فهرستِ کاربران از یک شیء می‌آید نه آرایه؛ این‌جا به شکلِ مشترک درمی‌آید. */
+const listMembers = (token: string) => fetchMembers(token).then((d) => d.members)
+
+/**
+ * نسخه‌های پشتیبان روی دیسکِ خودِ کاربرند، نه روی سرور — پس برخلافِ بقیه‌ی فهرست‌ها
+ * توکن نمی‌گیرد. در نسخه‌ی وب پوشه‌ای وجود ندارد و فهرست خالی می‌ماند، که همان
+ * حقیقت است: پشتیبانِ محلی فقط در دسکتاپ هست.
+ */
+const listLocalBackups = () =>
+  isElectron ? window.cubita.backupListLocal() : Promise.resolve([])
 
 /** یک ردیفِ خلاصه در کارتِ فهرست. */
 export interface ListRow {
@@ -221,6 +239,36 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `${r.first_name} ${r.last_name}`.trim(),
       subtitle: r.phone || r.national_id || '—',
       meta: r.is_active === false ? 'غیرفعال' : 'فعال',
+    })),
+  },
+  // ── ماژولِ تنظیمات ──────────────────────────────────────────────────────
+  // چهار فهرست: نسخه‌های پشتیبان، کاربران، روش‌های شماره‌گذاری، و سال‌های مالی.
+  backup: {
+    __default: def('نسخه‌های پشتیبان', listLocalBackups, (r) => ({
+      id: r.file,
+      title: new Date(r.mtime).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' }),
+      subtitle: r.file,
+      meta:
+        r.size < 1048576
+          ? `${faNum(Math.round(r.size / 1024))} کیلوبایت`
+          : `${(r.size / 1048576).toLocaleString('fa-IR', { maximumFractionDigits: 1 })} مگابایت`,
+    })),
+  },
+  team: {
+    __default: def('کاربران', listMembers, (r) => ({
+      id: r.id,
+      title: r.name,
+      subtitle: r.email,
+      meta: MEMBER_STATUS[r.status] ?? r.status,
+    })),
+  },
+  coding: {
+    // هر دو بخشِ این ماژول یک فهرست دارند: قاعده‌های شماره‌گذاری.
+    __default: def('روش‌های شماره‌گذاری', fetchNumbering, (r) => ({
+      id: r.doc_type,
+      title: r.label,
+      subtitle: r.last_number === 0 ? 'هنوز سندی ثبت نشده' : `آخرین شماره ${faNum(r.last_number)}`,
+      meta: `بعدی ${faNum(r.next_number)}`,
     })),
   },
   fiscalyear: {

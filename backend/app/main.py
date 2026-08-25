@@ -39,6 +39,7 @@ from app.routers import (
     onboarding,
     payroll,
     fiscal_year,
+    numbering,
     period_close,
     pos_terminals,
     quotations,
@@ -102,6 +103,7 @@ async def shop_public_cors(request, call_next):
 
 app.include_router(auth.router)
 app.include_router(fiscal_year.router)
+app.include_router(numbering.router)
 app.include_router(admin_accounts.router)
 app.include_router(members.router)
 app.include_router(modules.router)

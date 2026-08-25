@@ -566,6 +566,19 @@ export interface FiscalYearSuggestion {
   is_leap: boolean
 }
 
+export interface NumberingRule {
+  doc_type: string
+  label: string
+  last_number: number
+  next_number: number
+}
+
+export const fetchNumbering = (token: string) =>
+  authedGet<NumberingRule[]>(token, '/api/numbering')
+
+export const setNumbering = (token: string, docType: string, nextNumber: number) =>
+  authedSend<NumberingRule>(token, 'PATCH', `/api/numbering/${docType}`, { next_number: nextNumber })
+
 export const fetchFiscalYears = (token: string) =>
   authedGet<FiscalYearRecord[]>(token, '/api/fiscal-years')
 
