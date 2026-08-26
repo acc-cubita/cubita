@@ -23,6 +23,7 @@ import {
   deleteAccount,
   fetchChartAccounts,
   fetchChartTemplates,
+  fetchNextAccountCode,
   fetchTrialBalance,
   updateAccount,
   type ChartAccount,
@@ -137,6 +138,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   const [newCode, setNewCode] = useState('')
   const [newName, setNewName] = useState('')
   const [newIsGroup, setNewIsGroup] = useState(false)
+  const [newCodeHint, setNewCodeHint] = useState('')
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -206,21 +208,23 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
     return ids
   }, [roots])
 
-  /** کدِ آزادِ بعدی زیرِ یک سرفصل — تا کاربر مجبور نباشد خودش دنبالِ خالی بگردد. */
-  function suggestCode(parent: Node): string {
-    const used = new Set((accounts ?? []).map((a) => a.code))
-    const childCodes = parent.children.map((c) => c.code).filter((c) => /^\d+$/.test(c))
-    const width = childCodes.length > 0 ? childCodes[0].length : parent.code.length + 2
-    let n = childCodes.length > 0 ? Math.max(...childCodes.map(Number)) + 1 : Number(parent.code + '01')
-    while (used.has(String(n).padStart(width, '0'))) n += 1
-    return String(n).padStart(width, '0')
-  }
-
+  /**
+   * کدِ پیشنهادی از سرور می‌آید نه از حدسِ محلی، چون قاعده‌ی کدینگ (رقمِ هر سطح)
+   * آن‌جا تعریف شده و همان‌جا هم اعمال می‌شود. حدس‌زدنِ محلی یعنی فرم کدی پیشنهاد
+   * بدهد که سرور ردش کند.
+   */
   function openAdd(parent: Node) {
     setAddUnder(parent)
-    setNewCode(suggestCode(parent))
     setNewName('')
     setNewIsGroup(false)
+    setNewCode('')
+    setNewCodeHint('')
+    void fetchNextAccountCode(token, parent.id)
+      .then((r) => {
+        setNewCode(r.code)
+        setNewCodeHint(`سطحِ ${r.level} — ${r.digits.toLocaleString('fa-IR')} رقمِ افزوده`)
+      })
+      .catch(() => setNewCodeHint('کدِ پیشنهادی خوانده نشد؛ کد را دستی وارد کنید.'))
   }
 
   function submitAdd(e: React.FormEvent) {
@@ -392,7 +396,13 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
             <td colSpan={5}>
               <form className="tree-add" onSubmit={submitAdd}>
                 <span className="tree-add-label">زیرِ «{node.name}»:</span>
-                <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="کد" required />
+                <input
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                  placeholder="کد"
+                  title={newCodeHint}
+                  required
+                />
                 <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="نام حساب" required />
                 <label className="fy-check">
                   <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
@@ -402,6 +412,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                   <Save size={13} /> ثبت
                 </button>
                 <button type="button" onClick={() => setAddUnder(null)}>انصراف</button>
+                {newCodeHint && <span className="bk-hint">{newCodeHint}</span>}
               </form>
             </td>
           </tr>,

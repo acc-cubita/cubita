@@ -17,7 +17,7 @@ def _two_leaves(db):
 def test_create_account_under_group(db, user, client):
     grp = _a_group(db)
     res = client.post("/api/accounts", json={
-        "code": "TEST-9001", "name": "حسابِ آزمایشی", "type": grp.type, "parent_id": str(grp.id),
+        "code": _free_code(client, grp), "name": "حسابِ آزمایشی", "type": grp.type, "parent_id": str(grp.id),
     })
     assert res.status_code == 201, res.text
     body = res.json()
@@ -27,11 +27,16 @@ def test_create_account_under_group(db, user, client):
     assert body["parent_id"] == str(grp.id)
 
 
+def _free_code(client, parent) -> str:
+    """کدِ آزادِ بعدی طبقِ قاعده‌ی کدینگ — تست نباید کدِ دلخواه بسازد."""
+    return client.get(f"/api/accounts/next-code?parent_id={parent.id}").json()["code"]
+
+
 def test_create_type_must_match_parent(db, user, client):
     grp = _a_group(db)
     wrong = "income" if grp.type != "income" else "asset"
     res = client.post("/api/accounts", json={
-        "code": "TEST-9002", "name": "x", "type": wrong, "parent_id": str(grp.id),
+        "code": _free_code(client, grp), "name": "x", "type": wrong, "parent_id": str(grp.id),
     })
     assert res.status_code == 400
 
@@ -39,14 +44,14 @@ def test_create_type_must_match_parent(db, user, client):
 def test_create_parent_must_be_group(db, user, client):
     leaf, _ = _two_leaves(db)
     res = client.post("/api/accounts", json={
-        "code": "TEST-9003", "name": "x", "type": leaf.type, "parent_id": str(leaf.id),
+        "code": _free_code(client, leaf), "name": "x", "type": leaf.type, "parent_id": str(leaf.id),
     })
     assert res.status_code == 400
 
 
 def test_duplicate_code_rejected(db, user, client):
     grp = _a_group(db)
-    p = {"code": "TEST-DUP", "name": "x", "type": grp.type, "parent_id": str(grp.id)}
+    p = {"code": _free_code(client, grp), "name": "x", "type": grp.type, "parent_id": str(grp.id)}
     assert client.post("/api/accounts", json=p).status_code == 201
     assert client.post("/api/accounts", json=p).status_code == 409
 
@@ -54,7 +59,7 @@ def test_duplicate_code_rejected(db, user, client):
 # ── ویرایش / غیرفعال‌سازی ────────────────────────────────────────────────
 def test_rename_and_deactivate(db, user, client):
     grp = _a_group(db)
-    aid = client.post("/api/accounts", json={"code": "TEST-9004", "name": "قدیمی", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
+    aid = client.post("/api/accounts", json={"code": _free_code(client, grp), "name": "قدیمی", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
     r = client.patch(f"/api/accounts/{aid}", json={"name": "نو", "is_active": False})
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "نو"
@@ -73,14 +78,14 @@ def test_cannot_deactivate_system_account(db, user, client):
 # ── حذف ──────────────────────────────────────────────────────────────────
 def test_delete_unused_account(db, user, client):
     grp = _a_group(db)
-    aid = client.post("/api/accounts", json={"code": "TEST-9005", "name": "بی‌استفاده", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
+    aid = client.post("/api/accounts", json={"code": _free_code(client, grp), "name": "بی‌استفاده", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
     assert client.delete(f"/api/accounts/{aid}").status_code == 204
 
 
 def test_cannot_delete_account_with_entries(db, user, client):
     a1, a2 = _two_leaves(db)
     grp = _a_group(db)
-    aid = client.post("/api/accounts", json={"code": "TEST-9006", "name": "دارای‌سند", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
+    aid = client.post("/api/accounts", json={"code": _free_code(client, grp), "name": "دارای‌سند", "type": grp.type, "parent_id": str(grp.id)}).json()["id"]
     # سندی که این حساب را به کار می‌برد
     r = client.post("/api/journal-entries", json={
         "entry_date": date.today().isoformat(),
@@ -103,7 +108,7 @@ def test_cannot_delete_system_account(db, user, client):
 
 def test_cannot_delete_group_with_children(db, user, client):
     grp = _a_group(db)
-    child = client.post("/api/accounts", json={"code": "TEST-9007", "name": "بچه", "type": grp.type, "parent_id": str(grp.id)}).json()
+    child = client.post("/api/accounts", json={"code": _free_code(client, grp), "name": "بچه", "type": grp.type, "parent_id": str(grp.id)}).json()
     assert client.delete(f"/api/accounts/{grp.id}").status_code == 409  # سرفصل زیرحساب دارد
     client.delete(f"/api/accounts/{child['id']}")  # پاک‌سازی
 

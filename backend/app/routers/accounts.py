@@ -5,9 +5,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.models.accounting import Account, JournalLine
 from app.schemas.accounting import AccountCreateIn, AccountOut, AccountUpdateIn
+from app.models.tenant import Tenant
+from app.services import account_coding as coding
 from app.services import chart_templates as templates
 from pydantic import BaseModel
 
@@ -16,6 +18,41 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 class AccountCodeIn(BaseModel):
     code: str
+
+
+class CodingLevelOut(BaseModel):
+    name: str
+    #: رقمِ افزوده در این سطح.
+    width: int
+    #: طولِ کلِ کد در این سطح.
+    total: int
+    #: نمونه‌ی کد.
+    example: str
+
+
+class CodingRuleOut(BaseModel):
+    widths: list[int]
+    levels: list[CodingLevelOut]
+
+
+class CodingRuleIn(BaseModel):
+    widths: list[int]
+
+
+def _coding_out(widths: list[int]) -> CodingRuleOut:
+    samples = coding.preview(widths)
+    return CodingRuleOut(
+        widths=widths,
+        levels=[
+            CodingLevelOut(
+                name=coding.level_name(i),
+                width=coding.width_for(widths, i),
+                total=len(samples[i]),
+                example=samples[i],
+            )
+            for i in range(len(widths))
+        ],
+    )
 
 
 class ChartTemplateOut(BaseModel):
@@ -39,6 +76,54 @@ def _missing_rows(db: Session, key: str):
     """ردیف‌هایی از قالب که کدشان هنوز در چارت نیست."""
     existing = {code for (code,) in db.query(Account.code).all()}
     return [row for row in templates.rows_for(key) if row[0] not in existing]
+
+
+@router.get("/coding-rule", response_model=CodingRuleOut)
+def get_coding_rule(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """قاعده‌ی کدینگِ چارت: چند رقم در هر سطح."""
+    return _coding_out(coding.get_widths(db.get(Tenant, principal.tenant_id)))
+
+
+@router.patch("/coding-rule", response_model=CodingRuleOut)
+def set_coding_rule(
+    data: CodingRuleIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "approve")),
+):
+    """قاعده را عوض می‌کند. حساب‌های موجود دست نمی‌خورند — فقط کدِ تازه."""
+    tenant = db.get(Tenant, principal.tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
+    clean = coding.set_widths(tenant, data.widths)
+    db.flush()
+    return _coding_out(clean)
+
+
+@router.get("/next-code", response_model=dict)
+def next_code(
+    parent_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """کدِ آزادِ بعدی زیرِ یک سرفصل، طبقِ قاعده — تا فرم حدس نزند."""
+    parent = db.get(Account, parent_id) if parent_id else None
+    widths = coding.get_widths(db.get(Tenant, principal.tenant_id))
+    depth = coding.depth_of(db, parent)
+    try:
+        code = coding.suggest_code(db, parent=parent, widths=widths)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(err)) from None
+    return {
+        "code": code,
+        "level": coding.level_name(depth),
+        "digits": coding.effective_width(db, parent, widths, depth),
+    }
 
 
 @router.get("/templates", response_model=list[ChartTemplateOut])
@@ -148,6 +233,7 @@ def list_accounts(
 def create_account(
     data: AccountCreateIn,
     db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
     _=Depends(require_permission("accounting", "create")),
 ):
     """ساختِ حسابِ تازه در چارت — زیرِ یک سرفصل یا در ریشه.
@@ -168,6 +254,15 @@ def create_account(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط زیرِ یک سرفصل (گروه) می‌توان حساب ساخت")
         if data.type != parent.type:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ زیرحساب باید با نوعِ سرفصلش یکی باشد")
+
+    # قاعده‌ی کدینگِ همین کسب‌وکار — طولِ کد باید با سطحِ حساب جور باشد.
+    tenant = db.get(Tenant, principal.tenant_id)
+    try:
+        coding.validate_new_code(
+            db, code=data.code, parent=parent, widths=coding.get_widths(tenant)
+        )
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from None
 
     account = Account(
         code=data.code,

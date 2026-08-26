@@ -81,6 +81,9 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: ترجیحِ نمایشِ مالک: فهرستِ کلیدِ ماژول‌های اختیاریِ *روشن*. NULL = شخصی‌سازی‌نشده →
     #: همه‌ی ماژول‌های مجاز دیده می‌شوند (سازگاریِ عقب‌رو). core هرگز این‌جا نمی‌آید.
     enabled_modules: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    #: قاعده‌ی کدینگِ چارت: رقمِ افزوده در هر سطح (گروه، کل، معین، تفصیلی).
+    #: NULL = پیش‌فرضِ سرویس، پس حساب‌های موجود با ارتقا چیزی عوض نمی‌کنند.
+    account_code_widths: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     #: «حقِ دسترسی»: ماژول‌های محدودی که سوپرادمین به این اکانت داده (مثلِ تولید).
     granted_modules: Mapped[list] = mapped_column(
         JSONB, default=list, server_default="[]", nullable=False

@@ -1306,6 +1306,25 @@ export interface ChartTemplate {
   missing: number
 }
 
+/** قاعده‌ی کدینگِ چارت — رقمِ افزوده در هر سطح. */
+export interface CodingRule {
+  widths: number[]
+  levels: { name: string; width: number; total: number; example: string }[]
+}
+
+export const fetchCodingRule = (token: string) =>
+  authedGet<CodingRule>(token, '/api/accounts/coding-rule')
+
+export const setCodingRule = (token: string, widths: number[]) =>
+  authedSend<CodingRule>(token, 'PATCH', '/api/accounts/coding-rule', { widths })
+
+/** کدِ آزادِ بعدی زیرِ یک سرفصل، طبقِ قاعده — تا فرم حدس نزند. */
+export const fetchNextAccountCode = (token: string, parentId: string | null) =>
+  authedGet<{ code: string; level: string; digits: number }>(
+    token,
+    `/api/accounts/next-code${parentId ? `?parent_id=${parentId}` : ''}`,
+  )
+
 export const fetchChartTemplates = (token: string) =>
   authedGet<ChartTemplate[]>(token, '/api/accounts/templates')
 

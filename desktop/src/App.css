@@ -8219,3 +8219,30 @@ button:disabled {
 .tpl-hint { color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.6; }
 .tpl-meta { margin-top: 2px; color: var(--accent-text); font-size: var(--fs-xs); font-weight: 700; }
 .tpl-card.done .tpl-meta { color: var(--success); }
+
+/* ── قاعده‌ی کدینگِ حساب‌ها: چهار سطح کنارِ هم با نمونه‌ی زنده ───────────────── */
+.cd-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cd-level {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.cd-level-name { color: var(--text-h); font-size: var(--fs-sm); font-weight: 700; }
+.cd-level input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
+.cd-level-sample {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  direction: ltr;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cd-preview { direction: rtl; }

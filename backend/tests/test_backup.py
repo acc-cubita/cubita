@@ -90,8 +90,10 @@ def test_restore_wipes_extra_rows(db, user, client):
 
     grp_type = base["tables"]["accounts"][0]["type"]
     grp_id = next(r["id"] for r in base["tables"]["accounts"] if r["is_group"])
+    # کد باید با قاعده‌ی کدینگِ چارت جور باشد؛ از خودِ سرویس گرفته می‌شود.
+    free = client.get(f"/api/accounts/next-code?parent_id={grp_id}").json()["code"]
     add = client.post("/api/accounts", json={
-        "code": "BK-EXTRA", "name": "اضافه", "type": grp_type, "parent_id": grp_id,
+        "code": free, "name": "اضافه", "type": grp_type, "parent_id": grp_id,
     })
     assert add.status_code == 201, add.text
     assert len(client.get("/api/backup/export").json()["tables"]["accounts"]) == base_accounts + 1
