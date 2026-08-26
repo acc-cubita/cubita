@@ -10,15 +10,13 @@ import {
   RotateCcw,
   Save,
   ShieldCheck,
-  Trash2,
   Upload,
 } from 'lucide-react'
 import { fetchBackupExport, importBackup, type MeResponse } from '../api'
 import { isElectron } from '../platform'
-import type { BackupSettings, BackupStatus, LocalBackup } from '../electron.d'
+import type { BackupSettings, BackupStatus } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
-import { EmptyState } from '../components/EmptyState'
 
 /**
  * تنظیماتِ تهیه‌ی پشتیبانِ خودکار.
@@ -28,8 +26,8 @@ import { EmptyState } from '../components/EmptyState'
  * نسخه‌های نگه‌داشته‌شده، نه انتخابِ پوشه — و فقط پس از همگام‌سازی اجرا می‌شد.
  *
  * حالا همه‌ی آن تصمیم‌ها این‌جاست و یک زمان‌بندِ ساعتی در پروسه‌ی اصلی هم اجرایشان
- * می‌کند. نسخه‌ها هم دیگر فقط فهرست نمی‌شوند: از داخلِ همین صفحه قابلِ بازیابی و
- * حذف‌اند.
+ * می‌کند. فهرستِ نسخه‌ها و بازیابی/حذفِ آن‌ها در صفحه‌ی «نسخه‌های پشتیبانی و بازیابی»
+ * است، چون هر کنش به یک ردیفِ مشخص گره خورده.
  *
  * نسخه‌ی وب پوشه‌ی محلی ندارد، پس آن‌جا صریح گفته می‌شود که خودکارسازی مالِ دسکتاپ
  * است و فقط پشتیبانِ دستی در دسترس می‌ماند — به‌جای نشان‌دادنِ تنظیماتی که کار نمی‌کند.
@@ -68,19 +66,13 @@ const RESTORE_WARNING =
 export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
   const isOwner = Boolean(me.permissions['*'])
   const [status, setStatus] = useState<BackupStatus | null>(null)
-  const [locals, setLocals] = useState<LocalBackup[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
 
   const refresh = useCallback(async () => {
     if (!isElectron) return
     try {
-      const [st, list] = await Promise.all([
-        window.cubita.backupStatus(),
-        window.cubita.backupListLocal(),
-      ])
-      setStatus(st)
-      setLocals(list)
+      setStatus(await window.cubita.backupStatus())
     } catch {
       // خواندنِ وضعیت نباید صفحه را از کار بیندازد؛ کارت‌های عملیات همچنان کار می‌کنند.
     }
@@ -134,21 +126,7 @@ export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
     })
   }
 
-  function handleRestoreLocal(b: LocalBackup) {
-    if (!window.confirm(`${fmtTime(b.mtime)}\n\n${RESTORE_WARNING}`)) return
-    void run(`restore-${b.file}`, async () => {
-      const r = await window.cubita.backupRestoreFromLocal(b.file)
-      return { text: r.message, kind: r.restored ? 'ok' : 'err' }
-    })
-  }
 
-  function handleDelete(b: LocalBackup) {
-    if (!window.confirm(`نسخه‌ی ${fmtTime(b.mtime)} حذف شود؟`)) return
-    void run(`del-${b.file}`, async () => {
-      await window.cubita.backupDeleteLocal(b.file)
-      return { text: 'نسخه حذف شد.', kind: 'ok' }
-    })
-  }
 
   function handleRestoreFile() {
     if (!window.confirm(RESTORE_WARNING)) return
@@ -416,58 +394,6 @@ export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
         </div>
       </div>
 
-      {auto && (
-        <SectionCard
-          icon={DatabaseBackup}
-          title="نسخه‌های ذخیره‌شده"
-          description="تازه‌ترین بالا. بازیابی از هر نسخه مستقیم از همین‌جا ممکن است."
-        >
-          {locals.length === 0 ? (
-            <EmptyState icon={DatabaseBackup} text="هنوز نسخه‌ای ساخته نشده." />
-          ) : (
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>زمان</th>
-                    <th>حجم</th>
-                    <th>فایل</th>
-                    <th>عملیات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {locals.map((b) => (
-                    <tr key={b.file}>
-                      <td className="card-title" data-label="زمان">
-                        {fmtTime(b.mtime)}
-                      </td>
-                      <td data-label="حجم">{fmtSize(b.size)}</td>
-                      <td data-label="فایل" className="bk-file">
-                        {b.file}
-                      </td>
-                      <td data-label="عملیات">
-                        <div className="fy-actions">
-                          <button type="button" onClick={() => handleRestoreLocal(b)} disabled={busy !== null}>
-                            <Upload size={13} /> بازیابی
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-danger"
-                            onClick={() => handleDelete(b)}
-                            disabled={busy !== null}
-                          >
-                            <Trash2 size={13} /> حذف
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionCard>
-      )}
     </div>
   )
 }

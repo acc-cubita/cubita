@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
 import { MODULE_SECTIONS, type SectionDef } from './moduleSections'
-import { LIST_MENUS, MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
+import { LIST_MENUS, LIST_PAGE_GROUP, MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
 import type { NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
@@ -21,7 +21,10 @@ const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
 
 /** گروهِ ناوبری‌ای که این صفحه داخلش است (صفحه‌های حسابِ کاربری در هیچ گروهی نیستند). */
 const groupOf = (groups: NavGroup[], page: PageKey) =>
-  groups.find((g) => g.items.some((i) => i.key === page)) ?? null
+  groups.find((g) => g.items.some((i) => i.key === page)) ??
+  // صفحه‌ی فهرست خودش در منو نیست؛ گروهش را از نگاشتِ صریح می‌گیرد.
+  groups.find((g) => g.heading === LIST_PAGE_GROUP[page]) ??
+  null
 
 /**
  * آیا این ماژول اصلاً دو کارت دارد؟
@@ -35,6 +38,7 @@ const groupOf = (groups: NavGroup[], page: PageKey) =>
  */
 export function hasModulePanels(page: PageKey, groups: NavGroup[]): boolean {
   return (
+    LIST_PAGE_GROUP[page] !== undefined ||
     (groupOf(groups, page)?.items.length ?? 0) > 1 ||
     (MODULE_SECTIONS[page]?.length ?? 0) > 0 ||
     MODULE_LISTS[page] !== undefined

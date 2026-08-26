@@ -75,10 +75,21 @@ export interface ListMenuItem {
  */
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'تنظیمات': [
-    { key: 'backup', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
-    { key: 'team', label: 'کاربران', icon: UsersRound },
-    { key: 'fiscalyear', label: 'سال‌های مالی', icon: CalendarRange },
+    { key: 'backuplist', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
+    { key: 'userlist', label: 'کاربران', icon: UsersRound },
+    { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
   ],
+}
+
+/**
+ * صفحه‌های فهرست در هیچ گروهی از منو نیستند (وگرنه در کارتِ «عملیات» هم تکرار
+ * می‌شدند)، ولی وقتی بازند باید همان دو کارتِ ماژولِ خودشان را کنارشان داشته باشند —
+ * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
+ */
+export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  backuplist: 'تنظیمات',
+  userlist: 'تنظیمات',
+  fiscalyearlist: 'تنظیمات',
 }
 
 export interface ListDef {

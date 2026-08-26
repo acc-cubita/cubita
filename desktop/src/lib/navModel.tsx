@@ -75,6 +75,10 @@ export type PageKey =
   | 'password'
   | 'backup'
   | 'numbering'
+  //: صفحه‌های فهرست — از کارتِ «فهرست» باز می‌شوند، نه از منو.
+  | 'backuplist'
+  | 'userlist'
+  | 'fiscalyearlist'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }

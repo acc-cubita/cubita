@@ -1,22 +1,7 @@
 import { useEffect, useState } from 'react'
+import { AlertTriangle, CalendarRange, CheckCircle2, Plus, RefreshCw, Sparkles } from 'lucide-react'
 import {
-  AlertTriangle,
-  CalendarRange,
-  CheckCircle2,
-  Lock,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Star,
-  Trash2,
-  ArrowDownToLine,
-} from 'lucide-react'
-import {
-  activateFiscalYear,
-  carryForwardFiscalYear,
-  closeFiscalYear,
   createFiscalYear,
-  deleteFiscalYear,
   fetchFiscalYearSuggestion,
   fetchFiscalYears,
   type FiscalYearRecord,
@@ -24,21 +9,17 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
-import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { formatJalali, isoToJalali, todayIso } from '../lib/jalali'
 
 /**
- * سال مالی — تعریفِ دوره‌ی رسمیِ حسابداری.
+ * سال مالی — نیمه‌ی «ساختن».
  *
- * این صفحه سه کارِ متفاوت را که به‌هم زنجیر شده‌اند در یک جا جمع می‌کند:
- *  ۱. **ساختنِ دوره** با بازه‌ی دقیق (پیشنهادِ خودکارِ ۱ فروردین تا آخرِ اسفند، با
- *     محاسبه‌ی کبیسه — نه فرضِ ۲۹ اسفند).
- *  ۲. **افتتاحیه**: آوردنِ مانده‌ی حساب‌های دائمیِ سالِ قبل به این سال.
- *  ۳. **اختتامیه**: صفرکردنِ حساب‌های موقت و قفلِ دوره.
+ * وضعیتِ سالِ جاری + فرمِ ساختِ دوره‌ی تازه، با پیشنهادِ خودکارِ ۱ فروردین تا آخرِ اسفند
+ * (با محاسبه‌ی کبیسه، نه فرضِ ۲۹ اسفند).
  *
- * ترتیب اجباری است و بک‌اند آن را تضمین می‌کند؛ این‌جا فقط همان ترتیب *دیده* می‌شود تا
- * کاربر پیش از کلیک بداند چرا دکمه‌ای غیرفعال است.
+ * کارِ روی دوره‌ی موجود — جاری‌کردن، افتتاحیه، بستن، حذف — در صفحه‌ی «سال‌های مالی»
+ * است، چون هر کنش به یک ردیفِ مشخص گره خورده و بدونِ دیدنِ آن ردیف معنا ندارد.
  */
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -120,34 +101,8 @@ export function FiscalYearPage({ token }: { token: string }) {
     })
   }
 
-  function handleClose(year: FiscalYearRecord) {
-    const ok = window.confirm(
-      `با بستن «${year.title}»، حساب‌های درآمد و هزینه‌ی این دوره صفر و سود/زیان به سود انباشته منتقل می‌شود. ` +
-        'پس از آن هیچ سندی با تاریخِ داخلِ این دوره قابل ثبت نیست. ادامه می‌دهید؟',
-    )
-    if (!ok) return
-    void run(async () => {
-      const closed = await closeFiscalYear(token, year.id)
-      return closed.closing_entry_id
-        ? `«${closed.title}» بسته شد و سند اختتامیه ثبت شد.`
-        : `«${closed.title}» بسته شد. این دوره فعالیت درآمد/هزینه‌ای نداشت، پس سند اختتامیه لازم نشد.`
-    })
-  }
 
-  function handleCarryForward(year: FiscalYearRecord) {
-    void run(async () => {
-      const res = await carryForwardFiscalYear(token, year.id)
-      return `سند افتتاحیه‌ی «${year.title}» با ${fa(res.line_count)} ردیف ثبت شد.`
-    })
-  }
 
-  function handleDelete(year: FiscalYearRecord) {
-    if (!window.confirm(`«${year.title}» حذف شود؟`)) return
-    void run(async () => {
-      await deleteFiscalYear(token, year.id)
-      return `«${year.title}» حذف شد.`
-    })
-  }
 
   const active = years.find((y) => y.is_active) ?? null
   const days = spanDays(startDate, endDate)
@@ -265,99 +220,6 @@ export function FiscalYearPage({ token }: { token: string }) {
         </form>
       </SectionCard>
 
-      <SectionCard
-        icon={CalendarRange}
-        title="سال‌های مالی"
-        description="افتتاحیه فقط وقتی ممکن است که سالِ قبل بسته شده باشد؛ بستنِ هر سال هم به بسته‌بودنِ سال‌های قدیمی‌تر نیاز دارد."
-      >
-        {years.length === 0 ? (
-          <EmptyState icon={CalendarRange} text="هنوز سال مالی‌ای ساخته نشده." />
-        ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>نام</th>
-                  <th>بازه</th>
-                  <th>طول</th>
-                  <th>وضعیت</th>
-                  <th>اسناد</th>
-                  <th>افتتاحیه</th>
-                  <th>اختتامیه</th>
-                  <th>عملیات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {years.map((y) => {
-                  const closed = y.status === 'closed'
-                  return (
-                    <tr key={y.id}>
-                      <td className="card-title" data-label="نام">
-                        {y.title}
-                        {y.is_active && <span className="fy-badge fy-badge--active">جاری</span>}
-                      </td>
-                      <td data-label="بازه">
-                        {formatJalali(y.start_date)} تا {formatJalali(y.end_date)}
-                      </td>
-                      <td data-label="طول">{fa(spanDays(y.start_date, y.end_date))} روز</td>
-                      <td data-label="وضعیت">
-                        <span className={`fy-badge ${closed ? 'fy-badge--closed' : 'fy-badge--open'}`}>
-                          {closed ? 'بسته' : 'باز'}
-                        </span>
-                      </td>
-                      <td data-label="اسناد">{fa(y.entry_count)}</td>
-                      <td data-label="افتتاحیه">{y.opening_entry_id ? 'ثبت شده' : '—'}</td>
-                      <td data-label="اختتامیه">{y.closing_entry_id ? 'ثبت شده' : '—'}</td>
-                      <td data-label="عملیات">
-                        <div className="fy-actions">
-                          {!closed && !y.is_active && (
-                            <button
-                              type="button"
-                              onClick={() => void run(async () => {
-                                const r = await activateFiscalYear(token, y.id)
-                                return `«${r.title}» سال جاری شد.`
-                              })}
-                              disabled={busy}
-                              title="این سال، سال جاری شود"
-                            >
-                              <Star size={13} /> جاری
-                            </button>
-                          )}
-                          {!closed && !y.opening_entry_id && (
-                            <button
-                              type="button"
-                              onClick={() => handleCarryForward(y)}
-                              disabled={busy}
-                              title="انتقال مانده‌ی حساب‌های دائمی از سال قبل"
-                            >
-                              <ArrowDownToLine size={13} /> افتتاحیه
-                            </button>
-                          )}
-                          {!closed && (
-                            <button type="button" onClick={() => handleClose(y)} disabled={busy}>
-                              <Lock size={13} /> بستن
-                            </button>
-                          )}
-                          {!closed && y.entry_count === 0 && (
-                            <button
-                              type="button"
-                              className="btn-danger"
-                              onClick={() => handleDelete(y)}
-                              disabled={busy}
-                            >
-                              <Trash2 size={13} /> حذف
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
     </>
   )
 }

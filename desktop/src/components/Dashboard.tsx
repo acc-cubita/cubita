@@ -40,6 +40,9 @@ import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
 import { NumberingPage } from '../pages/NumberingPage'
+import { BackupListPage } from '../pages/BackupListPage'
+import { UserListPage } from '../pages/UserListPage'
+import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
@@ -82,7 +85,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   mpcommission: 'کمیسیونِ بازار',
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
-  team: 'کاربران و دسترسی‌ها',
+  team: 'کاربر جدید',
   modules: 'شخصی‌سازیِ پنل',
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',
@@ -91,6 +94,9 @@ const PAGE_TITLES: Record<PageKey, string> = {
   password: 'تغییر کلمه عبور',
   backup: 'پشتیبان‌گیری خودکار',
   numbering: 'روش‌های شماره‌گذاری',
+  backuplist: 'نسخه‌های پشتیبانی و بازیابی',
+  userlist: 'کاربران',
+  fiscalyearlist: 'سال‌های مالی',
   help: 'راهنما',
 }
 
@@ -367,6 +373,9 @@ export function Dashboard({
           {page === 'fiscalyear' && <FiscalYearPage token={token} />}
           {page === 'backup' && <BackupPage token={token} me={me} />}
           {page === 'numbering' && <NumberingPage token={token} />}
+          {page === 'backuplist' && <BackupListPage token={token} me={me} />}
+          {page === 'userlist' && <UserListPage token={token} />}
+          {page === 'fiscalyearlist' && <FiscalYearListPage token={token} />}
           {page === 'password' && (
             <ChangePasswordPage token={token} me={me} onTokenRenewed={onTokenRenewed} />
           )}
