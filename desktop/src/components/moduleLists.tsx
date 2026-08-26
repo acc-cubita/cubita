@@ -3,9 +3,6 @@ import {
   fetchContacts,
   fetchCrmActivities,
   fetchEmployees,
-  fetchFiscalYears,
-  fetchMembers,
-  fetchNumbering,
   fetchFixedAssets,
   fetchInstallmentPlans,
   fetchItemsLive,
@@ -24,8 +21,8 @@ import {
   fetchStockTransfers,
   fetchTreasuryTransactions,
 } from '../api'
+import { CalendarRange, DatabaseBackup, UsersRound, type LucideIcon } from 'lucide-react'
 import type { PageKey } from './Sidebar'
-import { isElectron } from '../platform'
 import { formatJalali } from '../lib/jalali'
 
 /**
@@ -48,21 +45,6 @@ const MOADIAN_STATUS: Record<string, string> = {
 
 const day = (d: unknown) => (typeof d === 'string' && d ? formatJalali(d) : '—')
 
-const MEMBER_STATUS: Record<string, string> = {
-  active: 'فعال', invited: 'در انتظار دعوت', disabled: 'غیرفعال',
-}
-
-/** فهرستِ کاربران از یک شیء می‌آید نه آرایه؛ این‌جا به شکلِ مشترک درمی‌آید. */
-const listMembers = (token: string) => fetchMembers(token).then((d) => d.members)
-
-/**
- * نسخه‌های پشتیبان روی دیسکِ خودِ کاربرند، نه روی سرور — پس برخلافِ بقیه‌ی فهرست‌ها
- * توکن نمی‌گیرد. در نسخه‌ی وب پوشه‌ای وجود ندارد و فهرست خالی می‌ماند، که همان
- * حقیقت است: پشتیبانِ محلی فقط در دسکتاپ هست.
- */
-const listLocalBackups = () =>
-  isElectron ? window.cubita.backupListLocal() : Promise.resolve([])
-
 /** یک ردیفِ خلاصه در کارتِ فهرست. */
 export interface ListRow {
   id: string
@@ -72,6 +54,31 @@ export interface ListRow {
   subtitle?: string
   /** ستونِ چپ — مبلغ یا تاریخ. */
   meta?: string
+}
+
+/** یک ورودیِ منو در کارتِ «فهرست» — به‌جای ردیفِ داده، رهسپارِ صفحه‌ی همان فهرست. */
+export interface ListMenuItem {
+  key: PageKey
+  label: string
+  icon: LucideIcon
+}
+
+/**
+ * ماژول‌هایی که کارتِ «فهرست»شان به‌جای ردیف‌های داده، **منو** نشان می‌دهد.
+ *
+ * تنظیمات چند فهرستِ کاملاً بی‌ربط دارد (نسخه‌های پشتیبان، کاربران، سال‌های مالی) که
+ * هیچ‌کدام به «عملیاتِ انتخاب‌شده» گره نمی‌خورند. نشان‌دادنِ ردیف‌های یکی از آن‌ها
+ * بسته به اینکه کاربر روی کدام زیرمنو ایستاده، بیشتر گیج‌کننده بود تا مفید. پس این‌جا
+ * کارت خودش یک منوی سه‌تایی می‌شود و هر کدام صفحه‌ی همان فهرست را باز می‌کند.
+ *
+ * کلید، **نامِ گروهِ ناوبری** است نه صفحه — چون این تصمیم به کلِ ماژول تعلق دارد.
+ */
+export const LIST_MENUS: Record<string, ListMenuItem[]> = {
+  'تنظیمات': [
+    { key: 'backup', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
+    { key: 'team', label: 'کاربران', icon: UsersRound },
+    { key: 'fiscalyear', label: 'سال‌های مالی', icon: CalendarRange },
+  ],
 }
 
 export interface ListDef {
@@ -239,43 +246,6 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `${r.first_name} ${r.last_name}`.trim(),
       subtitle: r.phone || r.national_id || '—',
       meta: r.is_active === false ? 'غیرفعال' : 'فعال',
-    })),
-  },
-  // ── ماژولِ تنظیمات ──────────────────────────────────────────────────────
-  // چهار فهرست: نسخه‌های پشتیبان، کاربران، روش‌های شماره‌گذاری، و سال‌های مالی.
-  backup: {
-    __default: def('نسخه‌های پشتیبان', listLocalBackups, (r) => ({
-      id: r.file,
-      title: new Date(r.mtime).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' }),
-      subtitle: r.file,
-      meta:
-        r.size < 1048576
-          ? `${faNum(Math.round(r.size / 1024))} کیلوبایت`
-          : `${(r.size / 1048576).toLocaleString('fa-IR', { maximumFractionDigits: 1 })} مگابایت`,
-    })),
-  },
-  team: {
-    __default: def('کاربران', listMembers, (r) => ({
-      id: r.id,
-      title: r.name,
-      subtitle: r.email,
-      meta: MEMBER_STATUS[r.status] ?? r.status,
-    })),
-  },
-  numbering: {
-    __default: def('روش‌های شماره‌گذاری', fetchNumbering, (r) => ({
-      id: r.doc_type,
-      title: r.label,
-      subtitle: r.last_number === 0 ? 'هنوز سندی ثبت نشده' : `آخرین شماره ${faNum(r.last_number)}`,
-      meta: `بعدی ${faNum(r.next_number)}`,
-    })),
-  },
-  fiscalyear: {
-    __default: def('سال‌های مالی', fetchFiscalYears, (r) => ({
-      id: r.id,
-      title: r.title,
-      subtitle: `${day(r.start_date)} تا ${day(r.end_date)}`,
-      meta: r.status === 'closed' ? 'بسته' : r.is_active ? 'جاری' : 'باز',
     })),
   },
   moadian: {

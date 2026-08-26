@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
 import { MODULE_SECTIONS, type SectionDef } from './moduleSections'
-import { MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
+import { LIST_MENUS, MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
 import type { NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
@@ -87,6 +87,7 @@ export function ModulePanels({
   const group = groupOf(groups, page)
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 ? siblings : []
+  const listMenu = group ? LIST_MENUS[group.heading] : undefined
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -173,7 +174,26 @@ export function ModulePanels({
           <ChevronRight size={15} className="mod-panel-chev" />
         </button>
         <div className="mod-panel-body">
-          <ListPanel token={token} page={page} section={activeSection} />
+          {listMenu ? (
+            // ماژولی که چند فهرستِ بی‌ربط دارد، به‌جای ردیف‌های داده منو می‌گیرد؛
+            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند.
+            listMenu.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`mod-op${item.key === page ? ' active' : ''}`}
+                  onClick={() => onNavigate(item.key)}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })
+          ) : (
+            <ListPanel token={token} page={page} section={activeSection} />
+          )}
         </div>
       </section>
     </div>
