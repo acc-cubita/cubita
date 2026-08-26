@@ -165,7 +165,23 @@ def set_industry(tenant: "Tenant", industry: str, *, grant_restricted: bool = Tr
 
 
 def set_grants(tenant: "Tenant", granted_keys: list[str]) -> list[str]:
-    """گرنتِ سوپرادمین برای ماژول‌های محدود را می‌گذارد (فقط کلیدهای محدودِ معتبر)."""
+    """گرنتِ سوپرادمین برای ماژول‌های محدود را می‌گذارد (فقط کلیدهای محدودِ معتبر).
+
+    ماژولی که *تازه* گرنت می‌شود در نمایش هم روشن می‌شود. بدونِ این، گرنت روی حسابی
+    که قبلاً پنلش را شخصی‌سازی کرده هیچ اثری در منو نداشت: `allowed` باز می‌شد ولی کلید
+    در `enabled_modules` نبود (قالبِ صنفش هرگز نداشته)، پس سوپرادمین «فعال» می‌کرد و
+    مالک همچنان چیزی نمی‌دید. گرنت یک تصمیمِ صریحِ موردی است و باید یک کلید باشد، نه دو.
+
+    لغوِ گرنت ترجیح را دست نمی‌زند — نمایش با `allowed` بسته می‌شود، و اگر بعداً دوباره
+    گرنت داده شود ماژول همان‌جا برمی‌گردد.
+    """
     clean = sorted({k for k in granted_keys if k in RESTRICTED_MODULES})
+    before = set(tenant.granted_modules or [])
     tenant.granted_modules = clean
+
+    added = [k for k in clean if k not in before]
+    # `None` یعنی «شخصی‌سازی‌نشده» = همه‌ی اختیاری‌ها روشن‌اند؛ آن‌جا کاری لازم نیست.
+    if added and tenant.enabled_modules is not None:
+        on = set(tenant.enabled_modules) | set(added)
+        tenant.enabled_modules = [k for k in OPTIONAL_MODULES if k in on]
     return clean

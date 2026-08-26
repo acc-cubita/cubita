@@ -114,3 +114,46 @@ def test_industry_change_keeps_the_grant(db, tenant_id):
     svc.set_industry(tenant, "retail")
     assert "integration" in tenant.enabled_modules
     assert svc.is_module_visible(tenant, "integration")
+
+
+def test_grant_turns_the_module_on_for_a_customized_account(db, tenant_id):
+    """گرنت باید *یک* کلید باشد، نه دو.
+
+    حسابی که پنلش را شخصی‌سازی کرده، فهرستِ نمایشِ ذخیره‌شده‌ای دارد که ماژولِ محدود
+    هرگز در آن نبوده (قالبِ صنفش نداشته). پیش‌تر گرنت فقط `allowed` را باز می‌کرد و
+    ماژول همچنان در منو نبود — سوپرادمین «فعال» می‌کرد و هیچ اتفاقی نمی‌افتاد.
+    """
+    tenant = db.get(Tenant, tenant_id)
+    tenant.granted_modules = []
+    tenant.enabled_modules = ["sales", "purchases"]  # شخصی‌سازی‌شده، بدونِ ماژولِ محدود
+
+    svc.set_grants(tenant, ["manufacturing"])
+    assert "manufacturing" in tenant.enabled_modules
+    assert svc.is_module_visible(tenant, "manufacturing")
+
+
+def test_revoking_keeps_the_preference_for_next_time(db, tenant_id):
+    """لغوِ گرنت نمایش را می‌بندد ولی ترجیح را پاک نمی‌کند، پس گرنتِ بعدی دوباره کار می‌کند."""
+    tenant = db.get(Tenant, tenant_id)
+    tenant.granted_modules = []
+    tenant.enabled_modules = ["sales"]
+
+    svc.set_grants(tenant, ["integration"])
+    svc.set_grants(tenant, [])
+    assert "integration" in tenant.enabled_modules
+    assert not svc.is_module_visible(tenant, "integration")
+
+    svc.set_grants(tenant, ["integration"])
+    assert svc.is_module_visible(tenant, "integration")
+
+
+def test_grant_does_not_touch_an_uncustomized_account(db, tenant_id):
+    """`enabled_modules = None` یعنی همه‌ی اختیاری‌ها روشن‌اند؛ گرنت نباید آن را به فهرستِ
+    ثابت تبدیل کند، وگرنه حساب سازگاریِ عقب‌روی خودش را از دست می‌دهد."""
+    tenant = db.get(Tenant, tenant_id)
+    tenant.granted_modules = []
+    tenant.enabled_modules = None
+
+    svc.set_grants(tenant, ["manufacturing"])
+    assert tenant.enabled_modules is None
+    assert svc.is_module_visible(tenant, "manufacturing")
