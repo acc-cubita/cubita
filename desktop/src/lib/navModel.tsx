@@ -102,6 +102,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    //: کانالِ فروشِ آنلاین — کنارِ کانالِ حضوری می‌نشیند، نه لای تنظیمات: راه‌اندازیِ
+    //: فروشگاه یک ماژولِ کاری است (کاتالوگ، سفارش، درگاه)، نه یک گزینه‌ی پیکربندی.
+    //: پیش‌فرض خاموش است و فقط با گرنتِ سوپرادمین دیده می‌شود (RESTRICTED_MODULES).
+    heading: 'اتصال فروشگاه',
+    icon: <Store size={17} />,
+    items: [{ key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> }],
+  },
+  {
     heading: 'تامین‌کنندگان و انبار',
     icon: <Boxes size={17} />,
     items: [
@@ -164,7 +172,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
       { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
       { key: 'backup', label: 'پشتیبان‌گیری خودکار', icon: <DatabaseBackup size={18} /> },
-      { key: 'integration', label: 'اتصال فروشگاه', icon: <Store size={18} /> },
       { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
       { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
     ],

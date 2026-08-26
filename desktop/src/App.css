@@ -3688,6 +3688,8 @@ button:disabled {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .topnav-inner {
+  /* لنگرِ منوی جمع‌شده (که absolute می‌شود). */
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -3709,6 +3711,39 @@ button:disabled {
 }
 .topnav-hamburger:hover {
   background: var(--topnav-hover);
+}
+/* جمع‌شدنِ سنجیده (کلاسِ `topnav--collapsed` از TopNav): وقتی ماژول‌ها روی یک خط جا
+   نمی‌شوند، همان کشوی همبرگری می‌آید. بریک‌پوینتِ ثابت کافی نیست چون تعدادِ گروه‌ها از
+   حسابی به حسابِ دیگر فرق دارد (گرنتِ ماژولِ محدود، بازارِ عمده‌فروشی، مدیریتِ سامانه).
+   ویژگیِ بالاترِ این گزینشگرها از قاعده‌های پایه، پس ترتیبشان در فایل مهم نیست.
+
+   منوی جمع‌شده `display:none` نمی‌گیرد بلکه از جریان بیرون می‌رود و پنهان می‌شود:
+   این‌طور همچنان اندازه‌پذیر است و TopNav می‌تواند در هر تغییرِ عرض دوباره بسنجد که
+   حالا جا می‌شود یا نه. با `display:none` عرضِ آیتم‌ها صفر می‌شد و نوار دیگر هرگز
+   باز نمی‌شد. `visibility:hidden` از دسترسِ صفحه‌خوان و Tab هم بیرونش می‌برد. */
+.topnav--collapsed .topnav-menu {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.topnav--collapsed .topnav-hamburger {
+  display: inline-flex;
+}
+/* جست‌وجو هم مثلِ منو پنهان می‌شود ولی اندازه‌پذیر می‌ماند، تا وقتی پنجره باز شد
+   TopNav بداند چقدر جا لازم دارد و برش گرداند. */
+.topnav--tight .topnav-search {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* آیتم‌ها نباید فشرده شوند: سنجشِ بالا به عرضِ *طبیعیِ* هر ماژول تکیه دارد، و فشرده‌شدن
+   یعنی نوار به‌جای رفتن به کشو، متن‌ها را روی هم می‌ریزد. */
+.topnav-item {
+  flex: 0 0 auto;
 }
 .topnav-brand {
   display: flex;
@@ -4092,10 +4127,9 @@ button:disabled {
   .topnav-search { padding: 0 8px; }
   .topnav-search input { width: 96px; }
 }
-/* کمی باریک‌تر: جست‌وجوی ماژول هم کنار می‌رود تا در کلِ بازه‌ی ۱۰۲۵–۱۴۴۰ منوها کامل جا شوند. */
-@media (max-width: 1200px) {
-  .topnav-search { display: none; }
-}
+/* جست‌وجوی ماژول با بریک‌پوینتِ ثابت کنار نمی‌رود، بلکه *سنجیده* — کلاسِ
+   `topnav--tight` از TopNav. پیش از رفتن به کشوی همبرگری، اول این ~۱۳۰px آزاد
+   می‌شود؛ در بیشترِ عرض‌ها همین کافی است تا کلِ ماژول‌ها روی نوار بمانند. */
 /* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو. جست‌وجو/نامِ کسب‌وکار دیرتر (۷۶۰) پنهان می‌شوند. */
 @media (max-width: 1024px) {
   .topnav-menu {

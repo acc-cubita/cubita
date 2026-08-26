@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import require_feature, require_permission
+from app.deps import require_feature, require_module, require_permission
 from app.models.user import User
 from app.services.site_build import build_site_bundle
 from app.schemas.storefront_native import (
@@ -26,10 +26,13 @@ from app.schemas.storefront_native import (
 )
 from app.services import storefront_manage as service
 
+# مثلِ /api/integration و با همان ترتیب: اول گیتِ پلن، بعد «حقِ دسترسی»ِ ماژول.
+# سطحِ عمومیِ /api/shop/* عمداً بیرونِ این گیت است — آن‌جا اصلاً کاربرِ احرازشده‌ای نیست
+# و بستنش یعنی خاموش‌شدنِ سایتِ فروشگاهیِ مشتری‌های فعلی.
 router = APIRouter(
     prefix="/api/storefront",
     tags=["storefront"],
-    dependencies=[Depends(require_feature("storefront"))],
+    dependencies=[Depends(require_feature("storefront")), Depends(require_module("integration"))],
 )
 
 

@@ -143,6 +143,23 @@ def db(_schema):
 
 
 @pytest.fixture
+def grant_module(db, tenant_id):
+    """گرنتِ ماژولِ محدود به مستأجرِ آزمون — معادلِ کلیدِ سوپرادمین در «مدیریت اکانت‌ها».
+
+    ماژول‌های `RESTRICTED_MODULES` (تولید، اتصال فروشگاه) پیش‌فرض خاموش‌اند و روترشان
+    با `require_module` بسته است؛ تستِ آن ماژول‌ها باید اول گرنت را بگذارد.
+    """
+    from app.models.tenant import Tenant
+
+    def _grant(*keys: str) -> None:
+        tenant = db.get(Tenant, tenant_id)
+        tenant.granted_modules = sorted({*(tenant.granted_modules or []), *keys})
+        db.flush()
+
+    return _grant
+
+
+@pytest.fixture
 def user(db) -> User:
     """کاربر مالک seed‌شده — سرویس‌ها برای created_by به آن نیاز دارند."""
     return db.query(User).filter(User.email == SEED_OWNER_EMAIL).one()

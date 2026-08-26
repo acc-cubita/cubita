@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, RefreshCw, UserPlus, CalendarClock, Users, CheckCircle2,
-  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift, Factory,
+  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift, Factory, Store,
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
@@ -36,6 +36,14 @@ const KIND_LABEL: Record<string, string> = {
 const INDUSTRY_LABEL: Record<string, string> = {
   general: 'عمومی', manufacturing: 'تولیدی', retail: 'خرده‌فروشی', services: 'خدماتی', distribution: 'پخش',
 }
+
+//: ماژول‌های «محدود» — کلیدها با RESTRICTED_MODULES سمتِ سرور یکی‌اند. این‌ها پیش‌فرض
+//: برای هیچ اکانتی روشن نیستند و فقط سوپرادمین بازشان می‌کند؛ گیتِ واقعی هم در بک‌اند
+//: است (require_module)، نه فقط پنهان‌کردنِ منو.
+const RESTRICTED_MODULES: { key: string; label: string; icon: typeof Factory }[] = [
+  { key: 'manufacturing', label: 'تولید', icon: Factory },
+  { key: 'integration', label: 'فروشگاه', icon: Store },
+]
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
   active: 'فعال', invited: 'دعوت‌شده', disabled: 'غیرفعال',
@@ -174,14 +182,14 @@ export function AccountsAdminPage({ token }: { token: string }) {
     void run(a.tenant_id, () => setAdminAccountIndustry(token, a.tenant_id, next), `صنفِ «${a.name}» به «${INDUSTRY_LABEL[next] ?? next}» تغییر کرد.`)
   }
 
-  //: گرنت/لغوِ ماژولِ محدودِ «تولید». فهرستِ کاملِ محدودهای مجاز فرستاده می‌شود (نه افزایشی).
-  function toggleManufacturing(a: AdminAccount) {
-    const has = a.granted_modules.includes('manufacturing')
-    const next = has ? a.granted_modules.filter((m) => m !== 'manufacturing') : [...a.granted_modules, 'manufacturing']
+  //: گرنت/لغوِ یک ماژولِ محدود. فهرستِ کاملِ محدودهای مجاز فرستاده می‌شود (نه افزایشی).
+  function toggleRestricted(a: AdminAccount, key: string, label: string) {
+    const has = a.granted_modules.includes(key)
+    const next = has ? a.granted_modules.filter((m) => m !== key) : [...a.granted_modules, key]
     void run(
       a.tenant_id,
       () => setAdminAccountModules(token, a.tenant_id, next),
-      has ? `ماژولِ تولیدِ «${a.name}» غیرفعال شد.` : `ماژولِ تولید به «${a.name}» داده شد.`,
+      has ? `ماژولِ ${label}ِ «${a.name}» غیرفعال شد.` : `ماژولِ ${label} به «${a.name}» داده شد.`,
     )
   }
 
@@ -389,15 +397,21 @@ export function AccountsAdminPage({ token }: { token: string }) {
                       <option key={k} value={k}>صنف: {label}</option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    className={a.granted_modules.includes('manufacturing') ? 'is-on' : ''}
-                    disabled={busyId === a.tenant_id}
-                    onClick={() => toggleManufacturing(a)}
-                    title="گرنتِ ماژولِ محدودِ «تولید»"
-                  >
-                    <Factory size={13} /> تولید: {a.granted_modules.includes('manufacturing') ? 'فعال' : 'خاموش'}
-                  </button>
+                  {RESTRICTED_MODULES.map(({ key, label, icon: Icon }) => {
+                    const on = a.granted_modules.includes(key)
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={on ? 'is-on' : ''}
+                        disabled={busyId === a.tenant_id}
+                        onClick={() => toggleRestricted(a, key, label)}
+                        title={`گرنتِ ماژولِ محدودِ «${label}»`}
+                      >
+                        <Icon size={13} /> {label}: {on ? 'فعال' : 'خاموش'}
+                      </button>
+                    )
+                  })}
                   <button type="button" className="icon-btn-danger" disabled={busyId === a.tenant_id} onClick={() => doDelete(a)}>
                     <Trash2 size={13} /> حذف
                   </button>

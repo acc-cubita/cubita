@@ -201,3 +201,9 @@ def test_idpay_pay_and_post_callback_creates_invoice(client, db, user, monkeypat
 @pytest.mark.parametrize("provider", ["zarinpal", "zibal", "idpay"])
 def test_provider_registered(provider):
     assert payment_providers.get_provider(provider) is not None
+
+
+@pytest.fixture(autouse=True)
+def _grant_storefront(grant_module):
+    """«اتصال فروشگاه» ماژولِ محدود است (require_module)؛ این تست‌ها با گرنت اجرا می‌شوند."""
+    grant_module("integration")

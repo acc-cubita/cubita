@@ -44,7 +44,11 @@ OPTIONAL_MODULES: tuple[str, ...] = (
 
 #: زیرمجموعه‌ی اختیاری‌ها که «حقِ دسترسی»شان فقط با گرنتِ سوپرادمین باز می‌شود و در
 #: بک‌اند هم گیت می‌شوند (require_module). «تولید» نمونه‌ی اصلی است.
-RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing",)
+#:
+#: «اتصال فروشگاه» هم این‌جاست: راه‌اندازیِ فروشگاه (دامنه، درگاه، کلیدِ publishable)
+#: کاری است که پشتیبانی همراهِ مشتری انجام می‌دهد، نه چیزی که هر حسابِ تازه باید
+#: نیمه‌تنظیم‌شده در منو ببیند. پیش‌فرض خاموش؛ سوپرادمین برای هر اکانت بازش می‌کند.
+RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration")
 
 #: همه‌ی کلیدهای ماژولِ کسب‌وکار (core + اختیاری) — برای اعتبارسنجی.
 ALL_BUSINESS_MODULES: tuple[str, ...] = CORE_MODULES + OPTIONAL_MODULES
@@ -55,7 +59,7 @@ INDUSTRY_TEMPLATES: dict[str, tuple[str, ...]] = {
     # عمومی: همه‌ی اختیاری‌ها جز محدودها (تولید با گرنتِ سوپرادمین می‌آید).
     "general": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
-        "accounting", "banking", "fixedassets", "payroll", "integration",
+        "accounting", "banking", "fixedassets", "payroll",
         "calendar", "onboarding",
     ),
     # تولیدی: خط تولید فعال، بدونِ صندوق/باشگاه/اقساط.
@@ -120,9 +124,17 @@ def set_enabled(tenant: "Tenant", keys: list[str]) -> list[str]:
 
     core خودکار روشن است پس ذخیره نمی‌شود؛ کلیدهای نامعتبر/غیرمجاز کنار گذاشته می‌شوند
     (fail-safe: مالک نمی‌تواند با این مسیر ماژولِ محدودِ گرنت‌نشده را روشن کند).
+
+    یک استثنا: ماژولِ محدودی که *از قبل* روشن بوده روشن می‌ماند. وگرنه هر بار که مالک
+    تنظیماتِ پنل را ذخیره می‌کرد، ترجیحش پاک می‌شد و گرنتِ بعدیِ سوپرادمین بی‌اثر
+    می‌ماند — یعنی سوپرادمین «فعال» می‌کرد و مالک همچنان چیزی نمی‌دید. نگه‌داشتنِ
+    ترجیح روشن‌کردن نیست؛ گیتِ واقعی همچنان `allowed` است.
     """
     allowed = allowed_modules(tenant)
-    clean = [k for k in OPTIONAL_MODULES if k in set(keys) and k in allowed]
+    already = set(tenant.enabled_modules or [])
+    clean = [
+        k for k in OPTIONAL_MODULES if k in set(keys) and (k in allowed or k in already)
+    ]
     tenant.enabled_modules = clean
     return clean
 
@@ -139,11 +151,17 @@ def set_industry(tenant: "Tenant", industry: str, *, grant_restricted: bool = Tr
         raise ValueError("صنفِ نامعتبر")
     template = INDUSTRY_TEMPLATES[industry]
     tenant.industry = industry
-    tenant.enabled_modules = [k for k in OPTIONAL_MODULES if k in set(template)]
     if grant_restricted:
         granted = set(tenant.granted_modules or [])
         granted.update(k for k in template if k in RESTRICTED_MODULES)
         tenant.granted_modules = sorted(granted)
+
+    # بازنشانی به قالب، *به‌جز* ماژول‌های محدودی که سوپرادمین صریحاً به این اکانت داده.
+    # گرنت یک تصمیمِ موردیِ اوست و نباید با عوض‌کردنِ صنف — که یک پیش‌فرضِ کلی است —
+    # بی‌صدا پس گرفته شود. «اتصال فروشگاه» در هیچ قالبی نیست، پس بدونِ این استثنا هر
+    # تغییرِ صنف آن را از منو حذف می‌کرد.
+    on = set(template) | {k for k in (tenant.granted_modules or []) if k in RESTRICTED_MODULES}
+    tenant.enabled_modules = [k for k in OPTIONAL_MODULES if k in on]
 
 
 def set_grants(tenant: "Tenant", granted_keys: list[str]) -> list[str]:

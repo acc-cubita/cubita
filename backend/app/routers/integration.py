@@ -3,14 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_feature, require_permission
+from app.deps import require_feature, require_module, require_permission
 from app.models.user import User
 from app.schemas.storefront import StorefrontSettingsIn, StorefrontSettingsOut
 from app.services import storefront_integration as service
 from app.services.storefront_integration import StorefrontConfigError, sync_all
 
-# قابلیتِ فقط-پلن (مثلِ مودیان): حسابِ آزمایشی قفل است و باکسِ «خرید پلن» می‌بیند.
-router = APIRouter(prefix="/api/integration", tags=["integration"], dependencies=[Depends(require_feature("storefront"))])
+# دو گیتِ مستقل روی کلِ روتر، به همین ترتیب:
+#   • require_feature("storefront") — گیتِ پلن: حسابِ آزمایشی ۴۰۲ و باکسِ «خرید پلن».
+#   • require_module("integration") — «حقِ دسترسی»: تا سوپرادمین این ماژول را به اکانت
+#     نداده باشد، حتی حسابِ پولی هم ۴۰۳ می‌گیرد (پیش‌فرض خاموش).
+# ترتیب عمدی است: به حسابِ آزمایشی باید «پلن بخر» گفته شود نه «با پشتیبانی تماس بگیر»،
+# چون خریدِ پلن کاری است که خودش می‌تواند انجام دهد.
+router = APIRouter(
+    prefix="/api/integration",
+    tags=["integration"],
+    dependencies=[Depends(require_feature("storefront")), Depends(require_module("integration"))],
+)
 
 
 def _to_out(row) -> StorefrontSettingsOut:

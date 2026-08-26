@@ -7,6 +7,8 @@
 import io
 import zipfile
 
+import pytest
+
 from tests.conftest import PRIMARY_SLUG
 from tests.factories import make_item
 
@@ -157,3 +159,9 @@ def test_site_bundle_has_seo_prerender(client, db):
 
     sitemap = z.read("sitemap.xml").decode("utf-8")
     assert "https://myshop.example/" in sitemap and "https://myshop.example/p/seo-1/" in sitemap
+
+
+@pytest.fixture(autouse=True)
+def _grant_storefront(grant_module):
+    """«اتصال فروشگاه» ماژولِ محدود است (require_module)؛ این تست‌ها با گرنت اجرا می‌شوند."""
+    grant_module("integration")

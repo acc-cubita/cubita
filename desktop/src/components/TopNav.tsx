@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Menu,
   X,
@@ -74,6 +74,89 @@ export function TopNav({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [query, setQuery] = useState('')
   const barRef = useRef<HTMLElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLElement>(null)
+
+  /* ── جمع‌شدنِ سنجیده‌ی نوار ────────────────────────────────────────────────
+     تعدادِ ماژول‌های نوار از حسابی به حسابِ دیگر فرق دارد: گرنتِ ماژول‌های محدود،
+     گروهِ «بازارِ عمده‌فروشی» برای پخش‌کننده/فروشگاه، «مدیریت سامانه» برای سوپرادمین.
+     پس هیچ بریک‌پوینتِ ثابتی درست نیست — با یک ترکیب جا می‌شود و با ترکیبِ بعدی نوار
+     از لبه بیرون می‌زند. این‌جا خودِ جا‌شدن سنجیده می‌شود و اگر جا نشد همان کشوی
+     همبرگریِ موبایل می‌آید.
+
+     `neededRef` عرضِ طبیعیِ نوارِ *باز* را نگه می‌دارد؛ چون منو نمی‌شکند، این عدد به
+     عرضِ پنجره وابسته نیست. باز‌شدنِ دوباره با همان عدد سنجیده می‌شود، پس نوسانِ
+     باز/بسته رخ نمی‌دهد (همبرگر از منو باریک‌تر است، پس هر بار که باز می‌شود جا دارد). */
+  //: دو مرحله‌ی کوچک‌شدنِ نوار، به همین ترتیب: اول جست‌وجوی ماژول کنار می‌رود
+  //: (`tight`)، و تنها اگر باز هم جا نشد کلِ منو به کشوی همبرگری می‌رود (`collapsed`).
+  const [tight, setTight] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+
+  // امضای *محتوایی* گروه‌ها، نه هویتِ آرایه: `groups` هر رندر تازه ساخته می‌شود و
+  // وابستگی به خودش این افکت را در هر رندر می‌دواند (باز↔بسته، حلقه‌ی بی‌پایان).
+  const navKey = useMemo(
+    () => groups.map((g) => `${g.heading}:${g.items.length}`).join('|'),
+    [groups],
+  )
+
+  useLayoutEffect(() => {
+    const inner = innerRef.current
+    const menu = menuRef.current
+    if (!inner || !menu) return
+
+    const px = (v: string) => parseFloat(v) || 0
+
+    function fit() {
+      if (!inner || !menu) return
+      const items = Array.from(menu.children) as HTMLElement[]
+      if (items.length === 0) return
+
+      // عرضِ *طبیعیِ* منو. آیتم‌ها `flex: 0 0 auto` دارند و منوی جمع‌شده هم از جریان
+      // بیرون است ولی اندازه‌پذیر — پس این عدد به عرضِ پنجره و به حالتِ فعلی وابسته
+      // نیست، و همین است که بازشدنِ دوباره را ممکن می‌کند.
+      const ms = getComputedStyle(menu)
+      const menuWidth =
+        items.reduce((sum, el) => sum + el.offsetWidth, 0) +
+        px(ms.columnGap) * (items.length - 1) +
+        px(ms.marginInlineStart)
+
+      // بقیه‌ی نوار — عمداً **بی‌احتسابِ همبرگر**، که فقط در حالتِ جمع‌شده وجود دارد.
+      // اگر آن را می‌شمردیم، هر بار که نوار باز می‌شد عرضِ لازم عوض می‌شد و تصمیم بین
+      // باز و بسته نوسان می‌کرد.
+      const others = (Array.from(inner.children) as HTMLElement[]).filter(
+        (el) => el !== menu && !el.classList.contains('topnav-hamburger') && el.offsetWidth > 0,
+      )
+      const cs = getComputedStyle(inner)
+      const base =
+        menuWidth +
+        others.reduce((sum, el) => sum + el.offsetWidth, 0) +
+        px(cs.paddingInlineStart) +
+        px(cs.paddingInlineEnd) +
+        px(cs.columnGap) * others.length
+
+      // هزینه‌ی جست‌وجو جدا حساب می‌شود تا هر دو مرحله در *یک* سنجش تصمیم‌گیری شوند.
+      // اگر مرحله‌به‌مرحله سنجیده می‌شد، هر تغییرِ حالت یک سنجشِ تازه می‌خواست و
+      // نوار می‌توانست بین دو حالت بلرزد.
+      const search = inner.querySelector('.topnav-search') as HTMLElement | null
+      const actions = inner.querySelector('.topnav-actions') as HTMLElement | null
+      const searchCost =
+        search && search.offsetWidth > 0
+          ? search.offsetWidth + (actions ? px(getComputedStyle(actions).columnGap) : 0)
+          : 0
+      // `base` وقتی نوار tight است جست‌وجو را نمی‌شمارد (از جریان بیرون رفته).
+      const withSearch = tight ? base + searchCost : base
+      const withoutSearch = tight ? base : base - searchCost
+
+      const avail = inner.clientWidth
+      setTight(withSearch > avail)
+      setCollapsed(withoutSearch > avail)
+    }
+
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(inner)
+    return () => ro.disconnect()
+  }, [collapsed, tight, navKey])
 
   // کلیک بیرون از نوار → بستنِ منوها. (پنل‌ها stopPropagation ندارند؛ ناوبری خودش می‌بندد.)
   useEffect(() => {
@@ -117,8 +200,11 @@ export function TopNav({
     : []
 
   return (
-    <header className="topnav" ref={barRef}>
-      <div className="topnav-inner">
+    <header
+      className={`topnav${tight ? ' topnav--tight' : ''}${collapsed ? ' topnav--collapsed' : ''}`}
+      ref={barRef}
+    >
+      <div className="topnav-inner" ref={innerRef}>
         <button
           type="button"
           className="topnav-hamburger"
@@ -133,7 +219,7 @@ export function TopNav({
           <span className="topnav-brand-name">کوبیتا</span>
         </button>
 
-        <nav className="topnav-menu">
+        <nav className="topnav-menu" ref={menuRef}>
           {/* دراپ‌داونِ زیرمنو حذف شد: کلیک روی ماژول مستقیم واردش می‌شود و زیرمنوها
               در کارتِ «عملیات» باز می‌شوند — یک جا، نه دو جا. */}
           {groups.map((group) => {

@@ -7,6 +7,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn
 from app.services.inventory import post_purchase_invoice
 
@@ -130,3 +132,9 @@ def test_fulfillment_status_update(client, db, user):
 
     bad = client.put(f"/api/storefront/orders/{oid}/fulfillment", json={"fulfillment_status": "bogus"})
     assert bad.status_code == 400
+
+
+@pytest.fixture(autouse=True)
+def _grant_storefront(grant_module):
+    """«اتصال فروشگاه» ماژولِ محدود است (require_module)؛ این تست‌ها با گرنت اجرا می‌شوند."""
+    grant_module("integration")
