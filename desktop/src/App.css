@@ -7610,85 +7610,169 @@ button:disabled {
   .pos-receipt-print .rc-foot .rc-brand { margin-top: 2px; font-weight: 700; letter-spacing: 0.5px; }
 }
 
-/* ── شخصی‌سازیِ پنل (ModulesPage) ── */
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+/* ── شخصی‌سازیِ پنل (ModulesPage) ─────────────────────────────────────────
+   یک فهرستِ چگال، نه یک داشبورد. چهارده کارتِ جدا — که بیشترشان یک ردیف بیشتر
+   نداشتند — جای خود را به یک کارت با سرگروه‌های کم‌رنگ داد، تا کلِ ماژول‌ها در یک
+   نگاه جا شوند و کاربر برای دیدنِ ماژولِ آخر اسکرول نکند.
+
+   حالتِ «روشن» فقط روی کلید نشسته، نه روی کلِ ردیف: پیش‌فرض تقریباً همه روشن‌اند و
+   ردیف‌های رنگی یعنی صفحه‌ای یکدست رنگی که در آن هیچ‌چیز برجسته نیست. با کلیدِ آرام،
+   چیزی که به چشم می‌آید *خاموش‌ها* هستند — یعنی همان چیزی که کاربر دنبالش است. */
+/* ستونی، نه یک ستونِ بلند: بیشترِ گروه‌ها یک یا دو ماژول دارند، پس چیدنشان زیرِ هم
+   یعنی یک نوارِ باریکِ محتوا و دو‌سومِ عرضِ خالی. `column-width` تعدادِ ستون را خودش
+   از عرضِ موجود درمی‌آورد، پس بریک‌پوینتِ دستی لازم نیست. */
+.mp-groups {
+  column-width: 230px;
+  column-gap: var(--sp-5);
 }
-.module-row {
+/* `div` است نه `section`، چون `.page section` هر سکشن را کارت می‌کند و اینجا دقیقاً
+   نمی‌خواهیم کارت‌های تودرتو داشته باشیم. */
+.mp-group {
+  min-width: 0;
+  /* گروه نباید وسطش بینِ دو ستون بشکند. */
+  break-inside: avoid;
+  margin-bottom: var(--sp-3);
+}
+.mp-group-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  transition: border-color 0.15s, background 0.15s;
-}
-.module-row.on { border-color: var(--accent); background: var(--accent-soft); }
-.module-row.locked { opacity: 0.75; }
-.module-row-icon {
-  display: inline-flex;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
   color: var(--text-muted);
-  flex-shrink: 0;
 }
-.module-row.on .module-row-icon { color: var(--accent); }
-.module-row-label {
+/* خطِ مویی که تا انتهای ردیف ادامه می‌دهد — مرزِ گروه را بدونِ افزودنِ کادر نشان می‌دهد. */
+.mp-group-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.mp-items {
+  display: flex;
+  flex-direction: column;
+}
+.mp-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  border-radius: 0;
+  font: inherit;
+  font-size: var(--fs-base);
+  text-align: start;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.mp-item.is-static { cursor: default; }
+button.mp-item:hover:not(:disabled) { background: var(--surface-hover); }
+button.mp-item:disabled { cursor: default; }
+/* روشن = متنِ پررنگ. تفاوتِ روشن/خاموش با *وزنِ رنگ* خوانده می‌شود، نه با پس‌زمینه. */
+.mp-item.is-on,
+.mp-item.is-core { color: var(--text); }
+.mp-item-ico {
+  display: inline-flex;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.mp-item-ico svg { width: 15px; height: 15px; }
+.mp-item.is-on .mp-item-ico { opacity: 1; }
+.mp-item-name {
   flex: 1;
   min-width: 0;
-  font-size: var(--fs-sm);
-  color: var(--text);
-}
-.module-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  background: var(--surface-3);
-  border-radius: var(--radius-pill);
-  padding: 3px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.module-badge.locked { color: var(--accent-text); background: var(--accent-bg); }
-.module-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-3);
+
+/* کلیدِ کوچک و استاندارد. متنِ «روشن/خاموش» حذف شد: جای کلید خودش حالت را می‌گوید و
+   وضعیت برای صفحه‌خوان با role="switch" + aria-checked می‌رسد، نه با متنِ تکراری. */
+.mp-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 16px;
   border-radius: var(--radius-pill);
-  padding: 4px 10px 4px 6px;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.module-toggle:disabled { cursor: default; opacity: 0.6; }
-.module-toggle.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-.module-toggle-knob {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--border-strong);
   transition: background 0.15s;
 }
-.module-toggle.on .module-toggle-knob { background: var(--accent-text); }
-.module-toggle-text { font-size: var(--fs-xs); }
-.module-save-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 14px 4px 4px;
-  position: sticky;
-  bottom: 0;
+.mp-item.is-on .mp-switch { background: var(--accent); }
+/* رنگِ دستگیره از توکنِ *متنِ* هر حالت می‌آید نه از سفیدِ ثابت: در پوسته‌ی برند
+   رنگِ لهجه طلاییِ روشن است و دستگیره‌ی سفید رویش گم می‌شود، در حالی که
+   `--accent-text` همان‌جا سرمه‌ای تیره است. این‌طور در هر سه پوسته خوانا می‌ماند. */
+.mp-switch-knob {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: inset-inline-start 0.15s, background 0.15s;
+}
+.mp-item.is-on .mp-switch-knob {
+  inset-inline-start: 14px;
+  background: var(--accent-text);
+}
+button.mp-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
+/* برچسبِ حالت‌های تغییرناپذیر (core و قفل‌شده) — متنِ کوچکِ بی‌کادر، نه بَج. */
+.mp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+.mp-tag.is-lock { color: var(--warning); opacity: 1; }
+.mp-item.is-locked .mp-item-ico { opacity: 0.5; }
+
+.mp-note-line {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* نوارِ ذخیره: فقط وقتی چیزی عوض شده، و چسبیده به پایینِ ناحیه‌ی محتوا. */
+.mp-savebar {
+  position: sticky;
+  bottom: var(--sp-3);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+}
+.mp-savebar-count {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .mp-groups { column-width: auto; columns: 1; }
+  /* هدفِ لمسی: ردیف در موبایل بلندتر می‌شود تا کلید راحت زده شود. */
+  .mp-item { min-height: 42px; }
+  .mp-savebar { flex-wrap: wrap; }
+  .mp-savebar-count { flex: 1 0 100%; }
+}
 
 /* ── دو کارتِ ماژول: «عملیات» و «فهرست» ──────────────────────────────────
    یک ستونِ باریک کنارِ ناحیه‌ی محتوا؛ «فهرست» *زیرِ* «عملیات» می‌نشیند، نه

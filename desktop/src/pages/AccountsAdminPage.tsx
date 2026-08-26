@@ -6,7 +6,8 @@ import {
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
   resetAdminAccountPassword, deleteAdminAccount, setAdminAccountKind,
-  setAdminAccountIndustry, setAdminAccountModules, type AdminAccount,
+  setAdminAccountIndustry, setAdminAccountModules, fetchMe,
+  type AdminAccount, type MeResponse,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -74,7 +75,16 @@ function lastSeenText(iso: string | null): string {
   return `${relativeFa(iso)} · ${formatJalali(iso.slice(0, 10))}`
 }
 
-export function AccountsAdminPage({ token }: { token: string }) {
+export function AccountsAdminPage({
+  token,
+  me,
+  onMeUpdated,
+}: {
+  token: string
+  me: MeResponse
+  //: تغییرِ ماژول‌ها ناوبریِ همین جلسه را عوض می‌کند — اگر اکانتِ خودِ سوپرادمین باشد.
+  onMeUpdated: (me: MeResponse) => void
+}) {
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -136,6 +146,10 @@ export function AccountsAdminPage({ token }: { token: string }) {
       await fn()
       setMessage(ok)
       await refresh()
+      // اگر اکانتِ دست‌کاری‌شده همانی است که خودمان داخلش هستیم، ناوبری باید همین‌جا
+      // عوض شود. بدونِ این، خاموش‌کردنِ یک ماژول تا بارگذاریِ دوباره‌ی برنامه در منو
+      // می‌ماند و به‌نظر می‌رسد فقط دسترسی بسته شده، نه اینکه ماژول برداشته شده باشد.
+      if (id === me.tenant_id) onMeUpdated(await fetchMe(token))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {

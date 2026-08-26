@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { SlidersHorizontal, Lock, Check } from 'lucide-react'
+import { Check, Lock, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import {
   fetchModules,
   updateModules,
@@ -11,6 +11,18 @@ import { NAV_GROUPS } from '../lib/navModel'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 
+/**
+ * شخصی‌سازیِ پنل — کدام ماژول‌ها در منو دیده شوند.
+ *
+ * این صفحه یک *فهرست* است، نه یک داشبورد: کاربر می‌آید، چند کلید را می‌زند و می‌رود.
+ * پس چگالی مهم‌تر از بزرگیِ اجزاست — همه‌ی ماژول‌ها در یک کارت و یک نگاه جا می‌شوند،
+ * به‌جای چهارده کارتِ جدا که بیشترشان یک ردیف بیشتر ندارند.
+ *
+ * حالتِ «روشن» فقط با کلید نشان داده می‌شود، نه با رنگ‌کردنِ کلِ ردیف. وقتی پیش‌فرضِ
+ * تقریباً همه‌چیز روشن است، ردیف‌های رنگی یعنی یک صفحه‌ی یکدست رنگی که در آن هیچ‌چیز
+ * برجسته نیست؛ کلیدِ آرام همان اطلاعات را می‌دهد و *خاموش‌ها* را دیدنی می‌کند.
+ */
+
 //: برچسبِ فارسیِ صنف‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند.
 const INDUSTRY_LABELS: Record<string, string> = {
   general: 'عمومی',
@@ -21,6 +33,8 @@ const INDUSTRY_LABELS: Record<string, string> = {
 }
 
 type Kind = 'core' | 'locked' | 'toggle'
+
+const fa = (n: number) => n.toLocaleString('fa-IR')
 
 export function ModulesPage({
   token,
@@ -61,18 +75,41 @@ export function ModulesPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const dirty = useMemo(() => {
-    if (enabled.size !== baseline.size) return true
-    for (const k of enabled) if (!baseline.has(k)) return true
-    return false
-  }, [enabled, baseline])
-
   function kindOf(key: string): Kind {
     if (!state) return 'toggle'
     if (state.core.includes(key)) return 'core'
     if (state.restricted.includes(key) && !state.allowed.includes(key)) return 'locked'
     return 'toggle'
   }
+
+  // فقط گروه‌هایی که ماژولِ کسب‌وکار دارند (همه‌ی NAV_GROUPS دارند).
+  const groups = useMemo(
+    () =>
+      state
+        ? NAV_GROUPS.map((g) => ({
+            heading: g.heading,
+            items: g.items.filter(
+              (i) => state.core.includes(i.key) || state.optional.includes(i.key),
+            ),
+          })).filter((g) => g.items.length > 0)
+        : [],
+    [state],
+  )
+
+  // شمارشِ کلیدهای *قابلِ تغییر* — core همیشه روشن است و قفل‌شده‌ها دستِ کاربر نیستند،
+  // پس آوردنشان در شمارش عددی می‌سازد که کاربر نمی‌تواند تغییرش دهد.
+  const toggleable = useMemo(
+    () =>
+      groups.flatMap((g) => g.items).filter((i) => kindOf(i.key) === 'toggle').map((i) => i.key),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [groups, state],
+  )
+  const onCount = toggleable.filter((k) => enabled.has(k)).length
+
+  const changed = useMemo(() => {
+    const keys = new Set([...enabled, ...baseline])
+    return [...keys].filter((k) => enabled.has(k) !== baseline.has(k)).length
+  }, [enabled, baseline])
 
   function toggle(key: string) {
     setMessage(null)
@@ -82,6 +119,11 @@ export function ModulesPage({
       else next.add(key)
       return next
     })
+  }
+
+  function setAll(on: boolean) {
+    setMessage(null)
+    setEnabled(on ? new Set(toggleable) : new Set())
   }
 
   async function save() {
@@ -100,13 +142,7 @@ export function ModulesPage({
     }
   }
 
-  // فقط گروه‌هایی که ماژولِ کسب‌وکار دارند (همه‌ی NAV_GROUPS دارند).
-  const groups = state
-    ? NAV_GROUPS.map((g) => ({
-        heading: g.heading,
-        items: g.items.filter((i) => state.core.includes(i.key) || state.optional.includes(i.key)),
-      })).filter((g) => g.items.length > 0)
-    : []
+  const industry = state ? INDUSTRY_LABELS[state.industry] ?? state.industry : ''
 
   return (
     <div className="page panels">
@@ -118,68 +154,101 @@ export function ModulesPage({
 
       {error && <div className="error">{error}</div>}
 
-      {state && (
-        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span>
-            صنفِ کسب‌وکار: <strong>{INDUSTRY_LABELS[state.industry] ?? state.industry}</strong>
-          </span>
-          <span className="muted">— تغییرِ صنف و بازکردنِ ماژول‌های ویژه توسطِ پشتیبانی انجام می‌شود.</span>
-        </div>
-      )}
+      <SectionCard
+        icon={SlidersHorizontal}
+        title="ماژول‌های پنل"
+        description={
+          state
+            ? `صنفِ ${industry} — ${fa(onCount)} از ${fa(toggleable.length)} ماژولِ اختیاری روشن است.`
+            : 'در حال بارگذاری…'
+        }
+        actions={
+          isOwner && state ? (
+            <>
+              <button type="button" disabled={saving} onClick={() => setAll(true)}>
+                همه
+              </button>
+              <button type="button" disabled={saving} onClick={() => setAll(false)}>
+                هیچ‌کدام
+              </button>
+            </>
+          ) : undefined
+        }
+      >
+        {!isOwner && (
+          <p className="mp-note-line">
+            فقط مالکِ کسب‌وکار می‌تواند ماژول‌های پنل را تغییر دهد؛ این صفحه برای شما فقط‌خواندنی است.
+          </p>
+        )}
 
-      {!isOwner && (
-        <div className="hint">فقط مالکِ کسب‌وکار می‌تواند ماژول‌های پنل را تغییر دهد. این صفحه برای شما فقط‌خواندنی است.</div>
-      )}
+        {state && (
+          <div className="mp-groups">
+            {groups.map((g) => (
+              <div key={g.heading} className="mp-group">
+                <h3 className="mp-group-title">{g.heading}</h3>
+                <div className="mp-items">
+                  {g.items.map((item) => {
+                    const kind = kindOf(item.key)
+                    const on = kind === 'core' || enabled.has(item.key)
 
-      {groups.map((g) => (
-        <SectionCard key={g.heading} icon={SlidersHorizontal} title={g.heading}>
-          <div className="module-grid">
-            {g.items.map((item) => {
-              const kind = kindOf(item.key)
-              const on = kind === 'core' || enabled.has(item.key)
-              return (
-                <div key={item.key} className={`module-row${on ? ' on' : ''}${kind === 'locked' ? ' locked' : ''}`}>
-                  <span className="module-row-icon">{item.icon}</span>
-                  <span className="module-row-label">{item.label}</span>
-                  {kind === 'core' && (
-                    <span className="module-badge">
-                      <Check size={13} /> همیشه فعال
-                    </span>
-                  )}
-                  {kind === 'locked' && (
-                    <span className="module-badge locked" title="برای فعال‌سازی با پشتیبانی تماس بگیرید">
-                      <Lock size={13} /> نیازمندِ فعال‌سازی
-                    </span>
-                  )}
-                  {kind === 'toggle' && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      className={`module-toggle${on ? ' on' : ''}`}
-                      disabled={!isOwner || saving}
-                      onClick={() => toggle(item.key)}
-                    >
-                      <span className="module-toggle-knob" />
-                      <span className="module-toggle-text">{on ? 'روشن' : 'خاموش'}</span>
-                    </button>
-                  )}
+                    if (kind === 'toggle') {
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          className={`mp-item${on ? ' is-on' : ''}`}
+                          disabled={!isOwner || saving}
+                          onClick={() => toggle(item.key)}
+                        >
+                          <span className="mp-item-ico">{item.icon}</span>
+                          <span className="mp-item-name">{item.label}</span>
+                          <span className="mp-switch" aria-hidden="true">
+                            <span className="mp-switch-knob" />
+                          </span>
+                        </button>
+                      )
+                    }
+
+                    return (
+                      <div key={item.key} className={`mp-item is-static is-${kind}`}>
+                        <span className="mp-item-ico">{item.icon}</span>
+                        <span className="mp-item-name">{item.label}</span>
+                        {kind === 'core' ? (
+                          <span className="mp-tag" title="ستونِ فقراتِ برنامه — خاموش‌شدنی نیست">
+                            <Check size={12} /> همیشه
+                          </span>
+                        ) : (
+                          <span className="mp-tag is-lock" title="برای فعال‌سازی با پشتیبانی تماس بگیرید">
+                            <Lock size={12} /> فعال‌سازی
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
-        </SectionCard>
-      ))}
+        )}
+      </SectionCard>
 
-      {isOwner && state && (
-        <div className="module-save-bar">
-          <button type="button" className="btn-primary" disabled={!dirty || saving} onClick={() => void save()}>
+      {/* نوارِ ذخیره فقط وقتی چیزی عوض شده — یک نوارِ همیشه‌حاضرِ غیرفعال هم جا می‌گیرد
+          هم به کاربر می‌گوید «کاری هست که نکرده‌ای»، در حالی که کاری نیست. */}
+      {isOwner && changed > 0 && (
+        <div className="mp-savebar">
+          <span className="mp-savebar-count">{fa(changed)} تغییرِ ذخیره‌نشده</span>
+          <button type="button" disabled={saving} onClick={() => setEnabled(new Set(baseline))}>
+            <RotateCcw size={13} /> انصراف
+          </button>
+          <button type="button" className="btn-primary" disabled={saving} onClick={() => void save()}>
             {saving ? 'در حال ذخیره…' : 'ذخیره‌ی تغییرات'}
           </button>
-          {dirty && !saving && <span className="muted">تغییراتِ ذخیره‌نشده دارید.</span>}
-          {message && <span className="hint">{message}</span>}
         </div>
       )}
+
+      {message && <p className="mp-note-line">{message}</p>}
     </div>
   )
 }

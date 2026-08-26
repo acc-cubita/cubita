@@ -351,7 +351,9 @@ export function Dashboard({
               <PurchasesAdminPanel token={token} />
             </div>
           )}
-          {page === 'accounts' && me.is_super_admin && <AccountsAdminPage token={token} />}
+          {page === 'accounts' && me.is_super_admin && (
+            <AccountsAdminPage token={token} me={me} onMeUpdated={onMeUpdated} />
+          )}
           {page === 'mpcommission' && me.is_super_admin && <MarketplaceCommissionPage token={token} />}
           {page === 'reports' && (
             <div className="page panels">
