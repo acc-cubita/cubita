@@ -1684,6 +1684,20 @@ export interface Installment {
   remaining: string
   paid_date: string | null
   status: 'pending' | 'partial' | 'paid' | 'overdue'
+  /** روزهای تأخیر و جریمه — سرور با تاریخِ امروز حساب می‌کند، ذخیره نمی‌شود. */
+  days_late: number
+  penalty: string
+}
+
+export interface InstallmentPayment {
+  id: string
+  installment_id: string
+  installment_seq: number
+  amount: string
+  paid_on: string
+  method: string
+  treasury_transaction_id: string | null
+  notes: string
 }
 
 export interface InstallmentPlan {
@@ -1694,19 +1708,31 @@ export interface InstallmentPlan {
   sales_invoice_id: string | null
   title: string
   total_amount: string
+  cash_price: string
+  profit_amount: string
+  profit_pct: string
   down_payment: string
   financed: string
   num_installments: number
   interval_months: number
   start_date: string
   status: 'active' | 'completed' | 'cancelled'
+  penalty_rate: string
+  guarantor_name: string
+  guarantor_phone: string
+  guarantor_national_id: string
   notes: string
   installments: Installment[]
+  payments: InstallmentPayment[]
   total_paid: string
   total_remaining: string
   next_due_date: string | null
+  next_due_amount: string
   overdue_amount: string
   overdue_count: number
+  penalty_total: string
+  collected_pct: string
+  worst_days_late: number
 }
 
 export interface InstallmentPlanIn {
@@ -1714,10 +1740,16 @@ export interface InstallmentPlanIn {
   sales_invoice_id?: string | null
   title?: string
   total_amount: number
+  cash_price?: number | null
+  profit_amount?: number | null
   down_payment?: number
   num_installments: number
   interval_months?: number
   start_date: string
+  penalty_rate?: number
+  guarantor_name?: string
+  guarantor_phone?: string
+  guarantor_national_id?: string
   notes?: string
 }
 
@@ -1726,16 +1758,73 @@ export interface InstallmentPayIn {
   transaction_date: string
   method: 'cash' | 'bank'
   bank_account_id?: string | null
+  notes?: string
+}
+
+export interface EarlySettlement {
+  remaining: string
+  unearned_profit: string
+  discount: string
+  payable: string
+}
+
+export interface InstallmentAgingBucket {
+  key: string
+  label: string
+  count: number
+  amount: string
+}
+
+export interface InstallmentDebtor {
+  contact_id: string
+  contact_name: string
+  remaining: string
+  overdue: string
+  plans: number
+}
+
+export interface InstallmentSummary {
+  active_plans: number
+  total_financed: string
+  total_collected: string
+  total_remaining: string
+  collected_pct: string
+  overdue_amount: string
+  overdue_count: number
+  penalty_total: string
+  due_this_week: string
+  due_this_month: string
+  buckets: InstallmentAgingBucket[]
+  top_debtors: InstallmentDebtor[]
 }
 
 export const fetchInstallmentPlans = (token: string) =>
   authedGet<InstallmentPlan[]>(token, '/api/installment-plans')
+
+export const fetchInstallmentSummary = (token: string) =>
+  authedGet<InstallmentSummary>(token, '/api/installment-plans/summary')
 
 export const createInstallmentPlan = (token: string, data: InstallmentPlanIn) =>
   authedSend<InstallmentPlan>(token, 'POST', '/api/installment-plans', data)
 
 export const payInstallment = (token: string, planId: string, installmentId: string, data: InstallmentPayIn) =>
   authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/installments/${installmentId}/pay`, data)
+
+/** یک فیش، چند قسط — سرور از قدیمی‌ترین قسطِ باز به بعد تسهیم می‌کند. */
+export const settleInstallments = (token: string, planId: string, data: InstallmentPayIn) =>
+  authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/settle`, data)
+
+export const rescheduleInstallments = (
+  token: string,
+  planId: string,
+  lines: { installment_id: string; due_date: string; amount: number }[],
+) => authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/reschedule`, { lines })
+
+export const fetchEarlySettlement = (token: string, planId: string, discount = 0) =>
+  authedGet<EarlySettlement>(
+    token,
+    `/api/installment-plans/${planId}/early-settlement?discount=${discount}`,
+  )
 
 export const cancelInstallmentPlan = (token: string, planId: string) =>
   authedSend<InstallmentPlan>(token, 'POST', `/api/installment-plans/${planId}/cancel`, {})

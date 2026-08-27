@@ -123,7 +123,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
-      { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
       { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
     ],
@@ -190,7 +189,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'onboarding', label: 'فرآیند راه‌اندازی', icon: <Rocket size={18} /> },
       { key: 'contactnew', label: 'طرف حساب جدید', icon: <UserPlus size={18} /> },
-      { key: 'installments', label: 'تقسیط', icon: <CalendarClock size={18} /> },
+      { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
       { key: 'costcenter', label: 'مرکز هزینه', icon: <Target size={18} /> },
       { key: 'geo', label: 'محل‌های جغرافیایی', icon: <MapPin size={18} /> },
       { key: 'contactgroup', label: 'گروه جدید', icon: <Tags size={18} /> },

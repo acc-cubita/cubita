@@ -22,7 +22,7 @@ from app.models.crm import (
 )
 from app.models.currency import Currency, ExchangeRate
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine
-from app.models.installments import Installment, InstallmentPlan
+from app.models.installments import Installment, InstallmentPayment, InstallmentPlan
 from app.models.idempotency import IdempotencyKey
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.invoices import (
@@ -102,6 +102,7 @@ __all__ = [
     "BomLine",
     "ProductionOrder",
     "ProductionOrderLine",
+    "InstallmentPayment",
     "InstallmentPlan",
     "Installment",
     "PriceList",

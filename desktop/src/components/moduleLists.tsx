@@ -107,7 +107,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: Gauge },
     { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound },
     { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2 },
-    { key: 'installmentplans', label: 'تقسیط', icon: CalendarClock },
+    { key: 'installmentplans', label: 'قراردادهای اقساطی', icon: CalendarClock },
     { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks },
     { key: 'costcenterlist', label: 'مراکز هزینه', icon: Target },
   ],

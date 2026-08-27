@@ -6223,19 +6223,11 @@ button:disabled {
   font-weight: 700;
   color: var(--text-h);
 }
-.inst-progress-cell { min-width: 110px; }
-
-/* نوارِ پیشرفتِ سرِ جدولِ زمان‌بندی */
-.inst-sched-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-.inst-sched-progress .inst-progress { flex: 1 1 200px; height: 20px; }
-.inst-sched-progress-text { font-size: var(--fs-sm); color: var(--text-muted); }
 
 /* ── موبایل (≤۷۶۰px): جدول‌های قراردادها و زمان‌بندی کارتِ برچسب‌دار می‌شوند ── */
 @media (max-width: 760px) {
-  .inst-plans-table, .inst-plans-table tbody,
   .inst-sched-table, .inst-sched-table tbody { display: block; }
-  .inst-plans-table thead, .inst-sched-table thead { display: none; }
-  .inst-plans-table > tbody > tr,
+  .inst-sched-table thead { display: none; }
   .inst-sched-table > tbody > tr:not(.inst-pay-row) {
     display: block;
     border: 1px solid var(--border-strong);
@@ -6244,7 +6236,6 @@ button:disabled {
     padding: 4px 12px;
     margin-bottom: 12px;
   }
-  .inst-plans-table td,
   .inst-sched-table > tbody > tr:not(.inst-pay-row) > td {
     display: flex;
     align-items: center;
@@ -6256,9 +6247,7 @@ button:disabled {
     white-space: normal;
     text-align: start;
   }
-  .inst-plans-table tr td:last-child,
   .inst-sched-table > tbody > tr:not(.inst-pay-row) > td:last-child { border-bottom: 0; }
-  .inst-plans-table td[data-label]::before,
   .inst-sched-table td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
@@ -6266,14 +6255,6 @@ button:disabled {
     flex: 0 0 auto;
     white-space: nowrap;
   }
-  /* سرِ کارت (نام مشتری) = تمام‌عرض، بدونِ برچسب */
-  .inst-plans-table td.entity-name { justify-content: flex-start; flex-wrap: wrap; }
-  .inst-progress-cell { min-width: 0; }
-  .inst-progress-cell .inst-progress { flex: 1 1 auto; }
-  /* سلولِ اقدام تمام‌عرضِ قابلِ لمس */
-  .inst-plans-table td.inst-plan-action { padding-top: 10px; }
-  .inst-plans-table td.inst-plan-action .row-actions { width: 100%; }
-  .inst-plans-table td.inst-plan-action .row-actions button:first-child { flex: 1 1 auto; justify-content: center; }
   .inst-sched-table td.inst-inst-action { padding-top: 8px; }
   .inst-sched-table td.inst-inst-action button { width: 100%; justify-content: center; }
   /* ردیفِ پرداختِ درجا: تمام‌عرض، بدونِ کارت‌شدن */
@@ -8570,11 +8551,12 @@ button.mp-item:focus-visible {
   gap: 12px;
 }
 
+/* خطوطِ تقسیم با inset box-shadow، نه gap: وقتی تعدادِ کارت‌ها ردیف را کامل پر
+   نمی‌کند، سلولِ خالی نباید رنگِ خط بگیرد — همان الگویی که نوارِ آمارِ برنامه دارد. */
 .cc-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1px;
-  background: var(--border);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -8586,6 +8568,7 @@ button.mp-item:focus-visible {
   gap: 3px;
   padding: 10px 14px;
   background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--border), inset 0 1px 0 var(--border);
 }
 
 .cc-metric-label {
@@ -9117,4 +9100,212 @@ button.mp-item:focus-visible {
     white-space: normal;
   }
 
+}
+
+/* ── فروش اقساطی: سبد، فهرستِ قراردادها، وصول و زمان‌بندی ─────────────────── */
+
+.inst-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.inst-toolbar .inst-filters {
+  margin-bottom: 0;
+}
+
+.inst-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
+.inst-search input {
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  min-width: 11rem;
+  color: var(--text);
+}
+
+.inst-search input:focus {
+  outline: none;
+}
+
+/* فهرستِ قراردادها همان اسکلتِ فهرستِ درختیِ مراکز است — یک الگو برای هر دو صفحه. */
+.inst-list .cc-node-text {
+  gap: 5px;
+}
+
+.inst-list .inst-progress {
+  height: 6px;
+  min-width: 0;
+}
+
+.inst-list .inst-progress-label {
+  display: none;
+}
+
+/* ── نوارِ سنِّ معوق ── */
+
+.inst-aging {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inst-aging-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.inst-aging-seg {
+  display: block;
+  height: 100%;
+}
+
+/* سطل‌ها یک *ترتیب* دارند نه هویت‌های جدا، پس رنگ‌ها یک طیفِ پیوسته‌اند:
+   از خنثی (سررسیدنشده) تا هشدار (بیش از ۹۰ روز). */
+.inst-aging-seg--0 {
+  background: var(--series-1);
+}
+.inst-aging-seg--1 {
+  background: color-mix(in srgb, var(--warning) 55%, var(--surface));
+}
+.inst-aging-seg--2 {
+  background: var(--warning);
+}
+.inst-aging-seg--3 {
+  background: color-mix(in srgb, var(--danger) 65%, var(--warning));
+}
+.inst-aging-seg--4 {
+  background: var(--danger);
+}
+
+.inst-aging-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 4px 16px;
+}
+
+.inst-aging-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.76rem;
+}
+
+.inst-aging-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.inst-aging-label {
+  color: var(--text-muted);
+}
+
+.inst-aging-amount {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.inst-aging-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── پرونده‌ی قرارداد ── */
+
+.inst-plan-summary {
+  margin-bottom: 12px;
+}
+
+.inst-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.inst-settle,
+.inst-quote {
+  margin-bottom: 14px;
+}
+
+.inst-quote-input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.inst-quote-input input {
+  max-width: 12rem;
+}
+
+.inst-debtors h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+/* ── فرمِ قرارداد ── */
+
+.inst-form {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.inst-preview {
+  grid-column: 1 / -1;
+}
+
+/* ── ویرایشِ زمان‌بندی ── */
+
+.inst-reschedule-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inst-reschedule table input,
+.inst-reschedule table select {
+  min-width: 7rem;
+}
+
+@media (max-width: 760px) {
+  .inst-toolbar {
+    align-items: stretch;
+  }
+
+  .inst-search {
+    justify-content: flex-start;
+  }
+
+  .inst-search input {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .inst-aging-legend {
+    grid-template-columns: 1fr;
+  }
 }

@@ -44,7 +44,6 @@ import { BackupListPage } from '../pages/BackupListPage'
 import { UserListPage } from '../pages/UserListPage'
 import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
-import { InstallmentsPage } from '../pages/InstallmentsPage'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
 import { SalesPage } from '../pages/SalesPage'
@@ -84,6 +83,7 @@ import {
   UsageReportPage,
 } from '../pages/company/CompanyListPages'
 import { DynamicReportsPage, ReportBuilderPage } from '../pages/company/ReportBuilderPages'
+import { InstallmentSalesPage } from '../pages/company/InstallmentSalesPage'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -139,7 +139,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   usagereport: 'گزارش استفاده از نرم‌افزار',
   contactlist: 'طرف حساب‌ها',
   relatedpeople: 'افراد مرتبط',
-  installmentplans: 'تقسیط',
+  installmentplans: 'قراردادهای اقساطی',
   allinstallments: 'همه اقساط',
   costcenterlist: 'مراکز هزینه',
 }
@@ -301,7 +301,7 @@ export function Dashboard({
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
-          {page === 'installments' && <InstallmentsPage token={token} bankAccounts={bankAccounts} />}
+          {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
           {page === 'contacts' && <ContactsPage token={token} bankAccounts={bankAccounts} />}
           {page === 'crm' && <CrmPage token={token} />}
           {page === 'inventory' && (

@@ -1,7 +1,7 @@
 import uuid
-from datetime import date as date_
+from datetime import date as date_, datetime
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,11 +30,22 @@ class InstallmentPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(200), default="")
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: قیمتِ نقدیِ همان کالا/خدمت و سودِ فروشِ اقساطی. رابطه‌ی «نقدی + سود = کل» در
+    #: سرویس تضمین می‌شود. این دو **توصیفی**اند: سند از فاکتورِ نسیه می‌آید، نه از اینجا.
+    cash_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    profit_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: درصدِ جریمه‌ی دیرکرد به‌ازای هر ماه تأخیر. مبلغش محاسبه می‌شود نه ذخیره — مثلِ
+    #: وضعیتِ قسط — تا بدونِ زمان‌بندِ پس‌زمینه همیشه با تاریخِ امروز درست باشد.
+    penalty_rate: Mapped[float] = mapped_column(Numeric(6, 3), default=0, server_default="0")
     down_payment: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     num_installments: Mapped[int] = mapped_column(Integer, default=1)
     interval_months: Mapped[int] = mapped_column(Integer, default=1)
     start_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     status: Mapped[str] = mapped_column(String(20), default="active")
+    #: ضامن — در فروشِ اقساطی بخشی از خودِ قرارداد است، نه یادداشت.
+    guarantor_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    guarantor_phone: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    guarantor_national_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
     notes: Mapped[str] = mapped_column(Text, default="")
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -42,6 +53,9 @@ class InstallmentPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     contact: Mapped["Contact"] = relationship()  # noqa: F821
     installments: Mapped[list["Installment"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="Installment.seq"
+    )
+    payments: Mapped[list["InstallmentPayment"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", order_by="InstallmentPayment.paid_on"
     )
 
 
@@ -62,3 +76,33 @@ class Installment(TenantMixin, UUIDPKMixin, Base):
     paid_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
 
     plan: Mapped["InstallmentPlan"] = relationship(back_populates="installments")
+
+
+class InstallmentPayment(TenantMixin, UUIDPKMixin, Base):
+    """یک وصولِ واقعی روی یک قسط — مبلغ، تاریخ، روش، و سندِ خزانه‌اش.
+
+    `installments.paid_amount` جمعِ همین ردیف‌هاست. نگه‌داشتنِ جمع کنارِ جزئیات عمدی
+    است: گزارش‌ها و وضعیتِ قسط به یک ستون نگاه می‌کنند و لازم نیست هر بار جمع بزنند،
+    ولی «کِی و چطور وصول شد» هم دیگر گم نمی‌شود.
+    """
+
+    __tablename__ = "installment_payments"
+    __table_args__ = (Index("ix_installment_payments_tenant_plan", "tenant_id", "plan_id"),)
+
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("installment_plans.id", ondelete="CASCADE")
+    )
+    installment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("installments.id", ondelete="CASCADE")
+    )
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    paid_on: Mapped[date_] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(20), default="cash", server_default="cash")
+    treasury_transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("treasury_transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    plan: Mapped["InstallmentPlan"] = relationship(back_populates="payments")

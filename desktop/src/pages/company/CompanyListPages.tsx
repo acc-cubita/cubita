@@ -467,8 +467,8 @@ export function InstallmentPlansPage({ token }: { token: string }) {
     <div className="page panels">
       <PageHeader
         icon={CalendarClock}
-        title="تقسیط"
-        description="قراردادهای فروشِ اقساطی — هر قرارداد با تعدادِ اقساط، مبلغ و وضعیتش."
+        title="قراردادهای اقساطی"
+        description="فهرستِ قراردادهای فروشِ اقساطی. برای ساخت، وصول و تنظیمِ زمان‌بندی به «شرکت ← فروش اقساطی» بروید."
       />
       {error && <div className="error">{error}</div>}
 
@@ -482,7 +482,7 @@ export function InstallmentPlansPage({ token }: { token: string }) {
         {plans == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : plans.length === 0 ? (
-          <EmptyState icon={CalendarClock} text="هنوز قرارداد اقساطی ثبت نشده — از ماژولِ «فروش اقساطی» اولین قرارداد را بسازید." />
+          <EmptyState icon={CalendarClock} text="هنوز قرارداد اقساطی ثبت نشده — از «شرکت ← فروش اقساطی» اولین قرارداد را بسازید." />
         ) : (
           <>
             <div className="table-scroll">
