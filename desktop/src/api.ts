@@ -399,9 +399,16 @@ export const fetchGeneralLedger = (token: string, accountId: string, dateFrom?: 
 export interface JournalEntryLine {
   id: string
   account_id: string
+  cost_center_id?: string | null
+  /** بُعدِ تحلیلیِ آزاد («تفصیلی سایر») — اختیاری، NULL برای ردیف‌های معمولی. */
+  analytic_id?: string | null
   debit: string
   credit: string
   description: string
+  /** ردیفِ ارزی: مبلغ و نرخِ لحظه‌ی ثبت. بدهکار/بستانکار همیشه ریالی است. */
+  currency_code?: string | null
+  fx_amount?: string | null
+  fx_rate?: string | null
 }
 
 export interface JournalEntryRecord {
@@ -410,6 +417,9 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  /** `temporary` | `permanent` — سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود. */
+  status: string
+  finalized_at?: string | null
   voided_at: string | null
   reverses_entry_id: string | null
   lines: JournalEntryLine[]
@@ -1401,7 +1411,19 @@ export const createJournalEntryDirect = (
     entry_date: string
     description: string
     cost_center_id?: string | null
-    lines: { account_id: string; debit: number; credit: number }[]
+    analytic_id?: string | null
+    /** پیش‌فرضِ سرور `temporary` است — سند اول در کارتابل بازبینی می‌شود. */
+    status?: 'temporary' | 'permanent'
+    lines: {
+      account_id: string
+      debit: number
+      credit: number
+      description?: string
+      currency_code?: string | null
+      fx_amount?: number | null
+      fx_rate?: number | null
+      analytic_id?: string | null
+    }[]
   },
 ) => authedSend<unknown>(token, 'POST', '/api/journal-entries', data)
 
@@ -3920,3 +3942,278 @@ export const settleMpCommission = (
 // پخش‌کننده — صورتِ کمیسیونِ خودش
 export const fetchMyMpCommissions = (token: string) =>
   authedGet<MpCommissionPeriod[]>(token, '/api/marketplace/distributor/commissions')
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ماژولِ حسابداری — هجده عملیاتِ دفترداری زیرِ `/api/accounting`
+//
+// الگو یکسان است: هر عملیاتِ سندساز یک `…Preview` دارد که فقط می‌خواند و یک تابعِ
+// صدور. صفحه‌ها همیشه اول پیش‌نمایش را نشان می‌دهند، پس هیچ سندی بی‌دیدن زده نمی‌شود.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AccountingOverview {
+  temporary_count: number
+  permanent_count: number
+  voided_count: number
+  account_count: number
+  group_count: number
+  last_number: number | null
+  oldest_temporary_date: string | null
+  last_close_date: string | null
+}
+
+export const fetchAccountingOverview = (token: string) =>
+  authedGet<AccountingOverview>(token, '/api/accounting/overview')
+
+export interface EntrySummary {
+  id: string
+  number: number | null
+  entry_date: string
+  description: string
+  source_type: string
+  status: string
+  voided_at: string | null
+  total: string
+  line_count: number
+  accounts: string[]
+}
+
+export interface Cartable {
+  total_count: number
+  groups: { source_type: string; count: number; total: string }[]
+  entries: EntrySummary[]
+}
+
+export const fetchCartable = (token: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<Cartable>(token, `/api/accounting/cartable${rangeQs(dateFrom, dateTo)}`)
+
+export const finalizeEntries = (
+  token: string,
+  data: { date_from?: string; date_to?: string; entry_ids?: string[]; source_type?: string },
+) =>
+  authedSend<{ count: number; first_date: string; last_date: string }>(
+    token, 'POST', '/api/accounting/entries/finalize', data,
+  )
+
+export interface RenumberRow {
+  id: string
+  entry_date: string
+  description: string
+  old_number: number | null
+  new_number: number
+  changed: boolean
+  status: string
+  source_type: string
+  accounts: string[]
+}
+
+export const fetchRenumberPreview = (
+  token: string, dateFrom: string | undefined, dateTo: string | undefined, startNumber: number,
+) => {
+  const qs = new URLSearchParams({ start_number: String(startNumber) })
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo) qs.set('date_to', dateTo)
+  return authedGet<{
+    count: number
+    changed_count: number
+    /** اسنادِ دائمِ بازه که دست نمی‌خورند. */
+    skipped_permanent: number
+    rows: RenumberRow[]
+    truncated: boolean
+  }>(token, `/api/accounting/entries/renumber/preview?${qs}`)
+}
+
+export const renumberEntries = (
+  token: string, data: { date_from?: string; date_to?: string; start_number: number },
+) =>
+  authedSend<{ count: number; changed_count: number; first_number: number; last_number: number }>(
+    token, 'POST', '/api/accounting/entries/renumber', data,
+  )
+
+export const mergeEntries = (token: string, entryIds: string[], description: string) =>
+  authedSend<{
+    entry_id: string
+    number: number | null
+    line_count: number
+    merged_numbers: (number | null)[]
+  }>(token, 'POST', '/api/accounting/entries/merge', { entry_ids: entryIds, description })
+
+export interface FxRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  currency_code: string
+  fx_balance: string
+  rate: string
+  book_value: string
+  market_value: string
+  difference: string
+}
+
+export const fetchFxPreview = (token: string, asOf: string) =>
+  authedGet<{ as_of: string; items: FxRow[]; total_difference: string; missing_rates: string[] }>(
+    token, `/api/accounting/fx-revaluation/preview?as_of=${asOf}`,
+  )
+
+export const issueFxRevaluation = (token: string, asOf: string, description: string) =>
+  authedSend<{ entry_id: string; number: number | null; line_count: number; net_difference: string }>(
+    token, 'POST', '/api/accounting/fx-revaluation', { as_of: asOf, description },
+  )
+
+export interface PnlPreview {
+  date_from: string | null
+  date_to: string
+  rows: { account_id: string; account_code: string; account_name: string; side: string; amount: string }[]
+  total_income: string
+  total_expenses: string
+  net_profit: string
+  temporary_in_range: number
+}
+
+export const fetchPnlClosePreview = (token: string, dateTo: string) =>
+  authedGet<PnlPreview>(token, `/api/accounting/pnl-close/preview?date_to=${dateTo}`)
+
+export interface ClosingRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  debit: string
+  credit: string
+  balance: string
+}
+
+export const fetchClosingPreview = (token: string, asOf: string) =>
+  authedGet<{
+    as_of: string
+    rows: ClosingRow[]
+    total: string
+    open_pnl_total: string
+    temporary_count: number
+  }>(token, `/api/accounting/closing-entry/preview?as_of=${asOf}`)
+
+export const issueClosingEntry = (token: string, asOf: string, description: string) =>
+  authedSend<{ entry_id: string; number: number | null; line_count: number; total: string }>(
+    token, 'POST', '/api/accounting/closing-entry', { as_of: asOf, description },
+  )
+
+export const fetchOpeningPreview = (token: string, asOf: string, sourceDate: string) =>
+  authedGet<{
+    as_of: string
+    source_date: string
+    rows: ClosingRow[]
+    closing_entry_number: number | null
+    total: string
+  }>(token, `/api/accounting/opening-entry/preview?as_of=${asOf}&source_date=${sourceDate}`)
+
+export const issueOpeningEntry = (
+  token: string, asOf: string, sourceDate: string, description: string,
+) =>
+  authedSend<{ entry_id: string; number: number | null; line_count: number; total: string }>(
+    token, 'POST', '/api/accounting/opening-entry',
+    { as_of: asOf, source_date: sourceDate, description },
+  )
+
+export interface BalanceRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  parent_id: string | null
+  opening_debit: string
+  opening_credit: string
+  period_debit: string
+  period_credit: string
+  closing_debit: string
+  closing_credit: string
+  balance: string
+}
+
+export const fetchAccountBalances = (token: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<BalanceRow[]>(token, `/api/accounting/balances${rangeQs(dateFrom, dateTo)}`)
+
+export interface LegalBookRow {
+  entry_id: string
+  entry_number: number | null
+  entry_date: string
+  status: string
+  voided: boolean
+  account_code: string
+  account_name: string
+  description: string
+  debit: string
+  credit: string
+}
+
+export const fetchLegalBook = (token: string, dateFrom: string, dateTo: string) =>
+  authedGet<{
+    date_from: string
+    date_to: string
+    rows: LegalBookRow[]
+    total_debit: string
+    total_credit: string
+  }>(token, `/api/accounting/legal-book?date_from=${dateFrom}&date_to=${dateTo}`)
+
+export const reclassifyAccounts = (
+  token: string, items: { account_id: string; parent_id: string | null; type?: string }[],
+) =>
+  authedSend<{
+    count: number
+    changed: {
+      account_id: string
+      account_code: string
+      account_name: string
+      old_parent_id: string | null
+      new_parent_id: string | null
+      old_type: string
+      new_type: string
+    }[]
+  }>(token, 'POST', '/api/accounting/accounts/reclassify', { items })
+
+export interface AnalyticAccount {
+  id: string
+  code: string
+  name: string
+  group_name: string
+  description: string
+  is_active: boolean
+  line_count: number
+}
+
+export const fetchAnalytics = (token: string) =>
+  authedGet<AnalyticAccount[]>(token, '/api/accounting/analytics')
+
+export const createAnalytic = (
+  token: string, data: { code: string; name: string; group_name?: string; description?: string },
+) => authedSend<AnalyticAccount>(token, 'POST', '/api/accounting/analytics', data)
+
+export const updateAnalytic = (
+  token: string,
+  id: string,
+  patch: { code?: string; name?: string; group_name?: string; description?: string; is_active?: boolean },
+) => authedSend<AnalyticAccount>(token, 'PATCH', `/api/accounting/analytics/${id}`, patch)
+
+export const deleteAnalytic = (token: string, id: string) =>
+  authedDelete(token, `/api/accounting/analytics/${id}`)
+
+/** فیلترِ فهرستِ اسناد — پایه‌ی «سند حسابداری»، «ادغام اسناد» و «گزارش دفتر». */
+export interface JournalQuery {
+  dateFrom?: string
+  dateTo?: string
+  status?: 'temporary' | 'permanent'
+  sourceType?: string
+  q?: string
+  limit?: number
+}
+
+/** فیلتر سمتِ سرور انجام می‌شود، نه در مرورگر: کشیدنِ کلِ دفترِ یک کسب‌وکارِ چندساله
+ *  برای فیلترکردنش این‌جا، همان چیزی است که صفحه‌بندیِ keyset برای جلوگیری‌اش ساخته شد. */
+export const fetchJournalEntriesFiltered = (token: string, query: JournalQuery = {}) => {
+  const qs = new URLSearchParams()
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  if (query.dateTo) qs.set('date_to', query.dateTo)
+  if (query.status) qs.set('status', query.status)
+  if (query.sourceType) qs.set('source_type', query.sourceType)
+  if (query.q) qs.set('q', query.q)
+  qs.set('limit', String(query.limit ?? 100))
+  return authedGet<Page<JournalEntryRecord>>(token, `/api/journal-entries?${qs}`).then((p) => p.items)
+}

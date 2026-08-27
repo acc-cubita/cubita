@@ -1,10 +1,10 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.accounting import JournalLine
+from app.models.accounting import JournalEntry, JournalLine
 from app.models.period_close import FiscalPeriodClose
 from app.models.user import User
 from app.schemas.period_close import FiscalPeriodCloseIn
@@ -78,6 +78,21 @@ def close_period(db: Session, data: FiscalPeriodCloseIn, user: User) -> FiscalPe
     journal_entry = make_journal_entry(
         db, data.closing_date, f"سند بستن دوره مالی تا تاریخ {data.closing_date}", "period_close", user, journal_lines
     )
+
+    # بستنِ رسمیِ دوره یعنی هرچه در آن بازه است دیگر قابلِ بازبینی نیست — پس اسنادِ
+    # موقتِ داخلِ دوره (و خودِ سندِ بستن) همین‌جا دائم می‌شوند. اگر این‌جا نبود، دوره‌ی
+    # قفل‌شده پر از سندِ «موقت»ی می‌ماند که هیچ‌وقت نمی‌شد قطعی‌شان کرد.
+    finalize_query = db.query(JournalEntry).filter(
+        JournalEntry.status == "temporary",
+        JournalEntry.entry_date <= data.closing_date,
+    )
+    if date_from is not None:
+        finalize_query = finalize_query.filter(JournalEntry.entry_date >= date_from)
+    now = datetime.now(timezone.utc)
+    for pending in finalize_query.all():
+        pending.status = "permanent"
+        pending.finalized_at = now
+        pending.finalized_by_id = user.id
 
     close = FiscalPeriodClose(
         closing_date=data.closing_date,

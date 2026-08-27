@@ -1,4 +1,5 @@
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.analytic import AnalyticAccount
 from app.models.assets import DepreciationEntry, FixedAsset
 from app.models.audit import AuditLog
 from app.models.auth_token import AuthToken
@@ -90,6 +91,7 @@ __all__ = [
     "GeoLocation",
     "RelatedPerson",
     "Account",
+    "AnalyticAccount",
     "JournalEntry",
     "JournalLine",
     "Lead",

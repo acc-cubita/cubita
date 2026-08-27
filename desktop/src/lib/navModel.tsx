@@ -1,19 +1,27 @@
 import {
   Archive,
+  ArrowLeftRight,
   BarChart3,
   BellRing,
+  BookMarked,
   BookOpen,
+  BookOpenCheck,
   Boxes,
   Building,
   Building2,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
   CalendarRange,
+  ClipboardCheck,
   ClipboardList,
+  Coins,
+  Combine,
   CreditCard,
   DatabaseBackup,
   Factory,
   FileSpreadsheet,
+  FolderPlus,
   HandCoins,
   HardHat,
   Hash,
@@ -21,13 +29,17 @@ import {
   HelpCircle,
   KeyRound,
   Landmark,
+  Layers,
   LayoutDashboard,
+  ListTree,
+  Lock,
   MapPin,
   PackagePlus,
   Palette,
   Percent,
   PlayCircle,
   Rocket,
+  Scale,
   ScanLine,
   Settings,
   ShieldCheck,
@@ -35,6 +47,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Store,
+  Tag,
   Tags,
   Target,
   Truck,
@@ -106,6 +119,33 @@ export type PageKey =
   | 'installmentplans'
   | 'allinstallments'
   | 'costcenterlist'
+  //: ماژولِ «حسابداری» — هجده عملیاتِ دفترداری. کلیدِ ماژولِ گیت‌کننده‌شان
+  //: `accounting` است (نگاشتِ PAGE_MODULE_KEY پایین)، نه خودشان.
+  | 'acctchart'
+  | 'journalentry'
+  | 'renumber'
+  | 'mergeentries'
+  | 'finalizeentries'
+  | 'fxrevaluation'
+  | 'generaldoc'
+  | 'entrycartable'
+  | 'closingopening'
+  | 'vat'
+  | 'ebooks'
+  | 'reclassify'
+  | 'closepnl'
+  | 'analytics'
+  | 'newaccount'
+  | 'accountbrowse'
+  | 'balancereport'
+  | 'ledgerreport'
+  //: فهرست‌های حسابداری — از کارتِ «فهرست» باز می‌شوند.
+  | 'entrylist'
+  | 'accountlist'
+  | 'recurringlist'
+  | 'budgetlist'
+  | 'currencylist'
+  | 'periodcloselist'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -159,10 +199,30 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> }],
   },
   {
+    //: «حسابداری» = دفترداری، از ساختِ چارت تا بستنِ سال. ترتیب عمدی است و مسیرِ
+    //: کارِ واقعی را دنبال می‌کند: اول ساختار (چارت، سرفصل)، بعد ثبت و بازبینیِ
+    //: سند، بعد اصلاح و مرتب‌سازی، بعد عملیاتِ پایانِ دوره، و آخر گزارش‌ها.
     heading: 'حسابداری',
     icon: <BookOpen size={17} />,
     items: [
-      { key: 'accounting', label: 'حسابداری', icon: <BookOpen size={18} /> },
+      { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} /> },
+      { key: 'newaccount', label: 'سرفصل جدید', icon: <FolderPlus size={18} /> },
+      { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} /> },
+      { key: 'entrycartable', label: 'کارتابل صدور سند حسابداری', icon: <ClipboardCheck size={18} /> },
+      { key: 'finalizeentries', label: 'تبدیل اسناد موقت به دائم', icon: <Lock size={18} /> },
+      { key: 'renumber', label: 'شماره‌گذاری مجدد اسناد', icon: <Hash size={18} /> },
+      { key: 'mergeentries', label: 'ادغام اسناد', icon: <Combine size={18} /> },
+      { key: 'reclassify', label: 'اصلاح طبقه‌بندی حساب‌ها', icon: <ArrowLeftRight size={18} /> },
+      { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} /> },
+      { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <Coins size={18} /> },
+      { key: 'generaldoc', label: 'صدور سند کل', icon: <FileSpreadsheet size={18} /> },
+      { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} /> },
+      { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} /> },
+      { key: 'vat', label: 'مالیات بر ارزش افزوده', icon: <Percent size={18} /> },
+      { key: 'ebooks', label: 'دفاتر تجارت الکترونیک', icon: <BookMarked size={18} /> },
+      { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} /> },
+      { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} /> },
+      { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} /> },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
     ],
   },
@@ -219,6 +279,21 @@ export const NAV_GROUPS: NavGroup[] = [
 //: کلیدهایی که با سیستمِ شخصی‌سازیِ ماژول گیت می‌شوند. بقیه‌ی ورودی‌های منو (کاربران،
 //: تنظیمات، راهنما، ماژول‌های تازه‌ای که هنوز در رجیستریِ بک‌اند نیستند) همیشه دیده
 //: می‌شوند — وگرنه با روشنِ‌شدن فیلتر، ناوبریِ سیستمی هم ناپدید می‌شد.
+//: صفحه‌هایی که خودشان کلیدِ ماژول نیستند ولی زیرِ چترِ یک ماژول گیت می‌شوند.
+//: بدونِ این نگاشت، خاموش‌کردنِ «حسابداری» در شخصی‌سازیِ پنل هجده ورودی را روشن
+//: می‌گذاشت — و بدتر، گرنت‌نداشتنِ ماژول هم جلویشان را نمی‌گرفت.
+const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
+  (
+    [
+      'acctchart', 'newaccount', 'journalentry', 'entrycartable', 'finalizeentries',
+      'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation',
+      'generaldoc', 'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
+      'balancereport', 'ledgerreport',
+      'entrylist', 'accountlist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
+    ] as PageKey[]
+  ).map((key) => [key, 'accounting']),
+) as Partial<Record<PageKey, string>>
+
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',
   'manufacturing', 'accounting', 'banking', 'fixedassets', 'payroll',
@@ -272,8 +347,12 @@ export function buildNav({
   const filterModules = enabledModules.length > 0 && allowedModules.length > 0
   const allowed = new Set(allowedModules)
   const visible = new Set(enabledModules.filter((k) => allowed.has(k)))
-  const isVisible = (key: PageKey) =>
-    !filterModules || !GATED_MODULE_KEYS.has(key) || visible.has(key)
+  const isVisible = (key: PageKey) => {
+    if (!filterModules) return true
+    const moduleKey = PAGE_MODULE_KEY[key]
+    if (moduleKey) return visible.has(moduleKey)
+    return !GATED_MODULE_KEYS.has(key) || visible.has(key)
+  }
 
   const businessGroups = NAV_GROUPS.map((g) => ({
     ...g,

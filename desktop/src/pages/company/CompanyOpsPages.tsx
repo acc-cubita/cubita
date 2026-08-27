@@ -318,7 +318,7 @@ export function OpeningOpsPage({
             description="درختواره‌ی حساب‌ها را بسازید یا یکی از قالب‌های صنفی (بازرگانی، خدماتی، تولیدی، پیمانکاری) را درج کنید."
             state={{ label: 'هر وقت لازم شد', tone: 'warn' }}
             action="درختواره"
-            onGo={() => onNavigate('accounting', 'chart')}
+            onGo={() => onNavigate('acctchart')}
           />
           <Step
             index={3}

@@ -1,6 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -12,6 +15,7 @@ from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.accounting import JournalEntryIn, JournalEntryOut
 from app.schemas.voiding import VoidIn, VoidOut
+from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
 from app.services.voiding import void_journal_entry
@@ -21,13 +25,40 @@ router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
 
 @router.get("", response_model=Page[JournalEntryOut])
 def list_entries(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    status_filter: str | None = Query(None, alias="status"),
+    source_type: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
     _=Depends(require_permission("accounting", "view")),
 ):
+    """فهرستِ اسناد با فیلترهای اختیاری.
+
+    فیلترها سمتِ سرورند نه کلاینت: صفحه‌ی «سند حسابداری»، کارتابل، ادغام و دفترِ
+    روزنامه همگی زیرمجموعه‌ای از همین فهرست را می‌خواهند، و کشیدنِ کلِ دفتر برای
+    فیلترکردنِ آن در مرورگر با هر کسب‌وکارِ چندساله از کار می‌افتاد.
+    """
+    query = db.query(JournalEntry).options(selectinload(JournalEntry.lines))
+    if date_from is not None:
+        query = query.filter(JournalEntry.entry_date >= date_from)
+    if date_to is not None:
+        query = query.filter(JournalEntry.entry_date <= date_to)
+    if status_filter in ("temporary", "permanent"):
+        query = query.filter(JournalEntry.status == status_filter)
+    if source_type:
+        query = query.filter(JournalEntry.source_type == source_type)
+    if q:
+        term = q.strip()
+        conditions = [JournalEntry.description.ilike(f"%{term}%")]
+        if term.isdigit():
+            conditions.append(JournalEntry.number == int(term))
+        query = query.filter(or_(*conditions))
+
     # (entry_date, number) یکتاست چون number از sequence می‌آید — کلید امن برای keyset
     items, next_cursor = paginate(
-        db.query(JournalEntry).options(selectinload(JournalEntry.lines)),
+        query,
         [JournalEntry.entry_date, JournalEntry.number],
         params,
     )
@@ -42,6 +73,7 @@ def create_entry(
 ):
     assert_period_open(db, data.entry_date)
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
+    entry_analytic_id = resolve_analytic_id(db, data.analytic_id)
 
     # شماره‌ی سند از یک sequence اتمیک پایگاه‌داده گرفته می‌شود تا زیر بار همزمان چند کاربر تصادم نکند
     number = next_document_number(db, DOC_JOURNAL_ENTRY)
@@ -51,14 +83,20 @@ def create_entry(
         entry_date=data.entry_date,
         description=data.description,
         source_type="manual",
+        status=data.status,
         created_by_id=user.id,
         lines=[
             JournalLine(
                 account_id=line.account_id,
                 cost_center_id=cost_center_id,
+                # تفصیلیِ ردیف بر تفصیلیِ سند مقدم است: سطحِ ریزتر همیشه برنده.
+                analytic_id=resolve_analytic_id(db, line.analytic_id) or entry_analytic_id,
                 debit=line.debit,
                 credit=line.credit,
                 description=line.description,
+                currency_code=line.currency_code,
+                fx_amount=line.fx_amount,
+                fx_rate=line.fx_rate,
             )
             for line in data.lines
         ],

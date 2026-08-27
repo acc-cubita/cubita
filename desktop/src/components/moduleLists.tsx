@@ -6,13 +6,11 @@ import {
   fetchFixedAssets,
   fetchInstallmentPlans,
   fetchItemsLive,
-  fetchJournalEntries,
   fetchLeads,
   fetchMoadianSubmissions,
   fetchProductionOrders,
   fetchPurchaseInvoices,
   fetchPurchaseReturns,
-  fetchRecurringEntries,
   fetchSalesInvoices,
   fetchSalesQuotations,
   fetchSalesReturns,
@@ -23,15 +21,20 @@ import {
 } from '../api'
 import {
   Activity,
+  Archive,
   BarChart3,
   CalendarClock,
   CalendarRange,
+  Coins,
   Contact2,
   DatabaseBackup,
   Download,
+  FileStack,
   Gauge,
   LayoutList,
   ListChecks,
+  ListTree,
+  Repeat,
   Target,
   Upload,
   UsersRound,
@@ -95,6 +98,16 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
   ],
+  //: «حسابداری» — داده‌ی ذخیره‌شده‌ی ماژول: اسناد، حساب‌ها، و سه پنلی که پیش‌تر
+  //: تبِ درونِ صفحه بودند (تکرارشونده، بودجه، ارز) و حالا صفحه‌ی مستقل دارند.
+  'حسابداری': [
+    { key: 'entrylist', label: 'اسناد حسابداری', icon: FileStack },
+    { key: 'accountlist', label: 'فهرست حساب‌ها', icon: ListTree },
+    { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: Repeat },
+    { key: 'budgetlist', label: 'بودجه‌بندی', icon: Target },
+    { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: Coins },
+    { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
+  ],
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
   'شرکت': [
@@ -119,6 +132,12 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  entrylist: 'حسابداری',
+  accountlist: 'حسابداری',
+  recurringlist: 'حسابداری',
+  budgetlist: 'حسابداری',
+  currencylist: 'حسابداری',
+  periodcloselist: 'حسابداری',
   backuplist: 'تنظیمات',
   userlist: 'تنظیمات',
   fiscalyearlist: 'تنظیمات',
@@ -212,26 +231,6 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `انبارگردانی ${faNum(r.number ?? '')}`.trim(),
       subtitle: r.status ?? '—',
       meta: day(r.count_date ?? r.created_at),
-    })),
-  },
-  accounting: {
-    journal: def('اسنادِ ثبت‌شده', fetchJournalEntries, (r) => ({
-      id: r.id,
-      title: `سند ${faNum(r.number)}`,
-      subtitle: r.description || day(r.entry_date),
-      meta: day(r.entry_date),
-    })),
-    daybook: def('اسنادِ ثبت‌شده', fetchJournalEntries, (r) => ({
-      id: r.id,
-      title: `سند ${faNum(r.number)}`,
-      subtitle: r.description || '—',
-      meta: day(r.entry_date),
-    })),
-    recurring: def('اسنادِ تکرارشونده', fetchRecurringEntries, (r) => ({
-      id: r.id,
-      title: r.title,
-      subtitle: r.is_active ? 'فعال' : 'غیرفعال',
-      meta: day(r.next_run_date),
     })),
   },
   banking: {

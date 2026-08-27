@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator, model_validator
 
-from app.models.accounting import ACCOUNT_TYPES
+from app.models.accounting import ACCOUNT_TYPES, ENTRY_STATUSES
 
 
 class AccountOut(BaseModel):
@@ -68,6 +68,13 @@ class JournalLineIn(BaseModel):
     debit: Decimal = Decimal(0)
     credit: Decimal = Decimal(0)
     description: str = ""
+    #: بُعدِ ارزی و تفصیلیِ سایر — هر دو اختیاری. بدهکار/بستانکارِ بالا همیشه ریالی
+    #: است؛ این‌ها فقط *مبنای* آن عدد را نگه می‌دارند تا تسعیر و گزارشِ تحلیلی
+    #: بعداً بتوانند رویشان تکیه کنند.
+    currency_code: str | None = None
+    fx_amount: Decimal | None = None
+    fx_rate: Decimal | None = None
+    analytic_id: UUID | None = None
 
 
 class JournalEntryIn(BaseModel):
@@ -75,7 +82,20 @@ class JournalEntryIn(BaseModel):
     description: str = ""
     #: مرکز هزینه/پروژه‌ی سند؛ به همه‌ی ردیف‌هایش منتقل می‌شود. None = بدون مرکز.
     cost_center_id: UUID | None = None
+    #: تفصیلیِ سایرِ سند — مثلِ مرکزِ هزینه به ردیف‌ها ارث می‌رسد، مگر خودِ ردیف
+    #: تفصیلیِ صریح داشته باشد.
+    analytic_id: UUID | None = None
+    #: سندِ تازه به‌صورتِ پیش‌فرض *موقت* ثبت می‌شود تا در کارتابل بازبینی شود.
+    #: `permanent` یعنی همان لحظه قطعی — برای دفترداری که بازبینی نمی‌خواهد.
+    status: str = "temporary"
     lines: list[JournalLineIn]
+
+    @field_validator("status")
+    @classmethod
+    def _valid_status(cls, v: str) -> str:
+        if v not in ENTRY_STATUSES:
+            raise ValueError("وضعیتِ سند نامعتبر است")
+        return v
 
     @model_validator(mode="after")
     def validate_balance(self) -> "JournalEntryIn":
@@ -94,9 +114,13 @@ class JournalLineOut(BaseModel):
     id: UUID
     account_id: UUID
     cost_center_id: UUID | None = None
+    analytic_id: UUID | None = None
     debit: Decimal
     credit: Decimal
     description: str
+    currency_code: str | None = None
+    fx_amount: Decimal | None = None
+    fx_rate: Decimal | None = None
 
     model_config = {"from_attributes": True}
 
@@ -107,6 +131,9 @@ class JournalEntryOut(BaseModel):
     entry_date: date
     description: str
     source_type: str
+    #: موقت/دائم — «دائم» یعنی بازبینی‌شده و بیرون از دسترسِ ادغام و بازشماره‌گذاری.
+    status: str = "temporary"
+    finalized_at: datetime | None = None
     #: مهرِ ابطال (اگر باطل شده) و ارجاع به سندی که این سند معکوسِ آن است — برای
     #: نمایشِ وضعیت در دفتر روزنامه (سندِ باطل و سندِ برگشتیِ متناظر).
     voided_at: datetime | None = None

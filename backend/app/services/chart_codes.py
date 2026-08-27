@@ -32,6 +32,13 @@ FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌
 ACCUMULATED_DEPRECIATION = "accumulated_depreciation"  # استهلاک انباشته (کاهنده‌ی دارایی)
 DEPRECIATION_EXPENSE = "depreciation_expense"  # هزینه‌ی استهلاک دوره (هزینه)
 SALES_ROUNDING = "sales_rounding"  # تعدیلِ گِرد کردنِ مبلغِ فاکتور فروش (کاهنده/افزاینده‌ی درآمد)
+FX_GAIN = "fx_gain"  # سودِ تسعیرِ ارز (درآمد)
+FX_LOSS = "fx_loss"  # زیانِ تسعیرِ ارز (هزینه)
+#: دو حسابِ واسطِ پایانِ سال. اختتامیه همه‌ی حساب‌های دائمی را در پایانِ سال صفر
+#: می‌کند و افتتاحیه در ابتدای سالِ بعد دوباره بازشان می‌گرداند؛ جمعِ این دو در
+#: هر دو سند صفر است، پس هیچ‌کدام مانده‌ی واقعی نمی‌سازند.
+CLOSING_ACCOUNT = "closing_account"  # حسابِ اختتامیه
+OPENING_ACCOUNT = "opening_account"  # حسابِ افتتاحیه
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -57,6 +64,10 @@ DEFAULT_CODE_BY_ROLE = {
     PAYROLL_EXPENSE: "5102",
     INVENTORY_ADJUSTMENT: "5105",
     DEPRECIATION_EXPENSE: "5106",
+    FX_GAIN: "4104",
+    FX_LOSS: "5107",
+    CLOSING_ACCOUNT: "3901",
+    OPENING_ACCOUNT: "3902",
 }
 
 ROLE_BY_DEFAULT_CODE = {code: role for role, code in DEFAULT_CODE_BY_ROLE.items()}

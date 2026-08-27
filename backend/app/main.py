@@ -9,9 +9,10 @@ from app.observability import (
     unhandled_exception_handler,
 )
 from app.routers import (
+    accounting_ops,
     accounts,
-    advanced_inventory,
     admin_accounts,
+    advanced_inventory,
     alerts,
     assets,
     audit,
@@ -110,6 +111,7 @@ app.include_router(members.router)
 app.include_router(modules.router)
 app.include_router(accounts.router)
 app.include_router(journal.router)
+app.include_router(accounting_ops.router)
 app.include_router(inventory.router)
 app.include_router(invoices.router)
 app.include_router(quotations.router)

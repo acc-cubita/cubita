@@ -9309,3 +9309,410 @@ button.mp-item:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── ماژولِ حسابداری: عملیاتِ دفترداری ────────────────────────────────────────
+   نوارِ ابزار و ارقامِ سرصفحه از همان کلاس‌های `.cc-*`ِ «مرکز هزینه» می‌آیند تا دو
+   ماژول یک زبانِ بصری داشته باشند؛ آنچه اینجاست فقط چیزهایی است که مخصوصِ
+   دفترداری‌اند: چیپِ وضعیت، جدولِ ارقام، فهرستِ انتخاب، و نوارِ توازن. */
+
+.acc-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.acc-note--ok {
+  color: var(--success);
+}
+
+.acc-note--err {
+  color: var(--danger);
+}
+
+.acc-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ── چیپِ وضعیتِ سند ── */
+
+.acc-chip {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* موقت = هنوز تصمیمی گرفته نشده (خنثی)، دائم = تأییدشده، باطل = هشدار.
+   سه حالت‌اند نه سه هویت، پس رنگ‌ها از همان طیفِ وضعیتِ برنامه می‌آیند. */
+.acc-chip--draft {
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface));
+  color: var(--warning);
+}
+
+.acc-chip--final {
+  background: color-mix(in srgb, var(--success) 16%, var(--surface));
+  color: var(--success);
+}
+
+.acc-chip--void {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  color: var(--danger);
+}
+
+/* ── نوارِ فیلتر ── */
+
+.acc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.acc-filters > label,
+.acc-inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.acc-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
+.acc-search input {
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  min-width: 11rem;
+  color: var(--text);
+}
+
+.acc-search input:focus {
+  outline: none;
+}
+
+.acc-merge-desc {
+  flex: 1 1 18rem;
+  margin-bottom: 12px;
+}
+
+/* ── جدولِ ارقام ──
+   ارقامِ ریالی باید ستون‌به‌ستون بخوانند، پس هم چپ‌چین‌اند هم tabular. */
+
+.acc-table {
+  width: 100%;
+}
+
+.acc-table td.num,
+.acc-table th.num {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* تراز هشت‌ستونی و دفترِ قانونی از عرضِ ستونِ محتوا بیرون می‌زنند؛ به‌جای فشرده‌شدن
+   تا حدِ ناخوانایی، داخلِ ظرفِ خودشان اسکرول می‌خورند. */
+.acc-table--wide {
+  min-width: 780px;
+}
+
+.acc-row--void td {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.acc-row--muted td {
+  opacity: 0.6;
+}
+
+.acc-row--changed td {
+  background: var(--accent-bg);
+  font-weight: 600;
+}
+
+.acc-row--total td {
+  border-top: 2px solid var(--border-strong);
+  font-weight: 700;
+}
+
+.acc-row--clickable {
+  cursor: pointer;
+}
+
+.acc-row--clickable:hover td {
+  background: var(--accent-bg);
+}
+
+.acc-row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.acc-accounts {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* ── فهرستِ دسته‌ها (کارتابل، تبدیل به دائم، تازه‌ترین حساب‌ها) ── */
+
+.acc-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.acc-groups li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface);
+}
+
+.acc-group-name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.acc-group-count {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.acc-group-total {
+  font-variant-numeric: tabular-nums;
+  min-width: 7rem;
+  text-align: left;
+}
+
+/* ── گروه‌بندیِ روزانه (ادغام، دفترِ روزنامه، تفصیلی) ── */
+
+.acc-day + .acc-day {
+  margin-top: 16px;
+}
+
+.acc-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 0.86rem;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.acc-day-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ── فهرستِ انتخابیِ ادغام ── */
+
+.acc-picklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.acc-picklist li {
+  background: var(--surface);
+}
+
+.acc-picklist label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.acc-picklist li.is-blocked label {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.acc-pick-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.acc-pick-sub {
+  flex: 1 1 8rem;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acc-pick-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── نوارِ توازنِ سند ──
+   سندِ نامتوازن هرگز نباید صادر شود، پس این نوار باید *پیش* از دکمه دیده شود و
+   نامتوازن‌بودنش با رنگ فریاد بزند، نه با یک عددِ کوچک. */
+
+.acc-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.acc-balance b {
+  font-weight: 700;
+}
+
+.acc-balance-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+  color: var(--success);
+}
+
+.acc-balance--off {
+  border-color: var(--danger);
+}
+
+.acc-balance--off .acc-balance-state {
+  color: var(--danger);
+}
+
+/* ── مسیرِ مرورِ حساب‌ها ── */
+
+.acc-trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+}
+
+.acc-trail span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.acc-trail button {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.acc-trail button:hover {
+  color: var(--text);
+}
+
+.acc-trail button.is-active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .acc-filters {
+    align-items: stretch;
+  }
+
+  .acc-search {
+    justify-content: flex-start;
+  }
+
+  .acc-search input {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .acc-groups li,
+  .acc-picklist label {
+    align-items: flex-start;
+  }
+
+  .acc-group-total,
+  .acc-pick-meta {
+    margin-inline-start: auto;
+  }
+
+  /* در نمای کارتیِ موبایل، ردیفِ باطل خط‌خورده ناخواناست — کافی است کم‌رنگ باشد. */
+  .acc-row--void td {
+    text-decoration: none;
+  }
+
+  .acc-row-actions {
+    justify-content: flex-start;
+  }
+
+  .acc-table--wide {
+    min-width: 0;
+  }
+}
+
+/* چاپِ «سند کل»، «گزارش ترازها» و «دفاترِ تجارتِ الکترونیک»: کاربر برگه می‌خواهد،
+   نه ناوبری. هرچه در صفحه کنشی است حذف می‌شود تا جدول تمامِ کاغذ را بگیرد. */
+@media print {
+  .mod-panels,
+  .sidebar,
+  .topnav,
+  .cc-toolbar,
+  .cc-tabs,
+  .header-actions,
+  .pager {
+    display: none !important;
+  }
+
+  .acc-table--wide {
+    min-width: 0;
+  }
+}

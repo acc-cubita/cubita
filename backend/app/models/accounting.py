@@ -1,7 +1,8 @@
 import uuid
 from datetime import date as date_
+from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +11,12 @@ from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 ACCOUNT_TYPES = ("asset", "liability", "equity", "income", "expense")
+
+#: وضعیتِ سند. «موقت» یعنی ثبت شده ولی هنوز بازبینی/تأیید نشده؛ «دائم» یعنی
+#: قطعی‌شده. هر دو در دفتر و گزارش‌ها دیده می‌شوند — تفاوت در قابلِ‌بازبینی‌بودن
+#: است، نه در اثرِ مالی.
+ENTRY_STATUSES = ("temporary", "permanent")
+ENTRY_STATUS_LABELS = {"temporary": "موقت", "permanent": "دائم"}
 
 
 class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -50,6 +57,7 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_journal_entries_tenant_number"),
+        CheckConstraint(f"status IN {ENTRY_STATUSES}", name="ck_journal_entries_status"),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)  # شماره رسمی، فقط سرور اختصاص می‌دهد
@@ -61,6 +69,14 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    #: سندِ تازه موقت متولد می‌شود و با «تبدیل اسناد موقت به دائم» یا با بستنِ دوره
+    #: قطعی می‌شود. سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود — فقط ابطال با معکوس.
+    status: Mapped[str] = mapped_column(String(12), default="temporary", server_default="temporary")
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
     #: اگر این سند، معکوسِ سند دیگری باشد. رابطه یک‌طرفه و صریح است تا در دفتر
     #: روزنامه بتوان جفتِ «اصلی و معکوس» را نشان داد؛ جمعشان همیشه صفر است.
@@ -87,9 +103,21 @@ class JournalLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True, index=True
     )
 
+    #: تفصیلیِ سایر — بُعدِ تحلیلیِ آزاد. NULL = بدونِ تفصیلی.
+    analytic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analytic_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+
     debit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     credit: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     description: Mapped[str] = mapped_column(Text, default="")
+
+    #: ردیفِ ارزی: مبلغِ اصلی به ارزِ خارجی و نرخِ لحظه‌ی ثبت. بدهکار/بستانکارِ بالا
+    #: همیشه ریالی‌اند؛ این سه فقط *مبنای* آن عدد را نگه می‌دارند تا «تسعیر ارز»
+    #: بتواند بعداً بفهمد مانده‌ی ریالی معادلِ چند واحدِ ارز بوده. NULL = ردیفِ ریالی.
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    fx_amount: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+    fx_rate: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
 
     entry: Mapped["JournalEntry"] = relationship(back_populates="lines")
     account: Mapped["Account"] = relationship()

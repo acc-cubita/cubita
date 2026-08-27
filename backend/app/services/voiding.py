@@ -49,9 +49,17 @@ def _reverse_lines(entry: JournalEntry) -> list[JournalLine]:
     return [
         JournalLine(
             account_id=line.account_id,
+            # ابعادِ ردیف هم عیناً منتقل می‌شوند: اگر معکوس بدونِ مرکز/تفصیلی/ارز ثبت
+            # شود، گزارشِ همان بُعد یک‌طرفه می‌ماند — هزینه‌ی پروژه برمی‌گردد ولی
+            # مانده‌ی ارزیِ حساب نه.
+            cost_center_id=line.cost_center_id,
+            analytic_id=line.analytic_id,
             debit=line.credit,
             credit=line.debit,
             description=f"برگشت: {line.description}",
+            currency_code=line.currency_code,
+            fx_amount=line.fx_amount,
+            fx_rate=line.fx_rate,
         )
         for line in entry.lines
     ]

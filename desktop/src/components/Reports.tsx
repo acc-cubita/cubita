@@ -13,11 +13,8 @@ import {
   fetchInventoryReport,
   fetchItemsLive,
   fetchKardex,
-  fetchGeneralLedger,
   fetchIncomeStatement,
   fetchSeasonalReport,
-  fetchTrialBalance,
-  fetchVatReport,
   type AgingReport,
   type BalanceSheet,
   type BudgetReport,
@@ -25,17 +22,13 @@ import {
   type ContactRecord,
   type ContactStatement,
   type CostCenterReport,
-  type GeneralLedger,
   type InventoryReport,
   type ItemRecord,
   type KardexReport,
   type IncomeStatement,
   type SeasonalReport,
   type SeasonalSection,
-  type TrialBalanceRow,
-  type VatReport,
 } from '../api'
-import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -51,11 +44,8 @@ const QUARTER_OPTIONS = [
 ]
 
 type ReportKind =
-  | 'trial-balance'
   | 'income-statement'
   | 'balance-sheet'
-  | 'general-ledger'
-  | 'vat'
   | 'budget'
   | 'cash-flow'
   | 'cost-center'
@@ -106,15 +96,13 @@ function resolvePeriod(preset: PeriodPreset, customFrom: string, customTo: strin
   }
 }
 
-export function Reports({ token, accounts }: { token: string; accounts: AccountCache[] }) {
-  const [active, setActive] = useState<ReportKind>('trial-balance')
+export function Reports({ token }: { token: string }) {
+  const [active, setActive] = useState<ReportKind>('income-statement')
   const [preset, setPreset] = useState<PeriodPreset>('all')
   const [customFrom, setCustomFrom] = useState(todayIso())
   const [customTo, setCustomTo] = useState(todayIso())
-  const [trialBalance, setTrialBalance] = useState<TrialBalanceRow[] | null>(null)
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null)
-  const [vatReport, setVatReport] = useState<VatReport | null>(null)
   const [budgetReport, setBudgetReport] = useState<BudgetReport | null>(null)
   const [cashFlow, setCashFlow] = useState<CashFlow | null>(null)
   const [costCenterReport, setCostCenterReport] = useState<CostCenterReport | null>(null)
@@ -126,15 +114,12 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   const [items, setItems] = useState<ItemRecord[]>([])
   const [kardexItemId, setKardexItemId] = useState('')
   const [kardex, setKardex] = useState<KardexReport | null>(null)
-  const [ledgerAccountId, setLedgerAccountId] = useState('')
-  const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
   const [seasonalYear, setSeasonalYear] = useState(() => isoToJalali(todayIso()).jy)
   const [seasonalQuarter, setSeasonalQuarter] = useState(0)
   const [seasonal, setSeasonal] = useState<SeasonalReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const postableAccounts = accounts.filter((a) => !a.is_group)
   const period = useMemo(() => resolvePeriod(preset, customFrom, customTo), [preset, customFrom, customTo])
 
   // داده‌ی گزارشِ فعال را با بازه‌ی تاریخِ جاری می‌گیرد. گزارش‌های نیازمندِ انتخاب
@@ -146,17 +131,14 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     setLoading(true)
     try {
       switch (active) {
-        case 'trial-balance': setTrialBalance(await fetchTrialBalance(token, from, to)); break
         case 'income-statement': setIncomeStatement(await fetchIncomeStatement(token, from, to)); break
         case 'balance-sheet': setBalanceSheet(await fetchBalanceSheet(token, asOf)); break
-        case 'vat': setVatReport(await fetchVatReport(token, from, to)); break
         case 'budget': setBudgetReport(await fetchBudgetReport(token, from, to)); break
         case 'cash-flow': setCashFlow(await fetchCashFlow(token, from, to)); break
         case 'cost-center': setCostCenterReport(await fetchCostCenterReport(token, from, to)); break
         case 'receivable-aging': setAging(await fetchAging(token, 'receivable', asOf)); break
         case 'payable-aging': setAging(await fetchAging(token, 'payable', asOf)); break
         case 'inventory': setInventory(await fetchInventoryReport(token, asOf)); break
-        case 'general-ledger': if (ledgerAccountId) setGeneralLedger(await fetchGeneralLedger(token, ledgerAccountId, from, to)); break
         case 'kardex': if (kardexItemId) setKardex(await fetchKardex(token, kardexItemId, from, to)); break
         case 'contact-statement': if (statementContactId) setContactStatement(await fetchContactStatement(token, statementContactId, from, to)); break
         case 'seasonal': break // فصلی سال/فصلِ خودش را دارد
@@ -202,15 +184,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   // است در اکسل هم بیاید. null یعنی این گزارش هنوز داده‌ای برای خروجی ندارد.
   function buildExport(): { name: string; headers: string[]; rows: (string | number)[][] } | null {
     switch (active) {
-      case 'trial-balance':
-        return trialBalance && {
-          name: 'تراز-آزمایشی',
-          headers: ['کد', 'نام حساب', 'بدهکار', 'بستانکار', 'مانده'],
-          rows: [
-            ...trialBalance.map((r) => [r.account_code, r.account_name, r.total_debit, r.total_credit, r.balance] as (string | number)[]),
-            ['', 'جمع', trialBalance.reduce((s, r) => s + Number(r.total_debit), 0), trialBalance.reduce((s, r) => s + Number(r.total_credit), 0), ''],
-          ],
-        }
       case 'income-statement':
         return incomeStatement && {
           name: 'سود-و-زیان',
@@ -230,27 +203,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
             ...balanceSheet.liabilities.map((r) => ['بدهی', r.account_name, r.balance] as (string | number)[]),
             ...balanceSheet.equity.map((r) => ['حقوق صاحبان سرمایه', r.account_name, r.balance] as (string | number)[]),
             ['حقوق صاحبان سرمایه', 'سود/زیان دوره جاری', balanceSheet.current_period_profit],
-          ],
-        }
-      case 'general-ledger':
-        return generalLedger && {
-          name: `دفتر-کل-${generalLedger.account_code}`,
-          headers: ['شماره سند', 'تاریخ', 'شرح', 'بدهکار', 'بستانکار', 'مانده'],
-          rows: [
-            ['', '', 'مانده ابتدای دوره', '', '', generalLedger.opening_balance],
-            ...generalLedger.lines.map((l) => [l.entry_number ?? '', formatJalali(l.entry_date), l.description, l.debit, l.credit, l.balance] as (string | number)[]),
-          ],
-        }
-      case 'vat':
-        return vatReport && {
-          name: 'مالیات-ارزش-افزوده',
-          headers: ['عنوان', 'مبلغ'],
-          rows: [
-            ['جمع خالص فروش', vatReport.sales_net],
-            ['مالیات فروش (پس از کسر برگشت)', vatReport.output_vat],
-            ['جمع خالص خرید', vatReport.purchase_net],
-            ['اعتبار مالیاتی خرید (پس از کسر برگشت)', vatReport.input_vat],
-            ['خالص قابل پرداخت', vatReport.net_vat],
           ],
         }
       case 'budget':
@@ -328,12 +280,13 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
     if (data) downloadCsv(data.name, data.headers, data.rows)
   }
 
+  //: «تراز آزمایشی»، «دفتر کل» و «مالیات بر ارزش افزوده» از این‌جا برداشته شدند و
+  //: به ماژولِ حسابداری رفتند («گزارش ترازها»، «گزارش دفتر»، «مالیات بر ارزش
+  //: افزوده») — همان‌جا ستون‌های ۲/۴/۶/۸، سطحِ کل/معین/تفصیلی، دفترِ روزنامه و
+  //: انتخابِ فصل را هم دارند. ماندنشان این‌جا یعنی دو نسخه با دو رفتار.
   const tabs: { key: ReportKind; label: string }[] = [
-    { key: 'trial-balance', label: 'تراز آزمایشی' },
     { key: 'income-statement', label: 'سود و زیان' },
     { key: 'balance-sheet', label: 'ترازنامه' },
-    { key: 'general-ledger', label: 'دفتر کل' },
-    { key: 'vat', label: 'مالیات بر ارزش افزوده' },
     { key: 'budget', label: 'بودجه در برابر عملکرد' },
     { key: 'cash-flow', label: 'جریان وجوه نقد' },
     { key: 'cost-center', label: 'سود پروژه/مرکز هزینه' },
@@ -363,6 +316,10 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
   return (
     <SectionCard icon={BarChart3} title="گزارش‌های حسابداری">
       <p className="hint">این گزارش‌ها همیشه مستقیم و زنده از سرور خوانده می‌شوند (نیاز به اتصال اینترنت دارند).</p>
+      <p className="hint">
+        تراز آزمایشی، دفتر کل و مالیات بر ارزش افزوده به ماژولِ «حسابداری» منتقل شده‌اند —
+        به‌ترتیب «گزارش ترازها»، «گزارش دفتر» و «مالیات بر ارزش افزوده».
+      </p>
       <div className="report-tabs">
         {tabs.map((t) => (
           <button
@@ -407,22 +364,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
         <div className="report-export">
           <button type="button" onClick={handleExport}>
             <Download size={13} /> دانلود اکسل (CSV)
-          </button>
-        </div>
-      )}
-
-      {active === 'general-ledger' && (
-        <div className="check-actions">
-          <select value={ledgerAccountId} onChange={(e) => setLedgerAccountId(e.target.value)}>
-            <option value="">— انتخاب حساب —</option>
-            {postableAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.code} — {a.name}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={() => void loadData()}>
-            <Search size={13} /> نمایش
           </button>
         </div>
       )}
@@ -618,129 +559,6 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {active === 'general-ledger' && generalLedger && (
-        <div>
-          <h3>
-            {generalLedger.account_code} — {generalLedger.account_name}
-          </h3>
-          <div className="report-kpis">
-            <div className="report-kpi"><span>مانده ابتدای دوره</span><strong>{fa(generalLedger.opening_balance)}</strong></div>
-            <div className="report-kpi"><span>مانده پایان دوره</span><strong>{fa(generalLedger.closing_balance)}</strong></div>
-          </div>
-          <div className="entity-table-wrap">
-            <table className="entity-table rep-gl-table">
-              <thead>
-                <tr>
-                  <th>شماره سند</th>
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th>بدهکار</th>
-                  <th>بستانکار</th>
-                  <th>مانده</th>
-                </tr>
-              </thead>
-              <tbody>
-                {generalLedger.lines.map((line) => (
-                  <tr key={line.entry_id}>
-                    <td data-label="شماره سند">{line.entry_number ?? '—'}</td>
-                    <td data-label="تاریخ">{formatJalali(line.entry_date)}</td>
-                    <td className="entity-name">{line.description}</td>
-                    <td data-label="بدهکار" className="money-cell">{Number(line.debit) ? fa(line.debit) : '—'}</td>
-                    <td data-label="بستانکار" className="money-cell">{Number(line.credit) ? fa(line.credit) : '—'}</td>
-                    <td data-label="مانده" className="money-cell"><strong>{fa(line.balance)}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {active === 'trial-balance' && trialBalance && (
-        <div className="entity-table-wrap">
-          <table className="entity-table rep-tb-table">
-            <thead>
-              <tr>
-                <th>کد</th>
-                <th>نام حساب</th>
-                <th>بدهکار</th>
-                <th>بستانکار</th>
-                <th>مانده</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trialBalance.map((row) => (
-                <tr key={row.account_id}>
-                  <td data-label="کد">{row.account_code}</td>
-                  <td className="entity-name">{row.account_name}</td>
-                  <td data-label="بدهکار" className="money-cell">{fa(row.total_debit)}</td>
-                  <td data-label="بستانکار" className="money-cell">{fa(row.total_credit)}</td>
-                  <td data-label="مانده" className="money-cell"><strong>{fa(row.balance)}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-            {/* ردیفِ جمع — کلِ کارِ ترازِ آزمایشی همین است: جمعِ بدهکار باید با جمعِ بستانکار
-                برابر باشد، وگرنه دفتر نامتوازن است. ستونِ مانده «ماندهٔ طبیعیِ» هر حساب است و
-                جمعش صفر نمی‌شود، پس عمداً خالی می‌ماند تا گمراه‌کننده نباشد. */}
-            <tfoot>
-              <tr className="rep-foot">
-                <td className="entity-name">جمع</td>
-                <td data-label="کد"></td>
-                <td data-label="بدهکار" className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_debit), 0))}</td>
-                <td data-label="بستانکار" className="invoice-total">{fa(trialBalance.reduce((s, r) => s + Number(r.total_credit), 0))}</td>
-                <td data-label="مانده"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {active === 'vat' && vatReport && (
-        <div>
-          <p className="hint">خلاصه‌ی مالیات بر ارزش افزوده در دوره‌ی انتخاب‌شده — مبنای اظهارنامه و تسویه با سازمان.</p>
-          <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                <tr>
-                  <td>جمع خالص فروش</td>
-                  <td className="money-cell">{fa(vatReport.sales_net)}</td>
-                </tr>
-                <tr>
-                  <td>مالیات فروش، پس از کسرِ برگشت</td>
-                  <td className="money-cell">{fa(vatReport.output_vat)}</td>
-                </tr>
-                {Number(vatReport.sales_returns_vat) > 0 && (
-                  <tr className="muted-row">
-                    <td>— از این میان، مالیاتِ برگشت از فروش (کسرشده)</td>
-                    <td className="money-cell">{fa(vatReport.sales_returns_vat)}</td>
-                  </tr>
-                )}
-                <tr>
-                  <td>جمع خالص خرید</td>
-                  <td className="money-cell">{fa(vatReport.purchase_net)}</td>
-                </tr>
-                <tr>
-                  <td>اعتبار مالیاتی خرید، پس از کسرِ برگشت</td>
-                  <td className="money-cell">{fa(vatReport.input_vat)}</td>
-                </tr>
-                {Number(vatReport.purchase_returns_vat) > 0 && (
-                  <tr className="muted-row">
-                    <td>— از این میان، اعتبارِ برگشت از خرید (کسرشده)</td>
-                    <td className="money-cell">{fa(vatReport.purchase_returns_vat)}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="invoice-total">
-            {Number(vatReport.net_vat) >= 0
-              ? 'مالیات قابل پرداخت به سازمان'
-              : 'اعتبار مالیاتی (انتقالی به دوره‌ی بعد)'}
-            : {fa(Math.abs(Number(vatReport.net_vat)))}
-          </p>
         </div>
       )}
 

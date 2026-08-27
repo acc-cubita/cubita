@@ -52,7 +52,6 @@ import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
 import { DistributorPage } from '../pages/DistributorPage'
 import { MarketplacePage } from '../pages/MarketplacePage'
-import { AccountingPage } from '../pages/AccountingPage'
 import { BankingPage } from '../pages/BankingPage'
 import { HelpPage } from '../pages/HelpPage'
 import { TeamPage } from '../pages/TeamPage'
@@ -84,6 +83,40 @@ import {
 } from '../pages/company/CompanyListPages'
 import { DynamicReportsPage, ReportBuilderPage } from '../pages/company/ReportBuilderPages'
 import { InstallmentSalesPage } from '../pages/company/InstallmentSalesPage'
+import {
+  EntryCartablePage,
+  EntryListPage,
+  FinalizeEntriesPage,
+  JournalEntryPage,
+  MergeEntriesPage,
+  RenumberEntriesPage,
+} from '../pages/accounting/JournalPages'
+import {
+  AccountBrowsePage,
+  AccountListPage,
+  AnalyticsPage,
+  ChartOfAccountsPage,
+  NewAccountPage,
+  ReclassifyPage,
+} from '../pages/accounting/ChartPages'
+import {
+  ClosePnlPage,
+  ClosingOpeningPage,
+  FxRevaluationPage,
+  GeneralDocumentPage,
+} from '../pages/accounting/ClosingPages'
+import {
+  BalanceReportPage,
+  LedgerReportPage,
+  LegalBooksPage,
+  VatPage,
+} from '../pages/accounting/ReportPages'
+import {
+  BudgetListPage,
+  CurrencyListPage,
+  PeriodCloseListPage,
+  RecurringListPage,
+} from '../pages/accounting/AccountingListPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -113,6 +146,31 @@ const PAGE_TITLES: Record<PageKey, string> = {
   modules: 'شخصی‌سازیِ پنل',
   profile: 'پروفایل من',
   onboarding: 'راه‌اندازی',
+  // ── ماژولِ «حسابداری» ──
+  acctchart: 'درختواره حساب‌ها',
+  newaccount: 'سرفصل جدید',
+  journalentry: 'سند حسابداری',
+  entrycartable: 'کارتابل صدور سند حسابداری',
+  finalizeentries: 'تبدیل اسناد موقت به دائم',
+  renumber: 'شماره‌گذاری مجدد اسناد',
+  mergeentries: 'ادغام اسناد',
+  reclassify: 'اصلاح طبقه‌بندی حساب‌ها',
+  analytics: 'تفصیلی سایر',
+  fxrevaluation: 'صدور سند تسعیر ارز',
+  generaldoc: 'صدور سند کل',
+  closepnl: 'بستن حساب‌های سود و زیان',
+  closingopening: 'صدور سند اختتامیه و افتتاحیه',
+  vat: 'مالیات بر ارزش افزوده',
+  ebooks: 'دفاتر تجارت الکترونیک',
+  accountbrowse: 'مرور حساب‌ها',
+  balancereport: 'گزارش ترازها',
+  ledgerreport: 'گزارش دفتر',
+  entrylist: 'اسناد حسابداری',
+  accountlist: 'فهرست حساب‌ها',
+  recurringlist: 'اسناد تکرارشونده',
+  budgetlist: 'بودجه‌بندی',
+  currencylist: 'ارزها و نرخ ارز',
+  periodcloselist: 'دوره‌های بسته‌شده',
   theme: 'ظاهر و پوسته',
   fiscalyear: 'سال مالی',
   password: 'تغییر کلمه عبور',
@@ -325,14 +383,44 @@ export function Dashboard({
               {theme.content === 'guided' ? <FixedAssetWizard token={token} /> : <FixedAssetsPanel token={token} />}
             </div>
           )}
-          {page === 'accounting' && (
-            <AccountingPage
+          {/* ── ماژولِ «حسابداری» — هجده عملیات و شش فهرست ── */}
+          {page === 'acctchart' && (
+            <ChartOfAccountsPage token={token} onChanged={() => void refreshFromLocalCache()} />
+          )}
+          {page === 'newaccount' && (
+            <NewAccountPage token={token} onChanged={() => void refreshFromLocalCache()} />
+          )}
+          {page === 'journalentry' && (
+            <JournalEntryPage
               token={token}
               accounts={accounts}
               outbox={journalOutbox}
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
+          {page === 'entrycartable' && <EntryCartablePage token={token} />}
+          {page === 'finalizeentries' && <FinalizeEntriesPage token={token} />}
+          {page === 'renumber' && <RenumberEntriesPage token={token} />}
+          {page === 'mergeentries' && <MergeEntriesPage token={token} />}
+          {page === 'reclassify' && (
+            <ReclassifyPage token={token} onChanged={() => void refreshFromLocalCache()} />
+          )}
+          {page === 'analytics' && <AnalyticsPage token={token} />}
+          {page === 'fxrevaluation' && <FxRevaluationPage token={token} />}
+          {page === 'generaldoc' && <GeneralDocumentPage token={token} />}
+          {page === 'closepnl' && <ClosePnlPage token={token} />}
+          {page === 'closingopening' && <ClosingOpeningPage token={token} />}
+          {page === 'vat' && <VatPage token={token} />}
+          {page === 'ebooks' && <LegalBooksPage token={token} />}
+          {page === 'accountbrowse' && <AccountBrowsePage token={token} />}
+          {page === 'balancereport' && <BalanceReportPage token={token} />}
+          {page === 'ledgerreport' && <LedgerReportPage token={token} />}
+          {page === 'entrylist' && <EntryListPage token={token} />}
+          {page === 'accountlist' && <AccountListPage token={token} />}
+          {page === 'recurringlist' && <RecurringListPage token={token} accounts={accounts} />}
+          {page === 'budgetlist' && <BudgetListPage token={token} accounts={accounts} />}
+          {page === 'currencylist' && <CurrencyListPage token={token} />}
+          {page === 'periodcloselist' && <PeriodCloseListPage token={token} />}
           {page === 'banking' && (
             <BankingPage
               token={token}
@@ -406,7 +494,7 @@ export function Dashboard({
                 title="گزارش‌ها"
                 description="تراز آزمایشی، سود و زیان، ترازنامه و دفتر کل — همیشه زنده و مستقیم از دفاتر حسابداری."
               />
-              <Reports token={token} accounts={accounts} />
+              <Reports token={token} />
             </div>
           )}
           {page === 'contracting' && <ContractingPage />}
@@ -436,7 +524,7 @@ export function Dashboard({
           {page === 'reportbuilder' && <ReportBuilderPage token={token} />}
           {page === 'dynamicreports' && <DynamicReportsPage token={token} onNavigate={navigate} />}
           {page === 'dayactivity' && <DayActivityPage token={token} />}
-          {page === 'mgmtreports' && <ManagementReportsPage token={token} accounts={accounts} />}
+          {page === 'mgmtreports' && <ManagementReportsPage token={token} />}
           {page === 'usagereport' && <UsageReportPage token={token} />}
           {page === 'contactlist' && <ContactListPage token={token} />}
           {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}

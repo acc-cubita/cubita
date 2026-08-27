@@ -766,13 +766,7 @@ export function CostCenterListPage({
  * مدیریتی = همان مرکزِ گزارش‌هاست. یک نسخه‌ی دومِ نمودارها یعنی دو جا که باید
  * هم‌زمان درست بمانند؛ پس همان کامپوننت این‌جا میزبانی می‌شود.
  */
-export function ManagementReportsPage({
-  token,
-  accounts,
-}: {
-  token: string
-  accounts: AccountCache[]
-}) {
+export function ManagementReportsPage({ token }: { token: string }) {
   return (
     <div className="page panels">
       <PageHeader
@@ -780,7 +774,7 @@ export function ManagementReportsPage({
         title="گزارش‌ها و نمودارهای مدیریتی"
         description="سود و زیان، ترازنامه، جریان نقد، مطالبات و نمودارهای روند — نمای مدیریتیِ کسب‌وکار."
       />
-      <Reports token={token} accounts={accounts} />
+      <Reports token={token} />
     </div>
   )
 }

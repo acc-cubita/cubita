@@ -18,6 +18,6 @@ export const TASK_LAUNCHERS: TaskLauncher[] = [
   { key: 'quotation', title: 'پیش‌فاکتور', desc: 'صدورِ پیش‌فاکتور برای مشتری.', icon: FileText, page: 'sales', section: 'quotations' },
   { key: 'purchase-invoice', title: 'فاکتور خرید', desc: 'ثبتِ خرید از تأمین‌کننده.', icon: PackagePlus, page: 'purchases', section: 'invoices' },
   { key: 'treasury', title: 'دریافت و پرداخت', desc: 'ثبتِ دریافت/پرداختِ نقد و بانک.', icon: HandCoins, page: 'contacts', section: 'treasury' },
-  { key: 'journal', title: 'ثبت سند', desc: 'سندِ دستیِ حسابداری.', icon: BookOpen, page: 'accounting', section: 'journal' },
+  { key: 'journal', title: 'ثبت سند', desc: 'سندِ دستیِ حسابداری.', icon: BookOpen, page: 'journalentry' },
   { key: 'product', title: 'کالای جدید', desc: 'افزودنِ کالا یا خدمت به انبار.', icon: Package, page: 'inventory', section: 'products' },
 ]
