@@ -167,3 +167,18 @@ class _FakeTenant:
 
 def object_with_defaults() -> _FakeTenant:
     return _FakeTenant()
+
+
+def test_onboarding_is_hidden_until_granted(db, tenant_id):
+    """«فرآیند راه‌اندازی» تا تکمیل‌شدن ماژولِ محدود است: پیش‌فرض نه مجاز، نه در قالبِ صنفی."""
+    tenant = _tenant(db, tenant_id)
+    assert "onboarding" in svc.RESTRICTED_MODULES
+    assert "onboarding" not in svc.allowed_modules(tenant)
+    # هیچ قالبِ صنفی نباید دوباره روشنش کند
+    assert all("onboarding" not in tpl for tpl in svc.INDUSTRY_TEMPLATES.values())
+
+
+def test_onboarding_appears_after_super_admin_grant(db, tenant_id):
+    tenant = _tenant(db, tenant_id)
+    svc.set_grants(tenant, ["onboarding"])
+    assert "onboarding" in svc.allowed_modules(tenant)

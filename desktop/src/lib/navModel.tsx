@@ -182,12 +182,11 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
   },
   {
-    //: «شرکت» = کارهای سطحِ سازمان: راه‌اندازی، شناسنامه‌ی طرف‌حساب‌ها، و عملیاتِ
-    //: ابتدا/انتهای دوره. ترتیب عمدی است — از راه‌اندازیِ اولیه تا بستنِ سال.
+    //: «شرکت» = کارهای سطحِ سازمان: شناسنامه‌ی طرف‌حساب‌ها، فروشِ اقساطی، و عملیاتِ
+    //: ابتدا/انتهای دوره. ترتیب عمدی است — از ساختِ داده‌ی پایه تا بستنِ سال.
     heading: 'شرکت',
     icon: <Building size={17} />,
     items: [
-      { key: 'onboarding', label: 'فرآیند راه‌اندازی', icon: <Rocket size={18} /> },
       { key: 'contactnew', label: 'طرف حساب جدید', icon: <UserPlus size={18} /> },
       { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
       { key: 'costcenter', label: 'مرکز هزینه', icon: <Target size={18} /> },
@@ -203,6 +202,9 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'تنظیمات',
     icon: <Settings size={17} />,
     items: [
+      //: «فرآیند راه‌اندازی» هنوز کامل نیست: ماژولِ محدود است، پس تا وقتی سوپرادمین
+      //: برای حسابی بازش نکند در منو دیده نمی‌شود.
+      { key: 'onboarding', label: 'فرآیند راه‌اندازی', icon: <Rocket size={18} /> },
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
       { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },

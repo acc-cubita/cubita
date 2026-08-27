@@ -48,7 +48,11 @@ OPTIONAL_MODULES: tuple[str, ...] = (
 #: «اتصال فروشگاه» هم این‌جاست: راه‌اندازیِ فروشگاه (دامنه، درگاه، کلیدِ publishable)
 #: کاری است که پشتیبانی همراهِ مشتری انجام می‌دهد، نه چیزی که هر حسابِ تازه باید
 #: نیمه‌تنظیم‌شده در منو ببیند. پیش‌فرض خاموش؛ سوپرادمین برای هر اکانت بازش می‌کند.
-RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration")
+#:
+#: «فرآیند راه‌اندازی» موقتاً این‌جاست: هنوز کامل نیست و نباید در منوی حساب‌های
+#: واقعی دیده شود. با گرنتِ سوپرادمین برای حسابِ توسعه باز می‌شود و پس از تکمیل،
+#: از این فهرست برمی‌گردد به ماژول‌های عادی.
+RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration", "onboarding")
 
 #: همه‌ی کلیدهای ماژولِ کسب‌وکار (core + اختیاری) — برای اعتبارسنجی.
 ALL_BUSINESS_MODULES: tuple[str, ...] = CORE_MODULES + OPTIONAL_MODULES
@@ -60,25 +64,25 @@ INDUSTRY_TEMPLATES: dict[str, tuple[str, ...]] = {
     "general": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
         "accounting", "banking", "fixedassets", "payroll",
-        "calendar", "onboarding",
+        "calendar",
     ),
     # تولیدی: خط تولید فعال، بدونِ صندوق/باشگاه/اقساط.
     "manufacturing": (
         "sales", "purchases", "inventory", "manufacturing", "accounting",
-        "banking", "fixedassets", "payroll", "calendar", "onboarding",
+        "banking", "fixedassets", "payroll", "calendar",
     ),
     # خرده‌فروشی: صندوق و باشگاه پررنگ، بدونِ تولید/حقوق/دارایی.
     "retail": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
-        "accounting", "banking", "calendar", "onboarding",
+        "accounting", "banking", "calendar",
     ),
     # خدماتی: بدونِ انبار/صندوق/تولید.
     "services": (
-        "sales", "crm", "accounting", "banking", "payroll", "calendar", "onboarding",
+        "sales", "crm", "accounting", "banking", "payroll", "calendar",
     ),
     # پخش: تمرکز روی خرید/انبار (ماژولِ «پخشِ من» جدا با tenant.kind می‌آید).
     "distribution": (
-        "sales", "purchases", "inventory", "accounting", "banking", "calendar", "onboarding",
+        "sales", "purchases", "inventory", "accounting", "banking", "calendar",
     ),
 }
 
