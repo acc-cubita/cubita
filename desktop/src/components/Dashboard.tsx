@@ -427,7 +427,7 @@ export function Dashboard({
           {page === 'contactnew' && <ContactNewPage token={token} onNavigate={navigate} />}
           {page === 'contactgroup' && <ContactGroupPage token={token} />}
           {page === 'geo' && <GeoLocationsPage token={token} />}
-          {page === 'costcenter' && <CostCenterPage token={token} />}
+          {page === 'costcenter' && <CostCenterPage token={token} accounts={accounts} />}
           {page === 'openingops' && <OpeningOpsPage token={token} onNavigate={navigate} />}
           {page === 'yearendops' && <YearEndOpsPage token={token} onNavigate={navigate} />}
           {page === 'yearendreminder' && <YearEndReminderPage token={token} />}
@@ -442,7 +442,7 @@ export function Dashboard({
           {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}
           {page === 'installmentplans' && <InstallmentPlansPage token={token} />}
           {page === 'allinstallments' && <AllInstallmentsPage token={token} />}
-          {page === 'costcenterlist' && <CostCenterListPage token={token} />}
+          {page === 'costcenterlist' && <CostCenterListPage token={token} onNavigate={navigate} />}
           {page === 'password' && (
             <ChangePasswordPage token={token} me={me} onTokenRenewed={onTokenRenewed} />
           )}

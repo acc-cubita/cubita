@@ -15,28 +15,30 @@ import {
   fetchAuditSummary,
   fetchContactGroups,
   fetchContacts,
-  fetchCostCenters,
+  fetchCostCenterReport,
   fetchGeoLocations,
   fetchInstallmentPlans,
   type AuditEntryRecord,
   type AuditSummary,
   type ContactGroupRecord,
   type ContactRecord,
-  type CostCenterRecord,
+  costCenterKindLabel,
+  type CostCenterReportRow,
   type GeoLocationRecord,
   type InstallmentPlan,
   type MeResponse,
 } from '../../api'
+import type { PageKey } from '../../lib/navModel'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import { EmptyState } from '../../components/EmptyState'
 import { StatCard } from '../../components/StatCard'
 import { Pager, usePagination } from '../../components/Pager'
-import { CostCentersPanel } from '../../components/CostCentersPanel'
+import { CostCenterWorkspace } from './CostCenterWorkspace'
 import { Reports } from '../../components/Reports'
 import { BackupPage } from '../BackupPage'
 import { BackupListPage } from '../BackupListPage'
-import { formatJalali, todayIso } from '../../lib/jalali'
+import { formatJalali, isoToJalali, jalaliToIso, todayIso } from '../../lib/jalali'
 import type { AccountCache } from '../../electron.d'
 
 /**
@@ -130,7 +132,7 @@ export function DayActivityPage({ token }: { token: string }) {
       />
       {error && <div className="error">{error}</div>}
 
-      <div className="stat-row">
+      <div className="stat-grid">
         <StatCard label="رویدادهای این روز" value={fa(ofDay.length)} icon={<Activity size={16} />} />
         <StatCard label="کاربرانِ فعال" value={fa(byActor.length)} icon={<UsersRound size={16} />} />
         <StatCard
@@ -239,7 +241,7 @@ export function UsageReportPage({ token }: { token: string }) {
           <p className="muted">در حال بارگذاری…</p>
         ) : (
           <>
-            <div className="stat-row">
+            <div className="stat-grid">
               <StatCard label="کلِ رویدادها" value={fa(data.total)} icon={<Activity size={16} />} />
               <StatCard label="کاربرانِ فعال" value={fa(data.by_actor.length)} icon={<UsersRound size={16} />} />
               <StatCard
@@ -470,7 +472,7 @@ export function InstallmentPlansPage({ token }: { token: string }) {
       />
       {error && <div className="error">{error}</div>}
 
-      <div className="stat-row">
+      <div className="stat-grid">
         <StatCard label="کلِ قراردادها" value={fa(totals.count)} icon={<CalendarClock size={16} />} />
         <StatCard label="جاری" value={fa(totals.active)} icon={<ListChecks size={16} />} />
         <StatCard label="مبلغِ کل" value={money(totals.amount)} hint="ریال" icon={<BarChart3 size={16} />} />
@@ -572,7 +574,7 @@ export function AllInstallmentsPage({ token }: { token: string }) {
       />
       {error && <div className="error">{error}</div>}
 
-      <div className="stat-row">
+      <div className="stat-grid">
         <StatCard label="اقساطِ نمایش‌داده‌شده" value={fa(rows.length)} icon={<ListChecks size={16} />} />
         <StatCard
           label="معوق"
@@ -640,41 +642,71 @@ export function AllInstallmentsPage({ token }: { token: string }) {
 
 // ── مراکز هزینه ──────────────────────────────────────────────────────────────
 
-export function CostCenterPage({ token }: { token: string }) {
+export function CostCenterPage({
+  token,
+  accounts,
+}: {
+  token: string
+  accounts: AccountCache[]
+}) {
   return (
     <div className="page panels">
       <PageHeader
         icon={Target}
         title="مرکز هزینه"
-        description="بُعدی برای برچسب‌زدنِ اسناد و سنجشِ سود به تفکیکِ پروژه یا واحد. برچسب روی ردیفِ سند می‌نشیند، پس گزارش از تراکنشِ واقعی درمی‌آید."
+        description="بُعدی برای برچسب‌زدنِ اسناد و سنجشِ سود به تفکیکِ پروژه، شعبه یا واحد. برچسب روی ردیفِ سند می‌نشیند، پس گزارش از تراکنشِ واقعی درمی‌آید — نه از تخصیصِ دستی."
       />
-      <CostCentersPanel token={token} />
+      <CostCenterWorkspace token={token} accounts={accounts} />
     </div>
   )
 }
 
-export function CostCenterListPage({ token }: { token: string }) {
-  const [rows, setRows] = useState<CostCenterRecord[] | null>(null)
+/**
+ * فهرستِ خواندنیِ مراکز با ارقامِ همین سالِ مالی.
+ *
+ * عمداً «فقط نام و کد» نیست: فهرستی که رقم ندارد کاربر را وادار می‌کند برای هر
+ * سؤالِ ساده‌ای به میزکار برود. ساخت و ویرایش همچنان فقط یک‌جاست — «شرکت ← مرکز هزینه».
+ */
+export function CostCenterListPage({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate?: (page: PageKey) => void
+}) {
+  const [rows, setRows] = useState<CostCenterReportRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void fetchCostCenters(token)
-      .then(setRows)
+    const { jy } = isoToJalali(todayIso())
+    void fetchCostCenterReport(token, jalaliToIso(jy, 1, 1), todayIso())
+      .then((r) => setRows(r.rows.filter((x) => x.cost_center_id !== null)))
       .catch((err) => setError(errText(err)))
   }, [token])
 
-  const pg = usePagination(rows ?? [], 10)
+  const pg = usePagination(rows ?? [], 12)
 
   return (
     <div className="page panels">
       <PageHeader
         icon={Target}
         title="مراکز هزینه"
-        description="فهرستِ مراکز/پروژه‌ها. برای ساخت و ویرایش به «مرکز هزینه» در منوی شرکت بروید."
+        description="فهرستِ مراکز/پروژه‌ها با سود و زیانِ سالِ جاری. برای ساخت، ویرایش و تحلیل به «شرکت ← مرکز هزینه» بروید."
       />
       {error && <div className="error">{error}</div>}
 
-      <SectionCard icon={Target} title={rows ? `${fa(rows.length)} مرکز` : 'در حال بارگذاری…'}>
+      <SectionCard
+        icon={Target}
+        title={rows ? `${fa(rows.length)} مرکز` : 'در حال بارگذاری…'}
+        description="ارقام از ابتدای سالِ مالی تا امروز"
+        actions={
+          onNavigate ? (
+            <button type="button" onClick={() => onNavigate('costcenter')}>
+              <Target size={13} /> میزکار مراکز
+            </button>
+          ) : undefined
+        }
+      >
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : rows.length === 0 ? (
@@ -686,22 +718,35 @@ export function CostCenterListPage({ token }: { token: string }) {
                 <thead>
                   <tr>
                     <th>کد</th>
-                    <th>نام</th>
+                    <th>مرکز</th>
+                    <th>نوع</th>
+                    <th>درآمد</th>
+                    <th>هزینه</th>
+                    <th>سود (با زیرمجموعه)</th>
                     <th>وضعیت</th>
-                    <th>توضیحات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pg.pageItems.map((r) => (
-                    <tr key={r.id}>
-                      <td data-label="کد">{r.code || '—'}</td>
-                      <td className="card-title" data-label="نام">{r.name}</td>
+                    <tr key={r.cost_center_id}>
+                      <td data-label="کد">{r.cost_center_code || '—'}</td>
+                      <td className="card-title" data-label="مرکز">
+                        <span style={{ paddingInlineStart: r.depth * 14 }}>{r.cost_center_name}</span>
+                      </td>
+                      <td data-label="نوع">{costCenterKindLabel(r.kind)}</td>
+                      <td data-label="درآمد" className="money-cell">{money(r.rollup_income)}</td>
+                      <td data-label="هزینه" className="money-cell">{money(r.rollup_expense)}</td>
+                      <td
+                        data-label="سود"
+                        className={`money-cell ${Number(r.rollup_profit) >= 0 ? 'pos-in' : 'pos-out'}`}
+                      >
+                        <strong>{money(r.rollup_profit)}</strong>
+                      </td>
                       <td data-label="وضعیت">
                         <span className={`badge ${r.is_active ? 'success' : ''}`}>
                           {r.is_active ? 'فعال' : 'بسته'}
                         </span>
                       </td>
-                      <td data-label="توضیحات">{r.notes || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

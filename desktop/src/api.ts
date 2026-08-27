@@ -1988,6 +1988,8 @@ export interface BudgetLineRecord {
   period_date: string
   amount: string
   notes: string
+  cost_center_id: string | null
+  cost_center_name: string
 }
 
 export interface BudgetLineIn {
@@ -1995,6 +1997,8 @@ export interface BudgetLineIn {
   period_date: string
   amount: number
   notes: string
+  /** خالی یعنی بودجه‌ی کلِ کسب‌وکار؛ پرشده یعنی بودجه‌ی همان مرکز. */
+  cost_center_id?: string | null
 }
 
 export interface BudgetReportRow {
@@ -2018,8 +2022,11 @@ export interface BudgetReport {
   total_variance: string
 }
 
-export const fetchBudgetLines = (token: string) =>
-  authedGet<BudgetLineRecord[]>(token, '/api/budgets')
+export const fetchBudgetLines = (token: string, costCenterId?: string) =>
+  authedGet<BudgetLineRecord[]>(
+    token,
+    costCenterId ? `/api/budgets?cost_center_id=${costCenterId}` : '/api/budgets',
+  )
 
 export const createBudgetLine = (token: string, data: BudgetLineIn) =>
   authedSend<BudgetLineRecord>(token, 'POST', '/api/budgets', data)
@@ -2030,29 +2037,18 @@ export const updateBudgetLine = (token: string, id: string, data: BudgetLineIn) 
 export const deleteBudgetLine = (token: string, id: string) =>
   authedDelete(token, `/api/budgets/${id}`)
 
-export const fetchBudgetReport = (token: string, dateFrom?: string, dateTo?: string) => {
+export const fetchBudgetReport = (
+  token: string,
+  dateFrom?: string,
+  dateTo?: string,
+  costCenterId?: string,
+) => {
   const qs = new URLSearchParams()
   if (dateFrom) qs.set('date_from', dateFrom)
   if (dateTo) qs.set('date_to', dateTo)
+  if (costCenterId) qs.set('cost_center_id', costCenterId)
   const suffix = qs.toString() ? `?${qs}` : ''
   return authedGet<BudgetReport>(token, `/api/budgets/report${suffix}`)
-}
-
-// --- مراکز هزینه / پروژه ----------------------------------------------------------
-
-export interface CostCenterRecord {
-  id: string
-  code: string
-  name: string
-  is_active: boolean
-  notes: string
-}
-
-export interface CostCenterIn {
-  code: string
-  name: string
-  is_active: boolean
-  notes: string
 }
 
 /* ── ماژولِ «شرکت»: گروهِ طرف‌حساب، محلِ جغرافیایی، فردِ مرتبط ─────────────── */
@@ -2226,6 +2222,147 @@ export interface AuditSummary {
 export const fetchAuditSummary = (token: string, days: number) =>
   authedGet<AuditSummary>(token, `/api/audit/summary?days=${days}`)
 
+// --- مراکز هزینه / پروژه ----------------------------------------------------------
+
+export const COST_CENTER_KINDS = [
+  { value: 'project', label: 'پروژه' },
+  { value: 'branch', label: 'شعبه' },
+  { value: 'department', label: 'واحد سازمانی' },
+  { value: 'product', label: 'خط محصول' },
+  { value: 'contract', label: 'قرارداد' },
+  { value: 'other', label: 'سایر' },
+] as const
+
+export const costCenterKindLabel = (kind: string) =>
+  COST_CENTER_KINDS.find((k) => k.value === kind)?.label ?? kind
+
+export interface CostCenterRecord {
+  id: string
+  code: string
+  name: string
+  kind: string
+  parent_id: string | null
+  manager: string
+  start_date: string | null
+  end_date: string | null
+  is_active: boolean
+  notes: string
+  /** عمق و مسیر را سرور می‌سازد؛ کلاینت درخت را دوباره نمی‌پیماید. */
+  depth: number
+  path: string
+  child_count: number
+}
+
+export interface CostCenterIn {
+  code: string
+  name: string
+  kind: string
+  parent_id: string | null
+  manager: string
+  start_date: string | null
+  end_date: string | null
+  is_active: boolean
+  notes: string
+}
+
+export interface CostCenterAccountRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  amount: string
+  share_pct: string
+}
+
+export interface CostCenterMonthPoint {
+  label: string
+  income: string
+  expense: string
+  profit: string
+}
+
+export interface CostCenterChildRow {
+  id: string
+  code: string
+  name: string
+  kind: string
+  is_active: boolean
+  income: string
+  expense: string
+  profit: string
+}
+
+export interface CostCenterAnalysis {
+  center: CostCenterRecord
+  date_from: string | null
+  date_to: string | null
+  include_children: boolean
+  income: string
+  expense: string
+  profit: string
+  margin_pct: string | null
+  budget_income: string
+  budget_expense: string
+  budget_profit: string
+  profit_variance: string | null
+  has_budget: boolean
+  entry_count: number
+  first_entry_date: string | null
+  last_entry_date: string | null
+  elapsed_pct: string | null
+  income_accounts: CostCenterAccountRow[]
+  expense_accounts: CostCenterAccountRow[]
+  monthly: CostCenterMonthPoint[]
+  children: CostCenterChildRow[]
+}
+
+export interface CostCenterLedgerRow {
+  line_id: string
+  entry_id: string
+  entry_number: number | null
+  entry_date: string
+  description: string
+  source_type: string
+  account_code: string
+  account_name: string
+  account_type: string
+  debit: string
+  credit: string
+  cost_center_id: string
+  cost_center_name: string
+}
+
+export interface CostCenterReportRow {
+  cost_center_id: string | null
+  cost_center_code: string
+  cost_center_name: string
+  kind: string
+  parent_id: string | null
+  depth: number
+  path: string
+  is_active: boolean
+  income: string
+  expense: string
+  profit: string
+  rollup_income: string
+  rollup_expense: string
+  rollup_profit: string
+  budget_income: string
+  budget_expense: string
+  profit_variance: string | null
+  entry_count: number
+}
+
+export interface CostCenterReport {
+  date_from: string | null
+  date_to: string | null
+  rows: CostCenterReportRow[]
+  total_income: string
+  total_expense: string
+  total_profit: string
+  untagged_share_pct: string
+}
+
 export const fetchCostCenters = (token: string) =>
   authedGet<CostCenterRecord[]>(token, '/api/cost-centers')
 
@@ -2238,31 +2375,52 @@ export const updateCostCenter = (token: string, id: string, data: CostCenterIn) 
 export const deleteCostCenter = (token: string, id: string) =>
   authedDelete(token, `/api/cost-centers/${id}`)
 
-export interface CostCenterReportRow {
-  cost_center_id: string | null
-  cost_center_code: string
-  cost_center_name: string
-  income: string
-  expense: string
-  profit: string
-}
-
-export interface CostCenterReport {
-  date_from: string | null
-  date_to: string | null
-  rows: CostCenterReportRow[]
-  total_income: string
-  total_expense: string
-  total_profit: string
-}
-
-export const fetchCostCenterReport = (token: string, dateFrom?: string, dateTo?: string) => {
+function rangeQuery(dateFrom?: string, dateTo?: string, extra?: Record<string, string>) {
   const qs = new URLSearchParams()
   if (dateFrom) qs.set('date_from', dateFrom)
   if (dateTo) qs.set('date_to', dateTo)
-  const suffix = qs.toString() ? `?${qs}` : ''
-  return authedGet<CostCenterReport>(token, `/api/reports/cost-center${suffix}`)
+  for (const [k, v] of Object.entries(extra ?? {})) qs.set(k, v)
+  return qs.toString() ? `?${qs}` : ''
 }
+
+export const fetchCostCenterReport = (token: string, dateFrom?: string, dateTo?: string) =>
+  authedGet<CostCenterReport>(token, `/api/cost-centers/report${rangeQuery(dateFrom, dateTo)}`)
+
+export const fetchCostCenterAnalysis = (
+  token: string,
+  id: string,
+  dateFrom?: string,
+  dateTo?: string,
+  includeChildren = true,
+) =>
+  authedGet<CostCenterAnalysis>(
+    token,
+    `/api/cost-centers/${id}/analysis${rangeQuery(dateFrom, dateTo, {
+      include_children: String(includeChildren),
+    })}`,
+  )
+
+export const fetchCostCenterLedger = (
+  token: string,
+  id: string,
+  dateFrom?: string,
+  dateTo?: string,
+  includeChildren = true,
+  limit = 50,
+) =>
+  authedGet<CostCenterLedgerRow[]>(
+    token,
+    `/api/cost-centers/${id}/ledger${rangeQuery(dateFrom, dateTo, {
+      include_children: String(includeChildren),
+      limit: String(limit),
+    })}`,
+  )
+
+export const fetchCostCenterBudget = (token: string, id: string) =>
+  authedGet<BudgetLineRecord[]>(token, `/api/cost-centers/${id}/budget`)
+
+export const setCostCenterBudget = (token: string, id: string, data: BudgetLineIn) =>
+  authedSend<BudgetLineRecord>(token, 'POST', `/api/cost-centers/${id}/budget`, data)
 
 export interface AgingRow {
   contact_id: string

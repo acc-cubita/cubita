@@ -21,6 +21,7 @@ from app.schemas.reports import (
     TrialBalanceRowOut,
     VatReportOut,
 )
+from app.services import cost_centers as cost_centers_service
 from app.services import reports as reports_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -103,7 +104,7 @@ def cost_center_report(
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return reports_service.get_cost_center_report(db, date_from, date_to)
+    return cost_centers_service.get_report(db, date_from, date_to)
 
 
 @router.get("/aging", response_model=AgingReportOut)

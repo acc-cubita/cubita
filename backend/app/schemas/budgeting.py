@@ -10,6 +10,8 @@ class BudgetLineIn(BaseModel):
     period_date: date
     amount: Decimal
     notes: str = ""
+    #: بُعدِ اختیاریِ مرکز هزینه. خالی یعنی بودجه‌ی کلِ کسب‌وکار.
+    cost_center_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate(self) -> "BudgetLineIn":
@@ -27,6 +29,8 @@ class BudgetLineOut(BaseModel):
     period_date: date
     amount: Decimal
     notes: str
+    cost_center_id: UUID | None = None
+    cost_center_name: str = ""
 
 
 class BudgetReportRow(BaseModel):

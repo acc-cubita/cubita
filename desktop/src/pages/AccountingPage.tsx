@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Target, FolderKanban, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Inbox, ListTree, BookOpen, BookOpenCheck, CalendarCheck, Target, Repeat, Coins, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import type { AccountCache, OutboxEntry } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { JournalEntryForm } from '../components/JournalEntryForm'
@@ -10,7 +10,6 @@ import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
 import { PeriodClosePanel } from '../components/PeriodClosePanel'
 import { BudgetPanel } from '../components/BudgetPanel'
-import { CostCentersPanel } from '../components/CostCentersPanel'
 import { RecurringEntriesPanel } from '../components/RecurringEntriesPanel'
 import { CurrenciesPanel } from '../components/CurrenciesPanel'
 import { AccountTreePanel } from '../components/AccountTreePanel'
@@ -93,12 +92,6 @@ export function AccountingPage({
             label: 'بودجه‌بندی',
             icon: Target,
             content: <BudgetPanel token={token} accounts={accounts} />,
-          },
-          {
-            key: 'cost-centers',
-            label: 'مراکز هزینه',
-            icon: FolderKanban,
-            content: <CostCentersPanel token={token} />,
           },
           {
             key: 'recurring',

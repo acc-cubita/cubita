@@ -8553,3 +8553,568 @@ button.mp-item:focus-visible {
   .rb-filter { grid-template-columns: 1fr 1fr; }
   .rb-cols { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── میزکارِ مرکز هزینه ────────────────────────────────────────────────────── */
+
+/* سرِ صفحه یک پنلِ سطح‌بالای .page.panels است، پس قاب و padding را از همان می‌گیرد. */
+.cc-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.cc-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.cc-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+
+.cc-metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.cc-metric-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-metric-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* ── فهرستِ درختیِ مراکز ── */
+
+.cc-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-node {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cc-node:last-child {
+  border-bottom: none;
+}
+
+.cc-node.is-muted {
+  opacity: 0.55;
+}
+
+.cc-node-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.cc-node-main:hover {
+  background: var(--surface-hover);
+}
+
+.cc-node.is-selected .cc-node-main {
+  background: var(--accent-bg);
+}
+
+.cc-node-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cc-node-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* نامِ مرکز باید فضای باقی‌مانده را بگیرد و *فقط* خودش کوتاه شود؛ بدونِ این، رقم و
+   چیپِ نوع فضا را می‌برند و نام تا یک حرف آب می‌رود. */
+.cc-node-title .cc-tree-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cc-node-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.cc-node-figures {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: start;
+}
+
+.cc-node-profit {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-node-var {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* کنش‌ها فقط روی هاور/فوکوس — تا فهرست شلوغ نشود ولی با صفحه‌کلید هم در دسترس بماند. */
+.cc-node-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.cc-node:hover .cc-node-actions,
+.cc-node:focus-within .cc-node-actions {
+  opacity: 1;
+}
+
+.cc-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.cc-presets button {
+  padding: 5px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.cc-presets button:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.cc-presets button.is-active {
+  background: var(--accent-soft, var(--accent-bg));
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cc-custom-range {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* همان دوستونیِ استانداردِ برنامه (.workspace-split)، فقط با نسبتِ متفاوت: درختِ
+   مراکز سمتِ راست، پرونده سمتِ چپ — چون پرونده نمودار و جدول دارد و جا می‌خواهد. */
+.cc-split.workspace-split {
+  grid-template-columns: minmax(320px, 5fr) minmax(0, 7fr);
+}
+
+/* ── درخت ── */
+
+
+.cc-kind-chip {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cc-tree-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-tree-code {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── فرمِ کشویی زیرِ درخت ── */
+
+.cc-form-slot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.cc-form-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.cc-form-close {
+  margin-inline-start: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cc-form {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.cc-form-wide {
+  grid-column: 1 / -1;
+}
+
+/* ── تب‌های پرونده ── */
+
+.cc-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cc-tabs button {
+  padding: 7px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.cc-tabs button.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.cc-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.cc-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cc-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.cc-panel h4 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cc-shares {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+/* ── سهمِ حساب‌ها ── */
+
+.cc-share {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cc-share-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.cc-share-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-share-amount {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.cc-share-track {
+  margin-top: 4px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.cc-share-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.cc-share-fill--in {
+  background: var(--series-1);
+}
+
+.cc-share-fill--out {
+  background: var(--series-2);
+}
+
+.cc-share-pct {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── سنجه‌ی بودجه ── */
+
+.cc-gauge-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 3rem;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.cc-gauge-label {
+  color: var(--text-muted);
+}
+
+.cc-gauge-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.cc-gauge-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--series-2);
+}
+
+.cc-gauge-fill--time {
+  background: var(--chart-axis);
+}
+
+.cc-gauge-fill--over {
+  background: var(--danger);
+}
+
+.cc-gauge-pct {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-gauge-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+
+/* ── نمودار ── */
+
+.cc-chart {
+  position: relative;
+}
+
+.cc-chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── بودجه و دفتر ── */
+
+.cc-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cc-budget-form {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.cc-budget-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+/* ستونِ مادر باریک است؛ جدولِ دفتر به‌جای فشرده‌شدن و بریدنِ ارقام، افقی اسکرول شود. */
+.cc-ledger-table {
+  min-width: 540px;
+}
+
+.cc-ledger-desc,
+.cc-ledger-account {
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* کارت‌های KPIِ درونِ پرونده، برخلافِ نوارِ بالای صفحه، فرزندِ مستقیمِ پنل نیستند؛
+   خطِّ جداکننده‌شان از inset shadow می‌آید پس فقط فاصله را برمی‌گردانیم. */
+.cc-inner-stats {
+  gap: 1px;
+}
+
+@media (max-width: 1100px) {
+  .cc-split.workspace-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .cc-toolbar {
+    align-items: stretch;
+  }
+
+  /* روی موبایل نام و رقم در یک خط جا نمی‌شوند؛ ردیف عمودی می‌شود و ارقام زیرِ نام
+     کنارِ هم می‌نشینند. کنش‌ها هم همیشه دیده می‌شوند — هاوری در کار نیست. */
+  .cc-node-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .cc-node-figures {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .cc-node-actions {
+    opacity: 1;
+  }
+
+  .cc-presets {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .cc-presets button {
+    white-space: nowrap;
+  }
+
+  .cc-custom-range {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cc-gauge-row {
+    grid-template-columns: 1fr 2.6rem;
+    grid-template-areas: 'label label' 'track pct';
+  }
+
+  .cc-gauge-label {
+    grid-area: label;
+  }
+
+  .cc-gauge-track {
+    grid-area: track;
+  }
+
+  .cc-gauge-pct {
+    grid-area: pct;
+  }
+
+  .cc-ledger-table {
+    min-width: 0;
+  }
+
+  .cc-ledger-desc,
+  .cc-ledger-account {
+    max-width: none;
+    white-space: normal;
+  }
+
+}

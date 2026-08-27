@@ -15,20 +15,22 @@ router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
 @router.get("", response_model=list[BudgetLineOut])
 def list_budget_lines(
+    cost_center_id: UUID | None = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return budgeting_service.list_budget_lines(db)
+    return budgeting_service.list_budget_lines(db, cost_center_id=cost_center_id)
 
 
 @router.get("/report", response_model=BudgetReportOut)
 def budget_report(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
+    cost_center_id: UUID | None = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return budgeting_service.get_budget_report(db, date_from, date_to)
+    return budgeting_service.get_budget_report(db, date_from, date_to, cost_center_id)
 
 
 @router.post("", response_model=BudgetLineOut, status_code=201)

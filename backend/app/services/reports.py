@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount, Check
-from app.models.cost_center import CostCenter
 from app.models.inventory import Contact, Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
 from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
@@ -352,7 +351,11 @@ def get_general_ledger(
 
 
 def _leaf_account_totals(
-    db: Session, date_from: date | None, date_to: date | None, types: tuple[str, ...] | None = None
+    db: Session,
+    date_from: date | None,
+    date_to: date | None,
+    types: tuple[str, ...] | None = None,
+    cost_center_ids: set[UUID] | None = None,
 ) -> list[tuple[Account, Decimal, Decimal]]:
     query = (
         db.query(Account, func.coalesce(func.sum(JournalLine.debit), 0), func.coalesce(func.sum(JournalLine.credit), 0))
@@ -362,6 +365,8 @@ def _leaf_account_totals(
     )
     if types is not None:
         query = query.filter(Account.type.in_(types))
+    if cost_center_ids is not None:
+        query = query.filter(JournalLine.cost_center_id.in_(cost_center_ids))
     if date_from is not None:
         query = query.filter(JournalEntry.entry_date >= date_from)
     if date_to is not None:
@@ -565,65 +570,6 @@ def get_cash_flow(db: Session, date_from: date | None, date_to: date | None) -> 
         "net_financing": net_financing,
         "net_change": net_change,
         "closing_cash": opening_cash + net_change,
-    }
-
-
-def get_cost_center_report(db: Session, date_from: date | None, date_to: date | None) -> dict:
-    """سود و زیان به تفکیک مرکز هزینه/پروژه، از ردیف‌های برچسب‌خورده‌ی سند.
-
-    فقط حساب‌های درآمد و هزینه شمرده می‌شوند (سود = درآمد − هزینه). سطرِ `cost_center_id`
-    برابر NULL یعنی سندهای برچسب‌نخورده — عمداً نمایش داده می‌شود تا معلوم باشد چه
-    بخشی از فعالیت هنوز به هیچ پروژه‌ای نسبت داده نشده.
-    """
-    query = (
-        db.query(
-            JournalLine.cost_center_id,
-            Account.type,
-            func.coalesce(func.sum(JournalLine.debit), 0),
-            func.coalesce(func.sum(JournalLine.credit), 0),
-        )
-        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
-        .join(Account, JournalLine.account_id == Account.id)
-        .filter(Account.type.in_(("income", "expense")))
-    )
-    if date_from is not None:
-        query = query.filter(JournalEntry.entry_date >= date_from)
-    if date_to is not None:
-        query = query.filter(JournalEntry.entry_date <= date_to)
-    query = query.group_by(JournalLine.cost_center_id, Account.type)
-
-    centers: dict[UUID | None, dict[str, Decimal]] = {}
-    for cost_center_id, account_type, debit, credit in query.all():
-        signed = _signed_balance(account_type, Decimal(debit), Decimal(credit))
-        bucket = centers.setdefault(cost_center_id, {"income": Decimal(0), "expense": Decimal(0)})
-        bucket["income" if account_type == "income" else "expense"] += signed
-
-    names = {c.id: c for c in db.query(CostCenter).all()}
-    rows = []
-    for cost_center_id, vals in centers.items():
-        center = names.get(cost_center_id)
-        rows.append(
-            {
-                "cost_center_id": cost_center_id,
-                "cost_center_code": center.code if center else "",
-                "cost_center_name": center.name if center else "بدون مرکز هزینه",
-                "income": vals["income"],
-                "expense": vals["expense"],
-                "profit": vals["income"] - vals["expense"],
-            }
-        )
-
-    # مراکزِ دارای برچسب اول، بعد سطرِ «بدون مرکز» (None) در انتها
-    rows.sort(key=lambda r: (r["cost_center_id"] is None, r["cost_center_code"], r["cost_center_name"]))
-    total_income = sum((r["income"] for r in rows), Decimal(0))
-    total_expense = sum((r["expense"] for r in rows), Decimal(0))
-    return {
-        "date_from": date_from,
-        "date_to": date_to,
-        "rows": rows,
-        "total_income": total_income,
-        "total_expense": total_expense,
-        "total_profit": total_income - total_expense,
     }
 
 

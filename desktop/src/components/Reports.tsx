@@ -8,6 +8,7 @@ import {
   fetchCashFlow,
   fetchContacts,
   fetchContactStatement,
+  costCenterKindLabel,
   fetchCostCenterReport,
   fetchInventoryReport,
   fetchItemsLive,
@@ -274,8 +275,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       case 'cost-center':
         return costCenterReport && {
           name: 'سود-مرکز-هزینه',
-          headers: ['کد', 'مرکز/پروژه', 'درآمد', 'هزینه', 'سود/زیان'],
-          rows: costCenterReport.rows.map((r) => [r.cost_center_code, r.cost_center_name, r.income, r.expense, r.profit]),
+          headers: ['کد', 'مرکز/پروژه', 'نوع', 'درآمد', 'هزینه', 'سود مستقیم', 'سود با زیرمجموعه', 'انحراف از بودجه'],
+          rows: costCenterReport.rows.map((r) => [r.cost_center_code, r.path || r.cost_center_name, costCenterKindLabel(r.kind), r.income, r.expense, r.profit, r.rollup_profit, r.profit_variance ?? '']),
         }
       case 'receivable-aging':
       case 'payable-aging':
@@ -843,11 +844,13 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
       {active === 'cost-center' && costCenterReport && (
         <div>
           <p className="hint">
-            سود و زیانِ هر مرکز هزینه/پروژه از سندهای برچسب‌خورده. سطرِ «بدون مرکز هزینه» یعنی فعالیتی که به هیچ پروژه‌ای
-            نسبت داده نشده.
+            سود و زیانِ هر مرکز هزینه/پروژه از سندهای برچسب‌خورده. «مستقیم» فقط سندهای خودِ مرکز است و «تجمیعی»
+            زیرمجموعه‌ها را هم می‌گیرد. سطرِ «بدون مرکز هزینه» یعنی فعالیتی که به هیچ مرکزی نسبت داده نشده — الان
+            {' '}
+            <strong>{toFaDigits(costCenterReport.untagged_share_pct)}٪</strong> از کلِ گردش.
           </p>
           {costCenterReport.rows.length === 0 ? (
-            <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «حسابداری ← مراکز هزینه» شروع کنید.</p>
+            <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «شرکت ← مرکز هزینه» شروع کنید.</p>
           ) : (
             <div className="entity-table-wrap">
               <table className="entity-table rep-cc-table">
@@ -857,17 +860,29 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                     <th>مرکز / پروژه</th>
                     <th>درآمد</th>
                     <th>هزینه</th>
-                    <th>سود/زیان</th>
+                    <th>سود مستقیم</th>
+                    <th>با زیرمجموعه</th>
+                    <th>انحراف از بودجه</th>
                   </tr>
                 </thead>
                 <tbody>
                   {costCenterReport.rows.map((r) => (
                     <tr key={r.cost_center_id ?? 'none'}>
                       <td data-label="کد">{r.cost_center_code || '—'}</td>
-                      <td className="entity-name">{r.cost_center_name}</td>
+                      <td className="entity-name">
+                        <span style={{ paddingInlineStart: r.depth * 14 }}>{r.cost_center_name}</span>
+                      </td>
                       <td data-label="درآمد" className="money-cell">{fa(r.income)}</td>
                       <td data-label="هزینه" className="money-cell">{fa(r.expense)}</td>
-                      <td data-label="سود/زیان" className={`money-cell ${Number(r.profit) >= 0 ? 'pos-in' : 'pos-out'}`}><strong>{fa(r.profit)}</strong></td>
+                      <td data-label="سود مستقیم" className={`money-cell ${Number(r.profit) >= 0 ? 'pos-in' : 'pos-out'}`}>{fa(r.profit)}</td>
+                      <td data-label="با زیرمجموعه" className={`money-cell ${Number(r.rollup_profit) >= 0 ? 'pos-in' : 'pos-out'}`}><strong>{fa(r.rollup_profit)}</strong></td>
+                      <td data-label="انحراف از بودجه" className="money-cell">
+                        {r.profit_variance == null ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <span className={Number(r.profit_variance) >= 0 ? 'pos-in' : 'pos-out'}>{fa(r.profit_variance)}</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   <tr className="rep-foot">
@@ -875,7 +890,8 @@ export function Reports({ token, accounts }: { token: string; accounts: AccountC
                     <td data-label="کد"></td>
                     <td data-label="درآمد" className="invoice-total">{fa(costCenterReport.total_income)}</td>
                     <td data-label="هزینه" className="invoice-total">{fa(costCenterReport.total_expense)}</td>
-                    <td data-label="سود/زیان" className="invoice-total">{fa(costCenterReport.total_profit)}</td>
+                    <td data-label="سود مستقیم" className="invoice-total">{fa(costCenterReport.total_profit)}</td>
+                    <td colSpan={2} />
                   </tr>
                 </tbody>
               </table>
