@@ -6,6 +6,7 @@ from app.models.banking import BankAccount, BankStatementLine, BankTransaction, 
 from app.models.billing import Plan, Purchase
 from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
+from app.models.company import ContactGroup, GeoLocation, RelatedPerson, SavedReport
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.device_token import DeviceToken
@@ -84,6 +85,10 @@ from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.user import Role, User
 
 __all__ = [
+    "ContactGroup",
+    "SavedReport",
+    "GeoLocation",
+    "RelatedPerson",
     "Account",
     "JournalEntry",
     "JournalLine",

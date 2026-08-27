@@ -21,7 +21,23 @@ import {
   fetchStockTransfers,
   fetchTreasuryTransactions,
 } from '../api'
-import { CalendarRange, DatabaseBackup, UsersRound, type LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  BarChart3,
+  CalendarClock,
+  CalendarRange,
+  Contact2,
+  DatabaseBackup,
+  Download,
+  Gauge,
+  LayoutList,
+  ListChecks,
+  Target,
+  Upload,
+  UsersRound,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
 
@@ -79,6 +95,22 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
   ],
+  //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
+  //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
+  'شرکت': [
+    { key: 'dataexport', label: 'ارسال اطلاعات', icon: Upload },
+    { key: 'dataimport', label: 'دریافت اطلاعات', icon: Download },
+    { key: 'reportbuilder', label: 'گزارش‌ساز', icon: Wrench },
+    { key: 'dynamicreports', label: 'گزارش‌های پویا', icon: LayoutList },
+    { key: 'dayactivity', label: 'فعالیت‌های روز', icon: Activity },
+    { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: BarChart3 },
+    { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: Gauge },
+    { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound },
+    { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2 },
+    { key: 'installmentplans', label: 'تقسیط', icon: CalendarClock },
+    { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks },
+    { key: 'costcenterlist', label: 'مراکز هزینه', icon: Target },
+  ],
 }
 
 /**
@@ -90,6 +122,18 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   backuplist: 'تنظیمات',
   userlist: 'تنظیمات',
   fiscalyearlist: 'تنظیمات',
+  dataexport: 'شرکت',
+  dataimport: 'شرکت',
+  reportbuilder: 'شرکت',
+  dynamicreports: 'شرکت',
+  dayactivity: 'شرکت',
+  mgmtreports: 'شرکت',
+  usagereport: 'شرکت',
+  contactlist: 'شرکت',
+  relatedpeople: 'شرکت',
+  installmentplans: 'شرکت',
+  allinstallments: 'شرکت',
+  costcenterlist: 'شرکت',
 }
 
 export interface ListDef {

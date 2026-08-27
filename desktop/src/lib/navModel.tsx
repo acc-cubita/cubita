@@ -1,5 +1,7 @@
 import {
+  Archive,
   BarChart3,
+  BellRing,
   BookOpen,
   Boxes,
   Building,
@@ -20,9 +22,11 @@ import {
   KeyRound,
   Landmark,
   LayoutDashboard,
+  MapPin,
   PackagePlus,
   Palette,
   Percent,
+  PlayCircle,
   Rocket,
   ScanLine,
   Settings,
@@ -31,9 +35,12 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Store,
+  Tags,
+  Target,
   Truck,
   UserCircle,
   UserCog,
+  UserPlus,
   Users,
   UsersRound,
   Warehouse,
@@ -75,10 +82,30 @@ export type PageKey =
   | 'password'
   | 'backup'
   | 'numbering'
+  //: ماژولِ «شرکت» — عملیاتِ سطحِ شرکت.
+  | 'contactnew'
+  | 'contactgroup'
+  | 'geo'
+  | 'costcenter'
+  | 'openingops'
+  | 'yearendops'
+  | 'yearendreminder'
   //: صفحه‌های فهرست — از کارتِ «فهرست» باز می‌شوند، نه از منو.
   | 'backuplist'
   | 'userlist'
   | 'fiscalyearlist'
+  | 'dataexport'
+  | 'dataimport'
+  | 'reportbuilder'
+  | 'dynamicreports'
+  | 'dayactivity'
+  | 'mgmtreports'
+  | 'usagereport'
+  | 'contactlist'
+  | 'relatedpeople'
+  | 'installmentplans'
+  | 'allinstallments'
+  | 'costcenterlist'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -156,11 +183,21 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
   },
   {
+    //: «شرکت» = کارهای سطحِ سازمان: راه‌اندازی، شناسنامه‌ی طرف‌حساب‌ها، و عملیاتِ
+    //: ابتدا/انتهای دوره. ترتیب عمدی است — از راه‌اندازیِ اولیه تا بستنِ سال.
     heading: 'شرکت',
     icon: <Building size={17} />,
     items: [
+      { key: 'onboarding', label: 'فرآیند راه‌اندازی', icon: <Rocket size={18} /> },
+      { key: 'contactnew', label: 'طرف حساب جدید', icon: <UserPlus size={18} /> },
+      { key: 'installments', label: 'تقسیط', icon: <CalendarClock size={18} /> },
+      { key: 'costcenter', label: 'مرکز هزینه', icon: <Target size={18} /> },
+      { key: 'geo', label: 'محل‌های جغرافیایی', icon: <MapPin size={18} /> },
+      { key: 'contactgroup', label: 'گروه جدید', icon: <Tags size={18} /> },
+      { key: 'openingops', label: 'عملیات اول دوره', icon: <PlayCircle size={18} /> },
+      { key: 'yearendops', label: 'عملیات پایان سال', icon: <Archive size={18} /> },
+      { key: 'yearendreminder', label: 'یادآوری عملیات پایان سال', icon: <BellRing size={18} /> },
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
-      { key: 'onboarding', label: 'راه‌اندازی', icon: <Rocket size={18} /> },
     ],
   },
   {

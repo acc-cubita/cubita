@@ -1582,6 +1582,8 @@ export interface ContactRecord {
   national_id: string | null
   economic_code: string | null
   postal_code: string | null
+  group_id: string | null
+  geo_location_id: string | null
 }
 
 export interface ContactIn {
@@ -1598,6 +1600,9 @@ export interface ContactIn {
   national_id?: string | null
   economic_code?: string | null
   postal_code?: string | null
+  //: دسته‌بندیِ سطحِ شرکت — هر دو اختیاری.
+  group_id?: string | null
+  geo_location_id?: string | null
 }
 
 // ── راه‌اندازی: ورودِ گروهی + مانده‌های اول دوره ──
@@ -2049,6 +2054,177 @@ export interface CostCenterIn {
   is_active: boolean
   notes: string
 }
+
+/* ── ماژولِ «شرکت»: گروهِ طرف‌حساب، محلِ جغرافیایی، فردِ مرتبط ─────────────── */
+
+export interface ContactGroupRecord {
+  id: string
+  name: string
+  code: string
+  notes: string
+  is_active: boolean
+  contact_count: number
+}
+
+export interface ContactGroupIn {
+  name: string
+  code?: string
+  notes?: string
+  is_active?: boolean
+}
+
+export const fetchContactGroups = (token: string) =>
+  authedGet<ContactGroupRecord[]>(token, '/api/company/groups')
+
+export const createContactGroup = (token: string, data: ContactGroupIn) =>
+  authedSend<ContactGroupRecord>(token, 'POST', '/api/company/groups', data)
+
+export const updateContactGroup = (token: string, id: string, data: ContactGroupIn) =>
+  authedSend<ContactGroupRecord>(token, 'PUT', `/api/company/groups/${id}`, data)
+
+export const deleteContactGroup = (token: string, id: string) =>
+  authedDelete(token, `/api/company/groups/${id}`)
+
+/** سطح‌های درختِ جغرافیایی — کلیدها با GEO_KINDS سمتِ سرور یکی‌اند. */
+export const GEO_KIND_LABELS: Record<string, string> = {
+  country: 'کشور',
+  province: 'استان',
+  city: 'شهر',
+  district: 'منطقه',
+}
+
+export interface GeoLocationRecord {
+  id: string
+  name: string
+  kind: string
+  code: string
+  parent_id: string | null
+  is_active: boolean
+  path: string
+  contact_count: number
+}
+
+export interface GeoLocationIn {
+  name: string
+  kind: string
+  code?: string
+  parent_id?: string | null
+  is_active?: boolean
+}
+
+export const fetchGeoLocations = (token: string) =>
+  authedGet<GeoLocationRecord[]>(token, '/api/company/locations')
+
+export const createGeoLocation = (token: string, data: GeoLocationIn) =>
+  authedSend<GeoLocationRecord>(token, 'POST', '/api/company/locations', data)
+
+export const updateGeoLocation = (token: string, id: string, data: GeoLocationIn) =>
+  authedSend<GeoLocationRecord>(token, 'PUT', `/api/company/locations/${id}`, data)
+
+export const deleteGeoLocation = (token: string, id: string) =>
+  authedDelete(token, `/api/company/locations/${id}`)
+
+export interface RelatedPersonRecord {
+  id: string
+  contact_id: string
+  name: string
+  role: string
+  phone: string
+  email: string
+  is_primary: boolean
+  is_active: boolean
+  notes: string
+  contact_name: string
+}
+
+export interface RelatedPersonIn {
+  contact_id: string
+  name: string
+  role?: string
+  phone?: string
+  email?: string
+  is_primary?: boolean
+  is_active?: boolean
+  notes?: string
+}
+
+export const fetchRelatedPersons = (token: string, contactId?: string) =>
+  authedGet<RelatedPersonRecord[]>(
+    token,
+    `/api/company/persons${contactId ? `?contact_id=${contactId}` : ''}`,
+  )
+
+export const createRelatedPerson = (token: string, data: RelatedPersonIn) =>
+  authedSend<RelatedPersonRecord>(token, 'POST', '/api/company/persons', data)
+
+export const updateRelatedPerson = (token: string, id: string, data: RelatedPersonIn) =>
+  authedSend<RelatedPersonRecord>(token, 'PUT', `/api/company/persons/${id}`, data)
+
+export const deleteRelatedPerson = (token: string, id: string) =>
+  authedDelete(token, `/api/company/persons/${id}`)
+
+/* ── گزارش‌ساز: تعریفِ گزارش‌های ذخیره‌شده ────────────────────────────────── */
+
+export interface SavedReportRecord {
+  id: string
+  name: string
+  description: string
+  source: string
+  config: Record<string, unknown>
+  is_pinned: boolean
+}
+
+export interface SavedReportIn {
+  name: string
+  description?: string
+  source: string
+  config: Record<string, unknown>
+  is_pinned?: boolean
+}
+
+export const fetchSavedReports = (token: string) =>
+  authedGet<SavedReportRecord[]>(token, '/api/company/reports')
+
+export const createSavedReport = (token: string, data: SavedReportIn) =>
+  authedSend<SavedReportRecord>(token, 'POST', '/api/company/reports', data)
+
+export const updateSavedReport = (token: string, id: string, data: SavedReportIn) =>
+  authedSend<SavedReportRecord>(token, 'PUT', `/api/company/reports/${id}`, data)
+
+export const deleteSavedReport = (token: string, id: string) =>
+  authedDelete(token, `/api/company/reports/${id}`)
+
+/* ── دفترِ ردِ حسابرسی: رویدادها و خلاصه‌ی استفاده ────────────────────────── */
+
+export interface AuditEntryRecord {
+  id: string
+  at: string
+  actor_email: string
+  action: string
+  entity_type: string
+  entity_id: string
+  summary: string
+}
+
+export const fetchAuditEntries = (token: string) =>
+  authedGetAll<AuditEntryRecord>(token, '/api/audit')
+
+export interface AuditUsageRow {
+  key: string
+  count: number
+}
+
+export interface AuditSummary {
+  days: number
+  total: number
+  by_actor: AuditUsageRow[]
+  by_action: AuditUsageRow[]
+  by_entity: AuditUsageRow[]
+  by_day: AuditUsageRow[]
+}
+
+export const fetchAuditSummary = (token: string, days: number) =>
+  authedGet<AuditSummary>(token, `/api/audit/summary?days=${days}`)
 
 export const fetchCostCenters = (token: string) =>
   authedGet<CostCenterRecord[]>(token, '/api/cost-centers')

@@ -60,6 +60,30 @@ import { TeamPage } from '../pages/TeamPage'
 import { ModulesPage } from '../pages/ModulesPage'
 import { ProfilePage } from '../pages/ProfilePage'
 import { ThemeGallery } from './ThemeGallery'
+import {
+  ContactGroupPage,
+  GeoLocationsPage,
+  RelatedPeoplePage,
+} from '../pages/company/CompanyBasicsPages'
+import {
+  ContactNewPage,
+  OpeningOpsPage,
+  YearEndOpsPage,
+  YearEndReminderPage,
+} from '../pages/company/CompanyOpsPages'
+import {
+  AllInstallmentsPage,
+  ContactListPage,
+  CostCenterListPage,
+  CostCenterPage,
+  DataExportPage,
+  DataImportPage,
+  DayActivityPage,
+  InstallmentPlansPage,
+  ManagementReportsPage,
+  UsageReportPage,
+} from '../pages/company/CompanyListPages'
+import { DynamicReportsPage, ReportBuilderPage } from '../pages/company/ReportBuilderPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
@@ -98,6 +122,26 @@ const PAGE_TITLES: Record<PageKey, string> = {
   userlist: 'کاربران',
   fiscalyearlist: 'سال‌های مالی',
   help: 'راهنما',
+  // ── ماژولِ «شرکت» ──
+  contactnew: 'طرف حساب جدید',
+  contactgroup: 'گروه جدید',
+  geo: 'محل‌های جغرافیایی',
+  costcenter: 'مرکز هزینه',
+  openingops: 'عملیات اول دوره',
+  yearendops: 'عملیات پایان سال',
+  yearendreminder: 'یادآوری عملیات پایان سال',
+  dataexport: 'ارسال اطلاعات',
+  dataimport: 'دریافت اطلاعات',
+  reportbuilder: 'گزارش‌ساز',
+  dynamicreports: 'گزارش‌های پویا',
+  dayactivity: 'فعالیت‌های روز',
+  mgmtreports: 'گزارش‌ها و نمودارهای مدیریتی',
+  usagereport: 'گزارش استفاده از نرم‌افزار',
+  contactlist: 'طرف حساب‌ها',
+  relatedpeople: 'افراد مرتبط',
+  installmentplans: 'تقسیط',
+  allinstallments: 'همه اقساط',
+  costcenterlist: 'مراکز هزینه',
 }
 
 export function Dashboard({
@@ -378,6 +422,27 @@ export function Dashboard({
           {page === 'backuplist' && <BackupListPage token={token} me={me} />}
           {page === 'userlist' && <UserListPage token={token} />}
           {page === 'fiscalyearlist' && <FiscalYearListPage token={token} />}
+
+          {/* ── ماژولِ «شرکت» ── */}
+          {page === 'contactnew' && <ContactNewPage token={token} onNavigate={navigate} />}
+          {page === 'contactgroup' && <ContactGroupPage token={token} />}
+          {page === 'geo' && <GeoLocationsPage token={token} />}
+          {page === 'costcenter' && <CostCenterPage token={token} />}
+          {page === 'openingops' && <OpeningOpsPage token={token} onNavigate={navigate} />}
+          {page === 'yearendops' && <YearEndOpsPage token={token} onNavigate={navigate} />}
+          {page === 'yearendreminder' && <YearEndReminderPage token={token} />}
+          {page === 'dataexport' && <DataExportPage token={token} me={me} />}
+          {page === 'dataimport' && <DataImportPage token={token} me={me} />}
+          {page === 'reportbuilder' && <ReportBuilderPage token={token} />}
+          {page === 'dynamicreports' && <DynamicReportsPage token={token} onNavigate={navigate} />}
+          {page === 'dayactivity' && <DayActivityPage token={token} />}
+          {page === 'mgmtreports' && <ManagementReportsPage token={token} accounts={accounts} />}
+          {page === 'usagereport' && <UsageReportPage token={token} />}
+          {page === 'contactlist' && <ContactListPage token={token} />}
+          {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}
+          {page === 'installmentplans' && <InstallmentPlansPage token={token} />}
+          {page === 'allinstallments' && <AllInstallmentsPage token={token} />}
+          {page === 'costcenterlist' && <CostCenterListPage token={token} />}
           {page === 'password' && (
             <ChangePasswordPage token={token} me={me} onTokenRenewed={onTokenRenewed} />
           )}

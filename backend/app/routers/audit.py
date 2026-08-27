@@ -10,16 +10,18 @@ wildcard دارد. این یعنی حسابدار و انباردار نمی‌�
 است: رد حسابرسی ابزار نظارت است، و کسی که زیر نظارت است نباید بتواند ببیند چه چیزی
 از او ثبت شده.
 """
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
 from app.models.audit import AuditLog
 from app.pagination import Page, PageParams, paginate
-from app.schemas.audit import AuditEntryOut
+from app.schemas.audit import AuditEntryOut, AuditSummaryOut, AuditUsageRow
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -45,3 +47,49 @@ def list_audit_entries(
     # بدون کلید دوم، ردیف‌های هم‌زمان سر مرز صفحه گم می‌شوند.
     items, next_cursor = paginate(query, [AuditLog.at, AuditLog.id], params, descending=True)
     return Page(items=items, next_cursor=next_cursor)
+
+
+@router.get("/summary", response_model=AuditSummaryOut)
+def audit_summary(
+    days: int = Query(30, ge=1, le=365, description="بازه‌ی گزارش، از امروز به عقب"),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("audit", "view")),
+):
+    """گزارشِ استفاده از نرم‌افزار: چه کسی، چقدر، روی چه چیزی.
+
+    خلاصه سمتِ سرور جمع می‌شود نه سمتِ کلاینت — دفترِ ردِ حسابرسی صفحه‌بندی‌شده است و
+    شمردنِ آن در مرورگر یعنی شمردنِ *یک صفحه*، نه کلِ بازه. عددِ نادرست بدتر از عددِ
+    نداشته است.
+    """
+    since = datetime.combine(date.today() - timedelta(days=days - 1), time.min, tzinfo=timezone.utc)
+    base = db.query(AuditLog).filter(AuditLog.at >= since)
+
+    def rows(column) -> list[AuditUsageRow]:
+        return [
+            AuditUsageRow(key=key or "—", count=count)
+            for key, count in (
+                base.with_entities(column, func.count(AuditLog.id))
+                .group_by(column)
+                .order_by(func.count(AuditLog.id).desc())
+                .all()
+            )
+        ]
+
+    by_day = [
+        AuditUsageRow(key=str(day.date() if hasattr(day, "date") else day), count=count)
+        for day, count in (
+            base.with_entities(func.date_trunc("day", AuditLog.at).label("d"), func.count(AuditLog.id))
+            .group_by("d")
+            .order_by("d")
+            .all()
+        )
+    ]
+
+    return AuditSummaryOut(
+        days=days,
+        total=base.count(),
+        by_actor=rows(AuditLog.actor_email),
+        by_action=rows(AuditLog.action),
+        by_entity=rows(AuditLog.entity_type),
+        by_day=by_day,
+    )

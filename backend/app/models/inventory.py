@@ -72,6 +72,16 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: کد پستیِ ۱۰رقمی — سامانه‌ی معاملاتِ فصلی می‌خواهد. NULL = وارد نشده.
     postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # ── دسته‌بندیِ سطحِ شرکت (اختیاری؛ NULL = دسته‌بندی‌نشده) ──
+    #: گروهِ طرف‌حساب — برای گزارش‌گیریِ گروهی.
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contact_groups.id", ondelete="SET NULL"), nullable=True
+    )
+    #: محلِ جغرافیایی (برگِ درخت: معمولاً شهر یا منطقه).
+    geo_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("geo_locations.id", ondelete="SET NULL"), nullable=True
+    )
+
 
 class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """کالا یا خدمت. average_cost فقط برای کالا به‌روزرسانی می‌شود (روش میانگین موزون)."""

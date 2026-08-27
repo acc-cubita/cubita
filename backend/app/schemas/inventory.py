@@ -53,6 +53,9 @@ class ContactIn(BaseModel):
     national_id: str | None = None
     economic_code: str | None = None
     postal_code: str | None = None
+    #: دسته‌بندیِ سطحِ شرکت — هر دو اختیاری، NULL = دسته‌بندی‌نشده.
+    group_id: UUID | None = None
+    geo_location_id: UUID | None = None
 
     @field_validator("entity_type")
     @classmethod
@@ -92,6 +95,8 @@ class ContactOut(BaseModel):
     national_id: str | None
     economic_code: str | None
     postal_code: str | None
+    group_id: UUID | None
+    geo_location_id: UUID | None
 
     model_config = {"from_attributes": True}
 

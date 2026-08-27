@@ -16,3 +16,19 @@ class AuditEntryOut(BaseModel):
     summary: str
     changes: dict | None = None
     request_id: str | None = None
+
+
+class AuditUsageRow(BaseModel):
+    """یک ردیفِ شمارش — کلید (کاربر/کنش/موجودیت/روز) و تعداد."""
+
+    key: str
+    count: int
+
+
+class AuditSummaryOut(BaseModel):
+    days: int
+    total: int
+    by_actor: list[AuditUsageRow]
+    by_action: list[AuditUsageRow]
+    by_entity: list[AuditUsageRow]
+    by_day: list[AuditUsageRow]

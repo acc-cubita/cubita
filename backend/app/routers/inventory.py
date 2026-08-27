@@ -78,10 +78,26 @@ def list_contacts(
     return Page(items=items, next_cursor=next_cursor)
 
 
+def _assert_company_refs(db: Session, data: ContactIn) -> None:
+    """گروه و محلِ انتخاب‌شده باید واقعاً وجود داشته باشند.
+
+    بدونِ این بررسی، شناسه‌ی نامعتبر تا قیدِ کلیدِ خارجی می‌رفت و کاربر به‌جای پیامِ
+    روشن یک خطای ۵۰۰ می‌دید. (RLS هم ردیفِ مستأجرِ دیگر را نامرئی می‌کند، پس همین‌جا
+    «معتبر نیست» درست‌ترین پاسخ است.)
+    """
+    from app.models.company import ContactGroup, GeoLocation
+
+    if data.group_id is not None and db.get(ContactGroup, data.group_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "گروهِ انتخاب‌شده معتبر نیست")
+    if data.geo_location_id is not None and db.get(GeoLocation, data.geo_location_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "محلِ جغرافیاییِ انتخاب‌شده معتبر نیست")
+
+
 @router.post("/api/contacts", response_model=ContactOut, status_code=201)
 def create_contact(
     data: ContactIn, db: Session = Depends(get_db), _=Depends(require_permission("invoices", "create"))
 ):
+    _assert_company_refs(db, data)
     contact = Contact(**data.model_dump())
     db.add(contact)
     db.flush()
@@ -99,6 +115,7 @@ def update_contact(
     contact = db.get(Contact, contact_id)
     if contact is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
+    _assert_company_refs(db, data)
     for field, value in data.model_dump().items():
         setattr(contact, field, value)
     db.flush()

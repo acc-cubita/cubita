@@ -22,6 +22,7 @@ from app.routers import (
     billing,
     budgeting,
     calendar,
+    company,
     cost_centers,
     crm,
     currencies,
@@ -129,6 +130,7 @@ app.include_router(subscription.router)
 app.include_router(calendar.router)
 app.include_router(assets.router)
 app.include_router(budgeting.router)
+app.include_router(company.router)
 app.include_router(cost_centers.router)
 app.include_router(moadian.router)
 app.include_router(stock_taking.router)
