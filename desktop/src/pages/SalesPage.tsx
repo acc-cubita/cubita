@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Inbox, ShoppingCart, FileText, Undo2, Landmark, TrendingUp, CalendarRange, Receipt, Coins } from 'lucide-react'
+import { Inbox, ShoppingCart, FileText, Undo2, TrendingUp, CalendarRange, Receipt, Coins } from 'lucide-react'
 import { fetchSalesSummary, type MeResponse, type SalesInvoiceRecord, type SalesSummary } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { SalesInvoiceForm } from '../components/SalesInvoiceForm'
 import { SalesInvoiceWizard } from '../components/wizard/SalesInvoiceWizard'
 import { SalesReturnWizard } from '../components/wizard/SalesReturnWizard'
-import { MoadianWizard } from '../components/wizard/MoadianWizard'
 import { useTheme } from '../lib/theme'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { QuotationsTab } from '../components/QuotationsTab'
 import { SalesReturnForm } from '../components/SalesReturnForm'
-import { MoadianPanel } from '../components/MoadianPanel'
-import { FeatureUpsell } from '../components/FeatureUpsell'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -130,18 +127,6 @@ export function SalesPage({
             label: 'برگشت از فروش',
             icon: Undo2,
             content: guided ? <SalesReturnWizard token={token} /> : <SalesReturnForm token={token} />,
-          },
-          {
-            key: 'moadian',
-            label: 'سامانه مؤدیان',
-            icon: Landmark,
-            content: (me.locked_features ?? []).includes('moadian') ? (
-              <FeatureUpsell feature="moadian" />
-            ) : guided ? (
-              <MoadianWizard token={token} />
-            ) : (
-              <MoadianPanel token={token} />
-            ),
           },
         ]}
       />

@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  fetchMoadianPending,
+  fetchMoadianReadiness,
   fetchMoadianSettings,
   fetchMoadianSubmissions,
-  fetchSalesInvoices,
   inquireMoadianStatus,
-  submitInvoiceToMoadian,
+  submitMoadianBatch,
   testMoadianConnection,
   updateMoadianSettings,
+  type MoadianBatchResult,
+  type MoadianPendingInvoice,
+  type MoadianReadiness,
   type MoadianSettingsRecord,
   type MoadianSubmissionRecord,
-  type SalesInvoiceRecord,
 } from '../api'
 
 export const MOADIAN_STATUS_LABEL: Record<string, string> = {
@@ -18,6 +21,7 @@ export const MOADIAN_STATUS_LABEL: Record<string, string> = {
   confirmed: 'تأییدشده',
   rejected: 'ردشده',
   failed: 'خطا',
+  skipped: 'ارسال نشد',
 }
 
 export const MOADIAN_STATUS_TONE: Record<string, string> = {
@@ -26,6 +30,7 @@ export const MOADIAN_STATUS_TONE: Record<string, string> = {
   confirmed: 'tone-success',
   rejected: 'tone-danger',
   failed: 'tone-danger',
+  skipped: 'tone-warning',
 }
 
 const EMPTY_FORM = {
@@ -41,16 +46,23 @@ const EMPTY_FORM = {
 }
 
 /**
- * منطقِ مشترکِ پنلِ «سامانه مؤدیان» — تنظیماتِ اعتبارنامه، تستِ اتصال، ارسالِ صورتحساب و
- * تاریخچه. هم پنلِ کلاسیک ([MoadianPanel]) و هم ویزاردِ نسخه‌ی جدید ([MoadianWizard]) از
- * این یک منبع می‌خوانند.
+ * داده و کنش‌های ماژولِ «سامانه مؤدیان» — یک منبع برای هر چهار بخشِ صفحه.
+ *
+ * **چرا صف و چک‌لیست از سرور می‌آیند و اینجا محاسبه نمی‌شوند:** شرطِ ارسال (کلیدِ
+ * خواندنی، گواهی، کدِ ۱۳رقمیِ کالا، فعال‌بودن) در سرویسِ ارسال زندگی می‌کند. اگر
+ * فرانت همان قاعده را دوباره می‌نوشت، دو نسخه‌ی جدا از «آماده است» می‌داشتیم که
+ * دیر یا زود از هم فاصله می‌گرفتند — و بدترین حالتش این است که رابط «آماده» بگوید
+ * و ارسال شکست بخورد، آن هم بعد از مصرفِ سریال.
  */
 export function useMoadianPanel({ token }: { token: string }) {
   const [settings, setSettings] = useState<MoadianSettingsRecord | null>(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [submissions, setSubmissions] = useState<MoadianSubmissionRecord[]>([])
-  const [invoices, setInvoices] = useState<SalesInvoiceRecord[]>([])
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState('')
+  const [pending, setPending] = useState<MoadianPendingInvoice[]>([])
+  const [readiness, setReadiness] = useState<MoadianReadiness | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [batchResults, setBatchResults] = useState<MoadianBatchResult[] | null>(null)
+  const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
   const [sendMsg, setSendMsg] = useState<string | null>(null)
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -58,16 +70,20 @@ export function useMoadianPanel({ token }: { token: string }) {
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState(false)
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
-      const [s, subs, inv] = await Promise.all([
+      const [s, subs, queue, ready] = await Promise.all([
         fetchMoadianSettings(token),
         fetchMoadianSubmissions(token),
-        fetchSalesInvoices(token),
+        fetchMoadianPending(token),
+        fetchMoadianReadiness(token),
       ])
       setSettings(s)
       setSubmissions(subs)
-      setInvoices(inv.filter((i) => !i.voided_at))
+      setPending(queue)
+      setReadiness(ready)
+      // انتخاب‌هایی که دیگر در صف نیستند (ارسال شدند) پاک می‌شوند.
+      setSelected((prev) => new Set([...prev].filter((id) => queue.some((r) => r.id === id))))
       // کلید عمداً پر نمی‌شود: سرور آن را برنمی‌گرداند و خالی‌ماندنش یعنی «دست نزن».
       setForm({
         memory_id: s.memory_id,
@@ -82,13 +98,14 @@ export function useMoadianPanel({ token }: { token: string }) {
       })
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [token])
 
   useEffect(() => {
     void refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refresh])
 
   async function save(): Promise<boolean> {
     setMsg(null)
@@ -123,30 +140,52 @@ export function useMoadianPanel({ token }: { token: string }) {
     setSendMsg(null)
     try {
       const res = await inquireMoadianStatus(token, id)
-      setSendMsg(`وضعیت به‌روز شد: ${MOADIAN_STATUS_LABEL[res.status] ?? res.status}${res.error_message ? ` — ${res.error_message}` : ''}`)
+      setSendMsg(
+        `وضعیت به‌روز شد: ${MOADIAN_STATUS_LABEL[res.status] ?? res.status}${res.error_message ? ` — ${res.error_message}` : ''}`,
+      )
       await refresh()
     } catch (err) {
       setSendMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }
 
-  async function submitInvoice(): Promise<boolean> {
+  const sendable = useMemo(() => pending.filter((r) => !r.blocked_reason), [pending])
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /** انتخاب/لغوِ همه‌ی ردیف‌های *قابلِ ارسال*؛ ردیفِ مسدود هرگز انتخاب نمی‌شود. */
+  function toggleAll() {
+    setSelected((prev) => (prev.size >= sendable.length ? new Set() : new Set(sendable.map((r) => r.id))))
+  }
+
+  /** ارسالِ انتخاب‌شده‌ها در یک درخواست؛ نتیجه‌ی هر فاکتور جدا برمی‌گردد. */
+  async function submitSelected(): Promise<boolean> {
+    const ids = sendable.filter((r) => selected.has(r.id)).map((r) => r.id)
     setSendMsg(null)
-    if (!selectedInvoiceId) {
-      setSendMsg('ابتدا یک فاکتور انتخاب کنید.')
+    setBatchResults(null)
+    if (ids.length === 0) {
+      setSendMsg('هیچ فاکتورِ قابلِ ارسالی انتخاب نشده است.')
       return false
     }
     setSending(true)
     try {
-      const res = await submitInvoiceToMoadian(token, selectedInvoiceId)
+      const results = await submitMoadianBatch(token, ids)
+      setBatchResults(results)
+      const ok = results.filter((r) => r.ok).length
       setSendMsg(
-        res.status === 'sent' || res.status === 'confirmed'
-          ? `ارسال شد — شناسه مالیاتی ${res.tax_id}${res.reference_number ? `، مرجع ${res.reference_number}` : ''}`
-          : `وضعیت: ${MOADIAN_STATUS_LABEL[res.status] ?? res.status}${res.error_message ? ` — ${res.error_message}` : ''}`,
+        ok === results.length
+          ? `${results.length} فاکتور با موفقیت ارسال شد.`
+          : `${ok} از ${results.length} فاکتور ارسال شد؛ جزئیاتِ بقیه پایین آمده.`,
       )
-      setSelectedInvoiceId('')
       await refresh()
-      return true
+      return ok > 0
     } catch (err) {
       setSendMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
       return false
@@ -157,18 +196,20 @@ export function useMoadianPanel({ token }: { token: string }) {
 
   const sentCount = submissions.filter((s) => s.status === 'sent' || s.status === 'confirmed').length
   const failedCount = submissions.filter((s) => s.status === 'rejected' || s.status === 'failed').length
-  const submittedIds = new Set(
-    submissions.filter((s) => s.status === 'sent' || s.status === 'confirmed').map((s) => s.sales_invoice_id),
-  )
-  const pendingInvoices = invoices.filter((i) => !submittedIds.has(i.id))
 
   return {
     settings,
     form,
     setForm,
     submissions,
-    selectedInvoiceId,
-    setSelectedInvoiceId,
+    pending,
+    sendable,
+    readiness,
+    selected,
+    toggle,
+    toggleAll,
+    batchResults,
+    loading,
     msg,
     sendMsg,
     testMsg,
@@ -179,10 +220,9 @@ export function useMoadianPanel({ token }: { token: string }) {
     save,
     testConnection,
     inquire,
-    submitInvoice,
+    submitSelected,
     sentCount,
     failedCount,
-    pendingInvoices,
   }
 }
 

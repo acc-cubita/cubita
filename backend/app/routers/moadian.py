@@ -7,7 +7,11 @@ from app.database import get_db
 from app.deps import require_feature, require_permission
 from app.models.user import User
 from app.schemas.moadian import (
+    MoadianBatchIn,
+    MoadianBatchResultOut,
     MoadianConnectionTestOut,
+    MoadianPendingInvoiceOut,
+    MoadianReadinessOut,
     MoadianSettingsIn,
     MoadianSettingsOut,
     MoadianSubmissionOut,
@@ -104,3 +108,29 @@ def inquire_status(
     _=Depends(require_permission("moadian", "view")),
 ):
     return service.inquire_status(db, submission_id)
+
+
+@router.get("/readiness", response_model=MoadianReadinessOut)
+def readiness(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("moadian", "view")),
+):
+    return service.readiness(db)
+
+
+@router.get("/pending", response_model=list[MoadianPendingInvoiceOut])
+def pending(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("moadian", "view")),
+):
+    return service.pending_invoices(db)
+
+
+@router.post("/submit-batch", response_model=list[MoadianBatchResultOut])
+def submit_batch(
+    data: MoadianBatchIn,
+    db: Session = Depends(get_db),
+    # همان مجوزِ ارسالِ تکی؛ گروهی‌بودن قدرتِ تازه‌ای نمی‌دهد، فقط تکرار را کم می‌کند.
+    user: User = Depends(require_permission("moadian", "approve")),
+):
+    return service.submit_many(db, data.invoice_ids, user)

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -53,6 +54,9 @@ class MoadianConnectionTestOut(BaseModel):
 class MoadianSubmissionOut(BaseModel):
     id: UUID
     sales_invoice_id: UUID
+    #: شماره و خریدارِ فاکتورِ مربوط — برای اینکه تاریخچه بگوید «کدام فاکتور».
+    invoice_number: int | None = None
+    buyer_name: str = ""
     tax_id: str
     serial: int
     invoice_date: date
@@ -62,3 +66,49 @@ class MoadianSubmissionOut(BaseModel):
     sent_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class MoadianReadinessCheck(BaseModel):
+    """یک شرطِ ارسال — همان شرطی که مسیرِ ارسال واقعاً می‌سنجد، نه یک توصیه."""
+
+    key: str
+    ok: bool
+    title: str
+    detail: str
+
+
+class MoadianReadinessOut(BaseModel):
+    ready: bool
+    checks: list[MoadianReadinessCheck]
+    #: `sandbox` یا `production` — محیطِ مؤثرِ فعلی.
+    environment: str
+    pending_count: int
+    blocked_count: int
+
+
+class MoadianPendingInvoiceOut(BaseModel):
+    """یک ردیفِ صفِ ارسال. `blocked_reason` خالی یعنی همین حالا قابلِ ارسال است."""
+
+    id: UUID
+    number: int | None
+    invoice_date: date
+    buyer_name: str
+    buyer_is_legal: bool
+    net_amount: Decimal
+    tax_amount: Decimal
+    payable: Decimal
+    blocked_reason: str
+
+
+class MoadianBatchIn(BaseModel):
+    invoice_ids: list[UUID] = []
+
+
+class MoadianBatchResultOut(BaseModel):
+    invoice_id: UUID
+    ok: bool
+    #: وضعیتِ ثبت‌شده، یا `skipped` وقتی اصلاً ارسال نشد (قاعده جلویش را گرفت).
+    status: str
+    tax_id: str
+    reference_number: str
+    error_message: str

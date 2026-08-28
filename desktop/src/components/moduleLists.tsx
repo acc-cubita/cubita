@@ -186,12 +186,6 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       subtitle: day(r.return_date),
       meta: fa(r.total_amount),
     })),
-    moadian: def('صورتحساب‌های ارسالی', fetchMoadianSubmissions, (r) => ({
-      id: r.id,
-      title: `صورتحساب ${faNum(r.serial)}`,
-      subtitle: MOADIAN_STATUS[r.status] ?? r.status,
-      meta: day(r.invoice_date),
-    })),
   },
   purchases: {
     invoices: def('فاکتورهای خرید', fetchPurchaseInvoices, (r) => ({

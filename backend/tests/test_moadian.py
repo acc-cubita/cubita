@@ -481,3 +481,105 @@ def test_assert_stuff_ids_rejects_non_13_digits(db, user):
     db.flush()
     with pytest.raises(HTTPException):
         svc._assert_stuff_ids(inv, settings)
+
+
+# --- آمادگیِ ارسال، صفِ فاکتورها و ارسالِ گروهی -------------------------------
+
+def _checks(db) -> dict:
+    return {c["key"]: c for c in svc.readiness(db)["checks"]}
+
+
+def test_readiness_is_green_when_everything_is_configured(db, user):
+    _configure(db)
+    _invoice(db, user)
+    report = svc.readiness(db)
+    assert report["ready"] is True
+    assert report["environment"] == "sandbox"
+    assert report["pending_count"] == 1
+    assert report["blocked_count"] == 0
+
+
+def test_readiness_reports_each_missing_piece(db, user):
+    settings = _configure(db, active=False)
+    settings.economic_code = ""
+    settings.certificate_pem = ""
+    settings.default_stuff_id = ""
+    db.flush()
+    _invoice(db, user)  # کالا کدِ مالیاتی ندارد و پیش‌فرض هم برداشته شد
+
+    checks = _checks(db)
+    assert checks["credentials"]["ok"] is False
+    assert "شماره اقتصادی" in checks["credentials"]["detail"]
+    assert checks["signing"]["ok"] is False
+    assert checks["stuff_ids"]["ok"] is False
+    assert checks["activation"]["ok"] is False
+    assert svc.readiness(db)["ready"] is False
+
+
+def test_readiness_catches_a_corrupt_private_key_before_a_serial_is_burned(db):
+    """PEMِ خراب باید در چک‌لیست معلوم شود، نه وسطِ ارسال.
+
+    حضورِ رشته کافی نیست: `submit_invoice` کلید را واقعاً بارگذاری می‌کند، پس
+    چک‌لیست هم همان کار را می‌کند وگرنه «آماده» می‌گفت و ارسال شکست می‌خورد.
+    """
+    settings = _configure(db)
+    settings.private_key_pem = "-----BEGIN PRIVATE KEY-----\nnot-a-key\n-----END PRIVATE KEY-----"
+    db.flush()
+    assert _checks(db)["signing"]["ok"] is False
+
+
+def test_pending_queue_marks_blocked_invoices_with_the_reason(db, user):
+    settings = _configure(db)
+    settings.default_stuff_id = ""
+    db.flush()
+    inv = _invoice(db, user)
+
+    row = next(r for r in svc.pending_invoices(db) if r["id"] == inv.id)
+    assert row["blocked_reason"]  # همان پیامِ _assert_stuff_ids
+    assert row["payable"] == Decimal(inv.total_amount) + Decimal(inv.tax_amount) + Decimal(inv.rounding or 0)
+
+    inv.lines[0].item.tax_stuff_id = "1234567890123"
+    db.flush()
+    assert next(r for r in svc.pending_invoices(db) if r["id"] == inv.id)["blocked_reason"] == ""
+
+
+def test_pending_queue_drops_sent_and_voided_invoices(db, user):
+    _configure(db)
+    inv = _invoice(db, user)
+    assert any(r["id"] == inv.id for r in svc.pending_invoices(db))
+
+    svc.submit_invoice(db, inv.id, user, client=_mock_client())
+    assert not any(r["id"] == inv.id for r in svc.pending_invoices(db))
+
+
+def test_submit_batch_keeps_going_after_a_rejected_invoice(db, user):
+    """شکستِ یک فاکتور نباید بقیه‌ی صف را زمین بزند."""
+    _configure(db)
+    first = _invoice(db, user)
+    second = _invoice(db, user)
+    # فاکتورِ اول از قبل فرستاده شده → ارسالِ دوباره‌اش قاعدتاً رد می‌شود.
+    svc.submit_invoice(db, first.id, user, client=_mock_client())
+
+    results = svc.submit_many(db, [first.id, second.id], user, client=_mock_client())
+    by_id = {r["invoice_id"]: r for r in results}
+    assert by_id[first.id]["ok"] is False
+    assert by_id[first.id]["status"] == "skipped"
+    assert by_id[second.id]["ok"] is True
+    assert by_id[second.id]["reference_number"] == "REF-1"
+
+
+def test_submit_batch_refuses_more_than_the_cap(db, user):
+    _configure(db)
+    with pytest.raises(HTTPException) as e:
+        svc.submit_many(db, [uuid4()] * (svc.MAX_BATCH + 1), user, client=_mock_client())
+    assert e.value.status_code == 400
+
+
+def test_submissions_history_names_the_invoice(db, user):
+    """تاریخچه باید بگوید کدام فاکتور رفته — نه فقط شناسه‌ی مالیاتی و سریال."""
+    _configure(db)
+    inv = _invoice(db, user)
+    svc.submit_invoice(db, inv.id, user, client=_mock_client())
+    row = svc.list_submissions(db)[0]
+    assert row["invoice_number"] == inv.number
+    assert row["tax_id"]

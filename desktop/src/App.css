@@ -9722,3 +9722,365 @@ button.mp-item:focus-visible {
     min-width: 0;
   }
 }
+
+
+/* ── ماژولِ سامانه مؤدیان ──────────────────────────────────────────────────────
+   یک ماژولِ انطباقی است، نه یک فرمِ معمولی: کاربر باید در یک نگاه بفهمد «به کدام
+   سامانه وصلم» و «آیا ارسال ممکن است». پس نوارِ محیط و چک‌لیستِ آمادگی ظاهرِ
+   اختصاصی دارند، و متن‌های لاتین (PEM، آدرس، شناسه‌ی مالیاتی) با dir=ltr و فونتِ
+   یک‌عرض نوشته می‌شوند تا در جریانِ راست‌به‌چپ به‌هم نریزند. */
+
+.mdn-env {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--success);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  margin-bottom: var(--sp-4);
+}
+
+.mdn-env > svg {
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.mdn-env > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mdn-env span {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.mdn-env-serial {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.mdn-env code {
+  direction: ltr;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42%;
+}
+
+/* محیطِ واقعی عمداً هشدارگونه است — ارسالش برگشت‌ناپذیر و قانونی است. */
+.mdn-env.is-live {
+  border-inline-start-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.mdn-env.is-live > svg {
+  color: var(--danger);
+}
+
+.mdn-verdict {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.mdn-verdict.is-ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.mdn-verdict.is-todo {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.mdn-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.mdn-checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.mdn-checks li > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mdn-checks li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.mdn-checks li.is-ok > svg {
+  color: var(--success);
+}
+
+.mdn-checks li.is-todo {
+  border-color: var(--border-strong);
+}
+
+.mdn-checks li.is-todo > svg {
+  color: var(--text-muted);
+}
+
+.mdn-checks strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.mdn-checks p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.mdn-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.mdn-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mdn-note--ok {
+  color: var(--success);
+}
+
+.mdn-note--err {
+  color: var(--danger);
+}
+
+.mdn-note--warn {
+  color: var(--warning);
+}
+
+.mdn-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── صفِ ارسال ───────────────────────────────────────────────────────────── */
+
+.mdn-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.mdn-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mdn-check-col {
+  width: 38px;
+  text-align: center;
+}
+
+.mdn-row-blocked {
+  opacity: 0.72;
+}
+
+/* نام و نوعِ شخص همیشه دو سطر می‌مانند؛ وگرنه چیپ بسته به طولِ نام گاهی
+   کنارِ نام می‌نشست و گاهی زیرِ آن، و ستون ناهموار می‌شد. */
+.mdn-buyer {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mdn-buyer-kind {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.mdn-ref {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mdn-blocked {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.mdn-blocked > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mdn-results {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.mdn-results h4 {
+  margin: 0 0 10px;
+}
+
+/* ── فیلترهای تاریخچه ────────────────────────────────────────────────────── */
+
+.mdn-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.mdn-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mdn-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.mdn-chip.is-active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mdn-filters input[type='search'] {
+  flex: 1;
+  min-width: 220px;
+  max-width: 380px;
+}
+
+/* ── فرمِ تنظیمات ─────────────────────────────────────────────────────────── */
+
+.mdn-form {
+  display: grid;
+  gap: 16px;
+}
+
+.mdn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 18px;
+}
+
+.mdn-form > label,
+.mdn-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+/* PEM و آدرس تمام‌عرض‌اند: کلیدِ چندخطی در یک ستونِ باریک عملاً خوانده نمی‌شود. */
+.mdn-wide {
+  grid-column: 1 / -1;
+}
+
+.mdn-pem {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  direction: ltr;
+  text-align: left;
+  resize: vertical;
+}
+
+.mdn-toggles {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  /* در موبایل نوارِ محیط عمداً ستونی می‌شود: با wrapِ ساده، آدرسِ بی‌شکستِ سامانه
+     ستونِ متن را به چند کاراکتر می‌فشرد و توضیح روی خودش می‌افتاد. */
+  .mdn-env {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .mdn-env code {
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  .mdn-toolbar,
+  .mdn-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mdn-toolbar-actions button,
+  .mdn-filters input[type='search'] {
+    width: 100%;
+    max-width: none;
+  }
+
+  .mdn-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* در نمای کارتیِ جدول، ستونِ تیک به یک ردیفِ برچسب‌دار تبدیل می‌شود. */
+  .mdn-check-col {
+    width: auto;
+    text-align: start;
+  }
+}

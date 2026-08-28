@@ -615,9 +615,240 @@ def inquire_status(db: Session, submission_id: UUID, *, client: httpx.Client | N
     return submission
 
 
-def list_submissions(db: Session) -> list[MoadianSubmission]:
-    return (
-        db.query(MoadianSubmission)
+def list_submissions(db: Session) -> list[dict]:
+    """تاریخچه‌ی ارسال‌ها، همراهِ شماره‌ی فاکتور و نامِ خریدار.
+
+    خودِ رکوردِ ارسال فقط `sales_invoice_id` دارد؛ بدونِ این اتصال، تاریخچه شناسه‌ی
+    مالیاتی و سریال را نشان می‌داد ولی نمی‌گفت *کدام فاکتور* فرستاده شده — دقیقاً
+    چیزی که کاربر دنبالش است.
+    """
+    rows = (
+        db.query(MoadianSubmission, SalesInvoice.number, Contact.name)
+        .outerjoin(SalesInvoice, SalesInvoice.id == MoadianSubmission.sales_invoice_id)
+        .outerjoin(Contact, Contact.id == SalesInvoice.contact_id)
         .order_by(MoadianSubmission.created_at.desc())
         .all()
     )
+    return [
+        {
+            "id": sub.id,
+            "sales_invoice_id": sub.sales_invoice_id,
+            "invoice_number": number,
+            "buyer_name": buyer or "",
+            "tax_id": sub.tax_id,
+            "serial": sub.serial,
+            "invoice_date": sub.invoice_date,
+            "status": sub.status,
+            "reference_number": sub.reference_number,
+            "error_message": sub.error_message,
+            "sent_at": sub.sent_at,
+        }
+        for sub, number, buyer in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# آمادگیِ ارسال و صفِ فاکتورها
+# ---------------------------------------------------------------------------
+#
+# این بخش هیچ قاعده‌ی تازه‌ای نمی‌سازد: دقیقاً همان چیزهایی را می‌سنجد که مسیرِ
+# `submit_invoice` پیش از مصرفِ سریال بررسی می‌کند (`_load_private_key`،
+# `_cert_der_from_pem`، `_assert_stuff_ids`، `is_active`). عمداً همان توابع صدا زده
+# می‌شوند و قاعده دوباره‌نویسی نمی‌شود — وگرنه چک‌لیست به‌مرور از واقعیت فاصله می‌گرفت و
+# «همه‌چیز آماده است» می‌گفت درحالی‌که ارسال شکست می‌خورد.
+
+#: بیشترین تعداد فاکتور در یک ارسالِ گروهی. سقف دارد چون هر فاکتور یک رفت‌وبرگشتِ
+#: کاملِ شبکه است و درخواستِ بی‌سقف عملاً یک تایم‌اوتِ طولانی می‌شود.
+MAX_BATCH = 50
+
+
+def _submitted_invoice_ids(db: Session) -> set[UUID]:
+    """فاکتورهایی که ارسالِ موفق دارند — دوباره فرستادنشان بسته است."""
+    rows = (
+        db.query(MoadianSubmission.sales_invoice_id)
+        .filter(MoadianSubmission.status.in_(("sent", "confirmed")))
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+def _blocked_reason(invoice: SalesInvoice, settings: MoadianSettings) -> str:
+    """چرا این فاکتور همین حالا قابلِ ارسال نیست؟ رشته‌ی خالی یعنی آماده است."""
+    try:
+        _assert_stuff_ids(invoice, settings)
+    except HTTPException as err:
+        return str(err.detail)
+    return ""
+
+
+def pending_invoices(db: Session) -> list[dict]:
+    """صفِ ارسال: فاکتورهای فروشِ باطل‌نشده‌ای که هنوز ارسالِ موفق ندارند.
+
+    دلیلِ مسدودی همراهِ هر ردیف می‌آید تا کاربر پیش از زدنِ دکمه بداند کدام فاکتور
+    رد می‌شود و چرا — به‌جای اینکه با یک خطای تکی روبه‌رو شود.
+    """
+    settings = get_settings(db)
+    sent = _submitted_invoice_ids(db)
+    invoices = (
+        db.query(SalesInvoice)
+        .filter(SalesInvoice.voided_at.is_(None))
+        .order_by(SalesInvoice.invoice_date.desc(), SalesInvoice.number.desc())
+        .all()
+    )
+    rows: list[dict] = []
+    for invoice in invoices:
+        if invoice.id in sent:
+            continue
+        contact = db.get(Contact, invoice.contact_id) if invoice.contact_id else None
+        rows.append(
+            {
+                "id": invoice.id,
+                "number": invoice.number,
+                "invoice_date": invoice.invoice_date,
+                "buyer_name": (contact.name if contact else "") or "بدون طرف حساب",
+                "buyer_is_legal": _buyer_type(contact) == 2,
+                "net_amount": Decimal(invoice.total_amount or 0),
+                "tax_amount": Decimal(invoice.tax_amount or 0),
+                "payable": Decimal(invoice.total_amount or 0)
+                + Decimal(invoice.tax_amount or 0)
+                + Decimal(invoice.rounding or 0),
+                "blocked_reason": _blocked_reason(invoice, settings),
+            }
+        )
+    return rows
+
+
+def readiness(db: Session) -> dict:
+    """چک‌لیستِ «آیا می‌توانم ارسال کنم؟» — همان شرط‌هایی که ارسال واقعاً می‌سنجد."""
+    settings = get_settings(db)
+    checks: list[dict] = []
+
+    missing = [
+        label
+        for label, value, size in (
+            ("شناسه یکتای حافظه مالیاتی", settings.memory_id, 6),
+            ("شناسه ملی مؤدی", settings.national_id, 0),
+            ("شماره اقتصادی", settings.economic_code, 0),
+        )
+        if not (value or "").strip() or (size and len((value or "").strip()) != size)
+    ]
+    checks.append(
+        {
+            "key": "credentials",
+            "ok": not missing,
+            "title": "اعتبارنامه‌ی کارپوشه",
+            "detail": "شناسه‌ی حافظه، شناسه ملی و شماره اقتصادی ثبت شده‌اند."
+            if not missing
+            else "کامل نیست: " + "، ".join(missing),
+        }
+    )
+
+    # حضورِ کلید کافی نیست؛ خوانده‌شدنش هم سنجیده می‌شود تا PEMِ خراب پیش از
+    # مصرفِ سریال معلوم شود، نه وسطِ ارسال.
+    if not (settings.private_key_pem or "").strip() or not (settings.certificate_pem or "").strip():
+        signing_ok, signing_detail = False, "کلید خصوصی و گواهیِ امضا هر دو لازم‌اند."
+    else:
+        try:
+            _load_private_key(settings.private_key_pem)
+            _cert_der_from_pem(settings.certificate_pem)
+            signing_ok, signing_detail = True, "کلید و گواهی ثبت و خوانده شدند."
+        except HTTPException as err:
+            signing_ok, signing_detail = False, str(err.detail)
+    checks.append({"key": "signing", "ok": signing_ok, "title": "کلید و گواهیِ امضا", "detail": signing_detail})
+
+    queue = pending_invoices(db)
+    blocked = [row for row in queue if row["blocked_reason"]]
+    default_ok = bool(_STUFF_ID_RE.fullmatch((settings.default_stuff_id or "").strip()))
+    checks.append(
+        {
+            "key": "stuff_ids",
+            "ok": not blocked,
+            "title": "شناسه‌ی کالا/خدمتِ مالیاتی",
+            "detail": (
+                f"{len(blocked)} فاکتورِ صف به‌خاطرِ نبودِ کدِ ۱۳رقمیِ کالا قابلِ ارسال نیست."
+                if blocked
+                else (
+                    "شناسه‌ی پیش‌فرض ثبت شده و جای کالاهای بدونِ کد را می‌گیرد."
+                    if default_ok
+                    else "همه‌ی کالاهای صفِ ارسال کدِ مالیاتی دارند."
+                )
+            ),
+        }
+    )
+
+    checks.append(
+        {
+            "key": "activation",
+            "ok": bool(settings.is_active),
+            "title": "فعال‌بودنِ ارسال",
+            "detail": (
+                ("ارسال فعال است — محیطِ " + ("سندباکس (آزمایشی)" if settings.is_sandbox else "واقعی"))
+                if settings.is_active
+                else "کلیدِ «ارسال فعال باشد» در تنظیمات خاموش است."
+            ),
+        }
+    )
+
+    return {
+        "ready": all(c["ok"] for c in checks),
+        "checks": checks,
+        "environment": "sandbox" if settings.is_sandbox else "production",
+        "pending_count": len(queue),
+        "blocked_count": len(blocked),
+    }
+
+
+def submit_many(
+    db: Session, invoice_ids: list[UUID], user: User, *, client: httpx.Client | None = None
+) -> list[dict]:
+    """ارسالِ گروهی — هر فاکتور مستقل است و شکستِ یکی بقیه را متوقف نمی‌کند.
+
+    `submit_invoice` خودش برای هر فاکتور commit می‌کند، پس نتیجه‌ی موفق‌ها حتی اگر
+    ردیفِ بعدی خطا بدهد ماندگار است. یک کلاینتِ HTTP بینِ همه‌ی ارسال‌ها به‌اشتراک
+    گذاشته می‌شود تا برای هر فاکتور یک اتصالِ تازه باز نشود.
+    """
+    if not invoice_ids:
+        return []
+    if len(invoice_ids) > MAX_BATCH:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"در هر ارسالِ گروهی حداکثر {MAX_BATCH} فاکتور مجاز است.",
+        )
+    settings = get_settings(db)
+    results: list[dict] = []
+    owns_client = client is None
+    if owns_client:
+        client = httpx.Client(base_url=base_url_for(settings), timeout=REQUEST_TIMEOUT)
+    try:
+        for invoice_id in invoice_ids:
+            try:
+                submission = submit_invoice(db, invoice_id, user, client=client)
+            except HTTPException as err:
+                # خطای پیکربندی/قاعده (فاکتورِ باطل، ارسالِ تکراری، کدِ کالا) — رد می‌شود
+                # ولی صف ادامه پیدا می‌کند.
+                db.rollback()
+                results.append(
+                    {
+                        "invoice_id": invoice_id,
+                        "ok": False,
+                        "status": "skipped",
+                        "tax_id": "",
+                        "reference_number": "",
+                        "error_message": str(err.detail),
+                    }
+                )
+                continue
+            results.append(
+                {
+                    "invoice_id": invoice_id,
+                    "ok": submission.status in ("sent", "confirmed"),
+                    "status": submission.status,
+                    "tax_id": submission.tax_id,
+                    "reference_number": submission.reference_number,
+                    "error_message": submission.error_message,
+                }
+            )
+    finally:
+        if owns_client:
+            client.close()
+    return results

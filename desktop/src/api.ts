@@ -2724,6 +2724,9 @@ export interface MoadianSettingsIn {
 export interface MoadianSubmissionRecord {
   id: string
   sales_invoice_id: string
+  /** شماره و خریدارِ فاکتورِ مربوط — تاریخچه باید بگوید «کدام فاکتور». */
+  invoice_number: number | null
+  buyer_name: string
   tax_id: string
   serial: number
   invoice_date: string
@@ -2758,6 +2761,54 @@ export const submitInvoiceToMoadian = (token: string, invoiceId: string) =>
 
 export const inquireMoadianStatus = (token: string, submissionId: string) =>
   authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/inquiry/${submissionId}`, {})
+
+/** یک شرطِ ارسال — همان شرطی که مسیرِ ارسالِ سرور واقعاً می‌سنجد. */
+export interface MoadianReadinessCheck {
+  key: 'credentials' | 'signing' | 'stuff_ids' | 'activation'
+  ok: boolean
+  title: string
+  detail: string
+}
+
+export interface MoadianReadiness {
+  ready: boolean
+  checks: MoadianReadinessCheck[]
+  environment: 'sandbox' | 'production'
+  pending_count: number
+  blocked_count: number
+}
+
+/** یک ردیفِ صفِ ارسال. `blocked_reason` خالی یعنی همین حالا قابلِ ارسال است. */
+export interface MoadianPendingInvoice {
+  id: string
+  number: number | null
+  invoice_date: string
+  buyer_name: string
+  buyer_is_legal: boolean
+  net_amount: string
+  tax_amount: string
+  payable: string
+  blocked_reason: string
+}
+
+export interface MoadianBatchResult {
+  invoice_id: string
+  ok: boolean
+  /** وضعیتِ ثبت‌شده، یا `skipped` وقتی قاعده جلوی ارسال را گرفت. */
+  status: string
+  tax_id: string
+  reference_number: string
+  error_message: string
+}
+
+export const fetchMoadianReadiness = (token: string) =>
+  authedGet<MoadianReadiness>(token, '/api/moadian/readiness')
+
+export const fetchMoadianPending = (token: string) =>
+  authedGet<MoadianPendingInvoice[]>(token, '/api/moadian/pending')
+
+export const submitMoadianBatch = (token: string, invoiceIds: string[]) =>
+  authedSend<MoadianBatchResult[]>(token, 'POST', '/api/moadian/submit-batch', { invoice_ids: invoiceIds })
 
 // --- کاربران کسب‌وکار، بازیابی و تغییر رمز ----------------------------------------
 

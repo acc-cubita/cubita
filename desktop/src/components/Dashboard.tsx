@@ -34,7 +34,7 @@ import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { ContractingPage } from '../pages/ContractingPage'
-import { MoadianPage } from '../pages/MoadianPage'
+import { MoadianModulePage } from '../pages/moadian/MoadianModulePage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
@@ -499,7 +499,7 @@ export function Dashboard({
             </div>
           )}
           {page === 'contracting' && <ContractingPage />}
-          {page === 'moadian' && <MoadianPage token={token} />}
+          {page === 'moadian' && <MoadianModulePage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
           {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}

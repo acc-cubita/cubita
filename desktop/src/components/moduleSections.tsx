@@ -8,6 +8,7 @@ import {
   CalendarPlus,
   ClipboardCheck,
   ClipboardList,
+  FileCheck2,
   FileText,
   FileUp,
   FlaskConical,
@@ -26,6 +27,7 @@ import {
   Percent,
   PieChart,
   ScrollText,
+  Send,
   Settings,
   ShoppingCart,
   Store,
@@ -58,7 +60,14 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'invoices', label: 'فاکتور فروش', icon: ShoppingCart },
     { key: 'quotations', label: 'پیش‌فاکتور', icon: FileText },
     { key: 'returns', label: 'برگشت از فروش', icon: Undo2 },
-    { key: 'moadian', label: 'سامانه مؤدیان', icon: Landmark },
+  ],
+  //: «سامانه مؤدیان» — ترتیب همان مسیرِ کار است: اول ببین آماده‌ای یا نه، بعد بفرست،
+  //: بعد پیگیری کن؛ تنظیمات آخر است چون یک‌بار انجام می‌شود.
+  moadian: [
+    { key: 'status', label: 'وضعیت و آمادگی', icon: ListChecks },
+    { key: 'send', label: 'ارسال صورتحساب', icon: Send },
+    { key: 'history', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
+    { key: 'settings', label: 'تنظیمات و اعتبارنامه', icon: Landmark },
   ],
   purchases: [
     { key: 'invoices', label: 'فاکتور خرید', icon: PackagePlus },
