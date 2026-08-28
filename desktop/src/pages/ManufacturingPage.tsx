@@ -237,37 +237,39 @@ function BomsTab({
           </div>
 
           <div className="entity-table-wrap">
-            <table className="invoice-lines">
-              <thead>
-                <tr>
-                  <th>جزء (ماده اولیه)</th>
-                  <th>مقدار</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l, i) => (
-                  <tr key={i}>
-                    <td data-label="جزء">
-                      <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
-                        <option value="">— انتخاب کالا —</option>
-                        {goodsItems.map((it) => (
-                          <option key={it.id} value={it.id}>{it.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td data-label="مقدار">
-                      <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
-                    </td>
-                    <td>
-                      <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table className="invoice-lines cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>جزء (ماده اولیه)</th>
+                    <th>مقدار</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i}>
+                      <td data-label="جزء">
+                        <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
+                          <option value="">— انتخاب کالا —</option>
+                          {goodsItems.map((it) => (
+                            <option key={it.id} value={it.id}>{it.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td data-label="مقدار">
+                        <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="invoice-form-footer">
@@ -283,64 +285,66 @@ function BomsTab({
           <EmptyState icon={FlaskConical} text="فرمولی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table bom-table">
-              <thead>
-                <tr>
-                  <th>محصول</th>
-                  <th>اجزا</th>
-                  <th>بهای واحد</th>
-                  <th>حاشیهٔ سود</th>
-                  <th>اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bomsPg.pageItems.map((b) => {
-                  const finished = itemById.get(b.finished_item_id)
-                  const cost = bomUnitCost(b, itemById)
-                  const salePrice = Number(finished?.sales_price ?? 0)
-                  const margin = salePrice - cost
-                  const pct = salePrice > 0 ? (margin / salePrice) * 100 : null
-                  return (
-                    <tr key={b.id} className={b.is_active ? '' : 'bom-row-inactive'}>
-                      <td className="entity-name">
-                        <div className="entity-cell">
-                          <div className="entity-avatar">{(finished?.name ?? '؟').trim().charAt(0)}</div>
-                          <div>
-                            <div className="entity-name">{finished?.name ?? '—'}</div>
-                            <div className="entity-sub">
-                              {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
-                              {!b.is_active && ' · غیرفعال'}
+            <div className="table-scroll">
+              <table className="entity-table bom-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>محصول</th>
+                    <th>اجزا</th>
+                    <th>بهای واحد</th>
+                    <th>حاشیهٔ سود</th>
+                    <th>اقدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bomsPg.pageItems.map((b) => {
+                    const finished = itemById.get(b.finished_item_id)
+                    const cost = bomUnitCost(b, itemById)
+                    const salePrice = Number(finished?.sales_price ?? 0)
+                    const margin = salePrice - cost
+                    const pct = salePrice > 0 ? (margin / salePrice) * 100 : null
+                    return (
+                      <tr key={b.id} className={b.is_active ? '' : 'bom-row-inactive'}>
+                        <td className="entity-name" data-label="محصول">
+                          <div className="entity-cell">
+                            <div className="entity-avatar">{(finished?.name ?? '؟').trim().charAt(0)}</div>
+                            <div>
+                              <div className="entity-name">{finished?.name ?? '—'}</div>
+                              <div className="entity-sub">
+                                {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
+                                {!b.is_active && ' · غیرفعال'}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td data-label="اجزا" className="bom-components">
-                        {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
-                      </td>
-                      <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
-                      <td data-label="حاشیهٔ سود">
-                        {salePrice <= 0 ? (
-                          <span className="field-hint">قیمت فروش ثبت نشده</span>
-                        ) : (
-                          <span className={`status-badge ${margin >= 0 ? 'tone-success' : 'tone-danger'}`} title={`قیمت فروش: ${fa(salePrice)} — بهای تمام‌شده: ${fa(cost)}`}>
-                            {fa(margin)}{pct != null ? ` (${Math.round(pct)}٪)` : ''}
-                          </span>
-                        )}
-                      </td>
-                      <td className="bom-actions">
-                        <div className="row-actions">
-                          <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
-                          <button type="button" className={b.is_active ? '' : 'btn-muted'} onClick={() => void toggleActive(b)} title={b.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}>
-                            <Power size={13} /> {b.is_active ? 'فعال' : 'غیرفعال'}
-                          </button>
-                          <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td data-label="اجزا" className="bom-components">
+                          {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
+                        </td>
+                        <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
+                        <td data-label="حاشیهٔ سود">
+                          {salePrice <= 0 ? (
+                            <span className="field-hint">قیمت فروش ثبت نشده</span>
+                          ) : (
+                            <span className={`status-badge ${margin >= 0 ? 'tone-success' : 'tone-danger'}`} title={`قیمت فروش: ${fa(salePrice)} — بهای تمام‌شده: ${fa(cost)}`}>
+                              {fa(margin)}{pct != null ? ` (${Math.round(pct)}٪)` : ''}
+                            </span>
+                          )}
+                        </td>
+                        <td className="bom-actions" data-label="اقدام">
+                          <div className="row-actions">
+                            <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
+                            <button type="button" className={b.is_active ? '' : 'btn-muted'} onClick={() => void toggleActive(b)} title={b.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}>
+                              <Power size={13} /> {b.is_active ? 'فعال' : 'غیرفعال'}
+                            </button>
+                            <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={bomsPg.page} pageCount={bomsPg.pageCount} onChange={bomsPg.setPage} />
           </div>
         )}
@@ -491,32 +495,34 @@ function ProduceTab({
           <EmptyState icon={Hammer} text="هنوز تولیدی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table prod-order-table">
-              <thead>
-                <tr>
-                  <th>شماره</th>
-                  <th>محصول</th>
-                  <th>تعداد</th>
-                  <th>بهای واحد</th>
-                  <th>تاریخ</th>
-                  <th>اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ordersPg.pageItems.map((o) => (
-                  <tr key={o.id}>
-                    <td data-label="شماره">{o.number != null ? o.number.toLocaleString('fa-IR') : '—'}</td>
-                    <td className="entity-name">{itemById.get(o.finished_item_id)?.name ?? '—'}</td>
-                    <td data-label="تعداد">{Number(o.qty_produced).toLocaleString('fa-IR')}</td>
-                    <td data-label="بهای واحد" className="money-cell"><strong>{fa(Number(o.unit_cost))}</strong></td>
-                    <td data-label="تاریخ">{formatJalali(o.production_date)}</td>
-                    <td className="prod-order-action">
-                      <button type="button" onClick={() => setOpenOrder(o)}><ReceiptText size={13} /> برگهٔ بها</button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table prod-order-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>محصول</th>
+                    <th>تعداد</th>
+                    <th>بهای واحد</th>
+                    <th>تاریخ</th>
+                    <th>اقدام</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ordersPg.pageItems.map((o) => (
+                    <tr key={o.id}>
+                      <td data-label="شماره">{o.number != null ? o.number.toLocaleString('fa-IR') : '—'}</td>
+                      <td className="entity-name" data-label="محصول">{itemById.get(o.finished_item_id)?.name ?? '—'}</td>
+                      <td data-label="تعداد">{Number(o.qty_produced).toLocaleString('fa-IR')}</td>
+                      <td data-label="بهای واحد" className="money-cell"><strong>{fa(Number(o.unit_cost))}</strong></td>
+                      <td data-label="تاریخ">{formatJalali(o.production_date)}</td>
+                      <td className="prod-order-action" data-label="اقدام">
+                        <button type="button" onClick={() => setOpenOrder(o)}><ReceiptText size={13} /> برگهٔ بها</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={ordersPg.page} pageCount={ordersPg.pageCount} onChange={ordersPg.setPage} />
           </div>
         )}

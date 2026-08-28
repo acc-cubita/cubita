@@ -127,32 +127,34 @@ export function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
   if (employees.length === 0) return <EmptyState icon={Users} text="پرسنلی ثبت نشده." />
   return (
     <div className="entity-table-wrap">
-      <table className="entity-table payroll-emp-table">
-        <thead>
-          <tr>
-            <th>نام</th>
-            <th>کد ملی</th>
-            <th>تاریخ استخدام</th>
-            <th>وضعیت</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pg.pageItems.map((e) => (
-            <tr key={e.id}>
-              <td className="entity-name">
-                {e.first_name} {e.last_name}
-              </td>
-              <td data-label="کد ملی">{e.national_id}</td>
-              <td data-label="تاریخ استخدام">{formatJalali(e.hire_date)}</td>
-              <td data-label="وضعیت">
-                <span className={`status-badge ${e.is_active ? 'tone-success' : 'tone-muted'}`}>
-                  {e.is_active ? 'فعال' : 'غیرفعال'}
-                </span>
-              </td>
+      <div className="table-scroll">
+        <table className="entity-table payroll-emp-table cards-on-mobile">
+          <thead>
+            <tr>
+              <th>نام</th>
+              <th>کد ملی</th>
+              <th>تاریخ استخدام</th>
+              <th>وضعیت</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pg.pageItems.map((e) => (
+              <tr key={e.id}>
+                <td className="entity-name" data-label="نام">
+                  {e.first_name} {e.last_name}
+                </td>
+                <td data-label="کد ملی">{e.national_id}</td>
+                <td data-label="تاریخ استخدام">{formatJalali(e.hire_date)}</td>
+                <td data-label="وضعیت">
+                  <span className={`status-badge ${e.is_active ? 'tone-success' : 'tone-muted'}`}>
+                    {e.is_active ? 'فعال' : 'غیرفعال'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
     </div>
   )
@@ -237,32 +239,34 @@ export function PeriodPicker({ d }: { d: PayrollRunDraft }) {
 export function AttendanceTable({ d, employees }: { d: PayrollRunDraft; employees: EmployeeRecord[] }) {
   return (
     <div className="entity-table-wrap">
-      <table className="entity-table payroll-attend-table">
-        <thead>
-          <tr>
-            <th>کارمند</th>
-            <th>روز کارکرد</th>
-            <th>ساعت اضافه‌کار</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((emp) => (
-            <tr key={emp.id}>
-              <td className="entity-name">{emp.first_name} {emp.last_name}</td>
-              <td data-label="روز کارکرد">
-                <NumberInput value={d.attendance[emp.id]?.worked ?? '30'} onChange={(v) => d.setAttendanceField(emp.id, { worked: v })} />
-              </td>
-              <td data-label="ساعت اضافه‌کار">
-                <NumberInput value={d.attendance[emp.id]?.overtime ?? '0'} onChange={(v) => d.setAttendanceField(emp.id, { overtime: v })} />
-              </td>
-              <td className="attend-action">
-                <button type="button" onClick={() => void d.saveAttendance(emp.id)}><Save size={13} /> ذخیره کارکرد</button>
-              </td>
+      <div className="table-scroll">
+        <table className="entity-table payroll-attend-table cards-on-mobile">
+          <thead>
+            <tr>
+              <th>کارمند</th>
+              <th>روز کارکرد</th>
+              <th>ساعت اضافه‌کار</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {employees.map((emp) => (
+              <tr key={emp.id}>
+                <td className="entity-name" data-label="کارمند">{emp.first_name} {emp.last_name}</td>
+                <td data-label="روز کارکرد">
+                  <NumberInput value={d.attendance[emp.id]?.worked ?? '30'} onChange={(v) => d.setAttendanceField(emp.id, { worked: v })} />
+                </td>
+                <td data-label="ساعت اضافه‌کار">
+                  <NumberInput value={d.attendance[emp.id]?.overtime ?? '0'} onChange={(v) => d.setAttendanceField(emp.id, { overtime: v })} />
+                </td>
+                <td className="attend-action card-actions">
+                  <button type="button" onClick={() => void d.saveAttendance(emp.id)}><Save size={13} /> ذخیره کارکرد</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -295,37 +299,39 @@ export function PayslipResults({ d, showGenerate = true }: { d: PayrollRunDraft;
 
       {d.payslips.length > 0 && (
         <div className="entity-table-wrap">
-          <table className="entity-table payslip-table">
-            <thead>
-              <tr>
-                <th>شماره</th>
-                <th>کارمند</th>
-                <th>ناخالص</th>
-                <th>بیمه</th>
-                <th>مالیات</th>
-                <th>خالص پرداختی</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.pageItems.map((p) => {
-                const emp = d.empById.get(p.employee_id)
-                return (
-                  <tr key={p.id}>
-                    <td data-label="شماره">{p.number}</td>
-                    <td className="entity-name">{emp ? `${emp.first_name} ${emp.last_name}` : '—'}</td>
-                    <td data-label="ناخالص" className="money-cell">{Number(p.gross_pay).toLocaleString('fa-IR')}</td>
-                    <td data-label="بیمه" className="money-cell">{Number(p.insurance_employee_share).toLocaleString('fa-IR')}</td>
-                    <td data-label="مالیات" className="money-cell">{Number(p.tax_amount).toLocaleString('fa-IR')}</td>
-                    <td data-label="خالص پرداختی" className="money-cell"><strong>{Number(p.net_pay).toLocaleString('fa-IR')}</strong></td>
-                    <td className="payslip-action">
-                      <button type="button" onClick={() => d.setOpenPayslip(p)}><FileText size={13} /> فیش / چاپ</button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="entity-table payslip-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>شماره</th>
+                  <th>کارمند</th>
+                  <th>ناخالص</th>
+                  <th>بیمه</th>
+                  <th>مالیات</th>
+                  <th>خالص پرداختی</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((p) => {
+                  const emp = d.empById.get(p.employee_id)
+                  return (
+                    <tr key={p.id}>
+                      <td data-label="شماره">{p.number}</td>
+                      <td className="entity-name" data-label="کارمند">{emp ? `${emp.first_name} ${emp.last_name}` : '—'}</td>
+                      <td data-label="ناخالص" className="money-cell">{Number(p.gross_pay).toLocaleString('fa-IR')}</td>
+                      <td data-label="بیمه" className="money-cell">{Number(p.insurance_employee_share).toLocaleString('fa-IR')}</td>
+                      <td data-label="مالیات" className="money-cell">{Number(p.tax_amount).toLocaleString('fa-IR')}</td>
+                      <td data-label="خالص پرداختی" className="money-cell"><strong>{Number(p.net_pay).toLocaleString('fa-IR')}</strong></td>
+                      <td className="payslip-action card-actions">
+                        <button type="button" onClick={() => d.setOpenPayslip(p)}><FileText size={13} /> فیش / چاپ</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}

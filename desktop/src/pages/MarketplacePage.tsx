@@ -119,41 +119,43 @@ function Distributors({ token }: { token: string }) {
           <EmptyState icon={Store} text="هنوز پخش‌کننده‌ی فعالی در بازار نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>پخش‌کننده</th><th>وضعیت</th><th></th></tr></thead>
-              <tbody>
-                {pg.pageItems.map((d) => {
-                  const st = d.connection_status
-                  const badge = st ? STATUS_BADGE[st] : null
-                  const canRequest = st === null || st === 'rejected'
-                  return (
-                    <tr key={d.tenant_id}>
-                      <td className="card-title"><div className="entity-name">{d.display_name}</div></td>
-                      <td data-label="وضعیت">{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
-                      <td className="card-actions">
-                        <div className="check-actions">
-                          {canRequest && (
-                            <button type="button" className="btn-primary" disabled={busy === d.tenant_id} onClick={() => void connect(d)}>
-                              <Link2 size={13} /> درخواستِ اتصال
-                            </button>
-                          )}
-                          {st === 'approved' && connByDist.get(d.tenant_id) && (
-                            <button type="button" className="mp-chat-btn" onClick={() => setChatConn(connByDist.get(d.tenant_id)!)}>
-                              <MessageSquare size={13} /> گفتگو
-                              {(connByDist.get(d.tenant_id)!.unread_count ?? 0) > 0 && (
-                                <span className="mp-unread">{connByDist.get(d.tenant_id)!.unread_count.toLocaleString('fa-IR')}</span>
-                              )}
-                            </button>
-                          )}
-                          {st === 'pending' && <span className="entity-sub">منتظرِ تأیید…</span>}
-                          {st === 'blocked' && <span className="entity-sub">اتصالِ شما مسدود شده</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>پخش‌کننده</th><th>وضعیت</th><th></th></tr></thead>
+                <tbody>
+                  {pg.pageItems.map((d) => {
+                    const st = d.connection_status
+                    const badge = st ? STATUS_BADGE[st] : null
+                    const canRequest = st === null || st === 'rejected'
+                    return (
+                      <tr key={d.tenant_id}>
+                        <td className="card-title" data-label="پخش‌کننده"><div className="entity-name">{d.display_name}</div></td>
+                        <td data-label="وضعیت">{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
+                        <td className="card-actions">
+                          <div className="check-actions">
+                            {canRequest && (
+                              <button type="button" className="btn-primary" disabled={busy === d.tenant_id} onClick={() => void connect(d)}>
+                                <Link2 size={13} /> درخواستِ اتصال
+                              </button>
+                            )}
+                            {st === 'approved' && connByDist.get(d.tenant_id) && (
+                              <button type="button" className="mp-chat-btn" onClick={() => setChatConn(connByDist.get(d.tenant_id)!)}>
+                                <MessageSquare size={13} /> گفتگو
+                                {(connByDist.get(d.tenant_id)!.unread_count ?? 0) > 0 && (
+                                  <span className="mp-unread">{connByDist.get(d.tenant_id)!.unread_count.toLocaleString('fa-IR')}</span>
+                                )}
+                              </button>
+                            )}
+                            {st === 'pending' && <span className="entity-sub">منتظرِ تأیید…</span>}
+                            {st === 'blocked' && <span className="entity-sub">اتصالِ شما مسدود شده</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
@@ -337,22 +339,24 @@ function Catalog({ token }: { token: string }) {
         ) : (
           <>
             <div className="entity-table-wrap">
-              <table className="entity-table">
-                <thead><tr><th>محصول</th><th>تعداد</th><th>جمع</th><th></th></tr></thead>
-                <tbody>
-                  {cartLines.map((ln) => (
-                    <tr key={ln.listing.id}>
-                      <td>
-                        <div className="entity-name">{ln.listing.title}</div>
-                        <div className="entity-sub">{ln.listing.distributor_name}</div>
-                      </td>
-                      <td style={{ maxWidth: 110 }}><NumberInput allowDecimal value={ln.qty} onChange={(v) => setQty(ln.listing.id, v)} /></td>
-                      <td className="money-cell">{faMoney(Number(ln.listing.wholesale_price) * (Number(ln.qty) || 0))}</td>
-                      <td><button type="button" className="icon-btn-danger" onClick={() => removeLine(ln.listing.id)} aria-label="حذف"><Trash2 size={14} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="entity-table cards-on-mobile">
+                  <thead><tr><th>محصول</th><th>تعداد</th><th>جمع</th><th></th></tr></thead>
+                  <tbody>
+                    {cartLines.map((ln) => (
+                      <tr key={ln.listing.id}>
+                        <td data-label="محصول">
+                          <div className="entity-name">{ln.listing.title}</div>
+                          <div className="entity-sub">{ln.listing.distributor_name}</div>
+                        </td>
+                        <td style={{ maxWidth: 110 }} data-label="تعداد"><NumberInput allowDecimal value={ln.qty} onChange={(v) => setQty(ln.listing.id, v)} /></td>
+                        <td className="money-cell" data-label="جمع">{faMoney(Number(ln.listing.wholesale_price) * (Number(ln.qty) || 0))}</td>
+                        <td className="card-actions"><button type="button" className="icon-btn-danger" onClick={() => removeLine(ln.listing.id)} aria-label="حذف"><Trash2 size={14} /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
             <div className="cart-total"><span>جمعِ کل</span><strong className="money-cell">{faMoney(cartTotal)} ریال</strong></div>
             <div className="invoice-form-footer">
@@ -406,65 +410,69 @@ function Orders({ token }: { token: string }) {
         <EmptyState icon={ClipboardList} text="هنوز سفارشی ثبت نکرده‌اید — از تبِ کاتالوگ سفارش دهید." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table cards-on-mobile">
-            <thead><tr><th>سفارش</th><th>پخش‌کننده</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
-            <tbody>
-              {pg.pageItems.map((o) => {
-                // در گردشِ کارِ تحویل، سفارشِ «تأییدشده» تا وقتی فاکتور نخورده هنوز به انبار نرسیده.
-                const awaitingDelivery = o.status === 'confirmed' && !o.retailer_purchase_invoice_id
-                const badge = awaitingDelivery
-                  ? { label: 'تأییدشده — در انتظارِ تحویل', tone: 'tone-warning' }
-                  : ORDER_BADGE[o.status]
-                const open = expanded === o.id
-                const canPay = o.settlement_mode === 'online' && o.payment_status === 'unpaid' && o.status === 'placed'
-                return (
-                  <Fragment key={o.id}>
-                    <tr>
-                      <td className="card-title"><button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>سفارش #{faNum(o.order_number)}</button></td>
-                      <td data-label="پخش‌کننده">{o.distributor_name}</td>
-                      <td data-label="مبلغ" className="money-cell">{faMoney(o.total)}</td>
-                      <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
-                      <td className="card-actions">
-                        {canPay && (
-                          <button type="button" className="btn-primary" disabled={paying === o.id} onClick={() => void pay(o)}>
-                            <CreditCard size={13} /> پرداختِ آنلاین
-                          </button>
-                        )}
-                        <button type="button" className="mp-chat-btn" onClick={() => setChatOrder(o)}>
-                          <MessageSquare size={13} /> گفتگو
-                          {o.unread_count > 0 && <span className="mp-unread">{o.unread_count.toLocaleString('fa-IR')}</span>}
-                        </button>
-                      </td>
-                    </tr>
-                    {open && (
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead><tr><th>سفارش</th><th>پخش‌کننده</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
+              <tbody>
+                {pg.pageItems.map((o) => {
+                  // در گردشِ کارِ تحویل، سفارشِ «تأییدشده» تا وقتی فاکتور نخورده هنوز به انبار نرسیده.
+                  const awaitingDelivery = o.status === 'confirmed' && !o.retailer_purchase_invoice_id
+                  const badge = awaitingDelivery
+                    ? { label: 'تأییدشده — در انتظارِ تحویل', tone: 'tone-warning' }
+                    : ORDER_BADGE[o.status]
+                  const open = expanded === o.id
+                  const canPay = o.settlement_mode === 'online' && o.payment_status === 'unpaid' && o.status === 'placed'
+                  return (
+                    <Fragment key={o.id}>
                       <tr>
-                        <td className="card-full" colSpan={5}>
-                          <table className="entity-table">
-                            <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
-                            <tbody>
-                              {o.lines.map((ln, i) => (
-                                <tr key={i}>
-                                  <td>
-                                    {ln.image
-                                      ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
-                                      : ln.title}
-                                  </td>
-                                  <td className="money-cell">{faMoney(ln.unit_price)}</td>
-                                  <td>{faNum(ln.qty)}</td>
-                                  <td className="money-cell">{faMoney(ln.line_total)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {o.note && <p className="hint">یادداشت: {o.note}</p>}
+                        <td className="card-title" data-label="سفارش"><button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>سفارش #{faNum(o.order_number)}</button></td>
+                        <td data-label="پخش‌کننده">{o.distributor_name}</td>
+                        <td data-label="مبلغ" className="money-cell">{faMoney(o.total)}</td>
+                        <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+                        <td className="card-actions">
+                          {canPay && (
+                            <button type="button" className="btn-primary" disabled={paying === o.id} onClick={() => void pay(o)}>
+                              <CreditCard size={13} /> پرداختِ آنلاین
+                            </button>
+                          )}
+                          <button type="button" className="mp-chat-btn" onClick={() => setChatOrder(o)}>
+                            <MessageSquare size={13} /> گفتگو
+                            {o.unread_count > 0 && <span className="mp-unread">{o.unread_count.toLocaleString('fa-IR')}</span>}
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
+                      {open && (
+                        <tr>
+                          <td className="card-full" colSpan={5}>
+                            <div className="table-scroll">
+                              <table className="entity-table cards-on-mobile">
+                                <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
+                                <tbody>
+                                  {o.lines.map((ln, i) => (
+                                    <tr key={i}>
+                                      <td data-label="قلم">
+                                        {ln.image
+                                          ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
+                                          : ln.title}
+                                      </td>
+                                      <td className="money-cell" data-label="قیمتِ واحد">{faMoney(ln.unit_price)}</td>
+                                      <td data-label="تعداد">{faNum(ln.qty)}</td>
+                                      <td className="money-cell" data-label="جمع">{faMoney(ln.line_total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {o.note && <p className="hint">یادداشت: {o.note}</p>}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}

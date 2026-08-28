@@ -219,7 +219,7 @@ function printSchedule(plan: InstallmentPlan) {
     <div>پرداخت‌شده: <strong>${fa(plan.total_paid)}</strong></div>
     <div>مانده: <strong>${fa(plan.total_remaining)}</strong></div>
   </div>
-  <table>
+  <table class="table-plain">
     <thead><tr><th>قسط</th><th>سررسید</th><th class="num">مبلغ</th><th class="num">پرداخت‌شده</th><th class="num">مانده</th><th>وضعیت</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
@@ -871,7 +871,7 @@ export function InstallmentSalesPage({
                     <tbody>
                       {summary.top_debtors.map((d) => (
                         <tr key={d.contact_id}>
-                          <td className="card-title">{d.contact_name}</td>
+                          <td className="card-title" data-label="مشتری">{d.contact_name}</td>
                           <td data-label="قرارداد">{faInt(d.plans)}</td>
                           <td data-label="مانده" className="money-cell">{fa(d.remaining)}</td>
                           <td data-label="معوق" className="money-cell">
@@ -1029,7 +1029,7 @@ export function InstallmentSalesPage({
                   )}
 
                   <div className="table-scroll">
-                    <table className="inst-sched-table">
+                    <table className="inst-sched-table cards-on-mobile">
                       <thead>
                         <tr>
                           <th>قسط</th>
@@ -1064,7 +1064,7 @@ export function InstallmentSalesPage({
                                   {INST_STATUS[inst.status].label}
                                 </span>
                               </td>
-                              <td className="inst-inst-action">
+                              <td className="inst-inst-action" data-label="اقدام">
                                 {selected.status === 'active' && inst.status !== 'paid' && (
                                   <button type="button" onClick={() => startPay(inst)}>
                                     <Wallet size={13} /> پرداخت
@@ -1156,7 +1156,7 @@ export function InstallmentSalesPage({
                             <td data-label="قسط">{toFaDigits(p.installment_seq)}</td>
                             <td data-label="مبلغ" className="money-cell">{fa(p.amount)}</td>
                             <td data-label="روش">{p.method === 'bank' ? 'بانکی' : 'نقدی'}</td>
-                            <td className="card-title">{p.notes || '—'}</td>
+                            <td className="card-title" data-label="شرح">{p.notes || '—'}</td>
                           </tr>
                         ))}
                       </tbody>

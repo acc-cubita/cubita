@@ -96,28 +96,30 @@ export function PettyCashLedger({ d }: { d: PettyCashDraft }) {
         <EmptyState icon={Wallet} text="هنوز گردشی در تنخواه ثبت نشده." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table petty-table">
-            <thead>
-              <tr><th>تاریخ</th><th>نوع</th><th>شرح</th><th>مبلغ</th><th>مانده</th></tr>
-            </thead>
-            <tbody>
-              {pg.pageItems.map((t) => (
-                <tr key={t.id}>
-                  <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
-                  <td data-label="نوع">
-                    <span className={`status-badge ${t.type === 'charge' ? 'tone-success' : 'tone-warning'}`}>
-                      {t.type === 'charge' ? 'شارژ' : 'هزینه'}
-                    </span>
-                  </td>
-                  <td data-label="شرح">{t.description || '—'}</td>
-                  <td data-label="مبلغ" className={`money-cell ${t.type === 'charge' ? 'pos-in' : 'pos-out'}`}>
-                    {t.type === 'charge' ? '+' : '−'}{fa(Number(t.amount))}
-                  </td>
-                  <td data-label="مانده" className="money-cell"><strong>{fa(t.running)}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="entity-table petty-table cards-on-mobile">
+              <thead>
+                <tr><th>تاریخ</th><th>نوع</th><th>شرح</th><th>مبلغ</th><th>مانده</th></tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((t) => (
+                  <tr key={t.id}>
+                    <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
+                    <td data-label="نوع">
+                      <span className={`status-badge ${t.type === 'charge' ? 'tone-success' : 'tone-warning'}`}>
+                        {t.type === 'charge' ? 'شارژ' : 'هزینه'}
+                      </span>
+                    </td>
+                    <td data-label="شرح">{t.description || '—'}</td>
+                    <td data-label="مبلغ" className={`money-cell ${t.type === 'charge' ? 'pos-in' : 'pos-out'}`}>
+                      {t.type === 'charge' ? '+' : '−'}{fa(Number(t.amount))}
+                    </td>
+                    <td data-label="مانده" className="money-cell"><strong>{fa(t.running)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}

@@ -52,41 +52,43 @@ export function ProductionCostDrawer({
           </div>
 
           <div className="entity-table-wrap">
-            <table className="entity-table prod-cost-table">
-              <thead>
-                <tr><th>جزء (ماده اولیه)</th><th>مقدار</th><th>بهای واحد</th><th>جمع</th></tr>
-              </thead>
-              <tbody>
-                {order.lines.map((l, i) => (
-                  <tr key={i}>
-                    <td className="entity-name">{itemById.get(l.component_item_id)?.name ?? '؟'}</td>
-                    <td data-label="مقدار">{faQty(l.qty)}</td>
-                    <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
-                    <td data-label="جمع" className="money-cell"><strong>{fa(Number(l.qty) * Number(l.unit_cost))}</strong></td>
-                  </tr>
-                ))}
-                <tr className="prod-cost-foot">
-                  <td className="entity-name">جمعِ مواد اولیه</td>
-                  <td data-label="مقدار"></td>
-                  <td data-label="بهای واحد"></td>
-                  <td data-label="جمع" className="money-cell"><strong>{fa(order.component_cost)}</strong></td>
-                </tr>
-                {Number(order.overhead_cost) > 0 && (
+            <div className="table-scroll">
+              <table className="entity-table prod-cost-table cards-on-mobile">
+                <thead>
+                  <tr><th>جزء (ماده اولیه)</th><th>مقدار</th><th>بهای واحد</th><th>جمع</th></tr>
+                </thead>
+                <tbody>
+                  {order.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td className="entity-name" data-label="جزء (ماده اولیه)">{itemById.get(l.component_item_id)?.name ?? '؟'}</td>
+                      <td data-label="مقدار">{faQty(l.qty)}</td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
+                      <td data-label="جمع" className="money-cell"><strong>{fa(Number(l.qty) * Number(l.unit_cost))}</strong></td>
+                    </tr>
+                  ))}
                   <tr className="prod-cost-foot">
-                    <td className="entity-name">سربار / دستمزد</td>
+                    <td className="entity-name" data-label="جزء (ماده اولیه)">جمعِ مواد اولیه</td>
                     <td data-label="مقدار"></td>
                     <td data-label="بهای واحد"></td>
-                    <td data-label="جمع" className="money-cell"><strong>{fa(order.overhead_cost)}</strong></td>
+                    <td data-label="جمع" className="money-cell"><strong>{fa(order.component_cost)}</strong></td>
                   </tr>
-                )}
-                <tr className="prod-cost-total">
-                  <td className="entity-name">بهای هر واحدِ محصول (÷ {faQty(order.qty_produced)})</td>
-                  <td data-label="مقدار"></td>
-                  <td data-label="بهای واحد"></td>
-                  <td data-label="جمع" className="money-cell"><strong>{fa(order.unit_cost)}</strong></td>
-                </tr>
-              </tbody>
-            </table>
+                  {Number(order.overhead_cost) > 0 && (
+                    <tr className="prod-cost-foot">
+                      <td className="entity-name" data-label="جزء (ماده اولیه)">سربار / دستمزد</td>
+                      <td data-label="مقدار"></td>
+                      <td data-label="بهای واحد"></td>
+                      <td data-label="جمع" className="money-cell"><strong>{fa(order.overhead_cost)}</strong></td>
+                    </tr>
+                  )}
+                  <tr className="prod-cost-total">
+                    <td className="entity-name" data-label="جزء (ماده اولیه)">بهای هر واحدِ محصول (÷ {faQty(order.qty_produced)})</td>
+                    <td data-label="مقدار"></td>
+                    <td data-label="بهای واحد"></td>
+                    <td data-label="جمع" className="money-cell"><strong>{fa(order.unit_cost)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="field-hint">
             اجزا با میانگینِ موزونِ خودشان از انبار خارج شده‌اند؛ بهای هر واحد = (بهای مواد + سربار) ÷ تعدادِ تولید.

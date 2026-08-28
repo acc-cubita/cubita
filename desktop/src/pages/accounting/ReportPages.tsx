@@ -790,10 +790,10 @@ export function VatPage({ token }: { token: string }) {
                   </tr>
                 ))}
                 <tr className="acc-row--total">
-                  <td className="card-title">مالیاتِ خالصِ فصل</td>
-                  <td className="num">—</td>
-                  <td className="num">{fa(net)}</td>
-                  <td>{net >= 0 ? 'پرداختنی' : 'استردادی'}</td>
+                  <td className="card-title" data-label="شرح">مالیاتِ خالصِ فصل</td>
+                  <td className="num" data-label="مبلغِ خالص">—</td>
+                  <td className="num" data-label="مالیات">{fa(net)}</td>
+                  <td data-label="اثر">{net >= 0 ? 'پرداختنی' : 'استردادی'}</td>
                 </tr>
               </tbody>
             </table>

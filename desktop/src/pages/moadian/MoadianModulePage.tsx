@@ -533,7 +533,7 @@ function HistoryTab({ m }: { m: MoadianPanelState }) {
                         {s.reference_number ? <span className="mdn-ref" dir="ltr">{s.reference_number}</span> : '—'}
                       </td>
                       <td className="card-wide" data-label="توضیح">{s.error_message || '—'}</td>
-                      <td className="card-actions">
+                      <td className="card-actions" data-label="استعلام">
                         {s.reference_number ? (
                           <button type="button" className="btn-ghost btn-sm" onClick={() => void m.inquire(s.id)}>
                             استعلام وضعیت

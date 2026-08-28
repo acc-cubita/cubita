@@ -80,7 +80,7 @@ export function PermissionMatrix({
       </div>
       {note && <p className="bk-hint tm-matrix-note">{note}</p>}
       <div className="table-scroll">
-        <table className="tm-matrix-table">
+        <table className="tm-matrix-table table-plain">
           <thead>
             <tr>
               <th>ماژول</th>

@@ -259,54 +259,56 @@ export function IntegrationPanel({ token }: { token: string }) {
           </div>
 
           <div className="entity-table-wrap">
-            <table className="entity-table integration-table">
-              <thead>
-                <tr>
-                  <th>کد کالا</th>
-                  <th>نام</th>
-                  <th>وضعیت</th>
-                  <th>قیمت فروش</th>
-                  <th>بهای تمام‌شده</th>
-                  <th>شناسه محصول در سایت</th>
-                  <th>اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleItems.map((item) => (
-                  <tr key={item.id}>
-                    <td data-label="کد کالا">{item.sku}</td>
-                    <td className="entity-name">{item.name}</td>
-                    <td data-label="وضعیت">
-                      {item.storefront_product_id != null
-                        ? <span className="status-badge tone-success">متصل</span>
-                        : <span className="status-badge tone-muted">بدون نگاشت</span>}
-                    </td>
-                    <td data-label="قیمت فروش" className="money-cell">{Number(item.sales_price).toLocaleString('fa-IR')}</td>
-                    <td data-label="بهای تمام‌شده">
-                      <NumberInput
-                        className="integration-num"
-                        value={pendingCost[item.id] ?? String(Number(item.average_cost) || 0)}
-                        onChange={(v) => setPendingCost((prev) => ({ ...prev, [item.id]: v }))}
-                      />
-                    </td>
-                    <td data-label="شناسه محصول در سایت">
-                      <NumberInput
-                        group={false}
-                        className="integration-num"
-                        placeholder="—"
-                        value={pendingMapping[item.id] ?? item.storefront_product_id ?? ''}
-                        onChange={(v) => setPendingMapping((prev) => ({ ...prev, [item.id]: v }))}
-                      />
-                    </td>
-                    <td className="integration-action">
-                      <button type="button" onClick={() => void saveRow(item)}>
-                        <Save size={13} /> ذخیره
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table integration-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کد کالا</th>
+                    <th>نام</th>
+                    <th>وضعیت</th>
+                    <th>قیمت فروش</th>
+                    <th>بهای تمام‌شده</th>
+                    <th>شناسه محصول در سایت</th>
+                    <th>اقدام</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visibleItems.map((item) => (
+                    <tr key={item.id}>
+                      <td data-label="کد کالا">{item.sku}</td>
+                      <td className="entity-name" data-label="نام">{item.name}</td>
+                      <td data-label="وضعیت">
+                        {item.storefront_product_id != null
+                          ? <span className="status-badge tone-success">متصل</span>
+                          : <span className="status-badge tone-muted">بدون نگاشت</span>}
+                      </td>
+                      <td data-label="قیمت فروش" className="money-cell">{Number(item.sales_price).toLocaleString('fa-IR')}</td>
+                      <td data-label="بهای تمام‌شده">
+                        <NumberInput
+                          className="integration-num"
+                          value={pendingCost[item.id] ?? String(Number(item.average_cost) || 0)}
+                          onChange={(v) => setPendingCost((prev) => ({ ...prev, [item.id]: v }))}
+                        />
+                      </td>
+                      <td data-label="شناسه محصول در سایت">
+                        <NumberInput
+                          group={false}
+                          className="integration-num"
+                          placeholder="—"
+                          value={pendingMapping[item.id] ?? item.storefront_product_id ?? ''}
+                          onChange={(v) => setPendingMapping((prev) => ({ ...prev, [item.id]: v }))}
+                        />
+                      </td>
+                      <td className="integration-action" data-label="اقدام">
+                        <button type="button" onClick={() => void saveRow(item)}>
+                          <Save size={13} /> ذخیره
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {syncResult && (syncResult.orders_skipped.length > 0 || syncResult.items_push_failed.length > 0) && (

@@ -135,7 +135,7 @@ export function FixedAssetsList({ d }: { d: FixedAssetDraft }) {
         <tbody>
           {pg.pageItems.map((a) => (
             <tr key={a.id} style={a.is_disposed ? { opacity: 0.55 } : undefined}>
-              <td className="card-title">{a.name}</td>
+              <td className="card-title" data-label="نام">{a.name}</td>
               <td data-label="تحصیل">{formatJalali(a.acquired_date)}</td>
               <td data-label="بها">{fa(a.cost)}</td>
               <td data-label="ماهانه">{fa(a.monthly_depreciation)}</td>
@@ -146,7 +146,7 @@ export function FixedAssetsList({ d }: { d: FixedAssetDraft }) {
                   {a.is_disposed ? 'واگذارشده' : a.fully_depreciated ? 'مستهلک کامل' : 'فعال'}
                 </span>
               </td>
-              <td className="card-actions">
+              <td className="card-actions" data-label="عملیات">
                 <div className="check-actions">
                   <button type="button" onClick={() => d.startEdit(a)} aria-label="ویرایش"><Pencil size={13} /></button>
                   {!a.is_disposed && (
@@ -195,7 +195,7 @@ export function DepreciationRun({ d }: { d: FixedAssetDraft }) {
               {pg.pageItems.map((e) => (
                 <tr key={e.id}>
                   <td data-label="دوره">{formatJalali(e.period_date)}</td>
-                  <td className="card-title">{e.asset_name}</td>
+                  <td className="card-title" data-label="دارایی">{e.asset_name}</td>
                   <td data-label="مبلغ استهلاک">{fa(e.amount)}</td>
                 </tr>
               ))}

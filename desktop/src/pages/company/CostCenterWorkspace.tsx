@@ -564,7 +564,7 @@ function CenterBudget({
               {lines.map((l) => (
                 <tr key={l.id}>
                   <td data-label="دوره">{monthLabel(l.period_date)}</td>
-                  <td className="card-title">{l.account_name}</td>
+                  <td className="card-title" data-label="حساب">{l.account_name}</td>
                   <td data-label="نوع">{l.account_type === 'income' ? 'درآمد' : 'هزینه'}</td>
                   <td data-label="مبلغ" className="money-cell">
                     {fa(l.amount)}
@@ -634,7 +634,7 @@ function CenterLedger({
               <tr key={r.line_id}>
                 <td data-label="تاریخ">{formatJalali(r.entry_date)}</td>
                 <td data-label="سند">{r.entry_number ? toFaDigits(r.entry_number) : '—'}</td>
-                <td className="card-title cc-ledger-account">{r.account_name}</td>
+                <td className="card-title cc-ledger-account" data-label="حساب">{r.account_name}</td>
                 <td data-label="شرح" className="cc-ledger-desc">
                   {r.description || '—'}
                 </td>
@@ -1111,7 +1111,7 @@ export function CostCenterWorkspace({
                             <tbody>
                               {analysis.children.map((ch) => (
                                 <tr key={ch.id}>
-                                  <td className="card-title">{ch.name}</td>
+                                  <td className="card-title" data-label="مرکز">{ch.name}</td>
                                   <td data-label="درآمد" className="money-cell">
                                     {fa(ch.income)}
                                   </td>

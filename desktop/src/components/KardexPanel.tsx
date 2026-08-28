@@ -65,30 +65,32 @@ export function KardexPanel({ token, items }: { token: string; items: PickableIt
             <p className="muted">هیچ حرکتی برای این کالا ثبت نشده.</p>
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table kardex-table">
-                <thead>
-                  <tr>
-                    <th>تاریخ</th>
-                    <th>شرح</th>
-                    <th>ورود</th>
-                    <th>خروج</th>
-                    <th>بهای واحد</th>
-                    <th>مانده</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
-                      <td data-label="شرح">{l.source_label}</td>
-                      <td data-label="ورود" className="pos-in">{Number(l.qty_in) > 0 ? faQty(l.qty_in) : '—'}</td>
-                      <td data-label="خروج" className="pos-out">{Number(l.qty_out) > 0 ? faQty(l.qty_out) : '—'}</td>
-                      <td data-label="بهای واحد" className="money-cell">{fa(Number(l.unit_cost))}</td>
-                      <td data-label="مانده" className="money-cell"><strong>{faQty(l.balance_qty)}</strong></td>
+              <div className="table-scroll">
+                <table className="entity-table kardex-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>تاریخ</th>
+                      <th>شرح</th>
+                      <th>ورود</th>
+                      <th>خروج</th>
+                      <th>بهای واحد</th>
+                      <th>مانده</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.lines.map((l, i) => (
+                      <tr key={i}>
+                        <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
+                        <td data-label="شرح">{l.source_label}</td>
+                        <td data-label="ورود" className="pos-in">{Number(l.qty_in) > 0 ? faQty(l.qty_in) : '—'}</td>
+                        <td data-label="خروج" className="pos-out">{Number(l.qty_out) > 0 ? faQty(l.qty_out) : '—'}</td>
+                        <td data-label="بهای واحد" className="money-cell">{fa(Number(l.unit_cost))}</td>
+                        <td data-label="مانده" className="money-cell"><strong>{faQty(l.balance_qty)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

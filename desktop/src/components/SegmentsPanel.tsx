@@ -102,45 +102,47 @@ export function SegmentsPanel({ token }: { token: string }) {
           <EmptyState icon={Users} text={loading ? 'در حال محاسبه…' : 'مشتریِ دارای خرید برای این دسته نیست.'} />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table segments-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>مشتری</th>
-                  <th>دسته</th>
-                  <th>R</th>
-                  <th>F</th>
-                  <th>M</th>
-                  <th>آخرین خرید</th>
-                  <th>تعداد</th>
-                  <th>مجموع خرید</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((c) => {
-                  const meta = SEGMENT_META[c.segment]
-                  return (
-                    <tr key={c.contact_id}>
-                      <td className="card-title" data-label="مشتری">
-                        <div className="entity-cell">
-                          <div className="entity-avatar tone-customer">{c.contact_name.trim().charAt(0) || '؟'}</div>
-                          <div className="entity-name">{c.contact_name}</div>
-                        </div>
-                      </td>
-                      <td data-label="دسته"><span className={`status-badge tone-${meta.tone}`}>{meta.label}</span></td>
-                      <td data-label="R"><Rfm score={c.r} /></td>
-                      <td data-label="F"><Rfm score={c.f} /></td>
-                      <td data-label="M"><Rfm score={c.m} /></td>
-                      <td data-label="آخرین خرید">
-                        {c.last_purchase ? formatJalali(c.last_purchase) : '—'}
-                        <div className="entity-sub">{fa(c.recency_days)} روز پیش</div>
-                      </td>
-                      <td data-label="تعداد" className="money-cell">{fa(c.frequency)}</td>
-                      <td data-label="مجموع خرید" className="money-cell"><strong>{fa(c.monetary)}</strong></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table segments-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>مشتری</th>
+                    <th>دسته</th>
+                    <th>R</th>
+                    <th>F</th>
+                    <th>M</th>
+                    <th>آخرین خرید</th>
+                    <th>تعداد</th>
+                    <th>مجموع خرید</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((c) => {
+                    const meta = SEGMENT_META[c.segment]
+                    return (
+                      <tr key={c.contact_id}>
+                        <td className="card-title" data-label="مشتری">
+                          <div className="entity-cell">
+                            <div className="entity-avatar tone-customer">{c.contact_name.trim().charAt(0) || '؟'}</div>
+                            <div className="entity-name">{c.contact_name}</div>
+                          </div>
+                        </td>
+                        <td data-label="دسته"><span className={`status-badge tone-${meta.tone}`}>{meta.label}</span></td>
+                        <td data-label="R"><Rfm score={c.r} /></td>
+                        <td data-label="F"><Rfm score={c.f} /></td>
+                        <td data-label="M"><Rfm score={c.m} /></td>
+                        <td data-label="آخرین خرید">
+                          {c.last_purchase ? formatJalali(c.last_purchase) : '—'}
+                          <div className="entity-sub">{fa(c.recency_days)} روز پیش</div>
+                        </td>
+                        <td data-label="تعداد" className="money-cell">{fa(c.frequency)}</td>
+                        <td data-label="مجموع خرید" className="money-cell"><strong>{fa(c.monetary)}</strong></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}

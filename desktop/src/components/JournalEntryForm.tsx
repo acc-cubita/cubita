@@ -120,7 +120,7 @@ export function JournalEntryForm({
 export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
   return (
     <div className="table-scroll">
-      <table className="invoice-lines">
+      <table className="invoice-lines cards-on-mobile">
         <thead>
           <tr>
             <th>حساب</th>
@@ -133,7 +133,7 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
         <tbody>
           {d.lines.map((line, i) => (
             <tr key={i}>
-              <td>
+              <td data-label="حساب">
                 <select value={line.accountId} onChange={(e) => d.updateLine(i, { accountId: e.target.value })}>
                   <option value="">— انتخاب حساب —</option>
                   {d.postableAccounts.map((a) => (
@@ -144,7 +144,7 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                 </select>
               </td>
               {d.currencyCode && (
-                <td>
+                <td data-label="مبلغ ارزی">
                   <NumberInput
                     value={line.fxAmount ?? ''}
                     onChange={(v) => d.setLineFx(i, v)}
@@ -152,13 +152,13 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                   />
                 </td>
               )}
-              <td>
+              <td data-label="بدهکار">
                 <NumberInput value={line.debit} onChange={(v) => d.updateLine(i, { debit: v, credit: '' })} />
               </td>
-              <td>
+              <td data-label="بستانکار">
                 <NumberInput value={line.credit} onChange={(v) => d.updateLine(i, { credit: v, debit: '' })} />
               </td>
-              <td>
+              <td className="card-actions">
                 <button
                   type="button"
                   className="icon-btn-danger"

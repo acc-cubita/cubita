@@ -217,7 +217,7 @@ export function ContactGroupPage({ token }: { token: string }) {
                       </span>
                     </td>
                     <td data-label="توضیحات">{r.notes || '—'}</td>
-                    <td>
+                    <td className="card-actions">
                       <button
                         type="button"
                         className="icon-btn-danger"
@@ -432,7 +432,7 @@ export function GeoLocationsPage({ token }: { token: string }) {
                         {r.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
-                    <td>
+                    <td className="card-actions">
                       <button
                         type="button"
                         className="icon-btn-danger"
@@ -659,7 +659,7 @@ export function RelatedPeoplePage({ token }: { token: string }) {
                     <td data-label="سمت">{r.role || '—'}</td>
                     <td data-label="تلفن">{r.phone || '—'}</td>
                     <td data-label="ایمیل">{r.email || '—'}</td>
-                    <td>
+                    <td className="card-actions">
                       <button
                         type="button"
                         className="icon-btn-danger"

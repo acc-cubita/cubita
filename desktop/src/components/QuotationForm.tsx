@@ -91,7 +91,7 @@ export function QuotationForm({
           </label>
 
           <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead>
                 <tr>
                   <th>کالا</th>
@@ -152,7 +152,7 @@ export function QuotationForm({
                           {line.itemId ? ((Number(line.qty) || 0) * (Number(line.unitPrice) || 0)).toLocaleString('fa-IR') : '—'}
                         </span>
                       </td>
-                      <td>
+                      <td className="card-actions">
                         <button type="button" className="icon-btn-danger" onClick={() => q.removeLine(i)} disabled={q.lines.length === 1} aria-label="حذف ردیف">
                           <Trash2 size={14} />
                         </button>

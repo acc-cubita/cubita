@@ -364,9 +364,9 @@ export function ClosePnlPage({ token }: { token: string }) {
                   </tr>
                 ))}
                 <tr className="acc-row--total">
-                  <td className="card-title">انتقال به سود انباشته</td>
-                  <td className="num">{profit < 0 ? fa(Math.abs(profit)) : '—'}</td>
-                  <td className="num">{profit > 0 ? fa(profit) : '—'}</td>
+                  <td className="card-title" data-label="حساب">انتقال به سود انباشته</td>
+                  <td className="num" data-label="بدهکار">{profit < 0 ? fa(Math.abs(profit)) : '—'}</td>
+                  <td className="num" data-label="بستانکار">{profit > 0 ? fa(profit) : '—'}</td>
                 </tr>
               </tbody>
             </table>

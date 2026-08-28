@@ -171,37 +171,39 @@ export function RewardsPanel({
           <EmptyState icon={Gift} text="جایزه‌ای تعریف نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table rewards-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>جایزه</th>
-                  <th>نوع</th>
-                  <th>امتیازِ لازم</th>
-                  <th>وضعیت</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((r) => (
-                  <tr key={r.id} className={r.is_active ? '' : 'row-muted'}>
-                    <td className="card-title" data-label="جایزه">
-                      <div className="entity-name">{r.name}</div>
-                      <div className="entity-sub">{rewardValue(r)}</div>
-                    </td>
-                    <td data-label="نوع"><span className="status-badge tone-default">{KIND_LABELS[r.kind]}</span></td>
-                    <td data-label="امتیازِ لازم" className="money-cell"><strong>{fa(r.points_cost)}</strong></td>
-                    <td data-label="وضعیت">
-                      <button type="button" className="link-btn" onClick={() => void toggleActive(r)}>
-                        {r.is_active ? <><ToggleRight size={15} /> فعال</> : <><ToggleLeft size={15} /> غیرفعال</>}
-                      </button>
-                    </td>
-                    <td className="card-actions">
-                      <button type="button" className="icon-btn-danger" onClick={() => void remove(r.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table rewards-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>جایزه</th>
+                    <th>نوع</th>
+                    <th>امتیازِ لازم</th>
+                    <th>وضعیت</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((r) => (
+                    <tr key={r.id} className={r.is_active ? '' : 'row-muted'}>
+                      <td className="card-title" data-label="جایزه">
+                        <div className="entity-name">{r.name}</div>
+                        <div className="entity-sub">{rewardValue(r)}</div>
+                      </td>
+                      <td data-label="نوع"><span className="status-badge tone-default">{KIND_LABELS[r.kind]}</span></td>
+                      <td data-label="امتیازِ لازم" className="money-cell"><strong>{fa(r.points_cost)}</strong></td>
+                      <td data-label="وضعیت">
+                        <button type="button" className="link-btn" onClick={() => void toggleActive(r)}>
+                          {r.is_active ? <><ToggleRight size={15} /> فعال</> : <><ToggleLeft size={15} /> غیرفعال</>}
+                        </button>
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" className="icon-btn-danger" onClick={() => void remove(r.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}

@@ -100,43 +100,45 @@ export function WarehousesPanel({ token, onChanged }: { token: string; onChanged
           <EmptyState icon={Warehouse} text="هنوز انباری ساخته نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table wh-table">
-              <thead>
-                <tr><th>کد</th><th>نام</th><th>وضعیت</th><th></th></tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((w) => (
-                  <tr key={w.id}>
-                    <td data-label="کد" className="ltr-cell">{w.code}</td>
-                    <td data-label="نام" className="entity-name">
-                      {editId === w.id ? (
-                        <input value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus />
-                      ) : (
-                        w.name
-                      )}
-                    </td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${w.is_active ? 'tone-success' : 'tone-warning'}`}>
-                        {w.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                    <td className="check-actions">
-                      {editId === w.id ? (
-                        <>
-                          <button type="button" onClick={() => void saveRename(w)}><Save size={13} /> ذخیره</button>
-                          <button type="button" onClick={() => setEditId(null)}><X size={13} /> انصراف</button>
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" onClick={() => { setEditId(w.id); setEditName(w.name) }}><Pencil size={13} /> ویرایش نام</button>
-                          <button type="button" onClick={() => void toggleActive(w)}>{w.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}</button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table wh-table cards-on-mobile">
+                <thead>
+                  <tr><th>کد</th><th>نام</th><th>وضعیت</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((w) => (
+                    <tr key={w.id}>
+                      <td data-label="کد" className="ltr-cell">{w.code}</td>
+                      <td data-label="نام" className="entity-name">
+                        {editId === w.id ? (
+                          <input value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus />
+                        ) : (
+                          w.name
+                        )}
+                      </td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${w.is_active ? 'tone-success' : 'tone-warning'}`}>
+                          {w.is_active ? 'فعال' : 'غیرفعال'}
+                        </span>
+                      </td>
+                      <td className="check-actions card-actions">
+                        {editId === w.id ? (
+                          <>
+                            <button type="button" onClick={() => void saveRename(w)}><Save size={13} /> ذخیره</button>
+                            <button type="button" onClick={() => setEditId(null)}><X size={13} /> انصراف</button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => { setEditId(w.id); setEditName(w.name) }}><Pencil size={13} /> ویرایش نام</button>
+                            <button type="button" onClick={() => void toggleActive(w)}>{w.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}

@@ -80,16 +80,16 @@ export function StockAdjustmentHistory({ d }: { d: StockAdjustmentDraft }) {
   if (d.history.length === 0) return null
   return (
     <div className="table-scroll">
-      <table>
+      <table className="cards-on-mobile">
         <thead>
           <tr><th>تاریخ</th><th>مقدار</th><th>دلیل</th></tr>
         </thead>
         <tbody>
           {d.history.map((h) => (
             <tr key={h.id}>
-              <td>{formatJalali(h.adjustment_date)}</td>
-              <td>{Number(h.qty_diff) > 0 ? '+' : ''}{Number(h.qty_diff).toLocaleString('fa-IR')}</td>
-              <td>{h.reason}</td>
+              <td data-label="تاریخ">{formatJalali(h.adjustment_date)}</td>
+              <td data-label="مقدار">{Number(h.qty_diff) > 0 ? '+' : ''}{Number(h.qty_diff).toLocaleString('fa-IR')}</td>
+              <td data-label="دلیل">{h.reason}</td>
             </tr>
           ))}
         </tbody>

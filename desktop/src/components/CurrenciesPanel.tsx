@@ -130,30 +130,32 @@ export function CurrenciesPanel({ token }: { token: string }) {
           <EmptyState icon={Coins} text="ارزی تعریف نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>کد</th>
-                  <th>نام</th>
-                  <th>نماد</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {curPg.pageItems.map((c) => (
-                  <tr key={c.id}>
-                    <td className="entity-name card-title">{c.code}</td>
-                    <td data-label="نام">{c.name}</td>
-                    <td data-label="نماد">{c.symbol || '—'}</td>
-                    <td className="card-actions">
-                      <button type="button" className="icon-btn-danger" onClick={() => void handleDeleteCurrency(c.id)} aria-label="حذف">
-                        <Trash2 size={13} /> حذف
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کد</th>
+                    <th>نام</th>
+                    <th>نماد</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {curPg.pageItems.map((c) => (
+                    <tr key={c.id}>
+                      <td className="entity-name card-title" data-label="کد">{c.code}</td>
+                      <td data-label="نام">{c.name}</td>
+                      <td data-label="نماد">{c.symbol || '—'}</td>
+                      <td className="card-actions">
+                        <button type="button" className="icon-btn-danger" onClick={() => void handleDeleteCurrency(c.id)} aria-label="حذف">
+                          <Trash2 size={13} /> حذف
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={curPg.page} pageCount={curPg.pageCount} onChange={curPg.setPage} />
           </div>
         )}
@@ -197,24 +199,26 @@ export function CurrenciesPanel({ token }: { token: string }) {
           <EmptyState icon={TrendingUp} text="نرخی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>ارز</th>
-                  <th>تاریخ</th>
-                  <th>نرخ (ریال)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ratePg.pageItems.map((r) => (
-                  <tr key={r.id}>
-                    <td className="entity-name card-title">{r.currency_code}</td>
-                    <td data-label="تاریخ">{formatJalali(r.rate_date)}</td>
-                    <td data-label="نرخ (ریال)" className="money-cell">{fa(r.rate)}</td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>ارز</th>
+                    <th>تاریخ</th>
+                    <th>نرخ (ریال)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ratePg.pageItems.map((r) => (
+                    <tr key={r.id}>
+                      <td className="entity-name card-title" data-label="ارز">{r.currency_code}</td>
+                      <td data-label="تاریخ">{formatJalali(r.rate_date)}</td>
+                      <td data-label="نرخ (ریال)" className="money-cell">{fa(r.rate)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={ratePg.page} pageCount={ratePg.pageCount} onChange={ratePg.setPage} />
           </div>
         )}

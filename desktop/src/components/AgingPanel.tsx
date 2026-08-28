@@ -54,45 +54,47 @@ export function AgingPanel({
         <EmptyState icon={CalendarClock} text={kind === 'receivable' ? 'مطالباتِ بازی نیست.' : 'بدهیِ بازی نیست.'} />
       ) : data ? (
         <div className="entity-table-wrap">
-          <table className="entity-table aging-table">
-            <thead>
-              <tr>
-                <th>طرف حساب</th>
-                <th>جاری</th>
-                <th>۳۱–۶۰ روز</th>
-                <th>۶۱–۹۰ روز</th>
-                <th>+۹۰ روز</th>
-                <th>جمع</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((r) => (
-                <tr key={r.contact_id}>
-                  <td data-label="طرف حساب" className="entity-name">{r.contact_name}</td>
-                  <td data-label="جاری" className="money-cell">{fa(Number(r.current))}</td>
-                  <td data-label="۳۱–۶۰ روز" className="money-cell">{Number(r.d31_60) > 0 ? fa(Number(r.d31_60)) : '—'}</td>
-                  <td data-label="۶۱–۹۰ روز" className="money-cell">{Number(r.d61_90) > 0 ? fa(Number(r.d61_90)) : '—'}</td>
-                  <td data-label="+۹۰ روز" className="money-cell">
-                    {Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(Number(r.over_90))}</span> : '—'}
-                  </td>
-                  <td data-label="جمع" className="money-cell"><strong>{fa(Number(r.total))}</strong></td>
-                  <td className="aging-action">
-                    <button type="button" onClick={() => onStatement({ id: r.contact_id, name: r.contact_name })}><FileText size={13} /> صورت‌حساب</button>
-                  </td>
+          <div className="table-scroll">
+            <table className="entity-table aging-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>طرف حساب</th>
+                  <th>جاری</th>
+                  <th>۳۱–۶۰ روز</th>
+                  <th>۶۱–۹۰ روز</th>
+                  <th>+۹۰ روز</th>
+                  <th>جمع</th>
+                  <th></th>
                 </tr>
-              ))}
-              <tr className="aging-total-row">
-                <td data-label="طرف حساب"><strong>جمعِ کل</strong></td>
-                <td data-label="جاری" className="money-cell"><strong>{fa(Number(data.total_current))}</strong></td>
-                <td data-label="۳۱–۶۰ روز" className="money-cell"><strong>{fa(Number(data.total_31_60))}</strong></td>
-                <td data-label="۶۱–۹۰ روز" className="money-cell"><strong>{fa(Number(data.total_61_90))}</strong></td>
-                <td data-label="+۹۰ روز" className="money-cell"><strong>{fa(Number(data.total_over_90))}</strong></td>
-                <td data-label="جمع" className="money-cell"><strong>{fa(Number(data.grand_total))}</strong></td>
-                <td></td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.contact_id}>
+                    <td data-label="طرف حساب" className="entity-name">{r.contact_name}</td>
+                    <td data-label="جاری" className="money-cell">{fa(Number(r.current))}</td>
+                    <td data-label="۳۱–۶۰ روز" className="money-cell">{Number(r.d31_60) > 0 ? fa(Number(r.d31_60)) : '—'}</td>
+                    <td data-label="۶۱–۹۰ روز" className="money-cell">{Number(r.d61_90) > 0 ? fa(Number(r.d61_90)) : '—'}</td>
+                    <td data-label="+۹۰ روز" className="money-cell">
+                      {Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(Number(r.over_90))}</span> : '—'}
+                    </td>
+                    <td data-label="جمع" className="money-cell"><strong>{fa(Number(r.total))}</strong></td>
+                    <td className="aging-action card-actions">
+                      <button type="button" onClick={() => onStatement({ id: r.contact_id, name: r.contact_name })}><FileText size={13} /> صورت‌حساب</button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="aging-total-row">
+                  <td data-label="طرف حساب"><strong>جمعِ کل</strong></td>
+                  <td data-label="جاری" className="money-cell"><strong>{fa(Number(data.total_current))}</strong></td>
+                  <td data-label="۳۱–۶۰ روز" className="money-cell"><strong>{fa(Number(data.total_31_60))}</strong></td>
+                  <td data-label="۶۱–۹۰ روز" className="money-cell"><strong>{fa(Number(data.total_61_90))}</strong></td>
+                  <td data-label="+۹۰ روز" className="money-cell"><strong>{fa(Number(data.total_over_90))}</strong></td>
+                  <td data-label="جمع" className="money-cell"><strong>{fa(Number(data.grand_total))}</strong></td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
     </SectionCard>

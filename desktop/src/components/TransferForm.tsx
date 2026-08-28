@@ -86,7 +86,7 @@ export function TransferForm({
 export function TransferLinesTable({ d }: { d: TransferDraft }) {
   return (
     <div className="table-scroll">
-      <table className="invoice-lines">
+      <table className="invoice-lines cards-on-mobile">
         <thead>
           <tr><th>کالا</th><th>تعداد</th><th></th></tr>
         </thead>
@@ -102,7 +102,7 @@ export function TransferLinesTable({ d }: { d: TransferDraft }) {
               <td data-label="تعداد">
                 <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
               </td>
-              <td>
+              <td className="card-actions">
                 <button type="button" className="icon-btn-danger" onClick={() => d.removeLine(i)} disabled={d.lines.length === 1} aria-label="حذف ردیف">
                   <Trash2 size={14} />
                 </button>
@@ -122,18 +122,18 @@ export function TransfersList({ d }: { d: TransferDraft }) {
   }
   return (
     <div className="table-scroll">
-      <table>
+      <table className="cards-on-mobile">
         <thead>
           <tr><th>شماره</th><th>تاریخ</th><th>از</th><th>به</th><th>ردیف‌ها</th></tr>
         </thead>
         <tbody>
           {d.transfers.map((t) => (
             <tr key={t.id}>
-              <td>{t.number != null ? t.number.toLocaleString('fa-IR') : '—'}</td>
-              <td>{formatJalali(t.transfer_date)}</td>
-              <td>{d.warehouseById.get(t.from_warehouse_id)?.name ?? '—'}</td>
-              <td>{d.warehouseById.get(t.to_warehouse_id)?.name ?? '—'}</td>
-              <td>
+              <td data-label="شماره">{t.number != null ? t.number.toLocaleString('fa-IR') : '—'}</td>
+              <td data-label="تاریخ">{formatJalali(t.transfer_date)}</td>
+              <td data-label="از">{d.warehouseById.get(t.from_warehouse_id)?.name ?? '—'}</td>
+              <td data-label="به">{d.warehouseById.get(t.to_warehouse_id)?.name ?? '—'}</td>
+              <td data-label="ردیف‌ها">
                 {t.lines.map((l) => `${d.itemById.get(l.item_id)?.name ?? l.item_id} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
               </td>
             </tr>

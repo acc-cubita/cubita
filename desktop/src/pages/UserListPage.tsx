@@ -16,6 +16,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { EmptyState } from '../components/EmptyState'
 import { Pager, usePagination } from '../components/Pager'
 import { PermissionMatrix, isFullAccess, summarize } from '../components/PermissionMatrix'
 
@@ -108,110 +109,114 @@ export function UserListPage({ token }: { token: string }) {
       >
         {data == null ? (
           <p className="muted">در حال بارگذاری…</p>
+        ) : data.members.length === 0 ? (
+          <EmptyState icon={ShieldCheck} text="هنوز کاربری در این کسب‌وکار نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>کاربر</th>
-                  <th>نقش</th>
-                  <th>دسترسی</th>
-                  <th>وضعیت</th>
-                  <th>عملیات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((m) => (
-                  <tr key={m.id}>
-                    <td className="card-title">
-                      <div className="entity-cell">
-                        <div className="entity-avatar">{m.name.trim().charAt(0) || '؟'}</div>
-                        <div>
-                          <div className="entity-name">
-                            {m.name}
-                            {m.is_me && <span className="muted"> (شما)</span>}
-                          </div>
-                          <div className="entity-sub ltr-cell">{m.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="نقش">
-                      <select
-                        value={m.role_key}
-                        disabled={busy}
-                        onChange={(e) =>
-                          void run(() => changeMemberRole(token, m.id, e.target.value), `نقش ${m.name} تغییر کرد.`)
-                        }
-                      >
-                        {roles.map((r) => (
-                          <option key={r.key} value={r.key}>
-                            {r.name}
-                          </option>
-                        ))}
-                        {/* نقشِ سفارشی‌ای که در فهرست نیست نباید بی‌صدا به نقشِ دیگری تبدیل شود */}
-                        {!roles.some((r) => r.key === m.role_key) && (
-                          <option value={m.role_key}>{m.role_name}</option>
-                        )}
-                      </select>
-                    </td>
-                    <td data-label="دسترسی">
-                      <span className="tm-perm-sum">
-                        {summarize(m.permissions)}
-                        {m.custom_permissions && <span className="fy-badge fy-badge--active">اختصاصی</span>}
-                      </span>
-                    </td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge tone-${STATUS_TONE[m.status]}`}>
-                        {STATUS_LABELS[m.status]}
-                      </span>
-                    </td>
-                    <td className="card-actions">
-                      <div className="fy-actions">
-                        {/* دسترسیِ خودِ کاربر عمداً این‌جا قابلِ تغییر نیست؛ سرور هم ۴۰۹
-                            می‌دهد. یک کلیکِ اشتباه نباید مدیر را از پنل بیرون کند. */}
-                        {!m.is_me && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setEditing({ member: m, perms: m.permissions })}
-                          >
-                            <SlidersHorizontal size={13} /> دسترسی
-                          </button>
-                        )}
-                        {m.status === 'invited' && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              void run(async () => {
-                                const r = await resendInvite(token, m.id)
-                                if (!r.email_sent) throw new Error('ارسال ایمیل دعوت ناموفق بود.')
-                              }, `دعوت دوباره برای ${m.name} ارسال شد.`)
-                            }
-                          >
-                            <Mail size={13} /> ارسال دوباره
-                          </button>
-                        )}
-                        {!m.is_me && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              void run(
-                                () => setMemberActive(token, m.id, m.status === 'disabled'),
-                                m.status === 'disabled' ? `${m.name} دوباره فعال شد.` : `دسترسی ${m.name} قطع شد.`,
-                              )
-                            }
-                          >
-                            {m.status === 'disabled' ? 'فعال‌سازی' : 'غیرفعال‌سازی'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کاربر</th>
+                    <th>نقش</th>
+                    <th>دسترسی</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((m) => (
+                    <tr key={m.id}>
+                      <td className="card-title" data-label="کاربر">
+                        <div className="entity-cell">
+                          <div className="entity-avatar">{m.name.trim().charAt(0) || '؟'}</div>
+                          <div>
+                            <div className="entity-name">
+                              {m.name}
+                              {m.is_me && <span className="muted"> (شما)</span>}
+                            </div>
+                            <div className="entity-sub ltr-cell">{m.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="نقش">
+                        <select
+                          value={m.role_key}
+                          disabled={busy}
+                          onChange={(e) =>
+                            void run(() => changeMemberRole(token, m.id, e.target.value), `نقش ${m.name} تغییر کرد.`)
+                          }
+                        >
+                          {roles.map((r) => (
+                            <option key={r.key} value={r.key}>
+                              {r.name}
+                            </option>
+                          ))}
+                          {/* نقشِ سفارشی‌ای که در فهرست نیست نباید بی‌صدا به نقشِ دیگری تبدیل شود */}
+                          {!roles.some((r) => r.key === m.role_key) && (
+                            <option value={m.role_key}>{m.role_name}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td data-label="دسترسی">
+                        <span className="tm-perm-sum">
+                          {summarize(m.permissions)}
+                          {m.custom_permissions && <span className="fy-badge fy-badge--active">اختصاصی</span>}
+                        </span>
+                      </td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge tone-${STATUS_TONE[m.status]}`}>
+                          {STATUS_LABELS[m.status]}
+                        </span>
+                      </td>
+                      <td className="card-actions" data-label="عملیات">
+                        <div className="fy-actions">
+                          {/* دسترسیِ خودِ کاربر عمداً این‌جا قابلِ تغییر نیست؛ سرور هم ۴۰۹
+                              می‌دهد. یک کلیکِ اشتباه نباید مدیر را از پنل بیرون کند. */}
+                          {!m.is_me && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => setEditing({ member: m, perms: m.permissions })}
+                            >
+                              <SlidersHorizontal size={13} /> دسترسی
+                            </button>
+                          )}
+                          {m.status === 'invited' && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(async () => {
+                                  const r = await resendInvite(token, m.id)
+                                  if (!r.email_sent) throw new Error('ارسال ایمیل دعوت ناموفق بود.')
+                                }, `دعوت دوباره برای ${m.name} ارسال شد.`)
+                              }
+                            >
+                              <Mail size={13} /> ارسال دوباره
+                            </button>
+                          )}
+                          {!m.is_me && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(
+                                  () => setMemberActive(token, m.id, m.status === 'disabled'),
+                                  m.status === 'disabled' ? `${m.name} دوباره فعال شد.` : `دسترسی ${m.name} قطع شد.`,
+                                )
+                              }
+                            >
+                              {m.status === 'disabled' ? 'فعال‌سازی' : 'غیرفعال‌سازی'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}

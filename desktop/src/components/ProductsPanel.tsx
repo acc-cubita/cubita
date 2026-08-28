@@ -345,57 +345,59 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           <EmptyState icon={Package} text="هنوز کالایی ثبت نشده — از فرمِ کنار، اولین کالا را بسازید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>کالا</th>
-                  <th>دسته</th>
-                  <th>واحد</th>
-                  <th>قیمت فروش</th>
-                  <th>وضعیت</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageItems.map((p) => (
-                  <tr key={p.id}>
-                    <td className="card-title">
-                      <div className="entity-cell">
-                        <div className="entity-avatar">{p.name.trim().charAt(0) || '؟'}</div>
-                        <div>
-                          <div className="entity-name">{p.name}</div>
-                          <div className="entity-sub ltr-cell">{p.barcode ? `${p.sku} · ${p.barcode}` : p.sku}</div>
-                          {!p.is_service && Number(p.reorder_point) > 0 && (
-                            <div className="entity-sub">نقطه‌ی سفارش: {faMoney(Number(p.reorder_point))} {p.unit}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="دسته">{p.category || '—'}</td>
-                    <td data-label="واحد">{p.is_service ? 'خدمات' : p.unit}</td>
-                    <td data-label="قیمت فروش" className="money-cell">{faMoney(Number(p.sales_price))}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${p.is_active ? 'tone-success' : 'tone-warning'}`}>
-                        {p.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                    <td className="card-actions">
-                      <div className="check-actions">
-                        <button type="button" onClick={() => startEdit(p)}>
-                          <Pencil size={13} /> ویرایش
-                        </button>
-                        <button type="button" onClick={() => void toggleActive(p)}>
-                          {p.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
-                        </button>
-                        <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(p)} aria-label="حذف کالا">
-                          <Trash2 size={13} /> حذف
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کالا</th>
+                    <th>دسته</th>
+                    <th>واحد</th>
+                    <th>قیمت فروش</th>
+                    <th>وضعیت</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pageItems.map((p) => (
+                    <tr key={p.id}>
+                      <td className="card-title" data-label="کالا">
+                        <div className="entity-cell">
+                          <div className="entity-avatar">{p.name.trim().charAt(0) || '؟'}</div>
+                          <div>
+                            <div className="entity-name">{p.name}</div>
+                            <div className="entity-sub ltr-cell">{p.barcode ? `${p.sku} · ${p.barcode}` : p.sku}</div>
+                            {!p.is_service && Number(p.reorder_point) > 0 && (
+                              <div className="entity-sub">نقطه‌ی سفارش: {faMoney(Number(p.reorder_point))} {p.unit}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="دسته">{p.category || '—'}</td>
+                      <td data-label="واحد">{p.is_service ? 'خدمات' : p.unit}</td>
+                      <td data-label="قیمت فروش" className="money-cell">{faMoney(Number(p.sales_price))}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${p.is_active ? 'tone-success' : 'tone-warning'}`}>
+                          {p.is_active ? 'فعال' : 'غیرفعال'}
+                        </span>
+                      </td>
+                      <td className="card-actions">
+                        <div className="check-actions">
+                          <button type="button" onClick={() => startEdit(p)}>
+                            <Pencil size={13} /> ویرایش
+                          </button>
+                          <button type="button" onClick={() => void toggleActive(p)}>
+                            {p.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
+                          </button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(p)} aria-label="حذف کالا">
+                            <Trash2 size={13} /> حذف
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={page} pageCount={pageCount} onChange={setPage} />
           </div>
         )}

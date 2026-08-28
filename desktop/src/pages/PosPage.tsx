@@ -389,50 +389,52 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
             <EmptyState icon={ShoppingCart} text="سبد خالی است — یک بارکد اسکن کنید." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table pos-cart">
-                <thead>
-                  <tr>
-                    <th>کالا</th>
-                    <th>تعداد</th>
-                    <th>قیمت واحد</th>
-                    <th>جمع</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cart.map((l) => {
-                    const avail = availableStock(l.item.id)
-                    const over = avail != null && l.qty > avail
-                    return (
-                    <tr key={l.item.id}>
-                      <td className="entity-name">
-                        {l.item.name}
-                        {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
-                        {avail != null && (
-                          <div className={over ? 'stock-warn' : 'unit-suffix'}>
-                            موجودی: {avail.toLocaleString('fa-IR')}{over ? ' — بیش از موجودی' : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td data-label="تعداد">
-                        <div className="pos-qty">
-                          <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
-                          <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, Number(v))} />
-                          <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
-                        </div>
-                      </td>
-                      <td data-label="قیمت واحد">
-                        <NumberInput className="pos-price" value={l.unitPrice} onChange={(v) => setPrice(l.item.id, Number(v))} />
-                      </td>
-                      <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
-                      <td className="pos-remove-cell">
-                        <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /> <span className="pos-remove-text">حذف</span></button>
-                      </td>
+              <div className="table-scroll">
+                <table className="entity-table pos-cart cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>کالا</th>
+                      <th>تعداد</th>
+                      <th>قیمت واحد</th>
+                      <th>جمع</th>
+                      <th></th>
                     </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {cart.map((l) => {
+                      const avail = availableStock(l.item.id)
+                      const over = avail != null && l.qty > avail
+                      return (
+                      <tr key={l.item.id}>
+                        <td className="entity-name" data-label="کالا">
+                          {l.item.name}
+                          {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
+                          {avail != null && (
+                            <div className={over ? 'stock-warn' : 'unit-suffix'}>
+                              موجودی: {avail.toLocaleString('fa-IR')}{over ? ' — بیش از موجودی' : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td data-label="تعداد">
+                          <div className="pos-qty">
+                            <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
+                            <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, Number(v))} />
+                            <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
+                          </div>
+                        </td>
+                        <td data-label="قیمت واحد">
+                          <NumberInput className="pos-price" value={l.unitPrice} onChange={(v) => setPrice(l.item.id, Number(v))} />
+                        </td>
+                        <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
+                        <td className="pos-remove-cell card-actions">
+                          <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /> <span className="pos-remove-text">حذف</span></button>
+                        </td>
+                      </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </SectionCard>

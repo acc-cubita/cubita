@@ -54,7 +54,7 @@ function TierRow({
           <Percent size={12} />
         </span>
       </td>
-      <td>
+      <td className="card-actions">
         <button type="button" className="icon-btn-danger" onClick={onRemove} aria-label="حذف"><Trash2 size={13} /></button>
       </td>
     </tr>
@@ -172,21 +172,23 @@ export function LoyaltyTiersPanel({ token }: { token: string }) {
             <EmptyState icon={Award} text="سطحی تعریف نشده. مثلاً برنز/نقره/طلا اضافه کنید." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table tiers-table">
-                <thead>
-                  <tr>
-                    <th>سطح</th>
-                    <th>آستانه</th>
-                    <th>تخفیف</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tiers.map((t) => (
-                    <TierRow key={t.id} token={token} tier={t} onSaved={refresh} onRemove={() => void remove(t.id)} />
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="entity-table tiers-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>سطح</th>
+                      <th>آستانه</th>
+                      <th>تخفیف</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tiers.map((t) => (
+                      <TierRow key={t.id} token={token} tier={t} onSaved={refresh} onRemove={() => void remove(t.id)} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </SectionCard>
@@ -197,31 +199,33 @@ export function LoyaltyTiersPanel({ token }: { token: string }) {
           <EmptyState icon={Medal} text="هنوز مشتری‌ای به سطحی نرسیده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>مشتری</th>
-                  <th>سطح</th>
-                  <th>{basis === 'points' ? 'امتیاز' : 'خریدِ سالانه'}</th>
-                  <th>تخفیف</th>
-                </tr>
-              </thead>
-              <tbody>
-                {membersPg.pageItems.map((m) => (
-                  <tr key={m.contact_id}>
-                    <td className="card-title" data-label="مشتری">
-                      <div className="entity-cell">
-                        <div className="entity-avatar tone-customer">{m.contact_name.trim().charAt(0) || '؟'}</div>
-                        <div className="entity-name">{m.contact_name}</div>
-                      </div>
-                    </td>
-                    <td data-label="سطح"><span className="status-badge tone-success"><Medal size={12} /> {m.tier_name}</span></td>
-                    <td data-label="مقدار" className="money-cell">{fa(m.value)}</td>
-                    <td data-label="تخفیف" className="money-cell">{fa(m.discount_percent)}٪</td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>مشتری</th>
+                    <th>سطح</th>
+                    <th>{basis === 'points' ? 'امتیاز' : 'خریدِ سالانه'}</th>
+                    <th>تخفیف</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {membersPg.pageItems.map((m) => (
+                    <tr key={m.contact_id}>
+                      <td className="card-title" data-label="مشتری">
+                        <div className="entity-cell">
+                          <div className="entity-avatar tone-customer">{m.contact_name.trim().charAt(0) || '؟'}</div>
+                          <div className="entity-name">{m.contact_name}</div>
+                        </div>
+                      </td>
+                      <td data-label="سطح"><span className="status-badge tone-success"><Medal size={12} /> {m.tier_name}</span></td>
+                      <td data-label="مقدار" className="money-cell">{fa(m.value)}</td>
+                      <td data-label="تخفیف" className="money-cell">{fa(m.discount_percent)}٪</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={membersPg.page} pageCount={membersPg.pageCount} onChange={membersPg.setPage} />
           </div>
         )}

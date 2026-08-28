@@ -104,7 +104,7 @@ export function PurchaseReturnsList({ r }: { r: PurchaseReturnDraft }) {
               <td data-label="خالص">{Number(row.total_amount).toLocaleString('fa-IR')}</td>
               <td data-label="مالیات">{Number(row.tax_amount).toLocaleString('fa-IR')}</td>
               <td data-label="جمع کل">{(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}</td>
-              <td className="card-actions">
+              <td className="card-actions" data-label="عملیات">
                 <button type="button" onClick={() => void r.handlePrint(row.id)}>
                   <Printer size={13} /> چاپ
                 </button>

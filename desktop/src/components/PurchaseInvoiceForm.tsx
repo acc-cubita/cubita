@@ -102,7 +102,7 @@ export function PurchaseInvoiceForm({
           )}
 
           <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead>
                 <tr>
                   <th>کالا</th>
@@ -147,7 +147,7 @@ export function PurchaseInvoiceForm({
                           : '—'}
                       </span>
                     </td>
-                    <td>
+                    <td className="card-actions">
                       <button type="button" className="icon-btn-danger" onClick={() => d.removeLine(i)} disabled={d.lines.length === 1} aria-label="حذف ردیف">
                         <Trash2 size={14} />
                       </button>

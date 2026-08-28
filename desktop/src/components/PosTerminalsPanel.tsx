@@ -311,51 +311,53 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             <EmptyState icon={CreditCard} text="هنوز کارتخوانی ثبت نشده." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>دستگاه</th>
-                    <th>اتصال</th>
-                    <th>وضعیت</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pg.pageItems.map((t) => {
-                    const bank = bankAccounts.find((b) => b.id === t.bank_account_id)
-                    return (
-                      <tr key={t.id}>
-                        <td data-label="دستگاه" className="entity-name card-title">
-                          {t.label || 'کارتخوان'}
-                          {t.is_default && <span className="unit-suffix"> · پیش‌فرض</span>}
-                          {bank && <div className="entity-sub">تسویه: {bank.name}</div>}
-                        </td>
-                        <td data-label="اتصال">
-                          {transportLabel(t.transport)}
-                          {t.transport === 'network' && t.host ? (
-                            <div className="entity-sub ltr-cell">
-                              {t.host}:{t.port}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td data-label="وضعیت">
-                          <span className={`status-badge ${t.is_active ? 'tone-success' : 'tone-warning'}`}>
-                            {t.is_active ? 'فعال' : 'غیرفعال'}
-                          </span>
-                        </td>
-                        <td className="check-actions card-actions">
-                          <button type="button" onClick={() => startEdit(t)}>
-                            <Pencil size={13} /> ویرایش
-                          </button>
-                          <button type="button" className="icon-btn-danger" onClick={() => void remove(t)}>
-                            <Trash2 size={13} /> حذف
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="entity-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>دستگاه</th>
+                      <th>اتصال</th>
+                      <th>وضعیت</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pg.pageItems.map((t) => {
+                      const bank = bankAccounts.find((b) => b.id === t.bank_account_id)
+                      return (
+                        <tr key={t.id}>
+                          <td data-label="دستگاه" className="entity-name card-title">
+                            {t.label || 'کارتخوان'}
+                            {t.is_default && <span className="unit-suffix"> · پیش‌فرض</span>}
+                            {bank && <div className="entity-sub">تسویه: {bank.name}</div>}
+                          </td>
+                          <td data-label="اتصال">
+                            {transportLabel(t.transport)}
+                            {t.transport === 'network' && t.host ? (
+                              <div className="entity-sub ltr-cell">
+                                {t.host}:{t.port}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td data-label="وضعیت">
+                            <span className={`status-badge ${t.is_active ? 'tone-success' : 'tone-warning'}`}>
+                              {t.is_active ? 'فعال' : 'غیرفعال'}
+                            </span>
+                          </td>
+                          <td className="check-actions card-actions">
+                            <button type="button" onClick={() => startEdit(t)}>
+                              <Pencil size={13} /> ویرایش
+                            </button>
+                            <button type="button" className="icon-btn-danger" onClick={() => void remove(t)}>
+                              <Trash2 size={13} /> حذف
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}

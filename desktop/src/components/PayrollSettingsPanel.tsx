@@ -205,36 +205,38 @@ export function PayrollSettingsPanel({
       <h3 className="panel-subhead">پلکانِ مالیاتِ سالانه</h3>
       <p className="field-hint">هر پلکان روی «مشمولِ سالانه پس از کسرِ معافیت» اعمال می‌شود. سقف‌ها تجمعی و صعودی‌اند؛ ردیفِ آخر خودبه‌خود نامحدود (به‌بالا) در نظر گرفته می‌شود.</p>
       <div className="entity-table-wrap">
-        <table className="entity-table tax-bracket-table">
-          <thead>
-            <tr><th>ردیف</th><th>تا سقفِ سالانه (ریال)</th><th>نرخ (٪)</th><th></th></tr>
-          </thead>
-          <tbody>
-            {brackets.map((b, i) => {
-              const last = i === brackets.length - 1
-              return (
-                <tr key={i}>
-                  <td data-label="ردیف">{fa(i + 1)}</td>
-                  <td data-label="تا سقفِ سالانه (ریال)">
-                    {last ? (
-                      <span className="muted">به‌بالا (نامحدود)</span>
-                    ) : (
-                      <NumberInput value={b.up_to} onChange={(v) => setBracket(i, { up_to: v })} placeholder="سقفِ تجمعی" />
-                    )}
-                  </td>
-                  <td data-label="نرخ (٪)">
-                    <NumberInput allowDecimal value={b.rate} onChange={(v) => setBracket(i, { rate: v })} />
-                  </td>
-                  <td className="tax-bracket-action">
-                    <button type="button" className="icon-btn-danger" title="حذفِ ردیف" onClick={() => removeBracket(i)} disabled={brackets.length <= 1}>
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="entity-table tax-bracket-table cards-on-mobile">
+            <thead>
+              <tr><th>ردیف</th><th>تا سقفِ سالانه (ریال)</th><th>نرخ (٪)</th><th></th></tr>
+            </thead>
+            <tbody>
+              {brackets.map((b, i) => {
+                const last = i === brackets.length - 1
+                return (
+                  <tr key={i}>
+                    <td data-label="ردیف">{fa(i + 1)}</td>
+                    <td data-label="تا سقفِ سالانه (ریال)">
+                      {last ? (
+                        <span className="muted">به‌بالا (نامحدود)</span>
+                      ) : (
+                        <NumberInput value={b.up_to} onChange={(v) => setBracket(i, { up_to: v })} placeholder="سقفِ تجمعی" />
+                      )}
+                    </td>
+                    <td data-label="نرخ (٪)">
+                      <NumberInput allowDecimal value={b.rate} onChange={(v) => setBracket(i, { rate: v })} />
+                    </td>
+                    <td className="tax-bracket-action card-actions">
+                      <button type="button" className="icon-btn-danger" title="حذفِ ردیف" onClick={() => removeBracket(i)} disabled={brackets.length <= 1}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="check-actions" style={{ marginTop: 8 }}>
         <button type="button" onClick={addBracket}><Plus size={13} /> افزودنِ پلکان</button>

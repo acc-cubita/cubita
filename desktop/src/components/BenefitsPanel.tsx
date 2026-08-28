@@ -169,52 +169,54 @@ export function BenefitsPanel({ token }: { token: string }) {
         <EmptyState icon={Gift} text="برای این سال کارمندی با حکم حقوقی یافت نشد." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table benefits-table">
-            <thead>
-              <tr>
-                <th>کارمند</th>
-                <th>حقوق پایه</th>
-                <th>عیدی</th>
-                <th>سنوات تا امروز</th>
-                <th>ماندهٔ مرخصی (روز)</th>
-                <th>طلب مرخصی</th>
-                <th>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.rows.map((r) => (
-                <tr key={r.employee_id}>
-                  <td className="entity-name">{r.employee_name}</td>
-                  <td data-label="حقوق پایه" className="money-cell">{fa(r.base_salary)}</td>
-                  <td data-label="عیدی" className="money-cell">{fa(r.eidi)}</td>
-                  <td data-label="سنوات تا امروز" className="money-cell">{fa(r.severance)}</td>
-                  <td data-label="ماندهٔ مرخصی (روز)" className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>{faDays(r.leave_remaining)}</td>
-                  <td data-label="طلب مرخصی" className="money-cell">{fa(r.leave_value)}</td>
-                  <td className="benefits-action">
-                    <div className="row-actions">
-                      <button type="button" onClick={() => void handleSeverance(r.employee_id)} title="صدور سنوات">
-                        <Coins size={13} /> سنوات
-                      </button>
-                      <button type="button" onClick={() => void handleLeavePayout(r.employee_id)} title="بازخرید مرخصی">
-                        <Wallet size={13} /> مرخصی
-                      </button>
-                    </div>
-                  </td>
+          <div className="table-scroll">
+            <table className="entity-table benefits-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>کارمند</th>
+                  <th>حقوق پایه</th>
+                  <th>عیدی</th>
+                  <th>سنوات تا امروز</th>
+                  <th>ماندهٔ مرخصی (روز)</th>
+                  <th>طلب مرخصی</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className="entity-name">جمع</td>
-                <td data-label="حقوق پایه"></td>
-                <td data-label="عیدی" className="money-cell">{fa(report.total_eidi)}</td>
-                <td data-label="سنوات تا امروز" className="money-cell">{fa(report.total_severance)}</td>
-                <td data-label="ماندهٔ مرخصی (روز)"></td>
-                <td data-label="طلب مرخصی" className="money-cell">{fa(report.total_leave_value)}</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {report.rows.map((r) => (
+                  <tr key={r.employee_id}>
+                    <td className="entity-name" data-label="کارمند">{r.employee_name}</td>
+                    <td data-label="حقوق پایه" className="money-cell">{fa(r.base_salary)}</td>
+                    <td data-label="عیدی" className="money-cell">{fa(r.eidi)}</td>
+                    <td data-label="سنوات تا امروز" className="money-cell">{fa(r.severance)}</td>
+                    <td data-label="ماندهٔ مرخصی (روز)" className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>{faDays(r.leave_remaining)}</td>
+                    <td data-label="طلب مرخصی" className="money-cell">{fa(r.leave_value)}</td>
+                    <td className="benefits-action" data-label="عملیات">
+                      <div className="row-actions">
+                        <button type="button" onClick={() => void handleSeverance(r.employee_id)} title="صدور سنوات">
+                          <Coins size={13} /> سنوات
+                        </button>
+                        <button type="button" onClick={() => void handleLeavePayout(r.employee_id)} title="بازخرید مرخصی">
+                          <Wallet size={13} /> مرخصی
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="entity-name" data-label="کارمند">جمع</td>
+                  <td data-label="حقوق پایه"></td>
+                  <td data-label="عیدی" className="money-cell">{fa(report.total_eidi)}</td>
+                  <td data-label="سنوات تا امروز" className="money-cell">{fa(report.total_severance)}</td>
+                  <td data-label="ماندهٔ مرخصی (روز)"></td>
+                  <td data-label="طلب مرخصی" className="money-cell">{fa(report.total_leave_value)}</td>
+                  <td data-label="عملیات"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 

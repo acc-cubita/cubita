@@ -432,55 +432,57 @@ export function CalendarPage({ token }: { token: string }) {
         <EmptyState icon={CalendarDays} text="رویدادی مطابق فیلتر پیدا نشد." />
       ) : (
         <div className="entity-table-wrap">
-        <table className="entity-table cal-list-table">
-          <thead>
-            <tr>
-              <th>وضعیت</th>
-              <th>تاریخ</th>
-              <th>ساعت</th>
-              <th>عنوان</th>
-              <th>دسته</th>
-              <th>اقدام</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evPg.pageItems.map((ev) => (
-              <tr key={ev.id} className={ev.is_done ? 'cal-row-done' : ''}>
-                <td className="cal-status-cell" data-label="وضعیت">
-                  <button
-                    type="button"
-                    className={`cal-done-toggle${ev.is_done ? ' on' : ''}`}
-                    onClick={() => toggleDone(ev)}
-                    title={ev.is_done ? 'برگرداندن به انجام‌نشده' : 'علامت انجام‌شده'}
-                  >
-                    {ev.is_done ? <Check size={14} /> : <RotateCcw size={14} />}
-                  </button>
-                </td>
-                <td data-label="تاریخ">{formatJalali(ev.event_date)}</td>
-                <td data-label="ساعت">{timeRange(ev)}</td>
-                <td className="entity-name">
-                  <div className="cal-list-title">{ev.title}</div>
-                  {ev.description && <div className="cal-list-desc">{ev.description}</div>}
-                </td>
-                <td data-label="دسته">
-                  <span className={`status-badge cal-badge ${CATEGORY_META[ev.category].cls}`}>
-                    {CATEGORY_META[ev.category].label}
-                  </span>
-                </td>
-                <td className="cal-action-cell">
-                  <div className="cal-row-actions">
-                    <button type="button" onClick={() => startEdit(ev)}>
-                      <Pencil size={13} /> ویرایش
-                    </button>
-                    <button type="button" className="icon-btn-danger" onClick={() => handleDelete(ev)} title="حذف">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
+        <div className="table-scroll">
+          <table className="entity-table cal-list-table cards-on-mobile">
+            <thead>
+              <tr>
+                <th>وضعیت</th>
+                <th>تاریخ</th>
+                <th>ساعت</th>
+                <th>عنوان</th>
+                <th>دسته</th>
+                <th>اقدام</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {evPg.pageItems.map((ev) => (
+                <tr key={ev.id} className={ev.is_done ? 'cal-row-done' : ''}>
+                  <td className="cal-status-cell" data-label="وضعیت">
+                    <button
+                      type="button"
+                      className={`cal-done-toggle${ev.is_done ? ' on' : ''}`}
+                      onClick={() => toggleDone(ev)}
+                      title={ev.is_done ? 'برگرداندن به انجام‌نشده' : 'علامت انجام‌شده'}
+                    >
+                      {ev.is_done ? <Check size={14} /> : <RotateCcw size={14} />}
+                    </button>
+                  </td>
+                  <td data-label="تاریخ">{formatJalali(ev.event_date)}</td>
+                  <td data-label="ساعت">{timeRange(ev)}</td>
+                  <td className="entity-name" data-label="عنوان">
+                    <div className="cal-list-title">{ev.title}</div>
+                    {ev.description && <div className="cal-list-desc">{ev.description}</div>}
+                  </td>
+                  <td data-label="دسته">
+                    <span className={`status-badge cal-badge ${CATEGORY_META[ev.category].cls}`}>
+                      {CATEGORY_META[ev.category].label}
+                    </span>
+                  </td>
+                  <td className="cal-action-cell" data-label="اقدام">
+                    <div className="cal-row-actions">
+                      <button type="button" onClick={() => startEdit(ev)}>
+                        <Pencil size={13} /> ویرایش
+                      </button>
+                      <button type="button" className="icon-btn-danger" onClick={() => handleDelete(ev)} title="حذف">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <Pager page={evPg.page} pageCount={evPg.pageCount} onChange={evPg.setPage} />
         </div>
       )}

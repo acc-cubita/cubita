@@ -334,7 +334,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
           <td data-label="مانده" className="tree-balance">
             {node.balance === 0 ? '—' : money(node.balance)}
           </td>
-          <td className="check-actions">
+          <td className="check-actions card-actions">
             {node.is_group && (
               <button type="button" onClick={() => openAdd(node)} disabled={busy} title="افزودنِ زیرحساب">
                 <Plus size={13} />
@@ -509,18 +509,20 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
           <EmptyState icon={ListTree} text="حسابی وجود ندارد." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table chart-table tree-table">
-              <thead>
-                <tr>
-                  <th>حساب</th>
-                  <th>سطح</th>
-                  <th>نوع</th>
-                  <th>مانده</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>{renderRows(roots)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table chart-table tree-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>حساب</th>
+                    <th>سطح</th>
+                    <th>نوع</th>
+                    <th>مانده</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>{renderRows(roots)}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>

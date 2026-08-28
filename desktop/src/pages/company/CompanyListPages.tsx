@@ -311,8 +311,8 @@ function UsageTable({
               {rows.slice(0, 12).map((r) => (
                 <tr key={r.key}>
                   <td className="card-title">{r.key}</td>
-                  <td className="num">{fa(r.count)}</td>
-                  <td className="num muted">
+                  <td className="num" data-label="تعداد">{fa(r.count)}</td>
+                  <td className="num muted" data-label="سهم">
                     {total ? `${fa(Math.round((r.count / total) * 100))}٪` : '—'}
                   </td>
                 </tr>

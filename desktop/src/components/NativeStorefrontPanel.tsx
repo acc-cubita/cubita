@@ -356,45 +356,47 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
           <p className="hint">هنوز کالایی ثبت نکرده‌اید. اول از ماژولِ «انبار → کالاها» کالا بسازید.</p>
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table sf-table">
-              <thead>
-                <tr>
-                  <th>کالا</th>
-                  <th>قیمت</th>
-                  <th>روی سایت</th>
-                  <th>نشانی (slug)</th>
-                  <th>اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemsPg.pageItems.map((item) => {
-                  const edit = itemEdits[item.item_id] ?? { is_listed: item.is_listed, slug: item.slug }
-                  const setEdit = (patch: Partial<{ is_listed: boolean; slug: string }>) =>
-                    setItemEdits((prev) => ({ ...prev, [item.item_id]: { ...edit, ...patch } }))
-                  return (
-                    <tr key={item.item_id}>
-                      <td className="entity-name">
-                        <span>{item.name}</span>
-                        <div className="entity-sub ltr-cell">{item.sku}</div>
-                      </td>
-                      <td data-label="قیمت" className="money-cell">{fa(item.sales_price)}</td>
-                      <td data-label="روی سایت">
-                        <label className="sf-switch">
-                          <input type="checkbox" checked={edit.is_listed} onChange={(e) => setEdit({ is_listed: e.target.checked })} />
-                          <span>{edit.is_listed ? 'نمایش' : 'پنهان'}</span>
-                        </label>
-                      </td>
-                      <td data-label="نشانی">
-                        <input type="text" dir="ltr" className="sf-slug-input" placeholder="خودکار از SKU" value={edit.slug} onChange={(e) => setEdit({ slug: e.target.value })} />
-                      </td>
-                      <td className="integration-action">
-                        <button type="button" onClick={() => void saveItem(item)} disabled={busy}><Save size={13} /> ذخیره</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table sf-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کالا</th>
+                    <th>قیمت</th>
+                    <th>روی سایت</th>
+                    <th>نشانی (slug)</th>
+                    <th>اقدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemsPg.pageItems.map((item) => {
+                    const edit = itemEdits[item.item_id] ?? { is_listed: item.is_listed, slug: item.slug }
+                    const setEdit = (patch: Partial<{ is_listed: boolean; slug: string }>) =>
+                      setItemEdits((prev) => ({ ...prev, [item.item_id]: { ...edit, ...patch } }))
+                    return (
+                      <tr key={item.item_id}>
+                        <td className="entity-name" data-label="کالا">
+                          <span>{item.name}</span>
+                          <div className="entity-sub ltr-cell">{item.sku}</div>
+                        </td>
+                        <td data-label="قیمت" className="money-cell">{fa(item.sales_price)}</td>
+                        <td data-label="روی سایت">
+                          <label className="sf-switch">
+                            <input type="checkbox" checked={edit.is_listed} onChange={(e) => setEdit({ is_listed: e.target.checked })} />
+                            <span>{edit.is_listed ? 'نمایش' : 'پنهان'}</span>
+                          </label>
+                        </td>
+                        <td data-label="نشانی">
+                          <input type="text" dir="ltr" className="sf-slug-input" placeholder="my-product" title="خالی بگذارید تا خودکار از SKU ساخته شود" value={edit.slug} onChange={(e) => setEdit({ slug: e.target.value })} />
+                        </td>
+                        <td className="integration-action" data-label="اقدام">
+                          <button type="button" onClick={() => void saveItem(item)} disabled={busy}><Save size={13} /> ذخیره</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={itemsPg.page} pageCount={itemsPg.pageCount} onChange={itemsPg.setPage} />
           </div>
         )}
@@ -402,47 +404,49 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
 
       <SectionCard icon={CreditCard} title="درگاهِ پرداخت" description="اطلاعاتِ درگاهِ خودتان — پولِ فروشِ سایت مستقیم به حسابِ شما می‌رود.">
         <div className="entity-table-wrap">
-          <table className="entity-table sf-table">
-            <thead>
-              <tr>
-                <th>درگاه</th>
-                <th>مرچنت / کلید</th>
-                <th>فعال</th>
-                <th>اقدام</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gateways.map((g) => {
-                const edit = gwEdits[g.provider] ?? { merchant_id: '', is_active: g.is_active }
-                const setEdit = (patch: Partial<{ merchant_id: string; is_active: boolean }>) =>
-                  setGwEdits((prev) => ({ ...prev, [g.provider]: { ...edit, ...patch } }))
-                return (
-                  <tr key={g.provider}>
-                    <td className="entity-name">{GATEWAY_LABEL[g.provider] ?? g.provider}</td>
-                    <td data-label="مرچنت">
-                      <input
-                        type="password"
-                        dir="ltr"
-                        className="sf-slug-input"
-                        placeholder={g.has_merchant ? '•••••• (ثبت‌شده — برای تغییر وارد کنید)' : 'کدِ مرچنت'}
-                        value={edit.merchant_id}
-                        onChange={(e) => setEdit({ merchant_id: e.target.value })}
-                      />
-                    </td>
-                    <td data-label="فعال">
-                      <label className="sf-switch">
-                        <input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ is_active: e.target.checked })} />
-                        <span>{edit.is_active ? 'فعال' : 'غیرفعال'}</span>
-                      </label>
-                    </td>
-                    <td className="integration-action">
-                      <button type="button" onClick={() => void saveGateway(g.provider)} disabled={busy}><Save size={13} /> ذخیره</button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="entity-table sf-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>درگاه</th>
+                  <th>مرچنت / کلید</th>
+                  <th>فعال</th>
+                  <th>اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gateways.map((g) => {
+                  const edit = gwEdits[g.provider] ?? { merchant_id: '', is_active: g.is_active }
+                  const setEdit = (patch: Partial<{ merchant_id: string; is_active: boolean }>) =>
+                    setGwEdits((prev) => ({ ...prev, [g.provider]: { ...edit, ...patch } }))
+                  return (
+                    <tr key={g.provider}>
+                      <td className="entity-name" data-label="درگاه">{GATEWAY_LABEL[g.provider] ?? g.provider}</td>
+                      <td data-label="مرچنت">
+                        <input
+                          type="password"
+                          dir="ltr"
+                          className="sf-slug-input"
+                          placeholder={g.has_merchant ? '•••••• (ثبت‌شده — برای تغییر وارد کنید)' : 'کدِ مرچنت'}
+                          value={edit.merchant_id}
+                          onChange={(e) => setEdit({ merchant_id: e.target.value })}
+                        />
+                      </td>
+                      <td data-label="فعال">
+                        <label className="sf-switch">
+                          <input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ is_active: e.target.checked })} />
+                          <span>{edit.is_active ? 'فعال' : 'غیرفعال'}</span>
+                        </label>
+                      </td>
+                      <td className="integration-action" data-label="اقدام">
+                        <button type="button" onClick={() => void saveGateway(g.provider)} disabled={busy}><Save size={13} /> ذخیره</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </SectionCard>
 
@@ -456,58 +460,60 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
           <p className="hint">هنوز سفارشی ثبت نشده است.</p>
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table sf-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>مشتری</th>
-                  <th>مبلغ</th>
-                  <th>پرداخت</th>
-                  <th>وضعیتِ ارسال</th>
-                  <th>اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ordersPg.pageItems.map((o) => {
-                  const pay = PAYMENT_LABEL[o.payment_status] ?? { label: o.payment_status, tone: 'muted' }
-                  return (
-                    <tr key={o.id}>
-                      <td data-label="#">
-                        <strong>{fa(o.order_number)}</strong>
-                        <div className="entity-sub ltr-cell">{o.tracking_code}</div>
-                      </td>
-                      <td className="entity-name">
-                        <span>{o.customer_name}</span>
-                        <div className="entity-sub ltr-cell">{o.customer_phone}</div>
-                      </td>
-                      <td data-label="مبلغ" className="money-cell">{fa(o.total)}</td>
-                      <td data-label="پرداخت"><span className={`status-badge tone-${pay.tone}`}>{pay.label}</span></td>
-                      <td data-label="وضعیتِ ارسال">
-                        <select
-                          className="sf-slug-input"
-                          value={o.fulfillment_status}
-                          disabled={busy || o.payment_status !== 'paid'}
-                          onChange={(e) => void changeFulfillment(o, e.target.value)}
-                        >
-                          {FULFILLMENT.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-                        </select>
-                      </td>
-                      <td className="integration-action">
-                        {o.payment_status === 'pending' ? (
-                          <button type="button" className="btn-primary" onClick={() => void confirmPayment(o)} disabled={busy}>
-                            <CheckCircle2 size={13} /> تأیید پرداخت
-                          </button>
-                        ) : o.sales_invoice_id ? (
-                          <span className="status-badge tone-success">فاکتور صادر شد</span>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table sf-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>مشتری</th>
+                    <th>مبلغ</th>
+                    <th>پرداخت</th>
+                    <th>وضعیتِ ارسال</th>
+                    <th>اقدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordersPg.pageItems.map((o) => {
+                    const pay = PAYMENT_LABEL[o.payment_status] ?? { label: o.payment_status, tone: 'muted' }
+                    return (
+                      <tr key={o.id}>
+                        <td data-label="#">
+                          <strong>{fa(o.order_number)}</strong>
+                          <div className="entity-sub ltr-cell">{o.tracking_code}</div>
+                        </td>
+                        <td className="entity-name" data-label="مشتری">
+                          <span>{o.customer_name}</span>
+                          <div className="entity-sub ltr-cell">{o.customer_phone}</div>
+                        </td>
+                        <td data-label="مبلغ" className="money-cell">{fa(o.total)}</td>
+                        <td data-label="پرداخت"><span className={`status-badge tone-${pay.tone}`}>{pay.label}</span></td>
+                        <td data-label="وضعیتِ ارسال">
+                          <select
+                            className="sf-slug-input"
+                            value={o.fulfillment_status}
+                            disabled={busy || o.payment_status !== 'paid'}
+                            onChange={(e) => void changeFulfillment(o, e.target.value)}
+                          >
+                            {FULFILLMENT.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                          </select>
+                        </td>
+                        <td className="integration-action" data-label="اقدام">
+                          {o.payment_status === 'pending' ? (
+                            <button type="button" className="btn-primary" onClick={() => void confirmPayment(o)} disabled={busy}>
+                              <CheckCircle2 size={13} /> تأیید پرداخت
+                            </button>
+                          ) : o.sales_invoice_id ? (
+                            <span className="status-badge tone-success">فاکتور صادر شد</span>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={ordersPg.page} pageCount={ordersPg.pageCount} onChange={ordersPg.setPage} />
           </div>
         )}

@@ -190,45 +190,47 @@ export function BatchesPanel({ token }: { token: string }) {
           <EmptyState icon={CalendarClock} text="باری ثبت نشده — با ثبتِ فاکتورِ خرید خودکار ساخته می‌شود." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr><th>کالا</th><th>بار</th><th>منشأ</th><th>ورودی/مانده</th><th>کسری</th><th>سریال</th><th>انقضا</th><th></th></tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((b) => {
-                  const d = daysUntil(b.expiry_date)
-                  const soon = d !== null && d <= 30
-                  const expired = d !== null && d < 0
-                  const src = SOURCE_LABEL[b.source_type] ?? SOURCE_LABEL.manual
-                  const defect = Number(b.defect_qty)
-                  return (
-                    <tr key={b.id}>
-                      <td className="entity-name card-title">{itemById.get(b.item_id)?.name ?? '—'}</td>
-                      <td className="ltr-cell" data-label="بار">{b.batch_number}</td>
-                      <td data-label="منشأ"><span className={`status-badge ${src.tone}`}>{src.label}</span></td>
-                      <td data-label="ورودی/مانده">{fa(Number(b.received_qty))} / <strong>{fa(Number(b.qty))}</strong></td>
-                      <td data-label="کسری" className={defect > 0 ? 'stock-over' : undefined}>{defect > 0 ? fa(defect) : '—'}</td>
-                      <td data-label="سریال">{b.serial_count > 0 ? fa(b.serial_count) : '—'}</td>
-                      <td data-label="انقضا">
-                        {b.expiry_date ? (
-                          <span className={`status-badge ${expired ? 'tone-danger' : soon ? 'tone-warning' : 'tone-success'}`}>
-                            {(expired || soon) && <AlertTriangle size={12} />}
-                            {formatJalali(b.expiry_date)}
-                            {d !== null && (expired ? ' (منقضی)' : soon ? ` (${fa(d)} روز)` : '')}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="card-actions">
-                        <div className="check-actions">
-                          <button type="button" onClick={() => setDetail(b)}><ScanBarcode size={13} /> مدیریت</button>
-                          <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr><th>کالا</th><th>بار</th><th>منشأ</th><th>ورودی/مانده</th><th>کسری</th><th>سریال</th><th>انقضا</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((b) => {
+                    const d = daysUntil(b.expiry_date)
+                    const soon = d !== null && d <= 30
+                    const expired = d !== null && d < 0
+                    const src = SOURCE_LABEL[b.source_type] ?? SOURCE_LABEL.manual
+                    const defect = Number(b.defect_qty)
+                    return (
+                      <tr key={b.id}>
+                        <td className="entity-name card-title" data-label="کالا">{itemById.get(b.item_id)?.name ?? '—'}</td>
+                        <td className="ltr-cell" data-label="بار">{b.batch_number}</td>
+                        <td data-label="منشأ"><span className={`status-badge ${src.tone}`}>{src.label}</span></td>
+                        <td data-label="ورودی/مانده">{fa(Number(b.received_qty))} / <strong>{fa(Number(b.qty))}</strong></td>
+                        <td data-label="کسری" className={defect > 0 ? 'stock-over' : undefined}>{defect > 0 ? fa(defect) : '—'}</td>
+                        <td data-label="سریال">{b.serial_count > 0 ? fa(b.serial_count) : '—'}</td>
+                        <td data-label="انقضا">
+                          {b.expiry_date ? (
+                            <span className={`status-badge ${expired ? 'tone-danger' : soon ? 'tone-warning' : 'tone-success'}`}>
+                              {(expired || soon) && <AlertTriangle size={12} />}
+                              {formatJalali(b.expiry_date)}
+                              {d !== null && (expired ? ' (منقضی)' : soon ? ` (${fa(d)} روز)` : '')}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="card-actions">
+                          <div className="check-actions">
+                            <button type="button" onClick={() => setDetail(b)}><ScanBarcode size={13} /> مدیریت</button>
+                            <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}

@@ -87,30 +87,32 @@ export function ContactStatementDrawer({
                 <p className="muted">این طرف حساب هیچ گردشی ندارد.</p>
               ) : (
                 <div className="entity-table-wrap">
-                  <table className="entity-table kardex-table">
-                    <thead>
-                      <tr>
-                        <th>تاریخ</th>
-                        <th>نوع</th>
-                        <th>شرح</th>
-                        <th>بدهکار</th>
-                        <th>بستانکار</th>
-                        <th>مانده</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.lines.map((l, i) => (
-                        <tr key={i}>
-                          <td data-label="تاریخ">{formatJalali(l.txn_date)}</td>
-                          <td data-label="نوع">{KIND_LABELS[l.kind] ?? l.kind}{l.number != null ? ` #${l.number.toLocaleString('fa-IR')}` : ''}</td>
-                          <td data-label="شرح">{l.description || '—'}</td>
-                          <td data-label="بدهکار" className="money-cell">{Number(l.debit) > 0 ? fa(Number(l.debit)) : '—'}</td>
-                          <td data-label="بستانکار" className="money-cell">{Number(l.credit) > 0 ? fa(Number(l.credit)) : '—'}</td>
-                          <td data-label="مانده" className="money-cell"><strong>{faSigned(l.balance)}</strong></td>
+                  <div className="table-scroll">
+                    <table className="entity-table kardex-table cards-on-mobile">
+                      <thead>
+                        <tr>
+                          <th>تاریخ</th>
+                          <th>نوع</th>
+                          <th>شرح</th>
+                          <th>بدهکار</th>
+                          <th>بستانکار</th>
+                          <th>مانده</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {data.lines.map((l, i) => (
+                          <tr key={i}>
+                            <td data-label="تاریخ">{formatJalali(l.txn_date)}</td>
+                            <td data-label="نوع">{KIND_LABELS[l.kind] ?? l.kind}{l.number != null ? ` #${l.number.toLocaleString('fa-IR')}` : ''}</td>
+                            <td data-label="شرح">{l.description || '—'}</td>
+                            <td data-label="بدهکار" className="money-cell">{Number(l.debit) > 0 ? fa(Number(l.debit)) : '—'}</td>
+                            <td data-label="بستانکار" className="money-cell">{Number(l.credit) > 0 ? fa(Number(l.credit)) : '—'}</td>
+                            <td data-label="مانده" className="money-cell"><strong>{faSigned(l.balance)}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>

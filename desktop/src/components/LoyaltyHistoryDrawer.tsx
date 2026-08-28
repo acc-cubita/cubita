@@ -73,23 +73,25 @@ export function LoyaltyHistoryDrawer({
                 <p className="muted">این مشتری هنوز امتیازی ندارد.</p>
               ) : (
                 <div className="entity-table-wrap">
-                  <table className="entity-table kardex-table">
-                    <thead>
-                      <tr><th>تاریخ</th><th>بابت</th><th>امتیاز</th><th>مانده</th></tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((t) => (
-                        <tr key={t.id}>
-                          <td data-label="تاریخ">{formatJalali(t.txn_date)}</td>
-                          <td data-label="بابت">{t.reason || '—'}</td>
-                          <td data-label="امتیاز" className={`money-cell ${t.points >= 0 ? 'pos-in' : 'pos-out'}`}>
-                            {t.points >= 0 ? '+' : '−'}{fa(Math.abs(t.points))}
-                          </td>
-                          <td data-label="مانده" className="money-cell"><strong>{fa(t.running)}</strong></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="table-scroll">
+                    <table className="entity-table kardex-table cards-on-mobile">
+                      <thead>
+                        <tr><th>تاریخ</th><th>بابت</th><th>امتیاز</th><th>مانده</th></tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((t) => (
+                          <tr key={t.id}>
+                            <td data-label="تاریخ">{formatJalali(t.txn_date)}</td>
+                            <td data-label="بابت">{t.reason || '—'}</td>
+                            <td data-label="امتیاز" className={`money-cell ${t.points >= 0 ? 'pos-in' : 'pos-out'}`}>
+                              {t.points >= 0 ? '+' : '−'}{fa(Math.abs(t.points))}
+                            </td>
+                            <td data-label="مانده" className="money-cell"><strong>{fa(t.running)}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>

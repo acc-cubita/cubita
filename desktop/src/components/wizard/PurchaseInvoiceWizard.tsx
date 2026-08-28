@@ -155,7 +155,7 @@ function LinesStep({ d }: { d: PurchaseInvoiceDraft }) {
   return (
     <>
       <div className="table-scroll">
-        <table className="invoice-lines">
+        <table className="invoice-lines cards-on-mobile">
           <thead>
             <tr><th>کالا</th><th>تعداد</th><th>بهای واحد</th><th>تخفیف</th><th>مبلغ</th><th></th></tr>
           </thead>
@@ -193,7 +193,7 @@ function LinesStep({ d }: { d: PurchaseInvoiceDraft }) {
                       : '—'}
                   </span>
                 </td>
-                <td>
+                <td className="card-actions">
                   <button type="button" className="icon-btn-danger" onClick={() => d.removeLine(i)} disabled={d.lines.length === 1} aria-label="حذف ردیف">
                     <Trash2 size={14} />
                   </button>
@@ -252,7 +252,7 @@ function ReviewStep({ d, items, warehouses }: { d: PurchaseInvoiceDraft; items: 
         {d.currencyCode && <div className="live-preview-row"><span>ارز</span><strong>{d.currencyCode}</strong></div>}
       </div>
       <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr><th>کالا</th><th>تعداد</th><th>بهای واحد</th><th>تخفیف</th><th>مبلغ</th></tr>
           </thead>
@@ -261,11 +261,11 @@ function ReviewStep({ d, items, warehouses }: { d: PurchaseInvoiceDraft; items: 
               const amount = Math.max((Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0), 0)
               return (
                 <tr key={i}>
-                  <td>{nameOf(line.itemId)}</td>
-                  <td>{Number(line.qty).toLocaleString('fa-IR')} {d.unitOf(line.itemId)}</td>
-                  <td>{Number(line.unitCost || 0).toLocaleString('fa-IR')}</td>
-                  <td>{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
-                  <td>{amount.toLocaleString('fa-IR')}</td>
+                  <td data-label="کالا">{nameOf(line.itemId)}</td>
+                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {d.unitOf(line.itemId)}</td>
+                  <td data-label="بهای واحد">{Number(line.unitCost || 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="تخفیف">{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>
                 </tr>
               )
             })}

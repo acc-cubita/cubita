@@ -219,7 +219,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                             </td>
                             <td data-label="تاریخ">{formatJalali(line.line_date)}</td>
                             <td data-label="مبلغ">{Number(line.amount).toLocaleString('fa-IR')}</td>
-                            <td className="card-title">{line.description}</td>
+                            <td className="card-title" data-label="شرح">{line.description}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -253,7 +253,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                             </td>
                             <td data-label="تاریخ">{formatJalali(txn.transaction_date)}</td>
                             <td data-label="مبلغ">{Number(txn.amount).toLocaleString('fa-IR')}</td>
-                            <td className="card-title">{txn.description}</td>
+                            <td className="card-title" data-label="شرح">{txn.description}</td>
                             <td className="card-hide"></td>
                           </tr>
                         ))}
@@ -282,7 +282,7 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
                         <tr key={line.id}>
                           <td data-label="تاریخ">{formatJalali(line.line_date)}</td>
                           <td data-label="مبلغ">{Number(line.amount).toLocaleString('fa-IR')}</td>
-                          <td className="card-title">{line.description}</td>
+                          <td className="card-title" data-label="شرح">{line.description}</td>
                           <td className="card-actions">
                             <button
                               type="button"

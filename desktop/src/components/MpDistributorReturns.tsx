@@ -60,59 +60,63 @@ export function MpDistributorReturns({ token }: { token: string }) {
         <EmptyState icon={Undo2} text="مرجوعی‌ای ثبت نشده." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table cards-on-mobile">
-            <thead><tr><th style={{ width: 24 }}></th><th>مرجوعی</th><th>فروشگاه</th><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
-            <tbody>
-              {pg.pageItems.map((r) => {
-                const open = expanded === r.id
-                const badge = RET_BADGE[r.status]
-                return (
-                  <Fragment key={r.id}>
-                    <tr className="invoice-row" onClick={() => setExpanded(open ? null : r.id)}>
-                      <td className="card-hide">{open ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}</td>
-                      <td data-label="مرجوعی">#{faNum(r.return_number)}</td>
-                      <td className="entity-name card-title" data-label="فروشگاه">{r.retailer_name}</td>
-                      <td data-label="سفارش">#{faNum(r.order_number)}</td>
-                      <td data-label="مبلغ" className="money-cell">{faMoney(r.total)}</td>
-                      <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
-                      <td className="card-actions" onClick={(e) => e.stopPropagation()}>
-                        {r.status === 'requested' && (
-                          <div className="check-actions">
-                            <button type="button" className="btn-primary" disabled={busy === r.id} onClick={() => void approve(r)}><Check size={13} /> تأیید</button>
-                            <button type="button" className="icon-btn-danger" disabled={busy === r.id} onClick={() => void reject(r)}><Ban size={13} /> رد</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    {open && (
-                      <tr className="invoice-detail-row">
-                        <td className="card-full" colSpan={7}>
-                          <div className="invoice-detail">
-                            {r.reason && <div className="invoice-detail-desc">دلیلِ فروشگاه: {r.reason}</div>}
-                            {r.response_note && <div className="invoice-detail-desc">پاسخِ شما: {r.response_note}</div>}
-                            <div className="invoice-detail-desc">تاریخ: {formatJalali(r.created_at)}</div>
-                            <table className="invoice-detail-table">
-                              <thead><tr><th>قلم</th><th>تعداد</th><th>قیمتِ واحد</th><th>جمع</th></tr></thead>
-                              <tbody>
-                                {r.lines.map((ln, i) => (
-                                  <tr key={i}>
-                                    <td className="entity-name">{ln.title}</td>
-                                    <td>{faNum(ln.qty)}</td>
-                                    <td>{faMoney(ln.unit_price)}</td>
-                                    <td>{faMoney(ln.line_total)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead><tr><th style={{ width: 24 }}></th><th>مرجوعی</th><th>فروشگاه</th><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th></th></tr></thead>
+              <tbody>
+                {pg.pageItems.map((r) => {
+                  const open = expanded === r.id
+                  const badge = RET_BADGE[r.status]
+                  return (
+                    <Fragment key={r.id}>
+                      <tr className="invoice-row" onClick={() => setExpanded(open ? null : r.id)}>
+                        <td className="card-hide">{open ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}</td>
+                        <td data-label="مرجوعی">#{faNum(r.return_number)}</td>
+                        <td className="entity-name card-title" data-label="فروشگاه">{r.retailer_name}</td>
+                        <td data-label="سفارش">#{faNum(r.order_number)}</td>
+                        <td data-label="مبلغ" className="money-cell">{faMoney(r.total)}</td>
+                        <td data-label="وضعیت"><span className={`status-badge ${badge.tone}`}>{badge.label}</span></td>
+                        <td className="card-actions" onClick={(e) => e.stopPropagation()}>
+                          {r.status === 'requested' && (
+                            <div className="check-actions">
+                              <button type="button" className="btn-primary" disabled={busy === r.id} onClick={() => void approve(r)}><Check size={13} /> تأیید</button>
+                              <button type="button" className="icon-btn-danger" disabled={busy === r.id} onClick={() => void reject(r)}><Ban size={13} /> رد</button>
+                            </div>
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
+                      {open && (
+                        <tr className="invoice-detail-row">
+                          <td className="card-full" colSpan={7}>
+                            <div className="invoice-detail">
+                              {r.reason && <div className="invoice-detail-desc">دلیلِ فروشگاه: {r.reason}</div>}
+                              {r.response_note && <div className="invoice-detail-desc">پاسخِ شما: {r.response_note}</div>}
+                              <div className="invoice-detail-desc">تاریخ: {formatJalali(r.created_at)}</div>
+                              <div className="table-scroll">
+                                <table className="invoice-detail-table cards-on-mobile">
+                                  <thead><tr><th>قلم</th><th>تعداد</th><th>قیمتِ واحد</th><th>جمع</th></tr></thead>
+                                  <tbody>
+                                    {r.lines.map((ln, i) => (
+                                      <tr key={i}>
+                                        <td className="entity-name" data-label="قلم">{ln.title}</td>
+                                        <td data-label="تعداد">{faNum(ln.qty)}</td>
+                                        <td data-label="قیمتِ واحد">{faMoney(ln.unit_price)}</td>
+                                        <td data-label="جمع">{faMoney(ln.line_total)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}

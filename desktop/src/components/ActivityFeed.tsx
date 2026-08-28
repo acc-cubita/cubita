@@ -12,6 +12,7 @@ import {
 import type { JournalEntryRecord } from '../api'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { formatJalali } from '../lib/jalali'
 
 //: سقفِ رویدادهای «اخیر» که در داشبرد قابلِ ورق‌زدن است (۱۰ صفحه‌ی ۴تایی). دفترِ کامل در «گزارش‌ها».
 const MAX_ACTIVITY = 40
@@ -53,7 +54,7 @@ export function ActivityFeed({ entries }: { entries: JournalEntryRecord[] }) {
               <div className="activity-body">
                 <div className="activity-title">{entry.description || meta.label}</div>
                 <div className="activity-meta">
-                  {meta.label} · {new Date(entry.entry_date).toLocaleDateString('fa-IR')}
+                  {meta.label} · {formatJalali(entry.entry_date)}
                 </div>
               </div>
               <div className="activity-amount">{Math.round(entryAmount(entry)).toLocaleString('fa-IR')}</div>

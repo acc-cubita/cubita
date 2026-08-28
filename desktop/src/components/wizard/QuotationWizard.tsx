@@ -135,7 +135,7 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
   return (
     <>
       <div className="table-scroll">
-        <table className="invoice-lines">
+        <table className="invoice-lines cards-on-mobile">
           <thead>
             <tr>
               <th>کالا</th>
@@ -196,7 +196,7 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
                       {line.itemId ? ((Number(line.qty) || 0) * (Number(line.unitPrice) || 0)).toLocaleString('fa-IR') : '—'}
                     </span>
                   </td>
-                  <td>
+                  <td className="card-actions">
                     <button type="button" className="icon-btn-danger" onClick={() => q.removeLine(i)} disabled={q.lines.length === 1} aria-label="حذف ردیف">
                       <Trash2 size={14} />
                     </button>
@@ -229,7 +229,7 @@ function ReviewStep({ q, items, warehouses }: { q: QuotationDraft; items: ItemCa
         {q.validUntil && <div className="live-preview-row"><span>اعتبار تا</span><strong>{q.validUntil}</strong></div>}
       </div>
       <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr><th>کالا</th><th>تعداد</th><th>قیمت واحد</th><th>مبلغ</th></tr>
           </thead>
@@ -239,10 +239,10 @@ function ReviewStep({ q, items, warehouses }: { q: QuotationDraft; items: ItemCa
               const amount = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0)
               return (
                 <tr key={i}>
-                  <td>{it?.name ?? '—'}</td>
-                  <td>{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
-                  <td>{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
-                  <td>{amount.toLocaleString('fa-IR')}</td>
+                  <td data-label="کالا">{it?.name ?? '—'}</td>
+                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
+                  <td data-label="قیمت واحد">{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>
                 </tr>
               )
             })}

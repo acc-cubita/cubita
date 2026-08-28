@@ -10,6 +10,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { EmptyState } from '../components/EmptyState'
 
 /** پیش‌فرضِ سرویس — همان ساختارِ چارتِ کاشته‌شده. */
 const DEFAULT_WIDTHS = [1, 1, 2, 2]
@@ -101,6 +102,8 @@ export function NumberingPage({ token }: { token: string }) {
       >
         {rules == null ? (
           <p className="muted">در حال بارگذاری…</p>
+        ) : rules.length === 0 ? (
+          <EmptyState icon={Hash} text="هنوز روشِ شماره‌گذاری‌ای تعریف نشده — هر سند با شماره‌ی خودکارِ پشتِ‌سرِهم صادر می‌شود." />
         ) : (
           <div className="table-scroll">
             <table className="cards-on-mobile">

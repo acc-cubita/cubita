@@ -396,30 +396,32 @@ export function Reports({ token }: { token: string }) {
             <div className="report-kpi"><span>موجودی پایان دوره</span><strong>{fa(kardex.closing_qty)}</strong></div>
           </div>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-kardex-table">
-              <thead>
-                <tr>
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th>ورود</th>
-                  <th>خروج</th>
-                  <th>بهای واحد</th>
-                  <th>موجودی</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kardex.lines.map((l, i) => (
-                  <tr key={i}>
-                    <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
-                    <td className="entity-name">{l.source_label}</td>
-                    <td data-label="ورود" className="pos-in">{Number(l.qty_in) ? fa(l.qty_in) : '—'}</td>
-                    <td data-label="خروج" className="pos-out">{Number(l.qty_out) ? fa(l.qty_out) : '—'}</td>
-                    <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
-                    <td data-label="موجودی" className="money-cell"><strong>{fa(l.balance_qty)}</strong></td>
+            <div className="table-scroll">
+              <table className="entity-table rep-kardex-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>تاریخ</th>
+                    <th>شرح</th>
+                    <th>ورود</th>
+                    <th>خروج</th>
+                    <th>بهای واحد</th>
+                    <th>موجودی</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {kardex.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
+                      <td className="entity-name" data-label="شرح">{l.source_label}</td>
+                      <td data-label="ورود" className="pos-in">{Number(l.qty_in) ? fa(l.qty_in) : '—'}</td>
+                      <td data-label="خروج" className="pos-out">{Number(l.qty_out) ? fa(l.qty_out) : '—'}</td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
+                      <td data-label="موجودی" className="money-cell"><strong>{fa(l.balance_qty)}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -460,44 +462,46 @@ export function Reports({ token }: { token: string }) {
                 <p className="hint">در این فصل معامله‌ای ثبت نشده.</p>
               ) : (
                 <div className="entity-table-wrap">
-                  <table className="entity-table rep-seasonal-table">
-                    <thead>
-                      <tr>
-                        <th>طرف حساب</th>
-                        <th>شخص</th>
-                        <th>کد/شناسه ملی</th>
-                        <th>کد اقتصادی</th>
-                        <th>تعداد</th>
-                        <th>خالص</th>
-                        <th>مالیات و عوارض</th>
-                        <th>مبلغ کل</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {section.rows.map((r, i) => (
-                        <tr key={r.contact_id ?? `agg-${i}`}>
-                          <td className="entity-name">{r.contact_name}</td>
-                          <td data-label="شخص">{ENTITY_LABEL[r.entity_type]}</td>
-                          <td data-label="کد/شناسه ملی">{r.national_id ?? '—'}</td>
-                          <td data-label="کد اقتصادی">{r.economic_code ?? '—'}</td>
-                          <td data-label="تعداد">{fa(r.invoice_count)}</td>
-                          <td data-label="خالص" className="money-cell">{fa(r.net)}</td>
-                          <td data-label="مالیات و عوارض" className="money-cell">{fa(r.vat)}</td>
-                          <td data-label="مبلغ کل" className="money-cell">{fa(r.total)}</td>
+                  <div className="table-scroll">
+                    <table className="entity-table rep-seasonal-table cards-on-mobile">
+                      <thead>
+                        <tr>
+                          <th>طرف حساب</th>
+                          <th>شخص</th>
+                          <th>کد/شناسه ملی</th>
+                          <th>کد اقتصادی</th>
+                          <th>تعداد</th>
+                          <th>خالص</th>
+                          <th>مالیات و عوارض</th>
+                          <th>مبلغ کل</th>
                         </tr>
-                      ))}
-                      <tr className="rep-foot">
-                        <td className="entity-name">جمع {title}</td>
-                        <td data-label="شخص"></td>
-                        <td data-label="کد/شناسه ملی"></td>
-                        <td data-label="کد اقتصادی"></td>
-                        <td data-label="تعداد"></td>
-                        <td data-label="خالص" className="invoice-total">{fa(section.total_net)}</td>
-                        <td data-label="مالیات و عوارض" className="invoice-total">{fa(section.total_vat)}</td>
-                        <td data-label="مبلغ کل" className="invoice-total">{fa(section.total_total)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {section.rows.map((r, i) => (
+                          <tr key={r.contact_id ?? `agg-${i}`}>
+                            <td className="entity-name" data-label="طرف حساب">{r.contact_name}</td>
+                            <td data-label="شخص">{ENTITY_LABEL[r.entity_type]}</td>
+                            <td data-label="کد/شناسه ملی">{r.national_id ?? '—'}</td>
+                            <td data-label="کد اقتصادی">{r.economic_code ?? '—'}</td>
+                            <td data-label="تعداد">{fa(r.invoice_count)}</td>
+                            <td data-label="خالص" className="money-cell">{fa(r.net)}</td>
+                            <td data-label="مالیات و عوارض" className="money-cell">{fa(r.vat)}</td>
+                            <td data-label="مبلغ کل" className="money-cell">{fa(r.total)}</td>
+                          </tr>
+                        ))}
+                        <tr className="rep-foot">
+                          <td className="entity-name" data-label="طرف حساب">جمع {title}</td>
+                          <td data-label="شخص"></td>
+                          <td data-label="کد/شناسه ملی"></td>
+                          <td data-label="کد اقتصادی"></td>
+                          <td data-label="تعداد"></td>
+                          <td data-label="خالص" className="invoice-total">{fa(section.total_net)}</td>
+                          <td data-label="مالیات و عوارض" className="invoice-total">{fa(section.total_vat)}</td>
+                          <td data-label="مبلغ کل" className="invoice-total">{fa(section.total_total)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -534,30 +538,32 @@ export function Reports({ token }: { token: string }) {
             </div>
           </div>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-stmt-table">
-              <thead>
-                <tr>
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th>شماره</th>
-                  <th>بدهکار</th>
-                  <th>بستانکار</th>
-                  <th>مانده</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contactStatement.lines.map((l, i) => (
-                  <tr key={i}>
-                    <td data-label="تاریخ">{formatJalali(l.txn_date)}</td>
-                    <td className="entity-name">{l.description}</td>
-                    <td data-label="شماره">{l.number != null ? fa(l.number) : '—'}</td>
-                    <td data-label="بدهکار" className="money-cell">{Number(l.debit) ? fa(l.debit) : '—'}</td>
-                    <td data-label="بستانکار" className="money-cell">{Number(l.credit) ? fa(l.credit) : '—'}</td>
-                    <td data-label="مانده" className="money-cell"><strong>{fa(l.balance)}</strong></td>
+            <div className="table-scroll">
+              <table className="entity-table rep-stmt-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>تاریخ</th>
+                    <th>شرح</th>
+                    <th>شماره</th>
+                    <th>بدهکار</th>
+                    <th>بستانکار</th>
+                    <th>مانده</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {contactStatement.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td data-label="تاریخ">{formatJalali(l.txn_date)}</td>
+                      <td className="entity-name" data-label="شرح">{l.description}</td>
+                      <td data-label="شماره">{l.number != null ? fa(l.number) : '—'}</td>
+                      <td data-label="بدهکار" className="money-cell">{Number(l.debit) ? fa(l.debit) : '—'}</td>
+                      <td data-label="بستانکار" className="money-cell">{Number(l.credit) ? fa(l.credit) : '—'}</td>
+                      <td data-label="مانده" className="money-cell"><strong>{fa(l.balance)}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -572,45 +578,47 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">هنوز بودجه‌ای تعریف نشده. از «حسابداری ← بودجه‌بندی» بودجه اضافه کنید.</p>
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table rep-budget-table">
-                <thead>
-                  <tr>
-                    <th>کد</th>
-                    <th>نام حساب</th>
-                    <th>بودجه</th>
-                    <th>عملکرد</th>
-                    <th>انحراف</th>
-                    <th>درصد</th>
-                    <th>وضعیت</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {budgetReport.rows.map((r) => (
-                    <tr key={r.account_id}>
-                      <td data-label="کد">{r.account_code}</td>
-                      <td className="entity-name">{r.account_name}</td>
-                      <td data-label="بودجه" className="money-cell">{fa(r.budget)}</td>
-                      <td data-label="عملکرد" className="money-cell">{fa(r.actual)}</td>
-                      <td data-label="انحراف" className="money-cell">{fa(r.variance)}</td>
-                      <td data-label="درصد">{r.variance_pct != null ? `${fa(r.variance_pct)}٪` : '—'}</td>
-                      <td data-label="وضعیت">
-                        <span className={`status-badge ${r.favorable ? 'tone-success' : 'tone-danger'}`}>
-                          {r.favorable ? 'مطلوب' : 'نامطلوب'}
-                        </span>
-                      </td>
+              <div className="table-scroll">
+                <table className="entity-table rep-budget-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>کد</th>
+                      <th>نام حساب</th>
+                      <th>بودجه</th>
+                      <th>عملکرد</th>
+                      <th>انحراف</th>
+                      <th>درصد</th>
+                      <th>وضعیت</th>
                     </tr>
-                  ))}
-                  <tr className="rep-foot">
-                    <td className="entity-name">جمع</td>
-                    <td data-label="کد"></td>
-                    <td data-label="بودجه" className="invoice-total">{fa(budgetReport.total_budget)}</td>
-                    <td data-label="عملکرد" className="invoice-total">{fa(budgetReport.total_actual)}</td>
-                    <td data-label="انحراف" className="invoice-total">{fa(budgetReport.total_variance)}</td>
-                    <td data-label="درصد"></td>
-                    <td data-label="وضعیت"></td>
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {budgetReport.rows.map((r) => (
+                      <tr key={r.account_id}>
+                        <td data-label="کد">{r.account_code}</td>
+                        <td className="entity-name" data-label="نام حساب">{r.account_name}</td>
+                        <td data-label="بودجه" className="money-cell">{fa(r.budget)}</td>
+                        <td data-label="عملکرد" className="money-cell">{fa(r.actual)}</td>
+                        <td data-label="انحراف" className="money-cell">{fa(r.variance)}</td>
+                        <td data-label="درصد">{r.variance_pct != null ? `${fa(r.variance_pct)}٪` : '—'}</td>
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${r.favorable ? 'tone-success' : 'tone-danger'}`}>
+                            {r.favorable ? 'مطلوب' : 'نامطلوب'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="rep-foot">
+                      <td className="entity-name" data-label="کد">جمع</td>
+                      <td data-label="کد"></td>
+                      <td data-label="بودجه" className="invoice-total">{fa(budgetReport.total_budget)}</td>
+                      <td data-label="عملکرد" className="invoice-total">{fa(budgetReport.total_actual)}</td>
+                      <td data-label="انحراف" className="invoice-total">{fa(budgetReport.total_variance)}</td>
+                      <td data-label="درصد"></td>
+                      <td data-label="وضعیت"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -640,16 +648,18 @@ export function Reports({ token }: { token: string }) {
                   <p className="hint">موردی در این فعالیت نبود.</p>
                 ) : (
                   <div className="entity-table-wrap">
-                    <table className="entity-table rep-2col-table">
-                      <tbody>
-                        {g.lines.map((l) => (
-                          <tr key={l.account_id}>
-                            <td>{l.account_code} — {l.account_name}</td>
-                            <td className={`money-cell ${Number(l.amount) >= 0 ? 'pos-in' : 'pos-out'}`}>{fa(l.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="table-scroll">
+                      <table className="entity-table rep-2col-table cards-on-mobile">
+                        <tbody>
+                          {g.lines.map((l) => (
+                            <tr key={l.account_id}>
+                              <td className="card-title">{l.account_code} — {l.account_name}</td>
+                              <td className={`money-cell ${Number(l.amount) >= 0 ? 'pos-in' : 'pos-out'}`} data-label="مبلغ">{fa(l.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
                 <p className="invoice-total">جمع {g.title}: {fa(g.total)}</p>
@@ -671,48 +681,50 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «شرکت ← مرکز هزینه» شروع کنید.</p>
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table rep-cc-table">
-                <thead>
-                  <tr>
-                    <th>کد</th>
-                    <th>مرکز / پروژه</th>
-                    <th>درآمد</th>
-                    <th>هزینه</th>
-                    <th>سود مستقیم</th>
-                    <th>با زیرمجموعه</th>
-                    <th>انحراف از بودجه</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {costCenterReport.rows.map((r) => (
-                    <tr key={r.cost_center_id ?? 'none'}>
-                      <td data-label="کد">{r.cost_center_code || '—'}</td>
-                      <td className="entity-name">
-                        <span style={{ paddingInlineStart: r.depth * 14 }}>{r.cost_center_name}</span>
-                      </td>
-                      <td data-label="درآمد" className="money-cell">{fa(r.income)}</td>
-                      <td data-label="هزینه" className="money-cell">{fa(r.expense)}</td>
-                      <td data-label="سود مستقیم" className={`money-cell ${Number(r.profit) >= 0 ? 'pos-in' : 'pos-out'}`}>{fa(r.profit)}</td>
-                      <td data-label="با زیرمجموعه" className={`money-cell ${Number(r.rollup_profit) >= 0 ? 'pos-in' : 'pos-out'}`}><strong>{fa(r.rollup_profit)}</strong></td>
-                      <td data-label="انحراف از بودجه" className="money-cell">
-                        {r.profit_variance == null ? (
-                          <span className="muted">—</span>
-                        ) : (
-                          <span className={Number(r.profit_variance) >= 0 ? 'pos-in' : 'pos-out'}>{fa(r.profit_variance)}</span>
-                        )}
-                      </td>
+              <div className="table-scroll">
+                <table className="entity-table rep-cc-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>کد</th>
+                      <th>مرکز / پروژه</th>
+                      <th>درآمد</th>
+                      <th>هزینه</th>
+                      <th>سود مستقیم</th>
+                      <th>با زیرمجموعه</th>
+                      <th>انحراف از بودجه</th>
                     </tr>
-                  ))}
-                  <tr className="rep-foot">
-                    <td className="entity-name">جمع</td>
-                    <td data-label="کد"></td>
-                    <td data-label="درآمد" className="invoice-total">{fa(costCenterReport.total_income)}</td>
-                    <td data-label="هزینه" className="invoice-total">{fa(costCenterReport.total_expense)}</td>
-                    <td data-label="سود مستقیم" className="invoice-total">{fa(costCenterReport.total_profit)}</td>
-                    <td colSpan={2} />
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {costCenterReport.rows.map((r) => (
+                      <tr key={r.cost_center_id ?? 'none'}>
+                        <td data-label="کد">{r.cost_center_code || '—'}</td>
+                        <td className="entity-name" data-label="مرکز / پروژه">
+                          <span style={{ paddingInlineStart: r.depth * 14 }}>{r.cost_center_name}</span>
+                        </td>
+                        <td data-label="درآمد" className="money-cell">{fa(r.income)}</td>
+                        <td data-label="هزینه" className="money-cell">{fa(r.expense)}</td>
+                        <td data-label="سود مستقیم" className={`money-cell ${Number(r.profit) >= 0 ? 'pos-in' : 'pos-out'}`}>{fa(r.profit)}</td>
+                        <td data-label="با زیرمجموعه" className={`money-cell ${Number(r.rollup_profit) >= 0 ? 'pos-in' : 'pos-out'}`}><strong>{fa(r.rollup_profit)}</strong></td>
+                        <td data-label="انحراف از بودجه" className="money-cell">
+                          {r.profit_variance == null ? (
+                            <span className="muted">—</span>
+                          ) : (
+                            <span className={Number(r.profit_variance) >= 0 ? 'pos-in' : 'pos-out'}>{fa(r.profit_variance)}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="rep-foot">
+                      <td className="entity-name card-title">جمع</td>
+                      <td data-label="کد"></td>
+                      <td data-label="درآمد" className="invoice-total">{fa(costCenterReport.total_income)}</td>
+                      <td data-label="هزینه" className="invoice-total">{fa(costCenterReport.total_expense)}</td>
+                      <td data-label="سود مستقیم" className="invoice-total">{fa(costCenterReport.total_profit)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -731,38 +743,40 @@ export function Reports({ token }: { token: string }) {
             </p>
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table rep-aging-table">
-                <thead>
-                  <tr>
-                    <th>{aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}</th>
-                    <th>جاری (۰–۳۰)</th>
-                    <th>۳۱–۶۰ روز</th>
-                    <th>۶۱–۹۰ روز</th>
-                    <th>بالای ۹۰ روز</th>
-                    <th>جمع</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {aging.rows.map((r) => (
-                    <tr key={r.contact_id}>
-                      <td className="entity-name">{r.contact_name}</td>
-                      <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(r.current)}</td>
-                      <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(r.d31_60)}</td>
-                      <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(r.d61_90)}</td>
-                      <td data-label="بالای ۹۰ روز" className="money-cell">{Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(r.over_90)}</span> : fa(r.over_90)}</td>
-                      <td data-label="جمع" className="money-cell"><strong>{fa(r.total)}</strong></td>
+              <div className="table-scroll">
+                <table className="entity-table rep-aging-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>{aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}</th>
+                      <th>جاری (۰–۳۰)</th>
+                      <th>۳۱–۶۰ روز</th>
+                      <th>۶۱–۹۰ روز</th>
+                      <th>بالای ۹۰ روز</th>
+                      <th>جمع</th>
                     </tr>
-                  ))}
-                  <tr className="rep-foot">
-                    <td className="entity-name">جمع</td>
-                    <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(aging.total_current)}</td>
-                    <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(aging.total_31_60)}</td>
-                    <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(aging.total_61_90)}</td>
-                    <td data-label="بالای ۹۰ روز" className="money-cell">{fa(aging.total_over_90)}</td>
-                    <td data-label="جمع" className="invoice-total">{fa(aging.grand_total)}</td>
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {aging.rows.map((r) => (
+                      <tr key={r.contact_id}>
+                        <td className="entity-name" data-label={aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}>{r.contact_name}</td>
+                        <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(r.current)}</td>
+                        <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(r.d31_60)}</td>
+                        <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(r.d61_90)}</td>
+                        <td data-label="بالای ۹۰ روز" className="money-cell">{Number(r.over_90) > 0 ? <span className="status-badge tone-danger">{fa(r.over_90)}</span> : fa(r.over_90)}</td>
+                        <td data-label="جمع" className="money-cell"><strong>{fa(r.total)}</strong></td>
+                      </tr>
+                    ))}
+                    <tr className="rep-foot">
+                      <td className="entity-name" data-label={aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}>جمع</td>
+                      <td data-label="جاری (۰–۳۰)" className="money-cell">{fa(aging.total_current)}</td>
+                      <td data-label="۳۱–۶۰ روز" className="money-cell">{fa(aging.total_31_60)}</td>
+                      <td data-label="۶۱–۹۰ روز" className="money-cell">{fa(aging.total_61_90)}</td>
+                      <td data-label="بالای ۹۰ روز" className="money-cell">{fa(aging.total_over_90)}</td>
+                      <td data-label="جمع" className="invoice-total">{fa(aging.grand_total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -777,38 +791,40 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">موجودی کالایی برای نمایش نیست.</p>
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table rep-inv-table">
-                <thead>
-                  <tr>
-                    <th>کد</th>
-                    <th>کالا</th>
-                    <th>واحد</th>
-                    <th>موجودی</th>
-                    <th>بهای واحد</th>
-                    <th>ارزش</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventory.rows.map((r) => (
-                    <tr key={r.item_id}>
-                      <td data-label="کد">{r.sku}</td>
-                      <td className="entity-name">{r.name}</td>
-                      <td data-label="واحد">{r.unit}</td>
-                      <td data-label="موجودی">{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
-                      <td data-label="بهای واحد" className="money-cell">{fa(r.unit_cost)}</td>
-                      <td data-label="ارزش" className="money-cell"><strong>{fa(r.stock_value)}</strong></td>
+              <div className="table-scroll">
+                <table className="entity-table rep-inv-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>کد</th>
+                      <th>کالا</th>
+                      <th>واحد</th>
+                      <th>موجودی</th>
+                      <th>بهای واحد</th>
+                      <th>ارزش</th>
                     </tr>
-                  ))}
-                  <tr className="rep-foot">
-                    <td className="entity-name">جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
-                    <td data-label="کد"></td>
-                    <td data-label="واحد"></td>
-                    <td data-label="موجودی"></td>
-                    <td data-label="بهای واحد"></td>
-                    <td data-label="ارزش" className="invoice-total">{fa(inventory.total_value)}</td>
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {inventory.rows.map((r) => (
+                      <tr key={r.item_id}>
+                        <td data-label="کد">{r.sku}</td>
+                        <td className="entity-name" data-label="کالا">{r.name}</td>
+                        <td data-label="واحد">{r.unit}</td>
+                        <td data-label="موجودی">{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
+                        <td data-label="بهای واحد" className="money-cell">{fa(r.unit_cost)}</td>
+                        <td data-label="ارزش" className="money-cell"><strong>{fa(r.stock_value)}</strong></td>
+                      </tr>
+                    ))}
+                    <tr className="rep-foot">
+                      <td className="entity-name" data-label="کد">جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
+                      <td data-label="کد"></td>
+                      <td data-label="واحد"></td>
+                      <td data-label="موجودی"></td>
+                      <td data-label="بهای واحد"></td>
+                      <td data-label="ارزش" className="invoice-total">{fa(inventory.total_value)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -826,29 +842,33 @@ export function Reports({ token }: { token: string }) {
           </div>
           <h3>درآمدها</h3>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                {incomeStatement.income.map((r) => (
-                  <tr key={r.account_id}>
-                    <td>{r.account_name}</td>
-                    <td className="money-cell">{fa(r.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  {incomeStatement.income.map((r) => (
+                    <tr key={r.account_id}>
+                      <td className="card-title">{r.account_name}</td>
+                      <td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <h3>هزینه‌ها</h3>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                {incomeStatement.expenses.map((r) => (
-                  <tr key={r.account_id}>
-                    <td>{r.account_name}</td>
-                    <td className="money-cell">{fa(r.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  {incomeStatement.expenses.map((r) => (
+                    <tr key={r.account_id}>
+                      <td className="card-title">{r.account_name}</td>
+                      <td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="invoice-total">سود/زیان خالص: {fa(incomeStatement.net_profit)}</p>
         </div>
@@ -868,41 +888,47 @@ export function Reports({ token }: { token: string }) {
           </div>
           <h3>دارایی‌ها</h3>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                {balanceSheet.assets.map((r) => (
-                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  {balanceSheet.assets.map((r) => (
+                    <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="invoice-total">جمع دارایی‌ها: {fa(balanceSheet.total_assets)}</p>
 
           <h3>بدهی‌ها</h3>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                {balanceSheet.liabilities.map((r) => (
-                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  {balanceSheet.liabilities.map((r) => (
+                    <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="invoice-total">جمع بدهی‌ها: {fa(balanceSheet.total_liabilities)}</p>
 
           <h3>حقوق صاحبان سرمایه</h3>
           <div className="entity-table-wrap">
-            <table className="entity-table rep-2col-table">
-              <tbody>
-                {balanceSheet.equity.map((r) => (
-                  <tr key={r.account_id}><td>{r.account_name}</td><td className="money-cell">{fa(r.balance)}</td></tr>
-                ))}
-                <tr>
-                  <td>سود/زیان دوره جاری</td>
-                  <td className="money-cell">{fa(balanceSheet.current_period_profit)}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  {balanceSheet.equity.map((r) => (
+                    <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>
+                  ))}
+                  <tr>
+                    <td className="card-title">سود/زیان دوره جاری</td>
+                    <td className="money-cell" data-label="مبلغ">{fa(balanceSheet.current_period_profit)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="invoice-total">جمع حقوق صاحبان سرمایه: {fa(balanceSheet.total_equity)}</p>
         </div>

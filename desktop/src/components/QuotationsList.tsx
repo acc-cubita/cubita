@@ -152,7 +152,7 @@ export function QuotationsList({
                     {STATUS_LABELS[q.status] ?? q.status}
                   </span>
                 </td>
-                <td className="card-actions">
+                <td className="card-actions" data-label="اقدام">
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(q.id)}>
                       <Printer size={13} /> چاپ

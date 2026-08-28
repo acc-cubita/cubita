@@ -135,14 +135,14 @@ function DetailsStep({ draft, items }: { draft: ListingDraft; items: ItemCache[]
       ) : (
         <div className="field-full">
           <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead><tr><th>کالا</th><th>تعداد در پک</th><th></th></tr></thead>
               <tbody>
                 {form.components.map((r, i) => (
                   <tr key={i}>
                     <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
                     <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
-                    <td>
+                    <td className="card-actions">
                       <button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف">
                         <Trash2 size={14} />
                       </button>
@@ -176,11 +176,11 @@ function ReviewStep({ draft, items }: { draft: ListingDraft; items: ItemCache[] 
       </div>
       {form.kind === 'pack' && draft.packRows.length > 0 && (
         <div className="table-scroll">
-          <table>
+          <table className="cards-on-mobile">
             <thead><tr><th>قلم</th><th>تعداد در پک</th></tr></thead>
             <tbody>
               {draft.packRows.map((r, i) => (
-                <tr key={i}><td>{itemName(r.itemId)}</td><td>{Number(r.qty).toLocaleString('fa-IR')}</td></tr>
+                <tr key={i}><td data-label="قلم">{itemName(r.itemId)}</td><td data-label="تعداد در پک">{Number(r.qty).toLocaleString('fa-IR')}</td></tr>
               ))}
             </tbody>
           </table>

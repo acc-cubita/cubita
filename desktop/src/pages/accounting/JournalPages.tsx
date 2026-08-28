@@ -154,7 +154,7 @@ function EntryTable({
                 {faAmount(total(e))}
               </td>
               {onVoid && (
-                <td className="acc-row-actions">
+                <td className="acc-row-actions card-actions">
                   {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
                   {!e.voided_at && e.source_type === 'manual' && (
                     <button type="button" className="danger" onClick={() => onVoid(e)}>
@@ -331,7 +331,7 @@ function CartableTable({
         <tbody>
           {pg.pageItems.map((e) => (
             <tr key={e.id}>
-              <td>
+              <td data-label="انتخاب">
                 <input type="checkbox" checked={picked.has(e.id)} onChange={() => onToggle(e.id)} />
               </td>
               <td className="card-title" data-label="شماره">

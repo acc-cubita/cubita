@@ -159,46 +159,48 @@ export function BirthdaysPanel({
             <EmptyState icon={CalendarHeart} text="تولدی در این بازه نیست." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table birthdays-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>مشتری</th>
-                    <th>تولد</th>
-                    <th>تا تولد</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((b) => (
-                    <tr key={b.contact_id}>
-                      <td className="card-title" data-label="مشتری">
-                        <div className="entity-cell">
-                          <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
-                          <div>
-                            <div className="entity-name">{b.contact_name}</div>
-                            <div className="entity-sub">{fa(b.turning_age)} ساله می‌شود</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td data-label="تولد">{formatJalali(b.next_birthday)}</td>
-                      <td data-label="تا تولد">
-                        {b.days_until === 0 ? (
-                          <span className="status-badge tone-success"><Cake size={12} /> امروز!</span>
-                        ) : (
-                          <span>{fa(b.days_until)} روز</span>
-                        )}
-                      </td>
-                      <td className="card-actions">
-                        {giftPoints > 0 && (
-                          <button type="button" onClick={() => void giveGift(b.contact_id)} title={`هدیه‌ی ${fa(giftPoints)} امتیاز`}>
-                            <Gift size={13} /> هدیه
-                          </button>
-                        )}
-                      </td>
+              <div className="table-scroll">
+                <table className="entity-table birthdays-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>مشتری</th>
+                      <th>تولد</th>
+                      <th>تا تولد</th>
+                      <th></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {rows.map((b) => (
+                      <tr key={b.contact_id}>
+                        <td className="card-title" data-label="مشتری">
+                          <div className="entity-cell">
+                            <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
+                            <div>
+                              <div className="entity-name">{b.contact_name}</div>
+                              <div className="entity-sub">{fa(b.turning_age)} ساله می‌شود</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td data-label="تولد">{formatJalali(b.next_birthday)}</td>
+                        <td data-label="تا تولد">
+                          {b.days_until === 0 ? (
+                            <span className="status-badge tone-success"><Cake size={12} /> امروز!</span>
+                          ) : (
+                            <span>{fa(b.days_until)} روز</span>
+                          )}
+                        </td>
+                        <td className="card-actions">
+                          {giftPoints > 0 && (
+                            <button type="button" onClick={() => void giveGift(b.contact_id)} title={`هدیه‌ی ${fa(giftPoints)} امتیاز`}>
+                              <Gift size={13} /> هدیه
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </SectionCard>

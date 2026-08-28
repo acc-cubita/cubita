@@ -99,37 +99,39 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
           <EmptyState icon={Check} text="کمیسیونِ دریافت‌نشده‌ای نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>پخش‌کننده</th>
-                  <th>ماه</th>
-                  <th>سفارش‌ها</th>
-                  <th>جمعِ فاکتورها</th>
-                  <th>کمیسیونِ ۲٪</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingRows.map((r) => {
-                  const key = `${r.distributor_tenant_id}|${r.period}`
-                  return (
-                    <tr key={key}>
-                      <td className="entity-name card-title">{r.distributor_name}</td>
-                      <td data-label="ماه">{faPeriod(r.period)}</td>
-                      <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
-                      <td className="money-cell" data-label="جمعِ فاکتورها">{faMoney(r.total_base)}</td>
-                      <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.pending_amount)}</td>
-                      <td className="card-actions">
-                        <button type="button" className="btn-primary" disabled={busy === key} onClick={() => void settle(r)}>
-                          <Check size={13} /> تسویه
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>پخش‌کننده</th>
+                    <th>ماه</th>
+                    <th>سفارش‌ها</th>
+                    <th>جمعِ فاکتورها</th>
+                    <th>کمیسیونِ ۲٪</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingRows.map((r) => {
+                    const key = `${r.distributor_tenant_id}|${r.period}`
+                    return (
+                      <tr key={key}>
+                        <td className="entity-name card-title" data-label="پخش‌کننده">{r.distributor_name}</td>
+                        <td data-label="ماه">{faPeriod(r.period)}</td>
+                        <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                        <td className="money-cell" data-label="جمعِ فاکتورها">{faMoney(r.total_base)}</td>
+                        <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.pending_amount)}</td>
+                        <td className="card-actions">
+                          <button type="button" className="btn-primary" disabled={busy === key} onClick={() => void settle(r)}>
+                            <Check size={13} /> تسویه
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -139,30 +141,32 @@ export function MarketplaceCommissionPage({ token }: { token: string }) {
           <EmptyState icon={Wallet} text="هنوز موردی تسویه نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>پخش‌کننده</th>
-                  <th>ماه</th>
-                  <th>سفارش‌ها</th>
-                  <th>کمیسیونِ ۲٪</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settledRows.map((r) => (
-                  <tr key={`${r.distributor_tenant_id}|${r.period}`}>
-                    <td className="entity-name card-title">{r.distributor_name}</td>
-                    <td data-label="ماه">{faPeriod(r.period)}</td>
-                    <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
-                    <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.total_amount)}</td>
-                    <td data-label="وضعیت">
-                      <span className="status-badge tone-success">تسویه‌شده</span>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>پخش‌کننده</th>
+                    <th>ماه</th>
+                    <th>سفارش‌ها</th>
+                    <th>کمیسیونِ ۲٪</th>
+                    <th>وضعیت</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {settledRows.map((r) => (
+                    <tr key={`${r.distributor_tenant_id}|${r.period}`}>
+                      <td className="entity-name card-title" data-label="پخش‌کننده">{r.distributor_name}</td>
+                      <td data-label="ماه">{faPeriod(r.period)}</td>
+                      <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                      <td className="money-cell" data-label="کمیسیونِ ۲٪">{faMoney(r.total_amount)}</td>
+                      <td data-label="وضعیت">
+                        <span className="status-badge tone-success">تسویه‌شده</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>

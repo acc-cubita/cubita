@@ -175,7 +175,7 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
   return (
     <>
       <div className="table-scroll">
-        <table className="invoice-lines">
+        <table className="invoice-lines cards-on-mobile">
           <thead>
             <tr>
               <th>کالا</th>
@@ -241,7 +241,7 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
                         : '—'}
                     </span>
                   </td>
-                  <td>
+                  <td className="card-actions">
                     <button
                       type="button"
                       className="icon-btn-danger"
@@ -349,7 +349,7 @@ function ReviewStep({ d, items, warehouses }: { d: SalesInvoiceDraft; items: Ite
       </div>
       <p className="form-subhead">اقلام</p>
       <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr>
               <th>کالا</th>
@@ -365,11 +365,11 @@ function ReviewStep({ d, items, warehouses }: { d: SalesInvoiceDraft; items: Ite
               const amount = Math.max((Number(line.qty) || 0) * (Number(line.unitPrice) || 0) - (Number(line.discount) || 0), 0)
               return (
                 <tr key={i}>
-                  <td>{it?.name ?? '—'}</td>
-                  <td>{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
-                  <td>{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
-                  <td>{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
-                  <td>{amount.toLocaleString('fa-IR')}</td>
+                  <td data-label="کالا">{it?.name ?? '—'}</td>
+                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
+                  <td data-label="قیمت واحد">{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="تخفیف">{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>
                 </tr>
               )
             })}

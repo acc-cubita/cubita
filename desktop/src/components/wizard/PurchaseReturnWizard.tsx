@@ -128,15 +128,15 @@ function ReviewStep({ r }: { r: PurchaseReturnDraft }) {
         <div className="live-preview-row"><span>تاریخ برگشت</span><strong>{r.returnDate}</strong></div>
       </div>
       <div className="table-scroll">
-        <table>
+        <table className="cards-on-mobile">
           <thead>
             <tr><th>کالا</th><th>مقدار برگشتی</th></tr>
           </thead>
           <tbody>
             {r.enteredLines.map((l) => (
               <tr key={l.item_id}>
-                <td>{nameOf(l.item_id)}</td>
-                <td>{fa(l.qty)} {unitOf(l.item_id)}</td>
+                <td data-label="کالا">{nameOf(l.item_id)}</td>
+                <td data-label="مقدار برگشتی">{fa(l.qty)} {unitOf(l.item_id)}</td>
               </tr>
             ))}
           </tbody>

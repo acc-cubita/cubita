@@ -346,59 +346,61 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           <EmptyState icon={UsersRound} text="طرف حسابی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table contacts-table">
-              <thead>
-                <tr>
-                  <th>نام</th>
-                  <th>نوع</th>
-                  <th>مانده</th>
-                  <th>سقف اعتبار</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {contactsPg.pageItems.map((c) => {
-                  const bal = balanceOf(c.id)
-                  const limit = Number(c.credit_limit) || 0
-                  const overLimit = limit > 0 && (recvMap.get(c.id) ?? 0) > limit
-                  return (
-                  <tr key={c.id}>
-                    <td data-label="نام">
-                      <div className="entity-cell">
-                        <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
-                        <div>
-                          <div className="entity-name">{c.name}</div>
-                          <div className="entity-sub">{c.phone || (c.economic_code ? `کد اقتصادی: ${c.economic_code}` : '')}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="نوع">
-                      <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
-                    </td>
-                    <td data-label="مانده" className="money-cell">
-                      {bal === 0 ? '۰' : (
-                        <span className={bal > 0 ? 'bal-debit' : 'bal-credit'}>
-                          {faMoney(Math.abs(Math.round(bal)))} <span className="bal-tag">{bal > 0 ? 'بدهکار' : 'بستانکار'}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="سقف اعتبار" className="money-cell">
-                      {limit > 0 ? (
-                        <>
-                          {faMoney(limit)}
-                          {overLimit && <span className="status-badge tone-danger credit-over">فراتر از سقف</span>}
-                        </>
-                      ) : '—'}
-                    </td>
-                    <td className="check-actions">
-                      <button type="button" onClick={() => setStatementContact({ id: c.id, name: c.name })}><FileText size={13} /> صورت‌حساب</button>
-                      <button type="button" onClick={() => startEdit(c)}><Pencil size={13} /> ویرایش</button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table contacts-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>نام</th>
+                    <th>نوع</th>
+                    <th>مانده</th>
+                    <th>سقف اعتبار</th>
+                    <th></th>
                   </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {contactsPg.pageItems.map((c) => {
+                    const bal = balanceOf(c.id)
+                    const limit = Number(c.credit_limit) || 0
+                    const overLimit = limit > 0 && (recvMap.get(c.id) ?? 0) > limit
+                    return (
+                    <tr key={c.id}>
+                      <td data-label="نام">
+                        <div className="entity-cell">
+                          <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
+                          <div>
+                            <div className="entity-name">{c.name}</div>
+                            <div className="entity-sub">{c.phone || (c.economic_code ? `کد اقتصادی: ${c.economic_code}` : '')}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="نوع">
+                        <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
+                      </td>
+                      <td data-label="مانده" className="money-cell">
+                        {bal === 0 ? '۰' : (
+                          <span className={bal > 0 ? 'bal-debit' : 'bal-credit'}>
+                            {faMoney(Math.abs(Math.round(bal)))} <span className="bal-tag">{bal > 0 ? 'بدهکار' : 'بستانکار'}</span>
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="سقف اعتبار" className="money-cell">
+                        {limit > 0 ? (
+                          <>
+                            {faMoney(limit)}
+                            {overLimit && <span className="status-badge tone-danger credit-over">فراتر از سقف</span>}
+                          </>
+                        ) : '—'}
+                      </td>
+                      <td className="check-actions card-actions">
+                        <button type="button" onClick={() => setStatementContact({ id: c.id, name: c.name })}><FileText size={13} /> صورت‌حساب</button>
+                        <button type="button" onClick={() => startEdit(c)}><Pencil size={13} /> ویرایش</button>
+                      </td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={contactsPg.page} pageCount={contactsPg.pageCount} onChange={contactsPg.setPage} />
           </div>
         )}
@@ -476,32 +478,34 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           <EmptyState icon={Wallet} text="هنوز دریافت یا پرداختی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table treasury-table">
-              <thead>
-                <tr>
-                  <th>نوع</th>
-                  <th>طرف حساب</th>
-                  <th>مبلغ</th>
-                  <th>روش</th>
-                  <th>تاریخ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {txPg.pageItems.map((t) => (
-                  <tr key={t.id}>
-                    <td data-label="نوع">
-                      <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
-                        {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
-                      </span>
-                    </td>
-                    <td data-label="طرف حساب" className="entity-name">{t.contact_name}</td>
-                    <td data-label="مبلغ" className="money-cell">{faMoney(Number(t.amount))}</td>
-                    <td data-label="روش">{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
-                    <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
+            <div className="table-scroll">
+              <table className="entity-table treasury-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>نوع</th>
+                    <th>طرف حساب</th>
+                    <th>مبلغ</th>
+                    <th>روش</th>
+                    <th>تاریخ</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {txPg.pageItems.map((t) => (
+                    <tr key={t.id}>
+                      <td data-label="نوع">
+                        <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
+                          {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
+                        </span>
+                      </td>
+                      <td data-label="طرف حساب" className="entity-name">{t.contact_name}</td>
+                      <td data-label="مبلغ" className="money-cell">{faMoney(Number(t.amount))}</td>
+                      <td data-label="روش">{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
+                      <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={txPg.page} pageCount={txPg.pageCount} onChange={txPg.setPage} />
           </div>
         )}

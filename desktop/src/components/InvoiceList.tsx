@@ -194,7 +194,7 @@ export function InvoiceList({
                 <td data-label="وضعیت">
                   {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : 'معتبر'}
                 </td>
-                <td className="card-actions" onClick={(e) => e.stopPropagation()}>
+                <td className="card-actions" onClick={(e) => e.stopPropagation()} data-label="عملیات">
                   <div className="check-actions">
                     <button type="button" onClick={() => void handlePrint(row.id)}>
                       <Printer size={13} /> چاپ
@@ -265,41 +265,43 @@ function InvoiceDetail({
     <div className="invoice-detail">
       {creator && <div className="invoice-detail-desc">ثبت‌کننده: {creator}</div>}
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
-      <table className="invoice-detail-table">
-        <thead>
-          <tr>
-            <th>کالا</th>
-            <th>تعداد</th>
-            <th>{isSales ? 'قیمت واحد' : 'بهای واحد'}</th>
-            <th>تخفیف</th>
-            <th>خالص</th>
-            {isSales && <th>بهای تمام‌شده</th>}
-            {isSales && <th>سود</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {row.lines.map((line) => {
-            const qty = Number(line.qty)
-            const price = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_price) : Number((line as PurchaseInvoiceRecord['lines'][number]).unit_cost)
-            const lineDiscount = Number(line.discount)
-            const lineNet = qty * price - lineDiscount
-            const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
-            const lineCost = qty * unitCost
-            const lineProfit = lineNet - lineCost
-            return (
-              <tr key={line.id}>
-                <td className="entity-name">{itemName(line.item_id)}</td>
-                <td>{qty.toLocaleString('fa-IR')}</td>
-                <td>{fa(price)}</td>
-                <td>{lineDiscount ? fa(lineDiscount) : '—'}</td>
-                <td>{fa(lineNet)}</td>
-                {isSales && <td>{fa(lineCost)}</td>}
-                {isSales && <td className={lineProfit >= 0 ? 'stock-ok' : 'stock-over'}>{fa(lineProfit)}</td>}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="invoice-detail-table cards-on-mobile">
+          <thead>
+            <tr>
+              <th>کالا</th>
+              <th>تعداد</th>
+              <th>{isSales ? 'قیمت واحد' : 'بهای واحد'}</th>
+              <th>تخفیف</th>
+              <th>خالص</th>
+              {isSales && <th>بهای تمام‌شده</th>}
+              {isSales && <th>سود</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {row.lines.map((line) => {
+              const qty = Number(line.qty)
+              const price = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_price) : Number((line as PurchaseInvoiceRecord['lines'][number]).unit_cost)
+              const lineDiscount = Number(line.discount)
+              const lineNet = qty * price - lineDiscount
+              const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
+              const lineCost = qty * unitCost
+              const lineProfit = lineNet - lineCost
+              return (
+                <tr key={line.id}>
+                  <td className="entity-name" data-label="کالا">{itemName(line.item_id)}</td>
+                  <td data-label="تعداد">{qty.toLocaleString('fa-IR')}</td>
+                  <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}</td>
+                  <td data-label="تخفیف">{lineDiscount ? fa(lineDiscount) : '—'}</td>
+                  <td data-label="خالص">{fa(lineNet)}</td>
+                  {isSales && <td data-label="بهای تمام‌شده">{fa(lineCost)}</td>}
+                  {isSales && <td className={lineProfit >= 0 ? 'stock-ok' : 'stock-over'} data-label="سود">{fa(lineProfit)}</td>}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       <div className="invoice-detail-totals">
         {discount > 0 && <span>جمع تخفیف: {fa(discount)}</span>}
         {headerDiscount > 0 && <span>از آن، تخفیف کل فاکتور: {fa(headerDiscount)}</span>}

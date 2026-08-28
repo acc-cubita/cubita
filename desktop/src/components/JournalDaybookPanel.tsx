@@ -114,21 +114,23 @@ export function JournalDaybookPanel({ token, accounts }: { token: string; accoun
 
                 {open && (
                   <div className="journal-detail">
-                    <table className="journal-lines-table">
-                      <thead>
-                        <tr><th>حساب</th><th>شرح</th><th>بدهکار</th><th>بستانکار</th></tr>
-                      </thead>
-                      <tbody>
-                        {e.lines.map((l) => (
-                          <tr key={l.id}>
-                            <td data-label="حساب" className="entity-name">{accountLabel(l.account_id)}</td>
-                            <td data-label="شرح">{l.description || '—'}</td>
-                            <td data-label="بدهکار" className="money-cell">{Number(l.debit) > 0 ? fa(Number(l.debit)) : '—'}</td>
-                            <td data-label="بستانکار" className="money-cell">{Number(l.credit) > 0 ? fa(Number(l.credit)) : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="table-scroll">
+                      <table className="journal-lines-table cards-on-mobile">
+                        <thead>
+                          <tr><th>حساب</th><th>شرح</th><th>بدهکار</th><th>بستانکار</th></tr>
+                        </thead>
+                        <tbody>
+                          {e.lines.map((l) => (
+                            <tr key={l.id}>
+                              <td data-label="حساب" className="entity-name">{accountLabel(l.account_id)}</td>
+                              <td data-label="شرح">{l.description || '—'}</td>
+                              <td data-label="بدهکار" className="money-cell">{Number(l.debit) > 0 ? fa(Number(l.debit)) : '—'}</td>
+                              <td data-label="بستانکار" className="money-cell">{Number(l.credit) > 0 ? fa(Number(l.credit)) : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {canVoid && (
                       <div className="journal-actions">
                         <button type="button" className="icon-btn-danger" disabled={busyId === e.id} onClick={() => void doVoid(e)}>

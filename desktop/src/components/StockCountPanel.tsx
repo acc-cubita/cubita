@@ -185,32 +185,34 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
           <EmptyState icon={ClipboardCheck} text="هنوز جلسه‌ای ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>انبار</th>
-                  <th>تاریخ</th>
-                  <th>وضعیت</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessionsPg.pageItems.map((s) => (
-                  <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
-                    <td className="entity-name card-title">{s.warehouse_name}</td>
-                    <td data-label="تاریخ">{formatJalali(s.count_date)}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${STATUS_TONE[s.status]}`}>{STATUS_LABEL[s.status]}</span>
-                    </td>
-                    <td className="card-actions">
-                      <button type="button" onClick={() => void openSession(s.id)}>
-                        باز کردن
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>انبار</th>
+                    <th>تاریخ</th>
+                    <th>وضعیت</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sessionsPg.pageItems.map((s) => (
+                    <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
+                      <td className="entity-name card-title" data-label="انبار">{s.warehouse_name}</td>
+                      <td data-label="تاریخ">{formatJalali(s.count_date)}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${STATUS_TONE[s.status]}`}>{STATUS_LABEL[s.status]}</span>
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" onClick={() => void openSession(s.id)}>
+                          باز کردن
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={sessionsPg.page} pageCount={sessionsPg.pageCount} onChange={sessionsPg.setPage} />
           </div>
         )}
@@ -252,45 +254,47 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
               </span>
             </div>
             <div className="entity-table-wrap">
-              <table className="entity-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>کالا</th>
-                    <th>سیستمی</th>
-                    <th>شمارش</th>
-                    <th>مغایرت</th>
-                    <th>ارزش مغایرت</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {liveRows.map(({ line, variance, value }) => (
-                    <tr key={line.id}>
-                      <td className="card-title">
-                        <div className="entity-name">{line.item_name}</div>
-                        <div className="entity-sub">{line.item_sku} · {line.unit}</div>
-                      </td>
-                      <td data-label="سیستمی">{faQty(line.system_qty)}</td>
-                      <td data-label="شمارش">
-                        {editable ? (
-                          <NumberInput
-                            allowDecimal
-                            className="count-input"
-                            value={counts[line.id] ?? ''}
-                            onChange={(v) => setCounts((prev) => ({ ...prev, [line.id]: v }))}
-                          />
-                        ) : (
-                          faQty(line.counted_qty)
-                        )}
-                      </td>
-                      <td data-label="مغایرت" className={variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}>
-                        {variance > 0 ? '+' : ''}
-                        {faQty(variance)}
-                      </td>
-                      <td data-label="ارزش مغایرت" className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>{faInt(value)}</td>
+              <div className="table-scroll">
+                <table className="entity-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>کالا</th>
+                      <th>سیستمی</th>
+                      <th>شمارش</th>
+                      <th>مغایرت</th>
+                      <th>ارزش مغایرت</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {liveRows.map(({ line, variance, value }) => (
+                      <tr key={line.id}>
+                        <td className="card-title" data-label="کالا">
+                          <div className="entity-name">{line.item_name}</div>
+                          <div className="entity-sub">{line.item_sku} · {line.unit}</div>
+                        </td>
+                        <td data-label="سیستمی">{faQty(line.system_qty)}</td>
+                        <td data-label="شمارش">
+                          {editable ? (
+                            <NumberInput
+                              allowDecimal
+                              className="count-input"
+                              value={counts[line.id] ?? ''}
+                              onChange={(v) => setCounts((prev) => ({ ...prev, [line.id]: v }))}
+                            />
+                          ) : (
+                            faQty(line.counted_qty)
+                          )}
+                        </td>
+                        <td data-label="مغایرت" className={variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}>
+                          {variance > 0 ? '+' : ''}
+                          {faQty(variance)}
+                        </td>
+                        <td data-label="ارزش مغایرت" className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>{faInt(value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
             {message && <div className="hint">{message}</div>}
           </>

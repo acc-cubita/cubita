@@ -132,44 +132,46 @@ export function InventoryPage({
                     <EmptyState icon={PackageSearch} text="موجودی ثبت‌شده‌ای نیست." />
                   ) : (
                     <div className="entity-table-wrap">
-                      <table className="entity-table inv-stock-table">
-                        <thead>
-                          <tr>
-                            <th>کالا</th>
-                            <th>انبار</th>
-                            <th>موجودی</th>
-                            <th>بهای واحد</th>
-                            <th>ارزش</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stockPg.pageItems.map((s) => (
-                            <tr key={`${s.item_id}-${s.warehouse_id}`}>
-                              <td data-label="کالا" className="entity-name">
-                                <span>{s.item_name}</span>
-                                <div className="entity-sub ltr-cell">{s.item_sku}</div>
-                                {lowIds.has(s.item_id) && <span className="status-badge tone-warning inv-low-badge">نیازمندِ سفارش</span>}
-                              </td>
-                              <td data-label="انبار">{s.warehouse_name}</td>
-                              <td data-label="موجودی" className="money-cell">
-                                {Number(s.qty) <= 0 ? (
-                                  <span className="status-badge tone-danger">{faQty(s.qty)}</span>
-                                ) : (
-                                  faQty(s.qty)
-                                )}
-                              </td>
-                              <td data-label="بهای واحد" className="money-cell">{faMoney(Number(s.unit_cost))}</td>
-                              <td data-label="ارزش" className="money-cell"><strong>{faMoney(Math.round(Number(s.stock_value)))}</strong></td>
-                              <td className="lowstock-action">
-                                <button type="button" onClick={() => setKardex({ id: s.item_id, name: s.item_name, sku: s.item_sku })}>
-                                  <History size={13} /> کاردکس
-                                </button>
-                              </td>
+                      <div className="table-scroll">
+                        <table className="entity-table inv-stock-table cards-on-mobile">
+                          <thead>
+                            <tr>
+                              <th>کالا</th>
+                              <th>انبار</th>
+                              <th>موجودی</th>
+                              <th>بهای واحد</th>
+                              <th>ارزش</th>
+                              <th></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {stockPg.pageItems.map((s) => (
+                              <tr key={`${s.item_id}-${s.warehouse_id}`}>
+                                <td data-label="کالا" className="entity-name">
+                                  <span>{s.item_name}</span>
+                                  <div className="entity-sub ltr-cell">{s.item_sku}</div>
+                                  {lowIds.has(s.item_id) && <span className="status-badge tone-warning inv-low-badge">نیازمندِ سفارش</span>}
+                                </td>
+                                <td data-label="انبار">{s.warehouse_name}</td>
+                                <td data-label="موجودی" className="money-cell">
+                                  {Number(s.qty) <= 0 ? (
+                                    <span className="status-badge tone-danger">{faQty(s.qty)}</span>
+                                  ) : (
+                                    faQty(s.qty)
+                                  )}
+                                </td>
+                                <td data-label="بهای واحد" className="money-cell">{faMoney(Number(s.unit_cost))}</td>
+                                <td data-label="ارزش" className="money-cell"><strong>{faMoney(Math.round(Number(s.stock_value)))}</strong></td>
+                                <td className="lowstock-action card-actions">
+                                  <button type="button" onClick={() => setKardex({ id: s.item_id, name: s.item_name, sku: s.item_sku })}>
+                                    <History size={13} /> کاردکس
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                       <Pager page={stockPg.page} pageCount={stockPg.pageCount} onChange={stockPg.setPage} />
                     </div>
                   )}
@@ -189,32 +191,34 @@ export function InventoryPage({
                     />
                   ) : (
                     <div className="entity-table-wrap">
-                      <table className="entity-table cards-on-mobile">
-                        <thead>
-                          <tr>
-                            <th>کالا</th>
-                            <th>واحد</th>
-                            <th>قیمت فروش</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((i) => (
-                            <tr key={i.id}>
-                              <td className="card-title">
-                                <div className="entity-cell">
-                                  <div className="entity-avatar">{i.name.trim().charAt(0) || '؟'}</div>
-                                  <div>
-                                    <div className="entity-name">{i.name}</div>
-                                    <div className="entity-sub ltr-cell">{i.sku}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td data-label="واحد">{i.unit}</td>
-                              <td className="money-cell" data-label="قیمت فروش">{faMoney(Number(i.sales_price))}</td>
+                      <div className="table-scroll">
+                        <table className="entity-table cards-on-mobile">
+                          <thead>
+                            <tr>
+                              <th>کالا</th>
+                              <th>واحد</th>
+                              <th>قیمت فروش</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {items.map((i) => (
+                              <tr key={i.id}>
+                                <td className="card-title" data-label="کالا">
+                                  <div className="entity-cell">
+                                    <div className="entity-avatar">{i.name.trim().charAt(0) || '؟'}</div>
+                                    <div>
+                                      <div className="entity-name">{i.name}</div>
+                                      <div className="entity-sub ltr-cell">{i.sku}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td data-label="واحد">{i.unit}</td>
+                                <td className="money-cell" data-label="قیمت فروش">{faMoney(Number(i.sales_price))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </SectionCard>

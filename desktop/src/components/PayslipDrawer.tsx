@@ -77,7 +77,7 @@ export function PayslipDrawer({
   </div>
   <div class="cols">
     <div>
-      <table>
+      <table class="table-plain">
         <thead><tr><th>درآمد</th><th class="num">ریال</th></tr></thead>
         <tbody>
           ${earnings.map(([l, v]) => row(l, v)).join('')}
@@ -86,7 +86,7 @@ export function PayslipDrawer({
       </table>
     </div>
     <div>
-      <table>
+      <table class="table-plain">
         <thead><tr><th>کسورات</th><th class="num">ریال</th></tr></thead>
         <tbody>
           ${deductions.map(([l, v]) => row(l, v)).join('')}
@@ -129,17 +129,19 @@ export function PayslipDrawer({
           </div>
 
           <div className="entity-table-wrap">
-            <table className="entity-table payslip-lines-table">
-              <tbody>
-                <tr><td data-label="ردیف">حقوقِ پایه</td><td data-label="مبلغ" className="money-cell">{fa(payslip.base_salary)}</td></tr>
-                <tr><td data-label="ردیف">مزایا (مسکن، خواربار، سایر)</td><td data-label="مبلغ" className="money-cell">{fa(payslip.allowances_total)}</td></tr>
-                <tr><td data-label="ردیف">اضافه‌کاری</td><td data-label="مبلغ" className="money-cell">{fa(payslip.overtime_pay)}</td></tr>
-                <tr className="payslip-subtotal"><td data-label="ردیف">جمعِ ناخالص</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.gross_pay)}</strong></td></tr>
-                <tr><td data-label="ردیف">بیمه — سهمِ کارمند</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.insurance_employee_share)}</td></tr>
-                <tr><td data-label="ردیف">مالیاتِ حقوق</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.tax_amount)}</td></tr>
-                <tr className="payslip-net"><td data-label="ردیف">خالصِ پرداختی</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.net_pay)}</strong></td></tr>
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table payslip-lines-table cards-on-mobile">
+                <tbody>
+                  <tr><td data-label="ردیف">حقوقِ پایه</td><td data-label="مبلغ" className="money-cell">{fa(payslip.base_salary)}</td></tr>
+                  <tr><td data-label="ردیف">مزایا (مسکن، خواربار، سایر)</td><td data-label="مبلغ" className="money-cell">{fa(payslip.allowances_total)}</td></tr>
+                  <tr><td data-label="ردیف">اضافه‌کاری</td><td data-label="مبلغ" className="money-cell">{fa(payslip.overtime_pay)}</td></tr>
+                  <tr className="payslip-subtotal"><td data-label="ردیف">جمعِ ناخالص</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.gross_pay)}</strong></td></tr>
+                  <tr><td data-label="ردیف">بیمه — سهمِ کارمند</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.insurance_employee_share)}</td></tr>
+                  <tr><td data-label="ردیف">مالیاتِ حقوق</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.tax_amount)}</td></tr>
+                  <tr className="payslip-net"><td data-label="ردیف">خالصِ پرداختی</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.net_pay)}</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <p className="field-hint">

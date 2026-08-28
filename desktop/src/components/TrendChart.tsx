@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { JALALI_MONTH_NAMES, isoToJalali, toFaDigits } from '../lib/jalali'
 
 export interface TrendSeries {
   key: string
@@ -8,7 +9,12 @@ export interface TrendSeries {
 }
 
 const fa = (v: number) => Math.round(v).toLocaleString('fa-IR')
-const faDate = (iso: string) => new Date(iso).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' })
+/** برچسبِ کوتاهِ محور: «۵ شهریور». از تقویمِ خودِ برنامه، نه ICUِ مرورگر — تا قالبِ
+ *  تاریخ در همه‌ی نمودارها و جدول‌ها یکی بماند. */
+const faDate = (iso: string) => {
+  const { jm, jd } = isoToJalali(iso.slice(0, 10))
+  return `${toFaDigits(jd)} ${JALALI_MONTH_NAMES[jm - 1]}`
+}
 
 // برچسبِ محورِ عمودی فشرده تا در گوشه‌ی چپ جا شود و با عددِ روی نمودار قاطی نشود.
 function faAxis(v: number): string {

@@ -172,14 +172,14 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
           </div>
         ) : (
           <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead><tr><th>کالا</th><th>تعداد در پک</th><th></th></tr></thead>
               <tbody>
                 {form.components.map((r, i) => (
                   <tr key={i}>
                     <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
                     <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
-                    <td><button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
+                    <td className="card-actions"><button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -247,42 +247,44 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
         <EmptyState icon={Package} text="هنوز لیستینگی نساخته‌اید — از فرمِ کنار، اولین محصول یا پک را منتشر کنید." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table cards-on-mobile">
-            <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
-            <tbody>
-              {pg.pageItems.map((l) => (
-                <tr key={l.id}>
-                  <td className="card-title">
-                    <div className="entity-with-thumb">
-                      {l.images?.[0]
-                        ? <img className="list-thumb" src={l.images[0]} alt="" />
-                        : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
-                      <div>
-                        <div className="entity-name">{l.title}</div>
-                        <div className="entity-sub">
-                          {l.kind === 'pack'
-                            ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
-                            : (itemName.get(l.item_id ?? '') ?? '—')}
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead><tr><th>عنوان</th><th>نوع</th><th>قیمتِ عمده</th><th>وضعیت</th><th></th></tr></thead>
+              <tbody>
+                {pg.pageItems.map((l) => (
+                  <tr key={l.id}>
+                    <td className="card-title" data-label="عنوان">
+                      <div className="entity-with-thumb">
+                        {l.images?.[0]
+                          ? <img className="list-thumb" src={l.images[0]} alt="" />
+                          : <span className="list-thumb list-thumb-empty"><Package size={16} /></span>}
+                        <div>
+                          <div className="entity-name">{l.title}</div>
+                          <div className="entity-sub">
+                            {l.kind === 'pack'
+                              ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
+                              : (itemName.get(l.item_id ?? '') ?? '—')}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td data-label="نوع">{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
-                  <td data-label="قیمتِ عمده" className="money-cell">{faMoney(l.wholesale_price)}</td>
-                  <td data-label="وضعیت">
-                    <span className={`status-badge ${l.is_published ? 'tone-success' : 'tone-warning'}`}>{l.is_published ? 'منتشرشده' : 'پیش‌نویس'}</span>
-                  </td>
-                  <td className="card-actions">
-                    <div className="check-actions">
-                      <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
-                      <button type="button" onClick={() => draft.startEdit(l)}><Pencil size={13} /> ویرایش</button>
-                      <button type="button" className="icon-btn-danger" onClick={() => void remove(l)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td data-label="نوع">{l.kind === 'pack' ? 'پک' : 'تکی'}</td>
+                    <td data-label="قیمتِ عمده" className="money-cell">{faMoney(l.wholesale_price)}</td>
+                    <td data-label="وضعیت">
+                      <span className={`status-badge ${l.is_published ? 'tone-success' : 'tone-warning'}`}>{l.is_published ? 'منتشرشده' : 'پیش‌نویس'}</span>
+                    </td>
+                    <td className="card-actions">
+                      <div className="check-actions">
+                        <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
+                        <button type="button" onClick={() => draft.startEdit(l)}><Pencil size={13} /> ویرایش</button>
+                        <button type="button" className="icon-btn-danger" onClick={() => void remove(l)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}
@@ -428,7 +430,7 @@ function OrdersPanel({ token }: { token: string }) {
     return (
       <>
         <tr>
-          <td className="card-title">
+          <td className="card-title card-actions">
             <button type="button" className="link-btn" onClick={() => setExpanded(open ? null : o.id)}>سفارش #{o.order_number}</button>
             <div className="entity-sub">{o.retailer_name}</div>
           </td>
@@ -460,23 +462,25 @@ function OrdersPanel({ token }: { token: string }) {
         {open && (
           <tr className="detail-row">
             <td className="card-full" colSpan={5}>
-              <table className="entity-table nested">
-                <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
-                <tbody>
-                  {o.lines.map((ln, i) => (
-                    <tr key={i}>
-                      <td>
-                        {ln.image
-                          ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
-                          : ln.title}
-                      </td>
-                      <td className="money-cell">{faMoney(ln.unit_price)}</td>
-                      <td>{Number(ln.qty).toLocaleString('fa-IR')}</td>
-                      <td className="money-cell">{faMoney(ln.line_total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="entity-table nested cards-on-mobile">
+                  <thead><tr><th>قلم</th><th>قیمتِ واحد</th><th>تعداد</th><th>جمع</th></tr></thead>
+                  <tbody>
+                    {o.lines.map((ln, i) => (
+                      <tr key={i}>
+                        <td data-label="قلم">
+                          {ln.image
+                            ? <span className="entity-with-thumb"><img className="list-thumb" src={ln.image} alt="" />{ln.title}</span>
+                            : ln.title}
+                        </td>
+                        <td className="money-cell" data-label="قیمتِ واحد">{faMoney(ln.unit_price)}</td>
+                        <td data-label="تعداد">{Number(ln.qty).toLocaleString('fa-IR')}</td>
+                        <td className="money-cell" data-label="جمع">{faMoney(ln.line_total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {o.status === 'confirmed' && !o.retailer_purchase_invoice_id && (
                 <p className="hint"><Truck size={13} /> در انتظارِ تحویل توسطِ مامور حمل — با ثبتِ تحویل، کالا به انبارِ فروشگاه اضافه و اسناد صادر می‌شود.</p>
               )}
@@ -535,10 +539,12 @@ function OrdersPanel({ token }: { token: string }) {
           <EmptyState icon={ClipboardList} text="سفارشِ در انتظاری ندارید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
-              <tbody>{pending.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
+                <tbody>{pending.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -547,10 +553,12 @@ function OrdersPanel({ token }: { token: string }) {
           <EmptyState icon={ClipboardList} text="هنوز سفارشی رسیدگی نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
-              <tbody>{done.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>سفارش</th><th>مبلغ</th><th>وضعیت</th><th>تسویه</th><th></th></tr></thead>
+                <tbody>{done.map((o) => <OrderRow key={o.id} o={o} />)}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -646,10 +654,12 @@ function ConnectionsPanel({ token }: { token: string }) {
           <EmptyState icon={Store} text="درخواستِ اتصالِ تازه‌ای ندارید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
-              <tbody>{pending.map((c) => <ConnRow key={c.id} c={c} actionable />)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>فروشگاه</th><th>وضعیت</th><th></th></tr></thead>
+                <tbody>{pending.map((c) => <ConnRow key={c.id} c={c} actionable />)}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -659,10 +669,12 @@ function ConnectionsPanel({ token }: { token: string }) {
           <EmptyState icon={Store} text="هنوز فروشگاهی تأیید نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>فروشگاه</th><th>وضعیت</th><th>زون</th><th></th></tr></thead>
-              <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} showZone />)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>فروشگاه</th><th>وضعیت</th><th>زون</th><th></th></tr></thead>
+                <tbody>{others.map((c) => <ConnRow key={c.id} c={c} actionable={false} showZone />)}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -714,32 +726,34 @@ function CommissionPanel({ token }: { token: string }) {
           <EmptyState icon={Percent} text="هنوز سفارشِ قطعی‌ای ندارید؛ کمیسیونی ثبت نشده است." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>ماه</th>
-                  <th>سفارش‌ها</th>
-                  <th>جمعِ فاکتورها</th>
-                  <th>کمیسیونِ ۲٪</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.period}>
-                    <td className="card-title" data-label="ماه">{faPeriod(r.period)}</td>
-                    <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
-                    <td data-label="جمعِ فاکتورها" className="money-cell">{faMoney(r.total_base)}</td>
-                    <td data-label="کمیسیونِ ۲٪" className="money-cell">{faMoney(r.total_amount)}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${r.status === 'settled' ? 'tone-success' : 'tone-warning'}`}>
-                        {r.status === 'settled' ? 'تسویه‌شده' : 'پرداخت‌نشده'}
-                      </span>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>ماه</th>
+                    <th>سفارش‌ها</th>
+                    <th>جمعِ فاکتورها</th>
+                    <th>کمیسیونِ ۲٪</th>
+                    <th>وضعیت</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.period}>
+                      <td className="card-title" data-label="ماه">{faPeriod(r.period)}</td>
+                      <td data-label="سفارش‌ها">{faMoney(r.order_count)}</td>
+                      <td data-label="جمعِ فاکتورها" className="money-cell">{faMoney(r.total_base)}</td>
+                      <td data-label="کمیسیونِ ۲٪" className="money-cell">{faMoney(r.total_amount)}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${r.status === 'settled' ? 'tone-success' : 'tone-warning'}`}>
+                          {r.status === 'settled' ? 'تسویه‌شده' : 'پرداخت‌نشده'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>

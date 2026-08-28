@@ -118,7 +118,7 @@ export function SalesInvoiceForm({
           )}
 
           <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead>
                 <tr>
                   <th>کالا</th>
@@ -184,7 +184,7 @@ export function SalesInvoiceForm({
                             : '—'}
                         </span>
                       </td>
-                      <td>
+                      <td className="card-actions">
                         <button
                           type="button"
                           className="icon-btn-danger"

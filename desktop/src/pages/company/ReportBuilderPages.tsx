@@ -735,7 +735,7 @@ export function DynamicReportsPage({
                       <td data-label="منبع">{src?.label ?? <span className="muted">{r.source} (ناموجود)</span>}</td>
                       <td data-label="ستون‌ها">{fa(cfg.columns.length)}</td>
                       <td data-label="توضیح">{r.description || '—'}</td>
-                      <td>
+                      <td className="card-actions">
                         <div className="rb-row-actions">
                           <button type="button" className="btn-primary" onClick={() => void run(r)}>
                             <Play size={13} /> اجرا

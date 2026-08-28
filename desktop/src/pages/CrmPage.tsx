@@ -302,62 +302,64 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
           <EmptyState icon={Target} text="سرنخی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table leads-table">
-              <thead>
-                <tr>
-                  <th>سرنخ</th>
-                  <th>وضعیت</th>
-                  <th>ارزش تخمینی</th>
-                  <th>پیگیری بعدی</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {leadsPg.pageItems.map((l) => {
-                  const open = ['new', 'contacted', 'qualified'].includes(l.status)
-                  const overdue = open && isOverdue(l.next_action_date)
-                  return (
-                  <tr key={l.id}>
-                    <td data-label="سرنخ">
-                      <div className="entity-cell">
-                        <div className="entity-avatar tone-customer">{l.name.trim().charAt(0) || '؟'}</div>
-                        <div>
-                          <div className="entity-name">{l.name}</div>
-                          <div className="entity-sub">{[l.company, l.phone, l.source].filter(Boolean).join(' · ') || '—'}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="وضعیت">
-                      <select className="status-select" value={l.status} onChange={(e) => void changeStatus(l.id, e.target.value as LeadStatus)}>
-                        {STATUS_ORDER.map((s) => (
-                          <option key={s} value={s}>{LEAD_STATUS[s].label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td data-label="ارزش تخمینی" className="money-cell">{Number(l.estimated_value) > 0 ? fa(Number(l.estimated_value)) : '—'}</td>
-                    <td data-label="پیگیری بعدی">
-                      {l.next_action_date ? formatJalali(l.next_action_date) : '—'}
-                      {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
-                    </td>
-                    <td className="crm-actions-cell">
-                      <div className="row-actions">
-                        {l.converted_contact_id ? (
-                          <span className="status-badge tone-success"><UserCheck size={12} /> مشتری شد</span>
-                        ) : (
-                          <button type="button" onClick={() => void convert(l.id)} title="تبدیل به مشتری">
-                            <ArrowRightLeft size={13} /> تبدیل به مشتری
-                          </button>
-                        )}
-                        <button type="button" className="icon-btn-danger" onClick={() => void remove(l.id)} aria-label="حذف">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table leads-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>سرنخ</th>
+                    <th>وضعیت</th>
+                    <th>ارزش تخمینی</th>
+                    <th>پیگیری بعدی</th>
+                    <th></th>
                   </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {leadsPg.pageItems.map((l) => {
+                    const open = ['new', 'contacted', 'qualified'].includes(l.status)
+                    const overdue = open && isOverdue(l.next_action_date)
+                    return (
+                    <tr key={l.id}>
+                      <td data-label="سرنخ">
+                        <div className="entity-cell">
+                          <div className="entity-avatar tone-customer">{l.name.trim().charAt(0) || '؟'}</div>
+                          <div>
+                            <div className="entity-name">{l.name}</div>
+                            <div className="entity-sub">{[l.company, l.phone, l.source].filter(Boolean).join(' · ') || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="وضعیت">
+                        <select className="status-select" value={l.status} onChange={(e) => void changeStatus(l.id, e.target.value as LeadStatus)}>
+                          {STATUS_ORDER.map((s) => (
+                            <option key={s} value={s}>{LEAD_STATUS[s].label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td data-label="ارزش تخمینی" className="money-cell">{Number(l.estimated_value) > 0 ? fa(Number(l.estimated_value)) : '—'}</td>
+                      <td data-label="پیگیری بعدی">
+                        {l.next_action_date ? formatJalali(l.next_action_date) : '—'}
+                        {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
+                      </td>
+                      <td className="crm-actions-cell card-actions">
+                        <div className="row-actions">
+                          {l.converted_contact_id ? (
+                            <span className="status-badge tone-success"><UserCheck size={12} /> مشتری شد</span>
+                          ) : (
+                            <button type="button" onClick={() => void convert(l.id)} title="تبدیل به مشتری">
+                              <ArrowRightLeft size={13} /> تبدیل به مشتری
+                            </button>
+                          )}
+                          <button type="button" className="icon-btn-danger" onClick={() => void remove(l.id)} aria-label="حذف">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={leadsPg.page} pageCount={leadsPg.pageCount} onChange={leadsPg.setPage} />
           </div>
         )}
@@ -499,43 +501,45 @@ function ActivitiesTab({
           <EmptyState icon={CalendarClock} text="پیگیری‌ای با این فیلتر نیست." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table activities-table">
-              <thead>
-                <tr>
-                  <th>موضوع</th>
-                  <th>نوع</th>
-                  <th>مرتبط با</th>
-                  <th>تاریخ</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {actPg.pageItems.map((a) => {
-                  const overdue = !a.done && isOverdue(a.activity_date)
-                  return (
-                  <tr key={a.id} className={a.done ? 'row-muted' : ''}>
-                    <td data-label="موضوع" className="entity-name">{a.subject}</td>
-                    <td data-label="نوع"><span className="status-badge tone-default">{KIND_LABELS[a.kind]}</span></td>
-                    <td data-label="مرتبط با">{a.lead_id ? (leadName.get(a.lead_id) ?? 'سرنخ') : a.contact_id ? (contactName.get(a.contact_id) ?? 'مشتری') : '—'}</td>
-                    <td data-label="تاریخ">
-                      {formatJalali(a.activity_date)}
-                      {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
-                    </td>
-                    <td className="crm-actions-cell">
-                      <div className="row-actions">
-                        <button type="button" onClick={() => void toggleDone(a)} title={a.done ? 'بازکردن' : 'انجام شد'}>
-                          {a.done ? <CheckCircle2 size={14} /> : <Circle size={14} />} {a.done ? 'انجام‌شده' : 'باز'}
-                        </button>
-                        <button type="button" className="icon-btn-danger" onClick={() => void remove(a.id)} aria-label="حذف">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table activities-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>موضوع</th>
+                    <th>نوع</th>
+                    <th>مرتبط با</th>
+                    <th>تاریخ</th>
+                    <th></th>
                   </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {actPg.pageItems.map((a) => {
+                    const overdue = !a.done && isOverdue(a.activity_date)
+                    return (
+                    <tr key={a.id} className={a.done ? 'row-muted' : ''}>
+                      <td data-label="موضوع" className="entity-name">{a.subject}</td>
+                      <td data-label="نوع"><span className="status-badge tone-default">{KIND_LABELS[a.kind]}</span></td>
+                      <td data-label="مرتبط با">{a.lead_id ? (leadName.get(a.lead_id) ?? 'سرنخ') : a.contact_id ? (contactName.get(a.contact_id) ?? 'مشتری') : '—'}</td>
+                      <td data-label="تاریخ">
+                        {formatJalali(a.activity_date)}
+                        {overdue && <span className="status-badge tone-danger crm-overdue"><AlertTriangle size={11} /> عقب‌افتاده</span>}
+                      </td>
+                      <td className="crm-actions-cell card-actions">
+                        <div className="row-actions">
+                          <button type="button" onClick={() => void toggleDone(a)} title={a.done ? 'بازکردن' : 'انجام شد'}>
+                            {a.done ? <CheckCircle2 size={14} /> : <Circle size={14} />} {a.done ? 'انجام‌شده' : 'باز'}
+                          </button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void remove(a.id)} aria-label="حذف">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
             <Pager page={actPg.page} pageCount={actPg.pageCount} onChange={actPg.setPage} />
           </div>
         )}
@@ -692,33 +696,35 @@ function LoyaltyTab({
           <EmptyState icon={Gift} text="هنوز امتیازی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table loyalty-table">
-              <thead>
-                <tr>
-                  <th>مشتری</th>
-                  <th>امتیاز فعال</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loyaltyPg.pageItems.map((b) => (
-                  <tr key={b.contact_id}>
-                    <td data-label="مشتری">
-                      <div className="entity-cell">
-                        <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
-                        <div className="entity-name">{b.contact_name}</div>
-                      </div>
-                    </td>
-                    <td data-label="امتیاز فعال" className="money-cell"><strong>{fa(b.balance)}</strong></td>
-                    <td className="loyalty-action">
-                      <button type="button" onClick={() => setHistoryContact({ id: b.contact_id, name: b.contact_name })}>
-                        <History size={13} /> تاریخچه
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table loyalty-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>مشتری</th>
+                    <th>امتیاز فعال</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {loyaltyPg.pageItems.map((b) => (
+                    <tr key={b.contact_id}>
+                      <td data-label="مشتری">
+                        <div className="entity-cell">
+                          <div className="entity-avatar tone-customer">{b.contact_name.trim().charAt(0) || '؟'}</div>
+                          <div className="entity-name">{b.contact_name}</div>
+                        </div>
+                      </td>
+                      <td data-label="امتیاز فعال" className="money-cell"><strong>{fa(b.balance)}</strong></td>
+                      <td className="loyalty-action card-actions">
+                        <button type="button" onClick={() => setHistoryContact({ id: b.contact_id, name: b.contact_name })}>
+                          <History size={13} /> تاریخچه
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={loyaltyPg.page} pageCount={loyaltyPg.pageCount} onChange={loyaltyPg.setPage} />
           </div>
         )}

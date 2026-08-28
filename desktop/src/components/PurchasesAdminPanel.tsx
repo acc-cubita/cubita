@@ -4,6 +4,7 @@ import { fetchAdminPurchases, fulfillPurchase, type PurchaseRecord } from '../ap
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { formatJalali } from '../lib/jalali'
 
 const STATUS_LABELS: Record<string, string> = {
   pending_payment: 'در انتظار پرداخت',
@@ -82,7 +83,7 @@ export function PurchasesAdminPanel({ token }: { token: string }) {
           <tbody>
             {pg.pageItems.map((p) => (
               <tr key={p.id}>
-                <td data-label="تاریخ">{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
+                <td data-label="تاریخ">{formatJalali(p.created_at.slice(0, 10))}</td>
                 <td className="card-title" data-label="مشتری">
                   {p.customer_name}
                   <br />

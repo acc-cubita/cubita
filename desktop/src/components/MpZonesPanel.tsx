@@ -77,24 +77,26 @@ export function MpZonesPanel({ token }: { token: string }) {
           <EmptyState icon={MapPin} text="هنوز زونی نساخته‌اید." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead><tr><th>زون</th><th>فروشگاه‌ها</th><th>توضیح</th><th></th></tr></thead>
-              <tbody>
-                {zones.map((z) => (
-                  <tr key={z.id}>
-                    <td className="entity-name card-title">{z.name}</td>
-                    <td data-label="فروشگاه‌ها">{faNum(z.connection_count)}</td>
-                    <td data-label="توضیح" className="entity-sub">{z.notes || '—'}</td>
-                    <td className="card-actions">
-                      <div className="check-actions">
-                        <button type="button" onClick={() => startEdit(z)}><Pencil size={13} /> ویرایش</button>
-                        <button type="button" className="icon-btn-danger" onClick={() => void remove(z)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead><tr><th>زون</th><th>فروشگاه‌ها</th><th>توضیح</th><th></th></tr></thead>
+                <tbody>
+                  {zones.map((z) => (
+                    <tr key={z.id}>
+                      <td className="entity-name card-title" data-label="زون">{z.name}</td>
+                      <td data-label="فروشگاه‌ها">{faNum(z.connection_count)}</td>
+                      <td data-label="توضیح" className="entity-sub">{z.notes || '—'}</td>
+                      <td className="card-actions">
+                        <div className="check-actions">
+                          <button type="button" onClick={() => startEdit(z)}><Pencil size={13} /> ویرایش</button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void remove(z)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </SectionCard>

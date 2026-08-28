@@ -270,7 +270,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
             )}
 
             <div className="table-scroll">
-            <table className="invoice-lines">
+            <table className="invoice-lines cards-on-mobile">
               <thead>
                 <tr>
                   <th>حساب</th>
@@ -282,7 +282,7 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
               <tbody>
                 {lines.map((line, i) => (
                   <tr key={i}>
-                    <td>
+                    <td data-label="حساب">
                       <select value={line.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })}>
                         <option value="">— انتخاب حساب —</option>
                         {postableAccounts.map((a) => (
@@ -292,19 +292,19 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                         ))}
                       </select>
                     </td>
-                    <td>
+                    <td data-label="بدهکار">
                       <NumberInput
                         value={line.debit}
                         onChange={(v) => updateLine(i, { debit: v, credit: '' })}
                       />
                     </td>
-                    <td>
+                    <td data-label="بستانکار">
                       <NumberInput
                         value={line.credit}
                         onChange={(v) => updateLine(i, { credit: v, debit: '' })}
                       />
                     </td>
-                    <td>
+                    <td className="card-actions">
                       <button
                         type="button"
                         className="icon-btn-danger"
@@ -354,51 +354,53 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
           <EmptyState icon={Repeat} text="هنوز قالبی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <table className="entity-table cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>عنوان</th>
-                  <th>تناوب</th>
-                  <th>سررسید بعدی</th>
-                  <th>مبلغ</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {entriesPg.pageItems.map((e) => (
-                  <tr key={e.id} className={editingId === e.id ? 'row-selected' : undefined}>
-                    <td className="card-title">
-                      <div className="entity-name">{e.title}</div>
-                      {!e.is_active && <span className="entity-sub">غیرفعال</span>}
-                    </td>
-                    <td data-label="تناوب">{freqText(e.frequency, e.interval)}</td>
-                    <td data-label="سررسید بعدی">
-                      {formatJalali(e.next_run_date)}
-                      {e.is_due && <span className="status-badge tone-warning due-badge">سررسید</span>}
-                    </td>
-                    <td className="money-cell" data-label="مبلغ">{fa(e.amount)}</td>
-                    <td className="card-actions">
-                      <div className="row-actions">
-                        <button type="button" onClick={() => startEdit(e)} aria-label="ویرایش">
-                          <Pencil size={13} />
-                        </button>
-                        {e.is_active && (
-                          <button type="button" onClick={() => void handleRunOne(e.id)} aria-label="تولید همین حالا">
-                            <Play size={13} />
-                          </button>
-                        )}
-                        <button type="button" onClick={() => void toggleActive(e)} aria-label={e.is_active ? 'غیرفعال' : 'فعال'}>
-                          {e.is_active ? <PauseCircle size={13} /> : <PlayCircle size={13} />}
-                        </button>
-                        <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(e.id)} aria-label="حذف">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>عنوان</th>
+                    <th>تناوب</th>
+                    <th>سررسید بعدی</th>
+                    <th>مبلغ</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {entriesPg.pageItems.map((e) => (
+                    <tr key={e.id} className={editingId === e.id ? 'row-selected' : undefined}>
+                      <td className="card-title" data-label="عنوان">
+                        <div className="entity-name">{e.title}</div>
+                        {!e.is_active && <span className="entity-sub">غیرفعال</span>}
+                      </td>
+                      <td data-label="تناوب">{freqText(e.frequency, e.interval)}</td>
+                      <td data-label="سررسید بعدی">
+                        {formatJalali(e.next_run_date)}
+                        {e.is_due && <span className="status-badge tone-warning due-badge">سررسید</span>}
+                      </td>
+                      <td className="money-cell" data-label="مبلغ">{fa(e.amount)}</td>
+                      <td className="card-actions">
+                        <div className="row-actions">
+                          <button type="button" onClick={() => startEdit(e)} aria-label="ویرایش">
+                            <Pencil size={13} />
+                          </button>
+                          {e.is_active && (
+                            <button type="button" onClick={() => void handleRunOne(e.id)} aria-label="تولید همین حالا">
+                              <Play size={13} />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => void toggleActive(e)} aria-label={e.is_active ? 'غیرفعال' : 'فعال'}>
+                            {e.is_active ? <PauseCircle size={13} /> : <PlayCircle size={13} />}
+                          </button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(e.id)} aria-label="حذف">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={entriesPg.page} pageCount={entriesPg.pageCount} onChange={entriesPg.setPage} />
           </div>
         )}

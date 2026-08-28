@@ -111,32 +111,34 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
             <EmptyState icon={Landmark} text="هنوز حساب بانکی‌ای ثبت نشده." />
           ) : (
             <div className="entity-table-wrap">
-              <table className="entity-table bank-table">
-                <thead>
-                  <tr><th>حساب</th><th>شماره / شبا</th><th>وضعیت</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {pg.pageItems.map((b) => (
-                    <tr key={b.id}>
-                      <td data-label="حساب" className="entity-name">
-                        {b.name}
-                        {b.bank_name && <span className="unit-suffix"> · {b.bank_name}</span>}
-                      </td>
-                      <td data-label="شماره / شبا" className="ltr-cell bank-numbers">
-                        {b.account_number || '—'}{b.iban ? <div className="entity-sub">{b.iban}</div> : null}
-                      </td>
-                      <td data-label="وضعیت">
-                        <span className={`status-badge ${b.is_active ? 'tone-success' : 'tone-warning'}`}>{b.is_active ? 'فعال' : 'غیرفعال'}</span>
-                      </td>
-                      <td className="check-actions">
-                        <button type="button" onClick={() => setLedger({ id: b.gl_account_id, code: b.account_number, name: b.name })}><BookOpen size={13} /> کارتِ حساب</button>
-                        <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
-                        <button type="button" onClick={() => void toggleActive(b)}>{b.is_active ? 'غیرفعال' : 'فعال'}</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="entity-table bank-table cards-on-mobile">
+                  <thead>
+                    <tr><th>حساب</th><th>شماره / شبا</th><th>وضعیت</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {pg.pageItems.map((b) => (
+                      <tr key={b.id}>
+                        <td data-label="حساب" className="entity-name">
+                          {b.name}
+                          {b.bank_name && <span className="unit-suffix"> · {b.bank_name}</span>}
+                        </td>
+                        <td data-label="شماره / شبا" className="ltr-cell bank-numbers">
+                          {b.account_number || '—'}{b.iban ? <div className="entity-sub">{b.iban}</div> : null}
+                        </td>
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${b.is_active ? 'tone-success' : 'tone-warning'}`}>{b.is_active ? 'فعال' : 'غیرفعال'}</span>
+                        </td>
+                        <td className="check-actions card-actions">
+                          <button type="button" onClick={() => setLedger({ id: b.gl_account_id, code: b.account_number, name: b.name })}><BookOpen size={13} /> کارتِ حساب</button>
+                          <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
+                          <button type="button" onClick={() => void toggleActive(b)}>{b.is_active ? 'غیرفعال' : 'فعال'}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
             </div>
           )}

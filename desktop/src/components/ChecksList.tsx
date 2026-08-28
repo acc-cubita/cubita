@@ -112,26 +112,28 @@ export function ChecksList({ token, bankAccounts }: { token: string; bankAccount
         <EmptyState icon={Landmark} text="چکی با این فیلتر نیست." />
       ) : (
         <div className="entity-table-wrap">
-          <table className="entity-table checks-table">
-            <thead>
-              <tr><th>نوع</th><th>شماره / بانک</th><th>مبلغ</th><th>سررسید</th><th>وضعیت</th><th>اقدام</th></tr>
-            </thead>
-            <tbody>
-              {pg.pageItems.map((c) => (
-                <tr key={c.id}>
-                  <td data-label="نوع" className="entity-name">
-                    {c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}
-                    {c.contact_name ? <div className="entity-sub">{c.contact_name}</div> : null}
-                  </td>
-                  <td data-label="شماره / بانک" className="ltr-cell">{c.number}{c.bank_name ? <div className="entity-sub">{c.bank_name}</div> : null}</td>
-                  <td data-label="مبلغ" className="money-cell">{fa(Number(c.amount))}</td>
-                  <td data-label="سررسید">{formatJalali(c.due_date)} {dueBadge(c)}</td>
-                  <td data-label="وضعیت"><span className={`status-badge tone-${STATUS_TONE[c.status] ?? 'default'}`}>{STATUS_LABELS[c.status] ?? c.status}</span></td>
-                  <td className="checks-action-cell">{actions(c)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="entity-table checks-table cards-on-mobile">
+              <thead>
+                <tr><th>نوع</th><th>شماره / بانک</th><th>مبلغ</th><th>سررسید</th><th>وضعیت</th><th>اقدام</th></tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((c) => (
+                  <tr key={c.id}>
+                    <td data-label="نوع" className="entity-name">
+                      {c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}
+                      {c.contact_name ? <div className="entity-sub">{c.contact_name}</div> : null}
+                    </td>
+                    <td data-label="شماره / بانک" className="ltr-cell">{c.number}{c.bank_name ? <div className="entity-sub">{c.bank_name}</div> : null}</td>
+                    <td data-label="مبلغ" className="money-cell">{fa(Number(c.amount))}</td>
+                    <td data-label="سررسید">{formatJalali(c.due_date)} {dueBadge(c)}</td>
+                    <td data-label="وضعیت"><span className={`status-badge tone-${STATUS_TONE[c.status] ?? 'default'}`}>{STATUS_LABELS[c.status] ?? c.status}</span></td>
+                    <td className="checks-action-cell" data-label="اقدام">{actions(c)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       )}

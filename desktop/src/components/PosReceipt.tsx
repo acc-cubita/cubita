@@ -56,7 +56,7 @@ export function PosReceipt({ data }: { data: ReceiptData }) {
 
       <div className="rc-sep" />
 
-      <table className="rc-items">
+      <table className="rc-items table-plain">
         <thead>
           <tr>
             <th className="rc-name">کالا</th>
