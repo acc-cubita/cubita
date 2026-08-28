@@ -109,13 +109,19 @@ export function FiscalYearPage({ token }: { token: string }) {
   const startJy = isoToJalali(startDate).jy
 
   return (
-    <>
+    // پوسته‌ی کارتیِ صفحه — مثلِ بقیه‌ی صفحه‌های تنظیمات. بدونِ آن، محتوا مستقیم روی
+    // پس‌زمینه‌ی برنامه شناور می‌ماند و هیچ سطحِ سفیدی زیرش نیست.
+    <div className="page panels">
       <PageHeader
         icon={CalendarRange}
         title="سال مالی"
         description="تعریفِ دوره‌ی رسمیِ حسابداری، انتقالِ مانده‌ی سال قبل (افتتاحیه) و بستنِ سال (اختتامیه)."
       />
 
+      {/* بنرها یک پنلِ مشترک می‌گیرند و *نوه‌ی* پوسته می‌مانند، نه فرزندِ مستقیم:
+          قانونِ `.page.panels > *` پس‌زمینه‌ی هر فرزند را به سطحِ خنثی می‌برد و
+          تخصصش از `.fy-note--ok/warn/err` بیشتر است، پس رنگِ وضعیت را می‌خورد. */}
+      <section className="fy-status">
       {years.length === 0 ? (
         <div className="fy-note fy-note--warn">
           <AlertTriangle size={16} />
@@ -151,6 +157,7 @@ export function FiscalYearPage({ token }: { token: string }) {
 
       {message && <div className="fy-note fy-note--ok"><CheckCircle2 size={16} /><div>{message}</div></div>}
       {error && <div className="fy-note fy-note--err"><AlertTriangle size={16} /><div>{error}</div></div>}
+      </section>
 
       <SectionCard
         icon={Plus}
@@ -219,7 +226,6 @@ export function FiscalYearPage({ token }: { token: string }) {
           </div>
         </form>
       </SectionCard>
-
-    </>
+    </div>
   )
 }

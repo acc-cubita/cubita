@@ -7950,6 +7950,12 @@ button.mp-item:focus-visible {
 .fy-note--err { border-color: var(--danger); background: var(--danger-bg); }
 .fy-note--err > svg { color: var(--danger); }
 
+/* پنلِ بنرهای وضعیتِ سال مالی. فاصله‌ی بنرها از `margin-bottom` خودشان می‌آید، پس
+   آخری باید صفر شود وگرنه ته پنل یک فاصله‌ی اضافی می‌ماند. */
+.fy-status > .fy-note:last-child {
+  margin-bottom: 0;
+}
+
 /* پیشنهادِ بازه — یک کلیک تا پرشدنِ فرم. */
 .fy-suggest {
   display: flex;

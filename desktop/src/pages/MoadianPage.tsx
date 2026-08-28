@@ -10,13 +10,19 @@ import { MoadianPanel } from '../components/MoadianPanel'
  */
 export function MoadianPage({ token }: { token: string }) {
   return (
-    <>
+    // پوسته‌ی کارتیِ صفحه — بدونِ آن محتوا روی پس‌زمینه‌ی برنامه شناور می‌ماند.
+    <div className="page panels">
       <PageHeader
         icon={FileSpreadsheet}
         title="سامانه مؤدیان"
         description="ارسالِ صورتحساب الکترونیکی به کارپوشه‌ی سازمان امور مالیاتی و پیگیریِ وضعیتِ آن‌ها."
       />
-      <MoadianPanel token={token} />
-    </>
+      {/* پنل داخلِ یک پنلِ میانی می‌نشیند، نه مستقیم زیرِ پوسته: قاعده‌ی پوسته‌ی
+          «راهنما» نوارِ آمارِ *فرزندِ مستقیمِ* صفحه را پنهان می‌کند، و KPIهای مؤدیان
+          (وضعیتِ ارسال، در صف، ردشده) تنها جای دیدنشان همین صفحه است. */}
+      <section className="moadian-body">
+        <MoadianPanel token={token} />
+      </section>
+    </div>
   )
 }

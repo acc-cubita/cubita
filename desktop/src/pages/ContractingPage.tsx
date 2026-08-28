@@ -20,7 +20,8 @@ const PLANNED = [
 
 export function ContractingPage() {
   return (
-    <>
+    // پوسته‌ی کارتیِ صفحه — بدونِ آن محتوا روی پس‌زمینه‌ی برنامه شناور می‌ماند.
+    <div className="page panels">
       <PageHeader
         icon={HardHat}
         title="پیمانکاری"
@@ -34,6 +35,6 @@ export function ContractingPage() {
           </SectionCard>
         ))}
       </div>
-    </>
+    </div>
   )
 }
