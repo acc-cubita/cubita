@@ -76,50 +76,17 @@ export function JournalEntryPage({
   onQueued: () => void
 }) {
   const guided = useTheme().theme.content === 'guided'
-  const [reloadKey, setReloadKey] = useState(0)
-  const [msg, setMsg] = useState<Msg>(null)
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<'' | 'temporary' | 'permanent'>('')
-
-  const list = useAsync(
-    () =>
-      fetchJournalEntriesFiltered(token, {
-        q: search || undefined,
-        status: status || undefined,
-        limit: 60,
-      }),
-    [token, search, status, reloadKey],
-  )
-
-  const refresh = () => {
-    setReloadKey((k) => k + 1)
-    onQueued()
-  }
-
-  async function handleVoid(entry: JournalEntryRecord) {
-    const reason = window.prompt(
-      `ابطالِ سندِ ${entry.number ?? ''} یک سندِ معکوس ثبت می‌کند و اصل سرِ جایش می‌ماند.\nعلتِ ابطال:`,
-    )
-    if (reason === null) return
-    try {
-      const out = await voidJournalEntry(token, entry.id, reason)
-      setMsg({ text: `سندِ معکوس با شماره ${fa(out.reversal_entry_number ?? 0)} ثبت شد.`, kind: 'ok' })
-      refresh()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
 
   return (
     <OpsPage
       icon={BookOpen}
       title="سند حسابداری"
-      description="ثبتِ سندِ دستی و مرورِ اسنادِ ثبت‌شده. سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور و فیش و چک خودشان خودکار سند می‌خورند."
+      description="ثبتِ سندِ دستی. سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور و فیش و چک خودشان خودکار سند می‌خورند. دفترِ کاملِ اسناد زیرِ کارتِ «فهرست» است."
     >
       {guided ? (
-        <JournalEntryWizard token={token} accounts={accounts} onQueued={refresh} />
+        <JournalEntryWizard token={token} accounts={accounts} onQueued={onQueued} />
       ) : (
-        <JournalEntryForm token={token} accounts={accounts} onQueued={refresh} />
+        <JournalEntryForm token={token} accounts={accounts} onQueued={onQueued} />
       )}
 
       {isElectron && (
@@ -131,59 +98,25 @@ export function JournalEntryPage({
           <OutboxList entries={outbox} emptyHint="سندی در صف نیست." />
         </SectionCard>
       )}
-
-      <SectionCard
-        icon={FileStack}
-        title="اسنادِ ثبت‌شده"
-        description="تازه‌ترین اسناد؛ برای جست‌وجو شماره یا بخشی از شرح را بنویسید."
-        actions={
-          <button type="button" onClick={refresh}>
-            <RefreshCw size={13} /> به‌روزرسانی
-          </button>
-        }
-      >
-        <Note msg={msg} />
-        <div className="acc-filters">
-          <label className="acc-search">
-            <Search size={14} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="شماره یا شرحِ سند"
-            />
-          </label>
-          <label>
-            وضعیت
-            <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-              <option value="">همه</option>
-              <option value="temporary">موقت</option>
-              <option value="permanent">دائم</option>
-            </select>
-          </label>
-        </div>
-
-        <AsyncBlock
-          loading={list.loading}
-          error={list.error}
-          empty={(list.data?.length ?? 0) === 0}
-          emptyText="سندی با این شرایط پیدا نشد."
-        >
-          <EntryTable entries={list.data ?? []} onVoid={handleVoid} />
-        </AsyncBlock>
-      </SectionCard>
     </OpsPage>
   )
 }
 
+/** جدولِ اسنادِ دفتر — تکی و مشترک.
+ *
+ *  پیش‌تر دو نسخه‌ی کمی‌متفاوت داشت: یکی ته صفحه‌ی «سند حسابداری» (با ابطال، بدونِ
+ *  شمارِ ردیف) و یکی در صفحه‌ی فهرستِ «اسناد حسابداری» (با شمارِ ردیف، بدونِ ابطال).
+ *  حالا یکی است و ستونِ کنش فقط وقتی می‌آید که `onVoid` داده شود. */
 function EntryTable({
   entries,
+  pageSize = 20,
   onVoid,
 }: {
   entries: JournalEntryRecord[]
-  onVoid: (e: JournalEntryRecord) => void
+  pageSize?: number
+  onVoid?: (e: JournalEntryRecord) => void
 }) {
-  const pg = usePagination(entries, 15)
+  const pg = usePagination(entries, pageSize)
   const total = (e: JournalEntryRecord) =>
     e.lines.reduce((sum, l) => sum + Number(l.debit || 0), 0)
 
@@ -197,8 +130,9 @@ function EntryTable({
             <th>شرح</th>
             <th>منشأ</th>
             <th>وضعیت</th>
+            <th>ردیف</th>
             <th>مبلغ</th>
-            <th />
+            {onVoid && <th />}
           </tr>
         </thead>
         <tbody>
@@ -213,16 +147,22 @@ function EntryTable({
               <td data-label="وضعیت">
                 <StatusChip status={e.status} voided={!!e.voided_at} />
               </td>
+              <td data-label="ردیف" className="num">
+                {faInt(e.lines.length)}
+              </td>
               <td data-label="مبلغ" className="num">
-                {fa(total(e))}
+                {faAmount(total(e))}
               </td>
-              <td className="acc-row-actions">
-                {!e.voided_at && e.source_type === 'manual' && (
-                  <button type="button" className="danger" onClick={() => onVoid(e)}>
-                    <Trash2 size={13} /> ابطال
-                  </button>
-                )}
-              </td>
+              {onVoid && (
+                <td className="acc-row-actions">
+                  {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
+                  {!e.voided_at && e.source_type === 'manual' && (
+                    <button type="button" className="danger" onClick={() => onVoid(e)}>
+                      <Trash2 size={13} /> ابطال
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -823,27 +763,52 @@ export function MergeEntriesPage({ token }: { token: string }) {
 }
 
 /** فهرستِ اسنادِ حسابداری — صفحه‌ی «فهرست» ماژول. */
+/**
+ * «اسناد حسابداری» — دفترِ کاملِ اسناد، تنها جایی که فهرستِ اسناد دیده می‌شود.
+ *
+ * پیش‌تر ته صفحه‌ی «سند حسابداری» هم یک فهرستِ دوم بود با فیلترهای دیگر (جست‌وجوی
+ * متنی، بدونِ بازه) و کنشِ ابطال. دو فهرست از یک داده یعنی کاربر باید حدس می‌زد کدام
+ * را باز کند؛ حالا یکی است و هر دو فیلتر و کنشِ ابطال را دارد.
+ */
 export function EntryListPage({ token }: { token: string }) {
   const range = useRange('year')
   const [status, setStatus] = useState<'' | 'temporary' | 'permanent'>('')
+  const [search, setSearch] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [msg, setMsg] = useState<Msg>(null)
+
   const list = useAsync(
     () =>
       fetchJournalEntriesFiltered(token, {
         dateFrom: range.from,
         dateTo: range.to,
         status: status || undefined,
+        q: search || undefined,
         limit: 300,
       }),
-    [token, range.from, range.to, status],
+    [token, range.from, range.to, status, search, reloadKey],
   )
   const rows = list.data ?? []
-  const pg = usePagination(rows, 20)
+
+  async function handleVoid(entry: JournalEntryRecord) {
+    const reason = window.prompt(
+      `ابطالِ سندِ ${entry.number ?? ''} یک سندِ معکوس ثبت می‌کند و اصل سرِ جایش می‌ماند.\nعلتِ ابطال:`,
+    )
+    if (reason === null) return
+    try {
+      const out = await voidJournalEntry(token, entry.id, reason)
+      setMsg({ text: `سندِ معکوس با شماره ${fa(out.reversal_entry_number ?? 0)} ثبت شد.`, kind: 'ok' })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
 
   return (
     <OpsPage
       icon={FileStack}
       title="اسناد حسابداری"
-      description="همه‌ی اسنادِ دفتر — دستی و خودکار، موقت و دائم."
+      description="همه‌ی اسنادِ دفتر — دستی و خودکار، موقت و دائم. سندِ دستی را می‌توان از همین‌جا ابطال کرد."
       head={
         <div className="cc-head">
           <RangeBar
@@ -862,50 +827,36 @@ export function EntryListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={FileStack} title="اسناد" description={`${faInt(rows.length)} سند`}>
+      <SectionCard
+        icon={FileStack}
+        title="اسناد"
+        description={`${faInt(rows.length)} سند`}
+        actions={
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
+            <RefreshCw size={13} /> به‌روزرسانی
+          </button>
+        }
+      >
+        <Note msg={msg} />
+        <div className="acc-filters">
+          <label className="acc-search">
+            <Search size={14} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="شماره یا شرحِ سند"
+            />
+          </label>
+        </div>
+
         <AsyncBlock
           loading={list.loading}
           error={list.error}
           empty={rows.length === 0}
-          emptyText="سندی در این بازه نیست."
+          emptyText="سندی با این شرایط پیدا نشد."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>شماره</th>
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th>منشأ</th>
-                  <th>وضعیت</th>
-                  <th>ردیف</th>
-                  <th>مبلغ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((e) => (
-                  <tr key={e.id} className={e.voided_at ? 'acc-row--void' : ''}>
-                    <td className="card-title" data-label="شماره">
-                      {fa(e.number ?? 0)}
-                    </td>
-                    <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
-                    <td data-label="شرح">{e.description || '—'}</td>
-                    <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
-                    <td data-label="وضعیت">
-                      <StatusChip status={e.status} voided={!!e.voided_at} />
-                    </td>
-                    <td data-label="ردیف" className="num">
-                      {faInt(e.lines.length)}
-                    </td>
-                    <td data-label="مبلغ" className="num">
-                      {faAmount(e.lines.reduce((s, l) => s + Number(l.debit || 0), 0))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
+          <EntryTable entries={rows} onVoid={handleVoid} />
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

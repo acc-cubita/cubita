@@ -189,6 +189,10 @@ export async function authedGetPage<T>(
 
 const MAX_PAGES = 200
 
+/** بیشترین ردیفی که سرور در یک درخواستِ صفحه‌بندی‌شده می‌دهد (`MAX_LIMIT` سمتِ بک‌اند).
+ *  عددِ بزرگ‌تر ۴۲۲ می‌گیرد، نه پاسخِ کوتاه‌ترِ بی‌خطر. */
+const SERVER_PAGE_MAX = 200
+
 /** همه‌ی صفحه‌ها را دنبال می‌کند و آرایه‌ی مسطح برمی‌گرداند.
  *
  * این پل موقت است: بک‌اند حالا صفحه‌بندی می‌کند ولی UI هنوز همه‌ی ردیف‌ها را یکجا
@@ -4271,13 +4275,35 @@ export interface JournalQuery {
 
 /** فیلتر سمتِ سرور انجام می‌شود، نه در مرورگر: کشیدنِ کلِ دفترِ یک کسب‌وکارِ چندساله
  *  برای فیلترکردنش این‌جا، همان چیزی است که صفحه‌بندیِ keyset برای جلوگیری‌اش ساخته شد. */
-export const fetchJournalEntriesFiltered = (token: string, query: JournalQuery = {}) => {
+/** فهرستِ اسناد با فیلترهای سرور.
+ *
+ *  `limit` سقفِ *کلِ* ردیف‌هاست، نه اندازه‌ی یک صفحه: سرور بیش از ۲۰۰ ردیف در هر
+ *  درخواست نمی‌دهد (`MAX_LIMIT`) و با عددِ بزرگ‌تر ۴۲۲ برمی‌گرداند. پس این‌جا با کرسر
+ *  چند صفحه گرفته می‌شود تا سقف پر شود — وگرنه هر صفحه‌ای که «کلِ سال» می‌خواست،
+ *  بی‌صدا خطا می‌گرفت و «سندی نیست» نشان می‌داد. */
+export const fetchJournalEntriesFiltered = async (
+  token: string,
+  query: JournalQuery = {},
+): Promise<JournalEntryRecord[]> => {
   const qs = new URLSearchParams()
   if (query.dateFrom) qs.set('date_from', query.dateFrom)
   if (query.dateTo) qs.set('date_to', query.dateTo)
   if (query.status) qs.set('status', query.status)
   if (query.sourceType) qs.set('source_type', query.sourceType)
   if (query.q) qs.set('q', query.q)
-  qs.set('limit', String(query.limit ?? 100))
-  return authedGet<Page<JournalEntryRecord>>(token, `/api/journal-entries?${qs}`).then((p) => p.items)
+  const wanted = query.limit ?? 100
+  const path = `/api/journal-entries?${qs}`
+
+  const rows: JournalEntryRecord[] = []
+  let cursor: string | null = null
+  while (rows.length < wanted) {
+    const page: Page<JournalEntryRecord> = await authedGetPage<JournalEntryRecord>(token, path, {
+      limit: Math.min(wanted - rows.length, SERVER_PAGE_MAX),
+      cursor,
+    })
+    rows.push(...page.items)
+    if (!page.next_cursor) break
+    cursor = page.next_cursor
+  }
+  return rows
 }

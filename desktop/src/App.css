@@ -3802,6 +3802,13 @@ button:disabled {
 .topnav-dd-item .nav-badge,
 .topnav-mobile-item .nav-badge { margin-inline-start: auto; }
 
+/* ورودی‌های «فهرست» زیرِ همان گروه، ولی یک پله تودار و کم‌رنگ‌تر — تا از عملیاتِ
+   خودِ ماژول جدا دیده شوند، همان‌طور که در کارتِ کناریِ دسکتاپ جدا هستند. */
+.topnav-mobile-item--list {
+  padding-inline-start: 26px;
+  color: var(--text-muted);
+}
+
 /* دکمه‌ی «دانلودِ دسکتاپ» روی نوارِ بالا (فقط نسخه‌ی وب) — چیپِ رنگِ برند، هم‌رنگِ هر تم. */
 .topnav-download {
   display: inline-flex;

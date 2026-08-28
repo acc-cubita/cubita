@@ -10,6 +10,7 @@ import {
   Download,
 } from 'lucide-react'
 import { buildNav, type PageKey } from '../lib/navModel'
+import { LIST_MENUS } from './moduleLists'
 import { isElectron } from '../platform'
 
 /** لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپ (روی هر انتشار همین می‌ماند؛ فایلِ سرور به‌روز می‌شود). */
@@ -357,6 +358,22 @@ export function TopNav({
                       {navBadge(item.key)}
                     </button>
                   ))}
+                  {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
+                      بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
+                  {(LIST_MENUS[group.heading] ?? []).map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`topnav-mobile-item topnav-mobile-item--list${active === item.key ? ' active' : ''}`}
+                        onClick={() => go(item.key)}
+                      >
+                        <span className="topnav-dd-ico"><Icon size={16} /></span>
+                        <span>{item.label}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               ))}
               <div className="topnav-mobile-group">
