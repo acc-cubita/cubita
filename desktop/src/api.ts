@@ -1335,6 +1335,19 @@ export const fetchNextAccountCode = (token: string, parentId: string | null) =>
     `/api/accounts/next-code${parentId ? `?parent_id=${parentId}` : ''}`,
   )
 
+/** وضعیتِ آماده‌سازیِ چارت — «آیا کاربر چارت را گسترش داده؟»، نه «آیا حساب دارد؟».
+ *  هر کسب‌وکار از لحظه‌ی ساخت چارتِ پایه دارد، پس سؤالِ دوم همیشه بله است. */
+export interface ChartSetup {
+  total: number
+  /** حساب‌هایی که در چارتِ پایه نبوده‌اند — کارِ خودِ کاربر. */
+  custom: number
+  /** کلیدِ قالبِ صنفیِ کاملاً درج‌شده، یا null. */
+  applied_template: string | null
+}
+
+export const fetchChartSetup = (token: string) =>
+  authedGet<ChartSetup>(token, '/api/accounts/setup-status')
+
 export const fetchChartTemplates = (token: string) =>
   authedGet<ChartTemplate[]>(token, '/api/accounts/templates')
 

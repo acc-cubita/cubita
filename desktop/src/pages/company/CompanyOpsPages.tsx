@@ -13,17 +13,19 @@ import {
   createContact,
   fetchCalendarEvents,
   fetchContactGroups,
+  fetchChartSetup,
   fetchFiscalYears,
   fetchGeoLocations,
   type CalendarEventRecord,
   type ContactGroupRecord,
+  type ChartSetup,
   type FiscalYearRecord,
   type GeoLocationRecord,
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import { EmptyState } from '../../components/EmptyState'
-import { formatJalali, todayIso } from '../../lib/jalali'
+import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import type { PageKey } from '../../lib/navModel'
 
 /**
@@ -276,15 +278,23 @@ export function OpeningOpsPage({
   onNavigate: (page: PageKey, section?: string | null) => void
 }) {
   const [years, setYears] = useState<FiscalYearRecord[] | null>(null)
+  const [chart, setChart] = useState<ChartSetup | null>(null)
 
   useEffect(() => {
     void fetchFiscalYears(token)
       .then(setYears)
       .catch(() => setYears([]))
+    // نشانِ گامِ «کدینگ حساب‌ها» باید از وضعیتِ واقعیِ چارت بیاید، نه یک برچسبِ ثابت.
+    void fetchChartSetup(token)
+      .then(setChart)
+      .catch(() => setChart(null))
   }, [token])
 
   const active = useMemo(() => (years ?? []).find((y) => y.is_active) ?? null, [years])
   const hasOpening = Boolean(active?.opening_entry_id)
+  //: «انجام شده» یعنی چارت گسترش یافته — با درجِ قالبِ صنفی یا با ساختنِ حسابِ خودی.
+  //: صرفِ داشتنِ حساب معیار نیست: چارتِ پایه از لحظه‌ی ساختِ کسب‌وکار وجود دارد.
+  const chartReady = Boolean(chart && (chart.custom > 0 || chart.applied_template))
 
   return (
     <div className="page panels">
@@ -316,20 +326,23 @@ export function OpeningOpsPage({
             index={2}
             title="کدینگ حساب‌ها"
             description="درختواره‌ی حساب‌ها را بسازید یا یکی از قالب‌های صنفی (بازرگانی، خدماتی، تولیدی، پیمانکاری) را درج کنید."
-            state={{ label: 'هر وقت لازم شد', tone: 'warn' }}
+            state={
+              chart === null
+                ? { label: 'هر وقت لازم شد', tone: 'warn' }
+                : chartReady
+                  ? {
+                      label: chart.applied_template
+                        ? 'قالبِ صنفی درج شده'
+                        : `${toFaDigits(chart.custom)} حسابِ افزوده`,
+                      tone: 'ok',
+                    }
+                  : { label: 'انجام نشده', tone: 'todo' }
+            }
             action="درختواره"
             onGo={() => onNavigate('acctchart')}
           />
           <Step
             index={3}
-            title="ورودِ گروهیِ اطلاعاتِ پایه"
-            description="کالاها و طرف‌حساب‌ها را به‌صورتِ گروهی از فایل وارد کنید تا لازم نباشد تک‌تک ثبت شوند."
-            state={{ label: 'اختیاری', tone: 'warn' }}
-            action="راه‌اندازی"
-            onGo={() => onNavigate('onboarding', 'items')}
-          />
-          <Step
-            index={4}
             title="مانده‌های اول دوره"
             description="مانده‌ی حساب‌ها، موجودیِ انبار و مانده‌ی طرف‌حساب‌ها در لحظه‌ی شروع. سندِ افتتاحیه از همین‌جا ساخته می‌شود."
             state={
@@ -341,7 +354,7 @@ export function OpeningOpsPage({
             onGo={() => onNavigate('onboarding', 'opening')}
           />
           <Step
-            index={5}
+            index={4}
             title="روش‌های شماره‌گذاری"
             description="اگر از سیستمِ قبلی می‌آیید، شماره‌ی شروعِ اسناد را تنظیم کنید تا سریِ شماره‌ها نشکند."
             state={{ label: 'اختیاری', tone: 'warn' }}

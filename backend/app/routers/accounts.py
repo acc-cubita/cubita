@@ -65,6 +65,22 @@ class ChartTemplateOut(BaseModel):
     missing: int
 
 
+class ChartSetupOut(BaseModel):
+    """آیا «کدینگ حساب‌ها» انجام شده — برای نشانِ گامِ «عملیات اول دوره».
+
+    هر کسب‌وکار از لحظه‌ی ساخت یک چارتِ پایه دارد، پس «حساب دارد یا نه» سؤالِ بی‌معنایی
+    است و همیشه بله جواب می‌دهد. سؤالِ درست این است: آیا کاربر چارت را *گسترش* داده —
+    چه با درجِ قالبِ صنفی، چه با ساختنِ حسابِ خودش.
+    """
+
+    #: کلِ حساب‌های چارت.
+    total: int
+    #: حساب‌هایی که در چارتِ پایه نبوده‌اند — یعنی کارِ خودِ کاربر.
+    custom: int
+    #: کلیدِ قالبی که کاملاً درج شده (اگر چند تا، اولی). None = هیچ قالبی کامل نیست.
+    applied_template: str | None
+
+
 class ApplyTemplateOut(BaseModel):
     created: int
     skipped: int
@@ -146,6 +162,27 @@ def list_templates(
             )
         )
     return out
+
+
+@router.get("/setup-status", response_model=ChartSetupOut)
+def setup_status(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """وضعیتِ آماده‌سازیِ چارت — پایه‌ی نشانِ «انجام شده» در «عملیات اول دوره»."""
+    from app.seed import CHART_OF_ACCOUNTS
+
+    baseline = {code for code, *_ in CHART_OF_ACCOUNTS}
+    codes = [code for (code,) in db.query(Account.code).all()]
+    applied = next(
+        (key for key in templates.TEMPLATES if not [r for r in _missing_rows(db, key) if not r[3]]),
+        None,
+    )
+    return ChartSetupOut(
+        total=len(codes),
+        custom=len([c for c in codes if c not in baseline]),
+        applied_template=applied,
+    )
 
 
 @router.post("/templates/{key}", response_model=ApplyTemplateOut)

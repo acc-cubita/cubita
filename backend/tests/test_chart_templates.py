@@ -108,3 +108,52 @@ def test_change_code_keeps_system_role_working(db):
     cash = db.query(Account).filter(Account.system_role == cc.CASH).first()
     change_code(cash.id, AccountCodeIn(code="9901"), db=db)
     assert get_account(db, cc.CASH).id == cash.id
+
+
+def test_seed_chart_never_squats_on_a_template_code():
+    """چارتِ پایه نباید کدی را بگیرد که قالبِ صنفی با نامِ دیگری برایش دارد.
+
+    محافظ در برابرِ یک خرابیِ بی‌صداست که یک‌بار رخ داد: حساب‌های تسعیر ارز روی ۴۱۰۴
+    و ۵۱۰۷ نشستند که مالِ «تخفیفات و برگشت از فروش» و «هزینه آب، برق، گاز و تلفن»
+    بود. `apply_template` کدِ موجود را رد می‌کند، پس آن دو حساب هرگز ساخته نمی‌شدند و
+    در شمارشِ «چند حساب کم دارید» هم موجود به حساب می‌آمدند.
+    """
+    from app.seed import CHART_OF_ACCOUNTS
+
+    seed_names = {code: name for code, name, *_ in CHART_OF_ACCOUNTS}
+    for key in ct.TEMPLATES:
+        for code, name, *_ in ct.rows_for(key):
+            if code in seed_names:
+                assert seed_names[code] == name, (
+                    f"کدِ {code}: چارتِ پایه «{seed_names[code]}» ولی قالبِ {key} «{name}»"
+                )
+
+
+def test_setup_status_is_untouched_on_a_fresh_chart(db):
+    """کسب‌وکارِ تازه چارتِ پایه دارد ولی هنوز کاری نکرده — پس «انجام نشده»."""
+    from app.routers.accounts import setup_status
+
+    out = setup_status(db=db)
+    assert out.custom == 0
+    assert out.applied_template is None
+    assert out.total > 0
+
+
+def test_setup_status_turns_done_after_applying_a_template(db):
+    from app.routers.accounts import setup_status
+
+    apply_template(key="trading", db=db)
+    out = setup_status(db=db)
+    assert out.applied_template == "trading"
+    assert out.custom > 0
+
+
+def test_setup_status_counts_a_hand_built_account(db):
+    """چارت را دستی هم می‌شود ساخت؛ نشانِ «انجام شده» نباید فقط به قالب گره بخورد."""
+    from app.routers.accounts import setup_status
+
+    db.add(Account(code="5301", name="هزینه‌ی دلخواه", type="expense", is_group=False))
+    db.flush()
+    out = setup_status(db=db)
+    assert out.custom == 1
+    assert out.applied_template is None
