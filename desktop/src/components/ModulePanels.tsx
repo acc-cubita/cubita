@@ -88,9 +88,12 @@ export function ModulePanels({
   const activeSection = section ?? sections[0]?.key ?? null
   // صفحه‌های هم‌گروه فقط وقتی فهرست می‌شوند که بیش از یکی باشند؛ گروهِ تک‌صفحه‌ای
   // در نوارِ بالا هم با نامِ خودش دیده می‌شود، پس تکرارش در کارت بی‌فایده است.
+  //
+  // استثنا: صفحه‌ی *فهرستِ* یک گروهِ تک‌صفحه‌ای. آن‌جا نه بخشِ خودی هست و نه هم‌گروهی،
+  // پس کارتِ «عملیات» اصلاً ساخته نمی‌شد و کاربر بدونِ راهِ برگشت به ماژول می‌ماند.
   const group = groupOf(groups, page)
   const siblings = group?.items ?? []
-  const pages = siblings.length > 1 ? siblings : []
+  const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
   const listMenu = group ? LIST_MENUS[group.heading] : undefined
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را

@@ -7,7 +7,6 @@ import {
   fetchInstallmentPlans,
   fetchItemsLive,
   fetchLeads,
-  fetchMoadianSubmissions,
   fetchProductionOrders,
   fetchPurchaseInvoices,
   fetchPurchaseReturns,
@@ -29,6 +28,7 @@ import {
   Contact2,
   DatabaseBackup,
   Download,
+  FileCheck2,
   FileStack,
   Gauge,
   LayoutList,
@@ -57,11 +57,6 @@ import { formatJalali } from '../lib/jalali'
 
 const fa = (n: unknown) => Math.round(Number(n) || 0).toLocaleString('fa-IR')
 const faNum = (n: unknown) => (n == null ? '—' : Number(n).toLocaleString('fa-IR'))
-const MOADIAN_STATUS: Record<string, string> = {
-  pending: 'در صف', sent: 'ارسال‌شده', confirmed: 'تأییدشده',
-  rejected: 'ردشده', failed: 'ناموفق',
-}
-
 const day = (d: unknown) => (typeof d === 'string' && d ? formatJalali(d) : '—')
 
 /** یک ردیفِ خلاصه در کارتِ فهرست. */
@@ -108,6 +103,12 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: Coins },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
   ],
+  //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
+  //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
+  //: نه یک پیش‌نمایشِ چندردیفی.
+  'سامانه مؤدیان': [
+    { key: 'moadianhistory', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
+  ],
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
   'شرکت': [
@@ -132,6 +133,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  moadianhistory: 'سامانه مؤدیان',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
   recurringlist: 'حسابداری',
@@ -294,14 +296,6 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `${r.first_name} ${r.last_name}`.trim(),
       subtitle: r.phone || r.national_id || '—',
       meta: r.is_active === false ? 'غیرفعال' : 'فعال',
-    })),
-  },
-  moadian: {
-    __default: def('صورتحساب‌های ارسالی', fetchMoadianSubmissions, (r) => ({
-      id: r.id,
-      title: `صورتحساب ${faNum(r.serial)}`,
-      subtitle: MOADIAN_STATUS[r.status] ?? r.status,
-      meta: day(r.invoice_date),
     })),
   },
 }

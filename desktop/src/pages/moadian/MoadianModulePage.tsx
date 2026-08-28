@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { MeResponse } from '../../api'
+import type { PageKey } from '../../lib/navModel'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import { StatCard } from '../../components/StatCard'
@@ -53,27 +54,64 @@ const faNum = (n: number | null) => (n === null ? '—' : n.toLocaleString('fa-I
 /** جمله‌ی اولِ پیامِ سرور برای سلولِ جدول؛ ادامه‌اش راهنماست و در tooltip می‌ماند. */
 const shortReason = (text: string) => text.split('؛')[0]
 
-export function MoadianModulePage({ token, me }: { token: string; me: MeResponse }) {
-  // قفلِ پلن پیش از هر درخواستی سنجیده می‌شود: بدونِ این، صفحه چهار فراخوانیِ ۴۰۲
-  // می‌زد و به‌جای پیشنهادِ ارتقا، چهار پیامِ خطا نشان می‌داد.
-  if ((me.locked_features ?? []).includes('moadian')) {
-    return (
-      <div className="page panels">
-        <PageHeader
-          icon={FileSpreadsheet}
-          title="سامانه مؤدیان"
-          description="ارسالِ صورتحساب الکترونیکی به کارپوشه‌ی سازمان امور مالیاتی."
-        />
-        <section>
-          <FeatureUpsell feature="moadian" />
-        </section>
-      </div>
-    )
-  }
-  return <MoadianModule token={token} />
+/** باکسِ «خرید پلن» به‌جای صفحه، وقتی این امکان روی پلنِ حساب قفل است.
+ *
+ *  پیش از هر درخواستی سنجیده می‌شود: بدونِ آن، صفحه چند فراخوانیِ ۴۰۲ می‌زد و
+ *  به‌جای پیشنهادِ ارتقا چند پیامِ خطا نشان می‌داد. */
+function LockedPage({ title }: { title: string }) {
+  return (
+    <div className="page panels">
+      <PageHeader
+        icon={FileSpreadsheet}
+        title={title}
+        description="ارسالِ صورتحساب الکترونیکی به کارپوشه‌ی سازمان امور مالیاتی."
+      />
+      <section>
+        <FeatureUpsell feature="moadian" />
+      </section>
+    </div>
+  )
 }
 
-function MoadianModule({ token }: { token: string }) {
+const isLocked = (me: MeResponse) => (me.locked_features ?? []).includes('moadian')
+
+export function MoadianModulePage({
+  token,
+  me,
+  onNavigate,
+}: {
+  token: string
+  me: MeResponse
+  onNavigate: (page: PageKey) => void
+}) {
+  if (isLocked(me)) return <LockedPage title="سامانه مؤدیان" />
+  return <MoadianModule token={token} onNavigate={onNavigate} />
+}
+
+/** «تاریخچه ارسال‌ها» — صفحه‌ی فهرستِ ماژول، از کارتِ «فهرست» باز می‌شود.
+ *
+ *  تبِ درونِ ماژول نیست چون دفترِ ارسال‌ها یک *داده‌ی ذخیره‌شده* است نه یک عملیات؛
+ *  همان تفکیکی که در بقیه‌ی ماژول‌ها بینِ کارتِ «عملیات» و کارتِ «فهرست» برقرار است. */
+export function MoadianHistoryPage({ token, me }: { token: string; me: MeResponse }) {
+  if (isLocked(me)) return <LockedPage title="تاریخچه ارسال‌ها" />
+  return <MoadianHistory token={token} />
+}
+
+function MoadianHistory({ token }: { token: string }) {
+  const m = useMoadianPanel({ token })
+  return (
+    <div className="page panels">
+      <PageHeader
+        icon={FileCheck2}
+        title="تاریخچه ارسال‌ها"
+        description="هر صورتحسابی که به سامانه رفته، با شناسه‌ی مالیاتی، سریال و وضعیتِ کارپوشه."
+      />
+      <HistoryTab m={m} />
+    </div>
+  )
+}
+
+function MoadianModule({ token, onNavigate }: { token: string; onNavigate: (page: PageKey) => void }) {
   const m = useMoadianPanel({ token })
 
   return (
@@ -86,9 +124,13 @@ function MoadianModule({ token }: { token: string }) {
       <Tabs
         syncPage="moadian"
         tabs={[
-          { key: 'status', label: 'وضعیت و آمادگی', icon: ListChecks, content: <StatusTab m={m} /> },
+          {
+            key: 'status',
+            label: 'وضعیت و آمادگی',
+            icon: ListChecks,
+            content: <StatusTab m={m} onNavigate={onNavigate} />,
+          },
           { key: 'send', label: 'ارسال صورتحساب', icon: Send, content: <SendTab m={m} /> },
-          { key: 'history', label: 'تاریخچه ارسال‌ها', icon: FileCheck2, content: <HistoryTab m={m} /> },
           { key: 'settings', label: 'تنظیمات و اعتبارنامه', icon: Landmark, content: <SettingsTab m={m} /> },
         ]}
       />
@@ -123,7 +165,7 @@ function EnvironmentBar({ m }: { m: MoadianPanelState }) {
 
 // ── وضعیت و آمادگی ──────────────────────────────────────────────────────────
 
-function StatusTab({ m }: { m: MoadianPanelState }) {
+function StatusTab({ m, onNavigate }: { m: MoadianPanelState; onNavigate: (page: PageKey) => void }) {
   const r = m.readiness
   const s = m.settings
 
@@ -175,9 +217,14 @@ function StatusTab({ m }: { m: MoadianPanelState }) {
         title="آمادگیِ ارسال"
         description="همان شرط‌هایی که سرور پیش از مصرفِ سریال می‌سنجد — نه یک توصیه‌ی جداگانه."
         actions={
-          <button type="button" onClick={() => void m.refresh()}>
-            <RefreshCw size={13} /> بازخوانی
-          </button>
+          <>
+            <button type="button" onClick={() => onNavigate('moadianhistory')}>
+              <FileCheck2 size={13} /> تاریخچه ارسال‌ها
+            </button>
+            <button type="button" onClick={() => void m.refresh()}>
+              <RefreshCw size={13} /> بازخوانی
+            </button>
+          </>
         }
       >
         <div className={`mdn-verdict ${r?.ready ? 'is-ok' : 'is-todo'}`}>

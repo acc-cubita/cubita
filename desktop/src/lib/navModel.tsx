@@ -118,6 +118,8 @@ export type PageKey =
   | 'installmentplans'
   | 'allinstallments'
   | 'costcenterlist'
+  //: فهرستِ «سامانه مؤدیان» — از کارتِ «فهرست» باز می‌شود، نه از منوی عملیات.
+  | 'moadianhistory'
   //: ماژولِ «حسابداری» — هجده عملیاتِ دفترداری. کلیدِ ماژولِ گیت‌کننده‌شان
   //: `accounting` است (نگاشتِ PAGE_MODULE_KEY پایین)، نه خودشان.
   | 'acctchart'

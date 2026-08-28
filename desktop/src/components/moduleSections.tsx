@@ -8,7 +8,6 @@ import {
   CalendarPlus,
   ClipboardCheck,
   ClipboardList,
-  FileCheck2,
   FileText,
   FileUp,
   FlaskConical,
@@ -66,7 +65,6 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   moadian: [
     { key: 'status', label: 'وضعیت و آمادگی', icon: ListChecks },
     { key: 'send', label: 'ارسال صورتحساب', icon: Send },
-    { key: 'history', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
     { key: 'settings', label: 'تنظیمات و اعتبارنامه', icon: Landmark },
   ],
   purchases: [
