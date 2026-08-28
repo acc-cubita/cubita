@@ -38,7 +38,6 @@ import {
   Palette,
   Percent,
   PlayCircle,
-  Rocket,
   Scale,
   ScanLine,
   Settings,
@@ -56,6 +55,7 @@ import {
   UserPlus,
   Users,
   UsersRound,
+  Wallet,
   Warehouse,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -84,7 +84,6 @@ export type PageKey =
   | 'accounts'
   | 'mpcommission'
   | 'reports'
-  | 'onboarding'
   | 'calendar'
   | 'team'
   | 'modules'
@@ -136,6 +135,7 @@ export type PageKey =
   | 'closepnl'
   | 'analytics'
   | 'newaccount'
+  | 'openingbalance'
   | 'accountbrowse'
   | 'balancereport'
   | 'ledgerreport'
@@ -207,6 +207,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} /> },
       { key: 'newaccount', label: 'سرفصل جدید', icon: <FolderPlus size={18} /> },
+      { key: 'openingbalance', label: 'مانده اول دوره', icon: <Wallet size={18} /> },
       { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} /> },
       { key: 'entrycartable', label: 'کارتابل صدور سند حسابداری', icon: <ClipboardCheck size={18} /> },
       { key: 'finalizeentries', label: 'تبدیل اسناد موقت به دائم', icon: <Lock size={18} /> },
@@ -262,9 +263,6 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'تنظیمات',
     icon: <Settings size={17} />,
     items: [
-      //: «فرآیند راه‌اندازی» هنوز کامل نیست: ماژولِ محدود است، پس تا وقتی سوپرادمین
-      //: برای حسابی بازش نکند در منو دیده نمی‌شود.
-      { key: 'onboarding', label: 'فرآیند راه‌اندازی', icon: <Rocket size={18} /> },
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
       { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
@@ -285,7 +283,7 @@ export const NAV_GROUPS: NavGroup[] = [
 const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
   (
     [
-      'acctchart', 'newaccount', 'journalentry', 'entrycartable', 'finalizeentries',
+      'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
       'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation',
       'generaldoc', 'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
       'balancereport', 'ledgerreport',
@@ -297,7 +295,7 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',
   'manufacturing', 'accounting', 'banking', 'fixedassets', 'payroll',
-  'integration', 'calendar', 'onboarding', 'contacts', 'reports',
+  'integration', 'calendar', 'contacts', 'reports',
 ])
 
 // تبِ کنترل‌پنلِ فروشِ خودِ کوبیتا (نه فیچرِ مشتری) — فقط برای ادمینِ پلتفرم.

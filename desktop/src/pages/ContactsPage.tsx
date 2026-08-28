@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarClock,
   FileText,
+  FileUp,
   HandCoins,
   Pencil,
   Plus,
@@ -30,6 +31,7 @@ import {
 import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { BulkImportPanel } from '../components/BulkImportPanel'
 import { Pager, usePagination } from '../components/Pager'
 import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
@@ -531,6 +533,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
           { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
           { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins, content: treasuryTab },
           { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, content: <AgingPanel token={token} onStatement={setStatementContact} /> },
+          { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp, content: <BulkImportPanel token={token} kind="contacts" /> },
         ]}
       />
 

@@ -169,16 +169,32 @@ def object_with_defaults() -> _FakeTenant:
     return _FakeTenant()
 
 
-def test_onboarding_is_hidden_until_granted(db, tenant_id):
-    """«فرآیند راه‌اندازی» تا تکمیل‌شدن ماژولِ محدود است: پیش‌فرض نه مجاز، نه در قالبِ صنفی."""
+def test_storefront_is_hidden_until_granted(db, tenant_id):
+    """«اتصال فروشگاه» ماژولِ محدود است: پیش‌فرض نه مجاز، نه در هیچ قالبِ صنفی."""
     tenant = _tenant(db, tenant_id)
-    assert "onboarding" in svc.RESTRICTED_MODULES
-    assert "onboarding" not in svc.allowed_modules(tenant)
+    assert "integration" in svc.RESTRICTED_MODULES
+    assert "integration" not in svc.allowed_modules(tenant)
     # هیچ قالبِ صنفی نباید دوباره روشنش کند
-    assert all("onboarding" not in tpl for tpl in svc.INDUSTRY_TEMPLATES.values())
+    assert all("integration" not in tpl for tpl in svc.INDUSTRY_TEMPLATES.values())
 
 
-def test_onboarding_appears_after_super_admin_grant(db, tenant_id):
+def test_storefront_appears_after_super_admin_grant(db, tenant_id):
     tenant = _tenant(db, tenant_id)
-    svc.set_grants(tenant, ["onboarding"])
-    assert "onboarding" in svc.allowed_modules(tenant)
+    svc.set_grants(tenant, ["integration"])
+    assert "integration" in svc.allowed_modules(tenant)
+
+
+def test_retired_module_key_is_ignored(db, tenant_id):
+    """کلیدِ ماژولی که از رجیستری حذف شده، در داده‌ی قدیمیِ مستأجرها بی‌اثر می‌ماند.
+
+    «فرآیند راه‌اندازی» ماژولِ جدایی بود و صفحه‌هایش به انبار/اشخاص/حسابداری منتقل
+    شدند. مستأجرهایی که آن روزها گرنت گرفته بودند هنوز کلیدش را در ستون دارند؛ این
+    نباید نه خطا بدهد و نه چیزی را روشن کند.
+    """
+    tenant = _tenant(db, tenant_id)
+    tenant.granted_modules = ["onboarding"]
+    tenant.enabled_modules = ["sales", "onboarding"]
+    assert "onboarding" not in svc.allowed_modules(tenant)
+    assert "onboarding" not in svc.enabled_modules(tenant)
+    assert svc.set_enabled(tenant, ["sales", "onboarding"]) == ["sales"]
+    assert svc.set_grants(tenant, ["onboarding"]) == []

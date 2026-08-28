@@ -351,7 +351,7 @@ export function OpeningOpsPage({
                 : { label: 'انجام نشده', tone: 'todo' }
             }
             action="مانده اول دوره"
-            onGo={() => onNavigate('onboarding', 'opening')}
+            onGo={() => onNavigate('openingbalance')}
           />
           <Step
             index={4}

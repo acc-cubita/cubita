@@ -59,3 +59,17 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
+/** رشته‌ی عددیِ واردشده (فارسی/عربی/لاتین، با یا بدونِ جداکننده‌ی هزارگان) → عدد.
+ *
+ * ورودیِ گروهی از فایلِ کاربر می‌آید و ستونِ «قیمت» ممکن است «۱۵۰,۰۰۰» باشد؛ `Number()`
+ * خام روی چنین رشته‌ای NaN می‌دهد و ردیف بی‌صدا صفر ثبت می‌شود. مقدارِ نامعتبر عمداً
+ * صفر می‌شود نه NaN — تا محاسبه‌ی جمع‌ها نشکند. */
+export function toNumber(s: string): number {
+  const latin = (s || '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[،,\s]/g, '')
+  const n = Number(latin)
+  return Number.isFinite(n) ? n : 0
+}

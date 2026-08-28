@@ -75,6 +75,7 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'transfer', label: 'انتقال بین انبار', icon: ArrowLeftRight },
     { key: 'pricelists', label: 'لیست قیمت', icon: Tags },
     { key: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
+    { key: 'import', label: 'ورود گروهی کالا', icon: FileUp },
   ],
   distributor: [
     { key: 'catalog', label: 'کاتالوگ', icon: Package },
@@ -98,6 +99,7 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound },
     { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins },
     { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock },
+    { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp },
   ],
   crm: [
     { key: 'leads', label: 'سرنخ‌ها', icon: Target },
@@ -126,10 +128,5 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'reminders', label: 'کارهای امروز', icon: BellRing },
     { key: 'calendar', label: 'تقویم ماهانه', icon: CalendarDays },
     { key: 'list', label: 'فهرست رویدادها', icon: ListChecks },
-  ],
-  onboarding: [
-    { key: 'items', label: 'ورود گروهی کالا', icon: FileUp },
-    { key: 'contacts', label: 'ورود گروهی اشخاص', icon: FileUp },
-    { key: 'opening', label: 'مانده اول دوره', icon: Wallet },
   ],
 }

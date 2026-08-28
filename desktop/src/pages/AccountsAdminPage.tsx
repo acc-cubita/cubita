@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, RefreshCw, UserPlus, CalendarClock, Users, CheckCircle2,
-  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift, Factory, Store, Rocket,
+  AlertTriangle, Ban, Play, KeyRound, Trash2, Clock, Activity, ChevronDown, ChevronUp, Gift, Factory, Store,
 } from 'lucide-react'
 import {
   fetchAdminAccounts, createAdminAccount, extendAdminAccount, setAdminAccountStatus,
@@ -44,7 +44,6 @@ const INDUSTRY_LABEL: Record<string, string> = {
 const RESTRICTED_MODULES: { key: string; label: string; icon: typeof Factory }[] = [
   { key: 'manufacturing', label: 'تولید', icon: Factory },
   { key: 'integration', label: 'فروشگاه', icon: Store },
-  { key: 'onboarding', label: 'راه‌اندازی', icon: Rocket },
 ]
 
 const MEMBERSHIP_LABEL: Record<string, string> = {

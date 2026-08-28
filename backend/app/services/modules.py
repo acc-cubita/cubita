@@ -39,7 +39,6 @@ OPTIONAL_MODULES: tuple[str, ...] = (
     "payroll",
     "integration",
     "calendar",
-    "onboarding",
 )
 
 #: زیرمجموعه‌ی اختیاری‌ها که «حقِ دسترسی»شان فقط با گرنتِ سوپرادمین باز می‌شود و در
@@ -49,10 +48,7 @@ OPTIONAL_MODULES: tuple[str, ...] = (
 #: کاری است که پشتیبانی همراهِ مشتری انجام می‌دهد، نه چیزی که هر حسابِ تازه باید
 #: نیمه‌تنظیم‌شده در منو ببیند. پیش‌فرض خاموش؛ سوپرادمین برای هر اکانت بازش می‌کند.
 #:
-#: «فرآیند راه‌اندازی» موقتاً این‌جاست: هنوز کامل نیست و نباید در منوی حساب‌های
-#: واقعی دیده شود. با گرنتِ سوپرادمین برای حسابِ توسعه باز می‌شود و پس از تکمیل،
-#: از این فهرست برمی‌گردد به ماژول‌های عادی.
-RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration", "onboarding")
+RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration")
 
 #: همه‌ی کلیدهای ماژولِ کسب‌وکار (core + اختیاری) — برای اعتبارسنجی.
 ALL_BUSINESS_MODULES: tuple[str, ...] = CORE_MODULES + OPTIONAL_MODULES

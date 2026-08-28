@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle } from 'lucide-react'
+import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
@@ -10,6 +10,7 @@ import { PriceListsPanel } from '../components/PriceListsPanel'
 import { BatchesPanel } from '../components/BatchesPanel'
 import { TransferForm } from '../components/TransferForm'
 import { ProductsPanel } from '../components/ProductsPanel'
+import { BulkImportPanel } from '../components/BulkImportPanel'
 import { LowStockPanel } from '../components/LowStockPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
@@ -275,6 +276,12 @@ export function InventoryPage({
             label: 'بچ و انقضا',
             icon: CalendarClock,
             content: <BatchesPanel token={token} />,
+          },
+          {
+            key: 'import',
+            label: 'ورود گروهی کالا',
+            icon: FileUp,
+            content: <BulkImportPanel token={token} kind="items" />,
           },
         ]}
       />

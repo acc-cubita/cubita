@@ -33,7 +33,6 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
-import { OnboardingPage } from '../pages/OnboardingPage'
 import { ContractingPage } from '../pages/ContractingPage'
 import { MoadianPage } from '../pages/MoadianPage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
@@ -99,6 +98,7 @@ import {
   NewAccountPage,
   ReclassifyPage,
 } from '../pages/accounting/ChartPages'
+import { OpeningBalancePage } from '../pages/accounting/OpeningBalancePage'
 import {
   ClosePnlPage,
   ClosingOpeningPage,
@@ -145,10 +145,10 @@ const PAGE_TITLES: Record<PageKey, string> = {
   team: 'کاربر جدید',
   modules: 'شخصی‌سازیِ پنل',
   profile: 'پروفایل من',
-  onboarding: 'راه‌اندازی',
   // ── ماژولِ «حسابداری» ──
   acctchart: 'درختواره حساب‌ها',
   newaccount: 'سرفصل جدید',
+  openingbalance: 'مانده اول دوره',
   journalentry: 'سند حسابداری',
   entrycartable: 'کارتابل صدور سند حسابداری',
   finalizeentries: 'تبدیل اسناد موقت به دائم',
@@ -390,6 +390,7 @@ export function Dashboard({
           {page === 'newaccount' && (
             <NewAccountPage token={token} onChanged={() => void refreshFromLocalCache()} />
           )}
+          {page === 'openingbalance' && <OpeningBalancePage token={token} />}
           {page === 'journalentry' && (
             <JournalEntryPage
               token={token}
@@ -499,7 +500,6 @@ export function Dashboard({
           )}
           {page === 'contracting' && <ContractingPage />}
           {page === 'moadian' && <MoadianPage token={token} />}
-          {page === 'onboarding' && <OnboardingPage token={token} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'team' && <TeamPage token={token} />}
           {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}
