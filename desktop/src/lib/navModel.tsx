@@ -66,13 +66,17 @@ import {
   UsersRound,
   Wallet,
   Warehouse,
+  FileText,
+  Calculator,
+  Ship,
+  BadgePercent,
+  TrendingUp,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 // شناسه‌ی هر صفحه‌ی برنامه. منبعِ واحد؛ Sidebar و TopNav هر دو از همین می‌خوانند.
 export type PageKey =
   | 'overview'
-  | 'sales'
   | 'pos'
   | 'installments'
   | 'purchases'
@@ -151,6 +155,37 @@ export type PageKey =
   | 'bankledger'
   //: فهرست‌های همین ماژول — از کارتِ «فهرست» باز می‌شوند. قاعده‌ی نظیر: هر عملیاتِ
   //: رکوردساز یک دفتر دارد (نگاشتِ OPS_LIST_MAP در moduleLists).
+  //: ماژولِ فروش — هجده عملیات و دوازده دفترِ نظیر (قاعده‌ی نظیر).
+  | 'salesflow'
+  | 'invoiceclose'
+  | 'salesinvoice'
+  | 'quotations'
+  | 'salesreturn'
+  | 'commission'
+  | 'commissioncalc'
+  | 'customs'
+  | 'contactstatement'
+  | 'creditnote'
+  | 'saletype'
+  | 'priceannounce'
+  | 'bundle'
+  | 'discount'
+  | 'discountgroup'
+  | 'markup'
+  | 'salesbrowse'
+  | 'contactoverview'
+  | 'saleslist'
+  | 'quotationlist'
+  | 'returnlist'
+  | 'saletypelist'
+  | 'pricingfactorlist'
+  | 'discountgrouplist'
+  | 'priceannouncelist'
+  | 'bundlelist'
+  | 'commissionrulelist'
+  | 'commissionrunlist'
+  | 'customslist'
+  | 'notelist'
   | 'treasuryledger'
   | 'checkbooklist'
   | 'bankaccountlist'
@@ -207,10 +242,36 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'مشتریان و فروش',
     icon: <ShoppingBag size={17} />,
     items: [
-      { key: 'sales', label: 'فروش', icon: <ShoppingCart size={18} /> },
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
       { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
+    ],
+  },
+  {
+    //: «فروش» = گردشِ کالا و پولِ فروش. ترتیب مسیرِ کارِ واقعی را دنبال می‌کند:
+    //: اول صدورِ سند (فاکتور، پیش‌فاکتور، برگشتی)، بعد اصلاح و بستن، بعد پورسانت و
+    //: گمرک، بعد داده‌های پایه‌ی قیمت‌گذاری، و آخر مرورها.
+    heading: 'فروش',
+    icon: <ShoppingCart size={17} />,
+    items: [
+      { key: 'salesflow', label: 'فرآیند فروش', icon: <Route size={18} /> },
+      { key: 'salesinvoice', label: 'فاکتور فروش', icon: <ShoppingCart size={18} /> },
+      { key: 'quotations', label: 'پیش‌فاکتور', icon: <FileText size={18} /> },
+      { key: 'salesreturn', label: 'فاکتور برگشتی', icon: <Undo2 size={18} /> },
+      { key: 'invoiceclose', label: 'بستن فاکتور', icon: <Lock size={18} /> },
+      { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} /> },
+      { key: 'contactstatement', label: 'صورت حساب طرف مقابل', icon: <ClipboardList size={18} /> },
+      { key: 'commission', label: 'پورسانت', icon: <Wallet size={18} /> },
+      { key: 'commissioncalc', label: 'محاسبه پورسانت', icon: <Calculator size={18} /> },
+      { key: 'customs', label: 'اظهارنامه گمرکی', icon: <Ship size={18} /> },
+      { key: 'saletype', label: 'نوع فروش', icon: <Tags size={18} /> },
+      { key: 'priceannounce', label: 'اعلامیه قیمت', icon: <FileSpreadsheet size={18} /> },
+      { key: 'bundle', label: 'بسته محصول جدید', icon: <Boxes size={18} /> },
+      { key: 'discount', label: 'تخفیف جدید', icon: <Percent size={18} /> },
+      { key: 'discountgroup', label: 'گروه کالای تخفیف جدید', icon: <Layers size={18} /> },
+      { key: 'markup', label: 'عامل افزاینده جدید', icon: <BadgePercent size={18} /> },
+      { key: 'salesbrowse', label: 'مرور فروش', icon: <TrendingUp size={18} /> },
+      { key: 'contactoverview', label: 'مرور جامع طرف حساب', icon: <UsersRound size={18} /> },
     ],
   },
   {
@@ -371,11 +432,24 @@ for (const key of [
   PAGE_MODULE_KEY[key] = 'banking'
 }
 
+//: هجده عملیاتِ «فروش» + دوازده دفترش، همگی زیرِ چترِ ماژولِ `sales`. بدونِ این،
+//: کسب‌وکاری که ماژولِ فروش را ندارد همه‌ی این منوها را می‌دید.
+for (const key of [
+  'salesflow', 'salesinvoice', 'quotations', 'salesreturn', 'invoiceclose', 'creditnote',
+  'contactstatement', 'commission', 'commissioncalc', 'customs', 'saletype', 'priceannounce',
+  'bundle', 'discount', 'discountgroup', 'markup', 'salesbrowse', 'contactoverview',
+  'saleslist', 'quotationlist', 'returnlist', 'notelist', 'commissionrulelist',
+  'commissionrunlist', 'customslist', 'saletypelist', 'priceannouncelist', 'bundlelist',
+  'pricingfactorlist', 'discountgrouplist',
+] as PageKey[]) {
+  PAGE_MODULE_KEY[key] = 'sales'
+}
+
 //: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
 PAGE_MODULE_KEY.analyticlist = 'accounting'
 
 const GATED_MODULE_KEYS = new Set<PageKey>([
-  'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',
+  'overview', 'pos', 'installments', 'crm', 'purchases', 'inventory',
   'manufacturing', 'accounting', 'banking', 'fixedassets', 'payroll',
   'integration', 'calendar', 'contacts', 'reports',
 ])

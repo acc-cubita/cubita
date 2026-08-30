@@ -1081,6 +1081,10 @@ export interface SalesInvoiceRecord {
   tax_amount: string
   voided_at: string | null
   void_reason: string
+  /** فاکتورِ بسته دیگر ویرایش و ابطال نمی‌شود. null = باز. */
+  closed_at: string | null
+  salesperson_id: string | null
+  sale_type_id: string | null
   /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
   created_by_id: string | null
   created_by_name: string | null
@@ -4395,3 +4399,232 @@ export const settlePosTerminal = (
     fee_amount: number
   },
 ) => authedSend<PosSettlementResult>(token, 'POST', '/api/pos-settlements', data)
+
+// ═══════════════════════ عملیاتِ ماژولِ فروش ═══════════════════════
+//
+// همه زیرِ `/api/sales-ops`. یک نکته‌ی طراحی که در تایپ‌ها هم دیده می‌شود: تخفیف و
+// عاملِ افزاینده *یک* موجودیت‌اند (`PricingFactor` با `kind`)، چون شکلشان یکی است و
+// تنها فرقشان جهتِ اثر است.
+
+export interface SaleType {
+  id: string
+  name: string
+  due_days: number
+  default_tax_rate: string | null
+  description: string
+  is_active: boolean
+}
+export const fetchSaleTypes = (token: string) =>
+  authedGet<SaleType[]>(token, '/api/sales-ops/sale-types')
+export const createSaleType = (token: string, data: Omit<SaleType, 'id'>) =>
+  authedSend<SaleType>(token, 'POST', '/api/sales-ops/sale-types', data)
+export const updateSaleType = (token: string, id: string, data: Omit<SaleType, 'id'>) =>
+  authedSend<SaleType>(token, 'PATCH', `/api/sales-ops/sale-types/${id}`, data)
+
+export interface DiscountGroup {
+  id: string
+  name: string
+  description: string
+  is_active: boolean
+  item_ids: string[]
+  item_count: number
+}
+export interface DiscountGroupIn {
+  name: string
+  description: string
+  is_active: boolean
+  item_ids: string[]
+}
+export const fetchDiscountGroups = (token: string) =>
+  authedGet<DiscountGroup[]>(token, '/api/sales-ops/discount-groups')
+export const createDiscountGroup = (token: string, data: DiscountGroupIn) =>
+  authedSend<DiscountGroup>(token, 'POST', '/api/sales-ops/discount-groups', data)
+export const updateDiscountGroup = (token: string, id: string, data: DiscountGroupIn) =>
+  authedSend<DiscountGroup>(token, 'PATCH', `/api/sales-ops/discount-groups/${id}`, data)
+
+/** `kind` جهتِ اثر است: `discount` کاهنده، `markup` افزاینده. */
+export interface PricingFactor {
+  id: string
+  name: string
+  kind: 'discount' | 'markup'
+  mode: 'percent' | 'amount'
+  value: string
+  scope: 'all' | 'item' | 'group'
+  item_id: string | null
+  group_id: string | null
+  valid_from: string | null
+  valid_to: string | null
+  is_active: boolean
+  description: string
+}
+export type PricingFactorIn = Omit<PricingFactor, 'id' | 'value'> & { value: number }
+export const fetchPricingFactors = (token: string, kind?: 'discount' | 'markup') =>
+  authedGet<PricingFactor[]>(token, `/api/sales-ops/pricing-factors${kind ? `?kind=${kind}` : ''}`)
+export const createPricingFactor = (token: string, data: PricingFactorIn) =>
+  authedSend<PricingFactor>(token, 'POST', '/api/sales-ops/pricing-factors', data)
+export const updatePricingFactor = (token: string, id: string, data: PricingFactorIn) =>
+  authedSend<PricingFactor>(token, 'PATCH', `/api/sales-ops/pricing-factors/${id}`, data)
+
+export interface PriceAnnouncement {
+  id: string
+  name: string
+  effective_from: string
+  notes: string
+  is_active: boolean
+  line_count: number
+  lines: { item_id: string; price: string }[]
+}
+export const fetchPriceAnnouncements = (token: string) =>
+  authedGet<PriceAnnouncement[]>(token, '/api/sales-ops/price-announcements')
+export const createPriceAnnouncement = (
+  token: string,
+  data: {
+    name: string
+    effective_from: string
+    notes: string
+    is_active: boolean
+    lines: { item_id: string; price: number }[]
+  },
+) => authedSend<PriceAnnouncement>(token, 'POST', '/api/sales-ops/price-announcements', data)
+
+export interface ProductBundle {
+  id: string
+  name: string
+  bundle_price: string | null
+  is_active: boolean
+  description: string
+  lines: { item_id: string; qty: string }[]
+}
+export const fetchBundles = (token: string) =>
+  authedGet<ProductBundle[]>(token, '/api/sales-ops/bundles')
+export const createBundle = (
+  token: string,
+  data: {
+    name: string
+    bundle_price: number | null
+    is_active: boolean
+    description: string
+    lines: { item_id: string; qty: number }[]
+  },
+) => authedSend<ProductBundle>(token, 'POST', '/api/sales-ops/bundles', data)
+
+export interface CommissionRule {
+  id: string
+  salesperson_id: string
+  salesperson_name: string
+  rate: string
+  basis: 'net' | 'profit'
+  is_active: boolean
+  description: string
+}
+export const fetchCommissionRules = (token: string) =>
+  authedGet<CommissionRule[]>(token, '/api/sales-ops/commission-rules')
+export const createCommissionRule = (
+  token: string,
+  data: {
+    salesperson_id: string
+    rate: number
+    basis: 'net' | 'profit'
+    is_active: boolean
+    description: string
+  },
+) => authedSend<CommissionRule>(token, 'POST', '/api/sales-ops/commission-rules', data)
+
+export interface CommissionRow {
+  salesperson_id: string
+  salesperson_name: string
+  invoice_count: number
+  base_amount: string
+  rate: string
+  basis: string
+  amount: string
+}
+export interface CommissionRun {
+  id: string
+  date_from: string
+  date_to: string
+  total_amount: string
+  note: string
+  created_at: string
+  rows: CommissionRow[]
+}
+export const fetchCommissionPreview = (token: string, from: string, to: string) =>
+  authedGet<{ date_from: string; date_to: string; total_amount: string; rows: CommissionRow[] }>(
+    token,
+    `/api/sales-ops/commission/preview?date_from=${from}&date_to=${to}`,
+  )
+export const createCommissionRun = (
+  token: string,
+  data: { date_from: string; date_to: string; note: string },
+) => authedSend<CommissionRun>(token, 'POST', '/api/sales-ops/commission/runs', data)
+export const fetchCommissionRuns = (token: string) =>
+  authedGet<CommissionRun[]>(token, '/api/sales-ops/commission/runs')
+
+export interface CustomsDeclaration {
+  id: string
+  declaration_no: string
+  declaration_date: string
+  customs_office: string
+  hs_code: string
+  destination_country: string
+  declared_value: string
+  currency_code: string
+  invoice_id: string | null
+  invoice_number: number | null
+  description: string
+}
+export const fetchCustoms = (token: string) =>
+  authedGet<CustomsDeclaration[]>(token, '/api/sales-ops/customs')
+export const createCustoms = (
+  token: string,
+  data: Omit<CustomsDeclaration, 'id' | 'invoice_number' | 'declared_value'> & { declared_value: number },
+) => authedSend<CustomsDeclaration>(token, 'POST', '/api/sales-ops/customs', data)
+
+export interface CreditDebitNote {
+  id: string
+  number: number | null
+  kind: 'debit' | 'credit'
+  note_date: string
+  contact_id: string
+  contact_name: string
+  amount: string
+  reason: string
+  invoice_id: string | null
+  journal_entry_id: string | null
+  voided_at: string | null
+}
+export const fetchNotes = (token: string, kind?: 'debit' | 'credit') =>
+  authedGet<CreditDebitNote[]>(token, `/api/sales-ops/notes${kind ? `?kind=${kind}` : ''}`)
+export const createNote = (
+  token: string,
+  data: {
+    kind: 'debit' | 'credit'
+    note_date: string
+    contact_id: string
+    amount: number
+    reason: string
+  },
+) => authedSend<CreditDebitNote>(token, 'POST', '/api/sales-ops/notes', data)
+export const voidNote = (token: string, id: string, reason: string) =>
+  authedSend<CreditDebitNote>(token, 'POST', `/api/sales-ops/notes/${id}/void`, { reason })
+
+export const closeInvoices = (
+  token: string,
+  data: { invoice_ids?: string[]; date_from?: string | null; date_to?: string | null },
+) =>
+  authedSend<{ count: number; first_date: string; last_date: string; total: string }>(
+    token,
+    'POST',
+    '/api/sales-ops/invoices/close',
+    data,
+  )
+
+/** پیشنهادِ قیمت — *پیشنهاد* است نه حکم؛ `applied` می‌گوید عدد از کجا آمده. */
+export const fetchPricingSuggestion = (token: string, itemId: string, qty: number, on?: string) =>
+  authedGet<{
+    unit_price: string
+    gross: string
+    discount: string
+    net: string
+    applied: { kind: string; name: string; value: string }[]
+  }>(token, `/api/sales-ops/pricing/suggest?item_id=${itemId}&qty=${qty}${on ? `&on=${on}` : ''}`)

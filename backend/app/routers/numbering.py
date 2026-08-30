@@ -31,6 +31,7 @@ DOC_LABELS: dict[str, str] = {
     "stock_transfer": "انتقال بین انبار",
     "production_order": "سفارش تولید",
     "installment_plan": "قرارداد اقساطی",
+    "credit_debit_note": "اعلامیه بدهکار/بستانکار",
 }
 
 

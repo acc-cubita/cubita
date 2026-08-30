@@ -81,11 +81,35 @@ from app.models.returns import (
     SalesReturnLine,
 )
 from app.models.transfers import StockTransfer, StockTransferLine
+from app.models.sales_ops import (
+    CommissionRule,
+    CommissionRun,
+    CommissionRunLine,
+    CreditDebitNote,
+    CustomsDeclaration,
+    DiscountItemGroup,
+    DiscountItemGroupMember,
+    PricingFactor,
+    ProductBundle,
+    ProductBundleLine,
+    SaleType,
+)
 from app.models.treasury import TreasuryTransaction
 from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.user import Role, User
 
 __all__ = [
+    "CommissionRule",
+    "CommissionRun",
+    "CommissionRunLine",
+    "CreditDebitNote",
+    "CustomsDeclaration",
+    "DiscountItemGroup",
+    "DiscountItemGroupMember",
+    "PricingFactor",
+    "ProductBundle",
+    "ProductBundleLine",
+    "SaleType",
     "ContactGroup",
     "SavedReport",
     "GeoLocation",

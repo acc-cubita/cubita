@@ -45,7 +45,42 @@ import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import { AccountsAdminPage } from '../pages/AccountsAdminPage'
 import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
-import { SalesPage } from '../pages/SalesPage'
+import {
+  CommissionCalcPage,
+  CommissionPage,
+  ContactOverviewPage,
+  ContactStatementPage,
+  CreditDebitNotePage,
+  CustomsPage,
+  DiscountGroupPage,
+  DiscountPage,
+  InvoiceClosePage,
+  MarkupPage,
+  PriceAnnouncementPage,
+  ProductBundlePage,
+  SaleTypePage,
+  SalesBrowsePage,
+  SalesFlowPage,
+} from '../pages/sales/SalesOpsPages'
+import {
+  BundleListPage,
+  CommissionRuleListPage,
+  CommissionRunListPage,
+  CustomsListPage,
+  DiscountGroupListPage,
+  NoteListPage,
+  PriceAnnouncementListPage,
+  PricingFactorListPage,
+  SaleTypeListPage,
+  SalesInvoiceListPage,
+  SalesReturnListPage,
+} from '../pages/sales/SalesListPages'
+import {
+  QuotationListPage,
+  QuotationPage,
+  SalesInvoicePage,
+  SalesReturnPage,
+} from '../pages/sales/SalesDocumentPages'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
@@ -159,7 +194,36 @@ import {
 
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: 'داشبورد',
-  sales: 'فروش',
+  salesflow: 'فرآیند فروش',
+  salesinvoice: 'فاکتور فروش',
+  quotations: 'پیش‌فاکتور',
+  salesreturn: 'فاکتور برگشتی',
+  invoiceclose: 'بستن فاکتور',
+  creditnote: 'اعلامیه بدهکار بستانکار',
+  contactstatement: 'صورت حساب طرف مقابل',
+  commission: 'پورسانت',
+  commissioncalc: 'محاسبه پورسانت',
+  customs: 'اظهارنامه گمرکی',
+  saletype: 'نوع فروش',
+  priceannounce: 'اعلامیه قیمت',
+  bundle: 'بسته محصول جدید',
+  discount: 'تخفیف جدید',
+  discountgroup: 'گروه کالای تخفیف جدید',
+  markup: 'عامل افزاینده جدید',
+  salesbrowse: 'مرور فروش',
+  contactoverview: 'مرور جامع طرف حساب',
+  saleslist: 'فاکتورهای فروش',
+  quotationlist: 'پیش‌فاکتورها',
+  returnlist: 'فاکتورهای برگشتی',
+  notelist: 'اعلامیه‌های بدهکار و بستانکار',
+  commissionrulelist: 'قواعد پورسانت',
+  commissionrunlist: 'محاسبه‌های پورسانت',
+  customslist: 'اظهارنامه‌های گمرکی',
+  saletypelist: 'انواع فروش',
+  priceannouncelist: 'اعلامیه‌های قیمت',
+  bundlelist: 'بسته‌های محصول',
+  pricingfactorlist: 'تخفیف‌ها و عوامل افزاینده',
+  discountgrouplist: 'گروه‌های کالای تخفیف',
   installments: 'فروش اقساطی',
   pos: 'صندوق فروشگاهی',
   purchases: 'خرید',
@@ -409,16 +473,54 @@ export function Dashboard({
                 itemsCount={items.length}
               />
             ))}
-          {page === 'sales' && (
-            <SalesPage
+          {/* ── ماژولِ فروش: هجده عملیات و دوازده دفتر (قاعده‌ی نظیر) ── */}
+          {page === 'salesflow' && <SalesFlowPage />}
+          {page === 'salesinvoice' && (
+            <SalesInvoicePage
               token={token}
-              me={me}
               warehouses={warehouses}
               items={items}
               outbox={invoiceOutbox}
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
+          {page === 'quotations' && (
+            <QuotationPage
+              token={token}
+              warehouses={warehouses}
+              items={items}
+              onQueued={() => void refreshFromLocalCache()}
+            />
+          )}
+          {page === 'salesreturn' && <SalesReturnPage token={token} />}
+          {page === 'invoiceclose' && <InvoiceClosePage token={token} />}
+          {page === 'creditnote' && <CreditDebitNotePage token={token} />}
+          {page === 'contactstatement' && <ContactStatementPage token={token} />}
+          {page === 'commission' && <CommissionPage token={token} />}
+          {page === 'commissioncalc' && <CommissionCalcPage token={token} />}
+          {page === 'customs' && <CustomsPage token={token} />}
+          {page === 'saletype' && <SaleTypePage token={token} />}
+          {page === 'priceannounce' && <PriceAnnouncementPage token={token} />}
+          {page === 'bundle' && <ProductBundlePage token={token} />}
+          {page === 'discount' && <DiscountPage token={token} />}
+          {page === 'discountgroup' && <DiscountGroupPage token={token} />}
+          {page === 'markup' && <MarkupPage token={token} />}
+          {page === 'salesbrowse' && <SalesBrowsePage token={token} />}
+          {page === 'contactoverview' && <ContactOverviewPage token={token} />}
+          {page === 'saleslist' && <SalesInvoiceListPage token={token} />}
+          {page === 'quotationlist' && (
+            <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
+          )}
+          {page === 'returnlist' && <SalesReturnListPage token={token} />}
+          {page === 'notelist' && <NoteListPage token={token} />}
+          {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
+          {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}
+          {page === 'customslist' && <CustomsListPage token={token} />}
+          {page === 'saletypelist' && <SaleTypeListPage token={token} />}
+          {page === 'priceannouncelist' && <PriceAnnouncementListPage token={token} />}
+          {page === 'bundlelist' && <BundleListPage token={token} />}
+          {page === 'pricingfactorlist' && <PricingFactorListPage token={token} />}
+          {page === 'discountgrouplist' && <DiscountGroupListPage token={token} />}
           {page === 'pos' && <PosPage token={token} me={me} />}
           {page === 'purchases' && (
             <PurchasesPage

@@ -103,6 +103,11 @@ class SalesInvoiceOut(BaseModel):
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
     voided_at: datetime | None = None
     void_reason: str = ""
+    #: فاکتورِ بسته دیگر ویرایش و ابطال نمی‌شود — رابط باید بداند تا دکمه‌ی بی‌اثر
+    #: نشان ندهد. NULL = باز.
+    closed_at: datetime | None = None
+    salesperson_id: UUID | None = None
+    sale_type_id: UUID | None = None
     #: ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زده. `created_by_id` همیشه هست؛
     #: نام/نقش را روتر پُر می‌کند (join به users/memberships)، پس برای پاسخِ خام None می‌مانند.
     created_by_id: UUID | None = None

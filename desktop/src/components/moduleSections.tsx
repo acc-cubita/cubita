@@ -8,7 +8,6 @@ import {
   CalendarPlus,
   ClipboardCheck,
   ClipboardList,
-  FileText,
   FileUp,
   FlaskConical,
   Gift,
@@ -25,7 +24,6 @@ import {
   PieChart,
   Send,
   Settings,
-  ShoppingCart,
   Store,
   Tags,
   Target,
@@ -51,11 +49,6 @@ export type SectionDef = { key: string; label: string; icon: LucideIcon }
  * ناهم‌خوان بماند، صفحه به تبِ اول برمی‌گردد — نه خطا، ولی زیرمنو ناقص می‌شود.)
  */
 export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
-  sales: [
-    { key: 'invoices', label: 'فاکتور فروش', icon: ShoppingCart },
-    { key: 'quotations', label: 'پیش‌فاکتور', icon: FileText },
-    { key: 'returns', label: 'برگشت از فروش', icon: Undo2 },
-  ],
   //: «سامانه مؤدیان» — ترتیب همان مسیرِ کار است: اول ببین آماده‌ای یا نه، بعد بفرست،
   //: بعد پیگیری کن؛ تنظیمات آخر است چون یک‌بار انجام می‌شود.
   moadian: [

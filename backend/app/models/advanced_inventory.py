@@ -11,7 +11,7 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,9 @@ class PriceList(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "price_lists"
 
     name: Mapped[str] = mapped_column(String(200))
+    #: تاریخِ اجرای اعلامیه. قیمتِ دیروز باید بماند تا فاکتورهای گذشته قابلِ توضیح
+    #: بمانند، پس اعلامیه‌ی تازه کنارِ قبلی می‌نشیند نه به‌جایش.
+    effective_from: Mapped[date_] = mapped_column(Date, default=date_.today, server_default=func.current_date())
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

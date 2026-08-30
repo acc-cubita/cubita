@@ -1,7 +1,8 @@
 import uuid
 from datetime import date as date_
+from datetime import datetime
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,6 +54,22 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     # شناسه‌ی سفارش روی سایت فروشگاهی؛ برای idempotent بودن sync (جلوگیری از وارد کردن دوباره‌ی همان سفارش)
     source_order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
+
+    #: **بستنِ فاکتور** — قفل از ویرایش و ابطال. همان معنایی که «دائم» برای سند
+    #: دارد: فاکتورِ بسته امضاشده است. یک‌طرفه؛ راهِ بازکردن عمداً نیست.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    closed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+    #: فروشنده‌ی این فاکتور — مبنای پورسانت. NULL = بی‌فروشنده (فروشِ مستقیم).
+    salesperson_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
+    #: نوعِ فروش (نقدی، اعتباری، صادراتی…). NULL = تعیین‌نشده.
+    sale_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sale_types.id", ondelete="SET NULL"), nullable=True
+    )
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

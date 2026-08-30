@@ -9,9 +9,6 @@ import {
   fetchProductionOrders,
   fetchPurchaseInvoices,
   fetchPurchaseReturns,
-  fetchSalesInvoices,
-  fetchSalesQuotations,
-  fetchSalesReturns,
   fetchStockAdjustments,
   fetchStockCounts,
   fetchStockTransfers,
@@ -49,6 +46,14 @@ import {
   Wallet,
   Wrench,
   type LucideIcon,
+  ClipboardList,
+  FileText,
+  Undo2,
+  Calculator,
+  Ship,
+  Boxes,
+  Percent,
+  Layers,
 } from 'lucide-react'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
@@ -97,6 +102,22 @@ export interface ListMenuItem {
  * کلید، **نامِ گروهِ ناوبری** است نه صفحه — چون این تصمیم به کلِ ماژول تعلق دارد.
  */
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
+  //: «فروش» — دفترِ نظیرِ هر عملیاتِ رکوردساز. «تخفیف‌ها و عوامل» عمداً یک دفترِ
+  //: مشترک است، چون دو منوی عملیات در یک جدول می‌نویسند (استثنای دومِ قاعده‌ی نظیر).
+  'فروش': [
+    { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList },
+    { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText },
+    { key: 'returnlist', label: 'فاکتورهای برگشتی', icon: Undo2 },
+    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet },
+    { key: 'commissionrulelist', label: 'قواعد پورسانت', icon: Wallet },
+    { key: 'commissionrunlist', label: 'محاسبه‌های پورسانت', icon: Calculator },
+    { key: 'customslist', label: 'اظهارنامه‌های گمرکی', icon: Ship },
+    { key: 'saletypelist', label: 'انواع فروش', icon: Tags },
+    { key: 'priceannouncelist', label: 'اعلامیه‌های قیمت', icon: FileSpreadsheet },
+    { key: 'bundlelist', label: 'بسته‌های محصول', icon: Boxes },
+    { key: 'pricingfactorlist', label: 'تخفیف‌ها و عوامل افزاینده', icon: Percent },
+    { key: 'discountgrouplist', label: 'گروه‌های کالای تخفیف', icon: Layers },
+  ],
   'تنظیمات': [
     { key: 'backuplist', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
@@ -158,6 +179,18 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  saleslist: 'فروش',
+  quotationlist: 'فروش',
+  returnlist: 'فروش',
+  notelist: 'فروش',
+  commissionrulelist: 'فروش',
+  commissionrunlist: 'فروش',
+  customslist: 'فروش',
+  saletypelist: 'فروش',
+  priceannouncelist: 'فروش',
+  bundlelist: 'فروش',
+  pricingfactorlist: 'فروش',
+  discountgrouplist: 'فروش',
   treasuryledger: 'دریافت و پرداخت',
   checkbooklist: 'دریافت و پرداخت',
   bankaccountlist: 'دریافت و پرداخت',
@@ -285,9 +318,29 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   //: تنها صفحه‌ی مستقلش همان فهرستِ تاریخچه است.
   moadian: 'moadianhistory',
 
+  // ── فروش ──
+  //: ماژولِ فروش دیگر تب‌دار نیست؛ هجده منوی عملیات دارد و هرکدام دفترِ نظیرش را.
+  salesflow: 'none', //: راهنمای مسیر
+  salesinvoice: 'saleslist',
+  quotations: 'quotationlist',
+  salesreturn: 'returnlist',
+  invoiceclose: 'state', //: فاکتور را قفل می‌کند، رکوردِ تازه نمی‌سازد
+  creditnote: 'notelist',
+  contactstatement: 'view', //: خودش گزارش است
+  commission: 'commissionrulelist',
+  commissioncalc: 'commissionrunlist',
+  customs: 'customslist',
+  saletype: 'saletypelist',
+  priceannounce: 'priceannouncelist',
+  bundle: 'bundlelist',
+  discount: 'pricingfactorlist', //: تخفیف و افزاینده یک جدول‌اند → دفترِ مشترک
+  markup: 'pricingfactorlist',
+  discountgroup: 'discountgrouplist',
+  salesbrowse: 'view',
+  contactoverview: 'view',
+
   // ── ماژول‌های تب‌دار ──
   //: هر تب دفترِ خودش را داخلِ خودش دارد، پس قاعده همان‌جا برآورده است.
-  sales: 'view',
   pos: 'view',
   contacts: 'contactlist',
   crm: 'view',
@@ -321,26 +374,8 @@ const def = (label: string, fetch: (t: string) => Promise<any[]>, row: (r: any) 
   ({ label, fetch, row }) as ListDef
 
 export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
-  sales: {
-    invoices: def('فاکتورهای فروش', fetchSalesInvoices, (r) => ({
-      id: r.id,
-      title: `فاکتور ${faNum(r.number)}`,
-      subtitle: day(r.invoice_date),
-      meta: fa(r.total_amount),
-    })),
-    quotations: def('پیش‌فاکتورها', fetchSalesQuotations, (r) => ({
-      id: r.id,
-      title: `پیش‌فاکتور ${faNum(r.number)}`,
-      subtitle: r.customer_name || day(r.quotation_date),
-      meta: fa(r.total_amount),
-    })),
-    returns: def('برگشت از فروش', fetchSalesReturns, (r) => ({
-      id: r.id,
-      title: `برگشتی ${faNum(r.number)}`,
-      subtitle: day(r.return_date),
-      meta: fa(r.total_amount),
-    })),
-  },
+  //: «فروش» اینجا نیست: دیگر ماژولِ تب‌دار نیست و دفترهایش صفحه‌ی مستقل دارند
+  //: (LIST_MENUS['فروش']). گذاشتنش اینجا یعنی نمای دومِ همان داده.
   purchases: {
     invoices: def('فاکتورهای خرید', fetchPurchaseInvoices, (r) => ({
       id: r.id,

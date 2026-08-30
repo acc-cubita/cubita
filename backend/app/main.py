@@ -54,6 +54,7 @@ from app.routers import (
     subscription,
     transfers,
     treasury,
+    sales_ops,
 )
 
 settings = get_settings()
@@ -148,6 +149,7 @@ app.include_router(shop.router)
 app.include_router(storefront.router)
 app.include_router(marketplace.router)
 app.include_router(devices.router)
+app.include_router(sales_ops.router)
 
 
 @app.get("/api/health")

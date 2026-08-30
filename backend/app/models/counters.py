@@ -38,6 +38,8 @@ DOC_PURCHASE_RETURN = "purchase_return"
 DOC_STOCK_TRANSFER = "stock_transfer"
 DOC_PRODUCTION_ORDER = "production_order"
 DOC_INSTALLMENT_PLAN = "installment_plan"
+#: اعلامیه‌ی بدهکار/بستانکار — شماره‌ی رسمی می‌گیرد چون سند حسابداری می‌زند.
+DOC_CREDIT_DEBIT_NOTE = "credit_debit_note"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -51,6 +53,7 @@ DOC_TYPES = (
     DOC_STOCK_TRANSFER,
     DOC_PRODUCTION_ORDER,
     DOC_INSTALLMENT_PLAN,
+    DOC_CREDIT_DEBIT_NOTE,
 )
 
 
