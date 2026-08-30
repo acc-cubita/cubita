@@ -21,6 +21,7 @@ import {
   finalizeEntries,
   mergeEntries,
   renumberEntries,
+  setEntrySubNumber,
   voidJournalEntry,
   type EntrySummary,
   type JournalEntryRecord,
@@ -111,10 +112,13 @@ function EntryTable({
   entries,
   pageSize = 20,
   onVoid,
+  onEditSub,
 }: {
   entries: JournalEntryRecord[]
   pageSize?: number
   onVoid?: (e: JournalEntryRecord) => void
+  /** اصلاحِ شماره فرعی. فقط سندِ موقت؛ روی دائم دکمه نمی‌آید. */
+  onEditSub?: (e: JournalEntryRecord) => void
 }) {
   const pg = usePagination(entries, pageSize)
   const total = (e: JournalEntryRecord) =>
@@ -148,7 +152,17 @@ function EntryTable({
               <td data-label="عطف" className="num">
                 {e.atf_number === null ? '—' : faInt(e.atf_number)}
               </td>
-              <td data-label="فرعی">{e.sub_number || '—'}</td>
+              <td data-label="فرعی">
+                {/* عطف تغییرناپذیر است، ولی فرعی ارجاعِ کاربر است و غلطِ تایپی
+                    باید اصلاح شود — تا وقتی سند موقت است. */}
+                {onEditSub && !e.voided_at && e.status === 'temporary' ? (
+                  <button type="button" className="link-btn" onClick={() => onEditSub(e)}>
+                    {e.sub_number || '＋ افزودن'}
+                  </button>
+                ) : (
+                  e.sub_number || '—'
+                )}
+              </td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
               <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
@@ -810,6 +824,22 @@ export function EntryListPage({ token }: { token: string }) {
   )
   const rows = list.data ?? []
 
+  async function handleEditSub(entry: JournalEntryRecord) {
+    const next = window.prompt(
+      `شماره فرعیِ سندِ ${entry.number ?? ''} — ارجاعِ خودتان (شماره‌ی پرونده، سندِ سیستمِ قبلی، کدِ دسته).
+خالی بگذارید تا پاک شود:`,
+      entry.sub_number ?? '',
+    )
+    if (next === null) return
+    try {
+      await setEntrySubNumber(token, entry.id, next.trim() || null)
+      setMsg({ text: 'شماره فرعی ثبت شد.', kind: 'ok' })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
   async function handleVoid(entry: JournalEntryRecord) {
     const reason = window.prompt(
       `ابطالِ سندِ ${entry.number ?? ''} یک سندِ معکوس ثبت می‌کند و اصل سرِ جایش می‌ماند.\nعلتِ ابطال:`,
@@ -876,7 +906,7 @@ export function EntryListPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="سندی با این شرایط پیدا نشد."
         >
-          <EntryTable entries={rows} onVoid={handleVoid} />
+          <EntryTable entries={rows} onVoid={handleVoid} onEditSub={handleEditSub} />
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

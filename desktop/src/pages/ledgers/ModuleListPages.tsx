@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Hash, MapPin, Tag, Tags } from 'lucide-react'
+import { CalendarDays, Check, Hash, MapPin, RotateCcw, Tag, Tags } from 'lucide-react'
 import {
   fetchAnalytics,
   fetchCalendarEvents,
+  setCalendarEventDone,
   fetchContactGroups,
   fetchGeoLocations,
   fetchNumbering,
@@ -269,7 +270,21 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export function CalendarListPage({ token }: { token: string }) {
   const [only, setOnly] = useState<'all' | 'open' | 'done'>('all')
-  const data = useAsync(() => fetchCalendarEvents(token), [token])
+  //: بدونِ این کلید، فهرست بعد از «انجام شد» تازه نمی‌شود و کاربر فکر می‌کند
+  //: دکمه کار نکرده. تبِ قبلیِ تقویم همین را داشت و با جابه‌جایی گم شده بود.
+  const [reloadKey, setReloadKey] = useState(0)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const data = useAsync(() => fetchCalendarEvents(token), [token, reloadKey])
+
+  async function toggleDone(id: string, next: boolean) {
+    setBusyId(id)
+    try {
+      await setCalendarEventDone(token, id, next)
+      setReloadKey((k) => k + 1)
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   const rows = useMemo(() => {
     return (data.data ?? [])
@@ -324,6 +339,7 @@ export function CalendarListPage({ token }: { token: string }) {
                   <th>دسته</th>
                   <th>ساعت</th>
                   <th>وضعیت</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -339,6 +355,23 @@ export function CalendarListPage({ token }: { token: string }) {
                       <span className={`status-badge ${e.is_done ? 'tone-success' : 'tone-warning'}`}>
                         {e.is_done ? 'انجام شد' : 'باز'}
                       </span>
+                    </td>
+                    <td className="card-actions">
+                      <button
+                        type="button"
+                        disabled={busyId === e.id}
+                        onClick={() => void toggleDone(e.id, !e.is_done)}
+                      >
+                        {e.is_done ? (
+                          <>
+                            <RotateCcw size={13} /> بازگشایی
+                          </>
+                        ) : (
+                          <>
+                            <Check size={13} /> انجام شد
+                          </>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

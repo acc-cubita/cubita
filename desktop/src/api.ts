@@ -615,11 +615,6 @@ export const createFiscalYear = (
   data: { title: string; start_date: string; end_date: string; notes?: string; activate?: boolean },
 ) => authedSend<FiscalYearRecord>(token, 'POST', '/api/fiscal-years', data)
 
-export const updateFiscalYear = (
-  token: string,
-  id: string,
-  data: { title?: string; start_date?: string; end_date?: string; notes?: string },
-) => authedSend<FiscalYearRecord>(token, 'PATCH', `/api/fiscal-years/${id}`, data)
 
 export const activateFiscalYear = (token: string, id: string) =>
   authedSend<FiscalYearRecord>(token, 'POST', `/api/fiscal-years/${id}/activate`, {})
@@ -796,9 +791,6 @@ export const fetchBackupExport = (token: string) => authedGet<Record<string, unk
 export const importBackup = (token: string, data: unknown) =>
   authedSend<{ restored: boolean; total_rows: number }>(token, 'POST', '/api/backup/import', data)
 
-/** جست‌وجوی کالا با بارکد (اسکن در صندوقِ فروشگاهی). ۴۰۴ اگر پیدا نشود. */
-export const fetchItemByBarcode = (token: string, code: string) =>
-  authedGet<ItemRecord>(token, `/api/items/by-barcode?code=${encodeURIComponent(code)}`)
 
 /** ورودیِ ساختِ کالای جدید — دقیقاً منطبق بر ItemIn سمت سرور (sku و name الزامی‌اند). */
 export interface ItemIn {
@@ -2777,8 +2769,6 @@ export const updateMoadianSettings = (token: string, data: MoadianSettingsIn) =>
 export const fetchMoadianSubmissions = (token: string) =>
   authedGet<MoadianSubmissionRecord[]>(token, '/api/moadian/submissions')
 
-export const submitInvoiceToMoadian = (token: string, invoiceId: string) =>
-  authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/submit/${invoiceId}`, {})
 
 export const inquireMoadianStatus = (token: string, submissionId: string) =>
   authedSend<MoadianSubmissionRecord>(token, 'POST', `/api/moadian/inquiry/${submissionId}`, {})
@@ -3247,8 +3237,6 @@ export const setBenefitSettings = (
   data: { year: number; min_base_wage: number; annual_leave_days: number },
 ) => authedSend<{ year: number; min_base_wage: string; annual_leave_days: number }>(token, 'PUT', '/api/payroll/benefit-settings', data)
 
-export const fetchLeaveRecords = (token: string, employeeId?: string) =>
-  authedGet<LeaveRecordRow[]>(token, `/api/payroll/leave${employeeId ? `?employee_id=${employeeId}` : ''}`)
 
 export const recordLeave = (
   token: string,
@@ -3627,8 +3615,6 @@ export const setPriceListItems = (token: string, listId: string, items: { item_i
 
 export const fetchStockBatches = (token: string, itemId?: string) =>
   authedGet<StockBatchRecord[]>(token, `/api/stock-batches${itemId ? `?item_id=${itemId}` : ''}`)
-export const fetchExpiringBatches = (token: string, days = 30) =>
-  authedGet<StockBatchRecord[]>(token, `/api/stock-batches/expiring?days=${days}`)
 export interface StockBatchIn {
   item_id: string
   warehouse_id: string
@@ -3643,8 +3629,6 @@ export interface StockBatchIn {
 }
 export const createStockBatch = (token: string, data: StockBatchIn) =>
   authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
-export const updateStockBatch = (token: string, id: string, data: StockBatchIn) =>
-  authedSend<StockBatchRecord>(token, 'PATCH', `/api/stock-batches/${id}`, data)
 export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
 
 // سریالِ کارتنِ یک بار
@@ -4034,20 +4018,6 @@ export const fetchMyMpCommissions = (token: string) =>
 // الگو یکسان است: هر عملیاتِ سندساز یک `…Preview` دارد که فقط می‌خواند و یک تابعِ
 // صدور. صفحه‌ها همیشه اول پیش‌نمایش را نشان می‌دهند، پس هیچ سندی بی‌دیدن زده نمی‌شود.
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface AccountingOverview {
-  temporary_count: number
-  permanent_count: number
-  voided_count: number
-  account_count: number
-  group_count: number
-  last_number: number | null
-  oldest_temporary_date: string | null
-  last_close_date: string | null
-}
-
-export const fetchAccountingOverview = (token: string) =>
-  authedGet<AccountingOverview>(token, '/api/accounting/overview')
 
 export interface EntrySummary {
   id: string

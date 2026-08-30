@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { deadFiles } from './find-dead-code.mjs'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -295,6 +296,25 @@ const RULES = [
         }
       }
       return found
+    },
+  },
+  {
+    id: 'R12',
+    level: 'error',
+    title: 'کدِ مرده',
+    why:
+      'فایلی که از `main.tsx` به آن نمی‌رسیم مرده است: نه `tsc` می‌گیردش (فایلِ ' +
+      'بی‌مصرف خطا نیست)، نه چشمِ بازبین. سه بازسازیِ ماژول نُه فایلِ بی‌ارجاع جا ' +
+      'گذاشتند و هیچ‌کدام دیده نشدند تا وقتی این قاعده نوشته شد.',
+    scope: 'nav',
+    check() {
+      //: `file` را خودش می‌دهد تا گزارش به فایلِ مرده اشاره کند، نه به navModel
+      //: که پیش‌فرضِ قاعده‌های `scope: 'nav'` است.
+      return deadFiles().map((d) => ({
+        file: `src/${d.file}`,
+        line: 1,
+        msg: `${d.lines} خط، از هیچ‌جا import نمی‌شود`,
+      }))
     },
   },
 ]
