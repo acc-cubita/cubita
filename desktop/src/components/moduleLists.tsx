@@ -20,23 +20,33 @@ import {
   Activity,
   Archive,
   BarChart3,
+  BookMarked,
   CalendarClock,
+  CalendarDays,
   CalendarRange,
   Coins,
   Contact2,
+  CreditCard,
   DatabaseBackup,
   Download,
   FileCheck2,
+  FileSpreadsheet,
   FileStack,
   Gauge,
   HandCoins,
+  Hash,
+  Landmark,
   LayoutList,
   ListChecks,
   ListTree,
+  MapPin,
   Repeat,
+  Tag,
+  Tags,
   Target,
   Upload,
   UsersRound,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -91,6 +101,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'backuplist', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
+    { key: 'numberinglist', label: 'روش‌های شماره‌گذاری', icon: Hash },
   ],
   //: «حسابداری» — داده‌ی ذخیره‌شده‌ی ماژول: اسناد، حساب‌ها، و سه پنلی که پیش‌تر
   //: تبِ درونِ صفحه بودند (تکرارشونده، بودجه، ارز) و حالا صفحه‌ی مستقل دارند.
@@ -101,11 +112,18 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'budgetlist', label: 'بودجه‌بندی', icon: Target },
     { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: Coins },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
+    { key: 'analyticlist', label: 'تفصیلی‌های سایر', icon: Tag },
   ],
   //: «دریافت و پرداخت» — دفترِ رسیدها و اعلامیه‌ها. پیش‌تر تبِ ماژولِ «اشخاص» بود؛
   //: داده‌ی این ماژول در ماژولِ دیگری زندگی می‌کرد.
   'دریافت و پرداخت': [
     { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins },
+    { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked },
+    { key: 'bankaccountlist', label: 'حساب‌های بانکی', icon: Landmark },
+    { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: CreditCard },
+    { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard },
+    { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet },
+    { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet },
   ],
   //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
   //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
@@ -128,6 +146,9 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'installmentplans', label: 'قراردادهای اقساطی', icon: CalendarClock },
     { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks },
     { key: 'costcenterlist', label: 'مراکز هزینه', icon: Target },
+    { key: 'geolist', label: 'محل‌های جغرافیایی', icon: MapPin },
+    { key: 'contactgrouplist', label: 'گروه‌های طرف حساب', icon: Tags },
+    { key: 'calendarlist', label: 'رویدادهای تقویم', icon: CalendarDays },
   ],
 }
 
@@ -138,6 +159,17 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   treasuryledger: 'دریافت و پرداخت',
+  checkbooklist: 'دریافت و پرداخت',
+  bankaccountlist: 'دریافت و پرداخت',
+  posterminallist: 'دریافت و پرداخت',
+  possettlelist: 'دریافت و پرداخت',
+  statementlist: 'دریافت و پرداخت',
+  pettylist: 'دریافت و پرداخت',
+  analyticlist: 'حسابداری',
+  geolist: 'شرکت',
+  contactgrouplist: 'شرکت',
+  calendarlist: 'شرکت',
+  numberinglist: 'تنظیمات',
   moadianhistory: 'سامانه مؤدیان',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
@@ -160,6 +192,121 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   installmentplans: 'شرکت',
   allinstallments: 'شرکت',
   costcenterlist: 'شرکت',
+}
+
+/**
+ * قاعده‌ی نظیر: **هر منوی عملیاتی که رکوردِ تازه ثبت می‌کند، فهرستِ نظیرِ خودش را دارد.**
+ *
+ * الگوی مرجع: «فروش اقساطی» (عملیات: فرم + جدولِ کاری) ↔ «قراردادهای اقساطی»
+ * (فهرست: دفترِ خواندنی با جمع‌ها و فیلتر). صفحه‌ی عملیات برای *ثبت* است و صفحه‌ی
+ * فهرست برای *مرور*؛ این دو تکراری نیستند و کاربر می‌داند کدام را کِی باز کند.
+ *
+ * **چرا این نگاشت وجود دارد:** بدونِ آن، منوی عملیاتِ تازه بی‌سروصدا بدونِ فهرست
+ * می‌ماند و کسی متوجه نمی‌شود تا وقتی کاربر بپرسد «ثبت‌شده‌ها کجا رفتند؟». ممیزِ
+ * صفحه‌ها (قاعده‌ی R11) هر منویی را که این‌جا ردیف ندارد خطا می‌دهد، پس تصمیم
+ * درباره‌ی فهرست *اجباری* است، نه فراموش‌شدنی.
+ *
+ * مقدارِ هر ردیف یا کلیدِ صفحه‌ی فهرست است، یا یکی از سه دلیلِ استثنا:
+ *
+ *  * `'state'` — رکورد نمی‌سازد، وضعیتِ رکوردِ موجود را عوض می‌کند (وصول چک،
+ *    تبدیل سندِ موقت به دائم). دفترش از قبل هست.
+ *  * `'view'`  — خودش فهرست یا گزارش است (جستجوی چک، گزارش ترازها).
+ *  * `'none'`  — چیزی ثبت نمی‌کند (راهنمای مسیر، تنظیمات، تغییر رمز).
+ */
+export type OpsListTarget = PageKey | 'state' | 'view' | 'none'
+
+export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
+  // ── دریافت و پرداخت ──
+  payflow: 'none', //: راهنمای مسیر
+  receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
+  paymentvoucher: 'treasuryledger',
+  contactsettle: 'treasuryledger',
+  //: دفترِ چک‌ها همان «جستجوی چک» است — کاربر صریحاً آن را در کارتِ عملیات خواست،
+  //: و فهرستِ دومِ چک یعنی دو نمای یک داده.
+  checkops: 'checksearch',
+  checkbooks: 'checkbooklist',
+  checkreturn: 'state',
+  checkpayclear: 'state',
+  bankreconcile: 'state',
+  checksearch: 'view',
+  bankledger: 'view',
+  cashbox: 'view',
+  possettle: 'possettlelist',
+  bankstatement: 'statementlist',
+  bankaccounts: 'bankaccountlist',
+  posterminals: 'posterminallist',
+  pettyholder: 'pettylist', //: شارژ و هزینه، یک دفترِ مشترک
+  pettyexpense: 'pettylist',
+
+  // ── حسابداری ──
+  acctchart: 'accountlist',
+  newaccount: 'accountlist',
+  openingbalance: 'entrylist', //: خروجی‌اش یک سندِ حسابداری است
+  journalentry: 'entrylist',
+  mergeentries: 'entrylist',
+  fxrevaluation: 'entrylist',
+  closingopening: 'entrylist',
+  closepnl: 'periodcloselist',
+  analytics: 'analyticlist',
+  entrycartable: 'state',
+  finalizeentries: 'state',
+  renumber: 'state',
+  reclassify: 'state',
+  generaldoc: 'view',
+  vat: 'view',
+  ebooks: 'view',
+  accountbrowse: 'view',
+  balancereport: 'view',
+  ledgerreport: 'view',
+  reports: 'view',
+
+  // ── شرکت ──
+  contactnew: 'contactlist',
+  installments: 'installmentplans', //: الگوی مرجعِ این قاعده
+  costcenter: 'costcenterlist',
+  geo: 'geolist',
+  contactgroup: 'contactgrouplist',
+  calendar: 'calendarlist',
+  yearendreminder: 'calendarlist', //: یادآوری‌اش روی همان تقویم می‌نشیند
+  openingops: 'none', //: راهنمای مسیر
+  yearendops: 'none',
+
+  // ── تنظیمات ──
+  fiscalyear: 'fiscalyearlist',
+  numbering: 'numberinglist',
+  team: 'userlist',
+  backup: 'backuplist',
+  password: 'none',
+  theme: 'none',
+  help: 'none',
+
+  // ── سامانه مؤدیان ──
+  //: بخش‌های تب‌دارِ این ماژول با کلیدِ خودشان در MODULE_SECTIONS می‌آیند، نه این‌جا؛
+  //: تنها صفحه‌ی مستقلش همان فهرستِ تاریخچه است.
+  moadian: 'moadianhistory',
+
+  // ── ماژول‌های تب‌دار ──
+  //: هر تب دفترِ خودش را داخلِ خودش دارد، پس قاعده همان‌جا برآورده است.
+  sales: 'view',
+  pos: 'view',
+  contacts: 'contactlist',
+  crm: 'view',
+  purchases: 'view',
+  inventory: 'view',
+  manufacturing: 'view',
+  banking: 'view',
+  fixedassets: 'view',
+  payroll: 'view',
+  integration: 'none',
+  contracting: 'view',
+  distributor: 'view',
+  marketplace: 'view',
+  overview: 'view',
+  modules: 'none',
+  profile: 'none',
+  billing: 'view',
+  accounts: 'view',
+  mpcommission: 'view',
 }
 
 export interface ListDef {

@@ -260,6 +260,43 @@ const RULES = [
       return [{ line: 1, msg: 'فایلِ صفحه بدونِ `PageHeader`/`OpsPage`' }]
     },
   },
+  {
+    id: 'R11',
+    level: 'error',
+    title: 'فهرستِ نظیرِ عملیات',
+    why:
+      'قاعده‌ی نظیر: هر منوی عملیاتی که رکورد ثبت می‌کند باید در کارتِ «فهرست»ِ همان ' +
+      'ماژول دفترِ خودش را داشته باشد. هر منوی عملیات باید در `OPS_LIST_MAP` یک ردیف ' +
+      'داشته باشد — یا کلیدِ فهرستش، یا دلیلِ استثنا (state/view/none). بدونِ این، ' +
+      'منوی تازه بی‌سروصدا بدونِ فهرست می‌ماند.',
+    scope: 'nav',
+    check() {
+      const nav = fs.readFileSync(path.join(SRC, 'lib', 'navModel.tsx'), 'utf8')
+      const lists = fs.readFileSync(path.join(SRC, 'components', 'moduleLists.tsx'), 'utf8')
+      const mapBody = lists.slice(lists.indexOf('OPS_LIST_MAP'), lists.indexOf('export interface ListDef'))
+      const mapped = new Set([...mapBody.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((m) => m[1]))
+      const listKeys = new Set([...lists.matchAll(/key: '([a-zA-Z]+)', label:/g)].map((m) => m[1]))
+
+      const navBody = nav.slice(nav.indexOf('export const NAV_GROUPS'), nav.indexOf('const PAGE_MODULE_KEY'))
+      const found = []
+      for (const m of navBody.matchAll(/key: '([a-zA-Z]+)', label: '([^']+)'/g)) {
+        const [, key, label] = m
+        if (!mapped.has(key)) {
+          found.push({ line: 1, msg: `منوی «${label}» (${key}) در OPS_LIST_MAP ردیف ندارد` })
+          continue
+        }
+        const target = new RegExp(`^\s{2}${key}:\s*'([a-zA-Z]+)'`, 'm').exec(mapBody)?.[1]
+        if (!target || ['state', 'view', 'none'].includes(target)) continue
+        // مقصد باید یک صفحه‌ی واقعی باشد: یا منوی فهرست، یا منوی عملیاتِ دیگری
+        // (دفترِ چک‌ها عمداً «جستجوی چک» است که در کارتِ عملیات نشسته).
+        const navKeys = new Set([...navBody.matchAll(/key: '([a-zA-Z]+)'/g)].map((x) => x[1]))
+        if (!listKeys.has(target) && !navKeys.has(target)) {
+          found.push({ line: 1, msg: `منوی «${label}» به فهرستِ ناموجودِ «${target}» اشاره می‌کند` })
+        }
+      }
+      return found
+    },
+  },
 ]
 
 /** پایانِ یک تگِ باز — با احترام به `{}`، `()` و رشته‌ها، چون attributeهای JSX
@@ -311,6 +348,12 @@ function nextExportIndex(text, from) {
 const results = []
 for (const rule of RULES) {
   if (onlyRule && rule.id !== onlyRule) continue
+  // قاعده‌ی `nav` به کلِ ناوبری نگاه می‌کند، نه فایل‌به‌فایل — یک‌بار اجرا می‌شود.
+  if (rule.scope === 'nav') {
+    for (const hit of rule.check('', ''))
+      results.push({ rule: rule.id, level: rule.level, file: 'src/lib/navModel.tsx', ...hit })
+    continue
+  }
   const files = rule.scope === 'pages' ? pageFiles : [...pageFiles, ...componentFiles]
   for (const file of files) {
     const text = fs.readFileSync(file, 'utf8')

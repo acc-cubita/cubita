@@ -1908,6 +1908,8 @@ export interface TreasuryTransactionRecord {
   trace_no?: string | null
   card_mask?: string | null
   terminal_no?: string | null
+  /** لحظه‌ی تسویه‌ی کارتخوان — NULL یعنی هنوز تسویه نشده. */
+  settled_at?: string | null
   psp?: string | null
 }
 

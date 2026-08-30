@@ -7,11 +7,8 @@ import {
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
-  Check,
   Clock,
-  ListChecks,
   Pencil,
-  RotateCcw,
   Save,
   Trash2,
   X,
@@ -20,7 +17,6 @@ import {
   createCalendarEvent,
   deleteCalendarEvent,
   fetchCalendarEvents,
-  setCalendarEventDone,
   updateCalendarEvent,
   type CalendarCategory,
   type CalendarEventIn,
@@ -31,14 +27,11 @@ import { SectionCard } from '../components/SectionCard'
 import { ReminderCenterPanel } from '../components/ReminderCenterPanel'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
-import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
-import { Pager, usePagination } from '../components/Pager'
 import {
   JALALI_MONTH_NAMES,
   JALALI_WEEKDAY_SHORT,
   buildJalaliMonthCells,
-  formatJalali,
   isoToJalali,
   jalaliToIso,
   toFaDigits,
@@ -76,10 +69,6 @@ const emptyForm = (): FormState => ({
   is_done: false,
 })
 
-function timeRange(ev: CalendarEventRecord): string {
-  if (!ev.start_time) return 'تمام‌روز'
-  return ev.end_time ? toFaDigits(`${ev.start_time} - ${ev.end_time}`) : toFaDigits(ev.start_time)
-}
 
 export function CalendarPage({ token }: { token: string }) {
   const [events, setEvents] = useState<CalendarEventRecord[]>([])
@@ -93,11 +82,6 @@ export function CalendarPage({ token }: { token: string }) {
   const initial = isoToJalali(todayIso())
   const [viewYear, setViewYear] = useState(initial.jy)
   const [viewMonth, setViewMonth] = useState(initial.jm)
-
-  // فیلترهای تب فهرست
-  const [filterCategory, setFilterCategory] = useState<'all' | CalendarCategory>('all')
-  const [showDone, setShowDone] = useState(true)
-  const [search, setSearch] = useState('')
 
   async function refresh() {
     setError(null)
@@ -203,14 +187,6 @@ export function CalendarPage({ token }: { token: string }) {
     }
   }
 
-  async function toggleDone(ev: CalendarEventRecord) {
-    try {
-      await setCalendarEventDone(token, ev.id, !ev.is_done)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
 
   function selectDay(iso: string) {
     setForm((f) => ({ ...f, event_date: iso }))
@@ -237,21 +213,6 @@ export function CalendarPage({ token }: { token: string }) {
     setViewMonth(t.jm)
   }
 
-  const filteredList = useMemo(() => {
-    return events
-      .filter((ev) => {
-        if (filterCategory !== 'all' && ev.category !== filterCategory) return false
-        if (!showDone && ev.is_done) return false
-        if (search && !ev.title.includes(search) && !ev.description.includes(search)) return false
-        return true
-      })
-      .sort((a, b) => {
-        if (a.event_date !== b.event_date) return a.event_date < b.event_date ? 1 : -1 // تازه‌ترین بالا
-        return (a.start_time ?? '') < (b.start_time ?? '') ? -1 : 1
-      })
-  }, [events, filterCategory, showDone, search])
-  // صفحه‌بندیِ فهرستِ رویدادها (۱۰ ردیف)؛ با تغییرِ فیلتر/جست‌وجو به صفحه‌ی اول برمی‌گردد.
-  const evPg = usePagination(filteredList, 10, `${filterCategory}|${showDone}|${search}`)
 
   const eventForm = (
     <SectionCard
@@ -406,89 +367,6 @@ export function CalendarPage({ token }: { token: string }) {
     </SectionCard>
   )
 
-  const listView = (
-    <SectionCard
-      icon={ListChecks}
-      title="همه‌ی رویدادها و یادآوری‌ها"
-      actions={
-        <div className="check-actions">
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as typeof filterCategory)}>
-            <option value="all">همه‌ی دسته‌ها</option>
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_META[c].label}
-              </option>
-            ))}
-          </select>
-          <label className="cal-check-inline">
-            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
-            نمایش انجام‌شده‌ها
-          </label>
-          <input type="text" placeholder="جستجو..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-      }
-    >
-      {filteredList.length === 0 ? (
-        <EmptyState icon={CalendarDays} text="رویدادی مطابق فیلتر پیدا نشد." />
-      ) : (
-        <div className="entity-table-wrap">
-        <div className="table-scroll">
-          <table className="entity-table cal-list-table cards-on-mobile">
-            <thead>
-              <tr>
-                <th>وضعیت</th>
-                <th>تاریخ</th>
-                <th>ساعت</th>
-                <th>عنوان</th>
-                <th>دسته</th>
-                <th>اقدام</th>
-              </tr>
-            </thead>
-            <tbody>
-              {evPg.pageItems.map((ev) => (
-                <tr key={ev.id} className={ev.is_done ? 'cal-row-done' : ''}>
-                  <td className="cal-status-cell" data-label="وضعیت">
-                    <button
-                      type="button"
-                      className={`cal-done-toggle${ev.is_done ? ' on' : ''}`}
-                      onClick={() => toggleDone(ev)}
-                      title={ev.is_done ? 'برگرداندن به انجام‌نشده' : 'علامت انجام‌شده'}
-                    >
-                      {ev.is_done ? <Check size={14} /> : <RotateCcw size={14} />}
-                    </button>
-                  </td>
-                  <td data-label="تاریخ">{formatJalali(ev.event_date)}</td>
-                  <td data-label="ساعت">{timeRange(ev)}</td>
-                  <td className="entity-name" data-label="عنوان">
-                    <div className="cal-list-title">{ev.title}</div>
-                    {ev.description && <div className="cal-list-desc">{ev.description}</div>}
-                  </td>
-                  <td data-label="دسته">
-                    <span className={`status-badge cal-badge ${CATEGORY_META[ev.category].cls}`}>
-                      {CATEGORY_META[ev.category].label}
-                    </span>
-                  </td>
-                  <td className="cal-action-cell" data-label="اقدام">
-                    <div className="cal-row-actions">
-                      <button type="button" onClick={() => startEdit(ev)}>
-                        <Pencil size={13} /> ویرایش
-                      </button>
-                      <button type="button" className="icon-btn-danger" onClick={() => handleDelete(ev)} title="حذف">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pager page={evPg.page} pageCount={evPg.pageCount} onChange={evPg.setPage} />
-        </div>
-      )}
-    </SectionCard>
-  )
-
   return (
     <div className="page panels">
       <PageHeader
@@ -529,17 +407,6 @@ export function CalendarPage({ token }: { token: string }) {
                 {monthView}
                 {eventForm}
               </div>
-            ),
-          },
-          {
-            key: 'list',
-            label: 'فهرست رویدادها',
-            icon: ListChecks,
-            content: (
-              <>
-                {eventForm}
-                {listView}
-              </>
             ),
           },
         ]}

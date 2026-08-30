@@ -149,8 +149,21 @@ export type PageKey =
   | 'pettyholder'
   | 'pettyexpense'
   | 'bankledger'
-  //: فهرستِ همین ماژول — از کارتِ «فهرست» باز می‌شود.
+  //: فهرست‌های همین ماژول — از کارتِ «فهرست» باز می‌شوند. قاعده‌ی نظیر: هر عملیاتِ
+  //: رکوردساز یک دفتر دارد (نگاشتِ OPS_LIST_MAP در moduleLists).
   | 'treasuryledger'
+  | 'checkbooklist'
+  | 'bankaccountlist'
+  | 'posterminallist'
+  | 'possettlelist'
+  | 'statementlist'
+  | 'pettylist'
+  //: دفترهای نظیرِ ماژول‌های حسابداری، شرکت و تنظیمات.
+  | 'analyticlist'
+  | 'geolist'
+  | 'contactgrouplist'
+  | 'calendarlist'
+  | 'numberinglist'
   //: ماژولِ «حسابداری» — هجده عملیاتِ دفترداری. کلیدِ ماژولِ گیت‌کننده‌شان
   //: `accounting` است (نگاشتِ PAGE_MODULE_KEY پایین)، نه خودشان.
   | 'acctchart'
@@ -352,10 +365,14 @@ for (const key of [
   'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
   'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox',
   'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
-  'treasuryledger',
+  'treasuryledger', 'checkbooklist', 'bankaccountlist', 'posterminallist', 'possettlelist',
+  'statementlist', 'pettylist',
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'banking'
 }
+
+//: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
+PAGE_MODULE_KEY.analyticlist = 'accounting'
 
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',

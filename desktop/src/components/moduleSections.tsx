@@ -123,6 +123,5 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   calendar: [
     { key: 'reminders', label: 'کارهای امروز', icon: BellRing },
     { key: 'calendar', label: 'تقویم ماهانه', icon: CalendarDays },
-    { key: 'list', label: 'فهرست رویدادها', icon: ListChecks },
   ],
 }

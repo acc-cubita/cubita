@@ -69,6 +69,21 @@ import {
   CheckbooksPage,
 } from '../pages/treasury/CheckOpsPages'
 import {
+  BankAccountListPage,
+  CheckbookListPage,
+  PettyCashListPage,
+  PosSettlementListPage,
+  PosTerminalListPage,
+  StatementListPage,
+} from '../pages/treasury/TreasuryListPages'
+import {
+  AnalyticListPage,
+  CalendarListPage,
+  ContactGroupListPage,
+  GeoListPage,
+  NumberingListPage,
+} from '../pages/ledgers/ModuleListPages'
+import {
   BankAccountsPage,
   BankLedgerPage,
   BankReconcilePage,
@@ -174,6 +189,17 @@ const PAGE_TITLES: Record<PageKey, string> = {
   pettyexpense: 'صورت هزینه تنخواه',
   bankledger: 'مرور عملیات بانکی',
   treasuryledger: 'دریافت‌ها و پرداخت‌ها',
+  checkbooklist: 'دسته‌چک‌ها',
+  bankaccountlist: 'حساب‌های بانکی',
+  posterminallist: 'دستگاه‌های کارتخوان',
+  possettlelist: 'تسویه‌های کارتخوان',
+  statementlist: 'ردیف‌های صورت‌حساب بانکی',
+  pettylist: 'گردش تنخواه',
+  analyticlist: 'تفصیلی‌های سایر',
+  geolist: 'محل‌های جغرافیایی',
+  contactgrouplist: 'گروه‌های طرف حساب',
+  calendarlist: 'رویدادهای تقویم',
+  numberinglist: 'روش‌های شماره‌گذاری',
   fixedassets: 'دارایی ثابت',
   contracting: 'پیمانکاری',
   moadian: 'سامانه مؤدیان',
@@ -487,6 +513,18 @@ export function Dashboard({
           {page === 'pettyexpense' && <PettyExpensePage token={token} accounts={accounts} />}
           {page === 'bankledger' && <BankLedgerPage token={token} />}
           {page === 'treasuryledger' && <TreasuryLedgerPage token={token} />}
+          {/* ── دفترهای نظیر (قاعده‌ی «هر عملیاتِ رکوردساز، یک فهرست») ── */}
+          {page === 'checkbooklist' && <CheckbookListPage token={token} />}
+          {page === 'bankaccountlist' && <BankAccountListPage token={token} />}
+          {page === 'posterminallist' && <PosTerminalListPage token={token} />}
+          {page === 'possettlelist' && <PosSettlementListPage token={token} />}
+          {page === 'statementlist' && <StatementListPage token={token} />}
+          {page === 'pettylist' && <PettyCashListPage token={token} />}
+          {page === 'analyticlist' && <AnalyticListPage token={token} />}
+          {page === 'geolist' && <GeoListPage token={token} />}
+          {page === 'contactgrouplist' && <ContactGroupListPage token={token} />}
+          {page === 'calendarlist' && <CalendarListPage token={token} />}
+          {page === 'numberinglist' && <NumberingListPage token={token} />}
           {page === 'payroll' && (
             <div className="page panels">
               <PageHeader
