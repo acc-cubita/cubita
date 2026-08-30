@@ -451,6 +451,7 @@ export interface CheckRecord {
   contact_id: string | null
   contact_name: string | null
   bank_account_id: string | null
+  checkbook_id?: string | null
 }
 
 export const fetchChecks = (token: string) => authedGetAll<CheckRecord>(token, '/api/checks')
@@ -1491,6 +1492,8 @@ export const createCheckDirect = (
     due_date: string
     description: string
     contact_id?: string | null
+    /** برگِ کدام دسته‌چک است (فقط چکِ پرداختنی). */
+    checkbook_id?: string | null
   },
 ) => authedSend<unknown>(token, 'POST', '/api/checks', data)
 
@@ -4307,3 +4310,100 @@ export const fetchJournalEntriesFiltered = async (
   }
   return rows
 }
+
+// --- دریافت و پرداخت: دسته‌چک، مرورِ بانکی، تسویه‌ی کارتخوان -----------------------
+
+export interface BankTransactionRecord {
+  id: string
+  bank_account_id: string
+  transaction_date: string
+  /** مثبت = واریز، منفی = برداشت. */
+  amount: string
+  description: string
+  is_reconciled: boolean
+  source_type: string
+  journal_entry_id: string | null
+}
+
+export const fetchBankTransactions = (token: string, bankAccountId?: string) => {
+  const qs = bankAccountId ? `?bank_account_id=${bankAccountId}` : ''
+  return authedGetAll<BankTransactionRecord>(token, `/api/bank-transactions${qs}`)
+}
+
+export interface CheckbookRecord {
+  id: string
+  bank_account_id: string
+  bank_account_name: string
+  serial: string
+  first_number: string
+  last_number: string
+  leaf_count: number
+  /** چند برگ خرج شده و چند تا مانده — سرور از روی چک‌های وصل‌شده می‌شمارد. */
+  used_count: number
+  remaining_count: number
+  issue_date: string | null
+  description: string
+  is_active: boolean
+}
+
+export interface CheckbookIn {
+  bank_account_id: string
+  serial?: string
+  first_number: string
+  last_number: string
+  /** ۰ بگذارید تا سرور از بازه‌ی شماره‌ها حساب کند. */
+  leaf_count?: number
+  issue_date?: string | null
+  description?: string
+}
+
+export const fetchCheckbooks = (token: string) => authedGet<CheckbookRecord[]>(token, '/api/checkbooks')
+
+export const createCheckbook = (token: string, data: CheckbookIn) =>
+  authedSend<CheckbookRecord>(token, 'POST', '/api/checkbooks', data)
+
+export const setCheckbookActive = (token: string, id: string, isActive: boolean) =>
+  authedSend<CheckbookRecord>(token, 'PATCH', `/api/checkbooks/${id}?is_active=${isActive}`, {})
+
+export const deleteCheckbook = (token: string, id: string) => authedDelete(token, `/api/checkbooks/${id}`)
+
+/** شماره‌ی برگِ بعدیِ دسته — رشته‌ی خالی یعنی دسته تمام شده. */
+export const fetchNextCheckNumber = (token: string, id: string) =>
+  authedGet<{ number: string }>(token, `/api/checkbooks/${id}/next-number`)
+
+export interface PosPendingGroup {
+  terminal_no: string
+  transaction_date: string
+  count: number
+  gross_amount: string
+}
+
+export const fetchPosPending = (
+  token: string,
+  query: { terminalNo?: string; dateFrom?: string; dateTo?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  if (query.terminalNo) qs.set('terminal_no', query.terminalNo)
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  if (query.dateTo) qs.set('date_to', query.dateTo)
+  return authedGet<PosPendingGroup[]>(token, `/api/pos-settlements/pending?${qs}`)
+}
+
+export interface PosSettlementResult {
+  settled_count: number
+  gross_amount: string
+  fee_amount: string
+  net_amount: string
+}
+
+export const settlePosTerminal = (
+  token: string,
+  data: {
+    settlement_date: string
+    date_from: string
+    date_to: string
+    terminal_no?: string | null
+    bank_account_id?: string | null
+    fee_amount: number
+  },
+) => authedSend<PosSettlementResult>(token, 'POST', '/api/pos-settlements', data)

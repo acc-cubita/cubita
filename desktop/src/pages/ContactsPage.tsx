@@ -11,24 +11,18 @@ import {
   TrendingDown,
   UserRound,
   UsersRound,
-  Wallet,
   X,
 } from 'lucide-react'
 import {
   createContact,
-  createTreasuryPayment,
-  createTreasuryReceipt,
   fetchAging,
   fetchContacts,
   fetchPriceLists,
-  fetchTreasuryTransactions,
   updateContact,
   type ContactIn,
   type ContactRecord,
   type PriceListRecord,
-  type TreasuryTransactionRecord,
 } from '../api'
-import type { BankAccountCache } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { BulkImportPanel } from '../components/BulkImportPanel'
@@ -37,10 +31,8 @@ import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
-import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { AgingPanel } from '../components/AgingPanel'
 import { ContactStatementDrawer } from '../components/ContactStatementDrawer'
-import { formatJalali } from '../lib/jalali'
 
 const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   customer: 'مشتری',
@@ -55,10 +47,9 @@ const EMPTY_FORM: ContactIn = {
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
-export function ContactsPage({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
+export function ContactsPage({ token }: { token: string }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
-  const [transactions, setTransactions] = useState<TreasuryTransactionRecord[]>([])
   const [recvMap, setRecvMap] = useState<Map<string, number>>(new Map())
   const [payMap, setPayMap] = useState<Map<string, number>>(new Map())
   const [agingTotals, setAgingTotals] = useState<{ recv: number; pay: number }>({ recv: 0, pay: 0 })
@@ -72,28 +63,16 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formMessage, setFormMessage] = useState<string | null>(null)
 
-  // فرم دریافت/پرداخت
-  const [txType, setTxType] = useState<'receipt' | 'payment'>('receipt')
-  const [txContactId, setTxContactId] = useState('')
-  const [txAmount, setTxAmount] = useState('')
-  const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 10))
-  const [txMethod, setTxMethod] = useState<'cash' | 'bank'>('cash')
-  const [txBankId, setTxBankId] = useState('')
-  const [txDescription, setTxDescription] = useState('')
-  const [txMessage, setTxMessage] = useState<string | null>(null)
-
   async function refresh() {
     setError(null)
     try {
-      const [cs, txs, pls, recvAging, payAging] = await Promise.all([
+      const [cs, pls, recvAging, payAging] = await Promise.all([
         fetchContacts(token),
-        fetchTreasuryTransactions(token),
         fetchPriceLists(token).catch(() => []),
         fetchAging(token, 'receivable').catch(() => null),
         fetchAging(token, 'payable').catch(() => null),
       ])
       setContacts(cs)
-      setTransactions(txs)
       setPriceLists(pls.filter((p) => p.is_active))
       setRecvMap(new Map((recvAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
       setPayMap(new Map((payAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
@@ -119,9 +98,7 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
       }),
     [contacts, filterType, search],
   )
-  // صفحه‌بندیِ جدول‌ها (۱۰ ردیف): فهرستِ اشخاص و فهرستِ تراکنش‌های خزانه.
   const contactsPg = usePagination(filteredContacts, 10, `${filterType}|${search}`)
-  const txPg = usePagination(transactions, 10)
 
   // شاخص‌های بالای صفحه — از همان داده‌ی موجود محاسبه می‌شوند
   const kpis = useMemo(() => {
@@ -180,46 +157,6 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
     })
     setFormMessage(null)
   }
-
-  async function handleSubmitTransaction(e: React.FormEvent) {
-    e.preventDefault()
-    setTxMessage(null)
-    if (!txContactId || Number(txAmount) <= 0) {
-      setTxMessage('طرف حساب و مبلغ (بزرگ‌تر از صفر) الزامی است.')
-      return
-    }
-    if (txMethod === 'bank' && !txBankId) {
-      setTxMessage('برای روش بانکی، حساب بانکی را انتخاب کنید.')
-      return
-    }
-    const payload = {
-      transaction_date: txDate,
-      contact_id: txContactId,
-      amount: Number(txAmount),
-      method: txMethod,
-      bank_account_id: txMethod === 'bank' ? txBankId : null,
-      description: txDescription,
-    }
-    try {
-      if (txType === 'receipt') {
-        await createTreasuryReceipt(token, payload)
-        setTxMessage('دریافت ثبت شد و سند حسابداری آن خودکار صادر شد.')
-      } else {
-        await createTreasuryPayment(token, payload)
-        setTxMessage('پرداخت ثبت شد و سند حسابداری آن خودکار صادر شد.')
-      }
-      setTxAmount('')
-      setTxDescription('')
-      await refresh()
-    } catch (err) {
-      setTxMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  const txContacts =
-    txType === 'receipt'
-      ? contacts.filter((c) => c.type !== 'supplier')
-      : contacts.filter((c) => c.type !== 'customer')
 
   const contactsTab = (
     <div className="workspace-split">
@@ -408,111 +345,6 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
     </div>
   )
 
-  const treasuryTab = (
-    <div className="workspace-split">
-      <SectionCard icon={HandCoins} title="ثبت دریافت / پرداخت" description="سند حسابداری هر تراکنش خودکار صادر می‌شود.">
-        <form className="invoice-form form-full" onSubmit={handleSubmitTransaction}>
-          <label>
-            نوع عملیات
-            <select value={txType} onChange={(e) => setTxType(e.target.value as 'receipt' | 'payment')}>
-              <option value="receipt">دریافت از مشتری</option>
-              <option value="payment">پرداخت به تأمین‌کننده</option>
-            </select>
-          </label>
-          <label>
-            طرف حساب
-            <select value={txContactId} onChange={(e) => setTxContactId(e.target.value)} required>
-              <option value="">— انتخاب —</option>
-              {txContacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="field-row">
-            <label>
-              مبلغ (ریال)
-              <NumberInput value={txAmount} onChange={setTxAmount} required />
-            </label>
-            <label>
-              تاریخ
-              <JalaliDatePicker value={txDate} onChange={setTxDate} />
-            </label>
-          </div>
-          <label>
-            روش
-            <select value={txMethod} onChange={(e) => setTxMethod(e.target.value as 'cash' | 'bank')}>
-              <option value="cash">نقدی (صندوق)</option>
-              <option value="bank">بانکی</option>
-            </select>
-          </label>
-          {txMethod === 'bank' && (
-            <label>
-              حساب بانکی
-              <select value={txBankId} onChange={(e) => setTxBankId(e.target.value)} required>
-                <option value="">— انتخاب —</option>
-                {bankAccounts.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label>
-            توضیحات
-            <input type="text" value={txDescription} onChange={(e) => setTxDescription(e.target.value)} />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Wallet size={14} /> ثبت {txType === 'receipt' ? 'دریافت' : 'پرداخت'}
-            </button>
-          </div>
-          {txMessage && <div className="hint">{txMessage}</div>}
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={Wallet} title="آخرین دریافت‌ها و پرداخت‌ها" description={`${faMoney(transactions.length)} تراکنش`}>
-        {transactions.length === 0 ? (
-          <EmptyState icon={Wallet} text="هنوز دریافت یا پرداختی ثبت نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table treasury-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>نوع</th>
-                    <th>طرف حساب</th>
-                    <th>مبلغ</th>
-                    <th>روش</th>
-                    <th>تاریخ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {txPg.pageItems.map((t) => (
-                    <tr key={t.id}>
-                      <td data-label="نوع">
-                        <span className={`status-badge tone-${t.type === 'receipt' ? 'success' : 'warning'}`}>
-                          {t.type === 'receipt' ? 'دریافت' : 'پرداخت'}
-                        </span>
-                      </td>
-                      <td data-label="طرف حساب" className="entity-name">{t.contact_name}</td>
-                      <td data-label="مبلغ" className="money-cell">{faMoney(Number(t.amount))}</td>
-                      <td data-label="روش">{t.method === 'cash' ? 'نقدی' : 'بانکی'}</td>
-                      <td data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pager page={txPg.page} pageCount={txPg.pageCount} onChange={txPg.setPage} />
-          </div>
-        )}
-      </SectionCard>
-    </div>
-  )
-
   return (
     <div className="page panels">
       <PageHeader
@@ -535,7 +367,6 @@ export function ContactsPage({ token, bankAccounts }: { token: string; bankAccou
         syncPage="contacts"
         tabs={[
           { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
-          { key: 'treasury', label: 'دریافت و پرداخت', icon: HandCoins, content: treasuryTab },
           { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, content: <AgingPanel token={token} onStatement={setStatementContact} /> },
           { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp, content: <BulkImportPanel token={token} kind="contacts" /> },
         ]}

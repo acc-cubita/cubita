@@ -1,8 +1,8 @@
 import uuid
-from datetime import date as date_
+from datetime import date as date_, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, Text, text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,6 +59,14 @@ class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     terminal_no: Mapped[str | None] = mapped_column(String(30), nullable=True)
     #: شرکتِ پرداخت (مثلاً behpardakht|sep|sadad|simulator).
     psp: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # ── تسویه‌ی کارتخوان ──
+    #: فروشِ کارتی همان‌روز به حساب نمی‌نشیند؛ PSP چند روز بعد یک‌جا (منهای کارمزد)
+    #: واریز می‌کند. تا این دو پر نشوند، تراکنش «تسویه‌نشده» است.
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    settlement_txn_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bank_transactions.id", ondelete="SET NULL"), nullable=True
+    )
 
     journal_entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

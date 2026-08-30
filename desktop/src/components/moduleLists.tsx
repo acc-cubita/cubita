@@ -1,5 +1,4 @@
 import {
-  fetchChecks,
   fetchContacts,
   fetchCrmActivities,
   fetchEmployees,
@@ -16,7 +15,6 @@ import {
   fetchStockAdjustments,
   fetchStockCounts,
   fetchStockTransfers,
-  fetchTreasuryTransactions,
 } from '../api'
 import {
   Activity,
@@ -31,6 +29,7 @@ import {
   FileCheck2,
   FileStack,
   Gauge,
+  HandCoins,
   LayoutList,
   ListChecks,
   ListTree,
@@ -103,6 +102,11 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: Coins },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
   ],
+  //: «دریافت و پرداخت» — دفترِ رسیدها و اعلامیه‌ها. پیش‌تر تبِ ماژولِ «اشخاص» بود؛
+  //: داده‌ی این ماژول در ماژولِ دیگری زندگی می‌کرد.
+  'دریافت و پرداخت': [
+    { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins },
+  ],
   //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
   //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
   //: نه یک پیش‌نمایشِ چندردیفی.
@@ -133,6 +137,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  treasuryledger: 'دریافت و پرداخت',
   moadianhistory: 'سامانه مؤدیان',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
@@ -229,26 +234,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       meta: day(r.count_date ?? r.created_at),
     })),
   },
-  banking: {
-    checks: def('چک‌ها', fetchChecks, (r) => ({
-      id: r.id,
-      title: `چک ${r.number}`,
-      subtitle: `${r.bank_name ?? ''} — ${r.status ?? ''}`.trim(),
-      meta: fa(r.amount),
-    })),
-  },
   contacts: {
     contacts: def('طرف‌حساب‌ها', fetchContacts, (r) => ({
       id: r.id,
       title: r.name,
       subtitle: r.phone || '—',
       meta: r.type === 'customer' ? 'مشتری' : r.type === 'supplier' ? 'تأمین‌کننده' : 'هر دو',
-    })),
-    treasury: def('دریافت و پرداخت‌ها', fetchTreasuryTransactions, (r) => ({
-      id: r.id,
-      title: r.type === 'receipt' ? 'دریافت' : 'پرداخت',
-      subtitle: r.contact_name || '—',
-      meta: fa(r.amount),
     })),
   },
   crm: {

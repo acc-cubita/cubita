@@ -1,6 +1,8 @@
 import {
   Archive,
+  ArrowDownToLine,
   ArrowLeftRight,
+  ArrowUpFromLine,
   BarChart3,
   BellRing,
   BookMarked,
@@ -22,6 +24,7 @@ import {
   Factory,
   FileSpreadsheet,
   FolderPlus,
+  GitCompareArrows,
   HandCoins,
   HardHat,
   Hash,
@@ -37,9 +40,14 @@ import {
   PackagePlus,
   Palette,
   Percent,
+  PiggyBank,
   PlayCircle,
+  Receipt,
+  Route,
   Scale,
   ScanLine,
+  ScrollText,
+  Search,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -50,6 +58,7 @@ import {
   Tags,
   Target,
   Truck,
+  Undo2,
   UserCircle,
   UserCog,
   UserPlus,
@@ -120,6 +129,28 @@ export type PageKey =
   | 'costcenterlist'
   //: فهرستِ «سامانه مؤدیان» — از کارتِ «فهرست» باز می‌شود، نه از منوی عملیات.
   | 'moadianhistory'
+  //: ماژولِ «دریافت و پرداخت» — هجده عملیات. کلیدِ گیت‌کننده‌شان `banking` است
+  //: (نگاشتِ PAGE_MODULE_KEY پایین)، نه خودشان.
+  | 'payflow'
+  | 'receiptvoucher'
+  | 'paymentvoucher'
+  | 'checkops'
+  | 'contactsettle'
+  | 'checkreturn'
+  | 'checkpayclear'
+  | 'checksearch'
+  | 'possettle'
+  | 'bankstatement'
+  | 'bankreconcile'
+  | 'cashbox'
+  | 'bankaccounts'
+  | 'posterminals'
+  | 'checkbooks'
+  | 'pettyholder'
+  | 'pettyexpense'
+  | 'bankledger'
+  //: فهرستِ همین ماژول — از کارتِ «فهرست» باز می‌شود.
+  | 'treasuryledger'
   //: ماژولِ «حسابداری» — هجده عملیاتِ دفترداری. کلیدِ ماژولِ گیت‌کننده‌شان
   //: `accounting` است (نگاشتِ PAGE_MODULE_KEY پایین)، نه خودشان.
   | 'acctchart'
@@ -191,9 +222,31 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> }],
   },
   {
+    //: «دریافت و پرداخت» = گردشِ پول. ترتیب عمدی است و مسیرِ کارِ واقعی را دنبال
+    //: می‌کند: اول فرآیند و ثبتِ رسید/اعلامیه، بعد چک، بعد بانک و کارتخوان، و آخر
+    //: داده‌های پایه (صندوق، حساب، دسته‌چک، تنخواه).
     heading: 'دریافت و پرداخت',
     icon: <HandCoins size={17} />,
-    items: [{ key: 'banking', label: 'چک و بانک', icon: <Landmark size={18} /> }],
+    items: [
+      { key: 'payflow', label: 'فرآیند دریافت و پرداخت', icon: <Route size={18} /> },
+      { key: 'receiptvoucher', label: 'رسید دریافت', icon: <ArrowDownToLine size={18} /> },
+      { key: 'paymentvoucher', label: 'اعلامیه پرداخت', icon: <ArrowUpFromLine size={18} /> },
+      { key: 'checkops', label: 'عملیات بانکی چک دریافتنی', icon: <ScrollText size={18} /> },
+      { key: 'contactsettle', label: 'تسویه حساب طرف مقابل', icon: <Scale size={18} /> },
+      { key: 'checkreturn', label: 'استرداد چک', icon: <Undo2 size={18} /> },
+      { key: 'checkpayclear', label: 'وصول چک پرداختنی', icon: <Landmark size={18} /> },
+      { key: 'checksearch', label: 'جستجوی چک', icon: <Search size={18} /> },
+      { key: 'possettle', label: 'تسویه کارت خوان', icon: <CreditCard size={18} /> },
+      { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} /> },
+      { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} /> },
+      { key: 'cashbox', label: 'صندوق', icon: <PiggyBank size={18} /> },
+      { key: 'bankaccounts', label: 'حساب بانکی', icon: <Landmark size={18} /> },
+      { key: 'posterminals', label: 'دستگاه کارت خوان', icon: <CreditCard size={18} /> },
+      { key: 'checkbooks', label: 'دسته چک', icon: <BookMarked size={18} /> },
+      { key: 'pettyholder', label: 'تنخواه دار', icon: <Wallet size={18} /> },
+      { key: 'pettyexpense', label: 'صورت هزینه تنخواه', icon: <Receipt size={18} /> },
+      { key: 'bankledger', label: 'مرور عملیات بانکی', icon: <ListTree size={18} /> },
+    ],
   },
   {
     heading: 'دارایی ثابت',
@@ -293,6 +346,16 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
     ] as PageKey[]
   ).map((key) => [key, 'accounting']),
 ) as Partial<Record<PageKey, string>>
+
+//: هجده عملیاتِ «دریافت و پرداخت» + فهرستش، همگی زیرِ چترِ ماژولِ `banking`.
+for (const key of [
+  'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
+  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox',
+  'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
+  'treasuryledger',
+] as PageKey[]) {
+  PAGE_MODULE_KEY[key] = 'banking'
+}
 
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'sales', 'pos', 'installments', 'crm', 'purchases', 'inventory',

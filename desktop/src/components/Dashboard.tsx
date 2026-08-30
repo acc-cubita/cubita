@@ -51,7 +51,31 @@ import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
 import { DistributorPage } from '../pages/DistributorPage'
 import { MarketplacePage } from '../pages/MarketplacePage'
-import { BankingPage } from '../pages/BankingPage'
+import {
+  CashBoxPage,
+  ContactSettlementPage,
+  PayFlowPage,
+  PaymentVoucherPage,
+  PettyExpensePage,
+  PettyHolderPage,
+  ReceiptVoucherPage,
+  TreasuryLedgerPage,
+} from '../pages/treasury/TreasuryOpsPages'
+import {
+  CheckPayableClearPage,
+  CheckReceivableOpsPage,
+  CheckReturnPage,
+  CheckSearchPage,
+  CheckbooksPage,
+} from '../pages/treasury/CheckOpsPages'
+import {
+  BankAccountsPage,
+  BankLedgerPage,
+  BankReconcilePage,
+  BankStatementPage,
+  PosSettlementPage,
+  PosTerminalsPage,
+} from '../pages/treasury/BankOpsPages'
 import { HelpPage } from '../pages/HelpPage'
 import { TeamPage } from '../pages/TeamPage'
 import { ModulesPage } from '../pages/ModulesPage'
@@ -129,7 +153,27 @@ const PAGE_TITLES: Record<PageKey, string> = {
   inventory: 'انبار',
   manufacturing: 'تولید و بهای تمام‌شده',
   accounting: 'حسابداری',
-  banking: 'چک و بانک',
+  //: `banking` کلیدِ ماژول است، نه صفحه — هجده عملیاتِ زیرش صفحه‌ی خودشان را دارند.
+  banking: 'دریافت و پرداخت',
+  payflow: 'فرآیند دریافت و پرداخت',
+  receiptvoucher: 'رسید دریافت',
+  paymentvoucher: 'اعلامیه پرداخت',
+  checkops: 'عملیات بانکی چک دریافتنی',
+  contactsettle: 'تسویه حساب طرف مقابل',
+  checkreturn: 'استرداد چک',
+  checkpayclear: 'وصول چک پرداختنی',
+  checksearch: 'جستجوی چک',
+  possettle: 'تسویه کارت خوان',
+  bankstatement: 'صورت حساب بانکی',
+  bankreconcile: 'مغایرت بانکی',
+  cashbox: 'صندوق',
+  bankaccounts: 'حساب بانکی',
+  posterminals: 'دستگاه کارت خوان',
+  checkbooks: 'دسته چک',
+  pettyholder: 'تنخواه دار',
+  pettyexpense: 'صورت هزینه تنخواه',
+  bankledger: 'مرور عملیات بانکی',
+  treasuryledger: 'دریافت‌ها و پرداخت‌ها',
   fixedassets: 'دارایی ثابت',
   contracting: 'پیمانکاری',
   moadian: 'سامانه مؤدیان',
@@ -361,7 +405,7 @@ export function Dashboard({
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
-          {page === 'contacts' && <ContactsPage token={token} bankAccounts={bankAccounts} />}
+          {page === 'contacts' && <ContactsPage token={token} />}
           {page === 'crm' && <CrmPage token={token} />}
           {page === 'inventory' && (
             <InventoryPage
@@ -423,15 +467,26 @@ export function Dashboard({
           {page === 'budgetlist' && <BudgetListPage token={token} accounts={accounts} />}
           {page === 'currencylist' && <CurrencyListPage token={token} />}
           {page === 'periodcloselist' && <PeriodCloseListPage token={token} />}
-          {page === 'banking' && (
-            <BankingPage
-              token={token}
-              accounts={accounts}
-              bankAccounts={bankAccounts}
-              outbox={checkOutbox}
-              onQueued={() => void refreshFromLocalCache()}
-            />
-          )}
+          {/* ── ماژولِ «دریافت و پرداخت» — هجده عملیات و یک فهرست ── */}
+          {page === 'payflow' && <PayFlowPage token={token} onNavigate={navigate} />}
+          {page === 'receiptvoucher' && <ReceiptVoucherPage token={token} />}
+          {page === 'paymentvoucher' && <PaymentVoucherPage token={token} />}
+          {page === 'checkops' && <CheckReceivableOpsPage token={token} />}
+          {page === 'contactsettle' && <ContactSettlementPage token={token} />}
+          {page === 'checkreturn' && <CheckReturnPage token={token} />}
+          {page === 'checkpayclear' && <CheckPayableClearPage token={token} />}
+          {page === 'checksearch' && <CheckSearchPage token={token} />}
+          {page === 'possettle' && <PosSettlementPage token={token} />}
+          {page === 'bankstatement' && <BankStatementPage token={token} />}
+          {page === 'bankreconcile' && <BankReconcilePage token={token} bankAccounts={bankAccounts} />}
+          {page === 'cashbox' && <CashBoxPage token={token} onNavigate={navigate} />}
+          {page === 'bankaccounts' && <BankAccountsPage token={token} accounts={accounts} />}
+          {page === 'posterminals' && <PosTerminalsPage token={token} bankAccounts={bankAccounts} />}
+          {page === 'checkbooks' && <CheckbooksPage token={token} />}
+          {page === 'pettyholder' && <PettyHolderPage token={token} accounts={accounts} />}
+          {page === 'pettyexpense' && <PettyExpensePage token={token} accounts={accounts} />}
+          {page === 'bankledger' && <BankLedgerPage token={token} />}
+          {page === 'treasuryledger' && <TreasuryLedgerPage token={token} />}
           {page === 'payroll' && (
             <div className="page panels">
               <PageHeader

@@ -2,7 +2,7 @@ import uuid
 from datetime import date as date_
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from app.models.inventory import Contact
 
 CHECK_TYPES = ("receivable", "payable")
-CHECK_STATUSES = ("in_hand", "deposited", "cleared", "bounced", "endorsed", "issued")
+#: `returned` = چکِ دریافتنی که بدونِ وصول به صاحبش پس داده شد. با `bounced` فرق دارد:
+#: آن‌جا بانک برگشت می‌زند، اینجا ما خودمان پس می‌دهیم (مثلاً معامله فسخ شده).
+CHECK_STATUSES = ("in_hand", "deposited", "cleared", "bounced", "endorsed", "issued", "returned")
 PETTY_CASH_TYPES = ("charge", "expense")
 
 
@@ -51,6 +53,10 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
     bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_accounts.id"), nullable=True
+    )
+    #: برگِ کدام دسته‌چک است. NULL برای چکِ دریافتنی (دسته‌ی ما نیست) و چک‌های قدیمی.
+    checkbook_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("checkbooks.id", ondelete="SET NULL"), nullable=True
     )
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -118,3 +124,35 @@ class PettyCashTransaction(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class Checkbook(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک دسته‌چکِ بانکی — بازه‌ی شماره‌ی برگ‌ها و اینکه چند برگ خرج شده.
+
+    **چرا مدلِ جدا و نه فقط یک فیلد روی چک:** بدونِ دسته، نه معلوم است چند برگ مانده،
+    نه می‌شود جلوی شماره‌ی تکراری را گرفت، و نه هنگامِ صدورِ چکِ تازه شماره‌ی بعدی
+    پیشنهاد می‌شود. سه چیزی که کاربر هر بار دستی حساب می‌کرد.
+
+    شماره‌ی برگ **رشته** است نه عدد: بانک‌ها صفرِ ابتدایی می‌گذارند («۰۰۰۱۲۳») و
+    تبدیل به عدد آن را می‌خورد.
+    """
+
+    __tablename__ = "checkbooks"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "bank_account_id", "serial", name="uq_checkbooks_tenant_serial"),
+    )
+
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bank_accounts.id"))
+    #: شناسه‌ی دسته روی جلد (سریِ صیاد یا شماره‌ی داخلیِ بانک).
+    serial: Mapped[str] = mapped_column(String(40), default="")
+    first_number: Mapped[str] = mapped_column(String(30))
+    last_number: Mapped[str] = mapped_column(String(30))
+    leaf_count: Mapped[int] = mapped_column(Integer, default=0)
+    issue_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    #: بسته‌شده = دیگر برگِ تازه از آن صادر نمی‌شود (تمام شد یا باطل شد).
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    bank_account: Mapped["BankAccount"] = relationship()

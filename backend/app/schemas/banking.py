@@ -51,6 +51,8 @@ class CheckIn(BaseModel):
     due_date: date
     contact_id: UUID | None = None
     description: str = ""
+    #: برگِ کدام دسته‌چک است (فقط برای چکِ پرداختنی). NULL = بدونِ دسته.
+    checkbook_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_check(self) -> "CheckIn":
@@ -74,6 +76,7 @@ class CheckOut(BaseModel):
     contact_id: UUID | None
     contact_name: str | None = None
     bank_account_id: UUID | None
+    checkbook_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -182,3 +185,58 @@ class PettyCashTransactionOut(BaseModel):
     counter_account_id: UUID
 
     model_config = {"from_attributes": True}
+
+
+class CheckbookIn(BaseModel):
+    bank_account_id: UUID
+    #: سریِ روی جلد (صیاد یا شماره‌ی داخلیِ بانک). اختیاری.
+    serial: str = ""
+    first_number: str
+    last_number: str
+    #: اگر ۰ بماند و شماره‌ها عددی باشند، خودِ سرور حساب می‌کند.
+    leaf_count: int = 0
+    issue_date: date | None = None
+    description: str = ""
+
+
+class CheckbookOut(BaseModel):
+    id: UUID
+    bank_account_id: UUID
+    bank_account_name: str
+    serial: str
+    first_number: str
+    last_number: str
+    leaf_count: int
+    #: چند برگ خرج شده و چند تا مانده — از روی چک‌های وصل‌شده شمرده می‌شود.
+    used_count: int
+    remaining_count: int
+    issue_date: date | None
+    description: str
+    is_active: bool
+
+
+class PosPendingGroupOut(BaseModel):
+    """یک روزِ تسویه‌نشده‌ی یک پایانه."""
+
+    terminal_no: str
+    transaction_date: date
+    count: int
+    gross_amount: Decimal
+
+
+class PosSettlementIn(BaseModel):
+    settlement_date: date
+    date_from: date
+    date_to: date
+    #: خالی = همه‌ی پایانه‌ها.
+    terminal_no: str | None = None
+    #: فقط وقتی کارمزد داری لازم است — سندِ کارمزد به این حساب بستانکار می‌شود.
+    bank_account_id: UUID | None = None
+    fee_amount: Decimal = Decimal(0)
+
+
+class PosSettlementOut(BaseModel):
+    settled_count: int
+    gross_amount: Decimal
+    fee_amount: Decimal
+    net_amount: Decimal

@@ -1,26 +1,44 @@
+from datetime import date as date_, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalLine
-from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
+from app.models.banking import (
+    BankAccount,
+    BankStatementLine,
+    BankTransaction,
+    Check,
+    Checkbook,
+    PettyCashTransaction,
+)
+from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import (
     BankDepositWithdrawIn,
     BankStatementLineIn,
+    CheckbookIn,
     CheckIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
+    PosSettlementIn,
 )
 from app.services import chart_codes as cc
-from app.services.common import get_account, make_journal_entry as _make_journal_entry
+from app.services.common import (
+    get_account,
+    get_or_create_account,
+    make_journal_entry as _make_journal_entry,
+)
 from app.services.period_close import assert_period_open
 
 # چرخه‌ی مجاز وضعیت هر چک: از وضعیت فعلی، کدام وضعیت‌های بعدی مجازند
 RECEIVABLE_TRANSITIONS = {
-    "in_hand": {"deposited", "endorsed"},
+    # `returned` = استرداد: چک را بدونِ وصول به صاحبش پس می‌دهیم. فقط از «نزدِ ما»
+    # ممکن است؛ چکی که به بانک سپرده شده اول باید برگردد.
+    "in_hand": {"deposited", "endorsed", "returned"},
     "deposited": {"cleared", "bounced"},
 }
 PAYABLE_TRANSITIONS = {
@@ -60,6 +78,7 @@ def create_check(db: Session, data: CheckIn, user: User) -> Check:
         status=initial_status,
         description=data.description,
         contact_id=data.contact_id,
+        checkbook_id=data.checkbook_id,
         created_by_id=user.id,
     )
     db.add(check)
@@ -81,7 +100,7 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
             f"انتقال وضعیت از «{check.status}» به «{new_status}» مجاز نیست",
         )
 
-    if new_status in ("cleared", "bounced", "endorsed"):
+    if new_status in ("cleared", "bounced", "endorsed", "returned"):
         assert_period_open(db, check.due_date)
 
     journal_entry = None
@@ -138,6 +157,19 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
             ]
         journal_entry = _make_journal_entry(
             db, check.due_date, f"برگشت چک شماره {check.number}", "check", user, lines
+        )
+
+    elif new_status == "returned":
+        # استرداد اثرِ ثبتِ اولیه را برمی‌گرداند: طلب از «اسنادِ دریافتنی» به همان
+        # «حساب‌های دریافتنی»ِ طرف‌حساب برمی‌گردد — دقیقاً معکوسِ لحظه‌ی دریافتِ چک.
+        # با `bounced` یکی نیست؛ آن‌جا بانک برگشت زده و اینجا ما پس داده‌ایم، و
+        # تفکیکشان برای پیگیریِ سابقه‌ی طرف‌حساب مهم است.
+        lines = [
+            JournalLine(account_id=get_account(db, cc.ACCOUNTS_RECEIVABLE).id, debit=check.amount, credit=0),
+            JournalLine(account_id=get_account(db, cc.CHECKS_RECEIVABLE).id, debit=0, credit=check.amount),
+        ]
+        journal_entry = _make_journal_entry(
+            db, check.due_date, f"استرداد چک شماره {check.number} به صاحبش", "check", user, lines
         )
 
     elif new_status == "endorsed":
@@ -346,3 +378,258 @@ def get_petty_cash_balance(db: Session) -> Decimal:
     total_charge = sum((Decimal(t.amount) for t in charges), Decimal(0))
     total_expense = sum((Decimal(t.amount) for t in expenses), Decimal(0))
     return total_charge - total_expense
+
+
+# ---------------------------------------------------------------------------
+# دسته چک
+# ---------------------------------------------------------------------------
+
+
+def list_checkbooks(db: Session) -> list[dict]:
+    """دسته‌چک‌ها با شمارِ برگِ خرج‌شده.
+
+    «چند برگ مانده» را از روی چک‌های وصل‌شده می‌شماریم نه از یک شمارنده‌ی جدا:
+    شمارنده با هر ابطال/حذفِ چک از واقعیت فاصله می‌گرفت.
+    """
+    used = dict(
+        db.query(Check.checkbook_id, func.count(Check.id))
+        .filter(Check.checkbook_id.isnot(None))
+        .group_by(Check.checkbook_id)
+        .all()
+    )
+    rows = (
+        db.query(Checkbook, BankAccount.name)
+        .outerjoin(BankAccount, BankAccount.id == Checkbook.bank_account_id)
+        .order_by(Checkbook.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": book.id,
+            "bank_account_id": book.bank_account_id,
+            "bank_account_name": bank_name or "",
+            "serial": book.serial,
+            "first_number": book.first_number,
+            "last_number": book.last_number,
+            "leaf_count": book.leaf_count,
+            "used_count": used.get(book.id, 0),
+            "remaining_count": max(book.leaf_count - used.get(book.id, 0), 0),
+            "issue_date": book.issue_date,
+            "description": book.description,
+            "is_active": book.is_active,
+        }
+        for book, bank_name in rows
+    ]
+
+
+def create_checkbook(db: Session, data: CheckbookIn, user: User) -> Checkbook:
+    bank = db.get(BankAccount, data.bank_account_id)
+    if bank is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
+
+    first = data.first_number.strip()
+    last = data.last_number.strip()
+    if not first or not last:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "شماره‌ی اولین و آخرین برگ لازم است")
+
+    # اگر هر دو عددی‌اند، شمارِ برگ را خودمان حساب می‌کنیم — کاربر نباید ریاضی کند.
+    leaf_count = data.leaf_count
+    if leaf_count <= 0 and first.isdigit() and last.isdigit():
+        leaf_count = int(last) - int(first) + 1
+    if leaf_count <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تعداد برگ باید مثبت باشد")
+
+    duplicate = (
+        db.query(Checkbook)
+        .filter(Checkbook.bank_account_id == bank.id, Checkbook.serial == data.serial.strip())
+        .first()
+    )
+    if data.serial.strip() and duplicate is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "دسته‌چکی با این سری برای همین حساب ثبت شده است")
+
+    book = Checkbook(
+        bank_account_id=bank.id,
+        serial=data.serial.strip(),
+        first_number=first,
+        last_number=last,
+        leaf_count=leaf_count,
+        issue_date=data.issue_date,
+        description=data.description.strip(),
+        is_active=True,
+        created_by_id=user.id,
+    )
+    db.add(book)
+    db.flush()
+    db.refresh(book)
+    return book
+
+
+def set_checkbook_active(db: Session, checkbook_id: UUID, is_active: bool) -> Checkbook:
+    book = db.get(Checkbook, checkbook_id)
+    if book is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
+    book.is_active = is_active
+    db.flush()
+    db.refresh(book)
+    return book
+
+
+def delete_checkbook(db: Session, checkbook_id: UUID) -> None:
+    """فقط دسته‌ی دست‌نخورده حذف می‌شود.
+
+    دسته‌ای که برگ خورده سابقه‌ی چک‌های صادرشده است؛ حذفش آن چک‌ها را بی‌ریشه
+    می‌کند. به‌جای حذف، «بستن» (is_active=false) کارِ درست است و پیام همین را می‌گوید.
+    """
+    book = db.get(Checkbook, checkbook_id)
+    if book is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
+    used = db.query(Check).filter(Check.checkbook_id == book.id).count()
+    if used:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"از این دسته {used} برگ صادر شده است؛ به‌جای حذف آن را ببندید.",
+        )
+    db.delete(book)
+    db.flush()
+
+
+def next_check_number(db: Session, checkbook_id: UUID) -> str:
+    """شماره‌ی برگِ بعدیِ این دسته — پیشنهاد، نه قفل.
+
+    از بزرگ‌ترین شماره‌ی مصرف‌شده جلو می‌رود، نه از شمارِ برگ‌ها: اگر کاربر برگی را
+    از وسط خرج کرده باشد، شمارش ساده شماره‌ی تکراری پیشنهاد می‌داد.
+    """
+    book = db.get(Checkbook, checkbook_id)
+    if book is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
+    numbers = [
+        c.number
+        for c in db.query(Check).filter(Check.checkbook_id == book.id).all()
+        if (c.number or "").isdigit()
+    ]
+    if not book.first_number.isdigit():
+        return ""
+    width = len(book.first_number)
+    nxt = (max(int(n) for n in numbers) + 1) if numbers else int(book.first_number)
+    if book.last_number.isdigit() and nxt > int(book.last_number):
+        return ""
+    return str(nxt).zfill(width)
+
+
+# ---------------------------------------------------------------------------
+# تسویه‌ی کارتخوان
+# ---------------------------------------------------------------------------
+#
+# فروشِ کارتی در لحظه‌ی رسید به حسابِ بانک بدهکار می‌شود، ولی پول همان لحظه نمی‌نشیند:
+# شرکتِ پرداخت چند روز بعد جمعِ چند تراکنش را **منهای کارمزد** واریز می‌کند. پس تسویه
+# اینجا یعنی «این تراکنش‌های کارتی در آن واریز آمدند» + ثبتِ کارمزد به‌عنوانِ هزینه.
+# خودِ مبلغِ ناخالص دوباره ثبت نمی‌شود؛ وگرنه درآمد دوبار می‌آمد.
+
+
+def pos_pending_settlements(
+    db: Session, *, terminal_no: str | None, date_from: date_ | None, date_to: date_ | None
+) -> list[dict]:
+    """رسیدهای کارتیِ تسویه‌نشده، گروه‌بندی‌شده بر اساسِ پایانه و روز."""
+    query = db.query(TreasuryTransaction).filter(
+        TreasuryTransaction.paid_via == "pos_terminal",
+        TreasuryTransaction.settled_at.is_(None),
+    )
+    if terminal_no:
+        query = query.filter(TreasuryTransaction.terminal_no == terminal_no)
+    if date_from is not None:
+        query = query.filter(TreasuryTransaction.transaction_date >= date_from)
+    if date_to is not None:
+        query = query.filter(TreasuryTransaction.transaction_date <= date_to)
+
+    groups: dict[tuple[str, date_], dict] = {}
+    for txn in query.order_by(TreasuryTransaction.transaction_date).all():
+        key = (txn.terminal_no or "", txn.transaction_date)
+        row = groups.setdefault(
+            key,
+            {
+                "terminal_no": txn.terminal_no or "",
+                "transaction_date": txn.transaction_date,
+                "count": 0,
+                "gross_amount": Decimal(0),
+            },
+        )
+        row["count"] += 1
+        row["gross_amount"] += Decimal(txn.amount)
+    return sorted(groups.values(), key=lambda r: (r["transaction_date"], r["terminal_no"]))
+
+
+def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
+    """تسویه‌ی یک واریزِ کارتخوان: علامت‌زدنِ رسیدها + ثبتِ کارمزد.
+
+    کارمزد اختیاری است؛ اگر صفر باشد فقط علامت می‌خورد و هیچ سندی صادر نمی‌شود —
+    سندِ صفرْ دفتر را شلوغ می‌کند بی‌آنکه چیزی بگوید.
+    """
+    assert_period_open(db, data.settlement_date)
+
+    query = db.query(TreasuryTransaction).filter(
+        TreasuryTransaction.paid_via == "pos_terminal",
+        TreasuryTransaction.settled_at.is_(None),
+        TreasuryTransaction.transaction_date >= data.date_from,
+        TreasuryTransaction.transaction_date <= data.date_to,
+    )
+    if data.terminal_no:
+        query = query.filter(TreasuryTransaction.terminal_no == data.terminal_no)
+    rows = query.all()
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "رسیدِ کارتیِ تسویه‌نشده‌ای در این بازه نیست")
+
+    gross = sum(Decimal(r.amount) for r in rows)
+    fee = Decimal(data.fee_amount or 0)
+    if fee < 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمزد نمی‌تواند منفی باشد")
+    if fee > gross:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمزد از جمعِ تراکنش‌ها بیشتر است")
+
+    settlement_txn = None
+    if fee > 0:
+        bank = db.get(BankAccount, data.bank_account_id) if data.bank_account_id else None
+        if bank is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای ثبتِ کارمزد، حساب بانکی لازم است")
+        fee_account = get_or_create_account(
+            db,
+            cc.BANK_FEE,
+            code=cc.DEFAULT_CODE_BY_ROLE[cc.BANK_FEE],
+            name="کارمزد و هزینه‌های بانکی",
+            acc_type="expense",
+            parent_code="5",
+        )
+        entry = _make_journal_entry(
+            db,
+            data.settlement_date,
+            f"کارمزدِ تسویه‌ی کارتخوان{f' {data.terminal_no}' if data.terminal_no else ''}",
+            "bank",
+            user,
+            [
+                JournalLine(account_id=fee_account.id, debit=fee, credit=0),
+                JournalLine(account_id=bank.gl_account_id, debit=0, credit=fee),
+            ],
+        )
+        settlement_txn = BankTransaction(
+            bank_account_id=bank.id,
+            transaction_date=data.settlement_date,
+            amount=-fee,
+            description="کارمزدِ تسویه‌ی کارتخوان",
+            source_type="pos_settlement",
+            journal_entry_id=entry.id,
+            created_by_id=user.id,
+        )
+        db.add(settlement_txn)
+        db.flush()
+
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        row.settled_at = now
+        row.settlement_txn_id = settlement_txn.id if settlement_txn is not None else None
+    db.flush()
+
+    return {
+        "settled_count": len(rows),
+        "gross_amount": gross,
+        "fee_amount": fee,
+        "net_amount": gross - fee,
+    }

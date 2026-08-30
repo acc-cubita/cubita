@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +16,8 @@ from app.schemas.banking import (
     BankStatementImportIn,
     BankStatementLineOut,
     BankTransactionOut,
+    CheckbookIn,
+    CheckbookOut,
     CheckIn,
     CheckOut,
     CheckStatusUpdateIn,
@@ -21,6 +25,9 @@ from app.schemas.banking import (
     PettyCashChargeIn,
     PettyCashExpenseIn,
     PettyCashTransactionOut,
+    PosPendingGroupOut,
+    PosSettlementIn,
+    PosSettlementOut,
     ReconciliationSummaryOut,
 )
 from app.services import banking as banking_service
@@ -219,3 +226,89 @@ def petty_cash_expense(
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
     return banking_service.create_petty_cash_expense(db, data, user)
+
+
+# ── دسته چک ──────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/checkbooks", response_model=list[CheckbookOut])
+def list_checkbooks(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
+    return banking_service.list_checkbooks(db)
+
+
+@router.post("/api/checkbooks", response_model=CheckbookOut, status_code=201)
+def create_checkbook(
+    data: CheckbookIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("checks_bank", "create")),
+):
+    book = banking_service.create_checkbook(db, data, user)
+    db.commit()
+    return _checkbook_row(db, book.id)
+
+
+@router.patch("/api/checkbooks/{checkbook_id}", response_model=CheckbookOut)
+def set_checkbook_active(
+    checkbook_id: UUID,
+    is_active: bool,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "update")),
+):
+    banking_service.set_checkbook_active(db, checkbook_id, is_active)
+    db.commit()
+    return _checkbook_row(db, checkbook_id)
+
+
+@router.delete("/api/checkbooks/{checkbook_id}", status_code=204)
+def delete_checkbook(
+    checkbook_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "delete")),
+):
+    banking_service.delete_checkbook(db, checkbook_id)
+    db.commit()
+
+
+@router.get("/api/checkbooks/{checkbook_id}/next-number")
+def next_check_number(
+    checkbook_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """شماره‌ی برگِ بعدی — پیشنهاد برای فرمِ صدورِ چک. رشته‌ی خالی = دسته تمام شده."""
+    return {"number": banking_service.next_check_number(db, checkbook_id)}
+
+
+def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
+    """همان شکلی که فهرست می‌دهد (با نامِ بانک و شمارِ برگ‌ها) برای یک ردیف."""
+    for row in banking_service.list_checkbooks(db):
+        if row["id"] == checkbook_id:
+            return row
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
+
+
+# ── تسویه‌ی کارتخوان ─────────────────────────────────────────────────────────
+
+
+@router.get("/api/pos-settlements/pending", response_model=list[PosPendingGroupOut])
+def pos_pending(
+    terminal_no: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    return banking_service.pos_pending_settlements(
+        db, terminal_no=terminal_no, date_from=date_from, date_to=date_to
+    )
+
+
+@router.post("/api/pos-settlements", response_model=PosSettlementOut)
+def settle_pos(
+    data: PosSettlementIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("checks_bank", "create")),
+):
+    result = banking_service.settle_pos(db, data, user)
+    db.commit()
+    return result
