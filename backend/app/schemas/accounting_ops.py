@@ -34,6 +34,10 @@ class AccountingOverviewOut(BaseModel):
 class EntrySummaryOut(BaseModel):
     id: UUID
     number: int | None
+    #: عطف و فرعی در کارتابل هم دیده می‌شوند: کسی که سند را بازبینی می‌کند همان
+    #: کسی است که با این دو دنبالش می‌گردد.
+    atf_number: int | None = None
+    sub_number: str | None = None
     entry_date: date
     description: str
     source_type: str
@@ -92,6 +96,9 @@ class RenumberRowOut(BaseModel):
     id: UUID
     entry_date: date
     description: str
+    #: عطف در پیش‌نمایش می‌آید تا کاربر با چشمِ خودش ببیند بازشماره‌گذاری به آن
+    #: دست نمی‌زند — همان تضمینی که کلِ دلیلِ وجودِ این ستون است.
+    atf_number: int | None = None
     old_number: int | None
     new_number: int
     changed: bool

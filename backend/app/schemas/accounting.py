@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.accounting import ACCOUNT_TYPES, ENTRY_STATUSES
 
@@ -88,7 +88,18 @@ class JournalEntryIn(BaseModel):
     #: سندِ تازه به‌صورتِ پیش‌فرض *موقت* ثبت می‌شود تا در کارتابل بازبینی شود.
     #: `permanent` یعنی همان لحظه قطعی — برای دفترداری که بازبینی نمی‌خواهد.
     status: str = "temporary"
+    #: شماره فرعی — ارجاعِ آزادِ کاربر (شماره‌ی سند در سیستمِ قبلی، شماره‌ی پرونده،
+    #: کدِ دسته). عطف اینجا گرفته نمی‌شود: آن را فقط سرور می‌دهد.
+    sub_number: str | None = Field(default=None, max_length=30)
     lines: list[JournalLineIn]
+
+    @field_validator("sub_number")
+    @classmethod
+    def _clean_sub_number(cls, v: str | None) -> str | None:
+        #: رشته‌ی خالی و فاصله‌ی تنها همان «خالی» است. بدونِ این، فیلدِ دست‌نخورده‌ی
+        #: فرم به‌صورتِ "" ذخیره می‌شد و جستجو و «دارد/ندارد» را به هم می‌ریخت.
+        cleaned = (v or "").strip()
+        return cleaned or None
 
     @field_validator("status")
     @classmethod
@@ -110,6 +121,18 @@ class JournalEntryIn(BaseModel):
         return self
 
 
+class SubNumberIn(BaseModel):
+    """تنها فیلدی از سند که بعد از ثبت هم قابلِ اصلاح است."""
+
+    sub_number: str | None = Field(default=None, max_length=30)
+
+    @field_validator("sub_number")
+    @classmethod
+    def _clean(cls, v: str | None) -> str | None:
+        cleaned = (v or "").strip()
+        return cleaned or None
+
+
 class JournalLineOut(BaseModel):
     id: UUID
     account_id: UUID
@@ -128,6 +151,11 @@ class JournalLineOut(BaseModel):
 class JournalEntryOut(BaseModel):
     id: UUID
     number: int | None
+    #: شماره عطف — سرور لحظه‌ی ثبت می‌دهد و هیچ عملیاتی عوضش نمی‌کند. فقط سندهای
+    #: پیش از مهاجرتِ ۰۰۸۵ که هنوز پر نشده‌اند می‌توانند NULL باشند.
+    atf_number: int | None = None
+    #: شماره فرعی — ارجاعِ آزادِ کاربر. NULL = خالی.
+    sub_number: str | None = None
     entry_date: date
     description: str
     source_type: str

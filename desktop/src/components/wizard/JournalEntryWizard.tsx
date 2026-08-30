@@ -46,6 +46,16 @@ export function JournalEntryWizard({
             تاریخ سند
             <JalaliDatePicker value={d.entryDate} onChange={d.setEntryDate} />
           </label>
+          <label>
+            شماره فرعی (اختیاری)
+            <input
+              type="text"
+              value={d.subNumber}
+              onChange={(e) => d.setSubNumber(e.target.value)}
+              maxLength={30}
+              placeholder="شماره‌ی پرونده، سندِ سیستمِ قبلی، کدِ دسته"
+            />
+          </label>
           {d.costCenters.length > 0 && (
             <label>
               مرکز هزینه/پروژه (اختیاری)
@@ -145,6 +155,7 @@ function LivePreview({ d }: { d: JournalEntryDraft }) {
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ سند</p>
       <div className="live-preview-row"><span>شرح</span><strong>{d.description || '—'}</strong></div>
+      <div className="live-preview-row"><span>شماره فرعی</span><strong>{d.subNumber || '—'}</strong></div>
       <div className="live-preview-row"><span>تاریخ</span><strong>{d.entryDate}</strong></div>
       <div className="live-preview-row"><span>ردیفِ معتبر</span><strong>{fa(d.validLineCount)}</strong></div>
       <div className="live-preview-divider" />

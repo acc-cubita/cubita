@@ -53,6 +53,8 @@ def _entry_out(entry: JournalEntry, names: dict[UUID, str] | None = None) -> dic
     return {
         "id": entry.id,
         "number": entry.number,
+        "atf_number": entry.atf_number,
+        "sub_number": entry.sub_number,
         "entry_date": entry.entry_date,
         "description": entry.description,
         "source_type": entry.source_type,
@@ -261,6 +263,7 @@ def preview_renumber(
                 "id": entry.id,
                 "entry_date": entry.entry_date,
                 "description": entry.description,
+                "atf_number": entry.atf_number,
                 "old_number": entry.number,
                 "new_number": new_number,
                 "changed": entry.number != new_number,

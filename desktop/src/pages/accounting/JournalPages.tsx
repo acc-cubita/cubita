@@ -126,6 +126,10 @@ function EntryTable({
         <thead>
           <tr>
             <th>شماره</th>
+            {/* عطف کنارِ شماره می‌نشیند چون کاربر این دو را با هم می‌خواند: یکی
+                جای سند در دفترِ امروز است، دیگری هویتِ ثابتش. */}
+            <th>عطف</th>
+            <th>فرعی</th>
             <th>تاریخ</th>
             <th>شرح</th>
             <th>منشأ</th>
@@ -141,6 +145,10 @@ function EntryTable({
               <td className="card-title" data-label="شماره">
                 {fa(e.number ?? 0)}
               </td>
+              <td data-label="عطف" className="num">
+                {e.atf_number === null ? '—' : faInt(e.atf_number)}
+              </td>
+              <td data-label="فرعی">{e.sub_number || '—'}</td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
               <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
@@ -321,6 +329,8 @@ function CartableTable({
           <tr>
             <th />
             <th>شماره</th>
+            <th>عطف</th>
+            <th>فرعی</th>
             <th>تاریخ</th>
             <th>شرح</th>
             <th>منشأ</th>
@@ -337,6 +347,10 @@ function CartableTable({
               <td className="card-title" data-label="شماره">
                 {fa(e.number ?? 0)}
               </td>
+              <td data-label="عطف" className="num">
+                {e.atf_number === null ? '—' : faInt(e.atf_number)}
+              </td>
+              <td data-label="فرعی">{e.sub_number || '—'}</td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
               <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
@@ -564,6 +578,9 @@ export function RenumberEntriesPage({ token }: { token: string }) {
                   <th>تاریخ</th>
                   <th>شرح</th>
                   <th>وضعیت</th>
+                  {/* عطف اینجاست تا کاربر پیش از زدنِ دکمه ببیند چه چیزی *تغییر
+                      نمی‌کند* — تضمینی که کلِ دلیلِ وجودِ این ستون است. */}
+                  <th>عطف (ثابت)</th>
                   <th>شماره‌ی فعلی</th>
                   <th>شماره‌ی تازه</th>
                 </tr>
@@ -577,6 +594,9 @@ export function RenumberEntriesPage({ token }: { token: string }) {
                     <td data-label="شرح">{r.description || sourceLabel(r.source_type)}</td>
                     <td data-label="وضعیت">
                       <StatusChip status={r.status} />
+                    </td>
+                    <td data-label="عطف (ثابت)" className="num">
+                      {r.atf_number == null ? '—' : fa(r.atf_number)}
                     </td>
                     <td data-label="شماره‌ی فعلی" className="num">
                       {r.old_number == null ? '—' : fa(r.old_number)}
@@ -808,7 +828,7 @@ export function EntryListPage({ token }: { token: string }) {
     <OpsPage
       icon={FileStack}
       title="اسناد حسابداری"
-      description="همه‌ی اسنادِ دفتر — دستی و خودکار، موقت و دائم. سندِ دستی را می‌توان از همین‌جا ابطال کرد."
+      description="همه‌ی اسنادِ دفتر — دستی و خودکار، موقت و دائم. «عطف» شماره‌ی ثابتِ سند است و با شماره‌گذاری مجدد عوض نمی‌شود؛ «فرعی» ارجاعِ خودِ شماست. سندِ دستی را می‌توان از همین‌جا ابطال کرد."
       head={
         <div className="cc-head">
           <RangeBar
@@ -845,7 +865,7 @@ export function EntryListPage({ token }: { token: string }) {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="شماره یا شرحِ سند"
+              placeholder="شماره، عطف، شماره فرعی یا شرحِ سند"
             />
           </label>
         </div>

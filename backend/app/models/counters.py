@@ -22,6 +22,13 @@ from app.models.tenant import TenantMixin
 
 #: انواع سندی که شماره‌ی رسمی می‌گیرند
 DOC_JOURNAL_ENTRY = "journal_entry"
+#: شمارنده‌ی «شماره عطف» سند حسابداری — جدا از شماره‌ی سند، و عمداً.
+#:
+#: شماره‌ی سند با عملیاتِ «شماره‌گذاری مجدد» به‌ترتیبِ تاریخ جابه‌جا می‌شود؛ عطف
+#: هرگز. عطف به‌ترتیبِ *ثبت* داده می‌شود و روی سند قفل می‌ماند، پس ارجاعِ بیرونی
+#: (چاپ، پیوست، نامه) به آن نمی‌شکند. دو ترتیبِ متفاوت یعنی دو شمارنده‌ی متفاوت —
+#: یکی‌کردنشان یعنی یا عطف با بازشماره‌گذاری بشکند یا شماره‌ی سند از تاریخ عقب بماند.
+DOC_JOURNAL_ATF = "journal_atf"
 DOC_SALES_INVOICE = "sales_invoice"
 DOC_PURCHASE_INVOICE = "purchase_invoice"
 DOC_PAYSLIP = "payslip"
@@ -34,6 +41,7 @@ DOC_INSTALLMENT_PLAN = "installment_plan"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
+    DOC_JOURNAL_ATF,
     DOC_SALES_INVOICE,
     DOC_PURCHASE_INVOICE,
     DOC_PAYSLIP,

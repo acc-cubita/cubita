@@ -37,6 +37,18 @@ export function JournalEntryForm({
             تاریخ سند
             <JalaliDatePicker value={d.entryDate} onChange={d.setEntryDate} />
           </label>
+          {/* شماره عطف عمداً در فرم نیست: سرور لحظه‌ی ثبت می‌دهدش و کاربر
+              انتخابی ندارد. پس از ثبت، در دفترِ «اسناد حسابداری» دیده می‌شود. */}
+          <label>
+            شماره فرعی (اختیاری)
+            <input
+              type="text"
+              value={d.subNumber}
+              onChange={(e) => d.setSubNumber(e.target.value)}
+              maxLength={30}
+              placeholder="شماره‌ی پرونده، سندِ سیستمِ قبلی، کدِ دسته"
+            />
+          </label>
           {d.costCenters.length > 0 && (
             <label>
               مرکز هزینه/پروژه (اختیاری)

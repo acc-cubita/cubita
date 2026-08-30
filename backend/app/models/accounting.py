@@ -2,7 +2,17 @@ import uuid
 from datetime import date as date_
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,10 +67,28 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_journal_entries_tenant_number"),
+        UniqueConstraint("tenant_id", "atf_number", name="uq_journal_entries_tenant_atf"),
         CheckConstraint(f"status IN {ENTRY_STATUSES}", name="ck_journal_entries_status"),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)  # شماره رسمی، فقط سرور اختصاص می‌دهد
+
+    #: **شماره عطف** — هویتِ ثابتِ سند. سرور لحظه‌ی ثبت و به‌ترتیبِ ورود می‌دهدش و
+    #: هیچ عملیاتی عوضش نمی‌کند؛ «شماره‌گذاری مجدد» فقط `number` را جابه‌جا می‌کند.
+    #:
+    #: چرا دو شماره: شماره‌ی سند باید با *تاریخ* بخواند (دفترداری آخرِ ماه مرتبش
+    #: می‌کند)، ولی ارجاعِ بیرونی — چاپِ سند، پیوستِ پرونده، نامه‌ی حسابرس — به
+    #: شماره‌ای نیاز دارد که هرگز تکان نخورد. یک ستون نمی‌تواند هر دو باشد.
+    #:
+    #: nullable چون سندهای پیش از مهاجرتِ ۰۰۸۵ در همان مهاجرت پر می‌شوند و ستون
+    #: نمی‌تواند وسطِ backfill غیرِ NULL باشد؛ از این به بعد هر سند عطف دارد.
+    atf_number: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+
+    #: **شماره فرعی** — ارجاعِ آزادِ کاربر: شماره‌ی سند در سیستمِ قبلی، شماره‌ی
+    #: پرونده، کدِ دسته. عمداً متن است نه عدد (کاربر «ب-۱۴۰۴/۷» هم می‌نویسد)، عمداً
+    #: یکتا نیست (چند سندِ یک دسته یک شماره‌ی فرعی می‌گیرند — همان کاری که باهاش
+    #: می‌کنند)، و عمداً اختیاری. NULL = خالی.
+    sub_number: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     entry_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     description: Mapped[str] = mapped_column(Text, default="")
 

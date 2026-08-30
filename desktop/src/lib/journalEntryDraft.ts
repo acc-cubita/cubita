@@ -36,6 +36,9 @@ export function useJournalEntryDraft({
 }) {
   // ورودی‌های کاربر ماندگار می‌شوند (رفرش/جابه‌جایی پیش‌نویس را نمی‌برد)؛ داده‌ی سرور و پیام/در‌حال‌ثبت نه.
   const [description, setDescription] = usePersistentState('cubita.draft.journal.description', '')
+  //: شماره فرعی — ارجاعِ آزادِ کاربر. عطف اینجا نیست: سرور می‌دهدش و فرم نه
+  //: نشانش می‌دهد نه می‌فرستدش، چون چیزی برای انتخاب‌کردن ندارد.
+  const [subNumber, setSubNumber] = usePersistentState('cubita.draft.journal.subNumber', '')
   const [entryDate, setEntryDate] = usePersistentState('cubita.draft.journal.entryDate', todayIso())
   const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', [emptyLine(), emptyLine()])
   const [message, setMessage] = useState<string | null>(null)
@@ -139,6 +142,7 @@ export function useJournalEntryDraft({
       cost_center_id: costCenterId || null,
       analytic_id: analyticId || null,
       status,
+      sub_number: subNumber.trim() || null,
       lines: validLines.map((l) => ({
         account_id: l.accountId,
         debit: Number(l.debit) || 0,
@@ -165,6 +169,9 @@ export function useJournalEntryDraft({
         setMessage(status === 'permanent' ? 'سند به‌صورتِ دائم ثبت شد.' : 'سندِ موقت ثبت شد؛ در کارتابل قابلِ بازبینی است.')
       }
       setDescription('')
+      //: پاک می‌شود مثلِ شرح. چسبیدنِ شماره فرعیِ سندِ قبلی به سندِ بعدی، ارجاعِ
+      //: غلط می‌سازد — و ارجاعِ غلط بدتر از ارجاعِ نداشته است.
+      setSubNumber('')
       setLines([emptyLine(), emptyLine()])
       setCostCenterId('')
       setAnalyticId('')
@@ -181,6 +188,8 @@ export function useJournalEntryDraft({
   return {
     description,
     setDescription,
+    subNumber,
+    setSubNumber,
     entryDate,
     setEntryDate,
     lines,

@@ -418,6 +418,10 @@ export interface JournalEntryLine {
 export interface JournalEntryRecord {
   id: string
   number: number | null
+  /** شماره عطف — سرور لحظه‌ی ثبت می‌دهد و هیچ عملیاتی عوضش نمی‌کند. */
+  atf_number: number | null
+  /** شماره فرعی — ارجاعِ آزادِ کاربر. null = خالی. */
+  sub_number: string | null
   entry_date: string
   description: string
   source_type: string
@@ -431,6 +435,12 @@ export interface JournalEntryRecord {
 
 export const fetchJournalEntries = (token: string) =>
   authedGetAll<JournalEntryRecord>(token, '/api/journal-entries')
+
+/** اصلاحِ شماره فرعیِ سند. فقط سندِ موقتِ باطل‌نشده؛ روی سندِ دائم سرور ۴۰۹ می‌دهد. */
+export const setEntrySubNumber = (token: string, entryId: string, subNumber: string | null) =>
+  authedSend<JournalEntryRecord>(
+    token, 'PATCH', `/api/journal-entries/${entryId}/sub-number`, { sub_number: subNumber },
+  )
 
 /** ابطالِ سندِ دستی با ثبتِ سندِ معکوس. فقط سندِ دستیِ باطل‌نشده؛ وگرنه سرور ۴۰۹ می‌دهد. */
 export const voidJournalEntry = (token: string, entryId: string, reason: string) =>
@@ -1432,6 +1442,8 @@ export const createJournalEntryDirect = (
     analytic_id?: string | null
     /** پیش‌فرضِ سرور `temporary` است — سند اول در کارتابل بازبینی می‌شود. */
     status?: 'temporary' | 'permanent'
+    /** شماره فرعی — اختیاری. عطف فرستاده نمی‌شود؛ آن را فقط سرور می‌دهد. */
+    sub_number?: string | null
     lines: {
       account_id: string
       debit: number
@@ -4040,6 +4052,8 @@ export const fetchAccountingOverview = (token: string) =>
 export interface EntrySummary {
   id: string
   number: number | null
+  atf_number: number | null
+  sub_number: string | null
   entry_date: string
   description: string
   source_type: string
@@ -4071,6 +4085,8 @@ export interface RenumberRow {
   id: string
   entry_date: string
   description: string
+  /** عطف در پیش‌نمایش می‌آید تا کاربر ببیند بازشماره‌گذاری به آن دست نمی‌زند. */
+  atf_number: number | null
   old_number: number | null
   new_number: number
   changed: boolean

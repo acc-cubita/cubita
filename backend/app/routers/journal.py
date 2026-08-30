@@ -2,7 +2,7 @@ from uuid import UUID
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -13,7 +13,7 @@ from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
-from app.schemas.accounting import JournalEntryIn, JournalEntryOut
+from app.schemas.accounting import JournalEntryIn, JournalEntryOut, SubNumberIn
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
@@ -51,9 +51,15 @@ def list_entries(
         query = query.filter(JournalEntry.source_type == source_type)
     if q:
         term = q.strip()
-        conditions = [JournalEntry.description.ilike(f"%{term}%")]
+        # شماره فرعی هم متن است و هم چیزی که کاربر با آن دنبالِ سند می‌گردد، پس
+        # مثلِ شرح جستجوی جزئی می‌شود؛ عطف و شماره‌ی سند عددی و دقیق‌اند.
+        conditions = [
+            JournalEntry.description.ilike(f"%{term}%"),
+            JournalEntry.sub_number.ilike(f"%{term}%"),
+        ]
         if term.isdigit():
             conditions.append(JournalEntry.number == int(term))
+            conditions.append(JournalEntry.atf_number == int(term))
         query = query.filter(or_(*conditions))
 
     # (entry_date, number) یکتاست چون number از sequence می‌آید — کلید امن برای keyset
@@ -80,6 +86,9 @@ def create_entry(
 
     entry = JournalEntry(
         number=number,
+        # عطف اینجا داده نمی‌شود: رویدادِ `_assign_atf_number` در سرویسِ شماره‌گذاری
+        # پیش از فلاش رویش می‌نشیند، برای *همه‌ی* مسیرهای ساختِ سند نه فقط این یکی.
+        sub_number=data.sub_number,
         entry_date=data.entry_date,
         description=data.description,
         source_type="manual",
@@ -102,6 +111,37 @@ def create_entry(
         ],
     )
     db.add(entry)
+    db.flush()
+    db.refresh(entry)
+    return entry
+
+
+@router.patch("/{entry_id}/sub-number", response_model=JournalEntryOut)
+def set_sub_number(
+    entry_id: UUID,
+    data: SubNumberIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "update")),
+):
+    """اصلاحِ شماره فرعیِ یک سند.
+
+    شماره فرعی ارجاعِ کاربر است نه واقعیتِ مالی، پس اصلاحش هیچ رقمی را جابه‌جا
+    نمی‌کند. با این حال فقط روی سندِ **موقت** باز است: «دائم» در این برنامه یعنی
+    امضاشده، و استثنا گذاشتن برای «فقط یک فیلدِ بی‌خطر» همان‌جایی است که این‌طور
+    قاعده‌ها می‌شکنند. سندِ باطل هم دست‌نخوردنی است.
+    """
+    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند پیدا نشد")
+    if entry.voided_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "سندِ باطل‌شده ویرایش نمی‌شود")
+    if entry.status != "temporary":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "سندِ دائم ویرایش نمی‌شود؛ شماره فرعی را پیش از دائم‌کردن ثبت کنید",
+        )
+
+    entry.sub_number = data.sub_number
     db.flush()
     db.refresh(entry)
     return entry
