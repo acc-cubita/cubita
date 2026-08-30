@@ -11,22 +11,13 @@ import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, View } from
 import { Ionicons } from '@expo/vector-icons'
 import { AppText, Button } from '../ui'
 import { colors, radius, spacing } from '../theme'
-import {
-  downloadApk,
-  fetchManifest,
-  hasUpdate,
-  installApk,
-  installedVersionName,
-  type UpdateManifest,
-} from './updater'
+import { fetchManifest, hasUpdate, installedVersionName, openStorePage, type UpdateManifest } from './updater'
 
 // چرخه‌ی حالتِ آپدیت که مودال از رویش رندر می‌شود.
 type Phase =
   | { state: 'idle' } // چیزی نشان نده
   | { state: 'checking' } // بررسیِ دستی در جریان است
   | { state: 'available'; info: UpdateManifest }
-  | { state: 'downloading'; info: UpdateManifest; percent: number }
-  | { state: 'installing'; info: UpdateManifest }
   | { state: 'none' } // بررسیِ دستی: به‌روز است
   | { state: 'error'; message: string }
 
@@ -69,25 +60,19 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const startInstall = useCallback(async () => {
-    const info = infoRef.current
-    if (!info) return
-    setPhase({ state: 'downloading', info, percent: 0 })
+  // به‌روزرسانی از راهِ خودِ فروشگاه انجام می‌شود، نه درونِ اپ — اپ فقط در را باز
+  // می‌کند. هیچ دانلودی اینجا رخ نمی‌دهد و هیچ دسترسیِ نصبی لازم نیست.
+  const openStore = useCallback(async () => {
     try {
-      const uri = await downloadApk(info, (f) => setPhase({ state: 'downloading', info, percent: f }))
-      setPhase({ state: 'installing', info })
-      await installApk(uri)
-      // نصب‌کننده باز شد؛ اگر کاربر لغو کند و برگردد، دوباره امکانِ اقدام داشته باشد.
-      setPhase({ state: 'available', info })
+      await openStorePage()
     } catch {
-      setPhase({ state: 'error', message: 'دانلود یا نصبِ به‌روزرسانی ناموفق بود. دوباره تلاش کنید.' })
+      setPhase({ state: 'error', message: 'بازکردنِ صفحه‌ی برنامه ناموفق بود.' })
     }
   }, [])
 
   const dismiss = useCallback(() => {
     // آپدیتِ اجباری قابلِ بستن نیست.
     if (phase.state === 'available' && phase.info.mandatory) return
-    if (phase.state === 'downloading' || phase.state === 'installing') return
     setPhase({ state: 'idle' })
   }, [phase])
 
@@ -100,7 +85,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   return (
     <UpdateContext.Provider value={{ phase, installedVersion: installedVersionName(), check }}>
       {children}
-      <UpdateModal phase={phase} onInstall={startInstall} onDismiss={dismiss} onRetry={() => void check()} />
+      <UpdateModal phase={phase} onOpenStore={() => void openStore()} onDismiss={dismiss} onRetry={() => void check()} />
     </UpdateContext.Provider>
   )
 }
@@ -115,12 +100,12 @@ export function useAppUpdate(): UpdateValue {
 
 function UpdateModal({
   phase,
-  onInstall,
+  onOpenStore,
   onDismiss,
   onRetry,
 }: {
   phase: Phase
-  onInstall: () => void
+  onOpenStore: () => void
   onDismiss: () => void
   onRetry: () => void
 }) {
@@ -134,7 +119,7 @@ function UpdateModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => dismissable && onDismiss()}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <ModalBody phase={phase} onInstall={onInstall} onDismiss={onDismiss} onRetry={onRetry} />
+          <ModalBody phase={phase} onOpenStore={onOpenStore} onDismiss={onDismiss} onRetry={onRetry} />
         </View>
       </View>
     </Modal>
@@ -143,12 +128,12 @@ function UpdateModal({
 
 function ModalBody({
   phase,
-  onInstall,
+  onOpenStore,
   onDismiss,
   onRetry,
 }: {
   phase: Phase
-  onInstall: () => void
+  onOpenStore: () => void
   onDismiss: () => void
   onRetry: () => void
 }) {
@@ -196,15 +181,12 @@ function ModalBody({
     )
   }
 
-  // available | downloading | installing — همه اطلاعاتِ نسخه را دارند.
+  // available — تنها حالتی که اطلاعاتِ نسخه دارد.
   const info = phase.info
-  const downloading = phase.state === 'downloading'
-  const installing = phase.state === 'installing'
-  const pct = downloading ? Math.round(phase.percent * 100) : 0
 
   return (
     <View style={styles.body}>
-      <IconBubble name="cloud-download-outline" tint={colors.accent} bg={colors.accentSoft} />
+      <IconBubble name="sparkles-outline" tint={colors.accent} bg={colors.accentSoft} />
       <AppText variant="heading">نسخه‌ی جدیدِ کوبیتا</AppText>
       <View style={styles.versionRow}>
         <AppText variant="label" color={colors.textMuted}>
@@ -219,19 +201,6 @@ function ModalBody({
         ) : null}
       </View>
 
-      {info.reinstall ? (
-        <View style={styles.reinstallBox}>
-          <AppText variant="label" color={colors.warning} weight="bold">
-            این نسخه نصبِ دوباره می‌خواهد
-          </AppText>
-          <AppText variant="caption" color={colors.textMuted} style={styles.center}>
-            به‌دلیلِ تغییرِ کلیدِ امنیتیِ برنامه، اندروید اجازه‌ی نصب روی نسخه‌ی فعلی را نمی‌دهد.
-            پس از دانلود، اگر نصب انجام نشد یک‌بار «کوبیتا» را حذف و دوباره نصب کنید.
-            اطلاعاتِ شما روی سرور است و از بین نمی‌رود.
-          </AppText>
-        </View>
-      ) : null}
-
       {info.notes ? (
         <ScrollView style={styles.notes} contentContainerStyle={{ paddingVertical: spacing.xs }}>
           <AppText variant="body" color={colors.textMuted}>
@@ -240,27 +209,24 @@ function ModalBody({
         </ScrollView>
       ) : null}
 
-      {downloading || installing ? (
-        <View style={styles.progressWrap}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: installing ? '100%' : `${pct}%` }]} />
-          </View>
-          <AppText variant="caption" color={colors.textMuted} style={styles.center}>
-            {installing ? 'در حال بازکردنِ نصب‌کننده…' : `در حال دانلود… ${pct.toLocaleString('fa-IR')}٪`}
-          </AppText>
+      <AppText variant="caption" color={colors.textMuted} style={styles.center}>
+        به‌روزرسانی از صفحه‌ی برنامه در بازار انجام می‌شود.
+      </AppText>
+
+      <View style={styles.actions}>
+        <View style={styles.flex}>
+          <Button
+            label="رفتن به بازار"
+            onPress={onOpenStore}
+            icon={<Ionicons name="open-outline" size={18} color={colors.onAccent} />}
+          />
         </View>
-      ) : (
-        <View style={styles.actions}>
+        {info.mandatory ? null : (
           <View style={styles.flex}>
-            <Button label="دانلود و نصب" onPress={onInstall} icon={<Ionicons name="download-outline" size={18} color={colors.onAccent} />} />
+            <Button label="بعداً" variant="ghost" onPress={onDismiss} />
           </View>
-          {info.mandatory ? null : (
-            <View style={styles.flex}>
-              <Button label="بعداً" variant="ghost" onPress={onDismiss} />
-            </View>
-          )}
-        </View>
-      )}
+        )}
+      </View>
     </View>
   )
 }
@@ -302,19 +268,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   notes: { maxHeight: 140, alignSelf: 'stretch' },
-  reinstallBox: {
-    alignSelf: 'stretch',
-    gap: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.warningSoft,
-    borderWidth: 1,
-    borderColor: colors.warning,
-    alignItems: 'center',
-  },
-  progressWrap: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.xs },
-  progressTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
   actions: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch', marginTop: spacing.xs },
   flex: { flex: 1 },
 })

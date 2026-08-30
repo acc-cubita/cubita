@@ -1,18 +1,19 @@
-// به‌روزرسانیِ درون‌برنامه‌ایِ اپ اندروید — «آپدیترِ APK روی سرورِ خودمان».
+// اطلاع‌رسانیِ نسخه‌ی تازه‌ی اپ اندروید.
 //
-// **چرا این‌طور و نه Play/EAS:** اپ فعلاً مستقیم (APK) پخش می‌شود و همه‌چیز باید روی
-// سرورِ خودمان بماند — دقیقاً همان دلیلی که آپدیتِ دسکتاپ هم از acc.cubita.ir/updates
-// می‌آید و نه GitHub: دسترسی از ایران به سرویس‌های بیرونی نامطمئن است. این ماژول یک
-// فایلِ ایستای latest.json را می‌خواند، نسخه‌ی نصب‌شده را با آن می‌سنجد، و اگر تازه‌تر
-// بود APK را دانلود و از طریقِ نصب‌کننده‌ی سیستمِ اندروید نصب می‌کند.
+// **چرا دیگر APK دانلود و نصب نمی‌کند:** نسخه‌ی پیشین این ماژول فایلِ APK را از
+// سرورِ خودمان می‌گرفت و با `REQUEST_INSTALL_PACKAGES` نصبش می‌کرد. کافه‌بازار این
+// دسترسی را رد می‌کند — و درست هم می‌گوید: اپی که خودش را از بیرونِ فروشگاه
+// به‌روز کند، بازبینیِ فروشگاه را دور می‌زند.
 //
-// **چرا نصبِ درجا کار می‌کند:** بیلدِ release با همان کلیدِ ثابت (android/app/debug.keystore)
-// امضا می‌شود؛ تا وقتی امضا ثابت بماند اندروید آپدیتِ روی نسخه‌ی قبلی را می‌پذیرد.
+// حالا اپ فقط *می‌فهمد* که نسخه‌ی تازه‌ای هست و کاربر را به صفحه‌ی خودش در بازار
+// می‌فرستد. نه دسترسیِ نصب لازم است، نه دانلودی انجام می‌شود، نه فایلی روی دستگاه
+// نوشته می‌شود — یعنی چیزی نمی‌ماند که فروشگاه به آن ایراد بگیرد.
+//
+// فیدِ `latest.json` سرِ جایش می‌ماند چون هنوز همان کارِ «تازه‌تر هست یا نه» را
+// می‌کند و برای دستگاه‌هایی که بازار ندارند تنها راهِ فهمیدن است.
 
-import { Platform } from 'react-native'
+import { Linking, Platform } from 'react-native'
 import * as Application from 'expo-application'
-import * as FileSystem from 'expo-file-system/legacy'
-import * as IntentLauncher from 'expo-intent-launcher'
 
 // فیدِ آپدیت روی همان سرورِ اصلی سرو می‌شود (کنارِ به‌روزرسانیِ دسکتاپ). قابلِ override با
 // EXPO_PUBLIC_UPDATE_BASE_URL برای تستِ محلی.
@@ -20,16 +21,18 @@ const DEFAULT_UPDATE_BASE = 'https://acc.cubita.ir/updates/android'
 const UPDATE_BASE = (process.env.EXPO_PUBLIC_UPDATE_BASE_URL?.trim() || DEFAULT_UPDATE_BASE).replace(/\/+$/, '')
 export const MANIFEST_URL = `${UPDATE_BASE}/latest.json`
 
+/** شناسه‌ی بسته در بازار — همان `applicationId` در build.gradle. */
+const PACKAGE_ID = 'ir.cubita.app'
+/** دیپ‌لینکِ اپِ بازار؛ اگر نصب باشد مستقیم صفحه‌ی برنامه باز می‌شود. */
+const BAZAAR_DEEPLINK = `bazaar://details?id=${PACKAGE_ID}`
+/** اگر اپِ بازار نبود، همان صفحه روی وب. */
+const BAZAAR_WEB = `https://cafebazaar.ir/app/${PACKAGE_ID}`
+
 export interface UpdateManifest {
   versionCode: number
   versionName: string
-  apkUrl: string
   notes?: string
   mandatory?: boolean
-  /** این نسخه با کلیدِ امضای متفاوتی امضا شده — اندروید نصبِ درجا را رد می‌کند و
-   *  کاربر باید یک‌بار نسخه‌ی قبلی را حذف کند. بدونِ این هشدار، نصب بی‌توضیح شکست
-   *  می‌خورد و کاربر فکر می‌کند اپ خراب است. */
-  reinstall?: boolean
 }
 
 /** versionCodeِ نسخه‌ی نصب‌شده (روی اندروید یک عددِ صحیحِ یکنواخت است). */
@@ -39,15 +42,9 @@ export function installedVersionCode(): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** versionNameِ نمایشیِ نسخه‌ی نصب‌شده (مثلِ «۱.۲.۰»). */
+/** versionNameِ نمایشیِ نسخه‌ی نصب‌شده (مثلِ «۱.۶.۰»). */
 export function installedVersionName(): string {
   return Application.nativeApplicationVersion ?? '—'
-}
-
-// apkUrl می‌تواند نسبی (نسبت به پوشه‌ی فید) یا مطلق باشد.
-function resolveUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url
-  return `${UPDATE_BASE}/${url.replace(/^\/+/, '')}`
 }
 
 /** مانیفستِ آخرین نسخه را می‌گیرد (با cache-busting تا کشِ میانی نسخه‌ی کهنه ندهد). */
@@ -55,16 +52,12 @@ export async function fetchManifest(): Promise<UpdateManifest> {
   const res = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } })
   if (!res.ok) throw new Error(`manifest ${res.status}`)
   const j = (await res.json()) as Partial<UpdateManifest>
-  if (typeof j.versionCode !== 'number' || typeof j.apkUrl !== 'string') {
-    throw new Error('مانیفستِ آپدیت نامعتبر است')
-  }
+  if (typeof j.versionCode !== 'number') throw new Error('مانیفستِ آپدیت نامعتبر است')
   return {
     versionCode: j.versionCode,
     versionName: typeof j.versionName === 'string' ? j.versionName : String(j.versionCode),
-    apkUrl: resolveUrl(j.apkUrl),
     notes: typeof j.notes === 'string' ? j.notes : undefined,
     mandatory: Boolean(j.mandatory),
-    reinstall: Boolean(j.reinstall),
   }
 }
 
@@ -73,36 +66,18 @@ export function hasUpdate(m: UpdateManifest): boolean {
   return Platform.OS === 'android' && m.versionCode > installedVersionCode()
 }
 
-/** APK را در کشِ اپ دانلود می‌کند و مسیرِ file:// را برمی‌گرداند. */
-export async function downloadApk(
-  m: UpdateManifest,
-  onProgress: (fraction: number) => void,
-): Promise<string> {
-  const dest = `${FileSystem.cacheDirectory}cubita-${m.versionCode}.apk`
-  // اگر از دفعه‌ی قبل نیمه‌کاره مانده باشد پاکش کن تا دانلودِ سالم شود.
+/** صفحه‌ی برنامه در بازار را باز می‌کند؛ اگر اپِ بازار نبود، نسخه‌ی وبش.
+ *
+ *  `canOpenURL` برای طرحِ `bazaar` بدونِ اعلانِ `<queries>` در مانیفست همیشه false
+ *  می‌دهد (اندروید ۱۱+)، پس آن اعلان کنارِ همین کد لازم است. */
+export async function openStorePage(): Promise<void> {
   try {
-    const info = await FileSystem.getInfoAsync(dest)
-    if (info.exists) await FileSystem.deleteAsync(dest, { idempotent: true })
-  } catch {
-    // اهمیتی ندارد
-  }
-  const task = FileSystem.createDownloadResumable(m.apkUrl, dest, {}, (p) => {
-    if (p.totalBytesExpectedToWrite > 0) {
-      onProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite)
+    if (await Linking.canOpenURL(BAZAAR_DEEPLINK)) {
+      await Linking.openURL(BAZAAR_DEEPLINK)
+      return
     }
-  })
-  const result = await task.downloadAsync()
-  if (!result?.uri) throw new Error('دانلودِ به‌روزرسانی ناتمام ماند')
-  return result.uri
-}
-
-/** نصبِ APK: سیستم‌عامل صفحه‌ی نصب را باز می‌کند و کاربر «نصب» را می‌زند. */
-export async function installApk(fileUri: string): Promise<void> {
-  // اندروید ۷+ برای دادنِ فایل به نصب‌کننده به content:// از راهِ FileProvider نیاز دارد
-  // (خودِ expo-file-system یک FileProvider تعریف کرده؛ authority = <package>.FileSystemFileProvider).
-  const contentUri = await FileSystem.getContentUriAsync(fileUri)
-  await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
-    data: contentUri,
-    flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-  })
+  } catch {
+    // به وب برمی‌گردیم
+  }
+  await Linking.openURL(BAZAAR_WEB)
 }
