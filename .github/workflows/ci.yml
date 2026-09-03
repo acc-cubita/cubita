@@ -95,6 +95,13 @@ jobs:
         working-directory: desktop
         run: npx oxlint src/
 
+      - name: ممیزِ ساختاریِ صفحه‌ها
+        # ۱۲ قاعده — از جمله R11 (قاعده‌ی نظیر: هر منوی عملیاتی یک فهرست) و
+        # R12 (کدِ مرده). محلی همیشه اجرا می‌شود؛ بدونِ این قدم فقط تا وقتی
+        # کسی یادش بماند دستی بزند.
+        working-directory: desktop
+        run: node scripts/audit-pages.mjs
+
       - name: build
         working-directory: desktop
         run: npx vite build
