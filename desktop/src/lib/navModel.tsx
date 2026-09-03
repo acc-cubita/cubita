@@ -239,21 +239,17 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
   },
   {
+    //: «مشتریان و فروش» = طرفِ‌حساب + گردشِ کالا و پولِ فروش، یک گروه — قبلاً دو
+    //: گروهِ جدا بودند و کاربر مجبور بود حدس بزند «اشخاص» زیرِ کدام است. ترتیب مسیرِ
+    //: کارِ واقعی را دنبال می‌کند: اول طرفِ‌حساب و کانال‌های مشتری (اشخاص، باشگاه،
+    //: صندوق)، بعد صدورِ سند (فاکتور، پیش‌فاکتور، برگشتی)، بعد اصلاح و بستن، بعد
+    //: پورسانت و گمرک، بعد داده‌های پایه‌ی قیمت‌گذاری، و آخر مرورها.
     heading: 'مشتریان و فروش',
     icon: <ShoppingBag size={17} />,
     items: [
-      { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
       { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
-    ],
-  },
-  {
-    //: «فروش» = گردشِ کالا و پولِ فروش. ترتیب مسیرِ کارِ واقعی را دنبال می‌کند:
-    //: اول صدورِ سند (فاکتور، پیش‌فاکتور، برگشتی)، بعد اصلاح و بستن، بعد پورسانت و
-    //: گمرک، بعد داده‌های پایه‌ی قیمت‌گذاری، و آخر مرورها.
-    heading: 'فروش',
-    icon: <ShoppingCart size={17} />,
-    items: [
+      { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
       { key: 'salesflow', label: 'فرآیند فروش', icon: <Route size={18} /> },
       { key: 'salesinvoice', label: 'فاکتور فروش', icon: <ShoppingCart size={18} /> },
       { key: 'quotations', label: 'پیش‌فاکتور', icon: <FileText size={18} /> },
