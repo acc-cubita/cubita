@@ -306,12 +306,16 @@ React + Vite، صفحه‌ی فرود بازاریابی برای **cubita.ir** 
 - اجرای بک‌اند: `... -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
 - اجرای اپ: در `desktop/` → `npm run dev` (Vite :5173 + پنجره‌ی Electron؛ به
   localhost:8000 وصل می‌شود).
-- **حساب تست محلی فعلی:** `acc.cubita@gmail.com` / `0919Nima!` (owner، اشتراک فعال).
+- **حساب تست محلی:** هر توسعه‌دهنده حسابِ خودش را با `app.seed` می‌سازد
+  (راهنما در [CONTRIBUTING.md](CONTRIBUTING.md)). رمز اینجا نوشته نمی‌شود —
+  مخزن مشترک است و تاریخچه‌ی گیت پاک نمی‌شود.
 
 ## ۹. وضعیت فعلی کار (git)
 
 - **گیت یکدست شد (۱۴۰۵/۰۵/۰۳):** `master` با کلِ خطِ توسعه هم‌تراز است (۵۹+ کامیت،
-  سرِ فعلی `4c42dd9`). working tree تمیز. (بدون remote؛ استقرار مستقیم روی VPS.)
+  سرِ فعلی `4c42dd9`). working tree تمیز.
+  **ریموت‌ها:** `origin` روی GitHub (کارِ مشترک، شاخه + Pull Request) و `vps`
+  روی مخزنِ bareِ سرور (مسیرِ استقرار). گردشِ کارِ تیمی در [CLAUDE.md](CLAUDE.md).
 - **prod = demo = repo روی مهاجرت `0046`** — مستقر و زنده (ارتقای فروش سپس خرید — بخشِ ۱۰).
   راستی‌آزماییِ عمومی: `alembic_version=0046`، health ok، RLS روی ۶۶ جدول، اندپوینت‌های تازه‌ی فروش و خرید
   (`/api/{sales,purchase}-invoices/summary`، `/returnable`، `/{sales,purchase}-returns/{id}/print`) روی هر دو دامنه ۴۰۱.
