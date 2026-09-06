@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.payroll import (
     BRANCH_KINDS,
@@ -509,3 +509,174 @@ class BenefitSettingsOut(BaseModel):
     year: int
     min_base_wage: Decimal
     annual_leave_days: int
+
+
+# ── وام‌های پرسنلی ────────────────────────────────────────────────────────────
+
+
+class LoanTypeIn(BaseModel):
+    code: str
+    name: str
+    name2: str = ""
+    default_installments: int = 12
+    is_active: bool = True
+
+    @field_validator("code", "name")
+    @classmethod
+    def _required(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("کد و عنوان الزامی‌اند")
+        return v
+
+    @field_validator("default_installments")
+    @classmethod
+    def _installments(cls, v: int) -> int:
+        if not (1 <= v <= 240):
+            raise ValueError("تعدادِ قسطِ پیش‌فرض باید بینِ ۱ و ۲۴۰ باشد")
+        return v
+
+
+class LoanTypeOut(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    name2: str
+    default_installments: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class EmployeeLoanIn(BaseModel):
+    """وامِ تازه. اقساط ساخته می‌شوند، نه فرستاده — قاعده‌شان سمتِ سرور است."""
+
+    employee_id: UUID
+    loan_type_id: UUID | None = None
+    amount: Decimal
+    loan_date: date
+    installment_count: int = 1
+    #: سررسیدِ قسطِ اول. خالی = یک ماه بعد از تاریخِ وام.
+    first_due_date: date | None = None
+    note: str = ""
+
+    @field_validator("amount")
+    @classmethod
+    def _positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مبلغِ وام باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class LoanInstallmentOut(BaseModel):
+    id: UUID
+    seq: int
+    due_date: date
+    amount: Decimal
+    deducted_period_id: UUID | None
+
+    model_config = {"from_attributes": True}
+
+
+class EmployeeLoanOut(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_name: str = ""
+    loan_type_id: UUID | None
+    amount: Decimal
+    loan_date: date
+    installment_count: int
+    status: str
+    note: str
+    #: مانده = جمعِ اقساطِ کسرنشده. مشتق است نه ستون، تا با اقساط از هم نیفتد.
+    balance: Decimal = Decimal(0)
+    installments: list[LoanInstallmentOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ── تسویه حساب ───────────────────────────────────────────────────────────────
+
+
+class PayrollSettlementIn(BaseModel):
+    employee_id: UUID
+    settlement_date: date
+    severance_amount: Decimal = Decimal(0)
+    leave_payout_amount: Decimal = Decimal(0)
+    other_earnings: Decimal = Decimal(0)
+    #: خالی بگذارید تا از وام‌های فعالِ همان کارمند خوانده شود.
+    loan_balance: Decimal | None = None
+    other_deductions: Decimal = Decimal(0)
+    note: str = ""
+
+    @model_validator(mode="after")
+    def _not_negative(self) -> "PayrollSettlementIn":
+        values = (
+            self.severance_amount, self.leave_payout_amount, self.other_earnings,
+            self.other_deductions,
+        )
+        if any(v < 0 for v in values) or (self.loan_balance is not None and self.loan_balance < 0):
+            raise ValueError("مبالغِ تسویه‌حساب نمی‌توانند منفی باشند")
+        return self
+
+
+class PayrollSettlementOut(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_name: str = ""
+    settlement_date: date
+    severance_amount: Decimal
+    leave_payout_amount: Decimal
+    other_earnings: Decimal
+    loan_balance: Decimal
+    other_deductions: Decimal
+    net_amount: Decimal
+    note: str
+    journal_entry_id: UUID | None
+
+    model_config = {"from_attributes": True}
+
+
+# ── اطلاعاتِ استقرار ──────────────────────────────────────────────────────────
+
+
+class DeploymentInfoIn(BaseModel):
+    """مانده‌های ابتدای استقرار — پرداختیِ پیش از آمدن به کوبیتا.
+
+    بی این عددها پلکانِ مالیاتِ سالانه از صفر شروع می‌شود و مالیات کمتر از واقع
+    درمی‌آید؛ برای همین هیچ‌کدام «اختیاریِ بی‌اثر» نیستند.
+    """
+
+    employee_id: UUID
+    year: int
+    cumulative_gross: Decimal = Decimal(0)
+    cumulative_tax: Decimal = Decimal(0)
+    cumulative_insurance: Decimal = Decimal(0)
+    leave_balance_days: Decimal = Decimal(0)
+    prior_service_days: int = 0
+    note: str = ""
+
+    @model_validator(mode="after")
+    def _not_negative(self) -> "DeploymentInfoIn":
+        values = (
+            self.cumulative_gross, self.cumulative_tax, self.cumulative_insurance,
+            self.leave_balance_days, Decimal(self.prior_service_days),
+        )
+        if any(v < 0 for v in values):
+            raise ValueError("مقادیرِ استقرار نمی‌توانند منفی باشند")
+        return self
+
+
+class DeploymentInfoOut(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_name: str = ""
+    year: int
+    cumulative_gross: Decimal
+    cumulative_tax: Decimal
+    cumulative_insurance: Decimal
+    leave_balance_days: Decimal
+    prior_service_days: int
+    note: str
+
+    model_config = {"from_attributes": True}

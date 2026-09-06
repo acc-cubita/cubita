@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
   FolderPlus,
   GitCompareArrows,
+  Banknote,
   HandCoins,
   HardHat,
   Hash,
@@ -62,6 +63,7 @@ import {
   Target,
   Truck,
   Undo2,
+  UploadCloud,
   UserCircle,
   UserCog,
   UserPlus,
@@ -102,6 +104,10 @@ export type PageKey =
   | 'jobtitle'
   | 'payrollfactors'
   | 'payrolltaxgroups'
+  | 'loantype'
+  | 'employeeloans'
+  | 'settlement'
+  | 'deploymentinfo'
   | 'integration'
   | 'billing'
   | 'accounts'
@@ -376,6 +382,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'jobtitle', label: 'شغل جدید', icon: <Briefcase size={18} /> },
       { key: 'payrollfactors', label: 'عوامل حقوق و مزایا', icon: <SlidersHorizontal size={18} /> },
       { key: 'payrolltaxgroups', label: 'گروه مالیاتی و شعب', icon: <Percent size={18} /> },
+      { key: 'loantype', label: 'نوع وام جدید', icon: <Banknote size={18} /> },
+      { key: 'employeeloans', label: 'تقسیط — وام‌های پرسنلی', icon: <HandCoins size={18} /> },
+      { key: 'settlement', label: 'تسویه حساب', icon: <Undo2 size={18} /> },
+      { key: 'deploymentinfo', label: 'اطلاعات استقرار', icon: <UploadCloud size={18} /> },
       { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
     ],
   },

@@ -20,7 +20,8 @@ from app.models.payroll import (
 )
 from app.models.user import User
 from app.services import chart_codes as cc
-from app.services.common import get_account, make_journal_entry
+from app.services import payroll_loans
+from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
 
 # طبق قانون کار ایران: پایه‌ی ساعتی از تقسیم بر ۱۹۴ ساعت کاری استاندارد ماهانه و ضریب اضافه‌کاری ۱.۴ به‌دست می‌آید.
@@ -82,6 +83,23 @@ def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContrac
         .filter(SalaryContract.employee_id == employee_id, SalaryContract.effective_from <= as_of)
         .order_by(SalaryContract.effective_from.desc())
         .first()
+    )
+
+
+def _employee_loan_account(db: Session):
+    """حسابِ «وام و مساعده‌ی کارکنان» — دارایی، نه هزینه.
+
+    `get_or_create_account` است نه `get_account`: این نقش تازه اضافه شده و چارتِ
+    کسب‌وکارهایی که از قبل ساخته شده‌اند آن را ندارد. اولین وامی که کسر شود، حساب را
+    می‌سازد؛ بی این کار، صدورِ فیش برای هر مشتریِ قدیمی با خطای ۵۰۰ می‌شکست.
+    """
+    return get_or_create_account(
+        db,
+        cc.EMPLOYEE_LOAN,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.EMPLOYEE_LOAN],
+        name="وام و مساعده‌ی کارکنان",
+        acc_type="asset",
+        parent_code="11",
     )
 
 
@@ -183,6 +201,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     total_insurance_employer = Decimal(0)
     total_tax = Decimal(0)
     total_net = Decimal(0)
+    total_loan_deduction = Decimal(0)
 
     for employee in employees:
         contract = get_current_contract(db, employee.id, as_of)
@@ -190,6 +209,17 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             continue  # کارمندی بدون حکم حقوقی فعال، از این دوره صرف‌نظر می‌شود
 
         amounts = compute_payslip_amounts(contract, attendance_by_employee.get(employee.id), settings)
+
+        #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
+        #: وام هزینه‌ی کارفرما نیست و مبنای بیمه و مالیات را تغییر نمی‌دهد — فقط
+        #: بخشی از همان خالص به‌جای جیبِ کارمند، بدهیِ وامش را می‌بندد.
+        loan_deduction = payroll_loans.deduct_for_period(db, employee.id, period)
+        if loan_deduction:
+            #: بیش از خالص کسر نمی‌شود؛ باقی‌اش سرِ جایش می‌ماند برای ماهِ بعد.
+            loan_deduction = min(loan_deduction, amounts["net_pay"])
+            amounts["net_pay"] -= loan_deduction
+        total_loan_deduction += loan_deduction
+
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
             number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
@@ -229,6 +259,17 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             description="مالیات حقوق پرداختنی",
         ),
     ]
+    #: بازپرداختِ وام: خالصِ پرداختنی به کارکنان کمتر شده و همان مبلغ از مانده‌ی
+    #: وامِ کارکنان (دارایی) کم می‌شود. سند بدونِ این ردیف متوازن نمی‌ماند.
+    if total_loan_deduction:
+        journal_lines.append(
+            JournalLine(
+                account_id=_employee_loan_account(db).id,
+                debit=0,
+                credit=total_loan_deduction,
+                description="بازپرداختِ اقساطِ وامِ کارکنان",
+            )
+        )
     journal_entry = make_journal_entry(
         db, as_of, f"حقوق و دستمزد دوره {period.year}/{period.month:02d}", "payroll", user, journal_lines
     )

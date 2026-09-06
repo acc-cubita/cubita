@@ -23,6 +23,10 @@ from app.models.tenant import TenantMixin
 
 PAYROLL_PERIOD_STATUSES = ("draft", "finalized")
 
+#: چرخه‌ی عمرِ وامِ پرسنلی. `settled` یعنی همه‌ی اقساط کسر شده‌اند؛ `cancelled`
+#: یعنی وام لغو شد و اقساطِ کسرنشده‌اش دیگر سررسید نمی‌شوند.
+LOAN_STATUSES = ("active", "settled", "cancelled")
+
 # ── جدول‌های مرجعِ حقوق و دستمزد ───────────────────────────────────────────────
 #
 # جریانِ استخدام از طرف‌حساب شروع می‌شود: اول شخص در «طرف حساب جدید» با تیکِ «کارمند»
@@ -433,3 +437,161 @@ class SalaryContractLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     contract: Mapped["SalaryContract"] = relationship(back_populates="lines")
     factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
+
+
+class LoanType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """نوعِ وامِ پرسنلی: وامِ ضروری، وامِ مسکن، مساعده…
+
+    جدولِ مرجعِ ساده، مثلِ `ServiceLocation`. `default_installments` فقط پیش‌فرضِ
+    فرم است نه قانون — هر وام تعدادِ قسطِ خودش را روی خودش دارد.
+    """
+
+    __tablename__ = "loan_types"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_loan_types_tenant_code"),
+        CheckConstraint(
+            "default_installments > 0 AND default_installments <= 240",
+            name="ck_loan_types_installments",
+        ),
+    )
+
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    default_installments: Mapped[int] = mapped_column(Integer, default=12, server_default="12")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class EmployeeLoan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """وامی که به کارمند داده شده و قسط‌به‌قسط از حقوقش کسر می‌شود.
+
+    مبلغ و تعدادِ قسط این‌جاست، ولی **قسطِ ماهانه از این‌ها حساب نمی‌شود** — اقساط
+    رکوردِ خودشان را دارند. دلیلش در مهاجرتِ ۰۰۹۵ نوشته شده: اقساط در عمل مساوی
+    نمی‌مانند و کسرِ ماهانه باید بداند کدام قسط سررسید شده، نه اینکه هر بار تقسیم کند.
+    """
+
+    __tablename__ = "employee_loans"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_employee_loans_amount"),
+        CheckConstraint(
+            "installment_count > 0 AND installment_count <= 240",
+            name="ck_employee_loans_installments",
+        ),
+        CheckConstraint(f"status IN {LOAN_STATUSES}", name="ck_employee_loans_status"),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    #: نوعِ وام پاک‌شدنی است بی‌آنکه وام‌های ثبت‌شده از بین بروند.
+    loan_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("loan_types.id", ondelete="SET NULL"), nullable=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    loan_date: Mapped[date_] = mapped_column(Date)
+    installment_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    installments: Mapped[list["EmployeeLoanInstallment"]] = relationship(
+        back_populates="loan", cascade="all, delete-orphan", order_by="EmployeeLoanInstallment.seq"
+    )
+
+
+class EmployeeLoanInstallment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک قسطِ وام. سررسید، مبلغ، و اینکه در کدام دوره کسر شد."""
+
+    __tablename__ = "employee_loan_installments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "loan_id", "seq", name="uq_loan_installments_loan_seq"),
+        CheckConstraint("amount > 0", name="ck_loan_installments_amount"),
+        CheckConstraint("seq > 0", name="ck_loan_installments_seq"),
+    )
+
+    loan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employee_loans.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    due_date: Mapped[date_] = mapped_column(Date)
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: NULL = هنوز کسر نشده. با ابطالِ آن دوره دوباره NULL می‌شود، پس نه قسطی دوبار
+    #: کسر می‌شود نه قسطی گم.
+    deducted_period_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_periods.id", ondelete="SET NULL"), nullable=True
+    )
+
+    loan: Mapped["EmployeeLoan"] = relationship(back_populates="installments")
+
+
+class PayrollSettlement(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تسویه‌حسابِ پایانِ کار — همه‌ی اجزا در یک سند، با یک خالصِ پرداختی.
+
+    این `BenefitRun` نیست: آن هر مزیت را جدا صادر می‌کند، این همه‌شان را منهای بدهیِ
+    وام یک‌جا می‌بندد. اجزا جدا می‌مانند چون کارمند حق دارد بداند خالص از کجا آمده و
+    ممیزِ بیمه و مالیات هم همین تفکیک را می‌خواهد.
+    """
+
+    __tablename__ = "payroll_settlements"
+    __table_args__ = (
+        #: یک تسویه‌ی نهایی برای هر کارمند؛ اصلاحش ویرایشِ همان ردیف است نه ردیفِ دوم.
+        UniqueConstraint("tenant_id", "employee_id", name="uq_payroll_settlements_employee"),
+        CheckConstraint(
+            "severance_amount >= 0 AND leave_payout_amount >= 0 AND other_earnings >= 0 "
+            "AND loan_balance >= 0 AND other_deductions >= 0",
+            name="ck_payroll_settlements_amounts",
+        ),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    settlement_date: Mapped[date_] = mapped_column(Date)
+    severance_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    leave_payout_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_earnings: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    loan_balance: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: **ذخیره** می‌شود نه محاسبه‌ی هربار: مبنای پرداخت است و نباید با تغییرِ بعدیِ
+    #: نرخ‌ها عقب‌گرد کند.
+    net_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class PayrollDeploymentInfo(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """مانده‌های ابتدای استقرار — آنچه پیش از آمدن به کوبیتا اتفاق افتاده.
+
+    **بی این رکورد، مالیاتِ حقوق کمتر از واقع درمی‌آید.** مالیات پلکانی و سالانه
+    است؛ شرکتی که مهرماه از اکسل می‌آید، اگر پرداختیِ شش ماهِ گذشته را ندهد، پلکان
+    از صفر شروع می‌شود و خطا تا ممیزیِ سالِ بعد دیده نمی‌شود.
+
+    مانده‌ی مرخصی و سابقه‌ی قبلی هم به همین دلیل این‌جاست: بدونشان کارمندِ ده‌ساله
+    از دیدِ نرم‌افزار تازه‌وارد است.
+    """
+
+    __tablename__ = "payroll_deployment_info"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "employee_id", "year", name="uq_payroll_deployment_employee_year"
+        ),
+        CheckConstraint(
+            "cumulative_gross >= 0 AND cumulative_tax >= 0 AND cumulative_insurance >= 0 "
+            "AND leave_balance_days >= 0 AND prior_service_days >= 0",
+            name="ck_payroll_deployment_amounts",
+        ),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    year: Mapped[int] = mapped_column(Integer)
+    cumulative_gross: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    cumulative_tax: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    cumulative_insurance: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    leave_balance_days: Mapped[float] = mapped_column(Numeric(6, 2), default=0, server_default="0")
+    prior_service_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")

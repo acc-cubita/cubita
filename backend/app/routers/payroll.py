@@ -10,11 +10,15 @@ from app.models.payroll import (
     CONTRACT_TYPE_LABELS,
     Attendance,
     Employee,
+    EmployeeLoan,
     InsuranceTaxBranch,
     JobTitle,
+    LoanType,
+    PayrollDeploymentInfo,
     PayrollFactor,
     PayrollPeriod,
     PayrollSettings,
+    PayrollSettlement,
     PayrollTaxGroup,
     Payslip,
     SalaryContract,
@@ -25,19 +29,27 @@ from app.pagination import Page, PageParams, paginate
 from app.schemas.payroll import (
     AttendanceIn,
     AttendanceOut,
+    DeploymentInfoIn,
+    DeploymentInfoOut,
     EmployeeCandidateOut,
     EmployeeIn,
+    EmployeeLoanIn,
+    EmployeeLoanOut,
     EmployeeOut,
     InsuranceTaxBranchIn,
     InsuranceTaxBranchOut,
     JobTitleIn,
     JobTitleOut,
+    LoanTypeIn,
+    LoanTypeOut,
     PayrollFactorIn,
     PayrollFactorOut,
     PayrollPeriodIn,
     PayrollPeriodOut,
     PayrollSettingsIn,
     PayrollSettingsOut,
+    PayrollSettlementIn,
+    PayrollSettlementOut,
     PayrollTaxGroupIn,
     PayrollTaxGroupOut,
     PayslipOut,
@@ -46,7 +58,7 @@ from app.schemas.payroll import (
     ServiceLocationIn,
     ServiceLocationOut,
 )
-from app.services import payroll_contracts
+from app.services import payroll_contracts, payroll_loans
 from app.services.payroll import (
     generate_insurance_list_csv,
     generate_payment_list_csv,
@@ -464,3 +476,237 @@ def contract_types_for(
         "allowed": allowed,
         "labels": {key: CONTRACT_TYPE_LABELS[key] for key in allowed},
     }
+
+
+# ── وام‌های پرسنلی ────────────────────────────────────────────────────────────
+
+
+def _employee_names(db: Session) -> dict:
+    return {
+        e.id: f"{e.first_name} {e.last_name}".strip()
+        for e in db.query(Employee).all()
+    }
+
+
+def _loan_out(db: Session, loan: EmployeeLoan, names: dict | None = None) -> dict:
+    names = names if names is not None else _employee_names(db)
+    return {
+        "id": loan.id,
+        "employee_id": loan.employee_id,
+        "employee_name": names.get(loan.employee_id, ""),
+        "loan_type_id": loan.loan_type_id,
+        "amount": loan.amount,
+        "loan_date": loan.loan_date,
+        "installment_count": loan.installment_count,
+        "status": loan.status,
+        "note": loan.note,
+        #: مانده مشتق است نه ستون — یک منبع، پس با اقساط از هم نمی‌افتد.
+        "balance": payroll_loans.loan_balance(db, loan.id),
+        "installments": loan.installments,
+    }
+
+
+@router.get("/api/loan-types", response_model=list[LoanTypeOut])
+def list_loan_types(db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))):
+    return db.query(LoanType).order_by(LoanType.code).all()
+
+
+@router.post("/api/loan-types", response_model=LoanTypeOut, status_code=201)
+def create_loan_type(
+    data: LoanTypeIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
+):
+    if db.query(LoanType).filter(LoanType.code == data.code).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "کدِ نوعِ وام تکراری است")
+    row = LoanType(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/api/loan-types/{row_id}", response_model=LoanTypeOut)
+def update_loan_type(
+    row_id: UUID,
+    data: LoanTypeIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    row = db.get(LoanType, row_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "نوعِ وام یافت نشد")
+    clash = db.query(LoanType).filter(LoanType.code == data.code, LoanType.id != row_id).first()
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "کدِ نوعِ وام تکراری است")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/employee-loans", response_model=list[EmployeeLoanOut])
+def list_employee_loans(
+    employee_id: UUID | None = None,
+    status_filter: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    query = db.query(EmployeeLoan)
+    if employee_id is not None:
+        query = query.filter(EmployeeLoan.employee_id == employee_id)
+    if status_filter:
+        query = query.filter(EmployeeLoan.status == status_filter)
+    rows = query.order_by(EmployeeLoan.loan_date.desc()).all()
+    names = _employee_names(db)
+    return [_loan_out(db, row, names) for row in rows]
+
+
+@router.post("/api/employee-loans", response_model=EmployeeLoanOut, status_code=201)
+def create_employee_loan(
+    data: EmployeeLoanIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("payroll", "create")),
+):
+    """وام + اقساطش. قاعده‌ی زمان‌بندی در سرویس است، نه این‌جا."""
+    loan = payroll_loans.create_loan(db, data, user)
+    return _loan_out(db, loan)
+
+
+@router.post("/api/employee-loans/{loan_id}/cancel", response_model=EmployeeLoanOut)
+def cancel_employee_loan(
+    loan_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "update"))
+):
+    """لغوِ وام — اقساطِ کسرشده دست نمی‌خورند، فقط دیگر قسطی سررسید نمی‌شود.
+
+    حذف نمی‌کنیم: اقساطی که قبلاً از حقوق کسر شده‌اند واقعیتِ ثبت‌شده‌اند و پاک‌کردنشان
+    یعنی فیش‌های گذشته توضیح‌ناپذیر شوند.
+    """
+    loan = db.get(EmployeeLoan, loan_id)
+    if loan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "وام یافت نشد")
+    loan.status = "cancelled"
+    db.flush()
+    return _loan_out(db, loan)
+
+
+# ── تسویه حساب ───────────────────────────────────────────────────────────────
+
+
+def _settlement_out(settlement: PayrollSettlement, names: dict) -> dict:
+    row = {c.name: getattr(settlement, c.name) for c in PayrollSettlement.__table__.columns}
+    row["employee_name"] = names.get(settlement.employee_id, "")
+    return row
+
+
+@router.get("/api/payroll-settlements", response_model=list[PayrollSettlementOut])
+def list_settlements(db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))):
+    names = _employee_names(db)
+    rows = db.query(PayrollSettlement).order_by(PayrollSettlement.settlement_date.desc()).all()
+    return [_settlement_out(row, names) for row in rows]
+
+
+@router.post("/api/payroll-settlements", response_model=PayrollSettlementOut, status_code=201)
+def create_settlement(
+    data: PayrollSettlementIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("payroll", "create")),
+):
+    """تسویه‌حسابِ پایانِ کار — یک ردیف به‌ازای هر کارمند.
+
+    `loan_balance` اگر فرستاده نشود از وام‌های *فعالِ* همان کارمند خوانده می‌شود،
+    نه دستی: عددی که کاربر تایپ کند می‌تواند با اقساطِ واقعی نخواند.
+    """
+    employee = db.get(Employee, data.employee_id)
+    if employee is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کارمند یافت نشد")
+    if db.query(PayrollSettlement).filter(
+        PayrollSettlement.employee_id == data.employee_id
+    ).first() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "برای این کارمند تسویه‌حساب ثبت شده؛ اصلاحش ویرایشِ همان ردیف است.",
+        )
+
+    loan_balance = (
+        data.loan_balance
+        if data.loan_balance is not None
+        else payroll_loans.employee_loan_balance(db, data.employee_id)
+    )
+    earnings = data.severance_amount + data.leave_payout_amount + data.other_earnings
+    net = earnings - loan_balance - data.other_deductions
+
+    row = PayrollSettlement(
+        employee_id=data.employee_id,
+        settlement_date=data.settlement_date,
+        severance_amount=data.severance_amount,
+        leave_payout_amount=data.leave_payout_amount,
+        other_earnings=data.other_earnings,
+        loan_balance=loan_balance,
+        other_deductions=data.other_deductions,
+        #: خالصِ منفی ممکن است (بدهیِ وام بیشتر از مزایا) و پنهانش نمی‌کنیم.
+        net_amount=net,
+        note=data.note,
+        created_by_id=user.id,
+    )
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return _settlement_out(row, _employee_names(db))
+
+
+# ── اطلاعاتِ استقرار ──────────────────────────────────────────────────────────
+
+
+@router.get("/api/payroll-deployment", response_model=list[DeploymentInfoOut])
+def list_deployment_info(
+    year: int | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    query = db.query(PayrollDeploymentInfo)
+    if year is not None:
+        query = query.filter(PayrollDeploymentInfo.year == year)
+    names = _employee_names(db)
+    rows = query.order_by(PayrollDeploymentInfo.year.desc()).all()
+    out = []
+    for row in rows:
+        item = {c.name: getattr(row, c.name) for c in PayrollDeploymentInfo.__table__.columns}
+        item["employee_name"] = names.get(row.employee_id, "")
+        out.append(item)
+    return out
+
+
+@router.put("/api/payroll-deployment", response_model=DeploymentInfoOut)
+def upsert_deployment_info(
+    data: DeploymentInfoIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """یک ردیف برای هر (کارمند، سال) — دوباره فرستادن ویرایش است، نه ردیفِ دوم.
+
+    `PUT` است نه `POST` چون همین معنا را دارد: این وضعیتِ استقرارِ آن کارمند در آن
+    سال است، و دو وضعیتِ متفاوت برای یک سال بی‌معناست.
+    """
+    if db.get(Employee, data.employee_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کارمند یافت نشد")
+
+    row = (
+        db.query(PayrollDeploymentInfo)
+        .filter(
+            PayrollDeploymentInfo.employee_id == data.employee_id,
+            PayrollDeploymentInfo.year == data.year,
+        )
+        .first()
+    )
+    if row is None:
+        row = PayrollDeploymentInfo(**data.model_dump())
+        db.add(row)
+    else:
+        for field, value in data.model_dump().items():
+            setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+
+    item = {c.name: getattr(row, c.name) for c in PayrollDeploymentInfo.__table__.columns}
+    item["employee_name"] = _employee_names(db).get(row.employee_id, "")
+    return item

@@ -24,6 +24,10 @@ PAYROLL_PAYABLE = "payroll_payable"
 SALES_REVENUE = "sales_revenue"
 COGS = "cogs"
 PAYROLL_EXPENSE = "payroll_expense"
+#: وام و مساعده‌ی کارکنان — **دارایی** است نه هزینه: پولی که به کارمند داده‌ایم و
+#: قسط‌به‌قسط از حقوقش برمی‌گردد. حسابِ نقش‌دارِ تازه است، پس با
+#: `get_or_create_account` ساخته می‌شود تا چارتِ مشتریانِ موجود هم نشکند.
+EMPLOYEE_LOAN = "employee_loan"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
 VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
@@ -63,6 +67,7 @@ DEFAULT_CODE_BY_ROLE = {
     SALES_ROUNDING: "4102",
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
+    EMPLOYEE_LOAN: "1111",
     INVENTORY_ADJUSTMENT: "5105",
     DEPRECIATION_EXPENSE: "5106",
     FX_GAIN: "4106",

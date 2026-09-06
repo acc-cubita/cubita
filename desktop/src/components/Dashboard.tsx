@@ -44,6 +44,12 @@ import { ContractFormPage } from '../pages/payroll/ContractFormPage'
 import { ContractListPage } from '../pages/payroll/ContractListPage'
 import { PayslipLedgerPage } from '../pages/payroll/PayslipLedgerPage'
 import {
+  DeploymentInfoPage,
+  EmployeeLoanPage,
+  LoanTypePage,
+  SettlementPage,
+} from '../pages/payroll/PayrollLoanPages'
+import {
   JobTitlePage,
   PayrollFactorPage,
   PayrollTaxGroupPage,
@@ -285,6 +291,10 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contractnew: 'قرارداد جدید',
   contractlist: 'قراردادها',
   payslipledger: 'مرور حقوق',
+  loantype: 'نوع وام جدید',
+  employeeloans: 'تقسیط — وام‌های پرسنلی',
+  settlement: 'تسویه حساب',
+  deploymentinfo: 'اطلاعات استقرار',
   servicelocation: 'محل خدمت جدید',
   jobtitle: 'شغل جدید',
   payrollfactors: 'عوامل حقوق و مزایا',
@@ -650,6 +660,10 @@ export function Dashboard({
           {page === 'contractnew' && <ContractFormPage token={token} onNavigate={setPage} />}
           {page === 'contractlist' && <ContractListPage token={token} onNavigate={setPage} />}
           {page === 'payslipledger' && <PayslipLedgerPage token={token} />}
+          {page === 'loantype' && <LoanTypePage token={token} />}
+          {page === 'employeeloans' && <EmployeeLoanPage token={token} />}
+          {page === 'settlement' && <SettlementPage token={token} />}
+          {page === 'deploymentinfo' && <DeploymentInfoPage token={token} />}
           {page === 'servicelocation' && <ServiceLocationPage token={token} />}
           {page === 'jobtitle' && <JobTitlePage token={token} />}
           {page === 'payrollfactors' && <PayrollFactorPage token={token} />}

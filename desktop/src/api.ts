@@ -5323,3 +5323,102 @@ export const fetchSalaryContracts = (token: string, employeeId?: string) =>
 
 export const createSalaryContract = (token: string, body: Record<string, unknown>) =>
   authedSend<SalaryContractRecord>(token, 'POST', '/api/salary-contracts', body)
+
+
+// ── وام‌های پرسنلی، تسویه حساب، اطلاعاتِ استقرار ──────────────────────────────
+
+export interface LoanTypeRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  default_installments: number
+  is_active: boolean
+}
+
+export const fetchLoanTypes = (token: string) =>
+  authedGet<LoanTypeRecord[]>(token, '/api/loan-types')
+export const createLoanType = (token: string, body: Partial<LoanTypeRecord>) =>
+  authedSend<LoanTypeRecord>(token, 'POST', '/api/loan-types', body)
+
+export interface LoanInstallmentRecord {
+  id: string
+  seq: number
+  due_date: string
+  amount: string
+  /** کدام دوره‌ی حقوقی کسرش کرد. null = هنوز کسر نشده. */
+  deducted_period_id: string | null
+}
+
+export interface EmployeeLoanRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  loan_type_id: string | null
+  amount: string
+  loan_date: string
+  installment_count: number
+  status: 'active' | 'settled' | 'cancelled'
+  note: string
+  /** مانده مشتق است — جمعِ اقساطِ کسرنشده، نه ستونی که بتواند از اقساط جدا بیفتد. */
+  balance: string
+  installments: LoanInstallmentRecord[]
+}
+
+export const LOAN_STATUS_LABELS: Record<string, string> = {
+  active: 'در حال کسر',
+  settled: 'تسویه‌شده',
+  cancelled: 'لغوشده',
+}
+
+export const fetchEmployeeLoans = (token: string, employeeId?: string) =>
+  authedGet<EmployeeLoanRecord[]>(
+    token,
+    employeeId ? `/api/employee-loans?employee_id=${employeeId}` : '/api/employee-loans',
+  )
+
+export const createEmployeeLoan = (token: string, body: Record<string, unknown>) =>
+  authedSend<EmployeeLoanRecord>(token, 'POST', '/api/employee-loans', body)
+
+export const cancelEmployeeLoan = (token: string, loanId: string) =>
+  authedSend<EmployeeLoanRecord>(token, 'POST', `/api/employee-loans/${loanId}/cancel`, {})
+
+export interface PayrollSettlementRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  settlement_date: string
+  severance_amount: string
+  leave_payout_amount: string
+  other_earnings: string
+  loan_balance: string
+  other_deductions: string
+  net_amount: string
+  note: string
+  journal_entry_id: string | null
+}
+
+export const fetchSettlements = (token: string) =>
+  authedGet<PayrollSettlementRecord[]>(token, '/api/payroll-settlements')
+export const createSettlement = (token: string, body: Record<string, unknown>) =>
+  authedSend<PayrollSettlementRecord>(token, 'POST', '/api/payroll-settlements', body)
+
+export interface DeploymentInfoRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  year: number
+  cumulative_gross: string
+  cumulative_tax: string
+  cumulative_insurance: string
+  leave_balance_days: string
+  prior_service_days: number
+  note: string
+}
+
+export const fetchDeploymentInfo = (token: string) =>
+  authedGet<DeploymentInfoRecord[]>(token, '/api/payroll-deployment')
+
+/** `PUT` است نه `POST`: یک وضعیتِ استقرار برای هر (کارمند، سال). */
+export const saveDeploymentInfo = (token: string, body: Record<string, unknown>) =>
+  authedSend<DeploymentInfoRecord>(token, 'PUT', '/api/payroll-deployment', body)
