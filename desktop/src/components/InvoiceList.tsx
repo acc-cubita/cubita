@@ -261,9 +261,20 @@ function InvoiceDetail({
     ? `${row.created_by_name}${row.created_by_role ? ` (${row.created_by_role})` : ''}`
     : null
 
+  //: واسطه و کارمزدش فقط در فاکتور فروش معنا دارند. مبلغ همان چیزی است که در
+  //: لحظه‌ی ثبت قفل شده، نه محاسبه‌ی دوباره از نرخِ امروزِ واسطه.
+  const brokerName = isSales ? (row as SalesInvoiceRecord).broker_name : null
+  const brokerCommission = isSales ? Number((row as SalesInvoiceRecord).broker_commission) : 0
+
   return (
     <div className="invoice-detail">
       {creator && <div className="invoice-detail-desc">ثبت‌کننده: {creator}</div>}
+      {brokerName && (
+        <div className="invoice-detail-desc">
+          واسطه: {brokerName}
+          {brokerCommission > 0 && ` — کارمزد: ${fa(brokerCommission)}`}
+        </div>
+      )}
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
       <div className="table-scroll">
         <table className="invoice-detail-table cards-on-mobile">

@@ -1122,6 +1122,11 @@ export interface SalesInvoiceRecord {
   closed_at: string | null
   salesperson_id: string | null
   sale_type_id: string | null
+  /** واسطه‌ی معامله — طرف‌حسابی با نقشِ «واسط». null = بی‌واسطه. */
+  broker_id: string | null
+  /** کارمزدِ واسطه، قفل‌شده در لحظه‌ی ثبت (نه محاسبه از نرخِ امروز). */
+  broker_commission: string
+  broker_name: string | null
   /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
   created_by_id: string | null
   created_by_name: string | null
@@ -1688,6 +1693,9 @@ export const createSalesInvoiceDirect = (
     invoice_discount?: number
     /** تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات)، علامت‌دار. */
     rounding?: number
+    /** واسطه‌ی معامله. باید نقشِ «واسط» داشته باشد؛ کارمزدش را سرور از نرخِ خودش
+     *  حساب و روی فاکتور قفل می‌کند. */
+    broker_id?: string | null
     lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,

@@ -59,6 +59,20 @@ def _attach_creators(db: Session, invoices: list) -> None:
         inv.created_by_role = roles.get(inv.created_by_id)
 
 
+def _attach_brokers(db: Session, invoices: list) -> None:
+    """نامِ واسطه را برای نمایش روی فاکتورهای فروش می‌نشاند.
+
+    مثلِ `_attach_creators` روی نمونه‌ی ORM ست می‌شود و persist نمی‌شود. یک کوئری
+    برای همه‌ی فاکتورها، نه یکی به‌ازای هر فاکتور.
+    """
+    ids = {inv.broker_id for inv in invoices if getattr(inv, "broker_id", None)}
+    if not ids:
+        return
+    names = {cid: name for cid, name in db.query(Contact.id, Contact.name).filter(Contact.id.in_(ids)).all()}
+    for inv in invoices:
+        inv.broker_name = names.get(inv.broker_id)
+
+
 @router.get("/api/sales-invoices", response_model=Page[SalesInvoiceOut])
 def list_sales_invoices(
     db: Session = Depends(get_db),
@@ -71,6 +85,7 @@ def list_sales_invoices(
         params,
     )
     _attach_creators(db, items)
+    _attach_brokers(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -109,6 +124,7 @@ def create_sales_invoice(
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
     _attach_creators(db, [invoice])
+    _attach_brokers(db, [invoice])
     return invoice
 
 
