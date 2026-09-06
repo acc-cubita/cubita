@@ -1,6 +1,9 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // بدونِ این، tsc در فایل‌های تست `describe`/`it`/`jest` را نمی‌شناسد و صدها
+    // خطای کاذب می‌دهد. "node" هم لازم است چون تست‌ها به `global` دست می‌زنند.
+    "types": ["jest", "node"]
   }
 }

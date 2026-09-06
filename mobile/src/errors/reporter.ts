@@ -54,7 +54,16 @@ export interface CrashReport {
 // ── وضعیتِ درون‌حافظه‌ای ────────────────────────────────────────────────────
 
 let currentScreen: string | null = null
-let flushing = false
+
+/**
+ * فلاشِ در جریان — الگوی تک‌پروازه، همان که `api/client.ts` برای رفرشِ توکن دارد.
+ *
+ * نسخه‌ی اول یک بولین بود و وقتی فلاشی در جریان بود فوراً برمی‌گشت. نتیجه این بود
+ * که فراخوان هیچ راهی نداشت بفهمد ارسال تمام شده — و گزارشِ دومی که پشتِ سرِ اولی
+ * می‌آمد تا اجرای بعدیِ اپ روی دیسک می‌ماند. حالا فراخوانِ همزمان همان promise را
+ * می‌گیرد، پس هم یک ارسال بیشتر نمی‌رود و هم منتظر ماندن ممکن است.
+ */
+let flushing: Promise<void> | null = null
 
 /** ناوبری این را ست می‌کند تا گزارش بگوید کاربر کجا بود. */
 export function setCurrentScreen(name: string | null): void {
@@ -133,10 +142,7 @@ async function send(reports: CrashReport[]): Promise<boolean> {
   }
 }
 
-/** هر چه در صف هست را می‌فرستد. اگر نرفت، سرِ اجرای بعدی دوباره تلاش می‌شود. */
-export async function flush(): Promise<void> {
-  if (flushing) return
-  flushing = true
+async function doFlush(): Promise<void> {
   try {
     const queue = await readQueue()
     if (queue.length === 0) return
@@ -145,9 +151,13 @@ export async function flush(): Promise<void> {
     }
   } catch {
     // هیچ. گزارشگر نباید صدا داشته باشد.
-  } finally {
-    flushing = false
   }
+}
+
+/** هر چه در صف هست را می‌فرستد. اگر نرفت، سرِ اجرای بعدی دوباره تلاش می‌شود. */
+export function flush(): Promise<void> {
+  if (!flushing) flushing = doFlush().finally(() => (flushing = null))
+  return flushing
 }
 
 /**
@@ -165,7 +175,10 @@ export async function report(error: unknown, fatal = false): Promise<void> {
   } catch {
     return
   }
-  void flush()
+  // منتظرِ تلاشِ ارسال می‌ماند تا رفتار قطعی باشد. این چیزی را کند نمی‌کند: هر دو
+  // فراخوانِ واقعی (ErrorBoundary و گیرنده‌ی سراسری) خودشان منتظر نمی‌مانند، و
+  // گزارش از قبل روی دیسک نشسته — پس حتی اگر اپ همین‌جا بمیرد چیزی گم نمی‌شود.
+  await flush()
 }
 
 // ── نصبِ گیرنده‌ی سراسری ────────────────────────────────────────────────────
