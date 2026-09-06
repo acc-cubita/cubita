@@ -115,7 +115,11 @@ export function TaskFlow({
           type="button"
           className="btn-primary taskflow-next"
           onClick={next}
-          disabled={(!isLast && !canNext) || !!submitting}
+          //: `canAdvance` روی مرحله‌ی آخر هم اعمال می‌شود، نه فقط مرحله‌های میانی.
+          //: پیش از این، ویزارد می‌توانست ثبت را باز بگذارد در حالی که همان شرط
+          //: جلوی رفتن به مرحله‌ی بعد را می‌گرفت — یعنی قفلی که فقط تا یک قدم
+          //: مانده به ثبت کار می‌کرد.
+          disabled={!canNext || !!submitting}
         >
           {isLast ? (
             submitLabel

@@ -299,6 +299,20 @@ export function useSalesInvoiceDraft({
   //: درخواستِ جدا: فهرست از قبل این‌جاست و نمای دومِ همان داده نمی‌سازیم.
   const blacklisted = contacts.some((c) => c.id === contactId && c.is_blacklisted)
 
+  //: «جلوگیری کن» در فرمِ طرف حساب باید واقعاً جلو بگیرد — تا امروز ذخیره
+  //: می‌شد و هیچ اثری نداشت. تصمیم این‌جا گرفته می‌شود، در لحظه‌ی فروش، نه سرِ
+  //: همگام‌سازیِ آفلاین که فروش قبلاً انجام شده. سرور هم همین گارد را دارد؛
+  //: این‌جا فقط زودتر و با پیامِ روشن‌تر می‌گوید.
+  const creditBlock = (() => {
+    const contact = contacts.find((c) => c.id === contactId)
+    if (!contact || contact.credit_action !== 'block' || !credit) return null
+    const limit = Number(credit.credit_limit)
+    //: سقفِ صفر یعنی «بدون سقف» — همان قاعده‌ی سرور.
+    if (!(limit > 0)) return null
+    const projected = Number(credit.outstanding) + baseGrandTotal
+    return projected > limit ? { projected, limit, name: contact.name } : null
+  })()
+
   // اعتبارسنجیِ آماده‌ی ثبت (برای گِیتِ مرحله‌ی ویزارد و پیامِ فرم).
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0)
   const overDiscountLine = validLines.find(
@@ -399,6 +413,7 @@ export function useSalesInvoiceDraft({
     setContactId,
     credit,
     blacklisted,
+    creditBlock,
     autoTier,
     currencies,
     currencyCode,

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
@@ -89,6 +89,13 @@ def create_sales_invoice(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
+    #: صفِ آفلاینِ دسکتاپ این سرآیند را می‌فرستد. سقفِ اعتبار سرِ *همگام‌سازی* گرفته
+    #: نمی‌شود: آن فروش قبلاً انجام شده و کالایش رفته، و ردّش این‌جا یعنی نابودکردنِ
+    #: کارِ فروشنده. تصمیمِ «نفروش» باید در لحظه‌ی فروش گرفته شود.
+    #:
+    #: این مرزِ امنیتی نیست و لازم هم نیست باشد — قاعده‌ی کسب‌وکار است و کاربر
+    #: می‌تواند همان تنظیم را در فرمِ طرف حساب روی «هشدار بده» بگذارد.
+    x_cubita_offline_replay: str | None = Header(default=None),
 ):
     invoice = idempotent(
         db,
@@ -96,7 +103,9 @@ def create_sales_invoice(
         user,
         operation="create_sales_invoice",
         payload=data,
-        run=lambda: post_sales_invoice(db, data, user),
+        run=lambda: post_sales_invoice(
+            db, data, user, enforce_credit=not x_cubita_offline_replay
+        ),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
     _attach_creators(db, [invoice])
