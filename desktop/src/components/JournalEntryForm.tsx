@@ -130,6 +130,13 @@ export function JournalEntryForm({
 
 /** گریدِ ردیف‌های سند (حساب + بدهکار/بستانکار) — مشترکِ فرم و ویزارد. */
 export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
+  // ستون‌های پیگیری فقط وقتی ظاهر می‌شوند که دستِ‌کم یک ردیف حسابِ پیگیری‌دار
+  // داشته باشد. همیشه نشان دادنشان جدولِ چهارستونی را برای همه‌ی کسانی که هرگز
+  // پیگیری نمی‌خواهند به شش‌ستونی تبدیل می‌کرد.
+  const showTracking = d.lines.some((l) => d.trackingAllowed.has(l.accountId))
+  // ستونِ تفصیلی هم مثلِ پیگیری فقط وقتی می‌آید که ردیفی لازمش داشته باشد — ولی
+  // برخلافِ پیگیری، این یکی **اجباری** است و خالی‌ماندنش سند را رد می‌کند.
+  const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
   return (
     <div className="table-scroll">
       <table className="invoice-lines cards-on-mobile">
@@ -137,8 +144,11 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
           <tr>
             <th>حساب</th>
             {d.currencyCode && <th>مبلغ {d.currencyCode}</th>}
+            {showTafsili && <th>تفصیلی</th>}
             <th>بدهکار</th>
             <th>بستانکار</th>
+            {showTracking && <th>شماره پیگیری</th>}
+            {showTracking && <th>تاریخ پیگیری</th>}
             <th></th>
           </tr>
         </thead>
@@ -164,12 +174,65 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                   />
                 </td>
               )}
+              {showTafsili && (
+                <td data-label="تفصیلی">
+                  {d.tafsiliRequired.has(line.accountId) ? (
+                    <select
+                      value={line.analyticId ?? ''}
+                      onChange={(e) => d.updateLine(i, { analyticId: e.target.value })}
+                      //: در «شناور» فیلد هست ولی اجباری نیست — همان انتخابی که
+                      //: کاربر در تنظیمات ← شخصی‌سازی کرده.
+                      required={d.tafsiliMode !== 'floating'}
+                    >
+                      {/* اگر سطحِ سند تفصیلی دارد، خالی‌گذاشتن یعنی «همان» — پس
+                          متنِ گزینه‌ی خالی باید همین را بگوید، نه «انتخاب کنید». */}
+                      <option value="">
+                        {d.analyticId ? '— تفصیلیِ سند —' : '— انتخاب کنید —'}
+                      </option>
+                      {d.analytics.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input type="text" value="" disabled placeholder="—" readOnly />
+                  )}
+                </td>
+              )}
               <td data-label="بدهکار">
                 <NumberInput value={line.debit} onChange={(v) => d.updateLine(i, { debit: v, credit: '' })} />
               </td>
               <td data-label="بستانکار">
                 <NumberInput value={line.credit} onChange={(v) => d.updateLine(i, { credit: v, debit: '' })} />
               </td>
+              {showTracking && (
+                <td data-label="شماره پیگیری">
+                  {/* ردیفی که حسابش پیگیری نمی‌پذیرد خالی و غیرفعال می‌ماند، نه
+                      پنهان: ستون که هست، جای خالی خودش می‌گوید این حساب پیگیری
+                      ندارد. */}
+                  <input
+                    type="text"
+                    value={line.trackingNo ?? ''}
+                    onChange={(e) => d.updateLine(i, { trackingNo: e.target.value })}
+                    disabled={!d.trackingAllowed.has(line.accountId)}
+                    maxLength={50}
+                    placeholder={d.trackingAllowed.has(line.accountId) ? 'شماره‌ی حواله/نامه' : '—'}
+                  />
+                </td>
+              )}
+              {showTracking && (
+                <td data-label="تاریخ پیگیری">
+                  {d.trackingAllowed.has(line.accountId) ? (
+                    <JalaliDatePicker
+                      value={line.trackingDate ?? ''}
+                      onChange={(v) => d.updateLine(i, { trackingDate: v })}
+                    />
+                  ) : (
+                    <input type="text" value="" disabled placeholder="—" readOnly />
+                  )}
+                </td>
+              )}
               <td className="card-actions">
                 <button
                   type="button"

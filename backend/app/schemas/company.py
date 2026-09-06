@@ -58,6 +58,9 @@ class RelatedPersonIn(BaseModel):
     contact_id: UUID
     name: str = Field(min_length=1, max_length=200)
     role: str = Field(default="", max_length=120)
+    #: «(۲)»ِ فرمِ سپیدار — نسخه‌ی دومِ لاتین. اختیاری و بی‌اثر بر فارسی.
+    name2: str = Field(default="", max_length=200)
+    role2: str = Field(default="", max_length=200)
     phone: str = Field(default="", max_length=30)
     email: str = Field(default="", max_length=150)
     is_primary: bool = False
@@ -72,6 +75,8 @@ class RelatedPersonOut(BaseModel):
     contact_id: UUID
     name: str
     role: str
+    name2: str = ""
+    role2: str = ""
     phone: str
     email: str
     is_primary: bool

@@ -6,32 +6,28 @@ import {
   ChevronLeft,
   ChevronDown,
   FolderTree,
-  Hash,
   ListTree,
   Minus,
   Pencil,
   Plus,
   RefreshCw,
   Save,
-  Sparkles,
-  Trash2,
 } from 'lucide-react'
 import {
-  applyChartTemplate,
-  changeAccountCode,
+  ACCOUNT_NATURE_LABELS,
+  ACCOUNT_TRAIT_META,
   createAccount,
-  deleteAccount,
   fetchChartAccounts,
-  fetchChartTemplates,
   fetchNextAccountCode,
   fetchTrialBalance,
   updateAccount,
+  type AccountTraits,
   type ChartAccount,
-  type ChartTemplate,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
+import { AccountEditDrawer } from './AccountEditDrawer'
 
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   asset: 'دارایی', liability: 'بدهی', equity: 'سرمایه', income: 'درآمد', expense: 'هزینه',
@@ -51,7 +47,16 @@ const TYPE_TONE: Record<string, string> = {
  *  ۱. **سطحِ حساب** (گروه/کل/معین/تفصیلی) از عمقِ درخت — واژگانِ حسابداریِ ایران.
  *  ۲. **مانده‌ی هر حساب** و جمعِ سرفصل‌ها، که از تراز آزمایشی می‌آید و پایین‌به‌بالا جمع می‌شود.
  *  ۳. **تغییرِ کدِ حساب**؛ امن است چون ثبتِ خودکار حساب را با `system_role` پیدا می‌کند نه با کد.
- *  ۴. **قالب‌های آماده‌ی صنفی** برای درجِ یک‌جای ده‌ها حسابِ استاندارد.
+ *  ۴. قالب‌های صنفی، قاعده‌ی کدینگ و **حذفِ حساب** این‌جا نیستند — تنظیمات ← کدینگ.
+ *     حذف عمداً برداشته شد: دکمه‌ی ویرانگر کنارِ دکمه‌ای که روزی صد بار زده
+ *     می‌شود، دیر یا زود اشتباه زده می‌شود. غیرفعال‌سازی این‌جا می‌ماند چون
+ *     برگشت‌پذیر است.
+ *     یک‌بار تنظیم می‌شوند؛ نشستنشان بالای درختواره باعث می‌شد کاربر ناخواسته
+ *     چند قالب را پشتِ هم درج کند و چارتش پر از حسابِ بی‌ربط شود.
+ *  ۵. **ماهیتِ حساب** (بدهکار/بستانکار/مهم نیست) — فقط معیارِ گزارش، نه گاردِ ثبت.
+ *  ۶. **عنوانِ دوم** برای گزارشِ دوزبانه، و **عنوانِ کامل** (مسیر از ریشه) در راهنمای سطر.
+ *  ۷. **ویژگی‌های حساب** (شش پرچم) در کشوی ویرایش — جانشینِ `window.prompt`های
+ *     نام و کد، که دیگر جواب نمی‌دادند وقتی دو تیک به هم وابسته شدند.
  */
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -60,10 +65,37 @@ const money = (n: number) => Math.round(n).toLocaleString('fa-IR')
 /** واژگانِ سطحِ حساب در حسابداریِ ایران، بر پایه‌ی عمق در درخت. */
 const LEVEL_LABELS = ['گروه', 'کل', 'معین', 'تفصیلی']
 const levelOf = (depth: number) => LEVEL_LABELS[Math.min(depth, LEVEL_LABELS.length - 1)]
+//: رنگِ هر سطح — قراردادِ جاافتاده‌ی نرم‌افزارهای حسابداریِ ایرانی (سبز/آبی/زرد).
+//: کلاسِ CSS است نه رنگِ درون‌خطی، تا در پوسته‌ی روشن و تیره هر دو بخواند.
+const levelToneOf = (depth: number) => `tree-level--l${Math.min(depth, LEVEL_LABELS.length - 1)}`
+
+/**
+ * پرچم‌هایی که روی سطرِ درخت نشانه می‌گیرند، با برچسبِ کوتاه.
+ *
+ * «نمایش در گزارشات مدیریتی» عمداً این‌جا نیست: پیش‌فرضش روشن است، پس نشانه‌اش روی
+ * تقریباً همه‌ی سطرها می‌آمد و چیزی نمی‌گفت. حالتِ *خاموشش* جداگانه نشان داده می‌شود.
+ */
+const TRAIT_TAGS = ACCOUNT_TRAIT_META.filter((t) => t.key !== 'in_management_reports').map((t) => ({
+  key: t.key,
+  tag: t.key === 'nature_control' ? 'کنترلِ ماهیت' : t.label,
+  title: t.hint,
+}))
+
+/** پیش‌فرضِ ویژگی‌های حسابِ تازه — عیناً همان پیش‌فرضِ ستون‌ها در مهاجرتِ ۰۰۸۸. */
+const NEW_ACCOUNT_TRAITS: AccountTraits = {
+  nature_control: false,
+  is_fx: false,
+  fx_revaluable: false,
+  accepts_tafsili: false,
+  has_tracking: false,
+  in_management_reports: true,
+}
 
 interface Node extends ChartAccount {
   depth: number
   children: Node[]
+  /** «عنوانِ کامل» — مسیرِ حساب از ریشه، مثلِ «دارایی‌ها › دارایی‌های جاری › صندوق». */
+  fullName: string
   /** مانده‌ی خودِ حساب (برگ) یا جمعِ زیرمجموعه (سرفصل). */
   balance: number
 }
@@ -71,7 +103,8 @@ interface Node extends ChartAccount {
 /** فهرستِ تخت را به درخت تبدیل می‌کند و مانده‌ها را پایین‌به‌بالا جمع می‌زند. */
 function buildTree(accounts: ChartAccount[], balances: Map<string, number>): Node[] {
   const nodes = new Map<string, Node>()
-  for (const a of accounts) nodes.set(a.id, { ...a, depth: 0, children: [], balance: balances.get(a.id) ?? 0 })
+  for (const a of accounts)
+    nodes.set(a.id, { ...a, depth: 0, children: [], balance: balances.get(a.id) ?? 0, fullName: a.name })
 
   const roots: Node[] = []
   for (const node of nodes.values()) {
@@ -81,19 +114,22 @@ function buildTree(accounts: ChartAccount[], balances: Map<string, number>): Nod
   }
 
   const byCode = (a: Node, b: Node) => a.code.localeCompare(b.code, 'en', { numeric: true })
-  const walk = (list: Node[], depth: number): number => {
+  const walk = (list: Node[], depth: number, prefix: string): number => {
     list.sort(byCode)
     let sum = 0
     for (const node of list) {
       node.depth = depth
-      const childSum = walk(node.children, depth + 1)
-      // سرفصل مانده‌ی مستقیم ندارد؛ مانده‌اش جمعِ فرزندان است.
-      if (node.children.length > 0) node.balance = childSum
+      node.fullName = prefix ? `${prefix} › ${node.name}` : node.name
+      const childSum = walk(node.children, depth + 1, node.fullName)
+      //: مانده‌ی گره = مانده‌ی خودش + جمعِ فرزندان. سرفصل مانده‌ی مستقیم ندارد پس
+      //: صفر است و این می‌شود همان جمعِ فرزندان؛ ولی حسابِ معینی که تفصیلی گرفته
+      //: ممکن است ردیفِ مستقیمِ قدیمی هم داشته باشد و جای‌گذاریِ ساده پنهانش می‌کرد.
+      node.balance += childSum
       sum += node.balance
     }
     return sum
   }
-  walk(roots, 0)
+  walk(roots, 0, '')
   return roots
 }
 
@@ -120,7 +156,6 @@ function matchingIds(roots: Node[], query: string): Set<string> | null {
 export function AccountTreePanel({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const [accounts, setAccounts] = useState<ChartAccount[] | null>(null)
   const [balances, setBalances] = useState<Map<string, number>>(new Map())
-  const [templates, setTemplates] = useState<ChartTemplate[]>([])
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [search, setSearch] = useState('')
@@ -132,13 +167,23 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   //: فقط بارِ اول جمع می‌شود؛ به‌روزرسانی‌های بعدی نباید آنچه کاربر باز کرده را ببندند.
   const didCollapseRef = useRef(false)
   const [ledger, setLedger] = useState<{ id: string; code: string; name: string } | null>(null)
+  /** حسابی که کشوی ویرایش رویش باز است — همان فرمِ کاملِ «ویژگی‌های حساب». */
+  const [editing, setEditing] = useState<Node | null>(null)
+  /** منوی راست‌کلیک: گره و مختصاتِ صفحه. null = بسته. */
+  const [menu, setMenu] = useState<{ node: Node; x: number; y: number } | null>(null)
   const [busy, setBusy] = useState(false)
   /** سرفصلی که فرمِ «افزودن زیرحساب» زیرش باز است. */
   const [addUnder, setAddUnder] = useState<Node | null>(null)
   const [newCode, setNewCode] = useState('')
   const [newName, setNewName] = useState('')
+  const [newName2, setNewName2] = useState('')
+  //: '' یعنی «مشتق از نوعِ حساب» — همان چیزی که بک‌اند با null می‌فهمد.
+  const [newNature, setNewNature] = useState('')
   const [newIsGroup, setNewIsGroup] = useState(false)
   const [newCodeHint, setNewCodeHint] = useState('')
+  //: ویژگی‌های حسابِ تازه. پیش‌فرض‌ها همان پیش‌فرضِ سرورند تا فرم و پایگاه‌داده
+  //: یک چیز بگویند؛ «نمایش در گزارشات مدیریتی» تنها موردِ روشن است.
+  const [newTraits, setNewTraits] = useState<AccountTraits>(NEW_ACCOUNT_TRAITS)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -157,10 +202,25 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
 
   useEffect(() => {
     void refresh()
-    void fetchChartTemplates(token).then(setTemplates).catch(() => {})
-  }, [refresh, token])
+  }, [refresh])
 
   const roots = useMemo(() => buildTree(accounts ?? [], balances), [accounts, balances])
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
+    //: `capture` لازم است تا کلیک روی خودِ آیتم‌های منو هم اول منو را ببندد و بعد
+    //: کارش را بکند؛ وگرنه منو باز می‌ماند و روی کشویی که باز می‌شود می‌نشیند.
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu])
 
   useEffect(() => {
     if (didCollapseRef.current || roots.length === 0) return
@@ -216,7 +276,10 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   function openAdd(parent: Node) {
     setAddUnder(parent)
     setNewName('')
+    setNewName2('')
+    setNewNature('')
     setNewIsGroup(false)
+    setNewTraits(NEW_ACCOUNT_TRAITS)
     setNewCode('')
     setNewCodeHint('')
     void fetchNextAccountCode(token, parent.id)
@@ -235,50 +298,23 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
       await createAccount(token, {
         code: newCode.trim(),
         name: newName.trim(),
+        name2: newName2.trim(),
+        nature: newNature || null,
         type: parent.type,
         is_group: newIsGroup,
         parent_id: parent.id,
+        ...newTraits,
       })
       setAddUnder(null)
       return `حساب «${newName.trim()}» زیرِ «${parent.name}» ساخته شد.`
     })
   }
 
-  function rename(a: Node) {
-    const next = window.prompt(`نامِ تازه برای «${a.name}»:`, a.name)
-    if (next === null || !next.trim() || next.trim() === a.name) return
-    void run(async () => {
-      await updateAccount(token, a.id, { name: next.trim() })
-      return 'نامِ حساب تغییر کرد.'
-    })
-  }
-
-  function recode(a: Node) {
-    const next = window.prompt(
-      `کدِ تازه برای «${a.name}»:\n\nتغییرِ کد امن است — منطقِ ثبتِ خودکار حساب را با نقشش می‌شناسد نه با کدش.`,
-      a.code,
-    )
-    if (next === null || !next.trim() || next.trim() === a.code) return
-    void run(async () => {
-      await changeAccountCode(token, a.id, next.trim())
-      return `کدِ «${a.name}» به ${next.trim()} تغییر کرد.`
-    })
-  }
-
-  function applyTemplate(t: ChartTemplate) {
-    if (
-      !window.confirm(
-        `«${t.label}» اعمال شود؟\n\n${fa(t.missing)} حسابِ نبود ساخته می‌شود. حساب‌های موجود دست نمی‌خورند و اجرای دوباره بی‌اثر است.`,
-      )
-    )
-      return
-    void run(async () => {
-      const res = await applyChartTemplate(token, t.key)
-      const fresh = await fetchChartTemplates(token)
-      setTemplates(fresh)
-      return res.created === 0
-        ? `همه‌ی حساب‌های «${t.label}» از قبل وجود داشتند؛ چیزی اضافه نشد.`
-        : `${fa(res.created)} حساب از «${t.label}» اضافه شد.`
+  function setNewTrait(key: keyof AccountTraits, value: boolean) {
+    setNewTraits((t) => {
+      const next = { ...t, [key]: value }
+      if (key === 'is_fx' && !value) next.fx_revaluable = false
+      return next
     })
   }
 
@@ -304,7 +340,17 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
       const isCollapsed = !search && collapsed.has(node.id)
 
       out.push(
-        <tr key={node.id} className={node.is_group ? 'group-row' : ''}>
+        <tr
+          key={node.id}
+          className={node.is_group ? 'group-row' : ''}
+          //: راست‌کلیک همان سه کارِ دکمه‌های سطر را می‌کند. **افزوده است، نه
+          //: جایگزین**: روی موبایل و در نسخه‌ی وب راست‌کلیک وجود ندارد یا کشف
+          //: نمی‌شود، پس دکمه‌ها باید سرِ جایشان بمانند.
+          onContextMenu={(e) => {
+            e.preventDefault()
+            setMenu({ node, x: e.clientX, y: e.clientY })
+          }}
+        >
           <td data-label="حساب">
             <div className="tree-cell" style={{ paddingInlineStart: `${node.depth * 18}px` }}>
               {hasChildren ? (
@@ -318,13 +364,46 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
               )}
               <span className="tree-code">{node.code}</span>
               {node.is_group && <FolderTree size={13} className="chart-group-icon" />}
-              <span className={node.is_group ? 'chart-group-name' : 'entity-name'}>{node.name}</span>
+              <span className={node.is_group ? 'chart-group-name' : 'entity-name'} title={node.fullName}>
+                {node.name}
+              </span>
+              {node.name2 && <span className="chart-name2" dir="ltr">{node.name2}</span>}
               {node.system_role && <span className="chart-sys-tag">سیستمی</span>}
               {!node.is_active && <span className="fy-badge fy-badge--closed">غیرفعال</span>}
+              {/* نشانه‌های ویژگی روی خودِ سطر: بدونِ اینها کاربر باید هر حساب را باز
+                  کند تا بفهمد ارزی یا پیگیری‌دار هست یا نه. فقط پرچم‌های *روشن*
+                  نشان داده می‌شوند؛ نمایشِ همه‌شان ردیف را به دیوارِ برچسب تبدیل
+                  می‌کرد. «نمایش در گزارشات» برعکس است — چون پیش‌فرض روشن است،
+                  دیده‌شدنش وقتی ارزش دارد که کاربر خاموشش کرده باشد. */}
+              {TRAIT_TAGS.map(({ key, tag, title }) =>
+                node[key] ? (
+                  <span key={key} className="chart-trait-tag" title={title}>{tag}</span>
+                ) : null,
+              )}
+              {!node.in_management_reports && (
+                <span className="chart-trait-tag chart-trait-tag--off" title="از گزارش‌های مدیریتی کنار گذاشته شده">
+                  بدونِ گزارشِ مدیریتی
+                </span>
+              )}
             </div>
           </td>
           <td data-label="سطح">
-            <span className="tree-level">{levelOf(node.depth)}</span>
+            <span className={`tree-level ${levelToneOf(node.depth)}`}>{levelOf(node.depth)}</span>
+          </td>
+          <td data-label="ماهیت">
+            {node.is_group ? (
+              <span className="tree-level">—</span>
+            ) : (
+              <span
+                className={`nature-badge nature-badge--${node.effective_nature}`}
+                //: تفاوتِ «خودم گذاشتم» و «پیش‌فرض» مهم است — کاربر باید بداند کدام را
+                //: خودش تعیین کرده و کدام از نوعِ حساب آمده.
+                title={node.nature ? 'ماهیتِ تعیین‌شده توسطِ شما' : 'پیش‌فرض، مشتق از نوعِ حساب'}
+              >
+                {ACCOUNT_NATURE_LABELS[node.effective_nature] ?? node.effective_nature}
+                {!node.nature && <span className="nature-badge__auto">خودکار</span>}
+              </span>
+            )}
           </td>
           <td data-label="نوع">
             <span className={`status-badge tone-${TYPE_TONE[node.type] ?? 'default'}`}>
@@ -335,11 +414,24 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
             {node.balance === 0 ? '—' : money(node.balance)}
           </td>
           <td className="check-actions card-actions">
-            {node.is_group && (
-              <button type="button" onClick={() => openAdd(node)} disabled={busy} title="افزودنِ زیرحساب">
-                <Plus size={13} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => openAdd(node)}
+              disabled={busy}
+              //: روی معین هم هست، چون تفصیلی زیرِ معین می‌نشیند. اگر آن حساب سندِ
+              //: مستقیم خورده باشد سرور با پیامِ روشن ردش می‌کند — بهتر از پنهان
+              //: کردنِ دکمه، که کاربر نمی‌فهمد چرا نمی‌تواند. به همان دلیل، حسابِ
+              //: تفصیلی‌ناپذیر هم دکمه دارد ولی راهنمایش می‌گوید اول چه باید کرد.
+              title={
+                node.is_group
+                  ? 'افزودنِ زیرحساب'
+                  : node.accepts_tafsili || node.children.length > 0
+                    ? 'افزودنِ تفصیلی زیرِ این حساب'
+                    : 'برای افزودنِ تفصیلی، اول در ویرایشِ حساب «تفصیلی پذیر» را روشن کنید'
+              }
+            >
+              <Plus size={13} />
+            </button>
             {!node.is_group && (
               <button
                 type="button"
@@ -349,43 +441,33 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                 <BookOpen size={13} />
               </button>
             )}
-            <button type="button" onClick={() => rename(node)} disabled={busy} title="تغییرِ نام">
+            <button
+              type="button"
+              onClick={() => setEditing(node)}
+              disabled={busy}
+              //: یک دکمه به‌جای دو پرامپتِ قبلی (نام و کد): ویژگی‌های حساب شش تیک
+              //: است و دوتاشان به هم وابسته‌اند — در پرسشِ تک‌خطی نمی‌گنجد.
+              title="ویرایشِ حساب و ویژگی‌هایش"
+            >
               <Pencil size={13} />
             </button>
-            <button type="button" onClick={() => recode(node)} disabled={busy} title="تغییرِ کد">
-              <Hash size={13} />
+            <button
+              type="button"
+              disabled={busy}
+              //: روی حسابِ سیستمی هم هست. غیرفعال یعنی «از فهرست‌های انتخاب پنهان شو»؛
+              //: ثبتِ خودکار حساب را با نقشش پیدا می‌کند و is_active را نگاه نمی‌کند،
+              //: پس چیزی نمی‌شکند.
+              title={node.is_active ? 'از فهرست‌های انتخاب پنهان شود' : 'دوباره در فهرست‌ها دیده شود'}
+              onClick={() =>
+                void run(async () => {
+                  await updateAccount(token, node.id, { is_active: !node.is_active })
+                  return node.is_active ? 'حساب غیرفعال شد.' : 'حساب فعال شد.'
+                })
+              }
+            >
+              {node.is_active ? 'غیرفعال' : 'فعال'}
             </button>
-            {!node.system_role && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await updateAccount(token, node.id, { is_active: !node.is_active })
-                    return node.is_active ? 'حساب غیرفعال شد.' : 'حساب فعال شد.'
-                  })
-                }
-              >
-                {node.is_active ? 'غیرفعال' : 'فعال'}
-              </button>
-            )}
-            {!node.system_role && !node.children.length && (
-              <button
-                type="button"
-                className="icon-btn-danger"
-                disabled={busy}
-                aria-label="حذف حساب"
-                onClick={() => {
-                  if (!window.confirm(`حسابِ «${node.name}» حذف شود؟ (فقط حسابِ بی‌سند حذف می‌شود)`)) return
-                  void run(async () => {
-                    await deleteAccount(token, node.id)
-                    return 'حساب حذف شد.'
-                  })
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
+
           </td>
         </tr>,
       )
@@ -404,10 +486,38 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                   required
                 />
                 <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="نام حساب" required />
+                <input
+                  value={newName2}
+                  onChange={(e) => setNewName2(e.target.value)}
+                  placeholder="عنوان دوم (اختیاری)"
+                  dir="ltr"
+                />
+                <select value={newNature} onChange={(e) => setNewNature(e.target.value)} title="ماهیتِ حساب">
+                  <option value="">ماهیت: پیش‌فرضِ نوعِ حساب</option>
+                  <option value="debit">بدهکار</option>
+                  <option value="credit">بستانکار</option>
+                  <option value="any">مهم نیست</option>
+                </select>
                 <label className="fy-check">
                   <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
                   سرفصل است
                 </label>
+                {/* همان شش ویژگیِ کشوی ویرایش، این‌بار موقعِ ساخت — تا کاربر مجبور
+                    نباشد حساب را بسازد و بلافاصله بازش کند تا تیک بزند. */}
+                {ACCOUNT_TRAIT_META.map((trait) => {
+                  const locked = trait.key === 'fx_revaluable' && !newTraits.is_fx
+                  return (
+                    <label key={trait.key} className="fy-check" title={locked ? 'اول «ارزی» را روشن کنید.' : trait.hint}>
+                      <input
+                        type="checkbox"
+                        checked={newTraits[trait.key]}
+                        disabled={locked}
+                        onChange={(e) => setNewTrait(trait.key, e.target.checked)}
+                      />
+                      {trait.label}
+                    </label>
+                  )
+                })}
                 <button type="submit" className="btn-primary" disabled={busy}>
                   <Save size={13} /> ثبت
                 </button>
@@ -426,40 +536,6 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
 
   return (
     <>
-      <SectionCard
-        icon={Sparkles}
-        title="درج حساب‌های پیش‌فرض"
-        description="حساب‌های استانداردِ صنفتان را یک‌جا اضافه کنید. هر قالب = حساب‌های عمومی + حساب‌های تخصصیِ همان صنف."
-      >
-        {templates.length === 0 ? (
-          <p className="muted">در حال بارگذاری…</p>
-        ) : (
-          <div className="tpl-grid">
-            {templates.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`tpl-card${t.missing === 0 ? ' done' : ''}`}
-                onClick={() => applyTemplate(t)}
-                disabled={busy || t.missing === 0}
-              >
-                <span className="tpl-title">{t.label}</span>
-                <span className="tpl-hint">{t.hint}</span>
-                <span className="tpl-meta">
-                  {t.missing === 0
-                    ? 'همه‌ی حساب‌ها موجود است'
-                    : `${fa(t.missing)} حساب از ${fa(t.total)} اضافه می‌شود`}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        <p className="bk-hint">
-          حسابِ موجود هرگز دست نمی‌خورد و اجرای دوباره چیزی اضافه نمی‌کند. می‌توانید بیش از یک قالب را
-          اعمال کنید — مثلاً کسب‌وکاری که هم تولید دارد هم بازرگانی.
-        </p>
-      </SectionCard>
-
       <SectionCard
         icon={ListTree}
         title="درختواره‌ی حساب‌ها"
@@ -506,7 +582,12 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
         {accounts == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : roots.length === 0 ? (
-          <EmptyState icon={ListTree} text="حسابی وجود ندارد." />
+          <EmptyState
+            icon={ListTree}
+            //: کاربرِ تازه نمی‌داند قالب‌های آماده وجود دارند. «حسابی وجود ندارد»
+            //: بن‌بست بود؛ این جمله راه را نشان می‌دهد.
+            text="حسابی وجود ندارد. برای شروع، از تنظیمات ← کدینگ یکی از قالب‌های آماده را درج کنید."
+          />
         ) : (
           <div className="entity-table-wrap">
             <div className="table-scroll">
@@ -515,6 +596,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                   <tr>
                     <th>حساب</th>
                     <th>سطح</th>
+                    <th>ماهیت</th>
                     <th>نوع</th>
                     <th>مانده</th>
                     <th></th>
@@ -527,7 +609,54 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
         )}
       </SectionCard>
 
+      {menu && (
+        <div
+          className="tree-menu"
+          //: مختصاتِ صفحه است، پس `position: fixed`. جهتِ RTL با `insetInlineStart`
+          //: خودش برعکس می‌شود، پس `left` مستقیم داده می‌شود.
+          style={{ left: menu.x, top: menu.y }}
+          role="menu"
+        >
+          <div className="tree-menu-head">{menu.node.code} — {menu.node.name}</div>
+          <button type="button" onClick={() => openAdd(menu.node)}>
+            <Plus size={13} /> {menu.node.is_group ? 'زیرحسابِ جدید' : 'تفصیلیِ جدید'}
+          </button>
+          <button type="button" onClick={() => setEditing(menu.node)}>
+            <Pencil size={13} /> ویرایش
+          </button>
+          {!menu.node.is_group && (
+            <button
+              type="button"
+              onClick={() =>
+                setLedger({ id: menu.node.id, code: menu.node.code, name: menu.node.name })
+              }
+            >
+              <BookOpen size={13} /> کارتِ حساب
+            </button>
+          )}
+          {/* «حذف» عمداً این‌جا نیست — تنظیمات ← کدینگ. دکمه‌ی ویرانگر در منویی که
+              با یک راست‌کلیکِ ناخواسته باز می‌شود، دیر یا زود اشتباه زده می‌شود. */}
+        </div>
+      )}
+
       {ledger && <AccountLedgerDrawer token={token} account={ledger} onClose={() => setLedger(null)} />}
+
+      {editing && (
+        <AccountEditDrawer
+          token={token}
+          account={editing}
+          levelLabel={levelOf(editing.depth)}
+          //: مسیرِ کامل منهای خودِ حساب — همان «حساب سرشاخه»ی فرمِ سپیدار، ولی با
+          //: کلِ مسیر تا کاربر بداند این معین زیرِ کدام گروه است.
+          parentName={editing.fullName.split(' › ').slice(0, -1).join(' › ')}
+          typeLabel={ACCOUNT_TYPE_LABELS[editing.type] ?? editing.type}
+          onClose={() => setEditing(null)}
+          onSaved={(text) => {
+            setEditing(null)
+            void run(async () => text)
+          }}
+        />
+      )}
     </>
   )
 }

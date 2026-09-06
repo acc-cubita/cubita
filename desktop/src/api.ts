@@ -262,6 +262,19 @@ async function authedDelete(token: string, path: string): Promise<void> {
   }
 }
 
+/** مثلِ authedDelete ولی پاسخِ JSON را برمی‌گرداند — برای حذف‌هایی که گزارش می‌دهند. */
+async function authedDeleteJson<T>(token: string, path: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw new Error(errBody.detail ?? `حذف ناموفق بود (${res.status})`)
+  }
+  return res.json()
+}
+
 export interface SubscriptionStatus {
   status: 'active' | 'grace' | 'expired' | 'cancelled' | 'none'
   expires_at: string | null
@@ -413,6 +426,9 @@ export interface JournalEntryLine {
   currency_code?: string | null
   fx_amount?: string | null
   fx_rate?: string | null
+  /** پیگیری — ارجاعِ آزادِ این ردیف. فقط روی حسابی که «پیگیری» دارد پر می‌شود. */
+  tracking_no?: string | null
+  tracking_date?: string | null
 }
 
 export interface JournalEntryRecord {
@@ -658,17 +674,11 @@ export const createEmployee = (
   },
 ) => authedSend<EmployeeRecord>(token, 'POST', '/api/employees', data)
 
-export const createSalaryContract = (
-  token: string,
-  data: {
-    employee_id: string
-    effective_from: string
-    base_salary: number
-    housing_allowance: number
-    food_allowance: number
-    other_allowance: number
-  },
-) => authedSend<unknown>(token, 'POST', '/api/salary-contracts', data)
+/**
+ * قراردادِ حقوقی. تعریفِ کاملش — با ردیف‌های عوامل، اطلاعات استخدامی و بیمه —
+ * پایین‌تر در بخشِ «حقوق و دستمزد» است؛ این‌جا فقط ارجاع می‌دهیم تا دو نسخه‌ی
+ * ناهمگون از یک درخواست نداشته باشیم.
+ */
 
 export interface PayrollPeriodRecord {
   id: string
@@ -706,17 +716,45 @@ export interface PayslipRecord {
   insurance_employer_share: string
   taxable_pay: string
   tax_amount: string
+  /** دو کسورِ بعد از مالیات — با این دو، فیش جمع می‌زند:
+   *  خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات */
+  loan_deduction: string
+  other_deductions: string
   net_pay: string
 }
 
 export const fetchPayslips = (token: string, periodId: string) =>
   authedGetAll<PayslipRecord>(token, `/api/payslips?period_id=${periodId}`)
 
+/**
+ * دفترِ فیش‌ها — همه‌ی دوره‌ها، با فیلترِ اختیاریِ دوره و کارمند.
+ *
+ * `fetchPayslips` بالا فیش‌های *یک* دوره را برای صفحه‌ی صدور می‌آورد؛ این یکی
+ * دفترِ مرورِ چنددوره‌ای است. فیلتر سمتِ سرور می‌رود، نه مرورگر.
+ */
+export const fetchPayslipLedger = (
+  token: string,
+  filters: { periodId?: string; employeeId?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  if (filters.periodId) q.set('period_id', filters.periodId)
+  if (filters.employeeId) q.set('employee_id', filters.employeeId)
+  const qs = q.toString()
+  return authedGetAll<PayslipRecord>(token, `/api/payslips${qs ? `?${qs}` : ''}`)
+}
+
 export const generatePayslips = (token: string, periodId: string) =>
   authedSend<PayslipRecord[]>(token, 'POST', `/api/payroll-periods/${periodId}/generate-payslips`, {})
 
-export async function downloadInsuranceListCsv(token: string, periodId: string): Promise<{ filename: string; blob: Blob }> {
-  const res = await fetch(`${API_BASE_URL}/api/payroll-periods/${periodId}/insurance-list.csv`, {
+/** سه خروجیِ CSVِ دوره‌ی حقوق. نامِ فایل از خودِ سرور می‌آید، نه از حدسِ کلاینت. */
+export type PayrollExportKind = 'insurance-list' | 'tax-list' | 'payment-list'
+
+export async function downloadPayrollCsv(
+  token: string,
+  periodId: string,
+  kind: PayrollExportKind,
+): Promise<{ filename: string; blob: Blob }> {
+  const res = await fetch(`${API_BASE_URL}/api/payroll-periods/${periodId}/${kind}.csv`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
@@ -725,9 +763,8 @@ export async function downloadInsuranceListCsv(token: string, periodId: string):
   }
   const disposition = res.headers.get('Content-Disposition') ?? ''
   const match = /filename="?([^"]+)"?/.exec(disposition)
-  const filename = match?.[1] ?? 'insurance-list.csv'
   const blob = await res.blob()
-  return { filename, blob }
+  return { filename: match?.[1] ?? `${kind}.csv`, blob }
 }
 
 // نرخ‌های بیمه/مالیاتِ حقوق برای هر سالِ شمسی. صدورِ فیش تا وقتی این تنظیمات (با
@@ -1281,11 +1318,20 @@ interface AccountLiveOut {
   type: string
   is_group: boolean
   parent_id: string | null
+  has_tracking: boolean
+  accepts_tafsili: boolean
 }
 
 export const fetchAccountsLive = async (token: string) => {
   const rows = await authedGet<AccountLiveOut[]>(token, '/api/accounts')
-  return rows.map((a) => ({ ...a, is_group: a.is_group ? 1 : 0 }))
+  //: شکلِ خروجی عمداً با `AccountCache` (کشِ SQLite) یکی است تا فرم‌ها لازم نباشد
+  //: بینِ وب و Electron شاخه بزنند — بولی به ۰/۱ همان‌جا تبدیل می‌شود.
+  return rows.map((a) => ({
+    ...a,
+    is_group: a.is_group ? 1 : 0,
+    has_tracking: a.has_tracking ? 1 : 0,
+    accepts_tafsili: a.accepts_tafsili ? 1 : 0,
+  }))
 }
 
 /** حسابِ کامل (با فعال‌بودن و نقشِ سیستمی) — برای مدیریتِ چارتِ حساب‌ها. */
@@ -1293,11 +1339,88 @@ export interface ChartAccount {
   id: string
   code: string
   name: string
+  /** عنوانِ دوم (معمولاً انگلیسی) برای گزارشِ دوزبانه. خالی = ندارد. */
+  name2: string
   type: string // asset | liability | equity | income | expense
+  /** ماهیتِ *صریح*: debit | credit | any. null یعنی از نوعِ حساب مشتق می‌شود. */
+  nature: string | null
+  /** ماهیتِ *مؤثر* — همان که گزارشِ خلافِ ماهیت با آن می‌سنجد. همیشه پر است. */
+  effective_nature: string
   is_group: boolean
   is_active: boolean
+  /** صورتِ مالی: balance_sheet | income_statement. مشتق از نوعِ حساب، نه ستون. */
+  statement_type: string
   parent_id: string | null
   system_role: string | null
+  /** کنترلِ ماهیت طی دوره — رصدِ این حساب در گزارشِ خلافِ ماهیت. */
+  nature_control: boolean
+  /** ارزی — فیلدهای ارزِ ردیفِ سند را باز می‌کند. */
+  is_fx: boolean
+  /** تسعیرپذیر. فقط روی حسابِ ارزی؛ خاموش‌بودنش یعنی «ارزی هست، تسعیرش نکن». */
+  fx_revaluable: boolean
+  /** تفصیلی‌پذیر — ردیفِ سندِ این حساب **باید** تفصیلی داشته باشد. */
+  accepts_tafsili: boolean
+  /** پیگیری — شماره و تاریخِ پیگیری روی ردیفِ سندِ این حساب. */
+  has_tracking: boolean
+  /** نمایش در گزارشاتِ مدیریتی. پیش‌فرض روشن. */
+  in_management_reports: boolean
+}
+
+/** شش پرچمِ «ویژگی‌های حساب» — همان قابِ فرمِ ویرایشِ حساب. */
+export interface AccountTraits {
+  nature_control: boolean
+  is_fx: boolean
+  fx_revaluable: boolean
+  accepts_tafsili: boolean
+  has_tracking: boolean
+  in_management_reports: boolean
+}
+
+/** برچسب و توضیحِ هر ویژگی — یک‌جا، تا فرم و راهنما از هم جدا نیفتند. */
+export const ACCOUNT_TRAIT_META: {
+  key: keyof AccountTraits
+  label: string
+  hint: string
+}[] = [
+  {
+    key: 'nature_control',
+    label: 'کنترل ماهیت طی دوره',
+    hint: 'این حساب در گزارشِ «خلافِ ماهیت» رصد می‌شود.',
+  },
+  { key: 'is_fx', label: 'ارزی', hint: 'فیلدهای ارز روی ردیفِ سندِ این حساب باز می‌شوند.' },
+  {
+    key: 'fx_revaluable',
+    label: 'تسعیر پذیر',
+    hint: 'فقط روی حسابِ ارزی. برداشتنش یعنی «ارزی هست ولی تسعیرش نکن».',
+  },
+  {
+    key: 'accepts_tafsili',
+    label: 'تفصیلی پذیر',
+    hint: 'ردیفِ سندِ این حساب بدونِ تفصیلی ثبت نمی‌شود. (ربطی به زیرشاخه‌ی درختی ندارد.)',
+  },
+  {
+    key: 'has_tracking',
+    label: 'پیگیری',
+    hint: 'شماره و تاریخِ پیگیری روی ردیفِ سندِ این حساب ظاهر می‌شود.',
+  },
+  {
+    key: 'in_management_reports',
+    label: 'نمایش در گزارشات مدیریتی',
+    hint: 'برداشتنش حساب را از گزارش‌های مدیریتی کنار می‌گذارد، نه از دفتر.',
+  },
+]
+
+/** صورتِ مالیِ حساب — از نوعش مشتق می‌شود، ذخیره نمی‌شود. */
+export const STATEMENT_TYPE_LABELS: Record<string, string> = {
+  balance_sheet: 'ترازنامه‌ای',
+  income_statement: 'سود و زیانی',
+}
+
+/** ماهیتِ حساب — سمتی که مانده طبیعتاً باید در آن باشد. */
+export const ACCOUNT_NATURE_LABELS: Record<string, string> = {
+  debit: 'بدهکار',
+  credit: 'بستانکار',
+  any: 'مهم نیست',
 }
 
 export const fetchChartAccounts = (token: string) =>
@@ -1305,17 +1428,81 @@ export const fetchChartAccounts = (token: string) =>
 
 export const createAccount = (
   token: string,
-  data: { code: string; name: string; type: string; is_group?: boolean; parent_id?: string | null },
+  data: {
+    code: string
+    name: string
+    name2?: string
+    type: string
+    nature?: string | null
+    is_group?: boolean
+    parent_id?: string | null
+  } & Partial<AccountTraits>,
 ) => authedSend<ChartAccount>(token, 'POST', '/api/accounts', data)
 
-export const updateAccount = (token: string, id: string, patch: { name?: string; is_active?: boolean }) =>
-  authedSend<ChartAccount>(token, 'PATCH', `/api/accounts/${id}`, patch)
+export const updateAccount = (
+  token: string,
+  id: string,
+  patch: {
+    name?: string
+    name2?: string
+    nature?: string | null
+    is_active?: boolean
+  } & Partial<AccountTraits>,
+) => authedSend<ChartAccount>(token, 'PATCH', `/api/accounts/${id}`, patch)
 
 export const deleteAccount = (token: string, id: string) => authedDelete(token, `/api/accounts/${id}`)
+
+/** نتیجه‌ی خام‌سازیِ درختواره. */
+export interface WipeChartResult {
+  deleted: number
+  kept: KeptAccount[]
+}
+
+/**
+ * خام‌سازیِ کلِ درختواره — سرور فقط وقتی می‌پذیرد که هیچ سندی ثبت نشده باشد.
+ * آخرین راه است، نه دکمه‌ی روزمره: کدهای دلخواهِ کاربر از دست می‌روند.
+ */
+export const wipeChart = (token: string) =>
+  authedDeleteJson<WipeChartResult>(token, '/api/accounts')
 
 /** تغییرِ کدِ حساب — «کدینگ». امن است چون ثبتِ خودکار حساب را با نقشش می‌شناسد نه با کدش. */
 export const changeAccountCode = (token: string, id: string, code: string) =>
   authedSend<ChartAccount>(token, 'PATCH', `/api/accounts/${id}/code`, { code })
+
+/** پیامدِ یک سطحِ اجبار، تفکیک‌شده به سه چیزی که واقعاً فرق می‌کنند. */
+export interface TafsiliModeEffects {
+  manual: string
+  module: string
+  report: string
+  warning: string
+}
+
+export interface TafsiliModeOption {
+  key: string
+  label: string
+  hint: string
+  effects: TafsiliModeEffects
+  is_default: boolean
+}
+
+/**
+ * سطحِ اجبارِ تفصیلی روی حساب‌های «تفصیلی پذیر» — انتخابِ کسب‌وکار.
+ *
+ * `options` از سرور می‌آید نه از این‌جا: متنِ پیامدها یک منبعِ حقیقت دارد و اگر
+ * قاعده‌ای عوض شود، رابط خودبه‌خود همان را می‌گوید.
+ */
+export interface TafsiliMode {
+  mode: string
+  options: TafsiliModeOption[]
+  /** false یعنی هنوز روی پیش‌فرضِ سرویس است و کاربر انتخابی نکرده. */
+  is_explicit: boolean
+}
+
+export const fetchTafsiliMode = (token: string) =>
+  authedGet<TafsiliMode>(token, '/api/accounts/tafsili-mode')
+
+export const setTafsiliMode = (token: string, mode: string) =>
+  authedSend<TafsiliMode>(token, 'PATCH', '/api/accounts/tafsili-mode', { mode })
 
 /** قالبِ آماده‌ی کدینگِ صنفی. */
 export interface ChartTemplate {
@@ -1332,6 +1519,37 @@ export interface CodingRule {
   widths: number[]
   levels: { name: string; width: number; total: number; example: string }[]
 }
+
+/** یک حساب و اینکه پاک‌شدنی هست یا نه — پایه‌ی «حذفِ حساب» در تنظیمات. */
+export interface DeletableAccount {
+  id: string
+  code: string
+  name: string
+  level: string
+  is_group: boolean
+  can_delete: boolean
+  reason: string | null
+}
+
+export const fetchDeletableAccounts = (token: string) =>
+  authedGet<DeletableAccount[]>(token, '/api/accounts/deletable')
+
+/** حسابی که «برگرداندنِ قالب» نگه داشت، همراهِ دلیلش. */
+export interface KeptAccount {
+  code: string
+  name: string
+  reason: string
+}
+
+export interface RevertTemplateResult {
+  removed: number
+  codes: string[]
+  kept: KeptAccount[]
+}
+
+/** حساب‌های *بی‌استفاده*‌ی یک قالب را برمی‌دارد — راهِ برگشت از درجِ اشتباه. */
+export const revertChartTemplate = (token: string, key: string) =>
+  authedDeleteJson<RevertTemplateResult>(token, `/api/accounts/templates/${key}`)
 
 export const fetchCodingRule = (token: string) =>
   authedGet<CodingRule>(token, '/api/accounts/coding-rule')
@@ -1449,6 +1667,9 @@ export const createJournalEntryDirect = (
       fx_amount?: number | null
       fx_rate?: number | null
       analytic_id?: string | null
+      /** پیگیری — سرور اگر حساب «پیگیری» نداشته باشد ردش می‌کند، نه اینکه دور بریزد. */
+      tracking_no?: string | null
+      tracking_date?: string | null
     }[]
   },
 ) => authedSend<unknown>(token, 'POST', '/api/journal-entries', data)
@@ -1634,7 +1855,204 @@ export interface ContactRecord {
   postal_code: string | null
   group_id: string | null
   geo_location_id: string | null
+
+  // ── هویتِ تفکیک‌شده ──
+  /** `name` نامِ نمایشی است و از این دو ساخته می‌شود؛ خالی = نامِ یک‌تکه (شرکت). */
+  first_name: string
+  last_name: string
+  first_name2: string
+  last_name2: string
+  sub_type: string
+  website: string
+  registration_no: string | null
+  passport_no: string | null
+  marriage_date: string | null
+  /** جدا از `is_active`: غیرفعال = دیگر کار نمی‌کنیم، لیستِ سیاه = با احتیاط. */
+  is_blacklisted: boolean
+  discount_rate: string
+  tax_ministry_class: string
+  /** با عبور از سقفِ اعتبار چه شود: none | warn | block. */
+  credit_action: string
+  /** نقشِ سوم — پرچمِ مستقل، نه مقدارِ `type`. */
+  is_broker: boolean
+  commission_rate: string
+  /** کارمندِ متناظر در حقوق و دستمزد — پیوند، نه کپی. */
+  employee_id: string | null
+  /** تفصیلیِ متصل. کد و عنوان از خودِ تفصیلی خوانده می‌شوند، نه از طرف‌حساب. */
+  analytic_id: string | null
+  tafsili_code: string | null
+  tafsili_title: string | null
+  tafsili_title2: string
+  /** مانده‌ی اول دوره — مبلغ نامنفی، سمت جدا. پس از ثبتِ افتتاحیه قفل می‌شود. */
+  opening_ar_amount: string
+  opening_ar_side: string
+  opening_ap_amount: string
+  opening_ap_side: string
+  /** مشخصاتِ شخص — واقعیتِ آدم است نه شغلش، پس روی طرف‌حساب می‌نشیند نه کارمند. */
+  gender: string
+  marital_status: string
+  marital_status_date: string | null
+  children_count: number
+  dependents_count: number
+  education_level: string
+  education_field: string
+  is_employee: boolean
+  /** نقشِ چهارم — پرچمِ مستقل، مثلِ واسطه. */
+  is_shareholder: boolean
+  share_percent: string
 }
+
+/** تلفن یا نشانیِ *اضافه*. کانالِ اصلی روی خودِ طرف‌حساب است (`phone`/`address`). */
+export interface ContactChannel {
+  id: string
+  contact_id: string
+  kind: 'phone' | 'address' | 'email'
+  /** نوعِ کنترل‌شده (دفتر، انبار، همراه…)؛ `label` متنِ آزادِ کاربر است. */
+  channel_type: string
+  label: string
+  value: string
+  /** «اصلی» — سرور تضمین می‌کند در هر طرف‌حساب حداکثر یکی باشد. */
+  is_primary: boolean
+  notes: string
+  is_active: boolean
+}
+
+export const CHANNEL_KIND_LABELS: Record<string, string> = {
+  phone: 'تلفن',
+  address: 'نشانی',
+  email: 'ایمیل',
+}
+
+/** نوعِ تلفن — فهرستِ کنترل‌شده، چون «نوع» در فرم کشویی است نه متنِ آزاد. */
+export const CHANNEL_TYPE_LABELS: Record<string, string> = {
+  office: 'تلفن دفتر',
+  warehouse: 'تلفن انبار',
+  mobile: 'همراه',
+  fax: 'فکس',
+  home: 'منزل',
+  other: 'سایر',
+}
+
+/** نوعِ نشانی. هرکدام کاربردِ عملیاتی دارد — «ارسال کالا» همان است که به مأمورِ ارسال می‌رود. */
+export const ADDRESS_TYPE_LABELS: Record<string, string> = {
+  official: 'رسمی',
+  business: 'محل فعالیت',
+  billing: 'ارسال صورتحساب',
+  shipping: 'ارسال کالا',
+  warehouse: 'انبار',
+  home: 'منزل',
+  postal: 'پستی',
+  //: درِ خروجِ فهرست (کارگاه، نمایشگاه، دفترِ موقت) — عنوانِ نشانی می‌گوید دقیقاً چیست.
+  other: 'سایر',
+}
+
+export const GENDER_LABELS: Record<string, string> = { male: 'مرد', female: 'زن' }
+export const MARITAL_STATUS_LABELS: Record<string, string> = {
+  single: 'مجرد',
+  married: 'متأهل',
+  divorced: 'مطلقه',
+  widowed: 'همسر فوت‌شده',
+}
+
+/** یکی از نشانی‌های طرف‌حساب. جدا از تلفن چون شکلش واقعاً فرق دارد. */
+export interface ContactAddress {
+  id: string
+  contact_id: string
+  address_type: string
+  is_primary: boolean
+  geo_location_id: string | null
+  title: string
+  address: string
+  address2: string
+  postal_code: string
+  latitude: string | null
+  longitude: string | null
+  /** «زون»ِ توزیع — وقتی موجودیتِ زون ساخته شد، کلیدِ خارجی می‌شود. */
+  route_code: string
+  route_title: string
+  route_title2: string
+  region_code: string
+  region_title: string
+  region_title2: string
+  branch_code: string
+  notes: string
+  is_active: boolean
+}
+
+export type ContactAddressIn = Omit<ContactAddress, 'id' | 'contact_id'>
+
+export const fetchContactAddresses = (token: string, contactId: string) =>
+  authedGet<ContactAddress[]>(token, `/api/contacts/${contactId}/addresses`)
+
+export const addContactAddress = (
+  token: string,
+  contactId: string,
+  data: Partial<ContactAddressIn>,
+) => authedSend<ContactAddress>(token, 'POST', `/api/contacts/${contactId}/addresses`, data)
+
+export const deleteContactAddress = (token: string, contactId: string, addressId: string) =>
+  authedDelete(token, `/api/contacts/${contactId}/addresses/${addressId}`)
+
+/**
+ * آیا این عنوانِ تفصیلی از قبل هست؟
+ *
+ * جواب `true` **ثبت را نمی‌بندد** — دو نفرِ هم‌نام واقعاً ممکن‌اند. فرم فقط قرمزش
+ * می‌کند تا کاربر چیزی به آن اضافه کند و بعداً در فهرستِ تفصیلی گیج نشود.
+ */
+export const checkTafsiliTitleTaken = (token: string, title: string) =>
+  authedGet<{ taken: boolean }>(
+    token,
+    `/api/contacts/tafsili-title-taken?title=${encodeURIComponent(title)}`,
+  )
+
+export const fetchContactChannels = (token: string, contactId: string) =>
+  authedGet<ContactChannel[]>(token, `/api/contacts/${contactId}/channels`)
+
+export const addContactChannel = (
+  token: string,
+  contactId: string,
+  data: {
+    kind?: string
+    channel_type?: string
+    label?: string
+    value: string
+    is_primary?: boolean
+    notes?: string
+  },
+) => authedSend<ContactChannel>(token, 'POST', `/api/contacts/${contactId}/channels`, data)
+
+export const deleteContactChannel = (token: string, contactId: string, channelId: string) =>
+  authedDelete(token, `/api/contacts/${contactId}/channels/${channelId}`)
+
+/** با عبور از سقفِ اعتبار چه شود. */
+export const CREDIT_ACTION_LABELS: Record<string, string> = {
+  none: 'بدون کنترل',
+  warn: 'هشدار بده',
+  block: 'جلوگیری کن',
+}
+
+/** دسته‌بندیِ وزارت دارایی — مبنای گزارشِ معاملاتِ فصلی. */
+export const TAX_MINISTRY_CLASS_LABELS: Record<string, string> = {
+  normal: 'عادی',
+  gold: 'طلا و جواهر',
+  currency: 'ارز',
+  estate: 'املاک',
+}
+
+/**
+ * آیا فرمِ طرف حساب باید کدِ تفصیلی بخواهد.
+ *
+ * از سطحِ اجبارِ تفصیلی می‌آید (تنظیمات ← شخصی‌سازی): `required` در «اجباری»،
+ * `optional` در «ترکیبی»، `hidden` در «شناور».
+ */
+export interface TafsiliRequirement {
+  requirement: 'required' | 'optional' | 'hidden'
+  mode: string
+  suggested_code: string | null
+}
+
+export const fetchContactTafsiliRequirement = (token: string) =>
+  authedGet<TafsiliRequirement>(token, '/api/contacts/tafsili-requirement')
 
 export interface ContactIn {
   name: string
@@ -1653,6 +2071,40 @@ export interface ContactIn {
   //: دسته‌بندیِ سطحِ شرکت — هر دو اختیاری.
   group_id?: string | null
   geo_location_id?: string | null
+  first_name?: string
+  last_name?: string
+  first_name2?: string
+  last_name2?: string
+  sub_type?: string
+  website?: string
+  registration_no?: string | null
+  passport_no?: string | null
+  marriage_date?: string | null
+  is_blacklisted?: boolean
+  discount_rate?: number
+  tax_ministry_class?: string
+  credit_action?: string
+  is_broker?: boolean
+  commission_rate?: number
+  employee_id?: string | null
+  //: کد و عنوانِ تفصیلی — سرور از آن‌ها یک تفصیلی می‌سازد یا موجود را به‌روز می‌کند.
+  tafsili_code?: string | null
+  tafsili_title?: string | null
+  tafsili_title2?: string
+  opening_ar_amount?: number
+  opening_ar_side?: string
+  opening_ap_amount?: number
+  opening_ap_side?: string
+  gender?: string
+  marital_status?: string
+  marital_status_date?: string | null
+  children_count?: number
+  dependents_count?: number
+  education_level?: string
+  education_field?: string
+  is_employee?: boolean
+  is_shareholder?: boolean
+  share_percent?: number
 }
 
 // ── راه‌اندازی: ورودِ گروهی + مانده‌های اول دوره ──
@@ -2272,6 +2724,9 @@ export interface RelatedPersonRecord {
   is_active: boolean
   notes: string
   contact_name: string
+  /** «(۲)»ِ فرمِ سپیدار — نسخه‌ی لاتین، اختیاری. */
+  name2?: string
+  role2?: string
 }
 
 export interface RelatedPersonIn {
@@ -2283,6 +2738,9 @@ export interface RelatedPersonIn {
   is_primary?: boolean
   is_active?: boolean
   notes?: string
+  /** «(۲)»ِ فرمِ سپیدار — نسخه‌ی لاتین، اختیاری. */
+  name2?: string
+  role2?: string
 }
 
 export const fetchRelatedPersons = (token: string, contactId?: string) =>
@@ -4628,3 +5086,343 @@ export const fetchPricingSuggestion = (token: string, itemId: string, qty: numbe
     net: string
     applied: { kind: string; name: string; value: string }[]
   }>(token, `/api/sales-ops/pricing/suggest?item_id=${itemId}&qty=${qty}${on ? `&on=${on}` : ''}`)
+
+/** یک حسابِ خلافِ ماهیت — `balance` مثبت است و سمتش در `balance_side` می‌آید. */
+export interface NatureViolation {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  nature: string
+  /** ماهیت را کاربر ست کرده (true) یا از نوعِ حساب مشتق شده (false). */
+  nature_is_explicit: boolean
+  /** تیکِ «کنترل ماهیت طی دوره» روی همین حساب. */
+  nature_control: boolean
+  total_debit: number
+  total_credit: number
+  balance: number
+  balance_side: string
+}
+
+/** ردیفی روی حسابِ «تفصیلی پذیر» که تفصیلی ندارد — سوراخِ گزارشِ تفصیلی. */
+export interface MissingTafsili {
+  account_id: string
+  account_code: string
+  account_name: string
+  entry_id: string
+  entry_number: number | null
+  entry_date: string
+  source_type: string
+  /** سندِ دستی یا ساخته‌ی ماژول. */
+  is_manual: boolean
+  debit: string
+  credit: string
+  description: string
+}
+
+/** در هر سه سطحِ اجبار کار می‌کند — سطح تعیین می‌کند چه مسدود شود، نه چه دیده شود. */
+export const fetchMissingTafsili = (token: string) =>
+  authedGet<MissingTafsili[]>(token, '/api/reports/missing-tafsili')
+
+export const fetchNatureViolations = (token: string, controlledOnly = false) =>
+  authedGet<NatureViolation[]>(
+    token,
+    `/api/reports/nature-violations${controlledOnly ? '?controlled_only=true' : ''}`,
+  )
+
+
+// ── حقوق و دستمزد: جدول‌های مرجع و قرارداد ────────────────────────────────────
+
+/** رسته شغل — فهرستِ بسته‌ی سپیدار، مبنای کدِ شغلِ بیمه. */
+export const JOB_FAMILIES = [
+  'مالی', 'مهندسی فرهنگی', 'امور اجتماعی', 'فناوری اطلاعات', 'بهداشت و درمان',
+  'فنی مهندسی', 'خدمات', 'کشاورزی و محیط زیست', 'بازاریابی و فروش', 'حراست و نگهبانی',
+  'کارگری', 'ترابری', 'تولیدی', 'کنترل کیفی', 'تحقیقات', 'انبارداری', 'فضا',
+  'اعضای هیئت علمی دانشگاه',
+]
+
+/** نوعِ استخدام — فهرستِ بسته‌ی سپیدار. */
+export const EMPLOYMENT_TYPES = [
+  'سایر', 'پیمانی', 'رسمی', 'رسمی آزمایشی', 'قراردادی', 'روزمزد', 'خرید خدمت',
+  'مأمور', 'ساعتی', 'رسمی فصلی', 'کارمزدی', 'شرکتی',
+]
+
+export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  hire: 'استخدام',
+  amend: 'اصلاح قرارداد',
+}
+
+export const FACTOR_CATEGORY_LABELS: Record<string, string> = {
+  benefit: 'مزایا',
+  deduction: 'کسورات',
+}
+
+export const FACTOR_KIND_LABELS: Record<string, string> = {
+  fixed: 'قراردادی (ثابت)',
+  variable: 'متغیر',
+}
+
+export const TAX_GROUP_KIND_LABELS: Record<string, string> = {
+  normal: 'مناطق عادی',
+  deprived: 'مناطق محروم',
+  exempt: 'معاف',
+}
+
+export const BRANCH_KIND_LABELS: Record<string, string> = {
+  insurance: 'شعبه بیمه',
+  tax: 'حوزه مالیاتی',
+}
+
+export interface ServiceLocationRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  is_active: boolean
+}
+
+export interface JobTitleRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  job_family: string
+  insurance_job_code: string
+  is_active: boolean
+}
+
+export interface PayrollFactorRecord {
+  id: string
+  name: string
+  name2: string
+  category: string
+  kind: string
+  is_extraordinary: boolean
+  /** خالی = عاملِ ساخته‌ی کاربر؛ کلیددار = عاملی که موتورِ فیش می‌شناسدش. */
+  system_key: string
+  is_active: boolean
+}
+
+export interface PayrollTaxGroupRecord {
+  id: string
+  name: string
+  kind: string
+  percent: string
+  is_active: boolean
+}
+
+export interface InsuranceTaxBranchRecord {
+  id: string
+  code: string
+  name: string
+  kind: string
+  is_active: boolean
+}
+
+/** طرف‌حسابی که تیکِ «کارمند» دارد — ورودیِ فهرستِ «نام کارمند»ِ فرمِ قرارداد. */
+export interface EmployeeCandidate {
+  contact_id: string
+  name: string
+  national_id: string | null
+  /** خالی = هنوز پرونده‌ی حقوق و دستمزد ندارد؛ اولین قرارداد می‌سازدش. */
+  employee_id: string | null
+  has_contract: boolean
+}
+
+export interface ContractLine {
+  id?: string
+  factor_id: string
+  amount: number | string
+  factor_name?: string
+  factor_category?: string
+}
+
+export interface SalaryContractRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  effective_from: string
+  contract_type: string
+  number: string
+  valid_until: string | null
+  service_end_date: string | null
+  employment_type: string
+  service_location_id: string | null
+  job_title_id: string | null
+  cost_center_id: string | null
+  base_salary: string
+  housing_allowance: string
+  food_allowance: string
+  other_allowance: string
+  tax_group_id: string | null
+  tax_branch_id: string | null
+  insurance_branch_id: string | null
+  housing_loan_exempt_amount: string
+  is_insured: boolean
+  is_hard_job: boolean
+  exempt_employee_insurance: boolean
+  exempt_employer_insurance: boolean
+  employer_exempt_percent: string
+  exempt_unemployment_insurance: boolean
+  employer_name: string
+  has_supplementary_insurance: boolean
+  supplementary_branch: string
+  supplementary_insurer: string
+  description: string
+  lines: ContractLine[]
+}
+
+export const fetchServiceLocations = (token: string) =>
+  authedGet<ServiceLocationRecord[]>(token, '/api/service-locations')
+export const createServiceLocation = (token: string, body: Partial<ServiceLocationRecord>) =>
+  authedSend<ServiceLocationRecord>(token, 'POST', '/api/service-locations', body)
+export const updateServiceLocation = (token: string, id: string, body: Partial<ServiceLocationRecord>) =>
+  authedSend<ServiceLocationRecord>(token, 'PATCH', `/api/service-locations/${id}`, body)
+
+export const fetchJobTitles = (token: string) => authedGet<JobTitleRecord[]>(token, '/api/job-titles')
+export const createJobTitle = (token: string, body: Partial<JobTitleRecord>) =>
+  authedSend<JobTitleRecord>(token, 'POST', '/api/job-titles', body)
+export const updateJobTitle = (token: string, id: string, body: Partial<JobTitleRecord>) =>
+  authedSend<JobTitleRecord>(token, 'PATCH', `/api/job-titles/${id}`, body)
+
+export const fetchPayrollFactors = (token: string) =>
+  authedGet<PayrollFactorRecord[]>(token, '/api/payroll-factors')
+export const createPayrollFactor = (token: string, body: Partial<PayrollFactorRecord>) =>
+  authedSend<PayrollFactorRecord>(token, 'POST', '/api/payroll-factors', body)
+/** عوامل پیش‌فرض را می‌سازد (بی‌خطر اگر از قبل باشند) و همه را برمی‌گرداند. */
+export const createDefaultPayrollFactors = (token: string) =>
+  authedSend<PayrollFactorRecord[]>(token, 'POST', '/api/payroll-factors/defaults', {})
+
+export const fetchPayrollTaxGroups = (token: string) =>
+  authedGet<PayrollTaxGroupRecord[]>(token, '/api/payroll-tax-groups')
+export const createPayrollTaxGroup = (token: string, body: Partial<PayrollTaxGroupRecord>) =>
+  authedSend<PayrollTaxGroupRecord>(token, 'POST', '/api/payroll-tax-groups', body)
+
+export const fetchInsuranceTaxBranches = (token: string, kind?: string) =>
+  authedGet<InsuranceTaxBranchRecord[]>(
+    token,
+    kind ? `/api/insurance-tax-branches?kind=${kind}` : '/api/insurance-tax-branches',
+  )
+export const createInsuranceTaxBranch = (token: string, body: Partial<InsuranceTaxBranchRecord>) =>
+  authedSend<InsuranceTaxBranchRecord>(token, 'POST', '/api/insurance-tax-branches', body)
+
+export const fetchEmployeeCandidates = (token: string, q = '') =>
+  authedGet<EmployeeCandidate[]>(
+    token,
+    q ? `/api/payroll/employee-candidates?q=${encodeURIComponent(q)}` : '/api/payroll/employee-candidates',
+  )
+
+/** کدام نوعِ قرارداد برای این شخص مجاز است — «استخدام» فقط تا وقتی ثبت نشده. */
+export const fetchAllowedContractTypes = (token: string, contactId: string) =>
+  authedGet<{ allowed: string[]; labels: Record<string, string> }>(
+    token,
+    `/api/payroll/contract-types?contact_id=${contactId}`,
+  )
+
+export const fetchSalaryContracts = (token: string, employeeId?: string) =>
+  authedGet<SalaryContractRecord[]>(
+    token,
+    employeeId ? `/api/salary-contracts?employee_id=${employeeId}` : '/api/salary-contracts',
+  )
+
+export const createSalaryContract = (token: string, body: Record<string, unknown>) =>
+  authedSend<SalaryContractRecord>(token, 'POST', '/api/salary-contracts', body)
+
+
+// ── وام‌های پرسنلی، تسویه حساب، اطلاعاتِ استقرار ──────────────────────────────
+
+export interface LoanTypeRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  default_installments: number
+  is_active: boolean
+}
+
+export const fetchLoanTypes = (token: string) =>
+  authedGet<LoanTypeRecord[]>(token, '/api/loan-types')
+export const createLoanType = (token: string, body: Partial<LoanTypeRecord>) =>
+  authedSend<LoanTypeRecord>(token, 'POST', '/api/loan-types', body)
+
+export interface LoanInstallmentRecord {
+  id: string
+  seq: number
+  due_date: string
+  amount: string
+  /** کدام دوره‌ی حقوقی کسرش کرد. null = هنوز کسر نشده. */
+  deducted_period_id: string | null
+}
+
+export interface EmployeeLoanRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  loan_type_id: string | null
+  amount: string
+  loan_date: string
+  installment_count: number
+  status: 'active' | 'settled' | 'cancelled'
+  note: string
+  /** مانده مشتق است — جمعِ اقساطِ کسرنشده، نه ستونی که بتواند از اقساط جدا بیفتد. */
+  balance: string
+  installments: LoanInstallmentRecord[]
+}
+
+export const LOAN_STATUS_LABELS: Record<string, string> = {
+  active: 'در حال کسر',
+  settled: 'تسویه‌شده',
+  cancelled: 'لغوشده',
+}
+
+export const fetchEmployeeLoans = (token: string, employeeId?: string) =>
+  authedGet<EmployeeLoanRecord[]>(
+    token,
+    employeeId ? `/api/employee-loans?employee_id=${employeeId}` : '/api/employee-loans',
+  )
+
+export const createEmployeeLoan = (token: string, body: Record<string, unknown>) =>
+  authedSend<EmployeeLoanRecord>(token, 'POST', '/api/employee-loans', body)
+
+export const cancelEmployeeLoan = (token: string, loanId: string) =>
+  authedSend<EmployeeLoanRecord>(token, 'POST', `/api/employee-loans/${loanId}/cancel`, {})
+
+export interface PayrollSettlementRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  settlement_date: string
+  severance_amount: string
+  leave_payout_amount: string
+  other_earnings: string
+  loan_balance: string
+  other_deductions: string
+  net_amount: string
+  note: string
+  journal_entry_id: string | null
+}
+
+export const fetchSettlements = (token: string) =>
+  authedGet<PayrollSettlementRecord[]>(token, '/api/payroll-settlements')
+export const createSettlement = (token: string, body: Record<string, unknown>) =>
+  authedSend<PayrollSettlementRecord>(token, 'POST', '/api/payroll-settlements', body)
+
+export interface DeploymentInfoRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  year: number
+  cumulative_gross: string
+  cumulative_tax: string
+  cumulative_insurance: string
+  leave_balance_days: string
+  prior_service_days: number
+  note: string
+}
+
+export const fetchDeploymentInfo = (token: string) =>
+  authedGet<DeploymentInfoRecord[]>(token, '/api/payroll-deployment')
+
+/** `PUT` است نه `POST`: یک وضعیتِ استقرار برای هر (کارمند، سال). */
+export const saveDeploymentInfo = (token: string, body: Record<string, unknown>) =>
+  authedSend<DeploymentInfoRecord>(token, 'PUT', '/api/payroll-deployment', body)

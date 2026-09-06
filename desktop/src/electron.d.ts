@@ -5,6 +5,10 @@ export interface AccountCache {
   type: string
   is_group: number
   parent_id: string | null
+  /** پیگیری — ۱ یعنی ردیفِ سندِ این حساب شماره و تاریخِ پیگیری می‌پذیرد. */
+  has_tracking?: number
+  /** تفصیلی‌پذیر — ۱ یعنی ردیفِ سندِ این حساب بدونِ تفصیلی ثبت نمی‌شود. */
+  accepts_tafsili?: number
 }
 
 export interface WarehouseCache {

@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalEntry, JournalLine
+from app.services import tafsili
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PRODUCTION_ORDER
 from app.models.inventory import Item, StockLedger
 from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine
@@ -129,6 +130,7 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
                 JournalLine(account_id=get_account(db, cc.CASH).id, debit=0, credit=overhead, description="پرداختِ سربارِ تولید"),
             ],
         )
+        tafsili.assert_entry_has_tafsili(db, journal_entry)
         db.add(journal_entry)
         db.flush()
 

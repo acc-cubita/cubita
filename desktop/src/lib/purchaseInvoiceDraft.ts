@@ -168,6 +168,9 @@ export function usePurchaseInvoiceDraft({
   const rate = currencyCode ? Number(exchangeRate) || 1 : 1
   const baseGrandTotal = Math.round(grandTotal * rate)
 
+  //: همان هشدارِ لیستِ سیاهِ سمتِ فروش — تأمین‌کننده‌ی مشکل‌دار هم باید دیده شود.
+  const blacklisted = contacts.some((c) => c.id === contactId && c.is_blacklisted)
+
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0)
   const overDiscountLine = validLines.find(
     (l) => (Number(l.discount) || 0) > (Number(l.qty) || 0) * (Number(l.unitCost) || 0),
@@ -253,6 +256,7 @@ export function usePurchaseInvoiceDraft({
     setCostCenterId,
     contacts,
     contactId,
+    blacklisted,
     setContactId,
     currencies,
     currencyCode,

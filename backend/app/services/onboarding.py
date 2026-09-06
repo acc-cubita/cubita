@@ -114,6 +114,44 @@ def get_opening_status(db: Session) -> dict:
     }
 
 
+def _contact_opening_lines(db: Session) -> list[JournalLine]:
+    """مانده‌ی اول دوره‌ی طرف‌حساب‌ها را به ردیفِ سند تبدیل می‌کند.
+
+    همان الگویِ موجودیِ اول دوره: عدد روی خودِ طرف‌حساب می‌نشیند و سندِ افتتاحیه از
+    رویش ساخته می‌شود — نه اینکه کاربر مجبور باشد همان رقم را یک‌بار در فرمِ
+    طرف‌حساب و یک‌بار در ردیف‌های سند وارد کند.
+
+    تفصیلیِ طرف‌حساب (اگر داشته باشد) روی ردیف می‌نشیند، پس مانده‌ی افتتاحیه هم در
+    گزارشِ تفصیلی تفکیک می‌شود، نه اینکه یک رقمِ درهم روی حسابِ دریافتنی بماند.
+    """
+    lines: list[JournalLine] = []
+    rows = (
+        db.query(Contact)
+        .filter((Contact.opening_ar_amount > 0) | (Contact.opening_ap_amount > 0))
+        .order_by(Contact.name)
+        .all()
+    )
+    if not rows:
+        return lines
+
+    for contact in rows:
+        for amount, side, role, label in (
+            (contact.opening_ar_amount, contact.opening_ar_side, cc.ACCOUNTS_RECEIVABLE, "دریافتنی"),
+            (contact.opening_ap_amount, contact.opening_ap_side, cc.ACCOUNTS_PAYABLE, "پرداختنی"),
+        ):
+            amount = Decimal(amount or 0)
+            if amount <= 0:
+                continue
+            lines.append(JournalLine(
+                account_id=get_account(db, role).id,
+                debit=amount if side == "debit" else Decimal(0),
+                credit=amount if side == "credit" else Decimal(0),
+                analytic_id=contact.analytic_id,
+                description=f"{label} — {contact.name} (اول دوره)",
+            ))
+    return lines
+
+
 def create_opening_entry(db: Session, data: OpeningBalancesIn, user: User) -> JournalEntry:
     """یک سندِ افتتاحیه‌ی متوازن می‌سازد و در صورتِ وجودِ موجودیِ اول دوره، حرکاتِ
     انبار و میانگینِ بها را هم ثبت می‌کند.
@@ -127,7 +165,11 @@ def create_opening_entry(db: Session, data: OpeningBalancesIn, user: User) -> Jo
     if _existing_opening(db) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "سند افتتاحیه از قبل ثبت شده است")
     assert_period_open(db, data.entry_date)
-    if not data.lines and not data.stock:
+    # مانده‌ی طرف‌حساب‌ها منبعِ سومِ این سند است (کنارِ ردیف‌های دستی و موجودیِ کالا)،
+    # پس در این گارد هم باید شمرده شود — وگرنه سندی که *فقط* از مانده‌ی طرف‌حساب‌ها
+    # می‌آید رد می‌شد.
+    contact_lines = _contact_opening_lines(db)
+    if not data.lines and not data.stock and not contact_lines:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "حداقل یک مانده یا موجودیِ اول دوره لازم است")
 
     journal_lines: list[JournalLine] = [
@@ -159,6 +201,8 @@ def create_opening_entry(db: Session, data: OpeningBalancesIn, user: User) -> Jo
             account_id=get_account(db, cc.INVENTORY).id,
             debit=inventory_value, credit=0, description="موجودیِ کالا — اول دوره",
         ))
+
+    journal_lines.extend(contact_lines)
 
     total_debit = sum((Decimal(ln.debit) for ln in journal_lines), Decimal(0))
     total_credit = sum((Decimal(ln.credit) for ln in journal_lines), Decimal(0))

@@ -6,6 +6,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PURCHASE_INVOICE, DOC_SALES_INVOICE
+from app.services import tafsili
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.advanced_inventory import StockBatch
@@ -23,6 +24,7 @@ from app.services import chart_codes as cc
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
 from app.services.cost_centers import resolve_cost_center_id
+from app.services.credit import assert_within_credit_limit
 from app.services.period_close import assert_period_open
 
 
@@ -123,7 +125,15 @@ def lock_items(db: Session, item_ids) -> None:
     db.query(Item.id).filter(Item.id.in_(ids)).order_by(Item.id).with_for_update().all()
 
 
-def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesInvoice:
+def post_sales_invoice(
+    db: Session, data: SalesInvoiceIn, user: User, *, enforce_credit: bool = True
+) -> SalesInvoice:
+    """فاکتورِ فروش را ثبت می‌کند.
+
+    `enforce_credit=False` فقط برای همگام‌سازیِ فاکتورِ **آفلاین** است: آن فروش
+    قبلاً انجام شده و کالایش رفته؛ ردّش سرِ همگام‌سازی یعنی نابودکردنِ کارِ
+    فروشنده. شرحِ کامل در [گاردِ اعتبار](credit.py).
+    """
     assert_period_open(db, data.invoice_date)
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
@@ -209,6 +219,12 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
     if total_amount + tax_amount + rounding < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "گِرد کردن نمی‌تواند مبلغِ قابل‌پرداخت را منفی کند")
 
+    #: گاردِ سقفِ اعتبار این‌جاست نه بالاتر، چون به مبلغِ نهایی (پس از تخفیف، مالیات
+    #: و گِرد) نیاز دارد — همان عددی که واقعاً به حسابِ دریافتنی می‌نشیند.
+    assert_within_credit_limit(
+        db, data.contact_id, total_amount + tax_amount + rounding, enforce=enforce_credit
+    )
+
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
@@ -275,6 +291,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         created_by_id=user.id,
         lines=journal_lines,
     )
+    tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
     db.flush()
 
@@ -438,6 +455,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         created_by_id=user.id,
         lines=journal_lines,
     )
+    tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
     db.flush()
 
@@ -531,6 +549,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
                 JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
             ],
         )
+        tafsili.assert_entry_has_tafsili(db, journal_entry)
         db.add(journal_entry)
         db.flush()
 

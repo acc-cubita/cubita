@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../../electron.d'
 import type { SalesInvoiceRecord } from '../../api'
 import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../../lib/salesInvoiceDraft'
@@ -9,6 +9,7 @@ import { ItemPicker } from '../ItemPicker'
 import { CardPaymentButton } from '../CardPaymentDialog'
 import { CreditBanner } from '../SalesInvoiceForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { BlacklistBanner } from '../BlacklistBanner'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -71,6 +72,10 @@ export function SalesInvoiceWizard({
       key: 'review',
       title: 'بازبینی و ثبت',
       subtitle: 'همه‌چیز را یک‌بار مرور کنید، بعد ثبت را بزنید.',
+      //: سقفِ اعتبار این‌جا سنجیده می‌شود نه در مرحله‌ی سربرگ، چون به مبلغِ نهاییِ
+      //: فاکتور نیاز دارد و آن تا واردشدنِ اقلام معلوم نیست.
+      canAdvance: !d.creditBlock,
+      blockHint: 'سقفِ اعتبارِ این مشتری اجازه نمی‌دهد — بالای همین صفحه نوشته چه کار می‌شود کرد.',
       body: <ReviewStep d={d} items={items} warehouses={warehouses} />,
     },
   ]
@@ -162,6 +167,21 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
             </label>
           )}
         </div>
+      )}
+      {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
+      {d.creditBlock && (
+        <section className="fy-note fy-note--err">
+          <AlertTriangle size={16} />
+          <div>
+            <strong>{d.creditBlock.name}</strong> از سقفِ اعتبارش رد می‌شود: این فاکتور
+            مانده را به {Math.round(d.creditBlock.projected).toLocaleString('fa-IR')} می‌رساند و
+            سقفش {Math.round(d.creditBlock.limit).toLocaleString('fa-IR')} ریال است.
+            <span className="credit-banner-alert">
+              در فرمِ طرف حساب «با عبور از سقف» روی «جلوگیری کن» است. یا دریافتی ثبت کنید،
+              یا سقف را بالا ببرید، یا آن تنظیم را به «هشدار بده» تغییر دهید.
+            </span>
+          </div>
+        </section>
       )}
       {d.credit && Number(d.credit.credit_limit) > 0 && (
         <CreditBanner credit={d.credit} invoiceTotal={d.baseGrandTotal} />

@@ -16,6 +16,8 @@ from app.schemas.reports import (
     IncomeStatementOut,
     InventoryReportOut,
     KardexReportOut,
+    MissingTafsiliOut,
+    NatureViolationOut,
     SalesDashboardOut,
     SeasonalReportOut,
     TrialBalanceRowOut,
@@ -23,6 +25,7 @@ from app.schemas.reports import (
 )
 from app.services import cost_centers as cost_centers_service
 from app.services import reports as reports_service
+from app.services import tafsili as tafsili_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -43,9 +46,44 @@ def trial_balance(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     db: Session = Depends(get_db),
+    management_only: bool = Query(
+        False,
+        description="فقط حساب‌هایی که «نمایش در گزارشات مدیریتی» دارند",
+    ),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return reports_service.get_trial_balance(db, date_from, date_to)
+    return reports_service.get_trial_balance(db, date_from, date_to, management_only)
+
+
+@router.get("/nature-violations", response_model=list[NatureViolationOut])
+def nature_violations(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    controlled_only: bool = Query(
+        False,
+        description="فقط حساب‌هایی که «کنترل ماهیت طی دوره» دارند",
+    ),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """حساب‌هایی که مانده‌شان خلافِ ماهیتشان است — گزارش، نه گارد."""
+    return reports_service.get_nature_violations(db, date_from, date_to, controlled_only)
+
+
+@router.get("/missing-tafsili", response_model=list[MissingTafsiliOut])
+def missing_tafsili(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """ردیف‌های بدونِ تفصیلی روی حساب‌های تفصیلی‌پذیر — سوراخِ گزارشِ تفصیلی.
+
+    مستقل از سطحِ اجبار کار می‌کند. در «شناور» تنها چیزی است که این ردیف‌ها را نشان
+    می‌دهد؛ در «ترکیبی» ردیف‌های ماژول‌ها را که از گارد رد شده‌اند می‌آورد؛ در
+    «اجباری» باید تقریباً خالی باشد و هرچه در آن هست مالِ پیش از سخت‌گیری است.
+    """
+    return tafsili_service.find_missing_tafsili(db, date_from, date_to)
 
 
 @router.get("/income-statement", response_model=IncomeStatementOut)

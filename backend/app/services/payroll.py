@@ -20,7 +20,8 @@ from app.models.payroll import (
 )
 from app.models.user import User
 from app.services import chart_codes as cc
-from app.services.common import get_account, make_journal_entry
+from app.services import payroll_loans
+from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
 
 # طبق قانون کار ایران: پایه‌ی ساعتی از تقسیم بر ۱۹۴ ساعت کاری استاندارد ماهانه و ضریب اضافه‌کاری ۱.۴ به‌دست می‌آید.
@@ -76,12 +77,139 @@ def calc_monthly_tax(monthly_taxable: Decimal, annual_exemption: Decimal, bracke
     return _round(annual_tax / 12)
 
 
+def calc_cumulative_monthly_tax(
+    *,
+    monthly_taxable: Decimal,
+    prior_taxable: Decimal,
+    prior_tax: Decimal,
+    month_index: int,
+    annual_exemption: Decimal,
+    brackets: list[dict],
+    tax_percent: Decimal = Decimal(100),
+) -> Decimal:
+    """مالیاتِ این ماه، بر مبنای **تجمیعیِ سال** نه فقط همین ماه.
+
+    روشِ `calc_monthly_tax` هر ماه را جدا سالانه می‌کند و فرض می‌گیرد حقوق تمامِ سال
+    همین است. تا وقتی حقوق یکنواخت است جواب می‌دهد، ولی دو جا می‌شکند:
+
+    * **درآمدِ ناهموار.** پاداشِ یک ماه، آن ماه را به پلکانِ بالا می‌برد و ماه‌های
+      بعد دوباره از پایین شروع می‌کنند؛ جمعِ سال با مالیاتِ واقعیِ سالانه نمی‌خواند.
+    * **استقرارِ وسطِ سال.** شرکتی که مهرماه از اکسل می‌آید، شش ماهِ اولِ کارمند را
+      نمی‌بیند و پلکان از صفر شروع می‌شود — مالیات کمتر از واقع کسر می‌شود و تا
+      ممیزیِ سالِ بعد کسی نمی‌فهمد.
+
+    روشِ این‌جا: درآمدِ مشمولِ **از ابتدای سال تا همین ماه** جمع می‌شود، به نسبتِ
+    ماه‌های گذشته سالانه می‌شود، مالیاتِ سالانه‌اش حساب و به همان نسبت سهمِ تا امروز
+    گرفته می‌شود؛ آنچه قبلاً کسر شده کم می‌شود و باقی مالیاتِ همین ماه است.
+
+    **در حالتِ یکنواخت و بدونِ سابقه، جوابش دقیقاً همان `calc_monthly_tax` است** —
+    ماهِ اولِ سال با سابقه‌ی صفر همان فرمولِ قبلی را می‌دهد.
+
+    `tax_percent` سهمِ گروهِ مالیاتی است: مناطقِ عادی ۱۰۰، مناطقِ محروم ۵۰، معاف ۰.
+    روی مالیاتِ *سالانه* اعمال می‌شود نه ماهانه، وگرنه با کسرِ «قبلاً پرداخت‌شده»
+    ناسازگار می‌شد.
+
+    مقدارِ منفی برنمی‌گرداند: اگر ماهی کم‌درآمد باعث شود مالیاتِ تجمیعیِ لازم از
+    آنچه تا حالا کسر شده کمتر باشد، **مسترد نمی‌کنیم** — استردادِ مالیات کارِ
+    تعدیلِ پایانِ سال است، نه فیشِ ماهانه.
+    """
+    months = max(1, min(12, month_index))
+    ytd_taxable = max(Decimal(0), prior_taxable + monthly_taxable)
+
+    #: سالانه‌سازی به نسبتِ ماه‌های سپری‌شده — نه ضرب در ۱۲ که ماه‌های نیامده را هم
+    #: به حساب می‌آورد.
+    annualized = ytd_taxable * 12 / months
+    annual_after_exemption = max(Decimal(0), annualized - annual_exemption)
+    annual_tax = calc_annual_tax(annual_after_exemption, brackets) * tax_percent / 100
+
+    tax_due_to_date = annual_tax * months / 12
+    return max(Decimal(0), _round(tax_due_to_date - prior_tax))
+
+
 def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContract | None:
     return (
         db.query(SalaryContract)
         .filter(SalaryContract.employee_id == employee_id, SalaryContract.effective_from <= as_of)
         .order_by(SalaryContract.effective_from.desc())
         .first()
+    )
+
+
+def _tax_percent(db: Session, contract: SalaryContract) -> Decimal:
+    """سهمِ گروهِ مالیاتیِ قرارداد: عادی ۱۰۰، مناطقِ محروم ۵۰، معاف ۰.
+
+    تا امروز این عدد ذخیره می‌شد و هیچ‌جا ضرب نمی‌شد؛ «مناطق محروم» فقط یک برچسب
+    بود. بی گروهِ مالیاتی، ۱۰۰ درصد — یعنی همان رفتارِ قبلی.
+    """
+    from app.models.payroll import PayrollTaxGroup
+
+    group_id = getattr(contract, "tax_group_id", None)
+    if group_id is None:
+        return Decimal(100)
+    group = db.get(PayrollTaxGroup, group_id)
+    return Decimal(group.percent) if group is not None else Decimal(100)
+
+
+def _year_to_date(db: Session, employee_id: UUID, period: PayrollPeriod) -> dict:
+    """درآمدِ مشمول و مالیاتِ کسرشده‌ی همین کارمند از ابتدای سالِ مالی تا این دوره.
+
+    دو منبع دارد و هر دو لازم‌اند:
+
+    * **فیش‌های صادرشده‌ی همین سال** — ماه‌هایی که خودِ کوبیتا حساب کرده.
+    * **اطلاعاتِ استقرار** — ماه‌هایی که شرکت هنوز با اکسل کار می‌کرده. بی این،
+      پلکانِ مالیات از صفر شروع می‌شود و مالیاتِ ماه‌های باقی‌مانده کمتر از واقع
+      درمی‌آید.
+
+    درآمدِ مشمولِ استقرار = پرداختیِ تجمیعی منهای بیمه‌ی کسرشده‌ی تجمیعی، دقیقاً
+    همان تعریفی که موتور برای `taxable_pay` دارد.
+    """
+    from app.models.payroll import PayrollDeploymentInfo
+
+    rows = (
+        db.query(Payslip.taxable_pay, Payslip.tax_amount)
+        .join(PayrollPeriod, Payslip.period_id == PayrollPeriod.id)
+        .filter(
+            Payslip.employee_id == employee_id,
+            PayrollPeriod.year == period.year,
+            PayrollPeriod.month < period.month,
+        )
+        .all()
+    )
+    taxable = sum((Decimal(r[0]) for r in rows), Decimal(0))
+    tax = sum((Decimal(r[1]) for r in rows), Decimal(0))
+
+    deployment = (
+        db.query(PayrollDeploymentInfo)
+        .filter(
+            PayrollDeploymentInfo.employee_id == employee_id,
+            PayrollDeploymentInfo.year == period.year,
+        )
+        .first()
+    )
+    if deployment is not None:
+        taxable += max(
+            Decimal(0),
+            Decimal(deployment.cumulative_gross) - Decimal(deployment.cumulative_insurance),
+        )
+        tax += Decimal(deployment.cumulative_tax)
+
+    return {"taxable": taxable, "tax": tax}
+
+
+def _employee_loan_account(db: Session):
+    """حسابِ «وام و مساعده‌ی کارکنان» — دارایی، نه هزینه.
+
+    `get_or_create_account` است نه `get_account`: این نقش تازه اضافه شده و چارتِ
+    کسب‌وکارهایی که از قبل ساخته شده‌اند آن را ندارد. اولین وامی که کسر شود، حساب را
+    می‌سازد؛ بی این کار، صدورِ فیش برای هر مشتریِ قدیمی با خطای ۵۰۰ می‌شکست.
+    """
+    return get_or_create_account(
+        db,
+        cc.EMPLOYEE_LOAN,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.EMPLOYEE_LOAN],
+        name="وام و مساعده‌ی کارکنان",
+        acc_type="asset",
+        parent_code="11",
     )
 
 
@@ -93,9 +221,40 @@ def _period_as_of_date(period: PayrollPeriod):
     return persian_month_end(period.year, period.month)
 
 
+def contract_deductions(contract: SalaryContract) -> Decimal:
+    """جمعِ ردیف‌های *کسوراتِ* قرارداد (تبِ «سایر مبالغ»).
+
+    تا امروز این ردیف‌ها بی‌صدا نادیده گرفته می‌شدند: `payroll_contracts` هر عاملی
+    را که `benefit` نبود رد می‌کرد، پس کاربر بیمه‌ی تکمیلی را وارد می‌کرد و هیچ‌جا
+    کسر نمی‌شد.
+
+    مثلِ قسطِ وام از **خالص** کم می‌شوند نه از ناخالص: کسورِ اختیاری مبنای بیمه و
+    مالیات را تغییر نمی‌دهد.
+    """
+    total = Decimal(0)
+    for line in getattr(contract, "lines", []) or []:
+        factor = getattr(line, "factor", None)
+        if factor is not None and factor.category == "deduction":
+            total += Decimal(line.amount)
+    return total
+
+
 def compute_payslip_amounts(
-    contract: SalaryContract, attendance: Attendance | None, settings: PayrollSettings
+    contract: SalaryContract,
+    attendance: Attendance | None,
+    settings: PayrollSettings,
+    *,
+    month_index: int = 1,
+    prior_taxable: Decimal | None = None,
+    prior_tax: Decimal | None = None,
+    tax_percent: Decimal | None = None,
 ) -> dict:
+    """اعدادِ یک فیش.
+
+    چهار پارامترِ کلیدواژه‌ایِ آخر سابقه‌ی سالِ جاری و گروهِ مالیاتی‌اند. پیش‌فرضشان
+    «ماهِ اول، بی‌سابقه، صد درصد» است — یعنی همان رفتارِ قبلی — تا فراخوانی‌های
+    موجود دست‌نخورده بمانند.
+    """
     worked_days = attendance.worked_days if attendance else Decimal(30)
     overtime_hours = attendance.overtime_hours if attendance else Decimal(0)
 
@@ -112,8 +271,21 @@ def compute_payslip_amounts(
         gross_pay, Decimal(settings.insurance_employee_rate), Decimal(settings.insurance_employer_rate)
     )
     taxable_pay = max(Decimal(0), gross_pay - insurance_employee_share)
-    tax_amount = calc_monthly_tax(taxable_pay, Decimal(settings.tax_exemption_annual), settings.tax_brackets)
-    net_pay = gross_pay - insurance_employee_share - tax_amount
+    tax_amount = calc_cumulative_monthly_tax(
+        monthly_taxable=taxable_pay,
+        prior_taxable=prior_taxable if prior_taxable is not None else Decimal(0),
+        prior_tax=prior_tax if prior_tax is not None else Decimal(0),
+        month_index=month_index,
+        annual_exemption=Decimal(settings.tax_exemption_annual),
+        brackets=settings.tax_brackets,
+        tax_percent=tax_percent if tax_percent is not None else Decimal(100),
+    )
+
+    #: کسوراتِ قرارداد بعد از مالیات کم می‌شوند — مبنای بیمه و مالیات را تکان
+    #: نمی‌دهند. قسطِ وام در `generate_payslips_for_period` جدا اضافه می‌شود، چون
+    #: به دوره وابسته است نه به قرارداد.
+    other_deductions = _round(contract_deductions(contract) * proration)
+    net_pay = gross_pay - insurance_employee_share - tax_amount - other_deductions
 
     return {
         "base_salary": base_salary,
@@ -124,6 +296,8 @@ def compute_payslip_amounts(
         "insurance_employer_share": insurance_employer_share,
         "taxable_pay": taxable_pay,
         "tax_amount": tax_amount,
+        "loan_deduction": Decimal(0),
+        "other_deductions": other_deductions,
         "net_pay": net_pay,
     }
 
@@ -183,13 +357,36 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     total_insurance_employer = Decimal(0)
     total_tax = Decimal(0)
     total_net = Decimal(0)
+    total_loan_deduction = Decimal(0)
 
     for employee in employees:
         contract = get_current_contract(db, employee.id, as_of)
         if contract is None:
             continue  # کارمندی بدون حکم حقوقی فعال، از این دوره صرف‌نظر می‌شود
 
-        amounts = compute_payslip_amounts(contract, attendance_by_employee.get(employee.id), settings)
+        prior = _year_to_date(db, employee.id, period)
+        amounts = compute_payslip_amounts(
+            contract,
+            attendance_by_employee.get(employee.id),
+            settings,
+            #: ماهِ شمسیِ دوره همان شماره‌ی ماه در سالِ مالی است (۱ = فروردین).
+            month_index=period.month,
+            prior_taxable=prior["taxable"],
+            prior_tax=prior["tax"],
+            tax_percent=_tax_percent(db, contract),
+        )
+
+        #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
+        #: وام هزینه‌ی کارفرما نیست و مبنای بیمه و مالیات را تغییر نمی‌دهد — فقط
+        #: بخشی از همان خالص به‌جای جیبِ کارمند، بدهیِ وامش را می‌بندد.
+        loan_deduction = payroll_loans.deduct_for_period(db, employee.id, period)
+        if loan_deduction:
+            #: بیش از خالص کسر نمی‌شود؛ باقی‌اش سرِ جایش می‌ماند برای ماهِ بعد.
+            loan_deduction = min(loan_deduction, amounts["net_pay"])
+            amounts["net_pay"] -= loan_deduction
+        amounts["loan_deduction"] = loan_deduction
+        total_loan_deduction += loan_deduction
+
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
             number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
@@ -229,6 +426,17 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             description="مالیات حقوق پرداختنی",
         ),
     ]
+    #: بازپرداختِ وام: خالصِ پرداختنی به کارکنان کمتر شده و همان مبلغ از مانده‌ی
+    #: وامِ کارکنان (دارایی) کم می‌شود. سند بدونِ این ردیف متوازن نمی‌ماند.
+    if total_loan_deduction:
+        journal_lines.append(
+            JournalLine(
+                account_id=_employee_loan_account(db).id,
+                debit=0,
+                credit=total_loan_deduction,
+                description="بازپرداختِ اقساطِ وامِ کارکنان",
+            )
+        )
     journal_entry = make_journal_entry(
         db, as_of, f"حقوق و دستمزد دوره {period.year}/{period.month:02d}", "payroll", user, journal_lines
     )
@@ -241,6 +449,113 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     for payslip in payslips:
         db.refresh(payslip)
     return payslips
+
+
+def _period_payslips(db: Session, period_id: UUID) -> tuple[list, PayrollPeriod]:
+    """فیش‌های یک دوره به‌همراه کارمندشان — پایه‌ی هر سه خروجیِ CSV.
+
+    یک تابع، سه خروجی: اگر هرکدام کوئریِ خودش را می‌زد، فیلترِ «فیشِ همین دوره» سه
+    جا تکرار می‌شد و اصلاحِ یکی، دوتای دیگر را عقب می‌گذاشت.
+    """
+    period = db.get(PayrollPeriod, period_id)
+    if period is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دوره حقوقی یافت نشد")
+
+    rows = (
+        db.query(Payslip, Employee)
+        .join(Employee, Payslip.employee_id == Employee.id)
+        .filter(Payslip.period_id == period_id)
+        .order_by(Employee.first_name, Employee.last_name)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای این دوره هنوز فیشی صادر نشده است")
+    return rows, period
+
+
+def _csv_text(header: list[str], body: list[list[str]], footer: list[str] | None = None) -> str:
+    """CSVِ فارسی‌خوان برای اکسل.
+
+    BOM ابتدای فایل لازم است، وگرنه اکسلِ ویندوز UTF-8 را windows-1256 می‌خواند و
+    همه‌ی متنِ فارسی به‌هم می‌ریزد — همان تله‌ای که لیستِ بیمه یک بار خورد.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(header)
+    for row in body:
+        writer.writerow(row)
+    if footer is not None:
+        writer.writerow([])
+        writer.writerow(footer)
+    return "﻿" + buffer.getvalue()
+
+
+def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:
+    """فایلِ مالیات بر درآمدِ حقوقِ دوره.
+
+    مثلِ لیستِ بیمه، **قالبِ ستون‌ها عمومی است** و پیش از ارسالِ رسمی به سامانه‌ی
+    مالیاتی باید با آخرین مشخصاتش تطبیق داده شود. این‌جا مبنای مشمول و مالیاتِ
+    محاسبه‌شده‌ی همان فیش می‌آید — نه محاسبه‌ی دوباره، تا عددِ فایل و عددِ فیشِ
+    کارمند هیچ‌وقت دو تا نشوند.
+    """
+    rows, period = _period_payslips(db, period_id)
+
+    body = []
+    total_taxable = Decimal(0)
+    total_tax = Decimal(0)
+    for payslip, employee in rows:
+        taxable = Decimal(payslip.taxable_pay)
+        tax = Decimal(payslip.tax_amount)
+        body.append(
+            [
+                employee.national_id,
+                employee.first_name,
+                employee.last_name,
+                str(payslip.gross_pay),
+                str(taxable),
+                str(tax),
+            ]
+        )
+        total_taxable += taxable
+        total_tax += tax
+
+    text = _csv_text(
+        ["کد ملی", "نام", "نام خانوادگی", "ناخالص حقوق", "درآمد مشمول مالیات", "مالیات"],
+        body,
+        ["جمع کل", "", "", "", str(total_taxable), str(total_tax)],
+    )
+    return text, period
+
+
+def generate_payment_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:
+    """دیسکتِ پرداختِ بانک — خالصِ پرداختیِ هر کارمند به شماره‌حسابش.
+
+    کارمندِ بی‌شماره‌حساب **حذف نمی‌شود**؛ ردیفش با شماره‌حسابِ خالی می‌آید. حذفش
+    یعنی فایل بی‌صدا کمتر از حقوقِ واقعی را منتقل می‌کند و کسی تا شکایتِ کارمند
+    نمی‌فهمد. ستونِ خالی در فایل دیده می‌شود.
+    """
+    rows, period = _period_payslips(db, period_id)
+
+    body = []
+    total = Decimal(0)
+    for payslip, employee in rows:
+        net = Decimal(payslip.net_pay)
+        body.append(
+            [
+                employee.bank_account_number or "",
+                f"{employee.first_name} {employee.last_name}".strip(),
+                employee.national_id,
+                str(net),
+            ]
+        )
+        total += net
+
+    text = _csv_text(
+        ["شماره حساب", "نام و نام خانوادگی", "کد ملی", "مبلغ خالص پرداختی"],
+        body,
+        ["جمع کل", "", "", str(total)],
+    )
+    return text, period
 
 
 def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:

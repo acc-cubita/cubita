@@ -8,6 +8,7 @@ import {
   Gauge,
   ListChecks,
   Target,
+  UserPlus,
   UsersRound,
 } from 'lucide-react'
 import {
@@ -327,19 +328,43 @@ function UsageTable({
 
 // ── طرف حساب‌ها ──────────────────────────────────────────────────────────────
 
-const TYPE_LABELS: Record<string, string> = {
-  customer: 'مشتری',
-  supplier: 'تأمین‌کننده',
-  both: 'هر دو',
+/**
+ * نقش‌های یک طرف‌حساب — همه‌شان، نه فقط `type`.
+ *
+ * `type` دو نقشِ معاملاتی را نگه می‌دارد و واسطه و سهامدار پرچمِ جداگانه‌اند. اگر
+ * این ستون فقط `type` را نشان دهد، واسطه‌ای که مشتری هم هست در فهرست «مشتری» دیده
+ * می‌شود و نقشِ واسطه‌اش ناپیدا می‌ماند.
+ */
+function contactRoles(r: ContactRecord): string[] {
+  const roles: string[] = []
+  if (r.type === 'customer' || r.type === 'both') roles.push('مشتری')
+  if (r.type === 'supplier' || r.type === 'both') roles.push('تأمین‌کننده')
+  if (r.is_broker) roles.push('واسطه')
+  if (r.is_shareholder) roles.push('سهامدار')
+  return roles
 }
 
-export function ContactListPage({ token }: { token: string }) {
+const ROLE_FILTERS: Record<string, (r: ContactRecord) => boolean> = {
+  customer: (r) => r.type === 'customer' || r.type === 'both',
+  supplier: (r) => r.type === 'supplier' || r.type === 'both',
+  broker: (r) => r.is_broker,
+  shareholder: (r) => r.is_shareholder,
+}
+
+export function ContactListPage({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate?: (page: PageKey) => void
+}) {
   const [rows, setRows] = useState<ContactRecord[] | null>(null)
   const [groups, setGroups] = useState<ContactGroupRecord[]>([])
   const [locations, setLocations] = useState<GeoLocationRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [groupFilter, setGroupFilter] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
 
   useEffect(() => {
     void fetchContacts(token)
@@ -356,19 +381,20 @@ export function ContactListPage({ token }: { token: string }) {
     const q = query.trim()
     return (rows ?? []).filter((r) => {
       if (groupFilter && r.group_id !== groupFilter) return false
+      if (roleFilter && !ROLE_FILTERS[roleFilter]?.(r)) return false
       if (!q) return true
       return [r.name, r.phone ?? '', r.email ?? '', r.national_id ?? ''].some((v) => v.includes(q))
     })
-  }, [rows, query, groupFilter])
+  }, [rows, query, groupFilter, roleFilter])
 
-  const pg = usePagination(shown, 10, `${query}|${groupFilter}`)
+  const pg = usePagination(shown, 10, `${query}|${groupFilter}|${roleFilter}`)
 
   return (
     <div className="page panels">
       <PageHeader
         icon={UsersRound}
         title="طرف حساب‌ها"
-        description="همه‌ی مشتریان و تأمین‌کنندگان، با گروه و محلِ جغرافیایی‌شان."
+        description="همه‌ی مشتریان، تأمین‌کنندگان، واسطه‌ها و سهامداران — با گروه و محلِ جغرافیایی‌شان."
       />
       {error && <div className="error">{error}</div>}
 
@@ -385,14 +411,36 @@ export function ContactListPage({ token }: { token: string }) {
                 </option>
               ))}
             </select>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">همه‌ی نقش‌ها</option>
+              <option value="customer">مشتری</option>
+              <option value="supplier">تأمین‌کننده</option>
+              <option value="broker">واسطه</option>
+              <option value="shareholder">سهامدار</option>
+            </select>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جست‌وجو…" />
+            {/* راهِ ساختِ طرف‌حساب از این فهرست گم بود: کاربر «طرف حساب‌ها» را باز
+                می‌کرد و هیچ راهی به فرمِ ساخت نداشت. ساخت همچنان یک‌جاست («شرکت ←
+                طرف حساب جدید») و این فقط میان‌بُر است، نه فرمِ دوم. */}
+            {onNavigate && (
+              <button type="button" className="btn-primary" onClick={() => onNavigate('contactnew')}>
+                <UserPlus size={13} /> طرف حساب جدید
+              </button>
+            )}
           </>
         }
       >
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : shown.length === 0 ? (
-          <EmptyState icon={UsersRound} text="چیزی پیدا نشد — فیلترها را تغییر دهید." />
+          <EmptyState
+            icon={UsersRound}
+            text={
+              query || groupFilter
+                ? 'چیزی پیدا نشد — فیلترها را تغییر دهید.'
+                : 'هنوز طرف‌حسابی ثبت نشده — با «طرف حساب جدید» اولی را بسازید.'
+            }
+          />
         ) : (
           <>
             <div className="table-scroll">
@@ -400,7 +448,7 @@ export function ContactListPage({ token }: { token: string }) {
                 <thead>
                   <tr>
                     <th>نام</th>
-                    <th>نوع</th>
+                    <th>نقش</th>
                     <th>گروه</th>
                     <th>محل</th>
                     <th>تلفن</th>
@@ -411,7 +459,7 @@ export function ContactListPage({ token }: { token: string }) {
                   {pg.pageItems.map((r) => (
                     <tr key={r.id}>
                       <td className="card-title" data-label="نام">{r.name}</td>
-                      <td data-label="نوع">{label(TYPE_LABELS, r.type)}</td>
+                      <td data-label="نقش">{contactRoles(r).join('، ')}</td>
                       <td data-label="گروه">{r.group_id ? groupName.get(r.group_id) ?? '—' : '—'}</td>
                       <td data-label="محل">
                         {r.geo_location_id ? geoPath.get(r.geo_location_id) ?? '—' : '—'}

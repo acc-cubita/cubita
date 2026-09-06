@@ -8292,6 +8292,40 @@ button.mp-item:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 .tree-level { color: var(--text-muted); font-size: var(--fs-xs); }
+
+/* رنگِ سطحِ کدینگ — قراردادِ جاافتاده‌ی نرم‌افزارهای حسابداریِ ایرانی: گروه سبز،
+   کل آبی، معین زرد/کهربایی، تفصیلی بنفش. با نشانِ رنگی به‌جای رنگ کردنِ خودِ متن،
+   تا کنتراستِ خواندن در هر دو پوسته دست‌نخورده بماند. */
+.tree-level--l0, .tree-level--l1, .tree-level--l2, .tree-level--l3 {
+  display: inline-flex; align-items: center; gap: 5px; font-weight: 600;
+}
+.tree-level--l0::before, .tree-level--l1::before,
+.tree-level--l2::before, .tree-level--l3::before {
+  content: ''; width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto;
+}
+.tree-level--l0 { color: #15803d; } .tree-level--l0::before { background: #22c55e; }
+.tree-level--l1 { color: #1d4ed8; } .tree-level--l1::before { background: #3b82f6; }
+.tree-level--l2 { color: #a16207; } .tree-level--l2::before { background: #eab308; }
+.tree-level--l3 { color: #7e22ce; } .tree-level--l3::before { background: #a855f7; }
+
+/* عنوانِ دومِ حساب — کنارِ نام، کم‌رنگ و LTR چون معمولاً انگلیسی است. */
+.chart-name2 {
+  color: var(--text-muted); font-size: var(--fs-xs); opacity: .75;
+  margin-inline-start: 6px; unicode-bidi: isolate;
+}
+
+/* ماهیتِ حساب. «خودکار» یعنی از نوعِ حساب مشتق شده، نه انتخابِ کاربر. */
+.nature-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-xs); font-weight: 600;
+}
+.nature-badge--debit { color: #1d4ed8; }
+.nature-badge--credit { color: #b91c1c; }
+.nature-badge--any { color: var(--text-muted); font-weight: 500; }
+.nature-badge__auto {
+  font-size: calc(var(--fs-xs) * .85); font-weight: 500; opacity: .6;
+  border: 1px solid currentColor; border-radius: 3px; padding: 0 3px;
+}
 .tree-balance { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tree-table tbody tr.group-row .tree-code,
 .tree-table tbody tr.group-row .chart-group-name { font-weight: 700; }
@@ -8325,8 +8359,15 @@ button.mp-item:focus-visible {
   text-align: right;
   cursor: pointer;
 }
-.tpl-card:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); }
-.tpl-card:disabled { cursor: default; opacity: 0.7; }
+.tpl-card:hover { border-color: var(--accent); }
+/* کارت دیگر خودش دکمه نیست — دو کنشِ «درج» و «برگرداندن» داخلش نشسته‌اند، چون
+   برگرداندن حذف است و نباید با یک کلیکِ اتفاقی روی کلِ کارت اتفاق بیفتد. */
+.tpl-card { cursor: default; }
+.tpl-actions {
+  display: flex; gap: 6px; margin-top: 8px; width: 100%;
+}
+.tpl-actions button { flex: 1 1 0; justify-content: center; }
+.tpl-actions button:disabled { opacity: .45; cursor: default; }
 .tpl-title { color: var(--text-h); font-size: var(--fs-sm); font-weight: 700; }
 .tpl-hint { color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.6; }
 .tpl-meta { margin-top: 2px; color: var(--accent-text); font-size: var(--fs-xs); font-weight: 700; }
@@ -8381,6 +8422,9 @@ button.mp-item:focus-visible {
   color: var(--text-muted);
 }
 .cmp-form-wide { grid-column: 1 / -1; }
+/* ردیفِ نقش‌های طرف‌حساب. تیک‌ها داخلِ یک ظرف می‌نشینند نه مستقیم در گرید، چون
+   `.cmp-form > label` ستونی است و چک‌باکس را زیرِ برچسبش می‌انداخت. */
+.role-picker { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .cmp-form .invoice-form-footer { grid-column: 1 / -1; }
 
 .cmp-check {
@@ -10091,3 +10135,104 @@ button.mp-item:focus-visible {
     text-align: start;
   }
 }
+
+/* ── ویژگی‌های حساب ──────────────────────────────────────────────────────── */
+
+/* نشانه‌ی پرچم روی سطرِ درخت. کم‌رنگ و کوچک، چون خبرِ فرعیِ سطر است نه عنوانش. */
+.chart-trait-tag {
+  font-size: calc(var(--fs-xs) * .85); font-weight: 500;
+  color: var(--text-muted); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 0 4px; white-space: nowrap;
+}
+/* حالتِ «خاموشِ» پرچمی که پیش‌فرضش روشن است — همان یک مورد که نبودنش خبر است. */
+.chart-trait-tag--off { color: #b45309; border-color: #b45309; background: transparent; }
+
+/* فرمِ ویرایشِ حساب در کشو. */
+.acc-edit { display: flex; flex-direction: column; gap: 16px; }
+.acc-edit-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.acc-edit-grid label { display: flex; flex-direction: column; gap: 4px; }
+.acc-edit-grid label > span { font-size: var(--fs-xs); color: var(--text-muted); }
+.acc-edit-grid input:disabled { background: var(--surface-2); color: var(--text-muted); }
+
+.acc-traits {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.acc-traits legend { font-size: var(--fs-xs); font-weight: 600; padding: 0 6px; }
+/* راهنما زیرِ برچسب می‌نشیند نه در tooltip: این شش تیک هرکدام یک رفتار را عوض
+   می‌کنند و کاربری که معنایشان را نمی‌داند، تیکِ اشتباه می‌زند. */
+.acc-trait { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start; }
+.acc-trait input { margin-top: 3px; }
+.acc-trait-label { font-weight: 600; }
+.acc-trait-hint { grid-column: 2; font-size: var(--fs-xs); color: var(--text-muted); }
+.acc-trait--off { opacity: .55; }
+
+.acc-edit-actions { display: flex; gap: 8px; }
+
+/* منوی راست‌کلیکِ درختواره — افزوده بر دکمه‌های سطر، نه جایگزینشان. */
+.tree-menu {
+  position: fixed; z-index: 60; min-width: 170px;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  padding: 4px; display: flex; flex-direction: column; gap: 2px;
+}
+.tree-menu-head {
+  font-size: var(--fs-xs); color: var(--text-muted);
+  padding: 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+}
+.tree-menu button {
+  display: flex; align-items: center; gap: 7px;
+  background: none; border: 0; text-align: start; width: 100%;
+  padding: 6px 8px; border-radius: 4px; cursor: pointer; font: inherit;
+}
+.tree-menu button:hover { background: var(--surface-2); }
+
+/* ── شخصی‌سازی: انتخاب‌هایی که یک جوابِ درستِ واحد ندارند ─────────────────── */
+
+.pz-options { display: flex; flex-direction: column; gap: 8px; }
+.pz-option {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; cursor: pointer;
+}
+.pz-option:hover { background: var(--surface-2); }
+/* گزینه‌ی انتخاب‌شده باید *دیده* شود، چون پنلِ پیامدها زیرش عوض می‌شود و بدونِ
+   نشانه‌ی روشن کاربر نمی‌داند آن متن مالِ کدام گزینه است. */
+.pz-option--on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pz-option input { margin-top: 3px; }
+.pz-option-body { display: flex; flex-direction: column; gap: 3px; }
+.pz-option-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pz-option-hint { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.7; }
+
+.pz-effects {
+  margin-top: 14px; padding: 12px 14px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.pz-effects-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-xs); font-weight: 700;
+}
+.pz-effect { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; }
+.pz-effect svg { margin-top: 3px; color: var(--text-muted); }
+.pz-effect strong { display: block; font-size: var(--fs-xs); }
+.pz-effect span { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.7; }
+.pz-warning {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start;
+  border-top: 1px solid var(--border); padding-top: 9px;
+  font-size: var(--fs-xs); line-height: 1.7; color: #b45309;
+}
+.pz-warning svg { margin-top: 3px; flex-shrink: 0; }
+
+.pz-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+/* هشدارِ عنوانِ تفصیلیِ تکراری — قرمز است ولی ثبت را نمی‌بندد: دو نفرِ هم‌نام
+   واقعاً ممکن‌اند و کاربر باید *بداند*، نه اینکه متوقف شود. */
+.input-warn { border-color: #dc2626; }
+.input-warn:focus { outline-color: #dc2626; }
+.field-hint--warn { color: #dc2626; }

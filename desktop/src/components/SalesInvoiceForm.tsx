@@ -7,6 +7,7 @@ import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { useSalesInvoiceDraft } from '../lib/salesInvoiceDraft'
+import { BlacklistBanner } from './BlacklistBanner'
 
 /**
  * فرمِ کلاسیکِ «ثبتِ فاکتورِ فروش» (پوسته‌های تیره/روشن) — همه‌ی فیلدها در یک صفحه.
@@ -113,6 +114,21 @@ export function SalesInvoiceForm({
             </div>
           )}
 
+          {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
+          {d.creditBlock && (
+            <section className="fy-note fy-note--err">
+              <AlertTriangle size={16} />
+              <div>
+                <strong>{d.creditBlock.name}</strong> از سقفِ اعتبارش رد می‌شود: این فاکتور
+                مانده را به {Math.round(d.creditBlock.projected).toLocaleString('fa-IR')} می‌رساند و
+                سقفش {Math.round(d.creditBlock.limit).toLocaleString('fa-IR')} ریال است.
+                <span className="credit-banner-alert">
+                  در فرمِ طرف حساب «با عبور از سقف» روی «جلوگیری کن» است. یا دریافتی ثبت کنید،
+                  یا سقف را بالا ببرید، یا آن تنظیم را به «هشدار بده» تغییر دهید.
+                </span>
+              </div>
+            </section>
+          )}
           {d.credit && Number(d.credit.credit_limit) > 0 && (
             <CreditBanner credit={d.credit} invoiceTotal={d.baseGrandTotal} />
           )}
@@ -259,7 +275,7 @@ export function SalesInvoiceForm({
                 onPaid={() => d.setMessage('پرداختِ کارتی روی حسابِ این مشتری ثبت شد. برای ثبتِ خودِ فاکتور، «ثبت فاکتور» را بزنید.')}
               />
             )}
-            <button type="submit" className="btn-primary" disabled={d.submitting}>
+            <button type="submit" className="btn-primary" disabled={d.submitting || Boolean(d.creditBlock)}>
               <Save size={14} /> ثبت فاکتور
             </button>
           </div>

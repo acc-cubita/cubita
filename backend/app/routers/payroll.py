@@ -5,23 +5,66 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.payroll import Attendance, Employee, PayrollPeriod, PayrollSettings, Payslip, SalaryContract
+from app.models.inventory import Contact
+from app.models.payroll import (
+    CONTRACT_TYPE_LABELS,
+    Attendance,
+    Employee,
+    EmployeeLoan,
+    InsuranceTaxBranch,
+    JobTitle,
+    LoanType,
+    PayrollDeploymentInfo,
+    PayrollFactor,
+    PayrollPeriod,
+    PayrollSettings,
+    PayrollSettlement,
+    PayrollTaxGroup,
+    Payslip,
+    SalaryContract,
+    ServiceLocation,
+)
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.payroll import (
     AttendanceIn,
     AttendanceOut,
+    DeploymentInfoIn,
+    DeploymentInfoOut,
+    EmployeeCandidateOut,
     EmployeeIn,
+    EmployeeLoanIn,
+    EmployeeLoanOut,
     EmployeeOut,
+    InsuranceTaxBranchIn,
+    InsuranceTaxBranchOut,
+    JobTitleIn,
+    JobTitleOut,
+    LoanTypeIn,
+    LoanTypeOut,
+    PayrollFactorIn,
+    PayrollFactorOut,
     PayrollPeriodIn,
     PayrollPeriodOut,
     PayrollSettingsIn,
     PayrollSettingsOut,
+    PayrollSettlementIn,
+    PayrollSettlementOut,
+    PayrollTaxGroupIn,
+    PayrollTaxGroupOut,
     PayslipOut,
     SalaryContractIn,
     SalaryContractOut,
+    ServiceLocationIn,
+    ServiceLocationOut,
 )
-from app.services.payroll import generate_insurance_list_csv, generate_payslips_for_period
+from app.services import payroll_contracts, payroll_loans
+from app.services.payroll import (
+    generate_insurance_list_csv,
+    generate_payment_list_csv,
+    generate_payslips_for_period,
+    generate_tax_list_csv,
+)
 
 router = APIRouter(tags=["payroll"])
 
@@ -51,20 +94,22 @@ def list_salary_contracts(
     query = db.query(SalaryContract)
     if employee_id is not None:
         query = query.filter(SalaryContract.employee_id == employee_id)
-    return query.order_by(SalaryContract.effective_from.desc()).all()
+    rows = query.order_by(SalaryContract.effective_from.desc()).all()
+    return [payroll_contracts.contract_out(row) for row in rows]
 
 
 @router.post("/api/salary-contracts", response_model=SalaryContractOut, status_code=201)
 def create_salary_contract(
     data: SalaryContractIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
 ):
-    if db.get(Employee, data.employee_id) is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمند یافت نشد")
-    contract = SalaryContract(**data.model_dump())
-    db.add(contract)
-    db.flush()
-    db.refresh(contract)
-    return contract
+    """قراردادِ تازه — و اگر کارمند هنوز پرونده ندارد، از روی طرف‌حسابش ساخته می‌شود.
+
+    قاعده‌های «استخدام یک‌بار» و «چهار ستونِ مبلغ از ردیف‌ها» در
+    [سرویسِ قرارداد](../services/payroll_contracts.py) نگه داشته می‌شوند، نه این‌جا —
+    تا هر مسیرِ دیگری که قرارداد بسازد هم همان‌ها را بگیرد.
+    """
+    contract = payroll_contracts.create_contract(db, data)
+    return payroll_contracts.contract_out(contract)
 
 
 @router.get("/api/payroll-periods", response_model=list[PayrollPeriodOut])
@@ -138,6 +183,32 @@ def export_insurance_list(
     )
 
 
+@router.get("/api/payroll-periods/{period_id}/tax-list.csv")
+def export_tax_list(
+    period_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    csv_text, period = generate_tax_list_csv(db, period_id)
+    filename = f"tax-list-{period.year}-{period.month:02d}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/payroll-periods/{period_id}/payment-list.csv")
+def export_payment_list(
+    period_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    csv_text, period = generate_payment_list_csv(db, period_id)
+    filename = f"payment-list-{period.year}-{period.month:02d}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/api/payslips", response_model=Page[PayslipOut])
 def list_payslips(
     period_id: UUID | None = None,
@@ -192,3 +263,450 @@ def upsert_payroll_settings(
     db.flush()
     db.refresh(settings)
     return settings
+
+
+# ── جدول‌های مرجعِ حقوق و دستمزد ───────────────────────────────────────────────
+#
+# پنج فهرستِ ساده با یک الگو: `GET` می‌خواند، `POST` می‌سازد، `PATCH` ویرایش می‌کند.
+# حذف عمداً نیست — رکوردی که در قراردادی استفاده شده نباید ناپدید شود؛ `is_active`
+# آن را از فهرستِ انتخاب بیرون می‌برد بی‌آنکه قراردادهای قدیمی بی‌مرجع شوند.
+
+
+def _fetch(db: Session, model, row_id: UUID, label: str):
+    row = db.get(model, row_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{label} یافت نشد")
+    return row
+
+
+@router.get("/api/service-locations", response_model=list[ServiceLocationOut])
+def list_service_locations(
+    db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    return db.query(ServiceLocation).order_by(ServiceLocation.code).all()
+
+
+@router.post("/api/service-locations", response_model=ServiceLocationOut, status_code=201)
+def create_service_location(
+    data: ServiceLocationIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "create")),
+):
+    row = ServiceLocation(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/api/service-locations/{row_id}", response_model=ServiceLocationOut)
+def update_service_location(
+    row_id: UUID,
+    data: ServiceLocationIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    row = _fetch(db, ServiceLocation, row_id, "محل خدمت")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/job-titles", response_model=list[JobTitleOut])
+def list_job_titles(db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))):
+    return db.query(JobTitle).order_by(JobTitle.code).all()
+
+
+@router.post("/api/job-titles", response_model=JobTitleOut, status_code=201)
+def create_job_title(
+    data: JobTitleIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "create")),
+):
+    row = JobTitle(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/api/job-titles/{row_id}", response_model=JobTitleOut)
+def update_job_title(
+    row_id: UUID,
+    data: JobTitleIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    row = _fetch(db, JobTitle, row_id, "شغل")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/payroll-factors", response_model=list[PayrollFactorOut])
+def list_payroll_factors(
+    db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    return (
+        db.query(PayrollFactor)
+        .order_by(PayrollFactor.category, PayrollFactor.system_key.desc(), PayrollFactor.name)
+        .all()
+    )
+
+
+@router.post("/api/payroll-factors/defaults", response_model=list[PayrollFactorOut])
+def create_default_factors(
+    db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
+):
+    """عوامل پیش‌فرض (حقوق پایه، حق مسکن، حق خواروبار، حق اولاد) را می‌سازد.
+
+    در مهاجرت کاشته نمی‌شوند چون جدول RLS دارد؛ این‌جا داخلِ مستأجرِ خودِ کاربر و
+    به‌خواستِ صریحش ساخته می‌شوند. تکرارِ فراخوانی بی‌خطر است.
+    """
+    return payroll_contracts.ensure_default_factors(db)
+
+
+@router.post("/api/payroll-factors", response_model=PayrollFactorOut, status_code=201)
+def create_payroll_factor(
+    data: PayrollFactorIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "create")),
+):
+    row = PayrollFactor(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/api/payroll-factors/{row_id}", response_model=PayrollFactorOut)
+def update_payroll_factor(
+    row_id: UUID,
+    data: PayrollFactorIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    row = _fetch(db, PayrollFactor, row_id, "عامل")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/payroll-tax-groups", response_model=list[PayrollTaxGroupOut])
+def list_payroll_tax_groups(
+    db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    return db.query(PayrollTaxGroup).order_by(PayrollTaxGroup.name).all()
+
+
+@router.post("/api/payroll-tax-groups", response_model=PayrollTaxGroupOut, status_code=201)
+def create_payroll_tax_group(
+    data: PayrollTaxGroupIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "create")),
+):
+    row = PayrollTaxGroup(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/insurance-tax-branches", response_model=list[InsuranceTaxBranchOut])
+def list_insurance_tax_branches(
+    kind: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    query = db.query(InsuranceTaxBranch)
+    if kind:
+        query = query.filter(InsuranceTaxBranch.kind == kind)
+    return query.order_by(InsuranceTaxBranch.name).all()
+
+
+@router.post("/api/insurance-tax-branches", response_model=InsuranceTaxBranchOut, status_code=201)
+def create_insurance_tax_branch(
+    data: InsuranceTaxBranchIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "create")),
+):
+    row = InsuranceTaxBranch(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+# ── فرمِ قرارداد ──────────────────────────────────────────────────────────────
+
+
+@router.get("/api/payroll/employee-candidates", response_model=list[EmployeeCandidateOut])
+def list_employee_candidates(
+    q: str = "",
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    """فهرستِ «نام کارمند»ِ فرمِ قرارداد — طرف‌حساب‌هایی که تیکِ «کارمند» دارند."""
+    return payroll_contracts.employee_candidates(db, q)
+
+
+@router.get("/api/payroll/contract-types", response_model=dict)
+def contract_types_for(
+    employee_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    """کدام نوعِ قرارداد برای این شخص مجاز است.
+
+    «استخدام» اولین قرارداد است؛ تا وقتی ثبت نشده «اصلاح قرارداد» اصلاً در فهرست
+    نمی‌آید، و بعد از آن دیگر «استخدام» نمی‌آید.
+    """
+    if employee_id is None and contact_id is not None:
+        contact = db.get(Contact, contact_id)
+        employee_id = contact.employee_id if contact is not None else None
+    allowed = payroll_contracts.allowed_contract_types(db, employee_id)
+    return {
+        "allowed": allowed,
+        "labels": {key: CONTRACT_TYPE_LABELS[key] for key in allowed},
+    }
+
+
+# ── وام‌های پرسنلی ────────────────────────────────────────────────────────────
+
+
+def _employee_names(db: Session) -> dict:
+    return {
+        e.id: f"{e.first_name} {e.last_name}".strip()
+        for e in db.query(Employee).all()
+    }
+
+
+def _loan_out(db: Session, loan: EmployeeLoan, names: dict | None = None) -> dict:
+    names = names if names is not None else _employee_names(db)
+    return {
+        "id": loan.id,
+        "employee_id": loan.employee_id,
+        "employee_name": names.get(loan.employee_id, ""),
+        "loan_type_id": loan.loan_type_id,
+        "amount": loan.amount,
+        "loan_date": loan.loan_date,
+        "installment_count": loan.installment_count,
+        "status": loan.status,
+        "note": loan.note,
+        #: مانده مشتق است نه ستون — یک منبع، پس با اقساط از هم نمی‌افتد.
+        "balance": payroll_loans.loan_balance(db, loan.id),
+        "installments": loan.installments,
+    }
+
+
+@router.get("/api/loan-types", response_model=list[LoanTypeOut])
+def list_loan_types(db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))):
+    return db.query(LoanType).order_by(LoanType.code).all()
+
+
+@router.post("/api/loan-types", response_model=LoanTypeOut, status_code=201)
+def create_loan_type(
+    data: LoanTypeIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
+):
+    if db.query(LoanType).filter(LoanType.code == data.code).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "کدِ نوعِ وام تکراری است")
+    row = LoanType(**data.model_dump())
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.patch("/api/loan-types/{row_id}", response_model=LoanTypeOut)
+def update_loan_type(
+    row_id: UUID,
+    data: LoanTypeIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    row = db.get(LoanType, row_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "نوعِ وام یافت نشد")
+    clash = db.query(LoanType).filter(LoanType.code == data.code, LoanType.id != row_id).first()
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "کدِ نوعِ وام تکراری است")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/employee-loans", response_model=list[EmployeeLoanOut])
+def list_employee_loans(
+    employee_id: UUID | None = None,
+    status_filter: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    query = db.query(EmployeeLoan)
+    if employee_id is not None:
+        query = query.filter(EmployeeLoan.employee_id == employee_id)
+    if status_filter:
+        query = query.filter(EmployeeLoan.status == status_filter)
+    rows = query.order_by(EmployeeLoan.loan_date.desc()).all()
+    names = _employee_names(db)
+    return [_loan_out(db, row, names) for row in rows]
+
+
+@router.post("/api/employee-loans", response_model=EmployeeLoanOut, status_code=201)
+def create_employee_loan(
+    data: EmployeeLoanIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("payroll", "create")),
+):
+    """وام + اقساطش. قاعده‌ی زمان‌بندی در سرویس است، نه این‌جا."""
+    loan = payroll_loans.create_loan(db, data, user)
+    return _loan_out(db, loan)
+
+
+@router.post("/api/employee-loans/{loan_id}/cancel", response_model=EmployeeLoanOut)
+def cancel_employee_loan(
+    loan_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "update"))
+):
+    """لغوِ وام — اقساطِ کسرشده دست نمی‌خورند، فقط دیگر قسطی سررسید نمی‌شود.
+
+    حذف نمی‌کنیم: اقساطی که قبلاً از حقوق کسر شده‌اند واقعیتِ ثبت‌شده‌اند و پاک‌کردنشان
+    یعنی فیش‌های گذشته توضیح‌ناپذیر شوند.
+    """
+    loan = db.get(EmployeeLoan, loan_id)
+    if loan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "وام یافت نشد")
+    loan.status = "cancelled"
+    db.flush()
+    return _loan_out(db, loan)
+
+
+# ── تسویه حساب ───────────────────────────────────────────────────────────────
+
+
+def _settlement_out(settlement: PayrollSettlement, names: dict) -> dict:
+    row = {c.name: getattr(settlement, c.name) for c in PayrollSettlement.__table__.columns}
+    row["employee_name"] = names.get(settlement.employee_id, "")
+    return row
+
+
+@router.get("/api/payroll-settlements", response_model=list[PayrollSettlementOut])
+def list_settlements(db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))):
+    names = _employee_names(db)
+    rows = db.query(PayrollSettlement).order_by(PayrollSettlement.settlement_date.desc()).all()
+    return [_settlement_out(row, names) for row in rows]
+
+
+@router.post("/api/payroll-settlements", response_model=PayrollSettlementOut, status_code=201)
+def create_settlement(
+    data: PayrollSettlementIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("payroll", "create")),
+):
+    """تسویه‌حسابِ پایانِ کار — یک ردیف به‌ازای هر کارمند.
+
+    `loan_balance` اگر فرستاده نشود از وام‌های *فعالِ* همان کارمند خوانده می‌شود،
+    نه دستی: عددی که کاربر تایپ کند می‌تواند با اقساطِ واقعی نخواند.
+    """
+    employee = db.get(Employee, data.employee_id)
+    if employee is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کارمند یافت نشد")
+    if db.query(PayrollSettlement).filter(
+        PayrollSettlement.employee_id == data.employee_id
+    ).first() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "برای این کارمند تسویه‌حساب ثبت شده؛ اصلاحش ویرایشِ همان ردیف است.",
+        )
+
+    loan_balance = (
+        data.loan_balance
+        if data.loan_balance is not None
+        else payroll_loans.employee_loan_balance(db, data.employee_id)
+    )
+    earnings = data.severance_amount + data.leave_payout_amount + data.other_earnings
+    net = earnings - loan_balance - data.other_deductions
+
+    row = PayrollSettlement(
+        employee_id=data.employee_id,
+        settlement_date=data.settlement_date,
+        severance_amount=data.severance_amount,
+        leave_payout_amount=data.leave_payout_amount,
+        other_earnings=data.other_earnings,
+        loan_balance=loan_balance,
+        other_deductions=data.other_deductions,
+        #: خالصِ منفی ممکن است (بدهیِ وام بیشتر از مزایا) و پنهانش نمی‌کنیم.
+        net_amount=net,
+        note=data.note,
+        created_by_id=user.id,
+    )
+    db.add(row)
+    db.flush()
+    db.refresh(row)
+    return _settlement_out(row, _employee_names(db))
+
+
+# ── اطلاعاتِ استقرار ──────────────────────────────────────────────────────────
+
+
+@router.get("/api/payroll-deployment", response_model=list[DeploymentInfoOut])
+def list_deployment_info(
+    year: int | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    query = db.query(PayrollDeploymentInfo)
+    if year is not None:
+        query = query.filter(PayrollDeploymentInfo.year == year)
+    names = _employee_names(db)
+    rows = query.order_by(PayrollDeploymentInfo.year.desc()).all()
+    out = []
+    for row in rows:
+        item = {c.name: getattr(row, c.name) for c in PayrollDeploymentInfo.__table__.columns}
+        item["employee_name"] = names.get(row.employee_id, "")
+        out.append(item)
+    return out
+
+
+@router.put("/api/payroll-deployment", response_model=DeploymentInfoOut)
+def upsert_deployment_info(
+    data: DeploymentInfoIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """یک ردیف برای هر (کارمند، سال) — دوباره فرستادن ویرایش است، نه ردیفِ دوم.
+
+    `PUT` است نه `POST` چون همین معنا را دارد: این وضعیتِ استقرارِ آن کارمند در آن
+    سال است، و دو وضعیتِ متفاوت برای یک سال بی‌معناست.
+    """
+    if db.get(Employee, data.employee_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کارمند یافت نشد")
+
+    row = (
+        db.query(PayrollDeploymentInfo)
+        .filter(
+            PayrollDeploymentInfo.employee_id == data.employee_id,
+            PayrollDeploymentInfo.year == data.year,
+        )
+        .first()
+    )
+    if row is None:
+        row = PayrollDeploymentInfo(**data.model_dump())
+        db.add(row)
+    else:
+        for field, value in data.model_dump().items():
+            setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+
+    item = {c.name: getattr(row, c.name) for c in PayrollDeploymentInfo.__table__.columns}
+    item["employee_name"] = _employee_names(db).get(row.employee_id, "")
+    return item

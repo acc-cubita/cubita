@@ -1,19 +1,9 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Hash, ListTree, RefreshCw, RotateCcw, Save } from 'lucide-react'
-import {
-  fetchCodingRule,
-  fetchNumbering,
-  setCodingRule,
-  setNumbering,
-  type CodingRule,
-  type NumberingRule,
-} from '../api'
+import { AlertTriangle, CheckCircle2, Hash, RefreshCw, Save } from 'lucide-react'
+import { fetchNumbering, setNumbering, type NumberingRule } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
-
-/** پیش‌فرضِ سرویس — همان ساختارِ چارتِ کاشته‌شده. */
-const DEFAULT_WIDTHS = [1, 1, 2, 2]
 
 /**
  * روش‌های شماره‌گذاری — دو قاعده‌ی متفاوت که هر دو «شماره» تعیین می‌کنند:
@@ -87,8 +77,6 @@ export function NumberingPage({ token }: { token: string }) {
           <div>{msg.text}</div>
         </div>
       )}
-
-      <CodingRuleCard token={token} onMessage={setMsg} />
 
       <SectionCard
         icon={Hash}
@@ -172,95 +160,3 @@ export function NumberingPage({ token }: { token: string }) {
  * حساب‌های موجود هرگز بازشماره‌گذاری نمی‌شوند — کدِ حساب روی اسناد و گزارش‌های
  * چاپ‌شده نشسته. قاعده فقط روی حسابِ تازه اعمال می‌شود.
  */
-function CodingRuleCard({
-  token,
-  onMessage,
-}: {
-  token: string
-  onMessage: (m: { text: string; kind: 'ok' | 'err' }) => void
-}) {
-  const [rule, setRule] = useState<CodingRule | null>(null)
-  const [draft, setDraft] = useState<number[] | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    void fetchCodingRule(token)
-      .then(setRule)
-      .catch(() => {})
-  }, [token])
-
-  const widths = draft ?? rule?.widths ?? DEFAULT_WIDTHS
-  const names = rule?.levels.map((l) => l.name) ?? ['گروه', 'کل', 'معین', 'تفصیلی']
-  // پیش‌نمایش محلی محاسبه می‌شود تا با هر تیک زنده عوض شود، نه پس از ذخیره.
-  const samples = widths.reduce<string[]>((acc, w, i) => {
-    acc.push((acc[i - 1] ?? '') + '1'.padStart(w, '0'))
-    return acc
-  }, [])
-  const dirty = draft != null && JSON.stringify(draft) !== JSON.stringify(rule?.widths)
-
-  async function save() {
-    if (!draft) return
-    setBusy(true)
-    try {
-      const next = await setCodingRule(token, draft)
-      setRule(next)
-      setDraft(null)
-      onMessage({ text: 'قاعده‌ی کدینگ ذخیره شد. حساب‌های موجود دست نخوردند.', kind: 'ok' })
-    } catch (err) {
-      onMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <SectionCard
-      icon={ListTree}
-      title="کدینگِ حساب‌ها"
-      description="کدِ هر حساب = کدِ سرفصلش + چند رقم. این‌جا تعیین می‌کنید هر سطح چند رقم بگیرد."
-      actions={
-        dirty ? (
-          <button type="button" onClick={() => setDraft(null)} disabled={busy}>
-            <RotateCcw size={13} /> انصراف
-          </button>
-        ) : undefined
-      }
-    >
-      <div className="cd-levels">
-        {widths.map((w, i) => (
-          <label key={i} className="cd-level">
-            <span className="cd-level-name">{names[i]}</span>
-            <input
-              type="number"
-              min={1}
-              max={6}
-              value={w}
-              onChange={(e) => {
-                const next = [...widths]
-                next[i] = Number(e.target.value)
-                setDraft(next)
-              }}
-            />
-            <span className="cd-level-sample">{samples[i]}</span>
-          </label>
-        ))}
-      </div>
-
-      <p className="bk-hint cd-preview">
-        نمونه: {samples.join(' ← ')} — یعنی حسابِ سطحِ «{names[names.length - 1]}»{' '}
-        {samples[samples.length - 1].length.toLocaleString('fa-IR')} رقم می‌شود.
-      </p>
-
-      <div className="invoice-form-footer">
-        <button type="button" className="btn-primary" onClick={() => void save()} disabled={!dirty || busy}>
-          <Save size={13} /> ذخیره‌ی قاعده
-        </button>
-      </div>
-
-      <p className="bk-hint">
-        حساب‌های موجود بازشماره‌گذاری نمی‌شوند؛ کدِ حساب روی اسناد و گزارش‌های چاپ‌شده نشسته است.
-        قاعده از این پس روی حسابِ تازه اعمال می‌شود و کدِ خارج از قاعده رد خواهد شد.
-      </p>
-    </SectionCard>
-  )
-}

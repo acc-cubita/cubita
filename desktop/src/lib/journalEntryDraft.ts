@@ -5,6 +5,7 @@ import {
   fetchAnalytics,
   fetchCostCenters,
   fetchCurrencies,
+  fetchTafsiliMode,
   fetchLatestRate,
   type AnalyticAccount,
   type CostCenterRecord,
@@ -20,9 +21,22 @@ export interface JournalDraftLine {
   credit: string
   /** مبلغ به ارزِ انتخابیِ سند. خالی = ردیفِ ریالی. */
   fxAmount?: string
+  /** پیگیری — فقط برای حسابی که «پیگیری» دارد؛ سرور بقیه را رد می‌کند. */
+  trackingNo?: string
+  trackingDate?: string
+  /** تفصیلیِ ردیف — برای حسابِ «تفصیلی پذیر» اجباری. خالی = ارث از سطحِ سند. */
+  analyticId?: string
 }
 
-const emptyLine = (): JournalDraftLine => ({ accountId: '', debit: '', credit: '', fxAmount: '' })
+const emptyLine = (): JournalDraftLine => ({
+  accountId: '',
+  debit: '',
+  credit: '',
+  fxAmount: '',
+  trackingNo: '',
+  trackingDate: '',
+  analyticId: '',
+})
 
 /** منطقِ مشترکِ «ثبت سند حسابداری دستی» — مصرف‌شده در فرمِ کلاسیک و ویزارد. */
 export function useJournalEntryDraft({
@@ -58,6 +72,18 @@ export function useJournalEntryDraft({
   )
 
   const postableAccounts = accounts.filter((a) => !a.is_group)
+  /** حساب‌هایی که ردیفشان پیگیری می‌پذیرد — فرم فقط برای همین‌ها فیلد نشان می‌دهد. */
+  const trackingAllowed = new Set(accounts.filter((a) => a.has_tracking).map((a) => a.id))
+  /** حساب‌هایی که ردیفشان تفصیلی می‌خواهند. */
+  const tafsiliRequired = new Set(accounts.filter((a) => a.accepts_tafsili).map((a) => a.id))
+  //: سطحِ اجبار از تنظیمات ← شخصی‌سازی می‌آید. در «شناور» فیلد هست ولی اجباری
+  //: نیست، پس فرم نباید جلوی ثبت را بگیرد — وگرنه انتخابِ کاربر بی‌اثر می‌شد.
+  const [tafsiliMode, setTafsiliMode] = useState('hybrid')
+  useEffect(() => {
+    fetchTafsiliMode(token)
+      .then((r) => setTafsiliMode(r.mode))
+      .catch(() => {})
+  }, [token])
 
   // مراکز هزینه/تفصیلی/ارز زنده خوانده می‌شوند (در کش محلی نیستند)؛ آفلاین که نشد،
   // فهرست خالی می‌ماند و انتخاب‌گر بی‌اثر است — ثبت سند مثل قبل کار می‌کند.
@@ -135,6 +161,22 @@ export function useJournalEntryDraft({
       return false
     }
 
+    // تفصیلیِ اجباری را همین‌جا می‌گیریم، نه با ۴۰۰ از سرور: کاربر باید بداند
+    // *کدام ردیف* مشکل دارد، و آن را فقط این‌جا می‌دانیم. سرور هم گاردش را دارد.
+    const missingTafsili =
+      tafsiliMode === 'floating'
+        ? []
+        : validLines
+            .map((l, i) => ({ l, i }))
+            .filter(({ l }) => tafsiliRequired.has(l.accountId) && !(l.analyticId || analyticId))
+            .map(({ i }) => (i + 1).toLocaleString('fa-IR'))
+    if (missingTafsili.length > 0) {
+      setMessage(
+        `ردیفِ ${missingTafsili.join('، ')}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
+      )
+      return false
+    }
+
     const rate = Number(fxRate) || 0
     const payload = {
       entry_date: entryDate,
@@ -154,6 +196,16 @@ export function useJournalEntryDraft({
               currency_code: currencyCode,
               fx_amount: Number(l.fxAmount),
               fx_rate: rate || null,
+            }
+          : {}),
+        // پیگیری فقط وقتی فرستاده می‌شود که حساب پذیرایش باشد *و* کاربر چیزی
+        // نوشته باشد. اگر کاربر شماره‌ای بزند و بعد حساب را به حسابی بی‌پیگیری
+        // عوض کند، آن مقدارِ جامانده سند را با ۴۰۰ رد می‌کرد.
+        ...(l.analyticId ? { analytic_id: l.analyticId } : {}),
+        ...(trackingAllowed.has(l.accountId) && (l.trackingNo?.trim() || l.trackingDate)
+          ? {
+              tracking_no: l.trackingNo?.trim() || null,
+              tracking_date: l.trackingDate || null,
             }
           : {}),
       })),
@@ -211,6 +263,9 @@ export function useJournalEntryDraft({
     status,
     setStatus,
     postableAccounts,
+    trackingAllowed,
+    tafsiliRequired,
+    tafsiliMode,
     totalDebit,
     totalCredit,
     isBalanced,

@@ -188,3 +188,88 @@ def test_rule_applies_where_there_is_no_precedent(db):
     assert coding.sibling_width(db, empty) is None
     # عمقِ ۳ (تفصیلی) → ۲ رقم
     assert len(coding.suggest_code(db, parent=empty, widths=widths)) == len("1299") + 2
+
+
+# ── تفصیلی زیرِ معین ─────────────────────────────────────────────────────────
+
+
+def _create(db, tenant, *, code, name, parent):
+    """ساختِ حساب از راهِ روتر، تا همان قیدهای واقعی اعمال شوند."""
+    from app.routers.accounts import create_account
+
+    return create_account(
+        AccountCreateIn(code=code, name=name, type=parent.type, parent_id=parent.id),
+        db=db,
+        principal=_P(tenant.id),
+    )
+
+
+def test_tafsili_can_be_created_under_a_moin(db):
+    """سطحِ چهارم — «بانک ملی» زیرِ «بانک». معین سرفصل نیست ولی باید فرزند بگیرد."""
+    tenant = _tenant(db)
+    bank = db.query(Account).filter(Account.code == "1102").one()
+    assert bank.is_group is False, "پیش‌فرضِ آزمون: بانک معین است نه سرفصل"
+
+    #: depth_of عمقِ حسابی را می‌دهد که *زیرِ* آرگومان ساخته می‌شود، نه خودش.
+    assert coding.level_name(coding.depth_of(db, bank.parent)) == "معین", "بانک معین است"
+    assert coding.level_name(coding.depth_of(db, bank)) == "تفصیلی", "فرزندش تفصیلی می‌شود"
+
+    #: از وقتی فرمِ ویرایش تیکِ «تفصیلی پذیر» دارد، معین باید صریحاً پذیرا باشد.
+    bank.accepts_tafsili = True
+    db.flush()
+
+    child = _create(db, tenant, code="110201", name="بانک ملی", parent=bank)
+
+    assert child.parent_id == bank.id
+    assert coding.level_name(coding.depth_of(db, child.parent)) == "تفصیلی"
+
+
+def test_suggested_code_for_a_tafsili_follows_the_rule(db):
+    """کدِ پیشنهادی باید کدِ معین + رقم‌های سطحِ تفصیلی باشد."""
+    bank = db.query(Account).filter(Account.code == "1102").one()
+    widths = coding.get_widths(_tenant(db))
+
+    code = coding.suggest_code(db, parent=bank, widths=widths)
+
+    assert code.startswith("1102")
+    assert len(code) == len("1102") + widths[3]
+
+
+def test_a_posted_account_cannot_take_children(db):
+    """قیدِ اصلی: حسابی که سندِ مستقیم دارد نباید فرزند بگیرد.
+
+    وگرنه مانده‌اش دو منبع پیدا می‌کند — ردیف‌های خودش و جمعِ فرزندان — و هر
+    گزارشی باید حدس بزند کدام را جمع بزند.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.accounting import JournalEntry, JournalLine
+    from app.models.user import User
+
+    tenant = _tenant(db)
+    cash = db.query(Account).filter(Account.code == "1101").one()
+    revenue = db.query(Account).filter(Account.code == "4101").one()
+    entry = JournalEntry(
+        entry_date=date(2026, 1, 1), description="آزمون", created_by_id=db.query(User.id).scalar()
+    )
+    entry.lines = [
+        JournalLine(account_id=cash.id, debit=Decimal(100), credit=Decimal(0)),
+        JournalLine(account_id=revenue.id, debit=Decimal(0), credit=Decimal(100)),
+    ]
+    db.add(entry)
+    db.flush()
+
+    with pytest.raises(HTTPException) as err:
+        _create(db, tenant, code="110101", name="زیرصندوق", parent=cash)
+    assert err.value.status_code == 409
+
+
+def test_a_group_takes_children_even_with_no_documents(db):
+    """سرفصل همیشه فرزند می‌گیرد — رفتارِ قبلی نباید عوض شده باشد."""
+    tenant = _tenant(db)
+    current = db.query(Account).filter(Account.code == "11").one()
+    assert current.is_group is True
+
+    child = _create(db, tenant, code="1150", name="حسابِ آزمایشی", parent=current)
+    assert child.parent_id == current.id

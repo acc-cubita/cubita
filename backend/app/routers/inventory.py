@@ -9,8 +9,17 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
 from app.models.user import User
+from decimal import Decimal
+
+from app.models.company import ContactAddress, ContactChannel
+from app.services import tafsili
+from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
 from app.schemas.inventory import (
+    ContactAddressIn,
+    ContactAddressOut,
+    ContactChannelIn,
+    ContactChannelOut,
     ContactIn,
     ContactOut,
     CreditStatusOut,
@@ -93,16 +102,127 @@ def _assert_company_refs(db: Session, data: ContactIn) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "محلِ جغرافیاییِ انتخاب‌شده معتبر نیست")
 
 
+#: فیلدهایی که ورودی دارد ولی ستونِ `contacts` نیستند — سرویسِ تفصیلی مصرفشان می‌کند.
+_TAFSILI_INPUT = ("tafsili_code", "tafsili_title", "tafsili_title2")
+
+
+def _contact_out(contact: Contact) -> dict:
+    """طرف‌حساب + کد و عنوانِ تفصیلی‌اش، خوانده از خودِ تفصیلی.
+
+    کد و عنوان روی طرف‌حساب *ذخیره نمی‌شوند*؛ هر بار از `analytic_accounts` خوانده
+    می‌شوند تا اگر کسی تفصیلی را از صفحه‌ی «تفصیلی سایر» عوض کرد، این‌جا هم همان
+    دیده شود. دو نمای یک داده نمی‌سازیم.
+    """
+    row = {c.name: getattr(contact, c.name) for c in Contact.__table__.columns}
+    analytic = contact.analytic
+    row["tafsili_code"] = analytic.code if analytic else None
+    row["tafsili_title"] = analytic.name if analytic else None
+    row["tafsili_title2"] = analytic.name2 if analytic else ""
+    return row
+
+
+@router.get("/api/contacts/tafsili-requirement", response_model=dict)
+def contact_tafsili_requirement(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """آیا فرمِ طرف حساب باید کدِ تفصیلی بخواهد — و کدِ پیشنهادی چیست.
+
+    از سطحِ اجبارِ تفصیلی (تنظیمات ← شخصی‌سازی) می‌آید: `required` در «اجباری»،
+    `optional` در «ترکیبی»، `hidden` در «شناور».
+    """
+    requirement = tafsili.contact_tafsili_requirement(db)
+    return {
+        "requirement": requirement,
+        "mode": tafsili.get_mode(db),
+        "suggested_code": (
+            tafsili.suggest_contact_tafsili_code(db) if requirement != "hidden" else None
+        ),
+    }
+
+
+@router.get("/api/contacts/tafsili-title-taken", response_model=dict)
+def contact_tafsili_title_taken(
+    title: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """آیا این عنوانِ تفصیلی از قبل هست؟ — فرم با آن قرمز می‌کند، نه اینکه رد کند.
+
+    عنوانِ تکراری واقعاً ممکن است (دو نفر هم‌نام)، ولی کاربر باید بداند تا چیزی
+    به آن اضافه کند؛ وگرنه در فهرستِ تفصیلی دو ردیفِ یکسان می‌ماند.
+    """
+    return {"taken": tafsili.tafsili_title_taken(db, title)}
+
+
+#: چهار فیلدِ مانده‌ی اول دوره — قفل روی همین‌هاست، نه روی کلِ طرف‌حساب.
+_OPENING_FIELDS = ("opening_ar_amount", "opening_ar_side", "opening_ap_amount", "opening_ap_side")
+
+
+def _assert_opening_unlocked(
+    db: Session,
+    data: ContactIn,
+    current: Contact | None = None,
+    *,
+    given: set[str] | None = None,
+) -> None:
+    """مانده‌ی اول دوره پس از ثبتِ سندِ افتتاحیه قفل است.
+
+    بدونِ این قفل، عددِ روی طرف‌حساب و ردیفی که در سندِ افتتاحیه نشسته از هم جدا
+    می‌افتند و دو گزارش دو حقیقتِ متفاوت می‌گویند. اصلاحِ مانده پس از افتتاحیه کارِ
+    سندِ اصلاحی است، نه ویرایشِ بی‌صدای یک فیلد.
+
+    `given` فیلدهایی است که واقعاً در درخواست آمده‌اند. در ویرایشِ جزئی، فیلدی که
+    نیامده یعنی «دست نزن» نه «صفر کن»، پس مقدارِ فعلی مبنا می‌ماند — وگرنه ویرایشِ
+    یک شماره‌تلفن، طرف‌حسابی را که مانده‌ی افتتاحیه دارد ۴۰۹ می‌کرد.
+    """
+
+    def wanted_of(name: str):
+        if given is None or name in given or current is None:
+            return getattr(data, name)
+        return getattr(current, name)
+
+    wanted = tuple(wanted_of(name) for name in _OPENING_FIELDS)
+    if current is not None:
+        now = (
+            Decimal(current.opening_ar_amount), current.opening_ar_side,
+            Decimal(current.opening_ap_amount), current.opening_ap_side,
+        )
+        if (Decimal(wanted[0]), wanted[1], Decimal(wanted[2]), wanted[3]) == now:
+            return
+    elif not wanted[0] and not wanted[2]:
+        return
+
+    if get_opening_status(db)["exists"]:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "سندِ افتتاحیه ثبت شده و مانده‌ی اول دوره دیگر تغییر نمی‌کند؛ "
+            "اصلاحش با سندِ حسابداری انجام می‌شود.",
+        )
+
+
 @router.post("/api/contacts", response_model=ContactOut, status_code=201)
 def create_contact(
-    data: ContactIn, db: Session = Depends(get_db), _=Depends(require_permission("invoices", "create"))
+    data: ContactIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
 ):
     _assert_company_refs(db, data)
-    contact = Contact(**data.model_dump())
+    _assert_opening_unlocked(db, data)
+    fields = data.model_dump()
+    analytic = tafsili.resolve_contact_analytic(
+        db,
+        user,
+        code=fields.pop("tafsili_code"),
+        title=fields.pop("tafsili_title"),
+        title2=fields.pop("tafsili_title2"),
+        fallback_title=data.name,
+    )
+    contact = Contact(**fields, analytic_id=analytic.id if analytic else None)
     db.add(contact)
     db.flush()
     db.refresh(contact)
-    return contact
+    return _contact_out(contact)
 
 
 @router.patch("/api/contacts/{contact_id}", response_model=ContactOut)
@@ -110,17 +230,151 @@ def update_contact(
     contact_id: UUID,
     data: ContactIn,
     db: Session = Depends(get_db),
-    _=Depends(require_permission("invoices", "update")),
+    user: User = Depends(require_permission("invoices", "update")),
 ):
     contact = db.get(Contact, contact_id)
     if contact is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
     _assert_company_refs(db, data)
-    for field, value in data.model_dump().items():
+    #: **ویرایشِ جزئی، نه جایگزینیِ کامل.** فرمِ ساده‌ی «طرف حساب»ِ ماژولِ فروش فقط
+    #: یک مشت فیلدِ پایه می‌فرستد؛ با `model_dump()`ِ کامل، هر چیزی که نفرستاده بود
+    #: به پیش‌فرضِ اسکیما برمی‌گشت — نقشِ واسطه و سهامدار پاک، مانده‌ی اول دوره صفر،
+    #: مشخصاتِ شخصی خالی. PATCH یعنی «همین‌ها را عوض کن»، نه «بقیه را دور بریز».
+    fields = data.model_dump(exclude_unset=True)
+    given = set(fields)
+    _assert_opening_unlocked(db, data, contact, given=given)
+    analytic = tafsili.resolve_contact_analytic(
+        db,
+        user,
+        code=fields.pop("tafsili_code", None),
+        title=fields.pop("tafsili_title", None),
+        title2=fields.pop("tafsili_title2", None),
+        #: نامِ طرف‌حساب فقط وقتی جایگزینِ عنوانِ تفصیلی می‌شود که کاربر خودِ عنوان را
+        #: فرستاده و خالی گذاشته باشد. وگرنه عنوانی که دستی انتخاب شده بود با هر
+        #: ویرایشِ ساده‌ی نام بازنویسی می‌شد.
+        fallback_title=data.name if "tafsili_title" in given else "",
+        existing_id=contact.analytic_id,
+    )
+    for field, value in fields.items():
         setattr(contact, field, value)
+    #: تفصیلیِ موجود هرگز این‌جا برداشته نمی‌شود — فقط جایگزین می‌شود. عوض‌کردنِ
+    #: سطحِ اجبار نباید داده‌ای را که قبلاً ثبت شده پاک کند.
+    if analytic is not None:
+        contact.analytic_id = analytic.id
     db.flush()
     db.refresh(contact)
-    return contact
+    return _contact_out(contact)
+
+
+@router.get("/api/contacts/{contact_id}/channels", response_model=list[ContactChannelOut])
+def list_contact_channels(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    #: تلفن‌ها و نشانی‌های *اضافه*. اصلی روی خودِ طرف‌حساب است و این‌جا نمی‌آید.
+    return (
+        db.query(ContactChannel)
+        .filter(ContactChannel.contact_id == contact_id)
+        .order_by(ContactChannel.kind, ContactChannel.label)
+        .all()
+    )
+
+
+@router.post("/api/contacts/{contact_id}/channels", response_model=ContactChannelOut, status_code=201)
+def add_contact_channel(
+    contact_id: UUID,
+    data: ContactChannelIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "update")),
+):
+    if db.get(Contact, contact_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
+    row = ContactChannel(contact_id=contact_id, **data.model_dump())
+    db.add(row)
+    db.flush()
+    if row.is_primary:
+        _demote_other_primaries(db, ContactChannel, contact_id, keep_id=row.id)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/api/contacts/{contact_id}/channels/{channel_id}", status_code=204)
+def delete_contact_channel(
+    contact_id: UUID,
+    channel_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "update")),
+):
+    row = db.get(ContactChannel, channel_id)
+    if row is None or row.contact_id != contact_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کانال یافت نشد")
+    db.delete(row)
+    db.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _demote_other_primaries(db: Session, model, contact_id: UUID, keep_id: UUID | None = None) -> None:
+    """«اصلی» در هر طرف‌حساب فقط یکی است.
+
+    به‌جای رد کردنِ ردیفِ دوم، ردیفِ قبلی از اصلی‌بودن درمی‌آید — چون نیتِ کاربری که
+    «اصلی» را روی شماره‌ی تازه می‌زند روشن است و مجبورکردنش به برداشتنِ دستیِ تیکِ
+    قبلی فقط یک مرحله‌ی اضافه است.
+    """
+    query = db.query(model).filter(model.contact_id == contact_id, model.is_primary.is_(True))
+    if keep_id is not None:
+        query = query.filter(model.id != keep_id)
+    for row in query:
+        row.is_primary = False
+
+
+@router.get("/api/contacts/{contact_id}/addresses", response_model=list[ContactAddressOut])
+def list_contact_addresses(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    return (
+        db.query(ContactAddress)
+        .filter(ContactAddress.contact_id == contact_id)
+        .order_by(ContactAddress.is_primary.desc(), ContactAddress.address_type)
+        .all()
+    )
+
+
+@router.post("/api/contacts/{contact_id}/addresses", response_model=ContactAddressOut, status_code=201)
+def add_contact_address(
+    contact_id: UUID,
+    data: ContactAddressIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "update")),
+):
+    if db.get(Contact, contact_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
+    row = ContactAddress(contact_id=contact_id, **data.model_dump())
+    db.add(row)
+    db.flush()
+    if row.is_primary:
+        _demote_other_primaries(db, ContactAddress, contact_id, keep_id=row.id)
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/api/contacts/{contact_id}/addresses/{address_id}", status_code=204)
+def delete_contact_address(
+    contact_id: UUID,
+    address_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "update")),
+):
+    row = db.get(ContactAddress, address_id)
+    if row is None or row.contact_id != contact_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "نشانی یافت نشد")
+    db.delete(row)
+    db.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/contacts/{contact_id}/credit", response_model=CreditStatusOut)

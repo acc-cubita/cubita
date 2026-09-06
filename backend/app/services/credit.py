@@ -55,6 +55,46 @@ def customer_outstanding(db: Session, contact_id: UUID, as_of: date | None = Non
     return Decimal(invoices) - Decimal(receipts) - Decimal(returns)
 
 
+def assert_within_credit_limit(
+    db: Session, contact_id: UUID | None, invoice_total: Decimal, *, enforce: bool = True
+) -> None:
+    """اگر طرف‌حساب روی «جلوگیری کن» تنظیم شده و این فاکتور از سقف رد می‌شود، جلویش را بگیر.
+
+    تا امروز `credit_action` ذخیره می‌شد و **هیچ‌جا اعمال نمی‌شد**: کاربر «جلوگیری
+    کن» را انتخاب می‌کرد و فاکتور همچنان ثبت می‌شد — یک تنظیمِ دروغین.
+
+    **`enforce=False` برای فاکتورِ آفلاین است و اختیاری نیست.** فاکتورهای آفلاین از
+    همین endpoint همگام می‌شوند؛ اگر گارد سرشان بگیرد، فروشی که *قبلاً انجام شده و
+    کالایش تحویل رفته* موقعِ اتصال رد می‌شود و کارِ فروشنده از بین می‌رود. تصمیم
+    باید در لحظه‌ی فروش گرفته شود، نه ساعت‌ها بعد سرِ همگام‌سازی.
+
+    `warn` و `none` هیچ‌وقت جلو نمی‌گیرند — هشدارشان کارِ بنرِ اعتبار در فرم است.
+    """
+    if not enforce or contact_id is None:
+        return
+
+    contact = db.get(Contact, contact_id)
+    if contact is None or contact.credit_action != "block":
+        return
+
+    limit = Decimal(contact.credit_limit or 0)
+    #: سقفِ صفر یعنی «بدون سقف» — همان قاعده‌ی `get_credit_status`.
+    if limit <= 0:
+        return
+
+    projected = customer_outstanding(db, contact_id) + invoice_total
+    if projected <= limit:
+        return
+
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"سقفِ اعتبارِ «{contact.name}» اجازه نمی‌دهد: مانده با این فاکتور به "
+        f"{projected:,.0f} می‌رسد و سقفش {limit:,.0f} ریال است. "
+        "یا دریافتی ثبت کنید، یا سقف را بالا ببرید، یا در فرمِ طرف حساب «با عبور از "
+        "سقف» را روی «هشدار بده» بگذارید.",
+    )
+
+
 def get_credit_status(db: Session, contact_id: UUID) -> dict:
     """سقفِ اعتبار، مانده‌ی جاری، مانده‌ی قابلِ استفاده و آیا از سقف گذشته است."""
     contact = db.get(Contact, contact_id)

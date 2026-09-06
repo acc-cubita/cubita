@@ -26,6 +26,10 @@ class AnalyticAccount(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دوم (معمولاً انگلیسی) — «عنوان تفصیلی (۲)»ِ فرمِ طرف حساب. روی خودِ
+    #: تفصیلی می‌نشیند نه روی طرف‌حساب، چون تفصیلی می‌تواند بی‌طرف‌حساب هم وجود
+    #: داشته باشد (خودرو، قرارداد) و عنوانِ دومش مالِ خودش است.
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
     #: دسته‌ی آزاد برای گروه‌بندیِ فهرست («خودرو»، «قرارداد»، …). خالی = بی‌دسته.
     group_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")

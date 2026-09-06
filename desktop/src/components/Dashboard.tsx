@@ -38,6 +38,24 @@ import { MoadianHistoryPage, MoadianModulePage } from '../pages/moadian/MoadianM
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
+import { CodingPage } from '../pages/CodingPage'
+import { PersonalizationPage } from '../pages/PersonalizationPage'
+import { ContractFormPage } from '../pages/payroll/ContractFormPage'
+import { ContractListPage } from '../pages/payroll/ContractListPage'
+import { PayslipLedgerPage } from '../pages/payroll/PayslipLedgerPage'
+import {
+  DeploymentInfoPage,
+  EmployeeLoanPage,
+  LoanTypePage,
+  SettlementPage,
+} from '../pages/payroll/PayrollLoanPages'
+import {
+  JobTitlePage,
+  PayrollFactorPage,
+  PayrollTaxGroupPage,
+  ServiceLocationPage,
+} from '../pages/payroll/PayrollRefPages'
+import { ContactNewPage } from '../pages/company/ContactFormPage'
 import { NumberingPage } from '../pages/NumberingPage'
 import { BackupListPage } from '../pages/BackupListPage'
 import { UserListPage } from '../pages/UserListPage'
@@ -137,7 +155,6 @@ import {
   RelatedPeoplePage,
 } from '../pages/company/CompanyBasicsPages'
 import {
-  ContactNewPage,
   OpeningOpsPage,
   YearEndOpsPage,
   YearEndReminderPage,
@@ -271,6 +288,17 @@ const PAGE_TITLES: Record<PageKey, string> = {
   distributor: 'پخشِ من',
   marketplace: 'بازارِ خرید',
   payroll: 'حقوق و دستمزد',
+  contractnew: 'قرارداد جدید',
+  contractlist: 'قراردادها',
+  payslipledger: 'مرور حقوق',
+  loantype: 'نوع وام جدید',
+  employeeloans: 'تقسیط — وام‌های پرسنلی',
+  settlement: 'تسویه حساب',
+  deploymentinfo: 'اطلاعات استقرار',
+  servicelocation: 'محل خدمت جدید',
+  jobtitle: 'شغل جدید',
+  payrollfactors: 'عوامل حقوق و مزایا',
+  payrolltaxgroups: 'گروه مالیاتی و شعب',
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
   accounts: 'مدیریت اکانت‌ها',
@@ -310,6 +338,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   fiscalyear: 'سال مالی',
   password: 'تغییر کلمه عبور',
   backup: 'پشتیبان‌گیری خودکار',
+  coding: 'کدینگ',
+  personalization: 'شخصی‌سازی',
   numbering: 'روش‌های شماره‌گذاری',
   backuplist: 'نسخه‌های پشتیبانی و بازیابی',
   userlist: 'کاربران',
@@ -627,6 +657,17 @@ export function Dashboard({
           {page === 'contactgrouplist' && <ContactGroupListPage token={token} />}
           {page === 'calendarlist' && <CalendarListPage token={token} />}
           {page === 'numberinglist' && <NumberingListPage token={token} />}
+          {page === 'contractnew' && <ContractFormPage token={token} onNavigate={setPage} />}
+          {page === 'contractlist' && <ContractListPage token={token} onNavigate={setPage} />}
+          {page === 'payslipledger' && <PayslipLedgerPage token={token} />}
+          {page === 'loantype' && <LoanTypePage token={token} />}
+          {page === 'employeeloans' && <EmployeeLoanPage token={token} />}
+          {page === 'settlement' && <SettlementPage token={token} />}
+          {page === 'deploymentinfo' && <DeploymentInfoPage token={token} />}
+          {page === 'servicelocation' && <ServiceLocationPage token={token} />}
+          {page === 'jobtitle' && <JobTitlePage token={token} />}
+          {page === 'payrollfactors' && <PayrollFactorPage token={token} />}
+          {page === 'payrolltaxgroups' && <PayrollTaxGroupPage token={token} />}
           {page === 'payroll' && (
             <div className="page panels">
               <PageHeader
@@ -634,7 +675,7 @@ export function Dashboard({
                 title="حقوق و دستمزد"
                 description="پرونده‌ی پرسنل، حکم حقوقی، کارکرد و صدور فیش، مزایا (عیدی/سنوات/مرخصی) و تنظیماتِ بیمه و مالیات."
               />
-              <PayrollPanel token={token} />
+              <PayrollPanel token={token} onNavigate={setPage} />
             </div>
           )}
           {page === 'integration' && (
@@ -703,6 +744,8 @@ export function Dashboard({
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'fiscalyear' && <FiscalYearPage token={token} />}
           {page === 'backup' && <BackupPage token={token} me={me} />}
+          {page === 'coding' && <CodingPage token={token} />}
+          {page === 'personalization' && <PersonalizationPage token={token} />}
           {page === 'numbering' && <NumberingPage token={token} />}
           {page === 'backuplist' && <BackupListPage token={token} me={me} />}
           {page === 'userlist' && <UserListPage token={token} />}
@@ -723,7 +766,7 @@ export function Dashboard({
           {page === 'dayactivity' && <DayActivityPage token={token} />}
           {page === 'mgmtreports' && <ManagementReportsPage token={token} />}
           {page === 'usagereport' && <UsageReportPage token={token} />}
-          {page === 'contactlist' && <ContactListPage token={token} />}
+          {page === 'contactlist' && <ContactListPage token={token} onNavigate={navigate} />}
           {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}
           {page === 'installmentplans' && <InstallmentPlansPage token={token} />}
           {page === 'allinstallments' && <AllInstallmentsPage token={token} />}

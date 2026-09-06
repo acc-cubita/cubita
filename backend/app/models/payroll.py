@@ -6,11 +6,13 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -20,6 +22,63 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
 PAYROLL_PERIOD_STATUSES = ("draft", "finalized")
+
+#: چرخه‌ی عمرِ وامِ پرسنلی. `settled` یعنی همه‌ی اقساط کسر شده‌اند؛ `cancelled`
+#: یعنی وام لغو شد و اقساطِ کسرنشده‌اش دیگر سررسید نمی‌شوند.
+LOAN_STATUSES = ("active", "settled", "cancelled")
+
+# ── جدول‌های مرجعِ حقوق و دستمزد ───────────────────────────────────────────────
+#
+# جریانِ استخدام از طرف‌حساب شروع می‌شود: اول شخص در «طرف حساب جدید» با تیکِ «کارمند»
+# ثبت می‌شود، بعد این‌جا برایش «قرارداد جدید» زده می‌شود. این جدول‌ها فهرست‌هایی‌اند
+# که آن فرم از آن‌ها انتخاب می‌کند.
+
+#: رسته شغل — فهرستِ بسته‌ی سپیدار (مبنای کدِ شغلِ بیمه).
+JOB_FAMILIES = (
+    "مالی", "مهندسی فرهنگی", "امور اجتماعی", "فناوری اطلاعات", "بهداشت و درمان",
+    "فنی مهندسی", "خدمات", "کشاورزی و محیط زیست", "بازاریابی و فروش", "حراست و نگهبانی",
+    "کارگری", "ترابری", "تولیدی", "کنترل کیفی", "تحقیقات", "انبارداری", "فضا",
+    "اعضای هیئت علمی دانشگاه",
+)
+
+#: نوعِ استخدام — فهرستِ بسته‌ی سپیدار.
+EMPLOYMENT_TYPES = (
+    "سایر", "پیمانی", "رسمی", "رسمی آزمایشی", "قراردادی", "روزمزد", "خرید خدمت",
+    "مأمور", "ساعتی", "رسمی فصلی", "کارمزدی", "شرکتی",
+)
+
+#: نوعِ قرارداد. «استخدام» اولین قراردادِ هر شخص است و «اصلاح قرارداد» هر قراردادِ
+#: بعدی — پس تا وقتی استخدام ثبت نشده، اصلاح معنایی ندارد.
+CONTRACT_TYPES = ("hire", "amend")
+CONTRACT_TYPE_LABELS = {"hire": "استخدام", "amend": "اصلاح قرارداد"}
+
+FACTOR_CATEGORIES = ("benefit", "deduction")
+FACTOR_CATEGORY_LABELS = {"benefit": "مزایا", "deduction": "کسورات"}
+FACTOR_KINDS = ("fixed", "variable")
+FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "متغیر"}
+
+#: کلیدِ سیستمیِ عامل — پلِ عاملِ کاربر به ستون‌های موتورِ فیشِ حقوقی. خالی یعنی
+#: عاملِ ساخته‌ی کاربر که در «سایر مزایا» جمع می‌شود.
+FACTOR_SYSTEM_KEYS = ("", "base", "housing", "food", "child")
+DEFAULT_FACTORS = (
+    ("حقوق پایه", "base"),
+    ("حق مسکن", "housing"),
+    ("حق خواروبار", "food"),
+    ("حق اولاد", "child"),
+)
+
+TAX_GROUP_KINDS = ("normal", "deprived", "exempt")
+TAX_GROUP_KIND_LABELS = {
+    "normal": "مناطق عادی",
+    "deprived": "مناطق محروم",
+    "exempt": "معاف",
+}
+#: درصدِ پیش‌فرضِ هر نوع — کاربر می‌تواند عوضش کند، ولی این‌ها نقطه‌ی شروع‌اند.
+TAX_GROUP_DEFAULT_PERCENT = {"normal": 100, "deprived": 50, "exempt": 0}
+
+BRANCH_KINDS = ("insurance", "tax")
+BRANCH_KIND_LABELS = {"insurance": "شعبه بیمه", "tax": "حوزه مالیاتی"}
+
 
 
 class Employee(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -43,18 +102,101 @@ class Employee(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class SalaryContract(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """حکم حقوقی. حکم جاری یک کارمند در تاریخ X = آخرین حکمی که effective_from آن <= X است."""
+    """قراردادِ حقوقی. قراردادِ جاری یک کارمند در تاریخ X = آخرینی که `effective_from` آن <= X است.
+
+    **`effective_from` همان «تاریخ صدور»ِ فرمِ سپیدار است** — یعنی «محاسبه‌ی حقوق از
+    این تاریخ شروع می‌شود». ستونِ دومی برایش نساختیم چون دو تاریخ برای یک معنا،
+    بالاخره از هم عقب می‌مانند.
+
+    سه تاریخ سه معنای متفاوت دارند و هیچ‌کدام جای دیگری را نمی‌گیرند:
+
+    * `effective_from` (تاریخ صدور) — محاسبه از این‌جا شروع می‌شود.
+    * `valid_until` (تاریخ اعتبار) — تا این‌جا طبقِ همین قرارداد محاسبه می‌شود.
+    * `service_end_date` (تاریخ پایان خدمت) — از این‌جا به بعد کارکرد اصلاً محاسبه
+      نمی‌شود.
+
+    و **تاریخ استخدام** اصلاً این‌جا نیست: واقعیتِ *شخص* است نه این قرارداد، پس روی
+    `employees.hire_date` می‌نشیند. عمداً می‌تواند سال‌ها قبل از تاریخِ صدور باشد —
+    شرکتی که تا دیروز با اکسل حقوق می‌داد، کارمندش را که تازه استخدام نکرده.
+    """
 
     __tablename__ = "salary_contracts"
+    __table_args__ = (
+        CheckConstraint(f"contract_type IN {CONTRACT_TYPES}", name="ck_salary_contracts_type"),
+        CheckConstraint(
+            "employer_exempt_percent >= 0 AND employer_exempt_percent <= 100 "
+            "AND housing_loan_exempt_amount >= 0",
+            name="ck_salary_contracts_percent",
+        ),
+        CheckConstraint(
+            "(valid_until IS NULL OR valid_until >= effective_from) "
+            "AND (service_end_date IS NULL OR service_end_date >= effective_from)",
+            name="ck_salary_contracts_dates",
+        ),
+    )
 
     employee_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"), index=True)
     effective_from: Mapped[date_] = mapped_column(Date)
+
+    # ── سرصفحه ────────────────────────────────────────────────────────────────
+    #: «استخدام» اولین قراردادِ هر شخص است؛ سرویس نمی‌گذارد دومی هم استخدام باشد و
+    #: نمی‌گذارد اولی اصلاح باشد.
+    contract_type: Mapped[str] = mapped_column(String(20), default="hire", server_default="hire")
+    number: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    valid_until: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    service_end_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+
+    # ── اطلاعات استخدامی ──────────────────────────────────────────────────────
+    employment_type: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    service_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("service_locations.id", ondelete="SET NULL"), nullable=True
+    )
+    job_title_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("job_titles.id", ondelete="SET NULL"), nullable=True
+    )
+    #: مرکز هزینه جدولِ خودش را دارد و این‌جا فقط به آن وصل می‌شویم — هزینه‌ی حقوق
+    #: باید در همان گزارشِ مرکز هزینه‌ای دیده شود که بقیه‌ی هزینه‌ها دیده می‌شوند.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # ── حقوق و مزایای ثابت (ستونی) ────────────────────────────────────────────
+    #: این چهار ستون ورودیِ موتورِ فیشِ حقوقی‌اند و **دیگر مستقیم پر نمی‌شوند**:
+    #: سرویس آن‌ها را از `lines` می‌سازد (`PayrollFactor.system_key` می‌گوید کدام
+    #: ردیف کدام ستون است و بقیه در `other_allowance` جمع می‌شوند). قراردادهای
+    #: قدیمی ردیف ندارند و مقادیرِ ستونی‌شان دست‌نخورده کار می‌کنند.
     base_salary: Mapped[float] = mapped_column(Numeric(18, 0))
     housing_allowance: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     food_allowance: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     other_allowance: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
 
+    # ── سایر اطلاعات: بیمه و مالیات ───────────────────────────────────────────
+    tax_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_tax_groups.id", ondelete="SET NULL"), nullable=True
+    )
+    tax_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    insurance_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    housing_loan_exempt_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    is_insured: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    is_hard_job: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    exempt_employee_insurance: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    exempt_employer_insurance: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    employer_exempt_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    exempt_unemployment_insurance: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    employer_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    has_supplementary_insurance: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    supplementary_branch: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    supplementary_insurer: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+
     employee: Mapped["Employee"] = relationship(back_populates="contracts")
+    lines: Mapped[list["SalaryContractLine"]] = relationship(
+        back_populates="contract", cascade="all, delete-orphan"
+    )
 
 
 class PayrollPeriod(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -106,6 +248,12 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     insurance_employer_share: Mapped[float] = mapped_column(Numeric(18, 0))
     taxable_pay: Mapped[float] = mapped_column(Numeric(18, 0))
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: دو کسورِ بعد از مالیات. جدا نگه داشته می‌شوند چون دو منشأ دارند و کارمند حق
+    #: دارد بداند کدام است: قسطِ وام خودکار از ماژولِ وام می‌آید، «سایر کسورات» از
+    #: ردیف‌های کسوراتِ قراردادِ خودش. با این دو، فیش دوباره جمع می‌زند:
+    #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
+    loan_deduction: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     net_pay: Mapped[float] = mapped_column(Numeric(18, 0))
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -163,3 +311,293 @@ class BenefitRun(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class ServiceLocation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """محل خدمت: انبار، شعبه‌ی ۳ فروشگاه، دفتر مرکزی.
+
+    جایی که کارمند واقعاً کار می‌کند. جدا از مرکز هزینه است: مرکز هزینه می‌گوید
+    هزینه‌اش به کدام حساب می‌رود، محل خدمت می‌گوید خودش کجاست. یک نفر می‌تواند در
+    انبار کار کند ولی هزینه‌اش به مرکزِ «فروش» برود.
+    """
+
+    __tablename__ = "service_locations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_service_locations_tenant_code"),
+    )
+
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class JobTitle(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """شغل: عنوانِ شغلیِ کارمند، به‌علاوه‌ی رسته و کدِ شغلِ بیمه.
+
+    کدِ شغلِ بیمه در لیستِ تأمین اجتماعی لازم است؛ نگه‌داشتنش روی شغل یعنی هر کارمندِ
+    آن شغل خودبه‌خود درست ثبت می‌شود، به‌جای اینکه هر بار دستی تایپ شود.
+    """
+
+    __tablename__ = "job_titles"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_job_titles_tenant_code"),)
+
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    job_family: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    insurance_job_code: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک عاملِ حقوق یا کسور: حقوق پایه، حق اولاد، بیمه‌ی تکمیلی، وام…
+
+    `system_key` پلِ این جدول به موتورِ فیشِ حقوقی است. موتور روی چهار ستونِ
+    `salary_contracts` حساب می‌کند؛ سرویس آن چهار را از ردیف‌های قرارداد می‌سازد و
+    این کلید می‌گوید کدام ردیف کدام ستون است. عاملِ بی‌کلید در «سایر مزایا» جمع
+    می‌شود — پس کاربر می‌تواند هرچه خواست بسازد بی‌آنکه محاسبه بشکند.
+    """
+
+    __tablename__ = "payroll_factors"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_payroll_factors_tenant_name"),
+        CheckConstraint(f"category IN {FACTOR_CATEGORIES}", name="ck_payroll_factors_category"),
+        CheckConstraint(f"kind IN {FACTOR_KINDS}", name="ck_payroll_factors_kind"),
+        CheckConstraint(
+            "system_key IN ('', 'base', 'housing', 'food', 'child')",
+            name="ck_payroll_factors_system_key",
+        ),
+        #: هر کلیدِ سیستمی حداکثر یک عامل، وگرنه «حقوق پایه» دوتا می‌شود و ستونِ
+        #: `base_salary` نمی‌داند از کدام ساخته شود.
+        Index(
+            "uq_payroll_factors_tenant_system_key", "tenant_id", "system_key",
+            unique=True, postgresql_where=text("system_key <> ''"),
+        ),
+    )
+
+    name: Mapped[str] = mapped_column(String(150))
+    name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    category: Mapped[str] = mapped_column(String(20), default="benefit", server_default="benefit")
+    kind: Mapped[str] = mapped_column(String(20), default="fixed", server_default="fixed")
+    is_extraordinary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    system_key: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """گروه مالیاتی: مناطق عادی، مناطق محروم، معاف.
+
+    `percent` می‌گوید چند درصد از مالیاتِ محاسبه‌شده واقعاً وصول می‌شود — مناطق محروم
+    نصف، معاف صفر. عدد است نه پرچم، چون درصدِ تخفیفِ مناطق محروم قانوناً عوض می‌شود.
+    """
+
+    __tablename__ = "payroll_tax_groups"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_payroll_tax_groups_tenant_name"),
+        CheckConstraint(f"kind IN {TAX_GROUP_KINDS}", name="ck_payroll_tax_groups_kind"),
+        CheckConstraint("percent >= 0 AND percent <= 100", name="ck_payroll_tax_groups_percent"),
+    )
+
+    name: Mapped[str] = mapped_column(String(150))
+    kind: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
+    percent: Mapped[float] = mapped_column(Numeric(5, 2), default=100, server_default="100")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """شعبه‌ی تأمین اجتماعی یا حوزه‌ی مالیاتی.
+
+    یک جدول برای هر دو، چون شکلشان یکی است (کد + عنوان) و فرمِ قرارداد هر دو را از
+    یک‌جا می‌خواهد. `kind` تفکیکشان می‌کند.
+    """
+
+    __tablename__ = "insurance_tax_branches"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "kind", "name", name="uq_insurance_tax_branches_tenant_kind_name"),
+        CheckConstraint(f"kind IN {BRANCH_KINDS}", name="ck_insurance_tax_branches_kind"),
+    )
+
+    code: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    name: Mapped[str] = mapped_column(String(150))
+    kind: Mapped[str] = mapped_column(String(20), default="insurance", server_default="insurance")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class SalaryContractLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک ردیفِ «حقوق و مزایای ثابت» یا «سایر مبالغ» روی یک قرارداد."""
+
+    __tablename__ = "salary_contract_lines"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "contract_id", "factor_id", name="uq_contract_lines_factor"),
+        CheckConstraint("amount >= 0", name="ck_salary_contract_lines_amount"),
+    )
+
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("salary_contracts.id", ondelete="CASCADE"), index=True
+    )
+    factor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="RESTRICT")
+    )
+    amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    contract: Mapped["SalaryContract"] = relationship(back_populates="lines")
+    factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
+
+
+class LoanType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """نوعِ وامِ پرسنلی: وامِ ضروری، وامِ مسکن، مساعده…
+
+    جدولِ مرجعِ ساده، مثلِ `ServiceLocation`. `default_installments` فقط پیش‌فرضِ
+    فرم است نه قانون — هر وام تعدادِ قسطِ خودش را روی خودش دارد.
+    """
+
+    __tablename__ = "loan_types"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_loan_types_tenant_code"),
+        CheckConstraint(
+            "default_installments > 0 AND default_installments <= 240",
+            name="ck_loan_types_installments",
+        ),
+    )
+
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    default_installments: Mapped[int] = mapped_column(Integer, default=12, server_default="12")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class EmployeeLoan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """وامی که به کارمند داده شده و قسط‌به‌قسط از حقوقش کسر می‌شود.
+
+    مبلغ و تعدادِ قسط این‌جاست، ولی **قسطِ ماهانه از این‌ها حساب نمی‌شود** — اقساط
+    رکوردِ خودشان را دارند. دلیلش در مهاجرتِ ۰۰۹۵ نوشته شده: اقساط در عمل مساوی
+    نمی‌مانند و کسرِ ماهانه باید بداند کدام قسط سررسید شده، نه اینکه هر بار تقسیم کند.
+    """
+
+    __tablename__ = "employee_loans"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_employee_loans_amount"),
+        CheckConstraint(
+            "installment_count > 0 AND installment_count <= 240",
+            name="ck_employee_loans_installments",
+        ),
+        CheckConstraint(f"status IN {LOAN_STATUSES}", name="ck_employee_loans_status"),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    #: نوعِ وام پاک‌شدنی است بی‌آنکه وام‌های ثبت‌شده از بین بروند.
+    loan_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("loan_types.id", ondelete="SET NULL"), nullable=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    loan_date: Mapped[date_] = mapped_column(Date)
+    installment_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    installments: Mapped[list["EmployeeLoanInstallment"]] = relationship(
+        back_populates="loan", cascade="all, delete-orphan", order_by="EmployeeLoanInstallment.seq"
+    )
+
+
+class EmployeeLoanInstallment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک قسطِ وام. سررسید، مبلغ، و اینکه در کدام دوره کسر شد."""
+
+    __tablename__ = "employee_loan_installments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "loan_id", "seq", name="uq_loan_installments_loan_seq"),
+        CheckConstraint("amount > 0", name="ck_loan_installments_amount"),
+        CheckConstraint("seq > 0", name="ck_loan_installments_seq"),
+    )
+
+    loan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employee_loans.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    due_date: Mapped[date_] = mapped_column(Date)
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: NULL = هنوز کسر نشده. با ابطالِ آن دوره دوباره NULL می‌شود، پس نه قسطی دوبار
+    #: کسر می‌شود نه قسطی گم.
+    deducted_period_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_periods.id", ondelete="SET NULL"), nullable=True
+    )
+
+    loan: Mapped["EmployeeLoan"] = relationship(back_populates="installments")
+
+
+class PayrollSettlement(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تسویه‌حسابِ پایانِ کار — همه‌ی اجزا در یک سند، با یک خالصِ پرداختی.
+
+    این `BenefitRun` نیست: آن هر مزیت را جدا صادر می‌کند، این همه‌شان را منهای بدهیِ
+    وام یک‌جا می‌بندد. اجزا جدا می‌مانند چون کارمند حق دارد بداند خالص از کجا آمده و
+    ممیزِ بیمه و مالیات هم همین تفکیک را می‌خواهد.
+    """
+
+    __tablename__ = "payroll_settlements"
+    __table_args__ = (
+        #: یک تسویه‌ی نهایی برای هر کارمند؛ اصلاحش ویرایشِ همان ردیف است نه ردیفِ دوم.
+        UniqueConstraint("tenant_id", "employee_id", name="uq_payroll_settlements_employee"),
+        CheckConstraint(
+            "severance_amount >= 0 AND leave_payout_amount >= 0 AND other_earnings >= 0 "
+            "AND loan_balance >= 0 AND other_deductions >= 0",
+            name="ck_payroll_settlements_amounts",
+        ),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    settlement_date: Mapped[date_] = mapped_column(Date)
+    severance_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    leave_payout_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_earnings: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    loan_balance: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: **ذخیره** می‌شود نه محاسبه‌ی هربار: مبنای پرداخت است و نباید با تغییرِ بعدیِ
+    #: نرخ‌ها عقب‌گرد کند.
+    net_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class PayrollDeploymentInfo(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """مانده‌های ابتدای استقرار — آنچه پیش از آمدن به کوبیتا اتفاق افتاده.
+
+    **بی این رکورد، مالیاتِ حقوق کمتر از واقع درمی‌آید.** مالیات پلکانی و سالانه
+    است؛ شرکتی که مهرماه از اکسل می‌آید، اگر پرداختیِ شش ماهِ گذشته را ندهد، پلکان
+    از صفر شروع می‌شود و خطا تا ممیزیِ سالِ بعد دیده نمی‌شود.
+
+    مانده‌ی مرخصی و سابقه‌ی قبلی هم به همین دلیل این‌جاست: بدونشان کارمندِ ده‌ساله
+    از دیدِ نرم‌افزار تازه‌وارد است.
+    """
+
+    __tablename__ = "payroll_deployment_info"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "employee_id", "year", name="uq_payroll_deployment_employee_year"
+        ),
+        CheckConstraint(
+            "cumulative_gross >= 0 AND cumulative_tax >= 0 AND cumulative_insurance >= 0 "
+            "AND leave_balance_days >= 0 AND prior_service_days >= 0",
+            name="ck_payroll_deployment_amounts",
+        ),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    year: Mapped[int] = mapped_column(Integer)
+    cumulative_gross: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    cumulative_tax: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    cumulative_insurance: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    leave_balance_days: Mapped[float] = mapped_column(Numeric(6, 2), default=0, server_default="0")
+    prior_service_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")

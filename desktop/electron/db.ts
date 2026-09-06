@@ -36,7 +36,9 @@ export function initLocalDb(): Database.Database {
       name TEXT NOT NULL,
       type TEXT NOT NULL,
       is_group INTEGER NOT NULL,
-      parent_id TEXT
+      parent_id TEXT,
+      has_tracking INTEGER NOT NULL DEFAULT 0,
+      accepts_tafsili INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS warehouses_cache (
@@ -63,7 +65,26 @@ export function initLocalDb(): Database.Database {
 
   for (const table of OUTBOX_TABLES) db.exec(outboxTableDdl(table))
 
+  // ستون‌هایی که بعد از انتشارِ اولین نسخه به کش اضافه شده‌اند. `CREATE TABLE IF
+  // NOT EXISTS` روی دیتابیسِ موجود کاری نمی‌کند، پس بدونِ این حلقه، کاربری که از
+  // قبل نصب داشته ستونِ تازه را هرگز نمی‌گرفت و همگام‌سازی با خطای SQL می‌خورد.
+  // امن است چون این جدول‌ها *کش*اند: هر مقدارِ پیش‌فرضی با اولین pull درست می‌شود.
+  ensureColumn(db, 'accounts_cache', 'has_tracking', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'accounts_cache', 'accepts_tafsili', 'INTEGER NOT NULL DEFAULT 0')
+
   return db
+}
+
+/** ستون را اگر نبود اضافه می‌کند. SQLite دستورِ «ADD COLUMN IF NOT EXISTS» ندارد. */
+function ensureColumn(
+  database: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  if (columns.some((c) => c.name === column)) return
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
 export function getLocalDb(): Database.Database {

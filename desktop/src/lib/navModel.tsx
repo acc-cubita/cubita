@@ -10,6 +10,8 @@ import {
   BookOpenCheck,
   Boxes,
   Building,
+  FileSignature,
+  Briefcase,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -25,6 +27,7 @@ import {
   FileSpreadsheet,
   FolderPlus,
   GitCompareArrows,
+  Banknote,
   HandCoins,
   HardHat,
   Hash,
@@ -49,6 +52,7 @@ import {
   ScrollText,
   Search,
   Settings,
+  Settings2,
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
@@ -59,6 +63,7 @@ import {
   Target,
   Truck,
   Undo2,
+  UploadCloud,
   UserCircle,
   UserCog,
   UserPlus,
@@ -92,6 +97,17 @@ export type PageKey =
   | 'distributor'
   | 'marketplace'
   | 'payroll'
+  | 'contractnew'
+  | 'contractlist'
+  | 'payslipledger'
+  | 'servicelocation'
+  | 'jobtitle'
+  | 'payrollfactors'
+  | 'payrolltaxgroups'
+  | 'loantype'
+  | 'employeeloans'
+  | 'settlement'
+  | 'deploymentinfo'
   | 'integration'
   | 'billing'
   | 'accounts'
@@ -107,6 +123,8 @@ export type PageKey =
   | 'password'
   | 'backup'
   | 'numbering'
+  | 'coding'
+  | 'personalization'
   //: ماژولِ «شرکت» — عملیاتِ سطحِ شرکت.
   | 'contactnew'
   | 'contactgroup'
@@ -353,9 +371,23 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    //: ترتیب عمدی است و همان ترتیبِ کار: اول داده‌های پایه (محل خدمت، شغل، عوامل،
+    //: گروه مالیاتی) ساخته می‌شوند، بعد قرارداد که از همه‌ی آن‌ها انتخاب می‌کند.
+    //: خودِ «حقوق و دستمزد» سرِ جایش می‌ماند — کارکرد، فیش و مزایا آن‌جاست.
     heading: 'حقوق و دستمزد',
     icon: <Users size={17} />,
-    items: [{ key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> }],
+    items: [
+      { key: 'contractnew', label: 'قرارداد جدید', icon: <FileSignature size={18} /> },
+      { key: 'servicelocation', label: 'محل خدمت جدید', icon: <Building size={18} /> },
+      { key: 'jobtitle', label: 'شغل جدید', icon: <Briefcase size={18} /> },
+      { key: 'payrollfactors', label: 'عوامل حقوق و مزایا', icon: <SlidersHorizontal size={18} /> },
+      { key: 'payrolltaxgroups', label: 'گروه مالیاتی و شعب', icon: <Percent size={18} /> },
+      { key: 'loantype', label: 'نوع وام جدید', icon: <Banknote size={18} /> },
+      { key: 'employeeloans', label: 'تقسیط — وام‌های پرسنلی', icon: <HandCoins size={18} /> },
+      { key: 'settlement', label: 'تسویه حساب', icon: <Undo2 size={18} /> },
+      { key: 'deploymentinfo', label: 'اطلاعات استقرار', icon: <UploadCloud size={18} /> },
+      { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
+    ],
   },
   {
     heading: 'پیمانکاری',
@@ -389,6 +421,8 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <Settings size={17} />,
     items: [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
+      { key: 'coding', label: 'کدینگ', icon: <ListTree size={18} /> },
+      { key: 'personalization', label: 'شخصی‌سازی', icon: <Settings2 size={18} /> },
       { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
       { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },

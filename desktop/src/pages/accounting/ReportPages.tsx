@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpenCheck,
   Download,
   FileSpreadsheet,
@@ -13,11 +14,14 @@ import {
   Wallet,
 } from 'lucide-react'
 import {
+  ACCOUNT_NATURE_LABELS,
   fetchAccountBalances,
   fetchChartAccounts,
   fetchGeneralLedger,
   fetchJournalEntriesFiltered,
   fetchLegalBook,
+  fetchMissingTafsili,
+  fetchNatureViolations,
   fetchVatReport,
   type BalanceRow,
   type ChartAccount,
@@ -333,7 +337,152 @@ export function BalanceReportPage({ token }: { token: string }) {
           <BalanceFooter debit={periodDebit} credit={periodCredit} />
         </AsyncBlock>
       </SectionCard>
+
+      <NatureViolationsCard token={token} />
+      <MissingTafsiliCard token={token} />
     </OpsPage>
+  )
+}
+
+/**
+ * حساب‌هایی که مانده‌شان خلافِ ماهیتشان است.
+ *
+ * **گزارش است، نه گارد.** خلافِ ماهیت شدن گاهی واقعاً درست است — اضافه‌برداشتِ
+ * بانکی، پیش‌دریافتِ مشتری — پس مسدود کردنِ ثبت یعنی جلوگیری از ضبطِ رویدادی که
+ * اتفاق افتاده. این‌جا فقط نشان داده می‌شود تا حسابدار خودش قضاوت کند.
+ *
+ * زیرِ ترازها نشسته چون همان دادهٔ مانده را از زاویه‌ی دیگری می‌خواند: تراز
+ * می‌گوید مانده چقدر است، این می‌گوید کدام مانده سرِ جایش نیست.
+ */
+/**
+ * ردیف‌هایی که روی حسابِ «تفصیلی پذیر» نشسته‌اند ولی تفصیلی ندارند.
+ *
+ * **در هر سه سطحِ اجبار کار می‌کند.** سطحِ اجبار (تنظیمات ← شخصی‌سازی) تعیین می‌کند
+ * چه چیزی *مسدود* شود، نه چه چیزی *دیده* شود — پس حتی در «شناور» هم این سوراخ
+ * نامرئی نمی‌ماند. در «ترکیبی» تقریباً همه‌ی ردیف‌های این فهرست از ماژول‌ها می‌آیند،
+ * که دقیقاً همان چیزی است که باید دیده شود.
+ */
+function MissingTafsiliCard({ token }: { token: string }) {
+  const rows = useAsync(() => fetchMissingTafsili(token), [token])
+  const list = rows.data ?? []
+
+  return (
+    <SectionCard
+      icon={AlertTriangle}
+      title="ردیف‌های بدونِ تفصیلی"
+      description="این ردیف‌ها روی حسابِ تفصیلی‌پذیر نشسته‌اند ولی تفصیلی ندارند. جمعِ حساب درست است؛ تفکیکش ناقص."
+    >
+      <AsyncBlock
+        loading={rows.loading}
+        error={rows.error}
+        empty={list.length === 0}
+        emptyText="هر ردیفی که روی حسابِ تفصیلی‌پذیر نشسته، تفصیلی دارد."
+      >
+        <div className="table-scroll">
+          <table className="cards-on-mobile acc-table">
+            <thead>
+              <tr>
+                <th>تاریخ</th>
+                <th>سند</th>
+                <th>حساب</th>
+                <th>شرح</th>
+                <th>مبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={`${r.entry_id}-${r.account_id}`}>
+                  <td data-label="تاریخ">{formatJalali(r.entry_date)}</td>
+                  <td data-label="سند">
+                    <span className="ltr-cell">{r.entry_number ?? '—'}</span>
+                    {!r.is_manual && <span className="chart-trait-tag">خودکار</span>}
+                  </td>
+                  <td data-label="حساب">
+                    <span className="ltr-cell">{r.account_code}</span> {r.account_name}
+                  </td>
+                  <td data-label="شرح">{r.description || '—'}</td>
+                  <td data-label="مبلغ">{fa(Number(r.debit) || Number(r.credit))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </AsyncBlock>
+    </SectionCard>
+  )
+}
+
+function NatureViolationsCard({ token }: { token: string }) {
+  //: تیکِ «کنترل ماهیت طی دوره»ی فرمِ حساب. پیش‌فرض خاموش است تا گزارش کامل بیاید؛
+  //: در چارتِ بزرگ حسابدار فقط چند حسابِ حساس را رصد می‌کند و آن‌وقت روشنش می‌کند.
+  const [controlledOnly, setControlledOnly] = useState(false)
+  const rows = useAsync(() => fetchNatureViolations(token, controlledOnly), [token, controlledOnly])
+  const list = rows.data ?? []
+
+  return (
+    <SectionCard
+      icon={AlertTriangle}
+      title="حساب‌های خلافِ ماهیت"
+      description="ماندهٔ این حساب‌ها در سمتی است که انتظار نمی‌رفت. لزوماً غلط نیست — اضافه‌برداشتِ بانکی و پیش‌دریافتِ مشتری هم همین شکل‌اند."
+      actions={
+        <label className="fy-check">
+          <input
+            type="checkbox"
+            checked={controlledOnly}
+            onChange={(e) => setControlledOnly(e.target.checked)}
+          />
+          فقط حساب‌هایی که «کنترل ماهیت» دارند
+        </label>
+      }
+    >
+      <AsyncBlock
+        loading={rows.loading}
+        error={rows.error}
+        empty={list.length === 0}
+        emptyText={
+          controlledOnly
+            ? 'هیچ‌کدام از حساب‌های تحتِ کنترل خلافِ ماهیت نیستند.'
+            : 'هیچ حسابی خلافِ ماهیتش نیست.'
+        }
+      >
+        <div className="table-scroll">
+          <table className="cards-on-mobile acc-table">
+            <thead>
+              <tr>
+                <th>کد</th>
+                <th>حساب</th>
+                <th>ماهیتِ انتظاری</th>
+                <th>ماندهٔ فعلی</th>
+                <th>مبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.account_id}>
+                  <td data-label="کد" className="ltr-cell">{r.account_code}</td>
+                  <td data-label="حساب">
+                    {r.account_name}
+                    {r.nature_control && <span className="chart-trait-tag">کنترلِ ماهیت</span>}
+                  </td>
+                  <td data-label="ماهیتِ انتظاری">
+                    <span className={`nature-badge nature-badge--${r.nature}`}>
+                      {ACCOUNT_NATURE_LABELS[r.nature] ?? r.nature}
+                      {!r.nature_is_explicit && <span className="nature-badge__auto">خودکار</span>}
+                    </span>
+                  </td>
+                  <td data-label="ماندهٔ فعلی">
+                    <span className={`nature-badge nature-badge--${r.balance_side}`}>
+                      {ACCOUNT_NATURE_LABELS[r.balance_side] ?? r.balance_side}
+                    </span>
+                  </td>
+                  <td data-label="مبلغ">{fa(Number(r.balance))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </AsyncBlock>
+    </SectionCard>
   )
 }
 
