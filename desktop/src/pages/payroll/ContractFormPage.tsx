@@ -370,7 +370,7 @@ export function ContractFormPage({
           {tab === 'deductions' && (
             <LinesTab
               title="سایر مبالغ (کسورات)"
-              hint="کسوراتِ ثابت مثلِ بیمه‌ی تکمیلی. اقساطِ وامِ پرسنلی جای خودش را دارد و این‌جا دوباره تایپ نمی‌شود."
+              hint="کسوراتِ ثابت مثلِ بیمه‌ی تکمیلی — هر ماه از خالصِ فیش کم می‌شوند. اقساطِ وامِ پرسنلی جای خودش را دارد و خودکار کسر می‌شود؛ اگر این‌جا هم بنویسیدش، دو بار از حقوق کم می‌شود."
               factors={deductionFactors}
               rows={deductionLines}
               setRows={setDeductionLines}

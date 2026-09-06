@@ -248,6 +248,12 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     insurance_employer_share: Mapped[float] = mapped_column(Numeric(18, 0))
     taxable_pay: Mapped[float] = mapped_column(Numeric(18, 0))
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: دو کسورِ بعد از مالیات. جدا نگه داشته می‌شوند چون دو منشأ دارند و کارمند حق
+    #: دارد بداند کدام است: قسطِ وام خودکار از ماژولِ وام می‌آید، «سایر کسورات» از
+    #: ردیف‌های کسوراتِ قراردادِ خودش. با این دو، فیش دوباره جمع می‌زند:
+    #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
+    loan_deduction: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     net_pay: Mapped[float] = mapped_column(Numeric(18, 0))
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(

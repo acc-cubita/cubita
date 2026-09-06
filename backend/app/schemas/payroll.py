@@ -392,6 +392,10 @@ class PayslipOut(BaseModel):
     insurance_employer_share: Decimal
     taxable_pay: Decimal
     tax_amount: Decimal
+    #: دو کسورِ بعد از مالیات، تا فیش جمع بزند:
+    #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
+    loan_deduction: Decimal
+    other_deductions: Decimal
     net_pay: Decimal
     journal_entry_id: UUID | None
 

@@ -71,6 +71,8 @@ export function PayslipLedgerPage({ token }: { token: string }) {
       gross: sum((r) => r.gross_pay),
       insurance: sum((r) => r.insurance_employee_share),
       tax: sum((r) => r.tax_amount),
+      loan: sum((r) => r.loan_deduction),
+      other: sum((r) => r.other_deductions),
       net: sum((r) => r.net_pay),
     }
   }, [rows])
@@ -138,6 +140,8 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                       <th>ناخالص</th>
                       <th>بیمه سهم کارمند</th>
                       <th>مالیات</th>
+                      <th>قسط وام</th>
+                      <th>سایر کسورات</th>
                       <th>خالص پرداختی</th>
                     </tr>
                   </thead>
@@ -153,6 +157,8 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                         <td className="num" data-label="ناخالص">{faAmount(r.gross_pay)}</td>
                         <td className="num" data-label="بیمه سهم کارمند">{faAmount(r.insurance_employee_share)}</td>
                         <td className="num" data-label="مالیات">{faAmount(r.tax_amount)}</td>
+                        <td className="num" data-label="قسط وام">{faAmount(r.loan_deduction)}</td>
+                        <td className="num" data-label="سایر کسورات">{faAmount(r.other_deductions)}</td>
                         <td className="num" data-label="خالص پرداختی">{faAmount(r.net_pay)}</td>
                       </tr>
                     ))}
@@ -163,6 +169,8 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                       <td className="num" data-label="ناخالص">{faAmount(totals.gross)}</td>
                       <td className="num" data-label="بیمه سهم کارمند">{faAmount(totals.insurance)}</td>
                       <td className="num" data-label="مالیات">{faAmount(totals.tax)}</td>
+                      <td className="num" data-label="قسط وام">{faAmount(totals.loan)}</td>
+                      <td className="num" data-label="سایر کسورات">{faAmount(totals.other)}</td>
                       <td className="num" data-label="خالص پرداختی">{faAmount(totals.net)}</td>
                     </tr>
                   </tfoot>

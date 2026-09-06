@@ -716,6 +716,10 @@ export interface PayslipRecord {
   insurance_employer_share: string
   taxable_pay: string
   tax_amount: string
+  /** دو کسورِ بعد از مالیات — با این دو، فیش جمع می‌زند:
+   *  خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات */
+  loan_deduction: string
+  other_deductions: string
   net_pay: string
 }
 

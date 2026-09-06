@@ -35,10 +35,17 @@ export function PayslipDrawer({
     ['مزایا (مسکن، خواربار، سایر)', payslip.allowances_total],
     ['اضافه‌کاری', payslip.overtime_pay],
   ]
+  //: قسطِ وام و سایر کسورات فقط وقتی می‌آیند که صفر نباشند — ردیفِ صفر در فیشِ
+  //: چاپی فقط چشم را از ارقامِ واقعی منحرف می‌کند.
   const deductions: [string, string][] = [
     ['بیمه — سهمِ کارمند', payslip.insurance_employee_share],
     ['مالیاتِ حقوق', payslip.tax_amount],
+    ...(Number(payslip.loan_deduction) ? [['قسطِ وام', payslip.loan_deduction] as [string, string]] : []),
+    ...(Number(payslip.other_deductions) ? [['سایر کسورات', payslip.other_deductions] as [string, string]] : []),
   ]
+  //: جمعِ کسورات از همان فهرست خوانده می‌شود نه از جمعِ دستیِ دو قلم — وگرنه با
+  //: افزودنِ هر کسورِ تازه، جمع عقب می‌ماند و فیش دیگر جمع نمی‌زند.
+  const deductionTotal = deductions.reduce((sum, [, v]) => sum + Number(v), 0)
 
   function printPayslip() {
     const win = window.open('', '_blank', 'width=820,height=1000')
@@ -90,7 +97,7 @@ export function PayslipDrawer({
         <thead><tr><th>کسورات</th><th class="num">ریال</th></tr></thead>
         <tbody>
           ${deductions.map(([l, v]) => row(l, v)).join('')}
-          ${row('جمعِ کسورات', String(Number(payslip.insurance_employee_share) + Number(payslip.tax_amount)), true)}
+          ${row('جمعِ کسورات', String(deductionTotal), true)}
         </tbody>
       </table>
     </div>
@@ -124,7 +131,7 @@ export function PayslipDrawer({
         <div className="drawer-body">
           <div className="kardex-summary">
             <div className="kardex-stat"><span>جمعِ ناخالص</span><strong>{fa(payslip.gross_pay)}</strong></div>
-            <div className="kardex-stat"><span>کسورات</span><strong className="pos-out">{fa(Number(payslip.insurance_employee_share) + Number(payslip.tax_amount))}</strong></div>
+            <div className="kardex-stat"><span>کسورات</span><strong className="pos-out">{fa(deductionTotal)}</strong></div>
             <div className="kardex-stat"><span>خالصِ پرداختی</span><strong className="pos-in">{fa(payslip.net_pay)}</strong></div>
           </div>
 
@@ -138,6 +145,12 @@ export function PayslipDrawer({
                   <tr className="payslip-subtotal"><td data-label="ردیف">جمعِ ناخالص</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.gross_pay)}</strong></td></tr>
                   <tr><td data-label="ردیف">بیمه — سهمِ کارمند</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.insurance_employee_share)}</td></tr>
                   <tr><td data-label="ردیف">مالیاتِ حقوق</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.tax_amount)}</td></tr>
+                  {Number(payslip.loan_deduction) > 0 && (
+                    <tr><td data-label="ردیف">قسطِ وام</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.loan_deduction)}</td></tr>
+                  )}
+                  {Number(payslip.other_deductions) > 0 && (
+                    <tr><td data-label="ردیف">سایر کسورات</td><td data-label="مبلغ" className="money-cell pos-out">−{fa(payslip.other_deductions)}</td></tr>
+                  )}
                   <tr className="payslip-net"><td data-label="ردیف">خالصِ پرداختی</td><td data-label="مبلغ" className="money-cell"><strong>{fa(payslip.net_pay)}</strong></td></tr>
                 </tbody>
               </table>
