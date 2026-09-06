@@ -5,6 +5,7 @@ import { LoginScreen } from '../screens/LoginScreen'
 import { LockScreen } from '../screens/LockScreen'
 import { MainTabs } from './MainTabs'
 import { navigationRef } from './navigationRef'
+import { setCurrentScreen } from '../errors/reporter'
 import { PushGate } from '../push/notifications'
 import { BrandMark } from '../ui/BrandMark'
 import { colors } from '../theme'
@@ -52,7 +53,21 @@ export function RootNavigator() {
   if (status === 'unauth') return <LoginScreen />
   if (status === 'locked') return <LockScreen />
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      linking={linking}
+      // گزارشِ کرش باید بگوید کاربر کجا بود. بدونِ این، یک stack traceِ minify‌شده
+      // داریم و هیچ سرنخی از مسیرِ رسیدن به آن.
+      //
+      // cast به همان دلیلی است که `navigateFromRoute` از dispatch استفاده می‌کند:
+      // `navigationRef` بدونِ ParamList ساخته شده، پس تایپِ خروجیِ getCurrentRoute
+      // تهی می‌شود. فقط نامِ صفحه را می‌خواهیم.
+      onStateChange={() => {
+        const route = navigationRef.getCurrentRoute() as { name?: string } | undefined
+        setCurrentScreen(route?.name ?? null)
+      }}
+    >
       <MainTabs />
       {/* بی‌نمایش: deep-linkِ لمسِ اعلان + تازه‌کردنِ نشانِ خوانده‌نشده. داخلِ کانتینر تا ناوبری آماده باشد. */}
       <PushGate />
