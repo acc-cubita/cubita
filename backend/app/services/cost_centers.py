@@ -160,21 +160,64 @@ def get_cost_center_out(db: Session, cost_center_id: UUID) -> dict:
     return _to_out(center, by_id, children)
 
 
-def resolve_cost_center_id(db: Session, cost_center_id: UUID | None) -> UUID | None:
+def resolve_cost_center_id(
+    db: Session, cost_center_id: UUID | None, *, current: UUID | None = None
+) -> UUID | None:
     """اعتبارِ برچسبِ مرکز را می‌سنجد؛ برای برچسب‌زدنِ فاکتور/سند استفاده می‌شود.
 
     None (بدون برچسب) مجاز است. اگر شناسه‌ای داده شد ولی به مرکزی نرسید، خطای ۴۰۰
     برمی‌گرداند تا سند با ارجاعِ نامعتبر (که RLS هم آن را نمی‌بیند) ثبت نشود.
+
+    **مرکزِ غیرفعال برای برچسبِ تازه رد می‌شود.** تا امروز «غیرفعال» فقط یک فیلترِ
+    سمتِ کلاینت بود و سرور هر مرکزی را می‌پذیرفت — یعنی فرمی که فیلتر نمی‌کرد
+    (فرمِ قراردادِ حقوق) بی‌صدا مرکزِ بسته را برچسب می‌زد.
+
+    `current` همان مقداری است که از قبل روی رکورد نشسته. اگر کاربر عوضش نکرده،
+    گارد نمی‌گیرد: وگرنه ویرایشِ عنوانِ یک قالبِ قدیمی به‌خاطرِ مرکزی که سالِ پیش
+    بسته شده ناممکن می‌شد — و سابقه باید بماند، این قاعده‌ی خودِ ماژول است.
+
+    **معافیتِ آفلاین ندارد و لازم هم ندارد** (برخلافِ سقفِ اعتبار): صفِ آفلاین
+    ردیفِ ناموفق را نگه می‌دارد و دوباره می‌فرستد، پس فاکتور از بین نمی‌رود —
+    منتظر می‌ماند تا مرکز دوباره فعال شود یا کاربر مرکزِ دیگری بگذارد.
     """
     if cost_center_id is None:
         return None
-    if db.get(CostCenter, cost_center_id) is None:
+    center = db.get(CostCenter, cost_center_id)
+    if center is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرکز هزینه‌ی انتخاب‌شده معتبر نیست")
+    if not center.is_active and cost_center_id != current:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"مرکزِ «{center.name}» غیرفعال است و به سندِ تازه برچسب نمی‌خورد؛ "
+            "مرکزِ دیگری انتخاب کنید یا آن را دوباره فعال کنید.",
+        )
     return cost_center_id
+
+
+def _assert_code_free(db: Session, code: str, *, exclude_id: UUID | None = None) -> None:
+    """کدِ تکراری را با پیامِ روشن رد می‌کند، پیش از اینکه ایندکس خطای خام بدهد.
+
+    ایندکسِ `uq_cost_centers_tenant_code` قیدِ واقعی است و این تابع جایش را
+    نمی‌گیرد — فقط ترجمه‌اش می‌کند. کدِ خالی بررسی نمی‌شود چون اختیاری است و
+    ایندکس هم آن را کنار گذاشته.
+    """
+    code = code.strip()
+    if not code:
+        return
+    query = db.query(CostCenter.id, CostCenter.name).filter(CostCenter.code == code)
+    if exclude_id is not None:
+        query = query.filter(CostCenter.id != exclude_id)
+    clash = query.first()
+    if clash is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"کدِ «{code}» قبلاً برای مرکزِ «{clash[1]}» به کار رفته؛ کدِ دیگری بگذارید.",
+        )
 
 
 def create_cost_center(db: Session, data: CostCenterIn, user: User) -> dict:
     _assert_parent_ok(db, None, data.parent_id)
+    _assert_code_free(db, data.code)
     center = CostCenter(
         code=data.code.strip(),
         name=data.name.strip(),
@@ -196,6 +239,7 @@ def create_cost_center(db: Session, data: CostCenterIn, user: User) -> dict:
 def update_cost_center(db: Session, cost_center_id: UUID, data: CostCenterIn) -> dict:
     center = get_cost_center(db, cost_center_id)
     _assert_parent_ok(db, cost_center_id, data.parent_id)
+    _assert_code_free(db, data.code, exclude_id=cost_center_id)
     center.code = data.code.strip()
     center.name = data.name.strip()
     center.kind = data.kind
