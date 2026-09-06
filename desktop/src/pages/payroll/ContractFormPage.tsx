@@ -127,7 +127,9 @@ export function ContractFormPage({
     setLocations(loc)
     setJobs(job)
     setFactors(fac)
-    setCostCenters(cc)
+    //: مرکزِ غیرفعال دیگر برچسب نمی‌خورد (سرور هم ردش می‌کند)، پس اصلاً پیشنهاد
+    //: نمی‌شود — همان کاری که چهار فرمِ دیگر از قبل می‌کردند و این‌جا جا افتاده بود.
+    setCostCenters(cc.filter((c) => c.is_active))
     setTaxGroups(tax)
     setBranches(br)
   }

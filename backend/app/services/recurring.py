@@ -64,7 +64,9 @@ def _apply(tpl: RecurringJournalEntry, data: RecurringEntryIn, db: Session) -> N
     tpl.interval = data.interval
     tpl.start_date = data.start_date
     tpl.end_date = data.end_date
-    tpl.cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
+    #: `current` تا ویرایشِ قالبی که مرکزش بعداً بسته شده ممکن بماند — کاربر
+    #: نباید برای عوض‌کردنِ عنوان مجبور به عوض‌کردنِ مرکز شود.
+    tpl.cost_center_id = resolve_cost_center_id(db, data.cost_center_id, current=tpl.cost_center_id)
     # تا وقتی هنوز اجرا نشده، سررسیدِ بعدی همان شروع است؛ بعد از اولین اجرا دست نمی‌خورد
     # تا ویرایشِ قالب سندهای گذشته را دوباره نسازد.
     if tpl.last_run_date is None:

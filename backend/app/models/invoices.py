@@ -2,7 +2,16 @@ import uuid
 from datetime import date as date_
 from datetime import datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +26,7 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_sales_invoices_tenant_number"),
         UniqueConstraint("tenant_id", "source_order_id", name="uq_sales_invoices_tenant_source_order_id"),
+        CheckConstraint("broker_commission >= 0", name="ck_sales_invoices_broker_commission"),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
@@ -70,6 +80,16 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     sale_type_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sale_types.id", ondelete="SET NULL"), nullable=True
     )
+
+    #: واسطه‌ی این معامله — طرف‌حسابی با نقشِ `is_broker`. NULL = بی‌واسطه.
+    #: با `salesperson_id` اشتباه نشود: آن کاربرِ داخلیِ ماست، این طرفِ بیرونی.
+    broker_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    #: کارمزدِ واسطه، **قفل‌شده در لحظه‌ی ثبت**. مشتق نیست چون
+    #: `contacts.commission_rate` نرخِ امروز است و عوض می‌شود؛ این مبلغ بدهیِ همان
+    #: فروش است. همان دلیلی که `tax_amount` هم کنارِ `tax_rate` ذخیره می‌شود.
+    broker_commission: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True

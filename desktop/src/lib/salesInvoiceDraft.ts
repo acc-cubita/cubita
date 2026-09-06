@@ -66,6 +66,7 @@ export function useSalesInvoiceDraft({
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.salesInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = usePersistentState('cubita.draft.salesInvoice.contactId', '', persistOff)
+  const [brokerId, setBrokerId] = usePersistentState('cubita.draft.salesInvoice.brokerId', '', persistOff)
   const [credit, setCredit] = useState<CreditStatus | null>(null)
   // تخفیفِ خودکارِ سطحِ باشگاه (اگر در تنظیماتِ باشگاه فعال باشد).
   const [tierAuto, setTierAuto] = useState(false)
@@ -299,6 +300,19 @@ export function useSalesInvoiceDraft({
   //: درخواستِ جدا: فهرست از قبل این‌جاست و نمای دومِ همان داده نمی‌سازیم.
   const blacklisted = contacts.some((c) => c.id === contactId && c.is_blacklisted)
 
+  //: فقط طرف‌حساب‌هایی که واقعاً نقشِ «واسط» دارند. سرور هم همین را می‌سنجد؛
+  //: این‌جا فقط جلوی انتخابِ نشدنی گرفته می‌شود.
+  const brokers = contacts.filter((c) => c.is_broker)
+  //: **پیش‌نمایش** است نه مقدارِ ذخیره‌شونده. عددِ قطعی را سرور در لحظه‌ی ثبت قفل
+  //: می‌کند؛ این فقط می‌گوید «حدوداً چقدر می‌شود» تا کاربر پیش از ثبت ببیند.
+  const brokerCommission = (() => {
+    const b = brokers.find((c) => c.id === brokerId)
+    if (!b) return null
+    const pct = Number(b.commission_rate) || 0
+    if (!(pct > 0)) return { name: b.name, pct: 0, amount: 0 }
+    return { name: b.name, pct, amount: Math.round((total * pct) / 100) }
+  })()
+
   //: «جلوگیری کن» در فرمِ طرف حساب باید واقعاً جلو بگیرد — تا امروز ذخیره
   //: می‌شد و هیچ اثری نداشت. تصمیم این‌جا گرفته می‌شود، در لحظه‌ی فروش، نه سرِ
   //: همگام‌سازیِ آفلاین که فروش قبلاً انجام شده. سرور هم همین گارد را دارد؛
@@ -343,6 +357,7 @@ export function useSalesInvoiceDraft({
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
       contact_id: contactId || null,
+      broker_id: brokerId || null,
       currency_code: currencyCode || null,
       exchange_rate: rate,
       // مبالغ به پایه (ریال) تبدیل می‌شوند؛ دفتر همیشه پایه است.
@@ -369,6 +384,7 @@ export function useSalesInvoiceDraft({
       setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '' }])
       setCostCenterId('')
       setContactId('')
+      setBrokerId('')
       setCurrencyCode('')
       setInvoiceDiscount('')
       setRoundStep(0)
@@ -414,6 +430,10 @@ export function useSalesInvoiceDraft({
     credit,
     blacklisted,
     creditBlock,
+    brokers,
+    brokerId,
+    setBrokerId,
+    brokerCommission,
     autoTier,
     currencies,
     currencyCode,

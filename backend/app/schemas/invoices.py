@@ -40,6 +40,9 @@ class SalesInvoiceIn(BaseModel):
     contact_id: UUID | None = None
     cost_center_id: UUID | None = None
     description: str = ""
+    #: واسطه‌ی معامله. باید طرف‌حسابی با نقشِ «واسط» باشد؛ کارمزدش از نرخِ همان
+    #: طرف‌حساب حساب و روی فاکتور قفل می‌شود. None = بی‌واسطه.
+    broker_id: UUID | None = None
     lines: list[SalesInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
@@ -108,6 +111,11 @@ class SalesInvoiceOut(BaseModel):
     closed_at: datetime | None = None
     salesperson_id: UUID | None = None
     sale_type_id: UUID | None = None
+    broker_id: UUID | None = None
+    #: کارمزدِ قفل‌شده در لحظه‌ی ثبت — نه محاسبه‌ی دوباره از نرخِ امروزِ واسطه.
+    broker_commission: Decimal = Decimal(0)
+    #: نامِ واسطه برای نمایش؛ روتر پُرش می‌کند، پس در پاسخِ خام None می‌ماند.
+    broker_name: str | None = None
     #: ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زده. `created_by_id` همیشه هست؛
     #: نام/نقش را روتر پُر می‌کند (join به users/memberships)، پس برای پاسخِ خام None می‌مانند.
     created_by_id: UUID | None = None

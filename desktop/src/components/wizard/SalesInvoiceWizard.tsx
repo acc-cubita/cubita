@@ -147,6 +147,26 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
           )}
         </label>
       )}
+      {d.brokers.length > 0 && (
+        <label>
+          واسطه (اختیاری)
+          <select value={d.brokerId} onChange={(e) => d.setBrokerId(e.target.value)}>
+            <option value="">— بدون واسطه —</option>
+            {d.brokers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {d.brokerCommission && (
+            <span className="field-hint">
+              {d.brokerCommission.pct > 0
+                ? `کارمزد ${d.brokerCommission.pct.toLocaleString('fa-IR')}٪ — حدود ${d.brokerCommission.amount.toLocaleString('fa-IR')} (مبلغِ قطعی هنگام ثبت قفل می‌شود)`
+                : 'نرخِ کارمزدِ این واسطه صفر است — ثبت می‌شود ولی کارمزدی ندارد.'}
+            </span>
+          )}
+        </label>
+      )}
       {d.currencies.length > 0 && (
         <div className="field-row">
           <label>

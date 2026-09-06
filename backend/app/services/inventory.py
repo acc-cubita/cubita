@@ -10,7 +10,7 @@ from app.services import tafsili
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.advanced_inventory import StockBatch
-from app.models.inventory import Item, StockAdjustment, StockLedger
+from app.models.inventory import Contact, Item, StockAdjustment, StockLedger
 from app.models.invoices import (
     PurchaseInvoice,
     PurchaseInvoiceLine,
@@ -89,6 +89,36 @@ def compute_tax(net: Decimal, rate: Decimal) -> Decimal:
     if rate is None or rate <= 0:
         return Decimal(0)
     return (net * rate / Decimal(100)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+
+
+def resolve_broker(db: Session, broker_id: UUID | None, net: Decimal) -> tuple[UUID | None, Decimal]:
+    """واسطه را اعتبارسنجی می‌کند و کارمزدش را **در همین لحظه قفل می‌کند**.
+
+    مبنا `net` است — خالصِ پس از تخفیف و پیش از مالیات. همان مبنایی که قاعده‌ی
+    پورسانتِ فروشنده با `basis="revenue"` به‌کار می‌برد، تا دو جای برنامه یک چیز را
+    دو جور حساب نکنند. مالیات وارد مبنا نمی‌شود چون پولِ دولت است نه فروشِ ما.
+
+    برگرداندنِ مبلغ به‌جای نگه‌داشتنِ نرخ عمدی است: `contacts.commission_rate` نرخِ
+    امروز است و فردا عوض می‌شود؛ کارمزدِ این فروش همین‌جا قطعی شده.
+    """
+    if broker_id is None:
+        return None, Decimal(0)
+
+    broker = db.get(Contact, broker_id)
+    if broker is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "واسطه‌ی انتخاب‌شده پیدا نشد")
+    #: بدونِ این، هر طرف‌حسابی می‌توانست واسطه شود و تیکِ «واسط» تزئینی می‌شد.
+    if not broker.is_broker:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"«{broker.name}» نقشِ واسط ندارد — در فرمِ طرف حساب تیکِ «واسط» را بزنید.",
+        )
+
+    rate = Decimal(broker.commission_rate or 0)
+    if rate <= 0:
+        return broker.id, Decimal(0)
+    commission = (max(net, Decimal(0)) * rate / Decimal(100)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    return broker.id, commission
 
 
 def get_stock_qty(db: Session, item_id: UUID, warehouse_id: UUID) -> Decimal:
@@ -225,6 +255,8 @@ def post_sales_invoice(
         db, data.contact_id, total_amount + tax_amount + rounding, enforce=enforce_credit
     )
 
+    broker_id, broker_commission = resolve_broker(db, data.broker_id, total_amount)
+
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
@@ -313,6 +345,8 @@ def post_sales_invoice(
         exchange_rate=data.exchange_rate,
         journal_entry_id=journal_entry.id,
         source_order_id=data.source_order_id,
+        broker_id=broker_id,
+        broker_commission=broker_commission,
         created_by_id=user.id,
         lines=invoice_lines,
     )

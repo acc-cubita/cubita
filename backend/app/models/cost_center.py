@@ -1,7 +1,7 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,9 +42,19 @@ class CostCenter(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(f"kind IN {COST_CENTER_KINDS}", name="ck_cost_centers_kind"),
         Index("ix_cost_centers_tenant_parent", "tenant_id", "parent_id"),
+        #: کدِ تکراری چیزی را شناسایی نمی‌کند. **جزئی** است چون کد اختیاری می‌ماند:
+        #: بدونِ شرطِ `code <> ''` دومین مرکزِ بی‌کد به اولی گیر می‌کرد.
+        Index(
+            "uq_cost_centers_tenant_code",
+            "tenant_id",
+            "code",
+            unique=True,
+            postgresql_where=text("code <> ''"),
+        ),
     )
 
-    #: کدِ اختیاریِ کوتاه برای مرتب‌سازی/ارجاع؛ یکتا نیست چون برچسبِ کاربر است.
+    #: کدِ اختیاریِ کوتاه برای مرتب‌سازی/ارجاع. خالی مجاز است؛ اگر داده شود، در
+    #: همان مستأجر یکتاست (`uq_cost_centers_tenant_code`).
     code: Mapped[str] = mapped_column(String(30), default="", server_default="")
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(20), default="project", server_default="project")
