@@ -303,6 +303,8 @@ def create_person(db: Session, data: RelatedPersonIn, user: User) -> dict:
         contact_id=data.contact_id,
         name=data.name.strip(),
         role=data.role.strip(),
+        name2=data.name2.strip(),
+        role2=data.role2.strip(),
         phone=data.phone.strip(),
         email=data.email.strip(),
         is_primary=data.is_primary,
@@ -325,6 +327,8 @@ def update_person(db: Session, person_id: UUID, data: RelatedPersonIn) -> dict:
     row.contact_id = data.contact_id
     row.name = data.name.strip()
     row.role = data.role.strip()
+    row.name2 = data.name2.strip()
+    row.role2 = data.role2.strip()
     row.phone = data.phone.strip()
     row.email = data.email.strip()
     row.is_primary = data.is_primary
@@ -349,6 +353,8 @@ def _as_person(p: RelatedPerson) -> dict:
         "contact_id": p.contact_id,
         "name": p.name,
         "role": p.role,
+        "name2": p.name2,
+        "role2": p.role2,
         "phone": p.phone,
         "email": p.email,
         "is_primary": p.is_primary,

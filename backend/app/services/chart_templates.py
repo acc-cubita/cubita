@@ -12,116 +12,78 @@
 - سرفصلِ والد با **کد** پیدا می‌شود، پس اگر مشتری چارت را بازشماره‌گذاری کرده باشد و
   سرفصل نباشد، همان‌جا ساخته می‌شود.
 - تکرارِ اعمال بی‌خطر است (idempotent): بارِ دوم چیزی اضافه نمی‌شود.
+
+**خودِ ردیف‌ها داده‌اند، نه کد** — در `app/data/chart_templates.json`. این ماژول فقط
+می‌خواندشان و شکلشان را می‌سنجد. جداکردنشان یعنی اضافه‌کردنِ یک حساب به قالب، ویرایشِ
+یک فایلِ داده است نه تغییرِ منطق؛ و `test_chart_templates.py` شکلِ فایل را قفل می‌کند
+تا خرابیِ داده در زمانِ *بارگذاری* پیدا شود نه وسطِ درجِ قالب برای مشتری.
 """
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 #: هر ردیف: (کد, نام, نوع, is_group, کدِ والد)
 Row = tuple[str, str, str, bool, str | None]
 
-#: سرفصل‌هایی که ممکن است در چارتِ پایه نباشند و قالب‌ها به آن‌ها تکیه می‌کنند.
-_PARENTS: list[Row] = [
-    ("1", "دارایی‌ها", "asset", True, None),
-    ("11", "دارایی‌های جاری", "asset", True, "1"),
-    ("12", "دارایی‌های غیرجاری", "asset", True, "1"),
-    ("2", "بدهی‌ها", "liability", True, None),
-    ("21", "بدهی‌های جاری", "liability", True, "2"),
-    ("3", "حقوق صاحبان سرمایه", "equity", True, None),
-    ("4", "درآمدها", "income", True, None),
-    ("5", "هزینه‌ها", "expense", True, None),
-]
+DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "chart_templates.json"
 
-#: حساب‌هایی که هر کسب‌وکاری — با هر صنفی — به آن‌ها می‌رسد.
-COMMON: list[Row] = [
-    ("1108", "پیش‌پرداخت‌ها", "asset", False, "11"),
-    ("1109", "سپرده‌ها و ودیعه‌ها", "asset", False, "11"),
-    ("1110", "جاری شرکا", "asset", False, "11"),
-    ("2106", "پیش‌دریافت از مشتریان", "liability", False, "21"),
-    ("2107", "هزینه‌های پرداختنی", "liability", False, "21"),
-    ("2108", "وام و تسهیلات دریافتی", "liability", False, "21"),
-    ("4104", "تخفیفات و برگشت از فروش", "income", False, "4"),
-    ("4105", "درآمد حاصل از سود سپرده و متفرقه", "income", False, "4"),
-    ("5107", "هزینه آب، برق، گاز و تلفن", "expense", False, "5"),
-    ("5108", "هزینه ملزومات و لوازم مصرفی", "expense", False, "5"),
-    ("5109", "هزینه تبلیغات و بازاریابی", "expense", False, "5"),
-    ("5110", "هزینه حمل و نقل", "expense", False, "5"),
-    ("5111", "کارمزد و هزینه‌های بانکی", "expense", False, "5"),
-    ("5112", "هزینه تعمیر و نگهداری", "expense", False, "5"),
-    ("5113", "هزینه بیمه", "expense", False, "5"),
-    ("5114", "هزینه مالیات و عوارض", "expense", False, "5"),
-    ("5115", "سایر هزینه‌های عملیاتی", "expense", False, "5"),
-]
+#: نوع‌های مجاز — همان‌های `ACCOUNT_TYPES`، این‌جا تکرار می‌شوند تا بارگذاری به مدل
+#: وابسته نباشد و بشود فایل را بدونِ بالاآوردنِ SQLAlchemy سنجید.
+_VALID_TYPES = ("asset", "liability", "equity", "income", "expense")
 
-TRADING: list[Row] = [
-    ("1120", "موجودی کالای در راه", "asset", False, "11"),
-    ("1121", "پیش‌پرداخت خرید کالا", "asset", False, "11"),
-    ("4110", "فروش عمده", "income", False, "4"),
-    ("4111", "فروش خرده", "income", False, "4"),
-    ("5120", "تخفیفات و برگشت از خرید", "expense", False, "5"),
-    ("5121", "هزینه گمرک و ترخیص کالا", "expense", False, "5"),
-    ("5122", "هزینه انبارداری", "expense", False, "5"),
-    ("5123", "هزینه بسته‌بندی", "expense", False, "5"),
-]
 
-SERVICES: list[Row] = [
-    ("1130", "کار در جریانِ خدمات", "asset", False, "11"),
-    ("4120", "درآمد ارائه خدمات", "income", False, "4"),
-    ("4121", "درآمد قراردادهای پشتیبانی", "income", False, "4"),
-    ("5130", "هزینه مستقیم ارائه خدمات", "expense", False, "5"),
-    ("5131", "حق‌الزحمه همکاران و پیمانکاران فرعی", "expense", False, "5"),
-    ("5132", "هزینه ایاب و ذهاب و مأموریت", "expense", False, "5"),
-    ("5133", "هزینه ابزار و نرم‌افزار", "expense", False, "5"),
-]
+def _row(raw: dict, where: str) -> Row:
+    """یک ردیفِ JSON را به تاپل تبدیل می‌کند و همان‌جا اعتبارش را می‌سنجد.
 
-MANUFACTURING: list[Row] = [
-    ("1140", "موجودی مواد اولیه", "asset", False, "11"),
-    ("1141", "موجودی کالای در جریان ساخت", "asset", False, "11"),
-    ("1142", "موجودی کالای ساخته‌شده", "asset", False, "11"),
-    ("1143", "موجودی قطعات و لوازم یدکی", "asset", False, "11"),
-    ("5140", "مواد مستقیم مصرفی", "expense", False, "5"),
-    ("5141", "دستمزد مستقیم تولید", "expense", False, "5"),
-    ("5142", "سربار ساخت", "expense", False, "5"),
-    ("5143", "هزینه انرژی خط تولید", "expense", False, "5"),
-    ("5144", "ضایعات تولید", "expense", False, "5"),
-    ("5145", "هزینه کنترل کیفیت", "expense", False, "5"),
-]
+    خطا این‌جا گرفته می‌شود — لحظه‌ی بارگذاریِ ماژول — نه وسطِ درجِ قالب. اگر ردیفی
+    خراب باشد، برنامه بالا نمی‌آید؛ بهتر از آنکه مشتری وسطِ کار نصفه‌کاره بماند.
+    """
+    missing = {"code", "title", "type"} - raw.keys()
+    if missing:
+        raise ValueError(f"ردیفِ ناقص در {where}: فیلدهای {sorted(missing)} نیستند — {raw}")
+    if raw["type"] not in _VALID_TYPES:
+        raise ValueError(f"نوعِ نامعتبر «{raw['type']}» در {where} برای کدِ {raw['code']}")
+    if not str(raw["code"]).isdigit():
+        raise ValueError(f"کدِ غیرعددی «{raw['code']}» در {where}")
+    return (
+        str(raw["code"]),
+        raw["title"],
+        raw["type"],
+        bool(raw.get("is_group", False)),
+        raw.get("parent"),
+    )
 
-CONTRACTING: list[Row] = [
-    ("1150", "کار در جریانِ پیمان", "asset", False, "11"),
-    ("1151", "صورت‌وضعیت تأییدنشده", "asset", False, "11"),
-    ("1152", "سپرده حسن انجام کار (نزد کارفرما)", "asset", False, "11"),
-    ("1153", "ماشین‌آلات و تجهیزات کارگاه", "asset", False, "12"),
-    ("2110", "پیش‌دریافت پیمان", "liability", False, "21"),
-    ("2111", "سپرده حسن انجام کار پیمانکاران فرعی", "liability", False, "21"),
-    ("4130", "درآمد پیمان", "income", False, "4"),
-    ("5150", "هزینه مصالح پیمان", "expense", False, "5"),
-    ("5151", "دستمزد کارگاه", "expense", False, "5"),
-    ("5152", "هزینه ماشین‌آلات کارگاه", "expense", False, "5"),
-    ("5153", "هزینه پیمانکاران جزء", "expense", False, "5"),
-    ("5154", "سربار کارگاه", "expense", False, "5"),
-]
 
-TEMPLATES: dict[str, dict] = {
-    "trading": {
-        "label": "کدینگ بازرگانی",
-        "hint": "خرید و فروشِ کالا: کالای در راه، ترخیص، انبارداری، فروشِ عمده و خرده.",
-        "rows": TRADING,
-    },
-    "services": {
-        "label": "کدینگ خدماتی",
-        "hint": "ارائه‌ی خدمات: درآمدِ خدمات و قرارداد، کارِ در جریان، هزینه‌ی مستقیمِ خدمت.",
-        "rows": SERVICES,
-    },
-    "manufacturing": {
-        "label": "کدینگ تولیدی",
-        "hint": "تولید: مواد اولیه، کالای در جریان ساخت، دستمزد مستقیم و سربارِ ساخت.",
-        "rows": MANUFACTURING,
-    },
-    "contracting": {
-        "label": "کدینگ پیمانکاری",
-        "hint": "پیمانکاری: کارِ در جریانِ پیمان، صورت‌وضعیت، حسن انجام کار، سربارِ کارگاه.",
-        "rows": CONTRACTING,
-    },
-}
+def _load() -> tuple[list[Row], list[Row], dict[str, dict]]:
+    raw = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    parents = [_row(r, "parents") for r in raw["parents"]]
+    common = [_row(r, "common") for r in raw["common"]]
+    templates = {
+        key: {
+            "label": meta["label"],
+            "hint": meta["hint"],
+            "rows": [_row(r, f"templates.{key}") for r in meta["rows"]],
+        }
+        for key, meta in raw["templates"].items()
+    }
+
+    #: هر کدی که ردیف‌ها به‌عنوانِ والد نام می‌برند باید واقعاً تعریف شده باشد،
+    #: وگرنه درجِ قالب سرفصلِ ناقص می‌سازد و درخت جای عجیبی رشد می‌کند.
+    defined = {r[0] for r in (*parents, *common)} | {
+        r[0] for meta in templates.values() for r in meta["rows"]
+    }
+    for scope, rows in [("parents", parents), ("common", common), *(
+        (f"templates.{k}", m["rows"]) for k, m in templates.items()
+    )]:
+        for code, _name, _type, _group, parent in rows:
+            if parent is not None and parent not in defined:
+                raise ValueError(f"والدِ «{parent}» در {scope} (کدِ {code}) هیچ‌جا تعریف نشده")
+
+    return parents, common, templates
+
+
+_PARENTS, COMMON, TEMPLATES = _load()
 
 
 def rows_for(key: str) -> list[Row]:

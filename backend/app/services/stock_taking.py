@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalEntry, JournalLine
+from app.services import tafsili
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.stock_count import StockCountLine, StockCountSession
@@ -150,6 +151,7 @@ def post_session(db: Session, session_id: UUID, user: User) -> StockCountSession
                 JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
             ],
         )
+        tafsili.assert_entry_has_tafsili(db, entry)
         db.add(entry)
         db.flush()
         session.journal_entry_id = entry.id

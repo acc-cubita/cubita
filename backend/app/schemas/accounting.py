@@ -4,16 +4,33 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.models.accounting import ACCOUNT_TYPES, ENTRY_STATUSES
+from app.models.accounting import ACCOUNT_NATURES, ACCOUNT_TYPES, ENTRY_STATUSES
 
 
 class AccountOut(BaseModel):
     id: UUID
     code: str
     name: str
+    #: عنوانِ دوم (معمولاً انگلیسی). خالی = ندارد.
+    name2: str = ""
     type: str
+    #: ماهیتِ *صریح*؛ NULL یعنی از نوعِ حساب مشتق می‌شود.
+    nature: str | None = None
+    #: ماهیتِ *مؤثر* — همان چیزی که گزارش با آن می‌سنجد. همیشه پر است، پس رابط
+    #: لازم نیست منطقِ مشتق‌شدن را تکرار کند.
+    effective_nature: str = "any"
     is_group: bool
     is_active: bool
+    #: صورتِ مالی — `balance_sheet` یا `income_statement`. **مشتق از `type` است، نه
+    #: ستون**: ذخیره‌کردنش دو منبعِ حقیقت می‌ساخت که می‌توانند با هم نخوانند.
+    statement_type: str = "balance_sheet"
+    #: ویژگی‌های حساب — شش پرچمِ فرمِ ویرایش. معنای هرکدام در مدل مستند است.
+    nature_control: bool = False
+    is_fx: bool = False
+    fx_revaluable: bool = False
+    accepts_tafsili: bool = False
+    has_tracking: bool = False
+    in_management_reports: bool = True
     parent_id: UUID | None
     #: نقشِ سیستمی (cash، inventory، …) — اگر پرشده باشد، حسابِ سیستمی است و
     #: نه قابلِ حذف است نه غیرفعال‌سازی. برای حساب‌های معمولی NULL.
@@ -22,12 +39,38 @@ class AccountOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class AccountCreateIn(BaseModel):
+class AccountTraitsIn(BaseModel):
+    """ویژگی‌های حساب — مشترک بینِ ساخت و ویرایش.
+
+    قیدِ «تسعیر پذیر فقط روی ارزی» این‌جا *سنجیده نمی‌شود*، چون در ویرایش هر دو
+    فیلد اختیاری‌اند و ممکن است فقط یکی بیاید؛ داوریِ درست به مقدارِ فعلیِ حساب
+    نیاز دارد و آن فقط در روتر در دسترس است.
+    """
+
+    #: کنترلِ ماهیت طی دوره — رصدِ این حساب در گزارشِ خلافِ ماهیت.
+    nature_control: bool = False
+    #: ارزی — فیلدهای ارزِ ردیفِ سند را باز می‌کند.
+    is_fx: bool = False
+    #: تسعیرپذیر — فقط روی حسابِ ارزی. خاموش‌بودنش روی حسابِ ارزی یعنی «تسعیرش نکن».
+    fx_revaluable: bool = False
+    #: تفصیلی‌پذیر — ردیفِ سندِ این حساب **باید** تفصیلی داشته باشد. ربطی به
+    #: زیرشاخه‌ی درختی ندارد؛ آن کدینگِ چهارسطحی است و قیدِ خودش را دارد.
+    accepts_tafsili: bool = False
+    #: پیگیری — شماره و تاریخِ پیگیری روی ردیفِ سندِ این حساب.
+    has_tracking: bool = False
+    #: نمایش در گزارشاتِ مدیریتی. پیش‌فرض روشن.
+    in_management_reports: bool = True
+
+
+class AccountCreateIn(AccountTraitsIn):
     """ساختِ حسابِ تازه در چارت — زیرِ یک سرفصل یا در ریشه."""
 
     code: str
     name: str
+    name2: str = ""
     type: str
+    #: خالی بگذارید تا از نوعِ حساب مشتق شود — حالتِ درست برای تقریباً همه‌ی حساب‌ها.
+    nature: str | None = None
     is_group: bool = False
     parent_id: UUID | None = None
 
@@ -45,13 +88,36 @@ class AccountCreateIn(BaseModel):
             raise ValueError("نوعِ حساب نامعتبر است")
         return v
 
+    @field_validator("nature")
+    @classmethod
+    def _valid_nature(cls, v: str | None) -> str | None:
+        #: رشته‌ی خالی از فرم می‌آید و همان «مشتق از نوع» است، نه مقدارِ نامعتبر.
+        if not v:
+            return None
+        if v not in ACCOUNT_NATURES:
+            raise ValueError("ماهیتِ حساب نامعتبر است")
+        return v
+
 
 class AccountUpdateIn(BaseModel):
-    """ویرایشِ حساب — فقط نام و فعال‌بودن. کد/نوع/سرفصل پس از ساخت ثابت‌اند (روی
-    اسناد و گزارش‌ها نشسته‌اند)."""
+    """ویرایشِ حساب — نام، عنوانِ دوم، ماهیت و فعال‌بودن. کد/نوع/سرفصل پس از ساخت
+    ثابت‌اند (روی اسناد و گزارش‌ها نشسته‌اند).
+
+    ماهیت برخلافِ آن‌ها هر وقت قابلِ تغییر است: چیزی را بازنویسی نمی‌کند، فقط
+    معیارِ گزارش را عوض می‌کند."""
 
     name: str | None = None
+    name2: str | None = None
+    nature: str | None = None
     is_active: bool | None = None
+    #: ویژگی‌های حساب — همه اختیاری. `exclude_unset` در روتر یعنی فیلدِ نیامده
+    #: دست‌نخورده می‌ماند، پس فرم می‌تواند فقط همان تیکی را بفرستد که عوض شده.
+    nature_control: bool | None = None
+    is_fx: bool | None = None
+    fx_revaluable: bool | None = None
+    accepts_tafsili: bool | None = None
+    has_tracking: bool | None = None
+    in_management_reports: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -61,6 +127,15 @@ class AccountUpdateIn(BaseModel):
         if not v.strip():
             raise ValueError("نام حساب نمی‌تواند خالی باشد")
         return v.strip()
+
+    @field_validator("nature")
+    @classmethod
+    def _valid_nature(cls, v: str | None) -> str | None:
+        if not v:
+            return None
+        if v not in ACCOUNT_NATURES:
+            raise ValueError("ماهیتِ حساب نامعتبر است")
+        return v
 
 
 class JournalLineIn(BaseModel):
@@ -75,6 +150,48 @@ class JournalLineIn(BaseModel):
     fx_amount: Decimal | None = None
     fx_rate: Decimal | None = None
     analytic_id: UUID | None = None
+    #: پیگیری — فقط برای حسابی که `has_tracking` دارد؛ وگرنه روتر ردش می‌کند تا
+    #: داده‌ی پیگیری بی‌صدا دور ریخته نشود.
+    tracking_no: str | None = Field(default=None, max_length=50)
+    tracking_date: date | None = None
+
+    @field_validator("tracking_no")
+    @classmethod
+    def _clean_tracking_no(cls, v: str | None) -> str | None:
+        #: مثلِ `sub_number`: رشته‌ی خالیِ فرم همان «ندارد» است، نه مقدار.
+        return (v or "").strip() or None
+
+    @model_validator(mode="after")
+    def _fx_is_all_or_nothing(self) -> "JournalLineIn":
+        """سه‌گانه‌ی ارزی یا کامل است یا اصلاً نیست.
+
+        ردیفِ نیمه‌کاره بی‌صدا خراب می‌شود، نه با خطا:
+
+        * بدونِ `fx_rate`، نرخِ **لحظه‌ی ثبت** برای همیشه گم می‌شود. مبلغِ ریالیِ
+          ردیف همان می‌ماند ولی دیگر معلوم نیست از کدام نرخ آمده، و حسابرسی و
+          بازسازیِ تسعیر ناممکن می‌شود.
+        * بدونِ `fx_amount`، ردیف از فیلترِ `fx_revaluation_preview` بیرون می‌افتد
+          و تسعیرِ پایانِ دوره کمتر از واقعیت درمی‌آید — بی‌آنکه جایی خطایی بیاید.
+        * بدونِ `currency_code` معلوم نیست عدد به کدام ارز است.
+
+        پس یا هر سه، یا هیچ‌کدام. مبلغِ ریالی (بدهکار/بستانکار) جدا و همیشه لازم
+        است؛ این سه فقط *مبنای* آن عددند.
+        """
+        parts = {
+            "ارز": self.currency_code,
+            "مبلغِ ارزی": self.fx_amount,
+            "نرخ": self.fx_rate,
+        }
+        given = [name for name, value in parts.items() if value is not None]
+        if given and len(given) != len(parts):
+            missing = [name for name, value in parts.items() if value is None]
+            raise ValueError(
+                f"ردیفِ ارزی ناقص است: «{'، '.join(given)}» آمده ولی "
+                f"«{'، '.join(missing)}» نه. هر سه با هم لازم‌اند."
+            )
+        if self.fx_rate is not None and self.fx_rate <= 0:
+            raise ValueError("نرخِ ارز باید بزرگ‌تر از صفر باشد")
+        return self
 
 
 class JournalEntryIn(BaseModel):
@@ -144,6 +261,8 @@ class JournalLineOut(BaseModel):
     currency_code: str | None = None
     fx_amount: Decimal | None = None
     fx_rate: Decimal | None = None
+    tracking_no: str | None = None
+    tracking_date: date | None = None
 
     model_config = {"from_attributes": True}
 
@@ -169,3 +288,4 @@ class JournalEntryOut(BaseModel):
     lines: list[JournalLineOut]
 
     model_config = {"from_attributes": True}
+

@@ -1,9 +1,17 @@
 """قالب‌های آماده‌ی کدینگ: کاملِ صنف، بی‌اثر بودنِ اجرای دوباره، و دست‌نخوردنِ حسابِ موجود."""
+import json
+
 import pytest
 from fastapi import HTTPException
 
 from app.models.accounting import Account
-from app.routers.accounts import AccountCodeIn, apply_template, change_code, list_templates
+from app.routers.accounts import (
+    AccountCodeIn,
+    apply_template,
+    change_code,
+    list_templates,
+    revert_template,
+)
 from app.services import chart_templates as ct
 
 
@@ -157,3 +165,131 @@ def test_setup_status_counts_a_hand_built_account(db):
     out = setup_status(db=db)
     assert out.custom == 1
     assert out.applied_template is None
+
+
+# ── برگرداندنِ قالب ───────────────────────────────────────────────────────────
+
+
+def test_revert_removes_exactly_what_apply_added(db):
+    """چرخه باید بسته باشد: درج و برگرداندن، چارت را سرِ جای اولش بگذارد."""
+    before = {c for (c,) in db.query(Account.code).all()}
+    added = apply_template("trading", db=db).created
+    assert added > 0
+
+    result = revert_template("trading", db=db)
+
+    assert result.removed == added
+    assert {c for (c,) in db.query(Account.code).all()} == before
+    assert result.kept == []
+
+
+def test_revert_keeps_an_account_that_has_a_document(db):
+    """قیدِ اصلی: حسابی که در سند آمده نباید برود — دفتر می‌شکند."""
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.accounting import JournalEntry, JournalLine
+    from app.models.user import User
+
+    apply_template("trading", db=db)
+    victim = db.query(Account).filter(Account.code == "1120").one()
+    user_id = db.query(User.id).scalar()
+    cash = db.query(Account).filter(Account.code == "1101").one()
+
+    entry = JournalEntry(entry_date=date(2026, 1, 1), description="آزمون", created_by_id=user_id)
+    entry.lines = [
+        JournalLine(account_id=victim.id, debit=Decimal(1), credit=Decimal(0)),
+        JournalLine(account_id=cash.id, debit=Decimal(0), credit=Decimal(1)),
+    ]
+    db.add(entry)
+    db.flush()
+
+    result = revert_template("trading", db=db)
+
+    kept_codes = {k.code for k in result.kept}
+    assert "1120" in kept_codes
+    assert next(k for k in result.kept if k.code == "1120").reason == "در سند استفاده شده"
+    assert db.query(Account).filter(Account.code == "1120").first() is not None
+
+
+def test_revert_never_touches_the_baseline_chart(db):
+    """حساب‌های پایه مالِ قالب نیستند، حتی اگر کدشان در قالب هم آمده باشد."""
+    from app.seed import CHART_OF_ACCOUNTS
+
+    baseline = {code for code, *_ in CHART_OF_ACCOUNTS}
+    apply_template("trading", db=db)
+    revert_template("trading", db=db)
+
+    survivors = {c for (c,) in db.query(Account.code).all()}
+    assert baseline <= survivors, "هیچ حسابِ پایه‌ای نباید با برگرداندنِ قالب برود"
+
+
+def test_revert_keeps_system_role_accounts(db):
+    """نقشِ سیستمی یعنی ثبتِ خودکار به آن تکیه دارد."""
+    apply_template("trading", db=db)
+    roles_before = db.query(Account).filter(Account.system_role.isnot(None)).count()
+    revert_template("trading", db=db)
+    assert db.query(Account).filter(Account.system_role.isnot(None)).count() == roles_before
+
+
+def test_revert_of_unknown_template_is_404(db):
+    with pytest.raises(HTTPException) as err:
+        revert_template("no-such-industry", db=db)
+    assert err.value.status_code == 404
+
+
+def test_revert_is_safe_to_repeat(db):
+    """بارِ دوم چیزی برای برداشتن نیست و نباید خطا بدهد."""
+    apply_template("trading", db=db)
+    revert_template("trading", db=db)
+    again = revert_template("trading", db=db)
+    assert again.removed == 0
+
+
+# ── قالب‌ها به‌عنوانِ داده ────────────────────────────────────────────────────
+
+
+def test_templates_come_from_the_data_file_not_the_code():
+    """قالب‌ها داده‌اند، نه کد — اضافه‌کردنِ حساب باید ویرایشِ JSON باشد نه پایتون."""
+    from app.services import chart_templates as t
+
+    assert t.DATA_FILE.exists(), "فایلِ داده باید کنارِ کد باشد و در همان مخزن"
+    raw = json.loads(t.DATA_FILE.read_text(encoding="utf-8"))
+    assert set(raw) == {"parents", "common", "templates"}
+    assert set(raw["templates"]) == {"trading", "services", "manufacturing", "contracting"}
+
+
+def test_every_parent_code_referenced_is_defined():
+    """**قیدِ اصلیِ داده.** والدی که تعریف نشده باشد، درجِ قالب را به ساختنِ سرفصلِ
+    ناقص می‌کشاند و درخت جای عجیبی رشد می‌کند. لودر همین را لحظه‌ی بارگذاری می‌سنجد،
+    این تست فقط قفلش می‌کند.
+    """
+    from app.services import chart_templates as t
+
+    defined = {row[0] for key in t.TEMPLATES for row in t.rows_for(key)}
+    for key in t.TEMPLATES:
+        for code, _name, _type, _group, parent in t.rows_for(key):
+            assert parent is None or parent in defined, f"والدِ {parent} برای {code} تعریف نشده"
+
+
+def test_a_broken_data_file_fails_loudly_at_load_time():
+    """خرابیِ داده باید موقعِ بارگذاری پیدا شود، نه وسطِ درجِ قالب برای مشتری."""
+    from app.services import chart_templates as t
+
+    with pytest.raises(ValueError, match="نوعِ نامعتبر"):
+        t._row({"code": "9999", "title": "x", "type": "not_a_type"}, "آزمون")
+    with pytest.raises(ValueError, match="ردیفِ ناقص"):
+        t._row({"code": "9999"}, "آزمون")
+    with pytest.raises(ValueError, match="غیرعددی"):
+        t._row({"code": "abc", "title": "x", "type": "asset"}, "آزمون")
+
+
+def test_row_order_puts_parents_before_children():
+    """ترتیب بخشی از قرارداد است: `apply_template` والد را پیش از فرزند می‌سازد."""
+    from app.services import chart_templates as t
+
+    for key in t.TEMPLATES:
+        seen: set[str] = set()
+        for code, _name, _type, _group, parent in t.rows_for(key):
+            assert parent is None or parent in seen, f"{code} پیش از والدش {parent} آمده"
+            seen.add(code)

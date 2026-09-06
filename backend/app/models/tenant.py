@@ -84,6 +84,14 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: قاعده‌ی کدینگِ چارت: رقمِ افزوده در هر سطح (گروه، کل، معین، تفصیلی).
     #: NULL = پیش‌فرضِ سرویس، پس حساب‌های موجود با ارتقا چیزی عوض نمی‌کنند.
     account_code_widths: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    #: سطحِ اجبارِ تفصیلی روی حساب‌های «تفصیلی پذیر» — انتخابِ خودِ کسب‌وکار:
+    #:   strict   = اجباری همه‌جا (سندِ دستی و ردیفِ ماژول‌ها)
+    #:   hybrid   = فقط سندِ دستی (پیش‌فرض)
+    #:   floating = هیچ‌جا مسدود نشود؛ فقط گزارش
+    #: NULL = پیش‌فرضِ سرویس. منطق در `app/services/tafsili.py`.
+    #: گزارشِ «ردیف‌های بدونِ تفصیلی» در **هر سه** حالت کار می‌کند؛ این انتخاب فقط
+    #: تعیین می‌کند چه چیزی مسدود شود، نه چه چیزی دیده شود.
+    tafsili_enforcement: Mapped[str | None] = mapped_column(String(20), nullable=True)
     #: «حقِ دسترسی»: ماژول‌های محدودی که سوپرادمین به این اکانت داده (مثلِ تولید).
     granted_modules: Mapped[list] = mapped_column(
         JSONB, default=list, server_default="[]", nullable=False

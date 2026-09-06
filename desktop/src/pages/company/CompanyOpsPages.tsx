@@ -5,22 +5,15 @@ import {
   BellRing,
   CheckCircle2,
   PlayCircle,
-  Save,
-  UserPlus,
 } from 'lucide-react'
 import {
   createCalendarEvent,
-  createContact,
   fetchCalendarEvents,
-  fetchContactGroups,
   fetchChartSetup,
   fetchFiscalYears,
-  fetchGeoLocations,
   type CalendarEventRecord,
-  type ContactGroupRecord,
   type ChartSetup,
   type FiscalYearRecord,
-  type GeoLocationRecord,
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
@@ -92,181 +85,6 @@ function Step({
 }
 
 // ── طرف حساب جدید ────────────────────────────────────────────────────────────
-
-export function ContactNewPage({
-  token,
-  onNavigate,
-}: {
-  token: string
-  onNavigate: (page: PageKey) => void
-}) {
-  const [groups, setGroups] = useState<ContactGroupRecord[]>([])
-  const [locations, setLocations] = useState<GeoLocationRecord[]>([])
-  const [msg, setMsg] = useState<Msg>(null)
-  const [busy, setBusy] = useState(false)
-
-  const [name, setName] = useState('')
-  const [type, setType] = useState('customer')
-  const [entityType, setEntityType] = useState<'real' | 'legal'>('real')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
-  const [nationalId, setNationalId] = useState('')
-  const [economicCode, setEconomicCode] = useState('')
-  const [postalCode, setPostalCode] = useState('')
-  const [groupId, setGroupId] = useState('')
-  const [geoId, setGeoId] = useState('')
-  const [creditLimit, setCreditLimit] = useState('')
-
-  useEffect(() => {
-    void fetchContactGroups(token)
-      .then((g) => setGroups(g.filter((x) => x.is_active)))
-      .catch(() => {})
-    void fetchGeoLocations(token)
-      .then((l) => setLocations(l.filter((x) => x.is_active)))
-      .catch(() => {})
-  }, [token])
-
-  function reset() {
-    setName('')
-    setPhone('')
-    setEmail('')
-    setAddress('')
-    setNationalId('')
-    setEconomicCode('')
-    setPostalCode('')
-    setCreditLimit('')
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return
-    setBusy(true)
-    setMsg(null)
-    try {
-      await createContact(token, {
-        name: name.trim(),
-        type,
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        address,
-        tax_id: null,
-        credit_limit: Number(creditLimit) || 0,
-        entity_type: entityType,
-        national_id: nationalId.trim() || null,
-        economic_code: economicCode.trim() || null,
-        postal_code: postalCode.trim() || null,
-        group_id: groupId || null,
-        geo_location_id: geoId || null,
-      })
-      setMsg({ text: `طرف‌حساب «${name.trim()}» ساخته شد.`, kind: 'ok' })
-      reset()
-    } catch (err) {
-      setMsg({ text: errText(err), kind: 'err' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="page panels">
-      <PageHeader
-        icon={UserPlus}
-        title="طرف حساب جدید"
-        description="مشتری یا تأمین‌کننده‌ی تازه، با گروه و محلِ جغرافیایی — تا از همان اول در گزارش‌های گروهی و منطقه‌ای درست بنشیند."
-      />
-      <Note msg={msg} />
-
-      <SectionCard icon={UserPlus} title="مشخصات" description="فقط «نام» الزامی است؛ بقیه هر وقت داشتید کامل می‌شود.">
-        <form onSubmit={(e) => void submit(e)} className="cmp-form">
-          <label className="cmp-form-wide">
-            <span>نام</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} />
-          </label>
-          <label>
-            <span>نوع</span>
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="customer">مشتری</option>
-              <option value="supplier">تأمین‌کننده</option>
-              <option value="both">هر دو</option>
-            </select>
-          </label>
-          <label>
-            <span>شخص</span>
-            <select value={entityType} onChange={(e) => setEntityType(e.target.value as 'real' | 'legal')}>
-              <option value="real">حقیقی</option>
-              <option value="legal">حقوقی</option>
-            </select>
-          </label>
-          <label>
-            <span>تلفن</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
-          </label>
-          <label>
-            <span>ایمیل</span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} />
-          </label>
-          <label>
-            <span>گروه</span>
-            <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-              <option value="">— بدون گروه —</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>محلِ جغرافیایی</span>
-            <select value={geoId} onChange={(e) => setGeoId(e.target.value)}>
-              <option value="">— تعیین‌نشده —</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.path}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{entityType === 'legal' ? 'شناسه ملی' : 'کد ملی'}</span>
-            <input value={nationalId} onChange={(e) => setNationalId(e.target.value)} maxLength={20} />
-          </label>
-          <label>
-            <span>کد اقتصادی</span>
-            <input value={economicCode} onChange={(e) => setEconomicCode(e.target.value)} maxLength={20} />
-          </label>
-          <label>
-            <span>کد پستی</span>
-            <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} maxLength={20} />
-          </label>
-          <label>
-            <span>سقف اعتبار (ریال)</span>
-            <input
-              type="number"
-              value={creditLimit}
-              onChange={(e) => setCreditLimit(e.target.value)}
-              placeholder="۰ = بدون سقف"
-            />
-          </label>
-          <label className="cmp-form-wide">
-            <span>نشانی</span>
-            <input value={address} onChange={(e) => setAddress(e.target.value)} />
-          </label>
-
-          <div className="invoice-form-footer">
-            <button type="button" onClick={() => onNavigate('contactlist')}>
-              فهرستِ طرف‌حساب‌ها
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              <Save size={13} /> ثبتِ طرف حساب
-            </button>
-          </div>
-        </form>
-      </SectionCard>
-    </div>
-  )
-}
 
 // ── عملیات اول دوره ──────────────────────────────────────────────────────────
 

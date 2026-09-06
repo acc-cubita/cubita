@@ -7,6 +7,7 @@ import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { useSalesInvoiceDraft } from '../lib/salesInvoiceDraft'
+import { BlacklistBanner } from './BlacklistBanner'
 
 /**
  * فرمِ کلاسیکِ «ثبتِ فاکتورِ فروش» (پوسته‌های تیره/روشن) — همه‌ی فیلدها در یک صفحه.
@@ -113,6 +114,7 @@ export function SalesInvoiceForm({
             </div>
           )}
 
+          {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
           {d.credit && Number(d.credit.credit_limit) > 0 && (
             <CreditBanner credit={d.credit} invoiceTotal={d.baseGrandTotal} />
           )}

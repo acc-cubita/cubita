@@ -4,6 +4,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from app.models.company import ADDRESS_TYPES, CHANNEL_TYPES
+from app.models.inventory import (
+    CREDIT_ACTIONS,
+    GENDERS,
+    MARITAL_STATUSES,
+    TAX_MINISTRY_CLASSES,
+)
+
 
 class WarehouseIn(BaseModel):
     code: str
@@ -57,6 +65,120 @@ class ContactIn(BaseModel):
     group_id: UUID | None = None
     geo_location_id: UUID | None = None
 
+    # ── هویتِ تفکیک‌شده ────────────────────────────────────────────────────────
+    #: نام و نام خانوادگی. اگر پر باشند `name` از آن‌ها ساخته می‌شود؛ اگر نه،
+    #: `name` همان است که فرستاده شده (شرکت، که نامِ یک‌تکه دارد).
+    first_name: str = ""
+    last_name: str = ""
+    first_name2: str = ""
+    last_name2: str = ""
+    sub_type: str = ""
+    website: str = ""
+    registration_no: str | None = None
+    passport_no: str | None = None
+    marriage_date: date | None = None
+    is_blacklisted: bool = False
+    discount_rate: Decimal = Decimal(0)
+    tax_ministry_class: str = "normal"
+    credit_action: str = "none"
+    is_broker: bool = False
+    commission_rate: Decimal = Decimal(0)
+    #: کارمندِ متناظر در ماژولِ حقوق و دستمزد — پیوند، نه کپی.
+    employee_id: UUID | None = None
+
+    # ── تفصیلی ────────────────────────────────────────────────────────────────
+    #: کد و عنوانِ تفصیلی. **ستونِ طرف‌حساب نیستند**: سرویس از آن‌ها یک
+    #: `analytic_account` می‌سازد یا موجود را به‌روز می‌کند و فقط `analytic_id` را
+    #: روی طرف‌حساب می‌نشاند. اجباری بودنشان به سطحِ اجبارِ تفصیلی بستگی دارد.
+    tafsili_code: str | None = None
+    tafsili_title: str | None = None
+    tafsili_title2: str = ""
+
+    # ── مانده‌ی اول دوره ──
+    #: مبلغ همیشه نامنفی است؛ سمت جدا می‌آید چون مانده‌ی خلافِ انتظار واقعاً پیش
+    #: می‌آید (پیش‌دریافت از مشتری، پیش‌پرداخت به تأمین‌کننده).
+    opening_ar_amount: Decimal = Decimal(0)
+    opening_ar_side: str = "debit"
+    opening_ap_amount: Decimal = Decimal(0)
+    opening_ap_side: str = "credit"
+
+    # ── مشخصاتِ شخصی و نقشِ سهامدار ──
+    gender: str = ""
+    marital_status: str = ""
+    marital_status_date: date | None = None
+    children_count: int = 0
+    dependents_count: int = 0
+    education_level: str = ""
+    education_field: str = ""
+    is_employee: bool = False
+    is_shareholder: bool = False
+    share_percent: Decimal = Decimal(0)
+
+    @field_validator("gender")
+    @classmethod
+    def _valid_gender(cls, v: str) -> str:
+        if v not in GENDERS:
+            raise ValueError("جنسیت نامعتبر است")
+        return v
+
+    @field_validator("marital_status")
+    @classmethod
+    def _valid_marital(cls, v: str) -> str:
+        if v not in MARITAL_STATUSES:
+            raise ValueError("وضعیتِ تأهل نامعتبر است")
+        return v
+
+    @model_validator(mode="after")
+    def _person_counts(self) -> "ContactIn":
+        if self.children_count < 0 or self.dependents_count < 0:
+            raise ValueError("تعداد نمی‌تواند منفی باشد")
+        if not (0 <= self.share_percent <= 100):
+            raise ValueError("درصدِ سهام باید بینِ ۰ و ۱۰۰ باشد")
+        return self
+
+    @field_validator("opening_ar_side", "opening_ap_side")
+    @classmethod
+    def _valid_side(cls, v: str) -> str:
+        if v not in ("debit", "credit"):
+            raise ValueError("سمتِ مانده باید بدهکار یا بستانکار باشد")
+        return v
+
+    @model_validator(mode="after")
+    def _opening_not_negative(self) -> "ContactIn":
+        if self.opening_ar_amount < 0 or self.opening_ap_amount < 0:
+            raise ValueError("مانده‌ی اول دوره نمی‌تواند منفی باشد؛ سمت را عوض کنید")
+        return self
+
+    @field_validator("credit_action")
+    @classmethod
+    def _valid_credit_action(cls, v: str) -> str:
+        if v not in CREDIT_ACTIONS:
+            raise ValueError("نحوه‌ی کنترلِ اعتبار نامعتبر است")
+        return v
+
+    @field_validator("tax_ministry_class")
+    @classmethod
+    def _valid_tax_class(cls, v: str) -> str:
+        if v not in TAX_MINISTRY_CLASSES:
+            raise ValueError("دسته‌بندیِ وزارت دارایی نامعتبر است")
+        return v
+
+    @model_validator(mode="after")
+    def _compose_name(self) -> "ContactIn":
+        #: نامِ نمایشی از نام و نام خانوادگی ساخته می‌شود تا فاکتور و گزارشِ فصلی
+        #: — که همه `name` را می‌خوانند — با فرمِ تفکیک‌شده هم بخوانند.
+        joined = " ".join(p for p in (self.first_name.strip(), self.last_name.strip()) if p)
+        if joined:
+            self.name = joined
+        return self
+
+    @model_validator(mode="after")
+    def _check_rates(self) -> "ContactIn":
+        for label, value in (("نرخ تخفیف", self.discount_rate), ("نرخ پورسانت", self.commission_rate)):
+            if value < 0 or value > 100:
+                raise ValueError(f"{label} باید بینِ ۰ و ۱۰۰ باشد")
+        return self
+
     @field_validator("entity_type")
     @classmethod
     def _valid_entity_type(cls, v: str) -> str:
@@ -97,6 +219,137 @@ class ContactOut(BaseModel):
     postal_code: str | None
     group_id: UUID | None
     geo_location_id: UUID | None
+    first_name: str
+    last_name: str
+    first_name2: str
+    last_name2: str
+    sub_type: str
+    website: str
+    registration_no: str | None
+    passport_no: str | None
+    marriage_date: date | None
+    is_blacklisted: bool
+    discount_rate: Decimal
+    tax_ministry_class: str
+    credit_action: str
+    is_broker: bool
+    commission_rate: Decimal
+    employee_id: UUID | None
+    #: تفصیلیِ متصل — سه‌تای پایین از خودِ `analytic_account` خوانده می‌شوند نه از
+    #: ستونی روی طرف‌حساب، پس همیشه با فهرستِ تفصیلی‌ها یکی‌اند.
+    analytic_id: UUID | None = None
+    tafsili_code: str | None = None
+    tafsili_title: str | None = None
+    tafsili_title2: str = ""
+    opening_ar_amount: Decimal
+    opening_ar_side: str
+    opening_ap_amount: Decimal
+    opening_ap_side: str
+    gender: str
+    marital_status: str
+    marital_status_date: date | None
+    children_count: int
+    dependents_count: int
+    education_level: str
+    education_field: str
+    is_employee: bool
+    is_shareholder: bool
+    share_percent: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class ContactChannelIn(BaseModel):
+    #: تلفنِ *اضافه*. نشانی از ۰۰۹۲ جدولِ خودش را دارد (`ContactAddressIn`).
+    kind: str = "phone"
+    #: نوعِ کنترل‌شده (دفتر، انبار، همراه…)؛ `label` متنِ آزادِ کاربر است.
+    channel_type: str = "other"
+    label: str = ""
+    value: str
+    #: «اصلی» — سرویس تضمین می‌کند در هر طرف‌حساب حداکثر یکی باشد.
+    is_primary: bool = False
+    notes: str = ""
+    is_active: bool = True
+
+    @field_validator("channel_type")
+    @classmethod
+    def _valid_channel_type(cls, v: str) -> str:
+        if v not in CHANNEL_TYPES:
+            raise ValueError("نوعِ تلفن نامعتبر است")
+        return v
+
+    @field_validator("kind")
+    @classmethod
+    def _valid_kind(cls, v: str) -> str:
+        if v not in ("phone", "address", "email"):
+            raise ValueError("نوعِ کانال نامعتبر است")
+        return v
+
+    @field_validator("value")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("مقدار نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class ContactChannelOut(BaseModel):
+    id: UUID
+    contact_id: UUID
+    kind: str
+    channel_type: str
+    label: str
+    value: str
+    is_primary: bool
+    notes: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ContactAddressIn(BaseModel):
+    """یکی از نشانی‌های طرف‌حساب. هیچ فیلدی اجباری نیست جز نوع — نشانیِ نیمه‌کاره
+    (مثلاً فقط مختصات، یا فقط کدِ مسیر) هم به کارِ مأمورِ ارسال می‌آید."""
+
+    address_type: str = "official"
+    is_primary: bool = False
+    geo_location_id: UUID | None = None
+    title: str = ""
+    address: str = ""
+    address2: str = ""
+    postal_code: str = ""
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    #: «زون»ِ توزیع. وقتی موجودیتِ زون ساخته شد، این کلیدِ خارجی می‌شود.
+    route_code: str = ""
+    route_title: str = ""
+    route_title2: str = ""
+    region_code: str = ""
+    region_title: str = ""
+    region_title2: str = ""
+    branch_code: str = ""
+    notes: str = ""
+    is_active: bool = True
+
+    @field_validator("address_type")
+    @classmethod
+    def _valid_address_type(cls, v: str) -> str:
+        if v not in ADDRESS_TYPES:
+            raise ValueError("نوعِ نشانی نامعتبر است")
+        return v
+
+    @model_validator(mode="after")
+    def _coords_come_in_pairs(self) -> "ContactAddressIn":
+        #: نیم‌مختصات روی نقشه هیچ نقطه‌ای نیست؛ رد کردنش بهتر از ذخیره‌ی داده‌ای است
+        #: که مأمورِ ارسال نمی‌تواند استفاده کند.
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("عرض و طولِ جغرافیایی باید با هم وارد شوند")
+        return self
+
+
+class ContactAddressOut(ContactAddressIn):
+    id: UUID
+    contact_id: UUID
 
     model_config = {"from_attributes": True}
 

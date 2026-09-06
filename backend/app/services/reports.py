@@ -376,8 +376,22 @@ def _leaf_account_totals(
     return [(acc, Decimal(debit), Decimal(credit)) for acc, debit, credit in query.all()]
 
 
-def get_trial_balance(db: Session, date_from: date | None, date_to: date | None) -> list[dict]:
+def get_trial_balance(
+    db: Session,
+    date_from: date | None,
+    date_to: date | None,
+    management_only: bool = False,
+) -> list[dict]:
+    """تراز آزمایشی.
+
+    `management_only` تیکِ «نمایش در گزارشات مدیریتی» را به کار می‌گیرد: حساب‌های
+    واسط و انتظامی برای مدیریت نویز‌اند ولی از دفتر حذف نمی‌شوند. پیش‌فرض خاموش
+    است، پس ترازِ کامل — که مبنای کنترلِ توازن است — دست‌نخورده می‌ماند؛ صافی فقط
+    وقتی اعمال می‌شود که گزارش‌گیرنده خودش خواسته باشد.
+    """
     rows = _leaf_account_totals(db, date_from, date_to)
+    if management_only:
+        rows = [r for r in rows if r[0].in_management_reports]
     result = [
         {
             "account_id": acc.id,
@@ -390,6 +404,61 @@ def get_trial_balance(db: Session, date_from: date | None, date_to: date | None)
         }
         for acc, debit, credit in rows
     ]
+    return sorted(result, key=lambda r: r["account_code"])
+
+
+def get_nature_violations(
+    db: Session,
+    date_from: date | None,
+    date_to: date | None,
+    controlled_only: bool = False,
+) -> list[dict]:
+    """حساب‌هایی که مانده‌شان خلافِ ماهیتشان است.
+
+    **گزارش است، نه گارد.** خلافِ ماهیت شدن گاهی واقعاً درست است — اضافه‌برداشتِ
+    بانکی، پیش‌دریافتِ مشتری روی حسابِ دریافتنی — پس مسدود کردنِ ثبت یعنی جلوگیری
+    از ضبطِ رویدادی که اتفاق افتاده. کاری که این‌جا می‌شود فقط نشان دادن است تا
+    حسابدار خودش قضاوت کند.
+
+    مانده‌ی خام (بدهکار منهای بستانکار) مبناست، نه `_signed_balance` که علامت را بر
+    اساسِ *نوع* برمی‌گرداند: ماهیت می‌تواند صریحاً خلافِ نوع ست شده باشد و آن‌وقت
+    علامتِ نوع‌محور نتیجه را وارونه می‌کرد.
+
+    `controlled_only` تیکِ «کنترل ماهیت طی دوره» را به کار می‌گیرد: در چارتِ بزرگ،
+    خواندنِ فهرستی که همه‌ی حساب‌ها را می‌سنجد عملاً ممکن نیست و حسابدار فقط چند
+    حسابِ حساس را رصد می‌کند. پیش‌فرض خاموش است تا این پرچمِ تازه گزارشِ موجود را
+    بی‌صدا خالی نکند — محدود کردن باید خواسته‌ی صریحِ کاربر باشد.
+    """
+    result = []
+    for acc, debit, credit in _leaf_account_totals(db, date_from, date_to):
+        if controlled_only and not acc.nature_control:
+            continue
+        nature = acc.effective_nature
+        if nature == "any":
+            continue
+        raw = debit - credit
+        if raw == 0:
+            continue
+        if (nature == "debit" and raw > 0) or (nature == "credit" and raw < 0):
+            continue
+        result.append(
+            {
+                "account_id": acc.id,
+                "account_code": acc.code,
+                "account_name": acc.name,
+                "account_type": acc.type,
+                "nature": nature,
+                #: صریح یا مشتق‌شده — تا کاربر بداند این معیار را خودش گذاشته یا پیش‌فرض است.
+                "nature_is_explicit": acc.nature is not None,
+                #: تیکِ «کنترل ماهیت طی دوره» — حتی وقتی گزارش محدود نشده، ستون
+                #: نشان می‌دهد کدام حساب زیرِ رصدِ کاربر است.
+                "nature_control": acc.nature_control,
+                "total_debit": debit,
+                "total_credit": credit,
+                "balance": abs(raw),
+                "balance_side": "debit" if raw > 0 else "credit",
+            }
+        )
     return sorted(result, key=lambda r: r["account_code"])
 
 
@@ -942,6 +1011,28 @@ def get_contact_statement(
             }
         )
 
+    # مانده‌ی اول دوره — پیش از هر رویدادِ دیگری.
+    #
+    # بدونِ این، عددی که کاربر در فرمِ طرف‌حساب وارد کرده در سندِ افتتاحیه می‌نشست
+    # ولی در کارتِ حسابِ خودِ آن شخص دیده نمی‌شد؛ یعنی همان گزارشی که برای آن ثبت
+    # شده بود، نشانش نمی‌داد. تاریخش تاریخِ سندِ افتتاحیه است تا در بازه‌ها درست
+    # بیفتد و در «ماندهٔ اول دوره»ی گزارش هم لحاظ شود.
+    opening_entry_date = db.query(func.min(JournalEntry.entry_date)).filter(
+        JournalEntry.source_type == "opening", JournalEntry.voided_at.is_(None)
+    ).scalar()
+    if opening_entry_date is not None:
+        for amount, side, label in (
+            (contact.opening_ar_amount, contact.opening_ar_side, "مانده اول دوره (دریافتنی)"),
+            (contact.opening_ap_amount, contact.opening_ap_side, "مانده اول دوره (پرداختنی)"),
+        ):
+            amount = Decimal(amount or 0)
+            if amount > 0:
+                add(
+                    opening_entry_date, "opening", None, label,
+                    amount if side == "debit" else 0,
+                    amount if side == "credit" else 0,
+                )
+
     # فروش به این شخص (بدهکار)
     for number, inv_date, total, tax in db.query(
         SalesInvoice.number, SalesInvoice.invoice_date, SalesInvoice.total_amount, SalesInvoice.tax_amount
@@ -1047,6 +1138,27 @@ def get_aging(db: Session, kind: str, as_of: date | None) -> dict:
         .filter(Invoice.contact_id.isnot(None), Invoice.voided_at.is_(None), Invoice.invoice_date <= as_of)
         .all()
     )
+
+    # مانده‌ی اول دوره مثلِ یک «فاکتور» با تاریخِ سندِ افتتاحیه وارد می‌شود.
+    #
+    # بدونش، طلبی که از پیش از شروعِ کار با سیستم مانده بود در تحلیلِ سنی اصلاً
+    # دیده نمی‌شد — یعنی قدیمی‌ترین و معمولاً پرخطرترین بخشِ مطالبات. تاریخِ
+    # افتتاحیه مبناست، پس به‌درستی در سطلِ سنیِ خودش می‌افتد نه در «جاری».
+    opening_date = db.query(func.min(JournalEntry.entry_date)).filter(
+        JournalEntry.source_type == "opening", JournalEntry.voided_at.is_(None)
+    ).scalar()
+    if opening_date is not None and opening_date <= as_of:
+        amount_col = Contact.opening_ar_amount if kind == "receivable" else Contact.opening_ap_amount
+        side_col = Contact.opening_ar_side if kind == "receivable" else Contact.opening_ap_side
+        #: فقط ماندهٔ همان سمتی که این گزارش می‌سنجد. مانده‌ی خلافِ سمت (پیش‌دریافت)
+        #: بدهی نیست و آوردنش رقم را وارونه می‌کرد.
+        wanted_side = "debit" if kind == "receivable" else "credit"
+        for contact_id, amount in (
+            db.query(Contact.id, amount_col)
+            .filter(amount_col > 0, side_col == wanted_side)
+            .all()
+        ):
+            invoices.append((contact_id, opening_date, Decimal(amount), Decimal(0)))
 
     # جمعِ تسویه‌ی هر شخص = دریافت/پرداخت + برگشت‌ها (هر دو مانده را کم می‌کنند)
     pool: dict = {}

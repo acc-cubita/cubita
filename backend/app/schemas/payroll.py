@@ -4,6 +4,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from app.models.payroll import (
+    BRANCH_KINDS,
+    CONTRACT_TYPES,
+    EMPLOYMENT_TYPES,
+    FACTOR_CATEGORIES,
+    FACTOR_KINDS,
+    FACTOR_SYSTEM_KEYS,
+    JOB_FAMILIES,
+    TAX_GROUP_DEFAULT_PERCENT,
+    TAX_GROUP_KINDS,
+)
+
 
 class EmployeeIn(BaseModel):
     first_name: str
@@ -30,18 +42,263 @@ class EmployeeOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── جدول‌های مرجع ─────────────────────────────────────────────────────────────
+
+
+class ServiceLocationIn(BaseModel):
+    code: str
+    name: str
+    name2: str = ""
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _required(self) -> "ServiceLocationIn":
+        if not self.code.strip():
+            raise ValueError("کد محل خدمت الزامی است")
+        if not self.name.strip():
+            raise ValueError("عنوان محل خدمت الزامی است")
+        return self
+
+
+class ServiceLocationOut(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    name2: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class JobTitleIn(BaseModel):
+    code: str
+    name: str
+    name2: str = ""
+    job_family: str = ""
+    insurance_job_code: str = ""
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _required(self) -> "JobTitleIn":
+        if not self.code.strip():
+            raise ValueError("کد شغل الزامی است")
+        if not self.name.strip():
+            raise ValueError("عنوان شغل الزامی است")
+        #: رسته در اسکیما بررسی می‌شود نه با قیدِ بررسیِ پایگاه‌داده — این فهرست با
+        #: دستورالعملِ بیمه عوض می‌شود و مهاجرت‌دادنِ هر تغییرش بی‌دلیل است.
+        if self.job_family and self.job_family not in JOB_FAMILIES:
+            raise ValueError("رسته شغل نامعتبر است")
+        return self
+
+
+class JobTitleOut(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    name2: str
+    job_family: str
+    insurance_job_code: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PayrollFactorIn(BaseModel):
+    name: str
+    name2: str = ""
+    category: str = "benefit"
+    kind: str = "fixed"
+    is_extraordinary: bool = False
+    #: خالی = عاملِ ساخته‌ی کاربر. کلیدِ سیستمی را فقط «ساخت عوامل پیش‌فرض» می‌گذارد،
+    #: چون هر کلید حداکثر یک عامل دارد و دستکاریِ دستی‌اش محاسبه را می‌شکند.
+    system_key: str = ""
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _valid(self) -> "PayrollFactorIn":
+        if not self.name.strip():
+            raise ValueError("عنوان عامل الزامی است")
+        if self.category not in FACTOR_CATEGORIES:
+            raise ValueError("طبقه‌ی عامل باید مزایا یا کسورات باشد")
+        if self.kind not in FACTOR_KINDS:
+            raise ValueError("نوع عامل باید ثابت یا متغیر باشد")
+        if self.system_key not in FACTOR_SYSTEM_KEYS:
+            raise ValueError("کلید سیستمی نامعتبر است")
+        return self
+
+
+class PayrollFactorOut(BaseModel):
+    id: UUID
+    name: str
+    name2: str
+    category: str
+    kind: str
+    is_extraordinary: bool
+    system_key: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PayrollTaxGroupIn(BaseModel):
+    name: str
+    kind: str = "normal"
+    percent: Decimal | None = None
+
+    @model_validator(mode="after")
+    def _valid(self) -> "PayrollTaxGroupIn":
+        if not self.name.strip():
+            raise ValueError("عنوان گروه مالیاتی الزامی است")
+        if self.kind not in TAX_GROUP_KINDS:
+            raise ValueError("نوع گروه مالیاتی نامعتبر است")
+        #: درصدِ خالی = پیش‌فرضِ همان نوع (عادی ۱۰۰، محروم ۵۰، معاف ۰). عدد آزاد
+        #: است چون درصدِ تخفیفِ مناطق محروم قانوناً عوض می‌شود.
+        if self.percent is None:
+            self.percent = Decimal(TAX_GROUP_DEFAULT_PERCENT[self.kind])
+        if not (0 <= self.percent <= 100):
+            raise ValueError("درصد باید بین ۰ و ۱۰۰ باشد")
+        return self
+
+
+class PayrollTaxGroupOut(BaseModel):
+    id: UUID
+    name: str
+    kind: str
+    percent: Decimal
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class InsuranceTaxBranchIn(BaseModel):
+    name: str
+    code: str = ""
+    kind: str = "insurance"
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _valid(self) -> "InsuranceTaxBranchIn":
+        if not self.name.strip():
+            raise ValueError("عنوان شعبه الزامی است")
+        if self.kind not in BRANCH_KINDS:
+            raise ValueError("نوع شعبه باید بیمه یا مالیات باشد")
+        return self
+
+
+class InsuranceTaxBranchOut(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    kind: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+# ── قرارداد ───────────────────────────────────────────────────────────────────
+
+
+class ContractLineIn(BaseModel):
+    factor_id: UUID
+    amount: Decimal = Decimal(0)
+
+
+class ContractLineOut(BaseModel):
+    id: UUID
+    factor_id: UUID
+    amount: Decimal
+    #: عنوان و طبقه از خودِ عامل خوانده می‌شوند نه از ستونی روی ردیف — تغییرِ نامِ
+    #: عامل باید همه‌جا دیده شود.
+    factor_name: str = ""
+    factor_category: str = "benefit"
+
+    model_config = {"from_attributes": True}
+
+
+class EmployeeCandidateOut(BaseModel):
+    """طرف‌حسابی که تیکِ «کارمند» دارد — ورودیِ فهرستِ «نام کارمند»ِ فرمِ قرارداد.
+
+    `employee_id` خالی یعنی هنوز پرونده‌ی حقوق و دستمزد ندارد؛ اولین قراردادش خودش
+    آن را می‌سازد. کاربر نباید یک آدم را دو بار (یک‌بار طرف‌حساب، یک‌بار کارمند) ثبت کند.
+    """
+
+    contact_id: UUID
+    name: str
+    national_id: str | None = None
+    employee_id: UUID | None = None
+    has_contract: bool = False
+
+
 class SalaryContractIn(BaseModel):
-    employee_id: UUID
+    """ورودیِ فرمِ «قرارداد جدید».
+
+    دو راه برای گفتنِ اینکه قرارداد مالِ کیست، و هر دو به یک رکورد می‌رسند:
+
+    * `contact_id` — راهِ فرم. طرف‌حسابی که تیکِ «کارمند» دارد؛ اگر هنوز پرونده‌ی
+      حقوق و دستمزد ندارد، سرویس از روی همان طرف‌حساب می‌سازدش. یک آدم، یک رکورد.
+    * `employee_id` — راهِ قدیمی، برای کدی که از قبل کارمند را دارد.
+
+    **`effective_from` همان «تاریخ صدور» است** و `hire_date` تاریخِ *واقعیِ* استخدام
+    که روی خودِ کارمند می‌نشیند و می‌تواند سال‌ها قبل‌تر باشد.
+    """
+
+    employee_id: UUID | None = None
+    contact_id: UUID | None = None
     effective_from: date
-    base_salary: Decimal
+    contract_type: str = "hire"
+    number: str = ""
+    valid_until: date | None = None
+    service_end_date: date | None = None
+
+    #: تاریخِ استخدام روی `employees.hire_date` می‌نشیند، نه روی قرارداد.
+    hire_date: date | None = None
+    employment_type: str = ""
+    service_location_id: UUID | None = None
+    job_title_id: UUID | None = None
+    cost_center_id: UUID | None = None
+
+    #: ردیف‌های «حقوق و مزایای ثابت» و «سایر مبالغ». اگر بیایند، چهار ستونِ مبلغِ
+    #: زیر از روی همین‌ها ساخته می‌شوند و مقدارِ فرستاده‌شده‌شان نادیده می‌رود.
+    lines: list[ContractLineIn] = []
+    base_salary: Decimal = Decimal(0)
     housing_allowance: Decimal = Decimal(0)
     food_allowance: Decimal = Decimal(0)
     other_allowance: Decimal = Decimal(0)
 
+    tax_group_id: UUID | None = None
+    tax_branch_id: UUID | None = None
+    insurance_branch_id: UUID | None = None
+    housing_loan_exempt_amount: Decimal = Decimal(0)
+    is_insured: bool = True
+    is_hard_job: bool = False
+    exempt_employee_insurance: bool = False
+    exempt_employer_insurance: bool = False
+    employer_exempt_percent: Decimal = Decimal(0)
+    exempt_unemployment_insurance: bool = False
+    employer_name: str = ""
+    has_supplementary_insurance: bool = False
+    supplementary_branch: str = ""
+    supplementary_insurer: str = ""
+    description: str = ""
+
     @model_validator(mode="after")
     def validate_positive(self) -> "SalaryContractIn":
-        if self.base_salary <= 0:
+        if self.employee_id is None and self.contact_id is None:
+            raise ValueError("کارمند انتخاب نشده است")
+        if self.contract_type not in CONTRACT_TYPES:
+            raise ValueError("نوع قرارداد باید استخدام یا اصلاح قرارداد باشد")
+        if self.employment_type and self.employment_type not in EMPLOYMENT_TYPES:
+            raise ValueError("نوع استخدام نامعتبر است")
+        #: با ردیف، مبلغ از ردیف‌ها می‌آید و همان‌جا بررسی می‌شود؛ بی‌ردیف، همان
+        #: قاعده‌ی قدیمی برقرار است تا کدِ موجود نشکند.
+        if not self.lines and self.base_salary <= 0:
             raise ValueError("حقوق پایه باید بزرگ‌تر از صفر باشد")
+        if self.valid_until and self.valid_until < self.effective_from:
+            raise ValueError("تاریخ اعتبار نمی‌تواند قبل از تاریخ صدور باشد")
+        if self.service_end_date and self.service_end_date < self.effective_from:
+            raise ValueError("تاریخ پایان خدمت نمی‌تواند قبل از تاریخ صدور باشد")
+        if not (0 <= self.employer_exempt_percent <= 100):
+            raise ValueError("درصد معافیت سهم کارفرما باید بین ۰ و ۱۰۰ باشد")
         return self
 
 
@@ -49,10 +306,36 @@ class SalaryContractOut(BaseModel):
     id: UUID
     employee_id: UUID
     effective_from: date
+    contract_type: str
+    number: str
+    valid_until: date | None
+    service_end_date: date | None
+    employment_type: str
+    service_location_id: UUID | None
+    job_title_id: UUID | None
+    cost_center_id: UUID | None
     base_salary: Decimal
     housing_allowance: Decimal
     food_allowance: Decimal
     other_allowance: Decimal
+    tax_group_id: UUID | None
+    tax_branch_id: UUID | None
+    insurance_branch_id: UUID | None
+    housing_loan_exempt_amount: Decimal
+    is_insured: bool
+    is_hard_job: bool
+    exempt_employee_insurance: bool
+    exempt_employer_insurance: bool
+    employer_exempt_percent: Decimal
+    exempt_unemployment_insurance: bool
+    employer_name: str
+    has_supplementary_insurance: bool
+    supplementary_branch: str
+    supplementary_insurer: str
+    description: str
+    lines: list[ContractLineOut] = []
+    #: نامِ کارمند برای فهرستِ قراردادها — وگرنه فهرست فقط شناسه نشان می‌دهد.
+    employee_name: str = ""
 
     model_config = {"from_attributes": True}
 

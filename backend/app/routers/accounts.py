@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,9 +12,13 @@ from app.schemas.accounting import AccountCreateIn, AccountOut, AccountUpdateIn
 from app.models.tenant import Tenant
 from app.services import account_coding as coding
 from app.services import chart_templates as templates
+from app.services import tafsili
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
+
+#: یک پیام برای ساخت و ویرایش، تا کاربر دو جمله‌ی متفاوت برای یک قاعده نبیند.
+_FX_REVALUABLE_ERROR = "«تسعیر پذیر» فقط روی حسابِ ارزی معنا دارد؛ اول «ارزی» را روشن کنید"
 
 
 class AccountCodeIn(BaseModel):
@@ -88,6 +93,28 @@ class ApplyTemplateOut(BaseModel):
     codes: list[str]
 
 
+class KeptAccountOut(BaseModel):
+    """حسابی که برگرداندنِ قالب نگهش داشت، همراهِ دلیلش."""
+
+    code: str
+    name: str
+    #: «حسابِ سیستمی» · «زیرحساب دارد» · «در سند استفاده شده» · «جای دیگری استفاده شده».
+    reason: str
+
+
+class RevertTemplateOut(BaseModel):
+    """نتیجه‌ی برگرداندنِ یک قالب.
+
+    `kept` عمداً فهرستِ دلیل‌دار است، نه فقط عدد: کاربری که «برگردان» می‌زند و
+    می‌بیند چند حساب مانده، باید بداند چرا مانده‌اند — وگرنه فکر می‌کند عملیات
+    نصفه‌کاره شکست خورده.
+    """
+
+    removed: int
+    codes: list[str]
+    kept: list[KeptAccountOut]
+
+
 def _missing_rows(db: Session, key: str):
     """ردیف‌هایی از قالب که کدشان هنوز در چارت نیست."""
     existing = {code for (code,) in db.query(Account.code).all()}
@@ -118,6 +145,79 @@ def set_coding_rule(
     clean = coding.set_widths(tenant, data.widths)
     db.flush()
     return _coding_out(clean)
+
+
+class TafsiliModeOut(BaseModel):
+    """سطحِ اجبارِ تفصیلی و همه‌ی گزینه‌های ممکن، با توضیحِ هرکدام."""
+
+    mode: str
+    #: کلید، برچسب و توضیحِ هر حالت — تا رابط متنِ گزینه‌ها را تکرار نکند.
+    options: list[dict]
+    #: True یعنی کاربر خودش انتخاب کرده؛ False یعنی هنوز روی پیش‌فرضِ سرویس است.
+    is_explicit: bool
+
+
+class TafsiliModeIn(BaseModel):
+    mode: str
+
+
+def _tafsili_out(tenant: Tenant) -> TafsiliModeOut:
+    return TafsiliModeOut(
+        mode=tenant.tafsili_enforcement or tafsili.DEFAULT_TAFSILI_MODE,
+        is_explicit=tenant.tafsili_enforcement is not None,
+        options=[
+            {
+                "key": key,
+                "label": tafsili.TAFSILI_MODE_LABELS[key],
+                "hint": tafsili.TAFSILI_MODE_HINTS[key],
+                #: پیامدِ تفکیک‌شده — تا رابط بگوید «اگر این را بزنی چه می‌شود»
+                #: به‌جای یک جمله‌ی کلی که کاربر باید خودش تفسیرش کند.
+                "effects": tafsili.TAFSILI_MODE_EFFECTS[key],
+                "is_default": key == tafsili.DEFAULT_TAFSILI_MODE,
+            }
+            for key in tafsili.TAFSILI_MODES
+        ],
+    )
+
+
+@router.get("/tafsili-mode", response_model=TafsiliModeOut)
+def get_tafsili_mode(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """سطحِ اجبارِ تفصیلی روی حساب‌های «تفصیلی پذیر»."""
+    tenant = db.get(Tenant, principal.tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
+    return _tafsili_out(tenant)
+
+
+@router.patch("/tafsili-mode", response_model=TafsiliModeOut)
+def set_tafsili_mode(
+    data: TafsiliModeIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "approve")),
+):
+    """تغییرِ سطحِ اجبار.
+
+    مجوزش `approve` است نه `update`، مثلِ قاعده‌ی کدینگ: تصمیمی در سطحِ کلِ
+    کسب‌وکار است که روی هر ثبتِ بعدی اثر می‌گذارد، نه ویرایشِ یک رکورد.
+
+    **روی ردیف‌های گذشته اثری ندارد** و عمداً هم ندارد: سختگیرتر کردنِ قاعده نباید
+    سندی را که دیروز درست ثبت شده بود امروز نامعتبر کند. آنچه از قبل بی‌تفصیلی ثبت
+    شده در گزارشِ «ردیف‌های بدونِ تفصیلی» دیده می‌شود — در هر سه حالت.
+    """
+    tenant = db.get(Tenant, principal.tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
+    try:
+        tafsili.set_mode(tenant, data.mode)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from None
+    db.flush()
+    return _tafsili_out(tenant)
 
 
 @router.get("/next-code", response_model=dict)
@@ -227,6 +327,67 @@ def apply_template(
     return ApplyTemplateOut(created=len(created), skipped=skipped, codes=created)
 
 
+@router.delete("/templates/{key}", response_model=RevertTemplateOut)
+def revert_template(
+    key: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "delete")),
+):
+    """حساب‌های *بی‌استفاده‌ی* یک قالب را برمی‌دارد — راهِ برگشت از «درجِ اشتباه».
+
+    قالب زدن آسان است و برگرداندنش تا امروز نبود؛ کاربری که چهار قالب را امتحان
+    می‌کرد، چارتش پر از حسابِ بی‌ربط می‌شد و راهی جز حذفِ تک‌تک نداشت.
+
+    **هرگز چیزی را که استفاده شده پاک نمی‌کند.** چهار چیز حساب را نگه می‌دارد:
+    ردیفِ سند (دفتر می‌شکند)، زیرحساب (یتیم می‌شوند)، نقشِ سیستمی (ثبتِ خودکار
+    می‌شکند)، و بودن در چارتِ پایه (مالِ قالب نیست). هرکدام با دلیلش در `kept`
+    برمی‌گردد تا کاربر بداند چه ماند و چرا.
+
+    ترتیبِ حذف از عمیق‌ترین کد به کم‌عمق‌ترین است، وگرنه سرفصل پیش از فرزندش حذف
+    می‌شود و به «زیرحساب دارد» می‌خورد در حالی که فرزندش هم قرار بود برود.
+    """
+    from app.seed import CHART_OF_ACCOUNTS
+
+    try:
+        rows = templates.rows_for(key)
+    except KeyError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "قالبِ کدینگ پیدا نشد") from None
+
+    baseline = {code for code, *_ in CHART_OF_ACCOUNTS}
+    wanted = {row[0] for row in rows}
+    by_code = {a.code: a for a in db.query(Account).filter(Account.code.in_(wanted)).all()}
+
+    removed: list[str] = []
+    kept: list[KeptAccountOut] = []
+
+    # عمیق‌ترین اول: کدِ بلندتر یعنی سطحِ پایین‌تر در درخت.
+    for code in sorted(by_code, key=lambda c: (-len(c), c)):
+        account = by_code[code]
+        if code in baseline:
+            continue  # مالِ چارتِ پایه است، نه این قالب — اصلاً نامزدِ حذف نیست
+        reason = None
+        if account.system_role is not None:
+            reason = "حسابِ سیستمی"
+        elif db.query(Account).filter(Account.parent_id == account.id).first() is not None:
+            reason = "زیرحساب دارد"
+        elif db.query(JournalLine).filter(JournalLine.account_id == account.id).first() is not None:
+            reason = "در سند استفاده شده"
+        if reason:
+            kept.append(KeptAccountOut(code=code, name=account.name, reason=reason))
+            continue
+        try:
+            #: SAVEPOINT چون کلیدِ خارجیِ جای دیگری (حسابِ بانکی، دارایی) هم ممکن است
+            #: مانع شود؛ آن‌وقت فقط همین حذف برمی‌گردد نه کلِ تراکنش و زمینه‌ی RLS.
+            with db.begin_nested():
+                db.delete(account)
+                db.flush()
+            removed.append(code)
+        except IntegrityError:
+            kept.append(KeptAccountOut(code=code, name=account.name, reason="جای دیگری استفاده شده"))
+
+    return RevertTemplateOut(removed=len(removed), codes=removed, kept=kept)
+
+
 @router.patch("/{account_id}/code", response_model=AccountOut)
 def change_code(
     account_id: UUID,
@@ -278,6 +439,10 @@ def create_account(
     نقشِ سیستمی هرگز از این راه ست نمی‌شود؛ فقط منطقِ ثبتِ خودکار حسابِ نقش‌دار
     می‌سازد. زیرحساب باید نوعش با سرفصلش یکی باشد (زیرحسابِ «دارایی‌ها» خودش دارایی
     است) وگرنه گزارش‌ها ناسازگار می‌شوند.
+
+    والد می‌تواند سرفصل باشد یا حسابِ معینِ بی‌سند — دومی همان «تفصیلی زیرِ معین» است
+    (بانک ملی زیرِ بانک). عمقِ درخت محدود نیست؛ نامِ سطح و طولِ کد را قاعده‌ی کدینگِ
+    همین کسب‌وکار تعیین می‌کند.
     """
     if db.query(Account).filter(Account.code == data.code).first() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "حسابی با این کد از قبل وجود دارد")
@@ -287,8 +452,25 @@ def create_account(
         parent = db.get(Account, data.parent_id)
         if parent is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "سرفصلِ والد یافت نشد")
-        if not parent.is_group:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط زیرِ یک سرفصل (گروه) می‌توان حساب ساخت")
+        #: زیرِ حسابِ معین هم می‌شود تفصیلی ساخت — همان سطحِ چهارمِ حسابداریِ ایران.
+        #: تنها قید: والد نباید سندِ مستقیم خورده باشد. حسابی که هم ردیفِ خودش را
+        #: دارد هم فرزند، مانده‌اش دو منبع پیدا می‌کند و هر گزارشی باید حدس بزند
+        #: کدام را جمع بزند — همان چیزی که بی‌صدا اشتباه می‌شود. اگر سند خورده،
+        #: راهِ درست حسابِ تفصیلیِ تازه در کنارش است، نه زیرش.
+        if not parent.is_group and db.query(JournalLine).filter(
+            JournalLine.account_id == parent.id
+        ).first() is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "این حساب سندِ مستقیم دارد و دیگر نمی‌تواند زیرحساب بگیرد؛ "
+                "زیرحساب فقط زیرِ حسابی ساخته می‌شود که هنوز سندی نخورده",
+            )
+        #: **این‌جا عمداً هیچ پرچمی سنجیده نمی‌شود.** یک نسخه پیش‌تر، `accepts_tafsili`
+        #: ساختِ زیرحساب را هم گارد می‌کرد؛ برداشته شد چون دو چیزِ متفاوت را یکی
+        #: گرفته بود. زیرشاخه‌ی درختی (بانک ملی زیرِ بانک) بخشی از *کدینگِ چهارسطحی*
+        #: است — کم‌تعداد، ثابت، و قیدِ واقعی‌اش همان «والد سند نخورده باشد» است که
+        #: بالا سنجیده شد. `accepts_tafsili` حالا فقط درباره‌ی *تفصیلیِ شناور* روی
+        #: ردیفِ سند حرف می‌زند، که ابعادِ متغیرند (۵۰۰ مشتری) و اصلاً در کد نمی‌آیند.
         if data.type != parent.type:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ زیرحساب باید با نوعِ سرفصلش یکی باشد")
 
@@ -301,13 +483,25 @@ def create_account(
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from None
 
+    if data.fx_revaluable and not data.is_fx:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _FX_REVALUABLE_ERROR)
+
     account = Account(
         code=data.code,
         name=data.name,
+        name2=data.name2,
         type=data.type,
+        #: None یعنی «از نوعِ حساب مشتق شود» — حالتِ درست برای تقریباً همه.
+        nature=data.nature,
         is_group=data.is_group,
         parent_id=data.parent_id,
         system_role=None,  # فقط منطقِ ثبتِ خودکار نقش می‌دهد، نه کاربر
+        nature_control=data.nature_control,
+        is_fx=data.is_fx,
+        fx_revaluable=data.fx_revaluable,
+        accepts_tafsili=data.accepts_tafsili,
+        has_tracking=data.has_tracking,
+        in_management_reports=data.in_management_reports,
     )
     db.add(account)
     db.flush()
@@ -322,22 +516,177 @@ def update_account(
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "update")),
 ):
-    """تغییرِ نام یا فعال/غیرفعال‌سازیِ حساب. حسابِ سیستمی را نمی‌توان غیرفعال کرد."""
+    """تغییرِ نام، عنوانِ دوم، ماهیت، ویژگی‌ها، یا فعال/غیرفعال‌سازیِ حساب.
+
+    **غیرفعال‌سازی برای هر حسابی مجاز است، حتی سیستمی.** گاردِ قبلی می‌گفت حسابِ
+    سیستمی «برای ثبتِ خودکار لازم است»، ولی `get_account` اصلاً `is_active` را
+    نگاه نمی‌کند — حسابِ غیرفعال را هم پیدا می‌کند و ثبتِ خودکار سرِ جایش کار
+    می‌کند. آن گارد کاری را می‌بست که نمی‌شکست، و پیامش هم غلط بود.
+
+    غیرفعال یعنی «از فهرست‌های انتخاب پنهان شو»؛ تاریخچه و ثبتِ خودکار دست‌نخورده
+    می‌مانند. حذف داستانِ دیگری است و آن‌جا نقشِ سیستمی واقعاً مانع است.
+    """
     account = db.get(Account, account_id)
     if account is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
 
-    if data.is_active is False and account.system_role is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "این حسابِ سیستمی است و برای ثبتِ خودکار لازم است؛ نمی‌توان غیرفعالش کرد",
-        )
+    changes = data.model_dump(exclude_unset=True)
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    #: قیدِ «تسعیر پذیر فقط روی ارزی» روی *نتیجه* سنجیده می‌شود نه روی ورودی،
+    #: چون فرم ممکن است فقط یکی از دو تیک را بفرستد. بدونِ این، خاموش‌کردنِ «ارزی»
+    #: به‌تنهایی حساب را در حالتی می‌گذاشت که قیدِ پایگاه‌داده با خطای خامِ
+    #: IntegrityError ردش می‌کرد و کاربر پیامِ نامفهوم می‌دید.
+    is_fx = changes.get("is_fx", account.is_fx)
+    fx_revaluable = changes.get("fx_revaluable", account.fx_revaluable)
+    if fx_revaluable and not is_fx:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _FX_REVALUABLE_ERROR)
+
+    #: قفلِ تفصیلی‌پذیری **یک‌طرفه** است: روشن‌کردن همیشه آزاد (ردیف‌های بعدی تفصیلی
+    #: می‌گیرند و ضرری ندارد)، خاموش‌کردن فقط تا وقتی هیچ ردیفی تفصیلی نگرفته.
+    #:
+    #: مشخصاتِ سپیدار قفلِ دوطرفه می‌خواهد — «بعد از یک سند، پرچم قفل». در کوبیتا
+    #: آن یعنی قفلِ ابدی، چون سند هرگز پاک نمی‌شود و فقط باطل می‌شود. قاعده‌ی
+    #: نامتقارن همان ضرر را می‌بندد: گزارشی که نصفِ ردیف‌هایش تفصیلی دارند و نصفشان
+    #: نه، بی‌آنکه هیچ نشانه‌ای بدهد.
+    if changes.get("accepts_tafsili") is False and account.accepts_tafsili:
+        used = (
+            db.query(JournalLine.id)
+            .filter(JournalLine.account_id == account.id, JournalLine.analytic_id.isnot(None))
+            .first()
+        )
+        if used is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "ردیف‌هایی از این حساب تفصیلی خورده‌اند؛ برداشتنِ این گزینه گزارشِ "
+                "تفصیلی را نصفه می‌کند — نصفِ ردیف‌ها تفصیلی دارند و نصفشان نه",
+            )
+
+    for key, value in changes.items():
         setattr(account, key, value)
     db.flush()
     db.refresh(account)
     return account
+
+
+class DeletableAccountOut(BaseModel):
+    """یک حساب و اینکه پاک‌شدنی هست یا نه — پایه‌ی «حذفِ حساب» در تنظیمات.
+
+    `reason` وقتی پر است که نشود پاکش کرد. جدا کردنِ دلیل از خودِ پرچم عمدی است:
+    کاربر باید بفهمد *چرا* نمی‌تواند، نه اینکه دکمه‌ای خاکستری ببیند.
+    """
+
+    id: UUID
+    code: str
+    name: str
+    level: str
+    is_group: bool
+    can_delete: bool
+    reason: str | None = None
+
+
+@router.get("/deletable", response_model=list[DeletableAccountOut])
+def list_deletable(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """همه‌ی حساب‌ها با وضعیتِ پاک‌شدنی‌بودنشان.
+
+    حذفِ حساب از درختواره برداشته شد و به تنظیمات آمد: درختواره کارِ روزمره است و
+    دکمه‌ی حذف کنارِ دکمه‌ای که روزی صد بار زده می‌شود، دیر یا زود اشتباه زده
+    می‌شود. این‌جا تصمیمِ آگاهانه است، با فهرستِ کامل و دلیلِ هر «نمی‌شود».
+
+    شمارشِ ردیف‌های سند و فرزندان با دو کوئریِ تجمیعی گرفته می‌شود، نه یکی به ازای
+    هر حساب — چارتِ واقعی صدها حساب دارد.
+    """
+    tenant = db.get(Tenant, principal.tenant_id)
+    widths = coding.get_widths(tenant)
+
+    accounts = db.query(Account).order_by(Account.code).all()
+    posted = {
+        aid
+        for (aid,) in db.query(JournalLine.account_id).distinct().all()
+    }
+    parents = {pid for (pid,) in db.query(Account.parent_id).filter(Account.parent_id.isnot(None)).distinct().all()}
+
+    out: list[DeletableAccountOut] = []
+    for a in accounts:
+        reason = None
+        if a.system_role is not None:
+            reason = "حسابِ سیستمی — ثبتِ خودکار به آن تکیه دارد"
+        elif a.id in parents:
+            reason = "زیرحساب دارد؛ اول زیرحساب‌ها را بردارید"
+        elif a.id in posted:
+            reason = "در سند استفاده شده؛ به‌جای حذف غیرفعالش کنید"
+        out.append(
+            DeletableAccountOut(
+                id=a.id,
+                code=a.code,
+                name=a.name,
+                level=coding.level_name(coding.depth_of(db, a.parent)),
+                is_group=a.is_group,
+                can_delete=reason is None,
+                reason=reason,
+            )
+        )
+    return out
+
+
+class WipeChartOut(BaseModel):
+    """نتیجه‌ی خام‌سازیِ درختواره."""
+
+    deleted: int
+    #: حساب‌هایی که ماندند چون جای دیگری (بانک، دارایی، تنظیمات) به آنها ارجاع دارد.
+    kept: list[KeptAccountOut]
+
+
+@router.delete("", response_model=WipeChartOut)
+def wipe_chart(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "delete")),
+):
+    """خام‌سازیِ کلِ درختواره — **فقط وقتی هیچ سندی در کلِ سیستم ثبت نشده باشد.**
+
+    این گارد همه‌ی خطرِ مالی را برمی‌دارد: بدونِ سند، هیچ عددی به هیچ حسابی گره
+    نخورده، پس پاک‌کردنِ چارت هیچ دفتری را نمی‌شکند. با یک سند هم، عملیات رد
+    می‌شود — نه «تا جایی که می‌شود پاک کن»، چون نتیجه‌ی نصفه بدتر از انجام‌نشدن است.
+
+    حسابِ سیستمی هم پاک می‌شود؛ همان چیزی است که «خام‌سازی» یعنی. منطقِ ثبتِ خودکار
+    با `get_or_create_account` هر نقشی را که لازم شود دوباره می‌سازد، پس چیزی از کار
+    نمی‌افتد — ولی کدِ دلخواهی که کاربر روی آن حساب گذاشته بود از دست می‌رود، و
+    همین است که این عملیات را «آخرین راه» می‌کند نه یک دکمه‌ی روزمره.
+
+    ارجاع‌های غیرِسند (حسابِ بانکی، دارایی ثابت، تنظیمات) با کلیدِ خارجی جلوی حذف را
+    می‌گیرند؛ آن حساب‌ها در `kept` با دلیل برمی‌گردند.
+    """
+    posted = db.query(JournalLine.id).first()
+    if posted is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "در این کسب‌وکار سند حسابداری ثبت شده و خام‌سازیِ درختواره ممکن نیست؛ "
+            "حساب‌های بی‌استفاده را تک‌به‌تک حذف کنید یا قالب را برگردانید",
+        )
+
+    #: از عمیق‌ترین کد به بالا، تا فرزند پیش از والدش برود و کلیدِ خارجیِ
+    #: `parent_id` وسطِ کار مانع نشود.
+    accounts = db.query(Account).order_by(func.length(Account.code).desc(), Account.code.desc()).all()
+    deleted = 0
+    kept: list[KeptAccountOut] = []
+    for account in accounts:
+        try:
+            with db.begin_nested():
+                db.delete(account)
+                db.flush()
+            deleted += 1
+        except IntegrityError:
+            kept.append(
+                KeptAccountOut(
+                    code=account.code,
+                    name=account.name,
+                    reason="جای دیگری (حسابِ بانکی، دارایی، تنظیمات) به این حساب ارجاع دارد",
+                )
+            )
+    return WipeChartOut(deleted=deleted, kept=kept)
 
 
 @router.delete("/{account_id}", status_code=204)

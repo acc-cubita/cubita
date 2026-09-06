@@ -8,6 +8,7 @@ import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
 import { QuickItemForm } from '../QuickItemForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { BlacklistBanner } from '../BlacklistBanner'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -130,6 +131,7 @@ function HeaderStep({ d, warehouses }: { d: PurchaseInvoiceDraft; warehouses: Wa
           </select>
         </label>
       )}
+      {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
       {d.currencies.length > 0 && (
         <div className="field-row">
           <label>

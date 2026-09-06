@@ -8,6 +8,7 @@ from app.models.counters import DOC_JOURNAL_ENTRY
 from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
+from app.services import tafsili
 
 
 def get_account(db: Session, system_role: str) -> Account:
@@ -83,6 +84,9 @@ def make_journal_entry(
         created_by_id=user.id,
         lines=lines,
     )
+    # نقطه‌ی مشترکِ سیزده سرویس — گارد این‌جا یعنی یک بار نوشتن به‌جای سیزده بار
+    # یادآوری. در حالتِ «ترکیبی» و «شناور» بی‌اثر است و فقط `strict` را اعمال می‌کند.
+    tafsili.assert_entry_has_tafsili(db, entry)
     db.add(entry)
     db.flush()
     return entry

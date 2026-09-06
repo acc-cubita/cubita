@@ -22,6 +22,29 @@ from app.models.tenant import TenantMixin
 
 ACCOUNT_TYPES = ("asset", "liability", "equity", "income", "expense")
 
+#: ماهیتِ حساب — سمتی که مانده‌ی حساب طبیعتاً باید در آن باشد. «صندوق» بستانکار
+#: شدن یعنی جایی اشتباه ثبت شده. `any` = حسابی که هر دو سمت برایش طبیعی است
+#: (حسابِ واسط، تسویه، طرفِ‌حسابی که هم می‌خرد هم می‌فروشد).
+ACCOUNT_NATURES = ("debit", "credit", "any")
+ACCOUNT_NATURE_LABELS = {"debit": "بدهکار", "credit": "بستانکار", "any": "مهم نیست"}
+
+#: نوع‌هایی که در **ترازنامه** می‌نشینند؛ بقیه (درآمد و هزینه) در **سود و زیان**.
+#: عمداً ستون نیست: صددرصد از `type` مشتق می‌شود و ذخیره‌کردنش یعنی دو منبعِ حقیقت
+#: که می‌توانند با هم نخوانند — حسابی با `type='asset'` و صورتِ «سود و زیان».
+BALANCE_SHEET_TYPES = ("asset", "liability", "equity")
+STATEMENT_TYPE_LABELS = {"balance_sheet": "ترازنامه‌ای", "income_statement": "سود و زیانی"}
+
+#: ماهیتِ ضمنیِ هر نوعِ حساب. `nature=NULL` یعنی «همین را حساب کن» — پس هیچ حسابِ
+#: موجودی با این مهاجرت معنایش عوض نمی‌شود و کسی مجبور نیست چارتش را دوباره پر کند.
+NATURE_BY_TYPE = {
+    "asset": "debit",
+    "expense": "debit",
+    "liability": "credit",
+    "equity": "credit",
+    "income": "credit",
+}
+
+
 #: وضعیتِ سند. «موقت» یعنی ثبت شده ولی هنوز بازبینی/تأیید نشده؛ «دائم» یعنی
 #: قطعی‌شده. هر دو در دفتر و گزارش‌ها دیده می‌شوند — تفاوت در قابلِ‌بازبینی‌بودن
 #: است، نه در اثرِ مالی.
@@ -39,6 +62,9 @@ class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         # هر نقش در هر کسب‌وکار فقط یک حساب دارد. بدون این قید، دو حساب با نقش
         # «صندوق» ممکن بود وجود داشته باشد و ثبت خودکار بی‌قاعده یکی را برمی‌داشت.
         UniqueConstraint("tenant_id", "system_role", name="uq_accounts_tenant_system_role"),
+        CheckConstraint(f"nature IS NULL OR nature IN {ACCOUNT_NATURES}", name="ck_accounts_nature"),
+        # «تسعیر پذیر» بدونِ «ارزی» بی‌معناست؛ در فرم هم تا ارزی تیک نخورد خاکستری است.
+        CheckConstraint("NOT fx_revaluable OR is_fx", name="ck_accounts_fx_revaluable"),
     )
 
     code: Mapped[str] = mapped_column(String(20), index=True)
@@ -46,18 +72,78 @@ class Account(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: و سرفصل‌ها NULL است — قید یکتا روی NULL اعمال نمی‌شود، پس تعدادشان آزاد است.
     system_role: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دوم (معمولاً انگلیسی) برای گزارشِ دوزبانه و صورت‌های مالیِ ارزی.
+    #: خالی = ندارد؛ هیچ‌جا اجباری نیست و روی نمایشِ فارسی اثر ندارد.
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
     type: Mapped[str] = mapped_column(String(20))
+    #: ماهیتِ *صریح*. NULL یعنی از `type` مشتق شود (`NATURE_BY_TYPE`) — الگوی
+    #: همیشگیِ این مخزن برای «پیش‌فرضِ سرویس». فقط گزارش می‌دهد؛ هیچ ثبتی را
+    #: نمی‌شکند، چون خلافِ ماهیت شدن گاهی واقعاً درست است (اضافه‌برداشتِ بانکی).
+    nature: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_group: Mapped[bool] = mapped_column(default=False)
     #: حسابِ غیرفعال از فهرست‌های ثبتِ سند پنهان می‌شود ولی تاریخچه‌اش می‌ماند —
     #: راهی برای بایگانیِ حساب‌هایی که دیگر استفاده نمی‌شوند ولی سند دارند و پاک
     #: نمی‌شوند. پیش‌فرض فعال؛ حساب‌های موجود بی‌تغییر می‌مانند.
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+    # ── ویژگی‌های حساب ────────────────────────────────────────────────────────
+    # شش پرچمی که فرمِ ویرایشِ حساب نشان می‌دهد. هیچ‌کدام تنهایی مانعِ ثبت نیستند؛
+    # هرکدام یک رفتارِ مشخص را باز یا محدود می‌کند و پیش‌فرضشان طوری است که چارتِ
+    # موجود بی‌تغییر بماند.
+
+    #: کنترلِ ماهیت طی دوره — «این حساب را رصد کن». جدا از خودِ `nature` است: آن
+    #: می‌گوید ماهیت *چیست*، این می‌گوید *پیگیری‌اش کن*. گزارشِ خلافِ ماهیت با
+    #: پارامترِ `controlled_only` می‌تواند فقط همین‌ها را نشان دهد.
+    nature_control: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+    #: حسابِ ارزی — مبنای نمایشِ فیلدهای ارز روی ردیفِ سند.
+    is_fx: Mapped[bool] = mapped_column(default=False, server_default="false")
+    #: تسعیرپذیر. فقط روی حسابِ ارزی معنا دارد (قیدِ `ck_accounts_fx_revaluable`).
+    #: **انصراف است، نه انتخاب**: سندِ تسعیر همه‌ی حساب‌های دارای ردیفِ ارزی را
+    #: می‌بیند، مگر حسابی صریحاً `is_fx` باشد و این خاموش — یعنی «ارزی هست ولی
+    #: تسعیرش نکن». اگر انتخاب بود، پیش‌فرضِ false صفحه‌ی تسعیر را خالی می‌کرد.
+    fx_revaluable: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+    #: تفصیلی‌پذیر — ردیفِ سندِ این حساب **باید** تفصیلی (`analytic_id`) داشته باشد.
+    #:
+    #: این همان «تفصیلیِ شناور»ِ حسابداریِ ایران است: بُعدی متغیر و پرتعداد (۵۰۰
+    #: مشتری) که در فهرستِ جدا نگه داشته می‌شود و لحظه‌ی ثبتِ سند به حساب می‌چسبد.
+    #: **با زیرشاخه‌ی درختی اشتباه نشود** — آن یکی بخشی از کدینگِ چهارسطحی است
+    #: (بانک ملی زیرِ بانک)، کم‌تعداد و ثابت، و قیدِ خودش را دارد: والد نباید سندِ
+    #: مستقیم خورده باشد. این پرچم هیچ کاری به ساختِ زیرحساب ندارد.
+    #:
+    #: قفلش یک‌طرفه است: روشن‌کردن همیشه آزاد، خاموش‌کردن فقط تا وقتی هیچ ردیفی از
+    #: این حساب تفصیلی نگرفته باشد.
+    accepts_tafsili: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+    #: پیگیری — «شماره پیگیری» و «تاریخ پیگیری» را روی ردیفِ سندِ این حساب باز
+    #: می‌کند. ردیفِ حسابی که این پرچم را ندارد پیگیری نمی‌پذیرد.
+    has_tracking: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+    #: نمایش در گزارشاتِ مدیریتی. پیش‌فرض *روشن* تا هیچ حسابی بی‌صدا از گزارش
+    #: نیفتد؛ خاموش‌کردنش کارِ آگاهانه‌ی کاربر است (حساب‌های واسط و انتظامی).
+    in_management_reports: Mapped[bool] = mapped_column(default=True, server_default="true")
+
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
     )
 
     parent: Mapped["Account | None"] = relationship(remote_side="Account.id", back_populates="children")
     children: Mapped[list["Account"]] = relationship(back_populates="parent")
+
+    @property
+    def effective_nature(self) -> str:
+        """ماهیتی که گزارش با آن می‌سنجد: مقدارِ صریح، وگرنه مشتق از نوعِ حساب."""
+        return self.nature or NATURE_BY_TYPE.get(self.type, "any")
+
+    @property
+    def statement_type(self) -> str:
+        """صورتِ مالیِ این حساب — ترازنامه‌ای یا سود و زیانی.
+
+        مشتق است نه ذخیره‌شده. اگر روزی حساب‌های *انتظامی* اضافه شوند، آن‌وقت این
+        اشتقاق می‌شکند و تازه آن‌جا ستونِ صریح موجه می‌شود — نه پیش از آن.
+        """
+        return "balance_sheet" if self.type in BALANCE_SHEET_TYPES else "income_statement"
 
 
 class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -146,6 +232,14 @@ class JournalLine(TenantMixin, UUIDPKMixin, Base):
     currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
     fx_amount: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
     fx_rate: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+
+    #: پیگیری — ارجاعِ آزادِ همین ردیف: شماره‌ی حواله، شماره‌ی نامه، کدِ پرونده.
+    #: فقط برای حسابی که `has_tracking` دارد پذیرفته می‌شود. روی *ردیف* است نه سند،
+    #: چون یک سند می‌تواند چند ردیف با پیگیری‌های متفاوت داشته باشد.
+    #: این جایگزینِ جدولِ `checks` نیست: چک موجودیتی با سررسید و وضعیت و گردش است،
+    #: پیگیری فقط یک ارجاعِ متنی که هیچ گردشی ندارد.
+    tracking_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tracking_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
 
     entry: Mapped["JournalEntry"] = relationship(back_populates="lines")
     account: Mapped["Account"] = relationship()

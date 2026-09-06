@@ -71,10 +71,23 @@ export async function pullAccounts(config: SyncConfig): Promise<void> {
     config,
     '/api/accounts',
     'accounts_cache',
-    ['code', 'name', 'type', 'is_group', 'parent_id'],
-    (a: { id: string; code: string; name: string; type: string; is_group: boolean; parent_id: string | null }) => ({
+    ['code', 'name', 'type', 'is_group', 'parent_id', 'has_tracking', 'accepts_tafsili'],
+    (a: {
+      id: string
+      code: string
+      name: string
+      type: string
+      is_group: boolean
+      parent_id: string | null
+      has_tracking?: boolean
+      accepts_tafsili?: boolean
+    }) => ({
       ...a,
       is_group: a.is_group ? 1 : 0,
+      // پیگیری در کش می‌ماند تا فرمِ سندِ آفلاین هم بداند کدام حساب فیلدِ پیگیری
+      // می‌خواهد؛ بدونش، سندِ صف‌شده موقعِ همگام‌سازی از سرور ۴۰۰ می‌گرفت.
+      has_tracking: a.has_tracking ? 1 : 0,
+      accepts_tafsili: a.accepts_tafsili ? 1 : 0,
     }),
   )
 }

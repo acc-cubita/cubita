@@ -6,6 +6,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PURCHASE_INVOICE, DOC_SALES_INVOICE
+from app.services import tafsili
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.advanced_inventory import StockBatch
@@ -275,6 +276,7 @@ def post_sales_invoice(db: Session, data: SalesInvoiceIn, user: User) -> SalesIn
         created_by_id=user.id,
         lines=journal_lines,
     )
+    tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
     db.flush()
 
@@ -438,6 +440,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         created_by_id=user.id,
         lines=journal_lines,
     )
+    tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
     db.flush()
 
@@ -531,6 +534,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
                 JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
             ],
         )
+        tafsili.assert_entry_has_tafsili(db, journal_entry)
         db.add(journal_entry)
         db.flush()
 

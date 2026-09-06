@@ -34,6 +34,48 @@ class TrialBalanceRowOut(BaseModel):
     balance: Decimal
 
 
+
+class NatureViolationOut(BaseModel):
+    """یک حسابِ خلافِ ماهیت. `balance` همیشه مثبت است و سمتش در `balance_side` می‌آید."""
+
+    account_id: UUID
+    account_code: str
+    account_name: str
+    account_type: str
+    #: ماهیتِ مؤثر (debit/credit) — «any» هرگز این‌جا نمی‌آید چون تخلف ندارد.
+    nature: str
+    #: True یعنی کاربر خودش ماهیت را ست کرده، False یعنی از نوعِ حساب مشتق شده.
+    nature_is_explicit: bool
+    #: تیکِ «کنترل ماهیت طی دوره» روی همین حساب.
+    nature_control: bool = False
+    total_debit: Decimal
+    total_credit: Decimal
+    balance: Decimal
+    balance_side: str
+
+
+class MissingTafsiliOut(BaseModel):
+    """ردیفی روی حسابِ «تفصیلی پذیر» که تفصیلی ندارد.
+
+    در **هر سه** سطحِ اجبار پر می‌شود؛ سطحِ اجبار تعیین می‌کند چه چیزی *مسدود* شود،
+    نه چه چیزی *دیده* شود.
+    """
+
+    account_id: UUID
+    account_code: str
+    account_name: str
+    entry_id: UUID
+    entry_number: int | None
+    entry_date: date
+    source_type: str
+    #: سندِ دستی یا ساخته‌ی ماژول — در حالتِ «ترکیبی» تقریباً همه‌ی این ردیف‌ها
+    #: از ماژول‌ها می‌آیند، و همان است که باید دیده شود.
+    is_manual: bool
+    debit: Decimal
+    credit: Decimal
+    description: str
+
+
 class AccountBalanceOut(BaseModel):
     account_id: UUID
     account_code: str
@@ -140,7 +182,7 @@ class InventoryReportOut(BaseModel):
 
 class ContactStatementLineOut(BaseModel):
     txn_date: date
-    kind: str  # sales_invoice | sales_return | purchase_invoice | purchase_return | receipt | payment
+    kind: str  # opening | sales_invoice | sales_return | purchase_invoice | purchase_return | receipt | payment
     number: int | None
     description: str
     debit: Decimal  # بدهیِ شخص به ما را زیاد می‌کند

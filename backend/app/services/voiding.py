@@ -60,6 +60,11 @@ def _reverse_lines(entry: JournalEntry) -> list[JournalLine]:
             currency_code=line.currency_code,
             fx_amount=line.fx_amount,
             fx_rate=line.fx_rate,
+            # پیگیری هم منتقل می‌شود: سندِ برگشتی باید با همان ارجاع پیدا شود که
+            # سندِ اصلی. اگر نمی‌رفت، جستجوی «شماره‌ی حواله» فقط نصفِ ماجرا را
+            # می‌آورد و مانده‌ی صفرشده نامرئی می‌ماند.
+            tracking_no=line.tracking_no,
+            tracking_date=line.tracking_date,
         )
         for line in entry.lines
     ]

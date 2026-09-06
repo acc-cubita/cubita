@@ -1,0 +1,466 @@
+{
+  "parents": [
+    {
+      "code": "1",
+      "title": "دارایی‌ها",
+      "type": "asset",
+      "is_group": true,
+      "parent": null
+    },
+    {
+      "code": "11",
+      "title": "دارایی‌های جاری",
+      "type": "asset",
+      "is_group": true,
+      "parent": "1"
+    },
+    {
+      "code": "12",
+      "title": "دارایی‌های غیرجاری",
+      "type": "asset",
+      "is_group": true,
+      "parent": "1"
+    },
+    {
+      "code": "2",
+      "title": "بدهی‌ها",
+      "type": "liability",
+      "is_group": true,
+      "parent": null
+    },
+    {
+      "code": "21",
+      "title": "بدهی‌های جاری",
+      "type": "liability",
+      "is_group": true,
+      "parent": "2"
+    },
+    {
+      "code": "3",
+      "title": "حقوق صاحبان سرمایه",
+      "type": "equity",
+      "is_group": true,
+      "parent": null
+    },
+    {
+      "code": "4",
+      "title": "درآمدها",
+      "type": "income",
+      "is_group": true,
+      "parent": null
+    },
+    {
+      "code": "5",
+      "title": "هزینه‌ها",
+      "type": "expense",
+      "is_group": true,
+      "parent": null
+    }
+  ],
+  "common": [
+    {
+      "code": "1108",
+      "title": "پیش‌پرداخت‌ها",
+      "type": "asset",
+      "is_group": false,
+      "parent": "11"
+    },
+    {
+      "code": "1109",
+      "title": "سپرده‌ها و ودیعه‌ها",
+      "type": "asset",
+      "is_group": false,
+      "parent": "11"
+    },
+    {
+      "code": "1110",
+      "title": "جاری شرکا",
+      "type": "asset",
+      "is_group": false,
+      "parent": "11"
+    },
+    {
+      "code": "2106",
+      "title": "پیش‌دریافت از مشتریان",
+      "type": "liability",
+      "is_group": false,
+      "parent": "21"
+    },
+    {
+      "code": "2107",
+      "title": "هزینه‌های پرداختنی",
+      "type": "liability",
+      "is_group": false,
+      "parent": "21"
+    },
+    {
+      "code": "2108",
+      "title": "وام و تسهیلات دریافتی",
+      "type": "liability",
+      "is_group": false,
+      "parent": "21"
+    },
+    {
+      "code": "4104",
+      "title": "تخفیفات و برگشت از فروش",
+      "type": "income",
+      "is_group": false,
+      "parent": "4"
+    },
+    {
+      "code": "4105",
+      "title": "درآمد حاصل از سود سپرده و متفرقه",
+      "type": "income",
+      "is_group": false,
+      "parent": "4"
+    },
+    {
+      "code": "5107",
+      "title": "هزینه آب، برق، گاز و تلفن",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5108",
+      "title": "هزینه ملزومات و لوازم مصرفی",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5109",
+      "title": "هزینه تبلیغات و بازاریابی",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5110",
+      "title": "هزینه حمل و نقل",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5111",
+      "title": "کارمزد و هزینه‌های بانکی",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5112",
+      "title": "هزینه تعمیر و نگهداری",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5113",
+      "title": "هزینه بیمه",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5114",
+      "title": "هزینه مالیات و عوارض",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    },
+    {
+      "code": "5115",
+      "title": "سایر هزینه‌های عملیاتی",
+      "type": "expense",
+      "is_group": false,
+      "parent": "5"
+    }
+  ],
+  "templates": {
+    "trading": {
+      "label": "کدینگ بازرگانی",
+      "hint": "خرید و فروشِ کالا: کالای در راه، ترخیص، انبارداری، فروشِ عمده و خرده.",
+      "rows": [
+        {
+          "code": "1120",
+          "title": "موجودی کالای در راه",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1121",
+          "title": "پیش‌پرداخت خرید کالا",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "4110",
+          "title": "فروش عمده",
+          "type": "income",
+          "is_group": false,
+          "parent": "4"
+        },
+        {
+          "code": "4111",
+          "title": "فروش خرده",
+          "type": "income",
+          "is_group": false,
+          "parent": "4"
+        },
+        {
+          "code": "5120",
+          "title": "تخفیفات و برگشت از خرید",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5121",
+          "title": "هزینه گمرک و ترخیص کالا",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5122",
+          "title": "هزینه انبارداری",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5123",
+          "title": "هزینه بسته‌بندی",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        }
+      ]
+    },
+    "services": {
+      "label": "کدینگ خدماتی",
+      "hint": "ارائه‌ی خدمات: درآمدِ خدمات و قرارداد، کارِ در جریان، هزینه‌ی مستقیمِ خدمت.",
+      "rows": [
+        {
+          "code": "1130",
+          "title": "کار در جریانِ خدمات",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "4120",
+          "title": "درآمد ارائه خدمات",
+          "type": "income",
+          "is_group": false,
+          "parent": "4"
+        },
+        {
+          "code": "4121",
+          "title": "درآمد قراردادهای پشتیبانی",
+          "type": "income",
+          "is_group": false,
+          "parent": "4"
+        },
+        {
+          "code": "5130",
+          "title": "هزینه مستقیم ارائه خدمات",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5131",
+          "title": "حق‌الزحمه همکاران و پیمانکاران فرعی",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5132",
+          "title": "هزینه ایاب و ذهاب و مأموریت",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5133",
+          "title": "هزینه ابزار و نرم‌افزار",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        }
+      ]
+    },
+    "manufacturing": {
+      "label": "کدینگ تولیدی",
+      "hint": "تولید: مواد اولیه، کالای در جریان ساخت، دستمزد مستقیم و سربارِ ساخت.",
+      "rows": [
+        {
+          "code": "1140",
+          "title": "موجودی مواد اولیه",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1141",
+          "title": "موجودی کالای در جریان ساخت",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1142",
+          "title": "موجودی کالای ساخته‌شده",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1143",
+          "title": "موجودی قطعات و لوازم یدکی",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "5140",
+          "title": "مواد مستقیم مصرفی",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5141",
+          "title": "دستمزد مستقیم تولید",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5142",
+          "title": "سربار ساخت",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5143",
+          "title": "هزینه انرژی خط تولید",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5144",
+          "title": "ضایعات تولید",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5145",
+          "title": "هزینه کنترل کیفیت",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        }
+      ]
+    },
+    "contracting": {
+      "label": "کدینگ پیمانکاری",
+      "hint": "پیمانکاری: کارِ در جریانِ پیمان، صورت‌وضعیت، حسن انجام کار، سربارِ کارگاه.",
+      "rows": [
+        {
+          "code": "1150",
+          "title": "کار در جریانِ پیمان",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1151",
+          "title": "صورت‌وضعیت تأییدنشده",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1152",
+          "title": "سپرده حسن انجام کار (نزد کارفرما)",
+          "type": "asset",
+          "is_group": false,
+          "parent": "11"
+        },
+        {
+          "code": "1153",
+          "title": "ماشین‌آلات و تجهیزات کارگاه",
+          "type": "asset",
+          "is_group": false,
+          "parent": "12"
+        },
+        {
+          "code": "2110",
+          "title": "پیش‌دریافت پیمان",
+          "type": "liability",
+          "is_group": false,
+          "parent": "21"
+        },
+        {
+          "code": "2111",
+          "title": "سپرده حسن انجام کار پیمانکاران فرعی",
+          "type": "liability",
+          "is_group": false,
+          "parent": "21"
+        },
+        {
+          "code": "4130",
+          "title": "درآمد پیمان",
+          "type": "income",
+          "is_group": false,
+          "parent": "4"
+        },
+        {
+          "code": "5150",
+          "title": "هزینه مصالح پیمان",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5151",
+          "title": "دستمزد کارگاه",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5152",
+          "title": "هزینه ماشین‌آلات کارگاه",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5153",
+          "title": "هزینه پیمانکاران جزء",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        },
+        {
+          "code": "5154",
+          "title": "سربار کارگاه",
+          "type": "expense",
+          "is_group": false,
+          "parent": "5"
+        }
+      ]
+    }
+  }
+}

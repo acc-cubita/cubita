@@ -418,6 +418,8 @@ def merge_entries(db: Session, user: User, entry_ids: list[UUID], description: s
             currency_code=line.currency_code,
             fx_amount=line.fx_amount,
             fx_rate=line.fx_rate,
+            tracking_no=line.tracking_no,
+            tracking_date=line.tracking_date,
         )
         for entry in sorted(entries, key=lambda e: (e.number or 0))
         for line in entry.lines
@@ -494,6 +496,13 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
     for account_id, code, debit, credit, fx_net in rows:
         account = accounts.get(account_id)
         if account is None:
+            continue
+        #: «تسعیر پذیر» انصراف است نه انتخاب. هر حسابی که ردیفِ ارزی دارد به‌طورِ
+        #: طبیعی تسعیر می‌شود؛ تنها راهِ کنارگذاشتنش این است که کاربر صریحاً آن را
+        #: «ارزی» علامت بزند و «تسعیرپذیر» را بردارد — یعنی «می‌دانم ارزی است،
+        #: تسعیرش نکن» (تنخواهِ ارزیِ بسته، حسابِ واسطِ ارزی). اگر انتخاب بود،
+        #: پیش‌فرضِ خاموشِ مهاجرتِ ۰۰۸۸ این صفحه را یک‌شبه خالی می‌کرد.
+        if account.is_fx and not account.fx_revaluable:
             continue
         fx_balance = Decimal(fx_net or 0)
         book_value = Decimal(debit) - Decimal(credit)  # مانده‌ی ریالیِ خام (بدهکار مثبت)

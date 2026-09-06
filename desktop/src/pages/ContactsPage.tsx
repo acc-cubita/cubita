@@ -312,6 +312,11 @@ export function ContactsPage({ token }: { token: string }) {
                       </td>
                       <td data-label="نوع">
                         <span className={`status-badge type-badge ${c.type}`}>{TYPE_LABELS[c.type]}</span>
+                        {/* واسطه و سهامدار در `type` نمی‌گنجند و پرچمِ جدا دارند. بی این
+                            دو نشان، نقشی که در فرمِ کاملِ «طرف حساب جدید» ثبت شده این‌جا
+                            ناپیدا می‌ماند و کاربر گمان می‌کند پاک شده. */}
+                        {c.is_broker && <> <span className="status-badge">واسطه</span></>}
+                        {c.is_shareholder && <> <span className="status-badge">سهامدار</span></>}
                       </td>
                       <td data-label="مانده" className="money-cell">
                         {bal === 0 ? '۰' : (

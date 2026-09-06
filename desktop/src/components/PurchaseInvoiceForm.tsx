@@ -8,6 +8,7 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { QuickItemForm } from './QuickItemForm'
 import { usePurchaseInvoiceDraft } from '../lib/purchaseInvoiceDraft'
+import { BlacklistBanner } from './BlacklistBanner'
 
 /** فرمِ کلاسیکِ «ثبت فاکتور خرید» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [usePurchaseInvoiceDraft] است تا با ویزاردِ نسخه‌ی جدید یک‌دست بماند. */
@@ -81,6 +82,7 @@ export function PurchaseInvoiceForm({
               </select>
             </label>
           )}
+          {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
           {d.currencies.length > 0 && (
             <div className="field-row">
               <label>

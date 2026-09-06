@@ -294,6 +294,11 @@ export function useSalesInvoiceDraft({
   const rate = currencyCode ? Number(exchangeRate) || 1 : 1
   const baseGrandTotal = Math.round(grandTotal * rate)
 
+  //: لیستِ سیاه فقط هشدار می‌دهد و ثبت را نمی‌بندد — گاهی آگاهانه و موقتاً برای
+  //: همان شخص فاکتور می‌زنیم. از خودِ رکوردِ طرف‌حساب خوانده می‌شود، نه از یک
+  //: درخواستِ جدا: فهرست از قبل این‌جاست و نمای دومِ همان داده نمی‌سازیم.
+  const blacklisted = contacts.some((c) => c.id === contactId && c.is_blacklisted)
+
   // اعتبارسنجیِ آماده‌ی ثبت (برای گِیتِ مرحله‌ی ویزارد و پیامِ فرم).
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0)
   const overDiscountLine = validLines.find(
@@ -393,6 +398,7 @@ export function useSalesInvoiceDraft({
     contactId,
     setContactId,
     credit,
+    blacklisted,
     autoTier,
     currencies,
     currencyCode,

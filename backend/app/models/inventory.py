@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    Integer,
     Index,
     Numeric,
     Sequence,
@@ -24,6 +25,36 @@ from app.models.tenant import TenantMixin
 
 CONTACT_TYPES = ("customer", "supplier", "both")
 
+#: با عبور از سقفِ اعتبار چه شود. `none` پیش‌فرض است تا سقف‌هایی که از قبل ثبت
+#: شده‌اند یک‌شبه جلوی فروش را نگیرند.
+CREDIT_ACTIONS = ("none", "warn", "block")
+CREDIT_ACTION_LABELS = {
+    "none": "بدون کنترل",
+    "warn": "هشدار بده",
+    "block": "جلوگیری کن",
+}
+
+#: جنسیت و وضعیتِ تأهل. رشته‌ی خالی = وارد نشده، چون در فرمِ سپیدار هم اجباری نیست
+#: و مجبورکردنِ کاربر به انتخاب برای یک مشتریِ حقوقی بی‌معناست.
+GENDERS = ("", "male", "female")
+GENDER_LABELS = {"male": "مرد", "female": "زن"}
+MARITAL_STATUSES = ("", "single", "married", "divorced", "widowed")
+MARITAL_STATUS_LABELS = {
+    "single": "مجرد",
+    "married": "متأهل",
+    "divorced": "مطلقه",
+    "widowed": "همسر فوت‌شده",
+}
+
+#: دسته‌بندیِ وزارت دارایی برای گزارشِ معاملاتِ فصلی.
+TAX_MINISTRY_CLASSES = ("normal", "gold", "currency", "estate")
+TAX_MINISTRY_CLASS_LABELS = {
+    "normal": "عادی",
+    "gold": "طلا و جواهر",
+    "currency": "ارز",
+    "estate": "املاک",
+}
+
 
 class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "warehouses"
@@ -38,10 +69,36 @@ class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """طرف حساب: مشتری، تأمین‌کننده یا هر دو."""
+    """طرف حساب: مشتری، تأمین‌کننده، واسطه یا سهامدار — و هر ترکیبی از این چهار.
+
+    `type` فقط دو نقشِ *معاملاتی* را نگه می‌دارد (مشتری/تأمین‌کننده/هردو) چون فیلترها
+    و گزارش‌های موجود روی همان تکیه دارند. واسطه و سهامدار پرچمِ مستقل‌اند، پس هر
+    چهار نقش هم‌زمان ممکن‌اند بی‌آنکه چیزی از قبل بشکند.
+    """
 
     __tablename__ = "contacts"
-    __table_args__ = (CheckConstraint(f"type IN {CONTACT_TYPES}", name="ck_contacts_type"),)
+    __table_args__ = (
+        CheckConstraint(f"type IN {CONTACT_TYPES}", name="ck_contacts_type"),
+        CheckConstraint(f"credit_action IN {CREDIT_ACTIONS}", name="ck_contacts_credit_action"),
+        CheckConstraint(
+            "discount_rate >= 0 AND discount_rate <= 100 "
+            "AND commission_rate >= 0 AND commission_rate <= 100",
+            name="ck_contacts_rates",
+        ),
+        CheckConstraint(
+            "opening_ar_amount >= 0 AND opening_ap_amount >= 0 "
+            "AND opening_ar_side IN ('debit', 'credit') "
+            "AND opening_ap_side IN ('debit', 'credit')",
+            name="ck_contacts_opening",
+        ),
+        CheckConstraint(
+            "children_count >= 0 AND dependents_count >= 0 "
+            "AND share_percent >= 0 AND share_percent <= 100 "
+            f"AND gender IN {GENDERS} "
+            f"AND marital_status IN {MARITAL_STATUSES}",
+            name="ck_contacts_person",
+        ),
+    )
 
     name: Mapped[str] = mapped_column(String(200))
     type: Mapped[str] = mapped_column(String(20), default="customer")
@@ -81,6 +138,96 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     geo_location_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("geo_locations.id", ondelete="SET NULL"), nullable=True
     )
+
+    # ── هویتِ تفکیک‌شده ────────────────────────────────────────────────────────
+    #: نام و نام خانوادگی جدا. `name` بالا **نامِ نمایشی** است و دست‌نخورده می‌ماند —
+    #: روی فاکتور، گزارشِ فصلی و صورت‌حساب نشسته و شکستنش تغییرِ شکننده‌ای بود.
+    #: سرویس `name` را از این دو می‌سازد؛ خالی بودنشان یعنی نامِ یک‌تکه (شرکت).
+    first_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    last_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    #: نام و نام خانوادگیِ دوم (معمولاً انگلیسی) برای اسنادِ دوزبانه.
+    first_name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    last_name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    #: نوعِ فرعی — دسته‌بندیِ آزادِ کاربر زیرِ حقیقی/حقوقی («سایر»، «دولتی»، «خیریه»).
+    sub_type: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    website: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    #: شماره ثبت (حقوقی) و شماره گذرنامه (حقیقیِ خارجی). NULL = وارد نشده.
+    registration_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    passport_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    marriage_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    #: لیستِ سیاه — جدا از `is_active`: غیرفعال یعنی «دیگر کار نمی‌کنیم»، لیستِ سیاه
+    #: یعنی «کار می‌کنیم ولی با احتیاط». هر دو با هم هم ممکن‌اند.
+    is_blacklisted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: نرخِ تخفیفِ پیش‌فرضِ این مشتری (درصد). صفر = بدونِ تخفیف.
+    discount_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    #: دسته‌بندیِ وزارت دارایی («عادی»، «طلا و جواهر»، …) — برای گزارشِ فصلی.
+    tax_ministry_class: Mapped[str] = mapped_column(
+        String(30), default="normal", server_default="normal"
+    )
+
+    # ── کنترلِ اعتبار ─────────────────────────────────────────────────────────
+    #: `credit_limit` بالا تا امروز ذخیره می‌شد ولی **هیچ‌جا اعمال نمی‌شد**. این
+    #: ستون می‌گوید با عبور از سقف چه شود: none = هیچ (پیش‌فرض، همان رفتارِ قبلی)،
+    #: warn = هشدار بده ولی بگذار، block = جلوی عملیات را بگیر.
+    credit_action: Mapped[str] = mapped_column(String(10), default="none", server_default="none")
+
+    # ── نقشِ سوم ──────────────────────────────────────────────────────────────
+    #: واسطه. پرچمِ مستقل است نه مقدارِ تازه‌ی `type`: ده‌ها فیلتر و گزارش روی
+    #: (customer, supplier, both) تکیه دارند و افزودنِ مقدار به آن یعنی بازبینیِ
+    #: همه‌شان. این‌طور، فرم همان سه تیکِ مستقل را می‌دهد بی‌آنکه چیزی بشکند.
+    is_broker: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    commission_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    # ── دو پیوند، نه دو کپی ───────────────────────────────────────────────────
+    #: تفصیلیِ این طرف‌حساب — همان «کد/عنوان تفصیلی»ِ فرمِ سپیدار. به جدولِ موجود
+    #: وصل می‌شود تا ردیفِ سند و گزارشِ تفصیلی از یک منبع بخوانند.
+    analytic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analytic_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    #: کارمندِ متناظر در ماژولِ حقوق و دستمزد — تبِ «مشخصات کارمند». پیوند است نه
+    #: کپی: نام و کد ملی و تاریخِ استخدام همان‌جا می‌مانند. یک آدم، یک رکورد.
+    employee_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # ── مانده‌ی اول دوره ──────────────────────────────────────────────────────
+    #: مانده‌ی طرف‌حساب در ابتدای دوره، به تفکیکِ نقش. دو مبلغِ جدا چون حسابِ
+    #: دریافتنی و پرداختنی دو حسابِ متفاوت‌اند و یک طرف‌حساب می‌تواند هم‌زمان هر دو
+    #: باشد. سمت جداست چون مانده‌ی خلافِ انتظار واقعاً پیش می‌آید (پیش‌دریافت از
+    #: مشتری، پیش‌پرداخت به تأمین‌کننده).
+    #:
+    #: همان الگویِ «موجودیِ اول دوره»ی کالا: عدد این‌جا می‌نشیند و سندِ افتتاحیه از
+    #: رویش ساخته می‌شود. **پس از ثبتِ افتتاحیه قفل می‌شوند** — وگرنه عددِ این‌جا و
+    #: ردیفِ سند از هم جدا می‌افتند و گزارش دو حقیقت می‌گوید.
+    opening_ar_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    opening_ar_side: Mapped[str] = mapped_column(String(6), default="debit", server_default="debit")
+    opening_ap_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    opening_ap_side: Mapped[str] = mapped_column(String(6), default="credit", server_default="credit")
+
+    # ── مشخصاتِ شخصی ─────────────────────────────────────────────────────────
+    # این‌ها واقعیت‌های *شخص*اند نه شغلش؛ چه کارمند باشد چه مشتری درست‌اند. اگر روی
+    # `employees` می‌نشستند، مشتریِ غیرکارمند هیچ‌وقت نمی‌توانست داشته باشدشان.
+    # واقعیت‌های *استخدام* (حکم، تاریخ استخدام، شماره حساب، مرخصی) سرِ جایشان در
+    # ماژولِ حقوق و دستمزد می‌مانند و `employee_id` پلِ این دو است.
+    gender: Mapped[str] = mapped_column(String(10), default="", server_default="")
+    marital_status: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    marital_status_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    children_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: افرادِ تحتِ تکفل — مبنای معافیتِ مالیاتی و بیمه، پس جدا از تعدادِ فرزند.
+    dependents_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    education_level: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    education_field: Mapped[str] = mapped_column(String(150), default="", server_default="")
+    #: تیکِ «کارمند» در فرم. `employee_id` می‌گوید *کدام* کارمند؛ این می‌گوید آیا
+    #: کاربر این طرف‌حساب را کارمند می‌داند — دو چیزِ متفاوت، چون ممکن است تیک بزند
+    #: و هنوز رکوردِ حقوق و دستمزدش را نساخته باشد.
+    is_employee: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: نقشِ چهارم، مثلِ `is_broker` پرچمِ مستقل و نه مقدارِ تازه‌ی `type`.
+    is_shareholder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    share_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    #: کد و عنوانِ تفصیلی از همین رابطه خوانده می‌شوند، نه از ستونی روی طرف‌حساب.
+    analytic: Mapped["AnalyticAccount | None"] = relationship(lazy="joined")  # noqa: F821
 
 
 class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

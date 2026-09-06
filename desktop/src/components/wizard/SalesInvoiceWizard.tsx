@@ -9,6 +9,7 @@ import { ItemPicker } from '../ItemPicker'
 import { CardPaymentButton } from '../CardPaymentDialog'
 import { CreditBanner } from '../SalesInvoiceForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { BlacklistBanner } from '../BlacklistBanner'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -163,6 +164,7 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
           )}
         </div>
       )}
+      {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
       {d.credit && Number(d.credit.credit_limit) > 0 && (
         <CreditBanner credit={d.credit} invoiceTotal={d.baseGrandTotal} />
       )}

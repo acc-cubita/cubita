@@ -10,7 +10,7 @@ from app.database import get_db
 from app.deps import require_permission
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.services.numbering import next_document_number
-from app.models.accounting import JournalEntry, JournalLine
+from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.accounting import JournalEntryIn, JournalEntryOut, SubNumberIn
@@ -18,9 +18,41 @@ from app.schemas.voiding import VoidIn, VoidOut
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
+from app.services import tafsili
 from app.services.voiding import void_journal_entry
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
+
+
+def _assert_tracking_allowed(db: Session, lines) -> None:
+    """پیگیری فقط روی حسابی که «پیگیری» دارد.
+
+    رد کردن، نه دور ریختنِ خاموش: اگر کاربر شماره‌ی حواله‌ای وارد کرده و سرور آن را
+    بی‌صدا نادیده می‌گرفت، سند ثبت می‌شد و آن ارجاع برای همیشه گم بود — و کسی هم
+    نمی‌فهمید، چون هیچ خطایی نیامده بود.
+    """
+    wanted = {
+        line.account_id for line in lines if line.tracking_no is not None or line.tracking_date is not None
+    }
+    if not wanted:
+        return
+    allowed = {
+        row.id
+        for row in db.query(Account.id).filter(
+            Account.id.in_(wanted), Account.has_tracking.is_(True)
+        )
+    }
+    missing = wanted - allowed
+    if missing:
+        names = [
+            f"{a.code} {a.name}"
+            for a in db.query(Account).filter(Account.id.in_(missing)).order_by(Account.code)
+        ]
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این حساب‌ها پیگیری نمی‌پذیرند؛ از ویرایشِ حساب گزینه‌ی «پیگیری» را "
+            f"روشن کنید: {'، '.join(names)}",
+        )
 
 
 @router.get("", response_model=Page[JournalEntryOut])
@@ -80,6 +112,19 @@ def create_entry(
     assert_period_open(db, data.entry_date)
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     entry_analytic_id = resolve_analytic_id(db, data.analytic_id)
+    _assert_tracking_allowed(db, data.lines)
+
+    # تفصیلیِ ردیف بر تفصیلیِ سند مقدم است: سطحِ ریزتر همیشه برنده. یک‌بار این‌جا
+    # حل می‌شود تا هم گاردِ زیر و هم ساختِ ردیف‌ها از یک مقدار بخوانند — وگرنه
+    # گارد چیزی را می‌سنجید که با آنچه ذخیره می‌شود یکی نیست.
+    line_analytics = [
+        resolve_analytic_id(db, line.analytic_id) or entry_analytic_id for line in data.lines
+    ]
+    tafsili.assert_lines_have_tafsili(
+        db,
+        [(line.account_id, analytic) for line, analytic in zip(data.lines, line_analytics)],
+        source_type="manual",
+    )
 
     # شماره‌ی سند از یک sequence اتمیک پایگاه‌داده گرفته می‌شود تا زیر بار همزمان چند کاربر تصادم نکند
     number = next_document_number(db, DOC_JOURNAL_ENTRY)
@@ -98,16 +143,17 @@ def create_entry(
             JournalLine(
                 account_id=line.account_id,
                 cost_center_id=cost_center_id,
-                # تفصیلیِ ردیف بر تفصیلیِ سند مقدم است: سطحِ ریزتر همیشه برنده.
-                analytic_id=resolve_analytic_id(db, line.analytic_id) or entry_analytic_id,
+                analytic_id=analytic,
                 debit=line.debit,
                 credit=line.credit,
                 description=line.description,
                 currency_code=line.currency_code,
                 fx_amount=line.fx_amount,
                 fx_rate=line.fx_rate,
+                tracking_no=line.tracking_no,
+                tracking_date=line.tracking_date,
             )
-            for line in data.lines
+            for line, analytic in zip(data.lines, line_analytics)
         ],
     )
     db.add(entry)

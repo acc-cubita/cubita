@@ -27,6 +27,7 @@ import {
   DatabaseBackup,
   Download,
   FileCheck2,
+  FileSignature,
   FileSpreadsheet,
   FileStack,
   Gauge,
@@ -149,6 +150,11 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
   //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
   //: نه یک پیش‌نمایشِ چندردیفی.
+  //: «حقوق و دستمزد» — دفترِ نظیرِ «قرارداد جدید». بقیه‌ی منوهای این ماژول
+  //: خودشان فهرستِ خودشان را دارند (نگاهی به OPS_LIST_MAP).
+  'حقوق و دستمزد': [
+    { key: 'contractlist', label: 'قراردادها', icon: FileSignature },
+  ],
   'سامانه مؤدیان': [
     { key: 'moadianhistory', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
   ],
@@ -203,6 +209,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   contactgrouplist: 'شرکت',
   calendarlist: 'شرکت',
   numberinglist: 'تنظیمات',
+  contractlist: 'حقوق و دستمزد',
   moadianhistory: 'سامانه مؤدیان',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
@@ -306,6 +313,10 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
 
   // ── تنظیمات ──
   fiscalyear: 'fiscalyearlist',
+  //: قالبِ صنفی حساب می‌سازد، و دفترِ حساب‌ها همان «فهرست حساب‌ها» است — فهرستِ
+  //: دوم یعنی دو نمای یک داده.
+  coding: 'accountlist',
+  personalization: 'accountlist',
   numbering: 'numberinglist',
   team: 'userlist',
   backup: 'backuplist',
@@ -350,6 +361,14 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   banking: 'view',
   fixedassets: 'view',
   payroll: 'view',
+  //: ── حقوق و دستمزد ──
+  contractnew: 'contractlist',
+  //: این چهار صفحه خودشان دفترِ خودشان‌اند: فرمِ ساختِ کوتاه بالا، فهرستِ کاملِ
+  //: همان رکوردها زیرش. فهرستِ جدا یعنی دو نمای یک داده — استثنای سومِ قاعده‌ی نظیر.
+  servicelocation: 'view',
+  jobtitle: 'view',
+  payrollfactors: 'view',
+  payrolltaxgroups: 'view',
   integration: 'none',
   contracting: 'view',
   distributor: 'view',
