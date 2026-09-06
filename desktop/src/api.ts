@@ -722,11 +722,35 @@ export interface PayslipRecord {
 export const fetchPayslips = (token: string, periodId: string) =>
   authedGetAll<PayslipRecord>(token, `/api/payslips?period_id=${periodId}`)
 
+/**
+ * دفترِ فیش‌ها — همه‌ی دوره‌ها، با فیلترِ اختیاریِ دوره و کارمند.
+ *
+ * `fetchPayslips` بالا فیش‌های *یک* دوره را برای صفحه‌ی صدور می‌آورد؛ این یکی
+ * دفترِ مرورِ چنددوره‌ای است. فیلتر سمتِ سرور می‌رود، نه مرورگر.
+ */
+export const fetchPayslipLedger = (
+  token: string,
+  filters: { periodId?: string; employeeId?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  if (filters.periodId) q.set('period_id', filters.periodId)
+  if (filters.employeeId) q.set('employee_id', filters.employeeId)
+  const qs = q.toString()
+  return authedGetAll<PayslipRecord>(token, `/api/payslips${qs ? `?${qs}` : ''}`)
+}
+
 export const generatePayslips = (token: string, periodId: string) =>
   authedSend<PayslipRecord[]>(token, 'POST', `/api/payroll-periods/${periodId}/generate-payslips`, {})
 
-export async function downloadInsuranceListCsv(token: string, periodId: string): Promise<{ filename: string; blob: Blob }> {
-  const res = await fetch(`${API_BASE_URL}/api/payroll-periods/${periodId}/insurance-list.csv`, {
+/** سه خروجیِ CSVِ دوره‌ی حقوق. نامِ فایل از خودِ سرور می‌آید، نه از حدسِ کلاینت. */
+export type PayrollExportKind = 'insurance-list' | 'tax-list' | 'payment-list'
+
+export async function downloadPayrollCsv(
+  token: string,
+  periodId: string,
+  kind: PayrollExportKind,
+): Promise<{ filename: string; blob: Blob }> {
+  const res = await fetch(`${API_BASE_URL}/api/payroll-periods/${periodId}/${kind}.csv`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
@@ -735,9 +759,8 @@ export async function downloadInsuranceListCsv(token: string, periodId: string):
   }
   const disposition = res.headers.get('Content-Disposition') ?? ''
   const match = /filename="?([^"]+)"?/.exec(disposition)
-  const filename = match?.[1] ?? 'insurance-list.csv'
   const blob = await res.blob()
-  return { filename, blob }
+  return { filename: match?.[1] ?? `${kind}.csv`, blob }
 }
 
 // نرخ‌های بیمه/مالیاتِ حقوق برای هر سالِ شمسی. صدورِ فیش تا وقتی این تنظیمات (با

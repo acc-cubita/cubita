@@ -38,6 +38,7 @@ import {
   ListChecks,
   ListTree,
   MapPin,
+  Receipt,
   Repeat,
   Tag,
   Tags,
@@ -154,6 +155,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: خودشان فهرستِ خودشان را دارند (نگاهی به OPS_LIST_MAP).
   'حقوق و دستمزد': [
     { key: 'contractlist', label: 'قراردادها', icon: FileSignature },
+    { key: 'payslipledger', label: 'مرور حقوق', icon: Receipt },
   ],
   'سامانه مؤدیان': [
     { key: 'moadianhistory', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
@@ -210,6 +212,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   calendarlist: 'شرکت',
   numberinglist: 'تنظیمات',
   contractlist: 'حقوق و دستمزد',
+  payslipledger: 'حقوق و دستمزد',
   moadianhistory: 'سامانه مؤدیان',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',

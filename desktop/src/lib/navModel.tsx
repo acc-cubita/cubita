@@ -97,6 +97,7 @@ export type PageKey =
   | 'payroll'
   | 'contractnew'
   | 'contractlist'
+  | 'payslipledger'
   | 'servicelocation'
   | 'jobtitle'
   | 'payrollfactors'

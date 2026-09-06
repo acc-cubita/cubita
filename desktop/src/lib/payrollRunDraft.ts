@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createPayrollPeriod,
-  downloadInsuranceListCsv,
+  downloadPayrollCsv,
+  type PayrollExportKind,
   fetchAttendance,
   fetchPayrollPeriods,
   fetchPayslips,
@@ -121,10 +122,10 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     }
   }
 
-  async function downloadInsurance() {
+  async function downloadCsv(kind: PayrollExportKind) {
     setMessage(null)
     try {
-      const { filename, blob } = await downloadInsuranceListCsv(token, selectedPeriodId)
+      const { filename, blob } = await downloadPayrollCsv(token, selectedPeriodId, kind)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -152,7 +153,7 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     saveAttendance,
     payslips,
     generate,
-    downloadInsurance,
+    downloadCsv,
     message,
     openPayslip,
     setOpenPayslip,

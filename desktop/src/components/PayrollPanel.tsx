@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Save, CalendarPlus, Download, FileText, Gift, Settings } from 'lucide-react'
+import { Users, Save, CalendarPlus, Download, FileSignature, FileText, Gift, Settings } from 'lucide-react'
 import { Tabs } from './Tabs'
 import { BenefitsPanel } from './BenefitsPanel'
 import { Pager, usePagination } from './Pager'
@@ -9,18 +9,23 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { PayrollSettingsPanel } from './PayrollSettingsPanel'
 import { PayslipDrawer } from './PayslipDrawer'
 import { formatJalali, JALALI_MONTH_NAMES } from '../lib/jalali'
+import type { PageKey } from '../lib/navModel'
 import { fetchEmployees, type EmployeeRecord } from '../api'
 import { useTheme } from '../lib/theme'
 import { useEmployeeDraft } from '../lib/employeeDraft'
-import { useSalaryContractDraft } from '../lib/salaryContractDraft'
 import { usePayrollRunDraft, type PayrollRunDraft } from '../lib/payrollRunDraft'
 import { EmployeeWizard } from './wizard/EmployeeWizard'
-import { SalaryContractWizard } from './wizard/SalaryContractWizard'
 import { PayrollRunWizard } from './wizard/PayrollRunWizard'
 
 // دوره‌ی حقوق شمسی است: ماه‌ها فروردین..اسفند (JALALI_MONTH_NAMES)
 
-export function PayrollPanel({ token }: { token: string }) {
+export function PayrollPanel({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate?: (page: PageKey) => void
+}) {
   const guided = useTheme().theme.content === 'guided'
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
   const refreshEmployees = useCallback(async () => {
@@ -50,11 +55,7 @@ export function PayrollPanel({ token }: { token: string }) {
                 <EmployeeFormClassic token={token} onCreated={refreshEmployees} />
               )}
               <EmployeeList employees={employees} />
-              {guided ? (
-                <SalaryContractWizard token={token} employees={employees} />
-              ) : (
-                <SalaryContractFormClassic token={token} employees={employees} />
-              )}
+              <ContractPointer onNavigate={onNavigate} />
             </>
           ),
         },
@@ -160,39 +161,32 @@ export function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
   )
 }
 
-function SalaryContractFormClassic({ token, employees }: { token: string; employees: EmployeeRecord[] }) {
-  const d = useSalaryContractDraft({ token })
+/**
+ * جای حکمِ حقوقی این‌جا نیست — «قرارداد جدید» است.
+ *
+ * تا امروز یک فرمِ کوتاهِ «ثبت حکم حقوقی» همین‌جا بود که فقط کارمند، تاریخ اجرا و
+ * چهار مبلغ می‌گرفت و به همان `/api/salary-contracts` می‌فرستاد که فرمِ کاملِ
+ * قرارداد می‌فرستد. دو نمای یک داده بود، و بدتر: چون نوعِ قرارداد پیش‌فرض
+ * «استخدام» است، حکمی که از این‌جا ثبت می‌شد **جای استخدامِ واقعی را می‌گرفت** و
+ * فرمِ کامل بعد از آن فقط «اصلاح قرارداد» می‌توانست بزند — بی‌آنکه شماره، نوع
+ * استخدام، محل خدمت، شغل و اطلاعات بیمه و مالیات هیچ‌وقت پر شده باشند.
+ */
+function ContractPointer({ onNavigate }: { onNavigate?: (page: PageKey) => void }) {
   return (
-    <form
-      className="invoice-form"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void d.submit()
-      }}
-    >
-      <h3>ثبت حکم حقوقی</h3>
-      <label>
-        کارمند
-        <select value={d.employeeId} onChange={(e) => d.setEmployeeId(e.target.value)}>
-          <option value="">— انتخاب —</option>
-          {employees.map((emp) => (
-            <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
-          ))}
-        </select>
-      </label>
-      <label>
-        تاریخ اجرا
-        <JalaliDatePicker value={d.effectiveFrom} onChange={d.setEffectiveFrom} />
-      </label>
-      <label>حقوق پایه<NumberInput value={d.baseSalary} onChange={d.setBaseSalary} /></label>
-      <label>حق مسکن<NumberInput value={d.housing} onChange={d.setHousing} /></label>
-      <label>بن خواربار<NumberInput value={d.food} onChange={d.setFood} /></label>
-      <label>سایر مزایا<NumberInput value={d.other} onChange={d.setOther} /></label>
-      <div className="invoice-form-footer">
-        <button type="submit" className="btn-primary" disabled={d.submitting}><Save size={14} /> ثبت حکم</button>
+    <section className="fy-note">
+      <FileSignature size={16} />
+      <div>
+        قرارداد و حکمِ حقوقی در «قرارداد جدید» ثبت می‌شود — آن‌جا نوعِ قرارداد، سه
+        تاریخ، اطلاعات استخدامی، عوامل حقوق و مزایا و اطلاعات بیمه و مالیات هم پرسیده
+        می‌شوند.
+        {onNavigate && (
+          <>
+            {' '}
+            <button type="button" onClick={() => onNavigate('contractnew')}>قرارداد جدید</button>
+          </>
+        )}
       </div>
-      {d.message && <div className="hint">{d.message}</div>}
-    </form>
+    </section>
   )
 }
 
@@ -283,16 +277,30 @@ export function PayslipResults({ d, showGenerate = true }: { d: PayrollRunDraft;
               صدور فیش‌های حقوقی این دوره
             </button>
           )}
+          {/* سه خروجیِ همان دوره: بیمه برای تأمین اجتماعی، مالیات برای سازمان
+              مالیاتی، و پرداخت برای بانک. هر سه از عددِ *همان فیش* می‌خوانند، نه
+              محاسبه‌ی دوباره — وگرنه فایلِ اداره و فیشِ کارمند دو تا می‌شوند. */}
           {d.payslips.length > 0 && (
-            <button type="button" onClick={() => void d.downloadInsurance()}>
-              <Download size={13} /> دانلود لیست بیمه (CSV)
-            </button>
+            <>
+              <button type="button" onClick={() => void d.downloadCsv('insurance-list')}>
+                <Download size={13} /> لیست بیمه (CSV)
+              </button>
+              <button type="button" onClick={() => void d.downloadCsv('tax-list')}>
+                <Download size={13} /> فایل مالیات (CSV)
+              </button>
+              <button type="button" onClick={() => void d.downloadCsv('payment-list')}>
+                <Download size={13} /> دیسکت پرداخت (CSV)
+              </button>
+            </>
           )}
         </div>
       )}
       {d.payslips.length > 0 && (
         <p className="hint">
-          فرمت این فایل عمومی است؛ قبل از ارسال رسمی به سازمان تأمین اجتماعی، آن را با آخرین مشخصات سامانه‌ی لیست بیمه تطبیق دهید.
+          قالبِ ستون‌های فایلِ بیمه و مالیات عمومی است؛ پیش از ارسالِ رسمی، با آخرین
+          مشخصاتِ سامانه‌ی مربوطه تطبیقش دهید. دیسکتِ پرداخت شماره‌حسابِ کارمند را از
+          پرونده‌اش می‌خواند — کارمندِ بی‌شماره‌حساب حذف نمی‌شود، ستونش خالی می‌آید تا
+          ببینیدش.
         </p>
       )}
       {d.message && <div className="hint">{d.message}</div>}

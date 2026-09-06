@@ -42,6 +42,7 @@ import { CodingPage } from '../pages/CodingPage'
 import { PersonalizationPage } from '../pages/PersonalizationPage'
 import { ContractFormPage } from '../pages/payroll/ContractFormPage'
 import { ContractListPage } from '../pages/payroll/ContractListPage'
+import { PayslipLedgerPage } from '../pages/payroll/PayslipLedgerPage'
 import {
   JobTitlePage,
   PayrollFactorPage,
@@ -283,6 +284,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   payroll: 'حقوق و دستمزد',
   contractnew: 'قرارداد جدید',
   contractlist: 'قراردادها',
+  payslipledger: 'مرور حقوق',
   servicelocation: 'محل خدمت جدید',
   jobtitle: 'شغل جدید',
   payrollfactors: 'عوامل حقوق و مزایا',
@@ -647,6 +649,7 @@ export function Dashboard({
           {page === 'numberinglist' && <NumberingListPage token={token} />}
           {page === 'contractnew' && <ContractFormPage token={token} onNavigate={setPage} />}
           {page === 'contractlist' && <ContractListPage token={token} onNavigate={setPage} />}
+          {page === 'payslipledger' && <PayslipLedgerPage token={token} />}
           {page === 'servicelocation' && <ServiceLocationPage token={token} />}
           {page === 'jobtitle' && <JobTitlePage token={token} />}
           {page === 'payrollfactors' && <PayrollFactorPage token={token} />}
@@ -658,7 +661,7 @@ export function Dashboard({
                 title="حقوق و دستمزد"
                 description="پرونده‌ی پرسنل، حکم حقوقی، کارکرد و صدور فیش، مزایا (عیدی/سنوات/مرخصی) و تنظیماتِ بیمه و مالیات."
               />
-              <PayrollPanel token={token} />
+              <PayrollPanel token={token} onNavigate={setPage} />
             </div>
           )}
           {page === 'integration' && (

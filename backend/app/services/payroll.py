@@ -243,6 +243,113 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     return payslips
 
 
+def _period_payslips(db: Session, period_id: UUID) -> tuple[list, PayrollPeriod]:
+    """فیش‌های یک دوره به‌همراه کارمندشان — پایه‌ی هر سه خروجیِ CSV.
+
+    یک تابع، سه خروجی: اگر هرکدام کوئریِ خودش را می‌زد، فیلترِ «فیشِ همین دوره» سه
+    جا تکرار می‌شد و اصلاحِ یکی، دوتای دیگر را عقب می‌گذاشت.
+    """
+    period = db.get(PayrollPeriod, period_id)
+    if period is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دوره حقوقی یافت نشد")
+
+    rows = (
+        db.query(Payslip, Employee)
+        .join(Employee, Payslip.employee_id == Employee.id)
+        .filter(Payslip.period_id == period_id)
+        .order_by(Employee.first_name, Employee.last_name)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای این دوره هنوز فیشی صادر نشده است")
+    return rows, period
+
+
+def _csv_text(header: list[str], body: list[list[str]], footer: list[str] | None = None) -> str:
+    """CSVِ فارسی‌خوان برای اکسل.
+
+    BOM ابتدای فایل لازم است، وگرنه اکسلِ ویندوز UTF-8 را windows-1256 می‌خواند و
+    همه‌ی متنِ فارسی به‌هم می‌ریزد — همان تله‌ای که لیستِ بیمه یک بار خورد.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(header)
+    for row in body:
+        writer.writerow(row)
+    if footer is not None:
+        writer.writerow([])
+        writer.writerow(footer)
+    return "﻿" + buffer.getvalue()
+
+
+def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:
+    """فایلِ مالیات بر درآمدِ حقوقِ دوره.
+
+    مثلِ لیستِ بیمه، **قالبِ ستون‌ها عمومی است** و پیش از ارسالِ رسمی به سامانه‌ی
+    مالیاتی باید با آخرین مشخصاتش تطبیق داده شود. این‌جا مبنای مشمول و مالیاتِ
+    محاسبه‌شده‌ی همان فیش می‌آید — نه محاسبه‌ی دوباره، تا عددِ فایل و عددِ فیشِ
+    کارمند هیچ‌وقت دو تا نشوند.
+    """
+    rows, period = _period_payslips(db, period_id)
+
+    body = []
+    total_taxable = Decimal(0)
+    total_tax = Decimal(0)
+    for payslip, employee in rows:
+        taxable = Decimal(payslip.taxable_pay)
+        tax = Decimal(payslip.tax_amount)
+        body.append(
+            [
+                employee.national_id,
+                employee.first_name,
+                employee.last_name,
+                str(payslip.gross_pay),
+                str(taxable),
+                str(tax),
+            ]
+        )
+        total_taxable += taxable
+        total_tax += tax
+
+    text = _csv_text(
+        ["کد ملی", "نام", "نام خانوادگی", "ناخالص حقوق", "درآمد مشمول مالیات", "مالیات"],
+        body,
+        ["جمع کل", "", "", "", str(total_taxable), str(total_tax)],
+    )
+    return text, period
+
+
+def generate_payment_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:
+    """دیسکتِ پرداختِ بانک — خالصِ پرداختیِ هر کارمند به شماره‌حسابش.
+
+    کارمندِ بی‌شماره‌حساب **حذف نمی‌شود**؛ ردیفش با شماره‌حسابِ خالی می‌آید. حذفش
+    یعنی فایل بی‌صدا کمتر از حقوقِ واقعی را منتقل می‌کند و کسی تا شکایتِ کارمند
+    نمی‌فهمد. ستونِ خالی در فایل دیده می‌شود.
+    """
+    rows, period = _period_payslips(db, period_id)
+
+    body = []
+    total = Decimal(0)
+    for payslip, employee in rows:
+        net = Decimal(payslip.net_pay)
+        body.append(
+            [
+                employee.bank_account_number or "",
+                f"{employee.first_name} {employee.last_name}".strip(),
+                employee.national_id,
+                str(net),
+            ]
+        )
+        total += net
+
+    text = _csv_text(
+        ["شماره حساب", "نام و نام خانوادگی", "کد ملی", "مبلغ خالص پرداختی"],
+        body,
+        ["جمع کل", "", "", str(total)],
+    )
+    return text, period
+
+
 def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPeriod]:
     """خروجی CSV لیست بیمه‌ی دوره برای ارسال به تأمین اجتماعی. توجه: فرمت ستون‌ها عمومی و قابل‌بازبینی است؛
     قبل از ارسال رسمی حتماً با آخرین مشخصات سامانه‌ی لیست بیمه تطبیق داده شود."""

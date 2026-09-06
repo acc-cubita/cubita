@@ -381,3 +381,92 @@ def test_the_old_column_based_contract_still_works(db, user, client):
     assert res.status_code == 201, res.text
     assert Decimal(str(res.json()["base_salary"])) == 90000000
     assert db.query(SalaryContract).count() == 1
+
+
+# ── خروجی‌های CSVِ دوره ────────────────────────────────────────────────────────
+
+
+def _period_with_payslips(db, client, contact_id: str, factors: dict[str, str]) -> str:
+    """یک دوره‌ی حقوقی با فیشِ صادرشده — پایه‌ی هر سه آزمونِ خروجی."""
+    from app.models.payroll import PayrollSettings
+
+    _contract(client, contact_id, factors)
+
+    #: نرخ‌های واقعی لازم است: سرویس نرخِ صفرِ seed را «هنوز تنظیم نشده» می‌شمارد و
+    #: صدورِ فیش را می‌بندد.
+    #: سالِ ۱۴۰۵ عمدی است — حکم از ۲۰۲۶-۰۱-۰۱ اجرا می‌شود و دوره باید *بعد* از آن
+    #: باشد، وگرنه «کارمندِ فعال با حکمِ معتبر» پیدا نمی‌شود.
+    year = 1405
+    db.add(
+        PayrollSettings(
+            year=year,
+            insurance_employee_rate=Decimal("0.07"),
+            insurance_employer_rate=Decimal("0.23"),
+            tax_exemption_annual=Decimal("1200000000"),
+            tax_brackets=[{"up_to": None, "rate": 0.1}],
+        )
+    )
+    db.flush()
+
+    period = client.post("/api/payroll-periods", json={"year": year, "month": 1})
+    assert period.status_code == 201, period.text
+    period_id = period.json()["id"]
+
+    res = client.post(f"/api/payroll-periods/{period_id}/generate-payslips", json={})
+    assert res.status_code == 200, res.text
+    assert res.json(), "برای آزمونِ خروجی دستِ‌کم یک فیش لازم است"
+    return period_id
+
+
+def test_the_tax_file_reports_the_same_numbers_as_the_payslip(db, user, client):
+    """**قیدِ اصلی.** فایلِ مالیات باید عددِ همان فیش را بدهد، نه محاسبه‌ی دوباره.
+
+    اگر روزی کسی مالیات را این‌جا از نو حساب کند، عددِ فایلِ سازمانِ مالیاتی و عددِ
+    فیشِ کارمند از هم جدا می‌افتند و هیچ‌کس تا ممیزی نمی‌فهمد.
+    """
+    _hybrid(db)
+    contact = _make_contact(client)
+    factors = _factors(client)
+    period_id = _period_with_payslips(db, client, contact["id"], factors)
+
+    slips = client.get("/api/payslips", params={"period_id": period_id}).json()["items"]
+    res = client.get(f"/api/payroll-periods/{period_id}/tax-list.csv")
+
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"].startswith("text/csv")
+    body = res.text
+    assert body.startswith("﻿"), "بی BOM، اکسلِ ویندوز فارسی را خراب می‌خواند"
+    for slip in slips:
+        assert str(slip["tax_amount"]) in body
+        assert str(slip["taxable_pay"]) in body
+
+
+def test_the_payment_file_keeps_an_employee_without_a_bank_account(db, user, client):
+    """کارمندِ بی‌شماره‌حساب حذف نمی‌شود — ردیفش با ستونِ خالی می‌آید.
+
+    حذفش یعنی دیسکتِ پرداخت بی‌صدا کمتر از حقوقِ واقعی منتقل می‌کند و تا شکایتِ
+    خودِ کارمند کسی نمی‌فهمد. ستونِ خالی دیده می‌شود.
+    """
+    _hybrid(db)
+    contact = _make_contact(client)
+    factors = _factors(client)
+    period_id = _period_with_payslips(db, client, contact["id"], factors)
+
+    employee = db.query(Employee).one()
+    assert not employee.bank_account_number, "این طرف‌حساب شماره‌حساب ندارد"
+
+    res = client.get(f"/api/payroll-periods/{period_id}/payment-list.csv")
+
+    assert res.status_code == 200, res.text
+    assert employee.national_id in res.text, "ردیفِ کارمند باید در فایل باشد"
+
+
+def test_an_export_for_a_period_without_payslips_says_so(db, user, client):
+    """خطا باید بگوید چه شد، نه اینکه فایلِ خالی بدهد."""
+    _hybrid(db)
+    period_id = client.post("/api/payroll-periods", json={"year": 1404, "month": 2}).json()["id"]
+
+    for name in ("tax-list", "payment-list", "insurance-list"):
+        res = client.get(f"/api/payroll-periods/{period_id}/{name}.csv")
+        assert res.status_code == 400, f"{name}: {res.text}"
+        assert "فیشی صادر نشده" in res.json()["detail"]

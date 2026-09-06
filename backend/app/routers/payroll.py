@@ -47,7 +47,12 @@ from app.schemas.payroll import (
     ServiceLocationOut,
 )
 from app.services import payroll_contracts
-from app.services.payroll import generate_insurance_list_csv, generate_payslips_for_period
+from app.services.payroll import (
+    generate_insurance_list_csv,
+    generate_payment_list_csv,
+    generate_payslips_for_period,
+    generate_tax_list_csv,
+)
 
 router = APIRouter(tags=["payroll"])
 
@@ -159,6 +164,32 @@ def export_insurance_list(
 ):
     csv_text, period = generate_insurance_list_csv(db, period_id)
     filename = f"insurance-list-{period.year}-{period.month:02d}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/payroll-periods/{period_id}/tax-list.csv")
+def export_tax_list(
+    period_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    csv_text, period = generate_tax_list_csv(db, period_id)
+    filename = f"tax-list-{period.year}-{period.month:02d}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/payroll-periods/{period_id}/payment-list.csv")
+def export_payment_list(
+    period_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    csv_text, period = generate_payment_list_csv(db, period_id)
+    filename = f"payment-list-{period.year}-{period.month:02d}.csv"
     return Response(
         content=csv_text,
         media_type="text/csv; charset=utf-8",
