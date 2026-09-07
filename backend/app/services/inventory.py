@@ -23,6 +23,7 @@ from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
+from app.services.common import number_lines
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.credit import assert_within_credit_limit
 from app.services.period_close import assert_period_open
@@ -375,7 +376,7 @@ def post_sales_invoice(
         description=f"فاکتور فروش شماره {number}",
         source_type="sales_invoice",
         created_by_id=user.id,
-        lines=journal_lines,
+        lines=number_lines(journal_lines),
     )
     tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
@@ -543,7 +544,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         description=f"فاکتور خرید شماره {number}",
         source_type="purchase_invoice",
         created_by_id=user.id,
-        lines=journal_lines,
+        lines=number_lines(journal_lines),
     )
     tafsili.assert_entry_has_tafsili(db, journal_entry)
     db.add(journal_entry)
@@ -634,10 +635,10 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
             description=f"تعدیل موجودی «{item.name}»: {data.reason}".strip(),
             source_type="stock_adjustment",
             created_by_id=user.id,
-            lines=[
+            lines=number_lines([
                 JournalLine(account_id=_get_account(db, debit_account).id, debit=amount, credit=0),
                 JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
-            ],
+            ]),
         )
         tafsili.assert_entry_has_tafsili(db, journal_entry)
         db.add(journal_entry)

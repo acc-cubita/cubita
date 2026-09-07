@@ -946,7 +946,7 @@ def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:
         .join(JournalLine, JournalLine.entry_id == JournalEntry.id)
         .join(Account, JournalLine.account_id == Account.id)
         .filter(JournalEntry.entry_date >= date_from, JournalEntry.entry_date <= date_to)
-        .order_by(JournalEntry.entry_date, JournalEntry.number, JournalLine.id)
+        .order_by(JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id)
         .all()
     )
     out = []

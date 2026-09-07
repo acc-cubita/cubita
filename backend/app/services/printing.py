@@ -354,3 +354,155 @@ def render_invoice(
 </div>
 </body>
 </html>"""
+
+
+def _journal_rows(lines: list[dict]) -> str:
+    """ردیف‌های سند. شماره‌ی ردیف از `seq` می‌آید نه از شمارنده‌ی حلقه.
+
+    اگر از حلقه می‌آمد، برگه‌ی چاپی همیشه ۱..n نشان می‌داد حتی وقتی ترتیبِ
+    واقعیِ ذخیره‌شده چیزِ دیگری بود — یعنی مشکل را پنهان می‌کرد به‌جای نشان‌دادنش.
+    سندهای پیش از مهاجرتِ ۰۱۰۰ که `seq = 0` دارند به ترتیبِ نمایش شماره می‌گیرند.
+    """
+    out = []
+    for i, line in enumerate(lines, start=1):
+        seq = line.get("seq") or i
+        tracking = line.get("tracking_no") or ""
+        if tracking and line.get("tracking_date"):
+            tracking = f"{tracking} ({format_jalali(line['tracking_date'])})"
+        out.append(
+            "<tr>"
+            f"<td class='num'>{fa_number(seq)}</td>"
+            f"<td class='num'>{escape(line.get('account_code') or '')}</td>"
+            f"<td>{escape(line.get('account_name') or '')}</td>"
+            f"<td>{escape(line.get('analytic_name') or '')}</td>"
+            f"<td>{escape(line.get('cost_center_name') or '')}</td>"
+            f"<td>{escape(line.get('description') or '')}</td>"
+            f"<td>{escape(tracking)}</td>"
+            f"<td class='num'>{fa_number(line['debit']) if Decimal(str(line['debit'])) else ''}</td>"
+            f"<td class='num'>{fa_number(line['credit']) if Decimal(str(line['credit'])) else ''}</td>"
+            "</tr>"
+        )
+    return "\n".join(out)
+
+
+def render_journal_entry(
+    *,
+    business_name: str,
+    number,
+    atf_number=None,
+    sub_number: str = "",
+    entry_date: date | None,
+    status: str,
+    description: str,
+    lines: list[dict],
+    voided_at=None,
+    void_reason: str = "",
+) -> str:
+    """برگه‌ی چاپیِ سند حسابداری — HTML مستقل، بدونِ منبعِ بیرونی.
+
+    **چرا جمعِ بدهکار و بستانکار هر دو چاپ می‌شوند و نه فقط یکی:** برگه‌ی سند سندِ
+    رسمی است و خواننده — حسابرس یا مدیر — باید بتواند توازن را *روی همان کاغذ*
+    ببیند، نه اینکه به درستیِ نرم‌افزار اعتماد کند.
+    """
+    total_debit = sum((Decimal(str(l["debit"])) for l in lines), Decimal(0))
+    total_credit = sum((Decimal(str(l["credit"])) for l in lines), Decimal(0))
+
+    banner = ""
+    if voided_at is not None:
+        reason = f" — {escape(void_reason)}" if void_reason else ""
+        banner = f"<div class='voided'>این سند باطل شده است{reason}</div>"
+
+    #: سندِ موقت هنوز قطعی نیست و برگه‌اش نباید با سندِ دائم اشتباه گرفته شود.
+    status_fa = "دائم" if status == "permanent" else "موقت"
+
+    meta = [
+        f"<div class='chip'><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>",
+        f"<div class='chip'><span>تاریخ</span> &nbsp;<strong>{format_jalali(entry_date)}</strong></div>",
+        f"<div class='chip'><span>وضعیت</span> &nbsp;<strong>{status_fa}</strong></div>",
+    ]
+    if atf_number:
+        meta.insert(1, f"<div class='chip'><span>عطف</span> &nbsp;<strong>{fa_number(atf_number)}</strong></div>")
+    if sub_number:
+        meta.insert(2, f"<div class='chip'><span>فرعی</span> &nbsp;<strong>{escape(sub_number)}</strong></div>")
+
+    note = (description or "").strip()
+    notes_block = (
+        f"<div class='notes'><span class='lbl'>شرح سند</span>"
+        f"<div class='txt'>{escape(note)}</div></div>"
+        if note
+        else ""
+    )
+
+    logo_svg = (
+        '<svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">'
+        '<path d="M9 4.5h9.6L23.5 9.4V26A1.5 1.5 0 0 1 22 27.5H9A1.5 1.5 0 0 1 7.5 26V6A1.5 1.5 0 0 1 9 4.5z" fill="#fff"/>'
+        '<path d="M18.6 4.6v3.4A1.4 1.4 0 0 0 20 9.4h3.3z" fill="#bcd0f7"/>'
+        '<rect x="11" y="14" width="10" height="1.8" rx="0.9" fill="#2563eb"/>'
+        '<rect x="11" y="17.8" width="10" height="1.8" rx="0.9" fill="#2563eb"/>'
+        '<rect x="11" y="21.6" width="6" height="1.8" rx="0.9" fill="#2563eb"/>'
+        "</svg>"
+    )
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سند حسابداری شماره {fa_number(number)}</title>
+<style>{_STYLE}</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  {banner}
+  <div class="head">
+    <div class="brand-block">
+      <div class="logo">{logo_svg}</div>
+      <div>
+        <h1 class="title">سند حسابداری</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      {''.join(meta)}
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="num" style="width:5%">ردیف</th>
+        <th class="num" style="width:9%">کد حساب</th>
+        <th style="width:19%">نام حساب</th>
+        <th style="width:12%">تفصیلی</th>
+        <th style="width:11%">مرکز هزینه</th>
+        <th style="width:18%">شرح</th>
+        <th style="width:10%">پیگیری</th>
+        <th class="num" style="width:8%">بدهکار</th>
+        <th class="num" style="width:8%">بستانکار</th>
+      </tr>
+    </thead>
+    <tbody>
+{_journal_rows(lines)}
+    </tbody>
+    <tfoot>
+      <tr class="grand">
+        <td colspan="7">جمع (ریال)</td>
+        <td class="num">{fa_number(total_debit)}</td>
+        <td class="num">{fa_number(total_credit)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {notes_block}
+
+  <div class="signs">
+    <div class="sign">تنظیم‌کننده</div>
+    <div class="sign">تأییدکننده</div>
+    <div class="sign">مدیر مالی</div>
+  </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
+</div>
+</body>
+</html>"""

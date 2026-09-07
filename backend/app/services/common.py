@@ -73,6 +73,22 @@ def next_journal_number(db: Session) -> int:
     return next_document_number(db, DOC_JOURNAL_ENTRY)
 
 
+def number_lines(lines: list[JournalLine]) -> list[JournalLine]:
+    """ردیف‌های سند را از ۱ شماره‌گذاری می‌کند و همان فهرست را برمی‌گرداند.
+
+    **چرا لازم است:** پیش از مهاجرتِ ۰۱۰۰ ترتیبِ ردیف‌ها با `id` بود و `id` یک
+    UUIDِ تصادفی است — یعنی ردیف‌ها به ترتیبِ ورود برنمی‌گشتند و بستانکار می‌توانست
+    پیش از بدهکار بیاید.
+
+    فهرست برگردانده می‌شود تا بتوان درجا در `JournalEntry(lines=...)` گذاشتش و
+    نقطه‌ی صدا زدن از نقطه‌ی ساخت جدا نیفتد — جداییِ همان دو، همان چیزی است که
+    باعث می‌شود یکی از هفت مسیر یادش برود.
+    """
+    for i, line in enumerate(lines, start=1):
+        line.seq = i
+    return lines
+
+
 def make_journal_entry(
     db: Session, entry_date: date_, description: str, source_type: str, user: User, lines: list[JournalLine]
 ) -> JournalEntry:
@@ -82,7 +98,7 @@ def make_journal_entry(
         description=description,
         source_type=source_type,
         created_by_id=user.id,
-        lines=lines,
+        lines=number_lines(lines),
     )
     # نقطه‌ی مشترکِ سیزده سرویس — گارد این‌جا یعنی یک بار نوشتن به‌جای سیزده بار
     # یادآوری. در حالتِ «ترکیبی» و «شناور» بی‌اثر است و فقط `strict` را اعمال می‌کند.

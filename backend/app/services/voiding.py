@@ -29,6 +29,7 @@ from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
+from app.services.common import number_lines
 from app.services.inventory import lock_items
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
@@ -81,7 +82,7 @@ def reverse_journal_entry(
         source_id=entry.source_id,
         reverses_entry_id=entry.id,
         created_by_id=user.id,
-        lines=_reverse_lines(entry),
+        lines=number_lines(_reverse_lines(entry)),
     )
     db.add(reversal)
     db.flush()

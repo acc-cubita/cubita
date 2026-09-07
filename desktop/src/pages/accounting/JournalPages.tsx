@@ -10,6 +10,7 @@ import {
   Layers,
   ListChecks,
   Lock,
+  Printer,
   RefreshCw,
   Search,
   Trash2,
@@ -20,6 +21,7 @@ import {
   fetchRenumberPreview,
   finalizeEntries,
   mergeEntries,
+  printJournalEntry,
   renumberEntries,
   setEntrySubNumber,
   voidJournalEntry,
@@ -112,11 +114,15 @@ function EntryTable({
   entries,
   pageSize = 20,
   onVoid,
+  onPrint,
   onEditSub,
 }: {
   entries: JournalEntryRecord[]
   pageSize?: number
   onVoid?: (e: JournalEntryRecord) => void
+  /** برگه‌ی چاپیِ سند. برخلافِ ابطال برای **هر** سندی می‌آید — خودکار و باطل هم —
+   *  چون چاپ خواندن است و سندِ باطل هم باید بتواند با نشانِ ابطالش چاپ شود. */
+  onPrint?: (e: JournalEntryRecord) => void
   /** اصلاحِ شماره فرعی. فقط سندِ موقت؛ روی دائم دکمه نمی‌آید. */
   onEditSub?: (e: JournalEntryRecord) => void
 }) {
@@ -140,7 +146,7 @@ function EntryTable({
             <th>وضعیت</th>
             <th>ردیف</th>
             <th>مبلغ</th>
-            {onVoid && <th />}
+            {(onVoid || onPrint) && <th />}
           </tr>
         </thead>
         <tbody>
@@ -175,10 +181,15 @@ function EntryTable({
               <td data-label="مبلغ" className="num">
                 {faAmount(total(e))}
               </td>
-              {onVoid && (
+              {(onVoid || onPrint) && (
                 <td className="acc-row-actions card-actions">
+                  {onPrint && (
+                    <button type="button" onClick={() => onPrint(e)}>
+                      <Printer size={13} /> چاپ
+                    </button>
+                  )}
                   {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
-                  {!e.voided_at && e.source_type === 'manual' && (
+                  {onVoid && !e.voided_at && e.source_type === 'manual' && (
                     <button type="button" className="danger" onClick={() => onVoid(e)}>
                       <Trash2 size={13} /> ابطال
                     </button>
@@ -854,6 +865,14 @@ export function EntryListPage({ token }: { token: string }) {
     }
   }
 
+  async function handlePrint(entry: JournalEntryRecord) {
+    try {
+      await printJournalEntry(token, entry.id)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
   return (
     <OpsPage
       icon={FileStack}
@@ -906,7 +925,7 @@ export function EntryListPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="سندی با این شرایط پیدا نشد."
         >
-          <EntryTable entries={rows} onVoid={handleVoid} onEditSub={handleEditSub} />
+          <EntryTable entries={rows} onVoid={handleVoid} onPrint={handlePrint} onEditSub={handleEditSub} />
         </AsyncBlock>
       </SectionCard>
     </OpsPage>
