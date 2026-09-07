@@ -2854,6 +2854,8 @@ export interface CostCenterRecord {
   id: string
   code: string
   name: string
+  /** عنوانِ دوم (لاتین) — «عنوان انگلیسی»ِ فرمِ سپیدار. خالی مجاز است. */
+  name2: string
   kind: string
   parent_id: string | null
   manager: string
@@ -2870,6 +2872,7 @@ export interface CostCenterRecord {
 export interface CostCenterIn {
   code: string
   name: string
+  name2: string
   kind: string
   parent_id: string | null
   manager: string

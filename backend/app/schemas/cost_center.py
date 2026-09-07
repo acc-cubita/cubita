@@ -10,6 +10,8 @@ from app.models.cost_center import COST_CENTER_KINDS
 class CostCenterIn(BaseModel):
     code: str = ""
     name: str
+    #: عنوانِ دوم (لاتین). اختیاری، مثلِ `code`.
+    name2: str = ""
     kind: str = "project"
     parent_id: UUID | None = None
     manager: str = ""
@@ -33,6 +35,7 @@ class CostCenterOut(BaseModel):
     id: UUID
     code: str
     name: str
+    name2: str = ""
     kind: str
     parent_id: UUID | None
     manager: str

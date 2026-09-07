@@ -57,6 +57,13 @@ class CostCenter(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: همان مستأجر یکتاست (`uq_cost_centers_tenant_code`).
     code: Mapped[str] = mapped_column(String(30), default="", server_default="")
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دوم (معمولاً انگلیسی) — «عنوان انگلیسی»ِ فرمِ سپیدار، برای گزارشِ
+    #: دوزبانه. همان چیزی که `accounts.name2` و `analytic_accounts.name2` دارند.
+    #:
+    #: از همان فرم، «کد تفصیلی» عمداً نیامد: سپیدار مرکز هزینه را *به‌عنوان* تفصیلی
+    #: پیاده کرده چون بُعدِ جدا ندارد. این‌جا `journal_lines` هر دو را جدا نگه
+    #: می‌دارد، پس پیوندشان یعنی یک چیز در دو بُعد — «دو نمای یک داده».
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
     kind: Mapped[str] = mapped_column(String(20), default="project", server_default="project")
     #: مرکزِ مادر؛ NULL یعنی ریشه. RESTRICT در دیتابیس و گاردِ صریح در سرویس.
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
