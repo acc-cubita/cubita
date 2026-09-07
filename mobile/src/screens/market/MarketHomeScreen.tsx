@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -18,6 +18,7 @@ import {
   rejectOrder,
   setConnectionStatus,
 } from '../../api/marketplace'
+import { isApiError } from '../../api/client'
 import type { MpConnection, MpOrder } from '../../api/types'
 import { canAccess } from '../../auth/access'
 import { DeliverSheet } from './DeliverSheet'
@@ -45,7 +46,10 @@ export function MarketHomeScreen() {
 
   // مأمورِ حمل کارش سفارش است نه اتصال؛ روی تبِ اتصال‌ها نباید بیفتد.
   const deliveryOnly = canDeliver && !canApprove && !canManage
-  const [tab, setTab] = useState<'connections' | 'orders'>(deliveryOnly ? 'orders' : 'connections')
+  const [tab, setTab] = useState<'connections' | 'orders'>('connections')
+  // مشتق، نه بذرِ state: اگر `me` یک رندر دیرتر برسد، بذر با مقدارِ غلط قفل
+  // می‌شد و مأمورِ حمل روی فهرستِ اتصال‌ها می‌ماند.
+  const activeTab = deliveryOnly ? 'orders' : tab
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<MpOrder | null>(null)
 
@@ -60,14 +64,17 @@ export function MarketHomeScreen() {
     enabled: isMarket,
   })
 
-  async function act(id: string, fn: () => Promise<unknown>, refetch: () => void) {
+  async function act(id: string, fn: () => Promise<unknown>, refetch: () => void, what = 'این کار') {
     setBusyId(id)
     try {
       await fn()
       refetch()
       void qc.invalidateQueries({ queryKey: ['mp-unread'] })
-    } catch {
-      // خطا سمتِ سرور؛ فهرست دست‌نخورده می‌ماند
+    } catch (e) {
+      // پیش از این بی‌صدا رد می‌شد. برای تأیید/رد هم بد بود، ولی «ثبتِ تحویل»
+      // یک کنشِ پولی است: کاربر می‌زند، هیچ اتفاقی نمی‌افتد، و نمی‌داند بار
+      // تحویل ثبت شده یا نه.
+      Alert.alert(`${what} انجام نشد`, isApiError(e) ? e.message : 'خطای نامشخص')
     } finally {
       setBusyId(null)
     }
@@ -108,7 +115,7 @@ export function MarketHomeScreen() {
         )}
       </View>
 
-      {tab === 'connections' ? (
+      {activeTab === 'connections' ? (
         <FlatList
           data={connQ.data ?? []}
           keyExtractor={(c) => c.id}
@@ -121,8 +128,8 @@ export function MarketHomeScreen() {
               isDist={isDist}
               canManage={canManage}
               busy={busyId === item.id}
-              onApprove={() => act(item.id, () => setConnectionStatus(item.id, 'approved'), connQ.refetch)}
-              onReject={() => act(item.id, () => setConnectionStatus(item.id, 'rejected'), connQ.refetch)}
+              onApprove={() => act(item.id, () => setConnectionStatus(item.id, 'approved'), connQ.refetch, 'تأیید')}
+              onReject={() => act(item.id, () => setConnectionStatus(item.id, 'rejected'), connQ.refetch, 'رد')}
               onChat={() => goChat('connection', item.id, isDist ? item.retailer_name : item.distributor_name)}
             />
           )}
@@ -142,8 +149,8 @@ export function MarketHomeScreen() {
               canManage={canManage}
               canDeliver={canDeliver}
               busy={busyId === item.id}
-              onConfirm={() => act(item.id, () => confirmOrder(item.id), orderQ.refetch)}
-              onReject={() => act(item.id, () => rejectOrder(item.id), orderQ.refetch)}
+              onConfirm={() => act(item.id, () => confirmOrder(item.id), orderQ.refetch, 'تأیید')}
+              onReject={() => act(item.id, () => rejectOrder(item.id), orderQ.refetch, 'رد')}
               onDeliver={() => setDeliverTarget(item)}
               onChat={() => goChat('order', item.id, `سفارش #${item.order_number.toLocaleString('fa-IR')}`)}
             />
@@ -159,7 +166,7 @@ export function MarketHomeScreen() {
           onConfirm={(pct) => {
             const target = deliverTarget
             setDeliverTarget(null)
-            void act(target.id, () => deliverOrder(target.id, pct), orderQ.refetch)
+            void act(target.id, () => deliverOrder(target.id, pct), orderQ.refetch, 'ثبتِ تحویل')
           }}
         />
       ) : null}
