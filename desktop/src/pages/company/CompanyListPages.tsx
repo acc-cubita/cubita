@@ -63,6 +63,7 @@ const ACTION_LABELS: Record<string, string> = {
   update: 'ویرایش',
   delete: 'حذف',
   void: 'ابطال',
+  finalize: 'دائم‌کردن',
   login: 'ورود',
   post: 'ثبت سند',
   pay: 'پرداخت',
