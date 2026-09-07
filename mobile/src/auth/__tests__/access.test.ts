@@ -130,6 +130,16 @@ describe('مأمورِ حمل', () => {
     expect(canSeeMarket(me('delivery_agent', 'standard'))).toBe(false)
   })
 
+  it('تحویل می‌زند ولی تأیید/رد/گفتگو نه', () => {
+    // اینها دقیقاً همان دکمه‌هایی بودند که تا پیش از این نشانش داده می‌شدند و
+    // روی هرکدام ۴۰۳ می‌گرفت. مجوزش فقط marketplace:[view, deliver] است.
+    const u = me('delivery_agent', 'distributor')
+    expect(canAccess(u, 'marketDeliver')).toBe(true)
+    expect(canAccess(u, 'marketApprove')).toBe(false)
+    expect(canAccess(u, 'marketManage')).toBe(false)
+    expect(canAccess(u, 'marketChat')).toBe(false)
+  })
+
   it('وقتی بازار دارد، صفحه‌ی «هنوز آماده نیست» نمی‌گیرد', () => {
     expect(hasNoContent(me('delivery_agent', 'distributor'))).toBe(false)
     expect(hasNoContent(me('delivery_agent', 'standard'))).toBe(true)
@@ -163,6 +173,16 @@ describe('حالت‌های مرزی', () => {
     expect(canAccess(null, 'dashboard')).toBe(false)
     expect(canSeeMarket(null)).toBe(false)
     expect(hasNoContent(null)).toBe(false) // هنوز وارد نشده — نه اینکه دسترسی ندارد
+  })
+
+  it('مالک با اکشنِ approve هم می‌تواند تحویل بزند', () => {
+    // بازتابِ require_permission("marketplace", ("deliver", "approve")) — تنها
+    // جای اپ که چند اکشنِ جایگزین دارد. مالک اصلاً اکشنِ deliver ندارد.
+    expect(canAccess(me('owner', 'distributor'), 'marketDeliver')).toBe(true)
+  })
+
+  it('فروشنده تحویل نمی‌زند — هیچ‌کدام از دو اکشن را ندارد', () => {
+    expect(canAccess(me('salesperson'), 'marketDeliver')).toBe(false)
   })
 
   it('مالکِ کسب‌وکارِ غیرِ بازاری، تبِ بازار را نمی‌بیند', () => {

@@ -24,6 +24,10 @@ export type Area =
   | 'newInvoice'
   | 'treasury'
   | 'market'
+  | 'marketChat'
+  | 'marketManage'
+  | 'marketApprove'
+  | 'marketDeliver'
   | 'stock'
 
 /**
@@ -33,7 +37,7 @@ export type Area =
  * `require_permission("invoices", "view")` گذاشته (routers/inventory.py). این
  * دقیقاً همان جایی است که حدس‌زدن نتیجه‌ی غلط می‌داد.
  */
-const REQUIRES: Record<Area, { resource: string; action: string }> = {
+const REQUIRES: Record<Area, { resource: string; action: string | string[] }> = {
   // routers/reports.py → require_permission("accounting", "view")
   dashboard: { resource: 'accounting', action: 'view' },
   reports: { resource: 'accounting', action: 'view' },
@@ -45,8 +49,18 @@ const REQUIRES: Record<Area, { resource: string; action: string }> = {
   // موبایل فرمِ *ثبتِ* دریافت/پرداخت است. با `view` دکمه به کسی نشان داده می‌شد
   // که می‌تواند ببیند ولی نمی‌تواند ثبت کند — یعنی همان ۴۰۳ که داریم حذفش می‌کنیم.
   treasury: { resource: 'checks_bank', action: 'create' },
-  // routers/marketplace.py
+  // routers/marketplace.py — «دیدن» بازار. خواندنِ فهرست‌ها روی بک‌اند
+  // require_permission ندارد (فقط نوعِ حساب)، پس این فقط تبِ بازار را باز می‌کند.
   market: { resource: 'marketplace', action: 'view' },
+  // کنش‌های بازار هرکدام مجوزِ *متفاوتی* می‌خواهند. تا پیش از این همه‌شان زیرِ
+  // یک `view` نشان داده می‌شدند و مأمورِ حمل — که فقط `view` و `deliver` دارد —
+  // دکمه‌ی «تأیید» و «رد» می‌دید و روی هرکدام ۴۰۳ می‌گرفت.
+  marketChat: { resource: 'marketplace', action: 'create' }, // post_*_message
+  marketManage: { resource: 'marketplace', action: 'update' }, // ردِ سفارش، وضعیتِ اتصال
+  marketApprove: { resource: 'marketplace', action: 'approve' }, // تأییدِ سفارش
+  // تنها جای اپ با چند اکشنِ جایگزین — بازتابِ
+  // `require_permission("marketplace", ("deliver", "approve"))`.
+  marketDeliver: { resource: 'marketplace', action: ['deliver', 'approve'] },
   // routers/stock_taking.py — عمداً `update` و نه `view`.
   //
   // خواندنِ جلسه `view` می‌خواهد، ولی *شمردن* و *بستنِ جلسه* `update`. با `view`
@@ -62,7 +76,9 @@ const REQUIRES: Record<Area, { resource: string; action: string }> = {
 export function canAccess(me: Me | null, area: Area): boolean {
   if (!me) return false
   const need = REQUIRES[area]
-  return hasPermission(me, need.resource, need.action)
+  // آرایه یعنی «هر کدام کافی است» — دقیقاً معنیِ تاپل در `require_permission`.
+  const actions = Array.isArray(need.action) ? need.action : [need.action]
+  return actions.some((a) => hasPermission(me, need.resource, a))
 }
 
 /**

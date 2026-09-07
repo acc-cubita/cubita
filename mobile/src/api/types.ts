@@ -330,13 +330,17 @@ export interface MpOrder {
   distributor_name: string
   retailer_name: string
   order_number: number
-  status: string // pending | confirmed | rejected | ...
+  /** ORDER_STATUSES در models/marketplace.py — «pending» جزوشان **نیست**. */
+  status: 'placed' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
   settlement_mode: string
   payment_status: string
   note: string
   subtotal: string
   total: string
   cash_amount: string
+  /** تا وقتی تحویل ثبت نشده خالی‌اند. */
+  delivered_at: string | null
+  delivered_by_name: string
   lines: MpOrderLine[]
 }
 

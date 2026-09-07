@@ -10,6 +10,7 @@ import {
   CONN_STATUS,
   ORDER_STATUS,
   confirmOrder,
+  deliverOrder,
   listDistributorConnections,
   listDistributorOrders,
   listRetailerConnections,
@@ -18,9 +19,12 @@ import {
   setConnectionStatus,
 } from '../../api/marketplace'
 import type { MpConnection, MpOrder } from '../../api/types'
+import { canAccess } from '../../auth/access'
+import { DeliverSheet } from './DeliverSheet'
 import { AppText, Badge, Button, Card, Center } from '../../ui'
 import { Segmented, StatusPill } from '../../ui/controls'
 import { colors, faMoney, faNum, spacing } from '../../theme'
+import { faDate } from '../../lib/format'
 import type { MarketStackParams } from '../../navigation/types'
 
 type Nav = NativeStackNavigationProp<MarketStackParams, 'MarketHome'>
@@ -32,8 +36,18 @@ export function MarketHomeScreen() {
   const kind = me?.tenant_kind
   const isDist = kind === 'distributor'
   const isMarket = kind === 'distributor' || kind === 'retailer'
-  const [tab, setTab] = useState<'connections' | 'orders'>('connections')
+  // کنش‌های بازار هرکدام مجوزِ متفاوتی می‌خواهند. تا پیش از این همه‌شان به هر
+  // کسی که تبِ بازار را داشت نشان داده می‌شدند — مأمورِ حمل «تأیید» و «رد» می‌دید
+  // و روی هرکدام ۴۰۳ می‌گرفت.
+  const canApprove = canAccess(me, 'marketApprove')
+  const canManage = canAccess(me, 'marketManage')
+  const canDeliver = canAccess(me, 'marketDeliver')
+
+  // مأمورِ حمل کارش سفارش است نه اتصال؛ روی تبِ اتصال‌ها نباید بیفتد.
+  const deliveryOnly = canDeliver && !canApprove && !canManage
+  const [tab, setTab] = useState<'connections' | 'orders'>(deliveryOnly ? 'orders' : 'connections')
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [deliverTarget, setDeliverTarget] = useState<MpOrder | null>(null)
 
   const connQ = useQuery({
     queryKey: ['mp-conns'],
@@ -81,15 +95,17 @@ export function MarketHomeScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <AppText variant="title">{isDist ? 'پخشِ من' : 'بازارِ خرید'}</AppText>
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { key: 'connections', label: 'اتصال‌ها' },
-            { key: 'orders', label: 'سفارش‌ها' },
-          ]}
-        />
+        <AppText variant="title">{deliveryOnly ? 'تحویلِ بار' : isDist ? 'پخشِ من' : 'بازارِ خرید'}</AppText>
+        {deliveryOnly ? null : (
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            options={[
+              { key: 'connections', label: 'اتصال‌ها' },
+              { key: 'orders', label: 'سفارش‌ها' },
+            ]}
+          />
+        )}
       </View>
 
       {tab === 'connections' ? (
@@ -103,6 +119,7 @@ export function MarketHomeScreen() {
             <ConnectionCard
               conn={item}
               isDist={isDist}
+              canManage={canManage}
               busy={busyId === item.id}
               onApprove={() => act(item.id, () => setConnectionStatus(item.id, 'approved'), connQ.refetch)}
               onReject={() => act(item.id, () => setConnectionStatus(item.id, 'rejected'), connQ.refetch)}
@@ -121,14 +138,31 @@ export function MarketHomeScreen() {
             <OrderCard
               order={item}
               isDist={isDist}
+              canApprove={canApprove}
+              canManage={canManage}
+              canDeliver={canDeliver}
               busy={busyId === item.id}
               onConfirm={() => act(item.id, () => confirmOrder(item.id), orderQ.refetch)}
               onReject={() => act(item.id, () => rejectOrder(item.id), orderQ.refetch)}
+              onDeliver={() => setDeliverTarget(item)}
               onChat={() => goChat('order', item.id, `سفارش #${item.order_number.toLocaleString('fa-IR')}`)}
             />
           )}
         />
       )}
+
+      {deliverTarget ? (
+        <DeliverSheet
+          order={deliverTarget}
+          busy={busyId === deliverTarget.id}
+          onCancel={() => setDeliverTarget(null)}
+          onConfirm={(pct) => {
+            const target = deliverTarget
+            setDeliverTarget(null)
+            void act(target.id, () => deliverOrder(target.id, pct), orderQ.refetch)
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   )
 }
@@ -164,6 +198,7 @@ function ChatButton({ unread, onPress }: { unread: number; onPress: () => void }
 function ConnectionCard({
   conn,
   isDist,
+  canManage,
   busy,
   onApprove,
   onReject,
@@ -171,6 +206,7 @@ function ConnectionCard({
 }: {
   conn: MpConnection
   isDist: boolean
+  canManage: boolean
   busy: boolean
   onApprove: () => void
   onReject: () => void
@@ -191,7 +227,7 @@ function ConnectionCard({
         </AppText>
       ) : null}
       <View style={styles.actions}>
-        {isDist && pending ? (
+        {isDist && pending && canManage ? (
           <>
             <View style={{ flex: 1 }}>
               <Button label={busy ? '…' : 'تأیید'} onPress={onApprove} disabled={busy} />
@@ -213,21 +249,34 @@ function ConnectionCard({
 function OrderCard({
   order,
   isDist,
+  canApprove,
+  canManage,
+  canDeliver,
   busy,
   onConfirm,
   onReject,
+  onDeliver,
   onChat,
 }: {
   order: MpOrder
   isDist: boolean
+  canApprove: boolean
+  canManage: boolean
+  canDeliver: boolean
   busy: boolean
   onConfirm: () => void
   onReject: () => void
+  onDeliver: () => void
   onChat: () => void
 }) {
   const name = isDist ? order.retailer_name : order.distributor_name
   const st = ORDER_STATUS[order.status] ?? { label: order.status, tone: 'muted' as const }
-  const pending = order.status === 'pending'
+  // «placed» است نه «pending» — این همان اشتباهی بود که دکمه‌های تأیید/رد را
+  // برای همیشه پنهان می‌کرد.
+  const awaiting = order.status === 'placed'
+  const deliverable = isDist && order.status === 'confirmed' && canDeliver
+  const cash = Number(order.cash_amount)
+
   return (
     <Card>
       <View style={styles.rowTop}>
@@ -243,21 +292,45 @@ function OrderCard({
         <AppText variant="label" color={colors.textMuted}>مبلغِ کل</AppText>
         <AppText variant="heading" color={colors.accent}>{faMoney(order.total)}</AppText>
       </View>
+      {cash > 0 ? (
+        <View style={styles.rowTop}>
+          <AppText variant="label" color={colors.textMuted}>نقدِ دریافتی</AppText>
+          <AppText variant="label" color={colors.success}>{faMoney(cash)}</AppText>
+        </View>
+      ) : null}
+      {order.status === 'delivered' && order.delivered_by_name ? (
+        <AppText variant="caption" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+          تحویل توسطِ «{order.delivered_by_name}»
+          {order.delivered_at ? ` — ${faDate(order.delivered_at)}` : ''}
+        </AppText>
+      ) : null}
       <View style={styles.actions}>
-        {isDist && pending ? (
+        {isDist && awaiting && (canApprove || canManage) ? (
           <>
-            <View style={{ flex: 1 }}>
-              <Button label={busy ? '…' : 'تأیید'} onPress={onConfirm} disabled={busy} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="رد" variant="danger" onPress={onReject} disabled={busy} />
-            </View>
+            {canApprove ? (
+              <View style={{ flex: 1 }}>
+                <Button label={busy ? '…' : 'تأیید'} onPress={onConfirm} disabled={busy} />
+              </View>
+            ) : null}
+            {canManage ? (
+              <View style={{ flex: 1 }}>
+                <Button label="رد" variant="danger" onPress={onReject} disabled={busy} />
+              </View>
+            ) : null}
           </>
-        ) : (
+        ) : deliverable ? (
           <View style={{ flex: 1 }}>
-            <ChatButton unread={order.unread_count} onPress={onChat} />
+            <Button
+              label={busy ? '…' : 'ثبتِ تحویل'}
+              onPress={onDeliver}
+              disabled={busy}
+              icon={<Ionicons name="cube-outline" size={18} color={colors.onAccent} />}
+            />
           </View>
-        )}
+        ) : null}
+        <View style={{ flex: 1 }}>
+          <ChatButton unread={order.unread_count} onPress={onChat} />
+        </View>
       </View>
     </Card>
   )
