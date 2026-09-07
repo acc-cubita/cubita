@@ -300,15 +300,52 @@ def _signed_balance(account_type: str, total_debit: Decimal, total_credit: Decim
     return total_debit - total_credit
 
 
+def descendant_account_ids(db: Session, root_id: UUID) -> set[UUID]:
+    """شناسه‌ی حساب و همه‌ی نوادگانش — پایه‌ی هر گزارشی که یک سرفصل را جمع می‌زند.
+
+    یک بار کلِ (id, parent_id) خوانده می‌شود و درخت در حافظه پیموده می‌شود؛ کوئریِ
+    بازگشتی برای چارتی که چند صد ردیف است صرف نمی‌کند. `seen` حلقه را می‌شکند تا
+    داده‌ی خرابِ درخت به‌جای پاسخ، پردازش را قفل نکند.
+    """
+    children: dict[UUID | None, list[UUID]] = {}
+    for aid, pid in db.query(Account.id, Account.parent_id).all():
+        children.setdefault(pid, []).append(aid)
+    seen: set[UUID] = set()
+    stack = [root_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(children.get(current, []))
+    return seen
+
+
 def get_general_ledger(
     db: Session, account_id: UUID, date_from: date | None, date_to: date | None
 ) -> dict:
+    """گردشِ یک حساب با مانده‌ی در حال اجرا — **شاملِ هر چه زیرش هست**.
+
+    برای حسابِ برگ همان دفترِ معینِ همیشگی است. برای سرفصل (حسابِ کل) گردشِ همه‌ی
+    زیرحساب‌هایش را به‌ترتیبِ تاریخ در یک دفتر می‌آورد — همان «دفتر کل».
+
+    **دوباره‌شماری ممکن نیست:** `routers/accounts.py` اجازه نمی‌دهد حسابی هم ردیفِ
+    مستقیم داشته باشد هم فرزند. پس هر حساب یا برگ است یا سرفصل، و جمعِ زیرشاخه
+    هیچ مبلغی را دو بار نمی‌شمارد.
+
+    سندِ باطل و معکوسش هر دو می‌مانند — مثلِ دفترِ روزنامه، به همان دلیل: دفتر باید
+    نشان دهد اشتباه رخ داد و بعد اصلاح شد.
+    """
     account = db.get(Account, account_id)
     if account is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
 
-    query = db.query(JournalLine, JournalEntry).join(JournalEntry, JournalLine.entry_id == JournalEntry.id).filter(
-        JournalLine.account_id == account_id
+    account_ids = descendant_account_ids(db, account_id)
+    query = (
+        db.query(JournalLine, JournalEntry, Account)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .join(Account, JournalLine.account_id == Account.id)
+        .filter(JournalLine.account_id.in_(account_ids))
     )
 
     opening_balance = Decimal(0)
@@ -321,11 +358,15 @@ def get_general_ledger(
     if date_to is not None:
         query = query.filter(JournalEntry.entry_date <= date_to)
 
-    rows = query.order_by(JournalEntry.entry_date, JournalEntry.number).all()
+    #: `seq` و `id` ترتیبِ درونِ سند را قطعی می‌کنند؛ بدونشان دو ردیفِ یک سند در
+    #: دفترِ کل هر بار جای هم عوض می‌شدند و مانده‌ی در حال اجرا ناپایدار می‌شد.
+    rows = query.order_by(
+        JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id
+    ).all()
 
     running = opening_balance
     lines = []
-    for line, entry in rows:
+    for line, entry, line_account in rows:
         delta = _signed_balance(account.type, line.debit, line.credit)
         running += delta
         lines.append(
@@ -333,6 +374,10 @@ def get_general_ledger(
                 "entry_id": entry.id,
                 "entry_number": entry.number,
                 "entry_date": entry.entry_date,
+                #: حسابِ خودِ ردیف، نه حسابی که کاربر انتخاب کرده. در دفترِ معین این
+                #: دو یکی‌اند؛ در دفترِ کل همین ستون می‌گوید مبلغ از کدام زیرحساب آمده.
+                "account_code": line_account.code,
+                "account_name": line_account.name,
                 "description": line.description or entry.description,
                 "debit": line.debit,
                 "credit": line.credit,
