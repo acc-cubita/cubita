@@ -105,7 +105,9 @@ def renumber(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("accounting", "update")),
 ):
-    return ops.renumber_entries(db, user, data.date_from, data.date_to, data.start_number)
+    return ops.renumber_entries(
+        db, user, data.date_from, data.date_to, data.start_number, data.entry_ids
+    )
 
 
 @router.post("/entries/merge", response_model=MergeOut)
