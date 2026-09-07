@@ -27,6 +27,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import audit
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.analytic import AnalyticAccount
+from app.models.cost_center import CostCenter
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.currency import ExchangeRate
 from app.models.user import User
@@ -524,15 +526,20 @@ def merge_entries(db: Session, user: User, entry_ids: list[UUID], description: s
 # ───────────────────────── ۵) تسعیرِ ارز ──────────────────────────────────
 
 
-def _rate_on(db: Session, code: str, as_of: date_) -> Decimal | None:
-    """آخرین نرخِ ثبت‌شده تا این تاریخ (نه نرخِ آینده)."""
+def _rate_on(db: Session, code: str, as_of: date_) -> tuple[Decimal, date_] | None:
+    """آخرین نرخِ ثبت‌شده تا این تاریخ (نه نرخِ آینده) — همراهِ تاریخِ خودش.
+
+    تاریخ هم برمی‌گردد چون «آخرین نرخ تا این تاریخ» می‌تواند ماه‌ها کهنه باشد و
+    کاربر باید ببیندش. نرخِ نبود را حدس نمی‌زنیم؛ نرخِ کهنه را هم نباید بی‌صدا
+    به‌جای نرخِ روز جا بزنیم.
+    """
     row = (
         db.query(ExchangeRate)
         .filter(ExchangeRate.currency_code == code, ExchangeRate.rate_date <= as_of)
         .order_by(ExchangeRate.rate_date.desc())
         .first()
     )
-    return Decimal(str(row.rate)) if row else None
+    return (Decimal(str(row.rate)), row.rate_date) if row else None
 
 
 def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
@@ -545,6 +552,12 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
     rows = (
         db.query(
             JournalLine.account_id,
+            #: گروه‌بندی روی هر سه بُعدی که ردیفِ سند حمل می‌کند، نه فقط حساب.
+            #: یک «دریافتنیِ ارزی» با سه مشتری سه مانده‌ی جداست؛ اگر یک‌کاسه شود،
+            #: ردیفِ تسعیر بی‌تفصیلی می‌نشیند و دفترِ تفصیلی از حساب جدا می‌افتد —
+            #: جمعِ حساب درست، تفکیکش غلط، و چون سند ویرایشِ ردیف ندارد، برای همیشه.
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
             JournalLine.currency_code,
             func.coalesce(func.sum(JournalLine.debit), 0),
             func.coalesce(func.sum(JournalLine.credit), 0),
@@ -565,15 +578,22 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
             JournalEntry.entry_date <= as_of,
             JournalEntry.voided_at.is_(None),
         )
-        .group_by(JournalLine.account_id, JournalLine.currency_code)
+        .group_by(
+            JournalLine.account_id,
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
+            JournalLine.currency_code,
+        )
         .all()
     )
 
     accounts = {a.id: a for a in db.query(Account).all()}
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
     missing_rates: set[str] = set()
     items = []
     total_diff = Decimal(0)
-    for account_id, code, debit, credit, fx_net in rows:
+    for account_id, analytic_id, cost_center_id, code, debit, credit, fx_net in rows:
         account = accounts.get(account_id)
         if account is None:
             continue
@@ -586,30 +606,49 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
             continue
         fx_balance = Decimal(fx_net or 0)
         book_value = Decimal(debit) - Decimal(credit)  # مانده‌ی ریالیِ خام (بدهکار مثبت)
-        rate = _rate_on(db, code, as_of)
-        if rate is None:
+        found = _rate_on(db, code, as_of)
+        if found is None:
             missing_rates.add(code)
             continue
+        rate, rate_date = found
         market_value = (fx_balance * rate).quantize(Decimal(1))
         diff = market_value - book_value
         if fx_balance == 0 and diff == 0:
             continue
         total_diff += diff
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        center = centers.get(cost_center_id) if cost_center_id else None
         items.append(
             {
                 "account_id": account.id,
                 "account_code": account.code,
                 "account_name": account.name,
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": cost_center_id,
+                "cost_center_name": center.name if center else None,
                 "currency_code": code,
                 "fx_balance": fx_balance,
                 "rate": rate,
+                #: تاریخِ خودِ نرخ، نه تاریخِ تسعیر. وقتی این دو یکی نیستند یعنی
+                #: نرخِ روز ثبت نشده و کهنه‌ترین موجود به کار رفته — که کاربر باید
+                #: ببیندش، نه اینکه پشتِ عددِ نرخ پنهان بماند.
+                "rate_date": rate_date,
                 "book_value": book_value,
                 "market_value": market_value,
                 "difference": diff,
             }
         )
 
-    items.sort(key=lambda r: (r["currency_code"], r["account_code"]))
+    items.sort(
+        key=lambda r: (
+            r["currency_code"],
+            r["account_code"],
+            r["analytic_code"] or "",
+            r["cost_center_name"] or "",
+        )
+    )
     return {
         "as_of": as_of,
         "items": items,
@@ -640,11 +679,20 @@ def issue_fx_revaluation(db: Session, user: User, as_of: date_, description: str
     for item in items:
         diff = Decimal(item["difference"])
         net += diff
+        #: تفصیلی در شرح هم می‌آید، وگرنه چند ردیفِ تسعیرِ یک حساب در چاپ و در
+        #: دفترِ کل از هم قابلِ تشخیص نیستند.
         label = f"تسعیرِ {item['currency_code']} — {item['account_name']}"
+        if item["analytic_name"]:
+            label += f" / {item['analytic_name']}"
         # اختلافِ مثبت یعنی معادلِ ریالیِ دارایی بیشتر شده → حساب بدهکار می‌شود.
         lines.append(
             JournalLine(
                 account_id=item["account_id"],
+                #: هر دو بُعد عیناً از مانده‌ای که تسعیر می‌شود کپی می‌شوند. ردیفی
+                #: که ابعادش را دور بیندازد، اثرِ مالی را جایی می‌نشاند که مانده‌اش
+                #: از آن‌جا نیامده است.
+                analytic_id=item["analytic_id"],
+                cost_center_id=item["cost_center_id"],
                 debit=diff if diff > 0 else 0,
                 credit=-diff if diff < 0 else 0,
                 description=label,

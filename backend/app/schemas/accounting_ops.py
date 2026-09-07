@@ -150,9 +150,18 @@ class FxRowOut(BaseModel):
     account_id: UUID
     account_code: str
     account_name: str
+    #: هر سه بُعدِ ردیفِ سند در ردیفِ تسعیر هم می‌مانند. `None` یعنی مانده‌ی این
+    #: گروه واقعاً بُعدی نداشته، نه اینکه محاسبه دورش انداخته باشد.
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_name: str | None = None
     currency_code: str
     fx_balance: Decimal
     rate: Decimal
+    #: تاریخِ خودِ نرخ — اگر با `as_of` یکی نباشد یعنی نرخِ روز ثبت نشده.
+    rate_date: date
     book_value: Decimal
     market_value: Decimal
     difference: Decimal
