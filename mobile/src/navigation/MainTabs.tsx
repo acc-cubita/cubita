@@ -8,6 +8,7 @@ import { ReportsStack } from './ReportsStack'
 import { ContactsStack } from './ContactsStack'
 import { MarketStack } from './MarketStack'
 import { useAuth } from '../auth/AuthContext'
+import { canAccess, canSeeMarket } from '../auth/access'
 import { fetchUnread } from '../api/marketplace'
 import { colors, font } from '../theme'
 
@@ -26,7 +27,12 @@ export function MainTabs() {
   const { me } = useAuth()
   // insetِ پایینِ اندروید (نوارِ ناوبری/ژست). بدونِ این، نوارِ تب زیرِ نوارِ سیستم می‌افتد.
   const insets = useSafeAreaInsets()
-  const isMarket = me?.tenant_kind === 'distributor' || me?.tenant_kind === 'retailer'
+  // تب‌ها بر اساسِ نقش. تا پیش از این همه‌ی تب‌ها به همه نشان داده می‌شدند و
+  // انباردار روی «گزارش» می‌زد و ۴۰۳ می‌گرفت.
+  const isMarket = canSeeMarket(me)
+  const showHome = canAccess(me, 'dashboard')
+  const showReports = canAccess(me, 'reports')
+  const showContacts = canAccess(me, 'contacts')
 
   // نشانِ خوانده‌نشده‌ی چتِ بازار روی تبِ «بازار» — پولِ سبک هر ~۲۵ ثانیه.
   const unreadQ = useQuery({
@@ -56,14 +62,21 @@ export function MainTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={HomeStack} options={{ title: 'خانه' }} />
-      <Tab.Screen name="Reports" component={ReportsStack} options={{ title: 'گزارش' }} />
-      <Tab.Screen
-        name="Market"
-        component={MarketStack}
-        options={{ title: 'بازار', tabBarBadge: unread > 0 ? (unread > 99 ? '۹۹+' : unread.toLocaleString('fa-IR')) : undefined }}
-      />
-      <Tab.Screen name="Contacts" component={ContactsStack} options={{ title: 'اشخاص' }} />
+      {showHome && <Tab.Screen name="Home" component={HomeStack} options={{ title: 'خانه' }} />}
+      {showReports && (
+        <Tab.Screen name="Reports" component={ReportsStack} options={{ title: 'گزارش' }} />
+      )}
+      {isMarket && (
+        <Tab.Screen
+          name="Market"
+          component={MarketStack}
+          options={{ title: 'بازار', tabBarBadge: unread > 0 ? (unread > 99 ? '۹۹+' : unread.toLocaleString('fa-IR')) : undefined }}
+        />
+      )}
+      {showContacts && (
+        <Tab.Screen name="Contacts" component={ContactsStack} options={{ title: 'اشخاص' }} />
+      )}
+      {/* «بیشتر» همیشه هست: تنظیمات، سوئیچِ کسب‌وکار و خروج به هر نقشی تعلق دارند. */}
       <Tab.Screen name="More" component={MoreScreen} options={{ title: 'بیشتر' }} />
     </Tab.Navigator>
   )

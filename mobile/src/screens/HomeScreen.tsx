@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthContext'
 import { fetchAlerts, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
 import { isApiError } from '../api/client'
 import type { AlertItem } from '../api/types'
-import { hasPermission } from '../api/types'
+import { canAccess } from '../auth/access'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card } from '../ui'
 import { MonthlyTrendChart } from '../ui/MonthlyTrendChart'
@@ -69,7 +69,7 @@ export function HomeScreen() {
           </Card>
         ) : null}
 
-        {me && hasPermission(me, 'invoices', 'create') ? (
+        {canAccess(me, 'newInvoice') ? (
           <QuickAction
             label="فاکتورِ فروش"
             icon="receipt-outline"
@@ -79,7 +79,7 @@ export function HomeScreen() {
           />
         ) : null}
 
-        {me && hasPermission(me, 'checks_bank', 'create') ? (
+        {canAccess(me, 'treasury') ? (
           <View style={styles.quickRow}>
             <QuickAction
               label="ثبتِ دریافت"
