@@ -62,11 +62,16 @@ class CartableOut(BaseModel):
 
 class FinalizeIn(BaseModel):
     """دستِ‌کم یکی از فیلترها لازم است — «همه‌ی اسنادِ موقتِ تاریخ» یک درخواستِ
-    خطرناکِ بی‌قصد است و باید صریح گفته شود."""
+    خطرناکِ بی‌قصد است و باید صریح گفته شود.
+
+    این جمله از روزِ اول این‌جا بود و **هیچ‌چیز اعمالش نمی‌کرد**؛ گاردش حالا در
+    `finalize_entries` است. `entry_ids` هم پیش‌فرضش `None` شد نه فهرستِ خالی، تا
+    «انتخاب نکردم» از «انتخابم خالی بود» جدا بماند — دومی خطاست.
+    """
 
     date_from: date | None = None
     date_to: date | None = None
-    entry_ids: list[UUID] = Field(default_factory=list)
+    entry_ids: list[UUID] | None = None
     source_type: str | None = None
 
 
