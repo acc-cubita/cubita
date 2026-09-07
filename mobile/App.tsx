@@ -4,13 +4,15 @@ import { I18nManager, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { AuthProvider } from './src/auth/AuthContext'
 import { AppUpdateProvider } from './src/update/AppUpdateProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { ErrorBoundary } from './src/errors/ErrorBoundary'
 import { flush, installGlobalHandler } from './src/errors/reporter'
 import { OfflineBanner } from './src/offline/OfflineBanner'
+import { OutboxBadge } from './src/offline/OutboxBadge'
+import { drain } from './src/offline/outbox'
 import { loadCache, startPersisting } from './src/offline/persist'
 import { colors } from './src/theme'
 
@@ -52,6 +54,10 @@ export default function App() {
     return () => stop?.()
   }, [])
 
+  // وقتی شبکه برمی‌گردد، صفِ نوشتن خودش خالی شود. بدونِ این، کارِ آفلاینِ کاربر
+  // تا وقتی دستی چیزِ دیگری ثبت نکند روی گوشی می‌ماند.
+  useEffect(() => onlineManager.subscribe((online) => { if (online) void drain() }), [])
+
   if (!cacheReady) {
     return <View style={{ flex: 1, backgroundColor: colors.bg }} />
   }
@@ -67,6 +73,7 @@ export default function App() {
               <AppUpdateProvider>
                 <StatusBar style="light" />
                 <OfflineBanner />
+                <OutboxBadge />
                 <RootNavigator />
               </AppUpdateProvider>
             </AuthProvider>
