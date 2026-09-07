@@ -121,6 +121,58 @@ def resolve_broker(db: Session, broker_id: UUID | None, net: Decimal) -> tuple[U
     return broker.id, commission
 
 
+def resolve_salesperson_id(db: Session, salesperson_id: UUID | None) -> UUID | None:
+    """فروشنده‌ی فاکتور را اعتبارسنجی می‌کند — مبنای محاسبه‌ی پورسانت.
+
+    فروشنده **کاربرِ سامانه** است نه طرف‌حساب (تصمیمِ صریحِ `CommissionRule`)، پس
+    باید عضوِ همین کسب‌وکار باشد. `memberships` جدولِ سراسری و بی‌RLS است، پس
+    فیلترِ `tenant_id` این‌جا صریح می‌آید — بدونِ آن هر کاربری از هر کسب‌وکارِ
+    دیگری روی فاکتور می‌نشست.
+    """
+    if salesperson_id is None:
+        return None
+    from app.models.tenant import Membership
+    from app.tenant_context import session_tenant
+
+    member = (
+        db.query(Membership.id)
+        .filter(
+            Membership.user_id == salesperson_id,
+            Membership.tenant_id == session_tenant(db),
+        )
+        .first()
+    )
+    if member is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "فروشنده‌ی انتخاب‌شده کاربرِ این کسب‌وکار نیست.",
+        )
+    return salesperson_id
+
+
+def resolve_sale_type_id(db: Session, sale_type_id: UUID | None) -> UUID | None:
+    """نوعِ فروش را اعتبارسنجی می‌کند (نقدی، اعتباری، صادراتی…).
+
+    نوعِ **غیرفعال** به فاکتورِ تازه نمی‌خورد — همان قاعده‌ای که مرکز هزینه دارد و
+    به همان دلیل: «غیرفعال» باید در سرور معنا داشته باشد وگرنه فقط یک فیلترِ
+    سمتِ کلاینت است. فاکتور ویرایش نمی‌شود (ابطال و صدورِ تازه می‌شود)، پس
+    برخلافِ `resolve_cost_center_id` به راهِ فرارِ `current` نیازی نیست.
+    """
+    if sale_type_id is None:
+        return None
+    from app.models.sales_ops import SaleType
+
+    sale_type = db.get(SaleType, sale_type_id)
+    if sale_type is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ فروشِ انتخاب‌شده معتبر نیست")
+    if not sale_type.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"نوعِ فروشِ «{sale_type.name}» غیرفعال است؛ نوعِ دیگری انتخاب کنید.",
+        )
+    return sale_type_id
+
+
 def get_stock_qty(db: Session, item_id: UUID, warehouse_id: UUID) -> Decimal:
     total = (
         db.query(func.coalesce(func.sum(StockLedger.qty), 0))
@@ -256,6 +308,8 @@ def post_sales_invoice(
     )
 
     broker_id, broker_commission = resolve_broker(db, data.broker_id, total_amount)
+    salesperson_id = resolve_salesperson_id(db, data.salesperson_id)
+    sale_type_id = resolve_sale_type_id(db, data.sale_type_id)
 
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
@@ -347,6 +401,8 @@ def post_sales_invoice(
         source_order_id=data.source_order_id,
         broker_id=broker_id,
         broker_commission=broker_commission,
+        salesperson_id=salesperson_id,
+        sale_type_id=sale_type_id,
         created_by_id=user.id,
         lines=invoice_lines,
     )

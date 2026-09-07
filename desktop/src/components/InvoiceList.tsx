@@ -265,10 +265,21 @@ function InvoiceDetail({
   //: لحظه‌ی ثبت قفل شده، نه محاسبه‌ی دوباره از نرخِ امروزِ واسطه.
   const brokerName = isSales ? (row as SalesInvoiceRecord).broker_name : null
   const brokerCommission = isSales ? Number((row as SalesInvoiceRecord).broker_commission) : 0
+  const salespersonName = isSales ? (row as SalesInvoiceRecord).salesperson_name : null
+  const saleTypeName = isSales ? (row as SalesInvoiceRecord).sale_type_name : null
 
   return (
     <div className="invoice-detail">
       {creator && <div className="invoice-detail-desc">ثبت‌کننده: {creator}</div>}
+      {salespersonName && (
+        <div className="invoice-detail-desc">
+          فروشنده: {salespersonName}
+          {saleTypeName && ` — نوع فروش: ${saleTypeName}`}
+        </div>
+      )}
+      {!salespersonName && saleTypeName && (
+        <div className="invoice-detail-desc">نوع فروش: {saleTypeName}</div>
+      )}
       {brokerName && (
         <div className="invoice-detail-desc">
           واسطه: {brokerName}
