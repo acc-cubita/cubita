@@ -80,7 +80,9 @@ def finalize(
         user,
         date_from=data.date_from,
         date_to=data.date_to,
-        entry_ids=data.entry_ids or None,
+        #: خالی به None تبدیل نمی‌شود: سرویس بینِ «انتخاب نکردم» و «انتخابم
+        #: خالی بود» فرق می‌گذارد و دومی خطاست، نه «فیلتری نیست».
+        entry_ids=data.entry_ids,
         source_type=data.source_type,
     )
 

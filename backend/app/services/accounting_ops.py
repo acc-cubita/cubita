@@ -179,15 +179,36 @@ def finalize_entries(
     «دائم» یعنی امضاشده و برگرداندنش همان چیزی است که این وضعیت باید جلویش را بگیرد.
     """
     _assert_range(date_from, date_to)
+
+    #: فهرستِ **خالی** یعنی «کاربر چیزی انتخاب نکرد»، نه «فیلتری در کار نیست».
+    #: با شرطِ truthy به فیلترِ تاریخ می‌افتاد و اگر بازه هم خالی بود **همه‌ی دفتر**
+    #: دائم می‌شد — یک‌طرفه و بی‌راهِ برگشت.
+    if entry_ids is not None and not entry_ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "سندی انتخاب نشده است")
+
+    #: **گاردِ واقعیِ همان قاعده‌ای که docstringِ `FinalizeIn` از روزِ اول ادعا می‌کرد.**
+    #: تا امروز هیچ‌چیز اعمالش نمی‌کرد و بدنه‌ی خالیِ `{}` همه‌ی اسنادِ موقتِ
+    #: کسب‌وکار را برای همیشه دائم می‌کرد.
+    if entry_ids is None and not (date_from or date_to or source_type):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "دستِ‌کم یک فیلتر لازم است — بازه، منشأ، یا انتخابِ صریحِ اسناد. "
+            "دائم‌کردنِ همه‌ی اسنادِ موقت یک‌طرفه است و باید صریح خواسته شود.",
+        )
+
     query = _live_entries(db).filter(JournalEntry.status == "temporary")
-    if entry_ids:
+    #: انتخابِ دستی **جایگزینِ** بازه است نه افزوده بر آن — همان قاعده‌ی
+    #: `_renumber_scope`. پیش از این هر دو اعمال می‌شدند، پس کاربری که چند سند تیک
+    #: زده و بازه‌اش روی «امسال» مانده بی‌صدا زیرمجموعه‌ای از انتخابش را دائم می‌کرد.
+    if entry_ids is not None:
         query = query.filter(JournalEntry.id.in_(entry_ids))
-    if date_from:
-        query = query.filter(JournalEntry.entry_date >= date_from)
-    if date_to:
-        query = query.filter(JournalEntry.entry_date <= date_to)
-    if source_type:
-        query = query.filter(JournalEntry.source_type == source_type)
+    else:
+        if date_from:
+            query = query.filter(JournalEntry.entry_date >= date_from)
+        if date_to:
+            query = query.filter(JournalEntry.entry_date <= date_to)
+        if source_type:
+            query = query.filter(JournalEntry.source_type == source_type)
 
     entries = query.all()
     if not entries:
