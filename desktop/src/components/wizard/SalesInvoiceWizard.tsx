@@ -147,6 +147,33 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
           )}
         </label>
       )}
+          {d.salespeople.length > 0 && (
+        <label>
+          فروشنده (اختیاری)
+          <select value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
+          <option value="">— بدون فروشنده —</option>
+          {d.salespeople.map((p) => (
+            <option key={p.id} value={p.id}>
+            {p.name}
+            </option>
+          ))}
+          </select>
+          <span className="field-hint">مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.</span>
+        </label>
+      )}
+      {d.saleTypes.length > 0 && (
+        <label>
+          نوع فروش (اختیاری)
+          <select value={d.saleTypeId} onChange={(e) => d.setSaleTypeId(e.target.value)}>
+          <option value="">— تعیین‌نشده —</option>
+          {d.saleTypes.map((t) => (
+            <option key={t.id} value={t.id}>
+            {t.name}
+            </option>
+          ))}
+          </select>
+        </label>
+      )}
       {d.brokers.length > 0 && (
         <label>
           واسطه (اختیاری)

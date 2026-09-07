@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact
+from app.models.sales_ops import SaleType
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.tenant import Membership
 from app.models.user import Role, User
@@ -73,6 +74,28 @@ def _attach_brokers(db: Session, invoices: list) -> None:
         inv.broker_name = names.get(inv.broker_id)
 
 
+def _attach_sales_meta(db: Session, invoices: list) -> None:
+    """نامِ فروشنده و نوعِ فروش را برای نمایش می‌نشاند.
+
+    هر دو ستون از روزِ اول روی `sales_invoices` بودند و **هیچ‌وقت پر نمی‌شدند**، پس
+    هیچ‌جا هم نمایش داده نمی‌شدند. حالا که پر می‌شوند، فهرست باید نشانشان بدهد —
+    وگرنه کاربر نمی‌فهمد پورسانت به نامِ چه کسی رفته.
+    """
+    person_ids = {inv.salesperson_id for inv in invoices if getattr(inv, "salesperson_id", None)}
+    if person_ids:
+        names = {uid: (name or email) for uid, name, email in
+                 db.query(User.id, User.name, User.email).filter(User.id.in_(person_ids)).all()}
+        for inv in invoices:
+            inv.salesperson_name = names.get(inv.salesperson_id)
+
+    type_ids = {inv.sale_type_id for inv in invoices if getattr(inv, "sale_type_id", None)}
+    if type_ids:
+        types = {tid: name for tid, name in
+                 db.query(SaleType.id, SaleType.name).filter(SaleType.id.in_(type_ids)).all()}
+        for inv in invoices:
+            inv.sale_type_name = types.get(inv.sale_type_id)
+
+
 @router.get("/api/sales-invoices", response_model=Page[SalesInvoiceOut])
 def list_sales_invoices(
     db: Session = Depends(get_db),
@@ -86,6 +109,7 @@ def list_sales_invoices(
     )
     _attach_creators(db, items)
     _attach_brokers(db, items)
+    _attach_sales_meta(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -125,6 +149,7 @@ def create_sales_invoice(
     )
     _attach_creators(db, [invoice])
     _attach_brokers(db, [invoice])
+    _attach_sales_meta(db, [invoice])
     return invoice
 
 

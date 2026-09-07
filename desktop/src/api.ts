@@ -1127,6 +1127,9 @@ export interface SalesInvoiceRecord {
   /** کارمزدِ واسطه، قفل‌شده در لحظه‌ی ثبت (نه محاسبه از نرخِ امروز). */
   broker_commission: string
   broker_name: string | null
+  /** نامِ فروشنده و نوعِ فروش برای نمایش؛ سرور پُرشان می‌کند. */
+  salesperson_name: string | null
+  sale_type_name: string | null
   /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
   created_by_id: string | null
   created_by_name: string | null
@@ -1696,6 +1699,10 @@ export const createSalesInvoiceDirect = (
     /** واسطه‌ی معامله. باید نقشِ «واسط» داشته باشد؛ کارمزدش را سرور از نرخِ خودش
      *  حساب و روی فاکتور قفل می‌کند. */
     broker_id?: string | null
+    /** فروشنده — مبنای محاسبه‌ی پورسانت. باید کاربرِ همین کسب‌وکار باشد. */
+    salesperson_id?: string | null
+    /** نوعِ فروش (نقدی، اعتباری…). نوعِ غیرفعال پذیرفته نمی‌شود. */
+    sale_type_id?: string | null
     lines: { item_id: string; qty: number; unit_price: number; discount?: number }[]
   },
   idempotencyKey?: string,

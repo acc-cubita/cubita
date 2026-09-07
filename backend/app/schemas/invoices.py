@@ -43,6 +43,12 @@ class SalesInvoiceIn(BaseModel):
     #: واسطه‌ی معامله. باید طرف‌حسابی با نقشِ «واسط» باشد؛ کارمزدش از نرخِ همان
     #: طرف‌حساب حساب و روی فاکتور قفل می‌شود. None = بی‌واسطه.
     broker_id: UUID | None = None
+    #: فروشنده‌ی این فاکتور — **مبنای محاسبه‌ی پورسانت**. کاربرِ سامانه است نه
+    #: طرف‌حساب. تا امروز ستونش بود ولی هیچ‌جا فرستاده نمی‌شد، پس «محاسبه پورسانت»
+    #: همیشه صفر ردیف برمی‌گرداند.
+    salesperson_id: UUID | None = None
+    #: نوعِ فروش (نقدی، اعتباری، صادراتی…). None = تعیین‌نشده.
+    sale_type_id: UUID | None = None
     lines: list[SalesInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
@@ -114,6 +120,9 @@ class SalesInvoiceOut(BaseModel):
     broker_id: UUID | None = None
     #: کارمزدِ قفل‌شده در لحظه‌ی ثبت — نه محاسبه‌ی دوباره از نرخِ امروزِ واسطه.
     broker_commission: Decimal = Decimal(0)
+    #: نامِ فروشنده و نوعِ فروش برای نمایش؛ روتر پُرشان می‌کند.
+    salesperson_name: str | None = None
+    sale_type_name: str | None = None
     #: نامِ واسطه برای نمایش؛ روتر پُرش می‌کند، پس در پاسخِ خام None می‌ماند.
     broker_name: str | None = None
     #: ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زده. `created_by_id` همیشه هست؛

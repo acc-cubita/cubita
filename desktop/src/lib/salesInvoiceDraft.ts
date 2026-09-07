@@ -9,13 +9,16 @@ import {
   fetchCurrencies,
   fetchLatestRate,
   fetchLoyaltySettings,
+  fetchMembers,
   fetchPriceListItems,
+  fetchSaleTypes,
   fetchStockLevels,
   newIdempotencyKey,
   type ContactRecord,
   type CostCenterRecord,
   type CreditStatus,
   type Currency,
+  type SaleType,
   type SalesInvoiceRecord,
   type StockLevel,
 } from '../api'
@@ -67,6 +70,11 @@ export function useSalesInvoiceDraft({
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = usePersistentState('cubita.draft.salesInvoice.contactId', '', persistOff)
   const [brokerId, setBrokerId] = usePersistentState('cubita.draft.salesInvoice.brokerId', '', persistOff)
+  //: فروشنده کاربرِ سامانه است نه طرف‌حساب — مبنای «محاسبه پورسانت».
+  const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([])
+  const [salespersonId, setSalespersonId] = usePersistentState('cubita.draft.salesInvoice.salespersonId', '', persistOff)
+  const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
+  const [saleTypeId, setSaleTypeId] = usePersistentState('cubita.draft.salesInvoice.saleTypeId', '', persistOff)
   const [credit, setCredit] = useState<CreditStatus | null>(null)
   // تخفیفِ خودکارِ سطحِ باشگاه (اگر در تنظیماتِ باشگاه فعال باشد).
   const [tierAuto, setTierAuto] = useState(false)
@@ -124,6 +132,17 @@ export function useSalesInvoiceDraft({
     fetchCostCenters(token)
       .then((rows) => setCostCenters(rows.filter((c) => c.is_active)))
       .catch(() => setCostCenters([]))
+  }, [token])
+
+  // فروشنده و نوعِ فروش، همان الگوی مراکز هزینه: زنده، و آفلاین که نشد پنهان.
+  // نوعِ غیرفعال کنار می‌رود چون سرور هم ردش می‌کند.
+  useEffect(() => {
+    fetchMembers(token)
+      .then((r) => setSalespeople(r.members.map((m) => ({ id: m.user_id, name: m.name || m.email }))))
+      .catch(() => setSalespeople([]))
+    fetchSaleTypes(token)
+      .then((rows) => setSaleTypes(rows.filter((t) => t.is_active)))
+      .catch(() => setSaleTypes([]))
   }, [token])
 
   // مشتری‌ها هم زنده خوانده می‌شوند (همان الگوی مراکز هزینه). تأمین‌کننده‌ها کنار می‌روند.
@@ -358,6 +377,8 @@ export function useSalesInvoiceDraft({
       cost_center_id: costCenterId || null,
       contact_id: contactId || null,
       broker_id: brokerId || null,
+      salesperson_id: salespersonId || null,
+      sale_type_id: saleTypeId || null,
       currency_code: currencyCode || null,
       exchange_rate: rate,
       // مبالغ به پایه (ریال) تبدیل می‌شوند؛ دفتر همیشه پایه است.
@@ -385,6 +406,8 @@ export function useSalesInvoiceDraft({
       setCostCenterId('')
       setContactId('')
       setBrokerId('')
+      setSalespersonId('')
+      setSaleTypeId('')
       setCurrencyCode('')
       setInvoiceDiscount('')
       setRoundStep(0)
@@ -434,6 +457,12 @@ export function useSalesInvoiceDraft({
     brokerId,
     setBrokerId,
     brokerCommission,
+    salespeople,
+    salespersonId,
+    setSalespersonId,
+    saleTypes,
+    saleTypeId,
+    setSaleTypeId,
     autoTier,
     currencies,
     currencyCode,
