@@ -5,7 +5,20 @@
  * بک‌اند فرستاده می‌شود، و بک‌اند دوباره مبلغ می‌سازد. اگر رفت‌وبرگشت دقیق نباشد،
  * سندِ خزانه‌ی دو کسب‌وکار با آنچه روی صفحه دیده شد فرق می‌کند — بدونِ هیچ خطایی.
  */
-import { cashAmountFor, cashPercentFor } from '../cod'
+import { cashAmountFor, cashPercentFor, settlesOnDelivery } from '../cod'
+
+describe('آیا تحویل اصلاً پول جابه‌جا می‌کند؟', () => {
+  it('سفارشِ بدونِ فاکتور: بله — تسویه سرِ تحویل انجام می‌شود', () => {
+    expect(settlesOnDelivery({ retailer_purchase_invoice_id: null })).toBe(true)
+  })
+
+  it('سفارشی که هنگامِ تأیید سند خورده: نه', () => {
+    // این باگ با تستِ سرتاسری روی سرورِ واقعی پیدا شد: فرم مبلغِ نقد می‌پرسید،
+    // کاربر ۳۳۳٬۳۳۳ می‌زد، و بک‌اند چون فاکتور از قبل بود کلِ بلوکِ نقد را رد
+    // می‌کرد. نتیجه cash_amount=0 بود — بدونِ هیچ خطایی.
+    expect(settlesOnDelivery({ retailer_purchase_invoice_id: 'inv-1' })).toBe(false)
+  })
+})
 
 describe('درصد از روی مبلغ', () => {
   it('هیچ نقدی یعنی صفر — سفارشِ کاملاً اعتباری', () => {

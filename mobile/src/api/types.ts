@@ -341,6 +341,13 @@ export interface MpOrder {
   /** تا وقتی تحویل ثبت نشده خالی‌اند. */
   delivered_at: string | null
   delivered_by_name: string
+  /**
+   * فاکتورهای دوطرفه. **کلیدِ اینکه آیا تحویل هنوز پولی جابه‌جا می‌کند یا نه:**
+   * اگر پر باشند، سند هنگامِ *تأیید* خورده و نقد همان‌جا تسویه شده؛ تحویل فقط
+   * علامت می‌خورد. جزئیات در `market/cod.ts::settlesOnDelivery`.
+   */
+  distributor_sales_invoice_id: string | null
+  retailer_purchase_invoice_id: string | null
   lines: MpOrderLine[]
 }
 

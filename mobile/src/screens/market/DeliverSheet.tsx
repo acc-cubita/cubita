@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import type { MpOrder } from '../../api/types'
-import { cashAmountFor, cashPercentFor } from '../../market/cod'
+import { cashAmountFor, cashPercentFor, settlesOnDelivery } from '../../market/cod'
 import { AppText, Button, TextField } from '../../ui'
 import { colors, faMoney, radius, spacing } from '../../theme'
 import { normalizeInt, toFaDigits } from '../../lib/format'
@@ -17,6 +17,12 @@ import { normalizeInt, toFaDigits } from '../../lib/format'
  * `market/cod.ts` انجام و رفت‌وبرگشتش تست می‌شود.
  *
  * هر دو عدد همیشه روی صفحه‌اند (نقد و اعتباری) تا چیزی پشتِ یک درصد پنهان نماند.
+ *
+ * **و گاهی اصلاً مبلغ نمی‌پرسد.** اگر سفارش هنگامِ تأیید سند خورده باشد، بک‌اند
+ * سرِ تحویل هیچ پولی جابه‌جا نمی‌کند و مبلغِ واردشده بی‌صدا دور ریخته می‌شود.
+ * تشخیصش در `market/cod.ts::settlesOnDelivery` است. نسخه‌ی اولِ همین فرم این را
+ * نمی‌دانست و پولی می‌پرسید که هیچ‌جا نمی‌نشست — با تستِ سرتاسری پیدا شد، نه با
+ * خواندنِ کد.
  */
 export function DeliverSheet({
   order,
@@ -30,6 +36,7 @@ export function DeliverSheet({
   onConfirm: (cashPercent: string) => void
 }) {
   const total = Number(order.total)
+  const withCash = settlesOnDelivery(order)
   const [raw, setRaw] = useState('')
 
   const { percent, cash, credit } = useMemo(() => {
@@ -59,33 +66,66 @@ export function DeliverSheet({
               {order.retailer_name} · مبلغِ کل {faMoney(total)} ﷼
             </AppText>
 
-            <View style={styles.quick}>
-              <Chip label="بدونِ نقد" active={cash === 0} onPress={() => setRaw('')} />
-              <Chip label="نقدِ کامل" active={cash === total && total > 0} onPress={() => setRaw(String(total))} />
-            </View>
+            {withCash ? (
+              <>
+                <View style={styles.quick}>
+                  <Chip label="بدونِ نقد" active={cash === 0} onPress={() => setRaw('')} />
+                  <Chip
+                    label="نقدِ کامل"
+                    active={cash === total && total > 0}
+                    onPress={() => setRaw(String(total))}
+                  />
+                </View>
 
-            <TextField
-              label="مبلغِ نقدِ دریافتی (ریال)"
-              placeholder="۰"
-              value={raw}
-              onChangeText={setRaw}
-              keyboardType="numeric"
+                <TextField
+                  label="مبلغِ نقدِ دریافتی (ریال)"
+                  placeholder="۰"
+                  value={raw}
+                  onChangeText={setRaw}
+                  keyboardType="numeric"
+                />
+
+                <View style={styles.split}>
+                  <Row label="نقد" value={`${faMoney(cash)} ﷼`} tone={colors.success} />
+                  <Row label="اعتباری (طلب)" value={`${faMoney(credit)} ﷼`} tone={colors.warning} />
+                  <Row label="سهمِ نقد" value={`${toFaDigits(Number(percent).toFixed(1))}٪`} />
+                </View>
+
+                <View style={styles.warn}>
+                  <AppText variant="caption" color={colors.warning}>
+                    با ثبتِ تحویل، کالا به انبارِ فروشگاه وارد و سندِ خرید/فروشِ دو طرف صادر
+                    می‌شود. این کار برگشت‌پذیر نیست.
+                  </AppText>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.split}>
+                  <Row
+                    label="نقدِ تسویه‌شده هنگامِ تأیید"
+                    value={`${faMoney(order.cash_amount)} ﷼`}
+                    tone={colors.success}
+                  />
+                  <Row
+                    label="اعتباری (طلب)"
+                    value={`${faMoney(total - Number(order.cash_amount))} ﷼`}
+                    tone={colors.warning}
+                  />
+                </View>
+                <View style={styles.note}>
+                  <AppText variant="caption" color={colors.textMuted}>
+                    این سفارش هنگامِ تأیید سند خورده و تسویه‌اش انجام شده است. ثبتِ تحویل فقط
+                    رسیدنِ بار را علامت می‌زند و مبلغی جابه‌جا نمی‌کند.
+                  </AppText>
+                </View>
+              </>
+            )}
+
+            <Button
+              label="ثبتِ تحویل"
+              onPress={() => onConfirm(withCash ? percent : '0')}
+              loading={busy}
             />
-
-            <View style={styles.split}>
-              <Row label="نقد" value={`${faMoney(cash)} ﷼`} tone={colors.success} />
-              <Row label="اعتباری (طلب)" value={`${faMoney(credit)} ﷼`} tone={colors.warning} />
-              <Row label="سهمِ نقد" value={`${toFaDigits(Number(percent).toFixed(1))}٪`} />
-            </View>
-
-            <View style={styles.warn}>
-              <AppText variant="caption" color={colors.warning}>
-                با ثبتِ تحویل، کالا به انبارِ فروشگاه وارد و سندِ خرید/فروشِ دو طرف صادر می‌شود.
-                این کار برگشت‌پذیر نیست.
-              </AppText>
-            </View>
-
-            <Button label="ثبتِ تحویل" onPress={() => onConfirm(percent)} loading={busy} />
           </ScrollView>
         </View>
       </View>
@@ -144,4 +184,5 @@ const styles = StyleSheet.create({
   split: { gap: spacing.xs, padding: spacing.md, backgroundColor: colors.surfaceAlt, borderRadius: radius.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   warn: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.warningSoft },
+  note: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
 })
