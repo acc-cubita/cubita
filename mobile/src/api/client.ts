@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './config'
+import { reportNetworkResult } from '../offline/network'
 import type { Page } from './types'
 
 // کلاینتِ نازکِ HTTP: تزریقِ توکن، رفرشِ خودکار روی ۴۰۱، مدیریتِ خطا، و پیمایشِ keyset.
@@ -84,8 +85,12 @@ async function request<T>(method: string, path: string, body?: unknown, isRetry 
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   } catch {
+    // تنها جایی که با قطعیِ واقعیِ شبکه روبه‌رو می‌شویم. لایه‌ی آفلاین از همین
+    // سیگنال تغذیه می‌شود — نه از یک ماژولِ نیتیو که فقط وای‌فای را می‌بیند.
+    reportNetworkResult(true)
     throw { status: 0, message: 'اتصال به سرور برقرار نشد. اینترنت را بررسی کنید.' } as ApiError
   }
+  reportNetworkResult(false)
 
   if (res.status === 401 && !isAuthPath(path)) {
     // یک بار با رفرش‌توکن، accessِ تازه بگیر و همان درخواست را دوباره بزن.

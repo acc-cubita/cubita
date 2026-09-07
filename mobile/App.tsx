@@ -1,5 +1,6 @@
 import 'react-native-gesture-handler'
-import { I18nManager } from 'react-native'
+import { useEffect, useState } from 'react'
+import { I18nManager, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -9,6 +10,8 @@ import { AppUpdateProvider } from './src/update/AppUpdateProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { ErrorBoundary } from './src/errors/ErrorBoundary'
 import { flush, installGlobalHandler } from './src/errors/reporter'
+import { OfflineBanner } from './src/offline/OfflineBanner'
+import { loadCache, startPersisting } from './src/offline/persist'
 import { colors } from './src/theme'
 
 // RTLِ فارسی. اعمالِ کاملش ممکن است به یک ری‌لود نیاز داشته باشد (نصبِ اول).
@@ -22,11 +25,37 @@ void flush()
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      // کشِ روی دیسک تا ۲۴ ساعت زنده است؛ اگر gcTime کوتاه‌تر بماند، react-query
+      // داده‌ی بازیابی‌شده را بلافاصله دور می‌ریزد و کلِ ماندگاری بی‌اثر می‌شود.
+      gcTime: 24 * 60 * 60 * 1000,
+    },
   },
 })
 
 export default function App() {
+  // پیش از رندر منتظرِ کشِ روی دیسک می‌مانیم. اگر همزمان رندر کنیم، کاربر یک لحظه
+  // صفحه‌ی خالی می‌بیند و بعد داده می‌پرد وسط — که بدتر از یک مکثِ کوتاه است.
+  const [cacheReady, setCacheReady] = useState(false)
+
+  useEffect(() => {
+    let stop: (() => void) | undefined
+    loadCache(queryClient)
+      .catch(() => false)
+      .finally(() => {
+        stop = startPersisting(queryClient)
+        setCacheReady(true)
+      })
+    return () => stop?.()
+  }, [])
+
+  if (!cacheReady) {
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
@@ -37,6 +66,7 @@ export default function App() {
             <AuthProvider>
               <AppUpdateProvider>
                 <StatusBar style="light" />
+                <OfflineBanner />
                 <RootNavigator />
               </AppUpdateProvider>
             </AuthProvider>

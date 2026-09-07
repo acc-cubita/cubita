@@ -6,6 +6,7 @@ import { setOnTokens, setOnUnauthorized, setTokens } from '../api/client'
 import { registerDevice, unregisterDevice } from '../api/devices'
 import { getFcmToken } from '../push/notifications'
 import type { Me } from '../api/types'
+import { clearCache } from '../offline/persist'
 
 const ACCESS_KEY = 'cubita.access'
 const REFRESH_KEY = 'cubita.refresh'
@@ -53,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshRef.current = null
     setTokens(null, null)
     setMe(null)
+    // کشِ روی دیسک هم باید برود. روی گوشیِ مشترک، بدونِ این، کاربرِ بعدی هنگامِ
+    // باز کردنِ اپ اعدادِ کسب‌وکارِ قبلی را می‌بیند — پیش از اینکه اصلاً وارد شود.
+    clearCache()
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_KEY),
       SecureStore.deleteItemAsync(REFRESH_KEY),
