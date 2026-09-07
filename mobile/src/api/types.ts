@@ -354,3 +354,49 @@ export interface MpMessagesPage {
   my_role: string
   messages: MpMessage[]
 }
+
+// ── انبارگردانی ────────────────────────────────────────────────────────────
+
+/** یک ردیفِ جلسه‌ی انبارگردانی — منطبق بر StockCountLineOut. */
+export interface StockCountLine {
+  id: string
+  item_id: string
+  item_name: string
+  item_sku: string
+  unit: string
+  system_qty: string
+  counted_qty: string
+  unit_cost: string
+  variance: string
+  variance_value: string
+}
+
+/** سرِ جلسه با ردیف‌ها — منطبق بر StockCountSessionOut. */
+export interface StockCountSession {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: 'open' | 'posted' | 'cancelled'
+  notes: string
+  journal_entry_id: string | null
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
+  variance_line_count: number
+  total_variance_value: string
+  lines: StockCountLine[]
+}
+
+/** ردیفِ فهرستِ جلسه‌ها — منطبق بر StockCountSummaryOut (بدونِ lines). */
+export interface StockCountSummary {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: 'open' | 'posted' | 'cancelled'
+  notes: string
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
+}

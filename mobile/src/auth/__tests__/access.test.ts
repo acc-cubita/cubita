@@ -62,7 +62,7 @@ const me = (role: keyof typeof ROLES, tenantKind = 'standard'): Me =>
   }) as unknown as Me
 
 describe('مالک همه‌چیز را می‌بیند', () => {
-  it.each(['dashboard', 'reports', 'contacts', 'newInvoice', 'treasury'] as const)(
+  it.each(['dashboard', 'reports', 'contacts', 'newInvoice', 'treasury', 'stock'] as const)(
     '%s',
     (area) => {
       expect(canAccess(me('owner'), area)).toBe(true)
@@ -97,19 +97,30 @@ describe('فروشنده', () => {
   it('خزانه را نمی‌بیند — checks_bank ندارد', () => {
     expect(canAccess(me('salesperson'), 'treasury')).toBe(false)
   })
+
+  it('تبِ انبارگردانی نمی‌گیرد — inventory دارد ولی فقط view', () => {
+    // اینجا عمداً `update` سنجیده می‌شود نه `view`. با `view` فروشنده تبی
+    // می‌گرفت که همه‌ی دکمه‌هایش خاموش است — همان تبِ ۴۰۳‌دهنده‌ی پیش از فازِ ۲.
+    expect(canAccess(me('salesperson'), 'stock')).toBe(false)
+  })
 })
 
 describe('انباردار', () => {
-  it('هیچ‌کدام از بخش‌های فعلیِ اپ را نمی‌بیند', () => {
+  it('بخش‌های مالی/فروش را نمی‌بیند', () => {
     const u = me('warehouse_keeper')
     for (const area of ['dashboard', 'reports', 'contacts', 'newInvoice', 'treasury'] as const) {
       expect(canAccess(u, area)).toBe(false)
     }
   })
 
-  it('صفحه‌ی «هنوز آماده نیست» می‌گیرد', () => {
-    // انبارگردانی و بارکد کارِ فازِ ۴ است؛ تا آن موقع اپ باید صادق باشد.
-    expect(hasNoContent(me('warehouse_keeper'))).toBe(true)
+  it('انبارگردانی را می‌بیند', () => {
+    expect(canAccess(me('warehouse_keeper'), 'stock')).toBe(true)
+  })
+
+  it('دیگر صفحه‌ی «هنوز آماده نیست» نمی‌گیرد', () => {
+    // پیش از فازِ ۴ این `true` بود و همان یافته دلیلِ وجودِ آن فاز شد: اپ برای
+    // نقشی که کارش کاملاً میدانی است هیچ محتوایی نداشت.
+    expect(hasNoContent(me('warehouse_keeper'))).toBe(false)
   })
 })
 
@@ -127,7 +138,9 @@ describe('مأمورِ حمل', () => {
 
 describe('مسئولِ حقوق', () => {
   it('اپِ موبایل هنوز چیزی برایش ندارد', () => {
+    // تنها نقشی که بعد از فازِ ۴ هم دستِ خالی می‌ماند.
     expect(hasNoContent(me('payroll_officer'))).toBe(true)
+    expect(canAccess(me('payroll_officer'), 'stock')).toBe(false)
   })
 })
 
@@ -137,9 +150,11 @@ describe('حسابِ دمو (فقط مشاهده)', () => {
     expect(canAccess(u, 'dashboard')).toBe(true)
     expect(canAccess(u, 'reports')).toBe(true)
     expect(canAccess(u, 'contacts')).toBe(true)
-    // این دو مهم‌ترین‌اند: رمزِ این حساب عمومی است و نباید بتواند چیزی ثبت کند.
+    // این‌ها مهم‌ترین‌اند: رمزِ این حساب عمومی است و نباید بتواند چیزی ثبت کند.
     expect(canAccess(u, 'newInvoice')).toBe(false)
     expect(canAccess(u, 'treasury')).toBe(false)
+    // انبارگردانی سندِ حسابداری می‌سازد — حسابِ دمو مطلقاً نباید بتواند.
+    expect(canAccess(u, 'stock')).toBe(false)
   })
 })
 

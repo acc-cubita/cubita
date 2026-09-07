@@ -14,6 +14,7 @@ import { OfflineBanner } from './src/offline/OfflineBanner'
 import { OutboxBadge } from './src/offline/OutboxBadge'
 import { drain } from './src/offline/outbox'
 import { loadCache, startPersisting } from './src/offline/persist'
+import { syncAllDrafts } from './src/stock/countDraft'
 import { colors } from './src/theme'
 
 // RTLِ فارسی. اعمالِ کاملش ممکن است به یک ری‌لود نیاز داشته باشد (نصبِ اول).
@@ -56,7 +57,16 @@ export default function App() {
 
   // وقتی شبکه برمی‌گردد، صفِ نوشتن خودش خالی شود. بدونِ این، کارِ آفلاینِ کاربر
   // تا وقتی دستی چیزِ دیگری ثبت نکند روی گوشی می‌ماند.
-  useEffect(() => onlineManager.subscribe((online) => { if (online) void drain() }), [])
+  useEffect(
+    () =>
+      onlineManager.subscribe((online) => {
+        if (!online) return
+        void drain()
+        // شمارشِ انبارگردانی هم روی گوشی می‌ماند تا شبکه برگردد.
+        void syncAllDrafts()
+      }),
+    [],
+  )
 
   if (!cacheReady) {
     return <View style={{ flex: 1, backgroundColor: colors.bg }} />

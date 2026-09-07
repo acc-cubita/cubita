@@ -7,6 +7,7 @@ import { registerDevice, unregisterDevice } from '../api/devices'
 import { getFcmToken } from '../push/notifications'
 import type { Me } from '../api/types'
 import { clearCache } from '../offline/persist'
+import { clearDrafts } from '../stock/countDraft'
 
 const ACCESS_KEY = 'cubita.access'
 const REFRESH_KEY = 'cubita.refresh'
@@ -57,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // کشِ روی دیسک هم باید برود. روی گوشیِ مشترک، بدونِ این، کاربرِ بعدی هنگامِ
     // باز کردنِ اپ اعدادِ کسب‌وکارِ قبلی را می‌بیند — پیش از اینکه اصلاً وارد شود.
     clearCache()
+    // شمارشِ انبارگردانیِ ثبت‌نشده هم روی گوشیِ مشترک نباید برای کاربرِ بعدی بماند.
+    clearDrafts()
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_KEY),
       SecureStore.deleteItemAsync(REFRESH_KEY),

@@ -24,6 +24,7 @@ export type Area =
   | 'newInvoice'
   | 'treasury'
   | 'market'
+  | 'stock'
 
 /**
  * مجوزِ لازمِ هر بخش — برداشته از خودِ بک‌اند، نه حدس.
@@ -46,6 +47,15 @@ const REQUIRES: Record<Area, { resource: string; action: string }> = {
   treasury: { resource: 'checks_bank', action: 'create' },
   // routers/marketplace.py
   market: { resource: 'marketplace', action: 'view' },
+  // routers/stock_taking.py — عمداً `update` و نه `view`.
+  //
+  // خواندنِ جلسه `view` می‌خواهد، ولی *شمردن* و *بستنِ جلسه* `update`. با `view`
+  // تبِ انبارگردانی به فروشنده و حسابِ دمو هم نشان داده می‌شد؛ صفحه‌ای که همه‌ی
+  // دکمه‌هایش خاموش است. این همان تبِ ۴۰۳‌دهنده‌ای است که فازِ ۲ حذفش کرد.
+  //
+  // در `DEFAULT_ROLES` هیچ نقشی `create` بدونِ `update` ندارد، پس همین یک ردیف
+  // هم تب را گیت می‌کند و هم ساختِ جلسه را.
+  stock: { resource: 'inventory', action: 'update' },
 }
 
 /** آیا این کاربر به این بخش دسترسی دارد؟ */
@@ -72,7 +82,7 @@ export function canSeeMarket(me: Me | null): boolean {
  * آیا این کاربر *هیچ* بخشِ محتوایی را نمی‌بیند؟
  *
  * برای نقش‌هایی مثلِ «مسئولِ حقوق و دستمزد» که هنوز هیچ صفحه‌ای در اپِ موبایل
- * ندارند، جوابْ بله است. آن‌وقت اپ باید صادقانه بگوید چرا خالی است — نه اینکه
+ * ندارند، جوابْ بله است. (انباردار از فازِ ۴ به بعد دیگر در این دسته نیست.) آن‌وقت اپ باید صادقانه بگوید چرا خالی است — نه اینکه
  * تبِ خالی نشان بدهد یا کاربر را به صفحه‌ای بفرستد که ۴۰۳ می‌دهد.
  */
 export function hasNoContent(me: Me | null): boolean {
@@ -80,6 +90,7 @@ export function hasNoContent(me: Me | null): boolean {
   return (
     !canAccess(me, 'dashboard') &&
     !canAccess(me, 'contacts') &&
+    !canAccess(me, 'stock') &&
     !canSeeMarket(me)
   )
 }

@@ -7,6 +7,7 @@ import { MoreScreen } from '../screens/MoreScreen'
 import { ReportsStack } from './ReportsStack'
 import { ContactsStack } from './ContactsStack'
 import { MarketStack } from './MarketStack'
+import { StockStack } from './StockStack'
 import { useAuth } from '../auth/AuthContext'
 import { canAccess, canSeeMarket } from '../auth/access'
 import { fetchUnread } from '../api/marketplace'
@@ -20,6 +21,7 @@ const ICONS: Record<string, IconName> = {
   Reports: 'stats-chart',
   Market: 'chatbubbles',
   Contacts: 'people',
+  Stock: 'cube',
   More: 'menu',
 }
 
@@ -33,6 +35,8 @@ export function MainTabs() {
   const showHome = canAccess(me, 'dashboard')
   const showReports = canAccess(me, 'reports')
   const showContacts = canAccess(me, 'contacts')
+  // انبارگردانی — تا فازِ ۴ اپ برای انباردار هیچ محتوایی نداشت.
+  const showStock = canAccess(me, 'stock')
 
   // نشانِ خوانده‌نشده‌ی چتِ بازار روی تبِ «بازار» — پولِ سبک هر ~۲۵ ثانیه.
   const unreadQ = useQuery({
@@ -75,6 +79,9 @@ export function MainTabs() {
       )}
       {showContacts && (
         <Tab.Screen name="Contacts" component={ContactsStack} options={{ title: 'اشخاص' }} />
+      )}
+      {showStock && (
+        <Tab.Screen name="Stock" component={StockStack} options={{ title: 'انبارگردانی' }} />
       )}
       {/* «بیشتر» همیشه هست: تنظیمات، سوئیچِ کسب‌وکار و خروج به هر نقشی تعلق دارند. */}
       <Tab.Screen name="More" component={MoreScreen} options={{ title: 'بیشتر' }} />
