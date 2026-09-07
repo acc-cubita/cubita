@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   CheckCircle2,
@@ -500,24 +500,43 @@ export function RenumberEntriesPage({ token }: { token: string }) {
   const [msg, setMsg] = useState<Msg>(null)
   const startNumber = Math.max(1, Number(start) || 1)
 
+  //: انتخابِ دستی. خالی یعنی «کلِ بازه» — همان رفتارِ قبلی، دست‌نخورده.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   const preview = useAsync(
     () => fetchRenumberPreview(token, range.from, range.to, startNumber),
     [token, range.from, range.to, startNumber],
   )
 
+  //: با عوض‌شدنِ بازه انتخاب پاک می‌شود. وگرنه شناسه‌هایی که دیگر در پیش‌نمایش
+  //: نیستند در انتخاب می‌ماندند و کاربر روی چیزی اعمال می‌کرد که نمی‌دید.
+  useEffect(() => setPicked(new Set()), [range.from, range.to])
+
   async function run() {
+    const manual = picked.size > 0
     if (
       !window.confirm(
-        `شماره‌ی ${preview.data?.count ?? 0} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
+        `شماره‌ی ${manual ? picked.size : (preview.data?.count ?? 0)} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
       )
     )
       return
     try {
+      //: انتخابِ دستی **جای** بازه می‌نشیند نه کنارش — سرور هم همین‌طور رفتار
+      //: می‌کند، پس فرستادنِ هر دو یعنی کاربر باید حدس بزند کدام برنده است.
       const out = await renumberEntries(token, {
-        date_from: range.from,
-        date_to: range.to,
+        date_from: manual ? null : range.from,
+        date_to: manual ? null : range.to,
+        entry_ids: manual ? [...picked] : null,
         start_number: startNumber,
       })
+      setPicked(new Set())
       setMsg({
         text: `${faInt(out.changed_count)} سند شماره‌ی تازه گرفت (${fa(out.first_number)} تا ${fa(out.last_number)}).`,
         kind: 'ok',
@@ -600,6 +619,7 @@ export function RenumberEntriesPage({ token }: { token: string }) {
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
+                  <th />
                   <th>تاریخ</th>
                   <th>شرح</th>
                   <th>وضعیت</th>
@@ -613,6 +633,13 @@ export function RenumberEntriesPage({ token }: { token: string }) {
               <tbody>
                 {(data?.rows ?? []).map((r) => (
                   <tr key={r.id} className={r.changed ? 'acc-row--changed' : ''}>
+                    <td data-label="انتخاب">
+                      <input
+                        type="checkbox"
+                        checked={picked.has(r.id)}
+                        onChange={() => togglePick(r.id)}
+                      />
+                    </td>
                     <td className="card-title" data-label="تاریخ">
                       {formatJalali(r.entry_date)}
                     </td>

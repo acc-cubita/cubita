@@ -25,6 +25,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app import audit
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.currency import ExchangeRate
@@ -208,8 +209,30 @@ def finalize_entries(
 # ─────────────────────── ۳) بازشماره‌گذاریِ اسناد ─────────────────────────
 
 
-def _renumber_scope(db: Session, date_from: date_ | None, date_to: date_ | None):
+def _renumber_scope(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+):
+    """محدوده‌ی عملیات: یا فهرستِ صریحِ اسناد، یا بازه‌ی تاریخ.
+
+    انتخابِ دستی **جایگزینِ** بازه است نه افزوده بر آن. اگر هر دو اعمال می‌شدند،
+    کاربری که چند سند را تیک زده و بازه‌اش روی «این ماه» مانده بی‌صدا زیرمجموعه‌ای
+    از انتخابش را می‌گرفت — و پیش‌نمایش هم همان کمتر را نشان می‌داد، پس اشتباه
+    شبیهِ درست به نظر می‌رسید.
+
+    **انتخاب بر اساسِ محدوده‌ی شماره عمداً نیست.** کلِ کارِ این عملیات درست‌کردنِ
+    شماره‌هایی است که با تاریخ نمی‌خوانند؛ فیلترکردن بر همان شماره‌های به‌هم‌ریخته
+    یعنی تکیه بر چیزی که خودش خراب است — همان دلیلی که `_renumber_plan` با
+    `created_at` مرتب می‌کند نه با `number`.
+    """
     query = _live_entries(db)
+    #: `is not None` و نه صرفاً truthy: فهرستِ **خالی** یعنی «کاربر چیزی انتخاب
+    #: نکرد»، نه «فیلتری در کار نیست». با شرطِ truthy، انتخابِ خالی به فیلترِ
+    #: تاریخ می‌افتاد و اگر بازه هم خالی بود **کلِ دفتر** بازشماری می‌شد.
+    if entry_ids is not None:
+        return query.filter(JournalEntry.id.in_(entry_ids))
     if date_from:
         query = query.filter(JournalEntry.entry_date >= date_from)
     if date_to:
@@ -217,7 +240,12 @@ def _renumber_scope(db: Session, date_from: date_ | None, date_to: date_ | None)
     return query
 
 
-def _renumber_plan(db: Session, date_from: date_ | None, date_to: date_ | None) -> list[JournalEntry]:
+def _renumber_plan(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+) -> list[JournalEntry]:
     """اسنادِ *موقتِ* بازه به ترتیبی که باید شماره بگیرند: تاریخ، بعد لحظه‌ی ثبت.
 
     دو تصمیم:
@@ -231,17 +259,22 @@ def _renumber_plan(db: Session, date_from: date_ | None, date_to: date_ | None) 
       بی‌نظمی را بازتولید می‌کرد.
     """
     return (
-        _renumber_scope(db, date_from, date_to)
+        _renumber_scope(db, date_from, date_to, entry_ids)
         .filter(JournalEntry.status == "temporary")
         .order_by(JournalEntry.entry_date, JournalEntry.created_at, JournalEntry.id)
         .all()
     )
 
 
-def _permanent_in_range(db: Session, date_from: date_ | None, date_to: date_ | None) -> int:
+def _permanent_in_range(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+) -> int:
     """چند سندِ دائم در بازه هست — فقط برای توضیحِ اینکه چرا نقشه کوچک‌تر از بازه است."""
     return int(
-        _renumber_scope(db, date_from, date_to)
+        _renumber_scope(db, date_from, date_to, entry_ids)
         .filter(JournalEntry.status == "permanent")
         .with_entities(func.count(JournalEntry.id))
         .scalar()
@@ -250,10 +283,14 @@ def _permanent_in_range(db: Session, date_from: date_ | None, date_to: date_ | N
 
 
 def preview_renumber(
-    db: Session, date_from: date_ | None, date_to: date_ | None, start_number: int
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    start_number: int,
+    entry_ids: list[UUID] | None = None,
 ) -> dict:
     _assert_range(date_from, date_to)
-    entries = _renumber_plan(db, date_from, date_to)
+    entries = _renumber_plan(db, date_from, date_to, entry_ids)
     names = _account_names(db)
     rows = []
     for offset, entry in enumerate(entries):
@@ -275,14 +312,19 @@ def preview_renumber(
     return {
         "count": len(rows),
         "changed_count": sum(1 for r in rows if r["changed"]),
-        "skipped_permanent": _permanent_in_range(db, date_from, date_to),
+        "skipped_permanent": _permanent_in_range(db, date_from, date_to, entry_ids),
         "rows": rows[:PREVIEW_LIMIT],
         "truncated": len(rows) > PREVIEW_LIMIT,
     }
 
 
 def renumber_entries(
-    db: Session, user: User, date_from: date_ | None, date_to: date_ | None, start_number: int
+    db: Session,
+    user: User,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    start_number: int,
+    entry_ids: list[UUID] | None = None,
 ) -> dict:
     """شماره‌ی اسنادِ بازه را از نو و به‌ترتیبِ تاریخ می‌دهد.
 
@@ -298,7 +340,7 @@ def renumber_entries(
     if start_number < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "شماره‌ی شروع باید دستِ‌کم ۱ باشد")
 
-    entries = _renumber_plan(db, date_from, date_to)
+    entries = _renumber_plan(db, date_from, date_to, entry_ids)
     if not entries:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "در این بازه سندِ موقتی برای شماره‌گذاری نیست"
@@ -321,16 +363,33 @@ def renumber_entries(
             f"شماره‌ی {clash[0]} پیش‌تر به سندی بیرونِ این بازه داده شده؛ شماره‌ی شروعِ دیگری انتخاب کنید",
         )
 
-    for i, entry in enumerate(entries):
-        entry.number = -(i + 1)
-    db.flush()
+    #: شماره‌های اصلی پیش از دست‌زدن نگه داشته می‌شوند — بعد از پاسِ منفی دیگر
+    #: از خودِ شیء درنمی‌آیند، و همین‌ها `from`ِ رکوردِ حسابرسی‌اند.
+    original = {entry.id: entry.number for entry in entries}
+
+    #: ثبتِ خودکار برای این دو flush خاموش است: مرحله‌ی منفی یک ترفندِ پیاده‌سازی
+    #: است نه واقعیتِ کسب‌وکاری، و رکوردش می‌گفت «سند شماره -۱ ویرایش شد».
+    #: رکوردِ درست پایین‌تر و یک‌بار نوشته می‌شود. شرح در `audit.suppressed`.
+    with audit.suppressed(db):
+        for i, entry in enumerate(entries):
+            entry.number = -(i + 1)
+        db.flush()
+        for offset, entry in enumerate(entries):
+            entry.number = start_number + offset
+        db.flush()
+
     changed = 0
-    for offset, entry in enumerate(entries):
-        new_number = start_number + offset
-        if entry.number != new_number:
-            changed += 1
-        entry.number = new_number
-    db.flush()
+    for entry in entries:
+        was, now = original[entry.id], entry.number
+        if was == now:
+            continue  # شماره‌اش عوض نشده؛ رویدادی رخ نداده که ثبت شود
+        changed += 1
+        audit.record_change(
+            db,
+            entry,
+            {"number": {"from": was, "to": now}},
+            f"شماره‌ی سند از {was if was is not None else '—'} به {now} تغییر کرد (بازشماره‌گذاری)",
+        )
 
     _sync_counter(db)
     return {

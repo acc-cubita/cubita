@@ -4565,7 +4565,14 @@ export const fetchRenumberPreview = (
 }
 
 export const renumberEntries = (
-  token: string, data: { date_from?: string; date_to?: string; start_number: number },
+  token: string,
+  data: {
+    date_from?: string | null
+    date_to?: string | null
+    /** انتخابِ دستی. اگر داده شود **جای** بازه می‌نشیند نه کنارش. */
+    entry_ids?: string[] | null
+    start_number: number
+  },
 ) =>
   authedSend<{ count: number; changed_count: number; first_number: number; last_number: number }>(
     token, 'POST', '/api/accounting/entries/renumber', data,

@@ -82,6 +82,9 @@ class FinalizeOut(BaseModel):
 class RenumberIn(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
+    #: انتخابِ دستی. اگر داده شود **جای** بازه می‌نشیند نه کنارش — دو فیلترِ
+    #: هم‌زمان یعنی کاربر باید حدس بزند کدام برنده است.
+    entry_ids: list[UUID] | None = None
     start_number: int = 1
 
     @field_validator("start_number")
