@@ -118,6 +118,7 @@ def _to_out(
         "id": center.id,
         "code": center.code,
         "name": center.name,
+        "name2": center.name2,
         "kind": center.kind,
         "parent_id": center.parent_id,
         "manager": center.manager,
@@ -221,6 +222,7 @@ def create_cost_center(db: Session, data: CostCenterIn, user: User) -> dict:
     center = CostCenter(
         code=data.code.strip(),
         name=data.name.strip(),
+        name2=data.name2.strip(),
         kind=data.kind,
         parent_id=data.parent_id,
         manager=data.manager.strip(),
@@ -242,6 +244,7 @@ def update_cost_center(db: Session, cost_center_id: UUID, data: CostCenterIn) ->
     _assert_code_free(db, data.code, exclude_id=cost_center_id)
     center.code = data.code.strip()
     center.name = data.name.strip()
+    center.name2 = data.name2.strip()
     center.kind = data.kind
     center.parent_id = data.parent_id
     center.manager = data.manager.strip()

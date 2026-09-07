@@ -157,3 +157,37 @@ def test_a_sales_invoice_cannot_be_tagged_with_an_inactive_center(db, user, clie
 
     assert res.status_code == 400, res.text
     assert "غیرفعال" in res.json()["detail"]
+
+
+# ── عنوانِ دوم ──────────────────────────────────────────────────────────────
+
+
+def test_the_second_title_is_stored_and_returned(db, user):
+    """«عنوان انگلیسی»ِ فرمِ سپیدار — برای گزارشِ دوزبانه.
+
+    سه موجودیتِ هم‌رده از قبل داشتندش (`accounts`، `analytic_accounts`،
+    `contacts`)؛ مرکز هزینه تنها یکی بود که جا مانده بود.
+    """
+    center = create_cost_center(
+        db, CostCenterIn(name="کارخانه زنجان", name2="Zanjan Plant", code="7001"), user
+    )
+
+    assert center["name2"] == "Zanjan Plant"
+
+
+def test_the_second_title_is_optional(db, user):
+    """اختیاری می‌ماند، مثلِ `code`.
+
+    اگر روزی اجباری شود، هر مرکزِ داخلی که عنوانِ لاتین ندارد ساختنش ناممکن می‌شود.
+    """
+    center = create_cost_center(db, CostCenterIn(name="واحد اداری"), user)
+
+    assert center["name2"] == ""
+
+
+def test_the_second_title_can_be_edited(db, user):
+    center = create_cost_center(db, CostCenterIn(name="فروش"), user)
+
+    updated = update_cost_center(db, center["id"], CostCenterIn(name="فروش", name2="Sales"))
+
+    assert updated["name2"] == "Sales"

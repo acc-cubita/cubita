@@ -87,6 +87,7 @@ const PRESETS: { key: Preset; label: string }[] = [
 const EMPTY_FORM: CostCenterIn = {
   code: '',
   name: '',
+  name2: '',
   kind: 'project',
   parent_id: null,
   manager: '',
@@ -335,6 +336,16 @@ function CenterForm({
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           placeholder="پروژه برج آسمان"
         />
+      </label>
+      <label>
+        عنوان (۲)
+        <input
+          value={form.name2}
+          onChange={(e) => setForm({ ...form, name2: e.target.value })}
+          dir="ltr"
+          maxLength={200}
+        />
+        <span className="field-hint">عنوانِ لاتین برای گزارشِ دوزبانه. اختیاری.</span>
       </label>
       <label>
         کد (اختیاری)
@@ -735,6 +746,7 @@ export function CostCenterWorkspace({
     setForm({
       code: c.code,
       name: c.name,
+      name2: c.name2,
       kind: c.kind,
       parent_id: c.parent_id,
       manager: c.manager,
