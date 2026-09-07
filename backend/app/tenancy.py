@@ -66,6 +66,10 @@ GLOBAL_TABLES = frozenset(
         "marketplace_zones",
         "marketplace_returns",
         "marketplace_return_lines",
+        # گزارشِ کرشِ کلاینت: بیشترِ ارزشش در گزارش‌هایی است که *پیش از ورود* ثبت
+        # می‌شوند (خطای راه‌اندازی و احراز)، جایی که هیچ زمینه‌ی مستأجری وجود ندارد.
+        # با RLS دقیقاً همان‌ها هرگز نوشته نمی‌شدند.
+        "client_errors",
     }
 )
 
