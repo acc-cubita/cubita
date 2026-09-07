@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -199,7 +200,7 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     )
 
     lines: Mapped[list["JournalLine"]] = relationship(
-        back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.id"
+        back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.seq, JournalLine.id"
     )
 
 
@@ -211,6 +212,15 @@ class JournalLine(TenantMixin, UUIDPKMixin, Base):
     )
 
     entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
+
+    #: شماره‌ی ردیف در همین سند (از ۱). پیش از این ترتیب با `id` بود و `id` یک
+    #: UUIDِ **تصادفی** است — یعنی ردیف‌ها به ترتیبِ ورودِ حسابدار برنمی‌گشتند و
+    #: بستانکار می‌توانست پیش از بدهکار بیاید.
+    #:
+    #: صفر یعنی «سندِ پیش از مهاجرتِ ۰۱۰۰». ترتیبِ آن سندها بازیابی‌شدنی نبود
+    #: (نه seq داشتند نه created_at)، پس `(seq, id)` مرتبشان می‌کند و رفتارشان
+    #: دقیقاً همان قبل می‌ماند.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
     #: مرکز هزینه/پروژه؛ از سطحِ سند به ردیف به ارث می‌رسد. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(

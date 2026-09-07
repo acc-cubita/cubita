@@ -3471,6 +3471,9 @@ export const printSalesInvoice = (token: string, invoiceId: string) =>
 export const printPurchaseInvoice = (token: string, invoiceId: string) =>
   openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)
 
+export const printJournalEntry = (token: string, entryId: string) =>
+  openInvoicePrintView(token, `/api/journal-entries/${entryId}/print`)
+
 export const printSalesQuotation = (token: string, quotationId: string) =>
   openInvoicePrintView(token, `/api/sales-quotations/${quotationId}/print`)
 
