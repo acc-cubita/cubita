@@ -146,6 +146,7 @@ def _describe(label: str, obj, action: str) -> str:
     return {
         "create": f"{who} ثبت شد",
         "void": f"{who} باطل شد",
+        "finalize": f"{who} دائم شد",
         "update": f"{who} ویرایش شد",
         "delete": f"{who} حذف شد",
     }[action]
@@ -201,7 +202,20 @@ def _record_financial_changes(session: Session, flush_context, instances) -> Non
         if not changes:
             continue
         # ابطال یک UPDATE معمولی نیست و نباید لای بقیه گم شود.
-        action = "void" if changes.get("voided_at", {}).get("from") is None and "voided_at" in changes else "update"
+        #
+        # دائم‌شدن هم همین‌طور، و به همان دلیل: لحظه‌ای که سند وارد سابقه‌ی رسمی
+        # می‌شود دومین رویدادِ مهمِ چرخه‌ی عمر است. با `update` ثبت می‌شد و خلاصه‌اش
+        # می‌گفت «… ویرایش شد» — که غلط توصیف می‌کند، چون هیچ‌چیز ویرایش نشده.
+        # سؤالِ «چه کسی این سند را نهایی کرد؟» جوابش فیلتر روی JSONِ changes بود.
+        #
+        # ترتیب مهم است: ابطال اول. سندی که هم‌زمان باطل و دائم شود وجود ندارد،
+        # ولی اگر روزی پیش بیاید «باطل شد» خبرِ مهم‌تری است.
+        if "voided_at" in changes and changes.get("voided_at", {}).get("from") is None:
+            action = "void"
+        elif changes.get("status", {}).get("to") == "permanent":
+            action = "finalize"
+        else:
+            action = "update"
         pending.append(_entry(session, obj, label, action, changes))
 
     for obj in session.deleted:

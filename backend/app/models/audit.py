@@ -42,8 +42,10 @@ class AuditLog(TenantMixin, UUIDPKMixin, Base):
     )
     actor_email: Mapped[str] = mapped_column(String(255), default="")
 
-    #: create | update | void | delete — «void» عمداً از «update» جدا شده، چون
-    #: مهم‌ترین رویدادی است که کسی ممکن است دنبالش بگردد.
+    #: create | update | void | finalize | delete — «void» و «finalize» عمداً از
+    #: «update» جدا شده‌اند، چون مهم‌ترین رویدادهایی‌اند که کسی دنبالشان می‌گردد:
+    #: «چه کسی این سند را باطل کرد؟» و «چه کسی نهایی‌اش کرد؟». داخلِ `update` که
+    #: باشند، جوابشان فیلتر روی محتوای JSON است نه یک کوئریِ ساده.
     action: Mapped[str] = mapped_column(String(20), index=True)
 
     entity_type: Mapped[str] = mapped_column(String(80), index=True)
