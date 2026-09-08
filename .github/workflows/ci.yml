@@ -41,7 +41,15 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql+psycopg://cubita:cubita@localhost:5432/cubita_ci
+      # **کاربرِ اپ عمداً superuser نیست.** `cubita` کاربرِ bootstrapِ ایمیجِ پستگرس
+      # و در نتیجه superuser است — و RLS روی superuser **هرگز** اعمال نمی‌شود، حتی
+      # با FORCE. با آن کاربر، `test_cross_tenant_leak` واقعاً نشت می‌دید و شکست
+      # می‌خورد؛ یعنی CI از روزِ اول نمی‌توانست سبز شود.
+      #
+      # `cubita_app` نقشِ عادی است و مالکِ جدول‌هایی می‌شود که خودش می‌سازد، پس
+      # FORCE رویش اثر دارد — دقیقاً همان چیزی که روی production اتفاق می‌افتد.
+      DATABASE_URL: postgresql+psycopg://cubita_app:cubita_app@localhost:5432/cubita_ci
+      ADMIN_URL: postgresql://cubita:cubita@localhost:5432/cubita_ci
       ENV: development
       ZARINPAL_SANDBOX: "true"
       JWT_SECRET: ci-only-secret-not-used-outside-github-actions-0123
@@ -61,6 +69,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+
+      - name: نقشِ اپ و سقفِ زمانِ دیتابیس
+        run: |
+          psql "$ADMIN_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cubita_app LOGIN PASSWORD 'cubita_app';
+          GRANT ALL ON DATABASE cubita_ci TO cubita_app;
+          -- کوئری یا قفلِ بی‌پایان باید **بلند بمیرد**، نه اینکه جاب را ساکت تا
+          -- سقفِ زمان ببرد. اجرای قبل ۲۳ دقیقه روی یک تست ایستاد و نه
+          -- `--timeout-method=thread` توانست بشکندش نه `signal` — چون انتظارِ
+          -- قفل داخلِ libpq است. سقفِ سمتِ سرور این را قطعی حل می‌کند.
+          ALTER DATABASE cubita_ci SET statement_timeout = '60s';
+          ALTER DATABASE cubita_ci SET lock_timeout = '30s';
+          SQL
 
       - name: اجرای تست‌ها
         working-directory: backend
@@ -85,11 +106,15 @@ jobs:
         # گم‌شده، ایندکس یکتای سراسری روی جدول مستأجرمحور، RLS اعمال‌نشده، و
         # مدلی که در app/models/__init__.py وارد نشده باشد.
         working-directory: backend
+        #
+        # پاک‌سازی با کاربرِ ادمین انجام می‌شود (اسکیمای `public` مالِ اوست) ولی
+        # مالکیتش به `cubita_app` داده می‌شود تا مهاجرت‌ها و بعدش اپ، با همان
+        # نقشِ غیرِsuperuser کار کنند — مثلِ production.
         run: |
-          psql "$DATABASE_URL_PLAIN" -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+          psql "$ADMIN_URL" -v ON_ERROR_STOP=1 \
+            -c "DROP SCHEMA IF EXISTS public CASCADE" \
+            -c "CREATE SCHEMA public AUTHORIZATION cubita_app"
           alembic upgrade head
-        env:
-          DATABASE_URL_PLAIN: postgresql://cubita:cubita@localhost:5432/cubita_ci
 
   frontend:
     runs-on: ubuntu-latest
