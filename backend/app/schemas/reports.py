@@ -270,10 +270,16 @@ class SeasonalPartyRowOut(BaseModel):
     net: Decimal  # خالصِ پس از تخفیف (پایه‌ی مالیات)
     vat: Decimal  # مالیات و عوارضِ ارزش افزوده
     total: Decimal  # net + vat (مبلغِ نهاییِ قابلِ پرداخت)
+    #: کمبودهای هویتِ مالیاتی، به‌صورتِ کدِ ماشین‌خوان — برچسبِ فارسی کارِ رابط است.
+    #: خالی یعنی این ردیف آماده‌ی سامانه است. ردیفِ تجمیعیِ خرد همیشه خالی است.
+    issues: list[str] = []
 
 
 class SeasonalSectionOut(BaseModel):
     rows: list[SeasonalPartyRowOut]
+    #: شمارشِ آمادگی — تا پیش از آپلود معلوم باشد چند ردیف رد خواهد شد.
+    ready_count: int = 0
+    incomplete_count: int = 0
     total_gross: Decimal
     total_discount: Decimal
     total_net: Decimal
