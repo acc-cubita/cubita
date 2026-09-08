@@ -52,6 +52,7 @@
           "recordAudioAndroid": false
         }
       ],
+      "./plugins/withOptionalCamera",
       [
         "expo-splash-screen",
         {

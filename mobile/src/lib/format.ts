@@ -61,6 +61,16 @@ export function normalizeDecimal(raw: string): string {
   return rest.length ? `${head}.${rest.join('')}` : head
 }
 
+/**
+ * متنِ ورودیِ کاربر → عدد.
+ *
+ * **چرا `Number()` تنها کافی نیست:** فیلدهای مقدار با ارقامِ *فارسی* پر می‌شوند
+ * (چون بقیه‌ی صفحه فارسی است)، و `Number('۱۲')` در جاوااسکریپت `NaN` می‌دهد.
+ * نتیجه‌اش خطا نیست — محاسبه‌ی مغایرت بی‌صدا از کار می‌افتد و ردیفِ مغایرت‌دار
+ * «بدونِ اختلاف» به‌نظر می‌رسد.
+ */
+export const parseQty = (raw: string): number => Number(normalizeDecimal(raw) || 0)
+
 /** مقدار برای نمایش: تا سه رقمِ اعشار، بدونِ صفرهای بی‌معنیِ انتها، با ارقامِ فارسی. */
 export function faQty(v: string | number): string {
   const n = Number(v)

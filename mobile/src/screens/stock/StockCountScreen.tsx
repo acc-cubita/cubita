@@ -16,7 +16,7 @@ import type { StockStackParams } from '../../navigation/types'
 import { AppText, Button, Center } from '../../ui'
 import { Segmented, StatusPill } from '../../ui/controls'
 import { colors, faMoney, radius, spacing } from '../../theme'
-import { faDate, faQty, normalizeDecimal, toFaDigits } from '../../lib/format'
+import { faDate, faQty, normalizeDecimal, parseQty, toFaDigits } from '../../lib/format'
 
 type Filter = 'all' | 'mine' | 'variance'
 
@@ -95,7 +95,10 @@ export function StockCountScreen() {
 
   /** مغایرتِ *دیده‌شده* — با مقدارِ روی گوشی، نه فقط آنچه به سرور رسیده. */
   const varianceOf = useCallback(
-    (l: StockCountLine): number => Number(draft[l.id] ?? l.counted_qty) - Number(l.system_qty),
+    // `parseQty` هم اینجا: مقادیرِ پیش‌نویس همیشه لاتین‌اند (چون `commit` آنها را
+    // نرمال می‌کند)، ولی تکیه بر آن قرارداد شکننده است — یک مسیرِ تازه که خام
+    // بنویسد، این محاسبه را بی‌صدا NaN می‌کند.
+    (l: StockCountLine): number => parseQty(String(draft[l.id] ?? l.counted_qty)) - Number(l.system_qty),
     [draft],
   )
 
@@ -285,7 +288,10 @@ export function StockCountScreen() {
         renderItem={({ item }) => (
           <CountRow
             line={item}
-            value={draft[item.id] ?? String(item.counted_qty)}
+            // `faQty` و نه `String(...)`: سرور «۱۲.۰۰۰» می‌دهد و نمایشِ خامش هم
+            // ارقامِ لاتین دارد هم سه صفرِ بی‌معنی — در ردیفی که کنارش «سیستم:
+            // ۱۲ عدد» فارسی نوشته شده.
+            value={draft[item.id] ?? faQty(item.counted_qty)}
             dirty={draft[item.id] !== undefined}
             editable={isOpen && canWrite}
             onChange={onChangeQty}
@@ -333,7 +339,10 @@ const CountRow = memo(function CountRow({
     onChange(line.id, clean)
   }
 
-  const variance = Number(text || 0) - Number(line.system_qty)
+  // `parseQty` و نه `Number(...)`: فیلد ارقامِ فارسی دارد و `Number('۱۲')` برابرِ
+  // NaN است. آن‌وقت `Math.abs(NaN) > 1e-9` نادرست می‌شود و ردیفِ مغایرت‌دار
+  // بی‌صدا «بدونِ اختلاف» نشان داده می‌شود.
+  const variance = parseQty(text) - Number(line.system_qty)
   const hasVariance = Math.abs(variance) > 1e-9
 
   return (
