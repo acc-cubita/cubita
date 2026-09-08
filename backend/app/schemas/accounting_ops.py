@@ -222,6 +222,13 @@ class ClosingRowOut(BaseModel):
     account_code: str
     account_name: str
     account_type: str
+    #: بُعدهای مانده. مانده‌ی یک حساب با سه تفصیلی سه ردیفِ جداست، وگرنه سالِ
+    #: جدید با حسابی باز می‌شود که مانده دارد ولی دفترِ تفصیلی‌اش خالی است.
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_name: str | None = None
     debit: Decimal
     credit: Decimal
     balance: Decimal
@@ -239,8 +246,10 @@ class OpeningPreviewOut(BaseModel):
     as_of: date
     source_date: date
     rows: list[ClosingRowOut]
-    #: شماره‌ی سندِ اختتامیه‌ای که افتتاحیه از رویش ساخته می‌شود — تا کاربر ببیند
-    #: دقیقاً کدام سند دارد وارونه می‌شود.
+    #: شناسه و شماره‌ی سندِ اختتامیه‌ای که افتتاحیه از رویش ساخته می‌شود — تا کاربر
+    #: ببیند دقیقاً کدام سند دارد وارونه می‌شود. شناسه روی `reverses_entry_id`ِ
+    #: سندِ افتتاحیه می‌نشیند و گاردِ «افتتاحیه‌ی تکراری» روی همان کار می‌کند.
+    closing_entry_id: UUID
     closing_entry_number: int | None
     total: Decimal
 
