@@ -3341,6 +3341,26 @@ export interface MoadianBatchResult {
 export const fetchMoadianReadiness = (token: string) =>
   authedGet<MoadianReadiness>(token, '/api/moadian/readiness')
 
+/** نگاشتِ واحدِ سنجش به کدِ رسمیِ سامانه. بدونِ آن هر ردیف «عدد» اظهار می‌شد. */
+export interface MoadianUnitMap {
+  id: string
+  unit: string
+  code: string
+}
+
+export const fetchMoadianUnitMaps = (token: string) =>
+  authedGet<MoadianUnitMap[]>(token, '/api/moadian/unit-maps')
+
+/** واحدهایی که روی کالاها به کار رفته‌اند ولی هنوز کد ندارند. */
+export const fetchMoadianUnmappedUnits = (token: string) =>
+  authedGet<string[]>(token, '/api/moadian/unmapped-units')
+
+export const saveMoadianUnitMap = (token: string, unit: string, code: string) =>
+  authedSend<MoadianUnitMap>(token, 'PUT', '/api/moadian/unit-maps', { unit, code })
+
+export const deleteMoadianUnitMap = (token: string, id: string) =>
+  authedDelete(token, `/api/moadian/unit-maps/${id}`)
+
 export const fetchMoadianPending = (token: string) =>
   authedGet<MoadianPendingInvoice[]>(token, '/api/moadian/pending')
 
