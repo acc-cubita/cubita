@@ -35,7 +35,7 @@ from app.models.user import User
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open, get_latest_close_date
-from app.services.reports import _signed_balance
+from app.services.reports import _signed_balance, descendant_account_ids
 
 #: نوعِ حساب‌هایی که مانده‌شان از سالی به سالِ بعد منتقل می‌شود (حساب‌های دائمی).
 #: درآمد و هزینه اینجا نیستند چون پیش از اختتامیه با «بستن سود و زیان» صفر شده‌اند.
@@ -1109,21 +1109,6 @@ def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:
 # ───────────────────── ۸) اصلاحِ طبقه‌بندیِ حساب‌ها ────────────────────────
 
 
-def _descendant_ids(db: Session, root_id: UUID) -> set[UUID]:
-    children: dict[UUID | None, list[UUID]] = {}
-    for aid, pid in db.query(Account.id, Account.parent_id).all():
-        children.setdefault(pid, []).append(aid)
-    seen: set[UUID] = set()
-    stack = [root_id]
-    while stack:
-        current = stack.pop()
-        if current in seen:
-            continue
-        seen.add(current)
-        stack.extend(children.get(current, []))
-    return seen
-
-
 def reclassify_accounts(db: Session, items: list[dict]) -> dict:
     """جابه‌جاییِ دسته‌ایِ حساب‌ها زیرِ سرفصلِ درست (و در صورتِ نیاز، اصلاحِ نوع).
 
@@ -1159,7 +1144,7 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, f"«{parent.name}» سرفصل نیست و نمی‌تواند زیرمجموعه بگیرد"
                 )
-            if parent.id in _descendant_ids(db, account.id):
+            if parent.id in descendant_account_ids(db, account.id):
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, "حساب را نمی‌توان زیرِ زیرمجموعه‌ی خودش برد"
                 )
@@ -1186,7 +1171,7 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
             # زیرمجموعه‌ها باید با والدشان هم‌نوع بمانند، وگرنه گارد بالا بارِ بعد
             # روی همان درخت شکست می‌خورد.
             if account.is_group:
-                for child_id in _descendant_ids(db, account.id) - {account.id}:
+                for child_id in descendant_account_ids(db, account.id) - {account.id}:
                     child = db.get(Account, child_id)
                     if child is not None:
                         child.type = new_type

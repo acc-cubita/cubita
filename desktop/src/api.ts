@@ -395,6 +395,9 @@ export interface GeneralLedgerLine {
   entry_id: string
   entry_number: number | null
   entry_date: string
+  /** حسابِ خودِ ردیف؛ در دفترِ کل می‌گوید مبلغ از کدام زیرحساب آمده. */
+  account_code: string
+  account_name: string
   description: string
   debit: string
   credit: string

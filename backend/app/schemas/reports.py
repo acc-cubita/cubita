@@ -9,6 +9,10 @@ class GeneralLedgerLineOut(BaseModel):
     entry_id: UUID
     entry_number: int | None
     entry_date: date
+    #: حسابِ خودِ ردیف — در دفترِ معین همان حسابِ انتخاب‌شده است، در دفترِ کل
+    #: زیرحسابی که مبلغ از آن آمده.
+    account_code: str
+    account_name: str
     description: str
     debit: Decimal
     credit: Decimal
