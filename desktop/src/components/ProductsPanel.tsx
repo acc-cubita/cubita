@@ -26,10 +26,11 @@ interface DraftForm {
   barcode: string
   reorderPoint: string
   taxStuffId: string
+  vatStatus: string
   isService: boolean
 }
 
-const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', reorderPoint: '', taxStuffId: '', isService: false }
+const EMPTY_FORM: DraftForm = { sku: '', name: '', category: '', unit: 'عدد', salesPrice: '', barcode: '', reorderPoint: '', taxStuffId: '', vatStatus: 'taxable', isService: false }
 
 /**
  * مدیریتِ کالاها/محصولات — ثبت، ویرایش و فعال/غیرفعال‌سازی.
@@ -91,6 +92,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       barcode: p.barcode ?? '',
       reorderPoint: String(Number(p.reorder_point) || ''),
       taxStuffId: p.tax_stuff_id ?? '',
+      vatStatus: p.vat_status ?? 'taxable',
       isService: p.is_service,
     })
     setMessage(null)
@@ -116,6 +118,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           barcode: form.barcode.trim() || null,
           reorder_point: Number(form.reorderPoint) || 0,
           tax_stuff_id: form.taxStuffId.trim(),
+          vat_status: form.vatStatus,
         })
         setMessage('کالا ویرایش شد.')
       } else {
@@ -129,6 +132,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           barcode: form.barcode.trim() || null,
           reorder_point: Number(form.reorderPoint) || 0,
           tax_stuff_id: form.taxStuffId.trim(),
+          vat_status: form.vatStatus,
         })
         setMessage('کالای جدید ثبت شد.')
       }
@@ -304,6 +308,20 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               <span aria-hidden="true" />
             </div>
           )}
+          <label className="form-field">
+            وضعیت مالیات بر ارزش افزوده
+            <select
+              value={form.vatStatus}
+              onChange={(e) => setForm({ ...form, vatStatus: e.target.value })}
+            >
+              <option value="taxable">مشمول</option>
+              <option value="exempt">معاف</option>
+            </select>
+            <span className="field-hint">
+              «معاف» عمداً از «نرخِ صفر» جداست: نرخِ صفر نمی‌گوید کالا معاف بوده یا فقط آن فاکتور
+              بی‌مالیات صادر شده. تغییرِ این گزینه فقط روی فروش‌های بعدی اثر دارد.
+            </span>
+          </label>
           {!editingId ? (
             <label className="cal-check-inline">
               <input

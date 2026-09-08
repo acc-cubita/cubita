@@ -282,6 +282,10 @@ def post_sales_invoice(
                 discount=line_discount,
                 unit_cost=unit_cost,
                 description=line.description,
+                #: وضعیتِ مالیاتی **در لحظه‌ی فروش** قفل می‌شود. اگر گزارش بعداً از
+                #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
+                #: نشان می‌داد. همان دلیلی که `tax_amount` کنارِ `tax_rate` می‌نشیند.
+                vat_status=item.vat_status,
             )
         )
         if not item.is_service:
@@ -478,6 +482,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 unit_cost=line.unit_cost,  # قیمتِ فهرستِ تأمین‌کننده، همان‌طور که در فاکتورش هست
                 discount=line_discount,
                 description=line.description,
+                vat_status=item.vat_status,  # قفل در لحظه‌ی خرید — مثلِ فروش
             )
         )
         if not item.is_service:
