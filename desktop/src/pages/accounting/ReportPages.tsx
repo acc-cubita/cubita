@@ -26,6 +26,7 @@ import {
   fetchVatReport,
   type BalanceRow,
   type ChartAccount,
+  type VatBreakdown,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
@@ -892,11 +893,20 @@ export function VatPage({ token }: { token: string }) {
   const data = report.data
   const net = Number(data?.net_vat ?? 0)
 
+  //: فروش و خرید در یک فهرست با برچسبِ نوع — کاربر دنبالِ «کدام فاکتور» است، نه
+  //: دنبالِ دو جدولِ جدا که باید بینشان چشم بچرخاند.
+  const mixed = [
+    ...(data?.mixed_sales_invoices ?? []).map((m) => ({ ...m, kind: 'فروش' })),
+    ...(data?.mixed_purchase_invoices ?? []).map((m) => ({ ...m, kind: 'خرید' })),
+  ]
+
   const rows = data
     ? [
-        { label: 'فروشِ مشمول', net: data.sales_net, vat: data.output_vat, sign: 1 },
+        //: پیش‌تر «فروشِ مشمول» نوشته بود، ولی این جمعِ کل است نه بخشِ مشمول؛
+        //: تفکیکِ مشمول/معاف در کارتِ «ترکیبِ پایه» است.
+        { label: 'فروش', net: data.sales_net, vat: data.output_vat, sign: 1 },
         { label: 'برگشت از فروش', net: data.sales_returns_net, vat: data.sales_returns_vat, sign: -1 },
-        { label: 'خریدِ مشمول', net: data.purchase_net, vat: data.input_vat, sign: -1 },
+        { label: 'خرید', net: data.purchase_net, vat: data.input_vat, sign: -1 },
         {
           label: 'برگشت از خرید',
           net: data.purchase_returns_net,
@@ -1016,6 +1026,78 @@ export function VatPage({ token }: { token: string }) {
               </tbody>
             </table>
           </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      <SectionCard
+        icon={Percent}
+        title="ترکیبِ پایه"
+        description="چقدر از فروش و خریدِ دوره مشمول بوده و چقدر معاف. وضعیت از لحظه‌ی معامله می‌آید، نه از وضعیتِ امروزِ کالا. برگشت‌ها در این جدول نمی‌آیند."
+      >
+        <AsyncBlock loading={report.loading} error={report.error}>
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>طبقه</th>
+                  <th>فروش</th>
+                  <th>خرید</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ['کالای مشمول', 'taxable_goods'],
+                  ['خدمتِ مشمول', 'taxable_services'],
+                  ['کالای معاف', 'exempt_goods'],
+                  ['خدمتِ معاف', 'exempt_services'],
+                ] as [string, keyof VatBreakdown][]).map(([label, key]) => (
+                  <tr key={key}>
+                    <td className="card-title" data-label="طبقه">{label}</td>
+                    <td data-label="فروش" className="num">
+                      {faAmount(data?.sales_breakdown[key] ?? 0)}
+                    </td>
+                    <td data-label="خرید" className="num">
+                      {faAmount(data?.purchase_breakdown[key] ?? 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {mixed.length > 0 && (
+            <>
+              <p className="fy-note fy-note--warn">
+                <AlertTriangle size={14} />{' '}
+                {fa(mixed.length)} فاکتور ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر
+                است — یعنی روی ردیفِ معاف هم مالیات گرفته شده.
+              </p>
+              <div className="table-scroll">
+                <table className="cards-on-mobile acc-table">
+                  <thead>
+                    <tr>
+                      <th>فاکتور</th>
+                      <th>تاریخ</th>
+                      <th>خالصِ معاف</th>
+                      <th>مالیاتِ فاکتور</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mixed.map((m) => (
+                      <tr key={m.invoice_id}>
+                        <td className="card-title" data-label="فاکتور">
+                          {m.kind} {fa(m.number ?? 0)}
+                        </td>
+                        <td data-label="تاریخ">{formatJalali(m.invoice_date)}</td>
+                        <td data-label="خالصِ معاف" className="num">{faAmount(m.exempt_net)}</td>
+                        <td data-label="مالیاتِ فاکتور" className="num">{faAmount(m.tax_amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

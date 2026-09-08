@@ -314,6 +314,29 @@ export interface VatReport {
   sales_returns_vat: string
   purchase_returns_net: string
   purchase_returns_vat: string
+  /** ترکیبِ فروش/خریدِ دوره. برگشت‌ها اینجا نمی‌آیند — ارقامِ بالا خالصِ پس از برگشت‌اند. */
+  sales_breakdown: VatBreakdown
+  purchase_breakdown: VatBreakdown
+  mixed_sales_invoices: MixedVatInvoice[]
+  mixed_purchase_invoices: MixedVatInvoice[]
+}
+
+/** تفکیکِ پایه‌ی مالیاتی — جوابِ «چقدر فروشِ معاف داشته‌ایم؟». */
+export interface VatBreakdown {
+  taxable_goods: string
+  taxable_services: string
+  exempt_goods: string
+  exempt_services: string
+}
+
+/** فاکتوری که ردیفِ معاف و مشمول را با هم دارد و نرخِ سربرگش غیرصفر است —
+ *  یعنی روی ردیفِ معاف هم مالیات گرفته شده. */
+export interface MixedVatInvoice {
+  invoice_id: string
+  number: number | null
+  invoice_date: string
+  tax_amount: string
+  exempt_net: string
 }
 
 export const fetchVatReport = (token: string, dateFrom?: string, dateTo?: string) => {
@@ -837,6 +860,8 @@ export interface ItemRecord {
   storefront_product_id: number | null
   reorder_point: string
   tax_stuff_id: string
+  /** `taxable` (مشمول) یا `exempt` (معاف). */
+  vat_status: string
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -860,6 +885,7 @@ export interface ItemIn {
   barcode?: string | null
   reorder_point?: number
   tax_stuff_id?: string
+  vat_status?: string
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
@@ -869,7 +895,7 @@ export const createItemLive = (token: string, data: ItemIn) =>
 export const updateItemLive = (
   token: string,
   itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string },
+  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string; vat_status?: string },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */

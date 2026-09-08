@@ -375,6 +375,8 @@ class ItemIn(BaseModel):
     reorder_point: Decimal = Decimal(0)
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid، ۱۳رقمیِ مؤدیان). خالی = پیش‌فرضِ کسب‌وکار.
     tax_stuff_id: str = ""
+    #: `taxable` (مشمول) یا `exempt` (معاف). پیش‌فرض مشمول = رفتارِ امروز.
+    vat_status: str = "taxable"
 
     @field_validator("barcode")
     @classmethod
@@ -392,6 +394,15 @@ class ItemIn(BaseModel):
             raise ValueError("نقطه‌ی سفارش نمی‌تواند منفی باشد")
         return v
 
+    @field_validator("vat_status")
+    @classmethod
+    def _known_vat_status(cls, v: str) -> str:
+        from app.models.inventory import VAT_STATUSES
+
+        if v not in VAT_STATUSES:
+            raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
+        return v
+
 
 class ItemOut(BaseModel):
     id: UUID
@@ -407,6 +418,7 @@ class ItemOut(BaseModel):
     storefront_product_id: int | None
     reorder_point: Decimal
     tax_stuff_id: str
+    vat_status: str
 
     model_config = {"from_attributes": True}
 
@@ -427,6 +439,18 @@ class ItemUpdateIn(BaseModel):
     storefront_product_id: int | None = None
     reorder_point: Decimal | None = None
     tax_stuff_id: str | None = None
+    #: تغییرِ وضعیت فقط روی فروش‌های **بعدی** اثر دارد؛ ردیف‌های ثبت‌شده وضعیتِ
+    #: لحظه‌ی معامله‌ی خودشان را نگه می‌دارند.
+    vat_status: str | None = None
+
+    @field_validator("vat_status")
+    @classmethod
+    def _known_vat_status(cls, v: str | None) -> str | None:
+        from app.models.inventory import VAT_STATUSES
+
+        if v is not None and v not in VAT_STATUSES:
+            raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
+        return v
 
     @field_validator("barcode")
     @classmethod

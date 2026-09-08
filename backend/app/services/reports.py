@@ -3,13 +3,18 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount, Check
 from app.models.inventory import Contact, Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
+from app.models.invoices import (
+    PurchaseInvoice,
+    PurchaseInvoiceLine,
+    SalesInvoice,
+    SalesInvoiceLine,
+)
 from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
 from app.models.treasury import TreasuryTransaction
 from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
@@ -126,6 +131,103 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
         net, tax = query.one()
         return Decimal(net), Decimal(tax)
 
+    def split(invoice_model, line_model, date_col) -> dict:
+        """پایه‌ی مالیاتی را به چهار سطل تفکیک می‌کند: مشمول/معاف × کالا/خدمت.
+
+        **از ردیف‌ها جمع می‌شود نه سربرگ**، و این دقیق است چون تخفیفِ سطحِ فاکتور
+        از قبل بینِ ردیف‌ها تسهیم شده (`invoices.py`): خالصِ ردیف =
+        `qty×price − discount`، و جمعشان همان `total_amount` است. پس تفکیک بدونِ
+        تسهیمِ نسبی درست درمی‌آید — تستِ `test_the_four_buckets_sum_to_the_total`
+        همین برابری را قفل می‌کند.
+
+        `vat_status` از **ردیف** خوانده می‌شود نه از کالا: وضعیتِ لحظه‌ی معامله،
+        نه وضعیتِ امروز. `is_service` برعکس از کالا می‌آید — کالا/خدمت بودن
+        واقعیتی فیزیکی است، نه طبقه‌بندیِ قانونی که با قانون عوض شود.
+        """
+        price_col = (
+            line_model.unit_price if hasattr(line_model, "unit_price") else line_model.unit_cost
+        )
+        net = func.coalesce(func.sum(line_model.qty * price_col - line_model.discount), 0)
+        query = (
+            db.query(line_model.vat_status, Item.is_service, net)
+            .join(invoice_model, line_model.invoice_id == invoice_model.id)
+            .join(Item, line_model.item_id == Item.id)
+            .filter(invoice_model.voided_at.is_(None))
+        )
+        if date_from is not None:
+            query = query.filter(date_col >= date_from)
+        if date_to is not None:
+            query = query.filter(date_col <= date_to)
+
+        out = {
+            "taxable_goods": Decimal(0),
+            "taxable_services": Decimal(0),
+            "exempt_goods": Decimal(0),
+            "exempt_services": Decimal(0),
+        }
+        for status, is_service, amount in query.group_by(line_model.vat_status, Item.is_service):
+            prefix = "exempt" if status == "exempt" else "taxable"
+            suffix = "services" if is_service else "goods"
+            out[f"{prefix}_{suffix}"] += Decimal(amount)
+        return out
+
+    def mixed_invoices(invoice_model, line_model, date_col) -> list[dict]:
+        """فاکتورهایی که ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر است.
+
+        این‌ها **روی ردیفِ معاف هم مالیات گرفته‌اند**، چون مالیات یک نرخ روی کلِ
+        فاکتور است (`compute_tax(total_amount, tax_rate)`).
+
+        **گزارش است نه گارد:** فاکتورِ ثبت‌شده ویرایش نمی‌شود و مسدودکردنِ گزارش
+        هیچ‌چیز را درست نمی‌کند؛ چیزی که کمک می‌کند این است که حسابدار بداند.
+        """
+        exempt_net = func.coalesce(
+            func.sum(
+                case(
+                    (
+                        line_model.vat_status == "exempt",
+                        line_model.qty
+                        * (
+                            line_model.unit_price
+                            if hasattr(line_model, "unit_price")
+                            else line_model.unit_cost
+                        )
+                        - line_model.discount,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        )
+        query = (
+            db.query(
+                invoice_model.id,
+                invoice_model.number,
+                date_col,
+                invoice_model.tax_amount,
+                func.count(func.distinct(line_model.vat_status)),
+                exempt_net,
+            )
+            .join(line_model, line_model.invoice_id == invoice_model.id)
+            .filter(invoice_model.voided_at.is_(None), invoice_model.tax_rate > 0)
+        )
+        if date_from is not None:
+            query = query.filter(date_col >= date_from)
+        if date_to is not None:
+            query = query.filter(date_col <= date_to)
+        rows = query.group_by(invoice_model.id, invoice_model.number, date_col, invoice_model.tax_amount).having(
+            func.count(func.distinct(line_model.vat_status)) > 1
+        ).all()
+        return [
+            {
+                "invoice_id": iid,
+                "number": number,
+                "invoice_date": idate,
+                "tax_amount": Decimal(tax),
+                "exempt_net": Decimal(ex_net),
+            }
+            for iid, number, idate, tax, _kinds, ex_net in rows
+        ]
+
     sales_net, output_vat = sums(SalesInvoice, SalesInvoice.invoice_date, True)
     purchase_net, input_vat = sums(PurchaseInvoice, PurchaseInvoice.invoice_date, True)
     sales_ret_net, sales_ret_vat = sums(SalesReturn, SalesReturn.return_date, False)
@@ -145,6 +247,19 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
         "sales_returns_vat": sales_ret_vat,
         "purchase_returns_net": purchase_ret_net,
         "purchase_returns_vat": purchase_ret_vat,
+        #: تفکیکِ پایه — جوابِ «چقدر فروشِ معاف داشته‌ایم؟». برگشت‌ها در این تفکیک
+        #: نمی‌آیند: ارقامِ بالا خالصِ پس از برگشت‌اند و این‌ها *ترکیبِ* فروشِ دوره را
+        #: نشان می‌دهند. یکی‌کردنشان دو معنا را در یک عدد قاطی می‌کرد.
+        "sales_breakdown": split(SalesInvoice, SalesInvoiceLine, SalesInvoice.invoice_date),
+        "purchase_breakdown": split(
+            PurchaseInvoice, PurchaseInvoiceLine, PurchaseInvoice.invoice_date
+        ),
+        "mixed_sales_invoices": mixed_invoices(
+            SalesInvoice, SalesInvoiceLine, SalesInvoice.invoice_date
+        ),
+        "mixed_purchase_invoices": mixed_invoices(
+            PurchaseInvoice, PurchaseInvoiceLine, PurchaseInvoice.invoice_date
+        ),
     }
 
 

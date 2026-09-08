@@ -113,6 +113,14 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # بهای تمام‌شده در لحظه‌ی فروش (برای COGS)
     description: Mapped[str] = mapped_column(Text, default="")
 
+    #: وضعیتِ مالیاتیِ کالا **در لحظه‌ی فروش** — از `Item.vat_status` کپی می‌شود.
+    #:
+    #: **چرا کپی و نه خواندنِ کالا:** قانون عوض می‌شود، تاریخ نه. کالایی که امسال
+    #: معاف شده، اگر گزارش از وضعیتِ *امروزش* بخواند، فروشِ پارسال را هم معاف نشان
+    #: می‌دهد — در حالی که آن فروش واقعاً مشمول بوده. همان استثنای «مقداری که در یک
+    #: لحظه قطعی شده» که `tax_amount` هم به همان دلیل کنارِ `tax_rate` ذخیره می‌شود.
+    vat_status: Mapped[str] = mapped_column(String(10), default="taxable", server_default="taxable")
+
     invoice: Mapped["SalesInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
 
@@ -172,6 +180,9 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     #: تخفیفِ این ردیف به مبلغ. خالصِ ردیف = qty×unit_cost − discount.
     discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     description: Mapped[str] = mapped_column(Text, default="")
+
+    #: وضعیتِ مالیاتیِ کالا **در لحظه‌ی خرید** — دلیلش همان `SalesInvoiceLine`.
+    vat_status: Mapped[str] = mapped_column(String(10), default="taxable", server_default="taxable")
 
     invoice: Mapped["PurchaseInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
