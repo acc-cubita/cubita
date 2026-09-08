@@ -112,3 +112,23 @@ class MoadianBatchResultOut(BaseModel):
     tax_id: str
     reference_number: str
     error_message: str
+
+
+class MoadianUnitMapIn(BaseModel):
+    """نگاشتِ واحدِ سنجش به کدِ رسمیِ سامانه.
+
+    کدها **حدس زده نمی‌شوند**: جدولِ رسمی ده‌ها ردیف دارد و کدِ اشتباه به سازمانِ
+    امور مالیاتی از نفرستادن بدتر است. تنها استثنا «عدد → ۱۶۴» است که در کد
+    به‌عنوان پایه هست، چون تا امروز همان برای *هر* ردیفی ارسال می‌شد.
+    """
+
+    unit: str
+    code: str
+
+
+class MoadianUnitMapOut(BaseModel):
+    id: UUID
+    unit: str
+    code: str
+
+    model_config = {"from_attributes": True}

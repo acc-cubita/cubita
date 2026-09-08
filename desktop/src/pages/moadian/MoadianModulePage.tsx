@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,7 +17,14 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react'
-import type { MeResponse } from '../../api'
+import {
+  deleteMoadianUnitMap,
+  fetchMoadianUnitMaps,
+  fetchMoadianUnmappedUnits,
+  saveMoadianUnitMap,
+  type MeResponse,
+  type MoadianUnitMap,
+} from '../../api'
 import type { PageKey } from '../../lib/navModel'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
@@ -131,7 +138,7 @@ function MoadianModule({ token, onNavigate }: { token: string; onNavigate: (page
             content: <StatusTab m={m} onNavigate={onNavigate} />,
           },
           { key: 'send', label: 'ارسال صورتحساب', icon: Send, content: <SendTab m={m} /> },
-          { key: 'settings', label: 'تنظیمات و اعتبارنامه', icon: Landmark, content: <SettingsTab m={m} /> },
+          { key: 'settings', label: 'تنظیمات و اعتبارنامه', icon: Landmark, content: <SettingsTab m={m} token={token} /> },
         ]}
       />
     </div>
@@ -558,7 +565,7 @@ function HistoryTab({ m }: { m: MoadianPanelState }) {
 
 // ── تنظیمات و اعتبارنامه ────────────────────────────────────────────────────
 
-function SettingsTab({ m }: { m: MoadianPanelState }) {
+function SettingsTab({ m, token }: { m: MoadianPanelState; token: string }) {
   const { form, setForm, settings } = m
 
   return (
@@ -709,6 +716,125 @@ function SettingsTab({ m }: { m: MoadianPanelState }) {
           {m.msg && <p className="hint">{m.msg}</p>}
         </form>
       </SectionCard>
+
+      <UnitMapCard token={token} />
     </>
+  )
+}
+
+/**
+ * نگاشتِ واحدِ سنجش به کدِ رسمیِ سامانه.
+ *
+ * تا پیش از این، کدِ واحدِ **هر** ردیفی ثابت «۱۶۴» (عدد) ارسال می‌شد — فروشِ ۵۰
+ * کیلوگرم به‌صورتِ ۵۰ عدد به سازمان اظهار می‌شد. کدها عمداً از پیش پُر نشده‌اند:
+ * جدولِ رسمی ده‌ها ردیف دارد و کدِ اشتباه از نفرستادن بدتر است.
+ */
+function UnitMapCard({ token }: { token: string }) {
+  const [rows, setRows] = useState<MoadianUnitMap[]>([])
+  const [missing, setMissing] = useState<string[]>([])
+  const [unit, setUnit] = useState('')
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    const [maps, unmapped] = await Promise.all([
+      fetchMoadianUnitMaps(token),
+      fetchMoadianUnmappedUnits(token),
+    ])
+    setRows(maps)
+    setMissing(unmapped)
+  }, [token])
+
+  useEffect(() => {
+    void refresh().catch(() => undefined)
+  }, [refresh])
+
+  async function save(u: string, c: string) {
+    setMsg(null)
+    try {
+      await saveMoadianUnitMap(token, u, c)
+      setUnit('')
+      setCode('')
+      await refresh()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={Landmark}
+      title="نگاشتِ واحدهای سنجش"
+      description="کدِ واحد را از جدولِ رسمیِ سامانه وارد کنید. «عدد» از پیش کدِ ۱۶۴ دارد؛ بقیه تا نگاشت نشوند، فاکتورشان ارسال نمی‌شود."
+    >
+      {missing.length > 0 && (
+        <p className="hint">
+          واحدهای بدونِ کد: {missing.join('، ')}
+        </p>
+      )}
+
+      <div className="mdn-form">
+        <label className="form-field">
+          واحد
+          <input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            list="mdn-unit-suggestions"
+            placeholder="کیلوگرم"
+          />
+          <datalist id="mdn-unit-suggestions">
+            {missing.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+        </label>
+        <label className="form-field">
+          کدِ سامانه
+          <input value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" />
+          <span className="field-hint">از جدولِ رسمیِ واحدهای سامانه مؤدیان.</span>
+        </label>
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={!unit.trim() || !code.trim()}
+          onClick={() => void save(unit, code)}
+        >
+          ثبتِ نگاشت
+        </button>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="cards-on-mobile">
+            <thead>
+              <tr>
+                <th>واحد</th>
+                <th>کد</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="card-title" data-label="واحد">{r.unit}</td>
+                  <td data-label="کد" dir="ltr">{r.code}</td>
+                  <td className="card-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void deleteMoadianUnitMap(token, r.id).then(refresh).catch(() => undefined)
+                      }}
+                    >
+                      حذف
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {msg && <p className="hint">{msg}</p>}
+    </SectionCard>
   )
 }

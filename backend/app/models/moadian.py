@@ -11,6 +11,14 @@ from app.models.tenant import TenantMixin
 
 SUBMISSION_STATUSES = ("pending", "sent", "confirmed", "rejected", "failed")
 
+#: نگاشتِ درون‌کدِ واحدِ سنجش به کدِ رسمیِ سامانه. عمداً فقط یک ردیف دارد:
+#: «عدد» → ۱۶۴، همان کدی که تا امروز برای *هر* ردیفی ارسال می‌شد.
+#:
+#: **بقیه‌ی کدها حدس زده نمی‌شوند.** جدولِ رسمیِ واحدها ده‌ها ردیف دارد و کدِ
+#: اشتباه به سازمانِ امور مالیاتی از نفرستادن بدتر است؛ پس کاربر آن‌ها را از روی
+#: جدولِ رسمی در `MoadianUnitMap` وارد می‌کند.
+BUILTIN_UNIT_CODES: dict[str, str] = {"عدد": "164"}
+
 
 class MoadianSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """اعتبارنامه و تنظیماتِ سامانه‌ی مؤدیانِ هر کسب‌وکار — یک ردیف برای هر مستأجر.
@@ -49,6 +57,30 @@ class MoadianSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     base_url_override: Mapped[str] = mapped_column(String(300), default="")
     #: شمارنده‌ی سریالِ داخلیِ صورتحساب — ورودیِ تولیدِ شناسه مالیاتی.
     last_serial: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class MoadianUnitMap(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """واحدِ سنجشِ کوبیتا → کدِ واحدِ سامانه‌ی مؤدیان.
+
+    **چرا لازم شد:** `build_invoice_packet` کدِ واحد را ثابت `"164"` (عدد) می‌فرستاد،
+    چه کالا کیلوگرم بود چه متر چه کارتن. یعنی فروشِ ۵۰ کیلوگرم به‌صورتِ ۵۰ «عدد»
+    به سازمان اظهار می‌شد — دادهٔ نادرست، نه فقط قابلیتِ نداشته.
+
+    `unit` همان متنِ آزادِ `Item.unit` است (نه شناسه)، چون واحد در کوبیتا موجودیت
+    نیست و کاربر آزادانه می‌نویسدش. یکتاییِ `(tenant_id, unit)` یعنی هر نوشتار
+    یک کد دارد.
+    """
+
+    __tablename__ = "moadian_unit_maps"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "unit", name="uq_moadian_unit_maps_tenant_unit"),
+    )
+
+    #: نوشتارِ واحد، دقیقاً همان‌طور که روی کالا ثبت شده («کیلوگرم»، «متر»، …).
+    unit: Mapped[str] = mapped_column(String(20))
+    #: کدِ واحد در جدولِ رسمیِ سامانه.
+    code: Mapped[str] = mapped_column(String(10))
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class MoadianSubmission(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
