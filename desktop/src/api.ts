@@ -4590,9 +4590,17 @@ export interface FxRow {
   account_id: string
   account_code: string
   account_name: string
+  /** بُعدهای ردیف؛ null یعنی مانده‌ی این گروه واقعاً بُعدی نداشته. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  cost_center_id: string | null
+  cost_center_name: string | null
   currency_code: string
   fx_balance: string
   rate: string
+  /** تاریخِ خودِ نرخ — اگر با تاریخِ تسعیر یکی نباشد، نرخ کهنه است. */
+  rate_date: string
   book_value: string
   market_value: string
   difference: string

@@ -188,10 +188,23 @@ export function FxRevaluationPage({ token }: { token: string }) {
               <tbody>
                 {(data?.items ?? []).map((row) => {
                   const diff = Number(row.difference)
+                  // بُعدها ستونِ تازه نمی‌گیرند: هویتِ ردیف‌اند، پس زیرِ خودِ حساب
+                  // می‌نشینند تا جدول هفت‌ستونه بماند و در موبایل هم کارتِ خوانا بماند.
+                  const dims = [
+                    row.analytic_name
+                      ? `تفصیلی: ${row.analytic_code ? `${row.analytic_code} ` : ''}${row.analytic_name}`
+                      : null,
+                    row.cost_center_name ? `مرکز: ${row.cost_center_name}` : null,
+                  ].filter(Boolean)
+                  // نرخِ کهنه حدس نیست ولی نرخِ روز هم نیست — باید دیده شود.
+                  const stale = row.rate_date !== asOf
                   return (
-                    <tr key={`${row.account_id}-${row.currency_code}`}>
+                    <tr
+                      key={`${row.account_id}-${row.analytic_id ?? '—'}-${row.cost_center_id ?? '—'}-${row.currency_code}`}
+                    >
                       <td className="card-title" data-label="حساب">
                         <span dir="ltr">{row.account_code}</span> — {row.account_name}
+                        {dims.length > 0 && <span className="field-hint">{dims.join(' · ')}</span>}
                       </td>
                       <td data-label="ارز" dir="ltr">
                         {row.currency_code}
@@ -201,6 +214,11 @@ export function FxRevaluationPage({ token }: { token: string }) {
                       </td>
                       <td data-label="نرخِ روز" className="num">
                         {fa(row.rate)}
+                        {stale && (
+                          <span className="field-hint field-hint--warn">
+                            نرخِ {formatJalali(row.rate_date)}
+                          </span>
+                        )}
                       </td>
                       <td data-label="ارزشِ دفتری" className="num">
                         {fa(row.book_value)}
