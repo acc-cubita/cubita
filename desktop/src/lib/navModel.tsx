@@ -225,6 +225,7 @@ export type PageKey =
   | 'mergeentries'
   | 'finalizeentries'
   | 'fxrevaluation'
+  | 'balancereclass'
   | 'generaldoc'
   | 'entrycartable'
   | 'closingopening'
@@ -356,9 +357,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'finalizeentries', label: 'تبدیل اسناد موقت به دائم', icon: <Lock size={18} /> },
       { key: 'renumber', label: 'شماره‌گذاری مجدد اسناد', icon: <Hash size={18} /> },
       { key: 'mergeentries', label: 'ادغام اسناد', icon: <Combine size={18} /> },
-      { key: 'reclassify', label: 'اصلاح طبقه‌بندی حساب‌ها', icon: <ArrowLeftRight size={18} /> },
+      { key: 'reclassify', label: 'جابه‌جایی حساب در درختواره', icon: <ArrowLeftRight size={18} /> },
       { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} /> },
       { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <Coins size={18} /> },
+      { key: 'balancereclass', label: 'اصلاح طبقه‌بندی مانده', icon: <ArrowLeftRight size={18} /> },
       { key: 'generaldoc', label: 'صدور سند کل', icon: <FileSpreadsheet size={18} /> },
       { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} /> },
       { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} /> },
@@ -443,7 +445,7 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
   (
     [
       'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
-      'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation',
+      'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation', 'balancereclass',
       'generaldoc', 'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
       'balancereport', 'ledgerreport',
       'entrylist', 'accountlist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',

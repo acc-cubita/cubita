@@ -1179,7 +1179,236 @@ def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:
     }
 
 
-# ───────────────────── ۸) اصلاحِ طبقه‌بندیِ حساب‌ها ────────────────────────
+# ──────────────────── ۸) اصلاحِ طبقه‌بندیِ *مانده* ─────────────────────────
+#
+# **این با «جابه‌جایی حساب در درختواره» (پایین‌تر) یکی نیست و نباید یکی شود.**
+#
+# آن یکی `parent_id`ِ خودِ حساب را عوض می‌کند — یعنی گزارشِ *پارسال* هم از امروز
+# طورِ دیگری دیده می‌شود. این یکی تاریخ را دست نمی‌زند: مانده‌ی یک ترکیبِ
+# (حساب، تفصیلی) را در یک تاریخِ مشخص با یک سندِ متوازن به جای درست منتقل می‌کند.
+#
+#     اسنادِ قدیمی  →  دست‌نخورده
+#     تاریخِ اصلاح  →  یک سندِ روشن که می‌گوید چه چیزی کجا رفت
+
+
+def analytic_balances(
+    db: Session, as_of: date_, account_ids: set[UUID] | None = None
+) -> list[tuple[Account, UUID | None, Decimal]]:
+    """مانده‌ی خامِ هر ترکیبِ (حساب، تفصیلی) تا این تاریخ. مثبت = بدهکار.
+
+    الگویش همان `_permanent_balances` است، ولی بدونِ فیلترِ نوعِ حساب و بدونِ
+    کنارگذاشتنِ حساب‌های واسط: اصلاحِ طبقه‌بندی به هر حسابی می‌تواند بخورد.
+
+    **مانده است نه گردش** — همان چیزی که §۱۱ تحلیل می‌خواهد: حسابی که ۷۰ بدهکار و
+    ۵۲ بستانکار داشته، ۱۸ منتقل می‌شود نه ۱۲۲.
+    """
+    query = (
+        db.query(
+            Account,
+            JournalLine.analytic_id,
+            func.coalesce(func.sum(JournalLine.debit), 0),
+            func.coalesce(func.sum(JournalLine.credit), 0),
+        )
+        .join(JournalLine, JournalLine.account_id == Account.id)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .filter(
+            Account.is_group.is_(False),
+            JournalEntry.entry_date <= as_of,
+            JournalEntry.voided_at.is_(None),
+        )
+    )
+    if account_ids is not None:
+        query = query.filter(Account.id.in_(account_ids))
+
+    out: list[tuple[Account, UUID | None, Decimal]] = []
+    for account, analytic_id, debit, credit in query.group_by(Account.id, JournalLine.analytic_id):
+        raw = Decimal(debit) - Decimal(credit)
+        if raw != 0:
+            out.append((account, analytic_id, raw))
+    return sorted(out, key=lambda r: (r[0].code, str(r[1] or "")))
+
+
+def reclass_sources(db: Session, as_of: date_) -> list[dict]:
+    """ترکیب‌های داری مانده تا این تاریخ — سیاهه‌ای که کاربر از آن مبدأ انتخاب می‌کند."""
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    rows = []
+    for account, analytic_id, raw in analytic_balances(db, as_of):
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        rows.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "balance": raw,
+                #: نقشِ سیستمی مسدود نمی‌کند، ولی کاربر باید بداند: مانده می‌رود،
+                #: **ثبت‌های خودکارِ آینده همچنان به همین حساب می‌آیند**.
+                "system_role": account.system_role,
+            }
+        )
+    return rows
+
+
+def _reclass_destination(db: Session, dest_account_id: UUID) -> Account:
+    dest = db.get(Account, dest_account_id)
+    if dest is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حسابِ مقصد یافت نشد")
+    if dest.is_group:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"«{dest.name}» سرفصل است و سند نمی‌پذیرد"
+        )
+    if not dest.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"حسابِ «{dest.name}» غیرفعال است")
+    return dest
+
+
+def reclass_preview(
+    db: Session,
+    as_of: date_,
+    sources: list[dict],
+    dest_account_id: UUID,
+    dest_analytic_id: UUID | None,
+) -> dict:
+    """پیش‌نمایشِ سندِ اصلاح: چه مبلغی، از کجا، به کجا — و اختلاف که باید صفر باشد.
+
+    **جهتِ سند از خودِ مانده می‌آید، نه از فرض.** مانده‌ی بدهکار یعنی مبدأ
+    بستانکار می‌شود تا صفر شود؛ مانده‌ی بستانکار یعنی برعکس. هیچ‌جا
+    «مبدأ بدهکار / مقصد بستانکار» ثابت نوشته نشده — §۱۲ تحلیل دقیقاً همین است.
+    """
+    if not sources:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "هیچ مبدأیی انتخاب نشده است")
+    dest = _reclass_destination(db, dest_account_id)
+
+    wanted = {(s["account_id"], s.get("analytic_id")) for s in sources}
+    balances = {
+        (account.id, analytic_id): (account, raw)
+        for account, analytic_id, raw in analytic_balances(
+            db, as_of, {s["account_id"] for s in sources}
+        )
+    }
+
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    dest_analytic = analytics.get(dest_analytic_id) if dest_analytic_id else None
+    items, warnings = [], []
+    total_debit = total_credit = Decimal(0)
+
+    for key in sorted(wanted, key=lambda k: str(k)):
+        if key == (dest_account_id, dest_analytic_id):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "مبدأ و مقصد یکی‌اند؛ این سند هیچ اثری ندارد"
+            )
+        found = balances.get(key)
+        if found is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "یکی از مبدأهای انتخاب‌شده در این تاریخ مانده‌ای ندارد",
+            )
+        account, raw = found
+        analytic = analytics.get(key[1]) if key[1] else None
+        #: مبدأ *برعکسِ* مانده‌اش زده می‌شود تا صفر شود؛ مقصد همان را می‌گیرد.
+        total_debit += raw if raw < 0 else Decimal(0)
+        items.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "analytic_id": key[1],
+                "analytic_name": analytic.name if analytic else None,
+                "balance": raw,
+                "source_debit": -raw if raw < 0 else Decimal(0),
+                "source_credit": raw if raw > 0 else Decimal(0),
+                "dest_debit": raw if raw > 0 else Decimal(0),
+                "dest_credit": -raw if raw < 0 else Decimal(0),
+            }
+        )
+        if account.system_role:
+            warnings.append(
+                f"حسابِ «{account.name}» نقشِ سیستمی دارد: مانده منتقل می‌شود ولی "
+                "ثبت‌های خودکارِ آینده همچنان به همین حساب می‌آیند."
+            )
+
+    total_debit = sum((i["source_debit"] + i["dest_debit"] for i in items), Decimal(0))
+    total_credit = sum((i["source_credit"] + i["dest_credit"] for i in items), Decimal(0))
+    return {
+        "as_of": as_of,
+        "items": items,
+        "dest_account_id": dest.id,
+        "dest_account_code": dest.code,
+        "dest_account_name": dest.name,
+        "dest_analytic_id": dest_analytic_id,
+        "dest_analytic_name": dest_analytic.name if dest_analytic else None,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        #: باید صفر باشد. اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد.
+        "difference": total_debit - total_credit,
+        "warnings": warnings,
+    }
+
+
+def issue_reclass(
+    db: Session,
+    user: User,
+    as_of: date_,
+    sources: list[dict],
+    dest_account_id: UUID,
+    dest_analytic_id: UUID | None,
+    description: str,
+) -> dict:
+    """سندِ اصلاحِ طبقه‌بندیِ مانده. تاریخ دست‌نخورده می‌ماند."""
+    assert_period_open(db, as_of)
+    preview = reclass_preview(db, as_of, sources, dest_account_id, dest_analytic_id)
+
+    lines: list[JournalLine] = []
+    for item in preview["items"]:
+        where = item["account_name"] + (f" / {item['analytic_name']}" if item["analytic_name"] else "")
+        to = preview["dest_account_name"] + (
+            f" / {preview['dest_analytic_name']}" if preview["dest_analytic_name"] else ""
+        )
+        #: یک **جفت** ردیف برای هر مبدأ، نه یک ردیفِ تجمیعیِ مقصد — تا از روی خودِ
+        #: سند معلوم باشد کدام مبلغ از کجا آمد.
+        lines.append(
+            JournalLine(
+                account_id=item["account_id"],
+                analytic_id=item["analytic_id"],
+                debit=item["source_debit"],
+                credit=item["source_credit"],
+                description=f"انتقالِ مانده‌ی {where} به {to}",
+            )
+        )
+        lines.append(
+            JournalLine(
+                account_id=dest_account_id,
+                analytic_id=dest_analytic_id,
+                debit=item["dest_debit"],
+                credit=item["dest_credit"],
+                description=f"دریافتِ مانده‌ی {where}",
+            )
+        )
+
+    entry = make_journal_entry(
+        db,
+        as_of,
+        description.strip() or f"اصلاح طبقه‌بندی مانده تا {as_of}",
+        "reclassification",
+        user,
+        lines,
+    )
+    db.flush()
+    return {
+        "entry_id": entry.id,
+        "number": entry.number,
+        "line_count": len(lines),
+        "total": preview["total_debit"],
+    }
+
+
+# ───────────────── ۹) جابه‌جاییِ حساب در درختواره (ساختاری) ────────────────
+#
+# **این مانده را جابه‌جا نمی‌کند.** `parent_id` و `type`ِ خودِ حساب را عوض می‌کند،
+# یعنی گزارشِ گذشته هم از این به بعد طورِ دیگری دیده می‌شود. برای بردنِ *مانده* به
+# حسابِ درست، بخشِ ۸ بالا («اصلاح طبقه‌بندی مانده») درست است.
 
 
 def reclassify_accounts(db: Session, items: list[dict]) -> dict:

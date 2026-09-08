@@ -4783,6 +4783,66 @@ export const fetchLegalBook = (token: string, dateFrom: string, dateTo: string) 
     total_credit: string
   }>(token, `/api/accounting/legal-book?date_from=${dateFrom}&date_to=${dateTo}`)
 
+/** یک ترکیبِ (حساب، تفصیلی) که در تاریخِ اصلاح مانده دارد. */
+export interface ReclassSource {
+  account_id: string
+  account_code: string
+  account_name: string
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  balance: string
+  /** نقشِ سیستمی مسدود نمی‌کند؛ فقط هشدار می‌دهد. */
+  system_role: string | null
+}
+
+export interface ReclassItem {
+  account_id: string
+  account_code: string
+  account_name: string
+  analytic_id: string | null
+  analytic_name: string | null
+  balance: string
+  source_debit: string
+  source_credit: string
+  dest_debit: string
+  dest_credit: string
+}
+
+export interface ReclassPreview {
+  as_of: string
+  items: ReclassItem[]
+  dest_account_id: string
+  dest_account_code: string
+  dest_account_name: string
+  dest_analytic_id: string | null
+  dest_analytic_name: string | null
+  total_debit: string
+  total_credit: string
+  /** باید صفر باشد — اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد. */
+  difference: string
+  warnings: string[]
+}
+
+export interface ReclassBody {
+  as_of: string
+  sources: { account_id: string; analytic_id: string | null }[]
+  dest_account_id: string
+  dest_analytic_id: string | null
+  description?: string
+}
+
+export const fetchReclassSources = (token: string, asOf: string) =>
+  authedGet<ReclassSource[]>(token, `/api/accounting/balance-reclass/sources?as_of=${asOf}`)
+
+export const previewReclass = (token: string, body: ReclassBody) =>
+  authedSend<ReclassPreview>(token, 'POST', '/api/accounting/balance-reclass/preview', body)
+
+export const issueReclass = (token: string, body: ReclassBody) =>
+  authedSend<{ entry_id: string; number: number | null; line_count: number; total: string }>(
+    token, 'POST', '/api/accounting/balance-reclass', body,
+  )
+
 export const reclassifyAccounts = (
   token: string, items: { account_id: string; parent_id: string | null; type?: string }[],
 ) =>

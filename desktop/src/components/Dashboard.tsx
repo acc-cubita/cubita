@@ -193,6 +193,7 @@ import { OpeningBalancePage } from '../pages/accounting/OpeningBalancePage'
 import {
   ClosePnlPage,
   ClosingOpeningPage,
+  BalanceReclassPage,
   FxRevaluationPage,
   GeneralDocumentPage,
 } from '../pages/accounting/ClosingPages'
@@ -317,9 +318,10 @@ const PAGE_TITLES: Record<PageKey, string> = {
   finalizeentries: 'تبدیل اسناد موقت به دائم',
   renumber: 'شماره‌گذاری مجدد اسناد',
   mergeentries: 'ادغام اسناد',
-  reclassify: 'اصلاح طبقه‌بندی حساب‌ها',
+  reclassify: 'جابه‌جایی حساب در درختواره',
   analytics: 'تفصیلی سایر',
   fxrevaluation: 'صدور سند تسعیر ارز',
+  balancereclass: 'اصلاح طبقه‌بندی مانده',
   generaldoc: 'صدور سند کل',
   closepnl: 'بستن حساب‌های سود و زیان',
   closingopening: 'صدور سند اختتامیه و افتتاحیه',
@@ -611,6 +613,7 @@ export function Dashboard({
           )}
           {page === 'analytics' && <AnalyticsPage token={token} />}
           {page === 'fxrevaluation' && <FxRevaluationPage token={token} />}
+          {page === 'balancereclass' && <BalanceReclassPage token={token} />}
           {page === 'generaldoc' && <GeneralDocumentPage token={token} />}
           {page === 'closepnl' && <ClosePnlPage token={token} />}
           {page === 'closingopening' && <ClosingOpeningPage token={token} />}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Archive,
+  ArrowLeftRight,
   BookOpenCheck,
   CalendarCheck,
   Coins,
@@ -24,10 +25,15 @@ import {
   fetchOpeningPreview,
   fetchPeriodCloses,
   fetchPnlClosePreview,
+  fetchReclassSources,
   issueClosingEntry,
   issueFxRevaluation,
   issueOpeningEntry,
+  issueReclass,
+  previewReclass,
   type ChartAccount,
+  type ReclassBody,
+  type ReclassPreview,
   type ClosingRow,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
@@ -816,6 +822,245 @@ export function GeneralDocumentPage({ token }: { token: string }) {
           <BalanceFooter debit={debit} credit={credit} />
         </AsyncBlock>
       </SectionCard>
+    </OpsPage>
+  )
+}
+
+
+// ═════════════════════ ۵) اصلاح طبقه‌بندی مانده ═════════════════════
+
+/**
+ * مانده‌ی یک ترکیبِ (حساب، تفصیلی) را با یک سندِ متوازن به حسابِ درست می‌برد.
+ *
+ * **با «جابه‌جایی حساب در درختواره» یکی نیست.** آن یکی `parent_id`ِ خودِ حساب را
+ * عوض می‌کند و گزارشِ گذشته را هم تغییر می‌دهد؛ این یکی اسنادِ گذشته را دست
+ * نمی‌زند و اصلاح را به‌عنوان یک رویدادِ مالیِ تاریخ‌دار ثبت می‌کند.
+ */
+export function BalanceReclassPage({ token }: { token: string }) {
+  const [asOf, setAsOf] = useState(todayIso())
+  const [description, setDescription] = useState('')
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
+  const [destAccount, setDestAccount] = useState('')
+  const [destAnalytic, setDestAnalytic] = useState('')
+  const [msg, setMsg] = useState<Msg>(null)
+  const [preview, setPreview] = useState<ReclassPreview | null>(null)
+
+  const sources = useAsync(() => fetchReclassSources(token, asOf), [token, asOf])
+  const accounts = useAsync(() => fetchChartAccounts(token), [token])
+
+  //: کلیدِ ترکیبی، چون یک حساب می‌تواند چند تفصیلی داشته باشد.
+  const keyOf = (r: { account_id: string; analytic_id: string | null }) =>
+    `${r.account_id}|${r.analytic_id ?? ''}`
+
+  const chosen = (sources.data ?? []).filter((r) => picked[keyOf(r)])
+
+  const body = (): ReclassBody => ({
+    as_of: asOf,
+    sources: chosen.map((r) => ({ account_id: r.account_id, analytic_id: r.analytic_id })),
+    dest_account_id: destAccount,
+    dest_analytic_id: destAnalytic || null,
+    description,
+  })
+
+  async function runPreview() {
+    setMsg(null)
+    setPreview(null)
+    try {
+      setPreview(await previewReclass(token, body()))
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
+  async function issue() {
+    if (!window.confirm('سندِ اصلاح طبقه‌بندی صادر شود؟')) return
+    try {
+      const out = await issueReclass(token, body())
+      setMsg({ text: `سند با شماره ${fa(out.number ?? 0)} صادر شد.`, kind: 'ok' })
+      setPicked({})
+      setPreview(null)
+      sources.reload()
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
+  const postable = (accounts.data ?? []).filter((a) => !a.is_group)
+  const ready = preview !== null && Number(preview.difference) === 0
+
+  return (
+    <OpsPage
+      icon={ArrowLeftRight}
+      title="اصلاح طبقه‌بندی مانده"
+      description="مانده‌ی یک حساب/تفصیلی را با یک سندِ متوازن به جای درست می‌برد. اسنادِ گذشته دست‌نخورده می‌مانند و اصلاح به‌عنوان رویدادی تاریخ‌دار ثبت می‌شود."
+      head={
+        <div className="cc-head">
+          <div className="cc-toolbar">
+            <label className="acc-inline-field">
+              تاریخِ اصلاح
+              <JalaliDatePicker value={asOf} onChange={setAsOf} />
+            </label>
+            <label className="acc-inline-field acc-merge-desc">
+              شرحِ سند
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="اصلاح طبقه‌بندی مانده"
+              />
+            </label>
+          </div>
+          <div className="cc-summary">
+            <Metric icon={<ArrowLeftRight size={14} />} label="انتخاب‌شده" value={faInt(chosen.length)} />
+          </div>
+        </div>
+      }
+    >
+      <Note msg={msg} />
+
+      <SectionCard
+        icon={ArrowLeftRight}
+        title="مبدأ — حساب‌های دارای مانده"
+        description="مانده تا تاریخِ اصلاح. فقط همان ترکیبی که انتخاب می‌کنید منتقل می‌شود، نه کلِ حساب."
+      >
+        <AsyncBlock
+          loading={sources.loading}
+          error={sources.error}
+          empty={(sources.data?.length ?? 0) === 0}
+          emptyText="در این تاریخ هیچ حسابی مانده ندارد."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th />
+                  <th>حساب</th>
+                  <th>مانده</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(sources.data ?? []).map((r) => {
+                  const k = keyOf(r)
+                  return (
+                    <tr key={k}>
+                      <td data-label="انتخاب">
+                        <input
+                          type="checkbox"
+                          checked={!!picked[k]}
+                          onChange={(e) => setPicked({ ...picked, [k]: e.target.checked })}
+                        />
+                      </td>
+                      <td className="card-title" data-label="حساب">
+                        <span dir="ltr">{r.account_code}</span> — {r.account_name}
+                        {r.analytic_name && (
+                          <span className="field-hint">تفصیلی: {r.analytic_name}</span>
+                        )}
+                        {r.system_role && (
+                          <span className="field-hint field-hint--warn">
+                            نقشِ سیستمی — ثبت‌های خودکارِ آینده همچنان به همین حساب می‌آیند.
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="مانده" className="num">{fa(r.balance)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      <SectionCard
+        icon={ArrowLeftRight}
+        title="مقصد"
+        description="مانده به این حساب/تفصیلی منتقل می‌شود."
+        actions={
+          <button type="button" disabled={!chosen.length || !destAccount} onClick={() => void runPreview()}>
+            پیش‌نمایش
+          </button>
+        }
+      >
+        <div className="cc-toolbar">
+          <label className="acc-inline-field">
+            حسابِ مقصد
+            <select value={destAccount} onChange={(e) => setDestAccount(e.target.value)}>
+              <option value="">— انتخاب کنید —</option>
+              {postable.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} — {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="acc-inline-field">
+            تفصیلیِ مقصد (اختیاری)
+            <input
+              type="text"
+              value={destAnalytic}
+              onChange={(e) => setDestAnalytic(e.target.value)}
+              dir="ltr"
+              />
+            <span className="field-hint">شناسه‌ی تفصیلی؛ خالی = بدونِ تفصیلی.</span>
+          </label>
+        </div>
+      </SectionCard>
+
+      {preview && (
+        <SectionCard
+          icon={Scale}
+          title="پیش‌نمایشِ سند"
+          description="تا اختلاف صفر نشود، سند صادر نمی‌شود."
+          actions={
+            <button type="button" className="btn-primary" disabled={!ready} onClick={() => void issue()}>
+              صدورِ سند
+            </button>
+          }
+        >
+          {preview.warnings.map((w) => (
+            <p key={w} className="fy-note fy-note--warn">
+              <AlertTriangle size={14} /> {w}
+            </p>
+          ))}
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>مبدأ</th>
+                  <th>مانده</th>
+                  <th>بدهکار</th>
+                  <th>بستانکار</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.items.map((i) => (
+                  <tr key={`${i.account_id}-${i.analytic_id ?? ''}`}>
+                    <td className="card-title" data-label="مبدأ">
+                      <span dir="ltr">{i.account_code}</span> — {i.account_name}
+                      {i.analytic_name && <span className="field-hint">تفصیلی: {i.analytic_name}</span>}
+                    </td>
+                    <td data-label="مانده" className="num">{fa(i.balance)}</td>
+                    <td data-label="بدهکار" className="num">{faAmount(i.source_debit)}</td>
+                    <td data-label="بستانکار" className="num">{faAmount(i.source_credit)}</td>
+                  </tr>
+                ))}
+                <tr className="acc-row--total">
+                  <td className="card-title" data-label="مبدأ">
+                    مقصد: {preview.dest_account_name}
+                    {preview.dest_analytic_name ? ` / ${preview.dest_analytic_name}` : ''}
+                  </td>
+                  <td className="num" data-label="مانده">—</td>
+                  <td className="num" data-label="بدهکار">{fa(preview.total_debit)}</td>
+                  <td className="num" data-label="بستانکار">{fa(preview.total_credit)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className={Number(preview.difference) === 0 ? 'hint' : 'fy-note fy-note--warn'}>
+            اختلاف: {fa(preview.difference)}
+          </p>
+        </SectionCard>
+      )}
     </OpsPage>
   )
 }
