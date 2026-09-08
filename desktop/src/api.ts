@@ -332,6 +332,8 @@ export interface SeasonalPartyRow {
   national_id: string | null
   economic_code: string | null
   postal_code: string | null
+  /** کدهای کمبودِ هویتِ مالیاتی. خالی = آماده‌ی سامانه. */
+  issues: string[]
   invoice_count: number
   gross: string
   discount: string
@@ -342,6 +344,9 @@ export interface SeasonalPartyRow {
 
 export interface SeasonalSection {
   rows: SeasonalPartyRow[]
+  /** شمارشِ آمادگی — چند ردیف هویتِ مالیاتیِ کامل دارد و چند تا نه. */
+  ready_count: number
+  incomplete_count: number
   total_gross: string
   total_discount: string
   total_net: string

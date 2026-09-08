@@ -161,6 +161,35 @@ def _seasonal_range(year: int, quarter: int) -> tuple[date, date]:
     return date_from, date_to
 
 
+#: طولِ شناسه‌ی هویتی به تفکیکِ نوعِ شخص — کدِ ملیِ حقیقی ۱۰ رقم، شناسه‌ی ملیِ
+#: حقوقی ۱۱ رقم. کامنتِ `Contact.national_id` همین را می‌گوید ولی هیچ‌جا سنجیده
+#: نمی‌شد؛ کدِ ۱۰رقمی روی شخصِ حقوقی *پُر* به‌نظر می‌رسد و سرِ آپلود رد می‌شود.
+NATIONAL_ID_LENGTH = {"real": 10, "legal": 11}
+
+
+def _seasonal_issues(contact) -> list[str]:
+    """چه چیزی از هویتِ مالیاتیِ این طرف‌حساب کم یا بدشکل است.
+
+    **کدِ ماشین‌خوان برمی‌گرداند، نه متنِ فارسی.** برچسب کارِ رابط است (کنارِ
+    `ENTITY_LABEL`)، و کد اجازه می‌دهد بعداً بدونِ شکستنِ چیزی فیلتر و شمارش شود.
+
+    **گزارش است، نه گارد**: خروجی هرگز مسدود نمی‌شود. کاری که این‌جا می‌شود فقط
+    این است که حسابدار *پیش از* آپلود بداند کدام ردیف رد خواهد شد، نه بعدش.
+    """
+    issues: list[str] = []
+    if not (contact.national_id or "").strip():
+        issues.append("national_id_missing")
+    else:
+        expected = NATIONAL_ID_LENGTH.get(contact.entity_type)
+        if expected is not None and len(contact.national_id.strip()) != expected:
+            issues.append("national_id_length")
+    if not (contact.economic_code or "").strip():
+        issues.append("economic_code_missing")
+    if not (contact.postal_code or "").strip():
+        issues.append("postal_code_missing")
+    return issues
+
+
 def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
     """گزارشِ معاملاتِ فصلی (ماده ۱۶۹ ق.م.م): تجمیعِ خرید و فروشِ یک فصلِ شمسی به
     تفکیکِ طرف حساب. فاکتورهای باطل حساب نمی‌شوند؛ برگشت‌ها (از روی فاکتورِ اصلی) از
@@ -246,6 +275,10 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
                     "net": net,
                     "vat": vat,
                     "total": net + vat,
+                    #: **این ردیف هرگز ایراد نمی‌گیرد.** طرف‌حساب نیست؛ سطلِ فروشِ
+                    #: نقدی/خرده است و اصلاً هویتِ مالیاتی ندارد که کم داشته باشد.
+                    #: بدونِ این کامنت، دفعه‌ی بعد کسی «درستش» می‌کند.
+                    "issues": [],
                 })
             else:
                 c = contacts.get(cid)
@@ -262,12 +295,19 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
                     "net": net,
                     "vat": vat,
                     "total": net + vat,
+                    "issues": _seasonal_issues(c) if c else [],
                 })
 
         # بزرگ‌ترین معامله‌ها بالا؛ ردیفِ تجمیعیِ خرد ته.
+        #
+        # ردیف‌های ناقص عمداً بالا کشیده *نمی‌شوند*: ترتیبِ مبلغ همان چیزی است که
+        # حسابدار برای خواندنِ گزارش می‌خواهد. پیداکردنشان کارِ فیلترِ «فقط ناقص‌ها»
+        # در رابط است، نه به‌هم‌ریختنِ ترتیبِ اصلی.
         rows.sort(key=lambda r: (r["contact_id"] is None, -r["net"]))
         return {
             "rows": rows,
+            "ready_count": sum(1 for r in rows if not r["issues"]),
+            "incomplete_count": sum(1 for r in rows if r["issues"]),
             "total_gross": sum((r["gross"] for r in rows), Decimal(0)),
             "total_discount": sum((r["discount"] for r in rows), Decimal(0)),
             "total_net": sum((r["net"] for r in rows), Decimal(0)),
