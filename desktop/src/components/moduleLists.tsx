@@ -288,6 +288,8 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   journalentry: 'entrylist',
   mergeentries: 'entrylist',
   fxrevaluation: 'entrylist',
+  //: سندش در فهرستِ اسناد با منشأ «اصلاح طبقه‌بندی مانده» دیده می‌شود.
+  balancereclass: 'entrylist',
   closingopening: 'entrylist',
   closepnl: 'periodcloselist',
   analytics: 'analyticlist',

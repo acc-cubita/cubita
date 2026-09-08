@@ -75,7 +75,17 @@ MODELS_WITHOUT_ENTRIES: frozenset[str] = frozenset({"PayrollSettlement"})
 #: منبع‌هایی که واقعاً عملیاتِ بیرونی ندارند — سند خودش رویداد است. این‌ها شکاف
 #: نیستند و `None` گرفتنشان درست است.
 ACCOUNTING_NATIVE: frozenset[str] = frozenset(
-    {"manual", "fx_revaluation", "closing_entry", "opening_entry", "opening", "opening_balance", "recurring"}
+    {
+        "manual",
+        "fx_revaluation",
+        "closing_entry",
+        "opening_entry",
+        "opening",
+        "opening_balance",
+        "recurring",
+        #: اصلاحِ طبقه‌بندیِ مانده هم عملیاتِ منبعِ بیرونی ندارد — خودِ سند رویداد است.
+        "reclassification",
+    }
 )
 
 

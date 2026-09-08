@@ -36,6 +36,9 @@ from app.schemas.accounting_ops import (
     OpeningIssueIn,
     OpeningPreviewOut,
     PnlPreviewOut,
+    ReclassIn,
+    ReclassPreviewOut,
+    ReclassSourceRowOut,
     ReclassifyIn,
     ReclassifyOut,
     RenumberIn,
@@ -268,3 +271,51 @@ def delete_analytic(
     _=Depends(require_permission("accounting", "delete")),
 ):
     an.delete_analytic(db, analytic_id)
+
+
+# ──────────────── اصلاحِ طبقه‌بندیِ مانده ────────────────
+#
+# با «جابه‌جایی حساب در درختواره» (`/accounts/reclassify`) یکی نیست: آن یکی
+# `parent_id`ِ حساب را عوض می‌کند و گزارشِ گذشته را هم تغییر می‌دهد؛ این یکی
+# تاریخ را دست نمی‌زند و فقط یک سندِ متوازنِ تاریخ‌دار می‌سازد.
+
+
+@router.get("/balance-reclass/sources", response_model=list[ReclassSourceRowOut])
+def reclass_sources(
+    as_of: date,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return ops.reclass_sources(db, as_of)
+
+
+@router.post("/balance-reclass/preview", response_model=ReclassPreviewOut)
+def reclass_preview(
+    data: ReclassIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return ops.reclass_preview(
+        db,
+        data.as_of,
+        [s.model_dump() for s in data.sources],
+        data.dest_account_id,
+        data.dest_analytic_id,
+    )
+
+
+@router.post("/balance-reclass", response_model=BalancedIssueOut)
+def reclass_issue(
+    data: ReclassIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "create")),
+):
+    return ops.issue_reclass(
+        db,
+        user,
+        data.as_of,
+        [s.model_dump() for s in data.sources],
+        data.dest_account_id,
+        data.dest_analytic_id,
+        data.description,
+    )

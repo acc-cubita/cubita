@@ -376,3 +376,64 @@ class AnalyticUpdateIn(BaseModel):
         if v is not None and not v.strip():
             raise ValueError("این فیلد نمی‌تواند خالی باشد")
         return v.strip() if v is not None else v
+
+
+# ─────────────── اصلاحِ طبقه‌بندیِ مانده ───────────────
+
+
+class ReclassSourceIn(BaseModel):
+    """یک ترکیبِ (حساب، تفصیلی) که مانده‌اش منتقل می‌شود."""
+
+    account_id: UUID
+    analytic_id: UUID | None = None
+
+
+class ReclassSourceRowOut(BaseModel):
+    """ترکیبی که در این تاریخ مانده دارد — سیاهه‌ای که کاربر از آن انتخاب می‌کند."""
+
+    account_id: UUID
+    account_code: str
+    account_name: str
+    analytic_id: UUID | None
+    analytic_code: str | None
+    analytic_name: str | None
+    balance: Decimal
+    #: نقشِ سیستمی مسدود نمی‌کند؛ فقط هشدار می‌دهد که ثبت‌های خودکارِ آینده
+    #: همچنان به همین حساب می‌آیند.
+    system_role: str | None
+
+
+class ReclassIn(BaseModel):
+    as_of: date
+    sources: list[ReclassSourceIn]
+    dest_account_id: UUID
+    dest_analytic_id: UUID | None = None
+    description: str = ""
+
+
+class ReclassItemOut(BaseModel):
+    account_id: UUID
+    account_code: str
+    account_name: str
+    analytic_id: UUID | None
+    analytic_name: str | None
+    balance: Decimal
+    source_debit: Decimal
+    source_credit: Decimal
+    dest_debit: Decimal
+    dest_credit: Decimal
+
+
+class ReclassPreviewOut(BaseModel):
+    as_of: date
+    items: list[ReclassItemOut]
+    dest_account_id: UUID
+    dest_account_code: str
+    dest_account_name: str
+    dest_analytic_id: UUID | None
+    dest_analytic_name: str | None
+    total_debit: Decimal
+    total_credit: Decimal
+    #: باید صفر باشد — اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد.
+    difference: Decimal
+    warnings: list[str] = []
