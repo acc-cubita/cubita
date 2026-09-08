@@ -64,10 +64,13 @@ jobs:
 
       - name: اجرای تست‌ها
         working-directory: backend
-        # `-p no:cacheprovider` چون کشِ pytest روی رانرِ یک‌بارمصرف بی‌فایده است،
-        # و `--timeout` تا تستی که گیر کند خودش را با traceback لو بدهد به‌جای
-        # اینکه کلِ جاب را ساکت تا سقفِ زمان ببرد.
-        run: pytest -q -p no:cacheprovider --timeout=120 --timeout-method=thread
+        # `-p no:cacheprovider` چون کشِ pytest روی رانرِ یک‌بارمصرف بی‌فایده است.
+        #
+        # `--timeout` روشِ **signal** می‌خواهد نه thread: تستی که در انتظارِ قفلِ
+        # دیتابیس بلاک شده داخلِ یک فراخوانیِ C است و thread نمی‌تواند قطعش کند —
+        # همان چیزی که در اجرای قبل ۲۳ دقیقه ساکت ماند. signal با SIGALRM آن را
+        # هم می‌شکند. (پیش‌فرضِ pytest-timeout روی یونیکس همین است.)
+        run: pytest -q -p no:cacheprovider --timeout=120
 
       - name: مهاجرت‌ها از صفر تا head اجرا می‌شوند
         # این جدا از تست‌هاست: مجموعه‌ی تست با create_all جدول می‌سازد، پس
