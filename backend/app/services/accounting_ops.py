@@ -771,15 +771,24 @@ def _temporary_count(db: Session, date_from: date_ | None, date_to: date_ | None
     return int(query.with_entities(func.count(JournalEntry.id)).scalar() or 0)
 
 
-def _permanent_balances(db: Session, as_of: date_) -> list[tuple[Account, Decimal]]:
+def _permanent_balances(
+    db: Session, as_of: date_
+) -> list[tuple[Account, UUID | None, UUID | None, Decimal]]:
     """مانده‌ی حساب‌های دائمی تا این تاریخ — بدونِ خودِ حساب‌های اختتامیه/افتتاحیه.
 
     آن دو حساب واسط‌اند و جمعشان در هر سندی صفر است؛ واردکردنشان در محاسبه یعنی
     اختتامیه‌ی امسال، اختتامیه‌ی پارسال را دوباره ببندد.
+
+    **گروه‌بندی روی هر سه بُعدِ ردیف است، نه فقط حساب.** «دریافتنیِ تجاری» با سه
+    مشتری سه مانده‌ی جداست؛ اگر یک‌کاسه شود، سالِ جدید با حسابی باز می‌شود که
+    مانده دارد ولی دفترِ تفصیلی‌اش خالی است — جمع درست، تفکیک غلط، و چون سند
+    ویرایشِ ردیف ندارد، برای همیشه. همان استدلالِ `fx_revaluation_preview`.
     """
     rows = (
         db.query(
             Account,
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
             func.coalesce(func.sum(JournalLine.debit), 0),
             func.coalesce(func.sum(JournalLine.credit), 0),
         )
@@ -794,33 +803,45 @@ def _permanent_balances(db: Session, as_of: date_) -> list[tuple[Account, Decima
             ),
             JournalEntry.entry_date <= as_of,
         )
-        .group_by(Account.id)
+        .group_by(Account.id, JournalLine.analytic_id, JournalLine.cost_center_id)
         .all()
     )
-    out: list[tuple[Account, Decimal]] = []
-    for account, debit, credit in rows:
+    out: list[tuple[Account, UUID | None, UUID | None, Decimal]] = []
+    for account, analytic_id, cost_center_id, debit, credit in rows:
         raw = Decimal(debit) - Decimal(credit)  # بدهکارِ خالص (مثبت = بدهکار)
         if raw != 0:
-            out.append((account, raw))
-    return sorted(out, key=lambda r: r[0].code)
+            out.append((account, analytic_id, cost_center_id, raw))
+    return sorted(out, key=lambda r: (r[0].code, str(r[1] or ""), str(r[2] or "")))
 
 
 def closing_entry_preview(db: Session, as_of: date_) -> dict:
     """سندِ اختتامیه: بستنِ همه‌ی حساب‌های دائمی در پایانِ سال."""
     balances = _permanent_balances(db, as_of)
-    rows = [
-        {
-            "account_id": a.id,
-            "account_code": a.code,
-            "account_name": a.name,
-            "account_type": a.type,
-            # اختتامیه هر حساب را *برعکسِ* مانده‌اش می‌زند تا صفر شود.
-            "debit": -raw if raw < 0 else Decimal(0),
-            "credit": raw if raw > 0 else Decimal(0),
-            "balance": raw,
-        }
-        for a, raw in balances
-    ]
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
+    rows = []
+    for a, analytic_id, cost_center_id, raw in balances:
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        center = centers.get(cost_center_id) if cost_center_id else None
+        rows.append(
+            {
+                "account_id": a.id,
+                "account_code": a.code,
+                "account_name": a.name,
+                "account_type": a.type,
+                #: بُعدها با مانده می‌آیند و روی ردیفِ سند می‌نشینند، وگرنه سالِ
+                #: جدید تفکیکِ تفصیلیِ خودش را از دست می‌دهد.
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": cost_center_id,
+                "cost_center_name": center.name if center else None,
+                # اختتامیه هر حساب را *برعکسِ* مانده‌اش می‌زند تا صفر شود.
+                "debit": -raw if raw < 0 else Decimal(0),
+                "credit": raw if raw > 0 else Decimal(0),
+                "balance": raw,
+            }
+        )
     total = sum((r["debit"] + r["credit"] for r in rows), Decimal(0))
     open_pnl = _open_pnl_total(db, as_of)
     return {
@@ -863,9 +884,16 @@ def issue_closing_entry(db: Session, user: User, as_of: date_, description: str)
     lines = [
         JournalLine(
             account_id=r["account_id"],
+            #: بُعدها عیناً از مانده‌ای که بسته می‌شود کپی می‌شوند؛ ردیفی که
+            #: دورشان بیندازد، دفترِ تفصیلیِ سالِ بعد را خالی تحویل می‌دهد.
+            analytic_id=r["analytic_id"],
+            cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=f"بستنِ {r['account_name']}",
+            description=(
+                f"بستنِ {r['account_name']}"
+                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
+            ),
         )
         for r in preview["rows"]
     ]
@@ -920,6 +948,8 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
         )
 
     accounts = {a.id: a for a in db.query(Account).all()}
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
     closing_role_ids = {
         a.id for a in accounts.values() if a.system_role == cc.CLOSING_ACCOUNT
     }
@@ -932,22 +962,32 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
             continue
         debit = Decimal(line.credit)
         credit = Decimal(line.debit)
+        analytic = analytics.get(line.analytic_id) if line.analytic_id else None
+        center = centers.get(line.cost_center_id) if line.cost_center_id else None
         rows.append(
             {
                 "account_id": account.id,
                 "account_code": account.code,
                 "account_name": account.name,
                 "account_type": account.type,
+                #: بُعدها از خودِ ردیفِ اختتامیه می‌آیند، نه از محاسبه‌ی تازه —
+                #: همان دلیلی که کلِ افتتاحیه معکوسِ اختتامیه است.
+                "analytic_id": line.analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": line.cost_center_id,
+                "cost_center_name": center.name if center else None,
                 "debit": debit,
                 "credit": credit,
                 "balance": debit - credit,
             }
         )
-    rows.sort(key=lambda r: r["account_code"])
+    rows.sort(key=lambda r: (r["account_code"], r["analytic_code"] or "", r["cost_center_name"] or ""))
     return {
         "as_of": as_of,
         "source_date": source_date,
         "rows": rows,
+        "closing_entry_id": closing.id,
         "closing_entry_number": closing.number,
         "total": sum((r["debit"] + r["credit"] for r in rows), Decimal(0)),
     }
@@ -965,6 +1005,30 @@ def issue_opening_entry(
     if not preview["rows"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سندِ اختتامیه‌ی مبنا هیچ ردیفی ندارد")
 
+    #: **اختتامیه خودش را گارد می‌کند، افتتاحیه نه.** بعد از اختتامیه همه‌ی
+    #: مانده‌ها صفرند، پس اختتامیه‌ی دوم «حسابی برای بستن نیست» می‌گیرد. ولی
+    #: افتتاحیه از *سندِ* اختتامیه ساخته می‌شود و آن سند سرِ جایش می‌ماند — پس
+    #: اجرای دوم همان را دوباره وارونه می‌کند و **هر مانده‌ی ابتدای دوره دو برابر
+    #: می‌شود**، بی‌صدا، چون سند متوازن است و هیچ گاردِ دیگری صدا نمی‌کند.
+    #:
+    #: مسدودکننده است نه هشدار: دوبرابرشدنِ خاموشِ ترازنامه همان‌قدر بنیادی است که
+    #: گاردِ «سود و زیان هنوز باز است» چند خط بالاتر.
+    existing = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.source_type == "opening_entry",
+            JournalEntry.reverses_entry_id == preview["closing_entry_id"],
+            JournalEntry.voided_at.is_(None),
+        )
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"از روی این سندِ اختتامیه قبلاً افتتاحیه صادر شده (سند شماره "
+            f"{existing.number}). برای صدورِ دوباره، اول همان را باطل کنید.",
+        )
+
     opening = get_or_create_account(
         db, cc.OPENING_ACCOUNT, code=cc.DEFAULT_CODE_BY_ROLE[cc.OPENING_ACCOUNT],
         name="حساب افتتاحیه", acc_type="equity", parent_code="3",
@@ -972,9 +1036,14 @@ def issue_opening_entry(
     lines = [
         JournalLine(
             account_id=r["account_id"],
+            analytic_id=r["analytic_id"],
+            cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=f"افتتاحِ {r['account_name']}",
+            description=(
+                f"افتتاحِ {r['account_name']}"
+                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
+            ),
         )
         for r in preview["rows"]
     ]
@@ -992,6 +1061,10 @@ def issue_opening_entry(
     entry = make_journal_entry(
         db, as_of, description.strip() or f"سند افتتاحیه {as_of}", "opening_entry", user, lines
     )
+    #: پیوندِ صریحِ افتتاحیه به اختتامیه‌اش. ستونِ تازه لازم نیست: `reverses_entry_id`
+    #: از قبل همین معنا را دارد و کامنتش می‌گوید «جمعشان همیشه صفر است» — که برای
+    #: این جفت مو‌به‌مو صادق است. گاردِ بالا هم روی همین می‌نشیند.
+    entry.reverses_entry_id = preview["closing_entry_id"]
     db.flush()
     return {
         "entry_id": entry.id,

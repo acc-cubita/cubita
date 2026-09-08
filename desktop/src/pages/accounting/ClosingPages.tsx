@@ -28,6 +28,7 @@ import {
   issueFxRevaluation,
   issueOpeningEntry,
   type ChartAccount,
+  type ClosingRow,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { CurrenciesPanel } from '../../components/CurrenciesPanel'
@@ -655,7 +656,7 @@ function EntryTotals({ rowDebit, rowCredit, label }: { rowDebit: number; rowCred
   )
 }
 
-function ClosingTable({ rows }: { rows: { account_id: string; account_code: string; account_name: string; account_type: string; debit: string; credit: string }[] }) {
+function ClosingTable({ rows }: { rows: ClosingRow[] }) {
   const pg = usePagination(rows, 20)
   return (
     <div className="table-scroll">
@@ -669,10 +670,20 @@ function ClosingTable({ rows }: { rows: { account_id: string; account_code: stri
           </tr>
         </thead>
         <tbody>
-          {pg.pageItems.map((r) => (
-            <tr key={r.account_id}>
+          {pg.pageItems.map((r) => {
+            // بُعدها ستونِ تازه نمی‌گیرند — هویتِ ردیف‌اند، پس زیرِ خودِ حساب
+            // می‌نشینند. همان الگویِ جدولِ تسعیر، تا دو جدولِ هم‌خانواده دو جور دیده نشوند.
+            const dims = [
+              r.analytic_name
+                ? `تفصیلی: ${r.analytic_code ? `${r.analytic_code} ` : ''}${r.analytic_name}`
+                : null,
+              r.cost_center_name ? `مرکز: ${r.cost_center_name}` : null,
+            ].filter(Boolean)
+            return (
+            <tr key={`${r.account_id}-${r.analytic_id ?? '—'}-${r.cost_center_id ?? '—'}`}>
               <td className="card-title" data-label="حساب">
                 <span dir="ltr">{r.account_code}</span> — {r.account_name}
+                {dims.length > 0 && <span className="field-hint">{dims.join(' · ')}</span>}
               </td>
               <td data-label="نوع">{TYPE_LABELS[r.account_type] ?? r.account_type}</td>
               <td data-label="بدهکار" className="num">
@@ -682,7 +693,8 @@ function ClosingTable({ rows }: { rows: { account_id: string; account_code: stri
                 {faAmount(r.credit)}
               </td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
       <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />

@@ -4649,6 +4649,12 @@ export interface ClosingRow {
   account_code: string
   account_name: string
   account_type: string
+  /** بُعدهای مانده — مانده‌ی یک حساب با سه تفصیلی سه ردیفِ جداست. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  cost_center_id: string | null
+  cost_center_name: string | null
   debit: string
   credit: string
   balance: string
@@ -4673,6 +4679,7 @@ export const fetchOpeningPreview = (token: string, asOf: string, sourceDate: str
     as_of: string
     source_date: string
     rows: ClosingRow[]
+    closing_entry_id: string
     closing_entry_number: number | null
     total: string
   }>(token, `/api/accounting/opening-entry/preview?as_of=${asOf}&source_date=${sourceDate}`)
