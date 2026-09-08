@@ -395,6 +395,7 @@ def render_journal_entry(
     status: str,
     description: str,
     lines: list[dict],
+    source_label: str = "",
     voided_at=None,
     void_reason: str = "",
 ) -> str:
@@ -424,6 +425,12 @@ def render_journal_entry(
         meta.insert(1, f"<div class='chip'><span>عطف</span> &nbsp;<strong>{fa_number(atf_number)}</strong></div>")
     if sub_number:
         meta.insert(2, f"<div class='chip'><span>فرعی</span> &nbsp;<strong>{escape(sub_number)}</strong></div>")
+    #: منبع روی خودِ برگه می‌آید: برگه‌ی چاپ‌شده از سیستم جدا می‌شود و
+    #: خواننده نمی‌تواند برگردد بپرسد این سند از کجا آمده.
+    if source_label:
+        meta.append(
+            f"<div class='chip'><span>منبع</span> &nbsp;<strong>{escape(source_label)}</strong></div>"
+        )
 
     note = (description or "").strip()
     notes_block = (

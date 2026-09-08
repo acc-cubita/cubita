@@ -49,6 +49,7 @@ import {
   faAmount,
   faInt,
   sourceLabel,
+  sourceText,
   useAsync,
   useRange,
   type Msg,
@@ -171,7 +172,7 @@ function EntryTable({
               </td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
+              <td data-label="منشأ">{sourceText(e)}</td>
               <td data-label="وضعیت">
                 <StatusChip status={e.status} voided={!!e.voided_at} />
               </td>
@@ -378,7 +379,7 @@ function CartableTable({
               <td data-label="فرعی">{e.sub_number || '—'}</td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
+              <td data-label="منشأ">{sourceText(e)}</td>
               <td data-label="حساب‌ها" className="acc-accounts">
                 {e.accounts.slice(0, 3).join('، ')}
                 {e.accounts.length > 3 ? ' …' : ''}

@@ -18,8 +18,9 @@ from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
-from app.schemas.accounting import JournalEntryIn, JournalEntryOut, SubNumberIn
+from app.schemas.accounting import EntrySourceOut, JournalEntryIn, JournalEntryOut, SubNumberIn
 from app.schemas.voiding import VoidIn, VoidOut
+from app.services import entry_source
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
@@ -105,7 +106,18 @@ def list_entries(
         [JournalEntry.entry_date, JournalEntry.number],
         params,
     )
-    return Page(items=items, next_cursor=next_cursor)
+
+    #: منبعِ هر سند **دسته‌ای** حل می‌شود: یک کوئری به‌ازای هر *نوعِ* منبع، نه
+    #: به‌ازای هر سند. این تنها جایی است که کاربر سند را می‌بیند (روتر
+    #: `GET /{entry_id}` ندارد)، پس اگر این‌جا نیاید هیچ‌جا دیده نمی‌شود.
+    sources = entry_source.resolve_sources(db, items)
+    rows = []
+    for entry in items:
+        row = JournalEntryOut.model_validate(entry)
+        found = sources.get(entry.id)
+        row.source = EntrySourceOut(**found) if found is not None else None
+        rows.append(row)
+    return Page(items=rows, next_cursor=next_cursor)
 
 
 @router.post("", response_model=JournalEntryOut, status_code=201)
@@ -259,6 +271,7 @@ def print_journal_entry(
         entry_date=entry.entry_date,
         status=entry.status,
         description=entry.description,
+        source_label=entry_source.describe(entry_source.resolve_source(db, entry)),
         lines=[
             {
                 "seq": line.seq,

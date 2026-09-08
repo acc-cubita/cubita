@@ -181,6 +181,17 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     # منشأ سند: مثلاً "sales_invoice" / "manual" / "payroll" برای ردیابی این‌که کدام ماژول این سند را خودکار ساخته
     source_type: Mapped[str] = mapped_column(String(50), default="manual")
+
+    #: **استفاده نمی‌شود.** برای ردیابیِ معکوس ساخته شده بود ولی هیچ‌کدام از
+    #: سی‌وهفت نقطه‌ی ساختِ سند پُرش نکردند، پس همیشه NULL است.
+    #:
+    #: پُرکردنش هم راهِ درست نبود: رابطه از قبل در `journal_entry_id`ِ خودِ
+    #: ماژول‌ها ذخیره شده و این ستون دومین جای همان بود — «دو نمای یک داده»، با
+    #: امکانِ نخواندنِ آن دو با هم. جوابِ «این سند از کدام عملیات آمد؟» حالا در
+    #: `services/entry_source.py` مشتق می‌شود: `source_type` می‌گوید کدام جدول،
+    #: و آن‌جا `journal_entry_id` جواب را دارد.
+    #:
+    #: حذف نشد چون مهاجرتِ حذف برای ستونی که هیچ‌کس نمی‌خواند، ریسکِ بی‌سود است.
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
