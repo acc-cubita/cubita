@@ -434,6 +434,16 @@ export interface JournalEntryLine {
   tracking_date?: string | null
 }
 
+/** عملیاتی که سند از آن آمده. `id`/`number` فقط وقتی می‌آیند که منبع یکتا باشد —
+ *  حقوق و دستمزد یک سند برای کلِ دوره می‌زند و ده‌ها فیش به همان اشاره می‌کنند. */
+export interface EntrySource {
+  source_type: string
+  model: string
+  count: number
+  id: string | null
+  number: string | null
+}
+
 export interface JournalEntryRecord {
   id: string
   number: number | null
@@ -444,6 +454,8 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  /** null = سند عملیاتِ بیرونی ندارد (دستی، تسعیر، اختتامیه). */
+  source: EntrySource | null
   /** `temporary` | `permanent` — سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود. */
   status: string
   finalized_at?: string | null

@@ -41,7 +41,7 @@ import {
   fa,
   faAmount,
   faInt,
-  sourceLabel,
+  sourceText,
   useAsync,
   useRange,
 } from './kit'
@@ -686,7 +686,7 @@ function DaybookCard({
             <h4 className="acc-day-head">
               سند {fa(e.number ?? 0)} — {formatJalali(e.entry_date)}
               <span>
-                <StatusChip status={e.status} voided={!!e.voided_at} /> {sourceLabel(e.source_type)}
+                <StatusChip status={e.status} voided={!!e.voided_at} /> {sourceText(e)}
               </span>
             </h4>
             {e.description && <p className="hint">{e.description}</p>}
