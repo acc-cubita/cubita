@@ -4,13 +4,25 @@ name: CI
 # خودکار اجرا نشوند، تستی هستند که به‌مرور می‌پوسند و کسی نمی‌فهمد کِی از کار افتادند.
 
 on:
+  # عمداً فقط `master` روی push. تا امروز `["**"]` بود و در کنارِ `pull_request`
+  # یعنی هر پوش روی شاخه‌ی PR‌دار **دو اجرا** می‌ساخت — دو برابرِ فشار روی صف،
+  # بدونِ یک ذره اطلاعاتِ بیشتر.
   push:
-    branches: ["**"]
+    branches: [master]
   pull_request:
+
+# اجرای قدیمیِ همان شاخه با پوشِ تازه لغو می‌شود. بدونِ این، پنج پوشِ پشتِ‌هم یعنی
+# پنج اجرای موازی که همه‌شان جز آخری بی‌فایده‌اند و اسلاتِ همزمانی را می‌گیرند.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # بدونِ سقفِ زمان، جابِ هنگ‌کرده **تا شش ساعت** (پیش‌فرضِ GitHub) اسلات را
+    # نگه می‌دارد و کلِ صف پشتش می‌ماند — دقیقاً همان چیزی که اتفاق افتاد.
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -52,7 +64,10 @@ jobs:
 
       - name: اجرای تست‌ها
         working-directory: backend
-        run: pytest -q
+        # `-p no:cacheprovider` چون کشِ pytest روی رانرِ یک‌بارمصرف بی‌فایده است،
+        # و `--timeout` تا تستی که گیر کند خودش را با traceback لو بدهد به‌جای
+        # اینکه کلِ جاب را ساکت تا سقفِ زمان ببرد.
+        run: pytest -q -p no:cacheprovider --timeout=120 --timeout-method=thread
 
       - name: مهاجرت‌ها از صفر تا head اجرا می‌شوند
         # این جدا از تست‌هاست: مجموعه‌ی تست با create_all جدول می‌سازد، پس
@@ -75,6 +90,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
