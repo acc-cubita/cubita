@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Save,
   ScrollText,
+  Share2,
   Search,
   Trash2,
   Undo2,
@@ -332,6 +333,12 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
     () => (checks.data ?? []).filter((c) => c.type === 'receivable' && c.status === 'deposited'),
     [checks.data],
   )
+  //: چکی که به تأمین‌کننده داده‌ایم. تا امروز هیچ صفحه‌ای نشانش نمی‌داد — بک‌اند
+  //: خرج‌کردن را می‌پذیرفت ولی راهی برای رسیدن به آن در رابط نبود.
+  const endorsed = useMemo(
+    () => (checks.data ?? []).filter((c) => c.type === 'receivable' && c.status === 'endorsed'),
+    [checks.data],
+  )
 
   const done = (m: Msg) => {
     setMsg(m)
@@ -342,16 +349,17 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
     <OpsPage
       icon={ScrollText}
       title="عملیات بانکی چک دریافتنی"
-      description="چکی که از مشتری گرفته‌اید: واگذاری به بانک، و بعد وصول یا برگشت."
+      description="چکی که از مشتری گرفته‌اید: واگذاری به بانک تا وصول شود، یا خرج کردنش بابتِ بدهیِ خودتان. هر دو راهِ بازگشت دارند."
       head={
         <div className="cc-head">
           <div className="cc-summary">
             <Metric icon={<ScrollText size={14} />} label="نزدِ ما" value={faInt(inHand.length)} hint="آماده‌ی واگذاری" />
             <Metric icon={<Landmark size={14} />} label="نزدِ بانک" value={faInt(deposited.length)} tone="out" hint="در انتظارِ وصول" />
+            <Metric icon={<Share2 size={14} />} label="خرج‌شده" value={faInt(endorsed.length)} hint="نزدِ طرفِ دیگر" />
             <Metric
               icon={<CheckCircle2 size={14} />}
               label="جمعِ در جریان"
-              value={fa([...inHand, ...deposited].reduce((s, c) => s + Number(c.amount), 0))}
+              value={fa([...inHand, ...deposited, ...endorsed].reduce((s, c) => s + Number(c.amount), 0))}
               tone="in"
             />
           </div>
@@ -371,7 +379,7 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
       <SectionCard
         icon={ScrollText}
         title="نزدِ ما — آماده‌ی واگذاری"
-        description="چک را به یکی از حساب‌های بانکی واگذار کنید تا در سررسید وصول شود."
+        description="چک را به بانک واگذار کنید تا در سررسید وصول شود، یا همان برگ را بابتِ بدهیِ خودتان به دیگری بدهید."
         actions={
           <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
             <RefreshCw size={13} /> بازخوانی
@@ -385,7 +393,10 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
           error={checks.error}
           emptyText="چکِ دریافتنیِ نزدِ ما نیست."
           onDone={done}
-          actions={[{ key: 'deposited', label: 'واگذاری به بانک', icon: Landmark, needsBank: true }]}
+          actions={[
+            { key: 'deposited', label: 'واگذاری به بانک', icon: Landmark, needsBank: true },
+            { key: 'endorsed', label: 'خرج کردن', icon: Share2 },
+          ]}
         />
       </SectionCard>
 
@@ -400,7 +411,24 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
           actions={[
             { key: 'cleared', label: 'وصول شد', icon: CheckCircle2 },
             { key: 'bounced', label: 'برگشت خورد', icon: AlertTriangle, tone: 'danger' },
+            { key: 'in_hand', label: 'بازگشت از بانک', icon: Undo2 },
           ]}
+        />
+      </SectionCard>
+
+      <SectionCard
+        icon={Share2}
+        title="خرج‌شده‌ها — نزدِ طرفِ دیگر"
+        description="برگی که بابتِ بدهیِ خودتان به کسی داده‌اید. اگر پسش بدهد، «برگشت از خرج» را ثبت کنید تا بدهیِ شما هم دوباره باز شود."
+      >
+        <CheckActionTable
+          token={token}
+          rows={endorsed}
+          loading={checks.loading}
+          error={checks.error}
+          emptyText="چکِ خرج‌شده‌ای نیست."
+          onDone={done}
+          actions={[{ key: 'in_hand', label: 'برگشت از خرج', icon: Undo2 }]}
         />
       </SectionCard>
     </OpsPage>
@@ -436,7 +464,8 @@ export function CheckReturnPage({ token }: { token: string }) {
       <p className="hint acc-note">
         <AlertTriangle size={14} />
         استرداد با «برگشت خوردن» یکی نیست: آن‌جا بانک چک را برگشت می‌زند، این‌جا شما خودتان برگ را پس می‌دهید.
-        فقط چکِ «نزدِ ما» قابلِ استرداد است؛ چکی که به بانک واگذار شده اول باید برگردد.
+        فقط چکِ «نزدِ ما» قابلِ استرداد است. چکی که به بانک واگذار شده یا خرج شده، اول باید با
+        «بازگشت از بانک» یا «برگشت از خرج» به دستِ شما برگردد — هر دو در صفحه‌ی «عملیات بانکی چک دریافتنی».
       </p>
 
       <SectionCard

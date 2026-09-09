@@ -34,12 +34,20 @@ from app.services.common import (
 )
 from app.services.period_close import assert_period_open
 
-# چرخه‌ی مجاز وضعیت هر چک: از وضعیت فعلی، کدام وضعیت‌های بعدی مجازند
+#: گرافِ وضعیتِ چکِ دریافتنی. **هیچ حالتی نباید بن‌بست باشد** مگر واقعاً پایانِ راه
+#: باشد (`cleared`، `bounced`، `returned`).
+#:
+#: تا پیش از این `endorsed` کلید نداشت، یعنی چکی که خرج شده بود برای همیشه قفل
+#: می‌شد و «برگشت از خرج کردن» ناممکن بود. `deposited` هم راهِ بازگشت نداشت، با
+#: آن‌که کامنتِ همین‌جا و متنِ صفحه‌ی «استرداد چک» هر دو وعده‌اش را می‌دادند.
 RECEIVABLE_TRANSITIONS = {
     # `returned` = استرداد: چک را بدونِ وصول به صاحبش پس می‌دهیم. فقط از «نزدِ ما»
     # ممکن است؛ چکی که به بانک سپرده شده اول باید برگردد.
     "in_hand": {"deposited", "endorsed", "returned"},
-    "deposited": {"cleared", "bounced"},
+    # بازگشت از بانک بدونِ واخواست — بانک برگ را پس داده ولی برگشت نزده.
+    "deposited": {"cleared", "bounced", "in_hand"},
+    # برگشت از خرج کردن: گیرنده برگ را به ما پس داده.
+    "endorsed": {"in_hand"},
 }
 PAYABLE_TRANSITIONS = {
     "issued": {"cleared", "bounced"},
@@ -100,7 +108,12 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
             f"انتقال وضعیت از «{check.status}» به «{new_status}» مجاز نیست",
         )
 
-    if new_status in ("cleared", "bounced", "endorsed", "returned"):
+    # گاردِ دوره فقط برای انتقال‌هایی که واقعاً سند می‌زنند. واگذاری به بانک و
+    # بازگشت از آن اثرِ مالی ندارند، پس دوره‌ی بسته دلیلی برای مسدودکردنشان نیست.
+    makes_entry = new_status in ("cleared", "bounced", "endorsed", "returned") or (
+        new_status == "in_hand" and check.status == "endorsed"
+    )
+    if makes_entry:
         assert_period_open(db, check.due_date)
 
     journal_entry = None
@@ -171,6 +184,25 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
         journal_entry = _make_journal_entry(
             db, check.due_date, f"استرداد چک شماره {check.number} به صاحبش", "check", user, lines
         )
+
+    elif new_status == "in_hand":
+        if check.status == "endorsed":
+            # **برگشت از خرج کردن** (§۱۷) — دقیقاً معکوسِ سندِ خرج: برگ دوباره نزدِ
+            # ماست و بدهیِ ما به کسی که به او داده بودیم هم برمی‌گردد.
+            #
+            # با `bounced` یکی نیست: آن‌جا بانک واخواست کرده و چک بی‌اعتبار است،
+            # این‌جا برگ سالم است و فقط دستِ ما برگشته.
+            lines = [
+                JournalLine(account_id=get_account(db, cc.CHECKS_RECEIVABLE).id, debit=check.amount, credit=0),
+                JournalLine(account_id=get_account(db, cc.ACCOUNTS_PAYABLE).id, debit=0, credit=check.amount),
+            ]
+            journal_entry = _make_journal_entry(
+                db, check.due_date, f"برگشت از خرج کردن چک شماره {check.number}", "check", user, lines
+            )
+        else:
+            # بازگشت از بانک: خودِ واگذاری هم سندی نزده بود، پس این هم نمی‌زند.
+            # سندِ بی‌اثر دفتر را شلوغ می‌کند بی‌آنکه چیزی بگوید.
+            check.bank_account_id = None
 
     elif new_status == "endorsed":
         lines = [
