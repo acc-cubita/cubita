@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- هم‌رنگِ تمِ اپ (src/theme/index.ts). عمداً تکرار شده‌اند و نه import:
+     منابعِ اندروید به TS دسترسی ندارند. اگر تمِ برند عوض شد، اینجا هم عوض شود. -->
+<resources>
+    <color name="widget_bg">#15151A</color>
+    <color name="widget_text">#F4F4F6</color>
+    <color name="widget_muted">#9A9AA6</color>
+    <color name="widget_accent">#FFC72C</color>
+    <color name="widget_success">#34D399</color>
+    <color name="widget_danger">#F87171</color>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- متنِ ویجت. همه فارسی — قاعده‌ی ۵ در CLAUDE.md برای نیتیو هم صادق است. -->
+<resources>
+    <string name="widget_name">نبضِ کوبیتا</string>
+    <string name="widget_description">فروشِ ۳۰ روز، سود/زیانِ دوره و هشدارها روی صفحه‌ی خانه</string>
+    <string name="widget_sales_label">فروشِ ۳۰ روز</string>
+    <string name="widget_profit_label">سود/زیانِ دوره</string>
+    <string name="widget_empty_title">کوبیتا</string>
+    <string name="widget_empty_hint">برای دیدنِ آمار، وارد شوید</string>
+    <string name="widget_alerts">%1$s هشدارِ نیازِ رسیدگی</string>
+    <string name="widget_stamp_today">به‌روزرسانی: امروز %1$s</string>
+    <string name="widget_stamp_yesterday">به‌روزرسانی: دیروز %1$s</string>
+    <string name="widget_stamp_days">به‌روزرسانی: %1$s روز پیش</string>
+</resources>

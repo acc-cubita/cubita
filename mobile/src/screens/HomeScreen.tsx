@@ -2,10 +2,13 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../auth/AuthContext'
 import { fetchAlerts, fetchIncomeStatement, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
+import { readPrefs } from '../widget/prefs'
+import { buildSnapshot, writeSnapshot } from '../widget/snapshot'
 import { isApiError } from '../api/client'
 import type { AlertItem } from '../api/types'
 import { canAccess } from '../auth/access'
@@ -35,6 +38,25 @@ export function HomeScreen() {
 
   const s = summaryQ.data
   const net = plQ.data ? Number(plQ.data.net_profit) : null
+
+  // **عکسِ ویجت اینجا نوشته می‌شود و نه در لایه‌ی API.** همین صفحه است که هر سه
+  // عدد را با هم دارد؛ نوشتن از سه جای جدا یعنی ویجتی که نیمی از اعدادش از یک
+  // لحظه و نیمِ دیگرش از لحظه‌ای دیگر است.
+  useEffect(() => {
+    if (!s || !plQ.data) return
+    void (async () => {
+      const prefs = await readPrefs()
+      await writeSnapshot(
+        buildSnapshot({
+          tenant: me?.tenant_name,
+          sales30: s.last_30_with_tax,
+          netProfit: plQ.data.net_profit,
+          alerts: alertsQ.data?.total,
+          showAmounts: prefs.showAmounts,
+        }),
+      )
+    })()
+  }, [s, plQ.data, alertsQ.data?.total, me?.tenant_name])
   const err = [summaryQ.error, dashQ.error, alertsQ.error].find(Boolean)
 
   return (

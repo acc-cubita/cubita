@@ -53,6 +53,8 @@
         }
       ],
       "./plugins/withOptionalCamera",
+      "./plugins/withHomeWidget",
+      "./plugins/withArmOnlyAbis",
       [
         "expo-splash-screen",
         {

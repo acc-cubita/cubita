@@ -8,6 +8,7 @@ import { getFcmToken } from '../push/notifications'
 import type { Me } from '../api/types'
 import { clearCache } from '../offline/persist'
 import { clearDrafts } from '../stock/countDraft'
+import { clearSnapshot } from '../widget/snapshot'
 
 const ACCESS_KEY = 'cubita.access'
 const REFRESH_KEY = 'cubita.refresh'
@@ -60,6 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearCache()
     // شمارشِ انبارگردانیِ ثبت‌نشده هم روی گوشیِ مشترک نباید برای کاربرِ بعدی بماند.
     clearDrafts()
+    // و ویجتِ صفحه‌ی خانه — که **بیرونِ اپ** است و هیچ قفلی جلویش را نمی‌گیرد.
+    // بدونِ این، گوشیِ فروخته‌شده یا دستِ همکار، گردشِ مالیِ کسب‌وکارِ قبلی را
+    // روی صفحه‌ی خانه نگه می‌دارد.
+    void clearSnapshot()
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_KEY),
       SecureStore.deleteItemAsync(REFRESH_KEY),
