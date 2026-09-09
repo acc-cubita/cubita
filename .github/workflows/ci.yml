@@ -154,6 +154,9 @@ jobs:
 
   mobile:
     runs-on: ubuntu-latest
+    # همان دلیلِ دو jobِ بالا: jobِ هنگ‌کرده بدونِ سقف تا شش ساعت اسلات را
+    # نگه می‌دارد و صف پشتش می‌ماند.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: mobile
