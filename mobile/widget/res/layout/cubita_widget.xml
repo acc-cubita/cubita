@@ -81,23 +81,23 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- **وزن روی همین TextView است و نه یک فاصله‌گیرِ جدا.** RemoteViews یک
+         layout معمولی نیست: فقط فهرستِ محدودی از کلاس‌های view را می‌پذیرد و
+         `<View>`ِ ساده در آن نیست. یک بار امتحان شد و لانچر «Can't load widget»
+         داد — بدونِ استثنا، فقط یک `W AppWidgetHostView: Error inflating
+         RemoteViews` در لاگ. پس فضای آزاد را همین سطر می‌بلعد و زمانِ
+         به‌روزرسانی ته‌نشین می‌شود. -->
     <TextView
         android:id="@+id/widget_alerts"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="8dp"
+        android:gravity="top"
         android:textColor="@color/widget_accent"
         android:textSize="12sp"
         android:maxLines="1"
         android:ellipsize="end" />
-
-    <!-- فاصله‌گیر: زمانِ به‌روزرسانی را ته‌نشین می‌کند. بدونِ این، در ویجتِ ۴×۲
-         محتوا بالا جمع می‌شد و نیمه‌ی پایین خالی می‌ماند — روی کد پیدا نبود،
-         روی صفحه‌ی خانه بود. -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
 
     <TextView
         android:id="@+id/widget_stamp"

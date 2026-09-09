@@ -6,7 +6,7 @@
  * نوشته شدند، هیچ صفحه‌ای صدایشان نزد، و ماه‌ها کسی نفهمید — یعنی اپ برای همه‌ی
  * نقش‌ها یک منو نشان می‌داد در حالی که کدِ نقش‌محوری‌اش «آماده» به‌نظر می‌رسید.
  *
- * چهار قاعده، عمداً کم: چیزی که خطای اشتباه بدهد را همه یاد می‌گیرند نادیده بگیرند.
+ * پنج قاعده، عمداً کم: چیزی که خطای اشتباه بدهد را همه یاد می‌گیرند نادیده بگیرند.
  *
  * اجرا: node scripts/audit-mobile.mjs
  */
@@ -152,11 +152,58 @@ function fixedTextHeights() {
   return problems
 }
 
+/**
+ * R5 — کلاس‌های غیرمجاز در چیدمانِ ویجت.
+ *
+ * **چرا این قاعده لازم شد:** `RemoteViews` یک layout معمولی نیست. لانچر آن را در
+ * پروسه‌ی خودش باد می‌کند و فقط فهرستِ محدودی از کلاس‌ها را می‌پذیرد (آن‌هایی که
+ * `@RemoteView` دارند). یک `<View>`ِ ساده به‌عنوان فاصله‌گیر اضافه شد و کلِ ویجت
+ * تبدیل شد به کارتِ سفیدِ «Can't load widget».
+ *
+ * و بدترین بخشش حالتِ شکست است: **نه استثنا، نه کرش، نه ردِ پشته‌ای که به فایل
+ * اشاره کند** — فقط یک خطِ `W AppWidgetHostView: Error inflating RemoteViews` در
+ * logcat. tsc نمی‌گیردش، jest نمی‌گیردش، بیلد سبز است و APK ساخته می‌شود.
+ * تنها راهِ فهمیدنش نگاه‌کردن به صفحه‌ی خانه است.
+ */
+const REMOTE_VIEWS_ALLOWED = new Set([
+  'FrameLayout', 'LinearLayout', 'RelativeLayout', 'GridLayout',
+  'AnalogClock', 'Button', 'Chronometer', 'ImageButton', 'ImageView',
+  'ProgressBar', 'TextView', 'ViewFlipper', 'ListView', 'GridView',
+  'StackView', 'AdapterViewFlipper', 'ViewStub',
+])
+
+function widgetLayoutViews() {
+  const dir = path.join(ROOT, 'widget/res/layout')
+  if (!fs.existsSync(dir)) return []
+  const found = []
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.xml')) continue
+    const file = path.join(dir, name)
+    const lines = fs.readFileSync(file, 'utf8').split('\n')
+    lines.forEach((line, i) => {
+      const m = line.match(/^\s*<([A-Za-z][A-Za-z0-9_.]*)/)
+      if (!m) return
+      const tag = m[1]
+      if (tag.startsWith('!') || tag === 'merge' || tag === 'requestFocus') return
+      const cls = tag.includes('.') ? tag.split('.').pop() : tag
+      if (!REMOTE_VIEWS_ALLOWED.has(cls)) {
+        found.push({
+          file: path.relative(ROOT, file).replace(/\\/g, '/'),
+          line: i + 1,
+          msg: `«${tag}» در RemoteViews مجاز نیست — ویجت «Can't load widget» می‌شود`,
+        })
+      }
+    })
+  }
+  return found
+}
+
 const RULES = [
   { id: 'R1', level: 'error', title: 'کدِ مرده', check: deadFiles },
   { id: 'R2', level: 'warn', title: 'exportِ استفاده‌نشده', check: unusedExports },
   { id: 'R3', level: 'error', title: 'ارقامِ فارسی', check: rawNumbers },
   { id: 'R4', level: 'error', title: 'ارتفاعِ ثابتِ کادرِ متن', check: fixedTextHeights },
+  { id: 'R5', level: 'error', title: 'کلاسِ غیرمجاز در چیدمانِ ویجت', check: widgetLayoutViews },
 ]
 
 console.log(`ممیزِ موبایل — ${sourceFiles().length} فایلِ منبع\n`)
