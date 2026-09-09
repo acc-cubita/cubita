@@ -24,6 +24,7 @@ export function AppText({
   weight,
   style,
   numberOfLines,
+  maxFontSizeMultiplier,
 }: {
   children: ReactNode
   variant?: 'display' | 'title' | 'heading' | 'body' | 'label' | 'caption'
@@ -31,11 +32,14 @@ export function AppText({
   weight?: keyof typeof font.weight
   style?: object
   numberOfLines?: number
+  /** سقفِ بزرگ‌نماییِ فونتِ سیستم. ← `font.maxScale` در تم. */
+  maxFontSizeMultiplier?: number
 }) {
   const v = TEXT_VARIANTS[variant]
   return (
     <Text
       numberOfLines={numberOfLines}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
       style={[
         { color: color ?? colors.text, fontSize: v.size, fontWeight: weight ? font.weight[weight] : v.weight },
         style,
@@ -76,6 +80,9 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       android_ripple={{ color: isPrimary ? 'rgba(0,0,0,0.15)' : colors.surfaceAlt }}
       style={({ pressed }) => [
         styles.btn,
@@ -127,7 +134,9 @@ export function Badge({ count }: { count: number }) {
   if (count <= 0) return null
   return (
     <View style={styles.badge}>
-      <Text style={styles.badgeText}>{count > 99 ? '۹۹+' : count.toLocaleString('fa-IR')}</Text>
+      <Text style={styles.badgeText} maxFontSizeMultiplier={font.maxScale.dense}>
+        {count > 99 ? '۹۹+' : count.toLocaleString('fa-IR')}
+      </Text>
     </View>
   )
 }
@@ -145,7 +154,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   btn: {
-    height: 52,
+    // `minHeight` و نه `height`: با فونتِ بزرگِ سیستم متنِ دکمه از کادر بیرون
+    // می‌زند و از پایین بریده می‌شود. کف را نگه می‌داریم، سقف را نه.
+    minHeight: 52,
+    paddingVertical: spacing.sm,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -158,14 +170,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
-    height: 52,
+    minHeight: 52,
+    paddingVertical: spacing.sm,
     color: colors.text,
     fontSize: font.size.md,
     textAlign: 'right',
   },
   badge: {
     minWidth: 20,
-    height: 20,
+    minHeight: 20,
     paddingHorizontal: 6,
     borderRadius: radius.pill,
     backgroundColor: colors.danger,

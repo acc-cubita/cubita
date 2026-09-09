@@ -12,7 +12,7 @@ import { canAccess } from '../auth/access'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card } from '../ui'
 import { MonthlyTrendChart } from '../ui/MonthlyTrendChart'
-import { colors, faMoney, faNum, radius, spacing } from '../theme'
+import { colors, faMoney, faNum, font, radius, spacing } from '../theme'
 
 // داشبوردِ مدیر: شاخص‌ها + روندِ فروش + هشدارها + پرفروش‌ها. آنلاین‌محور با react-query.
 export function HomeScreen() {
@@ -206,7 +206,7 @@ function AlertsCard({ items, total, onPress }: { items: AlertItem[]; total: numb
             <AppText variant="heading">هشدارها</AppText>
             {total > 0 ? (
               <View style={styles.alertCount}>
-                <AppText variant="label" color={colors.onAccent}>
+                <AppText variant="label" color={colors.onAccent} maxFontSizeMultiplier={font.maxScale.dense}>
                   {faNum(total)}
                 </AppText>
               </View>
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   alertCount: {
     minWidth: 24,
-    height: 22,
+    minHeight: 22,
     paddingHorizontal: 8,
     borderRadius: 999,
     backgroundColor: colors.accent,

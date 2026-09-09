@@ -1,4 +1,5 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { Text } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
@@ -56,11 +57,22 @@ export function MainTabs() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 62 + insets.bottom,
+          minHeight: 62 + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontSize: font.size.xs, fontWeight: font.weight.semibold },
+        // نوارِ تب پنج ستونِ مساویِ باریک است؛ با فونتِ ۲ برابرِ سیستم برچسب‌ها
+        // «انبارگر…» و «اشخا…» می‌شدند. سقف می‌گذاریم نه خاموشی — تا ۱٫۲ همراهِ
+        // کاربر بزرگ می‌شوند، بعد از آن آیکون معنی را می‌رساند.
+        tabBarLabel: ({ color, children }) => (
+          <Text
+            numberOfLines={1}
+            maxFontSizeMultiplier={font.maxScale.tab}
+            style={{ fontSize: font.size.xs, fontWeight: font.weight.semibold, color }}
+          >
+            {children}
+          </Text>
+        ),
         tabBarIcon: ({ color, size }) => (
           <Ionicons name={ICONS[route.name] ?? 'ellipse'} size={size} color={color} />
         ),

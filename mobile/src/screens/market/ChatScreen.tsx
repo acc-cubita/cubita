@@ -109,6 +109,9 @@ export function ChatScreen() {
           <Pressable
             onPress={send}
             disabled={!text.trim() || sending}
+            accessibilityRole="button"
+            accessibilityLabel="ارسالِ پیام"
+            accessibilityState={{ disabled: !text.trim() || sending, busy: sending }}
             android_ripple={{ color: 'rgba(0,0,0,0.15)', radius: 24 }}
             style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}
           >

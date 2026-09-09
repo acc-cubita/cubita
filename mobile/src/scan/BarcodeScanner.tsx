@@ -69,6 +69,9 @@ export function BarcodeScanner({
         <View style={styles.reticle} pointerEvents="none" />
         <Pressable
           onPress={() => setTorch((t) => !t)}
+          accessibilityRole="button"
+          accessibilityLabel={torch ? 'خاموش‌کردنِ چراغ' : 'روشن‌کردنِ چراغ'}
+          accessibilityState={{ selected: torch }}
           android_ripple={{ color: colors.surfaceAlt, borderless: true }}
           style={styles.torch}
         >
@@ -112,6 +115,9 @@ export function BarcodeScanner({
           <Pressable
             onPress={submitManual}
             disabled={!manual.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="ثبتِ بارکدِ واردشده"
+            accessibilityState={{ disabled: !manual.trim() }}
             android_ripple={{ color: colors.surfaceAlt }}
             style={[styles.manualBtn, !manual.trim() && { opacity: 0.4 }]}
           >

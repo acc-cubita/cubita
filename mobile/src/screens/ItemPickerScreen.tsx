@@ -76,6 +76,8 @@ export function ItemPickerScreen() {
           <View style={styles.scannerBar}>
             <Pressable
               onPress={() => setScanning(false)}
+              accessibilityRole="button"
+              accessibilityLabel="بستنِ اسکنر"
               android_ripple={{ color: colors.surfaceAlt, borderless: true }}
               style={styles.scannerClose}
             >
@@ -155,7 +157,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.surface,
   },
-  scannerClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  scannerClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   row: {
     flexDirection: 'row',

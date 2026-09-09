@@ -57,7 +57,12 @@ export function DeliverSheet({
               <AppText variant="heading" style={{ flex: 1 }}>
                 تحویلِ سفارش #{toFaDigits(order.order_number)}
               </AppText>
-              <Pressable onPress={onCancel} android_ripple={{ color: colors.surfaceAlt, borderless: true }}>
+              <Pressable
+                onPress={onCancel}
+                accessibilityRole="button"
+                accessibilityLabel="بستن"
+                android_ripple={{ color: colors.surfaceAlt, borderless: true }}
+              >
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </Pressable>
             </View>

@@ -6,7 +6,7 @@
  * نوشته شدند، هیچ صفحه‌ای صدایشان نزد، و ماه‌ها کسی نفهمید — یعنی اپ برای همه‌ی
  * نقش‌ها یک منو نشان می‌داد در حالی که کدِ نقش‌محوری‌اش «آماده» به‌نظر می‌رسید.
  *
- * سه قاعده، عمداً کم: چیزی که خطای اشتباه بدهد را همه یاد می‌گیرند نادیده بگیرند.
+ * چهار قاعده، عمداً کم: چیزی که خطای اشتباه بدهد را همه یاد می‌گیرند نادیده بگیرند.
  *
  * اجرا: node scripts/audit-mobile.mjs
  */
@@ -117,10 +117,46 @@ function rawNumbers() {
   return problems
 }
 
+// ── R4: ارتفاعِ ثابت روی کادرِ متن ──────────────────────────────────────────
+/**
+ * `height: <عدد>` روی استایلی که متن دارد.
+ *
+ * **چرا مهم است:** اندروید اجازه می‌دهد کاربر فونتِ سیستم را تا دو برابر بزرگ کند
+ * و کاربرِ این اپ — صاحبِ کسب‌وکارِ میان‌سال — واقعاً این کار را می‌کند. کادری با
+ * ارتفاعِ ثابت رشد نمی‌کند، پس متن از پایین بریده می‌شود؛ بدونِ خطا، بدونِ کرش.
+ * روی فیلدِ شمارشِ انبارگردانی همین افتاد و عددی که سندِ تعدیلِ حسابداری از آن
+ * ساخته می‌شود ناخوانا شد.
+ *
+ * `minHeight` درست است و علامت نمی‌خورد. کادرِ **مربعیِ** آیکون (`width` برابرِ
+ * `height`) هم استثناست: آنجا ارتفاع تزئین است نه ظرفِ متن.
+ */
+function fixedTextHeights() {
+  const problems = []
+  for (const f of sourceFiles()) {
+    const text = read(f)
+    for (const m of text.matchAll(/(\w+):\s*\{([^{}]*)\}/g)) {
+      const [, name, body] = m
+      const h = body.match(/(?:^|[\s,])height:\s*(\d+)/)
+      if (!h) continue
+      const w = body.match(/(?:^|[\s,])width:\s*(\d+)/)
+      if (w && w[1] === h[1]) continue
+      if (!/color:|fontSize|textAlign|fontWeight/.test(body)) continue
+      const line = text.slice(0, m.index).split('\n').length
+      problems.push({
+        file: rel(f),
+        line,
+        msg: `«${name}» ارتفاعِ ثابتِ ${h[1]} دارد و متن — با فونتِ بزرگِ سیستم بریده می‌شود (minHeight بگذار)`,
+      })
+    }
+  }
+  return problems
+}
+
 const RULES = [
   { id: 'R1', level: 'error', title: 'کدِ مرده', check: deadFiles },
   { id: 'R2', level: 'warn', title: 'exportِ استفاده‌نشده', check: unusedExports },
   { id: 'R3', level: 'error', title: 'ارقامِ فارسی', check: rawNumbers },
+  { id: 'R4', level: 'error', title: 'ارتفاعِ ثابتِ کادرِ متن', check: fixedTextHeights },
 ]
 
 console.log(`ممیزِ موبایل — ${sourceFiles().length} فایلِ منبع\n`)

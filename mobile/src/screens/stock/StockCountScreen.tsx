@@ -222,7 +222,7 @@ export function StockCountScreen() {
           <Metric label="مغایرت‌دار" value={`${toFaDigits(totals.lines)} کالا`} />
           <Metric
             label="ارزشِ تعدیل"
-            value={`${faMoney(totals.value)} ﷼`}
+            value={`${faMoney(totals.value)} ریال`}
             tone={totals.value === 0 ? undefined : totals.value > 0 ? colors.success : colors.danger}
           />
         </View>
@@ -305,7 +305,13 @@ export function StockCountScreen() {
           <View style={{ flex: 1 }}>
             <Button label="ثبتِ نهایی" onPress={() => void confirmPost()} loading={post.isPending} />
           </View>
-          <Pressable onPress={confirmCancel} android_ripple={{ color: colors.surfaceAlt }} style={styles.cancelBtn}>
+          <Pressable
+            onPress={confirmCancel}
+            accessibilityRole="button"
+            accessibilityLabel="لغوِ جلسه‌ی انبارگردانی"
+            android_ripple={{ color: colors.surfaceAlt }}
+            style={styles.cancelBtn}
+          >
             <Ionicons name="trash-outline" size={20} color={colors.danger} />
           </Pressable>
         </View>
@@ -371,6 +377,7 @@ const CountRow = memo(function CountRow({
         onEndEditing={() => commit(text)}
         keyboardType="decimal-pad"
         selectTextOnFocus
+        accessibilityLabel={`تعدادِ شمرده‌شده‌ی ${line.item_name}`}
         style={[styles.qty, !editable && { opacity: 0.5 }]}
       />
     </View>
@@ -420,7 +427,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    height: 48,
+    minHeight: 48,
+    paddingVertical: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.accent,
   },
@@ -430,7 +438,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    height: 46,
+    minHeight: 46,
+    paddingVertical: spacing.sm,
     color: colors.text,
     textAlign: 'right',
   },
@@ -447,8 +456,13 @@ const styles = StyleSheet.create({
   },
   rowDirty: { borderColor: colors.accent },
   qty: {
-    width: 84,
-    height: 46,
+    // **کف، نه اندازه‌ی ثابت.** با فونتِ بزرگِ سیستم عددِ داخلِ این کادر از هر دو
+    // سو بریده می‌شد — و این همان فیلدی است که سندِ تعدیلِ حسابداری از رویش
+    // ساخته می‌شود. عددی که خوانده نشود از عددِ غلط بهتر نیست.
+    minWidth: 84,
+    minHeight: 46,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,

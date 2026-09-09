@@ -151,7 +151,13 @@ function ResultCard({ hit, onBump, onDismiss }: { hit: Hit; onBump: (d: number) 
         {previous !== Number(r.line.system_qty) ? ` · شمارشِ قبلی: ${faQty(previous)}` : ''}
       </AppText>
       <View style={styles.tallyRow}>
-        <Pressable onPress={() => onBump(-1)} android_ripple={{ color: colors.surfaceAlt }} style={styles.step}>
+        <Pressable
+          onPress={() => onBump(-1)}
+          accessibilityRole="button"
+          accessibilityLabel="یکی کم کن"
+          android_ripple={{ color: colors.surfaceAlt }}
+          style={styles.step}
+        >
           <Ionicons name="remove" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.tallyBox}>
@@ -162,7 +168,13 @@ function ResultCard({ hit, onBump, onDismiss }: { hit: Hit; onBump: (d: number) 
             شمرده در این نوبت
           </AppText>
         </View>
-        <Pressable onPress={() => onBump(1)} android_ripple={{ color: colors.surfaceAlt }} style={styles.step}>
+        <Pressable
+          onPress={() => onBump(1)}
+          accessibilityRole="button"
+          accessibilityLabel="یکی اضافه کن"
+          android_ripple={{ color: colors.surfaceAlt }}
+          style={styles.step}
+        >
           <Ionicons name="add" size={20} color={colors.text} />
         </Pressable>
       </View>
@@ -183,7 +195,13 @@ function Banner({
   return (
     <View style={[styles.banner, { borderColor: border }]}>
       <View style={{ flex: 1, gap: spacing.xs }}>{children}</View>
-      <Pressable onPress={onDismiss} android_ripple={{ color: colors.surfaceAlt, borderless: true }} style={styles.close}>
+      <Pressable
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="بستنِ پیام"
+        android_ripple={{ color: colors.surfaceAlt, borderless: true }}
+        style={styles.close}
+      >
         <Ionicons name="close" size={18} color={colors.textMuted} />
       </Pressable>
     </View>
@@ -204,7 +222,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: colors.surface,
   },
-  close: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  // ۴۴ و نه ۲۸: کفِ هدفِ لمسیِ اندروید ۴۸dp است و ۲۸ یعنی خطای لمس با شست —
+  // آن هم روی دکمه‌ای که تنها راهِ بستنِ پیامِ خطاست.
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   tallyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
   tallyBox: { flex: 1, alignItems: 'center' },
   step: {

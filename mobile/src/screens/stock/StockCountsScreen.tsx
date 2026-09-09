@@ -82,6 +82,9 @@ export function StockCountsScreen() {
         {canCreate ? (
           <Pressable
             onPress={() => setPicking((p) => !p)}
+            accessibilityRole="button"
+            accessibilityLabel={picking ? 'بستنِ انتخابِ انبار' : 'جلسه‌ی انبارگردانیِ تازه'}
+            accessibilityState={{ expanded: picking }}
             android_ripple={{ color: colors.surfaceAlt, borderless: true }}
             style={styles.newBtn}
           >

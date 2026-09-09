@@ -124,7 +124,13 @@ export function NewInvoiceScreen() {
               <Ionicons name="chevron-back" size={18} color={colors.textFaint} />
             </Pressable>
             {contact ? (
-              <Pressable onPress={() => setContact(null)} hitSlop={8} style={styles.clearBtn}>
+              <Pressable
+                onPress={() => setContact(null)}
+                accessibilityRole="button"
+                accessibilityLabel="حذفِ طرفِ حساب"
+                hitSlop={8}
+                style={styles.clearBtn}
+              >
                 <Ionicons name="close-circle" size={20} color={colors.textFaint} />
               </Pressable>
             ) : null}
@@ -158,7 +164,12 @@ export function NewInvoiceScreen() {
                   <AppText variant="body" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
                     {l.name}
                   </AppText>
-                  <Pressable onPress={() => removeLine(idx)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => removeLine(idx)}
+                    accessibilityRole="button"
+                    accessibilityLabel="حذفِ این ردیف"
+                    hitSlop={8}
+                  >
                     <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </Pressable>
                 </View>

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 import { AppText } from './index'
-import { colors, radius, spacing } from '../theme'
+import { colors, font, radius, spacing } from '../theme'
 
 type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'accent'
 
@@ -40,10 +40,23 @@ export function Segmented<T extends string>({
           <Pressable
             key={o.key}
             onPress={() => onChange(o.key)}
+            accessibilityRole="tab"
+            accessibilityLabel={o.label}
+            accessibilityState={{ selected: active }}
             android_ripple={{ color: colors.surfaceAlt }}
             style={[styles.seg, active && styles.segActive]}
           >
-            <AppText variant="label" color={active ? colors.onAccent : colors.textMuted} weight="bold">
+            {/* برچسب‌ها واژه‌های بی‌فاصله‌اند («مغایرت‌دار»)، پس شکسته نمی‌شوند و
+                در ستونِ یک‌سومِ خودشان جا نمی‌گیرند — با فونتِ بزرگ از کادر بیرون
+                می‌زدند. سقفِ بزرگ‌نمایی نگهشان می‌دارد، و `numberOfLines` تضمینِ
+                آخر است برای زبان‌های بلندتر. */}
+            <AppText
+              variant="label"
+              color={active ? colors.onAccent : colors.textMuted}
+              weight="bold"
+              numberOfLines={1}
+              maxFontSizeMultiplier={font.maxScale.dense}
+            >
               {o.label}
             </AppText>
           </Pressable>
@@ -62,6 +75,16 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 4,
   },
-  seg: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm },
+  // ۴۸ کفِ هدفِ لمسیِ اندروید است. پیش از این ارتفاع فقط از padding می‌آمد و
+  // روی فونتِ کوچک به ۳۰ می‌رسید — یعنی لمس با انگشتِ شست خطا می‌خورد.
+  seg: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 4,
+    borderRadius: radius.sm,
+  },
   segActive: { backgroundColor: colors.accent },
 })
