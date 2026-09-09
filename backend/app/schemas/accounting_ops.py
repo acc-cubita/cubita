@@ -62,11 +62,16 @@ class CartableOut(BaseModel):
 
 class FinalizeIn(BaseModel):
     """دستِ‌کم یکی از فیلترها لازم است — «همه‌ی اسنادِ موقتِ تاریخ» یک درخواستِ
-    خطرناکِ بی‌قصد است و باید صریح گفته شود."""
+    خطرناکِ بی‌قصد است و باید صریح گفته شود.
+
+    این جمله از روزِ اول این‌جا بود و **هیچ‌چیز اعمالش نمی‌کرد**؛ گاردش حالا در
+    `finalize_entries` است. `entry_ids` هم پیش‌فرضش `None` شد نه فهرستِ خالی، تا
+    «انتخاب نکردم» از «انتخابم خالی بود» جدا بماند — دومی خطاست.
+    """
 
     date_from: date | None = None
     date_to: date | None = None
-    entry_ids: list[UUID] = Field(default_factory=list)
+    entry_ids: list[UUID] | None = None
     source_type: str | None = None
 
 
@@ -82,6 +87,9 @@ class FinalizeOut(BaseModel):
 class RenumberIn(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
+    #: انتخابِ دستی. اگر داده شود **جای** بازه می‌نشیند نه کنارش — دو فیلترِ
+    #: هم‌زمان یعنی کاربر باید حدس بزند کدام برنده است.
+    entry_ids: list[UUID] | None = None
     start_number: int = 1
 
     @field_validator("start_number")
@@ -142,9 +150,18 @@ class FxRowOut(BaseModel):
     account_id: UUID
     account_code: str
     account_name: str
+    #: هر سه بُعدِ ردیفِ سند در ردیفِ تسعیر هم می‌مانند. `None` یعنی مانده‌ی این
+    #: گروه واقعاً بُعدی نداشته، نه اینکه محاسبه دورش انداخته باشد.
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_name: str | None = None
     currency_code: str
     fx_balance: Decimal
     rate: Decimal
+    #: تاریخِ خودِ نرخ — اگر با `as_of` یکی نباشد یعنی نرخِ روز ثبت نشده.
+    rate_date: date
     book_value: Decimal
     market_value: Decimal
     difference: Decimal
@@ -205,6 +222,13 @@ class ClosingRowOut(BaseModel):
     account_code: str
     account_name: str
     account_type: str
+    #: بُعدهای مانده. مانده‌ی یک حساب با سه تفصیلی سه ردیفِ جداست، وگرنه سالِ
+    #: جدید با حسابی باز می‌شود که مانده دارد ولی دفترِ تفصیلی‌اش خالی است.
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_name: str | None = None
     debit: Decimal
     credit: Decimal
     balance: Decimal
@@ -222,8 +246,10 @@ class OpeningPreviewOut(BaseModel):
     as_of: date
     source_date: date
     rows: list[ClosingRowOut]
-    #: شماره‌ی سندِ اختتامیه‌ای که افتتاحیه از رویش ساخته می‌شود — تا کاربر ببیند
-    #: دقیقاً کدام سند دارد وارونه می‌شود.
+    #: شناسه و شماره‌ی سندِ اختتامیه‌ای که افتتاحیه از رویش ساخته می‌شود — تا کاربر
+    #: ببیند دقیقاً کدام سند دارد وارونه می‌شود. شناسه روی `reverses_entry_id`ِ
+    #: سندِ افتتاحیه می‌نشیند و گاردِ «افتتاحیه‌ی تکراری» روی همان کار می‌کند.
+    closing_entry_id: UUID
     closing_entry_number: int | None
     total: Decimal
 
@@ -350,3 +376,64 @@ class AnalyticUpdateIn(BaseModel):
         if v is not None and not v.strip():
             raise ValueError("این فیلد نمی‌تواند خالی باشد")
         return v.strip() if v is not None else v
+
+
+# ─────────────── اصلاحِ طبقه‌بندیِ مانده ───────────────
+
+
+class ReclassSourceIn(BaseModel):
+    """یک ترکیبِ (حساب، تفصیلی) که مانده‌اش منتقل می‌شود."""
+
+    account_id: UUID
+    analytic_id: UUID | None = None
+
+
+class ReclassSourceRowOut(BaseModel):
+    """ترکیبی که در این تاریخ مانده دارد — سیاهه‌ای که کاربر از آن انتخاب می‌کند."""
+
+    account_id: UUID
+    account_code: str
+    account_name: str
+    analytic_id: UUID | None
+    analytic_code: str | None
+    analytic_name: str | None
+    balance: Decimal
+    #: نقشِ سیستمی مسدود نمی‌کند؛ فقط هشدار می‌دهد که ثبت‌های خودکارِ آینده
+    #: همچنان به همین حساب می‌آیند.
+    system_role: str | None
+
+
+class ReclassIn(BaseModel):
+    as_of: date
+    sources: list[ReclassSourceIn]
+    dest_account_id: UUID
+    dest_analytic_id: UUID | None = None
+    description: str = ""
+
+
+class ReclassItemOut(BaseModel):
+    account_id: UUID
+    account_code: str
+    account_name: str
+    analytic_id: UUID | None
+    analytic_name: str | None
+    balance: Decimal
+    source_debit: Decimal
+    source_credit: Decimal
+    dest_debit: Decimal
+    dest_credit: Decimal
+
+
+class ReclassPreviewOut(BaseModel):
+    as_of: date
+    items: list[ReclassItemOut]
+    dest_account_id: UUID
+    dest_account_code: str
+    dest_account_name: str
+    dest_analytic_id: UUID | None
+    dest_analytic_name: str | None
+    total_debit: Decimal
+    total_credit: Decimal
+    #: باید صفر باشد — اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد.
+    difference: Decimal
+    warnings: list[str] = []

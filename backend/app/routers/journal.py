@@ -3,18 +3,24 @@ from uuid import UUID
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.models.counters import DOC_JOURNAL_ENTRY
+from app.models.analytic import AnalyticAccount
+from app.models.cost_center import CostCenter
+from app.services.common import number_lines
+from app.services.printing import render_journal_entry
 from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
-from app.schemas.accounting import JournalEntryIn, JournalEntryOut, SubNumberIn
+from app.schemas.accounting import EntrySourceOut, JournalEntryIn, JournalEntryOut, SubNumberIn
 from app.schemas.voiding import VoidIn, VoidOut
+from app.services import entry_source
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
@@ -100,7 +106,18 @@ def list_entries(
         [JournalEntry.entry_date, JournalEntry.number],
         params,
     )
-    return Page(items=items, next_cursor=next_cursor)
+
+    #: منبعِ هر سند **دسته‌ای** حل می‌شود: یک کوئری به‌ازای هر *نوعِ* منبع، نه
+    #: به‌ازای هر سند. این تنها جایی است که کاربر سند را می‌بیند (روتر
+    #: `GET /{entry_id}` ندارد)، پس اگر این‌جا نیاید هیچ‌جا دیده نمی‌شود.
+    sources = entry_source.resolve_sources(db, items)
+    rows = []
+    for entry in items:
+        row = JournalEntryOut.model_validate(entry)
+        found = sources.get(entry.id)
+        row.source = EntrySourceOut(**found) if found is not None else None
+        rows.append(row)
+    return Page(items=rows, next_cursor=next_cursor)
 
 
 @router.post("", response_model=JournalEntryOut, status_code=201)
@@ -139,7 +156,7 @@ def create_entry(
         source_type="manual",
         status=data.status,
         created_by_id=user.id,
-        lines=[
+        lines=number_lines([
             JournalLine(
                 account_id=line.account_id,
                 cost_center_id=cost_center_id,
@@ -154,7 +171,7 @@ def create_entry(
                 tracking_date=line.tracking_date,
             )
             for line, analytic in zip(data.lines, line_analytics)
-        ],
+        ]),
     )
     db.add(entry)
     db.flush()
@@ -209,3 +226,68 @@ def void_entry(
     """
     reversal = void_journal_entry(db, entry_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
+
+
+@router.get("/{entry_id}/print", response_class=HTMLResponse)
+def print_journal_entry(
+    entry_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """برگه‌ی چاپیِ سند حسابداری.
+
+    مجوز «view» است نه «create»: چاپ خواندن است. همان مرزی که چاپِ فاکتور دارد.
+
+    نام‌های حساب، تفصیلی و مرکز هزینه این‌جا با یک کوئریِ دسته‌ای گرفته می‌شوند نه
+    یکی‌به‌ازای‌هر‌ردیف — سندِ بیست‌ردیفی وگرنه شصت رفت‌وبرگشت می‌زد.
+    """
+    entry = db.get(JournalEntry, entry_id)
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند یافت نشد")
+
+    accounts = {
+        a.id: a
+        for a in db.query(Account).filter(Account.id.in_({l.account_id for l in entry.lines})).all()
+    }
+    analytic_ids = {l.analytic_id for l in entry.lines if l.analytic_id}
+    analytics = (
+        {a.id: a.name for a in db.query(AnalyticAccount).filter(AnalyticAccount.id.in_(analytic_ids)).all()}
+        if analytic_ids
+        else {}
+    )
+    center_ids = {l.cost_center_id for l in entry.lines if l.cost_center_id}
+    centers = (
+        {c.id: c.name for c in db.query(CostCenter).filter(CostCenter.id.in_(center_ids)).all()}
+        if center_ids
+        else {}
+    )
+
+    html = render_journal_entry(
+        business_name=principal.membership.tenant.name,
+        number=entry.number,
+        atf_number=entry.atf_number,
+        sub_number=entry.sub_number or "",
+        entry_date=entry.entry_date,
+        status=entry.status,
+        description=entry.description,
+        source_label=entry_source.describe(entry_source.resolve_source(db, entry)),
+        lines=[
+            {
+                "seq": line.seq,
+                "account_code": accounts[line.account_id].code if line.account_id in accounts else "",
+                "account_name": accounts[line.account_id].name if line.account_id in accounts else "",
+                "analytic_name": analytics.get(line.analytic_id, ""),
+                "cost_center_name": centers.get(line.cost_center_id, ""),
+                "description": line.description,
+                "tracking_no": line.tracking_no,
+                "tracking_date": line.tracking_date,
+                "debit": line.debit,
+                "credit": line.credit,
+            }
+            for line in entry.lines
+        ],
+        voided_at=entry.voided_at,
+        void_reason=entry.void_reason,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})

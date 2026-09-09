@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   CheckCircle2,
@@ -10,6 +10,7 @@ import {
   Layers,
   ListChecks,
   Lock,
+  Printer,
   RefreshCw,
   Search,
   Trash2,
@@ -20,6 +21,7 @@ import {
   fetchRenumberPreview,
   finalizeEntries,
   mergeEntries,
+  printJournalEntry,
   renumberEntries,
   setEntrySubNumber,
   voidJournalEntry,
@@ -47,6 +49,7 @@ import {
   faAmount,
   faInt,
   sourceLabel,
+  sourceText,
   useAsync,
   useRange,
   type Msg,
@@ -112,11 +115,15 @@ function EntryTable({
   entries,
   pageSize = 20,
   onVoid,
+  onPrint,
   onEditSub,
 }: {
   entries: JournalEntryRecord[]
   pageSize?: number
   onVoid?: (e: JournalEntryRecord) => void
+  /** برگه‌ی چاپیِ سند. برخلافِ ابطال برای **هر** سندی می‌آید — خودکار و باطل هم —
+   *  چون چاپ خواندن است و سندِ باطل هم باید بتواند با نشانِ ابطالش چاپ شود. */
+  onPrint?: (e: JournalEntryRecord) => void
   /** اصلاحِ شماره فرعی. فقط سندِ موقت؛ روی دائم دکمه نمی‌آید. */
   onEditSub?: (e: JournalEntryRecord) => void
 }) {
@@ -140,7 +147,7 @@ function EntryTable({
             <th>وضعیت</th>
             <th>ردیف</th>
             <th>مبلغ</th>
-            {onVoid && <th />}
+            {(onVoid || onPrint) && <th />}
           </tr>
         </thead>
         <tbody>
@@ -165,7 +172,7 @@ function EntryTable({
               </td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
+              <td data-label="منشأ">{sourceText(e)}</td>
               <td data-label="وضعیت">
                 <StatusChip status={e.status} voided={!!e.voided_at} />
               </td>
@@ -175,10 +182,15 @@ function EntryTable({
               <td data-label="مبلغ" className="num">
                 {faAmount(total(e))}
               </td>
-              {onVoid && (
+              {(onVoid || onPrint) && (
                 <td className="acc-row-actions card-actions">
+                  {onPrint && (
+                    <button type="button" onClick={() => onPrint(e)}>
+                      <Printer size={13} /> چاپ
+                    </button>
+                  )}
                   {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
-                  {!e.voided_at && e.source_type === 'manual' && (
+                  {onVoid && !e.voided_at && e.source_type === 'manual' && (
                     <button type="button" className="danger" onClick={() => onVoid(e)}>
                       <Trash2 size={13} /> ابطال
                     </button>
@@ -367,7 +379,7 @@ function CartableTable({
               <td data-label="فرعی">{e.sub_number || '—'}</td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
               <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceLabel(e.source_type)}</td>
+              <td data-label="منشأ">{sourceText(e)}</td>
               <td data-label="حساب‌ها" className="acc-accounts">
                 {e.accounts.slice(0, 3).join('، ')}
                 {e.accounts.length > 3 ? ' …' : ''}
@@ -489,24 +501,43 @@ export function RenumberEntriesPage({ token }: { token: string }) {
   const [msg, setMsg] = useState<Msg>(null)
   const startNumber = Math.max(1, Number(start) || 1)
 
+  //: انتخابِ دستی. خالی یعنی «کلِ بازه» — همان رفتارِ قبلی، دست‌نخورده.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   const preview = useAsync(
     () => fetchRenumberPreview(token, range.from, range.to, startNumber),
     [token, range.from, range.to, startNumber],
   )
 
+  //: با عوض‌شدنِ بازه انتخاب پاک می‌شود. وگرنه شناسه‌هایی که دیگر در پیش‌نمایش
+  //: نیستند در انتخاب می‌ماندند و کاربر روی چیزی اعمال می‌کرد که نمی‌دید.
+  useEffect(() => setPicked(new Set()), [range.from, range.to])
+
   async function run() {
+    const manual = picked.size > 0
     if (
       !window.confirm(
-        `شماره‌ی ${preview.data?.count ?? 0} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
+        `شماره‌ی ${manual ? picked.size : (preview.data?.count ?? 0)} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
       )
     )
       return
     try {
+      //: انتخابِ دستی **جای** بازه می‌نشیند نه کنارش — سرور هم همین‌طور رفتار
+      //: می‌کند، پس فرستادنِ هر دو یعنی کاربر باید حدس بزند کدام برنده است.
       const out = await renumberEntries(token, {
-        date_from: range.from,
-        date_to: range.to,
+        date_from: manual ? null : range.from,
+        date_to: manual ? null : range.to,
+        entry_ids: manual ? [...picked] : null,
         start_number: startNumber,
       })
+      setPicked(new Set())
       setMsg({
         text: `${faInt(out.changed_count)} سند شماره‌ی تازه گرفت (${fa(out.first_number)} تا ${fa(out.last_number)}).`,
         kind: 'ok',
@@ -589,6 +620,7 @@ export function RenumberEntriesPage({ token }: { token: string }) {
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
+                  <th />
                   <th>تاریخ</th>
                   <th>شرح</th>
                   <th>وضعیت</th>
@@ -602,6 +634,13 @@ export function RenumberEntriesPage({ token }: { token: string }) {
               <tbody>
                 {(data?.rows ?? []).map((r) => (
                   <tr key={r.id} className={r.changed ? 'acc-row--changed' : ''}>
+                    <td data-label="انتخاب">
+                      <input
+                        type="checkbox"
+                        checked={picked.has(r.id)}
+                        onChange={() => togglePick(r.id)}
+                      />
+                    </td>
                     <td className="card-title" data-label="تاریخ">
                       {formatJalali(r.entry_date)}
                     </td>
@@ -854,6 +893,14 @@ export function EntryListPage({ token }: { token: string }) {
     }
   }
 
+  async function handlePrint(entry: JournalEntryRecord) {
+    try {
+      await printJournalEntry(token, entry.id)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
   return (
     <OpsPage
       icon={FileStack}
@@ -906,7 +953,7 @@ export function EntryListPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="سندی با این شرایط پیدا نشد."
         >
-          <EntryTable entries={rows} onVoid={handleVoid} onEditSub={handleEditSub} />
+          <EntryTable entries={rows} onVoid={handleVoid} onPrint={handlePrint} onEditSub={handleEditSub} />
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

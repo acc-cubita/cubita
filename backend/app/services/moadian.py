@@ -33,7 +33,12 @@ from sqlalchemy.orm import Session
 
 from app.models.inventory import Contact
 from app.models.invoices import SalesInvoice
-from app.models.moadian import MoadianSettings, MoadianSubmission
+from app.models.moadian import (
+    BUILTIN_UNIT_CODES,
+    MoadianSettings,
+    MoadianSubmission,
+    MoadianUnitMap,
+)
 from app.models.user import User
 
 #: آدرس‌های پایه‌ی سامانه. با `base_url_override` قابلِ بازنویسی‌اند.
@@ -271,6 +276,100 @@ def _resolve_stuff_id(item, settings: MoadianSettings) -> str:
     return code
 
 
+def unit_codes(db: Session) -> dict[str, str]:
+    """نگاشتِ واحدِ این کسب‌وکار، با نگاشتِ درون‌کد به‌عنوان پایه.
+
+    ردیفِ کاربر بر پایه **مقدم** است: اگر کسی «عدد» را عمداً به کدِ دیگری نگاشت
+    کند، حرفِ او خوانده می‌شود نه پیش‌فرضِ ما.
+    """
+    mapping = dict(BUILTIN_UNIT_CODES)
+    for row in db.query(MoadianUnitMap).all():
+        mapping[(row.unit or "").strip()] = (row.code or "").strip()
+    return mapping
+
+
+def resolve_unit_code(unit: str | None, mapping: dict[str, str]) -> str:
+    """کدِ واحدِ یک ردیف. رشته‌ی خالی یعنی نگاشت نشده — و ارسال نباید انجام شود."""
+    return mapping.get((unit or "").strip(), "")
+
+
+def list_unit_maps(db: Session) -> list[MoadianUnitMap]:
+    return db.query(MoadianUnitMap).order_by(MoadianUnitMap.unit).all()
+
+
+def upsert_unit_map(db: Session, unit: str, code: str, user: User) -> MoadianUnitMap:
+    """نگاشتِ یک واحد. همان واحد دوباره = به‌روزرسانی، نه ردیفِ تکراری."""
+    unit = (unit or "").strip()
+    code = (code or "").strip()
+    if not unit:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "واحد نمی‌تواند خالی باشد")
+    if not code:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کدِ واحد نمی‌تواند خالی باشد")
+
+    row = db.query(MoadianUnitMap).filter(MoadianUnitMap.unit == unit).first()
+    if row is None:
+        row = MoadianUnitMap(unit=unit, code=code, created_by_id=user.id)
+        db.add(row)
+    else:
+        row.code = code
+    db.flush()
+    db.refresh(row)
+    return row
+
+
+def delete_unit_map(db: Session, map_id: UUID) -> None:
+    row = db.get(MoadianUnitMap, map_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "نگاشت یافت نشد")
+    db.delete(row)
+    db.flush()
+
+
+def unmapped_units(db: Session) -> list[str]:
+    """واحدهایی که روی کالاهای فعال به کار رفته‌اند ولی کدِ سامانه ندارند.
+
+    مبنا **کالاهای موجود** است نه فاکتورها: کاربر باید بتواند نگاشت را یک‌بار
+    کامل کند، نه اینکه با هر فاکتورِ تازه یک واحدِ جدید کشف شود.
+    """
+    from app.models.inventory import Item
+
+    mapping = unit_codes(db)
+    units = {(u or "").strip() for (u,) in db.query(Item.unit).filter(Item.is_active.is_(True)).all()}
+    return sorted(u for u in units if u and not mapping.get(u))
+
+
+def _assert_unit_codes(invoice: SalesInvoice, mapping: dict[str, str]) -> None:
+    """هر ردیف باید واحدِ نگاشت‌شده داشته باشد.
+
+    **پیش از مصرفِ سریال** صدا زده می‌شود، به همان دلیلِ `_assert_stuff_ids`: اگر
+    بسته ساخته نمی‌شود، سریال هم نباید هدر برود.
+
+    تا پیش از این، کدِ واحد ثابت «۱۶۴» بود و کالای کیلوگرمی هم «عدد» اظهار می‌شد.
+    """
+    for line in invoice.lines:
+        unit = (line.item.unit if line.item else "") or ""
+        if not resolve_unit_code(unit, mapping):
+            name = (line.item.name if line.item else "") or "کالا"
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"واحدِ «{unit.strip() or '—'}» (کالای «{name}») به کدِ واحدِ سامانه نگاشت "
+                "نشده است؛ آن را در تنظیماتِ مؤدیان ← نگاشتِ واحدها وارد کنید.",
+            )
+
+
+def _assert_buyer_identity(contact: Contact | None) -> None:
+    """خریداری که شماره اقتصادی دارد، صورتحسابِ «نوعِ اول» می‌گیرد و شناسه‌ی ملی‌اش
+    در فیلدِ `bid` می‌رود. بدونِ آن، `bid` خالی ارسال می‌شد و سامانه ردش می‌کرد."""
+    if contact is None:
+        return
+    if (contact.economic_code or "").strip() and not (contact.national_id or "").strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"طرف حسابِ «{contact.name}» شماره اقتصادی دارد ولی کد/شناسه‌ی ملی ندارد؛ "
+            "صورتحسابِ نوعِ اول بدونِ آن پذیرفته نمی‌شود. در صفحه‌ی اشخاص واردش کنید.",
+        )
+
+
 def _assert_stuff_ids(invoice: SalesInvoice, settings: MoadianSettings) -> None:
     """پیش از مصرفِ سریال: هر ردیف باید شناسه‌ی کالا/خدمتِ ۱۳رقمیِ معتبر داشته باشد؛
     وگرنه بسته ساخته نمی‌شود و سریال هدر نمی‌رود — با پیامی که می‌گوید کدام کالا کم دارد."""
@@ -286,13 +385,18 @@ def _assert_stuff_ids(invoice: SalesInvoice, settings: MoadianSettings) -> None:
 
 
 def build_invoice_packet(
-    invoice: SalesInvoice, settings: MoadianSettings, tax_id: str, contact: Contact | None = None
+    invoice: SalesInvoice,
+    settings: MoadianSettings,
+    tax_id: str,
+    contact: Contact | None = None,
+    unit_map: dict[str, str] | None = None,
 ) -> dict:
     """بسته‌ی صورتحساب: `{header, body[], payments[]}` مطابقِ نمونه‌ی اسپک.
 
     الگوی اول (فروش)، موضوعِ اصلی. اگر خریدار شماره اقتصادی داشته باشد نوعِ اول
     (با اطلاعاتِ خریدار) و در غیرِ این‌صورت نوعِ دوم صادر می‌شود.
     """
+    mapping = unit_map if unit_map is not None else dict(BUILTIN_UNIT_CODES)
     days = _days_since_epoch(invoice.invoice_date)
     indatim = days * _MS_PER_DAY
 
@@ -312,7 +416,9 @@ def build_invoice_packet(
             {
                 "sstid": _resolve_stuff_id(line.item, settings),  # شناسه کالا/خدمتِ ۱۳رقمی
                 "sstt": (line.item.name if line.item else "") or "",  # شرح کالا/خدمت
-                "mu": "164",  # واحد اندازه‌گیری (عدد) — کدِ جدولِ واحدها
+                #: کدِ واحد از نگاشتِ کسب‌وکار می‌آید. تا پیش از این ثابت «۱۶۴»
+                #: (عدد) بود و کالای کیلوگرمی هم «عدد» اظهار می‌شد.
+                "mu": resolve_unit_code(line.item.unit if line.item else "", mapping),
                 "am": float(Decimal(line.qty)),  # تعداد/مقدار
                 "fee": _rial(line.unit_price),  # مبلغ واحد
                 "prdis": line_gross,  # مبلغ قبل از تخفیف
@@ -499,11 +605,15 @@ def submit_invoice(
     _cert_der_from_pem(settings.certificate_pem)
 
     contact = db.get(Contact, invoice.contact_id) if invoice.contact_id else None
-    # پیش از مصرفِ سریال، مطمئن شو همه‌ی ردیف‌ها شناسه‌ی کالا/خدمتِ ۱۳رقمی دارند.
+    # پیش از مصرفِ سریال، هر سه شرطِ بسته سنجیده می‌شوند تا سریال بابتِ بسته‌ای که
+    # ساخته نمی‌شود هدر نرود: شناسه‌ی کالا، کدِ واحد، و هویتِ خریدار.
+    unit_map = unit_codes(db)
     _assert_stuff_ids(invoice, settings)
+    _assert_unit_codes(invoice, unit_map)
+    _assert_buyer_identity(contact)
     serial = _next_serial(db, settings)
     tax_id = generate_tax_id(settings.memory_id, invoice.invoice_date, serial)
-    packet = build_invoice_packet(invoice, settings, tax_id, contact)
+    packet = build_invoice_packet(invoice, settings, tax_id, contact, unit_map)
     invoice_json = json.dumps(packet, separators=(",", ":"), ensure_ascii=False)
 
     request_trace_id = str(uuid4())
@@ -672,10 +782,21 @@ def _submitted_invoice_ids(db: Session) -> set[UUID]:
     return {row[0] for row in rows}
 
 
-def _blocked_reason(invoice: SalesInvoice, settings: MoadianSettings) -> str:
-    """چرا این فاکتور همین حالا قابلِ ارسال نیست؟ رشته‌ی خالی یعنی آماده است."""
+def _blocked_reason(
+    invoice: SalesInvoice,
+    settings: MoadianSettings,
+    unit_map: dict[str, str],
+    contact: Contact | None,
+) -> str:
+    """چرا این فاکتور همین حالا قابلِ ارسال نیست؟ رشته‌ی خالی یعنی آماده است.
+
+    همان گاردهایی که خودِ ارسال می‌سنجد، تا کاربر پیش از زدنِ دکمه بداند — نه با
+    یک خطای تکی بعدش.
+    """
     try:
         _assert_stuff_ids(invoice, settings)
+        _assert_unit_codes(invoice, unit_map)
+        _assert_buyer_identity(contact)
     except HTTPException as err:
         return str(err.detail)
     return ""
@@ -689,6 +810,7 @@ def pending_invoices(db: Session) -> list[dict]:
     """
     settings = get_settings(db)
     sent = _submitted_invoice_ids(db)
+    unit_map = unit_codes(db)
     invoices = (
         db.query(SalesInvoice)
         .filter(SalesInvoice.voided_at.is_(None))
@@ -712,7 +834,7 @@ def pending_invoices(db: Session) -> list[dict]:
                 "payable": Decimal(invoice.total_amount or 0)
                 + Decimal(invoice.tax_amount or 0)
                 + Decimal(invoice.rounding or 0),
-                "blocked_reason": _blocked_reason(invoice, settings),
+                "blocked_reason": _blocked_reason(invoice, settings, unit_map, contact),
             }
         )
     return rows
@@ -755,6 +877,20 @@ def readiness(db: Session) -> dict:
         except HTTPException as err:
             signing_ok, signing_detail = False, str(err.detail)
     checks.append({"key": "signing", "ok": signing_ok, "title": "کلید و گواهیِ امضا", "detail": signing_detail})
+
+    #: واحدهای در حالِ استفاده‌ای که هنوز کدِ سامانه ندارند. یک‌جا فهرست می‌شوند تا
+    #: کاربر همه را با هم نگاشت کند، نه فاکتور به فاکتور.
+    unmapped = unmapped_units(db)
+    checks.append(
+        {
+            "key": "units",
+            "ok": not unmapped,
+            "title": "نگاشتِ واحدهای سنجش",
+            "detail": "همه‌ی واحدهای در حالِ استفاده کد دارند."
+            if not unmapped
+            else "کد ندارند: " + "، ".join(unmapped),
+        }
+    )
 
     queue = pending_invoices(db)
     blocked = [row for row in queue if row["blocked_reason"]]

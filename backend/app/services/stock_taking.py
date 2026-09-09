@@ -23,6 +23,7 @@ from app.models.stock_count import StockCountLine, StockCountSession
 from app.models.user import User
 from app.services import chart_codes as cc
 from app.services.common import get_account as _get_account
+from app.services.common import number_lines
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 
@@ -146,10 +147,10 @@ def post_session(db: Session, session_id: UUID, user: User) -> StockCountSession
             description=f"انبارگردانی انبار «{session.warehouse.name}»",
             source_type="stock_count",
             created_by_id=user.id,
-            lines=[
+            lines=number_lines([
                 JournalLine(account_id=_get_account(db, debit_account).id, debit=amount, credit=0),
                 JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
-            ],
+            ]),
         )
         tafsili.assert_entry_has_tafsili(db, entry)
         db.add(entry)

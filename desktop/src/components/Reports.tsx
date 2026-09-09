@@ -35,6 +35,22 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
 
 const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
+
+/**
+ * برچسبِ هر کمبودِ هویتِ مالیاتی. سرور کدِ ماشین‌خوان می‌دهد و فارسی‌اش این‌جاست
+ * — همان جایی که `ENTITY_LABEL` هم هست.
+ *
+ * متنِ هر برچسب می‌گوید **دقیقاً چه چیزی** کم است، نه «ناقص»؛ حسابدار باید
+ * از روی همین بداند در صفحه‌ی «اشخاص» سراغِ کدام فیلد برود.
+ */
+const ISSUE_LABEL: Record<string, string> = {
+  national_id_missing: 'کد/شناسه ملی',
+  national_id_length: 'طولِ کد ملی',
+  economic_code_missing: 'کد اقتصادی',
+  postal_code_missing: 'کد پستی',
+}
+
+const issueText = (codes: string[]) => codes.map((c) => ISSUE_LABEL[c] ?? c).join('، ')
 const QUARTER_OPTIONS = [
   { value: 0, label: 'کل سال' },
   { value: 1, label: 'بهار' },
@@ -118,6 +134,10 @@ export function Reports({ token }: { token: string }) {
   const [seasonalQuarter, setSeasonalQuarter] = useState(0)
   const [seasonal, setSeasonal] = useState<SeasonalReport | null>(null)
   const [loading, setLoading] = useState(false)
+  //: فیلترِ «فقط ناقص‌ها» سمتِ مرورگر است و این‌جا درست است: گزارشِ فصلی
+  //: تجمیعِ محدود به تعدادِ طرف‌حساب است نه کلِ دفتر، و از قبل یک‌جا آمده؛
+  //: درخواستِ دوم فقط همان داده را دوباره می‌کشد.
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const period = useMemo(() => resolvePeriod(preset, customFrom, customTo), [preset, customFrom, customTo])
@@ -264,10 +284,10 @@ export function Reports({ token }: { token: string }) {
       case 'seasonal':
         return seasonal && {
           name: `معاملات-فصلی-${seasonal.year}-${seasonal.quarter_label}`,
-          headers: ['نوع معامله', 'طرف حساب', 'شخص', 'کد/شناسه ملی', 'کد اقتصادی', 'کد پستی', 'تعداد فاکتور', 'ناخالص', 'تخفیف', 'خالص', 'مالیات و عوارض', 'مبلغ کل'],
+          headers: ['نوع معامله', 'طرف حساب', 'شخص', 'کد/شناسه ملی', 'کد اقتصادی', 'کد پستی', 'تعداد فاکتور', 'ناخالص', 'تخفیف', 'خالص', 'مالیات و عوارض', 'مبلغ کل', 'کمبودها'],
           rows: [
-            ...seasonal.sales.rows.map((r) => ['فروش', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total] as (string | number)[]),
-            ...seasonal.purchases.rows.map((r) => ['خرید', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total] as (string | number)[]),
+            ...seasonal.sales.rows.map((r) => ['فروش', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total, issueText(r.issues)] as (string | number)[]),
+            ...seasonal.purchases.rows.map((r) => ['خرید', r.contact_name, ENTITY_LABEL[r.entity_type], r.national_id ?? '', r.economic_code ?? '', r.postal_code ?? '', r.invoice_count, r.gross, r.discount, r.net, r.vat, r.total, issueText(r.issues)] as (string | number)[]),
           ],
         }
       default:
@@ -455,11 +475,37 @@ export function Reports({ token }: { token: string }) {
             تجمیعِ خرید و فروش به تفکیکِ طرف حساب، برای سامانه‌ی معاملاتِ فصلیِ سازمانِ امور مالیاتی (ماده ۱۶۹ ق.م.م).
             هویتِ مالیاتیِ هر طرف حساب (کد/شناسه‌ی ملی و کد اقتصادی) در صفحه‌ی «اشخاص» وارد می‌شود.
           </p>
-          {([['فروش', seasonal.sales], ['خرید', seasonal.purchases]] as [string, SeasonalSection][]).map(([title, section]) => (
+          <label className="rep-only-incomplete">
+            <input
+              type="checkbox"
+              checked={onlyIncomplete}
+              onChange={(e) => setOnlyIncomplete(e.target.checked)}
+            />
+            فقط ناقص‌ها
+          </label>
+          {([['فروش', seasonal.sales], ['خرید', seasonal.purchases]] as [string, SeasonalSection][]).map(([title, section]) => {
+            const visible = onlyIncomplete
+              ? section.rows.filter((r) => r.issues.length > 0)
+              : section.rows
+            return (
             <div key={title} style={{ marginTop: 16 }}>
               <h4>{title}</h4>
-              {section.rows.length === 0 ? (
-                <p className="hint">در این فصل معامله‌ای ثبت نشده.</p>
+              <p className="hint">
+                {fa(section.ready_count)} آماده
+                {section.incomplete_count > 0 && (
+                  <>
+                    {' · '}
+                    <strong className="rep-incomplete">{fa(section.incomplete_count)} ناقص</strong>
+                    {' — هویتِ مالیاتیِ این ردیف‌ها کامل نیست و سامانه ردشان می‌کند.'}
+                  </>
+                )}
+              </p>
+              {visible.length === 0 ? (
+                <p className="hint">
+                  {onlyIncomplete
+                    ? 'همه‌ی ردیف‌های این بخش آماده‌اند.'
+                    : 'در این فصل معامله‌ای ثبت نشده.'}
+                </p>
               ) : (
                 <div className="entity-table-wrap">
                   <div className="table-scroll">
@@ -477,9 +523,16 @@ export function Reports({ token }: { token: string }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {section.rows.map((r, i) => (
+                        {visible.map((r, i) => (
                           <tr key={r.contact_id ?? `agg-${i}`}>
-                            <td className="entity-name" data-label="طرف حساب">{r.contact_name}</td>
+                            <td className="entity-name" data-label="طرف حساب">
+                              {r.contact_name}
+                              {r.issues.length > 0 && (
+                                <span className="field-hint field-hint--warn">
+                                  ناقص: {issueText(r.issues)}
+                                </span>
+                              )}
+                            </td>
                             <td data-label="شخص">{ENTITY_LABEL[r.entity_type]}</td>
                             <td data-label="کد/شناسه ملی">{r.national_id ?? '—'}</td>
                             <td data-label="کد اقتصادی">{r.economic_code ?? '—'}</td>
@@ -505,7 +558,8 @@ export function Reports({ token }: { token: string }) {
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

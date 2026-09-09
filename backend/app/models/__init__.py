@@ -46,7 +46,7 @@ from app.models.marketplace import (
     MarketplaceSettings,
     MarketplaceZone,
 )
-from app.models.moadian import MoadianSettings, MoadianSubmission
+from app.models.moadian import MoadianSettings, MoadianSubmission, MoadianUnitMap
 from app.models.fiscal_year import FiscalYear
 from app.models.period_close import FiscalPeriodClose
 from app.models.pos_terminal import PosTerminal
@@ -195,6 +195,7 @@ __all__ = [
     "CostCenter",
     "MoadianSettings",
     "MoadianSubmission",
+    "MoadianUnitMap",
     "TreasuryTransaction",
     "AuthToken",
     "RefreshToken",

@@ -16,6 +16,7 @@ from app.schemas.moadian import (
     MoadianSettingsOut,
     MoadianSubmissionOut,
 )
+from app.schemas.moadian import MoadianUnitMapIn, MoadianUnitMapOut
 from app.services import moadian as service
 
 # کلِ ماژول قابلیتِ فقط-پلن است: حسابِ آزمایشی هنگامِ بازکردنِ آن ۴۰۲ می‌گیرد و فرانت
@@ -116,6 +117,44 @@ def readiness(
     _=Depends(require_permission("moadian", "view")),
 ):
     return service.readiness(db)
+
+
+@router.get("/unit-maps", response_model=list[MoadianUnitMapOut])
+def list_unit_maps(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("moadian", "view")),
+):
+    """نگاشتِ واحدهای این کسب‌وکار. «عدد» حتی بدونِ ردیف هم کد دارد (پایه‌ی درون‌کد)."""
+    return service.list_unit_maps(db)
+
+
+@router.get("/unmapped-units", response_model=list[str])
+def unmapped_units(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("moadian", "view")),
+):
+    """واحدهایی که روی کالاها به کار رفته‌اند ولی هنوز کدِ سامانه ندارند."""
+    return service.unmapped_units(db)
+
+
+@router.put("/unit-maps", response_model=MoadianUnitMapOut)
+def upsert_unit_map(
+    data: MoadianUnitMapIn,
+    db: Session = Depends(get_db),
+    #: همان مجوزی که تنظیماتِ مؤدیان را عوض می‌کند — این هم پیکربندیِ ارسال است،
+    #: نه داده‌ی عملیاتی: کدِ اشتباه یعنی اظهارِ نادرست به سازمان.
+    user: User = Depends(require_permission("moadian", "approve")),
+):
+    return service.upsert_unit_map(db, data.unit, data.code, user)
+
+
+@router.delete("/unit-maps/{map_id}", status_code=204)
+def delete_unit_map(
+    map_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("moadian", "approve")),
+):
+    service.delete_unit_map(db, map_id)
 
 
 @router.get("/pending", response_model=list[MoadianPendingInvoiceOut])

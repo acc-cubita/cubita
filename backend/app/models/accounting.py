@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -180,6 +181,17 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     # منشأ سند: مثلاً "sales_invoice" / "manual" / "payroll" برای ردیابی این‌که کدام ماژول این سند را خودکار ساخته
     source_type: Mapped[str] = mapped_column(String(50), default="manual")
+
+    #: **استفاده نمی‌شود.** برای ردیابیِ معکوس ساخته شده بود ولی هیچ‌کدام از
+    #: سی‌وهفت نقطه‌ی ساختِ سند پُرش نکردند، پس همیشه NULL است.
+    #:
+    #: پُرکردنش هم راهِ درست نبود: رابطه از قبل در `journal_entry_id`ِ خودِ
+    #: ماژول‌ها ذخیره شده و این ستون دومین جای همان بود — «دو نمای یک داده»، با
+    #: امکانِ نخواندنِ آن دو با هم. جوابِ «این سند از کدام عملیات آمد؟» حالا در
+    #: `services/entry_source.py` مشتق می‌شود: `source_type` می‌گوید کدام جدول،
+    #: و آن‌جا `journal_entry_id` جواب را دارد.
+    #:
+    #: حذف نشد چون مهاجرتِ حذف برای ستونی که هیچ‌کس نمی‌خواند، ریسکِ بی‌سود است.
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -194,12 +206,17 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     #: اگر این سند، معکوسِ سند دیگری باشد. رابطه یک‌طرفه و صریح است تا در دفتر
     #: روزنامه بتوان جفتِ «اصلی و معکوس» را نشان داد؛ جمعشان همیشه صفر است.
+    #:
+    #: **فقط برای ابطال نیست.** سندِ *افتتاحیه* هم معکوسِ سندِ اختتامیه‌ی سالِ قبل
+    #: است — همان تعریف، و همان «جمعشان صفر است». همین پیوند است که هم به سؤالِ
+    #: «این مانده‌ی ابتدای دوره از کجا آمد؟» جواب می‌دهد و هم جلوی صدورِ افتتاحیه‌ی
+    #: دوم را می‌گیرد، که وگرنه بی‌صدا کلِ ترازنامه را دو برابر می‌کرد.
     reverses_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
 
     lines: Mapped[list["JournalLine"]] = relationship(
-        back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.id"
+        back_populates="entry", cascade="all, delete-orphan", order_by="JournalLine.seq, JournalLine.id"
     )
 
 
@@ -211,6 +228,15 @@ class JournalLine(TenantMixin, UUIDPKMixin, Base):
     )
 
     entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
+
+    #: شماره‌ی ردیف در همین سند (از ۱). پیش از این ترتیب با `id` بود و `id` یک
+    #: UUIDِ **تصادفی** است — یعنی ردیف‌ها به ترتیبِ ورودِ حسابدار برنمی‌گشتند و
+    #: بستانکار می‌توانست پیش از بدهکار بیاید.
+    #:
+    #: صفر یعنی «سندِ پیش از مهاجرتِ ۰۱۰۰». ترتیبِ آن سندها بازیابی‌شدنی نبود
+    #: (نه seq داشتند نه created_at)، پس `(seq, id)` مرتبشان می‌کند و رفتارشان
+    #: دقیقاً همان قبل می‌ماند.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
     #: مرکز هزینه/پروژه؛ از سطحِ سند به ردیف به ارث می‌رسد. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(

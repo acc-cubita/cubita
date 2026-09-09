@@ -21,7 +21,7 @@ from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine
 from app.models.user import User
 from app.schemas.manufacturing import ProductionOrderIn
 from app.services import chart_codes as cc
-from app.services.common import get_account
+from app.services.common import get_account, number_lines
 from app.services.inventory import get_stock_qty, get_total_stock_qty, lock_items
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
@@ -125,10 +125,10 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
             description=f"سربارِ تولیدِ «{finished.name}»",
             source_type="production_order",
             created_by_id=user.id,
-            lines=[
+            lines=number_lines([
                 JournalLine(account_id=get_account(db, cc.INVENTORY).id, debit=overhead, credit=0, description="سربارِ تولید (سرمایه‌ای در بهای کالا)"),
                 JournalLine(account_id=get_account(db, cc.CASH).id, debit=0, credit=overhead, description="پرداختِ سربارِ تولید"),
-            ],
+            ]),
         )
         tafsili.assert_entry_has_tafsili(db, journal_entry)
         db.add(journal_entry)

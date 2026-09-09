@@ -5,6 +5,7 @@ import {
   Download,
   FileSpreadsheet,
   Landmark,
+  Library,
   Percent,
   Printer,
   Scale,
@@ -25,6 +26,7 @@ import {
   fetchVatReport,
   type BalanceRow,
   type ChartAccount,
+  type VatBreakdown,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
@@ -40,7 +42,7 @@ import {
   fa,
   faAmount,
   faInt,
-  sourceLabel,
+  sourceText,
   useAsync,
   useRange,
 } from './kit'
@@ -488,12 +490,16 @@ function NatureViolationsCard({ token }: { token: string }) {
 
 // ═══════════════════════ ۲) گزارش دفتر ═══════════════════════
 
-type Book = 'journal' | 'ledger'
+/** سه دفترِ حسابداری، به همان ترتیبی که در عمل خوانده می‌شوند. */
+type Book = 'journal' | 'general' | 'ledger'
 
 export function LedgerReportPage({ token }: { token: string }) {
   const range = useRange('month')
   const [book, setBook] = useState<Book>('journal')
   const [accountId, setAccountId] = useState('')
+  //: انتخابِ دفترِ کل جداست، وگرنه جابه‌جا شدن بینِ دو تب یک شناسه‌ی نامعتبر را
+  //: به انتخابگرِ دیگر می‌برد و کاربر یک `select`ِ خالی می‌بیند بی‌آنکه بداند چرا.
+  const [generalId, setGeneralId] = useState('')
   const [search, setSearch] = useState('')
 
   const accounts = useAsync(() => fetchChartAccounts(token), [token])
@@ -504,6 +510,16 @@ export function LedgerReportPage({ token }: { token: string }) {
         .sort((a, b) => a.code.localeCompare(b.code)),
     [accounts.data],
   )
+  //: حساب‌های سطحِ «کل» — همان عددی که `LEVEL_OPTIONS`ِ گزارش ترازها به کار می‌برد،
+  //: با همان `levelOf`. سطح از عمقِ درخت می‌آید نه طولِ کد، چون چارت یکدست نیست:
+  //: دارایی‌ها ۱ ← ۱۱ ← ۱۱۰۱ دارند و هزینه‌ها ۵ ← ۵۱۰۱.
+  const generalAccounts = useMemo(() => {
+    const list = accounts.data ?? []
+    const byId = new Map(list.map((a) => [a.id, a]))
+    return list
+      .filter((a) => levelOf(a, byId) === 2)
+      .sort((a, b) => a.code.localeCompare(b.code))
+  }, [accounts.data])
   //: ردیفِ سند فقط شناسه‌ی حساب دارد؛ نام از چارت می‌آید تا دفتر خوانا باشد.
   const accountNames = useMemo(
     () => new Map((accounts.data ?? []).map((a) => [a.id, `${a.code} — ${a.name}`])),
@@ -514,7 +530,7 @@ export function LedgerReportPage({ token }: { token: string }) {
     <OpsPage
       icon={BookOpenCheck}
       title="گزارش دفتر"
-      description="دفترِ روزنامه (همه‌ی اسناد به‌ترتیبِ تاریخ) و دفترِ معین (گردشِ یک حساب با مانده‌ی دوره‌ای)."
+      description="سه دفترِ حسابداری: روزنامه (همه‌ی اسناد به‌ترتیبِ تاریخ)، کل (گردشِ یک سرفصل با همه‌ی زیرحساب‌هایش) و معین (گردشِ یک حساب با مانده‌ی دوره‌ای)."
       head={
         <div className="cc-head">
           <div className="cc-tabs">
@@ -524,6 +540,13 @@ export function LedgerReportPage({ token }: { token: string }) {
               onClick={() => setBook('journal')}
             >
               <BookOpenCheck size={14} /> دفتر روزنامه
+            </button>
+            <button
+              type="button"
+              className={book === 'general' ? 'is-active' : ''}
+              onClick={() => setBook('general')}
+            >
+              <Library size={14} /> دفتر کل
             </button>
             <button
               type="button"
@@ -545,6 +568,18 @@ export function LedgerReportPage({ token }: { token: string }) {
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="شماره یا شرحِ سند"
                   />
+                </label>
+              ) : book === 'general' ? (
+                <label className="acc-inline-field">
+                  حسابِ کل
+                  <select value={generalId} onChange={(e) => setGeneralId(e.target.value)}>
+                    <option value="">— انتخابِ حسابِ کل —</option>
+                    {generalAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code} — {a.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               ) : (
                 <label className="acc-inline-field">
@@ -572,6 +607,8 @@ export function LedgerReportPage({ token }: { token: string }) {
           search={search}
           accountNames={accountNames}
         />
+      ) : book === 'general' ? (
+        <SubsidiaryCard token={token} accountId={generalId} from={range.from} to={range.to} rollup />
       ) : (
         <SubsidiaryCard token={token} accountId={accountId} from={range.from} to={range.to} />
       )}
@@ -650,7 +687,7 @@ function DaybookCard({
             <h4 className="acc-day-head">
               سند {fa(e.number ?? 0)} — {formatJalali(e.entry_date)}
               <span>
-                <StatusChip status={e.status} voided={!!e.voided_at} /> {sourceLabel(e.source_type)}
+                <StatusChip status={e.status} voided={!!e.voided_at} /> {sourceText(e)}
               </span>
             </h4>
             {e.description && <p className="hint">{e.description}</p>}
@@ -691,16 +728,23 @@ function DaybookCard({
   )
 }
 
+/**
+ * دفترِ یک حساب. با `rollup` همان حساب به‌علاوه‌ی همه‌ی زیرحساب‌هایش را می‌آورد —
+ * یعنی «دفتر کل». سرور هر دو حالت را از یک نقطه می‌دهد، پس این‌جا هم یک کارت
+ * می‌ماند نه دو: دو نمای یک داده ساخته نمی‌شود.
+ */
 function SubsidiaryCard({
   token,
   accountId,
   from,
   to,
+  rollup = false,
 }: {
   token: string
   accountId: string
   from?: string
   to?: string
+  rollup?: boolean
 }) {
   const ledger = useAsync(
     () => (accountId ? fetchGeneralLedger(token, accountId, from, to) : Promise.resolve(null)),
@@ -708,18 +752,24 @@ function SubsidiaryCard({
   )
   const data = ledger.data
   const pg = usePagination(data?.lines ?? [], 20)
+  const bookName = rollup ? 'دفتر کل' : 'دفتر معین'
+  const Icon = rollup ? Library : Landmark
 
   if (!accountId)
     return (
-      <SectionCard icon={Landmark} title="دفتر معین">
-        <p className="hint">برای دیدنِ دفترِ معین، یک حساب انتخاب کنید.</p>
+      <SectionCard icon={Icon} title={bookName}>
+        <p className="hint">
+          {rollup
+            ? 'برای دیدنِ دفترِ کل، یک حسابِ کل انتخاب کنید؛ گردشِ همه‌ی زیرحساب‌هایش با هم می‌آید.'
+            : 'برای دیدنِ دفترِ معین، یک حساب انتخاب کنید.'}
+        </p>
       </SectionCard>
     )
 
   return (
     <SectionCard
-      icon={Landmark}
-      title={data ? `${data.account_code} — ${data.account_name}` : 'دفتر معین'}
+      icon={Icon}
+      title={data ? `${data.account_code} — ${data.account_name}` : bookName}
       description={
         data
           ? `مانده‌ی ابتدای دوره ${fa(data.opening_balance)} · مانده‌ی پایان ${fa(data.closing_balance)}`
@@ -732,11 +782,20 @@ function SubsidiaryCard({
           onClick={() =>
             data &&
             downloadCsv(
-              `daftar-moein-${data.account_code}`,
-              ['شماره سند', 'تاریخ', 'شرح', 'بدهکار', 'بستانکار', 'مانده'],
+              `${rollup ? 'daftar-kol' : 'daftar-moein'}-${data.account_code}`,
+              [
+                'شماره سند',
+                'تاریخ',
+                ...(rollup ? ['زیرحساب'] : []),
+                'شرح',
+                'بدهکار',
+                'بستانکار',
+                'مانده',
+              ],
               data.lines.map((l) => [
                 l.entry_number ?? '',
                 formatJalali(l.entry_date),
+                ...(rollup ? [`${l.account_code} — ${l.account_name}`] : []),
                 l.description,
                 Number(l.debit),
                 Number(l.credit),
@@ -753,7 +812,11 @@ function SubsidiaryCard({
         loading={ledger.loading}
         error={ledger.error}
         empty={(data?.lines.length ?? 0) === 0}
-        emptyText="این حساب در بازه‌ی انتخابی گردشی ندارد."
+        emptyText={
+          rollup
+            ? 'هیچ‌کدام از زیرحساب‌های این سرفصل در بازه‌ی انتخابی گردشی ندارند.'
+            : 'این حساب در بازه‌ی انتخابی گردشی ندارد.'
+        }
       >
         <div className="table-scroll">
           <table className="cards-on-mobile acc-table">
@@ -761,6 +824,8 @@ function SubsidiaryCard({
               <tr>
                 <th>سند</th>
                 <th>تاریخ</th>
+                {/* در دفترِ معین همه‌ی ردیف‌ها یک حساب‌اند و این ستون فقط تکرار است. */}
+                {rollup && <th>زیرحساب</th>}
                 <th>شرح</th>
                 <th>بدهکار</th>
                 <th>بستانکار</th>
@@ -774,6 +839,11 @@ function SubsidiaryCard({
                     {fa(l.entry_number ?? 0)}
                   </td>
                   <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
+                  {rollup && (
+                    <td data-label="زیرحساب">
+                      <span dir="ltr">{l.account_code}</span> — {l.account_name}
+                    </td>
+                  )}
                   <td data-label="شرح">{l.description || '—'}</td>
                   <td data-label="بدهکار" className="num">
                     {faAmount(l.debit)}
@@ -823,11 +893,20 @@ export function VatPage({ token }: { token: string }) {
   const data = report.data
   const net = Number(data?.net_vat ?? 0)
 
+  //: فروش و خرید در یک فهرست با برچسبِ نوع — کاربر دنبالِ «کدام فاکتور» است، نه
+  //: دنبالِ دو جدولِ جدا که باید بینشان چشم بچرخاند.
+  const mixed = [
+    ...(data?.mixed_sales_invoices ?? []).map((m) => ({ ...m, kind: 'فروش' })),
+    ...(data?.mixed_purchase_invoices ?? []).map((m) => ({ ...m, kind: 'خرید' })),
+  ]
+
   const rows = data
     ? [
-        { label: 'فروشِ مشمول', net: data.sales_net, vat: data.output_vat, sign: 1 },
+        //: پیش‌تر «فروشِ مشمول» نوشته بود، ولی این جمعِ کل است نه بخشِ مشمول؛
+        //: تفکیکِ مشمول/معاف در کارتِ «ترکیبِ پایه» است.
+        { label: 'فروش', net: data.sales_net, vat: data.output_vat, sign: 1 },
         { label: 'برگشت از فروش', net: data.sales_returns_net, vat: data.sales_returns_vat, sign: -1 },
-        { label: 'خریدِ مشمول', net: data.purchase_net, vat: data.input_vat, sign: -1 },
+        { label: 'خرید', net: data.purchase_net, vat: data.input_vat, sign: -1 },
         {
           label: 'برگشت از خرید',
           net: data.purchase_returns_net,
@@ -947,6 +1026,78 @@ export function VatPage({ token }: { token: string }) {
               </tbody>
             </table>
           </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      <SectionCard
+        icon={Percent}
+        title="ترکیبِ پایه"
+        description="چقدر از فروش و خریدِ دوره مشمول بوده و چقدر معاف. وضعیت از لحظه‌ی معامله می‌آید، نه از وضعیتِ امروزِ کالا. برگشت‌ها در این جدول نمی‌آیند."
+      >
+        <AsyncBlock loading={report.loading} error={report.error}>
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>طبقه</th>
+                  <th>فروش</th>
+                  <th>خرید</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ['کالای مشمول', 'taxable_goods'],
+                  ['خدمتِ مشمول', 'taxable_services'],
+                  ['کالای معاف', 'exempt_goods'],
+                  ['خدمتِ معاف', 'exempt_services'],
+                ] as [string, keyof VatBreakdown][]).map(([label, key]) => (
+                  <tr key={key}>
+                    <td className="card-title" data-label="طبقه">{label}</td>
+                    <td data-label="فروش" className="num">
+                      {faAmount(data?.sales_breakdown[key] ?? 0)}
+                    </td>
+                    <td data-label="خرید" className="num">
+                      {faAmount(data?.purchase_breakdown[key] ?? 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {mixed.length > 0 && (
+            <>
+              <p className="fy-note fy-note--warn">
+                <AlertTriangle size={14} />{' '}
+                {fa(mixed.length)} فاکتور ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر
+                است — یعنی روی ردیفِ معاف هم مالیات گرفته شده.
+              </p>
+              <div className="table-scroll">
+                <table className="cards-on-mobile acc-table">
+                  <thead>
+                    <tr>
+                      <th>فاکتور</th>
+                      <th>تاریخ</th>
+                      <th>خالصِ معاف</th>
+                      <th>مالیاتِ فاکتور</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mixed.map((m) => (
+                      <tr key={m.invoice_id}>
+                        <td className="card-title" data-label="فاکتور">
+                          {m.kind} {fa(m.number ?? 0)}
+                        </td>
+                        <td data-label="تاریخ">{formatJalali(m.invoice_date)}</td>
+                        <td data-label="خالصِ معاف" className="num">{faAmount(m.exempt_net)}</td>
+                        <td data-label="مالیاتِ فاکتور" className="num">{faAmount(m.tax_amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

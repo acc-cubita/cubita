@@ -267,6 +267,22 @@ class JournalLineOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EntrySourceOut(BaseModel):
+    """عملیاتی که این سند از آن آمده — مشتق، نه ذخیره‌شده.
+
+    `id` و `number` فقط وقتی می‌آیند که منبع **یکتا** باشد. حقوق و دستمزد یک سند
+    برای کلِ دوره می‌زند و همه‌ی فیش‌ها به همان اشاره می‌کنند؛ آن‌جا فقط `count`
+    معنا دارد و نشان‌دادنِ یکی از فیش‌ها غلط توصیف می‌کند.
+    """
+
+    source_type: str
+    #: نامِ کلاسِ مدلِ منبع — برای رابط و اشکال‌زدایی، نه برای منطق.
+    model: str
+    count: int
+    id: UUID | None = None
+    number: str | None = None
+
+
 class JournalEntryOut(BaseModel):
     id: UUID
     number: int | None
@@ -278,6 +294,10 @@ class JournalEntryOut(BaseModel):
     entry_date: date
     description: str
     source_type: str
+    #: هویتِ عملیاتِ منبع. `None` یعنی سند عملیاتِ بیرونی ندارد — دستی، تسعیر،
+    #: اختتامیه. از `journal_entry_id`ِ خودِ ماژول‌ها مشتق می‌شود، نه از ستونی روی
+    #: سند؛ توضیحش در `services/entry_source.py`.
+    source: EntrySourceOut | None = None
     #: موقت/دائم — «دائم» یعنی بازبینی‌شده و بیرون از دسترسِ ادغام و بازشماره‌گذاری.
     status: str = "temporary"
     finalized_at: datetime | None = None

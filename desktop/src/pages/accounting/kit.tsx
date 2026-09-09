@@ -3,7 +3,8 @@ import { AlertTriangle, CalendarRange, CheckCircle2, Loader2 } from 'lucide-reac
 import type { LucideIcon } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
-import { isoToJalali, jalaliToIso, todayIso } from '../../lib/jalali'
+import { isoToJalali, jalaliToIso, toFaDigits, todayIso } from '../../lib/jalali'
+import type { EntrySource } from '../../api'
 
 /**
  * قطعاتِ مشترکِ هجده صفحه‌ی ماژولِ حسابداری.
@@ -66,6 +67,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   closing_entry: 'سند اختتامیه',
   opening_entry: 'سند افتتاحیه',
   fx_revaluation: 'تسعیر ارز',
+  reclassification: 'اصلاح طبقه‌بندی مانده',
   recurring: 'سند تکرارشونده',
   void: 'ابطال',
   opening_balance: 'مانده اول دوره',
@@ -74,6 +76,22 @@ export const SOURCE_LABELS: Record<string, string> = {
 }
 
 export const sourceLabel = (key: string) => SOURCE_LABELS[key] ?? key
+
+/**
+ * منشأِ سند با هویتش — «فاکتور فروش ۱۲۵»، نه فقط «فاکتور فروش».
+ *
+ * وقتی چند عملیات به یک سند می‌رسند (حقوق و دستمزد یک سند برای کلِ دوره می‌زند)
+ * شماره نمی‌آید و شمارش جایش را می‌گیرد: شماره‌ی *یکی* از بیست‌وسه فیش، سند را
+ * غلط توصیف می‌کند.
+ */
+export function sourceText(entry: { source_type: string; source?: EntrySource | null }): string {
+  const label = sourceLabel(entry.source_type)
+  const src = entry.source
+  if (!src) return label
+  if (src.number) return `${label} ${toFaDigits(src.number)}`
+  if (src.count > 1) return `${label} — ${faInt(src.count)} مورد`
+  return label
+}
 
 export const STATUS_LABELS: Record<string, string> = { temporary: 'موقت', permanent: 'دائم' }
 

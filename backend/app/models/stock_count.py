@@ -30,7 +30,7 @@ class StockCountSession(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

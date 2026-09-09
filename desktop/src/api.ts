@@ -314,6 +314,29 @@ export interface VatReport {
   sales_returns_vat: string
   purchase_returns_net: string
   purchase_returns_vat: string
+  /** ترکیبِ فروش/خریدِ دوره. برگشت‌ها اینجا نمی‌آیند — ارقامِ بالا خالصِ پس از برگشت‌اند. */
+  sales_breakdown: VatBreakdown
+  purchase_breakdown: VatBreakdown
+  mixed_sales_invoices: MixedVatInvoice[]
+  mixed_purchase_invoices: MixedVatInvoice[]
+}
+
+/** تفکیکِ پایه‌ی مالیاتی — جوابِ «چقدر فروشِ معاف داشته‌ایم؟». */
+export interface VatBreakdown {
+  taxable_goods: string
+  taxable_services: string
+  exempt_goods: string
+  exempt_services: string
+}
+
+/** فاکتوری که ردیفِ معاف و مشمول را با هم دارد و نرخِ سربرگش غیرصفر است —
+ *  یعنی روی ردیفِ معاف هم مالیات گرفته شده. */
+export interface MixedVatInvoice {
+  invoice_id: string
+  number: number | null
+  invoice_date: string
+  tax_amount: string
+  exempt_net: string
 }
 
 export const fetchVatReport = (token: string, dateFrom?: string, dateTo?: string) => {
@@ -332,6 +355,8 @@ export interface SeasonalPartyRow {
   national_id: string | null
   economic_code: string | null
   postal_code: string | null
+  /** کدهای کمبودِ هویتِ مالیاتی. خالی = آماده‌ی سامانه. */
+  issues: string[]
   invoice_count: number
   gross: string
   discount: string
@@ -342,6 +367,9 @@ export interface SeasonalPartyRow {
 
 export interface SeasonalSection {
   rows: SeasonalPartyRow[]
+  /** شمارشِ آمادگی — چند ردیف هویتِ مالیاتیِ کامل دارد و چند تا نه. */
+  ready_count: number
+  incomplete_count: number
   total_gross: string
   total_discount: string
   total_net: string
@@ -395,6 +423,9 @@ export interface GeneralLedgerLine {
   entry_id: string
   entry_number: number | null
   entry_date: string
+  /** حسابِ خودِ ردیف؛ در دفترِ کل می‌گوید مبلغ از کدام زیرحساب آمده. */
+  account_code: string
+  account_name: string
   description: string
   debit: string
   credit: string
@@ -431,6 +462,16 @@ export interface JournalEntryLine {
   tracking_date?: string | null
 }
 
+/** عملیاتی که سند از آن آمده. `id`/`number` فقط وقتی می‌آیند که منبع یکتا باشد —
+ *  حقوق و دستمزد یک سند برای کلِ دوره می‌زند و ده‌ها فیش به همان اشاره می‌کنند. */
+export interface EntrySource {
+  source_type: string
+  model: string
+  count: number
+  id: string | null
+  number: string | null
+}
+
 export interface JournalEntryRecord {
   id: string
   number: number | null
@@ -441,6 +482,8 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  /** null = سند عملیاتِ بیرونی ندارد (دستی، تسعیر، اختتامیه). */
+  source: EntrySource | null
   /** `temporary` | `permanent` — سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود. */
   status: string
   finalized_at?: string | null
@@ -817,6 +860,8 @@ export interface ItemRecord {
   storefront_product_id: number | null
   reorder_point: string
   tax_stuff_id: string
+  /** `taxable` (مشمول) یا `exempt` (معاف). */
+  vat_status: string
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -840,6 +885,7 @@ export interface ItemIn {
   barcode?: string | null
   reorder_point?: number
   tax_stuff_id?: string
+  vat_status?: string
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
@@ -849,7 +895,7 @@ export const createItemLive = (token: string, data: ItemIn) =>
 export const updateItemLive = (
   token: string,
   itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string },
+  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string; vat_status?: string },
 ) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
@@ -3295,6 +3341,26 @@ export interface MoadianBatchResult {
 export const fetchMoadianReadiness = (token: string) =>
   authedGet<MoadianReadiness>(token, '/api/moadian/readiness')
 
+/** نگاشتِ واحدِ سنجش به کدِ رسمیِ سامانه. بدونِ آن هر ردیف «عدد» اظهار می‌شد. */
+export interface MoadianUnitMap {
+  id: string
+  unit: string
+  code: string
+}
+
+export const fetchMoadianUnitMaps = (token: string) =>
+  authedGet<MoadianUnitMap[]>(token, '/api/moadian/unit-maps')
+
+/** واحدهایی که روی کالاها به کار رفته‌اند ولی هنوز کد ندارند. */
+export const fetchMoadianUnmappedUnits = (token: string) =>
+  authedGet<string[]>(token, '/api/moadian/unmapped-units')
+
+export const saveMoadianUnitMap = (token: string, unit: string, code: string) =>
+  authedSend<MoadianUnitMap>(token, 'PUT', '/api/moadian/unit-maps', { unit, code })
+
+export const deleteMoadianUnitMap = (token: string, id: string) =>
+  authedDelete(token, `/api/moadian/unit-maps/${id}`)
+
 export const fetchMoadianPending = (token: string) =>
   authedGet<MoadianPendingInvoice[]>(token, '/api/moadian/pending')
 
@@ -3470,6 +3536,9 @@ export const printSalesInvoice = (token: string, invoiceId: string) =>
 
 export const printPurchaseInvoice = (token: string, invoiceId: string) =>
   openInvoicePrintView(token, `/api/purchase-invoices/${invoiceId}/print`)
+
+export const printJournalEntry = (token: string, entryId: string) =>
+  openInvoicePrintView(token, `/api/journal-entries/${entryId}/print`)
 
 export const printSalesQuotation = (token: string, quotationId: string) =>
   openInvoicePrintView(token, `/api/sales-quotations/${quotationId}/print`)
@@ -4562,7 +4631,14 @@ export const fetchRenumberPreview = (
 }
 
 export const renumberEntries = (
-  token: string, data: { date_from?: string; date_to?: string; start_number: number },
+  token: string,
+  data: {
+    date_from?: string | null
+    date_to?: string | null
+    /** انتخابِ دستی. اگر داده شود **جای** بازه می‌نشیند نه کنارش. */
+    entry_ids?: string[] | null
+    start_number: number
+  },
 ) =>
   authedSend<{ count: number; changed_count: number; first_number: number; last_number: number }>(
     token, 'POST', '/api/accounting/entries/renumber', data,
@@ -4580,9 +4656,17 @@ export interface FxRow {
   account_id: string
   account_code: string
   account_name: string
+  /** بُعدهای ردیف؛ null یعنی مانده‌ی این گروه واقعاً بُعدی نداشته. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  cost_center_id: string | null
+  cost_center_name: string | null
   currency_code: string
   fx_balance: string
   rate: string
+  /** تاریخِ خودِ نرخ — اگر با تاریخِ تسعیر یکی نباشد، نرخ کهنه است. */
+  rate_date: string
   book_value: string
   market_value: string
   difference: string
@@ -4616,6 +4700,12 @@ export interface ClosingRow {
   account_code: string
   account_name: string
   account_type: string
+  /** بُعدهای مانده — مانده‌ی یک حساب با سه تفصیلی سه ردیفِ جداست. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  cost_center_id: string | null
+  cost_center_name: string | null
   debit: string
   credit: string
   balance: string
@@ -4640,6 +4730,7 @@ export const fetchOpeningPreview = (token: string, asOf: string, sourceDate: str
     as_of: string
     source_date: string
     rows: ClosingRow[]
+    closing_entry_id: string
     closing_entry_number: number | null
     total: string
   }>(token, `/api/accounting/opening-entry/preview?as_of=${asOf}&source_date=${sourceDate}`)
@@ -4691,6 +4782,66 @@ export const fetchLegalBook = (token: string, dateFrom: string, dateTo: string) 
     total_debit: string
     total_credit: string
   }>(token, `/api/accounting/legal-book?date_from=${dateFrom}&date_to=${dateTo}`)
+
+/** یک ترکیبِ (حساب، تفصیلی) که در تاریخِ اصلاح مانده دارد. */
+export interface ReclassSource {
+  account_id: string
+  account_code: string
+  account_name: string
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  balance: string
+  /** نقشِ سیستمی مسدود نمی‌کند؛ فقط هشدار می‌دهد. */
+  system_role: string | null
+}
+
+export interface ReclassItem {
+  account_id: string
+  account_code: string
+  account_name: string
+  analytic_id: string | null
+  analytic_name: string | null
+  balance: string
+  source_debit: string
+  source_credit: string
+  dest_debit: string
+  dest_credit: string
+}
+
+export interface ReclassPreview {
+  as_of: string
+  items: ReclassItem[]
+  dest_account_id: string
+  dest_account_code: string
+  dest_account_name: string
+  dest_analytic_id: string | null
+  dest_analytic_name: string | null
+  total_debit: string
+  total_credit: string
+  /** باید صفر باشد — اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد. */
+  difference: string
+  warnings: string[]
+}
+
+export interface ReclassBody {
+  as_of: string
+  sources: { account_id: string; analytic_id: string | null }[]
+  dest_account_id: string
+  dest_analytic_id: string | null
+  description?: string
+}
+
+export const fetchReclassSources = (token: string, asOf: string) =>
+  authedGet<ReclassSource[]>(token, `/api/accounting/balance-reclass/sources?as_of=${asOf}`)
+
+export const previewReclass = (token: string, body: ReclassBody) =>
+  authedSend<ReclassPreview>(token, 'POST', '/api/accounting/balance-reclass/preview', body)
+
+export const issueReclass = (token: string, body: ReclassBody) =>
+  authedSend<{ entry_id: string; number: number | null; line_count: number; total: string }>(
+    token, 'POST', '/api/accounting/balance-reclass', body,
+  )
 
 export const reclassifyAccounts = (
   token: string, items: { account_id: string; parent_id: string | null; type?: string }[],

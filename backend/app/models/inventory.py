@@ -25,6 +25,10 @@ from app.models.tenant import TenantMixin
 
 CONTACT_TYPES = ("customer", "supplier", "both")
 
+#: وضعیتِ مالیات بر ارزش افزوده. «معاف» عمداً از «نرخِ صفر» جداست — نرخِ صفر
+#: نمی‌گوید کالا معاف بوده یا فقط آن فاکتور بی‌مالیات صادر شده.
+VAT_STATUSES = ("taxable", "exempt")
+
 #: با عبور از سقفِ اعتبار چه شود. `none` پیش‌فرض است تا سقف‌هایی که از قبل ثبت
 #: شده‌اند یک‌شبه جلوی فروش را نگیرند.
 CREDIT_ACTIONS = ("none", "warn", "block")
@@ -266,6 +270,16 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: معنا دارد، نه خدمت. اعشاری‌پذیر چون واحد می‌تواند متر/کیلوگرم باشد.
     reorder_point: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
 
+    #: وضعیتِ مالیات بر ارزش افزوده: `taxable` (مشمول) یا `exempt` (معاف).
+    #:
+    #: **چرا پرچمِ جدا و نه `tax_rate = 0`:** نرخِ صفر مبهم است — سالِ بعد کسی
+    #: نمی‌تواند بگوید این کالا واقعاً معاف بوده یا فقط نرخش صفر ثبت شده. گزارشِ
+    #: ارزش افزوده باید «فروشِ معاف» را از «فروشِ مشمول با نرخِ صفر» تفکیک کند.
+    #:
+    #: این *تنظیم* است؛ آنچه در گزارش شمرده می‌شود `vat_status`ِ **ردیفِ فاکتور**
+    #: است که لحظه‌ی ثبت از همین‌جا کپی می‌شود. همان الگوی `tax_rate`/`tax_amount`.
+    vat_status: Mapped[str] = mapped_column(String(10), default="taxable", server_default="taxable")
+
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid) — کدِ رسمیِ ۱۳رقمیِ سامانه مؤدیان برای این کالا.
     #: خالی = از «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود. راز نیست.
     tax_stuff_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
@@ -323,7 +337,7 @@ class StockAdjustment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 

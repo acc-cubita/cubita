@@ -25,14 +25,17 @@ from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app import audit
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.analytic import AnalyticAccount
+from app.models.cost_center import CostCenter
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.currency import ExchangeRate
 from app.models.user import User
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open, get_latest_close_date
-from app.services.reports import _signed_balance
+from app.services.reports import _signed_balance, descendant_account_ids
 
 #: نوعِ حساب‌هایی که مانده‌شان از سالی به سالِ بعد منتقل می‌شود (حساب‌های دائمی).
 #: درآمد و هزینه اینجا نیستند چون پیش از اختتامیه با «بستن سود و زیان» صفر شده‌اند.
@@ -178,15 +181,36 @@ def finalize_entries(
     «دائم» یعنی امضاشده و برگرداندنش همان چیزی است که این وضعیت باید جلویش را بگیرد.
     """
     _assert_range(date_from, date_to)
+
+    #: فهرستِ **خالی** یعنی «کاربر چیزی انتخاب نکرد»، نه «فیلتری در کار نیست».
+    #: با شرطِ truthy به فیلترِ تاریخ می‌افتاد و اگر بازه هم خالی بود **همه‌ی دفتر**
+    #: دائم می‌شد — یک‌طرفه و بی‌راهِ برگشت.
+    if entry_ids is not None and not entry_ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "سندی انتخاب نشده است")
+
+    #: **گاردِ واقعیِ همان قاعده‌ای که docstringِ `FinalizeIn` از روزِ اول ادعا می‌کرد.**
+    #: تا امروز هیچ‌چیز اعمالش نمی‌کرد و بدنه‌ی خالیِ `{}` همه‌ی اسنادِ موقتِ
+    #: کسب‌وکار را برای همیشه دائم می‌کرد.
+    if entry_ids is None and not (date_from or date_to or source_type):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "دستِ‌کم یک فیلتر لازم است — بازه، منشأ، یا انتخابِ صریحِ اسناد. "
+            "دائم‌کردنِ همه‌ی اسنادِ موقت یک‌طرفه است و باید صریح خواسته شود.",
+        )
+
     query = _live_entries(db).filter(JournalEntry.status == "temporary")
-    if entry_ids:
+    #: انتخابِ دستی **جایگزینِ** بازه است نه افزوده بر آن — همان قاعده‌ی
+    #: `_renumber_scope`. پیش از این هر دو اعمال می‌شدند، پس کاربری که چند سند تیک
+    #: زده و بازه‌اش روی «امسال» مانده بی‌صدا زیرمجموعه‌ای از انتخابش را دائم می‌کرد.
+    if entry_ids is not None:
         query = query.filter(JournalEntry.id.in_(entry_ids))
-    if date_from:
-        query = query.filter(JournalEntry.entry_date >= date_from)
-    if date_to:
-        query = query.filter(JournalEntry.entry_date <= date_to)
-    if source_type:
-        query = query.filter(JournalEntry.source_type == source_type)
+    else:
+        if date_from:
+            query = query.filter(JournalEntry.entry_date >= date_from)
+        if date_to:
+            query = query.filter(JournalEntry.entry_date <= date_to)
+        if source_type:
+            query = query.filter(JournalEntry.source_type == source_type)
 
     entries = query.all()
     if not entries:
@@ -208,8 +232,30 @@ def finalize_entries(
 # ─────────────────────── ۳) بازشماره‌گذاریِ اسناد ─────────────────────────
 
 
-def _renumber_scope(db: Session, date_from: date_ | None, date_to: date_ | None):
+def _renumber_scope(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+):
+    """محدوده‌ی عملیات: یا فهرستِ صریحِ اسناد، یا بازه‌ی تاریخ.
+
+    انتخابِ دستی **جایگزینِ** بازه است نه افزوده بر آن. اگر هر دو اعمال می‌شدند،
+    کاربری که چند سند را تیک زده و بازه‌اش روی «این ماه» مانده بی‌صدا زیرمجموعه‌ای
+    از انتخابش را می‌گرفت — و پیش‌نمایش هم همان کمتر را نشان می‌داد، پس اشتباه
+    شبیهِ درست به نظر می‌رسید.
+
+    **انتخاب بر اساسِ محدوده‌ی شماره عمداً نیست.** کلِ کارِ این عملیات درست‌کردنِ
+    شماره‌هایی است که با تاریخ نمی‌خوانند؛ فیلترکردن بر همان شماره‌های به‌هم‌ریخته
+    یعنی تکیه بر چیزی که خودش خراب است — همان دلیلی که `_renumber_plan` با
+    `created_at` مرتب می‌کند نه با `number`.
+    """
     query = _live_entries(db)
+    #: `is not None` و نه صرفاً truthy: فهرستِ **خالی** یعنی «کاربر چیزی انتخاب
+    #: نکرد»، نه «فیلتری در کار نیست». با شرطِ truthy، انتخابِ خالی به فیلترِ
+    #: تاریخ می‌افتاد و اگر بازه هم خالی بود **کلِ دفتر** بازشماری می‌شد.
+    if entry_ids is not None:
+        return query.filter(JournalEntry.id.in_(entry_ids))
     if date_from:
         query = query.filter(JournalEntry.entry_date >= date_from)
     if date_to:
@@ -217,7 +263,12 @@ def _renumber_scope(db: Session, date_from: date_ | None, date_to: date_ | None)
     return query
 
 
-def _renumber_plan(db: Session, date_from: date_ | None, date_to: date_ | None) -> list[JournalEntry]:
+def _renumber_plan(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+) -> list[JournalEntry]:
     """اسنادِ *موقتِ* بازه به ترتیبی که باید شماره بگیرند: تاریخ، بعد لحظه‌ی ثبت.
 
     دو تصمیم:
@@ -231,17 +282,22 @@ def _renumber_plan(db: Session, date_from: date_ | None, date_to: date_ | None) 
       بی‌نظمی را بازتولید می‌کرد.
     """
     return (
-        _renumber_scope(db, date_from, date_to)
+        _renumber_scope(db, date_from, date_to, entry_ids)
         .filter(JournalEntry.status == "temporary")
         .order_by(JournalEntry.entry_date, JournalEntry.created_at, JournalEntry.id)
         .all()
     )
 
 
-def _permanent_in_range(db: Session, date_from: date_ | None, date_to: date_ | None) -> int:
+def _permanent_in_range(
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    entry_ids: list[UUID] | None = None,
+) -> int:
     """چند سندِ دائم در بازه هست — فقط برای توضیحِ اینکه چرا نقشه کوچک‌تر از بازه است."""
     return int(
-        _renumber_scope(db, date_from, date_to)
+        _renumber_scope(db, date_from, date_to, entry_ids)
         .filter(JournalEntry.status == "permanent")
         .with_entities(func.count(JournalEntry.id))
         .scalar()
@@ -250,10 +306,14 @@ def _permanent_in_range(db: Session, date_from: date_ | None, date_to: date_ | N
 
 
 def preview_renumber(
-    db: Session, date_from: date_ | None, date_to: date_ | None, start_number: int
+    db: Session,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    start_number: int,
+    entry_ids: list[UUID] | None = None,
 ) -> dict:
     _assert_range(date_from, date_to)
-    entries = _renumber_plan(db, date_from, date_to)
+    entries = _renumber_plan(db, date_from, date_to, entry_ids)
     names = _account_names(db)
     rows = []
     for offset, entry in enumerate(entries):
@@ -275,14 +335,19 @@ def preview_renumber(
     return {
         "count": len(rows),
         "changed_count": sum(1 for r in rows if r["changed"]),
-        "skipped_permanent": _permanent_in_range(db, date_from, date_to),
+        "skipped_permanent": _permanent_in_range(db, date_from, date_to, entry_ids),
         "rows": rows[:PREVIEW_LIMIT],
         "truncated": len(rows) > PREVIEW_LIMIT,
     }
 
 
 def renumber_entries(
-    db: Session, user: User, date_from: date_ | None, date_to: date_ | None, start_number: int
+    db: Session,
+    user: User,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    start_number: int,
+    entry_ids: list[UUID] | None = None,
 ) -> dict:
     """شماره‌ی اسنادِ بازه را از نو و به‌ترتیبِ تاریخ می‌دهد.
 
@@ -298,7 +363,7 @@ def renumber_entries(
     if start_number < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "شماره‌ی شروع باید دستِ‌کم ۱ باشد")
 
-    entries = _renumber_plan(db, date_from, date_to)
+    entries = _renumber_plan(db, date_from, date_to, entry_ids)
     if not entries:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "در این بازه سندِ موقتی برای شماره‌گذاری نیست"
@@ -321,16 +386,33 @@ def renumber_entries(
             f"شماره‌ی {clash[0]} پیش‌تر به سندی بیرونِ این بازه داده شده؛ شماره‌ی شروعِ دیگری انتخاب کنید",
         )
 
-    for i, entry in enumerate(entries):
-        entry.number = -(i + 1)
-    db.flush()
+    #: شماره‌های اصلی پیش از دست‌زدن نگه داشته می‌شوند — بعد از پاسِ منفی دیگر
+    #: از خودِ شیء درنمی‌آیند، و همین‌ها `from`ِ رکوردِ حسابرسی‌اند.
+    original = {entry.id: entry.number for entry in entries}
+
+    #: ثبتِ خودکار برای این دو flush خاموش است: مرحله‌ی منفی یک ترفندِ پیاده‌سازی
+    #: است نه واقعیتِ کسب‌وکاری، و رکوردش می‌گفت «سند شماره -۱ ویرایش شد».
+    #: رکوردِ درست پایین‌تر و یک‌بار نوشته می‌شود. شرح در `audit.suppressed`.
+    with audit.suppressed(db):
+        for i, entry in enumerate(entries):
+            entry.number = -(i + 1)
+        db.flush()
+        for offset, entry in enumerate(entries):
+            entry.number = start_number + offset
+        db.flush()
+
     changed = 0
-    for offset, entry in enumerate(entries):
-        new_number = start_number + offset
-        if entry.number != new_number:
-            changed += 1
-        entry.number = new_number
-    db.flush()
+    for entry in entries:
+        was, now = original[entry.id], entry.number
+        if was == now:
+            continue  # شماره‌اش عوض نشده؛ رویدادی رخ نداده که ثبت شود
+        changed += 1
+        audit.record_change(
+            db,
+            entry,
+            {"number": {"from": was, "to": now}},
+            f"شماره‌ی سند از {was if was is not None else '—'} به {now} تغییر کرد (بازشماره‌گذاری)",
+        )
 
     _sync_counter(db)
     return {
@@ -444,15 +526,20 @@ def merge_entries(db: Session, user: User, entry_ids: list[UUID], description: s
 # ───────────────────────── ۵) تسعیرِ ارز ──────────────────────────────────
 
 
-def _rate_on(db: Session, code: str, as_of: date_) -> Decimal | None:
-    """آخرین نرخِ ثبت‌شده تا این تاریخ (نه نرخِ آینده)."""
+def _rate_on(db: Session, code: str, as_of: date_) -> tuple[Decimal, date_] | None:
+    """آخرین نرخِ ثبت‌شده تا این تاریخ (نه نرخِ آینده) — همراهِ تاریخِ خودش.
+
+    تاریخ هم برمی‌گردد چون «آخرین نرخ تا این تاریخ» می‌تواند ماه‌ها کهنه باشد و
+    کاربر باید ببیندش. نرخِ نبود را حدس نمی‌زنیم؛ نرخِ کهنه را هم نباید بی‌صدا
+    به‌جای نرخِ روز جا بزنیم.
+    """
     row = (
         db.query(ExchangeRate)
         .filter(ExchangeRate.currency_code == code, ExchangeRate.rate_date <= as_of)
         .order_by(ExchangeRate.rate_date.desc())
         .first()
     )
-    return Decimal(str(row.rate)) if row else None
+    return (Decimal(str(row.rate)), row.rate_date) if row else None
 
 
 def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
@@ -465,6 +552,12 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
     rows = (
         db.query(
             JournalLine.account_id,
+            #: گروه‌بندی روی هر سه بُعدی که ردیفِ سند حمل می‌کند، نه فقط حساب.
+            #: یک «دریافتنیِ ارزی» با سه مشتری سه مانده‌ی جداست؛ اگر یک‌کاسه شود،
+            #: ردیفِ تسعیر بی‌تفصیلی می‌نشیند و دفترِ تفصیلی از حساب جدا می‌افتد —
+            #: جمعِ حساب درست، تفکیکش غلط، و چون سند ویرایشِ ردیف ندارد، برای همیشه.
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
             JournalLine.currency_code,
             func.coalesce(func.sum(JournalLine.debit), 0),
             func.coalesce(func.sum(JournalLine.credit), 0),
@@ -485,15 +578,22 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
             JournalEntry.entry_date <= as_of,
             JournalEntry.voided_at.is_(None),
         )
-        .group_by(JournalLine.account_id, JournalLine.currency_code)
+        .group_by(
+            JournalLine.account_id,
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
+            JournalLine.currency_code,
+        )
         .all()
     )
 
     accounts = {a.id: a for a in db.query(Account).all()}
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
     missing_rates: set[str] = set()
     items = []
     total_diff = Decimal(0)
-    for account_id, code, debit, credit, fx_net in rows:
+    for account_id, analytic_id, cost_center_id, code, debit, credit, fx_net in rows:
         account = accounts.get(account_id)
         if account is None:
             continue
@@ -506,30 +606,49 @@ def fx_revaluation_preview(db: Session, as_of: date_) -> dict:
             continue
         fx_balance = Decimal(fx_net or 0)
         book_value = Decimal(debit) - Decimal(credit)  # مانده‌ی ریالیِ خام (بدهکار مثبت)
-        rate = _rate_on(db, code, as_of)
-        if rate is None:
+        found = _rate_on(db, code, as_of)
+        if found is None:
             missing_rates.add(code)
             continue
+        rate, rate_date = found
         market_value = (fx_balance * rate).quantize(Decimal(1))
         diff = market_value - book_value
         if fx_balance == 0 and diff == 0:
             continue
         total_diff += diff
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        center = centers.get(cost_center_id) if cost_center_id else None
         items.append(
             {
                 "account_id": account.id,
                 "account_code": account.code,
                 "account_name": account.name,
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": cost_center_id,
+                "cost_center_name": center.name if center else None,
                 "currency_code": code,
                 "fx_balance": fx_balance,
                 "rate": rate,
+                #: تاریخِ خودِ نرخ، نه تاریخِ تسعیر. وقتی این دو یکی نیستند یعنی
+                #: نرخِ روز ثبت نشده و کهنه‌ترین موجود به کار رفته — که کاربر باید
+                #: ببیندش، نه اینکه پشتِ عددِ نرخ پنهان بماند.
+                "rate_date": rate_date,
                 "book_value": book_value,
                 "market_value": market_value,
                 "difference": diff,
             }
         )
 
-    items.sort(key=lambda r: (r["currency_code"], r["account_code"]))
+    items.sort(
+        key=lambda r: (
+            r["currency_code"],
+            r["account_code"],
+            r["analytic_code"] or "",
+            r["cost_center_name"] or "",
+        )
+    )
     return {
         "as_of": as_of,
         "items": items,
@@ -560,11 +679,20 @@ def issue_fx_revaluation(db: Session, user: User, as_of: date_, description: str
     for item in items:
         diff = Decimal(item["difference"])
         net += diff
+        #: تفصیلی در شرح هم می‌آید، وگرنه چند ردیفِ تسعیرِ یک حساب در چاپ و در
+        #: دفترِ کل از هم قابلِ تشخیص نیستند.
         label = f"تسعیرِ {item['currency_code']} — {item['account_name']}"
+        if item["analytic_name"]:
+            label += f" / {item['analytic_name']}"
         # اختلافِ مثبت یعنی معادلِ ریالیِ دارایی بیشتر شده → حساب بدهکار می‌شود.
         lines.append(
             JournalLine(
                 account_id=item["account_id"],
+                #: هر دو بُعد عیناً از مانده‌ای که تسعیر می‌شود کپی می‌شوند. ردیفی
+                #: که ابعادش را دور بیندازد، اثرِ مالی را جایی می‌نشاند که مانده‌اش
+                #: از آن‌جا نیامده است.
+                analytic_id=item["analytic_id"],
+                cost_center_id=item["cost_center_id"],
                 debit=diff if diff > 0 else 0,
                 credit=-diff if diff < 0 else 0,
                 description=label,
@@ -643,15 +771,24 @@ def _temporary_count(db: Session, date_from: date_ | None, date_to: date_ | None
     return int(query.with_entities(func.count(JournalEntry.id)).scalar() or 0)
 
 
-def _permanent_balances(db: Session, as_of: date_) -> list[tuple[Account, Decimal]]:
+def _permanent_balances(
+    db: Session, as_of: date_
+) -> list[tuple[Account, UUID | None, UUID | None, Decimal]]:
     """مانده‌ی حساب‌های دائمی تا این تاریخ — بدونِ خودِ حساب‌های اختتامیه/افتتاحیه.
 
     آن دو حساب واسط‌اند و جمعشان در هر سندی صفر است؛ واردکردنشان در محاسبه یعنی
     اختتامیه‌ی امسال، اختتامیه‌ی پارسال را دوباره ببندد.
+
+    **گروه‌بندی روی هر سه بُعدِ ردیف است، نه فقط حساب.** «دریافتنیِ تجاری» با سه
+    مشتری سه مانده‌ی جداست؛ اگر یک‌کاسه شود، سالِ جدید با حسابی باز می‌شود که
+    مانده دارد ولی دفترِ تفصیلی‌اش خالی است — جمع درست، تفکیک غلط، و چون سند
+    ویرایشِ ردیف ندارد، برای همیشه. همان استدلالِ `fx_revaluation_preview`.
     """
     rows = (
         db.query(
             Account,
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
             func.coalesce(func.sum(JournalLine.debit), 0),
             func.coalesce(func.sum(JournalLine.credit), 0),
         )
@@ -666,33 +803,45 @@ def _permanent_balances(db: Session, as_of: date_) -> list[tuple[Account, Decima
             ),
             JournalEntry.entry_date <= as_of,
         )
-        .group_by(Account.id)
+        .group_by(Account.id, JournalLine.analytic_id, JournalLine.cost_center_id)
         .all()
     )
-    out: list[tuple[Account, Decimal]] = []
-    for account, debit, credit in rows:
+    out: list[tuple[Account, UUID | None, UUID | None, Decimal]] = []
+    for account, analytic_id, cost_center_id, debit, credit in rows:
         raw = Decimal(debit) - Decimal(credit)  # بدهکارِ خالص (مثبت = بدهکار)
         if raw != 0:
-            out.append((account, raw))
-    return sorted(out, key=lambda r: r[0].code)
+            out.append((account, analytic_id, cost_center_id, raw))
+    return sorted(out, key=lambda r: (r[0].code, str(r[1] or ""), str(r[2] or "")))
 
 
 def closing_entry_preview(db: Session, as_of: date_) -> dict:
     """سندِ اختتامیه: بستنِ همه‌ی حساب‌های دائمی در پایانِ سال."""
     balances = _permanent_balances(db, as_of)
-    rows = [
-        {
-            "account_id": a.id,
-            "account_code": a.code,
-            "account_name": a.name,
-            "account_type": a.type,
-            # اختتامیه هر حساب را *برعکسِ* مانده‌اش می‌زند تا صفر شود.
-            "debit": -raw if raw < 0 else Decimal(0),
-            "credit": raw if raw > 0 else Decimal(0),
-            "balance": raw,
-        }
-        for a, raw in balances
-    ]
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
+    rows = []
+    for a, analytic_id, cost_center_id, raw in balances:
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        center = centers.get(cost_center_id) if cost_center_id else None
+        rows.append(
+            {
+                "account_id": a.id,
+                "account_code": a.code,
+                "account_name": a.name,
+                "account_type": a.type,
+                #: بُعدها با مانده می‌آیند و روی ردیفِ سند می‌نشینند، وگرنه سالِ
+                #: جدید تفکیکِ تفصیلیِ خودش را از دست می‌دهد.
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": cost_center_id,
+                "cost_center_name": center.name if center else None,
+                # اختتامیه هر حساب را *برعکسِ* مانده‌اش می‌زند تا صفر شود.
+                "debit": -raw if raw < 0 else Decimal(0),
+                "credit": raw if raw > 0 else Decimal(0),
+                "balance": raw,
+            }
+        )
     total = sum((r["debit"] + r["credit"] for r in rows), Decimal(0))
     open_pnl = _open_pnl_total(db, as_of)
     return {
@@ -735,9 +884,16 @@ def issue_closing_entry(db: Session, user: User, as_of: date_, description: str)
     lines = [
         JournalLine(
             account_id=r["account_id"],
+            #: بُعدها عیناً از مانده‌ای که بسته می‌شود کپی می‌شوند؛ ردیفی که
+            #: دورشان بیندازد، دفترِ تفصیلیِ سالِ بعد را خالی تحویل می‌دهد.
+            analytic_id=r["analytic_id"],
+            cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=f"بستنِ {r['account_name']}",
+            description=(
+                f"بستنِ {r['account_name']}"
+                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
+            ),
         )
         for r in preview["rows"]
     ]
@@ -792,6 +948,8 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
         )
 
     accounts = {a.id: a for a in db.query(Account).all()}
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
     closing_role_ids = {
         a.id for a in accounts.values() if a.system_role == cc.CLOSING_ACCOUNT
     }
@@ -804,22 +962,32 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
             continue
         debit = Decimal(line.credit)
         credit = Decimal(line.debit)
+        analytic = analytics.get(line.analytic_id) if line.analytic_id else None
+        center = centers.get(line.cost_center_id) if line.cost_center_id else None
         rows.append(
             {
                 "account_id": account.id,
                 "account_code": account.code,
                 "account_name": account.name,
                 "account_type": account.type,
+                #: بُعدها از خودِ ردیفِ اختتامیه می‌آیند، نه از محاسبه‌ی تازه —
+                #: همان دلیلی که کلِ افتتاحیه معکوسِ اختتامیه است.
+                "analytic_id": line.analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "cost_center_id": line.cost_center_id,
+                "cost_center_name": center.name if center else None,
                 "debit": debit,
                 "credit": credit,
                 "balance": debit - credit,
             }
         )
-    rows.sort(key=lambda r: r["account_code"])
+    rows.sort(key=lambda r: (r["account_code"], r["analytic_code"] or "", r["cost_center_name"] or ""))
     return {
         "as_of": as_of,
         "source_date": source_date,
         "rows": rows,
+        "closing_entry_id": closing.id,
         "closing_entry_number": closing.number,
         "total": sum((r["debit"] + r["credit"] for r in rows), Decimal(0)),
     }
@@ -837,6 +1005,30 @@ def issue_opening_entry(
     if not preview["rows"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سندِ اختتامیه‌ی مبنا هیچ ردیفی ندارد")
 
+    #: **اختتامیه خودش را گارد می‌کند، افتتاحیه نه.** بعد از اختتامیه همه‌ی
+    #: مانده‌ها صفرند، پس اختتامیه‌ی دوم «حسابی برای بستن نیست» می‌گیرد. ولی
+    #: افتتاحیه از *سندِ* اختتامیه ساخته می‌شود و آن سند سرِ جایش می‌ماند — پس
+    #: اجرای دوم همان را دوباره وارونه می‌کند و **هر مانده‌ی ابتدای دوره دو برابر
+    #: می‌شود**، بی‌صدا، چون سند متوازن است و هیچ گاردِ دیگری صدا نمی‌کند.
+    #:
+    #: مسدودکننده است نه هشدار: دوبرابرشدنِ خاموشِ ترازنامه همان‌قدر بنیادی است که
+    #: گاردِ «سود و زیان هنوز باز است» چند خط بالاتر.
+    existing = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.source_type == "opening_entry",
+            JournalEntry.reverses_entry_id == preview["closing_entry_id"],
+            JournalEntry.voided_at.is_(None),
+        )
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"از روی این سندِ اختتامیه قبلاً افتتاحیه صادر شده (سند شماره "
+            f"{existing.number}). برای صدورِ دوباره، اول همان را باطل کنید.",
+        )
+
     opening = get_or_create_account(
         db, cc.OPENING_ACCOUNT, code=cc.DEFAULT_CODE_BY_ROLE[cc.OPENING_ACCOUNT],
         name="حساب افتتاحیه", acc_type="equity", parent_code="3",
@@ -844,9 +1036,14 @@ def issue_opening_entry(
     lines = [
         JournalLine(
             account_id=r["account_id"],
+            analytic_id=r["analytic_id"],
+            cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=f"افتتاحِ {r['account_name']}",
+            description=(
+                f"افتتاحِ {r['account_name']}"
+                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
+            ),
         )
         for r in preview["rows"]
     ]
@@ -864,6 +1061,10 @@ def issue_opening_entry(
     entry = make_journal_entry(
         db, as_of, description.strip() or f"سند افتتاحیه {as_of}", "opening_entry", user, lines
     )
+    #: پیوندِ صریحِ افتتاحیه به اختتامیه‌اش. ستونِ تازه لازم نیست: `reverses_entry_id`
+    #: از قبل همین معنا را دارد و کامنتش می‌گوید «جمعشان همیشه صفر است» — که برای
+    #: این جفت مو‌به‌مو صادق است. گاردِ بالا هم روی همین می‌نشیند.
+    entry.reverses_entry_id = preview["closing_entry_id"]
     db.flush()
     return {
         "entry_id": entry.id,
@@ -946,7 +1147,7 @@ def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:
         .join(JournalLine, JournalLine.entry_id == JournalEntry.id)
         .join(Account, JournalLine.account_id == Account.id)
         .filter(JournalEntry.entry_date >= date_from, JournalEntry.entry_date <= date_to)
-        .order_by(JournalEntry.entry_date, JournalEntry.number, JournalLine.id)
+        .order_by(JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id)
         .all()
     )
     out = []
@@ -978,22 +1179,236 @@ def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:
     }
 
 
-# ───────────────────── ۸) اصلاحِ طبقه‌بندیِ حساب‌ها ────────────────────────
+# ──────────────────── ۸) اصلاحِ طبقه‌بندیِ *مانده* ─────────────────────────
+#
+# **این با «جابه‌جایی حساب در درختواره» (پایین‌تر) یکی نیست و نباید یکی شود.**
+#
+# آن یکی `parent_id`ِ خودِ حساب را عوض می‌کند — یعنی گزارشِ *پارسال* هم از امروز
+# طورِ دیگری دیده می‌شود. این یکی تاریخ را دست نمی‌زند: مانده‌ی یک ترکیبِ
+# (حساب، تفصیلی) را در یک تاریخِ مشخص با یک سندِ متوازن به جای درست منتقل می‌کند.
+#
+#     اسنادِ قدیمی  →  دست‌نخورده
+#     تاریخِ اصلاح  →  یک سندِ روشن که می‌گوید چه چیزی کجا رفت
 
 
-def _descendant_ids(db: Session, root_id: UUID) -> set[UUID]:
-    children: dict[UUID | None, list[UUID]] = {}
-    for aid, pid in db.query(Account.id, Account.parent_id).all():
-        children.setdefault(pid, []).append(aid)
-    seen: set[UUID] = set()
-    stack = [root_id]
-    while stack:
-        current = stack.pop()
-        if current in seen:
-            continue
-        seen.add(current)
-        stack.extend(children.get(current, []))
-    return seen
+def analytic_balances(
+    db: Session, as_of: date_, account_ids: set[UUID] | None = None
+) -> list[tuple[Account, UUID | None, Decimal]]:
+    """مانده‌ی خامِ هر ترکیبِ (حساب، تفصیلی) تا این تاریخ. مثبت = بدهکار.
+
+    الگویش همان `_permanent_balances` است، ولی بدونِ فیلترِ نوعِ حساب و بدونِ
+    کنارگذاشتنِ حساب‌های واسط: اصلاحِ طبقه‌بندی به هر حسابی می‌تواند بخورد.
+
+    **مانده است نه گردش** — همان چیزی که §۱۱ تحلیل می‌خواهد: حسابی که ۷۰ بدهکار و
+    ۵۲ بستانکار داشته، ۱۸ منتقل می‌شود نه ۱۲۲.
+    """
+    query = (
+        db.query(
+            Account,
+            JournalLine.analytic_id,
+            func.coalesce(func.sum(JournalLine.debit), 0),
+            func.coalesce(func.sum(JournalLine.credit), 0),
+        )
+        .join(JournalLine, JournalLine.account_id == Account.id)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .filter(
+            Account.is_group.is_(False),
+            JournalEntry.entry_date <= as_of,
+            JournalEntry.voided_at.is_(None),
+        )
+    )
+    if account_ids is not None:
+        query = query.filter(Account.id.in_(account_ids))
+
+    out: list[tuple[Account, UUID | None, Decimal]] = []
+    for account, analytic_id, debit, credit in query.group_by(Account.id, JournalLine.analytic_id):
+        raw = Decimal(debit) - Decimal(credit)
+        if raw != 0:
+            out.append((account, analytic_id, raw))
+    return sorted(out, key=lambda r: (r[0].code, str(r[1] or "")))
+
+
+def reclass_sources(db: Session, as_of: date_) -> list[dict]:
+    """ترکیب‌های داری مانده تا این تاریخ — سیاهه‌ای که کاربر از آن مبدأ انتخاب می‌کند."""
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    rows = []
+    for account, analytic_id, raw in analytic_balances(db, as_of):
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        rows.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic.name if analytic else None,
+                "balance": raw,
+                #: نقشِ سیستمی مسدود نمی‌کند، ولی کاربر باید بداند: مانده می‌رود،
+                #: **ثبت‌های خودکارِ آینده همچنان به همین حساب می‌آیند**.
+                "system_role": account.system_role,
+            }
+        )
+    return rows
+
+
+def _reclass_destination(db: Session, dest_account_id: UUID) -> Account:
+    dest = db.get(Account, dest_account_id)
+    if dest is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حسابِ مقصد یافت نشد")
+    if dest.is_group:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"«{dest.name}» سرفصل است و سند نمی‌پذیرد"
+        )
+    if not dest.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"حسابِ «{dest.name}» غیرفعال است")
+    return dest
+
+
+def reclass_preview(
+    db: Session,
+    as_of: date_,
+    sources: list[dict],
+    dest_account_id: UUID,
+    dest_analytic_id: UUID | None,
+) -> dict:
+    """پیش‌نمایشِ سندِ اصلاح: چه مبلغی، از کجا، به کجا — و اختلاف که باید صفر باشد.
+
+    **جهتِ سند از خودِ مانده می‌آید، نه از فرض.** مانده‌ی بدهکار یعنی مبدأ
+    بستانکار می‌شود تا صفر شود؛ مانده‌ی بستانکار یعنی برعکس. هیچ‌جا
+    «مبدأ بدهکار / مقصد بستانکار» ثابت نوشته نشده — §۱۲ تحلیل دقیقاً همین است.
+    """
+    if not sources:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "هیچ مبدأیی انتخاب نشده است")
+    dest = _reclass_destination(db, dest_account_id)
+
+    wanted = {(s["account_id"], s.get("analytic_id")) for s in sources}
+    balances = {
+        (account.id, analytic_id): (account, raw)
+        for account, analytic_id, raw in analytic_balances(
+            db, as_of, {s["account_id"] for s in sources}
+        )
+    }
+
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    dest_analytic = analytics.get(dest_analytic_id) if dest_analytic_id else None
+    items, warnings = [], []
+    total_debit = total_credit = Decimal(0)
+
+    for key in sorted(wanted, key=lambda k: str(k)):
+        if key == (dest_account_id, dest_analytic_id):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "مبدأ و مقصد یکی‌اند؛ این سند هیچ اثری ندارد"
+            )
+        found = balances.get(key)
+        if found is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "یکی از مبدأهای انتخاب‌شده در این تاریخ مانده‌ای ندارد",
+            )
+        account, raw = found
+        analytic = analytics.get(key[1]) if key[1] else None
+        #: مبدأ *برعکسِ* مانده‌اش زده می‌شود تا صفر شود؛ مقصد همان را می‌گیرد.
+        total_debit += raw if raw < 0 else Decimal(0)
+        items.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "analytic_id": key[1],
+                "analytic_name": analytic.name if analytic else None,
+                "balance": raw,
+                "source_debit": -raw if raw < 0 else Decimal(0),
+                "source_credit": raw if raw > 0 else Decimal(0),
+                "dest_debit": raw if raw > 0 else Decimal(0),
+                "dest_credit": -raw if raw < 0 else Decimal(0),
+            }
+        )
+        if account.system_role:
+            warnings.append(
+                f"حسابِ «{account.name}» نقشِ سیستمی دارد: مانده منتقل می‌شود ولی "
+                "ثبت‌های خودکارِ آینده همچنان به همین حساب می‌آیند."
+            )
+
+    total_debit = sum((i["source_debit"] + i["dest_debit"] for i in items), Decimal(0))
+    total_credit = sum((i["source_credit"] + i["dest_credit"] for i in items), Decimal(0))
+    return {
+        "as_of": as_of,
+        "items": items,
+        "dest_account_id": dest.id,
+        "dest_account_code": dest.code,
+        "dest_account_name": dest.name,
+        "dest_analytic_id": dest_analytic_id,
+        "dest_analytic_name": dest_analytic.name if dest_analytic else None,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        #: باید صفر باشد. اصلاحِ طبقه‌بندی از هیچ، دارایی یا سود نمی‌سازد.
+        "difference": total_debit - total_credit,
+        "warnings": warnings,
+    }
+
+
+def issue_reclass(
+    db: Session,
+    user: User,
+    as_of: date_,
+    sources: list[dict],
+    dest_account_id: UUID,
+    dest_analytic_id: UUID | None,
+    description: str,
+) -> dict:
+    """سندِ اصلاحِ طبقه‌بندیِ مانده. تاریخ دست‌نخورده می‌ماند."""
+    assert_period_open(db, as_of)
+    preview = reclass_preview(db, as_of, sources, dest_account_id, dest_analytic_id)
+
+    lines: list[JournalLine] = []
+    for item in preview["items"]:
+        where = item["account_name"] + (f" / {item['analytic_name']}" if item["analytic_name"] else "")
+        to = preview["dest_account_name"] + (
+            f" / {preview['dest_analytic_name']}" if preview["dest_analytic_name"] else ""
+        )
+        #: یک **جفت** ردیف برای هر مبدأ، نه یک ردیفِ تجمیعیِ مقصد — تا از روی خودِ
+        #: سند معلوم باشد کدام مبلغ از کجا آمد.
+        lines.append(
+            JournalLine(
+                account_id=item["account_id"],
+                analytic_id=item["analytic_id"],
+                debit=item["source_debit"],
+                credit=item["source_credit"],
+                description=f"انتقالِ مانده‌ی {where} به {to}",
+            )
+        )
+        lines.append(
+            JournalLine(
+                account_id=dest_account_id,
+                analytic_id=dest_analytic_id,
+                debit=item["dest_debit"],
+                credit=item["dest_credit"],
+                description=f"دریافتِ مانده‌ی {where}",
+            )
+        )
+
+    entry = make_journal_entry(
+        db,
+        as_of,
+        description.strip() or f"اصلاح طبقه‌بندی مانده تا {as_of}",
+        "reclassification",
+        user,
+        lines,
+    )
+    db.flush()
+    return {
+        "entry_id": entry.id,
+        "number": entry.number,
+        "line_count": len(lines),
+        "total": preview["total_debit"],
+    }
+
+
+# ───────────────── ۹) جابه‌جاییِ حساب در درختواره (ساختاری) ────────────────
+#
+# **این مانده را جابه‌جا نمی‌کند.** `parent_id` و `type`ِ خودِ حساب را عوض می‌کند،
+# یعنی گزارشِ گذشته هم از این به بعد طورِ دیگری دیده می‌شود. برای بردنِ *مانده* به
+# حسابِ درست، بخشِ ۸ بالا («اصلاح طبقه‌بندی مانده») درست است.
 
 
 def reclassify_accounts(db: Session, items: list[dict]) -> dict:
@@ -1031,7 +1446,7 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, f"«{parent.name}» سرفصل نیست و نمی‌تواند زیرمجموعه بگیرد"
                 )
-            if parent.id in _descendant_ids(db, account.id):
+            if parent.id in descendant_account_ids(db, account.id):
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, "حساب را نمی‌توان زیرِ زیرمجموعه‌ی خودش برد"
                 )
@@ -1058,7 +1473,7 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
             # زیرمجموعه‌ها باید با والدشان هم‌نوع بمانند، وگرنه گارد بالا بارِ بعد
             # روی همان درخت شکست می‌خورد.
             if account.is_group:
-                for child_id in _descendant_ids(db, account.id) - {account.id}:
+                for child_id in descendant_account_ids(db, account.id) - {account.id}:
                     child = db.get(Account, child_id)
                     if child is not None:
                         child.type = new_type

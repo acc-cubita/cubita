@@ -71,7 +71,7 @@ class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     overhead_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 

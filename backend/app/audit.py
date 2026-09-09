@@ -14,6 +14,7 @@ UPDATEها در یک دسته بیفتد، پیدا کردنش نیاز به ف�
 action مستقل، یک کوئری ساده است.
 """
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -26,6 +27,11 @@ from app.observability import request_id_var
 #: کلید نگهداری کاربر روی خودِ Session — به همان دلیلی که مستأجر آنجا نگه داشته
 #: می‌شود: زیر threadpool، ContextVar بین dependency و اندپوینت منتقل نمی‌شود.
 ACTOR_KEY = "cubita_audit_actor"
+
+#: کلیدِ خاموش‌کردنِ موقتِ ثبتِ خودکار. تنها مصرفش عملیاتی است که برای دور زدنِ یک
+#: قیدِ دیتابیس چندمرحله‌ای می‌نویسد و مراحلِ میانی‌اش واقعیتِ کسب‌وکاری نیستند —
+#: بازشماره‌گذاری. شرحِ کامل بالای `suppressed`.
+SUPPRESS_KEY = "cubita_audit_suppressed"
 
 #: متغیر جلسه‌ای که تنها راه مجاز حذف رکورد حسابرسی است (offboarding مستأجر).
 PURGE_SETTING = "app.audit_purge"
@@ -140,6 +146,7 @@ def _describe(label: str, obj, action: str) -> str:
     return {
         "create": f"{who} ثبت شد",
         "void": f"{who} باطل شد",
+        "finalize": f"{who} دائم شد",
         "update": f"{who} ویرایش شد",
         "delete": f"{who} حذف شد",
     }[action]
@@ -167,6 +174,9 @@ def _record_financial_changes(session: Session, flush_context, instances) -> Non
     before_flush جای درستش است چون هنوز می‌شود به session اضافه کرد و تاریخچه‌ی
     تغییرها هنوز پاک نشده. در after_flush هر دو از دست رفته‌اند.
     """
+    if session.info.get(SUPPRESS_KEY):
+        return
+
     registry = audited_models()
     if not registry:
         return
@@ -192,7 +202,20 @@ def _record_financial_changes(session: Session, flush_context, instances) -> Non
         if not changes:
             continue
         # ابطال یک UPDATE معمولی نیست و نباید لای بقیه گم شود.
-        action = "void" if changes.get("voided_at", {}).get("from") is None and "voided_at" in changes else "update"
+        #
+        # دائم‌شدن هم همین‌طور، و به همان دلیل: لحظه‌ای که سند وارد سابقه‌ی رسمی
+        # می‌شود دومین رویدادِ مهمِ چرخه‌ی عمر است. با `update` ثبت می‌شد و خلاصه‌اش
+        # می‌گفت «… ویرایش شد» — که غلط توصیف می‌کند، چون هیچ‌چیز ویرایش نشده.
+        # سؤالِ «چه کسی این سند را نهایی کرد؟» جوابش فیلتر روی JSONِ changes بود.
+        #
+        # ترتیب مهم است: ابطال اول. سندی که هم‌زمان باطل و دائم شود وجود ندارد،
+        # ولی اگر روزی پیش بیاید «باطل شد» خبرِ مهم‌تری است.
+        if "voided_at" in changes and changes.get("voided_at", {}).get("from") is None:
+            action = "void"
+        elif changes.get("status", {}).get("to") == "permanent":
+            action = "finalize"
+        else:
+            action = "update"
         pending.append(_entry(session, obj, label, action, changes))
 
     for obj in session.deleted:
@@ -203,3 +226,62 @@ def _record_financial_changes(session: Session, flush_context, instances) -> Non
 
     for entry in pending:
         session.add(entry)
+
+
+# ── استثنای آگاهانه‌ی «صریح به‌جای خودکار» ───────────────────────────────────
+#
+# docstringِ بالای همین فایل می‌گوید ثبت باید خودکار باشد نه صریح، چون «یادش
+# بماند» برای ردی که ارزشِ قانونی دارد حالتِ شکست است. آن استدلال درباره‌ی
+# **پوشش** است و سرِ جایش می‌ماند.
+#
+# این دو تا پوشش را کم نمی‌کنند؛ برای عملیاتی‌اند که *مراحلِ میانی‌اش واقعیت
+# ندارند*. `renumber_entries` برای دور زدنِ قیدِ یکتای (مستأجر، شماره) اول همه‌ی
+# شماره‌ها را منفی می‌کند و بعد نهایی. ثبتِ خودکار از آن دو flush دو رکورد
+# می‌ساخت که یکی‌شان می‌گفت «سند شماره -۱ ویرایش شد» — وضعیتی که هرگز واقعیت
+# نداشت — و هیچ‌کدام «۵ → ۳» را نشان نمی‌داد، یعنی همان تنها چیزی که کسی دنبالش
+# می‌گردد.
+#
+# پس ثبتِ خودکار برای آن دو flush خاموش می‌شود و یک رکوردِ درست جایش می‌نشیند.
+
+
+@contextmanager
+def suppressed(session: Session):
+    """ثبتِ خودکار را در این بلوک خاموش می‌کند.
+
+    تودرتو امن است و پرچم را به مقدارِ قبلی برمی‌گرداند، نه به False — وگرنه بلوکِ
+    داخلی خاموشیِ بلوکِ بیرونی را لغو می‌کرد.
+
+    **هرکس این را به کار می‌برد موظف است خودش رکوردِ درست را بنویسد**
+    (`record_change`). خاموش‌کردنِ بی‌جایگزین یعنی تغییرِ مالیِ بی‌رد.
+    """
+    previous = session.info.get(SUPPRESS_KEY, False)
+    session.info[SUPPRESS_KEY] = True
+    try:
+        yield
+    finally:
+        session.info[SUPPRESS_KEY] = previous
+
+
+def record_change(session: Session, obj, changes: dict, summary: str) -> None:
+    """یک رکوردِ حسابرسیِ صریح با خلاصه‌ی دلخواه.
+
+    `changes` همان شکلِ `{"field": {"from": ..., "to": ...}}`ِ ثبتِ خودکار را دارد
+    تا خواننده‌ی دفتر مجبور نباشد دو قالب را بشناسد.
+    """
+    label = audited_models().get(type(obj))
+    if label is None:
+        return
+    actor_id, actor_email = _actor(session)
+    session.add(
+        AuditLog(
+            tenant_id=getattr(obj, "tenant_id", None),
+            actor_id=actor_id,
+            actor_email=actor_email,
+            action="update",
+            entity_type=type(obj).__name__,
+            entity_id=obj.id,
+            summary=summary,
+            changes=changes or None,
+            request_id=request_id_var.get(),
+        )
+    )

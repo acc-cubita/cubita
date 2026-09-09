@@ -5934,6 +5934,13 @@ button:disabled {
 /* ردیفِ جمعِ گزارش‌ها */
 .entity-table tr.rep-foot td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 700; }
 
+/* آمادگیِ گزارشِ فصلی: تیکِ «فقط ناقص‌ها» و شمارشِ ردیف‌های ناقص.
+   رنگ از همان توکنِ هشدارِ `field-hint--warn` می‌آید تا نشانِ ردیف و شمارشِ بالا
+   یک زبان داشته باشند. */
+.rep-only-incomplete { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: var(--fs-sm); cursor: pointer; }
+.rep-only-incomplete input { cursor: pointer; }
+.rep-incomplete { color: #dc2626; }
+
 /* ── موبایل (≤۷۶۰px): جدول‌های چندستونیِ گزارش‌ها کارتِ برچسب‌دار می‌شوند ── */
 @media (max-width: 760px) {
   .rep-tb-table, .rep-tb-table tbody, .rep-tb-table tfoot,

@@ -3,13 +3,18 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount, Check
 from app.models.inventory import Contact, Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice, SalesInvoiceLine
+from app.models.invoices import (
+    PurchaseInvoice,
+    PurchaseInvoiceLine,
+    SalesInvoice,
+    SalesInvoiceLine,
+)
 from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
 from app.models.treasury import TreasuryTransaction
 from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
@@ -126,6 +131,103 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
         net, tax = query.one()
         return Decimal(net), Decimal(tax)
 
+    def split(invoice_model, line_model, date_col) -> dict:
+        """پایه‌ی مالیاتی را به چهار سطل تفکیک می‌کند: مشمول/معاف × کالا/خدمت.
+
+        **از ردیف‌ها جمع می‌شود نه سربرگ**، و این دقیق است چون تخفیفِ سطحِ فاکتور
+        از قبل بینِ ردیف‌ها تسهیم شده (`invoices.py`): خالصِ ردیف =
+        `qty×price − discount`، و جمعشان همان `total_amount` است. پس تفکیک بدونِ
+        تسهیمِ نسبی درست درمی‌آید — تستِ `test_the_four_buckets_sum_to_the_total`
+        همین برابری را قفل می‌کند.
+
+        `vat_status` از **ردیف** خوانده می‌شود نه از کالا: وضعیتِ لحظه‌ی معامله،
+        نه وضعیتِ امروز. `is_service` برعکس از کالا می‌آید — کالا/خدمت بودن
+        واقعیتی فیزیکی است، نه طبقه‌بندیِ قانونی که با قانون عوض شود.
+        """
+        price_col = (
+            line_model.unit_price if hasattr(line_model, "unit_price") else line_model.unit_cost
+        )
+        net = func.coalesce(func.sum(line_model.qty * price_col - line_model.discount), 0)
+        query = (
+            db.query(line_model.vat_status, Item.is_service, net)
+            .join(invoice_model, line_model.invoice_id == invoice_model.id)
+            .join(Item, line_model.item_id == Item.id)
+            .filter(invoice_model.voided_at.is_(None))
+        )
+        if date_from is not None:
+            query = query.filter(date_col >= date_from)
+        if date_to is not None:
+            query = query.filter(date_col <= date_to)
+
+        out = {
+            "taxable_goods": Decimal(0),
+            "taxable_services": Decimal(0),
+            "exempt_goods": Decimal(0),
+            "exempt_services": Decimal(0),
+        }
+        for status, is_service, amount in query.group_by(line_model.vat_status, Item.is_service):
+            prefix = "exempt" if status == "exempt" else "taxable"
+            suffix = "services" if is_service else "goods"
+            out[f"{prefix}_{suffix}"] += Decimal(amount)
+        return out
+
+    def mixed_invoices(invoice_model, line_model, date_col) -> list[dict]:
+        """فاکتورهایی که ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر است.
+
+        این‌ها **روی ردیفِ معاف هم مالیات گرفته‌اند**، چون مالیات یک نرخ روی کلِ
+        فاکتور است (`compute_tax(total_amount, tax_rate)`).
+
+        **گزارش است نه گارد:** فاکتورِ ثبت‌شده ویرایش نمی‌شود و مسدودکردنِ گزارش
+        هیچ‌چیز را درست نمی‌کند؛ چیزی که کمک می‌کند این است که حسابدار بداند.
+        """
+        exempt_net = func.coalesce(
+            func.sum(
+                case(
+                    (
+                        line_model.vat_status == "exempt",
+                        line_model.qty
+                        * (
+                            line_model.unit_price
+                            if hasattr(line_model, "unit_price")
+                            else line_model.unit_cost
+                        )
+                        - line_model.discount,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        )
+        query = (
+            db.query(
+                invoice_model.id,
+                invoice_model.number,
+                date_col,
+                invoice_model.tax_amount,
+                func.count(func.distinct(line_model.vat_status)),
+                exempt_net,
+            )
+            .join(line_model, line_model.invoice_id == invoice_model.id)
+            .filter(invoice_model.voided_at.is_(None), invoice_model.tax_rate > 0)
+        )
+        if date_from is not None:
+            query = query.filter(date_col >= date_from)
+        if date_to is not None:
+            query = query.filter(date_col <= date_to)
+        rows = query.group_by(invoice_model.id, invoice_model.number, date_col, invoice_model.tax_amount).having(
+            func.count(func.distinct(line_model.vat_status)) > 1
+        ).all()
+        return [
+            {
+                "invoice_id": iid,
+                "number": number,
+                "invoice_date": idate,
+                "tax_amount": Decimal(tax),
+                "exempt_net": Decimal(ex_net),
+            }
+            for iid, number, idate, tax, _kinds, ex_net in rows
+        ]
+
     sales_net, output_vat = sums(SalesInvoice, SalesInvoice.invoice_date, True)
     purchase_net, input_vat = sums(PurchaseInvoice, PurchaseInvoice.invoice_date, True)
     sales_ret_net, sales_ret_vat = sums(SalesReturn, SalesReturn.return_date, False)
@@ -145,6 +247,19 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
         "sales_returns_vat": sales_ret_vat,
         "purchase_returns_net": purchase_ret_net,
         "purchase_returns_vat": purchase_ret_vat,
+        #: تفکیکِ پایه — جوابِ «چقدر فروشِ معاف داشته‌ایم؟». برگشت‌ها در این تفکیک
+        #: نمی‌آیند: ارقامِ بالا خالصِ پس از برگشت‌اند و این‌ها *ترکیبِ* فروشِ دوره را
+        #: نشان می‌دهند. یکی‌کردنشان دو معنا را در یک عدد قاطی می‌کرد.
+        "sales_breakdown": split(SalesInvoice, SalesInvoiceLine, SalesInvoice.invoice_date),
+        "purchase_breakdown": split(
+            PurchaseInvoice, PurchaseInvoiceLine, PurchaseInvoice.invoice_date
+        ),
+        "mixed_sales_invoices": mixed_invoices(
+            SalesInvoice, SalesInvoiceLine, SalesInvoice.invoice_date
+        ),
+        "mixed_purchase_invoices": mixed_invoices(
+            PurchaseInvoice, PurchaseInvoiceLine, PurchaseInvoice.invoice_date
+        ),
     }
 
 
@@ -159,6 +274,35 @@ def _seasonal_range(year: int, quarter: int) -> tuple[date, date]:
     else:
         date_to = jalali_to_gregorian(year, start_month + 3, 1) - timedelta(days=1)
     return date_from, date_to
+
+
+#: طولِ شناسه‌ی هویتی به تفکیکِ نوعِ شخص — کدِ ملیِ حقیقی ۱۰ رقم، شناسه‌ی ملیِ
+#: حقوقی ۱۱ رقم. کامنتِ `Contact.national_id` همین را می‌گوید ولی هیچ‌جا سنجیده
+#: نمی‌شد؛ کدِ ۱۰رقمی روی شخصِ حقوقی *پُر* به‌نظر می‌رسد و سرِ آپلود رد می‌شود.
+NATIONAL_ID_LENGTH = {"real": 10, "legal": 11}
+
+
+def _seasonal_issues(contact) -> list[str]:
+    """چه چیزی از هویتِ مالیاتیِ این طرف‌حساب کم یا بدشکل است.
+
+    **کدِ ماشین‌خوان برمی‌گرداند، نه متنِ فارسی.** برچسب کارِ رابط است (کنارِ
+    `ENTITY_LABEL`)، و کد اجازه می‌دهد بعداً بدونِ شکستنِ چیزی فیلتر و شمارش شود.
+
+    **گزارش است، نه گارد**: خروجی هرگز مسدود نمی‌شود. کاری که این‌جا می‌شود فقط
+    این است که حسابدار *پیش از* آپلود بداند کدام ردیف رد خواهد شد، نه بعدش.
+    """
+    issues: list[str] = []
+    if not (contact.national_id or "").strip():
+        issues.append("national_id_missing")
+    else:
+        expected = NATIONAL_ID_LENGTH.get(contact.entity_type)
+        if expected is not None and len(contact.national_id.strip()) != expected:
+            issues.append("national_id_length")
+    if not (contact.economic_code or "").strip():
+        issues.append("economic_code_missing")
+    if not (contact.postal_code or "").strip():
+        issues.append("postal_code_missing")
+    return issues
 
 
 def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
@@ -246,6 +390,10 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
                     "net": net,
                     "vat": vat,
                     "total": net + vat,
+                    #: **این ردیف هرگز ایراد نمی‌گیرد.** طرف‌حساب نیست؛ سطلِ فروشِ
+                    #: نقدی/خرده است و اصلاً هویتِ مالیاتی ندارد که کم داشته باشد.
+                    #: بدونِ این کامنت، دفعه‌ی بعد کسی «درستش» می‌کند.
+                    "issues": [],
                 })
             else:
                 c = contacts.get(cid)
@@ -262,12 +410,19 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
                     "net": net,
                     "vat": vat,
                     "total": net + vat,
+                    "issues": _seasonal_issues(c) if c else [],
                 })
 
         # بزرگ‌ترین معامله‌ها بالا؛ ردیفِ تجمیعیِ خرد ته.
+        #
+        # ردیف‌های ناقص عمداً بالا کشیده *نمی‌شوند*: ترتیبِ مبلغ همان چیزی است که
+        # حسابدار برای خواندنِ گزارش می‌خواهد. پیداکردنشان کارِ فیلترِ «فقط ناقص‌ها»
+        # در رابط است، نه به‌هم‌ریختنِ ترتیبِ اصلی.
         rows.sort(key=lambda r: (r["contact_id"] is None, -r["net"]))
         return {
             "rows": rows,
+            "ready_count": sum(1 for r in rows if not r["issues"]),
+            "incomplete_count": sum(1 for r in rows if r["issues"]),
             "total_gross": sum((r["gross"] for r in rows), Decimal(0)),
             "total_discount": sum((r["discount"] for r in rows), Decimal(0)),
             "total_net": sum((r["net"] for r in rows), Decimal(0)),
@@ -300,15 +455,52 @@ def _signed_balance(account_type: str, total_debit: Decimal, total_credit: Decim
     return total_debit - total_credit
 
 
+def descendant_account_ids(db: Session, root_id: UUID) -> set[UUID]:
+    """شناسه‌ی حساب و همه‌ی نوادگانش — پایه‌ی هر گزارشی که یک سرفصل را جمع می‌زند.
+
+    یک بار کلِ (id, parent_id) خوانده می‌شود و درخت در حافظه پیموده می‌شود؛ کوئریِ
+    بازگشتی برای چارتی که چند صد ردیف است صرف نمی‌کند. `seen` حلقه را می‌شکند تا
+    داده‌ی خرابِ درخت به‌جای پاسخ، پردازش را قفل نکند.
+    """
+    children: dict[UUID | None, list[UUID]] = {}
+    for aid, pid in db.query(Account.id, Account.parent_id).all():
+        children.setdefault(pid, []).append(aid)
+    seen: set[UUID] = set()
+    stack = [root_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(children.get(current, []))
+    return seen
+
+
 def get_general_ledger(
     db: Session, account_id: UUID, date_from: date | None, date_to: date | None
 ) -> dict:
+    """گردشِ یک حساب با مانده‌ی در حال اجرا — **شاملِ هر چه زیرش هست**.
+
+    برای حسابِ برگ همان دفترِ معینِ همیشگی است. برای سرفصل (حسابِ کل) گردشِ همه‌ی
+    زیرحساب‌هایش را به‌ترتیبِ تاریخ در یک دفتر می‌آورد — همان «دفتر کل».
+
+    **دوباره‌شماری ممکن نیست:** `routers/accounts.py` اجازه نمی‌دهد حسابی هم ردیفِ
+    مستقیم داشته باشد هم فرزند. پس هر حساب یا برگ است یا سرفصل، و جمعِ زیرشاخه
+    هیچ مبلغی را دو بار نمی‌شمارد.
+
+    سندِ باطل و معکوسش هر دو می‌مانند — مثلِ دفترِ روزنامه، به همان دلیل: دفتر باید
+    نشان دهد اشتباه رخ داد و بعد اصلاح شد.
+    """
     account = db.get(Account, account_id)
     if account is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
 
-    query = db.query(JournalLine, JournalEntry).join(JournalEntry, JournalLine.entry_id == JournalEntry.id).filter(
-        JournalLine.account_id == account_id
+    account_ids = descendant_account_ids(db, account_id)
+    query = (
+        db.query(JournalLine, JournalEntry, Account)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .join(Account, JournalLine.account_id == Account.id)
+        .filter(JournalLine.account_id.in_(account_ids))
     )
 
     opening_balance = Decimal(0)
@@ -321,11 +513,15 @@ def get_general_ledger(
     if date_to is not None:
         query = query.filter(JournalEntry.entry_date <= date_to)
 
-    rows = query.order_by(JournalEntry.entry_date, JournalEntry.number).all()
+    #: `seq` و `id` ترتیبِ درونِ سند را قطعی می‌کنند؛ بدونشان دو ردیفِ یک سند در
+    #: دفترِ کل هر بار جای هم عوض می‌شدند و مانده‌ی در حال اجرا ناپایدار می‌شد.
+    rows = query.order_by(
+        JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id
+    ).all()
 
     running = opening_balance
     lines = []
-    for line, entry in rows:
+    for line, entry, line_account in rows:
         delta = _signed_balance(account.type, line.debit, line.credit)
         running += delta
         lines.append(
@@ -333,6 +529,10 @@ def get_general_ledger(
                 "entry_id": entry.id,
                 "entry_number": entry.number,
                 "entry_date": entry.entry_date,
+                #: حسابِ خودِ ردیف، نه حسابی که کاربر انتخاب کرده. در دفترِ معین این
+                #: دو یکی‌اند؛ در دفترِ کل همین ستون می‌گوید مبلغ از کدام زیرحساب آمده.
+                "account_code": line_account.code,
+                "account_name": line_account.name,
                 "description": line.description or entry.description,
                 "debit": line.debit,
                 "credit": line.credit,

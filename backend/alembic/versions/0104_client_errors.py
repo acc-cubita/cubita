@@ -1,7 +1,7 @@
 """گزارشِ کرشِ کلاینت‌ها
 
-Revision ID: 0100
-Revises: 0099
+Revision ID: 0104
+Revises: 0103
 
 اپِ موبایل روی کافه‌بازار زنده بود و هیچ راهی نداشتیم بفهمیم دستِ کاربرِ واقعی
 می‌شکند یا نه. این جدول مقصدِ گزارش‌هایی است که خودِ اپ می‌فرستد.
@@ -15,6 +15,13 @@ Revises: 0099
 **چرا `client_id` یکتاست:** دستگاه صفِ گزارش‌ها را تا وقتی پاسخِ موفق نگیرد نگه
 می‌دارد و دوباره می‌فرستد — که رفتارِ درستی است. بدونِ قیدِ یکتا، یک قطعیِ شبکه
 یعنی چند رکوردِ تکراری از یک کرش.
+
+**چرا ۰۱۰۴ و نه ۰۱۰۰:** این مهاجرت اولش ۰۱۰۰ بود و همزمان روی شاخه‌ی دیگری
+هم ۰۱۰۰ ساخته شد. Alembic دو شناسه‌ی یکسان را **خطا نمی‌گیرد** — فقط
+`UserWarning: Revision 0100 is present more than once` می‌دهد، یکی را بی‌صدا
+دور می‌ریزد و دو head می‌سازد. یعنی این جدول هرگز ساخته نمی‌شد و اندپوینتِ
+گزارشِ کرش روی سرور خطا می‌داد، بی‌آنکه استقرار چیزی بگوید. پیش از ساختِ
+مهاجرت `alembic heads` را ببین (قاعده‌ی «مهاجرتِ همزمان» در CLAUDE.md).
 """
 from typing import Sequence, Union
 
@@ -22,8 +29,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0100"
-down_revision: Union[str, None] = "0099"
+revision: str = "0104"
+down_revision: Union[str, None] = "0103"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

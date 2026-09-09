@@ -24,5 +24,7 @@ class FiscalPeriodClose(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     net_profit: Mapped[float] = mapped_column(Numeric(18, 0))
     notes: Mapped[str] = mapped_column(Text, default="")
 
-    journal_entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"))
+    journal_entry_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), index=True
+    )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

@@ -9,6 +9,10 @@ class GeneralLedgerLineOut(BaseModel):
     entry_id: UUID
     entry_number: int | None
     entry_date: date
+    #: حسابِ خودِ ردیف — در دفترِ معین همان حسابِ انتخاب‌شده است، در دفترِ کل
+    #: زیرحسابی که مبلغ از آن آمده.
+    account_code: str
+    account_name: str
     description: str
     debit: Decimal
     credit: Decimal
@@ -266,10 +270,16 @@ class SeasonalPartyRowOut(BaseModel):
     net: Decimal  # خالصِ پس از تخفیف (پایه‌ی مالیات)
     vat: Decimal  # مالیات و عوارضِ ارزش افزوده
     total: Decimal  # net + vat (مبلغِ نهاییِ قابلِ پرداخت)
+    #: کمبودهای هویتِ مالیاتی، به‌صورتِ کدِ ماشین‌خوان — برچسبِ فارسی کارِ رابط است.
+    #: خالی یعنی این ردیف آماده‌ی سامانه است. ردیفِ تجمیعیِ خرد همیشه خالی است.
+    issues: list[str] = []
 
 
 class SeasonalSectionOut(BaseModel):
     rows: list[SeasonalPartyRowOut]
+    #: شمارشِ آمادگی — تا پیش از آپلود معلوم باشد چند ردیف رد خواهد شد.
+    ready_count: int = 0
+    incomplete_count: int = 0
     total_gross: Decimal
     total_discount: Decimal
     total_net: Decimal
@@ -290,6 +300,33 @@ class SeasonalReportOut(BaseModel):
     purchases: SeasonalSectionOut
 
 
+class VatBreakdownOut(BaseModel):
+    """تفکیکِ پایه‌ی مالیاتی — جوابِ «چقدر فروشِ معاف داشته‌ایم؟».
+
+    وضعیت از **ردیفِ فاکتور** می‌آید (لحظه‌ی معامله)، و کالا/خدمت از خودِ کالا.
+    """
+
+    taxable_goods: Decimal
+    taxable_services: Decimal
+    exempt_goods: Decimal
+    exempt_services: Decimal
+
+
+class MixedVatInvoiceOut(BaseModel):
+    """فاکتوری که ردیفِ معاف و مشمول را با هم دارد و نرخِ سربرگش غیرصفر است.
+
+    یعنی روی ردیفِ معاف هم مالیات گرفته شده، چون مالیات یک نرخ روی کلِ فاکتور است.
+    **گزارش است نه گارد** — فاکتورِ ثبت‌شده ویرایش نمی‌شود.
+    """
+
+    invoice_id: UUID
+    number: int | None
+    invoice_date: date
+    tax_amount: Decimal
+    #: خالصِ ردیف‌های معاف که ناخواسته در پایه‌ی مالیات آمده‌اند.
+    exempt_net: Decimal
+
+
 class VatReportOut(BaseModel):
     """خلاصه‌ی مالیات بر ارزش افزوده در یک بازه — مبنای اظهارنامه/تسویه."""
 
@@ -305,3 +342,9 @@ class VatReportOut(BaseModel):
     sales_returns_vat: Decimal
     purchase_returns_net: Decimal
     purchase_returns_vat: Decimal
+    #: ترکیبِ فروش/خریدِ دوره. برگشت‌ها این‌جا نمی‌آیند — ارقامِ بالا خالصِ پس از
+    #: برگشت‌اند و این‌ها ترکیب را نشان می‌دهند؛ یکی‌کردنشان دو معنا را قاطی می‌کرد.
+    sales_breakdown: VatBreakdownOut
+    purchase_breakdown: VatBreakdownOut
+    mixed_sales_invoices: list[MixedVatInvoiceOut] = []
+    mixed_purchase_invoices: list[MixedVatInvoiceOut] = []
