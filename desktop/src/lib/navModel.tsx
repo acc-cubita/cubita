@@ -165,6 +165,7 @@ export type PageKey =
   | 'bankstatement'
   | 'bankreconcile'
   | 'cashbox'
+  | 'cashboxes'
   | 'bankaccounts'
   | 'posterminals'
   | 'checkbooks'
@@ -330,6 +331,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} /> },
       { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} /> },
       { key: 'cashbox', label: 'صندوق', icon: <PiggyBank size={18} /> },
+      { key: 'cashboxes', label: 'تعریف صندوق', icon: <PiggyBank size={18} /> },
       { key: 'bankaccounts', label: 'حساب بانکی', icon: <Landmark size={18} /> },
       { key: 'posterminals', label: 'دستگاه کارت خوان', icon: <CreditCard size={18} /> },
       { key: 'checkbooks', label: 'دسته چک', icon: <BookMarked size={18} /> },
@@ -458,7 +460,7 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
 //: هجده عملیاتِ «دریافت و پرداخت» + فهرستش، همگی زیرِ چترِ ماژولِ `banking`.
 for (const key of [
   'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
-  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox',
+  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox', 'cashboxes',
   'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
   'treasuryledger', 'checkbooklist', 'bankaccountlist', 'posterminallist', 'possettlelist',
   'statementlist', 'pettylist',

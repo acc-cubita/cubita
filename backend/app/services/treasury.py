@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
@@ -7,6 +9,8 @@ from app.models.inventory import Contact
 from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn
+from app.models.cashbox import Cashbox
+from app.services import cashboxes
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.period_close import assert_period_open
@@ -15,14 +19,21 @@ from app.services.period_close import assert_period_open
 WALKIN_CARD_CONTACT_NAME = "فروشِ کارتیِ گذری"
 
 
-def _resolve_cash_or_bank_account(db: Session, data: TreasuryTransactionIn):
-    """حساب مقصد/مبدأ وجه: صندوق برای نقدی، حساب معین بانکِ انتخاب‌شده برای بانکی."""
+def _resolve_money_side(db: Session, data: TreasuryTransactionIn) -> tuple[Account, UUID | None, Cashbox | None]:
+    """حساب مقصد/مبدأ وجه، و بُعدی که روی ردیفِ سند می‌نشیند.
+
+    برای نقدی، صندوق تعیین می‌کند مبلغ به کدام معین و **کدام تفصیلی** برود. همین
+    تفصیلی است که مانده‌ی هر صندوق را از بقیه جدا می‌کند — بدونِ آن، صندوق‌ها در
+    دفتر یک عدد می‌شوند و «مانده‌ی صندوقِ شعبه» معنایی ندارد.
+    """
     if data.method == "cash":
-        return get_account(db, cc.CASH)
+        box = cashboxes.resolve_cashbox(db, getattr(data, "cashbox_id", None))
+        cashboxes.assert_usable(db, box, data.transaction_date)
+        return db.get(Account, cashboxes.gl_account_id(db, box)), box.analytic_id, box
     bank = db.get(BankAccount, data.bank_account_id)
     if bank is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
-    return db.get(Account, bank.gl_account_id)
+    return db.get(Account, bank.gl_account_id), None, None
 
 
 def create_receipt(
@@ -47,7 +58,7 @@ def create_receipt(
     if contact is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
 
-    money_account = _resolve_cash_or_bank_account(db, data)
+    money_account, money_analytic, box = _resolve_money_side(db, data)
     receivable = get_account(db, cc.ACCOUNTS_RECEIVABLE)
 
     description = data.description or f"دریافت از {contact.name}"
@@ -58,7 +69,14 @@ def create_receipt(
         "treasury_receipt",
         user,
         [
-            JournalLine(account_id=money_account.id, debit=data.amount, credit=0, description=description),
+            JournalLine(
+                account_id=money_account.id,
+                #: تفصیلیِ صندوق — همین است که مانده‌ی صندوق را مشتق‌شدنی می‌کند.
+                analytic_id=money_analytic,
+                debit=data.amount,
+                credit=0,
+                description=description,
+            ),
             JournalLine(account_id=receivable.id, debit=0, credit=data.amount, description=description),
         ],
     )
@@ -70,6 +88,7 @@ def create_receipt(
         amount=data.amount,
         method=data.method,
         bank_account_id=data.bank_account_id,
+        cashbox_id=box.id if box else None,
         description=description,
         journal_entry_id=entry.id,
         created_by_id=user.id,
@@ -155,7 +174,7 @@ def create_payment(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
     if contact is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
 
-    money_account = _resolve_cash_or_bank_account(db, data)
+    money_account, money_analytic, box = _resolve_money_side(db, data)
     payable = get_account(db, cc.ACCOUNTS_PAYABLE)
 
     description = data.description or f"پرداخت به {contact.name}"
@@ -167,7 +186,13 @@ def create_payment(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
         user,
         [
             JournalLine(account_id=payable.id, debit=data.amount, credit=0, description=description),
-            JournalLine(account_id=money_account.id, debit=0, credit=data.amount, description=description),
+            JournalLine(
+                account_id=money_account.id,
+                analytic_id=money_analytic,
+                debit=0,
+                credit=data.amount,
+                description=description,
+            ),
         ],
     )
 
@@ -178,6 +203,7 @@ def create_payment(db: Session, data: TreasuryTransactionIn, user: User) -> Trea
         amount=data.amount,
         method=data.method,
         bank_account_id=data.bank_account_id,
+        cashbox_id=box.id if box else None,
         description=description,
         journal_entry_id=entry.id,
         created_by_id=user.id,

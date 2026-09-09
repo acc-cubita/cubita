@@ -11,6 +11,9 @@ class TreasuryTransactionIn(BaseModel):
     amount: Decimal
     method: str = "cash"  # cash | bank
     bank_account_id: UUID | None = None
+    #: کدام صندوق (فقط برای روشِ نقدی). خالی = صندوقِ پیش‌فرض — تا فراخوان‌های
+    #: موجود که این را نمی‌فرستند مثلِ قبل کار کنند.
+    cashbox_id: UUID | None = None
     description: str = ""
 
     @model_validator(mode="after")
@@ -60,6 +63,9 @@ class TreasuryTransactionOut(BaseModel):
     amount: Decimal
     method: str
     bank_account_id: UUID | None
+    #: کدام صندوق. NULL = صندوقِ پیش‌فرض — همان معنایی که تراکنش‌های پیش از
+    #: مهاجرتِ ۰۱۰۵ دارند.
+    cashbox_id: UUID | None = None
     description: str
     journal_entry_id: UUID
     # متادیتای پرداختِ کارتی (اگر از کارتخوان آمده باشد)

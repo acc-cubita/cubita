@@ -2474,6 +2474,8 @@ export interface TreasuryTransactionRecord {
   amount: string
   method: 'cash' | 'bank'
   bank_account_id: string | null
+  /** کدام صندوق. null = صندوقِ پیش‌فرض (تراکنش‌های پیش از مهاجرتِ ۰۱۰۵). */
+  cashbox_id: string | null
   description: string
   journal_entry_id: string
   // متادیتای کارت (فقط برای رسیدِ کارتخوان پر می‌شود)
@@ -2493,6 +2495,8 @@ export interface TreasuryTransactionIn {
   amount: number
   method: 'cash' | 'bank'
   bank_account_id: string | null
+  /** فقط برای روشِ نقدی. خالی = صندوقِ پیش‌فرض. */
+  cashbox_id?: string | null
   description: string
 }
 
@@ -3078,6 +3082,44 @@ export interface CostCenterReport {
   total_profit: string
   untagged_share_pct: string
 }
+
+export interface CashboxRecord {
+  id: string
+  name: string
+  name2: string
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  gl_account_id: string | null
+  currency_code: string
+  opening_date: string | null
+  is_active: boolean
+  /** هر دو **مشتق** از دفترند. یکی ابتدای دوره است و دیگری نتیجه‌ی هرچه بعدش افتاده. */
+  opening_balance: string
+  balance: string
+}
+
+export interface CashboxInput {
+  name: string
+  name2?: string
+  analytic_id?: string | null
+  gl_account_id?: string | null
+  currency_code?: string
+  opening_date?: string | null
+  is_active?: boolean
+}
+
+export const fetchCashboxes = (token: string, includeInactive = true) =>
+  authedGet<CashboxRecord[]>(token, `/api/cashboxes?include_inactive=${includeInactive}`)
+
+export const createCashbox = (token: string, data: CashboxInput) =>
+  authedSend<CashboxRecord>(token, 'POST', '/api/cashboxes', data)
+
+export const updateCashbox = (token: string, id: string, data: Partial<CashboxInput>) =>
+  authedSend<CashboxRecord>(token, 'PATCH', `/api/cashboxes/${id}`, data)
+
+export const deleteCashbox = (token: string, id: string) =>
+  authedDelete(token, `/api/cashboxes/${id}`)
 
 export const fetchCostCenters = (token: string) =>
   authedGet<CostCenterRecord[]>(token, '/api/cost-centers')
