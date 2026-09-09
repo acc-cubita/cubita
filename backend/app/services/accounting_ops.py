@@ -33,7 +33,7 @@ from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.currency import ExchangeRate
 from app.models.user import User
 from app.services import chart_codes as cc
-from app.services.common import get_or_create_account, make_journal_entry
+from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open, get_latest_close_date
 from app.services.reports import _signed_balance, descendant_account_ids
 
@@ -719,47 +719,230 @@ def issue_fx_revaluation(db: Session, user: User, as_of: date_, description: str
 # ──────────────── ۶) بستنِ سود و زیان / اختتامیه / افتتاحیه ────────────────
 
 
-def pnl_close_preview(db: Session, date_to: date_) -> dict:
-    """پیش‌نمایشِ سندی که «بستنِ دوره» خواهد زد — بدونِ زدنش.
+def pnl_balances(
+    db: Session, date_from: date_ | None, date_to: date_
+) -> list[tuple[Account, UUID | None, UUID | None, Decimal]]:
+    """مانده‌ی حساب‌های موقت (درآمد و هزینه) در یک بازه — به تفکیکِ هر سه بُعدِ ردیف.
 
-    عمداً همان تابعِ صورتِ سود و زیانِ سرویسِ گزارش را صدا می‌زند که خودِ بستن هم صدا
-    می‌زند؛ اگر پیش‌نمایش منطقِ دوم می‌داشت، روزی از سندِ واقعی جدا می‌افتاد.
+    دوقلوی `_permanent_balances` است و عمداً همان شکل را دارد؛ فرقش نوعِ حساب و
+    داشتنِ کفِ بازه است. دلیلِ بُعدها هم همان است: «فروش داخلی / شرکت آلفا» مانده‌ی
+    جداییست و اگر یک‌کاسه بسته شود، حساب صفر می‌شود ولی دفترِ تفصیلی مانده‌دار
+    می‌ماند.
+
+    **اینجا بدتر از اختتامیه است.** آنجا مانده‌ی معلق دستِ‌کم سالِ بعد دیده می‌شد؛
+    درآمد و هزینه به سالِ بعد منتقل نمی‌شوند، پس تفصیلیِ جامانده **هیچ‌وقت** بسته
+    نمی‌شود. و در حالتِ `strict` اصلاً کارِ بستن انجام نمی‌شد، چون سندِ بی‌تفصیلی
+    روی حسابِ تفصیل‌پذیر رد می‌شد.
     """
-    from app.services.reports import get_income_statement
+    query = (
+        db.query(
+            Account,
+            JournalLine.analytic_id,
+            JournalLine.cost_center_id,
+            func.coalesce(func.sum(JournalLine.debit), 0),
+            func.coalesce(func.sum(JournalLine.credit), 0),
+        )
+        .join(JournalLine, JournalLine.account_id == Account.id)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .filter(
+            Account.is_group.is_(False),
+            Account.type.in_(("income", "expense")),
+            JournalEntry.entry_date <= date_to,
+        )
+        .group_by(Account.id, JournalLine.analytic_id, JournalLine.cost_center_id)
+    )
+    if date_from is not None:
+        query = query.filter(JournalEntry.entry_date >= date_from)
 
+    out: list[tuple[Account, UUID | None, UUID | None, Decimal]] = []
+    for account, analytic_id, cost_center_id, debit, credit in query.all():
+        raw = Decimal(debit) - Decimal(credit)  # بدهکارِ خالص (مثبت = بدهکار)
+        if raw != 0:
+            out.append((account, analytic_id, cost_center_id, raw))
+    return sorted(out, key=lambda r: (r[0].code, str(r[1] or ""), str(r[2] or "")))
+
+
+def _pnl_rows(db: Session, date_from: date_ | None, date_to: date_) -> list[dict]:
+    """ردیف‌های سندِ بستن — **تنها جایی که این محاسبه انجام می‌شود**.
+
+    پیش‌نمایش و صدور هر دو از همین یکی می‌خوانند؛ اگر هرکدام حسابِ خودش را می‌کرد،
+    روزی از هم جدا می‌افتادند و کاربر چیزی امضا می‌کرد که ندیده بود.
+    """
+    analytics = {a.id: a for a in db.query(AnalyticAccount).all()}
+    centers = {c.id: c for c in db.query(CostCenter).all()}
+    rows: list[dict] = []
+    for account, analytic_id, cost_center_id, raw in pnl_balances(db, date_from, date_to):
+        analytic = analytics.get(analytic_id) if analytic_id else None
+        center = centers.get(cost_center_id) if cost_center_id else None
+        analytic_name = analytic.name if analytic else None
+        rows.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "account_type": account.type,
+                #: بُعدها با مانده می‌آیند و روی ردیفِ سند می‌نشینند، وگرنه دفترِ
+                #: تفصیلیِ درآمد و هزینه برای همیشه باز می‌ماند.
+                "analytic_id": analytic_id,
+                "analytic_code": analytic.code if analytic else None,
+                "analytic_name": analytic_name,
+                "cost_center_id": cost_center_id,
+                "cost_center_name": center.name if center else None,
+                # بستن یعنی عکسِ مانده: درآمدِ بستانکار بدهکار می‌شود و هزینه‌ی
+                # بدهکار بستانکار. جهت از خودِ مانده می‌آید، نه از نامِ حساب.
+                "debit": -raw if raw < 0 else Decimal(0),
+                "credit": raw if raw > 0 else Decimal(0),
+                #: `side`/`amount` شکلِ قدیمیِ همین دو ستون است و برای رابط می‌ماند.
+                "side": "debit" if raw < 0 else "credit",
+                "amount": abs(raw),
+                "balance": raw,
+            }
+        )
+    return rows
+
+
+def _pnl_totals(rows: list[dict]) -> tuple[Decimal, Decimal, Decimal]:
+    """جمعِ درآمد، جمعِ هزینه، و سود/زیانِ خالص — همه از روی همان ردیف‌ها.
+
+    درآمد مانده‌ی بستانکار دارد (خامِ منفی)، پس با علامتِ معکوس جمع می‌شود تا مثل
+    صورتِ سود و زیان مثبت دیده شود.
+    """
+    total_income = sum((-r["balance"] for r in rows if r["account_type"] == "income"), Decimal(0))
+    total_expenses = sum((r["balance"] for r in rows if r["account_type"] == "expense"), Decimal(0))
+    return total_income, total_expenses, total_income - total_expenses
+
+
+def pnl_close_entry_in(db: Session, date_from: date_ | None, date_to: date_) -> JournalEntry | None:
+    """سندِ بستنِ ابطال‌نشده‌ای که در این بازه زده شده — اگر باشد.
+
+    از وقتی بستن و قفل دو گامِ جدا شدند، `close_period` باید بتواند بفهمد گامِ اول
+    از قبل انجام شده؛ وگرنه بازه‌ی خالی را «هیچ فعالیتی نیست» می‌خواند و قفل را رد
+    می‌کند.
+    """
+    query = _live_entries(db).filter(
+        JournalEntry.source_type == "period_close",
+        JournalEntry.entry_date <= date_to,
+    )
+    if date_from is not None:
+        query = query.filter(JournalEntry.entry_date >= date_from)
+    return query.order_by(JournalEntry.number.desc()).first()
+
+
+def pnl_close_preview(db: Session, date_to: date_) -> dict:
+    """پیش‌نمایشِ سندی که بستنِ سود و زیان خواهد زد — بدونِ زدنش."""
     previous = get_latest_close_date(db)
     date_from = previous + timedelta(days=1) if previous else None
-    statement = get_income_statement(db, date_from, date_to)
-    rows = [
-        {
-            "account_id": r["account_id"],
-            "account_code": r["account_code"],
-            "account_name": r["account_name"],
-            "side": "debit",
-            "amount": r["balance"],
-        }
-        for r in statement["income"]
-        if r["balance"] != 0
-    ] + [
-        {
-            "account_id": r["account_id"],
-            "account_code": r["account_code"],
-            "account_name": r["account_name"],
-            "side": "credit",
-            "amount": r["balance"],
-        }
-        for r in statement["expenses"]
-        if r["balance"] != 0
-    ]
+    rows = _pnl_rows(db, date_from, date_to)
+    total_income, total_expenses, net_profit = _pnl_totals(rows)
+
+    destination = get_account(db, cc.RETAINED_EARNINGS)
+    # خطِ مقصد هم یک ردیفِ سند است و باید در جمع‌ها دیده شود، وگرنه «اختلاف»
+    # همیشه به‌اندازه‌ی سودِ دوره ناصفر به‌نظر می‌رسد.
+    total_debit = sum((r["debit"] for r in rows), Decimal(0)) + (
+        -net_profit if net_profit < 0 else Decimal(0)
+    )
+    total_credit = sum((r["credit"] for r in rows), Decimal(0)) + (
+        net_profit if net_profit > 0 else Decimal(0)
+    )
     return {
         "date_from": date_from,
         "date_to": date_to,
         "rows": rows,
-        "total_income": statement["total_income"],
-        "total_expenses": statement["total_expenses"],
-        "net_profit": statement["net_profit"],
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "net_profit": net_profit,
+        "destination_account_code": destination.code,
+        "destination_account_name": destination.name,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "difference": total_debit - total_credit,
         "temporary_in_range": _temporary_count(db, date_from, date_to),
+        #: آیا گامِ اول از قبل زده شده؟ رابط با همین تصمیم می‌گیرد کدام گام را
+        #: پیشِ رو بگذارد.
+        "already_closed": pnl_close_entry_in(db, date_from, date_to) is not None,
     }
+
+
+def issue_pnl_close(db: Session, user: User, date_to: date_, description: str = "") -> dict:
+    """**تنها سازنده‌ی سندِ بستنِ سود و زیان.**
+
+    دو ورودی دارد — عملیاتِ مستقلِ «بستن حساب‌های سود و زیان» و `close_period` که
+    دوره را هم قفل می‌کند — ولی هر دو از همین‌جا رد می‌شوند. کامنتِ روتر دقیقاً همین
+    را می‌خواست: دو *پیاده‌سازی* از یک سند نداشته باشیم. دو *فراخوان* اشکالی ندارد.
+
+    سند **موقت** ثبت می‌شود و چرخه‌ی عمرِ عادیِ اسناد را طی می‌کند. تا پیش از این،
+    بستنِ حساب‌ها و قفلِ برگشت‌ناپذیرِ دوره یک دکمه بودند و راهی برای دیدنِ سند پیش
+    از قفل وجود نداشت.
+    """
+    assert_period_open(db, date_to)
+    previous = get_latest_close_date(db)
+    date_from = previous + timedelta(days=1) if previous else None
+    rows = _pnl_rows(db, date_from, date_to)
+    if not rows:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "در این بازه هیچ فعالیت درآمد/هزینه‌ای برای بستن وجود ندارد",
+        )
+    total_income, total_expenses, net_profit = _pnl_totals(rows)
+
+    lines = [
+        JournalLine(
+            account_id=r["account_id"],
+            #: بُعدها عیناً از مانده‌ای که بسته می‌شود کپی می‌شوند.
+            analytic_id=r["analytic_id"],
+            cost_center_id=r["cost_center_id"],
+            debit=r["debit"],
+            credit=r["credit"],
+            description=_pnl_line_description(r),
+        )
+        for r in rows
+    ]
+    destination = get_account(db, cc.RETAINED_EARNINGS)
+    if net_profit > 0:
+        lines.append(
+            JournalLine(
+                account_id=destination.id,
+                debit=0,
+                credit=net_profit,
+                description="انتقال سود دوره به سود انباشته",
+            )
+        )
+    elif net_profit < 0:
+        lines.append(
+            JournalLine(
+                account_id=destination.id,
+                debit=abs(net_profit),
+                credit=0,
+                description="انتقال زیان دوره به سود انباشته",
+            )
+        )
+
+    entry = make_journal_entry(
+        db,
+        date_to,
+        description.strip() or f"سند بستن حساب‌های سود و زیان تا تاریخ {date_to}",
+        "period_close",
+        user,
+        lines,
+    )
+    db.flush()
+    return {
+        "entry_id": entry.id,
+        "number": entry.number,
+        "line_count": len(lines),
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "net_profit": net_profit,
+    }
+
+
+def _pnl_line_description(row: dict) -> str:
+    """شرحِ ردیف — نامِ تفصیلی را هم می‌آورد تا از روی خودِ سند معلوم باشد کدام
+    مانده بسته شده، نه فقط کدام حساب."""
+    base = "بستن حساب درآمد" if row["account_type"] == "income" else "بستن حساب هزینه"
+    if row["analytic_name"]:
+        return f"{base} / {row['analytic_name']}"
+    return base
 
 
 def _temporary_count(db: Session, date_from: date_ | None, date_to: date_ | None) -> int:

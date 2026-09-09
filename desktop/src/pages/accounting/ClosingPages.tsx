@@ -25,6 +25,7 @@ import {
   fetchOpeningPreview,
   fetchPeriodCloses,
   fetchPnlClosePreview,
+  issuePnlClose,
   fetchReclassSources,
   issueClosingEntry,
   issueFxRevaluation,
@@ -257,24 +258,41 @@ export function FxRevaluationPage({ token }: { token: string }) {
 
 export function ClosePnlPage({ token }: { token: string }) {
   const [dateTo, setDateTo] = useState(todayIso())
+  const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
   const [msg, setMsg] = useState<Msg>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const preview = useAsync(() => fetchPnlClosePreview(token, dateTo), [token, dateTo, reloadKey])
   const closes = useAsync(() => fetchPeriodCloses(token), [token, reloadKey])
 
-  async function run() {
+  /** گامِ اول — فقط سند. دوره باز می‌ماند و سند موقت است. */
+  async function issue() {
+    try {
+      const out = await issuePnlClose(token, dateTo, description)
+      setMsg({
+        text: `سندِ بستن با ${faInt(out.line_count)} ردیف ثبت شد؛ سود/زیانِ خالص ${fa(out.net_profit)}. سند موقت است و دوره هنوز باز.`,
+        kind: 'ok',
+      })
+      setDescription('')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
+  /** گامِ دوم — قفل. برگشت ندارد. */
+  async function lock() {
     if (
       !window.confirm(
-        `حساب‌های درآمد و هزینه تا ${formatJalali(dateTo)} صفر می‌شوند و سود/زیان به سود انباشته می‌رود.\n` +
-          'پس از آن ثبتِ سند در این بازه قفل می‌شود و اسنادِ موقتِ داخلش دائم می‌شوند. ادامه؟',
+        `دوره تا ${formatJalali(dateTo)} قفل می‌شود: دیگر هیچ سندی در این بازه ثبت یا اصلاح نمی‌شود ` +
+          'و اسنادِ موقتِ داخلش دائم می‌شوند.\n\nاین کار برگشت ندارد. ادامه؟',
       )
     )
       return
     try {
       const out = await createPeriodClose(token, { closing_date: dateTo, notes })
       setMsg({
-        text: `دوره تا ${formatJalali(out.closing_date)} بسته شد؛ سود/زیانِ خالص ${fa(out.net_profit)} منتقل شد.`,
+        text: `دوره تا ${formatJalali(out.closing_date)} قفل شد؛ سود/زیانِ خالص ${fa(out.net_profit)}.`,
         kind: 'ok',
       })
       setNotes('')
@@ -287,14 +305,15 @@ export function ClosePnlPage({ token }: { token: string }) {
   const data = preview.data
   const profit = Number(data?.net_profit ?? 0)
   const rows = data?.rows ?? []
-  const debit = rows.filter((r) => r.side === 'debit').reduce((s, r) => s + Number(r.amount), 0)
-  const credit = rows.filter((r) => r.side === 'credit').reduce((s, r) => s + Number(r.amount), 0)
+  const difference = Number(data?.difference ?? 0)
+  const alreadyClosed = data?.already_closed ?? false
+  const hasDimensions = rows.some((r) => r.analytic_name || r.cost_center_name)
 
   return (
     <OpsPage
       icon={CalendarCheck}
       title="بستن حساب‌های سود و زیان"
-      description="حساب‌های موقت (درآمد و هزینه) صفر می‌شوند و سود/زیانِ خالص به سود انباشته می‌رود. پس از این، دوره رسماً قفل است."
+      description="حساب‌های موقت (درآمد و هزینه) صفر می‌شوند و سود/زیانِ خالص به سود انباشته می‌رود. سند موقت است؛ قفلِ دوره گامِ دومِ جداست."
       head={
         <div className="cc-head">
           <div className="cc-toolbar">
@@ -326,7 +345,7 @@ export function ClosePnlPage({ token }: { token: string }) {
               icon={<AlertTriangle size={14} />}
               label="سندِ موقت در بازه"
               value={data ? faInt(data.temporary_in_range) : '—'}
-              hint="با بستنِ دوره همه دائم می‌شوند"
+              hint="با قفلِ دوره همه دائم می‌شوند"
               tone={data && data.temporary_in_range > 0 ? 'out' : 'plain'}
             />
           </div>
@@ -336,28 +355,42 @@ export function ClosePnlPage({ token }: { token: string }) {
       <Note msg={msg} />
 
       <SectionCard
-        icon={Lock}
-        title="سندی که زده می‌شود"
+        icon={Scale}
+        title="گامِ ۱ — صدور سند بستن"
         description={
-          data?.date_from
-            ? `بازه: ${formatJalali(data.date_from)} تا ${formatJalali(data.date_to)}`
+          data
+            ? `${data.date_from ? `بازه: ${formatJalali(data.date_from)} تا ${formatJalali(data.date_to)}` : `از ابتدا تا ${formatJalali(dateTo)}`} · مقصد: ${data.destination_account_name}`
             : `از ابتدا تا ${formatJalali(dateTo)}`
         }
         actions={
           <button
             type="button"
             className="btn-primary"
-            disabled={rows.length === 0}
-            onClick={() => void run()}
+            disabled={rows.length === 0 || difference !== 0}
+            onClick={() => void issue()}
           >
-            <Lock size={14} /> بستنِ دوره
+            <Scale size={14} /> صدور سند بستن
           </button>
         }
       >
         <label className="acc-inline-field acc-merge-desc">
-          یادداشت
-          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          شرحِ سند
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <span className="field-hint">خالی بگذارید تا خودکار نوشته شود.</span>
         </label>
+
+        {alreadyClosed && (
+          <section className="fy-status">
+            <p className="fy-note fy-note--ok">
+              سندِ بستن برای این بازه از قبل زده شده. اگر بعد از آن سندی اضافه شده باشد، صدورِ
+              دوباره فقط همان تفاوت را می‌بندد.
+            </p>
+          </section>
+        )}
 
         <AsyncBlock
           loading={preview.loading}
@@ -370,37 +403,73 @@ export function ClosePnlPage({ token }: { token: string }) {
               <thead>
                 <tr>
                   <th>حساب</th>
+                  {hasDimensions && <th>تفصیلی / مرکز هزینه</th>}
                   <th>بدهکار</th>
                   <th>بستانکار</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.account_id}>
+                  <tr key={`${r.account_id}-${r.analytic_id ?? ''}-${r.cost_center_id ?? ''}`}>
                     <td className="card-title" data-label="حساب">
                       <span dir="ltr">{r.account_code}</span> — {r.account_name}
                     </td>
+                    {hasDimensions && (
+                      <td data-label="تفصیلی / مرکز هزینه">
+                        {[r.analytic_name, r.cost_center_name].filter(Boolean).join(' · ') || '—'}
+                      </td>
+                    )}
                     <td data-label="بدهکار" className="num">
-                      {r.side === 'debit' ? fa(r.amount) : '—'}
+                      {faAmount(r.debit)}
                     </td>
                     <td data-label="بستانکار" className="num">
-                      {r.side === 'credit' ? fa(r.amount) : '—'}
+                      {faAmount(r.credit)}
                     </td>
                   </tr>
                 ))}
                 <tr className="acc-row--total">
-                  <td className="card-title" data-label="حساب">انتقال به سود انباشته</td>
-                  <td className="num" data-label="بدهکار">{profit < 0 ? fa(Math.abs(profit)) : '—'}</td>
-                  <td className="num" data-label="بستانکار">{profit > 0 ? fa(profit) : '—'}</td>
+                  <td className="card-title" data-label="حساب">
+                    انتقال به {data?.destination_account_name ?? 'سود انباشته'}
+                  </td>
+                  {hasDimensions && <td data-label="تفصیلی / مرکز هزینه">—</td>}
+                  <td className="num" data-label="بدهکار">
+                    {profit < 0 ? fa(Math.abs(profit)) : '—'}
+                  </td>
+                  <td className="num" data-label="بستانکار">
+                    {profit > 0 ? fa(profit) : '—'}
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <BalanceFooter
-            debit={debit + (profit < 0 ? Math.abs(profit) : 0)}
-            credit={credit + (profit > 0 ? profit : 0)}
+            debit={Number(data?.total_debit ?? 0)}
+            credit={Number(data?.total_credit ?? 0)}
           />
         </AsyncBlock>
+      </SectionCard>
+
+      <SectionCard
+        icon={Lock}
+        title="گامِ ۲ — قفل کردن دوره"
+        description="پس از قفل، هیچ سندی در این بازه ثبت یا اصلاح نمی‌شود و اسنادِ موقتِ داخلش دائم می‌شوند. این کار برگشت ندارد."
+        actions={
+          <button type="button" className="btn-primary" onClick={() => void lock()}>
+            <Lock size={14} /> قفل کردن دوره
+          </button>
+        }
+      >
+        <label className="acc-inline-field acc-merge-desc">
+          یادداشت
+          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+        {!alreadyClosed && rows.length > 0 && (
+          <section className="fy-status">
+            <p className="fy-note">
+              هنوز سندِ بستن زده نشده. اگر مستقیم قفل کنید، سند همین‌جا خودکار زده می‌شود.
+            </p>
+          </section>
+        )}
       </SectionCard>
 
       <SectionCard icon={Archive} title="دوره‌های بسته‌شده">

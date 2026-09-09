@@ -122,7 +122,14 @@ MANUAL_SOURCE = "manual"
 #: منبع‌هایی که ابعادِ ردیفشان را از داده‌ی *موجود* کپی می‌کنند و کاربر لحظه‌ی ساخت
 #: هیچ انتخابی ندارد. اجبار روی این‌ها کاربر را در بن‌بست می‌گذارد، چون سند نه
 #: ویرایشِ ردیف دارد نه راهِ دیگری. (`void_*` با پیشوند سنجیده می‌شود.)
-DIMENSION_COPYING_SOURCES = ("fx_revaluation", "closing_entry", "opening_entry")
+DIMENSION_COPYING_SOURCES = (
+    "fx_revaluation",
+    "closing_entry",
+    "opening_entry",
+    #: بستنِ سود و زیان هم ابعادش را از مانده‌ی بسته‌شونده کپی می‌کند. تا پیش از
+    #: این نبودنش یعنی در حالتِ strict بستنِ دوره **اصلاً انجام نمی‌شد**.
+    "period_close",
+)
 
 
 def get_mode(db: Session) -> str:

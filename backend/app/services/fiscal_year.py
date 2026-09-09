@@ -25,14 +25,11 @@ from app.models.fiscal_year import STATUS_CLOSED, STATUS_OPEN, FiscalYear
 from app.models.user import User
 from app.schemas.fiscal_year import FiscalYearIn, FiscalYearUpdate
 from app.services.common import make_journal_entry
-from app.services.reports import CREDIT_NORMAL_TYPES, get_income_statement, get_trial_balance
+from app.services.reports import get_income_statement
 
 #: بلندترین دوره‌ی مالیِ پذیرفتنی. سالِ مالی معمولاً ۱۲ ماه است، ولی اولین دوره‌ی یک
 #: شرکتِ تازه می‌تواند تا ۱۸ ماه باشد؛ بیشتر از آن قطعاً اشتباهِ ورودی است.
 MAX_YEAR_DAYS = 550
-
-#: حساب‌های دائمی — همان‌هایی که مانده‌شان به سالِ بعد منتقل می‌شود.
-PERMANENT_TYPES = ("asset", "liability", "equity")
 
 
 # ── خواندن ────────────────────────────────────────────────────────────────────
@@ -247,6 +244,8 @@ def _previous_year(db: Session, year: FiscalYear) -> FiscalYear | None:
 
 def carry_forward(db: Session, year_id, user: User) -> dict:
     """مانده‌ی حساب‌های دائمیِ سالِ قبل را در یک سندِ افتتاحیه به این سال می‌آورد."""
+    from app.services.accounting_ops import _permanent_balances
+
     year = _get(db, year_id)
     if year.status == STATUS_CLOSED:
         raise HTTPException(http_status.HTTP_400_BAD_REQUEST, "سال مالی بسته‌شده افتتاحیه نمی‌گیرد")
@@ -267,21 +266,20 @@ def carry_forward(db: Session, year_id, user: User) -> dict:
             f"ابتدا «{prev.title}» را ببندید تا مانده‌های پایان دوره قطعی شود",
         )
 
-    rows = [r for r in get_trial_balance(db, None, prev.end_date) if r["account_type"] in PERMANENT_TYPES]
+    # `_permanent_balances` مانده را به تفکیکِ **هر سه بُعدِ ردیف** می‌دهد، نه فقط
+    # حساب. تراز آزمایشی این تفکیک را ندارد و با آن، حسابِ «دریافتنی» با سه مشتری
+    # یک‌کاسه منتقل می‌شد: جمع درست، دفترِ تفصیلی خالی — و چون سند ویرایشِ ردیف
+    # ندارد، برای همیشه. همان اشکالی که در تسعیر و اختتامیه و بستنِ سود و زیان بود.
     lines: list[JournalLine] = []
-    for row in rows:
-        balance = Decimal(row["balance"])
-        if balance == 0:
-            continue
-        credit_normal = row["account_type"] in CREDIT_NORMAL_TYPES
-        # مانده‌ی منفی یعنی حساب خلافِ ماهیتش مانده دارد؛ همان‌طور و در سمتِ مقابل منتقل می‌شود.
-        if (balance > 0) == credit_normal:
-            debit, credit = Decimal(0), abs(balance)
-        else:
-            debit, credit = abs(balance), Decimal(0)
+    for account, analytic_id, cost_center_id, raw in _permanent_balances(db, prev.end_date):
+        # جهت مستقیم از علامتِ مانده می‌آید؛ مانده‌ی خلافِ ماهیت هم همان‌طور و در
+        # سمتِ مقابل منتقل می‌شود، بدونِ نیاز به دانستنِ ماهیتِ حساب.
+        debit, credit = (raw, Decimal(0)) if raw > 0 else (Decimal(0), -raw)
         lines.append(
             JournalLine(
-                account_id=row["account_id"],
+                account_id=account.id,
+                analytic_id=analytic_id,
+                cost_center_id=cost_center_id,
                 debit=debit,
                 credit=credit,
                 description=f"انتقال مانده از {prev.title}",
@@ -325,6 +323,7 @@ def close_year(db: Session, year_id, user: User) -> FiscalYear:
     از `close_period` استفاده می‌کند تا قفلِ تاریخی همان مکانیزمِ همیشگی بماند.
     """
     from app.schemas.period_close import FiscalPeriodCloseIn
+    from app.services.accounting_ops import pnl_close_entry_in
     from app.services.period_close import close_period
 
     year = _get(db, year_id)
@@ -345,7 +344,11 @@ def close_year(db: Session, year_id, user: User) -> FiscalYear:
 
     statement = get_income_statement(db, year.start_date, year.end_date)
     has_activity = any(row["balance"] != 0 for row in statement["income"] + statement["expenses"])
-    if has_activity:
+    # اگر کاربر گامِ اول («بستن حساب‌های سود و زیان») را جدا زده باشد، صورتِ سود و
+    # زیانِ سال حالا صفر است — ولی سال *بی‌فعالیت* نبوده. بدونِ این شرط،
+    # `closing_entry_id`ِ سال خالی می‌ماند و ردِ سند گم می‌شود.
+    already = pnl_close_entry_in(db, year.start_date, year.end_date)
+    if has_activity or already is not None:
         close = close_period(
             db,
             FiscalPeriodCloseIn(closing_date=year.end_date, notes=f"بستن {year.title}"),
