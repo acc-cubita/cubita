@@ -47,6 +47,8 @@ from app.schemas.accounting_ops import (
     RenumberResultOut,
 )
 from app.services import accounting_ops as ops
+from app.routers.reports import report_filters
+from app.services.reports import ReportFilters
 from app.services import analytics as an
 
 router = APIRouter(prefix="/api/accounting", tags=["accounting-ops"])
@@ -218,13 +220,19 @@ def opening_issue(
 
 @router.get("/balances", response_model=list[BalanceRowOut])
 def balances(
-    date_from: date | None = None,
-    date_to: date | None = None,
+    filters: ReportFilters = Depends(report_filters),
+    include_zero_activity: bool = False,
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    """پایه‌ی «گزارش ترازها»، «مرور حساب‌ها» و «صدور سند کل»."""
-    return ops.get_balances(db, date_from, date_to)
+    """پایه‌ی «گزارش ترازها»، «مرور حساب‌ها» و «صدور سند کل».
+
+    فیلترها همان‌هایی‌اند که دفتر می‌گیرد (`report_filters`) — عمداً، تا هر سه
+    گزارش با یک فیلتر یک عدد بدهند.
+    """
+    return ops.get_balances(
+        db, filters.date_from, filters.date_to, filters, include_zero_activity
+    )
 
 
 @router.get("/legal-book", response_model=LegalBookOut)

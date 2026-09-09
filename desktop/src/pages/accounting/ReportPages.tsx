@@ -5,6 +5,7 @@ import {
   Download,
   FileSpreadsheet,
   Landmark,
+  Layers,
   Library,
   Percent,
   Printer,
@@ -18,6 +19,7 @@ import {
   ACCOUNT_NATURE_LABELS,
   fetchAccountBalances,
   fetchChartAccounts,
+  fetchAnalyticLedger,
   fetchGeneralLedger,
   fetchJournalEntriesFiltered,
   fetchLegalBook,
@@ -26,8 +28,14 @@ import {
   fetchVatReport,
   type BalanceRow,
   type ChartAccount,
+  type GeneralLedger,
+  type ReportFilters,
   type VatBreakdown,
 } from '../../api'
+import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
+import { EntryCard } from '../../components/EntryCard'
+import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
+import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import { downloadCsv } from '../../lib/csv'
@@ -42,7 +50,6 @@ import {
   fa,
   faAmount,
   faInt,
-  sourceText,
   useAsync,
   useRange,
 } from './kit'
@@ -113,14 +120,32 @@ const LEVEL_OPTIONS = [
   { value: 0, label: 'تفصیلی (سطحِ آخر)' },
 ]
 
+/** فیلترِ نوعِ مانده (§۱۷). «بدونِ گردش» عمداً از «مانده صفر» جداست. */
+const BALANCE_FILTERS = [
+  { value: 'all', label: 'همه' },
+  { value: 'debit', label: 'مانده بدهکار' },
+  { value: 'credit', label: 'مانده بستانکار' },
+  { value: 'zero', label: 'مانده صفر' },
+  { value: 'idle', label: 'بدونِ گردش' },
+] as const
+type BalanceFilter = (typeof BALANCE_FILTERS)[number]['value']
+
 export function BalanceReportPage({ token }: { token: string }) {
   const range = useRange('year')
   const [columns, setColumns] = useState<Columns>(6)
   const [level, setLevel] = useState(0)
+  const [filters, setFilters] = useState<ReportFilters>({})
+  const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all')
+  const [drill, setDrill] = useState<{ id: string; code: string; name: string } | null>(null)
   const accounts = useAsync(() => fetchChartAccounts(token), [token])
+  //: «بدونِ گردش» تنها حالتی است که حساب‌های بی‌ردیف را هم لازم دارد؛ بقیه‌ی
+  //: اوقات کشیدنشان یعنی چارتِ چندصدردیفی پر از صفر.
+  const wantsIdle = balanceFilter === 'idle' || balanceFilter === 'all'
+  const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
   const balances = useAsync(
-    () => fetchAccountBalances(token, range.from, range.to),
-    [token, range.from, range.to],
+    () => fetchAccountBalances(token, scope, wantsIdle),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, JSON.stringify(scope), wantsIdle],
   )
 
   /** تراز در هر سطحی، جمعِ همان ردیف‌های سطحِ آخر است — پس تجمیع اینجا انجام می‌شود
@@ -171,7 +196,7 @@ export function BalanceReportPage({ token }: { token: string }) {
       .sort((a, b) => a.account_code.localeCompare(b.account_code))
   }, [accounts.data, balances.data, level])
 
-  const sum = (key: keyof BalanceRow) => rows.reduce((s, r) => s + Number(r[key] as string), 0)
+  const sum = (key: keyof BalanceRow) => visible.reduce((s, r) => s + Number(r[key] as string), 0)
   const periodDebit = sum('period_debit')
   const periodCredit = sum('period_credit')
 
@@ -184,7 +209,7 @@ export function BalanceReportPage({ token }: { token: string }) {
     downloadCsv(
       `tarazha-${range.from ?? 'all'}`,
       headers,
-      rows.map((r) => {
+      visible.map((r) => {
         const cells: (string | number)[] = [r.account_code, r.account_name, TYPE_LABELS[r.account_type] ?? r.account_type]
         if (columns >= 6) cells.push(Number(r.opening_debit), Number(r.opening_credit))
         if (columns >= 4) cells.push(Number(r.period_debit), Number(r.period_credit))
@@ -199,7 +224,21 @@ export function BalanceReportPage({ token }: { token: string }) {
     )
   }
 
-  const pg = usePagination(rows, 25)
+  //: در **رابط** اعمال می‌شود نه سرور: ردیف‌ها از قبل در دست‌اند و این فیلتر
+  //: دامنه‌ی محاسبه را عوض نمی‌کند، فقط نمایش را — برخلافِ `ReportFilterBar` که
+  //: باید سمتِ سرور باشد چون *خودِ عددها* را عوض می‌کند.
+  const visible = useMemo(() => {
+    if (balanceFilter === 'all') return rows
+    return rows.filter((r) => {
+      const net = Number(r.closing_debit) - Number(r.closing_credit)
+      if (balanceFilter === 'idle') return r.has_activity === false
+      if (balanceFilter === 'zero') return net === 0 && r.has_activity !== false
+      if (balanceFilter === 'debit') return net > 0
+      return net < 0
+    })
+  }, [rows, balanceFilter])
+
+  const pg = usePagination(visible, 25)
 
   return (
     <OpsPage
@@ -235,11 +274,25 @@ export function BalanceReportPage({ token }: { token: string }) {
                     ))}
                   </select>
                 </label>
+                <label className="acc-inline-field">
+                  نوعِ مانده
+                  <select
+                    value={balanceFilter}
+                    onChange={(e) => setBalanceFilter(e.target.value as BalanceFilter)}
+                  >
+                    {BALANCE_FILTERS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               </>
             }
           />
           <div className="cc-summary">
-            <Metric icon={<Scale size={14} />} label="ردیف" value={faInt(rows.length)} />
+            <Metric icon={<Scale size={14} />} label="ردیف" value={faInt(visible.length)} />
             <Metric icon={<Wallet size={14} />} label="گردشِ بدهکار" value={fa(periodDebit)} tone="in" />
             <Metric icon={<Wallet size={14} />} label="گردشِ بستانکار" value={fa(periodCredit)} tone="out" />
           </div>
@@ -251,12 +304,12 @@ export function BalanceReportPage({ token }: { token: string }) {
         title="تراز"
         description={
           range.from
-            ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())}`
-            : 'از ابتدای دفتر'
+            ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())} — روی هر حساب کلیک کنید تا دفترش باز شود`
+            : 'از ابتدای دفتر — روی هر حساب کلیک کنید تا دفترش باز شود'
         }
         actions={
           <>
-            <button type="button" onClick={exportCsv} disabled={rows.length === 0}>
+            <button type="button" onClick={exportCsv} disabled={visible.length === 0}>
               <Download size={13} /> خروجی CSV
             </button>
             <button type="button" onClick={() => window.print()}>
@@ -268,8 +321,8 @@ export function BalanceReportPage({ token }: { token: string }) {
         <AsyncBlock
           loading={accounts.loading || balances.loading}
           error={accounts.error ?? balances.error}
-          empty={rows.length === 0}
-          emptyText="در این بازه گردشی ثبت نشده."
+          empty={visible.length === 0}
+          emptyText="با این فیلترها ردیفی نیست — بازه یا نوعِ مانده را عوض کنید."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table acc-table--wide">
@@ -301,7 +354,15 @@ export function BalanceReportPage({ token }: { token: string }) {
               </thead>
               <tbody>
                 {pg.pageItems.map((r) => (
-                  <tr key={r.account_id}>
+                  <tr
+                    key={r.account_id}
+                    className={r.has_activity === false ? "acc-row--idle" : "acc-row--clickable"}
+                    onClick={() =>
+                      r.has_activity === false
+                        ? undefined
+                        : setDrill({ id: r.account_id, code: r.account_code, name: r.account_name })
+                    }
+                  >
                     <td className="card-title" data-label="کد" dir="ltr">
                       {r.account_code}
                     </td>
@@ -342,6 +403,17 @@ export function BalanceReportPage({ token }: { token: string }) {
 
       <NatureViolationsCard token={token} />
       <MissingTafsiliCard token={token} />
+
+      {/* §۱۱ و §۲۸ — هیچ عددی بن‌بست نیست. دامنه‌ی دفتر همان دامنه‌ی تراز است،
+          وگرنه کاربر عددی را باز می‌کرد و توضیحی می‌دید که با آن نمی‌خواند. */}
+      {drill && (
+        <AccountLedgerDrawer
+          token={token}
+          account={drill}
+          filters={scope}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </OpsPage>
   )
 }
@@ -491,11 +563,12 @@ function NatureViolationsCard({ token }: { token: string }) {
 // ═══════════════════════ ۲) گزارش دفتر ═══════════════════════
 
 /** سه دفترِ حسابداری، به همان ترتیبی که در عمل خوانده می‌شوند. */
-type Book = 'journal' | 'general' | 'ledger'
+type Book = 'journal' | 'general' | 'ledger' | 'analytic'
 
 export function LedgerReportPage({ token }: { token: string }) {
   const range = useRange('month')
   const [book, setBook] = useState<Book>('journal')
+  const [filters, setFilters] = useState<ReportFilters>({})
   const [accountId, setAccountId] = useState('')
   //: انتخابِ دفترِ کل جداست، وگرنه جابه‌جا شدن بینِ دو تب یک شناسه‌ی نامعتبر را
   //: به انتخابگرِ دیگر می‌برد و کاربر یک `select`ِ خالی می‌بیند بی‌آنکه بداند چرا.
@@ -520,6 +593,10 @@ export function LedgerReportPage({ token }: { token: string }) {
       .filter((a) => levelOf(a, byId) === 2)
       .sort((a, b) => a.code.localeCompare(b.code))
   }, [accounts.data])
+  //: بازه و فیلترها یک دامنه‌اند و با هم به سرور می‌روند — همان چیزی که تراز هم
+  //: می‌فرستد، تا دو گزارش نتوانند از هم جدا بیفتند.
+  const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
+
   //: ردیفِ سند فقط شناسه‌ی حساب دارد؛ نام از چارت می‌آید تا دفتر خوانا باشد.
   const accountNames = useMemo(
     () => new Map((accounts.data ?? []).map((a) => [a.id, `${a.code} — ${a.name}`])),
@@ -555,6 +632,13 @@ export function LedgerReportPage({ token }: { token: string }) {
             >
               <Landmark size={14} /> دفتر معین
             </button>
+            <button
+              type="button"
+              className={book === 'analytic' ? 'is-active' : ''}
+              onClick={() => setBook('analytic')}
+            >
+              <Layers size={14} /> دفتر تفصیلی
+            </button>
           </div>
           <RangeBar
             range={range}
@@ -570,29 +654,37 @@ export function LedgerReportPage({ token }: { token: string }) {
                   />
                 </label>
               ) : book === 'general' ? (
-                <label className="acc-inline-field">
-                  حسابِ کل
-                  <select value={generalId} onChange={(e) => setGeneralId(e.target.value)}>
-                    <option value="">— انتخابِ حسابِ کل —</option>
-                    {generalAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <>
+                  <label className="acc-inline-field">
+                    حسابِ کل
+                    <select value={generalId} onChange={(e) => setGeneralId(e.target.value)}>
+                      <option value="">— انتخابِ حسابِ کل —</option>
+                      {generalAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
+                </>
+              ) : book === 'ledger' ? (
+                <>
+                  <label className="acc-inline-field">
+                    حساب
+                    <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                      <option value="">— انتخابِ حساب —</option>
+                      {postable.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
+                </>
               ) : (
-                <label className="acc-inline-field">
-                  حساب
-                  <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                    <option value="">— انتخابِ حساب —</option>
-                    {postable.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               )
             }
           />
@@ -608,9 +700,11 @@ export function LedgerReportPage({ token }: { token: string }) {
           accountNames={accountNames}
         />
       ) : book === 'general' ? (
-        <SubsidiaryCard token={token} accountId={generalId} from={range.from} to={range.to} rollup />
+        <SubsidiaryCard token={token} accountId={generalId} filters={scope} rollup />
+      ) : book === 'analytic' ? (
+        <SubsidiaryCard token={token} accountId="" filters={scope} analytic />
       ) : (
-        <SubsidiaryCard token={token} accountId={accountId} from={range.from} to={range.to} />
+        <SubsidiaryCard token={token} accountId={accountId} filters={scope} />
       )}
     </OpsPage>
   )
@@ -682,44 +776,11 @@ function DaybookCard({
         empty={entries.length === 0}
         emptyText="در این بازه سندی نیست."
       >
+        {/* همان `EntryCard`ی که درایوِ drill-down رندر می‌کند — یک نمای یک داده.
+            پیش از این این جدول فقط این‌جا بود و وقتی «ردیفِ دفتر → سند» لازم شد،
+            وسوسه‌ی نوشتنِ نسخه‌ی دومش پیش آمد. */}
         {pg.pageItems.map((e) => (
-          <div className="acc-day" key={e.id}>
-            <h4 className="acc-day-head">
-              سند {fa(e.number ?? 0)} — {formatJalali(e.entry_date)}
-              <span>
-                <StatusChip status={e.status} voided={!!e.voided_at} /> {sourceText(e)}
-              </span>
-            </h4>
-            {e.description && <p className="hint">{e.description}</p>}
-            <div className="table-scroll">
-              <table className="cards-on-mobile acc-table">
-                <thead>
-                  <tr>
-                    <th>حساب</th>
-                    <th>شرح ردیف</th>
-                    <th>بدهکار</th>
-                    <th>بستانکار</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {e.lines.map((l) => (
-                    <tr key={l.id}>
-                      <td className="card-title" data-label="حساب">
-                        {accountNames.get(l.account_id) ?? '—'}
-                      </td>
-                      <td data-label="شرح ردیف">{l.description || '—'}</td>
-                      <td data-label="بدهکار" className="num">
-                        {faAmount(l.debit)}
-                      </td>
-                      <td data-label="بستانکار" className="num">
-                        {faAmount(l.credit)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <EntryCard key={e.id} entry={e} accountNames={accountNames} />
         ))}
         <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         <p className="hint">جمعِ گردشِ بازه: {fa(debit)}</p>
@@ -736,43 +797,66 @@ function DaybookCard({
 function SubsidiaryCard({
   token,
   accountId,
-  from,
-  to,
+  filters,
   rollup = false,
+  analytic = false,
 }: {
   token: string
   accountId: string
-  from?: string
-  to?: string
+  filters: ReportFilters
   rollup?: boolean
+  /** دفترِ تفصیلی: حساب اختیاری است و دامنه را `filters.analyticId` تعیین می‌کند. */
+  analytic?: boolean
 }) {
-  const ledger = useAsync(
-    () => (accountId ? fetchGeneralLedger(token, accountId, from, to) : Promise.resolve(null)),
-    [token, accountId, from, to],
+  const [entryId, setEntryId] = useState<string | null>(null)
+  const ready = analytic ? !!filters.analyticId : !!accountId
+  const ledger = useAsync<GeneralLedger | null>(
+    () =>
+      !ready
+        ? Promise.resolve(null)
+        : analytic
+          ? fetchAnalyticLedger(token, filters)
+          : fetchGeneralLedger(token, accountId, filters),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, accountId, analytic, ready, JSON.stringify(filters)],
   )
   const data = ledger.data
   const pg = usePagination(data?.lines ?? [], 20)
-  const bookName = rollup ? 'دفتر کل' : 'دفتر معین'
-  const Icon = rollup ? Library : Landmark
+  const bookName = analytic ? 'دفتر تفصیلی' : rollup ? 'دفتر کل' : 'دفتر معین'
+  const Icon = analytic ? Layers : rollup ? Library : Landmark
 
-  if (!accountId)
+  //: ستون فقط وقتی می‌آید که ردیفی مقدار داشته باشد — جدولِ همیشه‌هشت‌ستونه‌ای که
+  //: نیمش خط تیره است، خواندن را سخت می‌کند نه آسان.
+  const hasFx = (data?.lines ?? []).some((l) => l.currency_code)
+  const hasTracking = (data?.lines ?? []).some((l) => l.tracking_no)
+  //: در دفترِ تفصیلی ردیف‌ها از حساب‌های مختلف‌اند، پس ستونِ حساب لازم است.
+  const showAccount = rollup || analytic
+
+  if (!ready)
     return (
       <SectionCard icon={Icon} title={bookName}>
         <p className="hint">
-          {rollup
-            ? 'برای دیدنِ دفترِ کل، یک حسابِ کل انتخاب کنید؛ گردشِ همه‌ی زیرحساب‌هایش با هم می‌آید.'
-            : 'برای دیدنِ دفترِ معین، یک حساب انتخاب کنید.'}
+          {analytic
+            ? 'برای دیدنِ دفترِ تفصیلی، از نوارِ فیلتر یک تفصیلی انتخاب کنید؛ گردشش در همه‌ی حساب‌ها می‌آید.'
+            : rollup
+              ? 'برای دیدنِ دفترِ کل، یک حسابِ کل انتخاب کنید؛ گردشِ همه‌ی زیرحساب‌هایش با هم می‌آید.'
+              : 'برای دیدنِ دفترِ معین، یک حساب انتخاب کنید.'}
         </p>
       </SectionCard>
     )
 
+  const title = data?.account_code ? `${data.account_code} — ${data.account_name}` : bookName
+
   return (
     <SectionCard
       icon={Icon}
-      title={data ? `${data.account_code} — ${data.account_name}` : bookName}
+      title={title}
       description={
         data
-          ? `مانده‌ی ابتدای دوره ${fa(data.opening_balance)} · مانده‌ی پایان ${fa(data.closing_balance)}`
+          ? `مانده‌ی ابتدای دوره ${fa(data.opening_balance)} · مانده‌ی پایان ${fa(data.closing_balance)}` +
+            (data.fx_totals.length
+              ? ` · ${data.fx_totals.map((t) => `${fa(t.amount)} ${t.currency_code}`).join(' · ')}`
+              : '')
           : undefined
       }
       actions={
@@ -782,12 +866,14 @@ function SubsidiaryCard({
           onClick={() =>
             data &&
             downloadCsv(
-              `${rollup ? 'daftar-kol' : 'daftar-moein'}-${data.account_code}`,
+              `${analytic ? 'daftar-tafsili' : rollup ? 'daftar-kol' : 'daftar-moein'}-${data.account_code ?? 'all'}`,
               [
                 'شماره سند',
                 'تاریخ',
-                ...(rollup ? ['زیرحساب'] : []),
+                ...(showAccount ? ['حساب'] : []),
                 'شرح',
+                ...(hasFx ? ['ارز', 'مبلغ ارزی'] : []),
+                ...(hasTracking ? ['شماره پیگیری', 'تاریخ پیگیری'] : []),
                 'بدهکار',
                 'بستانکار',
                 'مانده',
@@ -795,8 +881,12 @@ function SubsidiaryCard({
               data.lines.map((l) => [
                 l.entry_number ?? '',
                 formatJalali(l.entry_date),
-                ...(rollup ? [`${l.account_code} — ${l.account_name}`] : []),
+                ...(showAccount ? [`${l.account_code} — ${l.account_name}`] : []),
                 l.description,
+                ...(hasFx ? [l.currency_code ?? '', l.fx_amount ? Number(l.fx_amount) : ''] : []),
+                ...(hasTracking
+                  ? [l.tracking_no ?? '', l.tracking_date ? formatJalali(l.tracking_date) : '']
+                  : []),
                 Number(l.debit),
                 Number(l.credit),
                 Number(l.balance),
@@ -813,11 +903,14 @@ function SubsidiaryCard({
         error={ledger.error}
         empty={(data?.lines.length ?? 0) === 0}
         emptyText={
-          rollup
-            ? 'هیچ‌کدام از زیرحساب‌های این سرفصل در بازه‌ی انتخابی گردشی ندارند.'
-            : 'این حساب در بازه‌ی انتخابی گردشی ندارد.'
+          analytic
+            ? 'این تفصیلی در این دامنه هیچ گردشی ندارد.'
+            : rollup
+              ? 'هیچ‌کدام از زیرحساب‌های این سرفصل در بازه‌ی انتخابی گردشی ندارند.'
+              : 'این حساب در بازه‌ی انتخابی گردشی ندارد.'
         }
       >
+        <p className="hint">روی هر ردیف کلیک کنید تا سندش باز شود.</p>
         <div className="table-scroll">
           <table className="cards-on-mobile acc-table">
             <thead>
@@ -825,26 +918,49 @@ function SubsidiaryCard({
                 <th>سند</th>
                 <th>تاریخ</th>
                 {/* در دفترِ معین همه‌ی ردیف‌ها یک حساب‌اند و این ستون فقط تکرار است. */}
-                {rollup && <th>زیرحساب</th>}
+                {showAccount && <th>حساب</th>}
                 <th>شرح</th>
+                {hasFx && <th>ارز</th>}
+                {hasTracking && <th>پیگیری</th>}
                 <th>بدهکار</th>
                 <th>بستانکار</th>
                 <th>مانده</th>
               </tr>
             </thead>
             <tbody>
-              {pg.pageItems.map((l, i) => (
-                <tr key={`${l.entry_id}-${i}`}>
+              {pg.pageItems.map((l) => (
+                <tr
+                  key={l.line_id}
+                  className="acc-row--clickable"
+                  onClick={() => setEntryId(l.entry_id)}
+                >
                   <td className="card-title" data-label="سند">
                     {fa(l.entry_number ?? 0)}
                   </td>
                   <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
-                  {rollup && (
-                    <td data-label="زیرحساب">
+                  {showAccount && (
+                    <td data-label="حساب">
                       <span dir="ltr">{l.account_code}</span> — {l.account_name}
                     </td>
                   )}
                   <td data-label="شرح">{l.description || '—'}</td>
+                  {hasFx && (
+                    <td data-label="ارز" className="num">
+                      {l.currency_code ? `${fa(l.fx_amount ?? 0)} ${l.currency_code}` : '—'}
+                    </td>
+                  )}
+                  {hasTracking && (
+                    <td data-label="پیگیری">
+                      {l.tracking_no ? (
+                        <>
+                          <span dir="ltr">{l.tracking_no}</span>
+                          {l.tracking_date ? ` — ${formatJalali(l.tracking_date)}` : ''}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  )}
                   <td data-label="بدهکار" className="num">
                     {faAmount(l.debit)}
                   </td>
@@ -861,6 +977,10 @@ function SubsidiaryCard({
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
       </AsyncBlock>
+
+      {entryId && (
+        <JournalEntryDrawer token={token} entryId={entryId} onClose={() => setEntryId(null)} />
+      )}
     </SectionCard>
   )
 }

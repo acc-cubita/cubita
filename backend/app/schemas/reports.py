@@ -6,9 +6,13 @@ from pydantic import BaseModel
 
 
 class GeneralLedgerLineOut(BaseModel):
+    #: شناسه‌ی خودِ ردیف — کلیدِ پایدارِ رابط و لنگرِ drill-down به سند.
+    line_id: UUID
     entry_id: UUID
     entry_number: int | None
     entry_date: date
+    entry_status: str
+    source_type: str | None
     #: حسابِ خودِ ردیف — در دفترِ معین همان حسابِ انتخاب‌شده است، در دفترِ کل
     #: زیرحسابی که مبلغ از آن آمده.
     account_code: str
@@ -17,15 +21,30 @@ class GeneralLedgerLineOut(BaseModel):
     debit: Decimal
     credit: Decimal
     balance: Decimal
+    #: ارز و پیگیری از قبل روی ردیفِ سند بودند و هیچ گزارشی نشانشان نمی‌داد.
+    currency_code: str | None = None
+    fx_amount: Decimal | None = None
+    fx_rate: Decimal | None = None
+    tracking_no: str | None = None
+    tracking_date: date | None = None
+
+
+class LedgerFxTotalOut(BaseModel):
+    """جمعِ ارزی به تفکیکِ ارز — دلار و یورو با هم جمع نمی‌شوند."""
+
+    currency_code: str
+    amount: Decimal
 
 
 class GeneralLedgerOut(BaseModel):
-    account_id: UUID
-    account_code: str
-    account_name: str
+    #: در «دفترِ تفصیلی» حسابِ واحدی در کار نیست، پس هر سه می‌توانند خالی باشند.
+    account_id: UUID | None
+    account_code: str | None
+    account_name: str | None
     opening_balance: Decimal
     lines: list[GeneralLedgerLineOut]
     closing_balance: Decimal
+    fx_totals: list[LedgerFxTotalOut] = []
 
 
 class TrialBalanceRowOut(BaseModel):

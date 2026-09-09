@@ -420,9 +420,12 @@ export const fetchCashFlow = (token: string, dateFrom?: string, dateTo?: string)
 }
 
 export interface GeneralLedgerLine {
+  line_id: string
   entry_id: string
   entry_number: number | null
   entry_date: string
+  entry_status: string
+  source_type: string | null
   /** حسابِ خودِ ردیف؛ در دفترِ کل می‌گوید مبلغ از کدام زیرحساب آمده. */
   account_code: string
   account_name: string
@@ -430,19 +433,69 @@ export interface GeneralLedgerLine {
   debit: string
   credit: string
   balance: string
+  /** ارز و پیگیری از قبل روی ردیفِ سند بودند و هیچ گزارشی نشانشان نمی‌داد. */
+  currency_code: string | null
+  fx_amount: string | null
+  fx_rate: string | null
+  tracking_no: string | null
+  tracking_date: string | null
 }
 
 export interface GeneralLedger {
-  account_id: string
-  account_code: string
-  account_name: string
+  /** در «دفترِ تفصیلی» حسابِ واحدی در کار نیست، پس هر سه می‌توانند خالی باشند. */
+  account_id: string | null
+  account_code: string | null
+  account_name: string | null
   opening_balance: string
   lines: GeneralLedgerLine[]
   closing_balance: string
+  fx_totals: { currency_code: string; amount: string }[]
 }
 
-export const fetchGeneralLedger = (token: string, accountId: string, dateFrom?: string, dateTo?: string) =>
-  authedGet<GeneralLedger>(token, `/api/reports/general-ledger/${accountId}${rangeQs(dateFrom, dateTo)}`)
+/**
+ * دامنه‌ی محاسبه‌ی گزارش‌های حسابداری — **یک مجموعه برای هر سه خانواده**.
+ *
+ * تراز و مرور حساب و دفتر باید با یک فیلتر یک عدد بدهند؛ راهش این است که هر سه
+ * همین شیء را بفرستند. هر میدانِ خالی یعنی «محدود نکن».
+ */
+export interface ReportFilters {
+  dateFrom?: string
+  dateTo?: string
+  entryFrom?: number
+  entryTo?: number
+  status?: 'temporary' | 'permanent'
+  sourceType?: string
+  costCenterId?: string
+  analyticId?: string
+  /** افتتاحیه، اختتامیه و بستنِ سود و زیان وارد محاسبه شوند. پیش‌فرضِ سرور: بله. */
+  includeSystemEntries?: boolean
+}
+
+export function reportFiltersQs(f: ReportFilters = {}): string {
+  const qs = new URLSearchParams()
+  if (f.dateFrom) qs.set('date_from', f.dateFrom)
+  if (f.dateTo) qs.set('date_to', f.dateTo)
+  if (f.entryFrom != null) qs.set('entry_from', String(f.entryFrom))
+  if (f.entryTo != null) qs.set('entry_to', String(f.entryTo))
+  if (f.status) qs.set('status', f.status)
+  if (f.sourceType) qs.set('source_type', f.sourceType)
+  if (f.costCenterId) qs.set('cost_center_id', f.costCenterId)
+  if (f.analyticId) qs.set('analytic_id', f.analyticId)
+  //: فقط وقتی فرستاده می‌شود که خاموش باشد — پیش‌فرضِ سرور روشن است.
+  if (f.includeSystemEntries === false) qs.set('include_system_entries', 'false')
+  const out = qs.toString()
+  return out ? `?${out}` : ''
+}
+
+export const fetchGeneralLedger = (token: string, accountId: string, filters: ReportFilters = {}) =>
+  authedGet<GeneralLedger>(
+    token,
+    `/api/reports/general-ledger/${accountId}${reportFiltersQs(filters)}`,
+  )
+
+/** دفترِ تفصیلی — بدونِ حسابِ اجباری: گردشِ یک تفصیلی در همه‌ی حساب‌ها. */
+export const fetchAnalyticLedger = (token: string, filters: ReportFilters) =>
+  authedGet<GeneralLedger>(token, `/api/reports/general-ledger${reportFiltersQs(filters)}`)
 
 export interface JournalEntryLine {
   id: string
@@ -4789,10 +4842,19 @@ export interface BalanceRow {
   closing_debit: string
   closing_credit: string
   balance: string
+  /** «گردش داشته» نه «مانده دارد» — این دو از نظر حسابداری یکی نیستند. */
+  has_activity: boolean
 }
 
-export const fetchAccountBalances = (token: string, dateFrom?: string, dateTo?: string) =>
-  authedGet<BalanceRow[]>(token, `/api/accounting/balances${rangeQs(dateFrom, dateTo)}`)
+export const fetchAccountBalances = (
+  token: string,
+  filters: ReportFilters = {},
+  includeZeroActivity = false,
+) => {
+  const qs = reportFiltersQs(filters)
+  const zero = includeZeroActivity ? `${qs ? '&' : '?'}include_zero_activity=true` : ''
+  return authedGet<BalanceRow[]>(token, `/api/accounting/balances${qs}${zero}`)
+}
 
 export interface LegalBookRow {
   entry_id: string
@@ -4930,6 +4992,10 @@ export interface JournalQuery {
 
 /** فیلتر سمتِ سرور انجام می‌شود، نه در مرورگر: کشیدنِ کلِ دفترِ یک کسب‌وکارِ چندساله
  *  برای فیلترکردنش این‌جا، همان چیزی است که صفحه‌بندیِ keyset برای جلوگیری‌اش ساخته شد. */
+/** یک سند با ردیف‌ها و منشأش — آخرین پله‌ی drill-down از تراز و دفتر. */
+export const fetchJournalEntry = (token: string, entryId: string) =>
+  authedGet<JournalEntryRecord>(token, `/api/journal-entries/${entryId}`)
+
 /** فهرستِ اسناد با فیلترهای سرور.
  *
  *  `limit` سقفِ *کلِ* ردیف‌هاست، نه اندازه‌ی یک صفحه: سرور بیش از ۲۰۰ ردیف در هر

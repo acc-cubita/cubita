@@ -3225,6 +3225,13 @@ button:disabled {
   min-width: 130px;
 }
 
+/* ردیفِ حسابِ بی‌گردش در تراز — هست ولی کلیک‌شدنی نیست، چون دفتری برای بازکردن
+   ندارد. کم‌رنگ می‌شود تا از ردیفِ «مانده صفر» که گردش داشته جدا دیده شود. */
+.acc-row--idle {
+  color: var(--muted);
+  cursor: default;
+}
+
 .cal-check-inline,
 .invoice-form label.cal-check-inline {
   flex-direction: row;

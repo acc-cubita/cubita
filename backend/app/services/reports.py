@@ -1,9 +1,10 @@
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
@@ -449,6 +450,82 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
     }
 
 
+#: منشأهایی که سندِ *دوره‌ای* می‌سازند، نه رویدادِ کسب‌وکار: افتتاحیه، اختتامیه و
+#: بستنِ سود و زیان. حسابدار گاهی می‌خواهد «گردشِ عملیاتیِ دوره» را بدونِ این‌ها
+#: ببیند و گاهی مانده‌ی واقعیِ دفتر را با آن‌ها؛ پس ورودشان باید صریح باشد نه ثابت.
+SYSTEM_SOURCE_TYPES = frozenset(
+    {"opening", "opening_balance", "opening_entry", "closing_entry", "period_close"}
+)
+
+
+@dataclass(frozen=True)
+class ReportFilters:
+    """دامنه‌ی محاسبه‌ی هر گزارشِ حسابداری — **یک مجموعه برای هر سه خانواده**.
+
+    تراز و مرور حساب و دفتر باید با یک فیلتر یک عدد بدهند؛ راهش این است که هر سه
+    از همین یک شیء بخوانند، نه اینکه هرکدام فیلترهای خودش را داشته باشد.
+
+    **پیش‌فرضِ هر میدان «چیزی عوض نمی‌شود» است.** ساختِ `ReportFilters()` خالی باید
+    دقیقاً همان چیزی بدهد که پیش از وجودِ این کلاس برمی‌گشت — یک تست همین را قفل
+    می‌کند.
+    """
+
+    date_from: date | None = None
+    date_to: date | None = None
+    #: محدوده‌ی **شماره‌ی سند**، نه شناسه. حسابدار با شماره کار می‌کند.
+    entry_from: int | None = None
+    entry_to: int | None = None
+    #: `temporary` یا `permanent`؛ `None` یعنی هر دو. سندِ موقت هنوز رسمی نیست و
+    #: گزارشِ رسمی نباید بی‌دلیل با آن یکی گرفته شود.
+    status: str | None = None
+    source_type: str | None = None
+    cost_center_id: UUID | None = None
+    analytic_id: UUID | None = None
+    #: افتتاحیه/اختتامیه/بستنِ سود و زیان وارد محاسبه شوند؟
+    include_system_entries: bool = True
+
+
+def _cost_center_scope(db: Session, center_id: UUID) -> set[UUID]:
+    """مرکز و همه‌ی زیرمجموعه‌هایش — گزارشِ «شعبه تهران» باید پروژه‌های زیرش را هم بیاورد."""
+    from app.services.cost_centers import _descendants, _index
+
+    _by_id, children = _index(db)
+    return _descendants(center_id, children)
+
+
+def apply_report_filters(db: Session, query, filters: ReportFilters):
+    """شرط‌های سطحِ سند و ردیف را به یک کوئری اضافه می‌کند — **بدونِ تاریخ**.
+
+    تاریخ عمداً اینجا نیست. `get_balances` بازه را دو تکه می‌کند (گردشِ *پیش از*
+    دوره و گردشِ *داخلِ* دوره) و اگر تاریخ همین‌جا اعمال می‌شد، تکه‌ی افتتاحیه هم
+    فیلترِ بازه می‌خورد و همیشه صفر می‌شد. هر فراخوان تاریخِ خودش را می‌گذارد.
+
+    کوئری باید از قبل به `JournalEntry` و `JournalLine` join شده باشد.
+    """
+    if filters.entry_from is not None:
+        query = query.filter(JournalEntry.number >= filters.entry_from)
+    if filters.entry_to is not None:
+        query = query.filter(JournalEntry.number <= filters.entry_to)
+    if filters.status in ("temporary", "permanent"):
+        query = query.filter(JournalEntry.status == filters.status)
+    if filters.source_type:
+        query = query.filter(JournalEntry.source_type == filters.source_type)
+    if not filters.include_system_entries:
+        # `notin_` روی ستونِ NULL‌پذیر ردیفِ NULL را هم می‌اندازد، پس صریح نگه‌داشته
+        # می‌شود: سندی که منشأ ندارد سندِ دوره‌ای هم نیست.
+        query = query.filter(
+            or_(
+                JournalEntry.source_type.is_(None),
+                JournalEntry.source_type.notin_(tuple(SYSTEM_SOURCE_TYPES)),
+            )
+        )
+    if filters.cost_center_id is not None:
+        query = query.filter(JournalLine.cost_center_id.in_(_cost_center_scope(db, filters.cost_center_id)))
+    if filters.analytic_id is not None:
+        query = query.filter(JournalLine.analytic_id == filters.analytic_id)
+    return query
+
+
 def _signed_balance(account_type: str, total_debit: Decimal, total_credit: Decimal) -> Decimal:
     if account_type in CREDIT_NORMAL_TYPES:
         return total_credit - total_debit
@@ -477,7 +554,11 @@ def descendant_account_ids(db: Session, root_id: UUID) -> set[UUID]:
 
 
 def get_general_ledger(
-    db: Session, account_id: UUID, date_from: date | None, date_to: date | None
+    db: Session,
+    account_id: UUID | None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    filters: ReportFilters | None = None,
 ) -> dict:
     """گردشِ یک حساب با مانده‌ی در حال اجرا — **شاملِ هر چه زیرش هست**.
 
@@ -488,27 +569,43 @@ def get_general_ledger(
     مستقیم داشته باشد هم فرزند. پس هر حساب یا برگ است یا سرفصل، و جمعِ زیرشاخه
     هیچ مبلغی را دو بار نمی‌شمارد.
 
+    `account_id = None` با `filters.analytic_id` یعنی **دفترِ تفصیلی**: گردشِ یک
+    تفصیلی در همه‌ی حساب‌ها. ماهیتِ مانده آن‌وقت از خودِ حسابِ هر ردیف می‌آید، چون
+    حسابِ واحدی در کار نیست.
+
+    `filters` همان شیئی است که تراز و مرور حساب هم می‌گیرند؛ با یک فیلتر، هر سه
+    باید یک عدد بدهند.
+
     سندِ باطل و معکوسش هر دو می‌مانند — مثلِ دفترِ روزنامه، به همان دلیل: دفتر باید
     نشان دهد اشتباه رخ داد و بعد اصلاح شد.
     """
-    account = db.get(Account, account_id)
-    if account is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
+    filters = filters or ReportFilters()
+    account = None
+    if account_id is not None:
+        account = db.get(Account, account_id)
+        if account is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
+    elif filters.analytic_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای دفتر باید حساب یا تفصیلی انتخاب شود")
 
-    account_ids = descendant_account_ids(db, account_id)
     query = (
         db.query(JournalLine, JournalEntry, Account)
         .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
         .join(Account, JournalLine.account_id == Account.id)
-        .filter(JournalLine.account_id.in_(account_ids))
     )
+    if account is not None:
+        query = query.filter(JournalLine.account_id.in_(descendant_account_ids(db, account.id)))
+    query = apply_report_filters(db, query, filters)
+
+    def sign(line_account: Account, debit, credit) -> Decimal:
+        #: ماهیت از حسابِ *خودِ ردیف* می‌آید وقتی حسابِ واحدی انتخاب نشده — یعنی در
+        #: دفترِ تفصیلی که ردیف‌هایش می‌توانند از حساب‌های مختلف باشند.
+        return _signed_balance((account or line_account).type, Decimal(debit), Decimal(credit))
 
     opening_balance = Decimal(0)
     if date_from is not None:
-        opening_rows = query.filter(JournalEntry.entry_date < date_from).all()
-        opening_debit = sum((r[0].debit for r in opening_rows), Decimal(0))
-        opening_credit = sum((r[0].credit for r in opening_rows), Decimal(0))
-        opening_balance = _signed_balance(account.type, opening_debit, opening_credit)
+        for line, _entry, line_account in query.filter(JournalEntry.entry_date < date_from).all():
+            opening_balance += sign(line_account, line.debit, line.credit)
         query = query.filter(JournalEntry.entry_date >= date_from)
     if date_to is not None:
         query = query.filter(JournalEntry.entry_date <= date_to)
@@ -521,32 +618,51 @@ def get_general_ledger(
 
     running = opening_balance
     lines = []
+    #: جمعِ ارزی به تفکیکِ ارز — «۱۰۰۰ دلار» با «۵۰۰ یورو» جمع‌شدنی نیست.
+    fx_totals: dict[str, Decimal] = {}
     for line, entry, line_account in rows:
-        delta = _signed_balance(account.type, line.debit, line.credit)
-        running += delta
+        running += sign(line_account, line.debit, line.credit)
+        if line.currency_code and line.fx_amount is not None:
+            fx = fx_totals.get(line.currency_code, Decimal(0))
+            #: ارزی هم مثلِ ریالی علامت می‌گیرد: بدهکار مثبت، بستانکار منفی.
+            fx_totals[line.currency_code] = fx + (
+                Decimal(line.fx_amount) if Decimal(line.debit) > 0 else -Decimal(line.fx_amount)
+            )
         lines.append(
             {
+                "line_id": line.id,
                 "entry_id": entry.id,
                 "entry_number": entry.number,
                 "entry_date": entry.entry_date,
+                #: وضعیت و منشأ روی هر ردیف می‌آیند تا کاربر بدون بازکردنِ سند
+                #: بفهمد این گردش موقت است یا دائم و از کجا آمده.
+                "entry_status": entry.status,
+                "source_type": entry.source_type,
                 #: حسابِ خودِ ردیف، نه حسابی که کاربر انتخاب کرده. در دفترِ معین این
-                #: دو یکی‌اند؛ در دفترِ کل همین ستون می‌گوید مبلغ از کدام زیرحساب آمده.
+                #: دو یکی‌اند؛ در دفترِ کل همین ستون می‌گوید مبلغ از کدام زیرحساب آمد.
                 "account_code": line_account.code,
                 "account_name": line_account.name,
                 "description": line.description or entry.description,
                 "debit": line.debit,
                 "credit": line.credit,
                 "balance": running,
+                #: ارز و پیگیری از قبل روی ردیف بودند و هیچ گزارشی نشانشان نمی‌داد.
+                "currency_code": line.currency_code,
+                "fx_amount": line.fx_amount,
+                "fx_rate": line.fx_rate,
+                "tracking_no": line.tracking_no,
+                "tracking_date": line.tracking_date,
             }
         )
 
     return {
-        "account_id": account.id,
-        "account_code": account.code,
-        "account_name": account.name,
+        "account_id": account.id if account else None,
+        "account_code": account.code if account else None,
+        "account_name": account.name if account else None,
         "opening_balance": opening_balance,
         "lines": lines,
         "closing_balance": running,
+        "fx_totals": [{"currency_code": code, "amount": amount} for code, amount in sorted(fx_totals.items())],
     }
 
 
