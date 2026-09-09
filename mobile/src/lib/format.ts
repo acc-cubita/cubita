@@ -18,6 +18,33 @@ const AR = '٠١٢٣٤٥٦٧٨٩'
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 
+/**
+ * نامِ ماه‌های جلالی — **همان فهرستِ دسکتاپ** (`desktop/src/lib/jalali.ts`).
+ *
+ * دو نسخه لازم است و هر دو از یک منبع می‌آیند تا واگرا نشوند: نامِ کامل برای
+ * برچسبی که جا دارد، و کوتاه‌شده برای محورِ نمودار که ستون‌هایش باریک‌اند.
+ */
+const JALALI_MONTHS = [
+  'فروردین',
+  'اردیبهشت',
+  'خرداد',
+  'تیر',
+  'مرداد',
+  'شهریور',
+  'مهر',
+  'آبان',
+  'آذر',
+  'دی',
+  'بهمن',
+  'اسفند',
+] as const
+
+/** `jm` (۱ تا ۱۲) → نامِ ماه. مقدارِ خارج از بازه به بازه برمی‌گردد. */
+export const faMonth = (jm: number, short = false): string => {
+  const name = JALALI_MONTHS[(Math.trunc(jm) - 1 + 12) % 12]
+  return short ? name.slice(0, 3) : name
+}
+
 /** ارقامِ لاتین → فارسی (برای نمایش). */
 export const toFaDigits = (v: string | number): string =>
   String(v).replace(/[0-9]/g, (d) => FA[Number(d)])

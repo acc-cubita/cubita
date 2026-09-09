@@ -6,6 +6,7 @@
  */
 import {
   faDate,
+  faMonth,
   faQty,
   normalizeDecimal,
   normalizeInt,
@@ -118,5 +119,32 @@ describe('نمایشِ مقدار', () => {
 
   it('اعشارِ واقعی می‌ماند', () => {
     expect(faQty('2.5')).toBe('۲٫۵')
+  })
+})
+
+describe('نامِ ماهِ جلالی', () => {
+  it('نامِ کامل', () => {
+    expect(faMonth(1)).toBe('فروردین')
+    expect(faMonth(6)).toBe('شهریور')
+    expect(faMonth(12)).toBe('اسفند')
+  })
+
+  it('کوتاه‌شده برای محورِ نمودار', () => {
+    expect(faMonth(6, true)).toBe('شهر')
+    expect(faMonth(1, true)).toBe('فرو')
+  })
+
+  it('خارج از بازه به بازه برمی‌گردد — به‌جای undefined روی صفحه', () => {
+    // سرور `jm` را ۱ تا ۱۲ می‌دهد؛ ولی اگر روزی نداد، «undefined» روی نمودار
+    // بدتر از یک نامِ ماه است.
+    expect(faMonth(13)).toBe('فروردین')
+    expect(faMonth(0)).toBe('اسفند')
+  })
+
+  it('سالِ کامل، نه دو رقمِ آخر', () => {
+    // باگِ دیده‌شده روی production: برچسب `jy % 100` را می‌نوشت، پس ۱۴۰۵ «۵»
+    // می‌شد و «شهر ۵» مثلِ *روزِ* ماه خوانده می‌شد نه سال.
+    expect(`${faMonth(6)} ${toFaDigits(1405)}`).toBe('شهریور ۱۴۰۵')
+    expect((1405 % 100).toLocaleString('fa-IR')).toBe('۵') // چرا غلط بود
   })
 })
