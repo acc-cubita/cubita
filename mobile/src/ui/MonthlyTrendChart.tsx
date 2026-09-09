@@ -3,14 +3,13 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native'
 import Svg, { Line, Path } from 'react-native-svg'
 import { AppText } from './index'
 import { colors, faMoney, radius, spacing } from '../theme'
+import { faMonth, toFaDigits } from '../lib/format'
 import type { DashboardMonth } from '../api/types'
 
 // نمودارِ روندِ فروشِ ماهانه — تک‌سری (magnitude در زمان)، تنها رنگِ برند (طلایی).
 // طبقِ dataviz: تک‌سری ⇒ بدونِ legend؛ عنوان سری را نام می‌برد. تضادِ رنگ با سطحِ
 // تیره اعتبارسنجی شد. میله‌ها با سرِ گِرد و فاصله‌ی سطحی، خطِ پایه‌ی کم‌رنگ، برچسبِ
 // پراکنده، و انتخاب با لمس.
-
-const MONTHS_FA = ['فرو', 'ارد', 'خرد', 'تیر', 'مرد', 'شهر', 'مهر', 'آبا', 'آذر', 'دی', 'بهم', 'اسف']
 
 function barPath(x: number, y: number, w: number, h: number, r: number): string {
   const rr = Math.max(0, Math.min(r, w / 2, h))
@@ -40,12 +39,33 @@ export function MonthlyTrendChart({ data }: { data: DashboardMonth[] }) {
   return (
     <View style={styles.wrap} onLayout={onLayout}>
       <View style={styles.headRow}>
-        <AppText variant="label" color={colors.textMuted}>
-          فروشِ ماهانه
-        </AppText>
+        {/* **پنجره‌ی زمانی صریح گفته می‌شود.** کارتِ «فروشِ کل» بالای همین صفحه
+            کلِ تاریخ را جمع می‌زند، ولی این نمودار فقط بازه‌ی اخیر را — دو عدد
+            که هر دو «فروش» نام دارند و بی‌این توضیح متناقض به‌نظر می‌رسند.
+            دسکتاپ هم همین را می‌نویسد: «روند فروش و خرید (۱۲ ماه اخیر)». */}
+        <View style={styles.headTitle}>
+          <AppText variant="label" color={colors.textMuted}>
+            فروشِ ماهانه
+          </AppText>
+          <AppText variant="caption" color={colors.textFaint}>
+            {toFaDigits(data.length)} ماه اخیر
+          </AppText>
+        </View>
         {sel ? (
-          <AppText variant="label" color={colors.accent}>
-            {MONTHS_FA[(sel.jm - 1 + 12) % 12]} {(sel.jy % 100).toLocaleString('fa-IR')} · {faMoney(sel.sales)}
+          // نامِ کاملِ ماه و **سالِ کامل**. پیش از این `jy % 100` بود و برای ۱۴۰۵
+          // «۵» می‌داد — یعنی «شهر ۵» که مثلِ *روزِ* ماه خوانده می‌شد نه سال.
+          //
+          // و ماهِ بی‌فروش واژه می‌گیرد نه رقم: «… · ۰» روی صفحه کنارِ جداکننده
+          // به‌شکلِ «۰۰» دیده می‌شد. ماهِ جاری معمولاً همین حالت را دارد، چون
+          // برچسبِ پیش‌فرض آخرین ماه است.
+          <AppText
+            variant="label"
+            color={colors.accent}
+            numberOfLines={1}
+            style={styles.headValue}
+          >
+            {faMonth(sel.jm)} {toFaDigits(sel.jy)} ·{' '}
+            {Number(sel.sales) > 0 ? faMoney(sel.sales) : 'بدونِ فروش'}
           </AppText>
         ) : null}
       </View>
@@ -88,7 +108,7 @@ export function MonthlyTrendChart({ data }: { data: DashboardMonth[] }) {
                 color={colors.textFaint}
                 style={{ width: barW + gap, textAlign: 'center' }}
               >
-                {show ? MONTHS_FA[(d.jm - 1 + 12) % 12] : ''}
+                {show ? faMonth(d.jm, true) : ''}
               </AppText>
             )
           })}
@@ -100,6 +120,13 @@ export function MonthlyTrendChart({ data }: { data: DashboardMonth[] }) {
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm, borderRadius: radius.md },
-  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headTitle: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
+  headValue: { flexShrink: 1 },
   labels: { flexDirection: 'row', marginTop: -16 },
 })

@@ -9,26 +9,10 @@ import { isApiError } from '../api/client'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card, TextField } from '../ui'
 import { colors, faMoney, radius, spacing } from '../theme'
+import { normalizeInt, todayIso } from '../lib/format'
 
 // ثبتِ دریافت/پرداختِ خزانه — «ثبتِ داده در حرکت». همان قراردادِ دسکتاپ/وب
 // (POST /api/treasury/{receipts|payments})، ولی فرمِ کاملاً موبایلیِ تک‌صفحه‌ای.
-
-/** تاریخِ امروز به‌صورتِ YYYY-MM-DD در وقتِ محلی (نه UTC — وگرنه شب‌ها یک روز عقب می‌افتد). */
-function todayIso(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-/** فقط رقم نگه می‌دارد (کاربر ممکن است جداکننده یا رقمِ فارسی بزند). */
-function normalizeAmount(raw: string): string {
-  const fa = '۰۱۲۳۴۵۶۷۸۹'
-  return raw
-    .split('')
-    .map((ch) => (fa.includes(ch) ? String(fa.indexOf(ch)) : ch))
-    .filter((ch) => ch >= '0' && ch <= '9')
-    .join('')
-}
 
 export function TreasuryScreen() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParams>>()
@@ -57,7 +41,7 @@ export function TreasuryScreen() {
       const body = {
         transaction_date: todayIso(),
         contact_id: contact!.id,
-        amount: normalizeAmount(amount),
+        amount: normalizeInt(amount),
         method,
         bank_account_id: method === 'bank' ? bankId : null,
         description: description.trim(),
@@ -80,7 +64,7 @@ export function TreasuryScreen() {
     },
   })
 
-  const amountNum = Number(normalizeAmount(amount) || 0)
+  const amountNum = Number(normalizeInt(amount) || 0)
   const canSave =
     contact !== null && amountNum > 0 && (method === 'cash' || bankId !== null) && !save.isPending
 

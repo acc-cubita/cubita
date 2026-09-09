@@ -3,7 +3,7 @@
     "name": "کوبیتا",
     "slug": "cubita",
     "scheme": "cubita",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "ir.cubita.app",
-      "versionCode": 8,
+      "versionCode": 9,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0b0b0d",
@@ -45,6 +45,16 @@
         }
       ],
       "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "برای اسکنِ بارکدِ کالا هنگامِ انبارگردانی و ثبتِ فاکتور، به دوربین نیاز است.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "./plugins/withOptionalCamera",
+      "./plugins/withHomeWidget",
+      "./plugins/withArmOnlyAbis",
       [
         "expo-splash-screen",
         {

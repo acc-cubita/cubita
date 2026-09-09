@@ -330,13 +330,24 @@ export interface MpOrder {
   distributor_name: string
   retailer_name: string
   order_number: number
-  status: string // pending | confirmed | rejected | ...
+  /** ORDER_STATUSES در models/marketplace.py — «pending» جزوشان **نیست**. */
+  status: 'placed' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
   settlement_mode: string
   payment_status: string
   note: string
   subtotal: string
   total: string
   cash_amount: string
+  /** تا وقتی تحویل ثبت نشده خالی‌اند. */
+  delivered_at: string | null
+  delivered_by_name: string
+  /**
+   * فاکتورهای دوطرفه. **کلیدِ اینکه آیا تحویل هنوز پولی جابه‌جا می‌کند یا نه:**
+   * اگر پر باشند، سند هنگامِ *تأیید* خورده و نقد همان‌جا تسویه شده؛ تحویل فقط
+   * علامت می‌خورد. جزئیات در `market/cod.ts::settlesOnDelivery`.
+   */
+  distributor_sales_invoice_id: string | null
+  retailer_purchase_invoice_id: string | null
   lines: MpOrderLine[]
 }
 
@@ -353,4 +364,50 @@ export interface MpMessage {
 export interface MpMessagesPage {
   my_role: string
   messages: MpMessage[]
+}
+
+// ── انبارگردانی ────────────────────────────────────────────────────────────
+
+/** یک ردیفِ جلسه‌ی انبارگردانی — منطبق بر StockCountLineOut. */
+export interface StockCountLine {
+  id: string
+  item_id: string
+  item_name: string
+  item_sku: string
+  unit: string
+  system_qty: string
+  counted_qty: string
+  unit_cost: string
+  variance: string
+  variance_value: string
+}
+
+/** سرِ جلسه با ردیف‌ها — منطبق بر StockCountSessionOut. */
+export interface StockCountSession {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: 'open' | 'posted' | 'cancelled'
+  notes: string
+  journal_entry_id: string | null
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
+  variance_line_count: number
+  total_variance_value: string
+  lines: StockCountLine[]
+}
+
+/** ردیفِ فهرستِ جلسه‌ها — منطبق بر StockCountSummaryOut (بدونِ lines). */
+export interface StockCountSummary {
+  id: string
+  warehouse_id: string
+  warehouse_name: string
+  count_date: string
+  status: 'open' | 'posted' | 'cancelled'
+  notes: string
+  posted_at: string | null
+  created_at: string | null
+  line_count: number
 }

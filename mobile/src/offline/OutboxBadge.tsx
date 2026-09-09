@@ -1,0 +1,59 @@
+import { useEffect, useState } from 'react'
+import { StyleSheet, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+
+import { AppText } from '../ui'
+import { colors, spacing } from '../theme'
+import { KIND_LABELS, subscribeOutbox, type OutboxItem } from './outbox'
+import { faNum } from '../theme'
+
+/**
+ * نوارِ «در صفِ ارسال».
+ *
+ * **چرا لازم است:** بدونِ این، کاربر فاکتوری ثبت می‌کند، در فهرست نمی‌بیندش (چون
+ * هنوز به سرور نرفته) و فکر می‌کند کارش گم شده — پس دوباره ثبتش می‌کند. یعنی
+ * نبودِ این نوار خودش باعثِ همان ثبتِ دوباره‌ای می‌شود که کلیدِ idempotency برای
+ * جلوگیری از آن گذاشته شده.
+ */
+export function OutboxBadge() {
+  const [items, setItems] = useState<OutboxItem[]>([])
+
+  useEffect(() => subscribeOutbox(setItems), [])
+
+  if (items.length === 0) return null
+
+  const rejected = items.filter((i) => i.rejectedReason)
+  const pending = items.length - rejected.length
+
+  return (
+    <View style={styles.bar}>
+      {rejected.length > 0 ? (
+        <>
+          <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
+          <AppText variant="caption" color={colors.danger}>
+            {`${faNum(rejected.length)} مورد ثبت نشد — «${KIND_LABELS[rejected[0].kind]}»`}
+          </AppText>
+        </>
+      ) : (
+        <>
+          <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
+          <AppText variant="caption" color={colors.accent}>
+            {`${faNum(pending)} مورد در صفِ ارسال`}
+          </AppText>
+        </>
+      )}
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+})

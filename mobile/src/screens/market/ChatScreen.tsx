@@ -15,6 +15,8 @@ import type { MpMessage } from '../../api/types'
 import { AppText, Center } from '../../ui'
 import { colors, radius, spacing } from '../../theme'
 import type { MarketStackParams } from '../../navigation/types'
+import { useAuth } from '../../auth/AuthContext'
+import { canAccess } from '../../auth/access'
 
 const faTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
@@ -26,6 +28,11 @@ export function ChatScreen() {
   const listRef = useRef<FlatList<MpMessage>>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  // خواندنِ رشته روی بک‌اند مجوز نمی‌خواهد، ولی *فرستادن* `marketplace:create`
+  // می‌خواهد. مأمورِ حمل آن را ندارد — پیش از این کادرِ نوشتن را می‌دید، تایپ
+  // می‌کرد و روی «ارسال» ۴۰۳ می‌گرفت.
+  const { me } = useAuth()
+  const canSend = canAccess(me, 'marketChat')
 
   // پولینگِ ~۴ ثانیه‌ای برای تحویلِ زنده (بدونِ WebSocket).
   const q = useQuery({
@@ -83,6 +90,13 @@ export function ChatScreen() {
           />
         )}
 
+        {!canSend ? (
+          <View style={styles.readOnly}>
+            <AppText variant="caption" color={colors.textMuted}>
+              با نقشِ شما فقط خواندنِ گفتگو ممکن است.
+            </AppText>
+          </View>
+        ) : (
         <View style={styles.composer}>
           <TextInput
             value={text}
@@ -95,12 +109,16 @@ export function ChatScreen() {
           <Pressable
             onPress={send}
             disabled={!text.trim() || sending}
+            accessibilityRole="button"
+            accessibilityLabel="ارسالِ پیام"
+            accessibilityState={{ disabled: !text.trim() || sending, busy: sending }}
             android_ripple={{ color: 'rgba(0,0,0,0.15)', radius: 24 }}
             style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}
           >
             <Ionicons name="arrow-up" size={22} color={colors.onAccent} />
           </Pressable>
         </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -130,6 +148,13 @@ const styles = StyleSheet.create({
   mine: { backgroundColor: colors.accent, borderTopRightRadius: 4 },
   theirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderTopLeftRadius: 4 },
   time: { marginTop: 2, textAlign: 'left' },
+  readOnly: {
+    alignItems: 'center',
+    padding: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

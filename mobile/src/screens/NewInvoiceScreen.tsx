@@ -9,6 +9,7 @@ import { isApiError } from '../api/client'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card, TextField } from '../ui'
 import { colors, faMoney, faNum, radius, spacing } from '../theme'
+import { normalizeDecimal, todayIso } from '../lib/format'
 
 // فاکتورِ فروشِ سریع — همان قراردادِ دسکتاپ/وب (POST /api/sales-invoices).
 // فرمِ موبایلیِ تک‌صفحه‌ای: طرف‌حساب (اختیاری) + ردیف‌ها + مالیات → ثبت.
@@ -21,26 +22,7 @@ interface Line {
   unit_price: string
 }
 
-function todayIso(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-/** ارقامِ فارسی/جداکننده → عددِ خام. اعشار (برای تعداد) حفظ می‌شود. */
-function normalizeNum(raw: string): string {
-  const fa = '۰۱۲۳۴۵۶۷۸۹'
-  const out = raw
-    .split('')
-    .map((ch) => (fa.includes(ch) ? String(fa.indexOf(ch)) : ch))
-    .filter((ch) => (ch >= '0' && ch <= '9') || ch === '.')
-    .join('')
-  // فقط یک نقطه‌ی اعشار
-  const i = out.indexOf('.')
-  return i === -1 ? out : out.slice(0, i + 1) + out.slice(i + 1).replace(/\./g, '')
-}
-
-const num = (s: string) => Number(normalizeNum(s) || 0)
+const num = (s: string) => Number(normalizeDecimal(s) || 0)
 
 export function NewInvoiceScreen() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParams>>()
@@ -95,11 +77,11 @@ export function NewInvoiceScreen() {
         warehouse_id: warehouse!.id,
         contact_id: contact?.id ?? null,
         description: description.trim(),
-        tax_rate: normalizeNum(taxRate) || '0',
+        tax_rate: normalizeDecimal(taxRate) || '0',
         lines: lines.map((l) => ({
           item_id: l.item_id,
-          qty: normalizeNum(l.qty),
-          unit_price: normalizeNum(l.unit_price),
+          qty: normalizeDecimal(l.qty),
+          unit_price: normalizeDecimal(l.unit_price),
         })),
       }),
     onSuccess: (inv) => {
@@ -142,7 +124,13 @@ export function NewInvoiceScreen() {
               <Ionicons name="chevron-back" size={18} color={colors.textFaint} />
             </Pressable>
             {contact ? (
-              <Pressable onPress={() => setContact(null)} hitSlop={8} style={styles.clearBtn}>
+              <Pressable
+                onPress={() => setContact(null)}
+                accessibilityRole="button"
+                accessibilityLabel="حذفِ طرفِ حساب"
+                hitSlop={8}
+                style={styles.clearBtn}
+              >
                 <Ionicons name="close-circle" size={20} color={colors.textFaint} />
               </Pressable>
             ) : null}
@@ -176,7 +164,12 @@ export function NewInvoiceScreen() {
                   <AppText variant="body" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
                     {l.name}
                   </AppText>
-                  <Pressable onPress={() => removeLine(idx)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => removeLine(idx)}
+                    accessibilityRole="button"
+                    accessibilityLabel="حذفِ این ردیف"
+                    hitSlop={8}
+                  >
                     <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </Pressable>
                 </View>

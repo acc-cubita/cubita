@@ -1,16 +1,29 @@
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import { ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../auth/AuthContext'
 import { useAppUpdate } from '../update/AppUpdateProvider'
 import { AppText, Button, Card } from '../ui'
 import { colors, spacing } from '../theme'
+import { DEFAULT_PREFS, readPrefs, writePrefs } from '../widget/prefs'
 
 // تنظیمات/بیشتر: پروفایل، وضعیتِ بیومتریک، خروج، نسخه + بررسیِ به‌روزرسانی.
 export function MoreScreen() {
   const { me, signOut, biometricAvailable } = useAuth()
   const { check, phase, installedVersion } = useAppUpdate()
   const checking = phase.state === 'checking'
+  const [showAmounts, setShowAmounts] = useState(DEFAULT_PREFS.showAmounts)
+
+  useEffect(() => {
+    void readPrefs().then((p) => setShowAmounts(p.showAmounts))
+  }, [])
+
+  const toggleAmounts = (next: boolean) => {
+    // حالتِ محلی فوراً عوض می‌شود تا سوییچ کند به‌نظر نرسد؛ نوشتن پشتِ سر می‌آید.
+    setShowAmounts(next)
+    void writePrefs({ showAmounts: next })
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -37,6 +50,28 @@ export function MoreScreen() {
               loading={checking}
               onPress={() => void check()}
               icon={<Ionicons name="cloud-download-outline" size={18} color={colors.text} />}
+            />
+          </View>
+        </Card>
+
+        {/* **ویجت بیرونِ قفل است.** اپ با اثرانگشت باز می‌شود، ولی ویجتِ صفحه‌ی
+            خانه را هر کسی که گوشی را بردارد می‌بیند. پیش‌فرض روشن است — کسی که
+            خودش ویجت را اضافه می‌کند دنبالِ عدد است — ولی این جمله باید جایی
+            نوشته می‌شد که کاربر بتواند تصمیم بگیرد. */}
+        <Card>
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <AppText variant="body">نمایشِ مبالغ در ویجت</AppText>
+              <AppText variant="caption" color={colors.textMuted}>
+                ویجتِ صفحه‌ی خانه قفلِ اپ را ندارد
+              </AppText>
+            </View>
+            <Switch
+              value={showAmounts}
+              onValueChange={toggleAmounts}
+              trackColor={{ false: colors.surfaceAlt, true: colors.accentSoft }}
+              thumbColor={showAmounts ? colors.accent : colors.textFaint}
+              accessibilityLabel="نمایشِ مبالغ در ویجتِ صفحه‌ی خانه"
             />
           </View>
         </Card>

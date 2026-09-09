@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,6 +8,7 @@ from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn, TreasuryTransactionOut
 from app.services import treasury as treasury_service
+from app.services.idempotency import idempotent
 
 router = APIRouter(tags=["treasury"])
 
@@ -50,19 +51,43 @@ def list_treasury(
 @router.post("/api/treasury/receipts", response_model=TreasuryTransactionOut, status_code=201)
 def create_receipt(
     data: TreasuryTransactionIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
-    return _to_out(treasury_service.create_receipt(db, data, user))
+    # صفِ آفلاینِ موبایل این را دوباره می‌فرستد اگر پاسخ گم شود. بدونِ کلیدِ
+    # idempotency، همان یک دریافت دو بار در دفتر می‌نشیند — بی‌هیچ خطایی.
+    return _to_out(
+        idempotent(
+            db,
+            request,
+            user,
+            operation="create_treasury_receipt",
+            payload=data,
+            run=lambda: treasury_service.create_receipt(db, data, user),
+            replay=lambda rid: db.get(TreasuryTransaction, rid),
+        )
+    )
 
 
 @router.post("/api/treasury/payments", response_model=TreasuryTransactionOut, status_code=201)
 def create_payment(
     data: TreasuryTransactionIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
-    return _to_out(treasury_service.create_payment(db, data, user))
+    return _to_out(
+        idempotent(
+            db,
+            request,
+            user,
+            operation="create_treasury_payment",
+            payload=data,
+            run=lambda: treasury_service.create_payment(db, data, user),
+            replay=lambda rid: db.get(TreasuryTransaction, rid),
+        )
+    )
 
 
 @router.post("/api/treasury/card-payment", response_model=TreasuryTransactionOut, status_code=201)

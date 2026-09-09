@@ -2,17 +2,20 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../auth/AuthContext'
-import { fetchAlerts, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
+import { fetchAlerts, fetchIncomeStatement, fetchSalesDashboard, fetchSalesSummary } from '../api/reports'
+import { readPrefs } from '../widget/prefs'
+import { buildSnapshot, writeSnapshot } from '../widget/snapshot'
 import { isApiError } from '../api/client'
 import type { AlertItem } from '../api/types'
-import { hasPermission } from '../api/types'
+import { canAccess } from '../auth/access'
 import type { HomeStackParams } from '../navigation/types'
 import { AppText, Button, Card } from '../ui'
 import { MonthlyTrendChart } from '../ui/MonthlyTrendChart'
-import { colors, faMoney, faNum, radius, spacing } from '../theme'
+import { colors, faMoney, faNum, font, radius, spacing } from '../theme'
 
 // داشبوردِ مدیر: شاخص‌ها + روندِ فروش + هشدارها + پرفروش‌ها. آنلاین‌محور با react-query.
 export function HomeScreen() {
@@ -22,15 +25,38 @@ export function HomeScreen() {
   const summaryQ = useQuery({ queryKey: ['sales-summary'], queryFn: fetchSalesSummary })
   const dashQ = useQuery({ queryKey: ['sales-dashboard'], queryFn: () => fetchSalesDashboard(12) })
   const alertsQ = useQuery({ queryKey: ['alerts'], queryFn: fetchAlerts })
+  // همان مجوزِ تبِ خانه است (`accounting: view`)، پس گیتِ جداگانه لازم ندارد.
+  const plQ = useQuery({ queryKey: ['income-statement'], queryFn: fetchIncomeStatement })
 
-  const refreshing = summaryQ.isFetching || dashQ.isFetching || alertsQ.isFetching
+  const refreshing = summaryQ.isFetching || dashQ.isFetching || alertsQ.isFetching || plQ.isFetching
   const refetchAll = () => {
     void summaryQ.refetch()
     void dashQ.refetch()
     void alertsQ.refetch()
+    void plQ.refetch()
   }
 
   const s = summaryQ.data
+  const net = plQ.data ? Number(plQ.data.net_profit) : null
+
+  // **عکسِ ویجت اینجا نوشته می‌شود و نه در لایه‌ی API.** همین صفحه است که هر سه
+  // عدد را با هم دارد؛ نوشتن از سه جای جدا یعنی ویجتی که نیمی از اعدادش از یک
+  // لحظه و نیمِ دیگرش از لحظه‌ای دیگر است.
+  useEffect(() => {
+    if (!s || !plQ.data) return
+    void (async () => {
+      const prefs = await readPrefs()
+      await writeSnapshot(
+        buildSnapshot({
+          tenant: me?.tenant_name,
+          sales30: s.last_30_with_tax,
+          netProfit: plQ.data.net_profit,
+          alerts: alertsQ.data?.total,
+          showAmounts: prefs.showAmounts,
+        }),
+      )
+    })()
+  }, [s, plQ.data, alertsQ.data?.total, me?.tenant_name])
   const err = [summaryQ.error, dashQ.error, alertsQ.error].find(Boolean)
 
   return (
@@ -69,7 +95,7 @@ export function HomeScreen() {
           </Card>
         ) : null}
 
-        {me && hasPermission(me, 'invoices', 'create') ? (
+        {canAccess(me, 'newInvoice') ? (
           <QuickAction
             label="فاکتورِ فروش"
             icon="receipt-outline"
@@ -79,7 +105,7 @@ export function HomeScreen() {
           />
         ) : null}
 
-        {me && hasPermission(me, 'checks_bank', 'create') ? (
+        {canAccess(me, 'treasury') ? (
           <View style={styles.quickRow}>
             <QuickAction
               label="ثبتِ دریافت"
@@ -100,6 +126,19 @@ export function HomeScreen() {
           <KpiCard title="فروشِ کل" value={s ? faMoney(s.total_with_tax) : '—'} hint="ریال (با مالیات)" />
           <KpiCard title="سود ناخالص" value={s ? faMoney(s.gross_profit) : '—'} hint={s ? `حاشیه ${faNum(s.margin_pct)}٪` : ''} tone="success" />
         </View>
+        {/* **سود ناخالص تنها، گمراه‌کننده است.** «سود ناخالص» فقط فروش منهای بهای
+            تمام‌شده است؛ حقوق، اجاره و استهلاک در آن نیستند. کسب‌وکاری می‌تواند
+            ناخالصِ مثبت و دوره‌ی زیان‌ده داشته باشد — و آن‌وقت مدیر روی گوشی عددِ
+            سبز می‌دید و روی وب همان لحظه عددِ قرمز. وب این را در صفحه‌ی خانه‌اش
+            دارد (`GuidedDashboard`، «سود/زیان دوره جاری»)؛ موبایل نداشت. */}
+        <KpiCard
+          title="سود/زیانِ دوره"
+          value={net === null ? '—' : faMoney(net)}
+          hint="درآمد منهای همه‌ی هزینه‌ها"
+          tone={net === null ? undefined : net >= 0 ? 'success' : 'danger'}
+          wide
+        />
+
         <View style={styles.kpiRow}>
           <KpiCard title="فروشِ ۳۰ روز" value={s ? faMoney(s.last_30_with_tax) : '—'} hint="ریال" />
           <KpiCard title="تعداد فاکتور" value={s ? faNum(s.invoice_count) : '—'} hint={s ? `میانگین ${faMoney(s.avg_invoice)}` : ''} />
@@ -144,18 +183,26 @@ function KpiCard({
   value,
   hint,
   tone,
+  wide,
 }: {
   title: string
   value: string
   hint?: string
-  tone?: 'success'
+  tone?: 'success' | 'danger'
+  /** تمام‌عرض — برای عددی که نباید هم‌وزنِ بقیه دیده شود. */
+  wide?: boolean
 }) {
   return (
-    <Card style={styles.kpi}>
+    <Card style={wide ? undefined : styles.kpi}>
       <AppText variant="label" color={colors.textMuted}>
         {title}
       </AppText>
-      <AppText variant="heading" color={tone === 'success' ? colors.success : colors.text} style={{ marginTop: spacing.xs }} numberOfLines={1}>
+      <AppText
+        variant="heading"
+        color={tone === 'success' ? colors.success : tone === 'danger' ? colors.danger : colors.text}
+        style={{ marginTop: spacing.xs }}
+        numberOfLines={1}
+      >
         {value}
       </AppText>
       {hint ? (
@@ -206,7 +253,7 @@ function AlertsCard({ items, total, onPress }: { items: AlertItem[]; total: numb
             <AppText variant="heading">هشدارها</AppText>
             {total > 0 ? (
               <View style={styles.alertCount}>
-                <AppText variant="label" color={colors.onAccent}>
+                <AppText variant="label" color={colors.onAccent} maxFontSizeMultiplier={font.maxScale.dense}>
                   {faNum(total)}
                 </AppText>
               </View>
@@ -275,7 +322,7 @@ const styles = StyleSheet.create({
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   alertCount: {
     minWidth: 24,
-    height: 22,
+    minHeight: 22,
     paddingHorizontal: 8,
     borderRadius: 999,
     backgroundColor: colors.accent,

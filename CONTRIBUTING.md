@@ -103,6 +103,34 @@ npx expo start
 پوشه‌ی `mobile/android/` در گیت نیست و ماشین‌به‌ماشین ساخته می‌شود
 (`npm run android`، با gradlewِ محلی — نه EAS).
 
+### ⚠️ `expo prebuild` کلیدِ امضا را پاک می‌کند
+
+`npx expo prebuild` پوشه‌ی `android/` را **پاک و از نو می‌سازد**. سه چیزِ دستی
+با آن می‌روند:
+
+| چه چیزی | کجاست |
+|---|---|
+| کلیدِ امضای انتشار | `android/app/cubita-release.keystore` |
+| رمزهای کلید | `android/keystore.properties` |
+| بلوکِ `signingConfigs.release` | `android/app/build.gradle` |
+
+**با گم شدنِ آن کلید دیگر هرگز نمی‌شود آپدیتِ همین اپ را منتشر کرد** — اندروید
+آپدیتی را که با کلیدِ دیگری امضا شده نمی‌پذیرد. تنها راهِ باقی‌مانده اپِ تازه با
+نامِ بسته‌ی تازه است، یعنی از دست دادنِ همه‌ی نصب‌های موجود.
+
+نسخه‌ی مرجعِ کلید در `mobile/release/signing/` نگه داشته می‌شود — بیرون از
+`android/`، جایی که prebuild دستش نمی‌رسد. پس همیشه:
+
+```bash
+npx expo prebuild --platform android
+node scripts/restore-signing.mjs     # ← فراموش نکن
+```
+
+اگر `release/signing/` روی ماشینِ تو نیست، اسکریپت هشدار می‌دهد و رد می‌شود؛
+ساختِ debug کار می‌کند ولی نسخه‌ی release با کلیدِ debug امضا می‌شود و به‌دردِ
+انتشار نمی‌خورد. کلید را از صاحبِ پروژه بگیر و در `mobile/release/signing/`
+بگذار (این پوشه در `.gitignore` است و **هرگز** نباید کامیت شود).
+
 ---
 
 ## گردشِ کار

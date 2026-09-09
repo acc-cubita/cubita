@@ -151,3 +151,35 @@ jobs:
         run: npx vite build
         env:
           VITE_API_URL: https://acc.cubita.ir
+
+  mobile:
+    runs-on: ubuntu-latest
+    # همان دلیلِ دو jobِ بالا: jobِ هنگ‌کرده بدونِ سقف تا شش ساعت اسلات را
+    # نگه می‌دارد و صف پشتش می‌ماند.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: نصب
+        run: npm ci
+
+      - name: بررسی نوع‌ها
+        run: npx tsc --noEmit
+
+      - name: تست‌ها
+        # اپ روی کافه‌بازار زنده است؛ تا پیش از این هیچ چیزی جز اجرای دستی
+        # نمی‌گفت چیزی شکسته یا نه.
+        run: npx jest --ci
+
+      - name: ممیزِ ساختاری
+        # معادلِ audit-pages.mjs دسکتاپ. کدِ مرده را می‌گیرد — همان چیزی که
+        # باعث شد isOwner/hasPermission ماه‌ها بی‌استفاده بمانند بی‌آنکه کسی بفهمد.
+        run: node scripts/audit-mobile.mjs

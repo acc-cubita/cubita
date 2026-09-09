@@ -4,7 +4,10 @@ import { useAuth } from '../auth/AuthContext'
 import { LoginScreen } from '../screens/LoginScreen'
 import { LockScreen } from '../screens/LockScreen'
 import { MainTabs } from './MainTabs'
+import { NoAccessScreen } from '../screens/NoAccessScreen'
 import { navigationRef } from './navigationRef'
+import { setCurrentScreen } from '../errors/reporter'
+import { hasNoContent } from '../auth/access'
 import { PushGate } from '../push/notifications'
 import { BrandMark } from '../ui/BrandMark'
 import { colors } from '../theme'
@@ -47,12 +50,29 @@ function Splash() {
 }
 
 export function RootNavigator() {
-  const { status } = useAuth()
+  const { status, me } = useAuth()
   if (status === 'restoring') return <Splash />
   if (status === 'unauth') return <LoginScreen />
   if (status === 'locked') return <LockScreen />
+  // نقشی که هیچ بخشی از اپ را نمی‌بیند (مثلِ مسئولِ حقوق) نباید با نوارِ تبِ
+  // تقریباً خالی روبه‌رو شود؛ صادقانه می‌گوییم چرا.
+  if (hasNoContent(me)) return <NoAccessScreen />
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      linking={linking}
+      // گزارشِ کرش باید بگوید کاربر کجا بود. بدونِ این، یک stack traceِ minify‌شده
+      // داریم و هیچ سرنخی از مسیرِ رسیدن به آن.
+      //
+      // cast به همان دلیلی است که `navigateFromRoute` از dispatch استفاده می‌کند:
+      // `navigationRef` بدونِ ParamList ساخته شده، پس تایپِ خروجیِ getCurrentRoute
+      // تهی می‌شود. فقط نامِ صفحه را می‌خواهیم.
+      onStateChange={() => {
+        const route = navigationRef.getCurrentRoute() as { name?: string } | undefined
+        setCurrentScreen(route?.name ?? null)
+      }}
+    >
       <MainTabs />
       {/* بی‌نمایش: deep-linkِ لمسِ اعلان + تازه‌کردنِ نشانِ خوانده‌نشده. داخلِ کانتینر تا ناوبری آماده باشد. */}
       <PushGate />

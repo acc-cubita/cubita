@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  فراداده‌ی ویجت.
+
+  `updatePeriodMillis` سی دقیقه است — **کمینه‌ی خودِ اندروید**. عددِ کوچک‌تر
+  بی‌صدا به همین گرد می‌شود، پس نوشتنِ ۵ دقیقه فقط یک دروغِ خوانا بود.
+
+  یعنی ویجت دو جور تازه می‌شود: هر نیم‌ساعت که سیستم بیدارش می‌کند، و هر بار که
+  اپ باز می‌شود و عکسِ تازه می‌نویسد (که در `onUpdate`ِ بعدی دیده می‌شود). برای
+  «فروشِ ۳۰ روز» و «سود/زیانِ دوره» — عددهایی که روزانه تغییر می‌کنند — کافی است،
+  و زمانِ عکس روی خودِ ویجت نوشته می‌شود تا کهنگی هرگز پنهان نماند.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/cubita_widget"
+    android:previewLayout="@layout/cubita_widget"
+    android:description="@string/widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

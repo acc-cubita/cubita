@@ -26,3 +26,9 @@ export type MarketStackParams = {
   MarketHome: undefined
   Chat: { scope: 'connection' | 'order'; id: string; title?: string }
 }
+
+export type StockStackParams = {
+  StockCounts: undefined
+  StockCount: { id: string; title?: string }
+  StockScan: { sessionId: string }
+}
