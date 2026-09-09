@@ -203,6 +203,18 @@ class PnlRowOut(BaseModel):
     account_id: UUID
     account_code: str
     account_name: str
+    account_type: str
+    #: بُعدهای مانده. حسابِ درآمدی با دو تفصیلی دو ردیفِ جداست — وگرنه حساب صفر
+    #: می‌شود ولی دفترِ تفصیلی مانده‌دار می‌ماند، و چون درآمد و هزینه به سالِ بعد
+    #: منتقل نمی‌شوند، هیچ‌وقت هم بسته نمی‌شود.
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_name: str | None = None
+    debit: Decimal
+    credit: Decimal
+    #: شکلِ قدیمیِ همان دو ستون، برای رابط.
     side: str
     amount: Decimal
 
@@ -214,7 +226,25 @@ class PnlPreviewOut(BaseModel):
     total_income: Decimal
     total_expenses: Decimal
     net_profit: Decimal
+    #: حسابِ مقصد از `system_role` پیدا می‌شود، نه از کد — کد مالِ مشتری است.
+    destination_account_code: str
+    destination_account_name: str
+    total_debit: Decimal
+    total_credit: Decimal
+    #: باید صفر باشد؛ رابط تا صفر نشود دکمه‌ی صدور را فعال نمی‌کند.
+    difference: Decimal
     temporary_in_range: int
+    #: گامِ اول از قبل زده شده؟
+    already_closed: bool
+
+
+class PnlIssueOut(BaseModel):
+    entry_id: UUID
+    number: int | None
+    line_count: int
+    total_income: Decimal
+    total_expenses: Decimal
+    net_profit: Decimal
 
 
 class ClosingRowOut(BaseModel):

@@ -4682,18 +4682,51 @@ export const issueFxRevaluation = (token: string, asOf: string, description: str
     token, 'POST', '/api/accounting/fx-revaluation', { as_of: asOf, description },
   )
 
+export interface PnlPreviewRow {
+  account_id: string
+  account_code: string
+  account_name: string
+  account_type: string
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
+  cost_center_id: string | null
+  cost_center_name: string | null
+  debit: string
+  credit: string
+  side: string
+  amount: string
+}
+
 export interface PnlPreview {
   date_from: string | null
   date_to: string
-  rows: { account_id: string; account_code: string; account_name: string; side: string; amount: string }[]
+  rows: PnlPreviewRow[]
   total_income: string
   total_expenses: string
   net_profit: string
+  destination_account_code: string
+  destination_account_name: string
+  total_debit: string
+  total_credit: string
+  difference: string
   temporary_in_range: number
+  already_closed: boolean
 }
 
 export const fetchPnlClosePreview = (token: string, dateTo: string) =>
   authedGet<PnlPreview>(token, `/api/accounting/pnl-close/preview?date_to=${dateTo}`)
+
+/** گامِ اول: فقط سند را می‌زند. قفلِ دوره گامِ دومِ جداست و برگشت ندارد. */
+export const issuePnlClose = (token: string, asOf: string, description: string) =>
+  authedSend<{
+    entry_id: string
+    number: number | null
+    line_count: number
+    total_income: string
+    total_expenses: string
+    net_profit: string
+  }>(token, 'POST', '/api/accounting/pnl-close', { as_of: asOf, description })
 
 export interface ClosingRow {
   account_id: string

@@ -35,6 +35,7 @@ from app.schemas.accounting_ops import (
     MergeOut,
     OpeningIssueIn,
     OpeningPreviewOut,
+    PnlIssueOut,
     PnlPreviewOut,
     ReclassIn,
     ReclassPreviewOut,
@@ -154,10 +155,25 @@ def pnl_preview(
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    """پیش‌نمایشِ «بستنِ حساب‌های سود و زیان». خودِ بستن از راهِ
-    `POST /api/fiscal-period-closes` انجام می‌شود — تا دو پیاده‌سازیِ موازیِ یک سند
-    وجود نداشته باشد."""
+    """پیش‌نمایشِ «بستنِ حساب‌های سود و زیان» — همان ردیف‌هایی که صدور خواهد زد."""
     return ops.pnl_close_preview(db, date_to)
+
+
+@router.post("/pnl-close", response_model=PnlIssueOut)
+def pnl_issue(
+    data: IssueIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "create")),
+):
+    """**گامِ اول**: سندِ بستن را می‌زند و بس — دوره قفل نمی‌شود.
+
+    قفلِ دوره گامِ دومِ جداست (`POST /api/fiscal-period-closes`) چون برگشت ندارد:
+    نه حذفی هست نه بازگشایی. پیش از آن، این دو یک دکمه بودند و کاربر سندی را
+    تأیید می‌کرد که هنوز ندیده بود.
+
+    هر دو مسیر از `issue_pnl_close` رد می‌شوند، پس یک *پیاده‌سازی* بیشتر نیست.
+    """
+    return ops.issue_pnl_close(db, user, data.as_of, data.description)
 
 
 @router.get("/closing-entry/preview", response_model=ClosingPreviewOut)

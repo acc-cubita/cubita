@@ -63,7 +63,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   adjustment: 'تعدیل',
   transfer_in: 'ورود از انتقال',
   transfer_out: 'خروج برای انتقال',
-  period_close: 'بستن دوره',
+  period_close: 'بستن حساب‌های سود و زیان',
   closing_entry: 'سند اختتامیه',
   opening_entry: 'سند افتتاحیه',
   fx_revaluation: 'تسعیر ارز',
