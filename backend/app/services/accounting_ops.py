@@ -35,7 +35,12 @@ from app.models.user import User
 from app.services import chart_codes as cc
 from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open, get_latest_close_date
-from app.services.reports import _signed_balance, descendant_account_ids
+from app.services.reports import (
+    ReportFilters,
+    _signed_balance,
+    apply_report_filters,
+    descendant_account_ids,
+)
 
 #: نوعِ حساب‌هایی که مانده‌شان از سالی به سالِ بعد منتقل می‌شود (حساب‌های دائمی).
 #: درآمد و هزینه اینجا نیستند چون پیش از اختتامیه با «بستن سود و زیان» صفر شده‌اند.
@@ -1260,13 +1265,28 @@ def issue_opening_entry(
 # ─────────────────── ۷) ترازها، مرورِ حساب‌ها، دفاتر ───────────────────────
 
 
-def get_balances(db: Session, date_from: date_ | None, date_to: date_ | None) -> list[dict]:
+def get_balances(
+    db: Session,
+    date_from: date_ | None = None,
+    date_to: date_ | None = None,
+    filters: ReportFilters | None = None,
+    include_zero_activity: bool = False,
+) -> list[dict]:
     """پایه‌ی «گزارش ترازها» و «مرور حساب‌ها» و «صدور سند کل» — هر سه از همین یک عدد ساخته می‌شوند.
 
     برای هر حسابِ سطحِ آخر شش عدد برمی‌گردد: گردشِ *قبل* از بازه (افتتاحیه)، گردشِ
     *داخلِ* بازه، و جمعشان (مانده‌ی پایانِ دوره). تراز دو/چهار/شش/هشت‌ستونی همگی
     نمایش‌های مختلفِ همین شش عددند، پس محاسبه یک‌بار اینجا انجام می‌شود نه در چهار جا.
+
+    `filters` همان شیئی است که دفتر هم می‌گیرد. **قیدِ اصلی:** با یک فیلتر، تراز و
+    مرور حساب و دفتر باید یک عدد بدهند؛ اگر نه، اشکالِ جدی در حسابداری داریم.
+
+    `include_zero_activity` حساب‌های **بی‌گردش** را هم می‌آورد. این دو یکی نیستند و
+    از نظر حسابداری هم نباید یکی گرفته شوند: حسابی که هیچ رویدادی نداشته با حسابی
+    که صد میلیون بدهکار و صد میلیون بستانکار خورده و به صفر رسیده، دو چیزند. ستونِ
+    `has_activity` روی هر ردیف همین را می‌گوید.
     """
+    filters = filters or ReportFilters()
     _assert_range(date_from, date_to)
 
     def totals(upper: date_ | None, lower: date_ | None):
@@ -1279,6 +1299,7 @@ def get_balances(db: Session, date_from: date_ | None, date_to: date_ | None) ->
             .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
             .group_by(JournalLine.account_id)
         )
+        query = apply_report_filters(db, query, filters)
         if lower is not None:
             query = query.filter(JournalEntry.entry_date >= lower)
         if upper is not None:
@@ -1289,8 +1310,13 @@ def get_balances(db: Session, date_from: date_ | None, date_to: date_ | None) ->
     period = totals(date_to, date_from)
 
     accounts = {a.id: a for a in db.query(Account).filter(Account.is_group.is_(False)).all()}
+    active = set(opening) | set(period)
+    #: حساب‌های بی‌گردش فقط وقتی می‌آیند که خواسته شوند — وگرنه چارتِ چندصدردیفی
+    #: هر گزارش را پر از ردیفِ صفر می‌کرد و رفتارِ امروز عوض می‌شد.
+    wanted = active | set(accounts) if include_zero_activity else active
+
     rows = []
-    for account_id in set(opening) | set(period):
+    for account_id in wanted:
         account = accounts.get(account_id)
         if account is None:
             continue
@@ -1312,6 +1338,8 @@ def get_balances(db: Session, date_from: date_ | None, date_to: date_ | None) ->
                 "closing_debit": close_net if close_net > 0 else Decimal(0),
                 "closing_credit": -close_net if close_net < 0 else Decimal(0),
                 "balance": _signed_balance(account.type, od + pd_, oc + pc),
+                #: «گردش داشته» نه «مانده دارد» — تفاوتی که §۱۸ رویش تأکید می‌کند.
+                "has_activity": account_id in active,
             }
         )
     return sorted(rows, key=lambda r: r["account_code"])

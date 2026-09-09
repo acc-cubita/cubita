@@ -799,7 +799,7 @@ export function GeneralDocumentPage({ token }: { token: string }) {
   const range = useRange('month')
   const accounts = useAsync(() => fetchChartAccounts(token), [token])
   const balances = useAsync(
-    () => fetchAccountBalances(token, range.from, range.to),
+    () => fetchAccountBalances(token, { dateFrom: range.from, dateTo: range.to }),
     [token, range.from, range.to],
   )
 

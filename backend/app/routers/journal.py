@@ -108,8 +108,7 @@ def list_entries(
     )
 
     #: منبعِ هر سند **دسته‌ای** حل می‌شود: یک کوئری به‌ازای هر *نوعِ* منبع، نه
-    #: به‌ازای هر سند. این تنها جایی است که کاربر سند را می‌بیند (روتر
-    #: `GET /{entry_id}` ندارد)، پس اگر این‌جا نیاید هیچ‌جا دیده نمی‌شود.
+    #: به‌ازای هر سند. صفحه‌ی دویست‌تایی حداکثر به تعدادِ *نوع‌ها* کوئری می‌خورد.
     sources = entry_source.resolve_sources(db, items)
     rows = []
     for entry in items:
@@ -118,6 +117,32 @@ def list_entries(
         row.source = EntrySourceOut(**found) if found is not None else None
         rows.append(row)
     return Page(items=rows, next_cursor=next_cursor)
+
+
+@router.get("/{entry_id}", response_model=JournalEntryOut)
+def get_entry(
+    entry_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """یک سند با ردیف‌ها و منشأش.
+
+    آخرین پله‌ی drill-down: از تراز به دفتر، از دفترِ حساب به همین‌جا. تا پیش از
+    این تنها راهِ دیدنِ یک سند، یافتنش در *فهرست* بود — یعنی هر گزارشی ته‌اش
+    بن‌بست می‌شد.
+    """
+    entry = (
+        db.query(JournalEntry)
+        .options(selectinload(JournalEntry.lines))
+        .filter(JournalEntry.id == entry_id)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند یافت نشد")
+    row = JournalEntryOut.model_validate(entry)
+    found = entry_source.resolve_source(db, entry)
+    row.source = EntrySourceOut(**found) if found is not None else None
+    return row
 
 
 @router.post("", response_model=JournalEntryOut, status_code=201)

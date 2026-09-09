@@ -25,20 +25,63 @@ from app.schemas.reports import (
 )
 from app.services import cost_centers as cost_centers_service
 from app.services import reports as reports_service
+from app.services.reports import ReportFilters
 from app.services import tafsili as tafsili_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
-@router.get("/general-ledger/{account_id}", response_model=GeneralLedgerOut)
-def general_ledger(
-    account_id: UUID,
+#: فیلترهای مشترکِ هر سه خانواده‌ی گزارش. یک `Depends` به‌جای تکرارِ نه پارامتر در
+#: هر نقطه — و مهم‌تر: یک *معنا*، تا تراز و دفتر نتوانند از هم جدا بیفتند.
+def report_filters(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
+    entry_from: int | None = Query(None, description="از شماره سند"),
+    entry_to: int | None = Query(None, description="تا شماره سند"),
+    status_filter: str | None = Query(None, alias="status", description="temporary | permanent"),
+    source_type: str | None = Query(None),
+    cost_center_id: UUID | None = Query(None),
+    analytic_id: UUID | None = Query(None),
+    include_system_entries: bool = Query(
+        True, description="افتتاحیه، اختتامیه و بستنِ سود و زیان وارد محاسبه شوند"
+    ),
+) -> ReportFilters:
+    return ReportFilters(
+        date_from=date_from,
+        date_to=date_to,
+        entry_from=entry_from,
+        entry_to=entry_to,
+        status=status_filter,
+        source_type=source_type,
+        cost_center_id=cost_center_id,
+        analytic_id=analytic_id,
+        include_system_entries=include_system_entries,
+    )
+
+
+@router.get("/general-ledger", response_model=GeneralLedgerOut)
+def analytic_ledger(
+    filters: ReportFilters = Depends(report_filters),
+    account_id: UUID | None = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return reports_service.get_general_ledger(db, account_id, date_from, date_to)
+    """دفتر بدونِ حسابِ اجباری — یعنی **دفترِ تفصیلی**: گردشِ یک تفصیلی در همه‌ی حساب‌ها."""
+    return reports_service.get_general_ledger(
+        db, account_id, filters.date_from, filters.date_to, filters
+    )
+
+
+@router.get("/general-ledger/{account_id}", response_model=GeneralLedgerOut)
+def general_ledger(
+    account_id: UUID,
+    filters: ReportFilters = Depends(report_filters),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    return reports_service.get_general_ledger(
+        db, account_id, filters.date_from, filters.date_to, filters
+    )
 
 
 @router.get("/trial-balance", response_model=list[TrialBalanceRowOut])

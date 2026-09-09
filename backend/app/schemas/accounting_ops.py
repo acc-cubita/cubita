@@ -307,6 +307,9 @@ class BalanceRowOut(BaseModel):
     closing_debit: Decimal
     closing_credit: Decimal
     balance: Decimal
+    #: «گردش داشته» نه «مانده دارد». حسابِ بی‌رویداد با حسابی که صد میلیون بدهکار
+    #: و صد میلیون بستانکار خورده و به صفر رسیده، دو چیزِ متفاوت‌اند.
+    has_activity: bool = True
 
 
 class LegalBookRowOut(BaseModel):

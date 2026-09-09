@@ -26,8 +26,11 @@ import {
   type AnalyticAccount,
   type BalanceRow,
   type ChartAccount,
+  type ReportFilters,
 } from '../../api'
+import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
 import { AccountTreePanel } from '../../components/AccountTreePanel'
+import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import {
@@ -650,10 +653,14 @@ function buildTree(accounts: ChartAccount[], balances: BalanceRow[]): BrowseNode
 export function AccountBrowsePage({ token }: { token: string }) {
   const range = useRange('year')
   const [path, setPath] = useState<string[]>([])
+  const [filters, setFilters] = useState<ReportFilters>({})
+  const [drill, setDrill] = useState<{ id: string; code: string; name: string } | null>(null)
+  const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
   const accounts = useAsync(() => fetchChartAccounts(token), [token])
   const balances = useAsync(
-    () => fetchAccountBalances(token, range.from, range.to),
-    [token, range.from, range.to],
+    () => fetchAccountBalances(token, scope),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, JSON.stringify(scope)],
   )
 
   const tree = useMemo(
@@ -685,7 +692,10 @@ export function AccountBrowsePage({ token }: { token: string }) {
       description="از سرفصل تا حسابِ سطحِ آخر، سطح‌به‌سطح. رقمِ هر سرفصل جمعِ زیرشاخه‌هایش است."
       head={
         <div className="cc-head">
-          <RangeBar range={range} />
+          <RangeBar
+            range={range}
+            extra={<ReportFilterBar token={token} filters={filters} onChange={setFilters} />}
+          />
           <div className="cc-summary">
             <Metric icon={<Layers size={14} />} label="سطحِ فعلی" value={faInt(current.length)} />
             <Metric icon={<Wallet size={14} />} label="گردشِ بدهکار" value={fa(totalDebit)} tone="in" />
@@ -697,7 +707,7 @@ export function AccountBrowsePage({ token }: { token: string }) {
       <SectionCard
         icon={FolderTree}
         title="مرور"
-        description="روی هر سرفصل کلیک کنید تا داخلش بروید."
+        description="روی سرفصل کلیک کنید تا داخلش بروید؛ روی حسابِ سطحِ آخر تا دفترش باز شود."
       >
         <nav className="acc-trail">
           <button type="button" onClick={() => setPath([])} className={path.length ? '' : 'is-active'}>
@@ -741,9 +751,15 @@ export function AccountBrowsePage({ token }: { token: string }) {
                   return (
                     <tr
                       key={node.account.id}
-                      className={node.children.length ? 'acc-row--clickable' : ''}
+                      className="acc-row--clickable"
                       onClick={() =>
-                        node.children.length ? setPath([...path, node.account.id]) : undefined
+                        node.children.length
+                          ? setPath([...path, node.account.id])
+                          : setDrill({
+                              id: node.account.id,
+                              code: node.account.code,
+                              name: node.account.name,
+                            })
                       }
                     >
                       <td className="card-title" data-label="کد" dir="ltr">
@@ -770,6 +786,16 @@ export function AccountBrowsePage({ token }: { token: string }) {
           </div>
         </AsyncBlock>
       </SectionCard>
+
+      {/* §۱۱ — تهِ درخت دیگر بن‌بست نیست: برگ، دفترِ خودش را با همان دامنه باز می‌کند. */}
+      {drill && (
+        <AccountLedgerDrawer
+          token={token}
+          account={drill}
+          filters={scope}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </OpsPage>
   )
 }
