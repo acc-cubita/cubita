@@ -367,3 +367,44 @@ class VatReportOut(BaseModel):
     purchase_breakdown: VatBreakdownOut
     mixed_sales_invoices: list[MixedVatInvoiceOut] = []
     mixed_purchase_invoices: list[MixedVatInvoiceOut] = []
+
+
+class IntegrityRowOut(BaseModel):
+    """یک ردیفِ یافته — شکلش عمداً برای همه‌ی بررسی‌ها یکی است.
+
+    یک شکل یعنی یک جدول در رابط، و یعنی افزودنِ بررسیِ تازه فقط کارِ بک‌اند است.
+    `entry_id`/`account_id` لنگرِ drill-down‌اند: هر یافته باید بتواند کاربر را به
+    خودِ سند یا دفترِ حساب ببرد.
+    """
+
+    label: str
+    detail: str
+    debit: Decimal
+    credit: Decimal
+    #: عددی که می‌گوید «چقدر پرت است». بررسی‌های ساختاری صفر می‌گذارند.
+    difference: Decimal
+    entry_id: UUID | None = None
+    account_id: UUID | None = None
+
+
+class IntegrityCheckOut(BaseModel):
+    key: str
+    title: str
+    description: str
+    #: error سلامتِ دفتر را زیر سؤال می‌برد؛ warning فقط دیده می‌شود.
+    severity: str
+    ok: bool
+    #: شمارشِ کاملِ یافته‌ها، حتی وقتی `rows` بریده شده.
+    count: int
+    rows: list[IntegrityRowOut]
+    truncated: bool
+
+
+class IntegrityReportOut(BaseModel):
+    date_from: date | None
+    date_to: date | None
+    total_debit: Decimal
+    total_credit: Decimal
+    difference: Decimal
+    ok: bool
+    checks: list[IntegrityCheckOut]

@@ -203,6 +203,7 @@ import {
   LegalBooksPage,
   VatPage,
 } from '../pages/accounting/ReportPages'
+import { IntegrityPage } from '../pages/accounting/IntegrityPage'
 import {
   BudgetListPage,
   CurrencyListPage,
@@ -330,6 +331,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   accountbrowse: 'مرور حساب‌ها',
   balancereport: 'گزارش ترازها',
   ledgerreport: 'گزارش دفتر',
+  integrity: 'بررسی یکپارچگی',
   entrylist: 'اسناد حسابداری',
   accountlist: 'فهرست حساب‌ها',
   recurringlist: 'اسناد تکرارشونده',
@@ -622,6 +624,7 @@ export function Dashboard({
           {page === 'accountbrowse' && <AccountBrowsePage token={token} />}
           {page === 'balancereport' && <BalanceReportPage token={token} />}
           {page === 'ledgerreport' && <LedgerReportPage token={token} />}
+          {page === 'integrity' && <IntegrityPage token={token} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
           {page === 'accountlist' && <AccountListPage token={token} />}
           {page === 'recurringlist' && <RecurringListPage token={token} accounts={accounts} />}

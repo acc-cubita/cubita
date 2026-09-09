@@ -5694,3 +5694,43 @@ export const fetchDeploymentInfo = (token: string) =>
 /** `PUT` است نه `POST`: یک وضعیتِ استقرار برای هر (کارمند، سال). */
 export const saveDeploymentInfo = (token: string, body: Record<string, unknown>) =>
   authedSend<DeploymentInfoRecord>(token, 'PUT', '/api/payroll-deployment', body)
+
+/* ── بررسیِ یکپارچگیِ دفتر (§۲۷) ──────────────────────────────────────────── */
+
+export interface IntegrityRow {
+  label: string
+  detail: string
+  debit: string
+  credit: string
+  /** «چقدر پرت است» — بررسی‌های ساختاری صفر می‌گذارند. */
+  difference: string
+  entry_id?: string | null
+  account_id?: string | null
+}
+
+export interface IntegrityCheck {
+  key: string
+  title: string
+  description: string
+  /** error سلامتِ دفتر را زیر سؤال می‌برد؛ warning فقط دیده می‌شود. */
+  severity: 'error' | 'warning'
+  ok: boolean
+  /** شمارشِ کاملِ یافته‌ها، حتی وقتی `rows` بریده شده. */
+  count: number
+  rows: IntegrityRow[]
+  truncated: boolean
+}
+
+export interface IntegrityReport {
+  date_from: string | null
+  date_to: string | null
+  total_debit: string
+  total_credit: string
+  difference: string
+  ok: boolean
+  checks: IntegrityCheck[]
+}
+
+/** گزارش است، نه گارد: چیزی مسدود نمی‌شود، فقط نشان داده می‌شود. */
+export const fetchIntegrityReport = (token: string, filters: ReportFilters = {}) =>
+  authedGet<IntegrityReport>(token, `/api/reports/integrity${reportFiltersQs(filters)}`)

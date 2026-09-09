@@ -36,6 +36,7 @@ import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
 import { EntryCard } from '../../components/EntryCard'
 import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
+import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import { downloadCsv } from '../../lib/csv'
@@ -290,6 +291,13 @@ export function BalanceReportPage({ token }: { token: string }) {
                 <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               </>
             }
+          />
+          <SavedViewBar
+            token={token}
+            viewKey="accounting.trial_balance"
+            filters={filters}
+            range={range}
+            setFilters={setFilters}
           />
           <div className="cc-summary">
             <Metric icon={<Scale size={14} />} label="ردیف" value={faInt(visible.length)} />
@@ -687,6 +695,13 @@ export function LedgerReportPage({ token }: { token: string }) {
                 <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               )
             }
+          />
+          <SavedViewBar
+            token={token}
+            viewKey="accounting.ledger"
+            filters={filters}
+            range={range}
+            setFilters={setFilters}
           />
         </div>
       }

@@ -31,6 +31,7 @@ import {
 import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
 import { AccountTreePanel } from '../../components/AccountTreePanel'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
+import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import {
@@ -695,6 +696,13 @@ export function AccountBrowsePage({ token }: { token: string }) {
           <RangeBar
             range={range}
             extra={<ReportFilterBar token={token} filters={filters} onChange={setFilters} />}
+          />
+          <SavedViewBar
+            token={token}
+            viewKey="accounting.account_browse"
+            filters={filters}
+            range={range}
+            setFilters={setFilters}
           />
           <div className="cc-summary">
             <Metric icon={<Layers size={14} />} label="سطحِ فعلی" value={faInt(current.length)} />

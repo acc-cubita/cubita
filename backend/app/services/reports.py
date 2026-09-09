@@ -594,7 +594,11 @@ def get_general_ledger(
         .join(Account, JournalLine.account_id == Account.id)
     )
     if account is not None:
-        query = query.filter(JournalLine.account_id.in_(descendant_account_ids(db, account.id)))
+        #: حسابِ سطحِ آخر نواده ندارد، پس خواندنِ کلِ چارت برای پیمودنِ درخت
+        #: هزینه‌ی بی‌جاست — و دفترِ معین همان حالتی است که تقریباً همیشه باز
+        #: می‌شود. برای سرفصل مسیرِ کاملِ درخت سرِ جایش می‌ماند.
+        scope = {account.id} if not account.is_group else descendant_account_ids(db, account.id)
+        query = query.filter(JournalLine.account_id.in_(scope))
     query = apply_report_filters(db, query, filters)
 
     def sign(line_account: Account, debit, credit) -> Decimal:

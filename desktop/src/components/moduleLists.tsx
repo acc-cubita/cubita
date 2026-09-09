@@ -303,6 +303,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   accountbrowse: 'view',
   balancereport: 'view',
   ledgerreport: 'view',
+  integrity: 'view',
   reports: 'view',
 
   // ── شرکت ──
