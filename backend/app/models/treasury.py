@@ -44,6 +44,11 @@ class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_accounts.id"), nullable=True
     )
+    #: کدام صندوق. `NULL` = صندوقِ پیش‌فرض — همان معنایی که تراکنش‌های پیش از
+    #: مهاجرتِ ۰۱۰۵ دارند، پس داده‌ی مستقر بدونِ backfill درست می‌ماند.
+    cashbox_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cashboxes.id"), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text, default="")
 
     # ── متادیتای پرداختِ کارتی (کارتخوان/POS) — برای مغایرت‌گیری با صورت‌حسابِ بانک ──

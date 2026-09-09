@@ -9,6 +9,7 @@ from app.models.client_error import ClientError
 from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.company import ContactGroup, GeoLocation, RelatedPerson, SavedReport
+from app.models.cashbox import Cashbox
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.device_token import DeviceToken
@@ -192,6 +193,7 @@ __all__ = [
     "Purchase",
     "BudgetLine",
     "CalendarEvent",
+    "Cashbox",
     "CostCenter",
     "MoadianSettings",
     "MoadianSubmission",

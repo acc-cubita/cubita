@@ -99,6 +99,7 @@ import {
   SalesInvoicePage,
   SalesReturnPage,
 } from '../pages/sales/SalesDocumentPages'
+import { CashboxesPage } from '../pages/treasury/CashboxPages'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
@@ -265,6 +266,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   bankstatement: 'صورت حساب بانکی',
   bankreconcile: 'مغایرت بانکی',
   cashbox: 'صندوق',
+  cashboxes: 'تعریف صندوق',
   bankaccounts: 'حساب بانکی',
   posterminals: 'دستگاه کارت خوان',
   checkbooks: 'دسته چک',
@@ -644,6 +646,7 @@ export function Dashboard({
           {page === 'bankstatement' && <BankStatementPage token={token} />}
           {page === 'bankreconcile' && <BankReconcilePage token={token} bankAccounts={bankAccounts} />}
           {page === 'cashbox' && <CashBoxPage token={token} onNavigate={navigate} />}
+          {page === 'cashboxes' && <CashboxesPage token={token} />}
           {page === 'bankaccounts' && <BankAccountsPage token={token} accounts={accounts} />}
           {page === 'posterminals' && <PosTerminalsPage token={token} bankAccounts={bankAccounts} />}
           {page === 'checkbooks' && <CheckbooksPage token={token} />}

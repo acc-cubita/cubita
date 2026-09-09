@@ -276,6 +276,9 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   cashbox: 'view',
   possettle: 'possettlelist',
   bankstatement: 'statementlist',
+  //: «تعریف صندوق» خودش هم فرم است و هم دفترِ صندوق‌ها با مانده‌شان — همان
+  //: الگوی «حساب بانکی». فهرستِ نظیرِ جدا یعنی دو نمای یک داده.
+  cashboxes: 'view',
   bankaccounts: 'bankaccountlist',
   posterminals: 'posterminallist',
   pettyholder: 'pettylist', //: شارژ و هزینه، یک دفترِ مشترک
