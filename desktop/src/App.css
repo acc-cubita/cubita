@@ -10250,3 +10250,56 @@ button.mp-item:focus-visible {
 .input-warn { border-color: #dc2626; }
 .input-warn:focus { outline-color: #dc2626; }
 .field-hint--warn { color: #dc2626; }
+
+/* ── نماهای ذخیره‌شده‌ی گزارش (§۳۵) ────────────────────────────────────────
+   روی همان `.cc-presets` سوار می‌شود تا با دکمه‌های بازه یک‌شکل باشد؛ فقط
+   دکمه‌ی حذف و فرمِ نام‌گذاری اضافه دارد. */
+.saved-views {
+  flex-wrap: wrap;
+}
+
+.saved-view {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.saved-view > button:first-child {
+  padding-inline-end: 6px;
+}
+
+.saved-view button.saved-view-drop {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px 5px 6px;
+  border: 0;
+  opacity: 0.55;
+}
+
+.saved-view button.saved-view-drop:hover {
+  opacity: 1;
+  color: var(--danger, #c0392b);
+}
+
+.saved-view-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.saved-view-form input {
+  width: 9rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.saved-views > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

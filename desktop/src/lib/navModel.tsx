@@ -239,6 +239,7 @@ export type PageKey =
   | 'accountbrowse'
   | 'balancereport'
   | 'ledgerreport'
+  | 'integrity'
   //: فهرست‌های حسابداری — از کارتِ «فهرست» باز می‌شوند.
   | 'entrylist'
   | 'accountlist'
@@ -369,6 +370,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} /> },
       { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} /> },
       { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} /> },
+      { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} /> },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
     ],
   },
@@ -447,7 +449,7 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
       'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
       'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation', 'balancereclass',
       'generaldoc', 'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
-      'balancereport', 'ledgerreport',
+      'balancereport', 'ledgerreport', 'integrity',
       'entrylist', 'accountlist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
     ] as PageKey[]
   ).map((key) => [key, 'accounting']),

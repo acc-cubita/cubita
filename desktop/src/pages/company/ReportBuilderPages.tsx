@@ -607,7 +607,13 @@ export function DynamicReportsPage({
 
   async function refresh() {
     try {
-      setReports(await fetchSavedReports(token))
+      //: `saved_reports` را دو قابلیت به‌اشتراک می‌گذارند و ردیف‌هاشان مجموعه‌های
+      //: جدا هستند: این‌جا گزارش‌های ساخته‌شده، و با پیشوندِ `view:` نماهای
+      //: ذخیره‌شده‌ی گزارش‌های حسابداری. کلیدهای این صفحه از `MODULE_LISTS` می‌آیند
+      //: و هرگز دونقطه ندارند، پس فیلترِ زیر دقیق است — بدونِ آن، نماها این‌جا
+      //: «منبعِ ناموجود» دیده می‌شدند.
+      const all = await fetchSavedReports(token)
+      setReports(all.filter((r) => !r.source.startsWith('view:')))
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
     }

@@ -14,6 +14,7 @@ from app.schemas.reports import (
     ContactStatementOut,
     GeneralLedgerOut,
     IncomeStatementOut,
+    IntegrityReportOut,
     InventoryReportOut,
     KardexReportOut,
     MissingTafsiliOut,
@@ -24,6 +25,7 @@ from app.schemas.reports import (
     VatReportOut,
 )
 from app.services import cost_centers as cost_centers_service
+from app.services import integrity as integrity_service
 from app.services import reports as reports_service
 from app.services.reports import ReportFilters
 from app.services import tafsili as tafsili_service
@@ -96,6 +98,20 @@ def trial_balance(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_trial_balance(db, date_from, date_to, management_only)
+
+
+@router.get("/integrity", response_model=IntegrityReportOut)
+def integrity_check(
+    filters: ReportFilters = Depends(report_filters),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """بررسیِ یکپارچگیِ دفتر — گزارش، نه گارد.
+
+    همان `report_filters` بقیه‌ی گزارش‌ها را می‌گیرد تا بشود دامنه‌ی بررسی را با
+    همان زبانِ آشنا محدود کرد؛ بدونِ فیلتر، کلِ دفتر سنجیده می‌شود.
+    """
+    return integrity_service.run_integrity_check(db, filters)
 
 
 @router.get("/nature-violations", response_model=list[NatureViolationOut])
