@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { HomeScreen } from '../screens/HomeScreen'
 import { AlertsScreen } from '../screens/AlertsScreen'
 import { TreasuryScreen } from '../screens/TreasuryScreen'
+import { OutboxScreen } from '../screens/OutboxScreen'
 import { ContactPickerScreen } from '../screens/ContactPickerScreen'
 import { NewInvoiceScreen } from '../screens/NewInvoiceScreen'
 import { ItemPickerScreen } from '../screens/ItemPickerScreen'
@@ -23,6 +24,11 @@ export function HomeStack() {
     >
       <Stack.Screen name="Dashboard" component={HomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Alerts" component={AlertsScreen} options={{ title: 'هشدارها' }} />
+      <Stack.Screen
+        name="Outbox"
+        component={OutboxScreen}
+        options={{ title: 'صفِ ارسال' }}
+      />
       <Stack.Screen
         name="Treasury"
         component={TreasuryScreen}

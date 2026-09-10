@@ -29,5 +29,11 @@ export function navigateFromRoute(route?: string): void {
   // دایجستِ روزانه‌ی هشدارها → صفحه‌ی هشدارها (تبِ خانه)
   if (parts[0] === 'alerts') {
     navigationRef.dispatch(CommonActions.navigate('Home', { screen: 'Alerts' }))
+    return
+  }
+
+  // نوارِ «در صفِ ارسال» — همین‌جا و نه یک نگاشتِ دوم، تا مسیرها یک‌جا بمانند.
+  if (parts[0] === 'outbox') {
+    navigationRef.dispatch(CommonActions.navigate('Home', { screen: 'Outbox' }))
   }
 }

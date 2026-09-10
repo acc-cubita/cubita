@@ -87,7 +87,10 @@ function unusedExports() {
   for (const { file, text } of all) {
     // فایلِ ورودیِ اپ و تایپ‌ها استثنا؛ تایپ‌ها ممکن است فقط در امضا استفاده شوند.
     if (file.endsWith('types.ts')) continue
-    for (const m of text.matchAll(/^export (?:const|function|class) (\w+)/gm)) {
+    // `async` اختیاری است — **بدونش این قاعده نیمه‌کور بود.** `enqueue`، یعنی
+    // تنها درِ ورودیِ صفِ نوشتنِ آفلاین، `export async function` است و هیچ‌جا
+    // صدا زده نمی‌شد؛ ممیز آن را نمی‌دید و یک قابلیتِ کامل ماه‌ها وصل‌نشده ماند.
+    for (const m of text.matchAll(/^export (?:async )?(?:const|function|class) (\w+)/gm)) {
       const name = m[1]
       const usedElsewhere = all.some(
         (o) => o.file !== file && new RegExp(`\\b${name}\\b`).test(o.text),
