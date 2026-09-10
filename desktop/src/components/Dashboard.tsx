@@ -123,7 +123,6 @@ import {
   CheckbooksPage,
 } from '../pages/treasury/CheckOpsPages'
 import {
-  BankAccountListPage,
   CheckbookListPage,
   PettyCashListPage,
   PosSettlementListPage,
@@ -275,7 +274,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   bankledger: 'مرور عملیات بانکی',
   treasuryledger: 'دریافت‌ها و پرداخت‌ها',
   checkbooklist: 'دسته‌چک‌ها',
-  bankaccountlist: 'حساب‌های بانکی',
   posterminallist: 'دستگاه‌های کارتخوان',
   possettlelist: 'تسویه‌های کارتخوان',
   statementlist: 'ردیف‌های صورت‌حساب بانکی',
@@ -656,7 +654,6 @@ export function Dashboard({
           {page === 'treasuryledger' && <TreasuryLedgerPage token={token} />}
           {/* ── دفترهای نظیر (قاعده‌ی «هر عملیاتِ رکوردساز، یک فهرست») ── */}
           {page === 'checkbooklist' && <CheckbookListPage token={token} />}
-          {page === 'bankaccountlist' && <BankAccountListPage token={token} />}
           {page === 'posterminallist' && <PosTerminalListPage token={token} />}
           {page === 'possettlelist' && <PosSettlementListPage token={token} />}
           {page === 'statementlist' && <StatementListPage token={token} />}

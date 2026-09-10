@@ -11,6 +11,7 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
+    from app.models.analytic import AnalyticAccount
     from app.models.inventory import Contact
 
 CHECK_TYPES = ("receivable", "payable")
@@ -21,15 +22,67 @@ PETTY_CASH_TYPES = ("charge", "expense")
 
 
 class BankAccount(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """حسابِ بانکیِ عملیاتی — **نه** حسابی در چارتِ حسابداری.
+
+    مستنداتِ `Cashbox` این کلاس را الگوی خودش معرفی می‌کند، ولی تا مهاجرتِ ۰۱۰۶
+    یک چیز را نداشت که همان الگو رویش سوار است: `analytic_id`. بدونِ آن هر
+    حسابِ بانکی روی همان معینِ «بانک» می‌نشست و **مانده‌ی تک‌تکشان اصلاً
+    مشتق‌شدنی نبود** — نه اینکه سخت باشد؛ در دفتر اطلاعاتی که بگوید کدام ریال
+    مالِ کدام بانک است وجود نداشت.
+
+    امروز جفتِ `(gl_account_id, analytic_id)` هویتِ حسابداریِ حساب است: سمتِ
+    نوشتن همان جفت را روی ردیفِ سند می‌گذارد و سمتِ خواندن با همان جفت مانده را
+    درمی‌آورد. هیچ ستونِ `balance`ای وجود ندارد و نباید ساخته شود.
+    """
+
     __tablename__ = "bank_accounts"
 
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دومِ تفصیلی — همان نقشی که `name2` در بقیه‌ی موجودیت‌ها دارد.
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
     bank_name: Mapped[str] = mapped_column(String(100), default="")
+    #: شعبه. عمداً متن است نه کلیدِ خارجی به جدولِ مرجعِ شعب — ر.ک. OPEN_DECISIONS.
+    branch_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
     account_number: Mapped[str] = mapped_column(String(50), default="")
+    #: جاری، پس‌انداز، قرض‌الحسنه… متنِ آزاد است و هیچ رفتاری به مقدارش گره نمی‌خورد.
+    account_type: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    #: سه شناسه‌ی بانکیِ **جدا** (§۷): شماره حساب، شماره کارت، شبا. هیچ‌کدام جای
+    #: دیگری به کار نمی‌رود، و هیچ‌کدام هویتِ داخلیِ رکورد نیست — آن `id` است (§۴).
+    card_number: Mapped[str] = mapped_column(String(30), default="", server_default="")
     iban: Mapped[str] = mapped_column(String(34), default="")
+
+    #: **بُعدی که مانده را مشتق‌شدنی می‌کند.** NULL یعنی «حسابِ تفکیک‌نشده» — همان
+    #: توده‌ای که پیش از مهاجرتِ ۰۱۰۶ روی معینِ بانک نشسته بود. فقط *یک* حساب
+    #: می‌تواند NULL باشد، وگرنه دو حساب یک مانده می‌خوانند.
+    analytic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analytic_accounts.id", ondelete="SET NULL"), nullable=True
+    )
     # حساب دفتر کل متناظر (پیش‌فرض «۱۱۰۲ بانک»)؛ امکان تفکیک حساب معین جداگانه در آینده باقی می‌ماند
     gl_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
+
+    #: یک حساب، یک ارز (§۱۱). حسابِ دلاری از ریالی جدا مدیریت می‌شود.
+    currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
+    #: **داده‌ی کسب‌وکار، نه `created_at`** (§۱۵): حساب می‌تواند ۱۴۰۰ باز شده باشد
+    #: و ۱۴۰۴ وارد کوبیتا شود.
+    opening_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+
+    #: صاحبِ حساب ≠ نامِ شرکت (§۱۷) — می‌تواند شعبه یا یک عنوانِ حقوقیِ دیگر باشد.
+    holder_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    holder_name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: مبلغی که بانک بلوکه کرده. **ذخیره می‌شود ولی هرگز به دفتر نمی‌خورد** (§۱۸):
+    #: بلوکه‌شدن رویدادِ حسابداری نیست، پس نه سند می‌زند نه مانده را عوض می‌کند.
+    #: «قابل استفاده» از این و مانده *مشتق* می‌شود و ذخیره نمی‌شود.
+    blocked_amount: Mapped[float] = mapped_column(
+        Numeric(18, 0), default=0, server_default="0"
+    )
+
+    #: فرمتِ چاپِ چکِ همین بانک (§۱۶) — فعلاً فقط نگهداری می‌شود؛ موتورِ چاپ جداست.
+    cheque_print_format: Mapped[str] = mapped_column(String(50), default="", server_default="")
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    analytic: Mapped["AnalyticAccount | None"] = relationship(lazy="joined")
 
 
 class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

@@ -1719,26 +1719,63 @@ export const fetchBankAccountsLive = async (token: string) => {
 export interface BankAccountRecord {
   id: string
   name: string
+  name2: string
   bank_name: string
+  branch_name: string
   account_number: string
+  account_type: string
+  /** سه شناسه‌ی جدا: شماره حساب، شماره کارت، شبا. هیچ‌کدام جای دیگری نیست. */
+  card_number: string
   iban: string
+  /** بُعدی که مانده‌ی این حساب را از بقیه جدا می‌کند. خالی = تفکیک‌نشده. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
   gl_account_id: string
+  currency_code: string
+  opening_date: string | null
+  holder_name: string
+  holder_name2: string
+  /** ذخیره‌شده — چیزی که بانک اعلام کرده، نه حاصلِ تراکنش‌ها. */
+  blocked_amount: string
+  cheque_print_format: string
   is_active: boolean
+  /** هر سه **مشتق‌اند**؛ هیچ‌کدام ستونِ پایگاه‌داده نیستند. */
+  opening_balance: string
+  balance: string
+  available_balance: string
+}
+
+export interface BankAccountInput {
+  name: string
+  name2?: string
+  bank_name?: string
+  branch_name?: string
+  account_number?: string
+  account_type?: string
+  card_number?: string
+  iban?: string
+  analytic_id?: string | null
+  currency_code?: string
+  opening_date?: string | null
+  holder_name?: string
+  holder_name2?: string
+  blocked_amount?: string | number
+  cheque_print_format?: string
+  is_active?: boolean
 }
 
 export const fetchBankAccountsAdmin = (token: string) =>
   authedGet<BankAccountRecord[]>(token, '/api/bank-accounts')
 
-export const createBankAccount = (
-  token: string,
-  data: { name: string; bank_name?: string; account_number?: string; iban?: string },
-) => authedSend<BankAccountRecord>(token, 'POST', '/api/bank-accounts', data)
+export const createBankAccount = (token: string, data: BankAccountInput) =>
+  authedSend<BankAccountRecord>(token, 'POST', '/api/bank-accounts', data)
 
-export const updateBankAccount = (
-  token: string,
-  id: string,
-  patch: { name?: string; bank_name?: string; account_number?: string; iban?: string; is_active?: boolean },
-) => authedSend<BankAccountRecord>(token, 'PATCH', `/api/bank-accounts/${id}`, patch)
+export const updateBankAccount = (token: string, id: string, patch: Partial<BankAccountInput>) =>
+  authedSend<BankAccountRecord>(token, 'PATCH', `/api/bank-accounts/${id}`, patch)
+
+export const deleteBankAccount = (token: string, id: string) =>
+  authedDelete(token, `/api/bank-accounts/${id}`)
 
 interface ItemWithPricingLiveOut {
   id: string
