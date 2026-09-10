@@ -5168,6 +5168,8 @@ export interface CheckbookRecord {
   issue_date: string | null
   description: string
   is_active: boolean
+  /** خالی یعنی «از حسابِ بانکی ارث ببر». */
+  cheque_print_format: string
 }
 
 export interface CheckbookIn {
@@ -5179,6 +5181,31 @@ export interface CheckbookIn {
   leaf_count?: number
   issue_date?: string | null
   description?: string
+  cheque_print_format?: string
+}
+
+/** ویرایشِ دسته — هرچه نفرستید دست نمی‌خورد. */
+export interface CheckbookUpdateIn {
+  bank_account_id?: string
+  serial?: string
+  first_number?: string
+  last_number?: string
+  leaf_count?: number
+  issue_date?: string | null
+  description?: string
+  cheque_print_format?: string
+  is_active?: boolean
+}
+
+/** یک برگِ خرج‌شده و چکی که از آن درآمد. */
+export interface CheckbookLeaf {
+  number: string
+  check_id: string
+  status: string
+  amount: string
+  issue_date: string
+  due_date: string
+  contact_name: string | null
 }
 
 export const fetchCheckbooks = (token: string) => authedGet<CheckbookRecord[]>(token, '/api/checkbooks')
@@ -5186,14 +5213,43 @@ export const fetchCheckbooks = (token: string) => authedGet<CheckbookRecord[]>(t
 export const createCheckbook = (token: string, data: CheckbookIn) =>
   authedSend<CheckbookRecord>(token, 'POST', '/api/checkbooks', data)
 
+export const updateCheckbook = (token: string, id: string, data: CheckbookUpdateIn) =>
+  authedSend<CheckbookRecord>(token, 'PATCH', `/api/checkbooks/${id}`, data)
+
 export const setCheckbookActive = (token: string, id: string, isActive: boolean) =>
-  authedSend<CheckbookRecord>(token, 'PATCH', `/api/checkbooks/${id}?is_active=${isActive}`, {})
+  updateCheckbook(token, id, { is_active: isActive })
 
 export const deleteCheckbook = (token: string, id: string) => authedDelete(token, `/api/checkbooks/${id}`)
 
 /** شماره‌ی برگِ بعدیِ دسته — رشته‌ی خالی یعنی دسته تمام شده. */
 export const fetchNextCheckNumber = (token: string, id: string) =>
   authedGet<{ number: string }>(token, `/api/checkbooks/${id}/next-number`)
+
+/** هر برگِ خرج‌شده‌ی این دسته کجا رفت — دسته ← برگ ← چک. */
+export const fetchCheckbookLeaves = (token: string, id: string) =>
+  authedGet<CheckbookLeaf[]>(token, `/api/checkbooks/${id}/leaves`)
+
+/** سیاستِ کنترلِ شماره‌ی چکِ پرداختنی. */
+export interface ChequeControlOption {
+  key: string
+  label: string
+  hint: string
+  effects: string[]
+  is_default: boolean
+}
+
+export interface ChequeControl {
+  mode: string
+  options: ChequeControlOption[]
+  /** False یعنی هنوز روی پیش‌فرضِ سرویس است، نه انتخابِ کاربر. */
+  is_explicit: boolean
+}
+
+export const fetchChequeControl = (token: string) =>
+  authedGet<ChequeControl>(token, '/api/cheque-number-control')
+
+export const setChequeControl = (token: string, mode: string) =>
+  authedSend<ChequeControl>(token, 'PATCH', '/api/cheque-number-control', { mode })
 
 export interface PosPendingGroup {
   terminal_no: string

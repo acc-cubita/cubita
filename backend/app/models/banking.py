@@ -2,7 +2,19 @@ import uuid
 from datetime import date as date_
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -92,6 +104,20 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(f"type IN {CHECK_TYPES}", name="ck_checks_type"),
         CheckConstraint(f"status IN {CHECK_STATUSES}", name="ck_checks_status"),
+        #: یک برگِ فیزیکی فقط یک بار خرج می‌شود. شرطِ جزئی لازم است چون چکِ
+        #: دریافتنی دسته ندارد و شماره‌اش را طرفِ مقابل تعیین کرده — یکتاییِ بینِ
+        #: آن‌ها نه ممکن است نه درست.
+        #:
+        #: این قید «برگِ باطل‌شده آزاد نمی‌شود» را هم می‌سازد: ردیفِ چک می‌ماند،
+        #: پس شماره‌اش برای همیشه گرفته است.
+        Index(
+            "uq_checks_tenant_book_number",
+            "tenant_id",
+            "checkbook_id",
+            "number",
+            unique=True,
+            postgresql_where=text("checkbook_id IS NOT NULL"),
+        ),
     )
 
     type: Mapped[str] = mapped_column(String(20))
@@ -205,6 +231,10 @@ class Checkbook(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, default="")
     #: بسته‌شده = دیگر برگِ تازه از آن صادر نمی‌شود (تمام شد یا باطل شد).
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: قالبِ چاپِ این دسته. **خالی یعنی از حسابِ بانکی ارث ببر** — دسته‌های یک حساب
+    #: معمولاً یک قالب دارند و تکرارِ آن روی هر دسته فقط راهی برای ناهماهنگ‌شدن است.
+    #: موتورِ چاپِ چک هنوز وجود ندارد؛ این فقط ترتیبِ خواندن را تثبیت می‌کند.
+    cheque_print_format: Mapped[str] = mapped_column(String(50), default="", server_default="")
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 

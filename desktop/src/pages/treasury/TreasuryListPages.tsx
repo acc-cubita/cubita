@@ -102,7 +102,12 @@ export function CheckbookListPage({ token }: { token: string }) {
                 {pg.pageItems.map((b) => (
                   <tr key={b.id} className={b.is_active ? '' : 'acc-row--void'}>
                     <td className="card-title" data-label="حساب بانکی">{b.bank_account_name}</td>
-                    <td data-label="سری"><span dir="ltr">{b.serial || '—'}</span></td>
+                    <td data-label="سری">
+                      <span dir="ltr">{b.serial || '—'}</span>
+                      {b.cheque_print_format && (
+                        <div className="entity-sub" dir="ltr">{b.cheque_print_format}</div>
+                      )}
+                    </td>
                     <td data-label="از"><span dir="ltr">{b.first_number}</span></td>
                     <td data-label="تا"><span dir="ltr">{b.last_number}</span></td>
                     <td className="num" data-label="برگ">{faInt(b.leaf_count)}</td>

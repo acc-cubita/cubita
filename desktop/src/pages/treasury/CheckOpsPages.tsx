@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BookMarked,
   CheckCircle2,
   Landmark,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -18,13 +19,17 @@ import {
   createCheckbook,
   deleteCheckbook,
   fetchBankAccountsLive,
+  fetchCheckbookLeaves,
   fetchCheckbooks,
   fetchChecks,
   fetchContacts,
   fetchNextCheckNumber,
   setCheckbookActive,
   updateCheckStatus,
+  updateCheckbook,
   type CheckRecord,
+  type CheckbookLeaf,
+  type CheckbookRecord,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
@@ -116,7 +121,10 @@ function CheckActionTable({
   const pg = usePagination(rows, 12)
 
   async function run(check: CheckRecord, action: Action) {
-    const bankId = bankPick[check.id]
+    //: چکی که از یک دسته‌چک صادر شده، حسابش را از همان دسته دارد. پرسیدنِ دوباره
+    //: هم اضافه است هم راهی برای ناسازگاری: تعهد روی یک حساب ثبت شده بود و پول
+    //: می‌توانست از حسابِ دیگری کم شود. سرور هم حالا حسابِ ناهمخوان را رد می‌کند.
+    const bankId = bankPick[check.id] || check.bank_account_id || ''
     if (action.needsBank && !bankId) {
       onDone({ text: 'اول حساب بانکی را انتخاب کنید.', kind: 'err' })
       return
@@ -163,17 +171,25 @@ function CheckActionTable({
                 <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
                 {needsBank && (
                   <td data-label="واریز به">
-                    <select
-                      value={bankPick[c.id] ?? c.bank_account_id ?? ''}
-                      onChange={(e) => setBankPick({ ...bankPick, [c.id]: e.target.value })}
-                    >
-                      <option value="">— انتخاب —</option>
-                      {(banks.data ?? []).map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
+                    {c.bank_account_id ? (
+                      //: حساب از خودِ چک می‌آید؛ عوض‌کردنش در همین لحظه یعنی سندِ
+                      //: وصول به حسابی بخورد که تعهد آن‌جا ثبت نشده بود.
+                      <span className="entity-sub">
+                        {(banks.data ?? []).find((b) => b.id === c.bank_account_id)?.name ?? '—'}
+                      </span>
+                    ) : (
+                      <select
+                        value={bankPick[c.id] ?? ''}
+                        onChange={(e) => setBankPick({ ...bankPick, [c.id]: e.target.value })}
+                      >
+                        <option value="">— انتخاب —</option>
+                        {(banks.data ?? []).map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                 )}
                 <td className="card-actions">
@@ -700,6 +716,53 @@ export function CheckSearchPage({ token }: { token: string }) {
   )
 }
 
+/**
+ * برگ‌های خرج‌شده‌ی یک دسته — ناوبریِ برعکسِ دسته ← برگ ← چک (§۲۳).
+ *
+ * بدونِ این، «۷ برگ خرج شده» عددی است که کاربر باید خودش دنبالِ معنایش بگردد؛ و
+ * وقتی گاردِ «این برگ قبلاً خرج شده» بالا می‌آید، اینجا می‌بیند کجا رفته.
+ */
+function LeafList({
+  rows,
+  loading,
+  error,
+}: {
+  rows: CheckbookLeaf[]
+  loading: boolean
+  error: string | null
+}) {
+  return (
+    <AsyncBlock loading={loading} error={error} empty={rows.length === 0} emptyText="هنوز برگی از این دسته خرج نشده.">
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>برگ</th>
+              <th>تاریخ صدور</th>
+              <th>سررسید</th>
+              <th>در وجه</th>
+              <th>مبلغ</th>
+              <th>وضعیت</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((leaf) => (
+              <tr key={leaf.check_id}>
+                <td className="card-title" data-label="برگ"><span dir="ltr">{leaf.number}</span></td>
+                <td data-label="تاریخ صدور">{formatJalali(leaf.issue_date)}</td>
+                <td data-label="سررسید">{formatJalali(leaf.due_date)}</td>
+                <td data-label="در وجه">{leaf.contact_name || '—'}</td>
+                <td className="num" data-label="مبلغ">{fa(Number(leaf.amount))}</td>
+                <td data-label="وضعیت">{CHECK_STATUS_LABEL[leaf.status] ?? leaf.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </AsyncBlock>
+  )
+}
+
 // ═══════════════════ ۱۵) دسته چک ═══════════════════
 
 const EMPTY_BOOK = {
@@ -709,6 +772,7 @@ const EMPTY_BOOK = {
   last_number: '',
   issue_date: '',
   description: '',
+  cheque_print_format: '',
 }
 
 export function CheckbooksPage({ token }: { token: string }) {
@@ -718,6 +782,17 @@ export function CheckbooksPage({ token }: { token: string }) {
   const [form, setForm] = useState({ ...EMPTY_BOOK })
   //: دسته‌ای که کاربر می‌خواهد از آن برگ صادر کند (خالی = فقط مدیریتِ دسته‌ها).
   const [issueFrom, setIssueFrom] = useState('')
+  //: دسته‌ی در حالِ ویرایش. تا امروز هیچ راهی برای ویرایش نبود، پس یک غلطِ تایپی
+  //: در شماره‌ی آخرین برگ تا ابد می‌ماند.
+  const [editing, setEditing] = useState<CheckbookRecord | null>(null)
+  //: دسته‌ای که برگ‌هایش باز شده — «۷ برگ خرج شده» بدونِ اینکه بشود دید کجا رفت،
+  //: عددِ بی‌فایده‌ای است.
+  const [openLeaves, setOpenLeaves] = useState('')
+
+  const leaves = useAsync(
+    () => (openLeaves ? fetchCheckbookLeaves(token, openLeaves) : Promise.resolve([])),
+    [token, openLeaves, reloadKey],
+  )
 
   const nextNumber = useAsync(
     () => (issueFrom ? fetchNextCheckNumber(token, issueFrom) : Promise.resolve({ number: '' })),
@@ -746,15 +821,25 @@ export function CheckbooksPage({ token }: { token: string }) {
     }
     setBusy(true)
     try {
-      await createCheckbook(token, {
+      const payload = {
         bank_account_id: form.bank_account_id,
         serial: form.serial,
         first_number: form.first_number,
         last_number: form.last_number,
         issue_date: form.issue_date || null,
         description: form.description,
-      })
-      setMsg({ text: 'دسته‌چک ثبت شد.', kind: 'ok' })
+        cheque_print_format: form.cheque_print_format,
+      }
+      if (editing) {
+        //: `is_active` عمداً نیست: وضعیت فقط با دکمه‌ی صریحِ باز/بستن عوض می‌شود.
+        //: PATCH حالا `exclude_unset` است، پس فیلدِ نفرستاده دست نمی‌خورد.
+        await updateCheckbook(token, editing.id, payload)
+        setMsg({ text: 'دسته‌چک ویرایش شد.', kind: 'ok' })
+      } else {
+        await createCheckbook(token, payload)
+        setMsg({ text: 'دسته‌چک ثبت شد.', kind: 'ok' })
+      }
+      setEditing(null)
       setForm({ ...EMPTY_BOOK })
       setReloadKey((k) => k + 1)
     } catch (err) {
@@ -762,6 +847,19 @@ export function CheckbooksPage({ token }: { token: string }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  function startEdit(book: CheckbookRecord) {
+    setEditing(book)
+    setForm({
+      bank_account_id: book.bank_account_id,
+      serial: book.serial,
+      first_number: book.first_number,
+      last_number: book.last_number,
+      issue_date: book.issue_date ?? '',
+      description: book.description,
+      cheque_print_format: book.cheque_print_format,
+    })
   }
 
   async function toggle(id: string, isActive: boolean) {
@@ -836,9 +934,26 @@ export function CheckbooksPage({ token }: { token: string }) {
 
       <div className="workspace-split">
         <SectionCard
-          icon={Plus}
-          title="دسته‌چکِ تازه"
-          description="شماره‌ی اولین و آخرین برگ را بنویسید؛ تعداد خودکار حساب می‌شود."
+          icon={editing ? Pencil : Plus}
+          title={editing ? 'ویرایشِ دسته‌چک' : 'دسته‌چکِ تازه'}
+          description={
+            editing
+              ? 'حساب و بازه‌ی شماره فقط تا وقتی عوض می‌شوند که هنوز برگی خرج نشده باشد.'
+              : 'شماره‌ی اولین و آخرین برگ را بنویسید؛ تعداد خودکار حساب می‌شود.'
+          }
+          actions={
+            editing ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(null)
+                  setForm({ ...EMPTY_BOOK })
+                }}
+              >
+                انصراف
+              </button>
+            ) : undefined
+          }
         >
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
@@ -888,13 +1003,22 @@ export function CheckbooksPage({ token }: { token: string }) {
               تاریخِ دریافتِ دسته
               <JalaliDatePicker value={form.issue_date} onChange={(iso) => setForm({ ...form, issue_date: iso })} />
             </label>
+            <label>
+              قالبِ چاپِ چک
+              <input
+                dir="ltr"
+                value={form.cheque_print_format}
+                onChange={(e) => setForm({ ...form, cheque_print_format: e.target.value })}
+              />
+              <span className="field-hint">خالی بگذارید تا از حسابِ بانکی ارث ببرد.</span>
+            </label>
             <label className="form-wide">
               توضیح
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary" disabled={busy}>
-                <Save size={14} /> ثبتِ دسته‌چک
+                <Save size={14} /> {editing ? 'ذخیرهٔ تغییرات' : 'ثبتِ دسته‌چک'}
               </button>
             </div>
           </form>
@@ -924,6 +1048,7 @@ export function CheckbooksPage({ token }: { token: string }) {
                     <th>سری</th>
                     <th>از</th>
                     <th>تا</th>
+                    <th>خرج‌شده</th>
                     <th>مانده</th>
                     <th>وضعیت</th>
                     <th />
@@ -931,30 +1056,55 @@ export function CheckbooksPage({ token }: { token: string }) {
                 </thead>
                 <tbody>
                   {pg.pageItems.map((b) => (
-                    <tr key={b.id} className={b.is_active ? '' : 'acc-row--void'}>
-                      <td className="card-title" data-label="حساب">{b.bank_account_name}</td>
-                      <td data-label="سری"><span dir="ltr">{b.serial || '—'}</span></td>
-                      <td data-label="از"><span dir="ltr">{b.first_number}</span></td>
-                      <td data-label="تا"><span dir="ltr">{b.last_number}</span></td>
-                      <td className="num" data-label="مانده">
-                        {toFaDigits(b.remaining_count)} از {toFaDigits(b.leaf_count)}
-                      </td>
-                      <td data-label="وضعیت">
-                        <span className={`status-badge ${b.is_active ? 'tone-success' : ''}`}>
-                          {b.is_active ? 'باز' : 'بسته'}
-                        </span>
-                      </td>
-                      <td className="card-actions">
-                        <button type="button" onClick={() => void toggle(b.id, !b.is_active)}>
-                          {b.is_active ? 'بستن' : 'بازکردن'}
-                        </button>
-                        {b.used_count === 0 && (
-                          <button type="button" className="danger" onClick={() => void remove(b.id)}>
-                            <Trash2 size={13} /> حذف
+                    <Fragment key={b.id}>
+                      <tr className={b.is_active ? '' : 'acc-row--void'}>
+                        <td className="card-title" data-label="حساب">{b.bank_account_name}</td>
+                        <td data-label="سری"><span dir="ltr">{b.serial || '—'}</span></td>
+                        <td data-label="از"><span dir="ltr">{b.first_number}</span></td>
+                        <td data-label="تا"><span dir="ltr">{b.last_number}</span></td>
+                        <td className="num" data-label="خرج‌شده">
+                          {b.used_count > 0 ? (
+                            <button
+                              type="button"
+                              className="link-button"
+                              onClick={() => setOpenLeaves(openLeaves === b.id ? '' : b.id)}
+                            >
+                              {toFaDigits(b.used_count)} برگ
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="num" data-label="مانده">
+                          {toFaDigits(b.remaining_count)} از {toFaDigits(b.leaf_count)}
+                        </td>
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${b.is_active ? 'tone-success' : ''}`}>
+                            {b.is_active ? 'باز' : 'بسته'}
+                          </span>
+                        </td>
+                        <td className="card-actions">
+                          <button type="button" onClick={() => startEdit(b)}>
+                            <Pencil size={13} /> ویرایش
                           </button>
-                        )}
-                      </td>
-                    </tr>
+                          <button type="button" onClick={() => void toggle(b.id, !b.is_active)}>
+                            {b.is_active ? 'بستن' : 'بازکردن'}
+                          </button>
+                          {b.used_count === 0 && (
+                            <button type="button" className="danger" onClick={() => void remove(b.id)}>
+                              <Trash2 size={13} /> حذف
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {openLeaves === b.id && (
+                        <tr>
+                          <td className="card-full" colSpan={8}>
+                            <LeafList rows={leaves.data ?? []} loading={leaves.loading} error={leaves.error} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
