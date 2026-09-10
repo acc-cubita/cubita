@@ -131,14 +131,26 @@ function CardPaymentDialog({
       setStage('error')
       return
     }
+    // شماره‌ی مرجع کلیدِ idempotency و تنها راهِ تطبیق با صورت‌حسابِ بانک است.
+    // پیش از این رشته‌ی خالی فرستاده می‌شد و سرور ۴۲۲ می‌داد — **بعد از اینکه
+    // کارتِ مشتری کشیده شده بود**، با پیامی که نمی‌گفت چه باید کرد.
+    if (!pr.rrn) {
+      setMsg(
+        'تراکنش تأیید شد ولی دستگاه شماره‌ی مرجع (RRN) نداد. ' +
+          'پول از حسابِ مشتری کم شده — رسید را دستی از «رسید دریافت» ثبت کنید.',
+      )
+      setStage('error')
+      return
+    }
     setStage('recording')
     try {
       const txn = await recordCardPayment(token, {
         transaction_date: todayIso(),
         amount: Math.round(amount),
-        bank_account_id: selected.bank_account_id,
+        //: حساب دیگر فرستاده نمی‌شود — سرور از خودِ دستگاه درش می‌آورد (§۴).
+        pos_terminal_id: selected.id,
         contact_id: contactId ?? null,
-        reference_no: pr.rrn || '',
+        reference_no: pr.rrn,
         trace_no: pr.traceNo,
         card_mask: pr.cardMask,
         terminal_no: pr.terminalNo,

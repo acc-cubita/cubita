@@ -2555,18 +2555,29 @@ export type PosTransport = 'simulator' | 'network' | 'serial' | 'sdk'
 export interface PosTerminalRecord {
   id: string
   label: string
+  name2: string
+  /** شماره‌ی پایانه‌ای که دستگاه گزارش می‌کند. هویتِ رکورد نیست — آن `id` است. */
+  terminal_no: string
+  currency_code: string
   psp: string
   transport: PosTransport
   host: string
   port: number
   com_port: string
   bank_account_id: string | null
+  bank_account_name: string | null
+  bank_account_name2: string | null
   is_active: boolean
   is_default: boolean
+  /** **مشتق** — جمعِ رسیدهای کارتیِ تسویه‌نشده. مانده‌ی بانک نیست. */
+  unsettled_balance: string
 }
 
 export interface PosTerminalIn {
   label?: string
+  name2?: string
+  terminal_no?: string
+  currency_code?: string
   psp?: string
   transport?: PosTransport
   host?: string
@@ -2577,8 +2588,22 @@ export interface PosTerminalIn {
   is_default?: boolean
 }
 
-export const fetchPosTerminals = (token: string) =>
-  authedGet<PosTerminalRecord[]>(token, '/api/pos-terminals')
+export interface PosTerminalFilters {
+  search?: string
+  bankAccountId?: string
+  currencyCode?: string
+  activeOnly?: boolean
+}
+
+export const fetchPosTerminals = (token: string, filters: PosTerminalFilters = {}) => {
+  const qs = new URLSearchParams()
+  if (filters.search) qs.set('search', filters.search)
+  if (filters.bankAccountId) qs.set('bank_account_id', filters.bankAccountId)
+  if (filters.currencyCode) qs.set('currency_code', filters.currencyCode)
+  if (filters.activeOnly) qs.set('active_only', 'true')
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<PosTerminalRecord[]>(token, `/api/pos-terminals${suffix}`)
+}
 
 export const createPosTerminal = (token: string, data: PosTerminalIn) =>
   authedSend<PosTerminalRecord>(token, 'POST', '/api/pos-terminals', data)
@@ -2593,7 +2618,9 @@ export const deletePosTerminal = (token: string, id: string) =>
 export interface CardPaymentIn {
   transaction_date: string
   amount: number
-  bank_account_id: string
+  /** دستگاه — وقتی داده شود، حسابِ تسویه از خودش می‌آید و لازم نیست جدا بفرستیم. */
+  pos_terminal_id?: string | null
+  bank_account_id?: string | null
   contact_id?: string | null
   reference_no: string
   trace_no?: string
@@ -5170,6 +5197,9 @@ export const fetchNextCheckNumber = (token: string, id: string) =>
 
 export interface PosPendingGroup {
   terminal_no: string
+  /** دستگاهِ واقعی — برای رسیدهای پیشِ اتصال خالی است. */
+  pos_terminal_id: string | null
+  terminal_label: string | null
   transaction_date: string
   count: number
   gross_amount: string
@@ -5177,9 +5207,10 @@ export interface PosPendingGroup {
 
 export const fetchPosPending = (
   token: string,
-  query: { terminalNo?: string; dateFrom?: string; dateTo?: string } = {},
+  query: { terminalNo?: string; posTerminalId?: string; dateFrom?: string; dateTo?: string } = {},
 ) => {
   const qs = new URLSearchParams()
+  if (query.posTerminalId) qs.set('pos_terminal_id', query.posTerminalId)
   if (query.terminalNo) qs.set('terminal_no', query.terminalNo)
   if (query.dateFrom) qs.set('date_from', query.dateFrom)
   if (query.dateTo) qs.set('date_to', query.dateTo)
@@ -5199,6 +5230,8 @@ export const settlePosTerminal = (
     settlement_date: string
     date_from: string
     date_to: string
+    /** راهِ درست — دامنه و حسابِ کارمزد از خودِ دستگاه می‌آید. */
+    pos_terminal_id?: string | null
     terminal_no?: string | null
     bank_account_id?: string | null
     fee_amount: number

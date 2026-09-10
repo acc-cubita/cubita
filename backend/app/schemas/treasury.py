@@ -36,7 +36,12 @@ class CardPaymentIn(BaseModel):
 
     transaction_date: date
     amount: Decimal
-    bank_account_id: UUID  # حسابِ تسویه‌ی کارتخوان (رسید به معینِ همین می‌خورد)
+    #: دستگاهی که کارت رویش کشیده شد. وقتی داده شود، حسابِ تسویه از خودش می‌آید
+    #: و دیگر لازم نیست کلاینت جدا بفرستدش (§۴).
+    pos_terminal_id: UUID | None = None
+    #: حسابِ تسویه — حالا اختیاری است. برای سازگاری با کلاینتِ قدیمی می‌ماند، ولی
+    #: اگر دستگاه هم داده شود باید با حسابِ همان دستگاه یکی باشد.
+    bank_account_id: UUID | None = None
     contact_id: UUID | None = None
     reference_no: str  # شماره‌ی مرجع/پیگیری (RRN)
     trace_no: str = ""
@@ -74,6 +79,7 @@ class TreasuryTransactionOut(BaseModel):
     trace_no: str | None = None
     card_mask: str | None = None
     terminal_no: str | None = None
+    pos_terminal_id: UUID | None = None
     psp: str | None = None
     #: لحظه‌ی تسویه‌ی کارتخوان. NULL = هنوز تسویه نشده. دفترِ «تسویه‌های کارتخوان»
     #: از همین ساخته می‌شود، بی‌آنکه اندپوینتِ جدایی لازم باشد.

@@ -15,6 +15,7 @@ import {
   fetchBankAccountsLive,
   fetchBankTransactions,
   fetchPosPending,
+  fetchPosTerminals,
   fetchStatementLines,
   importStatementLines,
   settlePosTerminal,
@@ -269,7 +270,7 @@ export function PosSettlementPage({ token }: { token: string }) {
   const [msg, setMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  const [terminalNo, setTerminalNo] = useState('')
+  const [posTerminalId, setPosTerminalId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState(todayIso())
   const [settlementDate, setSettlementDate] = useState(todayIso())
@@ -278,17 +279,26 @@ export function PosSettlementPage({ token }: { token: string }) {
 
   const data = useAsync(
     async () => {
-      const [pending, banks] = await Promise.all([
-        fetchPosPending(token, { terminalNo: terminalNo || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+      const [pending, banks, terminals] = await Promise.all([
+        fetchPosPending(token, {
+          posTerminalId: posTerminalId || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        }),
         fetchBankAccountsLive(token),
+        fetchPosTerminals(token),
       ])
-      return { pending, banks }
+      return { pending, banks, terminals }
     },
-    [token, terminalNo, dateFrom, dateTo, reloadKey],
+    [token, posTerminalId, dateFrom, dateTo, reloadKey],
   )
 
   const pending = data.data?.pending ?? []
   const banks = data.data?.banks ?? []
+  const terminals = data.data?.terminals ?? []
+  //: وقتی دستگاه انتخاب شده، حسابِ کارمزد از خودش می‌آید و پرسیدنش هم اضافه است
+  //: هم راهی برای ناسازگاری: کارمزد می‌توانست به حسابی بخورد که ناخالص آنجا نرفته.
+  const selectedTerminal = terminals.find((t) => t.id === posTerminalId) ?? null
   const gross = pending.reduce((s, g) => s + Number(g.gross_amount), 0)
   const count = pending.reduce((s, g) => s + g.count, 0)
   const pg = usePagination(pending, 12)
@@ -299,8 +309,8 @@ export function PosSettlementPage({ token }: { token: string }) {
       setMsg({ text: 'بازه‌ی تاریخ را مشخص کنید.', kind: 'err' })
       return
     }
-    if (Number(fee || 0) > 0 && !bankAccountId) {
-      setMsg({ text: 'برای ثبتِ کارمزد، حساب بانکی لازم است.', kind: 'err' })
+    if (Number(fee || 0) > 0 && !bankAccountId && !selectedTerminal) {
+      setMsg({ text: 'برای ثبتِ کارمزد، دستگاه یا حساب بانکی لازم است.', kind: 'err' })
       return
     }
     setBusy(true)
@@ -309,8 +319,9 @@ export function PosSettlementPage({ token }: { token: string }) {
         settlement_date: settlementDate,
         date_from: dateFrom,
         date_to: dateTo,
-        terminal_no: terminalNo || null,
-        bank_account_id: bankAccountId || null,
+        pos_terminal_id: posTerminalId || null,
+        //: وقتی دستگاه هست، سرور حساب را از خودش می‌گیرد و این نادیده می‌ماند.
+        bank_account_id: selectedTerminal ? null : bankAccountId || null,
         fee_amount: Number(fee || 0),
       })
       setMsg({
@@ -335,13 +346,16 @@ export function PosSettlementPage({ token }: { token: string }) {
         <div className="cc-head">
           <div className="cc-toolbar">
             <label className="acc-inline-field">
-              شماره پایانه
-              <input
-                dir="ltr"
-                value={terminalNo}
-                onChange={(e) => setTerminalNo(e.target.value)}
-                placeholder="12345678"
-              />
+              دستگاه
+              <select value={posTerminalId} onChange={(e) => setPosTerminalId(e.target.value)}>
+                <option value="">همه‌ی دستگاه‌ها</option>
+                {terminals.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.terminal_no ? `${t.terminal_no} — ` : ''}
+                    {t.label || 'کارتخوان'}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="acc-inline-field">
               از تاریخ
@@ -398,7 +412,7 @@ export function PosSettlementPage({ token }: { token: string }) {
                 {pg.pageItems.map((g) => (
                   <tr key={`${g.terminal_no}-${g.transaction_date}`}>
                     <td className="card-title" data-label="تاریخ">{formatJalali(g.transaction_date)}</td>
-                    <td data-label="پایانه"><span dir="ltr">{g.terminal_no || '—'}</span></td>
+                    <td data-label="پایانه"><span dir="ltr">{g.terminal_label || g.terminal_no || '—'}</span></td>
                     <td className="num" data-label="شمارِ تراکنش">{faInt(g.count)}</td>
                     <td className="num" data-label="جمعِ ناخالص">{fa(g.gross_amount)}</td>
                   </tr>
@@ -427,7 +441,11 @@ export function PosSettlementPage({ token }: { token: string }) {
           </label>
           <label>
             حسابِ بانکیِ واریز
-            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+            <select
+              value={selectedTerminal ? '' : bankAccountId}
+              onChange={(e) => setBankAccountId(e.target.value)}
+              disabled={selectedTerminal !== null}
+            >
               <option value="">— انتخاب —</option>
               {banks.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -435,7 +453,11 @@ export function PosSettlementPage({ token }: { token: string }) {
                 </option>
               ))}
             </select>
-            <span className="field-hint">فقط وقتی کارمزد داری لازم است.</span>
+            <span className="field-hint">
+              {selectedTerminal
+                ? `از حسابِ تسویه‌ی همین دستگاه می‌آید: ${selectedTerminal.bank_account_name ?? '—'}`
+                : 'فقط وقتی کارمزد داری لازم است.'}
+            </span>
           </label>
         </div>
         <div className="invoice-form-footer">
