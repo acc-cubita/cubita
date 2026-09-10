@@ -222,7 +222,7 @@ def test_terminal_crud_and_default_uniqueness(db, user, client):
     bank = _make_bank(db)
     a = client.post(
         "/api/pos-terminals",
-        json={"label": "صندوقِ ۱", "transport": "simulator", "bank_account_id": str(bank.id), "is_default": True},
+        json={"label": "کارتخوانِ ۱", "transport": "simulator", "bank_account_id": str(bank.id), "is_default": True},
     )
     assert a.status_code == 201, a.text
     a_id = a.json()["id"]
@@ -231,7 +231,7 @@ def test_terminal_crud_and_default_uniqueness(db, user, client):
     # ترمینالِ دومِ پیش‌فرض → اولی باید از پیش‌فرض خارج شود
     b = client.post(
         "/api/pos-terminals",
-        json={"label": "صندوقِ ۲", "transport": "network", "host": "192.168.1.50", "port": 8888, "is_default": True},
+        json={"label": "کارتخوانِ ۲", "transport": "network", "host": "192.168.1.50", "port": 8888, "is_default": True},
     )
     assert b.status_code == 201, b.text
 
@@ -240,9 +240,9 @@ def test_terminal_crud_and_default_uniqueness(db, user, client):
     assert defaults == [b.json()["id"]]
 
     # ویرایش
-    p = client.patch(f"/api/pos-terminals/{a_id}", json={"label": "صندوقِ نو", "transport": "simulator"})
+    p = client.patch(f"/api/pos-terminals/{a_id}", json={"label": "کارتخوانِ نو", "transport": "simulator"})
     assert p.status_code == 200, p.text
-    assert p.json()["label"] == "صندوقِ نو"
+    assert p.json()["label"] == "کارتخوانِ نو"
 
     # حذف
     d = client.delete(f"/api/pos-terminals/{a_id}")

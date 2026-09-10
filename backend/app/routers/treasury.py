@@ -30,7 +30,12 @@ def _to_out(txn) -> TreasuryTransactionOut:
         trace_no=txn.trace_no,
         card_mask=txn.card_mask,
         terminal_no=txn.terminal_no,
+        pos_terminal_id=txn.pos_terminal_id,
         psp=txn.psp,
+        #: این دو از قبل در شِما بودند ولی هرگز پر نمی‌شدند — یعنی هر مصرفی از این
+        #: مسیر «تسویه‌نشده» را نمی‌دید و صندوقِ رسید هم گم می‌شد.
+        settled_at=txn.settled_at,
+        cashbox_id=txn.cashbox_id,
     )
 
 

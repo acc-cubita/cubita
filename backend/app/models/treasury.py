@@ -60,7 +60,15 @@ class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     trace_no: Mapped[str | None] = mapped_column(String(40), nullable=True)
     #: شماره‌ی کارتِ ماسک‌شده (۶۰۳۷****۱۲۳۴).
     card_mask: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    #: شماره‌ی پایانه‌ی کارتخوان.
+    #: **دستگاهِ واقعی.** تا مهاجرتِ ۰۱۰۷ هیچ کلیدِ خارجی‌ای به `pos_terminals`
+    #: نبود و تنها حلقه‌ی اتصال همان `terminal_no`ِ متنیِ پایین بود — رشته‌ای که
+    #: کاربر در تسویه دستی تایپ می‌کرد و با `==` مقایسه می‌شد. `NULL` یعنی
+    #: رسیدی که پیش از این مهاجرت ثبت شده و فقط شماره‌اش را دارد.
+    pos_terminal_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pos_terminals.id"), nullable=True
+    )
+    #: شماره‌ی پایانه‌ی کارتخوان، همان‌طور که دستگاه گزارشش کرده. برای رسیدهای
+    #: قدیمی تنها ردِ دستگاه است، و برای مغایرت‌گیری با صورت‌حسابِ بانک می‌ماند.
     terminal_no: Mapped[str | None] = mapped_column(String(30), nullable=True)
     #: شرکتِ پرداخت (مثلاً behpardakht|sep|sadad|simulator).
     psp: Mapped[str | None] = mapped_column(String(30), nullable=True)

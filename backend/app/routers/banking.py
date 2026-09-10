@@ -303,13 +303,18 @@ def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
 @router.get("/api/pos-settlements/pending", response_model=list[PosPendingGroupOut])
 def pos_pending(
     terminal_no: str | None = None,
+    pos_terminal_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "view")),
 ):
     return banking_service.pos_pending_settlements(
-        db, terminal_no=terminal_no, date_from=date_from, date_to=date_to
+        db,
+        terminal_no=terminal_no,
+        date_from=date_from,
+        date_to=date_to,
+        pos_terminal_id=pos_terminal_id,
     )
 
 

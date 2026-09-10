@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,9 +30,27 @@ class PosTerminal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "pos_terminals"
     __table_args__ = (
         CheckConstraint(f"transport IN {POS_TRANSPORTS}", name="ck_pos_terminals_transport"),
+        #: یکتا فقط وقتی پر شده — ایندکسِ جزئی. دستگاه‌های تعریف‌شده‌ی پیش از
+        #: مهاجرتِ ۰۱۰۷ شماره ندارند و نباید با هم تصادم کنند.
+        Index(
+            "uq_pos_terminals_tenant_terminal_no",
+            "tenant_id",
+            "terminal_no",
+            unique=True,
+            postgresql_where=text("terminal_no <> ''"),
+        ),
     )
 
     label: Mapped[str] = mapped_column(String(120), default="")
+    #: عنوانِ دوم — همان نقشی که `name2` در صندوق و حسابِ بانکی دارد.
+    name2: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    #: شماره‌ی پایانه‌ای که خودِ دستگاه گزارش می‌کند. **هویتِ رکورد نیست** (§۴) —
+    #: آن `id` است؛ این شماره عوض‌شدنی است. تا مهاجرتِ ۰۱۰۷ اصلاً روی دستگاه
+    #: نبود و فقط روی تراکنش می‌نشست، یعنی دستگاهِ تعریف‌شده نمی‌دانست دستگاهِ
+    #: واقعی چه شماره‌ای برمی‌گرداند.
+    terminal_no: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    #: ارزِ عملیاتیِ دستگاه؛ باید با ارزِ حسابِ بانکیِ تسویه بخواند (§۹).
+    currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
     psp: Mapped[str] = mapped_column(String(30), default="", server_default="")
     transport: Mapped[str] = mapped_column(String(20), default="simulator", server_default="simulator")
     host: Mapped[str] = mapped_column(String(120), default="", server_default="")

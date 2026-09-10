@@ -15,6 +15,7 @@ from app.models.banking import (
     Checkbook,
     PettyCashTransaction,
 )
+from app.models.pos_terminal import PosTerminal
 from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import (
@@ -579,19 +580,35 @@ def next_check_number(db: Session, checkbook_id: UUID) -> str:
 
 
 def pos_pending_settlements(
-    db: Session, *, terminal_no: str | None, date_from: date_ | None, date_to: date_ | None
+    db: Session,
+    *,
+    terminal_no: str | None,
+    date_from: date_ | None,
+    date_to: date_ | None,
+    pos_terminal_id: UUID | None = None,
 ) -> list[dict]:
-    """رسیدهای کارتیِ تسویه‌نشده، گروه‌بندی‌شده بر اساسِ پایانه و روز."""
+    """رسیدهای کارتیِ تسویه‌نشده، گروه‌بندی‌شده بر اساسِ پایانه و روز.
+
+    `pos_terminal_id` راهِ درست است: دامنه از خودِ دستگاه می‌آید و شاملِ رسیدهای
+    قدیمیِ همان شماره هم می‌شود. `terminal_no` برای سازگاری می‌ماند.
+    """
+    from app.services import card_terminals
+
     query = db.query(TreasuryTransaction).filter(
         TreasuryTransaction.paid_via == "pos_terminal",
         TreasuryTransaction.settled_at.is_(None),
     )
-    if terminal_no:
+    if pos_terminal_id is not None:
+        query = query.filter(card_terminals._owned_transactions(card_terminals.resolve(db, pos_terminal_id)))
+    elif terminal_no:
         query = query.filter(TreasuryTransaction.terminal_no == terminal_no)
     if date_from is not None:
         query = query.filter(TreasuryTransaction.transaction_date >= date_from)
     if date_to is not None:
         query = query.filter(TreasuryTransaction.transaction_date <= date_to)
+
+    #: برچسبِ دستگاه یک‌بار خوانده می‌شود، نه به‌ازای هر ردیف.
+    labels = {t.id: t.label for t in db.query(PosTerminal).all()}
 
     groups: dict[tuple[str, date_], dict] = {}
     for txn in query.order_by(TreasuryTransaction.transaction_date).all():
@@ -600,6 +617,8 @@ def pos_pending_settlements(
             key,
             {
                 "terminal_no": txn.terminal_no or "",
+                "pos_terminal_id": txn.pos_terminal_id,
+                "terminal_label": labels.get(txn.pos_terminal_id),
                 "transaction_date": txn.transaction_date,
                 "count": 0,
                 "gross_amount": Decimal(0),
@@ -618,13 +637,22 @@ def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
     """
     assert_period_open(db, data.settlement_date)
 
+    from app.services import card_terminals
+
+    #: دستگاه، اگر داده شده، هم دامنه‌ی تسویه را تعیین می‌کند هم حسابِ کارمزد را —
+    #: به‌جای تطبیقِ رشته‌ایِ شماره‌ای که کاربر تایپ کرده و یک فاصله‌ی اضافی‌اش
+    #: بی‌صدا صفر نتیجه می‌داد.
+    terminal = card_terminals.resolve(db, data.pos_terminal_id) if data.pos_terminal_id else None
+
     query = db.query(TreasuryTransaction).filter(
         TreasuryTransaction.paid_via == "pos_terminal",
         TreasuryTransaction.settled_at.is_(None),
         TreasuryTransaction.transaction_date >= data.date_from,
         TreasuryTransaction.transaction_date <= data.date_to,
     )
-    if data.terminal_no:
+    if terminal is not None:
+        query = query.filter(card_terminals._owned_transactions(terminal))
+    elif data.terminal_no:
         query = query.filter(TreasuryTransaction.terminal_no == data.terminal_no)
     rows = query.all()
     if not rows:
@@ -639,7 +667,12 @@ def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
 
     settlement_txn = None
     if fee > 0:
-        bank = db.get(BankAccount, data.bank_account_id) if data.bank_account_id else None
+        #: حسابِ کارمزد از خودِ دستگاه می‌آید تا با حسابی که ناخالص آنجا نشسته یکی
+        #: بماند؛ فقط مسیرِ قدیمی (بدونِ دستگاه) هنوز حساب را از ورودی می‌گیرد.
+        if terminal is not None:
+            bank = card_terminals.settlement_account(db, terminal)
+        else:
+            bank = db.get(BankAccount, data.bank_account_id) if data.bank_account_id else None
         if bank is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای ثبتِ کارمزد، حساب بانکی لازم است")
         fee_account = get_or_create_account(
