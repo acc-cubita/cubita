@@ -131,13 +131,23 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "حساب بانکی مشخص نیست")
         if check.type == "receivable":
             lines = [
-                JournalLine(account_id=bank_account.gl_account_id, debit=check.amount, credit=0),
+                JournalLine(
+                    account_id=bank_account.gl_account_id,
+                    analytic_id=bank_account.analytic_id,
+                    debit=check.amount,
+                    credit=0,
+                ),
                 JournalLine(account_id=get_account(db, cc.CHECKS_RECEIVABLE).id, debit=0, credit=check.amount),
             ]
         else:
             lines = [
                 JournalLine(account_id=get_account(db, cc.CHECKS_PAYABLE).id, debit=check.amount, credit=0),
-                JournalLine(account_id=bank_account.gl_account_id, debit=0, credit=check.amount),
+                JournalLine(
+                    account_id=bank_account.gl_account_id,
+                    analytic_id=bank_account.analytic_id,
+                    debit=0,
+                    credit=check.amount,
+                ),
             ]
         journal_entry = _make_journal_entry(
             db, check.due_date, f"وصول/کسر چک شماره {check.number}", "check", user, lines
@@ -229,13 +239,23 @@ def create_bank_transaction(db: Session, data: BankDepositWithdrawIn, user: User
     is_deposit = data.amount > 0
     lines = (
         [
-            JournalLine(account_id=bank_account.gl_account_id, debit=data.amount, credit=0),
+            JournalLine(
+                account_id=bank_account.gl_account_id,
+                analytic_id=bank_account.analytic_id,
+                debit=data.amount,
+                credit=0,
+            ),
             JournalLine(account_id=data.counter_account_id, debit=0, credit=data.amount),
         ]
         if is_deposit
         else [
             JournalLine(account_id=data.counter_account_id, debit=-data.amount, credit=0),
-            JournalLine(account_id=bank_account.gl_account_id, debit=0, credit=-data.amount),
+            JournalLine(
+                account_id=bank_account.gl_account_id,
+                analytic_id=bank_account.analytic_id,
+                debit=0,
+                credit=-data.amount,
+            ),
         ]
     )
     journal_entry = _make_journal_entry(
@@ -638,7 +658,12 @@ def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
             user,
             [
                 JournalLine(account_id=fee_account.id, debit=fee, credit=0),
-                JournalLine(account_id=bank.gl_account_id, debit=0, credit=fee),
+                JournalLine(
+                    account_id=bank.gl_account_id,
+                    analytic_id=bank.analytic_id,
+                    debit=0,
+                    credit=fee,
+                ),
             ],
         )
         settlement_txn = BankTransaction(

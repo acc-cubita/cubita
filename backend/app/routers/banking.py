@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -30,6 +30,7 @@ from app.schemas.banking import (
     PosSettlementOut,
     ReconciliationSummaryOut,
 )
+from app.services import bank_accounts as bank_accounts_service
 from app.services import banking as banking_service
 from app.services import chart_codes as cc
 from app.services.common import get_account
@@ -40,25 +41,18 @@ router = APIRouter(tags=["banking"])
 
 @router.get("/api/bank-accounts", response_model=list[BankAccountOut])
 def list_bank_accounts(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return db.query(BankAccount).order_by(BankAccount.name).all()
+    """حساب‌ها با مانده‌ی مشتق — بدونِ جمعِ کل، چون ارزها با هم جمع نمی‌شوند (§۲۱)."""
+    return bank_accounts_service.list_bank_accounts(db)
 
 
 @router.post("/api/bank-accounts", response_model=BankAccountOut, status_code=201)
 def create_bank_account(
     data: BankAccountIn, db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "create"))
 ):
-    gl_account_id = data.gl_account_id or get_account(db, cc.BANK).id
-    account = BankAccount(
-        name=data.name,
-        bank_name=data.bank_name,
-        account_number=data.account_number,
-        iban=data.iban,
-        gl_account_id=gl_account_id,
-    )
-    db.add(account)
-    db.flush()
-    db.refresh(account)
-    return account
+    payload = data.model_dump()
+    payload["gl_account_id"] = data.gl_account_id or get_account(db, cc.BANK).id
+    account = bank_accounts_service.create_bank_account(db, payload)
+    return bank_accounts_service.row(db, account)
 
 
 @router.patch("/api/bank-accounts/{bank_account_id}", response_model=BankAccountOut)
@@ -68,15 +62,21 @@ def update_bank_account(
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "update")),
 ):
-    """ویرایشِ نام/بانک/شماره/شبا یا فعال‌بودنِ حساب بانکی. حسابِ دفترِ کل ثابت می‌ماند."""
-    account = db.get(BankAccount, bank_account_id)
-    if account is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(account, key, value)
-    db.flush()
-    db.refresh(account)
-    return account
+    """ویرایشِ حساب بانکی. حسابِ دفترِ کل ثابت می‌ماند و تفصیلیِ حسابِ باسابقه هم (§۳۱)."""
+    account = bank_accounts_service.update_bank_account(
+        db, bank_account_id, data.model_dump(exclude_unset=True)
+    )
+    return bank_accounts_service.row(db, account)
+
+
+@router.delete("/api/bank-accounts/{bank_account_id}", status_code=204)
+def delete_bank_account(
+    bank_account_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "delete")),
+):
+    """حسابِ بی‌سابقه حذف می‌شود؛ حسابِ باسابقه فقط غیرفعال (§۲۳)."""
+    bank_accounts_service.delete_bank_account(db, bank_account_id)
 
 
 @router.get("/api/checks", response_model=Page[CheckOut])
@@ -116,11 +116,21 @@ def update_check_status(
 def list_bank_transactions(
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
+    bank_account_id: UUID | None = Query(None, description="فقط گردشِ همین حساب"),
     _=Depends(require_permission("checks_bank", "view")),
 ):
+    """گردشِ بانکی، اختیاری محدود به یک حساب.
+
+    `bank_account_id` تا امروز **تعریف نشده بود** در حالی که رابط می‌فرستادش —
+    یعنی صافیِ حسابِ صفحه‌ی «مرور عملیات بانکی» بی‌صدا هیچ کاری نمی‌کرد و کاربر
+    گردشِ همه‌ی حساب‌ها را می‌دید.
+    """
+    query = db.query(BankTransaction)
+    if bank_account_id is not None:
+        query = query.filter(BankTransaction.bank_account_id == bank_account_id)
     # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
     items, next_cursor = paginate(
-        db.query(BankTransaction),
+        query,
         [BankTransaction.transaction_date, BankTransaction.id],
         params,
     )

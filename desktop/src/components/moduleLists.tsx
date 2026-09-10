@@ -33,7 +33,7 @@ import {
   Gauge,
   HandCoins,
   Hash,
-  Landmark,
+
   LayoutList,
   ListChecks,
   ListTree,
@@ -142,7 +142,6 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'دریافت و پرداخت': [
     { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins },
     { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked },
-    { key: 'bankaccountlist', label: 'حساب‌های بانکی', icon: Landmark },
     { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: CreditCard },
     { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard },
     { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet },
@@ -201,7 +200,6 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   discountgrouplist: 'فروش',
   treasuryledger: 'دریافت و پرداخت',
   checkbooklist: 'دریافت و پرداخت',
-  bankaccountlist: 'دریافت و پرداخت',
   posterminallist: 'دریافت و پرداخت',
   possettlelist: 'دریافت و پرداخت',
   statementlist: 'دریافت و پرداخت',
@@ -279,7 +277,9 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   //: «تعریف صندوق» خودش هم فرم است و هم دفترِ صندوق‌ها با مانده‌شان — همان
   //: الگوی «حساب بانکی». فهرستِ نظیرِ جدا یعنی دو نمای یک داده.
   cashboxes: 'view',
-  bankaccounts: 'bankaccountlist',
+  //: «حساب بانکی» خودش هم فرم است و هم دفترِ حساب‌ها با مانده‌شان — همان
+  //: الگوی «تعریف صندوق». فهرستِ نظیرِ جدا یعنی دو نمای یک داده.
+  bankaccounts: 'view',
   posterminals: 'posterminallist',
   pettyholder: 'pettylist', //: شارژ و هزینه، یک دفترِ مشترک
   pettyexpense: 'pettylist',

@@ -3,7 +3,7 @@ import {
   BookMarked,
   CreditCard,
   FileSpreadsheet,
-  Landmark,
+
   ScrollText,
   Wallet,
 } from 'lucide-react'
@@ -112,71 +112,6 @@ export function CheckbookListPage({ token }: { token: string }) {
                     <td data-label="وضعیت">
                       <span className={`status-badge ${b.is_active ? 'tone-success' : ''}`}>
                         {b.is_active ? 'باز' : 'بسته'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═══════════════════ حساب‌های بانکی ═══════════════════
-
-export function BankAccountListPage({ token }: { token: string }) {
-  const banks = useAsync(() => fetchBankAccountsAdmin(token), [token])
-  const rows = banks.data ?? []
-  const pg = usePagination(rows, 15)
-  const active = rows.filter((b) => b.is_active).length
-
-  return (
-    <OpsPage
-      icon={Landmark}
-      title="حساب‌های بانکی"
-      description="دفترِ حساب‌های بانکیِ ثبت‌شده و حسابِ دفترِ کلِ متناظرشان."
-      head={
-        <div className="cc-head">
-          <div className="cc-summary">
-            <Metric icon={<Landmark size={14} />} label="حساب‌ها" value={faInt(rows.length)} />
-            <Metric icon={<Landmark size={14} />} label="فعال" value={faInt(active)} tone="in" />
-            <Metric icon={<Landmark size={14} />} label="غیرفعال" value={faInt(rows.length - active)} tone="plain" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard icon={Landmark} title="حساب‌ها" description={`${faInt(rows.length)} حساب`}>
-        <AsyncBlock
-          loading={banks.loading}
-          error={banks.error}
-          empty={rows.length === 0}
-          emptyText="حساب بانکی ثبت نشده. از عملیاتِ «حساب بانکی» شروع کنید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>نام</th>
-                  <th>بانک</th>
-                  <th>شماره حساب</th>
-                  <th>شبا</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((b) => (
-                  <tr key={b.id} className={b.is_active ? '' : 'acc-row--void'}>
-                    <td className="card-title" data-label="نام">{b.name}</td>
-                    <td data-label="بانک">{b.bank_name || '—'}</td>
-                    <td data-label="شماره حساب"><span dir="ltr">{b.account_number || '—'}</span></td>
-                    <td className="card-wide" data-label="شبا"><span dir="ltr">{b.iban || '—'}</span></td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${b.is_active ? 'tone-success' : ''}`}>
-                        {b.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
                   </tr>

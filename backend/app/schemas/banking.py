@@ -7,20 +7,54 @@ from pydantic import BaseModel, model_validator
 
 class BankAccountIn(BaseModel):
     name: str
+    name2: str = ""
     bank_name: str = ""
+    branch_name: str = ""
     account_number: str = ""
+    account_type: str = ""
+    #: سه شناسه‌ی جدا (§۷) — هیچ‌کدام جای دیگری به کار نمی‌رود.
+    card_number: str = ""
     iban: str = ""
+    #: بُعدی که مانده‌ی این حساب را از بقیه جدا می‌کند. خالی فقط برای حسابِ اول.
+    analytic_id: UUID | None = None
     gl_account_id: UUID | None = None  # اگر خالی باشد، حساب پیش‌فرض «۱۱۰۲ بانک» استفاده می‌شود
+    currency_code: str = "IRR"
+    opening_date: date | None = None
+    holder_name: str = ""
+    holder_name2: str = ""
+    blocked_amount: Decimal = Decimal(0)
+    cheque_print_format: str = ""
+
+    @model_validator(mode="after")
+    def _name_not_blank(self) -> "BankAccountIn":
+        if not self.name.strip():
+            raise ValueError("نام حساب نمی‌تواند خالی باشد")
+        return self
 
 
 class BankAccountUpdateIn(BaseModel):
-    """ویرایشِ حساب بانکی — فقط فیلدهای ارسال‌شده تغییر می‌کنند. حسابِ دفترِ کلِ
-    متناظر (gl_account_id) پس از ساخت عوض نمی‌شود (روی اسناد نشسته)."""
+    """ویرایشِ حساب بانکی — فقط فیلدهای ارسال‌شده تغییر می‌کنند.
+
+    `gl_account_id` عمداً اینجا نیست: روی اسنادِ ثبت‌شده نشسته و عوض کردنش یعنی
+    مانده‌ی گذشته از جای دیگری خوانده شود. `analytic_id` هست ولی سرویس اگر حساب
+    سابقه داشته باشد ردش می‌کند (§۳۱).
+    """
 
     name: str | None = None
+    name2: str | None = None
     bank_name: str | None = None
+    branch_name: str | None = None
     account_number: str | None = None
+    account_type: str | None = None
+    card_number: str | None = None
     iban: str | None = None
+    analytic_id: UUID | None = None
+    currency_code: str | None = None
+    opening_date: date | None = None
+    holder_name: str | None = None
+    holder_name2: str | None = None
+    blocked_amount: Decimal | None = None
+    cheque_print_format: str | None = None
     is_active: bool | None = None
 
     @model_validator(mode="after")
@@ -33,11 +67,30 @@ class BankAccountUpdateIn(BaseModel):
 class BankAccountOut(BaseModel):
     id: UUID
     name: str
+    name2: str = ""
     bank_name: str
+    branch_name: str = ""
     account_number: str
+    account_type: str = ""
+    card_number: str = ""
     iban: str
+    analytic_id: UUID | None = None
+    #: کد و نامِ تفصیلی برای نمایش — از رابطه‌ی eager می‌آید، نه کوئریِ جدا.
+    analytic_code: str | None = None
+    analytic_name: str | None = None
     gl_account_id: UUID
+    currency_code: str = "IRR"
+    opening_date: date | None = None
+    holder_name: str = ""
+    holder_name2: str = ""
+    #: **ذخیره‌شده** — واقعیتی که بانک اعلام می‌کند، نه حاصلِ تراکنش‌ها (§۱۸).
+    blocked_amount: Decimal = Decimal(0)
+    cheque_print_format: str = ""
     is_active: bool
+    #: هر سه **مشتق‌اند** و هیچ‌کدام ستون نیستند. `available` = مانده − بلوکه.
+    opening_balance: Decimal = Decimal(0)
+    balance: Decimal = Decimal(0)
+    available_balance: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 

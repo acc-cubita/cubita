@@ -10,7 +10,7 @@ from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn
 from app.models.cashbox import Cashbox
-from app.services import cashboxes
+from app.services import bank_accounts, cashboxes
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.period_close import assert_period_open
@@ -25,15 +25,17 @@ def _resolve_money_side(db: Session, data: TreasuryTransactionIn) -> tuple[Accou
     برای نقدی، صندوق تعیین می‌کند مبلغ به کدام معین و **کدام تفصیلی** برود. همین
     تفصیلی است که مانده‌ی هر صندوق را از بقیه جدا می‌کند — بدونِ آن، صندوق‌ها در
     دفتر یک عدد می‌شوند و «مانده‌ی صندوقِ شعبه» معنایی ندارد.
+
+    **برای بانکی هم دقیقاً همین.** تا مهاجرتِ ۰۱۰۶ این شاخه `None` برمی‌گرداند و
+    نتیجه‌اش این بود که همه‌ی حساب‌های بانکی در دفتر یک عدد می‌شدند.
     """
     if data.method == "cash":
         box = cashboxes.resolve_cashbox(db, getattr(data, "cashbox_id", None))
         cashboxes.assert_usable(db, box, data.transaction_date)
         return db.get(Account, cashboxes.gl_account_id(db, box)), box.analytic_id, box
-    bank = db.get(BankAccount, data.bank_account_id)
-    if bank is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
-    return db.get(Account, bank.gl_account_id), None, None
+    bank = bank_accounts.resolve(db, data.bank_account_id)
+    bank_accounts.assert_usable(db, bank, data.transaction_date)
+    return db.get(Account, bank.gl_account_id), bank.analytic_id, None
 
 
 def create_receipt(

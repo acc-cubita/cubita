@@ -1142,8 +1142,17 @@ def deliver_order(
 
 # ── تسویه‌ی آنلاین (M5) ────────────────────────────────────────────────
 def _money_method(db: Session) -> tuple[str, UUID | None]:
-    """روشِ واریز برای تسویه: اگر بانکی تعریف شده «bank» + شناسه‌اش، وگرنه «cash» (درونِ scope)."""
-    bank = db.query(BankAccount).order_by(BankAccount.created_at.asc()).first()
+    """روشِ واریز برای تسویه: اگر بانکی تعریف شده «bank» + شناسه‌اش، وگرنه «cash» (درونِ scope).
+
+    فقط حسابِ **فعال**: حسابی که کاربر عمداً غیرفعال کرده (بسته شده، منتقل شده)
+    نباید مقصدِ واریزِ خودکار شود — همان قیدِ §۲۲.
+    """
+    bank = (
+        db.query(BankAccount)
+        .filter(BankAccount.is_active.is_(True))
+        .order_by(BankAccount.created_at.asc())
+        .first()
+    )
     if bank is not None:
         return "bank", bank.id
     return "cash", None

@@ -243,12 +243,32 @@ def create_cashbox(db: Session, data: dict) -> Cashbox:
     return box
 
 
+def _assert_analytic_change_allowed(db: Session, box: Cashbox, new_analytic_id) -> None:
+    """تفصیلیِ صندوقِ استفاده‌شده عوض نمی‌شود.
+
+    مانده مشتقِ جفتِ (معین، تفصیلی) است. عوض کردنِ تفصیلی هیچ سندی را بازنویسی
+    نمی‌کند — ولی مانده را **بی‌صدا** به مجموعه‌ی دیگری از ردیف‌ها می‌برد: پولِ
+    قبلی از فهرست ناپدید می‌شود و صفر جایش می‌نشیند.
+
+    راهِ درست «اصلاح طبقه‌بندی مانده» است که مانده را با یک سندِ متوازنِ تاریخ‌دار
+    منتقل می‌کند و گذشته را دست نمی‌زند.
+    """
+    if new_analytic_id == box.analytic_id or not _in_use(db, box):
+        return
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"صندوق «{box.name}» سابقه دارد و تفصیلی‌اش عوض نمی‌شود؛ مانده‌اش با "
+        "«اصلاح طبقه‌بندی مانده» منتقل می‌شود تا اسنادِ گذشته دست‌نخورده بمانند",
+    )
+
+
 def update_cashbox(db: Session, cashbox_id: UUID, data: dict) -> Cashbox:
     box = db.get(Cashbox, cashbox_id)
     if box is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "صندوق یافت نشد")
     if "analytic_id" in data:
         _assert_analytic_free(db, data["analytic_id"], exclude_id=box.id)
+        _assert_analytic_change_allowed(db, box, data["analytic_id"])
     for key, value in data.items():
         setattr(box, key, value)
     db.flush()
