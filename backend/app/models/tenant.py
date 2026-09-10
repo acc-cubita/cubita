@@ -92,6 +92,16 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: گزارشِ «ردیف‌های بدونِ تفصیلی» در **هر سه** حالت کار می‌کند؛ این انتخاب فقط
     #: تعیین می‌کند چه چیزی مسدود شود، نه چه چیزی دیده شود.
     tafsili_enforcement: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: سیاستِ کنترلِ شماره‌ی چکِ پرداختنی:
+    #:   off  = شماره آزاد است (پیش‌فرض — رفتارِ امروز)
+    #:   book = چکِ پرداختنی باید از یک دسته‌چکِ باز صادر شود
+    #: NULL = پیش‌فرضِ سرویس، پس هیچ کسب‌وکارِ موجودی با ارتقا رفتارش عوض نمی‌شود.
+    #:
+    #: **این پرچم بازه و تکراری‌نبودنِ برگ را کنترل نمی‌کند.** آن‌ها در هر دو حالت
+    #: سنجیده می‌شوند: اگر کاربر دسته‌ای را انتخاب کرد، شماره باید واقعاً از همان
+    #: دسته و خرج‌نشده باشد — وگرنه «برگِ مانده» عددِ دروغ می‌دهد. منطق در
+    #: `app/services/checkbooks.py`.
+    cheque_number_control: Mapped[str | None] = mapped_column(String(20), nullable=True)
     #: «حقِ دسترسی»: ماژول‌های محدودی که سوپرادمین به این اکانت داده (مثلِ تولید).
     granted_modules: Mapped[list] = mapped_column(
         JSONB, default=list, server_default="[]", nullable=False

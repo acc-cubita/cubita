@@ -21,13 +21,13 @@ from app.models.user import User
 from app.schemas.banking import (
     BankDepositWithdrawIn,
     BankStatementLineIn,
-    CheckbookIn,
     CheckIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
     PosSettlementIn,
 )
 from app.services import chart_codes as cc
+from app.services import checkbooks
 from app.services.common import (
     get_account,
     get_or_create_account,
@@ -55,10 +55,41 @@ PAYABLE_TRANSITIONS = {
 }
 
 
+def _resolve_leaf(db: Session, data: CheckIn) -> Checkbook | None:
+    """دسته‌ی این چک را پیدا و برگش را می‌سنجد.
+
+    دو چیزِ جدا که قاطی‌شان نکنیم:
+
+    * **یکپارچگی** — اگر دسته‌ای انتخاب شده، شماره باید از همان دسته و خرج‌نشده
+      باشد. این همیشه سنجیده می‌شود، در هر سیاستی؛ بدونش «برگِ مانده» عددِ دروغ
+      می‌دهد و همان کاغذ دو بار خرج می‌شود.
+    * **سیاست** — اینکه چکِ پرداختنی *اجازه دارد* بی‌دسته باشد یا نه، انتخابِ
+      کسب‌وکار است و پیش‌فرضش «دارد» (رفتارِ امروز).
+
+    چکِ دریافتنی دسته ندارد: کاغذش مالِ ما نیست و شماره‌اش را طرفِ مقابل نوشته.
+    """
+    if data.type == "receivable":
+        return None
+
+    if data.checkbook_id is None:
+        if checkbooks.get_control_mode(db) == "book":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "طبقِ تنظیماتِ این کسب‌وکار، چکِ پرداختنی باید از یک دسته‌چک صادر "
+                "شود. از صفحه‌ی «دسته چک» دسته را انتخاب و برگ را صادر کنید.",
+            )
+        return None
+
+    book = checkbooks.resolve(db, data.checkbook_id)
+    checkbooks.assert_leaf_available(db, book, data.number.strip())
+    return book
+
+
 def create_check(db: Session, data: CheckIn, user: User) -> Check:
     assert_period_open(db, data.issue_date)
 
     initial_status = "in_hand" if data.type == "receivable" else "issued"
+    book = _resolve_leaf(db, data)
 
     if data.type == "receivable":
         # چک دریافتنی بابت مطالبات مشتری: از حساب دریافتنی به چک‌های دریافتنی منتقل می‌شود
@@ -87,13 +118,44 @@ def create_check(db: Session, data: CheckIn, user: User) -> Check:
         status=initial_status,
         description=data.description,
         contact_id=data.contact_id,
-        checkbook_id=data.checkbook_id,
+        checkbook_id=book.id if book else None,
+        #: حسابِ بانکی از خودِ دسته می‌آید. تا امروز چکِ پرداختنی تا لحظه‌ی وصول
+        #: هیچ حسابی نداشت و آن‌وقت **دوباره** از کاربر پرسیده می‌شد — با آنکه
+        #: دسته از روزِ اول می‌دانستش.
+        bank_account_id=book.bank_account_id if book else None,
         created_by_id=user.id,
     )
     db.add(check)
     db.flush()
     db.refresh(check)
     return check
+
+
+def _clearing_account(db: Session, check: Check, sent_id: UUID | None) -> BankAccount:
+    """حسابی که پول از آن کم/به آن اضافه می‌شود هنگامِ وصول.
+
+    چکِ پرداختنیِ صادرشده از یک دسته‌چک، حسابش را از همان دسته دارد؛ پرسیدنِ
+    دوباره‌اش هم اضافه است هم راهی برای ناسازگاری — تعهد روی یک حساب ثبت شده بود
+    و پول از حسابِ دیگری کم می‌شد. پس حسابِ ناهمخوانِ ارسالی **رد** می‌شود،
+    نه اینکه بی‌صدا یکی ترجیح داده شود.
+    """
+    own = db.get(BankAccount, check.bank_account_id) if check.bank_account_id else None
+    if check.type == "receivable":
+        #: چکِ دریافتنی حسابش را در «واگذاری به بانک» گرفته، نه از دسته‌چک.
+        if own is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حساب بانکی مشخص نیست")
+        return own
+
+    sent = db.get(BankAccount, sent_id) if sent_id else None
+    if own is not None and sent is not None and sent.id != own.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"این چک از حسابِ «{own.name}» صادر شده است؛ وصولش از حسابِ دیگری ثبت نمی‌شود",
+        )
+    account = own or sent
+    if account is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "حساب بانکی مشخص نیست")
+    return account
 
 
 def update_check_status(db: Session, check_id: UUID, new_status: str, bank_account_id: UUID | None, user: User) -> Check:
@@ -125,11 +187,7 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
         # هنوز اثر مالی جدیدی ثبت نمی‌شود؛ چک فقط از نظر فیزیکی به بانک سپرده شده
 
     elif new_status == "cleared":
-        bank_account = db.get(BankAccount, check.bank_account_id) if check.type == "receivable" else (
-            db.get(BankAccount, bank_account_id) if bank_account_id else None
-        )
-        if bank_account is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حساب بانکی مشخص نیست")
+        bank_account = _clearing_account(db, check, bank_account_id)
         if check.type == "receivable":
             lines = [
                 JournalLine(
@@ -431,142 +489,6 @@ def get_petty_cash_balance(db: Session) -> Decimal:
     total_charge = sum((Decimal(t.amount) for t in charges), Decimal(0))
     total_expense = sum((Decimal(t.amount) for t in expenses), Decimal(0))
     return total_charge - total_expense
-
-
-# ---------------------------------------------------------------------------
-# دسته چک
-# ---------------------------------------------------------------------------
-
-
-def list_checkbooks(db: Session) -> list[dict]:
-    """دسته‌چک‌ها با شمارِ برگِ خرج‌شده.
-
-    «چند برگ مانده» را از روی چک‌های وصل‌شده می‌شماریم نه از یک شمارنده‌ی جدا:
-    شمارنده با هر ابطال/حذفِ چک از واقعیت فاصله می‌گرفت.
-    """
-    used = dict(
-        db.query(Check.checkbook_id, func.count(Check.id))
-        .filter(Check.checkbook_id.isnot(None))
-        .group_by(Check.checkbook_id)
-        .all()
-    )
-    rows = (
-        db.query(Checkbook, BankAccount.name)
-        .outerjoin(BankAccount, BankAccount.id == Checkbook.bank_account_id)
-        .order_by(Checkbook.created_at.desc())
-        .all()
-    )
-    return [
-        {
-            "id": book.id,
-            "bank_account_id": book.bank_account_id,
-            "bank_account_name": bank_name or "",
-            "serial": book.serial,
-            "first_number": book.first_number,
-            "last_number": book.last_number,
-            "leaf_count": book.leaf_count,
-            "used_count": used.get(book.id, 0),
-            "remaining_count": max(book.leaf_count - used.get(book.id, 0), 0),
-            "issue_date": book.issue_date,
-            "description": book.description,
-            "is_active": book.is_active,
-        }
-        for book, bank_name in rows
-    ]
-
-
-def create_checkbook(db: Session, data: CheckbookIn, user: User) -> Checkbook:
-    bank = db.get(BankAccount, data.bank_account_id)
-    if bank is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب بانکی یافت نشد")
-
-    first = data.first_number.strip()
-    last = data.last_number.strip()
-    if not first or not last:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "شماره‌ی اولین و آخرین برگ لازم است")
-
-    # اگر هر دو عددی‌اند، شمارِ برگ را خودمان حساب می‌کنیم — کاربر نباید ریاضی کند.
-    leaf_count = data.leaf_count
-    if leaf_count <= 0 and first.isdigit() and last.isdigit():
-        leaf_count = int(last) - int(first) + 1
-    if leaf_count <= 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تعداد برگ باید مثبت باشد")
-
-    duplicate = (
-        db.query(Checkbook)
-        .filter(Checkbook.bank_account_id == bank.id, Checkbook.serial == data.serial.strip())
-        .first()
-    )
-    if data.serial.strip() and duplicate is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "دسته‌چکی با این سری برای همین حساب ثبت شده است")
-
-    book = Checkbook(
-        bank_account_id=bank.id,
-        serial=data.serial.strip(),
-        first_number=first,
-        last_number=last,
-        leaf_count=leaf_count,
-        issue_date=data.issue_date,
-        description=data.description.strip(),
-        is_active=True,
-        created_by_id=user.id,
-    )
-    db.add(book)
-    db.flush()
-    db.refresh(book)
-    return book
-
-
-def set_checkbook_active(db: Session, checkbook_id: UUID, is_active: bool) -> Checkbook:
-    book = db.get(Checkbook, checkbook_id)
-    if book is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
-    book.is_active = is_active
-    db.flush()
-    db.refresh(book)
-    return book
-
-
-def delete_checkbook(db: Session, checkbook_id: UUID) -> None:
-    """فقط دسته‌ی دست‌نخورده حذف می‌شود.
-
-    دسته‌ای که برگ خورده سابقه‌ی چک‌های صادرشده است؛ حذفش آن چک‌ها را بی‌ریشه
-    می‌کند. به‌جای حذف، «بستن» (is_active=false) کارِ درست است و پیام همین را می‌گوید.
-    """
-    book = db.get(Checkbook, checkbook_id)
-    if book is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
-    used = db.query(Check).filter(Check.checkbook_id == book.id).count()
-    if used:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"از این دسته {used} برگ صادر شده است؛ به‌جای حذف آن را ببندید.",
-        )
-    db.delete(book)
-    db.flush()
-
-
-def next_check_number(db: Session, checkbook_id: UUID) -> str:
-    """شماره‌ی برگِ بعدیِ این دسته — پیشنهاد، نه قفل.
-
-    از بزرگ‌ترین شماره‌ی مصرف‌شده جلو می‌رود، نه از شمارِ برگ‌ها: اگر کاربر برگی را
-    از وسط خرج کرده باشد، شمارش ساده شماره‌ی تکراری پیشنهاد می‌داد.
-    """
-    book = db.get(Checkbook, checkbook_id)
-    if book is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
-    numbers = [
-        c.number
-        for c in db.query(Check).filter(Check.checkbook_id == book.id).all()
-        if (c.number or "").isdigit()
-    ]
-    if not book.first_number.isdigit():
-        return ""
-    width = len(book.first_number)
-    nxt = (max(int(n) for n in numbers) + 1) if numbers else int(book.first_number)
-    if book.last_number.isdigit() and nxt > int(book.last_number):
-        return ""
-    return str(nxt).zfill(width)
 
 
 # ---------------------------------------------------------------------------
