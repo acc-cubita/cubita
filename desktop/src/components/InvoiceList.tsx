@@ -29,6 +29,7 @@ import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
+import { JournalEntryDrawer } from './JournalEntryDrawer'
 
 export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
 type NamedItem = { id: string; name: string }
@@ -65,6 +66,7 @@ export function InvoiceList({
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [journalEntryId, setJournalEntryId] = useState<string | null>(null)
 
   const canVoid = can(me, 'invoices', 'delete')
   const canVoidWarehouseReceipt = can(me, 'accounting', 'delete')
@@ -178,6 +180,7 @@ export function InvoiceList({
               const grand = net + Number(row.tax_amount) + rounding
               const profit = isSales ? net - Number((row as SalesInvoiceRecord).total_cost) : 0
               const margin = isSales && net > 0 ? (profit / net) * 100 : 0
+              const journalId = isSales ? null : (row as PurchaseInvoiceRecord).journal_entry_id
               return (
               <Fragment key={row.id}>
               <tr
@@ -222,6 +225,11 @@ export function InvoiceList({
                     <button type="button" onClick={() => void handlePdf(row)}>
                       <FileDown size={13} /> PDF
                     </button>
+                    {journalId && (
+                      <button type="button" onClick={() => setJournalEntryId(journalId)}>
+                        <FileText size={13} /> سند حسابداری
+                      </button>
+                    )}
                     {onDuplicate && !row.voided_at && (
                       <button type="button" onClick={() => onDuplicate(row)}>
                         <Copy size={13} /> رونوشت
@@ -259,6 +267,9 @@ export function InvoiceList({
           </table>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
+      )}
+      {journalEntryId && (
+        <JournalEntryDrawer token={token} entryId={journalEntryId} onClose={() => setJournalEntryId(null)} />
       )}
     </SectionCard>
   )
@@ -322,6 +333,11 @@ function InvoiceDetail({
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
       {!isSales && (row as PurchaseInvoiceRecord).supplier_invoice_number && (
         <div className="invoice-detail-desc">شماره فاکتور تأمین‌کننده: {(row as PurchaseInvoiceRecord).supplier_invoice_number}</div>
+      )}
+      {!isSales && (row as PurchaseInvoiceRecord).related_payment_count > 0 && (
+        <div className="invoice-detail-desc">
+          اعلامیه‌های پرداخت فعالِ مرتبط: {(row as PurchaseInvoiceRecord).related_payment_count.toLocaleString('fa-IR')}
+        </div>
       )}
       <div className="table-scroll">
         <table className="invoice-detail-table cards-on-mobile">

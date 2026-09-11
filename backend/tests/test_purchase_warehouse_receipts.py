@@ -158,3 +158,40 @@ def test_warehouse_receipt_retry_does_not_move_stock_twice(client, db, user):
     assert db.query(StockLedger).filter(
         StockLedger.source_type == "warehouse_receipt", StockLedger.source_id == first.json()["id"]
     ).count() == 1
+
+
+def test_purchase_print_uses_transaction_time_supplier_identity(client, db, user):
+    item = make_item(db, name="کالای چاپ تاریخی")
+    supplier = make_contact(db, type_="supplier", name="فروشنده تاریخی")
+    supplier.phone = "021-11111111"
+    supplier.address = "نشانی زمان ثبت"
+    supplier.national_id = "10101010101"
+    db.flush()
+
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(1), unit_cost=Decimal(5000))],
+        ),
+        user,
+    )
+    assert invoice.supplier_snapshot["name"] == "فروشنده تاریخی"
+
+    supplier.name = "نام تازه فروشنده"
+    supplier.phone = "021-99999999"
+    supplier.address = "نشانی تازه"
+    db.flush()
+
+    html = client.get(f"/api/purchase-invoices/{invoice.id}/print").text
+    assert "فروشنده تاریخی" in html
+    assert "نشانی زمان ثبت" in html
+    assert "10101010101" in html
+    assert "نام تازه فروشنده" not in html
+    assert "نشانی تازه" not in html
+
+    pdf = client.get(f"/api/purchase-invoices/{invoice.id}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF")

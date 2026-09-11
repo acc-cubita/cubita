@@ -90,6 +90,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Codex | مهاجرت `0114`، مسیر Purchase/print، UI فهرست خرید، مستندات و تست‌ها؛ آزادسازی `pytest` و probe | Snapshot تاریخی طرفین، Trace پرداخت/سند و گارد ابطال وابستگی | ۱۴۰۵/۰۶/۲۰ |
 | Codex | مسیر Payment/Purchase در بک‌اند، UI اعلامیه پرداخت، مستندات و تست‌ها؛ آزادسازی شماره `0114` و `pytest` | Reference بدون تخصیص زودهنگام، مجوز درست ابطال و ناوبری سند حسابداری | ۱۴۰۵/۰۶/۲۰ |
 | Codex | مسیر خرید/رسید انبار در بک‌اند و `desktop/src/`؛ مستندات و تست‌ها؛ آزادسازی شماره `0114` | ابطال رسید در UI، idempotency صدور، و همگامی مانده بچ با ابطال | ۱۴۰۵/۰۶/۲۰ |
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |

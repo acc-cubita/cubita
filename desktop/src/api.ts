@@ -6464,3 +6464,10 @@ export const createWarehouseReceiptIdempotent = (
   data,
   idempotencyKey,
 )
+
+// فیلدهای Trace افزوده‌شده به خروجی خرید؛ declaration merging اجازه می‌دهد
+// بلوک مشترک api.ts فقط در انتهای فایل رشد کند و محل‌های پرتصادم بالا دست‌نخورند.
+export interface PurchaseInvoiceRecord {
+  journal_entry_id: string | null
+  related_payment_count: number
+}

@@ -273,6 +273,7 @@ class PurchaseInvoiceOut(BaseModel):
     settled_amount: Decimal = Decimal(0)
     remaining_amount: Decimal = Decimal(0)
     financial_status: str = "unsettled"
+    related_payment_count: int = 0
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""

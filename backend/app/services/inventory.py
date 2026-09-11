@@ -17,6 +17,8 @@ from app.models.invoices import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from app.models.moadian import MoadianSettings
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
@@ -27,6 +29,7 @@ from app.services.common import number_lines
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.credit import assert_within_credit_limit
 from app.services.period_close import assert_period_open
+from app.tenant_context import require_session_tenant
 
 
 def vat_payable_account(db: Session):
@@ -438,10 +441,27 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
     if data.warehouse_id is None and data.contact_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انتخاب تأمین‌کننده برای فاکتور خرید الزامی است")
-    if data.warehouse_id is None and data.contact_id is not None:
-        supplier = db.get(Contact, data.contact_id)
-        if supplier is None or supplier.type not in ("supplier", "both"):
+    supplier = db.get(Contact, data.contact_id) if data.contact_id is not None else None
+    if data.contact_id is not None and supplier is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تأمین‌کننده انتخاب‌شده یافت نشد")
+    if data.warehouse_id is None and supplier is not None:
+        if supplier.type not in ("supplier", "both"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب انتخاب‌شده تأمین‌کننده نیست")
+
+    supplier_snapshot = {
+        key: (getattr(supplier, key, None) or "")
+        for key in (
+            "name", "entity_type", "national_id", "economic_code", "registration_no",
+            "tax_id", "postal_code", "phone", "address",
+        )
+    } if supplier is not None else {}
+    tenant = db.get(Tenant, require_session_tenant(db))
+    taxpayer = db.query(MoadianSettings).first()
+    buyer_snapshot = {
+        "name": tenant.name if tenant is not None else "",
+        "economic_code": (taxpayer.economic_code if taxpayer is not None else "") or "",
+        "national_id": (taxpayer.national_id if taxpayer is not None else "") or "",
+    }
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
     for line in data.lines:
@@ -601,6 +621,8 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
         supplier_invoice_number=data.supplier_invoice_number.strip(),
+        supplier_snapshot=supplier_snapshot,
+        buyer_snapshot=buyer_snapshot,
         cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,

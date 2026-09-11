@@ -167,6 +167,9 @@ def render_invoice_pdf(
     voided_at=None,
     void_reason: str = "",
     currency_line: str = "",
+    business_detail: str = "",
+    party_label: str = "طرف حساب",
+    business_party_label: str = "",
 ) -> bytes:
     pdf = _InvoicePDF()
     usable = _usable(pdf)
@@ -229,23 +232,30 @@ def render_invoice_pdf(
         pdf.cell(usable, 8, currency_line, border=1, align="R", fill=True)
         y += 12
 
-    # --- طرف حساب (کارتِ تمام‌عرض با پس‌زمینه‌ی ملایم و عنوانِ برند) ---
-    # «شرح» به بالای امضاها منتقل شده تا این‌جا فقط طرف حساب دیده شود.
+    # --- هویت طرفین؛ فاکتور خرید فروشنده و خریدار را جدا نشان می‌دهد. ---
     box_w = (usable - 6) / 2  # عرضِ ستونِ امضاها در پایین از همین‌جا می‌آید
     party_h = 16
     pdf.set_fill_color(*_ZEBRA)
     pdf.set_draw_color(*_LINE)
     pdf.set_line_width(0.2)
-    pdf.rect(pdf.l_margin, y, usable, party_h, "DF")
-    pdf.set_xy(pdf.l_margin + 3, y + 2)
-    pdf.set_font("Vazir", "B", 8.5)
-    pdf.set_text_color(*_ACCENT)
-    pdf.cell(usable - 6, 5, "طرف حساب", align="R")
-    pdf.set_xy(pdf.l_margin + 3, y + 7.2)
-    pdf.set_font("Vazir", "B", 11)
-    pdf.set_text_color(*_INK)
-    party_text = party_name + (f" — {party_detail}" if party_detail else "")
-    pdf.cell(usable - 6, 6, _truncate(party_text, 95), align="R")
+
+    def draw_party(x: float, width: float, label: str, name: str, detail: str) -> None:
+        pdf.rect(x, y, width, party_h, "DF")
+        pdf.set_xy(x + 3, y + 2)
+        pdf.set_font("Vazir", "B", 8.5)
+        pdf.set_text_color(*_ACCENT)
+        pdf.cell(width - 6, 5, label, align="R")
+        pdf.set_xy(x + 3, y + 7.2)
+        pdf.set_font("Vazir", "B", 10)
+        pdf.set_text_color(*_INK)
+        text = name + (f" — {detail}" if detail else "")
+        pdf.cell(width - 6, 6, _truncate(text, 48 if business_party_label else 95), align="R")
+
+    if business_party_label:
+        draw_party(pdf.l_margin, box_w, business_party_label, business_name, business_detail)
+        draw_party(right - box_w, box_w, party_label, party_name, party_detail)
+    else:
+        draw_party(pdf.l_margin, usable, party_label, party_name, party_detail)
     y += party_h + 6
 
     # --- جدول اقلام: سربرگِ برند با متنِ سفید، بدنه با راه‌راهِ ملایم ---

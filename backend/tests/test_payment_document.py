@@ -335,6 +335,19 @@ def test_related_purchase_is_traceability_not_a_settlement_allocation(db, user, 
     assert row["financial_status"] == "unsettled"
     assert Decimal(row["settled_amount"]) == 0
     assert Decimal(row["remaining_amount"]) == Decimal(row["final_amount"])
+    assert row["related_payment_count"] == 1
+
+    blocked = client.post(
+        f"/api/purchase-invoices/{invoice.id}/void", json={"reason": "اصلاح فاکتور مرجع"}
+    )
+    assert blocked.status_code == 409
+    assert "اعلامیه پرداخت" in blocked.json()["detail"]
+
+    payments.void_payment(db, payment.id, reason="ابطال پرداخت مرجع", user=user)
+    voided = client.post(
+        f"/api/purchase-invoices/{invoice.id}/void", json={"reason": "اصلاح فاکتور مرجع"}
+    )
+    assert voided.status_code == 200, voided.text
 
 
 def test_payment_chapter_cannot_smuggle_allocation_into_related_document():

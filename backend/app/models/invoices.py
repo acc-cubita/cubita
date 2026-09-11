@@ -12,7 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -182,6 +182,10 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
         UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True
     )
     supplier_invoice_number: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    #: هویت طرفین در لحظه‌ی ثبت. چاپ سند قطعی نباید با تغییر بعدی Contact یا
+    #: تنظیمات مؤدی بازنویسی شود؛ JSONB شکلِ داده را بدون ستون‌های همیشه‌خالی حفظ می‌کند.
+    supplier_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    buyer_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True

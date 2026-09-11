@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact, StockLedger
+from app.models.payment import Payment, PaymentRelatedDocument
 from app.models.sales_ops import SaleType
 from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseReceipt
 from app.models.tenant import Membership
@@ -46,6 +47,17 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
     if not invoices:
         return
     ids = [invoice.id for invoice in invoices]
+    related_payment_counts = dict(
+        db.query(PaymentRelatedDocument.document_id, func.count(func.distinct(Payment.id)))
+        .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
+        .filter(
+            PaymentRelatedDocument.document_type == "purchase_invoice",
+            PaymentRelatedDocument.document_id.in_(ids),
+            Payment.voided_at.is_(None),
+        )
+        .group_by(PaymentRelatedDocument.document_id)
+        .all()
+    )
     legacy_ids = {
         source_id
         for (source_id,) in db.query(StockLedger.source_id)
@@ -75,6 +87,8 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
         invoice.settled_amount = Decimal(0)
         invoice.remaining_amount = final
         invoice.financial_status = "unsettled"
+        # شمارش برای Trace است، نه مبنای تسویه؛ مبلغ همچنان فقط کارِ موتور Allocation است.
+        invoice.related_payment_count = related_payment_counts.get(invoice.id, 0)
         rate = Decimal(invoice.exchange_rate or 1)
         invoice.transaction_total_amount = (Decimal(invoice.total_amount) / rate).quantize(Decimal("0.01"))
         invoice.transaction_tax_amount = (Decimal(invoice.tax_amount) / rate).quantize(Decimal("0.01"))
@@ -370,6 +384,17 @@ def void_purchase(
             status.HTTP_409_CONFLICT,
             "این فاکتور رسید انبار فعال دارد؛ ابتدا رسیدهای وابسته را باطل کنید",
         )
+    if db.query(Payment.id).join(
+        PaymentRelatedDocument, PaymentRelatedDocument.payment_id == Payment.id
+    ).filter(
+        PaymentRelatedDocument.document_type == "purchase_invoice",
+        PaymentRelatedDocument.document_id == invoice_id,
+        Payment.voided_at.is_(None),
+    ).first():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این فاکتور اعلامیه پرداخت فعال دارد؛ ابتدا اعلامیه‌های مرتبط را باطل کنید",
+        )
     reversal = void_purchase_invoice(db, invoice_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
 
@@ -383,6 +408,23 @@ def _party(db: Session, contact_id, fallback: str) -> tuple[str, str]:
     if contact is None:
         return fallback, ""
     return contact.name, " — ".join(filter(None, [contact.phone, contact.address]))
+
+
+def _snapshot_party(snapshot: dict, fallback: tuple[str, str]) -> tuple[str, str]:
+    """Snapshot خالی یعنی سند قدیمی؛ فقط در آن حالت Master فعلی fallback است."""
+    if not snapshot:
+        return fallback
+    labels = (
+        ("شماره ثبت", "registration_no"),
+        ("شناسه ملی", "national_id"),
+        ("کد اقتصادی", "economic_code"),
+        ("شناسه مالیاتی", "tax_id"),
+        ("کد پستی", "postal_code"),
+        ("تلفن", "phone"),
+        ("نشانی", "address"),
+    )
+    detail = " — ".join(f"{label}: {snapshot[key]}" for label, key in labels if snapshot.get(key))
+    return snapshot.get("name") or fallback[0], detail
 
 
 def _currency_line(invoice) -> str:
@@ -433,14 +475,24 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
 
 
 def _purchase_render_kwargs(db: Session, principal: Principal, invoice: PurchaseInvoice) -> dict:
-    name, detail = _party(db, invoice.contact_id, "تأمین‌کننده نقدی")
+    name, detail = _snapshot_party(
+        invoice.supplier_snapshot or {},
+        _party(db, invoice.contact_id, "تأمین‌کننده نقدی"),
+    )
+    buyer_name, buyer_detail = _snapshot_party(
+        invoice.buyer_snapshot or {},
+        (principal.membership.tenant.name, ""),
+    )
     return dict(
         kind="فاکتور خرید",
-        business_name=principal.membership.tenant.name,
+        business_name=buyer_name,
+        business_detail=buyer_detail,
+        business_party_label="خریدار",
         number=invoice.number,
         invoice_date=invoice.invoice_date,
         party_name=name,
         party_detail=detail,
+        party_label="فروشنده",
         description=" — ".join(filter(None, [
             f"شماره فاکتور تأمین‌کننده: {invoice.supplier_invoice_number}" if invoice.supplier_invoice_number else "",
             invoice.description,
