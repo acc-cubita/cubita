@@ -6,15 +6,19 @@
 `host`، `port`، `psp`، و حسابِ بانکیِ تسویه. رابطه‌شان یک‌طرفه است: صفحه‌ی فروش
 دستگاه را صدا می‌زند.
 
-**موجودیِ دستگاه مانده‌ی حسابداری نیست.** این نکته‌ی مرکزیِ این فایل است. مانده‌ی
-صندوق و حسابِ بانکی از دفتر می‌آید، ولی موجودیِ کارت‌خوان یعنی «چقدر کشیده شده و
-هنوز PSP واریزش نکرده» — یک عددِ عملیاتی. رسیدِ کارتی از همان لحظه معینِ بانک را
-بدهکار می‌کند، پس آن پول در دفتر *از قبل* روی بانک است؛ اگر موجودیِ دستگاه را هم
-از دفتر می‌خواندیم، همان پول دو بار شمرده می‌شد.
-
-پس فرمول از خودِ خزانه می‌آید و مشتق می‌ماند — هیچ ستونِ `balance`ای وجود ندارد:
+**موجودیِ دستگاه هیچ ستونی ندارد و مشتق می‌ماند:**
 
     موجودیِ دستگاه = جمعِ رسیدهای کارتیِ تسویه‌نشده‌ی همین دستگاه
+
+**و از مهاجرتِ ۰۱۰۹ همین عدد در دفتر هم هست.** تا پیش از آن نبود: رسیدِ کارتی از
+همان لحظه معینِ *بانک* را بدهکار می‌کرد، پس پولِ نرسیده در دفتر روی بانک نشسته
+بود و این عدد فقط یک شمارشِ عملیاتیِ کنارِ دفتر می‌ماند. حالا رسیدِ کارتی روی
+«وجوهِ در راهِ کارت‌خوان» با تفصیلیِ همین دستگاه می‌نشیند و تسویه آن را به بانک
+می‌برد — یعنی این تابع و مانده‌ی آن جفتِ `(معین، تفصیلی)` **باید یک عدد بدهند**.
+دوبار شمردن در کار نیست، چون دو مرحله دو حسابِ متفاوت‌اند.
+
+نگه‌داشتنِ این تابع روی خودِ خزانه عمدی است: پاسخ به «کدام رسیدها؟» را هم می‌دهد،
+که مانده‌ی دفتری نمی‌دهد.
 """
 from __future__ import annotations
 
@@ -159,6 +163,45 @@ def _assert_terminal_no_free(db: Session, terminal_no: str, exclude_id: UUID | N
         )
 
 
+def _assert_analytic_free(db: Session, analytic_id: UUID | None, exclude_id: UUID | None = None) -> None:
+    """یک تفصیلی نمی‌تواند مالِ دو دستگاه باشد — وگرنه وجوهِ در راهشان یکی می‌شود.
+
+    `NULL` استثناست: چند دستگاه می‌توانند بی‌تفصیلی بمانند، ولی آن‌وقت همه‌شان یک
+    مانده‌ی دفتری می‌خوانند. همان قاعده‌ای که صندوق و حسابِ بانکی دارند.
+    """
+    if analytic_id is None:
+        return
+    query = db.query(PosTerminal).filter(PosTerminal.analytic_id == analytic_id)
+    if exclude_id is not None:
+        query = query.filter(PosTerminal.id != exclude_id)
+    other = query.first()
+    if other is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"این تفصیلی از قبل به دستگاه «{other.label or other.terminal_no or 'بی‌نام'}» تعلق دارد",
+        )
+
+
+def _assert_analytic_change_allowed(db: Session, term: PosTerminal, new_analytic_id) -> None:
+    """تفصیلیِ دستگاهی که سابقه دارد عوض نمی‌شود.
+
+    عوض‌کردنش هیچ سندی را بازنویسی نمی‌کند — ولی مانده‌ی وجوهِ در راه را **بی‌صدا**
+    به مجموعه‌ی دیگری از ردیف‌ها می‌برد: پولِ قبلی از فهرست ناپدید می‌شود و صفر
+    جایش می‌نشیند. راهِ درست «اصلاح طبقه‌بندی مانده» است.
+    """
+    if new_analytic_id == term.analytic_id or not _in_use(db, term):
+        return
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"دستگاه «{_label(term)}» سابقه دارد و تفصیلی‌اش عوض نمی‌شود؛ مانده‌اش با "
+        "«اصلاح طبقه‌بندی مانده» منتقل می‌شود تا اسنادِ گذشته دست‌نخورده بمانند",
+    )
+
+
+def _label(term: PosTerminal) -> str:
+    return term.label or term.terminal_no or "کارتخوان"
+
+
 def row(db: Session, term: PosTerminal) -> dict:
     """یک دستگاه به شکلِ خروجی — تنها جایی که این شکل ساخته می‌شود."""
     bank = db.get(BankAccount, term.bank_account_id) if term.bank_account_id else None
@@ -175,6 +218,9 @@ def row(db: Session, term: PosTerminal) -> dict:
         "bank_account_id": term.bank_account_id,
         "bank_account_name": bank.name if bank else None,
         "bank_account_name2": bank.name2 if bank else None,
+        "analytic_id": term.analytic_id,
+        "analytic_code": term.analytic.code if term.analytic else None,
+        "analytic_name": term.analytic.name if term.analytic else None,
         "currency_code": term.currency_code,
         "is_active": term.is_active,
         "is_default": term.is_default,
@@ -217,6 +263,7 @@ def clear_default(db: Session, exclude_id: UUID | None = None) -> None:
 
 def create_terminal(db: Session, data: dict) -> PosTerminal:
     _assert_terminal_no_free(db, data.get("terminal_no") or "")
+    _assert_analytic_free(db, data.get("analytic_id"))
     assert_currency_match(db, data.get("currency_code") or "IRR", data.get("bank_account_id"))
     term = PosTerminal(**data)
     db.add(term)
@@ -232,6 +279,9 @@ def update_terminal(db: Session, terminal_id: UUID, data: dict) -> PosTerminal:
     term = resolve(db, terminal_id)
     if "terminal_no" in data:
         _assert_terminal_no_free(db, data["terminal_no"] or "", exclude_id=term.id)
+    if "analytic_id" in data:
+        _assert_analytic_free(db, data["analytic_id"], exclude_id=term.id)
+        _assert_analytic_change_allowed(db, term, data["analytic_id"])
     #: ارز و حساب هرکدام ممکن است تنها عوض شوند، پس قید روی *نتیجه* سنجیده
     #: می‌شود نه روی چیزی که فرستاده شده.
     assert_currency_match(

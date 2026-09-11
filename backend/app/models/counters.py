@@ -40,6 +40,9 @@ DOC_PRODUCTION_ORDER = "production_order"
 DOC_INSTALLMENT_PLAN = "installment_plan"
 #: اعلامیه‌ی بدهکار/بستانکار — شماره‌ی رسمی می‌گیرد چون سند حسابداری می‌زند.
 DOC_CREDIT_DEBIT_NOTE = "credit_debit_note"
+#: تسویه‌ی کارت‌خوان — شماره‌ی رسمی می‌گیرد چون سندِ حسابداری می‌زند و در فهرست
+#: و مغایرت‌گیریِ بانکی به آن ارجاع داده می‌شود (§۵).
+DOC_POS_SETTLEMENT = "pos_settlement"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -54,6 +57,7 @@ DOC_TYPES = (
     DOC_PRODUCTION_ORDER,
     DOC_INSTALLMENT_PLAN,
     DOC_CREDIT_DEBIT_NOTE,
+    DOC_POS_SETTLEMENT,
 )
 
 

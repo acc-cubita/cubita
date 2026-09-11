@@ -45,6 +45,7 @@ from app.routers import (
     numbering,
     period_close,
     cashbox,
+    pos_settlements,
     pos_terminals,
     quotations,
     recurring,
@@ -129,6 +130,7 @@ app.include_router(period_close.router)
 app.include_router(integration.router)
 app.include_router(billing.router)
 app.include_router(treasury.router)
+app.include_router(pos_settlements.router)
 app.include_router(pos_terminals.router)
 app.include_router(audit.router)
 app.include_router(backup.router)

@@ -28,9 +28,6 @@ from app.schemas.banking import (
     PettyCashChargeIn,
     PettyCashExpenseIn,
     PettyCashTransactionOut,
-    PosPendingGroupOut,
-    PosSettlementIn,
-    PosSettlementOut,
     ReconciliationSummaryOut,
 )
 from app.services import bank_accounts as bank_accounts_service
@@ -312,38 +309,6 @@ def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
         if row["id"] == checkbook_id:
             return row
     raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
-
-
-# ── تسویه‌ی کارتخوان ─────────────────────────────────────────────────────────
-
-
-@router.get("/api/pos-settlements/pending", response_model=list[PosPendingGroupOut])
-def pos_pending(
-    terminal_no: str | None = None,
-    pos_terminal_id: UUID | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    _=Depends(require_permission("checks_bank", "view")),
-):
-    return banking_service.pos_pending_settlements(
-        db,
-        terminal_no=terminal_no,
-        date_from=date_from,
-        date_to=date_to,
-        pos_terminal_id=pos_terminal_id,
-    )
-
-
-@router.post("/api/pos-settlements", response_model=PosSettlementOut)
-def settle_pos(
-    data: PosSettlementIn,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_permission("checks_bank", "create")),
-):
-    result = banking_service.settle_pos(db, data, user)
-    db.commit()
-    return result
 
 
 # ── سیاستِ کنترلِ شماره‌ی چک ───────────────────────────────────────────────────

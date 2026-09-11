@@ -15,8 +15,6 @@ from app.models.banking import (
     Checkbook,
     PettyCashTransaction,
 )
-from app.models.pos_terminal import PosTerminal
-from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import (
     BankDepositWithdrawIn,
@@ -24,7 +22,6 @@ from app.schemas.banking import (
     CheckIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
-    PosSettlementIn,
 )
 from app.services import chart_codes as cc
 from app.services import checkbooks
@@ -489,159 +486,3 @@ def get_petty_cash_balance(db: Session) -> Decimal:
     total_charge = sum((Decimal(t.amount) for t in charges), Decimal(0))
     total_expense = sum((Decimal(t.amount) for t in expenses), Decimal(0))
     return total_charge - total_expense
-
-
-# ---------------------------------------------------------------------------
-# تسویه‌ی کارتخوان
-# ---------------------------------------------------------------------------
-#
-# فروشِ کارتی در لحظه‌ی رسید به حسابِ بانک بدهکار می‌شود، ولی پول همان لحظه نمی‌نشیند:
-# شرکتِ پرداخت چند روز بعد جمعِ چند تراکنش را **منهای کارمزد** واریز می‌کند. پس تسویه
-# اینجا یعنی «این تراکنش‌های کارتی در آن واریز آمدند» + ثبتِ کارمزد به‌عنوانِ هزینه.
-# خودِ مبلغِ ناخالص دوباره ثبت نمی‌شود؛ وگرنه درآمد دوبار می‌آمد.
-
-
-def pos_pending_settlements(
-    db: Session,
-    *,
-    terminal_no: str | None,
-    date_from: date_ | None,
-    date_to: date_ | None,
-    pos_terminal_id: UUID | None = None,
-) -> list[dict]:
-    """رسیدهای کارتیِ تسویه‌نشده، گروه‌بندی‌شده بر اساسِ پایانه و روز.
-
-    `pos_terminal_id` راهِ درست است: دامنه از خودِ دستگاه می‌آید و شاملِ رسیدهای
-    قدیمیِ همان شماره هم می‌شود. `terminal_no` برای سازگاری می‌ماند.
-    """
-    from app.services import card_terminals
-
-    query = db.query(TreasuryTransaction).filter(
-        TreasuryTransaction.paid_via == "pos_terminal",
-        TreasuryTransaction.settled_at.is_(None),
-    )
-    if pos_terminal_id is not None:
-        query = query.filter(card_terminals._owned_transactions(card_terminals.resolve(db, pos_terminal_id)))
-    elif terminal_no:
-        query = query.filter(TreasuryTransaction.terminal_no == terminal_no)
-    if date_from is not None:
-        query = query.filter(TreasuryTransaction.transaction_date >= date_from)
-    if date_to is not None:
-        query = query.filter(TreasuryTransaction.transaction_date <= date_to)
-
-    #: برچسبِ دستگاه یک‌بار خوانده می‌شود، نه به‌ازای هر ردیف.
-    labels = {t.id: t.label for t in db.query(PosTerminal).all()}
-
-    groups: dict[tuple[str, date_], dict] = {}
-    for txn in query.order_by(TreasuryTransaction.transaction_date).all():
-        key = (txn.terminal_no or "", txn.transaction_date)
-        row = groups.setdefault(
-            key,
-            {
-                "terminal_no": txn.terminal_no or "",
-                "pos_terminal_id": txn.pos_terminal_id,
-                "terminal_label": labels.get(txn.pos_terminal_id),
-                "transaction_date": txn.transaction_date,
-                "count": 0,
-                "gross_amount": Decimal(0),
-            },
-        )
-        row["count"] += 1
-        row["gross_amount"] += Decimal(txn.amount)
-    return sorted(groups.values(), key=lambda r: (r["transaction_date"], r["terminal_no"]))
-
-
-def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
-    """تسویه‌ی یک واریزِ کارتخوان: علامت‌زدنِ رسیدها + ثبتِ کارمزد.
-
-    کارمزد اختیاری است؛ اگر صفر باشد فقط علامت می‌خورد و هیچ سندی صادر نمی‌شود —
-    سندِ صفرْ دفتر را شلوغ می‌کند بی‌آنکه چیزی بگوید.
-    """
-    assert_period_open(db, data.settlement_date)
-
-    from app.services import card_terminals
-
-    #: دستگاه، اگر داده شده، هم دامنه‌ی تسویه را تعیین می‌کند هم حسابِ کارمزد را —
-    #: به‌جای تطبیقِ رشته‌ایِ شماره‌ای که کاربر تایپ کرده و یک فاصله‌ی اضافی‌اش
-    #: بی‌صدا صفر نتیجه می‌داد.
-    terminal = card_terminals.resolve(db, data.pos_terminal_id) if data.pos_terminal_id else None
-
-    query = db.query(TreasuryTransaction).filter(
-        TreasuryTransaction.paid_via == "pos_terminal",
-        TreasuryTransaction.settled_at.is_(None),
-        TreasuryTransaction.transaction_date >= data.date_from,
-        TreasuryTransaction.transaction_date <= data.date_to,
-    )
-    if terminal is not None:
-        query = query.filter(card_terminals._owned_transactions(terminal))
-    elif data.terminal_no:
-        query = query.filter(TreasuryTransaction.terminal_no == data.terminal_no)
-    rows = query.all()
-    if not rows:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "رسیدِ کارتیِ تسویه‌نشده‌ای در این بازه نیست")
-
-    gross = sum(Decimal(r.amount) for r in rows)
-    fee = Decimal(data.fee_amount or 0)
-    if fee < 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمزد نمی‌تواند منفی باشد")
-    if fee > gross:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمزد از جمعِ تراکنش‌ها بیشتر است")
-
-    settlement_txn = None
-    if fee > 0:
-        #: حسابِ کارمزد از خودِ دستگاه می‌آید تا با حسابی که ناخالص آنجا نشسته یکی
-        #: بماند؛ فقط مسیرِ قدیمی (بدونِ دستگاه) هنوز حساب را از ورودی می‌گیرد.
-        if terminal is not None:
-            bank = card_terminals.settlement_account(db, terminal)
-        else:
-            bank = db.get(BankAccount, data.bank_account_id) if data.bank_account_id else None
-        if bank is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای ثبتِ کارمزد، حساب بانکی لازم است")
-        fee_account = get_or_create_account(
-            db,
-            cc.BANK_FEE,
-            code=cc.DEFAULT_CODE_BY_ROLE[cc.BANK_FEE],
-            name="کارمزد و هزینه‌های بانکی",
-            acc_type="expense",
-            parent_code="5",
-        )
-        entry = _make_journal_entry(
-            db,
-            data.settlement_date,
-            f"کارمزدِ تسویه‌ی کارتخوان{f' {data.terminal_no}' if data.terminal_no else ''}",
-            "bank",
-            user,
-            [
-                JournalLine(account_id=fee_account.id, debit=fee, credit=0),
-                JournalLine(
-                    account_id=bank.gl_account_id,
-                    analytic_id=bank.analytic_id,
-                    debit=0,
-                    credit=fee,
-                ),
-            ],
-        )
-        settlement_txn = BankTransaction(
-            bank_account_id=bank.id,
-            transaction_date=data.settlement_date,
-            amount=-fee,
-            description="کارمزدِ تسویه‌ی کارتخوان",
-            source_type="pos_settlement",
-            journal_entry_id=entry.id,
-            created_by_id=user.id,
-        )
-        db.add(settlement_txn)
-        db.flush()
-
-    now = datetime.now(timezone.utc)
-    for row in rows:
-        row.settled_at = now
-        row.settlement_txn_id = settlement_txn.id if settlement_txn is not None else None
-    db.flush()
-
-    return {
-        "settled_count": len(rows),
-        "gross_amount": gross,
-        "fee_amount": fee,
-        "net_amount": gross - fee,
-    }

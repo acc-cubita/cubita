@@ -2567,6 +2567,10 @@ export interface PosTerminalRecord {
   bank_account_id: string | null
   bank_account_name: string | null
   bank_account_name2: string | null
+  /** تفصیلیِ دستگاه روی «وجوهِ در راهِ کارت‌خوان» — بدونش مانده‌ی دفتریِ دستگاه‌ها یکی می‌شود. */
+  analytic_id: string | null
+  analytic_code: string | null
+  analytic_name: string | null
   is_active: boolean
   is_default: boolean
   /** **مشتق** — جمعِ رسیدهای کارتیِ تسویه‌نشده. مانده‌ی بانک نیست. */
@@ -2584,6 +2588,7 @@ export interface PosTerminalIn {
   port?: number
   com_port?: string
   bank_account_id?: string | null
+  analytic_id?: string | null
   is_active?: boolean
   is_default?: boolean
 }
@@ -5273,26 +5278,104 @@ export const fetchPosPending = (
   return authedGet<PosPendingGroup[]>(token, `/api/pos-settlements/pending?${qs}`)
 }
 
-export interface PosSettlementResult {
-  settled_count: number
+/** یک رسیدِ منبع — چیزی که مبلغِ تسویه از آن ساخته شده. */
+export interface PosSettlementReceipt {
+  id: string
+  transaction_date: string
+  contact_id: string
+  contact_name: string
+  contact_name2: string
+  amount: string
+  reference_no: string | null
+  trace_no: string | null
+  card_mask: string | null
+  description: string
+}
+
+export interface PosSettlement {
+  id: string
+  /** شماره‌ی عملیاتیِ خودِ تسویه — با شماره‌ی سند و شماره‌ی پایانه یکی نیست. */
+  number: number
+  settlement_date: string
+  /** برشِ انتخابِ رسیدها. با `settlement_date` یکی نیست و نباید بشود. */
+  settle_through: string
+  date_from: string | null
+  pos_terminal_id: string
+  terminal_no: string
+  terminal_label: string
+  bank_account_id: string
+  bank_account_name: string
+  bank_account_name2: string
   gross_amount: string
   fee_amount: string
   net_amount: string
+  receipt_count: number
+  journal_entry_id: string
+  bank_transaction_id: string | null
+  voided_at: string | null
+  void_reason: string
+  note: string
+}
+
+export interface PosSettlementDetail extends PosSettlement {
+  receipts: PosSettlementReceipt[]
+}
+
+/** پیش از ثبت: مبلغ از کدام رسیدها ساخته می‌شود. */
+export interface PosSettlementPreview {
+  pos_terminal_id: string
+  terminal_no: string
+  terminal_label: string
+  bank_account_id: string | null
+  bank_account_name: string
+  bank_account_name2: string
+  gross_amount: string
+  receipt_count: number
+  receipts: PosSettlementReceipt[]
+}
+
+export const fetchPosSettlements = (
+  token: string,
+  query: { posTerminalId?: string; dateFrom?: string; dateTo?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  if (query.posTerminalId) qs.set('pos_terminal_id', query.posTerminalId)
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  if (query.dateTo) qs.set('date_to', query.dateTo)
+  return authedGet<PosSettlement[]>(token, `/api/pos-settlements?${qs}`)
+}
+
+export const fetchPosSettlement = (token: string, id: string) =>
+  authedGet<PosSettlementDetail>(token, `/api/pos-settlements/${id}`)
+
+export const fetchPosSettlementPreview = (
+  token: string,
+  query: { posTerminalId: string; settleThrough: string; dateFrom?: string },
+) => {
+  const qs = new URLSearchParams({
+    pos_terminal_id: query.posTerminalId,
+    settle_through: query.settleThrough,
+  })
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  return authedGet<PosSettlementPreview>(token, `/api/pos-settlements/preview?${qs}`)
 }
 
 export const settlePosTerminal = (
   token: string,
   data: {
+    /** الزامی — حسابِ مقصد و تفصیلیِ وجوهِ در راه هر دو از خودِ دستگاه می‌آیند. */
+    pos_terminal_id: string
     settlement_date: string
-    date_from: string
-    date_to: string
-    /** راهِ درست — دامنه و حسابِ کارمزد از خودِ دستگاه می‌آید. */
-    pos_terminal_id?: string | null
-    terminal_no?: string | null
-    bank_account_id?: string | null
+    settle_through: string
+    date_from?: string | null
     fee_amount: number
+    note?: string
   },
-) => authedSend<PosSettlementResult>(token, 'POST', '/api/pos-settlements', data)
+) => authedSend<PosSettlement>(token, 'POST', '/api/pos-settlements', data)
+
+/** ابطال با سندِ معکوس — رسیدها دوباره تسویه‌نشده می‌شوند. */
+export const voidPosSettlement = (token: string, id: string, reason: string) =>
+  authedSend<PosSettlement>(token, 'POST', `/api/pos-settlements/${id}/void`, { reason })
 
 // ═══════════════════════ عملیاتِ ماژولِ فروش ═══════════════════════
 //
