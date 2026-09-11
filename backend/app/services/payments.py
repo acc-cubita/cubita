@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -116,6 +116,10 @@ def _eligible_endorsed_check(db: Session, check_id: UUID) -> Check:
 
 def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
     """همه‌ی اجزا را اتمیک می‌سازد؛ retry بیرونی با Idempotency-Key مهار می‌شود."""
+    #: شناسه پیش از ساختِ ردیف تولید می‌شود چون **ردیف‌های چک زودتر از خودِ
+    #: اعلامیه ساخته می‌شوند** و رویدادِ صدورشان باید همین‌جا به اعلامیه اشاره کند.
+    #: `check_events` فقط‌افزودنی است، پس «بعداً پُرش می‌کنیم» ممکن نیست (§۱۶).
+    payment_id = uuid4()
     assert_period_open(db, data.payment_date)
     contact = db.get(Contact, data.contact_id)
     if contact is None:
@@ -192,6 +196,9 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
                 sayad_id=row.sayad_id, back_number=row.back_number,
             ),
             user,
+            #: §۱۴ — از رویدادِ «صدور» بتوان همین اعلامیه را باز کرد.
+            source_type="payment",
+            source_id=payment_id,
         )
         if check.bank_account_id and selected_bank and check.bank_account_id != selected_bank.id:
             raise HTTPException(
@@ -290,6 +297,7 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
 
     entry = make_journal_entry(db, data.payment_date, description, "payment", user, [*debit_lines, *credit_lines])
     payment = Payment(
+        id=payment_id,
         number=next_document_number(db, DOC_PAYMENT), payment_type=data.payment_type,
         contact_id=contact.id, payment_date=data.payment_date,
         counterparty_account_id=counterparty.id,
@@ -346,6 +354,8 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
                 db, check.id, "endorsed", None, user,
                 contact_id=data.contact_id, event_date=data.payment_date,
                 external_journal_entry_id=entry.id,
+                #: §۱۶ — «خرج شد» بدونِ «در کدام اعلامیه» نیمی از جواب است.
+                source_type="payment", source_id=payment.id,
                 note=f"خرج شده با اعلامیه‌ی پرداخت شماره {int(payment.number)}",
             )
 

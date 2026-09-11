@@ -120,6 +120,22 @@ class CheckEvent(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True
     )
 
+    #: **سندی که این گذر در آن ثبت شد (§۱۴ §۱۶).** `journal_entry_id` بالا سندِ
+    #: *حسابداری* است؛ این سندِ *عملیاتی* است — رسیدِ دریافت، اعلامیه‌ی پرداخت،
+    #: یا خودِ عملیاتِ چک.
+    #:
+    #: بدونِ این، تایم‌لاین می‌گفت «چه شد» ولی نه «کجا ثبت شد»، و سؤالِ «این چک
+    #: با کدام رسید آمد؟» هیچ جوابی نداشت. `operation_no` شماره‌ی خودِ عملیاتِ
+    #: چک را دارد، ولی رسید و اعلامیه عملیاتِ چک نیستند — سندِ دیگری‌اند با
+    #: شماره‌ی دیگر.
+    #:
+    #: `NULL` یعنی منبعی بیرون از خودِ چک نداشته: چکی که مستقیم ثبت شده، یا
+    #: رویدادی که پیش از مهاجرتِ ۰۱۱۵ نوشته شده و منبعش بازیابی‌شدنی نبود.
+    #: کلیدِ خارجی نیست چون منبع‌ها در جدول‌های مختلفی زندگی می‌کنند — همان
+    #: الگویی که `journal_entries.source_type` دارد.
+    source_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     note: Mapped[str] = mapped_column(Text, default="", server_default="")
     #: کاربر ممکن است بعداً حذف شود؛ رویداد باید بماند.
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(

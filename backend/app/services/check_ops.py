@@ -161,6 +161,8 @@ def record_event(
     journal_entry_id: UUID | None = None,
     operation_no: int | None = None,
     batch_id: UUID | None = None,
+    source_type: str | None = None,
+    source_id: UUID | None = None,
     note: str = "",
 ) -> CheckEvent:
     """یک گذر را در تاریخچه می‌نویسد.
@@ -180,6 +182,8 @@ def record_event(
         journal_entry_id=journal_entry_id,
         operation_no=operation_no,
         batch_id=batch_id,
+        source_type=source_type,
+        source_id=source_id,
         note=note or "",
         created_by_id=user.id if user else None,
     )
@@ -222,7 +226,41 @@ def _event_row(db: Session, event: CheckEvent) -> dict:
         "contact_id": event.contact_id,
         "contact_name": contact.name if contact else None,
         "journal_entry_id": event.journal_entry_id,
+        **_source_ref(db, event),
         "note": event.note,
+    }
+
+
+#: نوعِ منبعِ رویداد → برچسبِ فارسی و مدلی که شماره‌اش را دارد. درون‌تابعی import
+#: می‌شود تا حلقه‌ی import با `receipts`/`payments` ساخته نشود.
+SOURCE_LABELS = {"receipt": "رسید دریافت", "payment": "اعلامیه پرداخت"}
+
+
+def _source_ref(db: Session, event: CheckEvent) -> dict:
+    """سندِ عملیاتیِ رویداد، با شماره‌اش (§۱۴ §۱۶).
+
+    شماره **هر بار از خودِ سند خوانده می‌شود**، نه از کپی روی رویداد: سندِ منبع
+    ممکن است بعداً باطل شود یا شماره‌اش عوض شود، و تایم‌لاین باید همان چیزی را
+    بگوید که الان در آن سند نوشته است.
+
+    وقتی منبع خالی است، خودِ عملیاتِ چک منبع است و `operation_no` شناسه‌اش —
+    که از قبل در همین ردیف هست.
+    """
+    if not event.source_type or not event.source_id:
+        return {"source_type": None, "source_id": None, "source_label": None, "source_number": None}
+
+    from app.models.payment import Payment
+    from app.models.receipt import Receipt
+
+    model = {"receipt": Receipt, "payment": Payment}.get(event.source_type)
+    row = db.get(model, event.source_id) if model is not None else None
+    return {
+        "source_type": event.source_type,
+        "source_id": event.source_id,
+        "source_label": SOURCE_LABELS.get(event.source_type, event.source_type),
+        #: `None` یعنی سند دیگر نیست (حذف‌شده) — و همین را باید نشان داد، نه یک
+        #: شماره‌ی کهنه که کاربر دنبالش بگردد و پیدا نکند.
+        "source_number": int(row.number) if row is not None and row.number is not None else None,
     }
 
 
@@ -293,7 +331,15 @@ def create_check(db: Session, data: CheckIn, user: User) -> Check:
         due_date=data.due_date,
         status=initial_status,
         description=data.description,
+        description2=data.description2,
         contact_id=data.contact_id,
+        #: هویتِ برگ — همان چیزهایی که `new_check_row` می‌نشاند. نبودنشان این‌جا
+        #: یعنی چکِ ثبت‌شده‌ی مستقیم صاحب و شعبه‌اش را بی‌صدا گم می‌کرد، و
+        #: جستجوی «صاحبِ چک» هیچ‌وقت پیدایش نمی‌کرد.
+        branch_name=data.branch_name,
+        branch_code=data.branch_code,
+        account_number=data.account_number,
+        owner_name=data.owner_name,
         checkbook_id=book.id if book else None,
         #: حسابِ بانکی از خودِ دسته می‌آید. تا امروز چکِ پرداختنی تا لحظه‌ی وصول
         #: هیچ حسابی نداشت و آن‌وقت **دوباره** از کاربر پرسیده می‌شد — با آنکه
@@ -427,6 +473,8 @@ def update_check_status(
     operation_no: int | None = None,
     batch_id: UUID | None = None,
     external_journal_entry_id: UUID | None = None,
+    source_type: str | None = None,
+    source_id: UUID | None = None,
 ) -> Check:
     """تنها جایی که `checks.status` نوشته می‌شود — و همیشه با یک رویداد.
 
@@ -439,6 +487,13 @@ def update_check_status(
     check = db.get(Check, check_id)
     if check is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "چک یافت نشد")
+
+    #: **هر رویداد یک هویت دارد (§۱۶):** یا سندِ منبعی که در آن ثبت شده (رسید،
+    #: اعلامیه)، یا شماره‌ی عملیاتِ خودش. گذرِ تکیِ بدونِ هیچ‌کدام، رویدادی
+    #: می‌ساخت که «در کدام عملیات؟» جوابی نداشت — و درست همان رویدادی است که
+    #: حسابرسی دنبالش می‌گردد. عملیاتِ گروهی شماره‌اش را خودش می‌دهد.
+    if operation_no is None and source_type is None:
+        operation_no = next_document_number(db, DOC_CHECK_OPERATION)
 
     assert_can_transition(check, new_status)
     assert_not_pledged_to_payment(db, check, new_status)
@@ -629,6 +684,10 @@ def update_check_status(
         journal_entry_id=journal_entry.id if journal_entry else external_journal_entry_id,
         operation_no=operation_no,
         batch_id=batch_id,
+        #: §۱۶ — سندی که این گذر در آن ثبت شد. وقتی فراخواننده نگوید، منبع خودِ
+        #: عملیاتِ چک است و `operation_no` شناسه‌اش؛ رسید و اعلامیه صریح می‌گویند.
+        source_type=source_type,
+        source_id=source_id,
         note=note,
     )
     db.refresh(check)
@@ -823,6 +882,8 @@ def new_check_row(
     receipt_id: UUID | None = None,
     payment_id: UUID | None = None,
     journal_entry_id: UUID | None = None,
+    source_type: str | None = None,
+    source_id: UUID | None = None,
 ) -> Check:
     """ردیفِ چک — **بدونِ سندِ حسابداریِ خودش**.
 
@@ -874,5 +935,8 @@ def new_check_row(
         contact_id=data.contact_id,
         bank_account_id=check.bank_account_id,
         journal_entry_id=journal_entry_id,
+        #: §۱۴ — «این چک از کجا آمد؟» باید از همان رویدادِ اول جواب داشته باشد.
+        source_type=source_type,
+        source_id=source_id,
     )
     return check

@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Opus 5 | `models/check_event.py`, `services/check_ops.py`, `routers/check_ops.py`, `schemas/banking.py`, `schemas/check_ops.py`, `services/receipts.py`+`payments.py` (فقط فراخوانِ `new_check_row`/`update_check_status`)، `0115_cheque_traceability.py`, `CheckOpsPages.tsx`, `desktop/src/api.ts` | جستجو و ردیابی چک؛ **شماره‌ی مهاجرتِ ۰۱۱۵ برداشته شد** | ۱۴۰۵/۰۶/۲۰ |
+| _(خالی)_ | | | |
 
 ---
 
@@ -93,3 +93,4 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 |---|---|---|---|
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/open_items.py`, `services/settlements.py`, `models/settlement.py`, `0114_counterparty_settlement.py`, `TreasuryOpsPages.tsx` + merge با master | تسویه حساب طرف مقابل؛ شماره‌ی مهاجرت ۰۱۱۴ برداشته شد | ۱۴۰۵/۰۶/۲۰ |
+| Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |

@@ -11,6 +11,7 @@ import {
   ScrollText,
   Share2,
   Search,
+  SlidersHorizontal,
   Trash2,
   Undo2,
   Wallet,
@@ -25,6 +26,7 @@ import {
   fetchCheckTimeline,
   fetchCheckbookLeaves,
   fetchCheckbooks,
+  fetchCheckSummary,
   fetchChecks,
   fetchContacts,
   fetchNextCheckNumber,
@@ -33,9 +35,11 @@ import {
   updateCheckbook,
   type CheckEventRecord,
   type CheckRecord,
+  type CheckSearchQuery,
   type CheckbookLeaf,
   type CheckbookRecord,
 } from '../../api'
+import type { PageKey } from '../../lib/navModel'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
@@ -770,35 +774,130 @@ export function CheckPayableClearPage({ token }: { token: string }) {
 
 // ═══════════════════ ۸) جستجوی چک ═══════════════════
 
-export function CheckSearchPage({ token }: { token: string }) {
+/**
+ * کارگاهِ جستجو و ردیابیِ چک.
+ *
+ * **این یک فهرست با فیلتر نیست.** نسخه‌ی قبلی همه‌ی چک‌ها را می‌گرفت و در مرورگر
+ * غربال می‌کرد — پس «جستجو روی کدِ صیادی» اصلاً ممکن نبود (آن ستون در غربال نبود)
+ * و برای دفترِ بزرگ مگابایت داده می‌آمد تا یک برگ پیدا شود.
+ *
+ * حالا فیلترها روی سرورند، و مهم‌تر: انتخابِ یک ردیف **مسیرِ همان چک** را باز
+ * می‌کند — از کجا آمد، الان کجاست، چه بر سرش آمد، و هر گام در کدام سند ثبت شد.
+ *
+ * **و خودش هیچ وضعیتی را عوض نمی‌کند (§۲۸).** کنش‌های مجاز کاربر را به همان
+ * عملیاتِ استانداردِ چک می‌برند؛ موتورِ دومِ گذرِ وضعیت ساخته نمی‌شود.
+ */
+export function CheckSearchPage({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate?: (page: PageKey) => void
+}) {
   const [q, setQ] = useState('')
-  const [type, setType] = useState<'all' | 'receivable' | 'payable'>('all')
-  const [status, setStatus] = useState('all')
-  const checks = useAsync(() => fetchChecks(token), [token])
+  const [type, setType] = useState<'' | 'receivable' | 'payable'>('')
+  const [status, setStatus] = useState('')
+  const [dueFrom, setDueFrom] = useState('')
+  const [dueTo, setDueTo] = useState('')
+  const [amountMin, setAmountMin] = useState('')
+  const [amountMax, setAmountMax] = useState('')
+  const [advanced, setAdvanced] = useState(false)
+  //: فیلترِ اعمال‌شده جدا از فیلترِ در حالِ تایپ — وگرنه هر حرف یک درخواست است.
+  const [applied, setApplied] = useState<CheckSearchQuery>({})
+  const [selected, setSelected] = useState<CheckRecord | null>(null)
 
-  const rows = useMemo(() => {
-    const term = q.trim()
-    return (checks.data ?? []).filter((c) => {
-      if (type !== 'all' && c.type !== type) return false
-      if (status !== 'all' && c.status !== status) return false
-      if (!term) return true
-      return (
-        c.number.includes(term) ||
-        (c.contact_name ?? '').includes(term) ||
-        c.bank_name.includes(term) ||
-        (c.description || '').includes(term)
-      )
+  const rows = useAsync(() => fetchChecks(token, applied), [token, applied])
+  const summary = useAsync(
+    () => fetchCheckSummary(token, type || undefined),
+    [token, type],
+  )
+
+  const list = rows.data ?? []
+  const pg = usePagination(list, 15, JSON.stringify(applied))
+
+  function apply() {
+    setSelected(null)
+    setApplied({
+      q,
+      type: type || undefined,
+      status: status || undefined,
+      dueFrom: dueFrom || undefined,
+      dueTo: dueTo || undefined,
+      amountMin: amountMin || undefined,
+      amountMax: amountMax || undefined,
     })
-  }, [checks.data, q, type, status])
-  const pg = usePagination(rows, 15, `${q}|${type}|${status}`)
+  }
+
+  function clear() {
+    setQ('')
+    setType('')
+    setStatus('')
+    setDueFrom('')
+    setDueTo('')
+    setAmountMin('')
+    setAmountMax('')
+    setSelected(null)
+    setApplied({})
+  }
 
   return (
     <OpsPage
       icon={Search}
-      title="جستجوی چک"
-      description="همه‌ی چک‌ها — دریافتنی و پرداختنی، باز و بسته — با جست‌وجو روی شماره، طرف حساب، بانک و شرح."
+      title="جستجو و ردیابی چک"
+      description="یک برگ را پیدا کنید و کلِ مسیرش را ببینید: از کجا آمد، الان کجاست، و هر گام در کدام سند ثبت شد."
+      head={
+        <div className="cc-head">
+          <div className="cc-toolbar">
+            <div className="cc-presets">
+              <button type="button" className={type === '' ? 'is-active' : ''} onClick={() => setType('')}>
+                همه
+              </button>
+              <button
+                type="button"
+                className={type === 'receivable' ? 'is-active' : ''}
+                onClick={() => setType('receivable')}
+              >
+                دریافتنی
+              </button>
+              <button
+                type="button"
+                className={type === 'payable' ? 'is-active' : ''}
+                onClick={() => setType('payable')}
+              >
+                پرداختنی
+              </button>
+            </div>
+          </div>
+          <AsyncBlock
+            loading={summary.loading}
+            error={summary.error}
+            empty={(summary.data ?? []).length === 0}
+            emptyText="چکی ثبت نشده."
+          >
+            <div className="cc-summary">
+              {(summary.data ?? []).map((s) => (
+                <Metric
+                  key={s.status}
+                  icon={<ScrollText size={14} />}
+                  label={s.label}
+                  value={`${faInt(s.count)} برگ · ${fa(s.amount)}`}
+                />
+              ))}
+            </div>
+          </AsyncBlock>
+        </div>
+      }
     >
-      <SectionCard icon={Search} title="نتیجه" description={`${faInt(rows.length)} برگ`}>
+      <SectionCard
+        icon={Search}
+        title="جستجو"
+        description="شماره چک، کد صیادی، پشت‌نمره، صاحب چک، بانک یا طرف حساب"
+        actions={
+          <button type="button" onClick={() => setAdvanced((v) => !v)}>
+            <SlidersHorizontal size={13} /> {advanced ? 'فیلتر ساده' : 'فیلتر پیشرفته'}
+          </button>
+        }
+      >
         <div className="acc-filters">
           <label className="acc-search">
             <Search size={14} />
@@ -806,61 +905,106 @@ export function CheckSearchPage({ token }: { token: string }) {
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="شماره چک، طرف حساب، بانک یا شرح"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') apply()
+              }}
+              placeholder="شماره چک، کد صیادی، پشت‌نمره، صاحب چک…"
             />
           </label>
-          <label>
-            نوع
-            <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-              <option value="all">همه</option>
-              <option value="receivable">دریافتنی</option>
-              <option value="payable">پرداختنی</option>
-            </select>
-          </label>
-          <label>
-            وضعیت
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="all">همه</option>
-              {Object.entries(CHECK_STATUS_LABEL).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <button type="button" className="primary" onClick={apply}>
+            <Search size={13} /> جستجو
+          </button>
+          <button type="button" onClick={clear}>
+            پاک کردن
+          </button>
         </div>
 
+        {advanced && (
+          <div className="acc-filters">
+            <label>
+              وضعیت
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">همه</option>
+                {Object.entries(CHECK_STATUS_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              سررسید از
+              <JalaliDatePicker value={dueFrom} onChange={setDueFrom} />
+            </label>
+            <label>
+              تا
+              <JalaliDatePicker value={dueTo} onChange={setDueTo} />
+            </label>
+            <label>
+              مبلغ از
+              <NumberInput value={amountMin} onChange={setAmountMin} placeholder="۰" />
+            </label>
+            <label>
+              تا
+              <NumberInput value={amountMax} onChange={setAmountMax} placeholder="۰" />
+            </label>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard icon={ScrollText} title="نتیجه" description={`${faInt(list.length)} برگ`}>
         <AsyncBlock
-          loading={checks.loading}
-          error={checks.error}
-          empty={rows.length === 0}
+          loading={rows.loading}
+          error={rows.error}
+          empty={list.length === 0}
           emptyText="چکی با این شرایط پیدا نشد."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
-                  <th>شماره</th>
                   <th>نوع</th>
+                  <th>شماره</th>
+                  <th>کد صیادی</th>
+                  <th>مبلغ</th>
+                  <th>سررسید</th>
                   <th>طرف حساب</th>
                   <th>بانک</th>
-                  <th>صدور</th>
-                  <th>سررسید</th>
                   <th>وضعیت</th>
-                  <th>مبلغ</th>
+                  <th>موقعیت فعلی</th>
+                  <th className="card-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {pg.pageItems.map((c) => (
-                  <tr key={c.id}>
-                    <td className="card-title" data-label="شماره">{toFaDigits(c.number)}</td>
+                  <tr key={c.id} className={selected?.id === c.id ? 'is-selected' : undefined}>
                     <td data-label="نوع">{c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}</td>
-                    <td className="card-wide" data-label="طرف حساب">{c.contact_name || '—'}</td>
-                    <td data-label="بانک">{c.bank_name || '—'}</td>
-                    <td data-label="صدور">{formatJalali(c.issue_date)}</td>
+                    <td className="card-title" data-label="شماره">
+                      {toFaDigits(c.number)}
+                    </td>
+                    <td data-label="کد صیادی">
+                      <span dir="ltr">{c.sayad_id ? toFaDigits(c.sayad_id) : '—'}</span>
+                    </td>
+                    <td className="num" data-label="مبلغ">
+                      {fa(c.amount)}
+                    </td>
                     <td data-label="سررسید">{formatJalali(c.due_date)}</td>
-                    <td data-label="وضعیت"><StatusChip status={c.status} /></td>
-                    <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
+                    <td className="card-wide" data-label="طرف حساب">
+                      {c.contact_name || '—'}
+                    </td>
+                    <td data-label="بانک">{c.bank_name || '—'}</td>
+                    <td data-label="وضعیت">
+                      <StatusChip status={c.status} />
+                    </td>
+                    <td data-label="موقعیت فعلی">{c.holder_label || '—'}</td>
+                    <td className="card-actions">
+                      <button
+                        type="button"
+                        onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                      >
+                        <History size={13} /> {selected?.id === c.id ? 'بستن' : 'مسیر چک'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -869,7 +1013,130 @@ export function CheckSearchPage({ token }: { token: string }) {
           </div>
         </AsyncBlock>
       </SectionCard>
+
+      {selected && <CheckDossier token={token} check={selected} onNavigate={onNavigate} />}
     </OpsPage>
+  )
+}
+
+/**
+ * کنشی که از این وضعیت معنی دارد، و صفحه‌ای که واقعاً انجامش می‌دهد (§۲۷ §۲۸).
+ *
+ * این‌جا فقط **مسیر** است، نه عمل: صفحه‌ی جستجو هیچ گذری ثبت نمی‌کند.
+ */
+const ACTIONS_BY_STATUS: Record<string, { label: string; page: PageKey }[]> = {
+  in_hand: [
+    { label: 'واگذاری به بانک', page: 'checkops' },
+    { label: 'نقد کردن', page: 'checkops' },
+    { label: 'خرج کردن', page: 'checkops' },
+    { label: 'استرداد', page: 'checkreturn' },
+  ],
+  deposited: [
+    { label: 'وصول', page: 'checkops' },
+    { label: 'واخواست', page: 'checkops' },
+    { label: 'بازگشت از بانک', page: 'checkreturn' },
+  ],
+  endorsed: [{ label: 'برگشت از خرج', page: 'checkreturn' }],
+  issued: [{ label: 'وصول چک پرداختنی', page: 'checkpayclear' }],
+}
+
+/**
+ * پرونده‌ی یک چک — وضعیت، موقعیت، و مسیرش.
+ *
+ * تایم‌لاین از همان `check_events` می‌آید که وضعیت از آن می‌آید؛ پس نمی‌تواند با
+ * ستونِ وضعیت اختلاف پیدا کند (§۱۳).
+ */
+function CheckDossier({
+  token,
+  check,
+  onNavigate,
+}: {
+  token: string
+  check: CheckRecord
+  onNavigate?: (page: PageKey) => void
+}) {
+  const events = useAsync(() => fetchCheckTimeline(token, check.id), [token, check.id])
+  const actions = ACTIONS_BY_STATUS[check.status] ?? []
+
+  return (
+    <SectionCard
+      icon={History}
+      title={`پرونده‌ی چک ${toFaDigits(check.number)}`}
+      description={`${fa(check.amount)} ریال · سررسید ${formatJalali(check.due_date)}`}
+    >
+      <div className="cc-summary">
+        <Metric icon={<ScrollText size={14} />} label="وضعیت" value={CHECK_STATUS_LABEL[check.status] ?? check.status} />
+        <Metric icon={<Landmark size={14} />} label="موقعیت فعلی" value={check.holder_label || '—'} />
+        <Metric icon={<Wallet size={14} />} label="طرف حساب" value={check.contact_name || '—'} />
+      </div>
+
+      <dl className="check-facts">
+        <div>
+          <dt>کد صیادی</dt>
+          <dd dir="ltr">{check.sayad_id ? toFaDigits(check.sayad_id) : '—'}</dd>
+        </div>
+        <div>
+          <dt>پشت‌نمره</dt>
+          <dd>{check.back_number ? toFaDigits(check.back_number) : '—'}</dd>
+        </div>
+        <div>
+          <dt>صاحب چک</dt>
+          <dd>{check.owner_name || '—'}</dd>
+        </div>
+        <div>
+          <dt>بانک / شعبه</dt>
+          <dd>
+            {check.bank_name || '—'}
+            {check.branch_name ? ` — ${check.branch_name}` : ''}
+          </dd>
+        </div>
+        <div>
+          <dt>شرح</dt>
+          <dd>{check.description || '—'}</dd>
+        </div>
+      </dl>
+
+      {actions.length > 0 && onNavigate && (
+        <div className="form-actions">
+          <span className="muted">عملیاتِ ممکن از این وضعیت:</span>
+          {actions.map((a) => (
+            <button key={a.label} type="button" onClick={() => onNavigate(a.page)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <AsyncBlock
+        loading={events.loading}
+        error={events.error}
+        empty={(events.data ?? []).length === 0}
+        emptyText="این چک پیش از افزوده‌شدنِ تاریخچه ثبت شده، پس گذرهای گذشته‌اش ردی ندارند. از این‌جا به بعد هر گذر ثبت می‌شود."
+      >
+        <ol className="check-trail">
+          {(events.data ?? []).map((e) => (
+            <li key={e.id}>
+              <span className="check-trail__what">{e.operation_label}</span>
+              <span className="check-trail__when">{formatJalali(e.event_date)}</span>
+              <span className="check-trail__where">
+                {e.bank_account_name || e.cashbox_name || e.contact_name || '—'}
+              </span>
+              <span className="check-trail__source">
+                {e.source_type && e.source_number != null ? (
+                  <em>
+                    {e.source_label} {faInt(e.source_number)}
+                  </em>
+                ) : e.operation_no != null ? (
+                  <em>عملیات چک {faInt(e.operation_no)}</em>
+                ) : (
+                  '—'
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </AsyncBlock>
+    </SectionCard>
   )
 }
 

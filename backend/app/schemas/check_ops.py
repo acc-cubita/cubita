@@ -31,6 +31,12 @@ class CheckEventOut(BaseModel):
     contact_id: UUID | None = None
     contact_name: str | None = None
     journal_entry_id: UUID | None = None
+    #: سندِ **عملیاتی** که این گذر در آن ثبت شد — رسید، اعلامیه (§۱۴ §۱۶).
+    #: با `journal_entry_id` که سندِ *حسابداری* است یکی نیست.
+    source_type: str | None = None
+    source_id: UUID | None = None
+    source_label: str | None = None
+    source_number: int | None = None
     note: str = ""
 
 
@@ -84,3 +90,16 @@ class CheckOperationOut(BaseModel):
     done: list[CheckOperationResultRow]
     failed: list[CheckOperationFailureRow]
     total_amount: Decimal
+
+
+class CheckSummaryOut(BaseModel):
+    """یک وضعیت با شمارش و جمعِ مبلغش (§۳۴).
+
+    از همان کوئریِ جستجو مشتق می‌شود، نه از جدولِ گزارشیِ جدا — پس هیچ‌وقت با
+    فهرست اختلاف پیدا نمی‌کند.
+    """
+
+    status: str
+    label: str
+    count: int
+    amount: Decimal
