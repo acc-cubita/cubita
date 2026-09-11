@@ -210,6 +210,7 @@ export type PageKey =
   | 'checkbooklist'
   | 'posterminallist'
   | 'possettlelist'
+  | 'checkoplist'
   | 'statementlist'
   | 'pettylist'
   //: دفترهای نظیرِ ماژول‌های حسابداری، شرکت و تنظیمات.
@@ -463,6 +464,7 @@ for (const key of [
   'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox', 'cashboxes',
   'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
   'treasuryledger', 'paymentnoticelist', 'checkbooklist', 'posterminallist', 'possettlelist',
+  'checkoplist',
   'statementlist', 'pettylist',
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'banking'

@@ -36,7 +36,7 @@ from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import CheckIn
 from app.schemas.receipts import ReceiptCashIn, ReceiptIn, ReceiptTransferIn
-from app.services import bank_accounts, banking, card_terminals, cashboxes
+from app.services import bank_accounts, card_terminals, cashboxes, check_ops
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.numbering import next_document_number
@@ -298,7 +298,7 @@ def _component_rows(
             #: ردیفِ چک این‌جا ساخته می‌شود ولی **سندِ جدا نمی‌زند** — اثرش در
             #: همین سندِ رسید است. `new_check_row` همان گاردهای مسیرِ مستقیم را
             #: اجرا می‌کند (برگ، صیادی)، تا دو مسیر یکسان بسنجند.
-            check = banking.new_check_row(db, cheque_in, user)
+            check = check_ops.new_check_row(db, cheque_in, user)
             lines.append(
                 JournalLine(
                     account_id=cheque_account.id,

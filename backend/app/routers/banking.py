@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
-from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
+from app.models.banking import BankAccount, BankStatementLine, BankTransaction, PettyCashTransaction
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
@@ -21,16 +21,10 @@ from app.schemas.banking import (
     CheckbookLeafOut,
     CheckbookOut,
     CheckbookUpdateIn,
-    CheckIn,
-    CheckOut,
-    CheckStatusUpdateIn,
     MatchStatementLineIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
     PettyCashTransactionOut,
-    PosPendingGroupOut,
-    PosSettlementIn,
-    PosSettlementOut,
     ReconciliationSummaryOut,
 )
 from app.services import bank_accounts as bank_accounts_service
@@ -82,39 +76,6 @@ def delete_bank_account(
 ):
     """حسابِ بی‌سابقه حذف می‌شود؛ حسابِ باسابقه فقط غیرفعال (§۲۳)."""
     bank_accounts_service.delete_bank_account(db, bank_account_id)
-
-
-@router.get("/api/checks", response_model=Page[CheckOut])
-def list_checks(
-    db: Session = Depends(get_db),
-    params: PageParams = Depends(),
-    _=Depends(require_permission("checks_bank", "view")),
-):
-    # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
-    items, next_cursor = paginate(
-        db.query(Check).options(selectinload(Check.contact)),
-        [Check.due_date, Check.id],
-        params,
-        descending=False,
-    )
-    return Page(items=items, next_cursor=next_cursor)
-
-
-@router.post("/api/checks", response_model=CheckOut, status_code=201)
-def create_check(
-    data: CheckIn, db: Session = Depends(get_db), user: User = Depends(require_permission("checks_bank", "create"))
-):
-    return banking_service.create_check(db, data, user)
-
-
-@router.patch("/api/checks/{check_id}/status", response_model=CheckOut)
-def update_check_status(
-    check_id: UUID,
-    data: CheckStatusUpdateIn,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_permission("checks_bank", "update")),
-):
-    return banking_service.update_check_status(db, check_id, data.status, data.bank_account_id, user)
 
 
 @router.get("/api/bank-transactions", response_model=Page[BankTransactionOut])
@@ -312,38 +273,6 @@ def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
         if row["id"] == checkbook_id:
             return row
     raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
-
-
-# ── تسویه‌ی کارتخوان ─────────────────────────────────────────────────────────
-
-
-@router.get("/api/pos-settlements/pending", response_model=list[PosPendingGroupOut])
-def pos_pending(
-    terminal_no: str | None = None,
-    pos_terminal_id: UUID | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    _=Depends(require_permission("checks_bank", "view")),
-):
-    return banking_service.pos_pending_settlements(
-        db,
-        terminal_no=terminal_no,
-        date_from=date_from,
-        date_to=date_to,
-        pos_terminal_id=pos_terminal_id,
-    )
-
-
-@router.post("/api/pos-settlements", response_model=PosSettlementOut)
-def settle_pos(
-    data: PosSettlementIn,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_permission("checks_bank", "create")),
-):
-    result = banking_service.settle_pos(db, data, user)
-    db.commit()
-    return result
 
 
 # ── سیاستِ کنترلِ شماره‌ی چک ───────────────────────────────────────────────────

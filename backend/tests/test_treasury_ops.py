@@ -1,7 +1,9 @@
-"""عملیاتِ «دریافت و پرداخت»: دسته‌چک، استردادِ چک، تسویه‌ی کارتخوان.
+"""عملیاتِ «دریافت و پرداخت»: دسته‌چک و استردادِ چک.
 
-سه قابلیتی که مهاجرتِ ۰۰۸۴ زیرساختشان را ساخت. هر تست یک قاعده‌ی رفتاری را می‌بندد،
-نه صرفاً «کد اجرا شد».
+هر تست یک قاعده‌ی رفتاری را می‌بندد، نه صرفاً «کد اجرا شد».
+
+**تسویه‌ی کارت‌خوان اینجا نیست** — از مهاجرتِ ۰۱۰۹ موجودیتِ خودش را دارد و
+تست‌هایش در `test_pos_settlement.py` است.
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -12,9 +14,8 @@ from fastapi import HTTPException
 from app.models.accounting import Account
 from app.models.banking import BankAccount, Check, Checkbook
 from app.models.inventory import Contact
-from app.models.treasury import TreasuryTransaction
-from app.schemas.banking import CheckbookIn, CheckbookUpdateIn, CheckIn, PosSettlementIn
-from app.services import banking as svc
+from app.schemas.banking import CheckbookIn, CheckbookUpdateIn, CheckIn
+from app.services import check_ops as svc
 from app.services import checkbooks as book_svc
 from app.services import chart_codes as cc
 from app.services.common import get_account
@@ -208,8 +209,14 @@ def test_a_deposited_check_cannot_be_returned(db, user):
     assert e.value.status_code == 400
 
 
-def test_payable_check_cannot_be_returned(db, user):
-    """استرداد فقط برای چکِ دریافتی معنی دارد."""
+def test_payable_check_can_be_returned_to_us(db, user):
+    """**تغییرِ رفتارِ عمدی (§۳۱).**
+
+    نسخه‌ی قبلی می‌گفت «استرداد فقط برای چکِ دریافتی معنی دارد». ولی چکِ
+    پرداختنی هم پیش از وصول به ما برمی‌گردد — و آن‌وقت هیچ راهی برای ثبتش نبود.
+    بدتر: ردیف‌های حسابداریِ `returned` سمتِ *دریافتنی* hard-code شده بودند، پس
+    بازکردنِ این گذر بدونِ اصلاحشان سندِ غلط می‌زد.
+    """
     check = svc.create_check(
         db,
         CheckIn(
@@ -221,154 +228,6 @@ def test_payable_check_cannot_be_returned(db, user):
         ),
         user,
     )
-    with pytest.raises(HTTPException):
-        svc.update_check_status(db, check.id, "returned", None, user)
-
-
-# ── تسویه‌ی کارتخوان ─────────────────────────────────────────────────────────
-
-
-def _card_receipt(db, user, contact, bank, *, amount=1_000_000, day=TODAY, terminal="T-1") -> TreasuryTransaction:
-    from app.schemas.treasury import TreasuryTransactionIn
-    from app.services import treasury as treasury_svc
-
-    return treasury_svc.create_receipt(
-        db,
-        TreasuryTransactionIn(
-            transaction_date=day,
-            contact_id=contact.id,
-            amount=Decimal(amount),
-            method="bank",
-            bank_account_id=bank.id,
-            description="فروشِ کارتی",
-        ),
-        user,
-        paid_via="pos_terminal",
-        reference_no=f"RRN-{amount}-{day}-{terminal}",
-        terminal_no=terminal,
-    )
-
-
-def test_pending_groups_card_receipts_by_terminal_and_day(db, user):
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=1_000_000)
-    _card_receipt(db, user, contact, bank, amount=2_000_000)
-    _card_receipt(db, user, contact, bank, amount=500_000, terminal="T-2")
-
-    rows = svc.pos_pending_settlements(db, terminal_no=None, date_from=None, date_to=None)
-    by_terminal = {r["terminal_no"]: r for r in rows}
-    assert by_terminal["T-1"]["count"] == 2
-    assert by_terminal["T-1"]["gross_amount"] == Decimal(3_000_000)
-    assert by_terminal["T-2"]["gross_amount"] == Decimal(500_000)
-
-
-def test_settlement_marks_receipts_and_books_only_the_fee(db, user):
-    """مبلغِ ناخالص دوباره ثبت نمی‌شود — فقط کارمزد به هزینه می‌رود.
-
-    رسیدِ کارتی در لحظه‌ی ثبت، بانک را بدهکار کرده. اگر تسویه دوباره ناخالص را
-    ثبت می‌کرد، درآمد دو بار می‌آمد.
-    """
-    from app.models.accounting import JournalEntry
-
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=1_000_000)
-    _card_receipt(db, user, contact, bank, amount=2_000_000)
-    before = db.query(JournalEntry).count()
-
-    result = svc.settle_pos(
-        db,
-        PosSettlementIn(
-            settlement_date=TODAY,
-            date_from=TODAY,
-            date_to=TODAY,
-            terminal_no="T-1",
-            bank_account_id=bank.id,
-            fee_amount=Decimal(30_000),
-        ),
-        user,
-    )
-    assert result["settled_count"] == 2
-    assert result["gross_amount"] == Decimal(3_000_000)
-    assert result["net_amount"] == Decimal(2_970_000)
-
-    # یک سند بیشتر، نه دو تا: فقط کارمزد.
-    assert db.query(JournalEntry).count() == before + 1
-    assert db.query(TreasuryTransaction).filter(TreasuryTransaction.settled_at.is_(None)).count() == 0
-
-
-def test_zero_fee_settlement_writes_no_entry(db, user):
-    """سندِ صفر دفتر را شلوغ می‌کند بی‌آنکه چیزی بگوید."""
-    from app.models.accounting import JournalEntry
-
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=800_000)
-    before = db.query(JournalEntry).count()
-
-    svc.settle_pos(
-        db,
-        PosSettlementIn(settlement_date=TODAY, date_from=TODAY, date_to=TODAY, fee_amount=Decimal(0)),
-        user,
-    )
-    assert db.query(JournalEntry).count() == before
-
-
-def test_already_settled_receipts_are_not_offered_twice(db, user):
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=400_000)
-    svc.settle_pos(
-        db,
-        PosSettlementIn(settlement_date=TODAY, date_from=TODAY, date_to=TODAY, fee_amount=Decimal(0)),
-        user,
-    )
-    assert svc.pos_pending_settlements(db, terminal_no=None, date_from=None, date_to=None) == []
-    with pytest.raises(HTTPException) as e:
-        svc.settle_pos(
-            db,
-            PosSettlementIn(settlement_date=TODAY, date_from=TODAY, date_to=TODAY, fee_amount=Decimal(0)),
-            user,
-        )
-    assert e.value.status_code == 400
-
-
-def test_fee_larger_than_gross_is_refused(db, user):
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=100_000)
-    with pytest.raises(HTTPException) as e:
-        svc.settle_pos(
-            db,
-            PosSettlementIn(
-                settlement_date=TODAY,
-                date_from=TODAY,
-                date_to=TODAY,
-                bank_account_id=bank.id,
-                fee_amount=Decimal(200_000),
-            ),
-            user,
-        )
-    assert e.value.status_code == 400
-
-
-def test_bank_fee_role_lands_on_the_shared_template_code(db, user):
-    """کارمزد روی همان کد ۵۱۱۱ِ قالب‌های صنفی می‌نشیند، نه یک حسابِ دومِ هم‌معنی."""
-    contact = _contact(db)
-    bank = _bank(db)
-    _card_receipt(db, user, contact, bank, amount=1_000_000)
-    svc.settle_pos(
-        db,
-        PosSettlementIn(
-            settlement_date=TODAY,
-            date_from=TODAY,
-            date_to=TODAY,
-            bank_account_id=bank.id,
-            fee_amount=Decimal(10_000),
-        ),
-        user,
-    )
-    fee_account = get_account(db, cc.BANK_FEE)
-    assert fee_account.code == "5111"
-    assert db.query(Account).filter(Account.code.like("5111%")).count() == 1
+    svc.update_check_status(db, check.id, "returned", None, user)
+    db.refresh(check)
+    assert check.status == "returned"

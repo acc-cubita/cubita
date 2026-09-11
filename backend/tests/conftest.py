@@ -76,7 +76,10 @@ def _schema():
         # trigger فقط‌افزودنیِ دفتر حسابرسی — به همان دلیل RLS بالا: create_all
         # فقط جدول می‌سازد و از trigger خبر ندارد. بدون این، تست‌ها روی جدولی
         # اجرا می‌شوند که می‌شود ویرایشش کرد، یعنی مهم‌ترین خاصیتش سنجیده نمی‌شود.
-        for stmt in append_only_statements():
+        #: `check_events` هم فقط‌افزودنی است (§۴۷ فصلِ عملیاتِ چک). بدونِ این خط،
+        #: تست‌ها روی جدولی اجرا می‌شدند که قابلِ ویرایش است — یعنی همان خاصیتی که
+        #: کلِ ارزشِ جدول است سنجیده نمی‌شد.
+        for stmt in append_only_statements() + append_only_statements("check_events"):
             conn.execute(text(stmt))
 
     session = SessionLocal()

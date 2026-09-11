@@ -98,6 +98,11 @@ class BankAccountOut(BaseModel):
 class CheckIn(BaseModel):
     type: str
     number: str
+    #: شماره‌ی پشتِ برگ — با شماره‌ی چک یکی نیست و در بانک با همین پیگیری می‌شود.
+    back_number: str = ""
+    #: شناسه‌ی صیادیِ ۱۶رقمی. یکتاییِ واقعیِ برگ همین است، نه شماره‌ی چک که بینِ
+    #: بانک‌ها تکرار می‌شود.
+    sayad_id: str = ""
     bank_name: str = ""
     amount: Decimal
     issue_date: date
@@ -137,6 +142,8 @@ class CheckOut(BaseModel):
     id: UUID
     type: str
     number: str
+    back_number: str = ""
+    sayad_id: str = ""
     bank_name: str
     amount: Decimal
     issue_date: date
@@ -156,6 +163,8 @@ class CheckOut(BaseModel):
     account_number: str = ""
     owner_name: str = ""
     voided_at: datetime | None = None
+    #: صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`.
+    cashbox_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -163,6 +172,13 @@ class CheckOut(BaseModel):
 class CheckStatusUpdateIn(BaseModel):
     status: str
     bank_account_id: UUID | None = None
+    #: برای «نقد کردن». خالی = صندوقِ پیش‌فرض.
+    cashbox_id: UUID | None = None
+    #: طرفِ مقابلِ همین عملیات — که لزوماً صاحبِ چک نیست (گیرنده‌ی چکِ خرج‌شده).
+    contact_id: UUID | None = None
+    #: تاریخِ عملیات. خالی = سررسیدِ چک، همان پیش‌فرضِ پیشین.
+    event_date: date | None = None
+    note: str = ""
 
 
 class BankDepositWithdrawIn(BaseModel):
@@ -328,35 +344,3 @@ class CheckbookOut(BaseModel):
     cheque_print_format: str = ""
 
 
-class PosPendingGroupOut(BaseModel):
-    """یک روزِ تسویه‌نشده‌ی یک پایانه."""
-
-    terminal_no: str
-    #: دستگاهِ واقعی، اگر رسیدها به آن وصل باشند. برای رسیدهای پیش از مهاجرتِ
-    #: ۰۱۰۷ خالی است و فقط `terminal_no` را دارند.
-    pos_terminal_id: UUID | None = None
-    terminal_label: str | None = None
-    transaction_date: date
-    count: int
-    gross_amount: Decimal
-
-
-class PosSettlementIn(BaseModel):
-    settlement_date: date
-    date_from: date
-    date_to: date
-    #: دستگاه — راهِ درست (§۲۵). دامنه‌ی تسویه از خودش می‌آید و حسابِ کارمزد هم.
-    pos_terminal_id: UUID | None = None
-    #: شماره‌ی پایانه به‌صورتِ متن. برای رسیدهای قدیمی که کلیدِ خارجی ندارند
-    #: می‌ماند؛ خالی = همه‌ی پایانه‌ها.
-    terminal_no: str | None = None
-    #: وقتی دستگاه داده شود از خودش می‌آید. فقط برای مسیرِ قدیمی لازم است.
-    bank_account_id: UUID | None = None
-    fee_amount: Decimal = Decimal(0)
-
-
-class PosSettlementOut(BaseModel):
-    settled_count: int
-    gross_amount: Decimal
-    fee_amount: Decimal
-    net_amount: Decimal

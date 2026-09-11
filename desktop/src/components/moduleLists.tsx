@@ -32,6 +32,7 @@ import {
   FileStack,
   Gauge,
   HandCoins,
+  History,
   Hash,
 
   LayoutList,
@@ -145,6 +146,9 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked },
     { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: CreditCard },
     { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard },
+    //: «چه عملیاتی کِی روی چه چکی» — نمای دومِ دامنه‌ی چک، در برابرِ
+    //: «جستجوی چک» که می‌گوید الان چه داریم و وضعیتشان چیست.
+    { key: 'checkoplist', label: 'عملیات چک', icon: History },
     { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet },
     { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet },
   ],
@@ -204,6 +208,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   checkbooklist: 'دریافت و پرداخت',
   posterminallist: 'دریافت و پرداخت',
   possettlelist: 'دریافت و پرداخت',
+  checkoplist: 'دریافت و پرداخت',
   statementlist: 'دریافت و پرداخت',
   pettylist: 'دریافت و پرداخت',
   analyticlist: 'حسابداری',
@@ -268,8 +273,8 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   //: و فهرستِ دومِ چک یعنی دو نمای یک داده.
   checkops: 'checksearch',
   checkbooks: 'checkbooklist',
-  checkreturn: 'state',
-  checkpayclear: 'state',
+  checkreturn: 'checkoplist',
+  checkpayclear: 'checkoplist',
   bankreconcile: 'state',
   checksearch: 'view',
   bankledger: 'view',

@@ -10303,3 +10303,49 @@ button.mp-item:focus-visible {
   align-items: center;
   gap: 4px;
 }
+
+/* ── تاریخچه‌ی عملیاتِ چک ─────────────────────────────────────────────────────
+   وضعیتِ فعلی به‌تنهایی توضیح نمی‌دهد چک چطور به اینجا رسیده. این فهرست زیرِ
+   ردیفِ چک باز می‌شود و هر گام را با تاریخ، نامِ عملیات و مقصدش نشان می‌دهد.
+   زیرِ ۷۶۰px ستون‌ها روی هم می‌روند، چون در کارتِ موبایل جا ندارند. */
+.check-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.check-timeline li {
+  display: grid;
+  grid-template-columns: 7.5rem 9rem 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-inline-start: 2px solid var(--border);
+  background: var(--surface-2, transparent);
+  border-radius: 6px;
+}
+
+.check-timeline__when {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.check-timeline__what { font-weight: 600; }
+
+.check-timeline__where,
+.check-timeline__no {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 760px) {
+  .check-timeline li {
+    grid-template-columns: 1fr auto;
+    row-gap: 4px;
+  }
+  .check-timeline__where { grid-column: 1 / -1; }
+}

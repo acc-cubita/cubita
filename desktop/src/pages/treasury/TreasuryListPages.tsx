@@ -4,6 +4,7 @@ import {
   BookMarked,
   CreditCard,
   FileSpreadsheet,
+  History,
 
   ScrollText,
   Wallet,
@@ -13,15 +14,19 @@ import {
   fetchCheckbooks,
   fetchPaymentDocuments,
   fetchPettyCashTransactions,
+  CHECK_OPERATION_LABEL,
+  fetchCheckOperations,
+  fetchPosSettlement,
+  fetchPosSettlements,
   fetchPosTerminals,
   fetchStatementLines,
-  fetchTreasuryTransactions,
+  voidPosSettlement,
   type BankStatementLineRecord,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
-import { formatJalali } from '../../lib/jalali'
-import { AsyncBlock, Metric, OpsPage, fa, faInt, useAsync } from '../accounting/kit'
+import { formatJalali, toFaDigits } from '../../lib/jalali'
+import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 
 /**
  * دفترهای ماژولِ «دریافت و پرداخت» — نظیرِ فهرستیِ عملیاتِ رکوردساز.
@@ -261,70 +266,261 @@ export function PosTerminalListPage({ token }: { token: string }) {
 // ═══════════════════ تسویه‌های کارتخوان ═══════════════════
 
 /**
- * دفترِ تسویه‌های انجام‌شده.
+ * دفترِ تسویه‌های کارت‌خوان.
  *
- * از خودِ رسیدهای کارتی ساخته می‌شود (`settled_at`)، نه یک جدولِ جدا: تسویه چیزی جز
- * «این رسیدها با هم تسویه شدند» نیست، و ساختنِ جدولِ موازی یعنی دو حقیقتِ ممکن.
+ * **پیش از مهاجرتِ ۰۱۰۹ این فهرست از روی `settled_at`ِ رسیدها بازسازی می‌شد** و
+ * کامنتش می‌گفت «تسویه چیزی جز این رسیدها نیست، جدولِ موازی یعنی دو حقیقت». آن
+ * استدلال یک چیز را نمی‌دید: دو تسویه‌ی متفاوت در یک روز از یک پایانه در آن
+ * فهرست **یک ردیف** می‌شدند، و هیچ‌کدام شماره و حسابِ مقصد و برشِ تاریخی نداشتند.
+ *
+ * حالا تسویه سندِ خودش است. این فهرست همان سند را می‌خواند، پس هنوز دو حقیقت
+ * نیست — یک حقیقت است که تا امروز جایی برای نشستن نداشت.
  */
 export function PosSettlementListPage({ token }: { token: string }) {
-  const txns = useAsync(() => fetchTreasuryTransactions(token), [token])
+  const [reloadKey, setReloadKey] = useState(0)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [msg, setMsg] = useState<Msg>(null)
 
-  const groups = useMemo(() => {
-    const map = new Map<string, { key: string; day: string; terminal: string; count: number; amount: number }>()
-    for (const t of txns.data ?? []) {
-      if (t.paid_via !== 'pos_terminal' || !t.settled_at) continue
-      const day = t.settled_at.slice(0, 10)
-      const terminal = t.terminal_no || ''
-      const key = `${day}|${terminal}`
-      const row = map.get(key) ?? { key, day, terminal, count: 0, amount: 0 }
-      row.count += 1
-      row.amount += Number(t.amount)
-      map.set(key, row)
+  const list = useAsync(() => fetchPosSettlements(token), [token, reloadKey])
+  //: رسیدهای منبعِ ردیفِ بازشده — §۱۱، جهتِ «این تسویه از کجا آمد».
+  const detail = useAsync(
+    async () => (openId ? fetchPosSettlement(token, openId) : null),
+    [token, openId, reloadKey],
+  )
+
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 15)
+  const live = rows.filter((r) => !r.voided_at)
+  const totalNet = live.reduce((s, r) => s + Number(r.net_amount), 0)
+  const totalFee = live.reduce((s, r) => s + Number(r.fee_amount), 0)
+
+  async function onVoid(id: string, number: number) {
+    const reason = window.prompt(`دلیلِ ابطالِ تسویه‌ی شماره ${number}؟`)
+    if (!reason || !reason.trim()) return
+    setMsg(null)
+    try {
+      await voidPosSettlement(token, id, reason.trim())
+      setMsg({
+        text: `تسویه‌ی ${faInt(number)} با سندِ معکوس باطل شد؛ رسیدهایش دوباره در صفِ تسویه‌اند.`,
+        kind: 'ok',
+      })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
     }
-    return [...map.values()].sort((a, b) => b.day.localeCompare(a.day))
-  }, [txns.data])
-
-  const pg = usePagination(groups, 15)
-  const total = groups.reduce((s, g) => s + g.amount, 0)
+  }
 
   return (
     <OpsPage
       icon={CreditCard}
       title="تسویه‌های کارتخوان"
-      description="واریزهای شرکتِ پرداخت که ثبت شده‌اند — هر ردیف یک روزِ تسویه‌شده‌ی یک پایانه."
+      description="واریزهای شرکتِ پرداخت — هر ردیف یک سندِ تسویه با شماره‌ی خودش."
       head={
         <div className="cc-head">
           <div className="cc-summary">
-            <Metric icon={<CreditCard size={14} />} label="تسویه‌ها" value={faInt(groups.length)} />
-            <Metric icon={<Wallet size={14} />} label="جمعِ ناخالصِ تسویه‌شده" value={fa(total)} tone="in" />
+            <Metric icon={<CreditCard size={14} />} label="تسویه‌ها" value={faInt(live.length)} />
+            <Metric icon={<Wallet size={14} />} label="جمعِ خالصِ واریز" value={fa(totalNet)} tone="in" />
+            <Metric icon={<ScrollText size={14} />} label="جمعِ کارمزد" value={fa(totalFee)} tone="plain" />
           </div>
         </div>
       }
     >
-      <SectionCard icon={CreditCard} title="تسویه‌ها" description={`${faInt(groups.length)} ردیف`}>
+      <Note msg={msg} />
+
+      <SectionCard icon={CreditCard} title="تسویه‌ها" description={`${faInt(rows.length)} ردیف`}>
         <AsyncBlock
-          loading={txns.loading}
-          error={txns.error}
-          empty={groups.length === 0}
+          loading={list.loading}
+          error={list.error}
+          empty={rows.length === 0}
           emptyText="هنوز تسویه‌ای ثبت نشده. از عملیاتِ «تسویه کارت خوان» شروع کنید."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
+                  <th>شماره</th>
                   <th>تاریخِ تسویه</th>
+                  <th>تسویه تا</th>
                   <th>پایانه</th>
-                  <th>شمارِ رسید</th>
-                  <th>جمعِ ناخالص</th>
+                  <th>حسابِ بانکی</th>
+                  <th>رسید</th>
+                  <th>ناخالص</th>
+                  <th>کارمزد</th>
+                  <th>خالص</th>
+                  <th className="card-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {pg.pageItems.map((g) => (
-                  <tr key={g.key}>
-                    <td className="card-title" data-label="تاریخِ تسویه">{formatJalali(g.day)}</td>
-                    <td data-label="پایانه"><span dir="ltr">{g.terminal || '—'}</span></td>
-                    <td className="num" data-label="شمارِ رسید">{faInt(g.count)}</td>
-                    <td className="num" data-label="جمعِ ناخالص">{fa(g.amount)}</td>
+                {pg.pageItems.map((r) => (
+                  <tr key={r.id} className={r.voided_at ? 'muted-row' : undefined}>
+                    <td className="card-title" data-label="شماره">
+                      {faInt(r.number)}
+                      {r.voided_at ? <div className="entity-sub">باطل‌شده — {r.void_reason}</div> : null}
+                    </td>
+                    <td data-label="تاریخِ تسویه">{formatJalali(r.settlement_date)}</td>
+                    <td data-label="تسویه تا">{formatJalali(r.settle_through)}</td>
+                    <td data-label="پایانه">
+                      <span dir="ltr">{r.terminal_no || r.terminal_label || '—'}</span>
+                    </td>
+                    <td data-label="حسابِ بانکی">
+                      {r.bank_account_name}
+                      {r.bank_account_name2 ? (
+                        <div className="entity-sub">{r.bank_account_name2}</div>
+                      ) : null}
+                    </td>
+                    <td className="num" data-label="رسید">{faInt(r.receipt_count)}</td>
+                    <td className="num" data-label="ناخالص">{fa(r.gross_amount)}</td>
+                    <td className="num" data-label="کارمزد">{fa(r.fee_amount)}</td>
+                    <td className="num" data-label="خالص">{fa(r.net_amount)}</td>
+                    <td className="card-actions">
+                      <button type="button" onClick={() => setOpenId(openId === r.id ? null : r.id)}>
+                        {openId === r.id ? 'بستنِ رسیدها' : 'رسیدها'}
+                      </button>
+                      {r.voided_at ? null : (
+                        <button type="button" onClick={() => void onVoid(r.id, r.number)}>
+                          ابطال
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      {openId ? (
+        <SectionCard
+          icon={ScrollText}
+          title={`رسیدهای تسویه‌ی ${faInt(detail.data?.number ?? 0)}`}
+          description="مبلغِ تسویه دقیقاً جمعِ همین‌هاست."
+        >
+          <AsyncBlock
+            loading={detail.loading}
+            error={detail.error}
+            empty={!detail.data || detail.data.receipts.length === 0}
+            emptyText="رسیدی به این تسویه وصل نیست."
+          >
+            <div className="table-scroll">
+              <table className="cards-on-mobile acc-table">
+                <thead>
+                  <tr>
+                    <th>تاریخ</th>
+                    <th>طرفِ مقابل</th>
+                    <th>مرجع / پیگیری</th>
+                    <th>کارت</th>
+                    <th>مبلغ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(detail.data?.receipts ?? []).map((r) => (
+                    <tr key={r.id}>
+                      <td className="card-title" data-label="تاریخ">{formatJalali(r.transaction_date)}</td>
+                      <td data-label="طرفِ مقابل">
+                        {r.contact_name}
+                        {r.contact_name2 ? <div className="entity-sub">{r.contact_name2}</div> : null}
+                      </td>
+                      <td data-label="مرجع / پیگیری">
+                        <span dir="ltr">{r.reference_no || r.trace_no || '—'}</span>
+                      </td>
+                      <td data-label="کارت"><span dir="ltr">{r.card_mask || '—'}</span></td>
+                      <td className="num" data-label="مبلغ">{fa(r.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </AsyncBlock>
+        </SectionCard>
+      ) : null}
+    </OpsPage>
+  )
+}
+
+// ═══════════════════ عملیات چک ═══════════════════
+
+/**
+ * دفترِ عملیاتِ چک.
+ *
+ * **نمای دومِ همان دامنه (§۴۱).** «جستجوی چک» می‌گوید الان چه چک‌هایی داریم و
+ * وضعیتشان چیست؛ این می‌گوید چه عملیاتی، کِی، روی کدام چک انجام شده. تا پیش از
+ * مهاجرتِ ۰۱۱۰ سؤالِ دوم اصلاً جواب نداشت — چک فقط وضعیتِ فعلی داشت و هیچ ردی
+ * از گذرهایش نمی‌ماند.
+ */
+export function CheckOperationListPage({ token }: { token: string }) {
+  const [operation, setOperation] = useState('')
+  const rows = useAsync(
+    () => fetchCheckOperations(token, { operation: operation || undefined }),
+    [token, operation],
+  )
+
+  const list = rows.data ?? []
+  const pg = usePagination(list, 15, operation)
+  const total = list.reduce((s, r) => s + Number(r.check_amount), 0)
+
+  return (
+    <OpsPage
+      icon={History}
+      title="عملیات چک"
+      description="هر گذرِ وضعیتِ چک — واگذاری، وصول، واخواست، نقد کردن، خرج و برگشت."
+      head={
+        <div className="cc-head">
+          <div className="cc-toolbar">
+            <label className="acc-inline-field">
+              نوعِ عملیات
+              <select value={operation} onChange={(e) => setOperation(e.target.value)}>
+                <option value="">همه</option>
+                {Object.entries(CHECK_OPERATION_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="cc-summary">
+            <Metric icon={<History size={14} />} label="عملیات" value={faInt(list.length)} />
+            <Metric icon={<Wallet size={14} />} label="جمعِ مبلغِ چک‌ها" value={fa(total)} tone="plain" />
+          </div>
+        </div>
+      }
+    >
+      <SectionCard icon={History} title="رویدادها" description={`${faInt(list.length)} ردیف`}>
+        <AsyncBlock
+          loading={rows.loading}
+          error={rows.error}
+          empty={list.length === 0}
+          emptyText="عملیاتی ثبت نشده."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>عملیات</th>
+                  <th>شماره چک</th>
+                  <th>مبلغ</th>
+                  <th>مقصد</th>
+                  <th>وضعیتِ پس از عملیات</th>
+                  <th>شماره عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((r) => (
+                  <tr key={r.id}>
+                    <td className="card-title" data-label="تاریخ">{formatJalali(r.event_date)}</td>
+                    <td data-label="عملیات">{r.operation_label}</td>
+                    <td data-label="شماره چک" dir="ltr">{toFaDigits(r.check_number)}</td>
+                    <td className="num" data-label="مبلغ">{fa(r.check_amount)}</td>
+                    <td data-label="مقصد">
+                      {r.bank_account_name || r.cashbox_name || r.contact_name || '—'}
+                    </td>
+                    <td data-label="وضعیتِ پس از عملیات">{r.to_status_label}</td>
+                    <td className="num" data-label="شماره عملیات">
+                      {r.operation_no ? faInt(r.operation_no) : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -18,6 +18,9 @@ class PosTerminalIn(BaseModel):
     port: int = 0
     com_port: str = ""
     bank_account_id: UUID | None = None
+    #: تفصیلیِ دستگاه روی حسابِ «وجوهِ در راهِ کارت‌خوان» — همان نقشی که در صندوق
+    #: و حسابِ بانکی دارد. بدونِ آن، وجوهِ در راهِ همه‌ی دستگاه‌ها یک عدد می‌شود.
+    analytic_id: UUID | None = None
     is_active: bool = True
     is_default: bool = False
 
@@ -49,6 +52,9 @@ class PosTerminalOut(BaseModel):
     port: int
     com_port: str
     bank_account_id: UUID | None
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
     is_active: bool
     is_default: bool
 
@@ -74,5 +80,6 @@ class PosTerminalUpdateIn(BaseModel):
     port: int | None = None
     com_port: str | None = None
     bank_account_id: UUID | None = None
+    analytic_id: UUID | None = None
     is_active: bool | None = None
     is_default: bool | None = None

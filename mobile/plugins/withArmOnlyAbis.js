@@ -14,56 +14,54 @@
  * روی هیچ گوشیِ واقعی اجرا نمی‌شود.** هر کاربرِ کافه‌بازار آن را با اینترنتِ
  * موبایل دانلود می‌کند و هرگز یک بایتش را اجرا نمی‌کند.
  *
- * ## چرا فیلترِ ساده و نه `splits`
+ * ## چرا `gradle.properties` و نه `ndk.abiFilters`
+ *
+ * نسخه‌ی اول این افزونه یک بلوکِ `ndk { abiFilters = … }` در `defaultConfig`
+ * می‌گذاشت. بلوک درست تولید می‌شد، بیلد سبز بود، و **APK همچنان هر چهار معماری
+ * را داشت** — چون افزونه‌ی گریدلِ React Native خودش معماری‌ها را از
+ * `reactNativeArchitectures` می‌خواند و *بعد* از `defaultConfig` رویش می‌نویسد.
+ *
+ * این دقیقاً همان دسته خطاست که این پروژه مدام به آن برمی‌خورد: پیکربندی درست
+ * به‌نظر می‌رسد، چیزی خطا نمی‌دهد، و تنها راهِ فهمیدنش **اندازه‌گرفتنِ خودِ
+ * خروجی** است. برای همین حالا سراغِ همان کلیدی می‌رویم که RN واقعاً می‌خواند.
+ *
+ * ## راهِ فرار برای امولاتور
+ *
+ * امولاتورِ توسعه روی ویندوز x86_64 است. اگر این معماری‌ها همیشه حذف شوند،
+ * **آزمونِ چشمی روی امولاتور از کار می‌افتد** — همان حلقه‌ای که تا امروز
+ * بیشترِ باگ‌های این اپ را پیدا کرده. سازوکارش از قبل هست و خودِ
+ * `gradle.properties` مستندش کرده:
+ *
+ *     ./gradlew assembleRelease -PreactNativeArchitectures=x86_64   ← امولاتور
+ *     ./gradlew assembleRelease                                     ← انتشار
+ *
+ * پس پرچمِ سفارشی نمی‌سازیم؛ همان قراردادِ RN استفاده می‌شود.
+ *
+ * ## چرا `splits` نه
  *
  * `splits { abi }` به‌ازای هر معماری یک APK می‌سازد و کاربرِ arm64 را به ~۴۰ MB
  * می‌رساند — بهتر، ولی یعنی چند APK در کافه‌بازار با versionCodeهای متفاوت.
  * پیچیدگیِ انتشار و ریسکِ رسیدنِ APKِ اشتباه به دستگاه را می‌آورد، در برابرِ
- * ۲۴ مگابایت. یک APKِ ۶۴ مگابایتیِ همه‌گوشی‌ها ساده‌تر و بی‌ریسک‌تر است.
- *
- * ## چرا با `-PallAbis` برمی‌گردند
- *
- * امولاتورِ توسعه روی ویندوز x86_64 است. اگر این معماری‌ها همیشه حذف شوند،
- * **آزمونِ چشمی روی امولاتور از کار می‌افتد** — همان حلقه‌ای که تا امروز
- * بیشترِ باگ‌های این اپ را پیدا کرده. پس:
- *
- *     ./gradlew assembleRelease -PallAbis     ← برای امولاتور
- *     ./gradlew assembleRelease               ← برای انتشار
- *
- * ## چرا افزونه
- *
- * `expo prebuild` فایلِ `android/app/build.gradle` را از نو می‌سازد. ویرایشِ
- * دستی با آن می‌رود — همان تله‌ای که سرِ کلیدِ امضا خوردیم.
+ * ۲۴ مگابایت. یک APKِ ~۶۴ مگابایتیِ همه‌گوشی‌ها ساده‌تر و بی‌ریسک‌تر است.
  */
-const { withAppBuildGradle } = require('expo/config-plugins')
+const { withGradleProperties } = require('expo/config-plugins')
 
-const MARKER = 'abiFilters'
-
-const BLOCK = `
-        // معماری‌های x86 فقط برای امولاتورند و روی هیچ گوشی‌ای اجرا نمی‌شوند؛
-        // نگه‌داشتنشان یعنی ~۵۵ مگابایت دانلودِ بی‌مصرف برای هر کاربر.
-        // برای آزمون روی امولاتور: ./gradlew assembleRelease -PallAbis
-        ndk {
-            abiFilters = project.hasProperty('allAbis')
-                ? ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
-                : ['armeabi-v7a', 'arm64-v8a']
-        }
-`
+const KEY = 'reactNativeArchitectures'
+const ARM_ONLY = 'armeabi-v7a,arm64-v8a'
 
 module.exports = (config) =>
-  withAppBuildGradle(config, (cfg) => {
-    if (cfg.modResults.language !== 'groovy') {
-      throw new Error('withArmOnlyAbis: فقط build.gradleِ groovy پشتیبانی می‌شود')
+  withGradleProperties(config, (cfg) => {
+    const existing = cfg.modResults.find((it) => it.type === 'property' && it.key === KEY)
+    if (existing) {
+      existing.value = ARM_ONLY
+      return cfg
     }
-    // idempotent — `prebuild` ممکن است چند بار اجرا شود.
-    if (cfg.modResults.contents.includes(MARKER)) return cfg
-
-    const anchor = '    defaultConfig {\n'
-    if (!cfg.modResults.contents.includes(anchor)) {
-      // بی‌صدا رد نمی‌شویم: APKِ دو‌برابری چیزی است که تا وقتی کسی حجمش را
-      // اندازه نگیرد دیده نمی‌شود.
-      throw new Error('withArmOnlyAbis: بلوکِ defaultConfig در build.gradle پیدا نشد')
-    }
-    cfg.modResults.contents = cfg.modResults.contents.replace(anchor, anchor + BLOCK)
+    // اگر قالبِ Expo روزی این کلید را نگذارد، خودمان می‌گذاریمش — بی‌صدا رد
+    // نمی‌شویم، چون APKِ دو‌برابری تا وقتی کسی حجمش را اندازه نگیرد دیده نمی‌شود.
+    cfg.modResults.push({
+      type: 'comment',
+      value: ' معماری‌های x86 فقط امولاتورند؛ برای آزمون: -PreactNativeArchitectures=x86_64',
+    })
+    cfg.modResults.push({ type: 'property', key: KEY, value: ARM_ONLY })
     return cfg
   })

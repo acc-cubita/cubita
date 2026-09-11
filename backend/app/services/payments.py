@@ -22,7 +22,7 @@ from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import CheckIn
 from app.schemas.payments import PaymentIn
-from app.services import bank_accounts, banking, cashboxes
+from app.services import bank_accounts, banking, cashboxes, check_ops
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.numbering import next_document_number
@@ -182,7 +182,7 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
         if selected_bank is not None:
             bank_accounts.assert_usable(db, selected_bank, data.payment_date)
             _assert_currency(selected_bank.currency_code, data.currency_code, f"حساب «{selected_bank.name}»")
-        check = banking.new_check_row(
+        check = check_ops.new_check_row(
             db,
             CheckIn(
                 type="payable", number=row.number, amount=amount,
@@ -340,7 +340,14 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
             db.add(PaymentChequeTransfer(
                 payment_id=payment.id, check_id=check.id, previous_status=check.status, created_by_id=user.id,
             ))
-            check.status = "endorsed"
+            #: از تنها نقطه‌ی نوشتنِ وضعیت رد می‌شود تا رویدادِ «خرج شد، به چه کسی»
+            #: در تایم‌لاین بیفتد. سند را همین اعلامیه زده، پس دوباره زده نمی‌شود.
+            check_ops.update_check_status(
+                db, check.id, "endorsed", None, user,
+                contact_id=data.contact_id, event_date=data.payment_date,
+                external_journal_entry_id=entry.id,
+                note=f"خرج شده با اعلامیه‌ی پرداخت شماره {int(payment.number)}",
+            )
 
     for row in data.related_documents:
         db.add(PaymentRelatedDocument(
@@ -507,8 +514,17 @@ def void_payment(db: Session, payment_id: UUID, *, reason: str, user: User, void
         check.void_reason = reason.strip()
     for transfer in transfers:
         check = db.get(Check, transfer.check_id)
-        check.status = transfer.previous_status
+        #: **اول ردیف را برگشت‌خورده علامت بزن، بعد وضعیت را عوض کن.** گاردِ
+        #: `assert_not_pledged_to_payment` دقیقاً همین حرکت را از مسیرهای دیگر
+        #: می‌بندد؛ اگر ترتیب برعکس بود، ابطالِ خودمان را هم رد می‌کرد.
         transfer.reversed_at = now
+        db.flush()
+        #: همان مسیر، برعکس — تا برگشت هم رویداد بگیرد و تایم‌لاین کامل بماند.
+        check_ops.update_check_status(
+            db, check.id, transfer.previous_status, None, user,
+            event_date=effective_date, external_journal_entry_id=reversal.id,
+            note=f"برگشت با ابطالِ اعلامیه‌ی پرداخت شماره {int(payment.number)}",
+        )
     payment.voided_at = now
     payment.voided_by_id = user.id
     payment.void_reason = reason.strip()

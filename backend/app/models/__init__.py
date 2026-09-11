@@ -6,6 +6,7 @@ from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.billing import Plan, Purchase
 from app.models.client_error import ClientError
+from app.models.check_event import CheckEvent
 from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.company import ContactGroup, GeoLocation, RelatedPerson, SavedReport
@@ -52,6 +53,7 @@ from app.models.marketplace import (
 from app.models.moadian import MoadianSettings, MoadianSubmission, MoadianUnitMap
 from app.models.fiscal_year import FiscalYear
 from app.models.period_close import FiscalPeriodClose
+from app.models.pos_settlement import PosSettlement
 from app.models.pos_terminal import PosTerminal
 from app.models.receipt import Receipt, ReceiptRelatedDocument
 from app.models.payment import Payment, PaymentChequeTransfer, PaymentRelatedDocument
@@ -186,6 +188,8 @@ __all__ = [
     "InsuranceTaxBranch",
     "FiscalPeriodClose",
     "FiscalYear",
+    "CheckEvent",
+    "PosSettlement",
     "PosTerminal",
     "Receipt",
     "ReceiptRelatedDocument",

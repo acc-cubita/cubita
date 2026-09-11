@@ -28,10 +28,12 @@ from sqlalchemy.orm import Session
 from app.models.accounting import JournalEntry
 from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
+from app.models.check_event import CheckEvent
 from app.models.inventory import StockAdjustment
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
+from app.models.pos_settlement import PosSettlement
 from app.models.period_close import FiscalPeriodClose
 from app.models.payment import Payment
 from app.models.receipt import Receipt
@@ -53,9 +55,12 @@ SOURCE_MODELS: dict[str, type] = {
     "treasury_payment": TreasuryTransaction,
     "receipt": Receipt,
     "payment": Payment,
-    #: چک و بانک هر دو به گردشِ بانکی می‌نشینند؛ صدورِ چک هنوز گردشی نساخته و
-    #: آن‌جا جواب به‌درستی خالی می‌ماند تا وصول شود.
-    "check": BankTransaction,
+    #: **سندِ چک به خودِ عملیات برمی‌گردد، نه به گردشِ بانکی.** تا پیش از
+    #: مهاجرتِ ۰۱۱۰ اینجا `BankTransaction` بود و فقط برای *وصول* جواب می‌داد؛
+    #: صدور، واگذاری، واخواست و خرج‌کردن هیچ گردشِ بانکی نمی‌سازند و جوابشان
+    #: خالی می‌ماند. `CheckEvent` برای **هر** سندِ چک وجود دارد و از آن‌جا هم به
+    #: چک می‌رسیم هم به عملیات (§۳۷).
+    "check": CheckEvent,
     "bank": BankTransaction,
     "petty_cash": PettyCashTransaction,
     "payroll": Payslip,
@@ -66,6 +71,8 @@ SOURCE_MODELS: dict[str, type] = {
     "stock_count": StockCountSession,
     "credit_debit_note": CreditDebitNote,
     "period_close": FiscalPeriodClose,
+    #: از سندِ تسویه به خودِ تسویه — و از آنجا به دستگاه، رسیدها و بانک (§۲۹).
+    "pos_settlement": PosSettlement,
 }
 
 #: مدل‌هایی که ستونِ `journal_entry_id` دارند ولی هیچ سندی به آن‌ها نمی‌رسد، پس در

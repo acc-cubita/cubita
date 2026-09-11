@@ -12,6 +12,7 @@ import { ErrorBoundary } from './src/errors/ErrorBoundary'
 import { flush, installGlobalHandler } from './src/errors/reporter'
 import { OfflineBanner } from './src/offline/OfflineBanner'
 import { OutboxBadge } from './src/offline/OutboxBadge'
+import { navigateFromRoute } from './src/navigation/navigationRef'
 import { drain } from './src/offline/outbox'
 import { loadCache, startPersisting } from './src/offline/persist'
 import { syncAllDrafts } from './src/stock/countDraft'
@@ -83,7 +84,9 @@ export default function App() {
               <AppUpdateProvider>
                 <StatusBar style="light" />
                 <OfflineBanner />
-                <OutboxBadge />
+                {/* لمسِ نوار به صفحه‌ی صف می‌برد؛ از همان مسیرِ اعلان‌ها رد می‌شود
+                    تا یک نگاشتِ دوم ساخته نشود. */}
+                <OutboxBadge onPress={() => navigateFromRoute('outbox')} />
                 <RootNavigator />
               </AppUpdateProvider>
             </AuthProvider>

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.accounting import Account, JournalLine
 from app.models.banking import BankAccount
 from app.models.inventory import Contact
+from app.models.pos_terminal import PosTerminal
 from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn
@@ -38,6 +39,25 @@ def _resolve_money_side(db: Session, data: TreasuryTransactionIn) -> tuple[Accou
     return db.get(Account, bank.gl_account_id), bank.analytic_id, None
 
 
+def _card_money_side(db: Session, pos_terminal_id: UUID | None) -> tuple[Account, UUID | None]:
+    """سمتِ بدهکارِ رسیدِ کارتی: **وجوهِ در راه**، نه بانک (§۱ §۲ §۲۶).
+
+    کارت‌کشیدنِ مشتری و رسیدنِ پول به بانک یک رویداد نیستند؛ شبکه‌ی پرداخت چند روز
+    بعد و یک‌جا واریز می‌کند. تا پیش از این همین‌جا معینِ بانک بدهکار می‌شد، یعنی
+    **مانده‌ی بانک دقیقاً به اندازه‌ی پولِ تسویه‌نشده باد می‌کرد** و مغایرت‌گیری با
+    صورت‌حسابِ بانک از پایه نمی‌خواند. حالا تسویه‌ی کارت‌خوان است که این مبلغ را
+    به بانک منتقل می‌کند.
+
+    تفصیلی از خودِ دستگاه می‌آید تا وجوهِ در راهِ هر کارت‌خوان جدا بماند. برای
+    رسیدِ بی‌دستگاه `NULL` است — همان معنایی که صندوق و حسابِ بانکیِ بی‌تفصیلی
+    دارند.
+    """
+    from app.services import pos_settlements
+
+    term = db.get(PosTerminal, pos_terminal_id) if pos_terminal_id else None
+    return pos_settlements.clearing_account(db), term.analytic_id if term else None
+
+
 def create_receipt(
     db: Session,
     data: TreasuryTransactionIn,
@@ -53,6 +73,9 @@ def create_receipt(
 ) -> TreasuryTransaction:
     """دریافت وجه از مشتری: بدهکار صندوق/بانک، بستانکار حساب‌های دریافتنی.
 
+    **استثنا: رسیدِ کارت‌خوان.** آنجا سمتِ بدهکار «وجوهِ در راهِ کارت‌خوان» است نه
+    بانک، چون پول هنوز به بانک نرسیده — `_card_money_side` بالاتر دلیلش را دارد.
+
     پارامترهای اختیاریِ کارت (paid_via/reference_no/…) فقط برای رسیدِ کارتخوان پر
     می‌شوند و روی خودِ تراکنش ذخیره می‌گردند تا برای مغایرت‌گیری در دسترس بمانند.
     """
@@ -62,6 +85,8 @@ def create_receipt(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
 
     money_account, money_analytic, box = _resolve_money_side(db, data)
+    if paid_via == card_terminals.PAID_VIA_TERMINAL:
+        money_account, money_analytic = _card_money_side(db, pos_terminal_id)
     receivable = get_account(db, cc.ACCOUNTS_RECEIVABLE)
 
     description = data.description or f"دریافت از {contact.name}"

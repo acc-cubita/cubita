@@ -36,7 +36,7 @@ from app.schemas.receipts import (
 )
 from app.services import chart_codes as cc
 from app.services import receipts as svc
-from app.services.banking import update_check_status
+from app.services.check_ops import update_check_status
 from app.services.common import get_account
 from app.services.reports import contact_balance
 

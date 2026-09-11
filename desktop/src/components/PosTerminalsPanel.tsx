@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CreditCard, Save, Pencil, X, RefreshCw, Plus, Trash2, PlugZap, Monitor } from 'lucide-react'
 import {
+  fetchAnalytics,
   fetchPosTerminals,
   createPosTerminal,
   updatePosTerminal,
@@ -25,6 +26,7 @@ interface Draft {
   com_port: string
   psp: string
   bank_account_id: string
+  analytic_id: string
   is_default: boolean
 }
 const EMPTY: Draft = {
@@ -38,6 +40,7 @@ const EMPTY: Draft = {
   com_port: '',
   psp: '',
   bank_account_id: '',
+  analytic_id: '',
   is_default: false,
 }
 
@@ -62,6 +65,7 @@ const transportLabel = (t: PosTransport) => TRANSPORTS.find((x) => x.value === t
 export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
   const desktop = typeof window !== 'undefined' && !!window.cubita?.posTerminal
   const [terminals, setTerminals] = useState<PosTerminalRecord[] | null>(null)
+  const [analytics, setAnalytics] = useState<{ id: string; code: string; name: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [form, setForm] = useState<Draft>(EMPTY)
@@ -77,6 +81,10 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
+  }, [token])
+
+  useEffect(() => {
+    fetchAnalytics(token).then(setAnalytics).catch(() => setAnalytics([]))
   }, [token])
 
   useEffect(() => {
@@ -99,6 +107,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
       com_port: t.com_port,
       psp: t.psp,
       bank_account_id: t.bank_account_id ?? '',
+      analytic_id: t.analytic_id ?? '',
       is_default: t.is_default,
     })
     setMessage(null)
@@ -137,6 +146,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
       com_port: form.com_port.trim(),
       psp: form.psp.trim(),
       bank_account_id: form.bank_account_id || null,
+      analytic_id: form.analytic_id || null,
       is_default: form.is_default,
     }
   }
@@ -325,6 +335,28 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                     </option>
                   ))}
                 </select>
+                <span className="field-hint">
+                  مقصدِ تسویه است، نه جایی که کارت‌کشی می‌نشیند: کارت‌کشی به «وجوهِ
+                  در راهِ کارت‌خوان» می‌رود و تسویه آن را به اینجا می‌آورد.
+                </span>
+              </label>
+              <label>
+                تفصیلیِ وجوهِ در راه
+                <select
+                  value={form.analytic_id}
+                  onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}
+                >
+                  <option value="">— بدونِ تفصیلی (فقط برای دستگاهِ اول) —</option>
+                  {analytics.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code} — {a.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  بدونِ تفصیلی، وجوهِ در راهِ این دستگاه از بقیه جدا نمی‌شود. دستگاهِ
+                  باسابقه تفصیلی‌اش عوض نمی‌شود.
+                </span>
               </label>
               <label>
                 شرکتِ پرداخت (اختیاری)
@@ -382,6 +414,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                       <th>شماره پایانه</th>
                       <th>دستگاه</th>
                       <th>حساب بانکی</th>
+                      <th>کد تفصیلی</th>
                       <th>تسویه‌نشده</th>
                       <th>ارز</th>
                       <th>اتصال</th>
@@ -406,6 +439,10 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                             {t.bank_account_name2 && (
                               <div className="entity-sub">{t.bank_account_name2}</div>
                             )}
+                          </td>
+                          {/* بدونِ تفصیلی، وجوهِ در راهِ این دستگاه در دفتر از بقیه جدا نیست. */}
+                          <td data-label="کد تفصیلی" dir="ltr">
+                            {t.analytic_code ?? '—'}
                           </td>
                           <td data-label="تسویه‌نشده" className="num">
                             {faAmount(t.unsettled_balance)}

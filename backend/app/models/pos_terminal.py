@@ -10,6 +10,7 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
+    from app.models.analytic import AnalyticAccount
     from app.models.banking import BankAccount
 
 #: روشِ اتصالِ نرم‌افزار به دستگاهِ کارتخوان. simulator = شبیه‌سازِ نرم‌افزاری (بدونِ
@@ -23,8 +24,12 @@ class PosTerminal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     فقط بخشِ حسابداری‌محور (نامِ نمایشی، حسابِ بانکیِ تسویه، فعال/پیش‌فرض) و سرنخِ
     اتصال (transport/host/port/COM) اینجاست؛ خودِ ارتباط با سخت‌افزار در پروسه‌ی
-    اصلیِ الکترون انجام می‌شود، نه سرور. رسیدِ بانکیِ پرداخت به `bank_account_id`
-    این ترمینال می‌نشیند.
+    اصلیِ الکترون انجام می‌شود، نه سرور.
+
+    **دو حسابِ متفاوت، و این تفاوت مهم است.** کارت‌کشیِ مشتری روی معینِ «وجوهِ در
+    راهِ کارت‌خوان» با تفصیلیِ `analytic_id` می‌نشیند؛ `bank_account_id` جایی است
+    که *تسویه* پول را به آن می‌برد. تا مهاجرتِ ۰۱۰۹ هر دو یکی بودند — یعنی مانده‌ی
+    بانک از همان لحظه‌ی کارت‌کشی بالا می‌رفت، چند روز پیش از آنکه پولی برسد.
     """
 
     __tablename__ = "pos_terminals"
@@ -56,7 +61,17 @@ class PosTerminal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     host: Mapped[str] = mapped_column(String(120), default="", server_default="")
     port: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     com_port: Mapped[str] = mapped_column(String(20), default="", server_default="")
-    #: حسابِ بانکیِ تسویه‌ی این کارتخوان — رسیدِ بانکیِ پرداخت به معینِ همین می‌خورد.
+    #: تفصیلیِ این دستگاه روی حسابِ «وجوهِ در راهِ کارت‌خوان» — همان نقشی که
+    #: `analytic_id` در صندوق و حسابِ بانکی دارد. بدونِ آن، همه‌ی دستگاه‌ها روی یک
+    #: معین می‌نشینند و «وجوهِ در راهِ دستگاهِ شعبه‌ی ۲» از دفتر درنمی‌آید.
+    #:
+    #: `NULL` معنا دارد و backfill نمی‌خواهد: دستگاهِ بی‌تفصیلی روی ردیف‌های
+    #: بی‌تفصیلیِ همان معین می‌نشیند، که دقیقاً همان چیزی است که داده‌ی امروز هست.
+    analytic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analytic_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    #: حسابِ بانکیِ تسویه‌ی این کارتخوان — **مقصدِ تسویه**، نه جایی که کارت‌کشی
+    #: می‌نشیند. رسیدِ کارتی به «وجوهِ در راه» می‌رود و تسویه آن را به اینجا می‌آورد.
     bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_accounts.id"), nullable=True
     )
@@ -64,3 +79,4 @@ class PosTerminal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     bank_account: Mapped["BankAccount | None"] = relationship("BankAccount")
+    analytic: Mapped["AnalyticAccount | None"] = relationship("AnalyticAccount")

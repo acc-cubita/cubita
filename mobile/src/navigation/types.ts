@@ -5,6 +5,7 @@ export type HomeStackParams = {
   Treasury: { type: 'receipt' | 'payment'; pickedContact?: { id: string; name: string } }
   /** returnTo: به کدام صفحه برگردد (پیش‌فرض: خزانه). */
   ContactPicker: { returnTo?: 'Treasury' | 'NewInvoice' } | undefined
+  Outbox: undefined
   NewInvoice: { pickedContact?: { id: string; name: string }; pickedItem?: { id: string; name: string; unit: string; sales_price: string } } | undefined
   ItemPicker: undefined
 }

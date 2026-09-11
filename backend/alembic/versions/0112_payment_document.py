@@ -8,8 +8,8 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.tenancy import policy_name
 
-revision: str = "0110"
-down_revision: Union[str, None] = "0109"
+revision: str = "0112"
+down_revision: Union[str, None] = "0111"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

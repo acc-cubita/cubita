@@ -32,6 +32,8 @@ DOC_LABELS: dict[str, str] = {
     "production_order": "سفارش تولید",
     "installment_plan": "قرارداد اقساطی",
     "credit_debit_note": "اعلامیه بدهکار/بستانکار",
+    "pos_settlement": "تسویه کارت‌خوان",
+    "check_operation": "عملیات چک",
     "receipt": "رسید دریافت",
     "payment": "اعلامیه پرداخت",
     "warehouse_receipt": "رسید انبار خرید",

@@ -27,10 +27,30 @@
 import { File, Paths } from 'expo-file-system'
 import { onlineManager } from '@tanstack/react-query'
 
-import { API_BASE_URL } from './../api/config'
+import { apiPost, isApiError } from '../api/client'
+import type { SalesInvoiceIn, SalesInvoiceOut, TreasuryTxn, TreasuryTxnIn } from '../api/types'
 
-/** عملیاتی که صف پشتیبانی می‌کند — هر کدام روی بک‌اند idempotent است. */
-export type OutboxKind = 'salesInvoice' | 'receipt' | 'payment'
+/**
+ * عملیاتی که صف پشتیبانی می‌کند — هر کدام روی بک‌اند idempotent است.
+ *
+ * **بدنه و پاسخ تایپ‌دار می‌مانند.** نسخه‌ی اول `body: unknown` می‌گرفت و همان
+ * لحظه که صفحه‌ها از `createSalesInvoice` به `enqueue` منتقل شدند، کنترلِ نوعِ
+ * بدنه از بین رفت: یک نامِ فیلدِ اشتباه دیگر کامپایل را قرمز نمی‌کرد و فقط سرور
+ * ۴۲۲ می‌داد — سرِ مشتری، وسطِ کار.
+ */
+export interface OutboxBodies {
+  salesInvoice: SalesInvoiceIn
+  receipt: TreasuryTxnIn
+  payment: TreasuryTxnIn
+}
+
+export interface OutboxResponses {
+  salesInvoice: SalesInvoiceOut
+  receipt: TreasuryTxn
+  payment: TreasuryTxn
+}
+
+export type OutboxKind = keyof OutboxBodies
 
 const PATHS: Record<OutboxKind, string> = {
   salesInvoice: '/api/sales-invoices',
@@ -106,12 +126,28 @@ function newKey(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 }
 
-/** کار را در صف می‌گذارد و بلافاصله یک تلاش می‌زند. */
-export async function enqueue(
-  kind: OutboxKind,
-  body: unknown,
-  token: string | null = null,
-): Promise<OutboxItem> {
+/**
+ * نتیجه‌ی `enqueue` — صفحه باید بداند کدام پیام را نشان دهد.
+ *
+ * `sent` پاسخِ سرور را هم می‌آورد، چون پیامِ موفقیت به شماره‌ی سند و نامِ طرف
+ * حساب نیاز دارد؛ `queued` یعنی هنوز شماره‌ای وجود ندارد.
+ */
+export type EnqueueResult<K extends OutboxKind = OutboxKind> =
+  | { status: 'sent'; data: OutboxResponses[K] }
+  | { status: 'queued'; item: OutboxItem }
+
+/**
+ * کار را روی دیسک می‌نشاند و بلافاصله یک تلاش می‌زند.
+ *
+ * **ردِ سرور اینجا پرتاب می‌شود، نه در صف پارک.** کاربری که همین حالا دکمه را
+ * زده جلوی گوشی ایستاده و می‌تواند اشکال را درست کند؛ پارک‌کردنش یعنی فرم بسته
+ * شود و کار به فهرستی برود که باید بعداً کشفش کند. پارک‌کردن فقط برای ردهایی
+ * است که حینِ `drain`ِ پس‌زمینه رخ می‌دهند و کاربر آنجا نیست.
+ */
+export async function enqueue<K extends OutboxKind>(
+  kind: K,
+  body: OutboxBodies[K],
+): Promise<EnqueueResult<K>> {
   const item: OutboxItem = {
     key: newKey(),
     kind,
@@ -123,11 +159,51 @@ export async function enqueue(
   items.push(item)
   await write(items)
   await publish()
+
+  if (!onlineManager.isOnline()) return { status: 'queued', item }
+
   // منتظرِ تلاشِ ارسال می‌ماند تا رفتار قطعی باشد. نوشتنِ روی دیسک *پیش از* این
-  // انجام شده، پس شبکه‌ی کند فقط زمانِ برگشت را عوض می‌کند نه ماندگاری را — و
-  // اگر آفلاین باشیم drain بی‌درنگ برمی‌گردد.
-  await drain(token)
-  return item
+  // انجام شده، پس شبکه‌ی کند فقط زمانِ برگشت را عوض می‌کند نه ماندگاری را.
+  const result = await send(item)
+  if (result.kind === 'sent') {
+    await discard(item.key)
+    return { status: 'sent', data: result.data as OutboxResponses[K] }
+  }
+  if (result.kind === 'rejected') {
+    await discard(item.key)
+    throw { status: 422, message: result.reason }
+  }
+  // شبکه/سرور جواب نداد — روی دیسک می‌ماند و `drain` بعداً می‌بردش.
+  item.attempts += 1
+  await write((await read()).map((i) => (i.key === item.key ? item : i)))
+  await publish()
+  return { status: 'queued', item }
+}
+
+/**
+ * تلاشِ دوباره‌ی دستی روی یک آیتم.
+ *
+ * **چرا لازم است:** `drain` عمداً از آیتمِ ردشده رد می‌شود — تلاشِ خودکارِ بی‌پایان
+ * روی چیزی که سرور نمی‌پذیرد فقط باتری می‌سوزاند. ولی گاهی علتِ رد بیرون از سند
+ * است و درست می‌شود: انبار شارژ شد، سقفِ اعتبار بالا رفت، حساب باز شد. بدونِ این
+ * تابع تنها راهِ باقی‌مانده حذف بود، یعنی دور ریختنِ کارِ کاربر.
+ */
+export async function retryItem(key: string): Promise<'sent' | 'retry' | 'rejected'> {
+  const items = await read()
+  const item = items.find((i) => i.key === key)
+  if (!item) return 'rejected'
+
+  const result = await send(item)
+  if (result.kind === 'sent') {
+    await discard(key)
+    return 'sent'
+  }
+  item.attempts += 1
+  // پاک می‌شود تا اگر این بار فقط شبکه بود، `drain` دوباره سراغش برود.
+  item.rejectedReason = result.kind === 'rejected' ? result.reason : undefined
+  await write(items.map((i) => (i.key === key ? item : i)))
+  await publish()
+  return result.kind
 }
 
 /** حذفِ دستیِ یک آیتم — برای وقتی سرور ردش کرده و کاربر می‌خواهد بی‌خیالش شود. */
@@ -140,27 +216,36 @@ export async function discard(key: string): Promise<void> {
 
 let draining = false
 
-async function send(item: OutboxItem, token: string | null): Promise<'sent' | 'retry' | 'rejected'> {
+type SendResult = { kind: 'sent'; data: unknown } | { kind: 'retry' } | { kind: 'rejected'; reason: string }
+
+/**
+ * یک آیتم را می‌فرستد.
+ *
+ * **از `apiPost`ِ مشترک رد می‌شود، نه `fetch`ِ خام.** نسخه‌ی اول `fetch` مستقیم
+ * می‌زد و توکن را به‌صورتِ پارامتر می‌گرفت — ولی `App.tsx` سرِ بازگشتِ شبکه
+ * `drain()` را **بدونِ توکن** صدا می‌زد. یعنی هر تلاشِ خودکار ۴۰۱ می‌گرفت،
+ * «تلاشِ دوباره» علامت می‌خورد، و کار تا ابد در صف می‌ماند بی‌آنکه کسی بفهمد.
+ * کلاینتِ مشترک توکن را خودش تزریق می‌کند، روی ۴۰۱ رفرش می‌زند، و `detail`ِ
+ * فارسیِ خطای سرور را بیرون می‌کشد.
+ */
+async function send(item: OutboxItem): Promise<SendResult> {
   try {
-    const res = await fetch(`${API_BASE_URL}${PATHS[item.kind]}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // کلیدِ ثابت: قلبِ ایمنیِ این صف.
-        'Idempotency-Key': item.key,
-        // بک‌اند سقفِ اعتبار را سرِ همگام‌سازی نمی‌گیرد؛ آن فروش قبلاً انجام شده.
-        'X-Cubita-Offline-Replay': '1',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(item.body),
+    const data = await apiPost<unknown>(PATHS[item.kind], item.body, {
+      // کلیدِ ثابت: قلبِ ایمنیِ این صف.
+      'Idempotency-Key': item.key,
+      // بک‌اند سقفِ اعتبار را سرِ همگام‌سازی نمی‌گیرد؛ آن فروش قبلاً انجام شده.
+      'X-Cubita-Offline-Replay': '1',
     })
-    if (res.ok) return 'sent'
-    // ۴۰۱ یعنی نشست خراب است نه خودِ کار — بماند تا کاربر دوباره وارد شود.
-    if (res.status === 401 || res.status >= 500) return 'retry'
+    return { kind: 'sent', data }
+  } catch (e) {
+    const status = isApiError(e) ? e.status : 0
+    // ۰ یعنی شبکه نبود، ۴۰۱ یعنی نشست خراب است نه کار، ۵xx یعنی مشکلِ سرور.
+    if (status === 0 || status === 401 || status >= 500) return { kind: 'retry' }
     // ۴xxِ دیگر یعنی سرور این کار را نمی‌پذیرد؛ تلاشِ دوباره همان جواب را می‌دهد.
-    return 'rejected'
-  } catch {
-    return 'retry'
+    return {
+      kind: 'rejected',
+      reason: isApiError(e) ? e.message : 'سرور این مورد را نپذیرفت.',
+    }
   }
 }
 
@@ -170,7 +255,7 @@ async function send(item: OutboxItem, token: string | null): Promise<'sent' | 'r
  * ترتیب حفظ می‌شود و روی اولین «تلاشِ دوباره» متوقف می‌شود: اگر شبکه قطع است،
  * آیتم‌های بعدی هم شکست می‌خورند و فقط شمارنده‌ی تلاششان را بی‌دلیل بالا می‌برند.
  */
-export async function drain(token: string | null = null): Promise<void> {
+export async function drain(): Promise<void> {
   if (draining || !onlineManager.isOnline()) return
   draining = true
   try {
@@ -183,14 +268,14 @@ export async function drain(token: string | null = null): Promise<void> {
         remaining.push(item)
         continue
       }
-      const result = await send(item, token)
-      if (result === 'sent') continue
+      const result = await send(item)
+      if (result.kind === 'sent') continue
       item.attempts += 1
-      if (result === 'rejected') {
-        item.rejectedReason = 'سرور این مورد را نپذیرفت؛ برای بررسی نگه داشته شد.'
-      } else {
-        stop = true
-      }
+      // **پیامِ خودِ سرور نگه داشته می‌شود.** پیشِ این، همه‌ی ردها یک جمله‌ی
+      // یکسان می‌گرفتند و «موجودیِ انبار کافی نیست» از «حساب بسته است» قابلِ
+      // تشخیص نبود — یعنی کاربر می‌دانست چیزی ثبت نشده ولی نه اینکه چرا.
+      if (result.kind === 'rejected') item.rejectedReason = result.reason
+      else stop = true
       remaining.push(item)
     }
 

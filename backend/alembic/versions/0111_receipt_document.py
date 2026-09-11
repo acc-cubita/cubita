@@ -32,8 +32,11 @@
    می‌شوند؛ منطقش در `services/receipts.py` است و از
    `voiding.reverse_journal_entry`ِ موجود استفاده می‌کند.
 
-۳) **هویتِ چک** — `sayad_id` (جدا از شماره‌ی چک، §۱۱)، `back_number`،
-   `branch_name`/`branch_code`، `account_number`، `owner_name`، `description2`.
+۳) **هویتِ چک** — `branch_name`/`branch_code`، `account_number`، `owner_name`،
+   `description2`. **`sayad_id` و `back_number` این‌جا نیستند:** مهاجرتِ ۰۱۱۰
+   (چرخه‌ی عمرِ چک) زودتر ساختشان و روی تولید نشسته‌اند. ولی ایندکسِ یکتای
+   **جزئیِ** صیادی این‌جا ساخته می‌شود — آن مهاجرت فقط ستون را داد، نه قید را،
+   و بدونِ قید یک کدِ صیادی می‌توانست روی دو چک بنشیند.
 
 ۴) **چهار مفهومِ مالیِ §۲۲ و `receipt_related_documents`** — قرینه‌ی `payments`
    در مهاجرتِ ۰۱۱۰. دو سندِ خواهر با دو توانِ متفاوت منتشر نمی‌شوند؛ سپیدار هم
@@ -59,8 +62,8 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.tenancy import policy_name
 
-revision: str = "0109"
-down_revision: Union[str, None] = "0108"
+revision: str = "0111"
+down_revision: Union[str, None] = "0110"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -181,9 +184,9 @@ def upgrade() -> None:
     op.create_index("ix_checks_receipt_id", "checks", ["receipt_id"])
 
     # ── هویتِ برگ (§۱۰ §۱۱) — همه با پیش‌فرضِ خالی، پس هیچ ردیفی به‌روز نمی‌شود ──
+    #: `sayad_id` و `back_number` این‌جا نیستند — مهاجرتِ ۰۱۱۰ (چرخه‌ی عمرِ چک)
+    #: زودتر ساختشان و روی تولید نشسته‌اند. دوباره‌ساختنشان یعنی شکستِ استقرار.
     for name, length in (
-        ("sayad_id", 16),
-        ("back_number", 30),
         ("branch_name", 100),
         ("branch_code", 20),
         ("account_number", 40),
@@ -219,8 +222,6 @@ def downgrade() -> None:
         "account_number",
         "branch_code",
         "branch_name",
-        "back_number",
-        "sayad_id",
     ):
         op.drop_column("checks", name)
 

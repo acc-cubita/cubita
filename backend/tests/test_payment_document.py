@@ -1,7 +1,10 @@
 """اعلامیه‌ی پرداخت: چند ابزار، چرخه‌ی چک، کارمزد و idempotency."""
 
+import pytest
 from datetime import date, timedelta
 from decimal import Decimal
+
+from fastapi import HTTPException
 
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.banking import BankAccount, BankTransaction, Check
@@ -15,7 +18,7 @@ from app.schemas.payments import (
     PaymentIn,
     PaymentPayableChequeIn,
 )
-from app.services import banking, checkbooks, payments
+from app.services import check_ops, checkbooks, payments
 from app.services import chart_codes as cc
 from app.services.common import get_account
 
@@ -85,7 +88,7 @@ def test_multi_instrument_payment_has_one_balanced_journal(db, user):
 def test_endorsing_reuses_the_original_received_cheque(db, user):
     customer = _contact(db, "customer", "مشتری")
     supplier = _contact(db)
-    original = banking.create_check(
+    original = check_ops.create_check(
         db,
         CheckIn(
             type="receivable", number="R-500", amount=Decimal(450_000),
@@ -114,7 +117,7 @@ def test_endorsing_reuses_the_original_received_cheque(db, user):
 def test_used_or_cleared_received_cheque_cannot_be_endorsed(db, user):
     customer = _contact(db, "customer", "مشتری")
     supplier = _contact(db)
-    cheque = banking.create_check(
+    cheque = check_ops.create_check(
         db,
         CheckIn(
             type="receivable", number="R-X", amount=Decimal(10), issue_date=TODAY,
@@ -158,7 +161,7 @@ def test_payment_endpoint_replays_same_idempotency_key(db, user, client):
 def test_void_restores_endorsed_cheque_and_keeps_history(db, user):
     customer = _contact(db, "customer", "مشتری")
     supplier = _contact(db)
-    cheque = banking.create_check(
+    cheque = check_ops.create_check(
         db,
         CheckIn(
             type="receivable", number="R-V", amount=Decimal(90_000),
@@ -212,3 +215,78 @@ def test_the_payment_sheet_prints_from_the_payment_itself(db, user):
     )
     for label in ("اعلامیه پرداخت", "وجه نقد", "برداشت بانکی", "مبلغ به حروف", "کارمزد بانکی"):
         assert label in html
+
+
+def test_an_endorsed_cheque_cannot_come_back_behind_the_payment_s_back(db, user):
+    """چکِ خرج‌شده با اعلامیه، از مسیرِ صفحه‌ی چک برنمی‌گردد.
+
+    بدونِ این گارد پول گم می‌شد: وضعیت به `in_hand` برمی‌گشت ولی ردیفِ
+    `PaymentChequeTransfer` دست‌نخورده می‌ماند، ابطالِ اعلامیه ۴۰۹ می‌گرفت (چون
+    گاردش وضعیتِ `endorsed` می‌خواهد)، پس سندِ اعلامیه می‌ماند و بدهی تسویه‌شده
+    حساب می‌شد — در حالی که همان چک دوباره قابلِ خرج‌کردن بود.
+    """
+    customer = _contact(db, "customer", "مشتریِ چک")
+    supplier = _contact(db)
+    cheque = check_ops.create_check(
+        db,
+        CheckIn(
+            type="receivable", number="R-PLEDGE", amount=Decimal(70_000),
+            issue_date=TODAY, due_date=TODAY, contact_id=customer.id,
+        ),
+        user,
+    )
+    payment = payments.create_payment(
+        db,
+        PaymentIn(
+            payment_type="supplier", contact_id=supplier.id, payment_date=TODAY,
+            description="پرداخت", description2="آزمون",
+            endorsed_cheques=[{"check_id": cheque.id}],
+        ),
+        user,
+    )
+    db.flush()
+    assert cheque.status == "endorsed"
+
+    #: مسیرِ دیگر باید بسته باشد — و پیام باید بگوید به‌جایش چه کند
+    with pytest.raises(HTTPException) as err:
+        check_ops.update_check_status(db, cheque.id, "in_hand", None, user)
+    assert err.value.status_code == 409
+    assert "اعلامیه" in err.value.detail
+
+    #: و مسیرِ درست همچنان باز است
+    payments.void_payment(db, payment.id, reason="اشتباه", user=user)
+    db.refresh(cheque)
+    assert cheque.status == "in_hand"
+
+    #: بعد از ابطال، برگشتِ دستی دیگر مسدود نیست — تعهدی نمانده
+    events = check_ops.timeline(db, cheque.id)
+    assert [e["to_status"] for e in events] == ["in_hand", "endorsed", "in_hand"]
+
+
+def test_a_cheque_spent_through_a_payment_lands_in_the_timeline(db, user):
+    """ثابتِ مهاجرتِ ۰۱۱۰: هر تغییرِ وضعیت یک رویداد دارد — از هر مسیری."""
+    customer = _contact(db, "customer", "مشتریِ تایم‌لاین")
+    supplier = _contact(db)
+    cheque = check_ops.create_check(
+        db,
+        CheckIn(
+            type="receivable", number="R-TL", amount=Decimal(40_000),
+            issue_date=TODAY, due_date=TODAY, contact_id=customer.id,
+        ),
+        user,
+    )
+    payments.create_payment(
+        db,
+        PaymentIn(
+            payment_type="supplier", contact_id=supplier.id, payment_date=TODAY,
+            description="پرداخت", description2="آزمون",
+            endorsed_cheques=[{"check_id": cheque.id}],
+        ),
+        user,
+    )
+    db.flush()
+    events = check_ops.timeline(db, cheque.id)
+    endorse = [e for e in events if e["to_status"] == "endorsed"]
+    assert len(endorse) == 1, "خرج‌کردن با اعلامیه باید در تایم‌لاین بیفتد"
+    #: و به سندِ خودِ اعلامیه اشاره کند، نه به سندِ دوم
+    assert endorse[0]["journal_entry_id"] is not None

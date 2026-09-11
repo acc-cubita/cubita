@@ -11,7 +11,7 @@ from app.schemas.banking import CheckIn
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.returns import SalesReturnIn, SalesReturnLineIn
 from app.schemas.treasury import TreasuryTransactionIn
-from app.services.banking import create_check, update_check_status
+from app.services.check_ops import create_check, update_check_status
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.reports import contact_balance, get_contact_statement
 from app.services.returns import post_sales_return
