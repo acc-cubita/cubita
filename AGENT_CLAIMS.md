@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+| Claude Opus 5 | `backend/app/models/inventory.py` · `backend/app/models/advanced_inventory.py` · `backend/app/schemas/inventory.py` · `backend/app/routers/inventory.py` · `backend/app/services/inventory.py` · `backend/app/services/returns.py` · `backend/app/services/chart_codes.py` · `backend/app/services/items.py` (جدید) · `backend/app/services/units.py` (جدید) · `backend/alembic/versions/0117…0120` · `desktop/src/components/ProductsPanel.tsx` · انتهای `desktop/src/api.ts` | فصلِ «تعریف کالا و خدمت» — Item Master | ۱۴۰۵/۰۶/۲۰ |
 
 ---
 
