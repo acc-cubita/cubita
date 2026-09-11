@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+| Claude Opus 5 | `models/check_event.py`, `services/check_ops.py`, `routers/check_ops.py`, `schemas/banking.py`, `schemas/check_ops.py`, `services/receipts.py`+`payments.py` (فقط فراخوانِ `new_check_row`/`update_check_status`)، `0115_cheque_traceability.py`, `CheckOpsPages.tsx`, `desktop/src/api.ts` | جستجو و ردیابی چک؛ **شماره‌ی مهاجرتِ ۰۱۱۵ برداشته شد** | ۱۴۰۵/۰۶/۲۰ |
 
 ---
 
