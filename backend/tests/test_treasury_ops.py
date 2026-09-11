@@ -13,8 +13,9 @@ from app.models.accounting import Account
 from app.models.banking import BankAccount, Check, Checkbook
 from app.models.inventory import Contact
 from app.models.treasury import TreasuryTransaction
-from app.schemas.banking import CheckbookIn, CheckIn, PosSettlementIn
+from app.schemas.banking import CheckbookIn, CheckbookUpdateIn, CheckIn, PosSettlementIn
 from app.services import banking as svc
+from app.services import checkbooks as book_svc
 from app.services import chart_codes as cc
 from app.services.common import get_account
 
@@ -44,7 +45,7 @@ def _book(db, user, bank, **kw) -> Checkbook:
         last_number=kw.get("last_number", "000110"),
         issue_date=TODAY,
     )
-    return svc.create_checkbook(db, data, user)
+    return book_svc.create_checkbook(db, data, user)
 
 
 # ── دسته چک ──────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ def test_next_number_walks_past_used_leaves(db, user):
     """
     bank = _bank(db)
     book = _book(db, user, bank)
-    assert svc.next_check_number(db, book.id) == "000101"
+    assert book_svc.next_number(db, book.id) == "000101"
 
     svc.create_check(
         db,
@@ -85,7 +86,7 @@ def test_next_number_walks_past_used_leaves(db, user):
         ),
         user,
     )
-    assert svc.next_check_number(db, book.id) == "000106"
+    assert book_svc.next_number(db, book.id) == "000106"
 
 
 def test_next_number_is_empty_when_the_book_is_finished(db, user):
@@ -103,7 +104,7 @@ def test_next_number_is_empty_when_the_book_is_finished(db, user):
         ),
         user,
     )
-    assert svc.next_check_number(db, book.id) == ""
+    assert book_svc.next_number(db, book.id) == ""
 
 
 def test_used_checkbook_cannot_be_deleted(db, user):
@@ -123,10 +124,10 @@ def test_used_checkbook_cannot_be_deleted(db, user):
         user,
     )
     with pytest.raises(HTTPException) as e:
-        svc.delete_checkbook(db, book.id)
+        book_svc.delete_checkbook(db, book.id)
     assert e.value.status_code == 409
     # ولی بستنش همیشه ممکن است
-    assert svc.set_checkbook_active(db, book.id, False).is_active is False
+    assert book_svc.update_checkbook(db, book.id, CheckbookUpdateIn(is_active=False)).is_active is False
 
 
 def test_checkbook_list_reports_remaining_leaves(db, user):
@@ -144,7 +145,7 @@ def test_checkbook_list_reports_remaining_leaves(db, user):
         ),
         user,
     )
-    row = next(r for r in svc.list_checkbooks(db) if r["id"] == book.id)
+    row = next(r for r in book_svc.list_checkbooks(db) if r["id"] == book.id)
     assert (row["used_count"], row["remaining_count"]) == (1, 9)
     assert row["bank_account_name"] == bank.name
 

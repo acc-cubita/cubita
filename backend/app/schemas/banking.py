@@ -250,6 +250,39 @@ class CheckbookIn(BaseModel):
     leaf_count: int = 0
     issue_date: date | None = None
     description: str = ""
+    #: خالی یعنی «از حسابِ بانکی ارث ببر». موتورِ چاپ جداست و هنوز وجود ندارد.
+    cheque_print_format: str = ""
+
+
+class CheckbookUpdateIn(BaseModel):
+    """ویرایشِ دسته — همه‌ی فیلدها اختیاری.
+
+    `exclude_unset` در سرویس یعنی «هرچه نفرستادی دست نمی‌خورد». شِمای کاملِ اجباری
+    اینجا همان اشکالی را می‌ساخت که در کارت‌خوان دیدیم: ویرایشِ توضیحاتِ یک دسته‌ی
+    بسته، بی‌صدا بازش می‌کرد.
+    """
+
+    bank_account_id: UUID | None = None
+    serial: str | None = None
+    first_number: str | None = None
+    last_number: str | None = None
+    leaf_count: int | None = None
+    issue_date: date | None = None
+    description: str | None = None
+    cheque_print_format: str | None = None
+    is_active: bool | None = None
+
+
+class CheckbookLeafOut(BaseModel):
+    """یک برگِ خرج‌شده و چکی که از آن درآمد — ناوبریِ برعکسِ دسته ← برگ ← چک."""
+
+    number: str
+    check_id: UUID
+    status: str
+    amount: Decimal
+    issue_date: date
+    due_date: date
+    contact_name: str | None = None
 
 
 class CheckbookOut(BaseModel):
@@ -266,12 +299,17 @@ class CheckbookOut(BaseModel):
     issue_date: date | None
     description: str
     is_active: bool
+    cheque_print_format: str = ""
 
 
 class PosPendingGroupOut(BaseModel):
     """یک روزِ تسویه‌نشده‌ی یک پایانه."""
 
     terminal_no: str
+    #: دستگاهِ واقعی، اگر رسیدها به آن وصل باشند. برای رسیدهای پیش از مهاجرتِ
+    #: ۰۱۰۷ خالی است و فقط `terminal_no` را دارند.
+    pos_terminal_id: UUID | None = None
+    terminal_label: str | None = None
     transaction_date: date
     count: int
     gross_amount: Decimal
@@ -281,9 +319,12 @@ class PosSettlementIn(BaseModel):
     settlement_date: date
     date_from: date
     date_to: date
-    #: خالی = همه‌ی پایانه‌ها.
+    #: دستگاه — راهِ درست (§۲۵). دامنه‌ی تسویه از خودش می‌آید و حسابِ کارمزد هم.
+    pos_terminal_id: UUID | None = None
+    #: شماره‌ی پایانه به‌صورتِ متن. برای رسیدهای قدیمی که کلیدِ خارجی ندارند
+    #: می‌ماند؛ خالی = همه‌ی پایانه‌ها.
     terminal_no: str | None = None
-    #: فقط وقتی کارمزد داری لازم است — سندِ کارمزد به این حساب بستانکار می‌شود.
+    #: وقتی دستگاه داده شود از خودش می‌آید. فقط برای مسیرِ قدیمی لازم است.
     bank_account_id: UUID | None = None
     fee_amount: Decimal = Decimal(0)
 

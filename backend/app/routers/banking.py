@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.banking import (
@@ -17,7 +18,9 @@ from app.schemas.banking import (
     BankStatementLineOut,
     BankTransactionOut,
     CheckbookIn,
+    CheckbookLeafOut,
     CheckbookOut,
+    CheckbookUpdateIn,
     CheckIn,
     CheckOut,
     CheckStatusUpdateIn,
@@ -32,8 +35,10 @@ from app.schemas.banking import (
 )
 from app.services import bank_accounts as bank_accounts_service
 from app.services import banking as banking_service
+from app.services import checkbooks as checkbook_service
 from app.services import chart_codes as cc
 from app.services.common import get_account
+from pydantic import BaseModel
 from uuid import UUID
 
 router = APIRouter(tags=["banking"])
@@ -243,7 +248,7 @@ def petty_cash_expense(
 
 @router.get("/api/checkbooks", response_model=list[CheckbookOut])
 def list_checkbooks(db: Session = Depends(get_db), _=Depends(require_permission("checks_bank", "view"))):
-    return banking_service.list_checkbooks(db)
+    return checkbook_service.list_checkbooks(db)
 
 
 @router.post("/api/checkbooks", response_model=CheckbookOut, status_code=201)
@@ -252,19 +257,20 @@ def create_checkbook(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
-    book = banking_service.create_checkbook(db, data, user)
+    book = checkbook_service.create_checkbook(db, data, user)
     db.commit()
     return _checkbook_row(db, book.id)
 
 
 @router.patch("/api/checkbooks/{checkbook_id}", response_model=CheckbookOut)
-def set_checkbook_active(
+def update_checkbook(
     checkbook_id: UUID,
-    is_active: bool,
+    data: CheckbookUpdateIn,
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "update")),
 ):
-    banking_service.set_checkbook_active(db, checkbook_id, is_active)
+    """ویرایشِ دسته. فیلدی که نفرستید دست نمی‌خورد؛ ساختاری فقط تا وقتی برگی خرج نشده."""
+    checkbook_service.update_checkbook(db, checkbook_id, data)
     db.commit()
     return _checkbook_row(db, checkbook_id)
 
@@ -275,7 +281,7 @@ def delete_checkbook(
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "delete")),
 ):
-    banking_service.delete_checkbook(db, checkbook_id)
+    checkbook_service.delete_checkbook(db, checkbook_id)
     db.commit()
 
 
@@ -286,12 +292,23 @@ def next_check_number(
     _=Depends(require_permission("checks_bank", "view")),
 ):
     """شماره‌ی برگِ بعدی — پیشنهاد برای فرمِ صدورِ چک. رشته‌ی خالی = دسته تمام شده."""
-    return {"number": banking_service.next_check_number(db, checkbook_id)}
+    return {"number": checkbook_service.next_number(db, checkbook_id)}
+
+
+@router.get("/api/checkbooks/{checkbook_id}/leaves", response_model=list[CheckbookLeafOut])
+def checkbook_leaves(
+    checkbook_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """هر برگِ خرج‌شده‌ی این دسته کجا رفت — دسته ← برگ ← چک."""
+    book = checkbook_service.resolve(db, checkbook_id)
+    return checkbook_service.used_leaves(db, book)
 
 
 def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
     """همان شکلی که فهرست می‌دهد (با نامِ بانک و شمارِ برگ‌ها) برای یک ردیف."""
-    for row in banking_service.list_checkbooks(db):
+    for row in checkbook_service.list_checkbooks(db):
         if row["id"] == checkbook_id:
             return row
     raise HTTPException(status.HTTP_404_NOT_FOUND, "دسته‌چک یافت نشد")
@@ -303,13 +320,18 @@ def _checkbook_row(db: Session, checkbook_id: UUID) -> dict:
 @router.get("/api/pos-settlements/pending", response_model=list[PosPendingGroupOut])
 def pos_pending(
     terminal_no: str | None = None,
+    pos_terminal_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "view")),
 ):
     return banking_service.pos_pending_settlements(
-        db, terminal_no=terminal_no, date_from=date_from, date_to=date_to
+        db,
+        terminal_no=terminal_no,
+        date_from=date_from,
+        date_to=date_to,
+        pos_terminal_id=pos_terminal_id,
     )
 
 
@@ -322,3 +344,81 @@ def settle_pos(
     result = banking_service.settle_pos(db, data, user)
     db.commit()
     return result
+
+
+# ── سیاستِ کنترلِ شماره‌ی چک ───────────────────────────────────────────────────
+#
+# قرینه‌ی `/api/accounts/tafsili-mode`: یک انتخابِ سطحِ کسب‌وکار که رابط گزینه‌ها و
+# پیامدشان را از سرور می‌گیرد، تا متنِ تصمیم دو جا نوشته نشود.
+
+
+class ChequeControlOut(BaseModel):
+    mode: str
+    options: list[dict]
+    #: True یعنی کاربر خودش انتخاب کرده؛ False یعنی هنوز روی پیش‌فرضِ سرویس است.
+    is_explicit: bool
+
+
+class ChequeControlIn(BaseModel):
+    mode: str
+
+
+def _cheque_control_out(tenant: Tenant) -> ChequeControlOut:
+    return ChequeControlOut(
+        mode=tenant.cheque_number_control or checkbook_service.DEFAULT_CONTROL_MODE,
+        is_explicit=tenant.cheque_number_control is not None,
+        options=[
+            {
+                "key": key,
+                "label": checkbook_service.CONTROL_MODE_LABELS[key],
+                "hint": checkbook_service.CONTROL_MODE_HINTS[key],
+                "effects": checkbook_service.CONTROL_MODE_EFFECTS[key],
+                "is_default": key == checkbook_service.DEFAULT_CONTROL_MODE,
+            }
+            for key in checkbook_service.CONTROL_MODES
+        ],
+    )
+
+
+def _tenant(db: Session, principal: Principal) -> Tenant:
+    tenant = db.get(Tenant, principal.tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
+    return tenant
+
+
+@router.get("/api/cheque-number-control", response_model=ChequeControlOut)
+def get_cheque_number_control(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """آیا چکِ پرداختنی باید از دسته‌چک صادر شود؟"""
+    return _cheque_control_out(_tenant(db, principal))
+
+
+@router.patch("/api/cheque-number-control", response_model=ChequeControlOut)
+def set_cheque_number_control(
+    data: ChequeControlIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    #: تاپل: مالک (`approve` از «*») و حسابدار (`update`). ماژولِ چک اکشنِ
+    #: `approve` در فهرستِ مجوزها ندارد، پس تنهاگذاشتنش یعنی حسابدار — همان کسی
+    #: که این تصمیم را می‌گیرد — بیرون می‌ماند.
+    _=Depends(require_permission("checks_bank", ("approve", "update"))),
+):
+    """تغییرِ سیاست.
+
+    تصمیمی در سطحِ کلِ کسب‌وکار است که روی هر صدورِ بعدی اثر می‌گذارد، نه ویرایشِ
+    یک رکورد — پس مالک و حسابدار می‌توانند، نه هر کسی که چک ثبت می‌کند.
+
+    **روی چک‌های گذشته اثری ندارد** و عمداً هم ندارد: سختگیرتر کردنِ قاعده نباید
+    چکی را که دیروز درست ثبت شده امروز نامعتبر کند.
+    """
+    tenant = _tenant(db, principal)
+    try:
+        checkbook_service.set_control_mode(tenant, data.mode)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from None
+    db.commit()
+    return _cheque_control_out(tenant)

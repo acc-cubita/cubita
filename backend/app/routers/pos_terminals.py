@@ -1,30 +1,35 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.pos_terminal import PosTerminal
-from app.schemas.pos_terminal import PosTerminalIn, PosTerminalOut
+from app.schemas.pos_terminal import PosTerminalIn, PosTerminalOut, PosTerminalUpdateIn
+from app.services import card_terminals as svc
 
 router = APIRouter(tags=["pos-terminals"])
-
-
-def _clear_default(db: Session) -> None:
-    """پیش‌فرض یکتاست: قبل از ست‌کردنِ پیش‌فرضِ تازه، بقیه را از حالتِ پیش‌فرض درمی‌آورد."""
-    for t in db.query(PosTerminal).filter(PosTerminal.is_default.is_(True)).all():
-        t.is_default = False
 
 
 @router.get("/api/pos-terminals", response_model=list[PosTerminalOut])
 def list_terminals(
     db: Session = Depends(get_db),
+    search: str | None = Query(None, description="شماره پایانه یا نامِ دستگاه"),
+    bank_account_id: UUID | None = Query(None),
+    currency_code: str | None = Query(None),
+    active_only: bool = Query(False),
     # نمای فهرست را فروشنده/صندوق‌دار هم لازم دارد تا دکمه‌ی پرداخت بداند به کدام
     # ترمینال/حسابِ بانکی وصل شود؛ پس با مجوزِ فروش (نه صرفاً checks_bank) گیت می‌شود.
     _=Depends(require_permission("invoices", "view")),
 ):
-    return db.query(PosTerminal).order_by(PosTerminal.label).all()
+    """فهرست با موجودیِ تسویه‌نشده، جست‌وجو و صافی (§۲۲ §۲۳)."""
+    return svc.list_terminals(
+        db,
+        search=search,
+        bank_account_id=bank_account_id,
+        currency_code=currency_code,
+        active_only=active_only,
+    )
 
 
 @router.post("/api/pos-terminals", response_model=PosTerminalOut, status_code=201)
@@ -33,32 +38,23 @@ def create_terminal(
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "update")),
 ):
-    if data.is_default:
-        _clear_default(db)
-    terminal = PosTerminal(**data.model_dump())
-    db.add(terminal)
-    db.flush()
-    db.refresh(terminal)
-    return terminal
+    return svc.row(db, svc.create_terminal(db, data.model_dump()))
 
 
 @router.patch("/api/pos-terminals/{terminal_id}", response_model=PosTerminalOut)
 def update_terminal(
     terminal_id: UUID,
-    data: PosTerminalIn,
+    data: PosTerminalUpdateIn,
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "update")),
 ):
-    terminal = db.get(PosTerminal, terminal_id)
-    if terminal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "دستگاهِ کارتخوان یافت نشد")
-    if data.is_default and not terminal.is_default:
-        _clear_default(db)
-    for field, value in data.model_dump().items():
-        setattr(terminal, field, value)
-    db.flush()
-    db.refresh(terminal)
-    return terminal
+    """ویرایشِ جزئی.
+
+    عمداً `PosTerminalUpdateIn` است نه `PosTerminalIn`: با شِمای کامل، هر فیلدی که
+    کلاینت نمی‌فرستاد **پیش‌فرضش نوشته می‌شد** — و چون پیش‌فرضِ `is_active` مقدارِ
+    `True` است، ویرایشِ هر دستگاهی دستگاهِ غیرفعال را بی‌صدا فعال می‌کرد.
+    """
+    return svc.row(db, svc.update_terminal(db, terminal_id, data.model_dump(exclude_unset=True)))
 
 
 @router.delete("/api/pos-terminals/{terminal_id}", status_code=204)
@@ -67,7 +63,5 @@ def delete_terminal(
     db: Session = Depends(get_db),
     _=Depends(require_permission("checks_bank", "update")),
 ):
-    terminal = db.get(PosTerminal, terminal_id)
-    if terminal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "دستگاهِ کارتخوان یافت نشد")
-    db.delete(terminal)
+    """دستگاهِ بی‌سابقه حذف می‌شود؛ دستگاهِ استفاده‌شده غیرفعال (§۲۱)."""
+    svc.delete_terminal(db, terminal_id)

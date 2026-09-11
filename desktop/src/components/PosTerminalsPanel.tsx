@@ -16,6 +16,9 @@ import { Pager, usePagination } from './Pager'
 
 interface Draft {
   label: string
+  name2: string
+  terminal_no: string
+  currency_code: string
   transport: PosTransport
   host: string
   port: string
@@ -26,6 +29,9 @@ interface Draft {
 }
 const EMPTY: Draft = {
   label: '',
+  name2: '',
+  terminal_no: '',
+  currency_code: 'IRR',
   transport: 'simulator',
   host: '',
   port: '',
@@ -41,6 +47,11 @@ const TRANSPORTS: { value: PosTransport; label: string }[] = [
   { value: 'serial', label: 'USB / سریال (COM)' },
   { value: 'sdk', label: 'SDK اختصاصیِ PSP' },
 ]
+/** صفر خط تیره می‌شود تا چشم از ارقامِ واقعی منحرف نشود. */
+const faAmount = (v: string) => {
+  const n = Math.round(Number(v) || 0)
+  return n === 0 ? '—' : n.toLocaleString('fa-IR')
+}
 const transportLabel = (t: PosTransport) => TRANSPORTS.find((x) => x.value === t)?.label ?? t
 
 /**
@@ -79,6 +90,9 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
     setEditingId(t.id)
     setForm({
       label: t.label,
+      name2: t.name2,
+      terminal_no: t.terminal_no,
+      currency_code: t.currency_code,
       transport: t.transport,
       host: t.host,
       port: t.port ? String(t.port) : '',
@@ -97,9 +111,26 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
     setTestMsg(null)
   }
 
+  async function toggleActive(t: PosTerminalRecord) {
+    //: §۲۰ — دستگاهِ جمع‌آوری‌شده باید بتواند غیرفعال شود. تا امروز هیچ راهی در
+    //: رابط نبود، در حالی که ستونِ وضعیت نمایش داده می‌شد.
+    try {
+      await updatePosTerminal(token, t.id, { is_active: !t.is_active })
+      await refresh()
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
   function payload() {
+    //: `is_active` عمداً اینجا نیست. PATCH حالا `exclude_unset` است، پس فیلدی که
+    //: نفرستیم دست نمی‌خورد — و همین بود که دستگاهِ غیرفعال را بی‌صدا فعال می‌کرد.
+    //: وضعیت فقط با دکمه‌ی صریحِ فعال/غیرفعال عوض می‌شود.
     return {
       label: form.label.trim(),
+      name2: form.name2.trim(),
+      terminal_no: form.terminal_no.trim(),
+      currency_code: form.currency_code,
       transport: form.transport,
       host: form.host.trim(),
       port: Number(form.port) || 0,
@@ -199,7 +230,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                 <input
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
-                  placeholder="مثلاً صندوقِ ۱"
+                  placeholder="مثلاً کارتخوانِ شعبه مرکزی"
                 />
               </label>
               <label>
@@ -247,6 +278,39 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             )}
 
             <div className="field-row">
+              <label>
+                شماره پایانه
+                <input
+                  value={form.terminal_no}
+                  onChange={(e) => setForm({ ...form, terminal_no: e.target.value })}
+                  dir="ltr"
+                  inputMode="numeric"
+                />
+                <span className="field-hint">
+                  شماره‌ای که خودِ دستگاه گزارش می‌کند — با شماره‌ی کارتِ بانکی یکی نیست.
+                </span>
+              </label>
+              <label>
+                عنوان دوم
+                <input value={form.name2} onChange={(e) => setForm({ ...form, name2: e.target.value })} />
+              </label>
+            </div>
+
+            <div className="field-row">
+              <label>
+                ارز
+                <select
+                  value={form.currency_code}
+                  onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
+                >
+                  {['IRR', 'USD', 'EUR', 'AED'].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">باید با ارزِ حسابِ تسویه یکی باشد.</span>
+              </label>
               <label>
                 حسابِ بانکیِ تسویه
                 <select
@@ -315,7 +379,11 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                 <table className="entity-table cards-on-mobile">
                   <thead>
                     <tr>
+                      <th>شماره پایانه</th>
                       <th>دستگاه</th>
+                      <th>حساب بانکی</th>
+                      <th>تسویه‌نشده</th>
+                      <th>ارز</th>
                       <th>اتصال</th>
                       <th>وضعیت</th>
                       <th></th>
@@ -323,13 +391,27 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                   </thead>
                   <tbody>
                     {pg.pageItems.map((t) => {
-                      const bank = bankAccounts.find((b) => b.id === t.bank_account_id)
                       return (
-                        <tr key={t.id}>
+                        <tr key={t.id} className={t.is_active ? '' : 'acc-row--idle'}>
+                          <td data-label="شماره پایانه" dir="ltr">
+                            {t.terminal_no || '—'}
+                          </td>
                           <td data-label="دستگاه" className="entity-name card-title">
                             {t.label || 'کارتخوان'}
                             {t.is_default && <span className="unit-suffix"> · پیش‌فرض</span>}
-                            {bank && <div className="entity-sub">تسویه: {bank.name}</div>}
+                            {t.name2 && <div className="entity-sub">{t.name2}</div>}
+                          </td>
+                          <td data-label="حساب بانکی">
+                            {t.bank_account_name ?? '—'}
+                            {t.bank_account_name2 && (
+                              <div className="entity-sub">{t.bank_account_name2}</div>
+                            )}
+                          </td>
+                          <td data-label="تسویه‌نشده" className="num">
+                            {faAmount(t.unsettled_balance)}
+                          </td>
+                          <td data-label="ارز" dir="ltr">
+                            {t.currency_code}
                           </td>
                           <td data-label="اتصال">
                             {transportLabel(t.transport)}
@@ -347,6 +429,9 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                           <td className="check-actions card-actions">
                             <button type="button" onClick={() => startEdit(t)}>
                               <Pencil size={13} /> ویرایش
+                            </button>
+                            <button type="button" onClick={() => void toggleActive(t)}>
+                              {t.is_active ? 'غیرفعال' : 'فعال'}
                             </button>
                             <button type="button" className="icon-btn-danger" onClick={() => void remove(t)}>
                               <Trash2 size={13} /> حذف
