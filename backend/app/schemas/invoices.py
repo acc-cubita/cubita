@@ -170,6 +170,8 @@ class PurchaseInvoiceLineIn(BaseModel):
     unit_cost: Decimal
     #: تخفیفِ ردیف به مبلغ. بهای موجودی از همان اول پس از تخفیف ثبت می‌شود.
     discount: Decimal = Decimal(0)
+    addition: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
     description: str = ""
 
     @model_validator(mode="after")
@@ -180,6 +182,8 @@ class PurchaseInvoiceLineIn(BaseModel):
             raise ValueError("بهای واحد نمی‌تواند منفی باشد")
         if self.discount < 0:
             raise ValueError("تخفیف نمی‌تواند منفی باشد")
+        if self.addition < 0 or self.duty_amount < 0:
+            raise ValueError("اضافات و عوارض نمی‌توانند منفی باشند")
         if self.discount > self.qty * self.unit_cost:
             raise ValueError("تخفیف نمی‌تواند از مبلغ ردیف بیشتر باشد")
         return self
@@ -187,16 +191,21 @@ class PurchaseInvoiceLineIn(BaseModel):
 
 class PurchaseInvoiceIn(BaseModel):
     invoice_date: date
-    warehouse_id: UUID
+    # اختیاری و فقط برای سازگاری گردش قدیمی «خرید+ورود هم‌زمان».
+    warehouse_id: UUID | None = None
     contact_id: UUID | None = None
+    supplier_invoice_number: str = ""
     cost_center_id: UUID | None = None
     description: str = ""
+    description2: str = ""
     lines: list[PurchaseInvoiceLineIn]
     #: نرخ مالیات بر ارزش افزوده به درصد (مثلاً 10). صفر = بدون مالیات/معاف.
     tax_rate: Decimal = Decimal(0)
     #: تخفیفِ کلِ فاکتور به مبلغ (درصد در رابط کاربری به مبلغ تبدیل می‌شود). هنگام ثبت
     #: به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس ارزش‌گذاریِ موجودی و پایه‌ی مالیات پس از آن‌اند.
     invoice_discount: Decimal = Decimal(0)
+    invoice_addition: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
     #: ارز فاکتور (مثل USD). None/خالی = پایه. مبالغِ سطرها همیشه پایه‌اند.
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
@@ -209,6 +218,8 @@ class PurchaseInvoiceIn(BaseModel):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
         if self.invoice_discount < 0:
             raise ValueError("تخفیفِ کلِ فاکتور نمی‌تواند منفی باشد")
+        if self.invoice_addition < 0 or self.duty_amount < 0:
+            raise ValueError("اضافات و عوارض نمی‌توانند منفی باشند")
         if self.currency_code and self.exchange_rate <= 0:
             raise ValueError("نرخ ارز باید بزرگ‌تر از صفر باشد")
         return self
@@ -220,6 +231,15 @@ class PurchaseInvoiceLineOut(BaseModel):
     qty: Decimal
     unit_cost: Decimal
     discount: Decimal = Decimal(0)
+    addition: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
+    tax_rate_snapshot: Decimal = Decimal(0)
+    tax_amount_snapshot: Decimal = Decimal(0)
+    item_code_snapshot: str = ""
+    item_name_snapshot: str = ""
+    unit_snapshot: str = ""
+    received_qty: Decimal = Decimal(0)
+    remaining_qty: Decimal = Decimal(0)
     description: str
 
     model_config = {"from_attributes": True}
@@ -229,17 +249,30 @@ class PurchaseInvoiceOut(BaseModel):
     id: UUID
     number: int | None
     invoice_date: date
-    warehouse_id: UUID
+    warehouse_id: UUID | None = None
     contact_id: UUID | None
+    supplier_invoice_number: str = ""
     cost_center_id: UUID | None = None
     description: str
+    description2: str = ""
     total_amount: Decimal
     total_discount: Decimal = Decimal(0)
     invoice_discount: Decimal = Decimal(0)
+    total_additions: Decimal = Decimal(0)
+    total_duties: Decimal = Decimal(0)
     tax_rate: Decimal
     tax_amount: Decimal
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
+    transaction_total_amount: Decimal = Decimal(0)
+    transaction_tax_amount: Decimal = Decimal(0)
+    final_amount: Decimal = Decimal(0)
+    transaction_final_amount: Decimal = Decimal(0)
+    received_total_qty: Decimal = Decimal(0)
+    inventory_status: str = "not_received"
+    settled_amount: Decimal = Decimal(0)
+    remaining_amount: Decimal = Decimal(0)
+    financial_status: str = "unsettled"
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""
@@ -248,5 +281,62 @@ class PurchaseInvoiceOut(BaseModel):
     created_by_name: str | None = None
     created_by_role: str | None = None
     lines: list[PurchaseInvoiceLineOut]
+
+    model_config = {"from_attributes": True}
+
+
+class WarehouseReceiptLineIn(BaseModel):
+    purchase_invoice_line_id: UUID
+    qty: Decimal
+    description: str = ""
+
+    @model_validator(mode="after")
+    def validate_qty(self) -> "WarehouseReceiptLineIn":
+        if self.qty <= 0:
+            raise ValueError("مقدار تحویل باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class WarehouseReceiptIn(BaseModel):
+    receipt_date: date
+    warehouse_id: UUID
+    description: str = ""
+    lines: list[WarehouseReceiptLineIn]
+
+    @model_validator(mode="after")
+    def validate_lines(self) -> "WarehouseReceiptIn":
+        if not self.lines:
+            raise ValueError("رسید انبار باید حداقل یک ردیف داشته باشد")
+        if len({line.purchase_invoice_line_id for line in self.lines}) != len(self.lines):
+            raise ValueError("هر ردیف فاکتور در رسید فقط یک‌بار مجاز است")
+        return self
+
+
+class WarehouseReceiptLineOut(BaseModel):
+    id: UUID
+    purchase_invoice_line_id: UUID
+    item_id: UUID
+    qty: Decimal
+    unit_cost: Decimal
+    item_code_snapshot: str = ""
+    item_name_snapshot: str = ""
+    unit_snapshot: str = ""
+    description: str = ""
+
+    model_config = {"from_attributes": True}
+
+
+class WarehouseReceiptOut(BaseModel):
+    id: UUID
+    number: int
+    receipt_date: date
+    purchase_invoice_id: UUID
+    warehouse_id: UUID
+    status: str
+    description: str = ""
+    voided_at: datetime | None = None
+    void_reason: str = ""
+    created_by_id: UUID
+    lines: list[WarehouseReceiptLineOut]
 
     model_config = {"from_attributes": True}

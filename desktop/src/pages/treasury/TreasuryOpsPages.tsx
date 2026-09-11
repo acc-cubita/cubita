@@ -2,7 +2,6 @@ import { Fragment, useMemo, useState } from 'react'
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Banknote,
   HandCoins,
   Landmark,
   PiggyBank,
@@ -17,8 +16,6 @@ import {
   createPettyCashCharge,
   createPettyCashExpense,
   createContactSettlement,
-  createTreasuryPayment,
-  createTreasuryReceipt,
   fetchAllocationHistory,
   fetchBankAccountsLive,
   fetchContacts,
@@ -27,7 +24,6 @@ import {
   fetchPettyCashBalance,
   fetchPettyCashTransactions,
   fetchTreasuryTransactions,
-  type ContactRecord,
   type OpenItem,
   type SettlementSide,
 } from '../../api'
@@ -41,6 +37,8 @@ import { formatJalali, todayIso } from '../../lib/jalali'
 // اسکلتِ مشترکِ صفحه‌های عملیات. زیرِ پوشه‌ی accounting/ زندگی می‌کند چون اولین‌بار
 // آن‌جا لازم شد، ولی محتوایش عمومی است و قراردادِ صفحه‌ها به همان ارجاع می‌دهد.
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { PaymentVoucherDocumentPage } from './PaymentVoucherPage'
+import { ReceiptVoucherDocumentPage } from './ReceiptVoucherPage'
 
 /**
  * عملیاتِ پولیِ ماژولِ «دریافت و پرداخت» — رسید، اعلامیه، تسویه‌ی طرف‌حساب، صندوق و تنخواه.
@@ -194,203 +192,12 @@ export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: 
 
 // ═══════════════════ ۲ و ۳) رسید دریافت / اعلامیه پرداخت ═══════════════════
 
-/** فرمِ مشترکِ رسید و اعلامیه — تنها تفاوت، جهتِ پول و واژه‌هاست. */
-function VoucherPage({
-  token,
-  kind,
-}: {
-  token: string
-  kind: 'receipt' | 'payment'
-}) {
-  const isReceipt = kind === 'receipt'
-  const [msg, setMsg] = useState<Msg>(null)
-  const [busy, setBusy] = useState(false)
-  const [reloadKey, setReloadKey] = useState(0)
-
-  const [date, setDate] = useState(todayIso())
-  const [contactId, setContactId] = useState('')
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<'cash' | 'bank'>('cash')
-  const [bankAccountId, setBankAccountId] = useState('')
-  const [description, setDescription] = useState('')
-
-  const data = useAsync(
-    async () => {
-      const [contacts, banks, recent] = await Promise.all([
-        fetchContacts(token),
-        fetchBankAccountsLive(token),
-        fetchTreasuryTransactions(token),
-      ])
-      return { contacts, banks, recent }
-    },
-    [token, reloadKey],
-  )
-
-  const contacts = useMemo(() => {
-    const all: ContactRecord[] = data.data?.contacts ?? []
-    return all.filter((c) => (isReceipt ? c.type !== 'supplier' : c.type !== 'customer'))
-  }, [data.data, isReceipt])
-  const banks = data.data?.banks ?? []
-  const recent = useMemo(
-    () => (data.data?.recent ?? []).filter((t) => t.type === kind).slice(0, 20),
-    [data.data, kind],
-  )
-  const pg = usePagination(recent, 8)
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setMsg(null)
-    if (!contactId) {
-      setMsg({ text: 'طرف حساب را انتخاب کنید.', kind: 'err' })
-      return
-    }
-    if (method === 'bank' && !bankAccountId) {
-      setMsg({ text: 'برای روشِ بانکی، حساب بانکی لازم است.', kind: 'err' })
-      return
-    }
-    setBusy(true)
-    try {
-      const payload = {
-        transaction_date: date,
-        contact_id: contactId,
-        amount: Number(amount || 0),
-        method,
-        bank_account_id: method === 'bank' ? bankAccountId : null,
-        description,
-      }
-      if (isReceipt) await createTreasuryReceipt(token, payload)
-      else await createTreasuryPayment(token, payload)
-      setMsg({
-        text: isReceipt ? 'رسیدِ دریافت ثبت شد و سندش خودکار صادر شد.' : 'اعلامیه‌ی پرداخت ثبت شد و سندش خودکار صادر شد.',
-        kind: 'ok',
-      })
-      setAmount('')
-      setDescription('')
-      setReloadKey((k) => k + 1)
-    } catch (err) {
-      setMsg({ text: errText(err), kind: 'err' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <OpsPage
-      icon={isReceipt ? ArrowDownToLine : ArrowUpFromLine}
-      title={isReceipt ? 'رسید دریافت' : 'اعلامیه پرداخت'}
-      description={
-        isReceipt
-          ? 'پولی که از مشتری گرفته‌اید را ثبت کنید؛ سندِ حسابداری و مانده‌ی طرف‌حساب خودکار به‌روز می‌شوند.'
-          : 'پولی که به تأمین‌کننده داده‌اید را ثبت کنید؛ سندِ حسابداری و مانده‌ی طرف‌حساب خودکار به‌روز می‌شوند.'
-      }
-    >
-      <Note msg={msg} />
-
-      <div className="workspace-split">
-        <SectionCard
-          icon={isReceipt ? Receipt : Banknote}
-          title={isReceipt ? 'رسیدِ تازه' : 'اعلامیه‌ی تازه'}
-          description={isReceipt ? 'دریافت از مشتری' : 'پرداخت به تأمین‌کننده'}
-        >
-          <form className="invoice-form form-full" onSubmit={submit}>
-            <label>
-              تاریخ
-              <JalaliDatePicker value={date} onChange={setDate} />
-            </label>
-            <label>
-              طرف حساب
-              <select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
-                <option value="">— انتخاب —</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              مبلغ (ریال)
-              <NumberInput value={amount} onChange={setAmount} />
-            </label>
-            <label>
-              روش
-              <select value={method} onChange={(e) => setMethod(e.target.value as 'cash' | 'bank')}>
-                <option value="cash">صندوق (نقدی)</option>
-                <option value="bank">بانک</option>
-              </select>
-            </label>
-            {method === 'bank' && (
-              <label>
-                حساب بانکی
-                <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-                  <option value="">— انتخاب —</option>
-                  {banks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="form-wide">
-              شرح
-              <input value={description} onChange={(e) => setDescription(e.target.value)} />
-            </label>
-            <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary" disabled={busy}>
-                <Save size={14} /> {isReceipt ? 'ثبتِ رسید' : 'ثبتِ اعلامیه'}
-              </button>
-            </div>
-          </form>
-        </SectionCard>
-
-        <SectionCard
-          icon={HandCoins}
-          title={isReceipt ? 'آخرین دریافت‌ها' : 'آخرین پرداخت‌ها'}
-          description="بیست موردِ آخر. دفترِ کامل زیرِ کارتِ «فهرست» است."
-        >
-          <AsyncBlock
-            loading={data.loading}
-            error={data.error}
-            empty={recent.length === 0}
-            emptyText={isReceipt ? 'هنوز دریافتی ثبت نشده.' : 'هنوز پرداختی ثبت نشده.'}
-          >
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>تاریخ</th>
-                    <th>طرف حساب</th>
-                    <th>روش</th>
-                    <th>مبلغ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pg.pageItems.map((t) => (
-                    <tr key={t.id}>
-                      <td className="card-title" data-label="تاریخ">{formatJalali(t.transaction_date)}</td>
-                      <td className="card-wide" data-label="طرف حساب">{t.contact_name}</td>
-                      <td data-label="روش">{t.method === 'bank' ? 'بانک' : 'صندوق'}</td>
-                      <td className="money-cell" data-label="مبلغ">{fa(t.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-            </div>
-          </AsyncBlock>
-        </SectionCard>
-      </div>
-    </OpsPage>
-  )
-}
-
 export function ReceiptVoucherPage({ token }: { token: string }) {
-  return <VoucherPage token={token} kind="receipt" />
+  return <ReceiptVoucherDocumentPage token={token} />
 }
 
 export function PaymentVoucherPage({ token }: { token: string }) {
-  return <VoucherPage token={token} kind="payment" />
+  return <PaymentVoucherDocumentPage token={token} />
 }
 
 // ═══════════════════ ۵) تسویه حساب طرف مقابل ═══════════════════
@@ -611,7 +418,7 @@ export function ContactSettlementPage({ token }: { token: string }) {
             <p className="muted">
               {fa(summary.unattributed)} ریال از گردشِ این معین سندِ قابلِ تسویه ندارد و در
               فهرستِ اقلام نمی‌آید — سندِ دستی، ماندهٔ اول دوره، یا چکی که پیش از نسخه‌ی
-              ۰۱۱۱ ثبت شده. دفتر درست است؛ فقط این گردش‌ها لنگری برای تخصیص ندارند.
+              ۰۱۱۴ ثبت شده. دفتر درست است؛ فقط این گردش‌ها لنگری برای تخصیص ندارند.
             </p>
           )}
         </div>
@@ -871,8 +678,8 @@ export function CashBoxPage({ token, onNavigate }: { token: string; onNavigate: 
   const data = useAsync(() => fetchTreasuryTransactions(token), [token])
 
   const cash = useMemo(() => (data.data ?? []).filter((t) => t.method === 'cash'), [data.data])
-  const inflow = cash.filter((t) => t.type === 'receipt').reduce((s, t) => s + Number(t.amount), 0)
-  const outflow = cash.filter((t) => t.type === 'payment').reduce((s, t) => s + Number(t.amount), 0)
+  const inflow = cash.filter((t) => t.type === 'receipt' && !t.voided_at).reduce((s, t) => s + Number(t.amount), 0)
+  const outflow = cash.filter((t) => t.type === 'payment' && !t.voided_at).reduce((s, t) => s + Number(t.amount), 0)
   const pg = usePagination(cash, 12)
 
   return (
@@ -1246,8 +1053,8 @@ export function TreasuryLedgerPage({ token }: { token: string }) {
   }, [data.data, kind, q])
   const pg = usePagination(rows, 15, `${kind}|${q}`)
 
-  const inflow = rows.filter((t) => t.type === 'receipt').reduce((s, t) => s + Number(t.amount), 0)
-  const outflow = rows.filter((t) => t.type === 'payment').reduce((s, t) => s + Number(t.amount), 0)
+  const inflow = rows.filter((t) => t.type === 'receipt' && !t.voided_at).reduce((s, t) => s + Number(t.amount), 0)
+  const outflow = rows.filter((t) => t.type === 'payment' && !t.voided_at).reduce((s, t) => s + Number(t.amount), 0)
 
   return (
     <OpsPage

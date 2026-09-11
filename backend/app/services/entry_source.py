@@ -35,6 +35,8 @@ from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.pos_settlement import PosSettlement
 from app.models.period_close import FiscalPeriodClose
+from app.models.payment import Payment
+from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.sales_ops import CreditDebitNote
 from app.models.stock_count import StockCountSession
@@ -51,6 +53,8 @@ SOURCE_MODELS: dict[str, type] = {
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
     "treasury_payment": TreasuryTransaction,
+    "receipt": Receipt,
+    "payment": Payment,
     #: **سندِ چک به خودِ عملیات برمی‌گردد، نه به گردشِ بانکی.** تا پیش از
     #: مهاجرتِ ۰۱۱۰ اینجا `BankTransaction` بود و فقط برای *وصول* جواب می‌داد؛
     #: صدور، واگذاری، واخواست و خرج‌کردن هیچ گردشِ بانکی نمی‌سازند و جوابشان
@@ -106,6 +110,8 @@ SOURCE_LABELS: dict[str, str] = {
     "purchase_return": "برگشت از خرید",
     "treasury_receipt": "رسید دریافت",
     "treasury_payment": "اعلامیه پرداخت",
+    "receipt": "رسید دریافت",
+    "payment": "اعلامیه پرداخت",
     "check": "چک",
     "bank": "عملیات بانکی",
     "petty_cash": "تنخواه‌گردان",

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from 'react'
-import { Ban, FileText, Printer, FileDown, ChevronDown, ChevronLeft, Copy } from 'lucide-react'
+import { Ban, FileText, Printer, FileDown, ChevronDown, ChevronLeft, Copy, PackageCheck, CreditCard } from 'lucide-react'
 import {
   can,
+  createWarehouseReceipt,
   downloadPurchaseInvoicePdf,
   downloadSalesInvoicePdf,
   fetchContacts,
@@ -16,6 +17,10 @@ import {
   type PurchaseInvoiceRecord,
   type SalesInvoiceRecord,
 } from '../api'
+import type { WarehouseCache } from '../electron.d'
+import { JalaliDatePicker } from './JalaliDatePicker'
+import { NumberInput } from './NumberInput'
+import { todayIso } from '../lib/jalali'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
@@ -38,6 +43,8 @@ export function InvoiceList({
   kind,
   items,
   onDuplicate,
+  warehouses = [],
+  onCreatePayment,
 }: {
   token: string
   me: MeResponse
@@ -45,6 +52,8 @@ export function InvoiceList({
   items: NamedItem[]
   /** رونوشتِ فاکتور — فرمِ فاکتور (فروش یا خرید) را با اقلامِ همین فاکتور پیش‌پر می‌کند. */
   onDuplicate?: (invoice: AnyInvoice) => void
+  warehouses?: WarehouseCache[]
+  onCreatePayment?: (invoice: PurchaseInvoiceRecord) => void
 }) {
   const isSales = kind === 'sales'
   const [rows, setRows] = useState<AnyInvoice[] | null>(null)
@@ -192,7 +201,13 @@ export function InvoiceList({
                   </td>
                 )}
                 <td data-label="وضعیت">
-                  {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : 'معتبر'}
+                  {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : isSales ? 'معتبر' : (
+                    <span>
+                      {({ not_received: 'تحویل‌نشده', partially_received: 'تحویل جزئی', fully_received: 'تحویل کامل' } as const)[(row as PurchaseInvoiceRecord).inventory_status]}
+                      {' / '}
+                      {({ unsettled: 'تسویه‌نشده', partially_settled: 'تسویه جزئی', fully_settled: 'تسویه کامل' } as const)[(row as PurchaseInvoiceRecord).financial_status]}
+                    </span>
+                  )}
                 </td>
                 <td className="card-actions" onClick={(e) => e.stopPropagation()} data-label="عملیات">
                   <div className="check-actions">
@@ -205,6 +220,11 @@ export function InvoiceList({
                     {onDuplicate && !row.voided_at && (
                       <button type="button" onClick={() => onDuplicate(row)}>
                         <Copy size={13} /> رونوشت
+                      </button>
+                    )}
+                    {!isSales && !row.voided_at && Number((row as PurchaseInvoiceRecord).remaining_amount) > 0 && onCreatePayment && (
+                      <button type="button" onClick={() => onCreatePayment(row as PurchaseInvoiceRecord)}>
+                        <CreditCard size={13} /> اعلامیه پرداخت
                       </button>
                     )}
                     {canVoid && !row.voided_at && (
@@ -223,7 +243,7 @@ export function InvoiceList({
               {isOpen && (
                 <tr className="invoice-detail-row">
                   <td className="card-full" colSpan={columnCount}>
-                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} />
+                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} token={token} warehouses={warehouses} onChanged={refresh} />
                   </td>
                 </tr>
               )}
@@ -243,10 +263,16 @@ function InvoiceDetail({
   row,
   isSales,
   itemName,
+  token,
+  warehouses,
+  onChanged,
 }: {
   row: AnyInvoice
   isSales: boolean
   itemName: (id: string) => string
+  token: string
+  warehouses: WarehouseCache[]
+  onChanged: () => Promise<void>
 }) {
   const net = Number(row.total_amount)
   const tax = Number(row.tax_amount)
@@ -287,6 +313,9 @@ function InvoiceDetail({
         </div>
       )}
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
+      {!isSales && (row as PurchaseInvoiceRecord).supplier_invoice_number && (
+        <div className="invoice-detail-desc">شماره فاکتور تأمین‌کننده: {(row as PurchaseInvoiceRecord).supplier_invoice_number}</div>
+      )}
       <div className="table-scroll">
         <table className="invoice-detail-table cards-on-mobile">
           <thead>
@@ -338,6 +367,81 @@ function InvoiceDetail({
           </span>
         )}
       </div>
+      {!isSales && !row.voided_at && (
+        <WarehouseReceiptEditor
+          token={token}
+          invoice={row as PurchaseInvoiceRecord}
+          warehouses={warehouses}
+          onCreated={onChanged}
+        />
+      )}
     </div>
   )
 }
+
+function WarehouseReceiptEditor({
+  token,
+  invoice,
+  warehouses,
+  onCreated,
+}: {
+  token: string
+  invoice: PurchaseInvoiceRecord
+  warehouses: WarehouseCache[]
+  onCreated: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? '')
+  const [receiptDate, setReceiptDate] = useState(todayIso())
+  const [qty, setQty] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const pending = invoice.lines.filter((line) => Number(line.remaining_qty) > 0)
+
+  async function submit() {
+    const lines = pending
+      .map((line) => ({ purchase_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_qty) }))
+      .filter((line) => line.qty > 0)
+    if (!warehouseId || lines.length === 0) {
+      setMessage('انبار و حداقل یک مقدار تحویل لازم است.')
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      await createWarehouseReceipt(token, invoice.id, { receipt_date: receiptDate, warehouse_id: warehouseId, lines })
+      setMessage('رسید انبار مستقل ثبت شد و موجودی به‌روز شد.')
+      await onCreated()
+      setOpen(false)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ثبت رسید ناموفق بود')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="invoice-adjustments">
+      <button type="button" onClick={() => setOpen((value) => !value)} disabled={pending.length === 0}>
+        <PackageCheck size={14} /> {pending.length ? 'صدور رسید انبار' : 'تحویل کامل شده'}
+      </button>
+      {open && (
+        <div className="invoice-form">
+          <p className="hint">ثبت فاکتور به‌تنهایی موجودی را تغییر نمی‌دهد؛ فقط این رسید ورود فیزیکی می‌سازد.</p>
+          <label>انبار<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+          <label>تاریخ رسید<JalaliDatePicker value={receiptDate} onChange={setReceiptDate} /></label>
+          {pending.map((line) => (
+            <label key={line.id}>
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+            </label>
+          ))}
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت رسید</button>
+        </div>
+      )}
+      {message && <span className="hint">{message}</span>}
+    </div>
+  )
+}
+
+const itemNameFallback = (id: string) => id

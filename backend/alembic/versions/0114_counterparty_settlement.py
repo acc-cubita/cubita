@@ -1,7 +1,7 @@
 """تسویه‌ی حسابِ طرف مقابل — تخصیصِ اقلامِ باز به هم
 
-Revision ID: 0111
-Revises: 0110
+Revision ID: 0114
+Revises: 0113
 
 ## چه چیزی نبود
 
@@ -52,8 +52,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.migration_utils import rls_disabled
 from app.tenancy import policy_name
 
-revision: str = "0111"
-down_revision: Union[str, None] = "0110"
+revision: str = "0114"
+down_revision: Union[str, None] = "0113"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

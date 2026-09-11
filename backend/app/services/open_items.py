@@ -41,6 +41,8 @@ from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.check_event import CheckEvent
 from app.models.inventory import Contact
 from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.payment import Payment
+from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.sales_ops import CreditDebitNote
 from app.models.settlement import Settlement, SettlementAllocation
@@ -128,23 +130,49 @@ SETTLEABLE: dict[str, SettleableKind] = {
         joins=((PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id),),
         filters=(PurchaseInvoice.voided_at.is_(None),),
     ),
+    #: **سربرگ، نه اجزا.** از مهاجرتِ ۰۱۱۱ رسید یک سند است با چند ابزار (نقد،
+    #: حواله، کارت‌خوان، چک) و **همه‌ی اجزا یک `journal_entry_id` مشترک دارند**.
+    #: پس اگر لنگر را روی جزء بگذاریم، رسیدی با دو جزء دو بار کلِ بستانکارِ
+    #: دریافتنی را می‌آورد — دو برابرِ واقعیت، و بی‌صدا.
+    "receipt": SettleableKind(
+        key="receipt",
+        label="رسید دریافت",
+        model=Receipt,
+        date_col=Receipt.receipt_date,
+        contact_col=Receipt.contact_id,
+        number_col=Receipt.number,
+        filters=(Receipt.voided_at.is_(None),),
+    ),
+    "payment": SettleableKind(
+        key="payment",
+        label="اعلامیه پرداخت",
+        model=Payment,
+        date_col=Payment.payment_date,
+        contact_col=Payment.contact_id,
+        number_col=Payment.number,
+        filters=(Payment.voided_at.is_(None),),
+    ),
+    #: ردیف‌های خزانه‌ی **بی‌سربرگ** — یا پیش از مهاجرتِ ۰۱۱۱ ثبت شده‌اند یا
+    #: اثرِ جانبیِ سندِ دیگری‌اند (قسط، بازارگاه) که خودش سربرگ ندارد. این‌ها
+    #: واقعاً سندِ مستقل‌اند، پس می‌مانند؛ ردیفی که سربرگ دارد کنار می‌رود تا
+    #: اثرش دوبار شمرده نشود.
     "treasury_receipt": SettleableKind(
         key="treasury_receipt",
-        label="رسید دریافت",
+        label="دریافت (بدون سربرگ)",
         model=TreasuryTransaction,
         date_col=TreasuryTransaction.transaction_date,
         contact_col=TreasuryTransaction.contact_id,
-        #: رسید شماره‌ی مستقل ندارد؛ شماره‌ی سندِ حسابداری‌اش شناسه‌ی عملیِ اوست.
+        #: شماره‌ی مستقل ندارد؛ شماره‌ی سندِ حسابداری‌اش شناسه‌ی عملیِ اوست، و
         #: `entry_number` در خروجی همیشه می‌آید، پس قلم بی‌شناسه نمی‌ماند.
-        filters=(TreasuryTransaction.type == "receipt",),
+        filters=(TreasuryTransaction.type == "receipt", TreasuryTransaction.receipt_id.is_(None)),
     ),
     "treasury_payment": SettleableKind(
         key="treasury_payment",
-        label="اعلامیه پرداخت",
+        label="پرداخت (بدون سربرگ)",
         model=TreasuryTransaction,
         date_col=TreasuryTransaction.transaction_date,
         contact_col=TreasuryTransaction.contact_id,
-        filters=(TreasuryTransaction.type == "payment",),
+        filters=(TreasuryTransaction.type == "payment", TreasuryTransaction.payment_id.is_(None)),
     ),
     "credit_debit_note": SettleableKind(
         key="credit_debit_note",

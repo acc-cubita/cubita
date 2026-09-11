@@ -1280,24 +1280,24 @@ def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     )
     bal -= s(
         db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
-        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "receipt")
+        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "receipt", TreasuryTransaction.voided_at.is_(None))
     )
     bal += s(
         db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
-        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "payment")
+        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "payment", TreasuryTransaction.voided_at.is_(None))
     )
     # چکِ دریافتنیِ غیربرگشتی: مطالباتِ مشتری را کم می‌کند — درست مثلِ دریافتِ نقدی، چون
     # همان لحظه‌ی ثبت، سندِ حسابداری «حساب‌های دریافتنی» را بستانکار کرده. چکِ برگشتی کنار
     # می‌رود، چون سندِ برگشت همان دریافتنی را دوباره بدهکار (احیا) می‌کند و اثرش خنثی است.
     bal -= s(
         db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
-            Check.contact_id == contact_id, Check.type == "receivable", Check.status != "bounced"
+            Check.contact_id == contact_id, Check.type == "receivable", Check.status != "bounced", Check.voided_at.is_(None)
         )
     )
     # چکِ پرداختنیِ غیربرگشتی: بدهیِ ما به تأمین‌کننده را کم می‌کند — مثلِ پرداختِ نقدی.
     bal += s(
         db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
-            Check.contact_id == contact_id, Check.type == "payable", Check.status != "bounced"
+            Check.contact_id == contact_id, Check.type == "payable", Check.status != "bounced", Check.voided_at.is_(None)
         )
     )
     return bal
@@ -1386,7 +1386,7 @@ def get_contact_statement(
     # دریافت/پرداختِ خزانه
     for t_type, t_date, amount in db.query(
         TreasuryTransaction.type, TreasuryTransaction.transaction_date, TreasuryTransaction.amount
-    ).filter(TreasuryTransaction.contact_id == contact_id).all():
+    ).filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.voided_at.is_(None)).all():
         if t_type == "receipt":
             add(t_date, "receipt", None, "دریافت وجه", 0, Decimal(amount))  # شخص پرداخت کرد
         else:
@@ -1396,7 +1396,7 @@ def get_contact_statement(
     # دریافتنی مطالبات را کم می‌کند (بستانکار)؛ پرداختنی بدهیِ ما را کم می‌کند (بدهکار).
     for c_type, c_number, c_date, c_amount in db.query(
         Check.type, Check.number, Check.issue_date, Check.amount
-    ).filter(Check.contact_id == contact_id, Check.status != "bounced").all():
+    ).filter(Check.contact_id == contact_id, Check.status != "bounced", Check.voided_at.is_(None)).all():
         if c_type == "receivable":
             add(c_date, "check_in", c_number, "چک دریافتنی", 0, Decimal(c_amount))
         else:
@@ -1491,7 +1491,11 @@ def get_aging(db: Session, kind: str, as_of: date | None) -> dict:
     pool: dict = {}
     settlements = (
         db.query(TreasuryTransaction.contact_id, func.coalesce(func.sum(TreasuryTransaction.amount), 0))
-        .filter(TreasuryTransaction.type == settle_type, TreasuryTransaction.transaction_date <= as_of)
+        .filter(
+            TreasuryTransaction.type == settle_type,
+            TreasuryTransaction.transaction_date <= as_of,
+            TreasuryTransaction.voided_at.is_(None),
+        )
         .group_by(TreasuryTransaction.contact_id)
         .all()
     )
@@ -1515,6 +1519,7 @@ def get_aging(db: Session, kind: str, as_of: date | None) -> dict:
         .filter(
             Check.type == check_type,
             Check.status != "bounced",
+            Check.voided_at.is_(None),
             Check.contact_id.isnot(None),
             Check.issue_date <= as_of,
         )

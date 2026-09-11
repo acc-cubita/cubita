@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -109,8 +109,20 @@ class CheckIn(BaseModel):
     due_date: date
     contact_id: UUID | None = None
     description: str = ""
+    description2: str = ""
     #: برگِ کدام دسته‌چک است (فقط برای چکِ پرداختنی). NULL = بدونِ دسته.
     checkbook_id: UUID | None = None
+
+    # ── هویتِ برگ — همه اختیاری، پس هیچ فراخوانیِ موجودی نمی‌شکند ──
+    #: کد صیادی، **جدا از شماره‌ی چک**. شانزده رقم.
+    sayad_id: str = ""
+    back_number: str = ""
+    branch_name: str = ""
+    branch_code: str = ""
+    #: شماره‌حسابِ صادرکننده، نه ما.
+    account_number: str = ""
+    #: صاحبِ چک — چکِ شخصِ ثالث با طرف‌حسابِ ما یکی نیست.
+    owner_name: str = ""
 
     @model_validator(mode="after")
     def validate_check(self) -> "CheckIn":
@@ -118,6 +130,11 @@ class CheckIn(BaseModel):
             raise ValueError("نوع چک باید receivable یا payable باشد")
         if self.amount <= 0:
             raise ValueError("مبلغ چک باید بزرگ‌تر از صفر باشد")
+        self.sayad_id = self.sayad_id.strip()
+        if self.sayad_id and not self.sayad_id.isdigit():
+            raise ValueError("کد صیادی فقط رقم است")
+        if self.sayad_id and len(self.sayad_id) != 16:
+            raise ValueError("کد صیادی ۱۶ رقم است")
         return self
 
 
@@ -133,10 +150,19 @@ class CheckOut(BaseModel):
     due_date: date
     status: str
     description: str
+    description2: str = ""
     contact_id: UUID | None
     contact_name: str | None = None
     bank_account_id: UUID | None
     checkbook_id: UUID | None = None
+    receipt_id: UUID | None = None
+    sayad_id: str = ""
+    back_number: str = ""
+    branch_name: str = ""
+    branch_code: str = ""
+    account_number: str = ""
+    owner_name: str = ""
+    voided_at: datetime | None = None
     #: صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`.
     cashbox_id: UUID | None = None
 

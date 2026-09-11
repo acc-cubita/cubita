@@ -32,6 +32,9 @@ from app.services.common import get_account
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.treasury import create_payment, create_receipt
 from app.services.voiding import void_sales_invoice
+from app.services.receipts import create_receipt as create_receipt_document
+from app.schemas.receipts import ReceiptCashIn, ReceiptIn, ReceiptTransferIn
+from app.models.banking import BankAccount
 from tests.factories import main_warehouse, make_contact, make_item
 
 TODAY = date(2026, 6, 1)
@@ -202,6 +205,53 @@ def test_a_manual_entry_on_receivable_is_reported_not_swallowed(db, user):
     assert summary["net"] + summary["unattributed"] == summary["account_ledger_net"]
     #: و در فهرستِ اقلام نمی‌آید — چون واقعاً سندی برای تخصیص ندارد.
     assert all(i["source_type"] != "manual" for i in summary["items"])
+
+
+def test_a_multi_instrument_receipt_counts_once(db, user):
+    """**رگرسیونِ ادغام با «رسید دریافت» (مهاجرتِ ۰۱۱۱).**
+
+    رسید حالا سربرگ است و اجزایش — نقد، حواله، کارت‌خوان، چک — **یک
+    `journal_entry_id` مشترک** دارند. اگر لنگرِ قلمِ تسویه روی جزء بماند، رسیدی
+    با دو جزء دو بار کلِ بستانکارِ دریافتنی را می‌آورد: دو برابرِ واقعیت، بی‌آنکه
+    چیزی خطا بدهد. لنگر باید سربرگ باشد.
+    """
+    contact = make_contact(db, name="مشتری چندابزاره")
+    _sell(db, user, contact, 300_000)
+
+    bank = BankAccount(
+        name="بانک رسید", bank_name="ملت", account_number="77", iban="IR77",
+        gl_account_id=get_account(db, cc.BANK).id,
+    )
+    db.add(bank)
+    db.flush()
+
+    create_receipt_document(
+        db,
+        ReceiptIn(
+            receipt_type="customer",
+            contact_id=contact.id,
+            receipt_date=TODAY,
+            cash=[ReceiptCashIn(amount=Decimal(100_000))],
+            transfers=[ReceiptTransferIn(amount=Decimal(200_000), bank_account_id=bank.id)],
+        ),
+        user,
+    )
+
+    items = _items(db, contact, _ar(db))
+    receipts = [i for i in items if i["source_type"] == "receipt"]
+    assert len(receipts) == 1, "یک رسید یک قلم است، هرچند دو ابزار داشته باشد"
+    assert receipts[0]["document_amount"] == Decimal(300_000)
+    #: و جزءِ خزانه‌ی سربرگ‌دار جداگانه نمی‌آید.
+    assert not [i for i in items if i["source_type"] == "treasury_receipt"]
+    #: و تراز هم می‌خورد: ۳۰۰ بدهکارِ فاکتور در برابرِ ۳۰۰ بستانکارِ رسید.
+    _settle(
+        db,
+        user,
+        contact,
+        _ar(db),
+        [(_by_type(items, "sales_invoice"), 300_000), (receipts[0], 300_000)],
+    )
+    assert _items(db, contact, _ar(db)) == []
 
 
 # ───────────────────────────── ساختارِ تخصیص ─────────────────────────────────

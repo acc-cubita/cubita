@@ -351,6 +351,43 @@ def _clearing_account(db: Session, check: Check, sent_id: UUID | None) -> BankAc
     return account
 
 
+
+def assert_not_pledged_to_payment(db: Session, check: Check, new_status: str) -> None:
+    """چکی که با اعلامیه‌ی پرداخت خرج شده، از مسیرِ دیگری برنگردد.
+
+    **این گارد جلوی از‌دست‌رفتنِ پول را می‌گیرد، نه یک ناسازگاریِ ظاهری را.** بدونش:
+
+    ۱. چک با اعلامیه خرج می‌شود → ردیفِ `PaymentChequeTransfer` با `reversed_at` خالی
+    ۲. کسی عملیاتِ «برگشت از خرج کردن» را از صفحه‌ی چک می‌زند → وضعیت `in_hand`
+       می‌شود ولی آن ردیف دست‌نخورده می‌ماند
+    ۳. ابطالِ اعلامیه حالا ۴۰۹ می‌گیرد (گاردش وضعیتِ `endorsed` می‌خواهد) — پس
+       سندِ اعلامیه می‌ماند و بدهی تسویه‌شده حساب می‌شود
+    ۴. و همان چک دوباره قابلِ خرج‌کردن است
+
+    یعنی بدهی با چکی تسویه شده که برگشته، بی‌هیچ سندِ معکوس و بی‌راهی برای ابطال.
+    """
+    if new_status != "in_hand" or check.status != "endorsed":
+        return
+    from app.models.payment import Payment, PaymentChequeTransfer
+
+    pledged = (
+        db.query(PaymentChequeTransfer.id)
+        .join(Payment, Payment.id == PaymentChequeTransfer.payment_id)
+        .filter(
+            PaymentChequeTransfer.check_id == check.id,
+            PaymentChequeTransfer.reversed_at.is_(None),
+            Payment.voided_at.is_(None),
+        )
+        .first()
+    )
+    if pledged is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"چکِ شماره‌ی {check.number} با یک اعلامیه‌ی پرداخت خرج شده است؛ "
+            "برای برگرداندنش همان اعلامیه را باطل کنید، نه این عملیات را.",
+        )
+
+
 def assert_can_transition(check: Check, new_status: str) -> None:
     """§۴۳ — خطا باید بگوید *چرا* نمی‌شود، نه فقط «مجاز نیست».
 
@@ -389,12 +426,22 @@ def update_check_status(
     note: str = "",
     operation_no: int | None = None,
     batch_id: UUID | None = None,
+    external_journal_entry_id: UUID | None = None,
 ) -> Check:
+    """تنها جایی که `checks.status` نوشته می‌شود — و همیشه با یک رویداد.
+
+    `external_journal_entry_id` یعنی **حسابداری را فراخواننده زده است**؛ سندی
+    این‌جا ساخته نمی‌شود و همان شناسه روی رویداد می‌نشیند. لازمش داریم چون
+    اعلامیه‌ی پرداخت و رسید دریافت هر کدام *یک* سند دارند (§۳۰) و ردیف‌های چک
+    داخلِ همان سند جمع می‌شوند؛ بدونِ این پارامتر، یا سند دوبار می‌خورد یا
+    وضعیت بی‌رویداد عوض می‌شود. هر دو غلط‌اند.
+    """
     check = db.get(Check, check_id)
     if check is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "چک یافت نشد")
 
     assert_can_transition(check, new_status)
+    assert_not_pledged_to_payment(db, check, new_status)
     from_status = check.status
     operation = OPERATION_BY_TRANSITION[(from_status, new_status)]
     when = event_date or check.due_date
@@ -405,10 +452,15 @@ def update_check_status(
     assert_period_open(db, when)
 
     journal_entry = None
+    #: سندِ فراخواننده — شاخه‌های پایین رد می‌شوند تا اثرِ مالی دوبار نخورد.
+    caller_posted = external_journal_entry_id is not None
     event_bank_id = None
     event_cashbox_id = None
 
-    if new_status == "deposited":
+    if caller_posted:
+        pass
+
+    elif new_status == "deposited":
         if bank_account_id is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای واگذاری چک، انتخاب حساب بانکی لازم است")
         bank = db.get(BankAccount, bank_account_id)
@@ -574,7 +626,7 @@ def update_check_status(
         bank_account_id=event_bank_id,
         cashbox_id=event_cashbox_id,
         contact_id=contact_id,
-        journal_entry_id=journal_entry.id if journal_entry else None,
+        journal_entry_id=journal_entry.id if journal_entry else external_journal_entry_id,
         operation_no=operation_no,
         batch_id=batch_id,
         note=note,
@@ -737,3 +789,90 @@ def list_operations(
         row["check_type"] = check.type if check else ""
         out.append(row)
     return out
+
+
+def assert_sayad_free(db: Session, sayad_id: str, *, exclude_check_id: UUID | None = None) -> None:
+    """کد صیادی روی چکِ دیگری ثبت نشده باشد.
+
+    کد در سطحِ **کشور** یکتاست — یک برگ، یک کد. پس تکراری‌بودنش یعنی یا دو بار
+    ثبت شده یا اشتباه تایپ شده؛ هیچ‌کدام حالتی نیست که بخواهیم نگه داریم.
+
+    مهاجرتِ ۰۱۱۰ ستون را داد ولی قیدی رویش نگذاشت؛ ایندکسِ جزئیِ
+    `uq_checks_tenant_sayad` (مهاجرتِ ۰۱۱۱) پشتیبانِ همین سنجش در سطحِ
+    پایگاه‌داده است.
+    """
+    sayad = (sayad_id or "").strip()
+    if not sayad:
+        return
+    query = db.query(Check).filter(Check.sayad_id == sayad)
+    if exclude_check_id is not None:
+        query = query.filter(Check.id != exclude_check_id)
+    twin = query.first()
+    if twin is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"کد صیادی {sayad} قبلاً روی چکِ شماره‌ی {twin.number} ثبت شده است",
+        )
+
+
+def new_check_row(
+    db: Session,
+    data: CheckIn,
+    user: User,
+    *,
+    receipt_id: UUID | None = None,
+    payment_id: UUID | None = None,
+    journal_entry_id: UUID | None = None,
+) -> Check:
+    """ردیفِ چک — **بدونِ سندِ حسابداریِ خودش**.
+
+    از `create_check` جدا شد چون رسیدِ دریافت و اعلامیه‌ی پرداخت چکشان را در سندِ
+    *خودشان* ثبت می‌کنند: یک سند برای یک رویداد (§۳۰). اثرِ حسابداری یکی است —
+    فقط آن دو ردیف در سندِ رسید/اعلامیه جمع می‌شوند به‌جای سندِ جدا.
+
+    **ولی رویدادِ تایم‌لاین حذف نمی‌شود.** قاعده‌ی این ماژول این است که هر چک از
+    همان لحظه‌ی اول رویداد داشته باشد؛ بدونش تاریخچه از وسط شروع می‌شود و
+    «این برگ از کجا آمد؟» بی‌جواب می‌ماند.
+    """
+    book = _resolve_leaf(db, data)
+    assert_sayad_free(db, data.sayad_id)
+    initial_status = "in_hand" if data.type == "receivable" else "issued"
+    check = Check(
+        type=data.type,
+        number=data.number,
+        bank_name=data.bank_name,
+        amount=data.amount,
+        issue_date=data.issue_date,
+        due_date=data.due_date,
+        status=initial_status,
+        description=data.description,
+        description2=data.description2,
+        contact_id=data.contact_id,
+        checkbook_id=book.id if book else None,
+        #: حسابِ بانکی از خودِ دسته می‌آید (مهاجرتِ ۰۱۰۸).
+        bank_account_id=book.bank_account_id if book else None,
+        receipt_id=receipt_id,
+        payment_id=payment_id,
+        sayad_id=(data.sayad_id or "").strip(),
+        back_number=(data.back_number or "").strip(),
+        branch_name=data.branch_name,
+        branch_code=data.branch_code,
+        account_number=data.account_number,
+        owner_name=data.owner_name,
+        created_by_id=user.id,
+    )
+    db.add(check)
+    db.flush()
+    record_event(
+        db,
+        check,
+        operation="receive" if data.type == "receivable" else "issue",
+        from_status=None,
+        to_status=initial_status,
+        event_date=data.issue_date,
+        user=user,
+        contact_id=data.contact_id,
+        bank_account_id=check.bank_account_id,
+        journal_entry_id=journal_entry_id,
+    )
+    return check

@@ -367,7 +367,7 @@ def _unsettleable_balance(db: Session) -> dict:
                 _row(
                     f"{account.code} — {account.name}",
                     "این مبلغ در دفتر هست ولی سندِ قابلِ تسویه‌ای ندارد "
-                    "(سندِ دستی، ماندهٔ اول دوره، یا چکِ پیش از نسخه‌ی ۰۱۱۱)",
+                    "(سندِ دستی، ماندهٔ اول دوره، یا چکِ پیش از نسخه‌ی ۰۱۱۴)",
                     difference=residual,
                     account_id=account.id,
                 )

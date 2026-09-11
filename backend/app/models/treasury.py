@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ TREASURY_TYPES = ("receipt", "payment")
 TREASURY_METHODS = ("cash", "bank")
 
 
-class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class TreasuryTransaction(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     """دریافت از مشتری یا پرداخت به تأمین‌کننده — تسویه‌ی حساب‌های دریافتنی/پرداختنی با سند خودکار."""
 
     __tablename__ = "treasury_transactions"
@@ -87,6 +87,19 @@ class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: ردیفِ بانکیِ مرتبط. پیش از ۰۱۰۹ ردیفِ «کارمزد» بود؛ حالا ردیفِ خودِ واریز.
     settlement_txn_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_transactions.id", ondelete="SET NULL"), nullable=True
+    )
+
+    #: **کدام رسید/سند این جزء را ساخت.** `NULL` یعنی یکی از دو چیز، و هر دو
+    #: حقیقت‌اند: تراکنشی پیش از مهاجرتِ ۰۱۰۹، یا اثرِ جانبیِ سندِ دیگری
+    #: (دریافتِ قسط، تسویه‌ی بازارگاه) که سربرگِ خودش را دارد و رسیدِ جدا برایش
+    #: ساختن یعنی دو سند برای یک رویداد.
+    receipt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("receipts.id"), nullable=True, index=True
+    )
+    #: کدام اعلامیه‌ی پرداخت این جزء را ساخته است. NULL برای مسیر قدیمی و
+    #: اثرهای جانبیِ اسناد دیگر معتبر است.
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True, index=True
     )
 
     journal_entry_id: Mapped[uuid.UUID] = mapped_column(
