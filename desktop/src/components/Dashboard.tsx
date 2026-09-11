@@ -125,6 +125,7 @@ import {
 import {
   CheckbookListPage,
   PettyCashListPage,
+  CheckOperationListPage,
   PosSettlementListPage,
   PosTerminalListPage,
   StatementListPage,
@@ -276,6 +277,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   checkbooklist: 'دسته‌چک‌ها',
   posterminallist: 'دستگاه‌های کارتخوان',
   possettlelist: 'تسویه‌های کارتخوان',
+  checkoplist: 'عملیات چک',
   statementlist: 'ردیف‌های صورت‌حساب بانکی',
   pettylist: 'گردش تنخواه',
   analyticlist: 'تفصیلی‌های سایر',
@@ -656,6 +658,7 @@ export function Dashboard({
           {page === 'checkbooklist' && <CheckbookListPage token={token} />}
           {page === 'posterminallist' && <PosTerminalListPage token={token} />}
           {page === 'possettlelist' && <PosSettlementListPage token={token} />}
+          {page === 'checkoplist' && <CheckOperationListPage token={token} />}
           {page === 'statementlist' && <StatementListPage token={token} />}
           {page === 'pettylist' && <PettyCashListPage token={token} />}
           {page === 'analyticlist' && <AnalyticListPage token={token} />}

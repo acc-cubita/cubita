@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import JournalEntry
 from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
+from app.models.check_event import CheckEvent
 from app.models.inventory import StockAdjustment
 from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.manufacturing import ProductionOrder
@@ -50,9 +51,12 @@ SOURCE_MODELS: dict[str, type] = {
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
     "treasury_payment": TreasuryTransaction,
-    #: چک و بانک هر دو به گردشِ بانکی می‌نشینند؛ صدورِ چک هنوز گردشی نساخته و
-    #: آن‌جا جواب به‌درستی خالی می‌ماند تا وصول شود.
-    "check": BankTransaction,
+    #: **سندِ چک به خودِ عملیات برمی‌گردد، نه به گردشِ بانکی.** تا پیش از
+    #: مهاجرتِ ۰۱۱۰ اینجا `BankTransaction` بود و فقط برای *وصول* جواب می‌داد؛
+    #: صدور، واگذاری، واخواست و خرج‌کردن هیچ گردشِ بانکی نمی‌سازند و جوابشان
+    #: خالی می‌ماند. `CheckEvent` برای **هر** سندِ چک وجود دارد و از آن‌جا هم به
+    #: چک می‌رسیم هم به عملیات (§۳۷).
+    "check": CheckEvent,
     "bank": BankTransaction,
     "petty_cash": PettyCashTransaction,
     "payroll": Payslip,

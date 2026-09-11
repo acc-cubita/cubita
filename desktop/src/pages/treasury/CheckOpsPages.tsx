@@ -13,12 +13,16 @@ import {
   Search,
   Trash2,
   Undo2,
+  Wallet,
+  History,
 } from 'lucide-react'
 import {
   createCheckDirect,
   createCheckbook,
   deleteCheckbook,
   fetchBankAccountsLive,
+  fetchCashboxes,
+  fetchCheckTimeline,
   fetchCheckbookLeaves,
   fetchCheckbooks,
   fetchChecks,
@@ -27,6 +31,7 @@ import {
   setCheckbookActive,
   updateCheckStatus,
   updateCheckbook,
+  type CheckEventRecord,
   type CheckRecord,
   type CheckbookLeaf,
   type CheckbookRecord,
@@ -58,6 +63,7 @@ export const CHECK_STATUS_LABEL: Record<string, string> = {
   endorsed: 'خرج‌شده',
   issued: 'صادرشده',
   returned: 'مسترد شده',
+  cashed: 'نقد شده',
 }
 
 const CHECK_STATUS_TONE: Record<string, string> = {
@@ -68,6 +74,7 @@ const CHECK_STATUS_TONE: Record<string, string> = {
   endorsed: 'tone-success',
   issued: 'tone-warning',
   returned: 'tone-danger',
+  cashed: 'tone-success',
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -90,9 +97,55 @@ function DueChip({ due }: { due: string }) {
   return <span className="muted">{toFaDigits(days)} روز مانده</span>
 }
 
+/**
+ * تاریخچه‌ی یک چک (§۳۵ §۳۶).
+ *
+ * **چرا نامِ عملیات کنارِ وضعیت می‌آید و نه فقط وضعیت:** «بازگشت از بانک» و
+ * «برگشت از خرج» هر دو به «نزدِ ما» می‌رسند. اگر فقط وضعیت را نشان می‌دادیم،
+ * تاریخچه دو رویدادِ کاملاً متفاوت را یک چیز نشان می‌داد.
+ */
+function CheckTimeline({ steps, loading }: { steps: CheckEventRecord[]; loading: boolean }) {
+  if (loading) return <p className="muted">در حال بارگذاری…</p>
+  if (steps.length === 0) {
+    return (
+      <p className="muted">
+        رویدادی ثبت نشده. تاریخچه از مهاجرتِ ۰۱۱۰ به بعد نوشته می‌شود؛ برای چک‌های
+        پیش از آن، گذرهای گذشته تاریخ و کاربرشان ثبت نشده بود و ساختنشان یعنی جعلِ سابقه.
+      </p>
+    )
+  }
+  return (
+    <ol className="check-timeline">
+      {steps.map((s) => (
+        <li key={s.id}>
+          <span className="check-timeline__when">{formatJalali(s.event_date)}</span>
+          <span className="check-timeline__what">{s.operation_label}</span>
+          <span className="check-timeline__where">
+            {s.bank_account_name || s.cashbox_name || s.contact_name || '—'}
+          </span>
+          <span className="check-timeline__state">
+            <StatusChip status={s.to_status} />
+          </span>
+          {s.operation_no ? (
+            <span className="check-timeline__no">عملیات {toFaDigits(String(s.operation_no))}</span>
+          ) : null}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 // ═══════════════════ اسکلتِ مشترکِ صفحه‌های کنشِ چک ═══════════════════
 
-type Action = { key: string; label: string; icon: typeof CheckCircle2; needsBank?: boolean; tone?: 'danger' }
+type Action = {
+  key: string
+  label: string
+  icon: typeof CheckCircle2
+  needsBank?: boolean
+  /** «نقد کردن» به صندوق می‌رود، نه بانک — دو مسیرِ جدا. */
+  needsCashbox?: boolean
+  tone?: 'danger'
+}
 
 /**
  * جدولِ چک با کنش‌های وضعیت. هر صفحه فقط می‌گوید کدام چک‌ها را می‌خواهد و چه کنشی
@@ -117,7 +170,18 @@ function CheckActionTable({
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [bankPick, setBankPick] = useState<Record<string, string>>({})
+  const [boxPick, setBoxPick] = useState<Record<string, string>>({})
+  //: تاریخچه فقط برای ردیفِ بازشده خوانده می‌شود — نه برای هر دوازده ردیفِ صفحه.
+  const [openId, setOpenId] = useState<string | null>(null)
   const banks = useAsync(() => fetchBankAccountsLive(token), [token])
+  const boxes = useAsync(
+    () => (actions.some((a) => a.needsCashbox) ? fetchCashboxes(token, false) : Promise.resolve([])),
+    [token],
+  )
+  const history = useAsync(
+    () => (openId ? fetchCheckTimeline(token, openId) : Promise.resolve([])),
+    [token, openId],
+  )
   const pg = usePagination(rows, 12)
 
   async function run(check: CheckRecord, action: Action) {
@@ -131,7 +195,9 @@ function CheckActionTable({
     }
     setBusy(check.id)
     try {
-      await updateCheckStatus(token, check.id, action.key, bankId || undefined)
+      await updateCheckStatus(token, check.id, action.key, bankId || undefined, {
+        cashbox_id: action.needsCashbox ? boxPick[check.id] || null : null,
+      })
       onDone({ text: `چکِ شماره ${check.number}: ${action.label} ثبت شد.`, kind: 'ok' })
     } catch (err) {
       onDone({ text: errText(err), kind: 'err' })
@@ -141,6 +207,7 @@ function CheckActionTable({
   }
 
   const needsBank = actions.some((a) => a.needsBank)
+  const needsCashbox = actions.some((a) => a.needsCashbox)
 
   return (
     <AsyncBlock loading={loading} error={error} empty={rows.length === 0} emptyText={emptyText}>
@@ -155,13 +222,18 @@ function CheckActionTable({
               <th>وضعیت</th>
               <th>مبلغ</th>
               {needsBank && <th>واریز به</th>}
+              {needsCashbox && <th>به صندوق</th>}
               <th />
             </tr>
           </thead>
           <tbody>
             {pg.pageItems.map((c) => (
-              <tr key={c.id}>
-                <td className="card-title" data-label="شماره">{toFaDigits(c.number)}</td>
+              <Fragment key={c.id}>
+              <tr>
+                <td className="card-title" data-label="شماره">
+                  {toFaDigits(c.number)}
+                  {c.sayad_id ? <div className="entity-sub" dir="ltr">{toFaDigits(c.sayad_id)}</div> : null}
+                </td>
                 <td className="card-wide" data-label="طرف حساب">{c.contact_name || '—'}</td>
                 <td data-label="بانک">{c.bank_name || '—'}</td>
                 <td data-label="سررسید">
@@ -192,6 +264,21 @@ function CheckActionTable({
                     )}
                   </td>
                 )}
+                {needsCashbox && (
+                  <td data-label="به صندوق">
+                    <select
+                      value={boxPick[c.id] ?? ''}
+                      onChange={(e) => setBoxPick({ ...boxPick, [c.id]: e.target.value })}
+                    >
+                      <option value="">— صندوقِ پیش‌فرض —</option>
+                      {(boxes.data ?? []).map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td className="card-actions">
                   {actions.map((a) => {
                     const Icon = a.icon
@@ -207,8 +294,24 @@ function CheckActionTable({
                       </button>
                     )
                   })}
+                  {/*
+                    وضعیتِ فعلی به‌تنهایی توضیح نمی‌دهد چک چطور به اینجا رسیده.
+                    «واخواست‌شده» وقتی معنی کامل دارد که بشود دید کِی و به کدام
+                    بانک واگذار شده بود.
+                  */}
+                  <button type="button" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
+                    <History size={13} /> {openId === c.id ? 'بستن' : 'تاریخچه'}
+                  </button>
                 </td>
               </tr>
+              {openId === c.id && (
+                <tr className="card-full">
+                  <td colSpan={needsBank || needsCashbox ? 8 : 7}>
+                    <CheckTimeline steps={history.data ?? []} loading={history.loading} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -222,6 +325,8 @@ function CheckActionTable({
 
 const EMPTY_CHECK = {
   number: '',
+  back_number: '',
+  sayad_id: '',
   bank_name: '',
   amount: '',
   issue_date: todayIso(),
@@ -267,6 +372,8 @@ function CheckForm({
       await createCheckDirect(token, {
         type,
         number: number.trim(),
+        back_number: form.back_number.trim(),
+        sayad_id: form.sayad_id.trim(),
         bank_name: form.bank_name,
         amount: Number(form.amount || 0),
         issue_date: form.issue_date,
@@ -297,6 +404,26 @@ function CheckForm({
       <label>
         بانک
         <input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} />
+      </label>
+      <label>
+        کد صیادی
+        <input
+          dir="ltr"
+          inputMode="numeric"
+          value={form.sayad_id}
+          onChange={(e) => setForm({ ...form, sayad_id: e.target.value })}
+        />
+        <span className="field-hint">
+          ۱۶ رقمِ روی برگ. یکتاییِ واقعیِ چک همین است — شماره‌ی چک بینِ بانک‌ها تکرار می‌شود.
+        </span>
+      </label>
+      <label>
+        پشت نمره
+        <input
+          dir="ltr"
+          value={form.back_number}
+          onChange={(e) => setForm({ ...form, back_number: e.target.value })}
+        />
       </label>
       <label>
         مبلغ (ریال)
@@ -411,6 +538,10 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
           onDone={done}
           actions={[
             { key: 'deposited', label: 'واگذاری به بانک', icon: Landmark, needsBank: true },
+            //: نقد کردن با وصولِ بانکی یکی نیست (§۱۹): پول به صندوق می‌رود، نه
+            //: به حسابِ بانکی. تا امروز این راه اصلاً وجود نداشت و کاربر مجبور
+            //: بود «وصول» ثبت کند — که پول را به بانکی می‌برد که چیزی نگرفته بود.
+            { key: 'cashed', label: 'نقد کردن', icon: Wallet, needsCashbox: true },
             { key: 'endorsed', label: 'خرج کردن', icon: Share2 },
           ]}
         />
@@ -462,6 +593,11 @@ export function CheckReturnPage({ token }: { token: string }) {
     () => (checks.data ?? []).filter((c) => c.type === 'receivable' && c.status === 'in_hand'),
     [checks.data],
   )
+  //: چکِ پرداختنیِ صادرشده‌ای که هنوز وصول نشده — تنها حالتی که استردادش معنا دارد.
+  const payableReturnable = useMemo(
+    () => (checks.data ?? []).filter((c) => c.type === 'payable' && c.status === 'issued'),
+    [checks.data],
+  )
   const returned = useMemo(() => (checks.data ?? []).filter((c) => c.status === 'returned'), [checks.data])
 
   const done = (m: Msg) => {
@@ -479,8 +615,8 @@ export function CheckReturnPage({ token }: { token: string }) {
 
       <p className="hint acc-note">
         <AlertTriangle size={14} />
-        استرداد با «برگشت خوردن» یکی نیست: آن‌جا بانک چک را برگشت می‌زند، این‌جا شما خودتان برگ را پس می‌دهید.
-        فقط چکِ «نزدِ ما» قابلِ استرداد است. چکی که به بانک واگذار شده یا خرج شده، اول باید با
+        استرداد با «برگشت خوردن» یکی نیست: آن‌جا بانک چک را برگشت می‌زند، این‌جا برگ سالم پس داده می‌شود.
+        چکِ دریافتنی فقط وقتی «نزدِ ما»ست قابلِ استرداد است؛ چکی که به بانک واگذار شده یا خرج شده، اول باید با
         «بازگشت از بانک» یا «برگشت از خرج» به دستِ شما برگردد — هر دو در صفحه‌ی «عملیات بانکی چک دریافتنی».
       </p>
 
@@ -502,6 +638,27 @@ export function CheckReturnPage({ token }: { token: string }) {
           emptyText="چکِ قابلِ استردادی نیست."
           onDone={done}
           actions={[{ key: 'returned', label: 'استرداد به صاحبش', icon: Undo2, tone: 'danger' }]}
+        />
+      </SectionCard>
+
+      {/*
+        نوعِ دومِ استرداد (§۳۱): چکی که *ما* صادر کرده‌ایم و پیش از وصول به ما
+        برگشته. تا امروز راهی برای ثبتش نبود و کاربر مجبور بود «برگشت خورد» بزند
+        — که واخواست است و معنایش برای سابقه‌ی طرف‌حساب کاملاً فرق دارد.
+      */}
+      <SectionCard
+        icon={Undo2}
+        title="چکِ پرداختنیِ برگشته به ما"
+        description="چکی که خودمان صادر کرده‌ایم و پیش از وصول پس گرفته‌ایم"
+      >
+        <CheckActionTable
+          token={token}
+          rows={payableReturnable}
+          loading={checks.loading}
+          error={checks.error}
+          emptyText="چکِ پرداختنیِ بازی نیست."
+          onDone={done}
+          actions={[{ key: 'returned', label: 'به ما مسترد شد', icon: Undo2 }]}
         />
       </SectionCard>
 

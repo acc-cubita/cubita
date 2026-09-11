@@ -33,6 +33,7 @@ DOC_LABELS: dict[str, str] = {
     "installment_plan": "قرارداد اقساطی",
     "credit_debit_note": "اعلامیه بدهکار/بستانکار",
     "pos_settlement": "تسویه کارت‌خوان",
+    "check_operation": "عملیات چک",
 }
 
 

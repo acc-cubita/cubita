@@ -24,7 +24,7 @@ from app.models.tenant import Tenant
 from app.schemas.banking import CheckbookIn, CheckbookUpdateIn, CheckIn
 from app.services import chart_codes as cc
 from app.services import checkbooks as svc
-from app.services.banking import create_check, update_check_status
+from app.services.check_ops import create_check, update_check_status
 from app.services.common import get_account
 from app.tenant_context import session_tenant
 

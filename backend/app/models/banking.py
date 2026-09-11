@@ -27,9 +27,26 @@ if TYPE_CHECKING:
     from app.models.inventory import Contact
 
 CHECK_TYPES = ("receivable", "payable")
-#: `returned` = چکِ دریافتنی که بدونِ وصول به صاحبش پس داده شد. با `bounced` فرق دارد:
-#: آن‌جا بانک برگشت می‌زند، اینجا ما خودمان پس می‌دهیم (مثلاً معامله فسخ شده).
-CHECK_STATUSES = ("in_hand", "deposited", "cleared", "bounced", "endorsed", "issued", "returned")
+#: چرخه‌ی عمرِ چک. **سه «برگشت» عمداً سه وضعیتِ جدا هستند** و یکی‌کردنشان گزارشِ
+#: چک را غیرقابلِ‌اعتماد می‌کند:
+#:
+#: * `bounced`  — بانک نتوانست وصول کند (واخواست).
+#: * `returned` — ما خودمان برگ را پس دادیم (مثلاً معامله فسخ شد).
+#: * `endorsed → in_hand` — چکی که خرج کرده بودیم به ما برگشت.
+#:
+#: `cashed` تازه است: چکِ دریافتنی می‌تواند به‌جای واگذاری به بانک، مستقیم نقد شود
+#: و پولش به صندوق برود. تا پیش از این چنین راهی نبود و کاربر مجبور بود آن را
+#: «وصول» ثبت کند — که پول را به بانکی می‌برد که هرگز چیزی نگرفته بود.
+CHECK_STATUSES = (
+    "in_hand",
+    "deposited",
+    "cleared",
+    "bounced",
+    "endorsed",
+    "issued",
+    "returned",
+    "cashed",
+)
 PETTY_CASH_TYPES = ("charge", "expense")
 
 
@@ -122,6 +139,12 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     type: Mapped[str] = mapped_column(String(20))
     number: Mapped[str] = mapped_column(String(50))
+    #: شماره‌ی پشتِ برگ. روی چکِ صیادی چاپ شده و در بانک با همین پیگیری می‌شود؛
+    #: با `number` یکی نیست و هویتِ رکورد هم نیست.
+    back_number: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    #: شناسه‌ی صیادی (۱۶ رقم). از ۱۴۰۰ روی هر برگِ بانکی هست و در استعلام و
+    #: مغایرت‌گیری همین است که یکتاست — نه شماره‌ی چک، که بینِ بانک‌ها تکرار می‌شود.
+    sayad_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
     bank_name: Mapped[str] = mapped_column(String(100), default="")
     amount: Mapped[float] = mapped_column(Numeric(18, 0))
     issue_date: Mapped[date_] = mapped_column(Date)
@@ -136,6 +159,11 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: برگِ کدام دسته‌چک است. NULL برای چکِ دریافتنی (دسته‌ی ما نیست) و چک‌های قدیمی.
     checkbook_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("checkbooks.id", ondelete="SET NULL"), nullable=True
+    )
+    #: صندوقی که چک در آن نقد شد. فقط برای وضعیتِ `cashed` معنا دارد و برای بقیه
+    #: `NULL` می‌ماند — قرینه‌ی `bank_account_id` که مقصدِ واگذاری/وصول است.
+    cashbox_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cashboxes.id"), nullable=True
     )
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

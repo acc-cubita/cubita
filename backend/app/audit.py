@@ -40,15 +40,21 @@ GUARD_FN = "audit_log_append_only"
 GUARD_TRIGGER = "audit_log_no_update_delete"
 
 
-def append_only_statements(table: str = "audit_log") -> list[str]:
-    """DDL ای که جدول حسابرسی را در سطح پایگاه‌داده فقط‌افزودنی می‌کند.
+def append_only_statements(table: str = "audit_log", trigger: str | None = None) -> list[str]:
+    """DDL ای که یک جدول را در سطح پایگاه‌داده فقط‌افزودنی می‌کند.
 
     اینجا زندگی می‌کند و نه فقط داخل مهاجرت، به همان دلیلی که rls_statements در
     tenancy.py است: تست‌ها schema را با create_all می‌سازند و create_all از trigger
     خبر ندارد. اگر این DDL فقط در مهاجرت بود، تست‌ها روی جدولی اجرا می‌شدند که
     قابل ویرایش است — یعنی دقیقاً همان خاصیتی که کل ارزش این جدول است، سنجیده
     نمی‌شد.
+
+    **پارامتری شد چون `check_events` هم همین خاصیت را می‌خواهد** (§۴۷ فصلِ
+    عملیاتِ چک): تاریخچه‌ی چک نباید بازنویسی شود تا وضعیتِ فعلی تمیزتر به‌نظر
+    برسد. تابعِ گاردْ مشترک می‌ماند، پس دریچه‌ی `app.audit_purge` — که فقط در
+    حذفِ مستأجر و بازیابیِ پشتیبان باز می‌شود — برای هر دو جدول یک‌جور کار می‌کند.
     """
+    trigger = trigger or f"{table}_no_update_delete"
     return [
         f"""
         CREATE OR REPLACE FUNCTION {GUARD_FN}() RETURNS trigger AS $$
@@ -56,13 +62,13 @@ def append_only_statements(table: str = "audit_log") -> list[str]:
             IF TG_OP = 'DELETE' AND current_setting('{PURGE_SETTING}', true) = 'on' THEN
                 RETURN OLD;
             END IF;
-            RAISE EXCEPTION 'دفتر حسابرسی فقط‌افزودنی است؛ % مجاز نیست', TG_OP
+            RAISE EXCEPTION 'این دفتر فقط‌افزودنی است؛ % مجاز نیست', TG_OP
                 USING ERRCODE = 'check_violation';
         END;
         $$ LANGUAGE plpgsql;
         """,
-        f"DROP TRIGGER IF EXISTS {GUARD_TRIGGER} ON {table}",
-        f"CREATE TRIGGER {GUARD_TRIGGER} BEFORE UPDATE OR DELETE ON {table} "
+        f"DROP TRIGGER IF EXISTS {trigger} ON {table}",
+        f"CREATE TRIGGER {trigger} BEFORE UPDATE OR DELETE ON {table} "
         f"FOR EACH ROW EXECUTE FUNCTION {GUARD_FN}()",
     ]
 
@@ -77,6 +83,7 @@ def audited_models() -> dict[type, str]:
     و این ماژول به مدل‌ها.
     """
     from app.models.accounting import JournalEntry
+    from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice
     from app.models.payroll import Payslip
     from app.models.period_close import FiscalPeriodClose
@@ -93,6 +100,9 @@ def audited_models() -> dict[type, str]:
         StockTransfer: "انتقال انبار",
         Payslip: "فیش حقوقی",
         TreasuryTransaction: "تراکنش خزانه",
+        #: چک تا امروز در این فهرست نبود — موجودیتی با غنی‌ترین چرخه‌ی عمرِ
+        #: خزانه، تنها موجودیتی بود که هیچ ردِ حسابرسی‌ای نمی‌گذاشت.
+        Check: "چک",
         FiscalPeriodClose: "بستن دوره",
     }
 

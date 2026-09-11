@@ -43,6 +43,10 @@ DOC_CREDIT_DEBIT_NOTE = "credit_debit_note"
 #: تسویه‌ی کارت‌خوان — شماره‌ی رسمی می‌گیرد چون سندِ حسابداری می‌زند و در فهرست
 #: و مغایرت‌گیریِ بانکی به آن ارجاع داده می‌شود (§۵).
 DOC_POS_SETTLEMENT = "pos_settlement"
+#: عملیاتِ چک (واگذاری، وصول، واخواست، نقد کردن، …). شماره‌ی مستقل دارد چون یک
+#: عملیات می‌تواند چند چک را با هم ببرد (§۱۱ §۴۴) و با شماره‌ی چک و شماره‌ی سند
+#: هیچ‌کدام یکی نیست.
+DOC_CHECK_OPERATION = "check_operation"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -58,6 +62,7 @@ DOC_TYPES = (
     DOC_INSTALLMENT_PLAN,
     DOC_CREDIT_DEBIT_NOTE,
     DOC_POS_SETTLEMENT,
+    DOC_CHECK_OPERATION,
 )
 
 

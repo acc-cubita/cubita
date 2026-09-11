@@ -564,6 +564,10 @@ export interface CheckRecord {
   id: string
   type: 'receivable' | 'payable'
   number: string
+  /** شماره‌ی پشتِ برگ — با شماره‌ی چک یکی نیست. */
+  back_number: string
+  /** شناسه‌ی صیادیِ ۱۶رقمی؛ یکتاییِ واقعیِ برگ همین است. */
+  sayad_id: string
   bank_name: string
   amount: string
   issue_date: string
@@ -574,14 +578,112 @@ export interface CheckRecord {
   contact_name: string | null
   bank_account_id: string | null
   checkbook_id?: string | null
+  /** صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`. */
+  cashbox_id?: string | null
 }
 
 export const fetchChecks = (token: string) => authedGetAll<CheckRecord>(token, '/api/checks')
 
-export const updateCheckStatus = (token: string, checkId: string, status: string, bankAccountId?: string) =>
+/** یک گامِ تاریخچه‌ی چک. */
+export interface CheckEventRecord {
+  id: string
+  check_id: string
+  /** نامِ عملیات — از وضعیتِ مقصد مشتق **نمی‌شود**: «بازگشت از بانک» و «برگشت از
+   *  خرج» هر دو به «نزدِ ما» می‌رسند ولی دو رویدادِ متفاوت‌اند. */
+  operation: string
+  operation_label: string
+  from_status: string | null
+  to_status: string
+  to_status_label: string
+  event_date: string
+  at: string
+  operation_no: number | null
+  batch_id: string | null
+  bank_account_id: string | null
+  bank_account_name: string | null
+  cashbox_id: string | null
+  cashbox_name: string | null
+  contact_id: string | null
+  contact_name: string | null
+  journal_entry_id: string | null
+  note: string
+}
+
+/**
+ * برچسبِ فارسیِ هر عملیات — کلیدها همان `OPERATION_LABEL`ِ سرور.
+ *
+ * سرور برچسب را روی هر ردیف می‌فرستد (`operation_label`)، ولی صافیِ فهرست باید
+ * پیش از رسیدنِ داده گزینه‌هایش را بسازد، پس همین‌جا هم لازم است.
+ */
+export const CHECK_OPERATION_LABEL: Record<string, string> = {
+  receive: 'دریافت',
+  issue: 'صدور',
+  deposit: 'واگذاری به بانک',
+  undeposit: 'بازگشت از بانک',
+  collect: 'وصول',
+  dishonor: 'واخواست',
+  cash: 'نقد کردن',
+  endorse: 'خرج کردن',
+  return_endorsed: 'برگشت از خرج',
+  refund: 'استرداد',
+}
+
+export interface CheckOperationRow extends CheckEventRecord {
+  check_number: string
+  check_amount: string
+  check_type: string
+}
+
+export const fetchCheckTimeline = (token: string, checkId: string) =>
+  authedGet<CheckEventRecord[]>(token, `/api/checks/${checkId}/timeline`)
+
+export const fetchCheckOperations = (
+  token: string,
+  query: { operation?: string; dateFrom?: string; dateTo?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  if (query.operation) qs.set('operation', query.operation)
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  if (query.dateTo) qs.set('date_to', query.dateTo)
+  return authedGet<CheckOperationRow[]>(token, `/api/check-operations?${qs}`)
+}
+
+export interface CheckOperationResult {
+  operation_no: number | null
+  batch_id: string
+  operation: string
+  operation_label: string
+  done: { check_id: string; number: string; amount: string }[]
+  /** **۲۰۱ لزوماً یعنی همه رفتند.** اینجا را بخوانید. */
+  failed: { check_id: string; reason: string }[]
+  total_amount: string
+}
+
+/** یک عملیات روی چند چک، با نتیجه‌ی جدا برای هر کدام. */
+export const runCheckOperation = (
+  token: string,
+  data: {
+    check_ids: string[]
+    status: string
+    bank_account_id?: string | null
+    cashbox_id?: string | null
+    contact_id?: string | null
+    event_date?: string | null
+    note?: string
+  },
+) => authedSend<CheckOperationResult>(token, 'POST', '/api/check-operations', data)
+
+export const updateCheckStatus = (
+  token: string,
+  checkId: string,
+  status: string,
+  bankAccountId?: string,
+  extra: { cashbox_id?: string | null; contact_id?: string | null; event_date?: string | null; note?: string } = {},
+) =>
   authedSend<CheckRecord>(token, 'PATCH', `/api/checks/${checkId}/status`, {
     status,
     bank_account_id: bankAccountId ?? null,
+    ...extra,
   })
 
 export interface PettyCashRecord {
@@ -1874,6 +1976,8 @@ export const createCheckDirect = (
     contact_id?: string | null
     /** برگِ کدام دسته‌چک است (فقط چکِ پرداختنی). */
     checkbook_id?: string | null
+    back_number?: string
+    sayad_id?: string
   },
 ) => authedSend<unknown>(token, 'POST', '/api/checks', data)
 
