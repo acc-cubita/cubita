@@ -5,8 +5,10 @@ import {
   deleteItemLive,
   fetchAccountsLive,
   fetchItemsLive,
+  fetchUnits,
   updateItemLive,
   type ItemRecord,
+  type UnitRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
@@ -16,13 +18,10 @@ import { BarcodeScanner } from './BarcodeScanner'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
-// واحدهای رایج برای انتخابِ سریع؛ «سایر…» اجازه‌ی تایپِ واحدِ دلخواه را می‌دهد.
-// قیمت/بها همیشه «per واحد» است، پس اگر واحد «متر» باشد قیمتِ فروش یعنی قیمتِ هر متر
-// و تعداد می‌تواند اعشاری باشد (مثلاً ۲٫۵ متر).
-const COMMON_UNITS = [
-  'عدد', 'متر', 'متر مربع', 'متر مکعب', 'سانتی‌متر', 'کیلوگرم', 'گرم', 'تن',
-  'لیتر', 'بسته', 'کارتن', 'جعبه', 'جفت', 'دست', 'رول', 'طاقه', 'شاخه', 'عدل', 'ساعت',
-]
+// واحدها از داده‌ی پایه می‌آیند، نه از یک فهرستِ ثابت در کد و نه از تایپِ آزاد:
+// «کیلوگرم» و «كيلوگرم» نباید دو واحدِ متفاوت شوند. مدیریتشان در تبِ «واحدها».
+// قیمت/بها همیشه «per واحدِ اصلی» است، پس اگر واحد «متر» باشد قیمتِ فروش یعنی
+// قیمتِ هر متر و تعداد می‌تواند اعشاری باشد (مثلاً ۲٫۵ متر).
 
 interface DraftForm {
   sku: string
@@ -41,6 +40,12 @@ interface DraftForm {
   taxRate: string
   dutyRate: string
   expenseAccountId: string
+  primaryUnitId: string
+  secondaryUnitId: string
+  conversionFactor: string
+  conversionMode: string
+  unitWeight: string
+  unitVolume: string
   isService: boolean
   isSellable: boolean
   isSerialTracked: boolean
@@ -50,7 +55,9 @@ const EMPTY_FORM: DraftForm = {
   sku: '', name: '', name2: '', category: '', unit: 'عدد', salesPrice: '',
   barcode: '', iranCode: '', barcode2: '', reorderPoint: '', taxStuffId: '',
   vatStatus: 'taxable', purchaseVatStatus: 'taxable', taxRate: '', dutyRate: '',
-  expenseAccountId: '', isService: false, isSellable: true, isSerialTracked: false,
+  expenseAccountId: '', primaryUnitId: '', secondaryUnitId: '', conversionFactor: '',
+  conversionMode: 'fixed', unitWeight: '', unitVolume: '',
+  isService: false, isSellable: true, isSerialTracked: false,
 }
 
 /**
@@ -67,6 +74,7 @@ const EMPTY_FORM: DraftForm = {
 export function ProductsPanel({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const [products, setProducts] = useState<ItemRecord[]>([])
   const [accounts, setAccounts] = useState<{ id: string; code: string; name: string; is_group: number }[]>([])
+  const [units, setUnits] = useState<UnitRecord[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM)
@@ -101,10 +109,23 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
     })()
   }, [token])
 
+  useEffect(() => {
+    //: واحدها داده‌ی پایه‌اند و از سرور می‌آیند — نه فهرستِ ثابت در کد، نه تایپِ آزاد.
+    void (async () => {
+      try {
+        setUnits((await fetchUnits(token)).filter((u) => u.is_active))
+      } catch {
+        setUnits([])
+      }
+    })()
+  }, [token])
+
   const accountOptions = useMemo(
     () => accounts.map((a) => ({ id: a.id, label: `${a.code} — ${a.name}` })),
     [accounts],
   )
+
+  const unitName = (id: string) => units.find((u) => u.id === id)?.name ?? ''
 
   const filtered = useMemo(
     () =>
@@ -150,6 +171,12 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       taxRate: String(Number(p.tax_rate) || ''),
       dutyRate: String(Number(p.duty_rate) || ''),
       expenseAccountId: p.expense_account_id ?? '',
+      primaryUnitId: p.primary_unit_id ?? '',
+      secondaryUnitId: p.secondary_unit_id ?? '',
+      conversionFactor: String(Number(p.conversion_factor) || ''),
+      conversionMode: p.conversion_mode ?? 'fixed',
+      unitWeight: String(Number(p.unit_weight) || ''),
+      unitVolume: String(Number(p.unit_volume) || ''),
       isService: p.is_service,
       isSellable: p.is_sellable,
       isSerialTracked: p.is_serial_tracked,
@@ -176,6 +203,12 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       name2: form.name2.trim(),
       category: form.category.trim(),
       unit: form.unit.trim() || 'عدد',
+      primary_unit_id: form.primaryUnitId || null,
+      secondary_unit_id: form.secondaryUnitId || null,
+      conversion_factor: Number(form.conversionFactor) || 0,
+      conversion_mode: form.conversionMode,
+      unit_weight: Number(form.unitWeight) || 0,
+      unit_volume: Number(form.unitVolume) || 0,
       sales_price: Number(form.salesPrice) || 0,
       barcode: form.barcode.trim() || null,
       iran_code: form.iranCode.trim(),
@@ -302,24 +335,21 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           </div>
           <div className="field-row">
             <label>
-              واحد
+              واحد اصلی
               <select
-                value={COMMON_UNITS.includes(form.unit) ? form.unit : '__custom__'}
-                onChange={(e) => setForm({ ...form, unit: e.target.value === '__custom__' ? '' : e.target.value })}
+                value={form.primaryUnitId}
+                onChange={(e) => {
+                  const picked = units.find((u) => u.id === e.target.value)
+                  setForm({ ...form, primaryUnitId: e.target.value, unit: picked?.name ?? form.unit })
+                }}
               >
-                {COMMON_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
-                <option value="__custom__">سایر (دستی)…</option>
+                <option value="">— انتخاب کنید —</option>
+                {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
               </select>
-              {!COMMON_UNITS.includes(form.unit) && (
-                <input
-                  type="text"
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                  placeholder="واحدِ دلخواه، مثلاً «قواره»"
-                  style={{ marginTop: 6 }}
-                />
-              )}
-              <span className="field-hint">خدمت هم واحد دارد — «ساعت» واحدِ مشاوره است، ولی موجودی نمی‌سازد.</span>
+              <span className="field-hint">
+                خدمت هم واحد دارد — «ساعت» واحدِ مشاوره است، ولی موجودی نمی‌سازد. واحدِ تازه را
+                در تبِ «واحدها» بسازید.
+              </span>
             </label>
             <label>
               قیمت فروش (ریال، هر {form.unit || 'واحد'})
@@ -354,6 +384,74 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             «فعال» و «قابل فروش» دو چیزند: موادِ اولیه و موادِ بسته‌بندی موجودی دارند و گردش
             می‌کنند، ولی نباید در فاکتورِ فروش و صندوق انتخاب شوند.
             {editingId && ' نوعِ قلم (کالا/خدمت) پس از ایجاد تغییر نمی‌کند.'}
+          </p>
+
+          <h4 className="form-section-title">واحدِ فرعی و تبدیل</h4>
+          <div className="field-row">
+            <label>
+              واحد فرعی
+              <select
+                value={form.secondaryUnitId}
+                onChange={(e) => setForm({ ...form, secondaryUnitId: e.target.value })}
+              >
+                <option value="">— ندارد —</option>
+                {units
+                  .filter((u) => u.id !== form.primaryUnitId)
+                  .map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+              </select>
+            </label>
+            <label>
+              نحوه‌ی تبدیل
+              <select
+                value={form.conversionMode}
+                onChange={(e) => setForm({ ...form, conversionMode: e.target.value })}
+                disabled={!form.secondaryUnitId}
+              >
+                <option value="fixed">نسبت ثابت</option>
+                <option value="variable">نسبت متغیر</option>
+              </select>
+            </label>
+          </div>
+          {form.secondaryUnitId && form.conversionMode === 'fixed' && (
+            <label className="form-field">
+              {`هر ۱ ${unitName(form.secondaryUnitId) || 'واحد فرعی'} چند ${unitName(form.primaryUnitId) || 'واحد اصلی'} است؟`}
+              <NumberInput
+                allowDecimal
+                value={form.conversionFactor}
+                onChange={(v) => setForm({ ...form, conversionFactor: v })}
+                placeholder="مثلاً ۲۴"
+              />
+            </label>
+          )}
+          {form.secondaryUnitId && form.conversionMode === 'variable' && (
+            <p className="hint">
+              نسبتِ متغیر یعنی این عدد از پیش معلوم نیست (طاقه‌ی پارچه، شاخه‌ی میلگرد، بارِ فله).
+              سیستم عددی از خودش درنمی‌آورد و مقدار باید به واحدِ اصلی وارد شود.
+            </p>
+          )}
+          <div className="field-row">
+            <label>
+              وزن هر واحد اصلی
+              <NumberInput
+                allowDecimal
+                value={form.unitWeight}
+                onChange={(v) => setForm({ ...form, unitWeight: v })}
+                placeholder="۰"
+              />
+            </label>
+            <label>
+              حجم هر واحد اصلی
+              <NumberInput
+                allowDecimal
+                value={form.unitVolume}
+                onChange={(v) => setForm({ ...form, unitVolume: v })}
+                placeholder="۰"
+              />
+            </label>
+          </div>
+          <p className="hint">
+            وزن و حجم متادیتای حمل‌ونقل و توزین‌اند، نه موجودی — هیچ ماندهٔ‌ای از رویشان
+            حساب نمی‌شود.
           </p>
 
           <h4 className="form-section-title">شناسه‌ها</h4>
@@ -580,7 +678,16 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                       </td>
                       <td data-label="نوع">{p.is_service ? 'خدمت' : 'کالا'}</td>
                       <td data-label="دسته">{p.category || '—'}</td>
-                      <td data-label="واحد">{p.unit}</td>
+                      <td data-label="واحد">
+                        {p.primary_unit_name || p.unit}
+                        {p.secondary_unit_name && (
+                          <div className="entity-sub">
+                            {p.conversion_mode === 'variable'
+                              ? `۱ ${p.secondary_unit_name} = متغیر`
+                              : `۱ ${p.secondary_unit_name} = ${faMoney(Number(p.conversion_factor))} ${p.primary_unit_name || p.unit}`}
+                          </div>
+                        )}
+                      </td>
                       <td data-label="قیمت فروش" className="money-cell">{faMoney(Number(p.sales_price))}</td>
                       <td data-label="وضعیت">
                         <span className={`status-badge ${p.is_active ? 'tone-success' : 'tone-warning'}`}>

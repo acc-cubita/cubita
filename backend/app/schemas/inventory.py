@@ -400,6 +400,44 @@ class CreditStatusOut(BaseModel):
     over_limit: bool
 
 
+class UnitIn(BaseModel):
+    """واحدِ سنجش — داده‌ی پایه (§۱۹)."""
+
+    name: str
+    name2: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ واحد نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class UnitUpdateIn(BaseModel):
+    name: str | None = None
+    name2: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ واحد نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class UnitOut(BaseModel):
+    id: UUID
+    name: str
+    name2: str = ""
+    is_active: bool
+    #: چند قلم کالا رویش نشسته — تا فهرست پیش از غیرفعال‌سازی خبر بدهد.
+    item_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
 class ItemIn(BaseModel):
     sku: str
     name: str
@@ -425,6 +463,33 @@ class ItemIn(BaseModel):
     purchase_vat_status: str = "taxable"
     #: §۱۵ — معینِ هزینه‌ی خریدِ خدمت. خالی = حسابِ پیش‌فرضِ «هزینه خرید خدمات».
     expense_account_id: UUID | None = None
+    #: §۱۷ §۱۸ — واحدِ اصلی از داده‌ی پایه. اگر فرستاده نشود، از نوشتارِ `unit`
+    #: ساخته/پیدا می‌شود؛ این‌طور مسیرهای قدیمی (ورودِ گروهی، بازار، بازیابیِ
+    #: پشتیبان) نمی‌شکنند و متنِ آزاد هم دیگر سرگردان نمی‌ماند.
+    primary_unit_id: UUID | None = None
+    #: §۲۰ §۲۱ §۲۲ — واحدِ فرعی و نسبتش.
+    secondary_unit_id: UUID | None = None
+    conversion_factor: Decimal = Decimal(0)
+    conversion_mode: str = "fixed"
+    #: §۲۳ — متادیتای حمل‌ونقل، نه موجودی.
+    unit_weight: Decimal = Decimal(0)
+    unit_volume: Decimal = Decimal(0)
+
+    @field_validator("conversion_mode")
+    @classmethod
+    def _known_mode(cls, v: str) -> str:
+        from app.models.inventory import CONVERSION_MODES
+
+        if v not in CONVERSION_MODES:
+            raise ValueError("نحوه‌ی تبدیلِ واحد نامعتبر است")
+        return v
+
+    @field_validator("conversion_factor", "unit_weight", "unit_volume")
+    @classmethod
+    def _non_negative(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("این مقدار نمی‌تواند منفی باشد")
+        return v
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). ۰ = بدونِ هشدار.
     reorder_point: Decimal = Decimal(0)
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid، ۱۳رقمیِ مؤدیان). خالی = پیش‌فرضِ کسب‌وکار.
@@ -495,6 +560,14 @@ class ItemOut(BaseModel):
     expense_account_code: str = ""
     expense_account_name: str = ""
     expense_account_is_default: bool = True
+    primary_unit_id: UUID | None = None
+    primary_unit_name: str = ""
+    secondary_unit_id: UUID | None = None
+    secondary_unit_name: str = ""
+    conversion_factor: Decimal = Decimal(0)
+    conversion_mode: str = "fixed"
+    unit_weight: Decimal = Decimal(0)
+    unit_volume: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -522,6 +595,12 @@ class ItemUpdateIn(BaseModel):
     duty_rate: Decimal | None = None
     purchase_vat_status: str | None = None
     expense_account_id: UUID | None = None
+    primary_unit_id: UUID | None = None
+    secondary_unit_id: UUID | None = None
+    conversion_factor: Decimal | None = None
+    conversion_mode: str | None = None
+    unit_weight: Decimal | None = None
+    unit_volume: Decimal | None = None
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None
@@ -547,6 +626,15 @@ class ItemUpdateIn(BaseModel):
     def _sane_rate(cls, v: Decimal | None) -> Decimal | None:
         if v is not None and not (0 <= v <= 100):
             raise ValueError("نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
+    @field_validator("conversion_mode")
+    @classmethod
+    def _known_mode(cls, v: str | None) -> str | None:
+        from app.models.inventory import CONVERSION_MODES
+
+        if v is not None and v not in CONVERSION_MODES:
+            raise ValueError("نحوه‌ی تبدیلِ واحد نامعتبر است")
         return v
 
     @field_validator("sku", "name", "unit")

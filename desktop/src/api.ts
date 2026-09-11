@@ -1104,6 +1104,18 @@ export interface ItemRecord {
   expense_account_code: string
   expense_account_name: string
   expense_account_is_default: boolean
+  /** واحدِ اصلی از داده‌ی پایه؛ `unit` بالا پرتوِ نامِ همین است. */
+  primary_unit_id: string | null
+  primary_unit_name: string
+  secondary_unit_id: string | null
+  secondary_unit_name: string
+  /** «۱ کارتن = ۲۴ عدد». صفر یعنی نسبت هنوز تعریف نشده. */
+  conversion_factor: string
+  /** `fixed` یا `variable` — نسبتِ متغیر عمداً بی‌عدد است. */
+  conversion_mode: string
+  /** متادیتای حمل‌ونقل، نه موجودی. */
+  unit_weight: string
+  unit_volume: string
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -1137,6 +1149,12 @@ export interface ItemIn {
   tax_rate?: number
   duty_rate?: number
   expense_account_id?: string | null
+  primary_unit_id?: string | null
+  secondary_unit_id?: string | null
+  conversion_factor?: number
+  conversion_mode?: string
+  unit_weight?: number
+  unit_volume?: number
 }
 
 /** فیلدهایی که سرور در `ItemUpdateIn` می‌پذیرد. `is_service` عمداً نیست: تبدیلِ
@@ -6758,3 +6776,31 @@ export const previewRas = (
 
 export const openReceiptPrintView = (token: string, id: string) =>
   openInvoicePrintView(token, `/api/receipts/${id}/print`)
+
+// ──────────────────────────── واحدهای سنجش (§۱۷–§۲۳) ────────────────────────────
+//
+// واحد تا امروز یک رشته‌ی آزاد روی کالا بود، پس «کیلوگرم» و «كيلوگرم» دو واحدِ
+// متفاوت بودند و نگاشتِ کدِ واحدِ مؤدیان برای هر املا جدا لازم می‌شد.
+
+export interface UnitRecord {
+  id: string
+  name: string
+  name2: string
+  is_active: boolean
+  /** چند قلم کالا رویش نشسته — تا فهرست پیش از غیرفعال‌سازی خبر بدهد. */
+  item_count: number
+}
+
+export const fetchUnits = (token: string) => authedGet<UnitRecord[]>(token, '/api/units')
+
+export const createUnit = (token: string, data: { name: string; name2?: string }) =>
+  authedSend<UnitRecord>(token, 'POST', '/api/units', data)
+
+export const updateUnit = (
+  token: string,
+  unitId: string,
+  patch: { name?: string; name2?: string; is_active?: boolean },
+) => authedSend<UnitRecord>(token, 'PATCH', `/api/units/${unitId}`, patch)
+
+/** حذف فقط برای واحدِ استفاده‌نشده؛ وگرنه سرور ۴۰۹ با پیامِ «غیرفعالش کنید» می‌دهد. */
+export const deleteUnit = (token: string, unitId: string) => authedDelete(token, `/api/units/${unitId}`)

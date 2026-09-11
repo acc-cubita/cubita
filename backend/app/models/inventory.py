@@ -101,6 +101,42 @@ class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+#: نحوه‌ی تبدیلِ واحدِ فرعی به اصلی (§۲۲).
+#:
+#: `fixed` — نسبت همیشه ثابت است: یک کارتن همیشه ۲۴ عدد.
+#: `variable` — نسبت هر بار فرق می‌کند (طاقه‌ی پارچه، شاخه‌ی میلگرد، بارِ فله).
+#:
+#: فصل می‌گوید مدلِ کالا باید **تفاوتِ این دو را بشناسد**، ولی رفتارِ ورودِ نسبتِ
+#: متغیر در تراکنش را «تا وقتی workflowهای اختصاصی تثبیتش کنند» نهایی نکن. پس
+#: این‌جا فقط اعلام می‌شود؛ موتورِ تبدیل نسبتِ متغیر را رد می‌کند نه اینکه عددی
+#: از خودش دربیاورد.
+CONVERSION_MODES = ("fixed", "variable")
+CONVERSION_MODE_LABELS = {"fixed": "نسبت ثابت", "variable": "نسبت متغیر"}
+
+
+class UnitOfMeasure(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """واحدِ سنجش به‌عنوان داده‌ی پایه (§۱۹).
+
+    **چرا موجودیت شد.** تا امروز واحد یک `String(20)`ِ آزاد روی کالا بود. یعنی
+    «کیلوگرم» و «كيلوگرم» (با ک و ی عربی) دو واحدِ متفاوت بودند، و نگاشتِ کدِ
+    واحدِ سامانه‌ی مؤدیان — که روی همان نوشتار کلید می‌خورد — برای هر املا جدا
+    لازم می‌شد. فصل صریح است: «Unit نباید Text آزاد داخل کالا باشد».
+
+    `name` کلیدِ کسب‌وکاری است چون همان چیزی است که تا امروز روی کالا نشسته و
+    مهاجرت از رویش پیوند می‌زند.
+    """
+
+    __tablename__ = "units_of_measure"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_units_of_measure_tenant_name"),
+    )
+
+    name: Mapped[str] = mapped_column(String(20))
+    #: عنوانِ دوم — همان الگوی انبار و طرف‌حساب و کالا.
+    name2: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
 class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """طرف حساب: مشتری، تأمین‌کننده، واسطه یا سهامدار — و هر ترکیبی از این چهار.
 
@@ -361,6 +397,31 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: بازنویسی نمی‌کند.
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     duty_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    #: **واحدِ اصلی و فرعی (§۱۷ §۱۸ §۲۰).**
+    #:
+    #: `unit` بالا از این پس **پرتوِ نامِ واحدِ اصلی** است، نه منبعِ حقیقت: سرویس
+    #: هر بار که واحد عوض شود آن را هم‌گام می‌کند. نگه‌داشتنش عمدی است — ردیفِ
+    #: فاکتور، بسته‌ی مؤدیان، بازار و فروشگاه همه `unit_snapshot`/`unit` را
+    #: می‌خوانند و شکستنِ همه‌شان ارزشی اضافه نمی‌کرد.
+    primary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    )
+    secondary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    )
+    #: §۲۱ — «۱ کارتن = ۲۴ عدد». صفر یعنی نسبت هنوز تعریف نشده.
+    conversion_factor: Mapped[float] = mapped_column(
+        Numeric(18, 6), default=0, server_default="0"
+    )
+    conversion_mode: Mapped[str] = mapped_column(
+        String(10), default="fixed", server_default="fixed"
+    )
+
+    #: §۲۳ — وزن و حجمِ **یک واحدِ اصلی**. متادیتای کالا برای حمل‌ونقل و توزین
+    #: است، **نه موجودی**: هیچ‌جا از این‌ها مانده‌ای مشتق نمی‌شود.
+    unit_weight: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
+    unit_volume: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
 
     #: **معینِ هزینه‌ی خرید (§۱۵).** برای خدمت: «مشاوره حقوقی» هنگام خرید به یک
     #: حسابِ هزینه می‌نشیند، نه به موجودیِ کالا.

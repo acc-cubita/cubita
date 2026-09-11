@@ -10,7 +10,7 @@ from app.models.accounting import Account
 from app.models.banking import BankAccount
 from app.models.billing import Plan
 from app.models.counters import DOC_TYPES, DocumentCounter
-from app.models.inventory import Warehouse
+from app.models.inventory import UnitOfMeasure, Warehouse
 from app.models.payroll import PayrollSettings
 from app.models.tenant import Membership, Tenant
 from app.models.user import DEFAULT_ROLES, Role, User
@@ -152,6 +152,14 @@ CHART_OF_ACCOUNTS = [
 ]
 
 
+#: واحدهای استاندارد برای کسب‌وکارِ تازه (§۱۹). فهرست باز است — کاربر می‌تواند
+#: اضافه کند؛ این فقط نقطه‌ی شروع است تا هیچ‌کس مجبور به تایپِ آزاد نباشد.
+STANDARD_UNITS = (
+    "عدد", "متر", "متر مربع", "متر مکعب", "سانتی‌متر", "کیلوگرم", "گرم", "تن",
+    "لیتر", "بسته", "کارتن", "جعبه", "جفت", "دست", "رول", "طاقه", "شاخه", "عدل", "ساعت",
+)
+
+
 def seed_platform(db) -> None:
     """داده‌ی سراسری پلتفرم — به هیچ مستأجری تعلق ندارد. یک‌بار برای کل نصب."""
     for plan_def in SAMPLE_PLANS:
@@ -224,6 +232,17 @@ def provision_tenant(
             db.add(account)
             db.flush()
         accounts_by_code[code] = account
+
+    #: واحدهای سنجش — داده‌ی پایه (§۱۹). بدونِ این‌ها فرمِ کالای جدید هیچ واحدی
+    #: برای انتخاب ندارد و کاربر دوباره مجبور به تایپِ آزاد می‌شود.
+    existing_units = {
+        u.name
+        for u in db.query(UnitOfMeasure).filter(UnitOfMeasure.tenant_id == tenant.id).all()
+    }
+    for unit_name in STANDARD_UNITS:
+        if unit_name not in existing_units:
+            db.add(UnitOfMeasure(tenant_id=tenant.id, name=unit_name))
+    db.flush()
 
     for wh_code, wh_name in (("MAIN", "انبار اصلی"), ("ONLINE", "انبار آنلاین")):
         if not db.query(Warehouse).filter(Warehouse.code == wh_code, Warehouse.tenant_id == tenant.id).first():

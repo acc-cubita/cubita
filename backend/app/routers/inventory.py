@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
+from app.models.inventory import Contact, Item, UnitOfMeasure, StockAdjustment, StockLedger, Warehouse
 from app.models.user import User
 from decimal import Decimal
 
@@ -16,6 +16,7 @@ from app.services import tafsili
 from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
 from app.services import items as items_svc
+from app.services import units as units_svc
 from app.services import warehouses as warehouses_svc
 from app.schemas.inventory import (
     ContactAddressIn,
@@ -27,6 +28,9 @@ from app.schemas.inventory import (
     CreditStatusOut,
     ItemIn,
     ItemOut,
+    UnitIn,
+    UnitOut,
+    UnitUpdateIn,
     ItemUpdateIn,
     LowStockRowOut,
     StockAdjustmentIn,
@@ -438,11 +442,124 @@ def contact_credit_status(
 
 
 def _item_out(db: Session, item: Item, default_account=None) -> dict:
-    """ردیفِ کالا + نگاشتِ حسابِ هزینه. یک شکل برای فهرست و تک‌رکورد."""
+    """ردیفِ کالا + نگاشتِ حسابِ هزینه و واحدها. یک شکل برای فهرست و تک‌رکورد."""
     return {
         **ItemOut.model_validate(item).model_dump(),
         **items_svc.row(db, item, default_account=default_account),
+        **units_svc.row(db, item),
     }
+
+
+def _apply_units(db: Session, item: Item, fields: dict) -> None:
+    """واحدها را حل و اعتبارسنجی می‌کند و `Item.unit` را هم‌گام نگه می‌دارد.
+
+    اگر `primary_unit_id` نیامده باشد، از نوشتارِ `unit` ساخته/پیدا می‌شود —
+    این‌طور مسیرهای قدیمی (ورودِ گروهی، بازار، بازیابیِ پشتیبان) نمی‌شکنند و
+    متنِ آزاد هم دیگر سرگردان نمی‌ماند (§۱۹).
+    """
+    if item.primary_unit_id is None:
+        item.primary_unit_id = units_svc.get_or_create(db, item.unit).id
+    elif "primary_unit_id" in fields:
+        units_svc.assert_usable(db, item.primary_unit_id)
+    if fields.get("secondary_unit_id") is not None:
+        units_svc.assert_usable(db, item.secondary_unit_id)
+    units_svc.assert_conversion(item)
+    units_svc.sync_item_unit(db, item)
+
+
+# ──────────────────────────── واحدهای سنجش (§۱۷–§۲۳) ────────────────────────────
+#
+# تا امروز واحد یک `String(20)`ِ آزاد روی کالا بود، پس «کیلوگرم» و «كيلوگرم» دو
+# واحدِ متفاوت بودند و نگاشتِ کدِ واحدِ مؤدیان — که روی نوشتار کلید می‌خورد —
+# برای هر املا جدا لازم می‌شد.
+
+
+def _unit_out(db: Session, unit: UnitOfMeasure) -> dict:
+    used = (
+        db.query(Item.id)
+        .filter((Item.primary_unit_id == unit.id) | (Item.secondary_unit_id == unit.id))
+        .count()
+    )
+    return {**UnitOut.model_validate(unit).model_dump(), "item_count": used}
+
+
+@router.get("/api/units", response_model=list[UnitOut])
+def list_units(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    units = db.query(UnitOfMeasure).order_by(UnitOfMeasure.name).all()
+    return [_unit_out(db, unit) for unit in units]
+
+
+@router.post("/api/units", response_model=UnitOut, status_code=201)
+def create_unit(
+    data: UnitIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "create")),
+):
+    if db.query(UnitOfMeasure).filter(UnitOfMeasure.name == data.name).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"واحدِ «{data.name}» از قبل تعریف شده است.")
+    unit = UnitOfMeasure(**data.model_dump())
+    db.add(unit)
+    db.flush()
+    db.refresh(unit)
+    return _unit_out(db, unit)
+
+
+@router.patch("/api/units/{unit_id}", response_model=UnitOut)
+def update_unit(
+    unit_id: UUID,
+    data: UnitUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    unit = units_svc.resolve(db, unit_id)
+    fields = data.model_dump(exclude_unset=True)
+    if "name" in fields:
+        clash = (
+            db.query(UnitOfMeasure)
+            .filter(UnitOfMeasure.name == fields["name"], UnitOfMeasure.id != unit.id)
+            .first()
+        )
+        if clash is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"واحدِ «{fields['name']}» از قبل تعریف شده است."
+            )
+    if fields.get("is_active") is False:
+        units_svc.assert_can_deactivate(db, unit)
+    for key, value in fields.items():
+        setattr(unit, key, value)
+    db.flush()
+    #: تغییرِ نامِ واحد باید روی کالاهایی که رویش نشسته‌اند هم دیده شود — وگرنه
+    #: `Item.unit` و واحدِ واقعی از هم جدا می‌افتند و بسته‌ی مؤدیان نامِ قدیمی را
+    #: می‌فرستد.
+    if "name" in fields:
+        for item in db.query(Item).filter(Item.primary_unit_id == unit.id).all():
+            item.unit = unit.name
+        db.flush()
+    db.refresh(unit)
+    return _unit_out(db, unit)
+
+
+@router.delete("/api/units/{unit_id}", status_code=204)
+def delete_unit(
+    unit_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "delete")),
+):
+    """§۴۹ — واحدِ استفاده‌نشده حذف می‌شود؛ استفاده‌شده غیرفعال.
+
+    مثلِ کالا، مرجعِ حقیقت قیدهای کلیدِ خارجیِ پایگاه‌داده‌اند نه شمارشِ دستی.
+    """
+    unit = units_svc.resolve(db, unit_id)
+    try:
+        with db.begin_nested():
+            db.delete(unit)
+            db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"واحدِ «{unit.name}» روی کالایی نشسته و حذف نمی‌شود؛ به‌جای حذف، غیرفعالش کنید.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/items", response_model=Page[ItemOut])
@@ -518,6 +635,7 @@ def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_p
     items_svc.assert_expense_account(db, data.expense_account_id)
     item = Item(**data.model_dump())
     db.add(item)
+    _apply_units(db, item, data.model_dump())
     db.flush()
     db.refresh(item)
     return _item_out(db, item)
@@ -546,6 +664,7 @@ def update_item(
         items_svc.assert_serial_toggle_allowed(db, item, fields["is_serial_tracked"])
     for key, value in fields.items():
         setattr(item, key, value)
+    _apply_units(db, item, fields)
     db.flush()
     db.refresh(item)
     return _item_out(db, item)
