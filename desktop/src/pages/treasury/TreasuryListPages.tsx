@@ -3,6 +3,7 @@ import {
   BookMarked,
   CreditCard,
   FileSpreadsheet,
+  History,
 
   ScrollText,
   Wallet,
@@ -11,6 +12,8 @@ import {
   fetchBankAccountsAdmin,
   fetchCheckbooks,
   fetchPettyCashTransactions,
+  CHECK_OPERATION_LABEL,
+  fetchCheckOperations,
   fetchPosSettlement,
   fetchPosSettlements,
   fetchPosTerminals,
@@ -20,7 +23,7 @@ import {
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
-import { formatJalali } from '../../lib/jalali'
+import { formatJalali, toFaDigits } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 
 /**
@@ -373,6 +376,100 @@ export function PosSettlementListPage({ token }: { token: string }) {
           </AsyncBlock>
         </SectionCard>
       ) : null}
+    </OpsPage>
+  )
+}
+
+// ═══════════════════ عملیات چک ═══════════════════
+
+/**
+ * دفترِ عملیاتِ چک.
+ *
+ * **نمای دومِ همان دامنه (§۴۱).** «جستجوی چک» می‌گوید الان چه چک‌هایی داریم و
+ * وضعیتشان چیست؛ این می‌گوید چه عملیاتی، کِی، روی کدام چک انجام شده. تا پیش از
+ * مهاجرتِ ۰۱۱۰ سؤالِ دوم اصلاً جواب نداشت — چک فقط وضعیتِ فعلی داشت و هیچ ردی
+ * از گذرهایش نمی‌ماند.
+ */
+export function CheckOperationListPage({ token }: { token: string }) {
+  const [operation, setOperation] = useState('')
+  const rows = useAsync(
+    () => fetchCheckOperations(token, { operation: operation || undefined }),
+    [token, operation],
+  )
+
+  const list = rows.data ?? []
+  const pg = usePagination(list, 15, operation)
+  const total = list.reduce((s, r) => s + Number(r.check_amount), 0)
+
+  return (
+    <OpsPage
+      icon={History}
+      title="عملیات چک"
+      description="هر گذرِ وضعیتِ چک — واگذاری، وصول، واخواست، نقد کردن، خرج و برگشت."
+      head={
+        <div className="cc-head">
+          <div className="cc-toolbar">
+            <label className="acc-inline-field">
+              نوعِ عملیات
+              <select value={operation} onChange={(e) => setOperation(e.target.value)}>
+                <option value="">همه</option>
+                {Object.entries(CHECK_OPERATION_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="cc-summary">
+            <Metric icon={<History size={14} />} label="عملیات" value={faInt(list.length)} />
+            <Metric icon={<Wallet size={14} />} label="جمعِ مبلغِ چک‌ها" value={fa(total)} tone="plain" />
+          </div>
+        </div>
+      }
+    >
+      <SectionCard icon={History} title="رویدادها" description={`${faInt(list.length)} ردیف`}>
+        <AsyncBlock
+          loading={rows.loading}
+          error={rows.error}
+          empty={list.length === 0}
+          emptyText="عملیاتی ثبت نشده."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>عملیات</th>
+                  <th>شماره چک</th>
+                  <th>مبلغ</th>
+                  <th>مقصد</th>
+                  <th>وضعیتِ پس از عملیات</th>
+                  <th>شماره عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((r) => (
+                  <tr key={r.id}>
+                    <td className="card-title" data-label="تاریخ">{formatJalali(r.event_date)}</td>
+                    <td data-label="عملیات">{r.operation_label}</td>
+                    <td data-label="شماره چک" dir="ltr">{toFaDigits(r.check_number)}</td>
+                    <td className="num" data-label="مبلغ">{fa(r.check_amount)}</td>
+                    <td data-label="مقصد">
+                      {r.bank_account_name || r.cashbox_name || r.contact_name || '—'}
+                    </td>
+                    <td data-label="وضعیتِ پس از عملیات">{r.to_status_label}</td>
+                    <td className="num" data-label="شماره عملیات">
+                      {r.operation_no ? faInt(r.operation_no) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        </AsyncBlock>
+      </SectionCard>
     </OpsPage>
   )
 }

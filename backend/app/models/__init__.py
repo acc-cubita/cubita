@@ -6,6 +6,7 @@ from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
 from app.models.billing import Plan, Purchase
 from app.models.client_error import ClientError
+from app.models.check_event import CheckEvent
 from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.company import ContactGroup, GeoLocation, RelatedPerson, SavedReport
@@ -181,6 +182,7 @@ __all__ = [
     "InsuranceTaxBranch",
     "FiscalPeriodClose",
     "FiscalYear",
+    "CheckEvent",
     "PosSettlement",
     "PosTerminal",
     "SalesQuotation",

@@ -15,7 +15,7 @@ from app.models.accounting import Account
 from app.models.banking import BankAccount, Check, Checkbook
 from app.models.inventory import Contact
 from app.schemas.banking import CheckbookIn, CheckbookUpdateIn, CheckIn
-from app.services import banking as svc
+from app.services import check_ops as svc
 from app.services import checkbooks as book_svc
 from app.services import chart_codes as cc
 from app.services.common import get_account
@@ -209,8 +209,14 @@ def test_a_deposited_check_cannot_be_returned(db, user):
     assert e.value.status_code == 400
 
 
-def test_payable_check_cannot_be_returned(db, user):
-    """استرداد فقط برای چکِ دریافتی معنی دارد."""
+def test_payable_check_can_be_returned_to_us(db, user):
+    """**تغییرِ رفتارِ عمدی (§۳۱).**
+
+    نسخه‌ی قبلی می‌گفت «استرداد فقط برای چکِ دریافتی معنی دارد». ولی چکِ
+    پرداختنی هم پیش از وصول به ما برمی‌گردد — و آن‌وقت هیچ راهی برای ثبتش نبود.
+    بدتر: ردیف‌های حسابداریِ `returned` سمتِ *دریافتنی* hard-code شده بودند، پس
+    بازکردنِ این گذر بدونِ اصلاحشان سندِ غلط می‌زد.
+    """
     check = svc.create_check(
         db,
         CheckIn(
@@ -222,5 +228,6 @@ def test_payable_check_cannot_be_returned(db, user):
         ),
         user,
     )
-    with pytest.raises(HTTPException):
-        svc.update_check_status(db, check.id, "returned", None, user)
+    svc.update_check_status(db, check.id, "returned", None, user)
+    db.refresh(check)
+    assert check.status == "returned"

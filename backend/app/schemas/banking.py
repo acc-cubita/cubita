@@ -98,6 +98,11 @@ class BankAccountOut(BaseModel):
 class CheckIn(BaseModel):
     type: str
     number: str
+    #: شماره‌ی پشتِ برگ — با شماره‌ی چک یکی نیست و در بانک با همین پیگیری می‌شود.
+    back_number: str = ""
+    #: شناسه‌ی صیادیِ ۱۶رقمی. یکتاییِ واقعیِ برگ همین است، نه شماره‌ی چک که بینِ
+    #: بانک‌ها تکرار می‌شود.
+    sayad_id: str = ""
     bank_name: str = ""
     amount: Decimal
     issue_date: date
@@ -120,6 +125,8 @@ class CheckOut(BaseModel):
     id: UUID
     type: str
     number: str
+    back_number: str = ""
+    sayad_id: str = ""
     bank_name: str
     amount: Decimal
     issue_date: date
@@ -130,6 +137,8 @@ class CheckOut(BaseModel):
     contact_name: str | None = None
     bank_account_id: UUID | None
     checkbook_id: UUID | None = None
+    #: صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`.
+    cashbox_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -137,6 +146,13 @@ class CheckOut(BaseModel):
 class CheckStatusUpdateIn(BaseModel):
     status: str
     bank_account_id: UUID | None = None
+    #: برای «نقد کردن». خالی = صندوقِ پیش‌فرض.
+    cashbox_id: UUID | None = None
+    #: طرفِ مقابلِ همین عملیات — که لزوماً صاحبِ چک نیست (گیرنده‌ی چکِ خرج‌شده).
+    contact_id: UUID | None = None
+    #: تاریخِ عملیات. خالی = سررسیدِ چک، همان پیش‌فرضِ پیشین.
+    event_date: date | None = None
+    note: str = ""
 
 
 class BankDepositWithdrawIn(BaseModel):

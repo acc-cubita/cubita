@@ -22,7 +22,7 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.banking import BankAccount, Check
 from app.models.inventory import Contact
 from app.schemas.banking import CheckIn
-from app.services import banking as svc
+from app.services import check_ops as svc
 from app.services import chart_codes as cc
 from app.services.common import get_account
 
@@ -148,10 +148,13 @@ def test_a_deposited_check_can_come_back(db, user):
     assert check.bank_account_id is None, "چک دیگر نزدِ بانک نیست"
 
 
-def test_coming_back_from_the_bank_makes_no_entry(db, user):
-    """واگذاری سندی نزده بود، پس بازگشتش هم نباید بزند.
+def test_coming_back_from_the_bank_reverses_the_deposit(db, user):
+    """**تغییرِ رفتارِ عمدی (مهاجرتِ ۰۱۱۰).**
 
-    سندِ بی‌اثر دفتر را شلوغ می‌کند بی‌آنکه چیزی بگوید.
+    نسخه‌ی قبلیِ این تست می‌گفت بازگشت از بانک سندی نمی‌زند — و درست بود، چون
+    خودِ واگذاری هم نمی‌زد. ولی همان نزدنِ سند یعنی دفتر «نزدِ ما» و «دستِ بانک»
+    را از هم نمی‌شناخت. حالا واگذاری طبقه‌بندیِ دوباره است، پس بازگشتش هم باید
+    معکوسش را بزند؛ وگرنه مبلغ تا ابد در حسابِ واسط می‌ماند.
     """
     check = _receivable(db, user)
     svc.update_check_status(db, check.id, "deposited", _bank(db).id, user)
@@ -159,7 +162,10 @@ def test_coming_back_from_the_bank_makes_no_entry(db, user):
 
     svc.update_check_status(db, check.id, "in_hand", None, user)
 
-    assert _entry_count(db) == before
+    assert _entry_count(db) == before + 1
+    #: حسابِ واسط بسته شده و مبلغ به «چک‌های دریافتنی» برگشته.
+    assert _balance(db, cc.CHECKS_IN_COLLECTION) == Decimal(0)
+    assert _balance(db, cc.CHECKS_RECEIVABLE) == Decimal(check.amount)
 
 
 def test_a_check_back_from_the_bank_can_be_returned_to_its_owner(db, user):
