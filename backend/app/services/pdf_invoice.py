@@ -161,6 +161,8 @@ def render_invoice_pdf(
     total: Decimal,
     tax_amount: Decimal = Decimal(0),
     total_discount: Decimal = Decimal(0),
+    total_additions: Decimal = Decimal(0),
+    total_duties: Decimal = Decimal(0),
     rounding: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
@@ -173,6 +175,8 @@ def render_invoice_pdf(
     subtotal = Decimal(str(total))
     tax = Decimal(str(tax_amount or 0))
     discount = Decimal(str(total_discount or 0))
+    additions = Decimal(str(total_additions or 0))
+    duties = Decimal(str(total_duties or 0))
     rnd = Decimal(str(rounding or 0))
     grand_total = subtotal + tax + rnd
 
@@ -280,9 +284,13 @@ def render_invoice_pdf(
         return result
 
     if discount > 0:
-        y = total_row(y, "جمع ناخالص (ریال)", subtotal + discount, bold=False)
+        y = total_row(y, "جمع ناخالص (ریال)", subtotal + discount - additions - duties, bold=False)
         y = total_row(y, "جمع تخفیف (ریال)", discount, bold=False)
-    if tax > 0 or rnd != 0:
+    if additions > 0:
+        y = total_row(y, "جمع اضافات (ریال)", additions, bold=False)
+    if duties > 0:
+        y = total_row(y, "جمع عوارض (ریال)", duties, bold=False)
+    if tax > 0 or rnd != 0 or additions > 0 or duties > 0:
         y = total_row(y, "جمع خالص (ریال)", subtotal, bold=False)
         if tax > 0:
             y = total_row(y, "مالیات بر ارزش افزوده (ریال)", tax, bold=False)

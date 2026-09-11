@@ -42,6 +42,7 @@ def customer_outstanding(db: Session, contact_id: UUID, as_of: date | None = Non
         TreasuryTransaction.contact_id == contact_id,
         TreasuryTransaction.type == "receipt",
         TreasuryTransaction.transaction_date <= as_of,
+        TreasuryTransaction.voided_at.is_(None),
     ).scalar()
 
     returns = db.query(

@@ -228,6 +228,8 @@ def render_invoice(
     total: Decimal,
     tax_amount: Decimal = Decimal(0),
     total_discount: Decimal = Decimal(0),
+    total_additions: Decimal = Decimal(0),
+    total_duties: Decimal = Decimal(0),
     rounding: Decimal = Decimal(0),
     voided_at=None,
     void_reason: str = "",
@@ -245,6 +247,8 @@ def render_invoice(
     subtotal = Decimal(str(total))
     tax = Decimal(str(tax_amount or 0))
     discount = Decimal(str(total_discount or 0))
+    additions = Decimal(str(total_additions or 0))
+    duties = Decimal(str(total_duties or 0))
     rnd = Decimal(str(rounding or 0))
     grand_total = subtotal + tax + rnd
 
@@ -252,9 +256,13 @@ def render_invoice(
     if discount > 0:
         # ناخالص و تخفیف فقط وقتی نشان داده می‌شوند که تخفیفی باشد، تا فاکتورهای
         # بدون تخفیف دقیقاً مثل قبل چاپ شوند.
-        rows.append(f"<tr><td colspan='7'>جمع ناخالص (ریال)</td><td class='num'>{fa_number(subtotal + discount)}</td></tr>")
+        rows.append(f"<tr><td colspan='7'>جمع ناخالص (ریال)</td><td class='num'>{fa_number(subtotal + discount - additions - duties)}</td></tr>")
         rows.append(f"<tr><td colspan='7'>جمع تخفیف (ریال)</td><td class='num'>{fa_number(discount)}</td></tr>")
-    if tax > 0 or rnd != 0:
+    if additions > 0:
+        rows.append(f"<tr><td colspan='7'>جمع اضافات (ریال)</td><td class='num'>{fa_number(additions)}</td></tr>")
+    if duties > 0:
+        rows.append(f"<tr><td colspan='7'>جمع عوارض (ریال)</td><td class='num'>{fa_number(duties)}</td></tr>")
+    if tax > 0 or rnd != 0 or additions > 0 or duties > 0:
         rows.append(f"<tr><td colspan='7'>جمع خالص (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
         if tax > 0:
             rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
@@ -507,6 +515,341 @@ def render_journal_entry(
     <div class="sign">تنظیم‌کننده</div>
     <div class="sign">تأییدکننده</div>
     <div class="sign">مدیر مالی</div>
+  </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
+</div>
+</body>
+</html>"""
+
+
+#: برچسبِ فارسیِ هر ابزار در برگه‌ی چاپی. چاپ **از همان رکوردِ رسید** ساخته
+#: می‌شود (§۲۵) — نسخه‌ی دومی از داده‌ی مالی وجود ندارد که بتواند واگرا شود.
+_RECEIPT_KIND_LABELS = {
+    "cash": "وجه نقد",
+    "transfer": "حواله",
+    "cheque": "چک",
+    "card": "کارت‌خوان",
+}
+
+
+def _receipt_rows(components: list[dict]) -> str:
+    """هر جزء یک ردیف، با ستون‌هایی که برای همان ابزار معنا دارند.
+
+    ستونِ «شماره/مرجع» برای چک شماره‌ی برگ است، برای حواله شماره‌ی حواله، و برای
+    کارت‌خوان کد پیگیری؛ «سررسید» فقط چک دارد. خالی‌گذاشتنشان بهتر از ساختنِ سه
+    جدولِ جدا است، چون کاربر یک فهرست می‌خواهد که جمعش بخواند.
+    """
+    out = []
+    for i, row in enumerate(components, start=1):
+        label = _RECEIPT_KIND_LABELS.get(row.get("kind", ""), row.get("kind", ""))
+        due = format_jalali(row.get("due_date")) if row.get("due_date") else "—"
+        out.append(
+            "      <tr>"
+            f"<td class='num'>{fa_number(i)}</td>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape(str(row.get('label') or ''))}</td>"
+            f"<td>{escape(str(row.get('reference_no') or '—'))}</td>"
+            f"<td class='num'>{due}</td>"
+            f"<td>{escape(str(row.get('description') or ''))}</td>"
+            f"<td class='num'>{fa_number(row.get('amount') or 0)}</td>"
+            "</tr>"
+        )
+    return "\n".join(out)
+
+
+def render_receipt(
+    *,
+    business_name: str,
+    number,
+    receipt_date: date | None,
+    type_label: str,
+    party_name: str,
+    party_detail: str,
+    description: str,
+    description2: str = "",
+    components: list[dict],
+    receipt_amount: Decimal,
+    discount_amount: Decimal = Decimal(0),
+    settlement_total: Decimal = Decimal(0),
+    voided_at=None,
+    void_reason: str = "",
+    currency_line: str = "",
+) -> str:
+    """برگه‌ی چاپیِ رسید دریافت — از همان رکورد، نه از یک نسخه‌ی جدا (§۲۵).
+
+    **مبلغ به حروف مشتق است** (§۲۶): از `settlement_total` حساب می‌شود و هیچ‌جا
+    ذخیره نمی‌شود. ذخیره‌کردنش یعنی یک منبعِ حقیقتِ دوم که می‌تواند با عدد نخواند.
+
+    امضاها «پرداخت‌کننده / دریافت‌کننده»اند نه «فروشنده / خریدار» — رسید سندِ
+    خزانه است، نه فاکتور.
+    """
+    banner = ""
+    if voided_at is not None:
+        reason = f" — {escape(void_reason)}" if void_reason else ""
+        banner = f"<div class='voided'>این رسید باطل شده است{reason}</div>"
+
+    currency_banner = f"<div class='currency-note'>{escape(currency_line)}</div>" if currency_line else ""
+
+    received = Decimal(str(receipt_amount or 0))
+    discount = Decimal(str(discount_amount or 0))
+    total = Decimal(str(settlement_total or 0)) or (received + discount)
+
+    totals = [
+        f"<tr><td colspan='6'>مبلغ دریافت (ریال)</td><td class='num'>{fa_number(received)}</td></tr>"
+    ]
+    if discount > 0:
+        #: تخفیف فقط وقتی نشان داده می‌شود که باشد، تا رسیدهای بی‌تخفیف شلوغ نشوند.
+        totals.append(
+            f"<tr><td colspan='6'>تخفیف تسویه (ریال)</td><td class='num'>{fa_number(discount)}</td></tr>"
+        )
+    totals.append(
+        f"<tr class='grand'><td colspan='6'>جمع کل (ریال)</td><td class='num'>{fa_number(total)}</td></tr>"
+    )
+
+    notes = []
+    if description:
+        notes.append(f"<span class='lbl'>بابت</span><span class='txt'>{escape(description)}</span>")
+    if description2:
+        notes.append(f"<span class='lbl'>توضیحات</span><span class='txt'>{escape(description2)}</span>")
+    notes_block = f"<div class='notes'>{''.join(notes)}</div>" if notes else ""
+
+    logo_svg = (
+        "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#fff' "
+        "stroke-width='2' stroke-linecap='round'><path d='M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>"
+    )
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>رسید دریافت شماره {fa_number(number)}</title>
+<style>{_STYLE}</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  {banner}
+  {currency_banner}
+  <div class="head">
+    <div class="brand-block">
+      <div class="logo">{logo_svg}</div>
+      <div>
+        <h1 class="title">رسید دریافت</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="chip"><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>
+      <div class="chip"><span>تاریخ</span> &nbsp;<strong>{format_jalali(receipt_date)}</strong></div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h2>دریافت از</h2>
+      <div class="big">{escape(party_name)}</div>
+      <div class="sub">{escape(party_detail)}</div>
+    </div>
+    <div class="party">
+      <h2>نوع دریافت</h2>
+      <div class="big">{escape(type_label)}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="num" style="width:6%">ردیف</th>
+        <th style="width:13%">ابزار</th>
+        <th style="width:22%">صندوق / بانک / دستگاه</th>
+        <th style="width:16%">شماره / مرجع</th>
+        <th class="num" style="width:13%">سررسید</th>
+        <th style="width:16%">شرح</th>
+        <th class="num" style="width:14%">مبلغ</th>
+      </tr>
+    </thead>
+    <tbody>
+{_receipt_rows(components)}
+    </tbody>
+    <tfoot>
+      {''.join(totals)}
+    </tfoot>
+  </table>
+
+  <div class="words">مبلغ به حروف: <strong>{amount_in_words(total)}</strong> ریال</div>
+
+  {notes_block}
+
+  <div class="signs">
+    <div class="sign">امضای پرداخت‌کننده</div>
+    <div class="sign">امضای دریافت‌کننده</div>
+  </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
+</div>
+</body>
+</html>"""
+
+
+_PAYMENT_KIND_LABELS = {
+    "cash": "وجه نقد",
+    "bank_withdrawal": "برداشت بانکی",
+    "payable_cheque": "چک پرداختنی",
+    "endorsed_cheque": "چک واگذاری",
+}
+
+
+def _payment_rows(components: list[dict]) -> str:
+    """قرینه‌ی `_receipt_rows`، با یک ستونِ اضافه: کارمزد.
+
+    کارمزد فقط سمتِ پرداخت وجود دارد — معادلِ سمتِ دریافت، کارمزدِ وصولِ چکِ
+    واگذاری است که مفهومِ دیگری است و به‌زور در تقارن جا نمی‌شود.
+    """
+    out = []
+    for i, row in enumerate(components, start=1):
+        label = _PAYMENT_KIND_LABELS.get(row.get("kind", ""), row.get("kind", ""))
+        due = format_jalali(row.get("due_date")) if row.get("due_date") else "—"
+        fee = Decimal(str(row.get("bank_fee") or 0))
+        out.append(
+            "      <tr>"
+            f"<td class='num'>{fa_number(i)}</td>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape(str(row.get('label') or ''))}</td>"
+            f"<td>{escape(str(row.get('reference_no') or '—'))}</td>"
+            f"<td class='num'>{due}</td>"
+            f"<td class='num'>{fa_number(fee) if fee else '—'}</td>"
+            f"<td class='num'>{fa_number(row.get('amount') or 0)}</td>"
+            "</tr>"
+        )
+    return "\n".join(out)
+
+
+def render_payment(
+    *,
+    business_name: str,
+    number,
+    payment_date: date | None,
+    type_label: str,
+    party_name: str,
+    party_detail: str,
+    description: str,
+    description2: str = "",
+    components: list[dict],
+    payment_amount: Decimal,
+    discount_amount: Decimal = Decimal(0),
+    bank_fee_amount: Decimal = Decimal(0),
+    settlement_total: Decimal = Decimal(0),
+    voided_at=None,
+    void_reason: str = "",
+    currency_line: str = "",
+) -> str:
+    """برگه‌ی چاپیِ اعلامیه پرداخت — قرینه‌ی `render_receipt`.
+
+    **چرا قرینه و نه یک تابعِ مشترکِ پارامتری:** دو سند ستون‌های متفاوت دارند
+    (کارمزد فقط این‌جا) و امضاهایشان هم فرق می‌کند. یکی‌کردنشان یعنی یک تابع با
+    چند پرچمِ «اگر رسید بود…» که هر دو را سخت‌خوان می‌کند.
+    """
+    banner = ""
+    if voided_at is not None:
+        reason = f" — {escape(void_reason)}" if void_reason else ""
+        banner = f"<div class='voided'>این اعلامیه باطل شده است{reason}</div>"
+
+    currency_banner = f"<div class='currency-note'>{escape(currency_line)}</div>" if currency_line else ""
+
+    paid = Decimal(str(payment_amount or 0))
+    discount = Decimal(str(discount_amount or 0))
+    fee = Decimal(str(bank_fee_amount or 0))
+    total = Decimal(str(settlement_total or 0)) or (paid + discount)
+
+    totals = [f"<tr><td colspan='6'>مبلغ پرداخت (ریال)</td><td class='num'>{fa_number(paid)}</td></tr>"]
+    if fee > 0:
+        totals.append(f"<tr><td colspan='6'>کارمزد بانکی (ریال)</td><td class='num'>{fa_number(fee)}</td></tr>")
+    if discount > 0:
+        totals.append(f"<tr><td colspan='6'>تخفیف تسویه (ریال)</td><td class='num'>{fa_number(discount)}</td></tr>")
+    totals.append(
+        f"<tr class='grand'><td colspan='6'>جمع کل (ریال)</td><td class='num'>{fa_number(total)}</td></tr>"
+    )
+
+    notes = []
+    if description:
+        notes.append(f"<span class='lbl'>بابت</span><span class='txt'>{escape(description)}</span>")
+    if description2:
+        notes.append(f"<span class='lbl'>توضیحات</span><span class='txt'>{escape(description2)}</span>")
+    notes_block = f"<div class='notes'>{''.join(notes)}</div>" if notes else ""
+
+    logo_svg = (
+        "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#fff' "
+        "stroke-width='2' stroke-linecap='round'><path d='M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>"
+    )
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اعلامیه پرداخت شماره {fa_number(number)}</title>
+<style>{_STYLE}</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  {banner}
+  {currency_banner}
+  <div class="head">
+    <div class="brand-block">
+      <div class="logo">{logo_svg}</div>
+      <div>
+        <h1 class="title">اعلامیه پرداخت</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="chip"><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>
+      <div class="chip"><span>تاریخ</span> &nbsp;<strong>{format_jalali(payment_date)}</strong></div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h2>پرداخت به</h2>
+      <div class="big">{escape(party_name)}</div>
+      <div class="sub">{escape(party_detail)}</div>
+    </div>
+    <div class="party">
+      <h2>نوع پرداخت</h2>
+      <div class="big">{escape(type_label)}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="num" style="width:6%">ردیف</th>
+        <th style="width:14%">ابزار</th>
+        <th style="width:21%">صندوق / بانک / چک</th>
+        <th style="width:15%">شماره / مرجع</th>
+        <th class="num" style="width:12%">تاریخ</th>
+        <th class="num" style="width:12%">کارمزد</th>
+        <th class="num" style="width:14%">مبلغ</th>
+      </tr>
+    </thead>
+    <tbody>
+{_payment_rows(components)}
+    </tbody>
+    <tfoot>
+      {''.join(totals)}
+    </tfoot>
+  </table>
+
+  <div class="words">مبلغ به حروف: <strong>{amount_in_words(total)}</strong> ریال</div>
+
+  {notes_block}
+
+  <div class="signs">
+    <div class="sign">امضای پرداخت‌کننده</div>
+    <div class="sign">امضای دریافت‌کننده</div>
   </div>
 
   <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>

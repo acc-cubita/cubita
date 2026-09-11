@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  ArrowUpFromLine,
   BookMarked,
   CreditCard,
   FileSpreadsheet,
@@ -10,6 +11,7 @@ import {
 import {
   fetchBankAccountsAdmin,
   fetchCheckbooks,
+  fetchPaymentDocuments,
   fetchPettyCashTransactions,
   fetchPosTerminals,
   fetchStatementLines,
@@ -29,6 +31,63 @@ import { AsyncBlock, Metric, OpsPage, fa, faInt, useAsync } from '../accounting/
  * رکوردهاست — همه‌ی ردیف‌ها، با جمع‌ها و فیلتر و بدونِ فرم. این دو تکراری نیستند:
  * یکی جای کار کردن است و دیگری جای گشتن.
  */
+
+// ═══════════════════ اعلامیه‌های پرداخت ═══════════════════
+
+export function PaymentNoticeListPage({ token }: { token: string }) {
+  const [q, setQ] = useState('')
+  const [type, setType] = useState<'all' | 'supplier' | 'customer' | 'other'>('all')
+  const data = useAsync(() => fetchPaymentDocuments(token), [token])
+  const rows = useMemo(() => {
+    const term = q.trim()
+    return (data.data ?? []).filter((row) => {
+      if (type !== 'all' && row.payment_type !== type) return false
+      if (!term) return true
+      return row.contact_name.includes(term) || row.description.includes(term) || String(row.number).includes(term)
+    })
+  }, [data.data, q, type])
+  const pg = usePagination(rows, 20, `${type}|${q}`)
+  const active = rows.filter((row) => !row.voided_at)
+  const principal = active.reduce((sum, row) => sum + Number(row.payment_amount), 0)
+  const fee = active.reduce((sum, row) => sum + Number(row.bank_fee_amount), 0)
+
+  return (
+    <OpsPage
+      icon={ArrowUpFromLine}
+      title="اعلامیه‌های پرداخت"
+      description="فهرست مستقل رویدادهای پرداخت؛ اقلام از ابزارهای واقعی خزانه‌داری مشتق شده‌اند."
+      head={<div className="cc-head"><div className="cc-summary">
+        <Metric icon={<ArrowUpFromLine size={14} />} label="اعلامیه‌ها" value={faInt(rows.length)} />
+        <Metric icon={<Wallet size={14} />} label="مبلغ پرداخت" value={fa(principal)} tone="out" />
+        <Metric icon={<CreditCard size={14} />} label="کارمزد بانکی" value={fa(fee)} />
+      </div></div>}
+    >
+      <SectionCard icon={ArrowUpFromLine} title="فهرست اعلامیه‌ها" description={`${faInt(rows.length)} اعلامیه`}>
+        <div className="acc-filters">
+          <label className="acc-search"><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="شماره، طرف حساب یا شرح" /></label>
+          <label>نوع<select value={type} onChange={(e) => setType(e.target.value as typeof type)}><option value="all">همه</option><option value="supplier">به تأمین‌کننده</option><option value="customer">به مشتری</option><option value="other">سایر</option></select></label>
+        </div>
+        <AsyncBlock loading={data.loading} error={data.error} empty={rows.length === 0} emptyText="اعلامیه‌ای با این شرایط نیست.">
+          <div className="table-scroll"><table className="cards-on-mobile acc-table">
+            <thead><tr><th>شماره</th><th>تاریخ</th><th>نوع</th><th>طرف حساب</th><th>اقلام</th><th>ارز</th><th>مبلغ پایه</th><th>تخفیف</th><th>کارمزد</th><th>وضعیت</th></tr></thead>
+            <tbody>{pg.pageItems.map((row) => <tr key={row.id} className={row.voided_at ? 'acc-row--void' : ''}>
+              <td className="card-title" data-label="شماره">{faInt(row.number)}</td>
+              <td data-label="تاریخ">{formatJalali(row.payment_date)}</td>
+              <td data-label="نوع">{row.payment_type_label}</td>
+              <td className="card-wide" data-label="طرف حساب">{row.contact_name}</td>
+              <td className="card-wide" data-label="اقلام">{row.items_summary || '—'}</td>
+              <td data-label="ارز"><span dir="ltr">{row.currency_code}</span></td>
+              <td className="num" data-label="مبلغ پایه">{fa(row.base_currency_amount)}</td>
+              <td className="num" data-label="تخفیف">{fa(row.discount_amount)}</td>
+              <td className="num" data-label="کارمزد">{fa(row.bank_fee_amount)}</td>
+              <td data-label="وضعیت"><span className={`status-badge ${row.voided_at ? 'tone-warning' : 'tone-success'}`}>{row.voided_at ? 'باطل' : 'ثبت‌شده'}</span></td>
+            </tr>)}</tbody>
+          </table><Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} /></div>
+        </AsyncBlock>
+      </SectionCard>
+    </OpsPage>
+  )
+}
 
 // ═══════════════════ دسته‌چک‌ها ═══════════════════
 

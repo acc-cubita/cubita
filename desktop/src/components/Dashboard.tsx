@@ -124,6 +124,7 @@ import {
 } from '../pages/treasury/CheckOpsPages'
 import {
   CheckbookListPage,
+  PaymentNoticeListPage,
   PettyCashListPage,
   PosSettlementListPage,
   PosTerminalListPage,
@@ -273,6 +274,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   pettyexpense: 'صورت هزینه تنخواه',
   bankledger: 'مرور عملیات بانکی',
   treasuryledger: 'دریافت‌ها و پرداخت‌ها',
+  paymentnoticelist: 'اعلامیه‌های پرداخت',
   checkbooklist: 'دسته‌چک‌ها',
   posterminallist: 'دستگاه‌های کارتخوان',
   possettlelist: 'تسویه‌های کارتخوان',
@@ -564,6 +566,17 @@ export function Dashboard({
               items={items}
               outbox={purchaseOutbox}
               onQueued={() => void refreshFromLocalCache()}
+              onCreatePayment={(invoice) => {
+                sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
+                  contactId: invoice.contact_id,
+                  documentId: invoice.id,
+                  amount: invoice.remaining_amount,
+                  currency: invoice.currency_code || 'IRR',
+                  rate: invoice.exchange_rate || '1',
+                  number: invoice.number,
+                }))
+                navigate('paymentvoucher')
+              }}
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
@@ -652,6 +665,7 @@ export function Dashboard({
           {page === 'pettyexpense' && <PettyExpensePage token={token} accounts={accounts} />}
           {page === 'bankledger' && <BankLedgerPage token={token} />}
           {page === 'treasuryledger' && <TreasuryLedgerPage token={token} />}
+          {page === 'paymentnoticelist' && <PaymentNoticeListPage token={token} />}
           {/* ── دفترهای نظیر (قاعده‌ی «هر عملیاتِ رکوردساز، یک فهرست») ── */}
           {page === 'checkbooklist' && <CheckbookListPage token={token} />}
           {page === 'posterminallist' && <PosTerminalListPage token={token} />}

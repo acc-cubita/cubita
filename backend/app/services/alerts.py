@@ -37,7 +37,7 @@ def get_alerts(db: Session, as_of: date | None = None) -> dict:
     horizon = as_of + timedelta(days=CHECK_DUE_DAYS)
     checks = (
         db.query(Check)
-        .filter(Check.status.in_(_ACTIVE_CHECK_STATUSES), Check.due_date <= horizon)
+        .filter(Check.status.in_(_ACTIVE_CHECK_STATUSES), Check.due_date <= horizon, Check.voided_at.is_(None))
         .order_by(Check.due_date)
         .all()
     )

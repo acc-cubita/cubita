@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ class BankAccount(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     analytic: Mapped["AnalyticAccount | None"] = relationship(lazy="joined")
 
 
-class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class Check(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     """چک دریافتنی/پرداختنی. چرخه‌ی وضعیت در app/services/banking.py مدیریت و سند حسابداری متناظر می‌سازد."""
 
     __tablename__ = "checks"
@@ -118,6 +118,17 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
             unique=True,
             postgresql_where=text("checkbook_id IS NOT NULL"),
         ),
+        #: کد صیادی در سطحِ **کشور** یکتاست — یک برگ، یک کد. پس دو چکِ یک
+        #: کسب‌وکار با یک کد یعنی خطای ورودِ داده، نه یک حالتِ ممکن.
+        #: شرطِ جزئی لازم است چون کد اختیاری است و چک‌های موجود همه رشته‌ی خالی
+        #: می‌گیرند؛ بدونِ شرط، دومین چک بلافاصله قید را می‌شکست.
+        Index(
+            "uq_checks_tenant_sayad",
+            "tenant_id",
+            "sayad_id",
+            unique=True,
+            postgresql_where=text("sayad_id <> ''"),
+        ),
     )
 
     type: Mapped[str] = mapped_column(String(20))
@@ -129,6 +140,22 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20))
     description: Mapped[str] = mapped_column(Text, default="")
 
+    #: شرحِ دوم — قرینه‌ی `name2` روی بقیه‌ی موجودیت‌ها.
+    description2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    # ── هویتِ برگ (§۱۰ §۱۱) ──
+    #: **کد صیادی، جدا از شماره‌ی چک.** این دو یک چیز نیستند و ادغامشان یعنی
+    #: نه استعلامِ صیاد ممکن است نه تطبیق با بانک. شانزده رقم.
+    sayad_id: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    #: پشت‌نمره — شماره‌ی سریِ روی بدنه‌ی چک، جدا از شماره‌ی برگ.
+    back_number: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    branch_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    branch_code: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    #: شماره‌حسابِ **صادرکننده**، نه ما. برای چکِ دریافتنی تنها ردِ حسابِ مبدأ است.
+    account_number: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    #: صاحبِ چک — همیشه طرف‌حسابِ ما نیست. چکِ شخصِ ثالث دقیقاً همین حالت است.
+    owner_name: Mapped[str] = mapped_column(String(120), default="", server_default="")
+
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
     bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_accounts.id"), nullable=True
@@ -136,6 +163,17 @@ class Check(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: برگِ کدام دسته‌چک است. NULL برای چکِ دریافتنی (دسته‌ی ما نیست) و چک‌های قدیمی.
     checkbook_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("checkbooks.id", ondelete="SET NULL"), nullable=True
+    )
+
+    #: **از کدام رسید آمد** (§۳۸). `NULL` = چکی که مستقیم از «عملیات بانکی چک
+    #: دریافتنی» ثبت شده، یا پیش از مهاجرتِ ۰۱۰۹ بوده.
+    receipt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("receipts.id"), nullable=True, index=True
+    )
+    #: چکِ پرداختنیِ صادرشده در این اعلامیه. چک دریافتنیِ خرج‌شده از جدول رخداد
+    #: `payment_cheque_transfers` به اعلامیه وصل می‌شود و این ستون روی آن نمی‌نشیند.
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True, index=True
     )
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -158,10 +196,21 @@ class BankTransaction(TenantMixin, UUIDPKMixin, Base):
     transaction_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     amount: Mapped[float] = mapped_column(Numeric(18, 0))  # مثبت = واریز، منفی = برداشت
     description: Mapped[str] = mapped_column(Text, default="")
+    description2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    reference_no: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    #: برای برداشتِ اعلامیه، اصل و کارمزد جدا می‌مانند؛ `amount` اثرِ واقعی و
+    #: علامت‌دار بانک است. روی ردیف‌های قدیمی هر دو صفرند.
+    principal_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    bank_fee_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     is_reconciled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     source_type: Mapped[str] = mapped_column(String(50), default="manual")  # manual | check_clear
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    #: برداشتِ بانکیِ یک اعلامیه، برای پیمایش دوطرفه و جلوگیری از حذفِ بی‌رد.
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True, index=True
+    )
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True

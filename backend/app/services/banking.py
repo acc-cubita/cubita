@@ -85,11 +85,70 @@ def _resolve_leaf(db: Session, data: CheckIn) -> Checkbook | None:
     return book
 
 
+def assert_sayad_free(db: Session, sayad_id: str, *, exclude_check_id: UUID | None = None) -> None:
+    """کد صیادی روی یک چکِ دیگر ثبت نشده باشد (§۱۱).
+
+    کد در سطحِ **کشور** یکتاست — یک برگ، یک کد. پس تکراری‌بودنش یعنی یا دو بار
+    ثبت شده یا اشتباه تایپ شده؛ هیچ‌کدام حالتی نیست که بخواهیم نگه داریم.
+    ایندکسِ جزئیِ `uq_checks_tenant_sayad` پشتیبانِ همین است در سطحِ پایگاه‌داده.
+    """
+    sayad = (sayad_id or "").strip()
+    if not sayad:
+        return
+    query = db.query(Check).filter(Check.sayad_id == sayad)
+    if exclude_check_id is not None:
+        query = query.filter(Check.id != exclude_check_id)
+    twin = query.first()
+    if twin is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"کد صیادی {sayad} قبلاً روی چکِ شماره‌ی {twin.number} ثبت شده است",
+        )
+
+
+def new_check_row(db: Session, data: CheckIn, user: User, *, receipt_id: UUID | None = None) -> Check:
+    """ردیفِ چک — **بدونِ سند حسابداری**.
+
+    از `create_check` جدا شد چون رسیدِ دریافت چکش را در سندِ *خودش* ثبت می‌کند:
+    یک رسید یک سند دارد (§۳۰)، پس چکِ داخلِ رسید نباید سندِ دومی بزند. اثرِ
+    حسابداری‌اش یکی است — بدهکارِ «چک‌های دریافتنی»، بستانکارِ حسابِ طرفِ مقابل —
+    فقط این‌که آن دو ردیف در سندِ رسید جمع می‌شوند به‌جای سندِ جدا.
+
+    گاردهای برگ و صیادی این‌جا می‌مانند تا هر دو مسیر یکسان بسنجند.
+    """
+    book = _resolve_leaf(db, data)
+    assert_sayad_free(db, data.sayad_id)
+    return Check(
+        type=data.type,
+        number=data.number,
+        bank_name=data.bank_name,
+        amount=data.amount,
+        issue_date=data.issue_date,
+        due_date=data.due_date,
+        status="in_hand" if data.type == "receivable" else "issued",
+        description=data.description,
+        description2=data.description2,
+        contact_id=data.contact_id,
+        checkbook_id=book.id if book else None,
+        #: حسابِ بانکی از خودِ دسته می‌آید. تا مهاجرتِ ۰۱۰۸ چکِ پرداختنی تا لحظه‌ی
+        #: وصول هیچ حسابی نداشت و آن‌وقت **دوباره** از کاربر پرسیده می‌شد — با
+        #: آنکه دسته از روزِ اول می‌دانستش.
+        bank_account_id=book.bank_account_id if book else None,
+        receipt_id=receipt_id,
+        sayad_id=data.sayad_id,
+        back_number=data.back_number,
+        branch_name=data.branch_name,
+        branch_code=data.branch_code,
+        account_number=data.account_number,
+        owner_name=data.owner_name,
+        created_by_id=user.id,
+    )
+
+
 def create_check(db: Session, data: CheckIn, user: User) -> Check:
     assert_period_open(db, data.issue_date)
 
-    initial_status = "in_hand" if data.type == "receivable" else "issued"
-    book = _resolve_leaf(db, data)
+    check = new_check_row(db, data, user)
 
     if data.type == "receivable":
         # چک دریافتنی بابت مطالبات مشتری: از حساب دریافتنی به چک‌های دریافتنی منتقل می‌شود
@@ -106,25 +165,8 @@ def create_check(db: Session, data: CheckIn, user: User) -> Check:
         ]
         description = f"صدور چک شماره {data.number} بابت بدهی"
 
-    journal_entry = _make_journal_entry(db, data.issue_date, description, "check", user, lines)
+    _make_journal_entry(db, data.issue_date, description, "check", user, lines)
 
-    check = Check(
-        type=data.type,
-        number=data.number,
-        bank_name=data.bank_name,
-        amount=data.amount,
-        issue_date=data.issue_date,
-        due_date=data.due_date,
-        status=initial_status,
-        description=data.description,
-        contact_id=data.contact_id,
-        checkbook_id=book.id if book else None,
-        #: حسابِ بانکی از خودِ دسته می‌آید. تا امروز چکِ پرداختنی تا لحظه‌ی وصول
-        #: هیچ حسابی نداشت و آن‌وقت **دوباره** از کاربر پرسیده می‌شد — با آنکه
-        #: دسته از روزِ اول می‌دانستش.
-        bank_account_id=book.bank_account_id if book else None,
-        created_by_id=user.id,
-    )
     db.add(check)
     db.flush()
     db.refresh(check)
@@ -162,6 +204,8 @@ def update_check_status(db: Session, check_id: UUID, new_status: str, bank_accou
     check = db.get(Check, check_id)
     if check is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "چک یافت نشد")
+    if check.voided_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "چک باطل شده است و عملیات تازه نمی‌پذیرد")
 
     transitions = RECEIVABLE_TRANSITIONS if check.type == "receivable" else PAYABLE_TRANSITIONS
     allowed = transitions.get(check.status, set())
@@ -519,6 +563,7 @@ def pos_pending_settlements(
     query = db.query(TreasuryTransaction).filter(
         TreasuryTransaction.paid_via == "pos_terminal",
         TreasuryTransaction.settled_at.is_(None),
+        TreasuryTransaction.voided_at.is_(None),
     )
     if pos_terminal_id is not None:
         query = query.filter(card_terminals._owned_transactions(card_terminals.resolve(db, pos_terminal_id)))
@@ -569,6 +614,7 @@ def settle_pos(db: Session, data: PosSettlementIn, user: User) -> dict:
     query = db.query(TreasuryTransaction).filter(
         TreasuryTransaction.paid_via == "pos_terminal",
         TreasuryTransaction.settled_at.is_(None),
+        TreasuryTransaction.voided_at.is_(None),
         TreasuryTransaction.transaction_date >= data.date_from,
         TreasuryTransaction.transaction_date <= data.date_to,
     )

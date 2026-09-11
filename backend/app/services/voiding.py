@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
 from app.services.common import number_lines
@@ -92,7 +92,11 @@ def reverse_journal_entry(
 def _voided_sources(db: Session) -> set:
     """کلیدِ (نوع، شناسه) هر سندی که باطل شده."""
     voided = set()
-    for model, source_type in ((SalesInvoice, "sales_invoice"), (PurchaseInvoice, "purchase_invoice")):
+    for model, source_type in (
+        (SalesInvoice, "sales_invoice"),
+        (PurchaseInvoice, "purchase_invoice"),
+        (WarehouseReceipt, "warehouse_receipt"),
+    ):
         for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
             voided.add((source_type, doc_id))
     return voided

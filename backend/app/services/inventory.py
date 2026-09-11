@@ -436,6 +436,13 @@ def post_sales_invoice(
 def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> PurchaseInvoice:
     assert_period_open(db, data.invoice_date)
 
+    if data.warehouse_id is None and data.contact_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "انتخاب تأمین‌کننده برای فاکتور خرید الزامی است")
+    if data.warehouse_id is None and data.contact_id is not None:
+        supplier = db.get(Contact, data.contact_id)
+        if supplier is None or supplier.type not in ("supplier", "both"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب انتخاب‌شده تأمین‌کننده نیست")
+
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
     for line in data.lines:
         if line.item_id not in items_by_id:
@@ -449,7 +456,16 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
     # تخفیفِ کلِ فاکتور به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس ارزش‌گذاریِ موجودی،
     # پایه‌ی مالیات و بهای برگشت همگی خودکار درست می‌مانند.
-    base_nets = [max((line.qty * line.unit_cost) - Decimal(line.discount or 0), Decimal(0)) for line in data.lines]
+    base_nets = [
+        max(
+            (line.qty * line.unit_cost)
+            - Decimal(line.discount or 0)
+            + Decimal(line.addition or 0)
+            + Decimal(line.duty_amount or 0),
+            Decimal(0),
+        )
+        for line in data.lines
+    ]
     gross_net = sum(base_nets, Decimal(0))
     invoice_discount = Decimal(data.invoice_discount or 0)
     if invoice_discount > gross_net:
@@ -457,9 +473,13 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             status.HTTP_400_BAD_REQUEST, "تخفیفِ کلِ فاکتور نمی‌تواند از جمعِ خالصِ فاکتور بیشتر باشد"
         )
     allocated = _allocate_discount(invoice_discount, base_nets)
+    allocated_additions = _allocate_discount(Decimal(data.invoice_addition or 0), base_nets)
+    allocated_duties = _allocate_discount(Decimal(data.duty_amount or 0), base_nets)
 
     total_amount = Decimal(0)
     total_discount = Decimal(0)
+    total_additions = Decimal(0)
+    total_duties = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
     stock_moves: list[StockLedger] = []
     # هر ردیفِ کالا یک «بارِ ورودی» جدا می‌سازد تا کسری/معیوب قابلِ ردیابی به همان بار باشد.
@@ -468,7 +488,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
         line_discount = Decimal(line.discount or 0) + allocated[idx]
-        line_net = (line.qty * line.unit_cost) - line_discount
+        line_addition = Decimal(line.addition or 0) + allocated_additions[idx]
+        line_duty = Decimal(line.duty_amount or 0) + allocated_duties[idx]
+        line_net = (line.qty * line.unit_cost) - line_discount + line_addition + line_duty
         # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
         # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
         # فروشِ بعدی کمتر از واقع گزارش می‌شود.
@@ -481,11 +503,21 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 qty=line.qty,
                 unit_cost=line.unit_cost,  # قیمتِ فهرستِ تأمین‌کننده، همان‌طور که در فاکتورش هست
                 discount=line_discount,
+                addition=line_addition,
+                duty_amount=line_duty,
                 description=line.description,
                 vat_status=item.vat_status,  # قفل در لحظه‌ی خرید — مثلِ فروش
+                item_code_snapshot=item.sku,
+                item_name_snapshot=item.name,
+                unit_snapshot=item.unit,
+                tax_rate_snapshot=data.tax_rate,
             )
         )
-        if not item.is_service:
+        total_additions += line_addition
+        total_duties += line_duty
+        # warehouse_id فقط مسیر سازگاریِ ثبت‌های قدیمی است. فاکتورهای جدید بدون آن
+        # هیچ حرکت فیزیکی ندارند و بعداً از WarehouseReceipt وارد می‌شوند.
+        if data.warehouse_id is not None and not item.is_service:
             existing_qty = get_total_stock_qty(db, item.id)
             new_qty = existing_qty + line.qty
             if new_qty > 0:
@@ -510,6 +542,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             )
 
     tax_amount = compute_tax(total_amount, data.tax_rate)
+    taxable_weights = [
+        Decimal(line.qty) * Decimal(line.unit_cost)
+        - Decimal(line.discount)
+        + Decimal(line.addition)
+        + Decimal(line.duty_amount)
+        for line in invoice_lines
+    ]
+    for line, share in zip(invoice_lines, _allocate_discount(tax_amount, taxable_weights), strict=True):
+        line.tax_amount_snapshot = share
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     payable_or_cash = _get_account(db, cc.ACCOUNTS_PAYABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
@@ -559,12 +600,16 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         number=number,
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
+        supplier_invoice_number=data.supplier_invoice_number.strip(),
         cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
+        description2=data.description2,
         total_amount=total_amount,
         total_discount=total_discount,
         invoice_discount=invoice_discount,
+        total_additions=total_additions,
+        total_duties=total_duties,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
         currency_code=(data.currency_code or None),

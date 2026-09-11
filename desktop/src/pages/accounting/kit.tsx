@@ -46,6 +46,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   treasury: 'دریافت و پرداخت',
   treasury_receipt: 'دریافت از مشتری',
   treasury_payment: 'پرداخت به تأمین‌کننده',
+  receipt: 'رسید دریافت',
+  payment: 'اعلامیه پرداخت',
   bank: 'عملیات بانکی',
   check_clear: 'وصول چک',
   petty_cash_settle: 'تسویه تنخواه',

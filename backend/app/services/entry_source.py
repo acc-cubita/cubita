@@ -33,6 +33,8 @@ from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.period_close import FiscalPeriodClose
+from app.models.payment import Payment
+from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.sales_ops import CreditDebitNote
 from app.models.stock_count import StockCountSession
@@ -49,6 +51,8 @@ SOURCE_MODELS: dict[str, type] = {
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
     "treasury_payment": TreasuryTransaction,
+    "receipt": Receipt,
+    "payment": Payment,
     #: چک و بانک هر دو به گردشِ بانکی می‌نشینند؛ صدورِ چک هنوز گردشی نساخته و
     #: آن‌جا جواب به‌درستی خالی می‌ماند تا وصول شود.
     "check": BankTransaction,
@@ -99,6 +103,8 @@ SOURCE_LABELS: dict[str, str] = {
     "purchase_return": "برگشت از خرید",
     "treasury_receipt": "رسید دریافت",
     "treasury_payment": "اعلامیه پرداخت",
+    "receipt": "رسید دریافت",
+    "payment": "اعلامیه پرداخت",
     "check": "چک",
     "bank": "عملیات بانکی",
     "petty_cash": "تنخواه‌گردان",

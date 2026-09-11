@@ -40,6 +40,11 @@ DOC_PRODUCTION_ORDER = "production_order"
 DOC_INSTALLMENT_PLAN = "installment_plan"
 #: اعلامیه‌ی بدهکار/بستانکار — شماره‌ی رسمی می‌گیرد چون سند حسابداری می‌زند.
 DOC_CREDIT_DEBIT_NOTE = "credit_debit_note"
+#: رسید دریافت — شماره‌ی عملیاتیِ خودِ رسید، جدا از شماره‌ی سندِ حسابداری و شماره‌ی
+#: چک. §۴ همین تفکیک را می‌خواهد، و بی‌شکاف‌بودن اینجا هم مثلِ فاکتور لازم است.
+DOC_RECEIPT = "receipt"
+DOC_PAYMENT = "payment"
+DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -54,6 +59,9 @@ DOC_TYPES = (
     DOC_PRODUCTION_ORDER,
     DOC_INSTALLMENT_PLAN,
     DOC_CREDIT_DEBIT_NOTE,
+    DOC_RECEIPT,
+    DOC_PAYMENT,
+    DOC_WAREHOUSE_RECEIPT,
 )
 
 

@@ -84,6 +84,7 @@ class TreasuryTransactionOut(BaseModel):
     #: لحظه‌ی تسویه‌ی کارتخوان. NULL = هنوز تسویه نشده. دفترِ «تسویه‌های کارتخوان»
     #: از همین ساخته می‌شود، بی‌آنکه اندپوینتِ جدایی لازم باشد.
     settled_at: datetime | None = None
+    voided_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

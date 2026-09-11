@@ -6,12 +6,14 @@ import {
   fetchCostCenters,
   fetchCurrencies,
   fetchLatestRate,
+  fetchPurchasePriceInfo,
   newIdempotencyKey,
   type ContactRecord,
   type CostCenterRecord,
   type Currency,
   type ItemRecord,
   type PurchaseInvoiceRecord,
+  type PurchasePricePoint,
 } from '../api'
 import { isElectron } from '../platform'
 import type { PickableItem } from '../components/ItemPicker'
@@ -23,6 +25,9 @@ export interface PurchaseDraftLine {
   qty: string
   unitCost: string
   discount: string
+  addition: string
+  dutyAmount: string
+  description: string
 }
 
 /**
@@ -51,13 +56,19 @@ export function usePurchaseInvoiceDraft({
   const [taxRate, setTaxRate] = usePersistentState('cubita.draft.purchaseInvoice.taxRate', '10', persistOff)
   const [invoiceDiscount, setInvoiceDiscount] = usePersistentState('cubita.draft.purchaseInvoice.invoiceDiscount', '', persistOff)
   const [invoiceDiscountMode, setInvoiceDiscountMode] = usePersistentState<'amount' | 'percent'>('cubita.draft.purchaseInvoice.invoiceDiscountMode', 'amount', persistOff)
-  const [lines, setLines] = usePersistentState<PurchaseDraftLine[]>('cubita.draft.purchaseInvoice.lines', [{ itemId: '', qty: '1', unitCost: '', discount: '' }], persistOff)
+  const emptyLine: PurchaseDraftLine = { itemId: '', qty: '1', unitCost: '', discount: '', addition: '', dutyAmount: '', description: '' }
+  const [lines, setLines] = usePersistentState<PurchaseDraftLine[]>('cubita.draft.purchaseInvoice.lines', [emptyLine], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.purchaseInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = usePersistentState('cubita.draft.purchaseInvoice.contactId', '', persistOff)
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = usePersistentState('cubita.draft.purchaseInvoice.supplierNumber', '', persistOff)
+  const [description, setDescription] = usePersistentState('cubita.draft.purchaseInvoice.description', '', persistOff)
+  const [description2, setDescription2] = usePersistentState('cubita.draft.purchaseInvoice.description2', '', persistOff)
+  const [invoiceAddition, setInvoiceAddition] = usePersistentState('cubita.draft.purchaseInvoice.addition', '', persistOff)
+  const [dutyAmount, setDutyAmount] = usePersistentState('cubita.draft.purchaseInvoice.duty', '', persistOff)
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [currencyCode, setCurrencyCode] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1')
@@ -65,6 +76,17 @@ export function usePurchaseInvoiceDraft({
   // بعدی به‌روز نمی‌شود). fdedupe در pickItems.
   const [extraItems, setExtraItems] = useState<ItemRecord[]>([])
   const [quickAdd, setQuickAdd] = useState<{ lineIndex: number; name: string } | null>(null)
+  const [priceHints, setPriceHints] = useState<Record<string, { latest: PurchasePricePoint | null; supplier_latest: PurchasePricePoint | null }>>({})
+
+  useEffect(() => {
+    const ids = [...new Set(lines.map((line) => line.itemId).filter(Boolean))]
+    if (!ids.length) return
+    let cancelled = false
+    Promise.all(ids.map(async (id) => [id, await fetchPurchasePriceInfo(token, id, contactId || undefined)] as const))
+      .then((entries) => !cancelled && setPriceHints(Object.fromEntries(entries)))
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [token, contactId, lines.map((line) => line.itemId).join('|')])
 
   const pickItems = useMemo<PickableItem[]>(() => {
     const seen = new Set<string>()
@@ -113,8 +135,11 @@ export function usePurchaseInvoiceDraft({
 
   useEffect(() => {
     if (!prefill) return
-    setWarehouseId(prefill.warehouse_id)
+    setWarehouseId('')
     setContactId(prefill.contact_id ?? '')
+    setSupplierInvoiceNumber('')
+    setDescription(prefill.description ?? '')
+    setDescription2('')
     setTaxRate(String(Number(prefill.tax_rate)))
     setCurrencyCode('')
     setInvoiceDate(todayIso())
@@ -124,6 +149,9 @@ export function usePurchaseInvoiceDraft({
         qty: String(Number(l.qty)),
         unitCost: String(Number(l.unit_cost)),
         discount: Number(l.discount) ? String(Number(l.discount)) : '',
+        addition: Number(l.addition) ? String(Number(l.addition)) : '',
+        dutyAmount: Number(l.duty_amount) ? String(Number(l.duty_amount)) : '',
+        description: l.description ?? '',
       })),
     )
     idempotencyKey.current = newIdempotencyKey()
@@ -141,7 +169,7 @@ export function usePurchaseInvoiceDraft({
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
   }
   function addLine() {
-    setLines((prev) => [...prev, { itemId: '', qty: '1', unitCost: '', discount: '' }])
+    setLines((prev) => [...prev, { ...emptyLine }])
   }
   function removeLine(index: number) {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev))
@@ -155,13 +183,17 @@ export function usePurchaseInvoiceDraft({
 
   const gross = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitCost) || 0), 0)
   const discountTotal = lines.reduce((sum, line) => sum + (Number(line.discount) || 0), 0)
-  const netAfterLine = gross - discountTotal
+  const lineAdditionTotal = lines.reduce((sum, line) => sum + (Number(line.addition) || 0), 0)
+  const lineDutyTotal = lines.reduce((sum, line) => sum + (Number(line.dutyAmount) || 0), 0)
+  const additionTotal = lineAdditionTotal + (Number(invoiceAddition) || 0)
+  const dutiesTotal = lineDutyTotal + (Number(dutyAmount) || 0)
+  const netAfterLine = gross - discountTotal + lineAdditionTotal + lineDutyTotal
   const invoiceDiscountInput = Number(invoiceDiscount) || 0
   const invoiceDiscountAmount = Math.min(
     invoiceDiscountMode === 'percent' ? Math.round((netAfterLine * invoiceDiscountInput) / 100) : invoiceDiscountInput,
     netAfterLine,
   )
-  const total = netAfterLine - invoiceDiscountAmount
+  const total = netAfterLine - invoiceDiscountAmount + (Number(invoiceAddition) || 0) + (Number(dutyAmount) || 0)
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const taxAmount = Math.round((total * taxRateNum) / 100)
   const grandTotal = total + taxAmount
@@ -179,8 +211,8 @@ export function usePurchaseInvoiceDraft({
 
   async function submit(): Promise<boolean> {
     setMessage(null)
-    if (!effectiveWarehouseId) {
-      setMessage('ابتدا هم‌گام‌سازی کنید تا انبار در دسترس باشد.')
+    if (!contactId) {
+      setMessage('انتخاب تأمین‌کننده الزامی است.')
       return false
     }
     if (validLines.length === 0) {
@@ -193,18 +225,25 @@ export function usePurchaseInvoiceDraft({
     }
     const payload = {
       invoice_date: invoiceDate,
-      warehouse_id: effectiveWarehouseId,
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
       contact_id: contactId || null,
+      supplier_invoice_number: supplierInvoiceNumber.trim(),
+      description: description.trim(),
+      description2: description2.trim(),
       currency_code: currencyCode || null,
       exchange_rate: rate,
       invoice_discount: Math.round(invoiceDiscountAmount * rate),
+      invoice_addition: Math.round((Number(invoiceAddition) || 0) * rate),
+      duty_amount: Math.round((Number(dutyAmount) || 0) * rate),
       lines: validLines.map((l) => ({
         item_id: l.itemId,
         qty: Number(l.qty),
         unit_cost: Math.round((Number(l.unitCost) || 0) * rate),
         discount: Math.round((Number(l.discount) || 0) * rate),
+        addition: Math.round((Number(l.addition) || 0) * rate),
+        duty_amount: Math.round((Number(l.dutyAmount) || 0) * rate),
+        description: l.description.trim(),
       })),
     }
     setSubmitting(true)
@@ -217,9 +256,14 @@ export function usePurchaseInvoiceDraft({
         setMessage('فاکتور خرید با موفقیت ثبت شد.')
       }
       idempotencyKey.current = newIdempotencyKey()
-      setLines([{ itemId: '', qty: '1', unitCost: '', discount: '' }])
+      setLines([{ ...emptyLine }])
       setCostCenterId('')
       setContactId('')
+      setSupplierInvoiceNumber('')
+      setDescription('')
+      setDescription2('')
+      setInvoiceAddition('')
+      setDutyAmount('')
       setCurrencyCode('')
       setInvoiceDiscount('')
       onQueued()
@@ -258,17 +302,30 @@ export function usePurchaseInvoiceDraft({
     contactId,
     blacklisted,
     setContactId,
+    supplierInvoiceNumber,
+    setSupplierInvoiceNumber,
+    description,
+    setDescription,
+    description2,
+    setDescription2,
+    invoiceAddition,
+    setInvoiceAddition,
+    dutyAmount,
+    setDutyAmount,
     currencies,
     currencyCode,
     setCurrencyCode,
     exchangeRate,
     setExchangeRate,
     pickItems,
+    priceHints,
     quickAdd,
     setQuickAdd,
     acceptCreatedItem,
     gross,
     discountTotal,
+    additionTotal,
+    dutiesTotal,
     total,
     taxAmount,
     grandTotal,
