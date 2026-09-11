@@ -403,11 +403,28 @@ class CreditStatusOut(BaseModel):
 class ItemIn(BaseModel):
     sku: str
     name: str
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام.
+    name2: str = ""
     category: str = ""
     unit: str = "عدد"
     is_service: bool = False
     sales_price: Decimal = Decimal(0)
     barcode: str | None = None
+    #: سه شناسه‌ی جدا (§۴ §۱۱ §۱۲): `sku` کدِ داخلی، `barcode` خطی، `iran_code`
+    #: و `barcode2` هرکدام مفهومِ خودشان. یکی‌شان نمی‌کنیم.
+    iran_code: str = ""
+    barcode2: str = ""
+    #: §۷ — «فعال» و «قابل فروش» دو چیزند. موادِ اولیه فعال‌اند و فروختنی نیستند.
+    is_sellable: bool = True
+    #: §۸ — کالا سریال‌محور است یا نه.
+    is_serial_tracked: bool = False
+    #: §۱۳ — نرخِ کالا. صفر = «نرخِ سرِ فاکتور»، نه معافیت (معافیت پرچمِ جداست).
+    tax_rate: Decimal = Decimal(0)
+    duty_rate: Decimal = Decimal(0)
+    #: §۱۳ — وضعیتِ مالیاتیِ سمتِ خرید، مستقل از فروش.
+    purchase_vat_status: str = "taxable"
+    #: §۱۵ — معینِ هزینه‌ی خریدِ خدمت. خالی = حسابِ پیش‌فرضِ «هزینه خرید خدمات».
+    expense_account_id: UUID | None = None
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). ۰ = بدونِ هشدار.
     reorder_point: Decimal = Decimal(0)
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid، ۱۳رقمیِ مؤدیان). خالی = پیش‌فرضِ کسب‌وکار.
@@ -431,7 +448,7 @@ class ItemIn(BaseModel):
             raise ValueError("نقطه‌ی سفارش نمی‌تواند منفی باشد")
         return v
 
-    @field_validator("vat_status")
+    @field_validator("vat_status", "purchase_vat_status")
     @classmethod
     def _known_vat_status(cls, v: str) -> str:
         from app.models.inventory import VAT_STATUSES
@@ -440,11 +457,19 @@ class ItemIn(BaseModel):
             raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
         return v
 
+    @field_validator("tax_rate", "duty_rate")
+    @classmethod
+    def _sane_rate(cls, v: Decimal) -> Decimal:
+        if not (0 <= v <= 100):
+            raise ValueError("نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
 
 class ItemOut(BaseModel):
     id: UUID
     sku: str
     name: str
+    name2: str = ""
     category: str
     unit: str
     is_service: bool
@@ -456,6 +481,20 @@ class ItemOut(BaseModel):
     reorder_point: Decimal
     tax_stuff_id: str
     vat_status: str
+    iran_code: str = ""
+    barcode2: str = ""
+    is_sellable: bool = True
+    is_serial_tracked: bool = False
+    tax_rate: Decimal = Decimal(0)
+    duty_rate: Decimal = Decimal(0)
+    purchase_vat_status: str = "taxable"
+    expense_account_id: UUID | None = None
+    #: کد و عنوانِ معینِ هزینه — برای خدمتِ بی‌نگاشت، حسابِ پیش‌فرض نشان داده
+    #: می‌شود و `is_default` می‌گوید انتخابِ کاربر نبوده. برای کالا خالی است،
+    #: چون بهای خرید به موجودیِ انبار می‌نشیند نه به حسابِ هزینه.
+    expense_account_code: str = ""
+    expense_account_name: str = ""
+    expense_account_is_default: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -469,6 +508,20 @@ class ItemUpdateIn(BaseModel):
     """
 
     name: str | None = None
+    #: §۴ — کد یک شناسه‌ی کسب‌وکاری است و کاربر می‌تواند اصلاحش کند؛ روابطِ
+    #: داخلی روی `id` بسته‌اند و ردیفِ فاکتور کدِ روزِ خودش را snapshot دارد.
+    sku: str | None = None
+    name2: str | None = None
+    category: str | None = None
+    unit: str | None = None
+    iran_code: str | None = None
+    barcode2: str | None = None
+    is_sellable: bool | None = None
+    is_serial_tracked: bool | None = None
+    tax_rate: Decimal | None = None
+    duty_rate: Decimal | None = None
+    purchase_vat_status: str | None = None
+    expense_account_id: UUID | None = None
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None
@@ -480,7 +533,7 @@ class ItemUpdateIn(BaseModel):
     #: لحظه‌ی معامله‌ی خودشان را نگه می‌دارند.
     vat_status: str | None = None
 
-    @field_validator("vat_status")
+    @field_validator("vat_status", "purchase_vat_status")
     @classmethod
     def _known_vat_status(cls, v: str | None) -> str | None:
         from app.models.inventory import VAT_STATUSES
@@ -488,6 +541,22 @@ class ItemUpdateIn(BaseModel):
         if v is not None and v not in VAT_STATUSES:
             raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
         return v
+
+    @field_validator("tax_rate", "duty_rate")
+    @classmethod
+    def _sane_rate(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and not (0 <= v <= 100):
+            raise ValueError("نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
+    @field_validator("sku", "name", "unit")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not v.strip():
+            raise ValueError("این فیلد نمی‌تواند خالی باشد")
+        return v.strip()
 
     @field_validator("barcode")
     @classmethod

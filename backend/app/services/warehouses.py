@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import Account
 from app.models.inventory import StockLedger, Warehouse
 from app.services import chart_codes as cc
-from app.services.common import get_account
+from app.services.common import assert_postable_account as assert_postable, get_account
 from app.services.printing import fa_number
 
 
@@ -151,35 +151,10 @@ def row(db: Session, warehouse: Warehouse) -> dict:
 
 
 def assert_postable_account(db: Session, account_id: UUID | None) -> None:
-    """حسابِ نگاشت باید حسابی باشد که واقعاً سند می‌پذیرد.
+    """معینِ انبار باید حسابی باشد که واقعاً سند می‌پذیرد.
 
-    حسابِ گروه ردیفِ سند نمی‌گیرد؛ نگاشتنِ انبار به آن یعنی اولین رسیدِ انبار
-    خطا بدهد — آن‌هم جایی که کاربر اصلاً به یادِ تنظیمِ انبار نیست.
+    قاعده مشترک است و در `common` نشسته تا نگاشتِ انبار و نگاشتِ کالا یک رفتار
+    داشته باشند؛ استثنا این‌جا نقشِ `inventory` است — همان پیش‌فرضی که انبارِ
+    بی‌نگاشت هم می‌گیرد.
     """
-    if account_id is None:
-        return
-    account = db.get(Account, account_id)
-    if account is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
-    if account.is_group:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"«{account.name}» حسابِ گروه است و ردیفِ سند نمی‌پذیرد؛ یکی از حساب‌های زیرِ آن را انتخاب کنید.",
-        )
-    #: **حسابی که نقشِ سیستمیِ دیگری دارد پذیرفته نمی‌شود.**
-    #:
-    #: نگاشتنِ موجودیِ یک انبار به حسابِ «صندوق» یعنی دو موتور روی یک حساب
-    #: می‌نویسند با دو معنی — و ماندهٔ صندوق بی‌صدا با بهای کالا قاطی می‌شود.
-    #: هیچ ترازی هم به‌هم نمی‌خورد که خبر بدهد.
-    #:
-    #: این قاعده از خودِ سازوکارِ `system_role`ِ کوبیتا می‌آید، نه از حدسِ
-    #: سلسله‌مراتبِ چارت: فصل صریحاً می‌گوید کد یا نامِ حساب را hard-code نکنیم و
-    #: از پیکربندیِ موجود حل کنیم. حسابِ خودِ نقشِ `inventory` استثناست — همان
-    #: پیش‌فرضی است که انبارِ بی‌نگاشت هم می‌گیرد.
-    if account.system_role and account.system_role != cc.INVENTORY:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"«{account.name}» حسابِ سیستمیِ «{account.system_role}» است و ماژولِ دیگری رویش "
-            "سند می‌زند؛ نگاشتنِ انبار به آن دو معنی را روی یک حساب جمع می‌کند. "
-            "حسابی از زیرمجموعه‌ی موجودی کالا انتخاب کنید.",
-        )
+    assert_postable(db, account_id, allow_role=cc.INVENTORY, subject="انبار")

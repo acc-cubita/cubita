@@ -106,3 +106,48 @@ def make_journal_entry(
     db.add(entry)
     db.flush()
     return entry
+
+
+def assert_postable_account(
+    db: Session,
+    account_id,
+    *,
+    allow_role: str | None = None,
+    subject: str = "این تنظیم",
+) -> None:
+    """حسابی که کاربر برای یک نگاشتِ خودکار انتخاب می‌کند باید واقعاً سند بپذیرد.
+
+    دو چیز را رد می‌کند، و هر دو خطاهایی‌اند که **دیر** و **جای اشتباه** بروز
+    می‌کنند اگر همین‌جا گرفته نشوند:
+
+    **حسابِ گروه.** ردیفِ سند نمی‌گیرد. نگاشتنِ انبار یا کالا به آن یعنی اولین
+    فاکتور خطا بدهد — آن‌هم جایی که کاربر اصلاً به یادِ تنظیمِ داده‌ی پایه نیست.
+
+    **حسابی که نقشِ سیستمیِ دیگری دارد.** نگاشتنِ موجودیِ یک انبار به حسابِ
+    «صندوق» یعنی دو موتور روی یک حساب می‌نویسند با دو معنی، و ماندهٔ صندوق
+    بی‌صدا با بهای کالا قاطی می‌شود. هیچ ترازی هم به‌هم نمی‌خورد که خبر بدهد.
+
+    `allow_role` همان نقشی است که *پیش‌فرضِ* این نگاشت است (موجودیِ کالا برای
+    انبار، هزینه‌ی خدمت برای کالا) — انتخابِ صریحش همان چیزی است که خالی‌گذاشتن
+    هم می‌دهد، پس مجاز است.
+
+    قاعده از خودِ سازوکارِ `system_role`ِ کوبیتا می‌آید، نه از حدسِ سلسله‌مراتبِ
+    چارت: کد و نامِ حساب هیچ‌جا hard-code نمی‌شود.
+    """
+    if account_id is None:
+        return
+    account = db.get(Account, account_id)
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "حساب یافت نشد")
+    if account.is_group:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"«{account.name}» حسابِ گروه است و ردیفِ سند نمی‌پذیرد؛ "
+            "یکی از حساب‌های زیرِ آن را انتخاب کنید.",
+        )
+    if account.system_role and account.system_role != allow_role:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"«{account.name}» حسابِ سیستمیِ «{account.system_role}» است و ماژولِ دیگری "
+            f"رویش سند می‌زند؛ نگاشتنِ {subject} به آن دو معنی را روی یک حساب جمع می‌کند.",
+        )

@@ -1074,18 +1074,36 @@ export interface ItemRecord {
   id: string
   sku: string
   name: string
+  /** عنوانِ دوم — فیلدِ مستقل، نه پیوستِ نام. */
+  name2: string
   category: string
   unit: string
   is_service: boolean
   is_active: boolean
+  /** «قابل فروش» جدا از «فعال»: موادِ اولیه موجودی دارند و فروختنی نیستند. */
+  is_sellable: boolean
+  is_serial_tracked: boolean
   sales_price: string
   average_cost: string
   barcode: string | null
+  /** سه شناسه‌ی جدا با sku و barcode — ایران‌کد و بارکدِ دوبعدی. */
+  iran_code: string
+  barcode2: string
   storefront_product_id: number | null
   reorder_point: string
   tax_stuff_id: string
-  /** `taxable` (مشمول) یا `exempt` (معاف). */
+  /** `taxable` (مشمول) یا `exempt` (معاف) — سمتِ **فروش**. */
   vat_status: string
+  /** وضعیتِ مالیاتیِ سمتِ **خرید**، مستقل از فروش. */
+  purchase_vat_status: string
+  /** نرخِ کالا؛ «۰» یعنی «نرخِ سرِ فاکتور»، نه معافیت. */
+  tax_rate: string
+  duty_rate: string
+  /** معینِ هزینه‌ی خریدِ خدمت. خالی = حسابِ پیش‌فرضِ «هزینه خرید خدمات». */
+  expense_account_id: string | null
+  expense_account_code: string
+  expense_account_name: string
+  expense_account_is_default: boolean
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -1102,25 +1120,39 @@ export const importBackup = (token: string, data: unknown) =>
 export interface ItemIn {
   sku: string
   name: string
+  name2?: string
   category?: string
   unit?: string
   is_service?: boolean
+  is_sellable?: boolean
+  is_serial_tracked?: boolean
   sales_price?: number
   barcode?: string | null
+  iran_code?: string
+  barcode2?: string
   reorder_point?: number
   tax_stuff_id?: string
   vat_status?: string
+  purchase_vat_status?: string
+  tax_rate?: number
+  duty_rate?: number
+  expense_account_id?: string | null
+}
+
+/** فیلدهایی که سرور در `ItemUpdateIn` می‌پذیرد. `is_service` عمداً نیست: تبدیلِ
+ *  کالا به خدمت پس از گردش، تاریخِ انبار را غیرمنطقی می‌کند. */
+export type ItemPatch = Partial<Omit<ItemIn, 'is_service'>> & {
+  is_active?: boolean
+  average_cost?: number
+  storefront_product_id?: number | null
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
   authedSend<ItemRecord>(token, 'POST', '/api/items', data)
 
 /** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد. */
-export const updateItemLive = (
-  token: string,
-  itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string; vat_status?: string },
-) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
+export const updateItemLive = (token: string, itemId: string, patch: ItemPatch) =>
+  authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
 export const deleteItemLive = (token: string, itemId: string) => authedDelete(token, `/api/items/${itemId}`)

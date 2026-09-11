@@ -15,6 +15,7 @@ from app.models.company import ContactAddress, ContactChannel
 from app.services import tafsili
 from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
+from app.services import items as items_svc
 from app.services import warehouses as warehouses_svc
 from app.schemas.inventory import (
     ContactAddressIn,
@@ -436,6 +437,14 @@ def contact_credit_status(
     return get_credit_status(db, contact_id)
 
 
+def _item_out(db: Session, item: Item, default_account=None) -> dict:
+    """ردیفِ کالا + نگاشتِ حسابِ هزینه. یک شکل برای فهرست و تک‌رکورد."""
+    return {
+        **ItemOut.model_validate(item).model_dump(),
+        **items_svc.row(db, item, default_account=default_account),
+    }
+
+
 @router.get("/api/items", response_model=Page[ItemOut])
 def list_items(
     db: Session = Depends(get_db),
@@ -444,7 +453,12 @@ def list_items(
 ):
     # sku یکتاست، پس به‌تنهایی کلید امنی است
     items, next_cursor = paginate(db.query(Item), [Item.sku], params, descending=False)
-    return Page(items=items, next_cursor=next_cursor)
+    #: حسابِ پیش‌فرض یک‌بار برای کلِ صفحه حل می‌شود، نه یک‌بار برای هر ردیف.
+    default_account = items_svc.default_expense_account_or_none(db)
+    return Page(
+        items=[_item_out(db, item, default_account) for item in items],
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/api/items/by-barcode", response_model=ItemOut)
@@ -458,6 +472,23 @@ def item_by_barcode(
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کالایی با این بارکد یافت نشد")
     return item
+
+
+def _assert_sku_free(db: Session, sku: str, exclude_id: UUID | None = None) -> None:
+    """§۴ — کد قابلِ اصلاح است، ولی دو کالا نباید یک کد بگیرند.
+
+    بازتابِ نرمِ `uq_items_tenant_sku`، تا کاربر پیامِ فارسی ببیند نه خطای خامِ
+    یکتاییِ پایگاه‌داده. ایندکس همچنان پشتیبانِ نهایی است.
+    """
+    q = db.query(Item.id, Item.name).filter(Item.sku == sku)
+    if exclude_id is not None:
+        q = q.filter(Item.id != exclude_id)
+    dup = q.first()
+    if dup is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"کدِ «{sku}» قبلاً برای کالای «{dup.name}» ثبت شده است.",
+        )
 
 
 def _assert_barcode_free(db: Session, barcode: str | None, exclude_id: UUID | None = None) -> None:
@@ -482,11 +513,14 @@ def _assert_barcode_free(db: Session, barcode: str | None, exclude_id: UUID | No
 @router.post("/api/items", response_model=ItemOut, status_code=201)
 def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "create"))):
     _assert_barcode_free(db, data.barcode)
+    #: §۱۵ — حسابِ نگاشت باید سند بپذیرد و نقشِ ماژولِ دیگری نباشد؛ وگرنه دو
+    #: موتور روی یک حساب می‌نویسند با دو معنی.
+    items_svc.assert_expense_account(db, data.expense_account_id)
     item = Item(**data.model_dump())
     db.add(item)
     db.flush()
     db.refresh(item)
-    return item
+    return _item_out(db, item)
 
 
 @router.patch("/api/items/{item_id}", response_model=ItemOut)
@@ -502,11 +536,19 @@ def update_item(
     fields = data.model_dump(exclude_unset=True)
     if "barcode" in fields:
         _assert_barcode_free(db, fields["barcode"], exclude_id=item.id)
+    if "sku" in fields:
+        _assert_sku_free(db, fields["sku"], exclude_id=item.id)
+    if "expense_account_id" in fields:
+        items_svc.assert_expense_account(db, fields["expense_account_id"])
+    if "is_serial_tracked" in fields:
+        #: §۹ — این ویژگی ساختاری است؛ عوض‌کردنش پس از گردشِ انباری موجودیِ
+        #: قدیمی را مبهم می‌کند.
+        items_svc.assert_serial_toggle_allowed(db, item, fields["is_serial_tracked"])
     for key, value in fields.items():
         setattr(item, key, value)
     db.flush()
     db.refresh(item)
-    return item
+    return _item_out(db, item)
 
 
 @router.delete("/api/items/{item_id}", status_code=204)

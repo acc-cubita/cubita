@@ -59,6 +59,14 @@ CHECKS_IN_COLLECTION = "checks_in_collection"
 #: هر دو سند صفر است، پس هیچ‌کدام مانده‌ی واقعی نمی‌سازند.
 CLOSING_ACCOUNT = "closing_account"  # حسابِ اختتامیه
 OPENING_ACCOUNT = "opening_account"  # حسابِ افتتاحیه
+#: هزینه‌ی خریدِ خدمت — پیش‌فرضِ کالاهایی که خدمت‌اند و معینِ اختصاصی ندارند.
+#:
+#: **چرا لازم شد:** `post_purchase_invoice` کلِ مبلغِ فاکتور را بدهکارِ «موجودی
+#: کالا» می‌کرد، چه کالا بود چه خدمت. ولی خدمت هیچ حرکتِ انباری نمی‌سازد، پس
+#: ۵۰ میلیون مشاوره‌ی حقوقی به‌عنوان دارایی در ترازنامه می‌نشست و **هرگز خارج
+#: نمی‌شد**، و هزینه‌اش هیچ‌وقت به سود و زیان نمی‌رسید. سند متوازن بود و تراز
+#: آزمایشی صفر می‌شد — هیچ نگهبانی خبر نمی‌داد.
+SERVICE_EXPENSE = "service_expense"
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -92,6 +100,7 @@ DEFAULT_CODE_BY_ROLE = {
     CHECKS_IN_COLLECTION: "1113",
     CLOSING_ACCOUNT: "3901",
     OPENING_ACCOUNT: "3902",
+    SERVICE_EXPENSE: "5117",
 }
 
 ROLE_BY_DEFAULT_CODE = {code: role for role, code in DEFAULT_CODE_BY_ROLE.items()}

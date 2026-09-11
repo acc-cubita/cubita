@@ -287,12 +287,37 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: کالاهایی که بارکد ندارند NULL می‌مانند (چند NULL مجاز است).
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(300))
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام. فصل صریح است: این دو را در یک
+    #: رشته ادغام نکن.
+    name2: Mapped[str] = mapped_column(String(300), default="", server_default="")
     category: Mapped[str] = mapped_column(String(100), default="")
     unit: Mapped[str] = mapped_column(String(20), default="عدد")
     is_service: Mapped[bool] = mapped_column(Boolean, default=False)
     sales_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     average_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    #: **«قابل فروش» جدا از «فعال» (§۷).** هرچه در انبار داریم الزاماً فروختنی
+    #: نیست: موادِ اولیه، قطعاتِ مصرفی و موادِ بسته‌بندی موجودی دارند و گردش
+    #: می‌کنند، ولی نباید در فاکتورِ فروش و صندوق انتخاب شوند.
+    #:
+    #: غیرفعال یعنی «دیگر با این کالا کار نمی‌کنیم»؛ غیرقابل‌فروش یعنی «کار
+    #: می‌کنیم ولی نمی‌فروشیمش». هر دو هم‌زمان ممکن‌اند.
+    is_sellable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: ثبتِ سریالی (§۸). امروز فقط *اعلام* می‌کند که این کالا سریال‌محور است؛
+    #: دفترِ سریال از قبل زیرِ `stock_batch_serials` هست و این پرچم می‌گوید کدام
+    #: کالا انتظارِ سریال دارد.
+    #:
+    #: §۹: روشن/خاموش‌کردنش **پس از وجودِ گردشِ انباری** کنترل‌شده است، چون
+    #: موجودیِ قدیمی سریال ندارد و مبهم می‌شود.
+    is_serial_tracked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: ایران‌کد (§۱۱) و بارکدِ دوبعدی (§۱۲) — **سه شناسه‌ی جدا** با `sku` و
+    #: `barcode`. فصل صریح است که یکی‌شان نکنیم. بارکدِ دوبعدی متنِ بلند است (QR)
+    #: پس اندازه‌اش با بارکدِ خطی یکی نیست.
+    iran_code: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    barcode2: Mapped[str] = mapped_column(String(300), default="", server_default="")
 
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). وقتی موجودیِ کلِ کالا ≤ این عدد باشد، در
     #: «نیازمندِ سفارش» هشدار داده می‌شود. صفر = بدونِ هشدار (پیش‌فرض). فقط برای کالا
@@ -312,6 +337,39 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid) — کدِ رسمیِ ۱۳رقمیِ سامانه مؤدیان برای این کالا.
     #: خالی = از «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود. راز نیست.
     tax_stuff_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
+
+    #: **وضعیتِ مالیاتیِ سمتِ خرید — جدا از فروش (§۱۳).**
+    #:
+    #: فصل صریح است: `item.tax_exempt = true` به‌تنهایی کافی نیست، چون وضعیتِ
+    #: مالیاتیِ خرید و فروشِ یک قلم الزاماً یکی نیست. `vat_status` بالا از این
+    #: پس فقط سمتِ *فروش* را می‌گوید و این سمتِ *خرید* را.
+    #:
+    #: مهاجرت مقدارِ `vat_status` را در این می‌ریزد، نه «مشمول» را — وگرنه کالایی
+    #: که امروز معاف است یک‌شبه در خرید مشمول می‌شد.
+    purchase_vat_status: Mapped[str] = mapped_column(
+        String(10), default="taxable", server_default="taxable"
+    )
+
+    #: نرخِ مالیات و عوارضِ **خودِ کالا** (§۱۳). صفر = «نرخِ سرِ فاکتور».
+    #:
+    #: **چرا صفر یعنی وراثت و نه معافیت:** معافیت مفهومِ جدایی است و جایش
+    #: `vat_status`/`purchase_vat_status` است. صفر گذاشتن روی همه‌ی کالاهای
+    #: موجود یعنی رفتارِ امروز (نرخِ یکتای فاکتور) بی‌تغییر می‌ماند.
+    #:
+    #: §۱۴: این *تنظیمِ جاری* است. آنچه در فاکتور می‌ماند `tax_rate_snapshot` و
+    #: `tax_amount_snapshot`ِ ردیف است؛ عوض‌شدنِ این نرخ فاکتورِ پارسال را
+    #: بازنویسی نمی‌کند.
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    duty_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    #: **معینِ هزینه‌ی خرید (§۱۵).** برای خدمت: «مشاوره حقوقی» هنگام خرید به یک
+    #: حسابِ هزینه می‌نشیند، نه به موجودیِ کالا.
+    #:
+    #: `NULL` یعنی حسابِ پیش‌فرضِ نقشِ `service_expense`. مثلِ معینِ انبار، نگاشت
+    #: اختیاری است و از چارتِ موجود حل می‌شود — کد و نامِ حساب hard-code نمی‌شود.
+    expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
 
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
