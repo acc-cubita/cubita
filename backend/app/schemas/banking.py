@@ -302,35 +302,3 @@ class CheckbookOut(BaseModel):
     cheque_print_format: str = ""
 
 
-class PosPendingGroupOut(BaseModel):
-    """یک روزِ تسویه‌نشده‌ی یک پایانه."""
-
-    terminal_no: str
-    #: دستگاهِ واقعی، اگر رسیدها به آن وصل باشند. برای رسیدهای پیش از مهاجرتِ
-    #: ۰۱۰۷ خالی است و فقط `terminal_no` را دارند.
-    pos_terminal_id: UUID | None = None
-    terminal_label: str | None = None
-    transaction_date: date
-    count: int
-    gross_amount: Decimal
-
-
-class PosSettlementIn(BaseModel):
-    settlement_date: date
-    date_from: date
-    date_to: date
-    #: دستگاه — راهِ درست (§۲۵). دامنه‌ی تسویه از خودش می‌آید و حسابِ کارمزد هم.
-    pos_terminal_id: UUID | None = None
-    #: شماره‌ی پایانه به‌صورتِ متن. برای رسیدهای قدیمی که کلیدِ خارجی ندارند
-    #: می‌ماند؛ خالی = همه‌ی پایانه‌ها.
-    terminal_no: str | None = None
-    #: وقتی دستگاه داده شود از خودش می‌آید. فقط برای مسیرِ قدیمی لازم است.
-    bank_account_id: UUID | None = None
-    fee_amount: Decimal = Decimal(0)
-
-
-class PosSettlementOut(BaseModel):
-    settled_count: int
-    gross_amount: Decimal
-    fee_amount: Decimal
-    net_amount: Decimal

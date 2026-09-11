@@ -77,6 +77,14 @@ class TreasuryTransaction(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: فروشِ کارتی همان‌روز به حساب نمی‌نشیند؛ PSP چند روز بعد یک‌جا (منهای کارمزد)
     #: واریز می‌کند. تا این دو پر نشوند، تراکنش «تسویه‌نشده» است.
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: **سندِ تسویه‌ای که این رسید را مصرف کرد (§۱۱ §۱۵).** تا مهاجرتِ ۰۱۰۹ چنین
+    #: چیزی نبود و تنها حلقه `settlement_txn_id`ِ پایین بود — که *فقط وقتی کارمزد
+    #: بزرگ‌تر از صفر باشد* پر می‌شد. یعنی تسویه‌ی بی‌کارمزد هیچ ردی نمی‌گذاشت و
+    #: «این رسید با کدام تسویه رفت؟» بی‌جواب می‌ماند.
+    settlement_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pos_settlements.id", ondelete="SET NULL"), nullable=True
+    )
+    #: ردیفِ بانکیِ مرتبط. پیش از ۰۱۰۹ ردیفِ «کارمزد» بود؛ حالا ردیفِ خودِ واریز.
     settlement_txn_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("bank_transactions.id", ondelete="SET NULL"), nullable=True
     )

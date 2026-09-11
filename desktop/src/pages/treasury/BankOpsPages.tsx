@@ -15,6 +15,7 @@ import {
   fetchBankAccountsLive,
   fetchBankTransactions,
   fetchPosPending,
+  fetchPosSettlementPreview,
   fetchPosTerminals,
   fetchStatementLines,
   importStatementLines,
@@ -188,7 +189,7 @@ export function BankStatementPage({ token }: { token: string }) {
         description="سه ستون به‌ترتیب: تاریخ (میلادی، مثل 2026-08-28)، مبلغ (منفی = برداشت)، شرح."
       >
         <div className="invoice-form form-full">
-          <label className="form-wide">
+          <label>
             چسباندنِ CSV
             <textarea
               rows={6}
@@ -261,10 +262,15 @@ export function BankStatementPage({ token }: { token: string }) {
 /**
  * تسویه‌ی واریزِ شرکتِ پرداخت.
  *
- * فروشِ کارتی در لحظه‌ی رسید به بانک بدهکار شده، ولی پول چند روز بعد و **منهای
- * کارمزد** می‌نشیند. این صفحه می‌گوید کدام رسیدها هنوز تسویه نشده‌اند، و با ثبتِ
- * تسویه آن‌ها را علامت می‌زند و کارمزد را به هزینه می‌برد. مبلغِ ناخالص دوباره ثبت
- * نمی‌شود — وگرنه درآمد دوبار می‌آمد.
+ * **دو رویداد، نه یکی.** مشتری کارت می‌کشد و پول به «وجوهِ در راهِ کارت‌خوان»
+ * می‌رود؛ چند روز بعد شرکتِ پرداخت جمعِ چند تراکنش را منهای کارمزد به حساب واریز
+ * می‌کند. این صفحه رویدادِ دوم را ثبت می‌کند: پول را از وجوهِ در راه به بانک
+ * می‌برد و کارمزد را به هزینه.
+ *
+ * تا مهاجرتِ ۰۱۰۹ رویدادِ اول مستقیم روی بانک می‌نشست و این صفحه فقط رسیدها را
+ * علامت می‌زد. متنِ قبلیِ همین فایل می‌گفت «مبلغِ ناخالص دوباره ثبت نمی‌شود —
+ * وگرنه درآمد دو بار می‌آمد»، که با آن مدل درست بود؛ حالا ثبت می‌شود، چون
+ * انتقالِ بین دو حسابِ خزانه است نه درآمد.
  */
 export function PosSettlementPage({ token }: { token: string }) {
   const [msg, setMsg] = useState<Msg>(null)
@@ -272,63 +278,73 @@ export function PosSettlementPage({ token }: { token: string }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [posTerminalId, setPosTerminalId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState(todayIso())
+  //: «تسویه تا تاریخ» — برشِ انتخابِ رسیدها (§۹). با تاریخِ واریزِ پایین یکی نیست.
+  const [settleThrough, setSettleThrough] = useState(todayIso())
   const [settlementDate, setSettlementDate] = useState(todayIso())
-  const [bankAccountId, setBankAccountId] = useState('')
   const [fee, setFee] = useState('')
+  const [note, setNote] = useState('')
 
   const data = useAsync(
     async () => {
-      const [pending, banks, terminals] = await Promise.all([
-        fetchPosPending(token, {
-          posTerminalId: posTerminalId || undefined,
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
-        }),
-        fetchBankAccountsLive(token),
+      const [pending, terminals] = await Promise.all([
+        fetchPosPending(token, { posTerminalId: posTerminalId || undefined }),
         fetchPosTerminals(token),
       ])
-      return { pending, banks, terminals }
+      return { pending, terminals }
     },
-    [token, posTerminalId, dateFrom, dateTo, reloadKey],
+    [token, posTerminalId, reloadKey],
+  )
+
+  //: رسیدهای دقیقی که با این برش تسویه می‌شوند — فقط وقتی دستگاه انتخاب شده،
+  //: چون دامنه و حسابِ مقصد هر دو از خودِ دستگاه می‌آیند.
+  const preview = useAsync(
+    async () =>
+      posTerminalId
+        ? fetchPosSettlementPreview(token, {
+            posTerminalId,
+            settleThrough,
+            dateFrom: dateFrom || undefined,
+          })
+        : null,
+    [token, posTerminalId, settleThrough, dateFrom, reloadKey],
   )
 
   const pending = data.data?.pending ?? []
-  const banks = data.data?.banks ?? []
   const terminals = data.data?.terminals ?? []
-  //: وقتی دستگاه انتخاب شده، حسابِ کارمزد از خودش می‌آید و پرسیدنش هم اضافه است
-  //: هم راهی برای ناسازگاری: کارمزد می‌توانست به حسابی بخورد که ناخالص آنجا نرفته.
-  const selectedTerminal = terminals.find((t) => t.id === posTerminalId) ?? null
-  const gross = pending.reduce((s, g) => s + Number(g.gross_amount), 0)
-  const count = pending.reduce((s, g) => s + g.count, 0)
-  const pg = usePagination(pending, 12)
+  const selected = terminals.find((t) => t.id === posTerminalId) ?? null
+  const eligible = preview.data
+  const gross = Number(eligible?.gross_amount ?? 0)
+  const pg = usePagination(eligible?.receipts ?? [], 10, `${posTerminalId}|${settleThrough}`)
 
   async function submit() {
     setMsg(null)
-    if (!dateFrom || !dateTo) {
-      setMsg({ text: 'بازه‌ی تاریخ را مشخص کنید.', kind: 'err' })
+    if (!posTerminalId) {
+      setMsg({ text: 'اول دستگاهِ کارت‌خوان را انتخاب کنید.', kind: 'err' })
       return
     }
-    if (Number(fee || 0) > 0 && !bankAccountId && !selectedTerminal) {
-      setMsg({ text: 'برای ثبتِ کارمزد، دستگاه یا حساب بانکی لازم است.', kind: 'err' })
+    if (!selected?.bank_account_id) {
+      setMsg({ text: 'این دستگاه حسابِ بانکیِ تسویه ندارد؛ اول آن را تعیین کنید.', kind: 'err' })
       return
     }
     setBusy(true)
     try {
       const res = await settlePosTerminal(token, {
+        pos_terminal_id: posTerminalId,
         settlement_date: settlementDate,
-        date_from: dateFrom,
-        date_to: dateTo,
-        pos_terminal_id: posTerminalId || null,
-        //: وقتی دستگاه هست، سرور حساب را از خودش می‌گیرد و این نادیده می‌ماند.
-        bank_account_id: selectedTerminal ? null : bankAccountId || null,
+        settle_through: settleThrough,
+        date_from: dateFrom || null,
         fee_amount: Number(fee || 0),
+        note: note.trim(),
       })
       setMsg({
-        text: `${faInt(res.settled_count)} رسید تسویه شد — ناخالص ${fa(res.gross_amount)}، کارمزد ${fa(res.fee_amount)}، خالص ${fa(res.net_amount)} ریال.`,
+        text:
+          `تسویه‌ی شماره ${faInt(res.number)} ثبت شد — ${faInt(res.receipt_count)} رسید، ` +
+          `ناخالص ${fa(res.gross_amount)}، کارمزد ${fa(res.fee_amount)}، ` +
+          `خالصِ واریز به «${res.bank_account_name}» ${fa(res.net_amount)} ریال.`,
         kind: 'ok',
       })
       setFee('')
+      setNote('')
       setReloadKey((k) => k + 1)
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -341,14 +357,14 @@ export function PosSettlementPage({ token }: { token: string }) {
     <OpsPage
       icon={CreditCard}
       title="تسویه کارت خوان"
-      description="رسیدهای کارتیِ تسویه‌نشده و ثبتِ واریزِ شرکتِ پرداخت، همراه با کارمزد."
+      description="بردنِ وجوهِ در راهِ یک دستگاه به حسابِ بانکی‌اش، همراه با کارمزد."
       head={
         <div className="cc-head">
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               دستگاه
               <select value={posTerminalId} onChange={(e) => setPosTerminalId(e.target.value)}>
-                <option value="">همه‌ی دستگاه‌ها</option>
+                <option value="">— انتخابِ دستگاه —</option>
                 {terminals.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.terminal_no ? `${t.terminal_no} — ` : ''}
@@ -358,20 +374,24 @@ export function PosSettlementPage({ token }: { token: string }) {
               </select>
             </label>
             <label className="acc-inline-field">
-              از تاریخ
-              <JalaliDatePicker value={dateFrom} onChange={setDateFrom} placeholder="از تاریخ" />
+              تسویه تا تاریخ
+              <JalaliDatePicker value={settleThrough} onChange={setSettleThrough} />
             </label>
             <label className="acc-inline-field">
-              تا تاریخ
-              <JalaliDatePicker value={dateTo} onChange={setDateTo} placeholder="تا تاریخ" />
+              از تاریخ (اختیاری)
+              <JalaliDatePicker value={dateFrom} onChange={setDateFrom} placeholder="از ابتدا" />
             </label>
           </div>
           <div className="cc-summary">
-            <Metric icon={<CreditCard size={14} />} label="رسیدِ تسویه‌نشده" value={faInt(count)} />
+            <Metric
+              icon={<CreditCard size={14} />}
+              label="رسیدِ واجدِ شرایط"
+              value={faInt(eligible?.receipt_count ?? 0)}
+            />
             <Metric icon={<ArrowDownToLine size={14} />} label="جمعِ ناخالص" value={fa(gross)} tone="in" />
             <Metric
               icon={<ArrowUpFromLine size={14} />}
-              label="خالصِ برآوردی"
+              label="خالصِ واریز"
               value={fa(gross - Number(fee || 0))}
               tone="plain"
               hint="پس از کارمزدِ واردشده"
@@ -382,9 +402,10 @@ export function PosSettlementPage({ token }: { token: string }) {
     >
       <Note msg={msg} />
 
+      {/* نمای کلی: کجا پولِ نرسیده هست — پیش از انتخابِ دستگاه هم مفید است. */}
       <SectionCard
         icon={CreditCard}
-        title="رسیدهای تسویه‌نشده"
+        title="وجوهِ در راه، به تفکیکِ دستگاه و روز"
         description={`${faInt(pending.length)} روزِ کاری`}
         actions={
           <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
@@ -396,7 +417,7 @@ export function PosSettlementPage({ token }: { token: string }) {
           loading={data.loading}
           error={data.error}
           empty={pending.length === 0}
-          emptyText="رسیدِ کارتیِ تسویه‌نشده‌ای در این بازه نیست."
+          emptyText="پولِ کارتیِ نرسیده‌ای نیست."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
@@ -409,12 +430,65 @@ export function PosSettlementPage({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody>
-                {pg.pageItems.map((g) => (
+                {pending.map((g) => (
                   <tr key={`${g.terminal_no}-${g.transaction_date}`}>
                     <td className="card-title" data-label="تاریخ">{formatJalali(g.transaction_date)}</td>
                     <td data-label="پایانه"><span dir="ltr">{g.terminal_label || g.terminal_no || '—'}</span></td>
                     <td className="num" data-label="شمارِ تراکنش">{faInt(g.count)}</td>
                     <td className="num" data-label="جمعِ ناخالص">{fa(g.gross_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      {/*
+        رسیدهای منبع (§۱۰ §۱۲). بدونِ این، مبلغِ تسویه یک جمعِ توضیح‌ناپذیر بود:
+        کاربر عدد را می‌دید ولی نمی‌توانست بگوید از کجا آمده.
+      */}
+      <SectionCard
+        icon={ListTree}
+        title="رسیدهایی که تسویه می‌شوند"
+        description={
+          selected
+            ? `${faInt(eligible?.receipt_count ?? 0)} رسید تا ${formatJalali(settleThrough)}`
+            : 'اول دستگاه را انتخاب کنید'
+        }
+      >
+        <AsyncBlock
+          loading={preview.loading}
+          error={preview.error}
+          empty={!eligible || eligible.receipts.length === 0}
+          emptyText={
+            selected
+              ? 'رسیدِ تسویه‌نشده‌ای برای این دستگاه تا این تاریخ نیست.'
+              : 'برای دیدنِ رسیدها، دستگاهِ کارت‌خوان را از بالا انتخاب کنید.'
+          }
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>طرفِ مقابل</th>
+                  <th>مرجع / پیگیری</th>
+                  <th>کارت</th>
+                  <th>مبلغ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((r) => (
+                  <tr key={r.id}>
+                    <td className="card-title" data-label="تاریخ">{formatJalali(r.transaction_date)}</td>
+                    <td data-label="طرفِ مقابل">
+                      {r.contact_name}
+                      {r.contact_name2 ? <div className="entity-sub">{r.contact_name2}</div> : null}
+                    </td>
+                    <td data-label="مرجع / پیگیری"><span dir="ltr">{r.reference_no || r.trace_no || '—'}</span></td>
+                    <td data-label="کارت"><span dir="ltr">{r.card_mask || '—'}</span></td>
+                    <td className="num" data-label="مبلغ">{fa(r.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -427,41 +501,42 @@ export function PosSettlementPage({ token }: { token: string }) {
       <SectionCard
         icon={Save}
         title="ثبتِ تسویه"
-        description="همه‌ی رسیدهای بازه‌ی بالا تسویه‌شده علامت می‌خورند و کارمزد به هزینه می‌رود."
+        description="این رسیدها تسویه‌شده علامت می‌خورند، خالص به بانک می‌رود و کارمزد به هزینه."
       >
         <div className="invoice-form form-full">
           <label>
             تاریخِ واریزِ شرکتِ پرداخت
             <JalaliDatePicker value={settlementDate} onChange={setSettlementDate} />
+            <span className="field-hint">
+              روزی که پول به بانک نشست — لازم نیست با «تسویه تا تاریخ» یکی باشد.
+            </span>
           </label>
           <label>
             کارمزد (ریال)
             <NumberInput value={fee} onChange={setFee} />
-            <span className="field-hint">۰ بگذارید اگر کارمزدی کسر نشده — سندِ صفر ثبت نمی‌شود.</span>
+            <span className="field-hint">۰ بگذارید اگر کارمزدی کسر نشده.</span>
           </label>
           <label>
             حسابِ بانکیِ واریز
-            <select
-              value={selectedTerminal ? '' : bankAccountId}
-              onChange={(e) => setBankAccountId(e.target.value)}
-              disabled={selectedTerminal !== null}
-            >
-              <option value="">— انتخاب —</option>
-              {banks.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            <input value={selected?.bank_account_name ?? ''} readOnly placeholder="— از دستگاه —" />
             <span className="field-hint">
-              {selectedTerminal
-                ? `از حسابِ تسویه‌ی همین دستگاه می‌آید: ${selectedTerminal.bank_account_name ?? '—'}`
-                : 'فقط وقتی کارمزد داری لازم است.'}
+              {selected
+                ? 'از حسابِ تسویه‌ی همین دستگاه می‌آید و اینجا عوض نمی‌شود.'
+                : 'پس از انتخابِ دستگاه پر می‌شود.'}
             </span>
+          </label>
+          <label>
+            توضیح (اختیاری)
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً شماره‌ی پیگیریِ واریزِ بانک" />
           </label>
         </div>
         <div className="invoice-form-footer">
-          <button type="button" className="btn-primary" onClick={() => void submit()} disabled={busy || count === 0}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => void submit()}
+            disabled={busy || !posTerminalId || (eligible?.receipt_count ?? 0) === 0}
+          >
             <Save size={14} /> {busy ? 'در حالِ ثبت…' : 'ثبتِ تسویه'}
           </button>
         </div>

@@ -81,36 +81,45 @@ def _pay(db, user, term, amount, *, contact=None, ref=None):
 
 
 def test_terminal_balance_is_not_the_bank_balance(db, user):
-    """**قیدِ §۱۳.** ناخالص از لحظه‌ی رسید روی بانک است؛ موجودیِ دستگاه یعنی
-    «هنوز واریز نشده». یکی‌گرفتنشان یعنی شمردنِ دو باره‌ی همان پول."""
+    """**قیدِ §۱۳ — و از مهاجرتِ ۰۱۰۹ معنایش عوض شد.**
+
+    نسخه‌ی قبلیِ این تست می‌گفت هر دو عدد ۱۰٬۰۰۰٬۰۰۰ می‌شوند و کنارش نوشته بود
+    «عددها برابرند ولی معناشان یکی نیست». آن برابری خودش نشانه‌ی اشکال بود: پولی
+    که شرکتِ پرداخت هنوز واریز نکرده در دفتر روی بانک نشسته بود.
+
+    حالا موجودیِ دستگاه بالاست و بانک هنوز صفر — که همان چیزی است که واقعاً اتفاق
+    افتاده.
+    """
     bank = _bank(db)
     term = _terminal(db, bank)
     _pay(db, user, term, 10_000_000)
 
     assert svc.unsettled_balance(db, term) == Decimal(10_000_000)
-    assert bank_accounts.balance(db, bank) == Decimal(10_000_000)
-    #: عددها اینجا برابرند ولی **معناشان یکی نیست** — تستِ بعدی نشان می‌دهد چرا.
+    assert bank_accounts.balance(db, bank) == Decimal(0)
 
 
-def test_settlement_clears_the_terminal_but_not_the_bank(db, user):
-    """تسویه فقط می‌گوید «این پول رسید»؛ ناخالص از اول در بانک بود."""
-    from app.schemas.banking import PosSettlementIn
-    from app.services.banking import settle_pos
+def test_settlement_moves_the_money_into_the_bank(db, user):
+    """تسویه پول را از وجوهِ در راه به بانک می‌برد.
+
+    پیش از ۰۱۰۹ این تست ادعا می‌کرد «بانک تکان نخورد» — چون ناخالص از اول آنجا
+    بود. حالا تسویه همان کاری را می‌کند که اسمش می‌گوید.
+    """
+    from app.services import pos_settlements
 
     bank = _bank(db)
     term = _terminal(db, bank)
     _pay(db, user, term, 4_000_000)
 
-    settle_pos(
+    pos_settlements.create(
         db,
-        PosSettlementIn(
-            settlement_date=WHEN, date_from=WHEN, date_to=WHEN, pos_terminal_id=term.id
-        ),
         user,
+        pos_terminal_id=term.id,
+        settlement_date=WHEN,
+        settle_through=WHEN,
     )
 
-    assert svc.unsettled_balance(db, term) == 0          # ← دستگاه خالی شد
-    assert bank_accounts.balance(db, bank) == Decimal(4_000_000)  # ← بانک تکان نخورد
+    assert svc.unsettled_balance(db, term) == 0                    # ← دستگاه خالی شد
+    assert bank_accounts.balance(db, bank) == Decimal(4_000_000)   # ← پول رسید
 
 
 def test_balance_is_derived_not_stored(db, user):

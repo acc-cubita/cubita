@@ -50,6 +50,7 @@ from app.models.marketplace import (
 from app.models.moadian import MoadianSettings, MoadianSubmission, MoadianUnitMap
 from app.models.fiscal_year import FiscalYear
 from app.models.period_close import FiscalPeriodClose
+from app.models.pos_settlement import PosSettlement
 from app.models.pos_terminal import PosTerminal
 from app.models.payroll import (
     Attendance,
@@ -180,6 +181,7 @@ __all__ = [
     "InsuranceTaxBranch",
     "FiscalPeriodClose",
     "FiscalYear",
+    "PosSettlement",
     "PosTerminal",
     "SalesQuotation",
     "SalesQuotationLine",

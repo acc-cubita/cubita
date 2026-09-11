@@ -34,6 +34,18 @@ def _gl_balance(db, account_id) -> Decimal:
     return sum((Decimal(d) - Decimal(c) for d, c in rows), Decimal(0))
 
 
+def _clearing_balance(db) -> Decimal:
+    """مانده‌ی «وجوهِ در راهِ کارت‌خوان».
+
+    **تا مهاجرتِ ۰۱۰۹ این تست‌ها معینِ بانک را می‌سنجیدند.** درست هم بود — همان‌جا
+    بدهکار می‌شد. ولی پول آن لحظه به بانک نرسیده بود؛ رسیدنش کارِ تسویه است. حالا
+    مرحله‌ی اول اینجا می‌نشیند و بانک تا تسویه تکان نمی‌خورد.
+    """
+    from app.services import pos_settlements
+
+    return _gl_balance(db, pos_settlements.clearing_account(db).id)
+
+
 def _card(bank, **over) -> CardPaymentIn:
     base = dict(
         transaction_date=date(2026, 5, 1),
@@ -62,8 +74,9 @@ def test_walkin_card_payment_creates_system_contact_and_bank_receipt(db, user):
     contact = db.get(TreasuryTransaction, txn.id).contact
     assert contact.is_system is True
     assert contact.name == WALKIN_CARD_CONTACT_NAME
-    # معینِ بانک به‌اندازه‌ی مبلغ بدهکار شد
-    assert _gl_balance(db, bank.gl_account_id) == Decimal(2_000_000)
+    # وجوهِ در راه بدهکار شد — نه بانک، چون شرکتِ پرداخت هنوز واریز نکرده.
+    assert _clearing_balance(db) == Decimal(2_000_000)
+    assert _gl_balance(db, bank.gl_account_id) == Decimal(0)
 
 
 def test_walkin_card_metadata_is_stored(db, user):
@@ -78,7 +91,7 @@ def test_walkin_card_metadata_is_stored(db, user):
 
 
 def test_walkin_full_flow_nets_receivable_to_zero(db, user):
-    """فاکتورِ گذری علیهِ طرف‌حسابِ سیستمی + رسیدِ کارت → ماندهٔ دریافتنیِ گذری صفر، بانک بدهکار."""
+    """فاکتورِ گذری + رسیدِ کارت → ماندهٔ دریافتنیِ گذری صفر، وجوهِ در راه بدهکار."""
     bank = _make_bank(db)
     wh = main_warehouse(db)
     item = make_item(db)
@@ -108,7 +121,7 @@ def test_walkin_full_flow_nets_receivable_to_zero(db, user):
     record_card_payment(db, _card(bank, amount=Decimal(2_000_000)), user)
 
     assert customer_outstanding(db, walkin.id) == Decimal(0)
-    assert _gl_balance(db, bank.gl_account_id) == Decimal(2_000_000)
+    assert _clearing_balance(db) == Decimal(2_000_000)
 
 
 def test_walkin_contact_reused_not_duplicated(db, user):
@@ -152,7 +165,7 @@ def test_card_payment_settles_real_contact_receivable(db, user):
     record_card_payment(db, _card(bank, contact_id=contact.id, amount=Decimal(3_000_000), reference_no="RRN-C"), user)
 
     assert customer_outstanding(db, contact.id) == Decimal(0)
-    assert _gl_balance(db, bank.gl_account_id) == Decimal(3_000_000)
+    assert _clearing_balance(db) == Decimal(3_000_000)
 
 
 # ── idempotency روی RRN ────────────────────────────────────────────────────────
