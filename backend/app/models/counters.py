@@ -52,6 +52,9 @@ DOC_CHECK_OPERATION = "check_operation"
 DOC_RECEIPT = "receipt"
 DOC_PAYMENT = "payment"
 DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
+#: تسویه‌ی حسابِ طرف مقابل — تخصیصِ اقلامِ باز به هم. شماره‌ی مستقل دارد چون
+#: خودش سند است و به شماره‌ی فاکتور و رسیدی که تخصیص می‌دهد گره نمی‌خورد (§۴۹).
+DOC_SETTLEMENT = "settlement"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -71,6 +74,7 @@ DOC_TYPES = (
     DOC_RECEIPT,
     DOC_PAYMENT,
     DOC_WAREHOUSE_RECEIPT,
+    DOC_SETTLEMENT,
 )
 
 

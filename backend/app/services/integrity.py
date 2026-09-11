@@ -318,6 +318,71 @@ def _trial_vs_ledger(db: Session, filters: ReportFilters) -> dict:
     )
 
 
+def _over_allocated_settlements(db: Session) -> dict:
+    """تخصیص‌هایی که از مانده‌ی سندشان بیشترند (§۳۹ §۴۰).
+
+    یعنی سندِ منبع **بعد از** تسویه کوچک یا باطل شده. چون تسویه سندِ حسابداری
+    نمی‌زند، هیچ ترازی از این خرابی خبر نمی‌دهد و تنها جایی که دیده می‌شود همین
+    بررسی است.
+
+    فیلترِ تاریخ نمی‌گیرد — تخصیصِ نامعتبر مالِ یک دوره نیست؛ تا وقتی اصلاح نشود
+    هست. همان استدلالِ `_leaves_with_children`.
+    """
+    from app.services.open_items import over_allocated
+
+    rows = over_allocated(db)
+    return _check(
+        "over_allocated",
+        "تخصیصِ بیش از مانده در تسویه",
+        "این سندها بعد از تسویه تغییر کرده‌اند و تخصیصشان از مبلغشان بیشتر شده. "
+        "تسویه‌ی مربوط را برگردانید و با مبلغِ درست دوباره ثبت کنید.",
+        "error",
+        [
+            _row(
+                f"{row['label']}",
+                f"تخصیص‌یافته {row['allocated']:,} در برابرِ مانده‌ی {row['eligible']:,}",
+                difference=row["excess"],
+            )
+            for row in rows
+        ],
+        len(rows),
+    )
+
+
+def _unsettleable_balance(db: Session) -> dict:
+    """گردشِ معینِ طرف مقابل که هیچ سندِ قابلِ تسویه‌ای پشتش نیست.
+
+    خطا نیست — دفتر سالم است و جمع‌ها می‌خوانند. ولی این بخش از ماندهٔ مشتری در
+    «اقلامِ باز» دیده نمی‌شود و قابلِ تسویه هم نیست، پس کاربر باید بداند چقدر
+    است و از کجا آمده: سندِ دستی روی دریافتنی/پرداختنی، ماندهٔ اول دوره، یا چکی
+    که پیش از مهاجرتِ ۰۱۱۰ ثبت شده و رویدادی ندارد.
+    """
+    from app.services.open_items import counterparty_accounts, unattributed
+
+    rows = []
+    for account in counterparty_accounts(db):
+        residual = unattributed(db, account.id)
+        if residual != 0:
+            rows.append(
+                _row(
+                    f"{account.code} — {account.name}",
+                    "این مبلغ در دفتر هست ولی سندِ قابلِ تسویه‌ای ندارد "
+                    "(سندِ دستی، ماندهٔ اول دوره، یا چکِ پیش از نسخه‌ی ۰۱۱۴)",
+                    difference=residual,
+                    account_id=account.id,
+                )
+            )
+    return _check(
+        "unsettleable_balance",
+        "گردشِ بدونِ سندِ قابلِ تسویه",
+        "بخشی از ماندهٔ این معین‌ها در «تسویه حساب طرف مقابل» دیده نمی‌شود. "
+        "دفتر درست است؛ فقط این گردش‌ها لنگرِ سندی ندارند تا تخصیص بخورند.",
+        "warning",
+        rows,
+        len(rows),
+    )
+
+
 def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> dict:
     """همه‌ی بررسی‌ها، با جمعِ کلِ دفتر به‌عنوانِ سرخطِ گزارش.
 
@@ -343,6 +408,8 @@ def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> di
         _leaves_with_children(db),
         _trial_vs_ledger(db, filters),
         _empty_entries(db, filters),
+        _over_allocated_settlements(db),
+        _unsettleable_balance(db),
     ]
     return {
         "date_from": filters.date_from,
