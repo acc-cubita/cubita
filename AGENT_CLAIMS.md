@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+| Claude Opus 5 | `models/inventory.py` (فقط `Warehouse`), `services/warehouses.py`, `services/inventory.py`, `routers/inventory.py`, `schemas/inventory.py`, `0116_warehouse_master.py`, صفحه‌ی انبارها | فصلِ «تعریف و مدیریت انبار»؛ **شماره‌ی مهاجرتِ ۰۱۱۶ برداشته شد** | ۱۴۰۵/۰۶/۲۰ |
 
 ---
 
