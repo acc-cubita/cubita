@@ -672,6 +672,60 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     return invoice
 
 
+def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
+    """یک پیش‌نویسِ تازه می‌سازد، بی‌آنکه هویت یا وابستگی‌های سند قبلی را کپی کند.
+
+    تخفیف/اضافات/عوارضِ سربرگ هنگام ثبت بین ردیف‌ها تسهیم شده‌اند. بنابراین
+    رونوشت، مقادیر نهایی ردیف‌ها را می‌گیرد و مقادیر سربرگ را صفر می‌کند؛ کپیِ
+    هم‌زمان هر دو، همان تعدیل را برای بار دوم اعمال می‌کرد.
+    """
+    invoice = db.get(PurchaseInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
+
+    rate = Decimal(invoice.exchange_rate or 1)
+    if rate <= 0:
+        rate = Decimal(1)
+
+    def transaction_amount(value) -> Decimal:
+        return (Decimal(value or 0) / rate).quantize(Decimal("0.01"))
+
+    return {
+        "source_invoice_number": invoice.number,
+        "contact_id": invoice.contact_id,
+        "cost_center_id": invoice.cost_center_id,
+        "description": invoice.description,
+        "description2": invoice.description2,
+        "tax_rate": Decimal(invoice.tax_rate),
+        "currency_code": invoice.currency_code,
+        "exchange_rate": rate,
+        "invoice_discount": Decimal(0),
+        "invoice_addition": Decimal(0),
+        "duty_amount": Decimal(0),
+        "lines": [
+            {
+                "item_id": line.item_id,
+                "qty": Decimal(line.qty),
+                "unit_cost": transaction_amount(line.unit_cost),
+                "discount": transaction_amount(line.discount),
+                "addition": transaction_amount(line.addition),
+                "duty_amount": transaction_amount(line.duty_amount),
+                "description": line.description,
+            }
+            for line in invoice.lines
+        ],
+        "cleared_fields": [
+            "شماره داخلی فاکتور",
+            "شماره فاکتور تأمین‌کننده",
+            "تاریخ فاکتور",
+            "رسیدهای انبار",
+            "اعلامیه‌های پرداخت",
+            "تخصیص‌های تسویه",
+            "سند حسابداری",
+        ],
+    }
+
+
 def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> StockAdjustment:
     assert_period_open(db, data.adjustment_date)
 

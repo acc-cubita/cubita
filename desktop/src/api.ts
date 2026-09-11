@@ -6471,3 +6471,31 @@ export interface PurchaseInvoiceRecord {
   journal_entry_id: string | null
   related_payment_count: number
 }
+
+export interface PurchaseInvoiceDuplicateDraft {
+  source_invoice_number: number | null
+  contact_id: string | null
+  cost_center_id: string | null
+  description: string
+  description2: string
+  tax_rate: string | number
+  currency_code: string | null
+  exchange_rate: string | number
+  invoice_discount: string | number
+  invoice_addition: string | number
+  duty_amount: string | number
+  lines: Array<{
+    item_id: string
+    qty: string | number
+    unit_cost: string | number
+    discount: string | number
+    addition: string | number
+    duty_amount: string | number
+    description: string
+  }>
+  cleared_fields: string[]
+}
+
+/** پیش‌نویس رونوشت از سرور می‌آید تا هیچ شناسه یا تخصیص تاریخی دوباره استفاده نشود. */
+export const fetchPurchaseInvoiceDuplicate = (token: string, id: string) =>
+  authedGet<PurchaseInvoiceDuplicateDraft>(token, `/api/purchase-invoices/${id}/duplicate`)

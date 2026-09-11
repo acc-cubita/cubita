@@ -195,3 +195,54 @@ def test_purchase_print_uses_transaction_time_supplier_identity(client, db, user
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content.startswith(b"%PDF")
+
+
+def test_purchase_duplicate_is_a_new_draft_without_historical_links(client, db, user):
+    item = make_item(db, name="کالای رونوشت")
+    supplier = make_contact(db, type_="supplier")
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            contact_id=supplier.id,
+            supplier_invoice_number="SUP-UNIQUE-42",
+            description="شرح قابل استفاده مجدد",
+            description2="شرح دوم",
+            tax_rate=Decimal(10),
+            invoice_discount=Decimal(100),
+            invoice_addition=Decimal(40),
+            duty_amount=Decimal(20),
+            lines=[
+                PurchaseInvoiceLineIn(
+                    item_id=item.id,
+                    qty=Decimal(2),
+                    unit_cost=Decimal(1000),
+                    discount=Decimal(50),
+                    addition=Decimal(10),
+                    duty_amount=Decimal(5),
+                )
+            ],
+        ),
+        user,
+    )
+
+    before_count = db.query(type(invoice)).count()
+    response = client.get(f"/api/purchase-invoices/{invoice.id}/duplicate")
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert db.query(type(invoice)).count() == before_count
+    assert draft["source_invoice_number"] == invoice.number
+    assert draft["contact_id"] == str(supplier.id)
+    assert draft["description"] == "شرح قابل استفاده مجدد"
+    assert draft["description2"] == "شرح دوم"
+    assert "supplier_invoice_number" not in draft
+    assert "invoice_date" not in draft
+    assert "warehouse_id" not in draft
+    assert Decimal(draft["invoice_discount"]) == Decimal(0)
+    assert Decimal(draft["invoice_addition"]) == Decimal(0)
+    assert Decimal(draft["duty_amount"]) == Decimal(0)
+    assert Decimal(draft["lines"][0]["discount"]) == Decimal(invoice.lines[0].discount)
+    assert Decimal(draft["lines"][0]["addition"]) == Decimal(invoice.lines[0].addition)
+    assert Decimal(draft["lines"][0]["duty_amount"]) == Decimal(invoice.lines[0].duty_amount)
+    assert "شماره فاکتور تأمین‌کننده" in draft["cleared_fields"]

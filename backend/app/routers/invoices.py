@@ -26,7 +26,7 @@ from app.schemas.invoices import (
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
-from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.inventory import duplicate_purchase_invoice_draft, post_purchase_invoice, post_sales_invoice
 from app.services.reports import get_purchase_summary, get_sales_summary
 from decimal import Decimal
 
@@ -300,6 +300,16 @@ def create_purchase_invoice(
     _attach_creators(db, [invoice])
     _attach_purchase_state(db, [invoice])
     return invoice
+
+
+@router.get("/api/purchase-invoices/{invoice_id}/duplicate")
+def duplicate_purchase_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "create")),
+):
+    """پیش‌نویسِ امنِ فاکتور تازه؛ این درخواست هیچ رکوردی نمی‌نویسد."""
+    return duplicate_purchase_invoice_draft(db, invoice_id)
 
 
 @router.get("/api/purchase-invoices/{invoice_id}/warehouse-receipts", response_model=list[WarehouseReceiptOut])
