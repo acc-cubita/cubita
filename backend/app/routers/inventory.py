@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.inventory import Contact, Item, UnitOfMeasure, StockAdjustment, StockLedger, Warehouse
+from app.models.inventory import Contact, Item, ItemWarehouse, UnitOfMeasure, StockAdjustment, StockLedger, Warehouse
 from app.models.user import User
 from decimal import Decimal
 
@@ -28,11 +28,13 @@ from app.schemas.inventory import (
     CreditStatusOut,
     ItemIn,
     ItemOut,
+    ItemWarehouseIn,
     UnitIn,
     UnitOut,
     UnitUpdateIn,
     ItemUpdateIn,
     LowStockRowOut,
+    OverStockRowOut,
     StockAdjustmentIn,
     StockAdjustmentOut,
     StockLevelOut,
@@ -442,11 +444,16 @@ def contact_credit_status(
 
 
 def _item_out(db: Session, item: Item, default_account=None) -> dict:
-    """ردیفِ کالا + نگاشتِ حسابِ هزینه و واحدها. یک شکل برای فهرست و تک‌رکورد."""
+    """ردیفِ کالا + نگاشتِ حسابِ هزینه، واحدها و انبارهای مرتبط."""
+    links = items_svc.warehouse_rows(db, item)
     return {
         **ItemOut.model_validate(item).model_dump(),
         **items_svc.row(db, item, default_account=default_account),
         **units_svc.row(db, item),
+        "warehouses": links,
+        "default_warehouse_id": next(
+            (link["warehouse_id"] for link in links if link["is_default"]), None
+        ),
     }
 
 
@@ -633,9 +640,13 @@ def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_p
     #: §۱۵ — حسابِ نگاشت باید سند بپذیرد و نقشِ ماژولِ دیگری نباشد؛ وگرنه دو
     #: موتور روی یک حساب می‌نویسند با دو معنی.
     items_svc.assert_expense_account(db, data.expense_account_id)
-    item = Item(**data.model_dump())
+    fields = data.model_dump()
+    links = fields.pop("warehouses", [])
+    item = Item(**fields)
     db.add(item)
-    _apply_units(db, item, data.model_dump())
+    db.flush()
+    items_svc.set_warehouses(db, item, links)
+    _apply_units(db, item, fields)
     db.flush()
     db.refresh(item)
     return _item_out(db, item)
@@ -662,8 +673,12 @@ def update_item(
         #: §۹ — این ویژگی ساختاری است؛ عوض‌کردنش پس از گردشِ انباری موجودیِ
         #: قدیمی را مبهم می‌کند.
         items_svc.assert_serial_toggle_allowed(db, item, fields["is_serial_tracked"])
+    #: `None` یعنی «دست نزن»؛ فهرستِ خالی یعنی «همه‌ی انبارها» (§۲۹).
+    links = fields.pop("warehouses", None)
     for key, value in fields.items():
         setattr(item, key, value)
+    if links is not None:
+        items_svc.set_warehouses(db, item, links)
     _apply_units(db, item, fields)
     db.flush()
     db.refresh(item)
@@ -773,9 +788,16 @@ def low_stock(db: Session = Depends(get_db), _=Depends(require_permission("inven
         .group_by(StockLedger.item_id)
         .all()
     )
+    #: §۲۵ — حداقلِ موجودی هم مثلِ نقطه‌ی سفارش سیگنال می‌سازد. دو آستانه‌ی جدا
+    #: هستند و `trigger` می‌گوید کدام‌یک این ردیف را آورده؛ یکی‌کردنشان یعنی
+    #: کاربر نفهمد چرا هشدار گرفته.
     items = (
         db.query(Item)
-        .filter(Item.is_service.is_(False), Item.is_active.is_(True), Item.reorder_point > 0)
+        .filter(
+            Item.is_service.is_(False),
+            Item.is_active.is_(True),
+            (Item.reorder_point > 0) | (Item.min_stock > 0),
+        )
         .all()
     )
     from decimal import Decimal
@@ -783,8 +805,12 @@ def low_stock(db: Session = Depends(get_db), _=Depends(require_permission("inven
     rows: list[LowStockRowOut] = []
     for item in items:
         qty = Decimal(on_hand.get(item.id, 0))
-        reorder = Decimal(item.reorder_point)
-        if qty <= reorder:
+        reorder = Decimal(item.reorder_point or 0)
+        minimum = Decimal(item.min_stock or 0)
+        threshold, trigger = (
+            (reorder, "reorder") if reorder >= minimum else (minimum, "min")
+        )
+        if threshold > 0 and qty <= threshold:
             rows.append(
                 LowStockRowOut(
                     item_id=item.id,
@@ -793,9 +819,51 @@ def low_stock(db: Session = Depends(get_db), _=Depends(require_permission("inven
                     unit=item.unit,
                     qty_on_hand=qty,
                     reorder_point=reorder,
-                    shortfall=max(reorder - qty, Decimal(0)),
+                    min_stock=minimum,
+                    trigger=trigger,
+                    shortfall=max(threshold - qty, Decimal(0)),
                 )
             )
     # بحرانی‌ترین اول: بیشترین کمبود بالاتر
     rows.sort(key=lambda r: r.shortfall, reverse=True)
+    return rows
+
+
+@router.get("/api/stock/over", response_model=list[OverStockRowOut])
+def over_stock(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    """§۲۶ — کالاهایی که موجودیشان از حداکثر گذشته.
+
+    **سدِ تراکنش نیست.** حداکثرِ موجودی جلوی ورودِ کالا را نمی‌گیرد؛ فصل صریح
+    است که این داده‌ی برنامه‌ریزی است، نه قاعده‌ی مسدودکننده. این فهرست فقط
+    می‌گوید کجا مازاد داریم.
+    """
+    from decimal import Decimal
+
+    on_hand = dict(
+        db.query(StockLedger.item_id, func.coalesce(func.sum(StockLedger.qty), 0))
+        .group_by(StockLedger.item_id)
+        .all()
+    )
+    items = (
+        db.query(Item)
+        .filter(Item.is_service.is_(False), Item.is_active.is_(True), Item.max_stock > 0)
+        .all()
+    )
+    rows: list[OverStockRowOut] = []
+    for item in items:
+        qty = Decimal(on_hand.get(item.id, 0))
+        maximum = Decimal(item.max_stock)
+        if qty > maximum:
+            rows.append(
+                OverStockRowOut(
+                    item_id=item.id,
+                    sku=item.sku,
+                    name=item.name,
+                    unit=item.unit,
+                    qty_on_hand=qty,
+                    max_stock=maximum,
+                    excess=qty - maximum,
+                )
+            )
+    rows.sort(key=lambda r: r.excess, reverse=True)
     return rows

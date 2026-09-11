@@ -423,6 +423,21 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     unit_weight: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
     unit_volume: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
 
+    #: **کنترلِ موجودی (§۲۴ §۲۵ §۲۶).**
+    #:
+    #: `reorder_point` از قبل بود و «نیازمندِ سفارش» رویش تکیه دارد؛ دست‌نخورده
+    #: می‌ماند. این دو کنارش می‌نشینند چون فصل سه مفهومِ **جدا** می‌شناسد:
+    #: حداقل، حداکثر، و نقطه‌ی سفارش.
+    #:
+    #: §۲۶ صریح است: این‌ها **قاعده‌ی برنامه‌ریزی‌اند، نه سدِ تراکنش**. حداکثر
+    #: موجودی جلوی ورودِ کالا را نمی‌گیرد؛ فقط هشدار می‌سازد.
+    #:
+    #: §۲۸ می‌گوید انبارمحور یا سراسری‌بودنشان را **فرض نکن**. پس عددِ این‌جا
+    #: سراسری است (همان رفتارِ امروزِ `reorder_point`) و ردیفِ `item_warehouses`
+    #: می‌تواند برای یک انبارِ خاص override بگذارد. هیچ‌کدام تحمیل نشده.
+    min_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    max_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+
     #: **معینِ هزینه‌ی خرید (§۱۵).** برای خدمت: «مشاوره حقوقی» هنگام خرید به یک
     #: حسابِ هزینه می‌نشیند، نه به موجودیِ کالا.
     #:
@@ -434,6 +449,54 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
+
+
+class ItemWarehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """انبارهای مرتبطِ یک کالا (§۲۹ §۳۰ §۳۱).
+
+    **رابطه ذاتاً چندبه‌چند است (§۳۰):** یک کالا در چند انبار، و یک انبار پرِ
+    چند کالا.
+
+    **فهرستِ خالی یعنی «همه‌ی انبارها»** — یعنی دقیقاً رفتارِ امروزِ کوبیتا. پس
+    این جدول هیچ کالای موجودی را محدود نمی‌کند؛ فقط کسی که صریحاً فهرست بگذارد
+    محدودیت می‌گیرد.
+
+    **`is_default` مالکیت نیست (§۳۲):** فقط پیشنهادِ اولیه‌ی فرم است. کالا به
+    انبارِ پیش‌فرضش قفل نمی‌شود.
+
+    **و حذفِ رابطه گذشته را پاک نمی‌کند (§۳۳):** حرکاتِ انبار و کاردکس جای دیگری
+    زندگی می‌کنند و این جدول فقط *آینده* را می‌گوید.
+    """
+
+    __tablename__ = "item_warehouses"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "item_id", "warehouse_id", name="uq_item_warehouses_pair"),
+        #: یک انبارِ پیش‌فرض برای هر کالا — نه صفر، نه دو تا. ایندکسِ جزئی چون
+        #: نبودِ پیش‌فرض مجاز است.
+        Index(
+            "uq_item_warehouses_default",
+            "tenant_id",
+            "item_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouses.id", ondelete="CASCADE"), index=True
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: override‌های انبارمحورِ کنترلِ موجودی (§۲۸). `NULL` = «همان عددِ کالا».
+    #: فصل تصمیم نمی‌گیرد که کنترل سراسری باشد یا انبارمحور؛ این ساختار هر دو را
+    #: می‌پذیرد بی‌آنکه یکی را تحمیل کند.
+    min_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    max_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+
+    warehouse: Mapped["Warehouse"] = relationship()
 
 
 class StockLedger(TenantMixin, UUIDPKMixin, Base):

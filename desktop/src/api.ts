@@ -1116,6 +1116,13 @@ export interface ItemRecord {
   /** متادیتای حمل‌ونقل، نه موجودی. */
   unit_weight: string
   unit_volume: string
+  /** قاعده‌ی برنامه‌ریزی، نه سدِ تراکنش. */
+  min_stock: string
+  max_stock: string
+  /** فهرستِ خالی یعنی «همه‌ی انبارها»، نه «هیچ انباری». */
+  warehouses: ItemWarehouseLink[]
+  /** پیشنهادِ فرمِ فروش/خرید، نه قفل. */
+  default_warehouse_id: string | null
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -1155,6 +1162,9 @@ export interface ItemIn {
   conversion_mode?: string
   unit_weight?: number
   unit_volume?: number
+  min_stock?: number
+  max_stock?: number
+  warehouses?: { warehouse_id: string; is_default?: boolean; min_stock?: number | null; max_stock?: number | null }[]
 }
 
 /** فیلدهایی که سرور در `ItemUpdateIn` می‌پذیرد. `is_service` عمداً نیست: تبدیلِ
@@ -1667,7 +1677,7 @@ export interface StockLevel {
 
 export const fetchStockLevels = (token: string) => authedGet<StockLevel[]>(token, '/api/stock')
 
-/** کالاهایی که موجودی‌شان به/زیرِ نقطه‌ی سفارش رسیده — هشدارِ سفارشِ مجدد. */
+/** کالاهایی که موجودی‌شان به/زیرِ نقطه‌ی سفارش یا حداقلِ موجودی رسیده. */
 export interface LowStockRow {
   item_id: string
   sku: string
@@ -1676,6 +1686,9 @@ export interface LowStockRow {
   qty_on_hand: string
   reorder_point: string
   shortfall: string
+  /** کدام آستانه این ردیف را آورده: `reorder` یا `min` — دو مفهومِ جدا. */
+  trigger: string
+  min_stock: string
 }
 
 export const fetchLowStock = (token: string) => authedGet<LowStockRow[]>(token, '/api/stock/low')
@@ -6804,3 +6817,33 @@ export const updateUnit = (
 
 /** حذف فقط برای واحدِ استفاده‌نشده؛ وگرنه سرور ۴۰۹ با پیامِ «غیرفعالش کنید» می‌دهد. */
 export const deleteUnit = (token: string, unitId: string) => authedDelete(token, `/api/units/${unitId}`)
+
+// ─────────────────── انبارهای مرتبط و مازادِ موجودی (§۲۴–§۳۳) ───────────────────
+
+/** یک انبارِ مرتبط. `is_default` فقط پیشنهادِ فرم است، نه مالکیت. */
+export interface ItemWarehouseLink {
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  is_default: boolean
+  /** override‌های انبارمحور؛ `null` یعنی «همان عددِ کالا». */
+  min_stock: string | null
+  max_stock: string | null
+}
+
+/**
+ * مازادِ موجودی — **سدِ تراکنش نیست**.
+ *
+ * حداکثرِ موجودی جلوی ورودِ کالا را نمی‌گیرد؛ فقط می‌گوید کجا مازاد داریم.
+ */
+export interface OverStockRow {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  qty_on_hand: string
+  max_stock: string
+  excess: string
+}
+
+export const fetchOverStock = (token: string) => authedGet<OverStockRow[]>(token, '/api/stock/over')

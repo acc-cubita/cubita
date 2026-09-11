@@ -239,6 +239,9 @@ def post_sales_invoice(
 
     #: §۷ §۵۳ — موادِ اولیه و موادِ بسته‌بندی موجودی دارند ولی فروختنی نیستند.
     items_svc.assert_sellable(db, [items_by_id[line.item_id] for line in data.lines])
+    #: §۲۹ — کالا فقط در انبارهای مرتبطش گردش می‌کند. فهرستِ خالی یعنی «همه».
+    for line in data.lines:
+        items_svc.assert_warehouse_allowed(db, items_by_id[line.item_id], data.warehouse_id)
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
     # هر دو پاس می‌شوند و موجودی منفی می‌شود — یعنی کالایی فروخته می‌شود که وجود ندارد.
@@ -483,6 +486,10 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     lock_items(db, [line.item_id for line in data.lines])
 
     number = next_document_number(db, DOC_PURCHASE_INVOICE)
+
+    #: §۲۹ — کالا فقط به انبارهای مرتبطش وارد می‌شود.
+    for line in data.lines:
+        items_svc.assert_warehouse_allowed(db, items_by_id[line.item_id], data.warehouse_id)
 
     #: عوارضِ هر ردیف: اگر فرستاده نشده باشد (`None`) از **نرخِ عوارضِ کالا**
     #: می‌آید (§۱۳)، وگرنه همان عددِ فرستاده‌شده. صفرِ صریح یعنی صفر.
@@ -739,6 +746,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالا یافت نشد")
     if item.is_service:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "خدمت موجودی ندارد که تعدیل شود")
+    items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
 
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)

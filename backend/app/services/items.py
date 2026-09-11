@@ -24,10 +24,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account
-from app.models.inventory import Item, StockLedger
+from app.models.inventory import Item, ItemWarehouse, StockLedger, Warehouse
 from app.services import chart_codes as cc
 from app.services.common import assert_postable_account as assert_postable
 from app.services.common import get_or_create_account
@@ -161,3 +162,153 @@ def default_expense_account_or_none(db: Session) -> Account | None:
     در چارتِ کسب‌وکاری که هنوز هیچ خدمتی نخریده حساب بسازد.
     """
     return db.query(Account).filter(Account.system_role == cc.SERVICE_EXPENSE).first()
+
+
+# ───────────────────── انبارهای مرتبط و کنترلِ موجودی (§۲۴–§۳۳) ─────────────────────
+
+
+def allowed_warehouse_ids(db: Session, item_id: UUID) -> set[UUID]:
+    """انبارهایی که این کالا صریحاً در آن‌ها مجاز است.
+
+    **مجموعه‌ی خالی یعنی «همه‌ی انبارها»** و نه «هیچ انباری» — یعنی رفتارِ امروزِ
+    کوبیتا. تفسیرِ دیگرش هر کالای موجودی را یک‌شبه غیرقابل‌استفاده می‌کرد.
+    """
+    rows = db.query(ItemWarehouse.warehouse_id).filter(ItemWarehouse.item_id == item_id).all()
+    return {warehouse_id for (warehouse_id,) in rows}
+
+
+def default_warehouse_id(db: Session, item_id: UUID) -> UUID | None:
+    """انبارِ پیش‌فرضِ کالا — **پیشنهادِ فرم، نه مالکیت** (§۳۲).
+
+    `None` یعنی پیش‌فرضی انتخاب نشده، نه اینکه کالا جایی ندارد.
+    """
+    row = (
+        db.query(ItemWarehouse.warehouse_id)
+        .filter(ItemWarehouse.item_id == item_id, ItemWarehouse.is_default.is_(True))
+        .first()
+    )
+    return row[0] if row else None
+
+
+def assert_warehouse_allowed(db: Session, item: Item, warehouse_id: UUID | None) -> None:
+    """§۲۹ — کالا فقط به انبارهای مرتبطش وارد می‌شود.
+
+    سه استثنا، و هر سه عمدی:
+
+    **فهرستِ خالی.** یعنی «همه‌ی انبارها» — رفتارِ امروز، پس هیچ کالای موجودی
+    نمی‌شکند.
+
+    **خدمت.** اصلاً وارد انبار نمی‌شود؛ محدودکردنش بی‌معناست (§۱۶).
+
+    **انباری که کالا در آن موجودی دارد.** §۳۳ می‌گوید حذفِ رابطه نباید گذشته را
+    پاک کند — و اگر خروج را هم ببندیم، کالا در انباری گیر می‌افتد که نه واردش
+    می‌شود نه خارج. همان «سرگردانیِ موجودی» که فصلِ انبار منعش می‌کند.
+    """
+    if warehouse_id is None or item.is_service:
+        return
+    allowed = allowed_warehouse_ids(db, item.id)
+    if not allowed or warehouse_id in allowed:
+        return
+    on_hand = (
+        db.query(func.coalesce(func.sum(StockLedger.qty), 0))
+        .filter(StockLedger.item_id == item.id, StockLedger.warehouse_id == warehouse_id)
+        .scalar()
+    )
+    if Decimal(on_hand or 0) != 0:
+        return
+    warehouse = db.get(Warehouse, warehouse_id)
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        f"«{item.name}» در انبارِ «{warehouse.name if warehouse else warehouse_id}» مجاز نیست. "
+        "اگر باید آن‌جا نگهداری شود، در تعریفِ کالا این انبار را به «انبارهای مرتبط» اضافه کنید.",
+    )
+
+
+def stock_limits(db: Session, item: Item, warehouse_id: UUID | None) -> tuple[Decimal, Decimal]:
+    """حداقل و حداکثرِ مؤثر برای این کالا در این انبار (§۲۸).
+
+    ردیفِ انبار اگر عددی داشته باشد مقدم است؛ وگرنه عددِ خودِ کالا — که سراسری
+    است و همان رفتارِ `reorder_point`ِ امروز را دارد. فصل هیچ‌کدام را تحمیل
+    نمی‌کند، پس هر دو لایه هست و هیچ‌کدام اجباری نیست.
+    """
+    item_min, item_max = Decimal(item.min_stock or 0), Decimal(item.max_stock or 0)
+    if warehouse_id is None:
+        return item_min, item_max
+    row = (
+        db.query(ItemWarehouse.min_stock, ItemWarehouse.max_stock)
+        .filter(ItemWarehouse.item_id == item.id, ItemWarehouse.warehouse_id == warehouse_id)
+        .first()
+    )
+    if row is None:
+        return item_min, item_max
+    row_min, row_max = row
+    return (
+        Decimal(row_min) if row_min is not None else item_min,
+        Decimal(row_max) if row_max is not None else item_max,
+    )
+
+
+def set_warehouses(db: Session, item: Item, links: list[dict]) -> None:
+    """فهرستِ انبارهای مرتبط را جایگزین می‌کند.
+
+    **حذفِ یک انبار از فهرست هیچ حرکتِ انباری‌ای را پاک نمی‌کند (§۳۳).** این
+    جدول فقط درباره‌ی *آینده* حرف می‌زند؛ کاردکس و موجودی جای دیگری زندگی
+    می‌کنند و دست‌نخورده می‌مانند.
+    """
+    wanted = {}
+    for link in links:
+        warehouse_id = link.get("warehouse_id")
+        if warehouse_id is None:
+            continue
+        if db.get(Warehouse, warehouse_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "انبار یافت نشد")
+        wanted[warehouse_id] = link
+
+    defaults = [link for link in wanted.values() if link.get("is_default")]
+    if len(defaults) > 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "فقط یک انبار می‌تواند پیش‌فرض باشد"
+        )
+
+    existing = {row.warehouse_id: row for row in db.query(ItemWarehouse).filter(ItemWarehouse.item_id == item.id).all()}
+
+    #: اول پیش‌فرض‌ها برداشته می‌شوند، بعد نشانده — وگرنه ایندکسِ یکتای «یک
+    #: پیش‌فرض برای هر کالا» وسطِ جابه‌جایی می‌شکند.
+    for row in existing.values():
+        row.is_default = False
+    db.flush()
+
+    for warehouse_id, row in existing.items():
+        if warehouse_id not in wanted:
+            db.delete(row)
+
+    for warehouse_id, link in wanted.items():
+        row = existing.get(warehouse_id)
+        if row is None:
+            row = ItemWarehouse(item_id=item.id, warehouse_id=warehouse_id)
+            db.add(row)
+        row.is_default = bool(link.get("is_default"))
+        row.min_stock = link.get("min_stock")
+        row.max_stock = link.get("max_stock")
+    db.flush()
+
+
+def warehouse_rows(db: Session, item: Item) -> list[dict]:
+    rows = (
+        db.query(ItemWarehouse, Warehouse)
+        .join(Warehouse, Warehouse.id == ItemWarehouse.warehouse_id)
+        .filter(ItemWarehouse.item_id == item.id)
+        .order_by(Warehouse.code)
+        .all()
+    )
+    return [
+        {
+            "warehouse_id": link.warehouse_id,
+            "warehouse_code": warehouse.code,
+            "warehouse_name": warehouse.name,
+            "is_default": link.is_default,
+            "min_stock": link.min_stock,
+            "max_stock": link.max_stock,
+        }
+        for link, warehouse in rows
+    ]

@@ -6,9 +6,11 @@ import {
   fetchAccountsLive,
   fetchItemsLive,
   fetchUnits,
+  fetchWarehousesAdmin,
   updateItemLive,
   type ItemRecord,
   type UnitRecord,
+  type WarehouseRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
@@ -22,6 +24,14 @@ const faMoney = (n: number) => n.toLocaleString('fa-IR')
 // «کیلوگرم» و «كيلوگرم» نباید دو واحدِ متفاوت شوند. مدیریتشان در تبِ «واحدها».
 // قیمت/بها همیشه «per واحدِ اصلی» است، پس اگر واحد «متر» باشد قیمتِ فروش یعنی
 // قیمتِ هر متر و تعداد می‌تواند اعشاری باشد (مثلاً ۲٫۵ متر).
+
+/** یک انبارِ مرتبط در فرم. `null` در سقف/کف یعنی «همان عددِ کالا». */
+interface WarehouseLinkDraft {
+  warehouseId: string
+  isDefault: boolean
+  minStock: string
+  maxStock: string
+}
 
 interface DraftForm {
   sku: string
@@ -46,6 +56,9 @@ interface DraftForm {
   conversionMode: string
   unitWeight: string
   unitVolume: string
+  minStock: string
+  maxStock: string
+  warehouses: WarehouseLinkDraft[]
   isService: boolean
   isSellable: boolean
   isSerialTracked: boolean
@@ -57,6 +70,7 @@ const EMPTY_FORM: DraftForm = {
   vatStatus: 'taxable', purchaseVatStatus: 'taxable', taxRate: '', dutyRate: '',
   expenseAccountId: '', primaryUnitId: '', secondaryUnitId: '', conversionFactor: '',
   conversionMode: 'fixed', unitWeight: '', unitVolume: '',
+  minStock: '', maxStock: '', warehouses: [],
   isService: false, isSellable: true, isSerialTracked: false,
 }
 
@@ -75,6 +89,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
   const [products, setProducts] = useState<ItemRecord[]>([])
   const [accounts, setAccounts] = useState<{ id: string; code: string; name: string; is_group: number }[]>([])
   const [units, setUnits] = useState<UnitRecord[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM)
@@ -125,7 +140,45 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
     [accounts],
   )
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        setWarehouses((await fetchWarehousesAdmin(token)).filter((w) => w.is_active))
+      } catch {
+        setWarehouses([])
+      }
+    })()
+  }, [token])
+
   const unitName = (id: string) => units.find((u) => u.id === id)?.name ?? ''
+
+  const linkFor = (warehouseId: string) => form.warehouses.find((w) => w.warehouseId === warehouseId)
+
+  /** تیکِ یک انبار. برداشتنِ تیک هیچ حرکتِ انباریِ گذشته‌ای را پاک نمی‌کند. */
+  function toggleWarehouse(warehouseId: string) {
+    const existing = linkFor(warehouseId)
+    setForm({
+      ...form,
+      warehouses: existing
+        ? form.warehouses.filter((w) => w.warehouseId !== warehouseId)
+        : [...form.warehouses, { warehouseId, isDefault: false, minStock: '', maxStock: '' }],
+    })
+  }
+
+  function setLink(warehouseId: string, patch: Partial<WarehouseLinkDraft>) {
+    setForm({
+      ...form,
+      warehouses: form.warehouses.map((w) => (w.warehouseId === warehouseId ? { ...w, ...patch } : w)),
+    })
+  }
+
+  /** یک پیش‌فرض، نه دو تا — سرور هم همین را می‌گوید. */
+  function makeDefault(warehouseId: string) {
+    setForm({
+      ...form,
+      warehouses: form.warehouses.map((w) => ({ ...w, isDefault: w.warehouseId === warehouseId })),
+    })
+  }
 
   const filtered = useMemo(
     () =>
@@ -177,6 +230,14 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       conversionMode: p.conversion_mode ?? 'fixed',
       unitWeight: String(Number(p.unit_weight) || ''),
       unitVolume: String(Number(p.unit_volume) || ''),
+      minStock: String(Number(p.min_stock) || ''),
+      maxStock: String(Number(p.max_stock) || ''),
+      warehouses: (p.warehouses ?? []).map((w) => ({
+        warehouseId: w.warehouse_id,
+        isDefault: w.is_default,
+        minStock: w.min_stock == null ? '' : String(Number(w.min_stock)),
+        maxStock: w.max_stock == null ? '' : String(Number(w.max_stock)),
+      })),
       isService: p.is_service,
       isSellable: p.is_sellable,
       isSerialTracked: p.is_serial_tracked,
@@ -209,6 +270,16 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       conversion_mode: form.conversionMode,
       unit_weight: Number(form.unitWeight) || 0,
       unit_volume: Number(form.unitVolume) || 0,
+      min_stock: Number(form.minStock) || 0,
+      max_stock: Number(form.maxStock) || 0,
+      warehouses: form.isService
+        ? []
+        : form.warehouses.map((w) => ({
+            warehouse_id: w.warehouseId,
+            is_default: w.isDefault,
+            min_stock: w.minStock === '' ? null : Number(w.minStock),
+            max_stock: w.maxStock === '' ? null : Number(w.maxStock),
+          })),
       sales_price: Number(form.salesPrice) || 0,
       barcode: form.barcode.trim() || null,
       iran_code: form.iranCode.trim(),
@@ -609,6 +680,103 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 «ثبت سریالی» پس از شروعِ گردشِ انباری قابل تغییر نیست: موجودیِ ثبت‌شده سریال
                 ندارد و عوض‌کردنِ این تنظیم ردیابی را مبهم می‌کند.
               </p>
+              <div className="field-row">
+                <label>
+                  حداقل موجودی
+                  <NumberInput
+                    allowDecimal
+                    value={form.minStock}
+                    onChange={(v) => setForm({ ...form, minStock: v })}
+                    placeholder="۰ = بدون کنترل"
+                  />
+                </label>
+                <label>
+                  حداکثر موجودی
+                  <NumberInput
+                    allowDecimal
+                    value={form.maxStock}
+                    onChange={(v) => setForm({ ...form, maxStock: v })}
+                    placeholder="۰ = بدون کنترل"
+                  />
+                </label>
+              </div>
+              <p className="hint">
+                حداقل، حداکثر و نقطه‌ی سفارش سه آستانه‌ی جدا هستند و هر سه{' '}
+                <b>داده‌ی برنامه‌ریزی‌اند، نه سدِ تراکنش</b>: حداکثرِ موجودی جلوی ورودِ کالا را
+                نمی‌گیرد، فقط در «نیازمندِ سفارش» و «مازاد موجودی» سیگنال می‌سازد.
+              </p>
+
+              <h4 className="form-section-title">انبارهای مرتبط</h4>
+              {warehouses.length === 0 ? (
+                <p className="hint">انباری تعریف نشده.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table className="entity-table table-plain">
+                    <thead>
+                      <tr>
+                        <th>انبار</th>
+                        <th>پیش‌فرض</th>
+                        <th>حداقل (این انبار)</th>
+                        <th>حداکثر (این انبار)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {warehouses.map((w) => {
+                        const link = linkFor(w.id)
+                        return (
+                          <tr key={w.id}>
+                            <td>
+                              <label className="cal-check-inline">
+                                <input
+                                  type="checkbox"
+                                  checked={!!link}
+                                  onChange={() => toggleWarehouse(w.id)}
+                                />
+                                {w.code} — {w.name}
+                              </label>
+                            </td>
+                            <td>
+                              <input
+                                type="radio"
+                                name="default-warehouse"
+                                checked={!!link?.isDefault}
+                                disabled={!link}
+                                onChange={() => makeDefault(w.id)}
+                                aria-label={`انبار پیش‌فرض: ${w.name}`}
+                              />
+                            </td>
+                            <td>
+                              <NumberInput
+                                allowDecimal
+                                value={link?.minStock ?? ''}
+                                onChange={(v) => setLink(w.id, { minStock: v })}
+                                placeholder="—"
+                                disabled={!link}
+                              />
+                            </td>
+                            <td>
+                              <NumberInput
+                                allowDecimal
+                                value={link?.maxStock ?? ''}
+                                onChange={(v) => setLink(w.id, { maxStock: v })}
+                                placeholder="—"
+                                disabled={!link}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="hint">
+                هیچ تیکی نزنید یعنی <b>همه‌ی انبارها</b> مجازند — نه «هیچ انباری». انبارِ
+                پیش‌فرض فقط پیشنهادِ اولیه‌ی فرم است و کالا را به آن انبار قفل نمی‌کند، و
+                برداشتنِ تیکِ یک انبار هیچ حرکتِ انباری یا کاردکسِ گذشته‌ای را پاک نمی‌کند.
+                خالی‌گذاشتنِ حداقل/حداکثرِ هر ردیف یعنی همان عددِ بالا.
+              </p>
+
             </>
           )}
 

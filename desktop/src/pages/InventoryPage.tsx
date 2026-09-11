@@ -11,7 +11,7 @@ import { BatchesPanel } from '../components/BatchesPanel'
 import { TransferForm } from '../components/TransferForm'
 import { ProductsPanel } from '../components/ProductsPanel'
 import { BulkImportPanel } from '../components/BulkImportPanel'
-import { LowStockPanel } from '../components/LowStockPanel'
+import { LowStockPanel, OverStockPanel } from '../components/LowStockPanel'
 import { UnitsPanel } from '../components/UnitsPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
@@ -236,7 +236,12 @@ export function InventoryPage({
             key: 'low',
             label: 'نیازمندِ سفارش',
             icon: AlertTriangle,
-            content: <LowStockPanel token={token} onKardex={setKardex} />,
+            content: (
+              <div className="split-2col">
+                <LowStockPanel token={token} onKardex={setKardex} />
+                <OverStockPanel token={token} onKardex={setKardex} />
+              </div>
+            ),
           },
           {
             key: 'warehouses',

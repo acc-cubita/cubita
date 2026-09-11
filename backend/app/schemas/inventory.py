@@ -438,6 +438,25 @@ class UnitOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ItemWarehouseIn(BaseModel):
+    """یک انبارِ مرتبط (§۲۹ §۳۱). `is_default` فقط پیشنهادِ فرم است، نه مالکیت."""
+
+    warehouse_id: UUID
+    is_default: bool = False
+    #: override‌های انبارمحورِ کنترلِ موجودی (§۲۸). `None` = «همان عددِ کالا».
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+
+
+class ItemWarehouseOut(BaseModel):
+    warehouse_id: UUID
+    warehouse_code: str
+    warehouse_name: str
+    is_default: bool
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+
+
 class ItemIn(BaseModel):
     sku: str
     name: str
@@ -474,6 +493,11 @@ class ItemIn(BaseModel):
     #: §۲۳ — متادیتای حمل‌ونقل، نه موجودی.
     unit_weight: Decimal = Decimal(0)
     unit_volume: Decimal = Decimal(0)
+    #: §۲۴ §۲۵ §۲۶ — قاعده‌ی برنامه‌ریزی، نه سدِ تراکنش.
+    min_stock: Decimal = Decimal(0)
+    max_stock: Decimal = Decimal(0)
+    #: §۲۹ §۳۰ — فهرستِ خالی یعنی «همه‌ی انبارها»، نه «هیچ انباری».
+    warehouses: list[ItemWarehouseIn] = []
 
     @field_validator("conversion_mode")
     @classmethod
@@ -568,6 +592,11 @@ class ItemOut(BaseModel):
     conversion_mode: str = "fixed"
     unit_weight: Decimal = Decimal(0)
     unit_volume: Decimal = Decimal(0)
+    min_stock: Decimal = Decimal(0)
+    max_stock: Decimal = Decimal(0)
+    warehouses: list[ItemWarehouseOut] = []
+    #: انبارِ پیش‌فرض — پیشنهادِ فرمِ فروش/خرید، نه قفل (§۳۲).
+    default_warehouse_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -601,6 +630,10 @@ class ItemUpdateIn(BaseModel):
     conversion_mode: str | None = None
     unit_weight: Decimal | None = None
     unit_volume: Decimal | None = None
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+    #: `None` = دست‌نزن؛ فهرستِ خالی = همه‌ی انبارها.
+    warehouses: list[ItemWarehouseIn] | None = None
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None
@@ -676,7 +709,7 @@ class StockLevelOut(BaseModel):
 
 
 class LowStockRowOut(BaseModel):
-    """کالایی که موجودیِ کلش به/زیرِ نقطه‌ی سفارش رسیده."""
+    """کالایی که موجودیِ کلش به/زیرِ نقطه‌ی سفارش یا حداقلِ موجودی رسیده."""
 
     item_id: UUID
     sku: str
@@ -684,7 +717,27 @@ class LowStockRowOut(BaseModel):
     unit: str
     qty_on_hand: Decimal
     reorder_point: Decimal
-    shortfall: Decimal  # کمبود تا نقطه‌ی سفارش = max(reorder_point − qty, 0)
+    shortfall: Decimal  # کمبود تا آستانه = max(threshold − qty, 0)
+    #: کدام آستانه این ردیف را آورده: `reorder` یا `min`. §۲۵ این دو را جدا
+    #: می‌داند و یکی‌کردنشان یعنی کاربر نفهمد چرا هشدار گرفته.
+    trigger: str = "reorder"
+    min_stock: Decimal = Decimal(0)
+
+
+class OverStockRowOut(BaseModel):
+    """§۲۶ — موجودی از حداکثر گذشته.
+
+    **سدِ تراکنش نیست، سیگنالِ برنامه‌ریزی است:** حداکثرِ موجودی جلوی ورودِ کالا
+    را نمی‌گیرد؛ فقط می‌گوید مازاد داریم.
+    """
+
+    item_id: UUID
+    sku: str
+    name: str
+    unit: str
+    qty_on_hand: Decimal
+    max_stock: Decimal
+    excess: Decimal
 
 
 class StockAdjustmentIn(BaseModel):

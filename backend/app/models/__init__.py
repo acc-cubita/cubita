@@ -31,6 +31,7 @@ from app.models.idempotency import IdempotencyKey
 from app.models.inventory import (
     Contact,
     Item,
+    ItemWarehouse,
     StockAdjustment,
     StockLedger,
     UnitOfMeasure,
@@ -172,6 +173,7 @@ __all__ = [
     "Item",
     "StockAdjustment",
     "StockLedger",
+    "ItemWarehouse",
     "UnitOfMeasure",
     "Warehouse",
     "PurchaseInvoice",
