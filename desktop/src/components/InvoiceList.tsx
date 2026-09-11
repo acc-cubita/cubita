@@ -1,21 +1,25 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Ban, FileText, Printer, FileDown, ChevronDown, ChevronLeft, Copy, PackageCheck, CreditCard } from 'lucide-react'
 import {
   can,
-  createWarehouseReceipt,
+  createWarehouseReceiptIdempotent,
   downloadPurchaseInvoicePdf,
   downloadSalesInvoicePdf,
   fetchContacts,
+  fetchWarehouseReceipts,
   fetchPurchaseInvoices,
   fetchSalesInvoices,
+  newIdempotencyKey,
   printPurchaseInvoice,
   printSalesInvoice,
   voidPurchaseInvoice,
   voidSalesInvoice,
+  voidWarehouseReceipt,
   type ContactRecord,
   type MeResponse,
   type PurchaseInvoiceRecord,
   type SalesInvoiceRecord,
+  type WarehouseReceiptRecord,
 } from '../api'
 import type { WarehouseCache } from '../electron.d'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -63,6 +67,7 @@ export function InvoiceList({
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const canVoid = can(me, 'invoices', 'delete')
+  const canVoidWarehouseReceipt = can(me, 'accounting', 'delete')
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? id
   const columnCount = isSales ? 8 : 7
   // صفحه‌بندیِ فهرستِ فاکتورها (۱۰ در هر صفحه)؛ با تعویضِ نوع (فروش/خرید) به اولِ فهرست برمی‌گردد.
@@ -243,7 +248,7 @@ export function InvoiceList({
               {isOpen && (
                 <tr className="invoice-detail-row">
                   <td className="card-full" colSpan={columnCount}>
-                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} token={token} warehouses={warehouses} onChanged={refresh} />
+                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} token={token} warehouses={warehouses} canVoidWarehouseReceipt={canVoidWarehouseReceipt} onChanged={refresh} />
                   </td>
                 </tr>
               )}
@@ -265,6 +270,7 @@ function InvoiceDetail({
   itemName,
   token,
   warehouses,
+  canVoidWarehouseReceipt,
   onChanged,
 }: {
   row: AnyInvoice
@@ -272,6 +278,7 @@ function InvoiceDetail({
   itemName: (id: string) => string
   token: string
   warehouses: WarehouseCache[]
+  canVoidWarehouseReceipt: boolean
   onChanged: () => Promise<void>
 }) {
   const net = Number(row.total_amount)
@@ -372,6 +379,7 @@ function InvoiceDetail({
           token={token}
           invoice={row as PurchaseInvoiceRecord}
           warehouses={warehouses}
+          canVoid={canVoidWarehouseReceipt}
           onCreated={onChanged}
         />
       )}
@@ -383,11 +391,13 @@ function WarehouseReceiptEditor({
   token,
   invoice,
   warehouses,
+  canVoid,
   onCreated,
 }: {
   token: string
   invoice: PurchaseInvoiceRecord
   warehouses: WarehouseCache[]
+  canVoid: boolean
   onCreated: () => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
@@ -396,7 +406,21 @@ function WarehouseReceiptEditor({
   const [qty, setQty] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [receipts, setReceipts] = useState<WarehouseReceiptRecord[] | null>(null)
+  const requestKey = useRef(newIdempotencyKey())
   const pending = invoice.lines.filter((line) => Number(line.remaining_qty) > 0)
+
+  const refreshReceipts = useCallback(async () => {
+    try {
+      setReceipts(await fetchWarehouseReceipts(token, invoice.id))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'دریافت سابقه رسیدهای انبار ناموفق بود')
+    }
+  }, [token, invoice.id])
+
+  useEffect(() => {
+    void refreshReceipts()
+  }, [refreshReceipts])
 
   async function submit() {
     const lines = pending
@@ -409,12 +433,43 @@ function WarehouseReceiptEditor({
     setBusy(true)
     setMessage(null)
     try {
-      await createWarehouseReceipt(token, invoice.id, { receipt_date: receiptDate, warehouse_id: warehouseId, lines })
+      await createWarehouseReceiptIdempotent(
+        token,
+        invoice.id,
+        { receipt_date: receiptDate, warehouse_id: warehouseId, lines },
+        requestKey.current,
+      )
+      requestKey.current = newIdempotencyKey()
       setMessage('رسید انبار مستقل ثبت شد و موجودی به‌روز شد.')
+      await refreshReceipts()
       await onCreated()
       setOpen(false)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'ثبت رسید ناموفق بود')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleVoid(receipt: WarehouseReceiptRecord) {
+    const reason = window.prompt(
+      `ابطال رسید انبار شماره ${receipt.number.toLocaleString('fa-IR')}؟\n\n` +
+        'رسید پاک نمی‌شود؛ یک حرکت جبرانی در کاردکس ثبت می‌شود.\nدلیل ابطال:',
+    )
+    if (reason === null) return
+    if (reason.trim().length < 3) {
+      setMessage('دلیل ابطال باید نوشته شود.')
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      await voidWarehouseReceipt(token, receipt.id, reason)
+      setMessage(`رسید انبار شماره ${receipt.number.toLocaleString('fa-IR')} باطل شد.`)
+      await refreshReceipts()
+      await onCreated()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ابطال رسید انبار ناموفق بود')
     } finally {
       setBusy(false)
     }
@@ -437,6 +492,31 @@ function WarehouseReceiptEditor({
             </label>
           ))}
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت رسید</button>
+        </div>
+      )}
+      {receipts && receipts.length > 0 && (
+        <div className="table-scroll">
+          <table className="cards-on-mobile">
+            <thead><tr><th>شماره رسید</th><th>تاریخ</th><th>انبار</th><th>مقدار</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+            <tbody>
+              {receipts.map((receipt) => (
+                <tr key={receipt.id} style={receipt.voided_at ? { opacity: 0.55 } : undefined}>
+                  <td data-label="شماره رسید">{receipt.number.toLocaleString('fa-IR')}</td>
+                  <td data-label="تاریخ">{formatJalali(receipt.receipt_date)}</td>
+                  <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === receipt.warehouse_id)?.name ?? '—'}</td>
+                  <td data-label="مقدار">{receipt.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="وضعیت">{receipt.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
+                  <td className="card-actions" data-label="عملیات">
+                    {canVoid && !receipt.voided_at ? (
+                      <button type="button" className="icon-btn-danger" disabled={busy} onClick={() => void handleVoid(receipt)}>
+                        <Ban size={13} /> ابطال رسید
+                      </button>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {message && <span className="hint">{message}</span>}

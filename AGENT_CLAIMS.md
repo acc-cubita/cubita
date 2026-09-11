@@ -91,4 +91,5 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Codex | مسیر خرید/رسید انبار در بک‌اند و `desktop/src/`؛ مستندات و تست‌ها؛ آزادسازی شماره `0114` | ابطال رسید در UI، idempotency صدور، و همگامی مانده بچ با ابطال | ۱۴۰۵/۰۶/۲۰ |
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |

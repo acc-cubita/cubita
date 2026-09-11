@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 
+from app.models.advanced_inventory import StockBatch
 from app.models.inventory import StockLedger
 from app.schemas.invoices import (
     PurchaseInvoiceIn,
@@ -12,7 +13,7 @@ from app.schemas.invoices import (
     WarehouseReceiptLineIn,
 )
 from app.services.inventory import post_purchase_invoice
-from app.services.warehouse_receipts import create_warehouse_receipt, received_by_line
+from app.services.warehouse_receipts import create_warehouse_receipt, received_by_line, void_warehouse_receipt
 from tests.factories import main_warehouse, make_contact, make_item
 
 
@@ -72,3 +73,88 @@ def test_purchase_without_warehouse_has_no_physical_stock_and_accepts_partial_re
             user,
         )
     assert error.value.status_code == 409
+
+
+def test_void_warehouse_receipt_reverses_stock_batch_and_reopens_remaining(db, user):
+    item = make_item(db, name="کالای رسید باطل‌شونده")
+    supplier = make_contact(db, type_="supplier")
+    warehouse = main_warehouse(db)
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(5), unit_cost=Decimal(1200))],
+        ),
+        user,
+    )
+    line = invoice.lines[0]
+    receipt = create_warehouse_receipt(
+        db,
+        invoice.id,
+        WarehouseReceiptIn(
+            receipt_date=date.today(),
+            warehouse_id=warehouse.id,
+            lines=[WarehouseReceiptLineIn(purchase_invoice_line_id=line.id, qty=Decimal(5))],
+        ),
+        user,
+    )
+    batch = db.query(StockBatch).filter(StockBatch.source_id == receipt.id).one()
+    assert Decimal(batch.qty) == Decimal(5)
+    assert Decimal(batch.received_qty) == Decimal(5)
+
+    void_warehouse_receipt(db, receipt.id, reason="رسید اشتباه", user=user)
+
+    assert received_by_line(db, invoice.id).get(line.id, Decimal(0)) == Decimal(0)
+    assert sum(
+        Decimal(qty)
+        for (qty,) in db.query(StockLedger.qty).filter(
+            StockLedger.item_id == item.id, StockLedger.warehouse_id == warehouse.id
+        )
+    ) == Decimal(0)
+    assert Decimal(batch.qty) == Decimal(0)
+    assert Decimal(batch.received_qty) == Decimal(5)
+
+    replacement = create_warehouse_receipt(
+        db,
+        invoice.id,
+        WarehouseReceiptIn(
+            receipt_date=date.today(),
+            warehouse_id=warehouse.id,
+            lines=[WarehouseReceiptLineIn(purchase_invoice_line_id=line.id, qty=Decimal(5))],
+        ),
+        user,
+    )
+    assert replacement.id != receipt.id
+    assert received_by_line(db, invoice.id)[line.id] == Decimal(5)
+
+
+def test_warehouse_receipt_retry_does_not_move_stock_twice(client, db, user):
+    item = make_item(db, name="کالای retry رسید")
+    supplier = make_contact(db, type_="supplier")
+    warehouse = main_warehouse(db)
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=date.today(),
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(3), unit_cost=Decimal(900))],
+        ),
+        user,
+    )
+    body = {
+        "receipt_date": date.today().isoformat(),
+        "warehouse_id": str(warehouse.id),
+        "lines": [{"purchase_invoice_line_id": str(invoice.lines[0].id), "qty": 3}],
+    }
+    headers = {"Idempotency-Key": "warehouse-receipt-retry"}
+
+    first = client.post(f"/api/purchase-invoices/{invoice.id}/warehouse-receipts", json=body, headers=headers)
+    second = client.post(f"/api/purchase-invoices/{invoice.id}/warehouse-receipts", json=body, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    assert db.query(StockLedger).filter(
+        StockLedger.source_type == "warehouse_receipt", StockLedger.source_id == first.json()["id"]
+    ).count() == 1

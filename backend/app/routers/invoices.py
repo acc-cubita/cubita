@@ -329,10 +329,19 @@ def list_warehouse_receipts(
 def issue_warehouse_receipt(
     invoice_id: UUID,
     data: WarehouseReceiptIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return create_warehouse_receipt(db, invoice_id, data, user)
+    return idempotent(
+        db,
+        request,
+        user,
+        operation=f"create_warehouse_receipt:{invoice_id}",
+        payload=data,
+        run=lambda: create_warehouse_receipt(db, invoice_id, data, user),
+        replay=lambda rid: db.get(WarehouseReceipt, rid),
+    )
 
 
 @router.post("/api/warehouse-receipts/{receipt_id}/void", response_model=WarehouseReceiptOut)
@@ -340,7 +349,7 @@ def void_receipt(
     receipt_id: UUID,
     data: VoidIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("invoices", "delete")),
+    user: User = Depends(require_permission("accounting", "delete")),
 ):
     return void_warehouse_receipt(db, receipt_id, reason=data.reason, user=user, void_date=data.void_date)
 

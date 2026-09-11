@@ -6446,3 +6446,21 @@ export const previewRas = (
 
 export const openReceiptPrintView = (token: string, id: string) =>
   openInvoicePrintView(token, `/api/receipts/${id}/print`)
+
+/** ابطالِ رسید انبار؛ رسید و ردیف‌هایش باقی می‌مانند و حرکت جبرانی در کاردکس ثبت می‌شود. */
+export const voidWarehouseReceipt = (token: string, id: string, reason: string) =>
+  authedSend<WarehouseReceiptRecord>(token, 'POST', `/api/warehouse-receipts/${id}/void`, { reason })
+
+/** صدور رسید با کلید تکرارنشدن؛ retry شبکه نباید موجودی را دوبار زیاد کند. */
+export const createWarehouseReceiptIdempotent = (
+  token: string,
+  invoiceId: string,
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  idempotencyKey: string,
+) => authedSend<WarehouseReceiptRecord>(
+  token,
+  'POST',
+  `/api/purchase-invoices/${invoiceId}/warehouse-receipts`,
+  data,
+  idempotencyKey,
+)
