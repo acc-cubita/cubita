@@ -25,7 +25,18 @@ Revises: 0113
 
 * `settlements` — سربرگ: شماره، تاریخ، طرف حساب، **معینِ طرف مقابل**، ارز، شرح.
 * `settlement_allocations` — قلم‌ها: سمت، سندِ منبع، مبلغِ مصرف‌شده.
-* شمارنده‌ی `settlement` برای مستأجرهای موجود.
+* **شمارنده‌ی هر نوعِ سندی که مستأجرِ موجود کم دارد** — نه فقط `settlement`.
+
+### چرا شمارنده‌ها عمومی پر می‌شوند
+
+مهاجرت‌های ۰۱۱۱ تا ۰۱۱۳ سه نوعِ تازه (`receipt`, `payment`, `warehouse_receipt`)
+به `DOC_TYPES` اضافه کردند ولی ردیفِ شمارنده‌ی مستأجرهای **موجود** را نساختند.
+`next_document_number` نبودنِ ردیف را عمداً ۵۰۰ می‌دهد تا شماره‌ی تکراری نسازد،
+پس اولین رسیدی که روی تولید ثبت می‌شد می‌شکست. تست هم نمی‌گرفتش: هر تست مستأجرِ
+تازه می‌سازد و `seed.py` روی `DOC_TYPES` حلقه می‌زند.
+
+به‌جای وصله‌ی سه‌تایی، این مهاجرت **هر نوعِ کم‌بود** را می‌سازد. idempotent است و
+اگر همه‌چیز سرِ جایش باشد صفر ردیف می‌نویسد.
 
 ## چرا هیچ داده‌ای نوشته نمی‌شود
 
@@ -150,20 +161,42 @@ def upgrade() -> None:
         )
 
     with rls_disabled(conn, ["document_counters"]):
-        #: بدونِ این ردیف، اولین تسویه‌ی هر مستأجرِ موجود ۵۰۰ می‌دهد —
-        #: `next_document_number` عمداً بلند شکست می‌خورد تا شماره‌ی تکراری نسازد.
+        #: **هر نوعِ سند برای هر مستأجر یک ردیفِ شمارنده لازم دارد.**
+        #: `next_document_number` نبودنش را عمداً ۵۰۰ می‌دهد تا شماره‌ی تکراری
+        #: نسازد — یعنی اولین استفاده از آن نوعِ سند روی مستأجرِ موجود می‌شکند.
+        #:
+        #: `seed.py` روی `DOC_TYPES` حلقه می‌زند، پس مستأجرِ **تازه** همیشه کامل
+        #: است؛ شکاف فقط برای مستأجرهای موجود است و در تست هم دیده نمی‌شود، چون
+        #: هر تست مستأجرِ تازه می‌سازد.
+        #:
+        #: پس این‌جا به‌جای فقط `settlement`، **هر نوعی که کم باشد** ساخته
+        #: می‌شود. این وصله‌ی یک فراموشیِ خاص نیست؛ همان ناوردایی را برقرار
+        #: می‌کند و اگر نوعی از قبل باشد کاری نمی‌کند.
+        #:
+        #: فهرست عمداً **ثابت** نوشته شده و از `DOC_TYPES` وارد نمی‌شود: مهاجرت
+        #: باید همیشه همان کاری را بکند که روزِ نوشتنش می‌کرد، حتی اگر آن ثابت
+        #: بعداً عوض شود.
+        doc_types = (
+            "journal_entry", "journal_atf", "sales_invoice", "purchase_invoice",
+            "payslip", "sales_quotation", "sales_return", "purchase_return",
+            "stock_transfer", "production_order", "installment_plan",
+            "credit_debit_note", "pos_settlement", "check_operation",
+            "receipt", "payment", "warehouse_receipt", "settlement",
+        )
         conn.execute(
             sa.text(
                 """
                 INSERT INTO document_counters (id, tenant_id, doc_type, last_number,
                                                created_at, updated_at)
-                SELECT gen_random_uuid(), t.id, 'settlement', 0, now(), now()
+                SELECT gen_random_uuid(), t.id, d.doc_type, 0, now(), now()
                   FROM tenants t
+                 CROSS JOIN unnest(CAST(:doc_types AS text[])) AS d(doc_type)
                  WHERE NOT EXISTS (
-                       SELECT 1 FROM document_counters d
-                        WHERE d.tenant_id = t.id AND d.doc_type = 'settlement')
+                       SELECT 1 FROM document_counters c
+                        WHERE c.tenant_id = t.id AND c.doc_type = d.doc_type)
                 """
-            )
+            ),
+            {"doc_types": list(doc_types)},
         )
 
 
