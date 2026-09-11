@@ -32,22 +32,13 @@ export function PurchaseInvoiceWizard({
   const d = usePurchaseInvoiceDraft({ token, warehouses, items, onQueued, prefill, onPrefillConsumed })
   const [resetTick, setResetTick] = useState(0)
 
-  if (warehouses.length === 0) {
-    return (
-      <section className="taskflow">
-        <h2 className="taskflow-title">ثبت فاکتور خرید</h2>
-        <p className="hint">قبل از ثبت فاکتور، حداقل یک انبار لازم است؛ یک‌بار «هم‌گام‌سازی» کنید.</p>
-      </section>
-    )
-  }
-
   const steps: WizardStep[] = [
     {
       key: 'header',
       title: 'سربرگ و تأمین‌کننده',
-      subtitle: 'انبار، تاریخ و تأمین‌کننده‌ی فاکتور را مشخص کنید.',
-      canAdvance: !!d.effectiveWarehouseId,
-      blockHint: 'ابتدا هم‌گام‌سازی کنید تا انبار در دسترس باشد.',
+      subtitle: 'تاریخ، تأمین‌کننده و شماره فاکتور او را مشخص کنید.',
+      canAdvance: !!d.contactId,
+      blockHint: 'انتخاب تأمین‌کننده الزامی است.',
       body: <HeaderStep d={d} warehouses={warehouses} />,
     },
     {
@@ -60,8 +51,8 @@ export function PurchaseInvoiceWizard({
     },
     {
       key: 'adjust',
-      title: 'مالیات و تخفیف',
-      subtitle: 'نرخِ مالیات و تخفیفِ کلِ فاکتور.',
+      title: 'تعدیلات',
+      subtitle: 'مالیات، تخفیف، اضافات و عوارض را جدا وارد کنید.',
       body: <AdjustStep d={d} />,
     },
     {
@@ -100,15 +91,9 @@ export function PurchaseInvoiceWizard({
   )
 }
 
-function HeaderStep({ d, warehouses }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache[] }) {
+function HeaderStep({ d }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache[] }) {
   return (
     <div className="invoice-form">
-      <label>
-        انبار
-        <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
-          {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-        </select>
-      </label>
       <label>
         تاریخ فاکتور
         <JalaliDatePicker value={d.invoiceDate} onChange={d.setInvoiceDate} />
@@ -124,14 +109,16 @@ function HeaderStep({ d, warehouses }: { d: PurchaseInvoiceDraft; warehouses: Wa
       )}
       {d.contacts.length > 0 && (
         <label>
-          تأمین‌کننده (اختیاری)
+          تأمین‌کننده
           <select value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
-            <option value="">— بدون تأمین‌کننده —</option>
+            <option value="">— انتخاب تأمین‌کننده —</option>
             {d.contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
           </select>
         </label>
       )}
       {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
+      <label>شماره فاکتور تأمین‌کننده<input value={d.supplierInvoiceNumber} onChange={(e) => d.setSupplierInvoiceNumber(e.target.value)} /></label>
+      <label>شرح<input value={d.description} onChange={(e) => d.setDescription(e.target.value)} /></label>
       {d.currencies.length > 0 && (
         <div className="field-row">
           <label>
@@ -159,7 +146,7 @@ function LinesStep({ d }: { d: PurchaseInvoiceDraft }) {
       <div className="table-scroll">
         <table className="invoice-lines cards-on-mobile">
           <thead>
-            <tr><th>کالا</th><th>تعداد</th><th>بهای واحد</th><th>تخفیف</th><th>مبلغ</th><th></th></tr>
+            <tr><th>کالا</th><th>تعداد</th><th>بهای واحد</th><th>تخفیف</th><th>اضافات</th><th>عوارض</th><th>مبلغ</th><th></th></tr>
           </thead>
           <tbody>
             {d.lines.map((line, i) => (
@@ -188,10 +175,12 @@ function LinesStep({ d }: { d: PurchaseInvoiceDraft }) {
                 <td data-label="تخفیف">
                   <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />
                 </td>
+                <td data-label="اضافات"><NumberInput value={line.addition ?? ''} onChange={(v) => d.updateLine(i, { addition: v })} placeholder="۰" /></td>
+                <td data-label="عوارض"><NumberInput value={line.dutyAmount ?? ''} onChange={(v) => d.updateLine(i, { dutyAmount: v })} placeholder="۰" /></td>
                 <td data-label="مبلغ">
                   <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
                     {line.itemId
-                      ? Math.max((Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0), 0).toLocaleString('fa-IR')
+                      ? Math.max((Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0) + (Number(line.addition) || 0) + (Number(line.dutyAmount) || 0), 0).toLocaleString('fa-IR')
                       : '—'}
                   </span>
                 </td>
@@ -235,21 +224,22 @@ function AdjustStep({ d }: { d: PurchaseInvoiceDraft }) {
             <span className="hint">معادل {d.invoiceDiscountAmount.toLocaleString('fa-IR')}</span>
           )}
         </label>
+        <label className="adj-field">اضافات کل<NumberInput value={d.invoiceAddition} onChange={d.setInvoiceAddition} placeholder="۰" /></label>
+        <label className="adj-field">عوارض کل<NumberInput value={d.dutyAmount} onChange={d.setDutyAmount} placeholder="۰" /></label>
       </div>
     </div>
   )
 }
 
-function ReviewStep({ d, items, warehouses }: { d: PurchaseInvoiceDraft; items: ItemCache[]; warehouses: WarehouseCache[] }) {
+function ReviewStep({ d, items }: { d: PurchaseInvoiceDraft; items: ItemCache[]; warehouses: WarehouseCache[] }) {
   const supplier = d.contacts.find((c) => c.id === d.contactId)
-  const warehouse = warehouses.find((w) => w.id === d.effectiveWarehouseId)
   const validLines = d.lines.filter((l) => l.itemId && Number(l.qty) > 0)
   const nameOf = (id: string) => d.pickItems.find((x) => x.id === id)?.name ?? items.find((x) => x.id === id)?.name ?? '—'
   return (
     <div className="review-step">
       <div className="review-facts">
         <div className="live-preview-row"><span>تأمین‌کننده</span><strong>{supplier?.name ?? 'بدون تأمین‌کننده'}</strong></div>
-        <div className="live-preview-row"><span>انبار</span><strong>{warehouse?.name ?? '—'}</strong></div>
+        <div className="live-preview-row"><span>شماره فاکتور تأمین‌کننده</span><strong>{d.supplierInvoiceNumber || '—'}</strong></div>
         <div className="live-preview-row"><span>تاریخ</span><strong>{d.invoiceDate}</strong></div>
         {d.currencyCode && <div className="live-preview-row"><span>ارز</span><strong>{d.currencyCode}</strong></div>}
       </div>
@@ -278,15 +268,14 @@ function ReviewStep({ d, items, warehouses }: { d: PurchaseInvoiceDraft; items: 
   )
 }
 
-function LivePreview({ d, warehouses }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache[] }) {
+function LivePreview({ d }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache[] }) {
   const supplier = d.contacts.find((c) => c.id === d.contactId)
-  const warehouse = warehouses.find((w) => w.id === d.effectiveWarehouseId)
   const lineCount = d.lines.filter((l) => l.itemId && Number(l.qty) > 0).length
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ فاکتورِ خرید</p>
       <div className="live-preview-row"><span>تأمین‌کننده</span><strong>{supplier?.name ?? 'بدون تأمین‌کننده'}</strong></div>
-      <div className="live-preview-row"><span>انبار</span><strong>{warehouse?.name ?? '—'}</strong></div>
+      <div className="live-preview-row"><span>وضعیت ورود</span><strong>در انتظار رسید انبار</strong></div>
       <div className="live-preview-row"><span>تاریخ</span><strong>{d.invoiceDate}</strong></div>
       <div className="live-preview-row"><span>تعداد اقلام</span><strong>{lineCount.toLocaleString('fa-IR')}</strong></div>
       <div className="live-preview-divider" />

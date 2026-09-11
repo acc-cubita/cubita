@@ -1,7 +1,6 @@
 import { PackagePlus, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import type { PurchaseInvoiceRecord } from '../api'
-import { isElectron } from '../platform'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -31,27 +30,13 @@ export function PurchaseInvoiceForm({
 
   return (
     <SectionCard icon={PackagePlus} title="ثبت فاکتور خرید">
-      {warehouses.length === 0 ? (
-        <p className="hint">
-          قبل از ثبت فاکتور، حداقل یک انبار لازم است
-          {isElectron ? '؛ یک‌بار «هم‌گام‌سازی» کنید تا انبارها در دسترس باشند.' : '.'}
-        </p>
-      ) : (
-        <form
+      <form
           className="invoice-form"
           onSubmit={(e) => {
             e.preventDefault()
             void d.submit()
           }}
         >
-          <label>
-            انبار
-            <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          </label>
           <label>
             تاریخ فاکتور
             <JalaliDatePicker value={d.invoiceDate} onChange={d.setInvoiceDate} />
@@ -73,9 +58,9 @@ export function PurchaseInvoiceForm({
           )}
           {d.contacts.length > 0 && (
             <label>
-              تأمین‌کننده (اختیاری)
+              تأمین‌کننده
               <select value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
-                <option value="">— بدون تأمین‌کننده —</option>
+                <option value="">— انتخاب تأمین‌کننده —</option>
                 {d.contacts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -83,6 +68,16 @@ export function PurchaseInvoiceForm({
             </label>
           )}
           {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
+          <div className="field-row">
+            <label>
+              شماره فاکتور تأمین‌کننده
+              <input value={d.supplierInvoiceNumber} onChange={(e) => d.setSupplierInvoiceNumber(e.target.value)} />
+            </label>
+            <label>
+              شرح
+              <input value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
+            </label>
+          </div>
           {d.currencies.length > 0 && (
             <div className="field-row">
               <label>
@@ -111,6 +106,9 @@ export function PurchaseInvoiceForm({
                   <th>تعداد</th>
                   <th>بهای واحد</th>
                   <th>تخفیف</th>
+                  <th>اضافات</th>
+                  <th>عوارض</th>
+                  <th>شرح</th>
                   <th>مبلغ</th>
                   <th></th>
                 </tr>
@@ -138,14 +136,30 @@ export function PurchaseInvoiceForm({
                         onChange={(v) => d.updateLine(i, { unitCost: v })}
                         title={(() => { const u = d.unitOf(line.itemId); return u ? `بهای هر ${u}` : 'بهای واحد' })()}
                       />
+                      {line.itemId && d.priceHints[line.itemId]?.latest && (
+                        <span className="hint">
+                          آخرین خرید: {Number(d.priceHints[line.itemId].latest?.transaction_unit_cost).toLocaleString('fa-IR')}
+                          {d.priceHints[line.itemId].supplier_latest && ` — از این تأمین‌کننده: ${Number(d.priceHints[line.itemId].supplier_latest?.transaction_unit_cost).toLocaleString('fa-IR')}`}
+                        </span>
+                      )}
+                      {(() => {
+                        const previous = Number(d.priceHints[line.itemId]?.supplier_latest?.transaction_unit_cost ?? 0)
+                        const current = Number(line.unitCost || 0)
+                        return previous > 0 && current > 0 && Math.abs(current - previous) / previous >= 0.1
+                          ? <span className="stock-over">اختلاف قیمت با خرید قبلی این تأمین‌کننده بیش از ۱۰٪ است.</span>
+                          : null
+                      })()}
                     </td>
                     <td data-label="تخفیف">
                       <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />
                     </td>
+                    <td data-label="اضافات"><NumberInput value={line.addition ?? ''} onChange={(v) => d.updateLine(i, { addition: v })} placeholder="۰" /></td>
+                    <td data-label="عوارض"><NumberInput value={line.dutyAmount ?? ''} onChange={(v) => d.updateLine(i, { dutyAmount: v })} placeholder="۰" /></td>
+                    <td data-label="شرح"><input value={line.description ?? ''} onChange={(e) => d.updateLine(i, { description: e.target.value })} /></td>
                     <td data-label="مبلغ">
                       <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
                         {line.itemId
-                          ? Math.max((Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0), 0).toLocaleString('fa-IR')
+                          ? Math.max((Number(line.qty) || 0) * (Number(line.unitCost) || 0) - (Number(line.discount) || 0) + (Number(line.addition) || 0) + (Number(line.dutyAmount) || 0), 0).toLocaleString('fa-IR')
                           : '—'}
                       </span>
                     </td>
@@ -175,6 +189,8 @@ export function PurchaseInvoiceForm({
                 <span className="hint">معادل {d.invoiceDiscountAmount.toLocaleString('fa-IR')}</span>
               )}
             </label>
+            <label className="adj-field">اضافات کل<NumberInput value={d.invoiceAddition} onChange={d.setInvoiceAddition} placeholder="۰" /></label>
+            <label className="adj-field">عوارض کل<NumberInput value={d.dutyAmount} onChange={d.setDutyAmount} placeholder="۰" /></label>
           </div>
 
           <div className="invoice-form-footer">
@@ -184,6 +200,8 @@ export function PurchaseInvoiceForm({
             <div className="invoice-totals">
               {d.discountTotal > 0 && <span>تخفیف سطری: {d.discountTotal.toLocaleString('fa-IR')}</span>}
               {d.invoiceDiscountAmount > 0 && <span>تخفیف کل: {d.invoiceDiscountAmount.toLocaleString('fa-IR')}</span>}
+              {d.additionTotal > 0 && <span>اضافات: {d.additionTotal.toLocaleString('fa-IR')}</span>}
+              {d.dutiesTotal > 0 && <span>عوارض: {d.dutiesTotal.toLocaleString('fa-IR')}</span>}
               <span>جمع خالص: {d.total.toLocaleString('fa-IR')}</span>
               <span>مالیات ({d.taxRateNum.toLocaleString('fa-IR')}٪): {d.taxAmount.toLocaleString('fa-IR')}</span>
               <span className="invoice-total">
@@ -197,7 +215,6 @@ export function PurchaseInvoiceForm({
 
           {d.message && <div className="hint">{d.message}</div>}
         </form>
-      )}
 
       {d.quickAdd && (
         <QuickItemForm

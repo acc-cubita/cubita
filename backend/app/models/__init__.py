@@ -32,6 +32,8 @@ from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Wa
 from app.models.invoices import (
     PurchaseInvoice,
     PurchaseInvoiceLine,
+    WarehouseReceipt,
+    WarehouseReceiptLine,
     SalesInvoice,
     SalesInvoiceLine,
 )
@@ -53,6 +55,8 @@ from app.models.fiscal_year import FiscalYear
 from app.models.period_close import FiscalPeriodClose
 from app.models.pos_settlement import PosSettlement
 from app.models.pos_terminal import PosTerminal
+from app.models.receipt import Receipt, ReceiptRelatedDocument
+from app.models.payment import Payment, PaymentChequeTransfer, PaymentRelatedDocument
 from app.models.payroll import (
     Attendance,
     BenefitRun,
@@ -161,6 +165,8 @@ __all__ = [
     "Warehouse",
     "PurchaseInvoice",
     "PurchaseInvoiceLine",
+    "WarehouseReceipt",
+    "WarehouseReceiptLine",
     "SalesInvoice",
     "SalesInvoiceLine",
     "BankAccount",
@@ -185,6 +191,11 @@ __all__ = [
     "CheckEvent",
     "PosSettlement",
     "PosTerminal",
+    "Receipt",
+    "ReceiptRelatedDocument",
+    "Payment",
+    "PaymentChequeTransfer",
+    "PaymentRelatedDocument",
     "SalesQuotation",
     "SalesQuotationLine",
     "PurchaseReturn",

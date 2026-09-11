@@ -47,6 +47,11 @@ DOC_POS_SETTLEMENT = "pos_settlement"
 #: عملیات می‌تواند چند چک را با هم ببرد (§۱۱ §۴۴) و با شماره‌ی چک و شماره‌ی سند
 #: هیچ‌کدام یکی نیست.
 DOC_CHECK_OPERATION = "check_operation"
+#: رسید دریافت — شماره‌ی عملیاتیِ خودِ رسید، جدا از شماره‌ی سندِ حسابداری و شماره‌ی
+#: چک. §۴ همین تفکیک را می‌خواهد، و بی‌شکاف‌بودن اینجا هم مثلِ فاکتور لازم است.
+DOC_RECEIPT = "receipt"
+DOC_PAYMENT = "payment"
+DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -63,6 +68,9 @@ DOC_TYPES = (
     DOC_CREDIT_DEBIT_NOTE,
     DOC_POS_SETTLEMENT,
     DOC_CHECK_OPERATION,
+    DOC_RECEIPT,
+    DOC_PAYMENT,
+    DOC_WAREHOUSE_RECEIPT,
 )
 
 

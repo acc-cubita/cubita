@@ -125,6 +125,48 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item: Mapped["Item"] = relationship()
 
 
+class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+    """رسید مستقل ورود فیزیکی؛ یک فاکتور می‌تواند چند رسید جزئی داشته باشد."""
+
+    __tablename__ = "warehouse_receipts"
+    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),)
+
+    number: Mapped[int] = mapped_column(nullable=False, index=True)
+    receipt_date: Mapped[date_] = mapped_column(Date, default=date_.today)
+    purchase_invoice_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoices.id"), index=True
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    lines: Mapped[list["WarehouseReceiptLine"]] = relationship(
+        back_populates="receipt", cascade="all, delete-orphan", order_by="WarehouseReceiptLine.id"
+    )
+
+
+class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
+    __tablename__ = "warehouse_receipt_lines"
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouse_receipts.id", ondelete="CASCADE"), index=True
+    )
+    purchase_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), index=True
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
+    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    receipt: Mapped["WarehouseReceipt"] = relationship(back_populates="lines")
+    item: Mapped["Item"] = relationship()
+
+
 class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "purchase_invoices"
 
@@ -135,12 +177,17 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     invoice_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
-    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    # فقط برای سازگاری فاکتورهای قدیمی؛ ورود فیزیکی از WarehouseReceipt می‌آید.
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True
+    )
+    supplier_invoice_number: Mapped[str] = mapped_column(String(80), default="", server_default="")
     #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
     )
     description: Mapped[str] = mapped_column(Text, default="")
+    description2: Mapped[str] = mapped_column(String(200), default="", server_default="")
 
     #: خالصِ **پس از تخفیف** و بدون مالیات.
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
@@ -151,6 +198,8 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     #: تسهیم می‌شود (پس ارزش‌گذاریِ موجودی و اعتبارِ مالیاتی هم پس از آن‌اند)؛ اینجا
     #: فقط برای نمایشِ شفاف جدا نگه داشته می‌شود.
     invoice_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    total_additions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    total_duties: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -183,6 +232,15 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
 
     #: وضعیتِ مالیاتیِ کالا **در لحظه‌ی خرید** — دلیلش همان `SalesInvoiceLine`.
     vat_status: Mapped[str] = mapped_column(String(10), default="taxable", server_default="taxable")
+
+    # snapshot تاریخی؛ تغییر بعدی شناسنامه/واحد کالا فاکتور قدیمی را عوض نمی‌کند.
+    item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    addition: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    duty_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     invoice: Mapped["PurchaseInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

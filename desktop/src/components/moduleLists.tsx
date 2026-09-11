@@ -142,6 +142,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: داده‌ی این ماژول در ماژولِ دیگری زندگی می‌کرد.
   'دریافت و پرداخت': [
     { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins },
+    { key: 'paymentnoticelist', label: 'اعلامیه‌های پرداخت', icon: HandCoins },
     { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked },
     { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: CreditCard },
     { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard },
@@ -203,6 +204,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   pricingfactorlist: 'فروش',
   discountgrouplist: 'فروش',
   treasuryledger: 'دریافت و پرداخت',
+  paymentnoticelist: 'دریافت و پرداخت',
   checkbooklist: 'دریافت و پرداخت',
   posterminallist: 'دریافت و پرداخت',
   possettlelist: 'دریافت و پرداخت',
@@ -265,7 +267,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   // ── دریافت و پرداخت ──
   payflow: 'none', //: راهنمای مسیر
   receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
-  paymentvoucher: 'treasuryledger',
+  paymentvoucher: 'paymentnoticelist',
   contactsettle: 'treasuryledger',
   //: دفترِ چک‌ها همان «جستجوی چک» است — کاربر صریحاً آن را در کارتِ عملیات خواست،
   //: و فهرستِ دومِ چک یعنی دو نمای یک داده.

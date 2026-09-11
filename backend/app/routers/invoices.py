@@ -2,13 +2,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
-from app.models.inventory import Contact
+from app.models.inventory import Contact, StockLedger
+from app.models.payment import Payment, PaymentRelatedDocument
 from app.models.sales_ops import SaleType
-from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseReceipt
 from app.models.tenant import Membership
 from app.models.user import Role, User
 from app.pagination import Page, PageParams, paginate
@@ -16,6 +18,8 @@ from app.schemas.invoices import (
     PurchaseInvoiceIn,
     PurchaseInvoiceOut,
     PurchaseSummaryOut,
+    WarehouseReceiptIn,
+    WarehouseReceiptOut,
     SalesInvoiceIn,
     SalesInvoiceOut,
     SalesSummaryOut,
@@ -29,8 +33,68 @@ from decimal import Decimal
 from app.services.pdf_invoice import render_invoice_pdf
 from app.services.printing import fa_number, render_invoice
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
+from app.services.warehouse_receipts import (
+    create_warehouse_receipt,
+    received_by_line,
+    void_warehouse_receipt,
+)
 
 router = APIRouter(tags=["invoices"])
+
+
+def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None:
+    """دو وضعیت مستقلِ تحویل و تسویه را فقط از اسناد معتبر مشتق می‌کند."""
+    if not invoices:
+        return
+    ids = [invoice.id for invoice in invoices]
+    allocations = dict(
+        db.query(
+            PaymentRelatedDocument.document_id,
+            func.coalesce(func.sum(PaymentRelatedDocument.allocated_amount * Payment.exchange_rate), 0),
+        )
+        .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
+        .filter(
+            PaymentRelatedDocument.document_type == "purchase_invoice",
+            PaymentRelatedDocument.document_id.in_(ids),
+            Payment.voided_at.is_(None),
+        )
+        .group_by(PaymentRelatedDocument.document_id)
+        .all()
+    )
+    legacy_ids = {
+        source_id
+        for (source_id,) in db.query(StockLedger.source_id)
+        .filter(StockLedger.source_type == "purchase_invoice", StockLedger.source_id.in_(ids))
+        .distinct()
+        .all()
+    }
+    for invoice in invoices:
+        received = received_by_line(db, invoice.id)
+        received_total = Decimal(0)
+        ordered_total = Decimal(0)
+        for line in invoice.lines:
+            ordered = Decimal(line.qty)
+            got = received.get(line.id, ordered if invoice.id in legacy_ids else Decimal(0))
+            line.received_qty = got
+            line.remaining_qty = max(ordered - got, Decimal(0))
+            received_total += got
+            ordered_total += ordered
+        invoice.received_total_qty = received_total
+        invoice.inventory_status = (
+            "not_received" if received_total <= 0 else "fully_received" if received_total >= ordered_total else "partially_received"
+        )
+        final = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
+        settled = min(Decimal(allocations.get(invoice.id, 0)), final)
+        invoice.final_amount = final
+        invoice.settled_amount = settled
+        invoice.remaining_amount = max(final - settled, Decimal(0))
+        invoice.financial_status = (
+            "unsettled" if settled <= 0 else "fully_settled" if settled >= final else "partially_settled"
+        )
+        rate = Decimal(invoice.exchange_rate or 1)
+        invoice.transaction_total_amount = (Decimal(invoice.total_amount) / rate).quantize(Decimal("0.01"))
+        invoice.transaction_tax_amount = (Decimal(invoice.tax_amount) / rate).quantize(Decimal("0.01"))
+        invoice.transaction_final_amount = (final / rate).quantize(Decimal("0.01"))
 
 
 def _attach_creators(db: Session, invoices: list) -> None:
@@ -165,6 +229,7 @@ def list_purchase_invoices(
         params,
     )
     _attach_creators(db, items)
+    _attach_purchase_state(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -175,6 +240,47 @@ def purchase_summary(
 ):
     """شاخص‌های خرید، محاسبه‌شده سمت سرور."""
     return PurchaseSummaryOut(**get_purchase_summary(db))
+
+
+@router.get("/api/purchase-price-info/{item_id}")
+def purchase_price_info(
+    item_id: UUID,
+    supplier_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """آخرین بهای تاریخی کالا، در کل و نزد تأمین‌کننده انتخابی."""
+    base = (
+        db.query(PurchaseInvoiceLine, PurchaseInvoice)
+        .join(PurchaseInvoice, PurchaseInvoice.id == PurchaseInvoiceLine.invoice_id)
+        .filter(PurchaseInvoiceLine.item_id == item_id, PurchaseInvoice.voided_at.is_(None))
+    )
+
+    def serialize(row):
+        if row is None:
+            return None
+        line, invoice = row
+        rate = Decimal(invoice.exchange_rate or 1)
+        return {
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.number,
+            "invoice_date": invoice.invoice_date,
+            "supplier_id": invoice.contact_id,
+            "base_unit_cost": Decimal(line.unit_cost),
+            "transaction_unit_cost": (Decimal(line.unit_cost) / rate).quantize(Decimal("0.01")),
+            "currency_code": invoice.currency_code or "IRR",
+            "exchange_rate": rate,
+        }
+
+    latest = base.order_by(PurchaseInvoice.invoice_date.desc(), PurchaseInvoice.created_at.desc()).first()
+    supplier_latest = None
+    if supplier_id is not None:
+        supplier_latest = (
+            base.filter(PurchaseInvoice.contact_id == supplier_id)
+            .order_by(PurchaseInvoice.invoice_date.desc(), PurchaseInvoice.created_at.desc())
+            .first()
+        )
+    return {"latest": serialize(latest), "supplier_latest": serialize(supplier_latest)}
 
 
 @router.post("/api/purchase-invoices", response_model=PurchaseInvoiceOut, status_code=201)
@@ -194,7 +300,49 @@ def create_purchase_invoice(
         replay=lambda rid: db.get(PurchaseInvoice, rid),
     )
     _attach_creators(db, [invoice])
+    _attach_purchase_state(db, [invoice])
     return invoice
+
+
+@router.get("/api/purchase-invoices/{invoice_id}/warehouse-receipts", response_model=list[WarehouseReceiptOut])
+def list_warehouse_receipts(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    if db.get(PurchaseInvoice, invoice_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
+    return (
+        db.query(WarehouseReceipt)
+        .options(selectinload(WarehouseReceipt.lines))
+        .filter(WarehouseReceipt.purchase_invoice_id == invoice_id)
+        .order_by(WarehouseReceipt.receipt_date.desc(), WarehouseReceipt.number.desc())
+        .all()
+    )
+
+
+@router.post(
+    "/api/purchase-invoices/{invoice_id}/warehouse-receipts",
+    response_model=WarehouseReceiptOut,
+    status_code=201,
+)
+def issue_warehouse_receipt(
+    invoice_id: UUID,
+    data: WarehouseReceiptIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    return create_warehouse_receipt(db, invoice_id, data, user)
+
+
+@router.post("/api/warehouse-receipts/{receipt_id}/void", response_model=WarehouseReceiptOut)
+def void_receipt(
+    receipt_id: UUID,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "delete")),
+):
+    return void_warehouse_receipt(db, receipt_id, reason=data.reason, user=user, void_date=data.void_date)
 
 
 @router.post("/api/sales-invoices/{invoice_id}/void", response_model=VoidOut)
@@ -221,6 +369,14 @@ def void_purchase(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "delete")),
 ):
+    if db.query(WarehouseReceipt.id).filter(
+        WarehouseReceipt.purchase_invoice_id == invoice_id,
+        WarehouseReceipt.voided_at.is_(None),
+    ).first():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این فاکتور رسید انبار فعال دارد؛ ابتدا رسیدهای وابسته را باطل کنید",
+        )
     reversal = void_purchase_invoice(db, invoice_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
 
@@ -292,13 +448,17 @@ def _purchase_render_kwargs(db: Session, principal: Principal, invoice: Purchase
         invoice_date=invoice.invoice_date,
         party_name=name,
         party_detail=detail,
-        description=invoice.description,
+        description=" — ".join(filter(None, [
+            f"شماره فاکتور تأمین‌کننده: {invoice.supplier_invoice_number}" if invoice.supplier_invoice_number else "",
+            invoice.description,
+            invoice.description2,
+        ])),
         lines=[
             {
-                "name": line.item.name,
+                "name": line.item_name_snapshot or line.item.name,
                 "description": line.description,
                 "qty": line.qty,
-                "unit": line.item.unit,
+                "unit": line.unit_snapshot or line.item.unit,
                 "unit_price": line.unit_cost,
                 "discount": line.discount,
             }
@@ -307,6 +467,8 @@ def _purchase_render_kwargs(db: Session, principal: Principal, invoice: Purchase
         total=invoice.total_amount,
         tax_amount=invoice.tax_amount,
         total_discount=invoice.total_discount,
+        total_additions=invoice.total_additions,
+        total_duties=invoice.total_duties,
         voided_at=invoice.voided_at,
         void_reason=invoice.void_reason,
         currency_line=_currency_line(invoice),

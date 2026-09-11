@@ -22,6 +22,7 @@ export function PurchasesPage({
   items,
   outbox,
   onQueued,
+  onCreatePayment,
 }: {
   token: string
   me: MeResponse
@@ -29,6 +30,7 @@ export function PurchasesPage({
   items: ItemCache[]
   outbox: OutboxEntry[]
   onQueued: () => void
+  onCreatePayment: (invoice: PurchaseInvoiceRecord) => void
 }) {
   // شاخص‌ها از سرور می‌آیند (قرینه‌ی صفحه‌ی فروش؛ رفعِ دانلودِ کلِ تاریخچه در کلاینت).
   const [summary, setSummary] = useState<PurchaseSummary | null>(null)
@@ -58,7 +60,7 @@ export function PurchasesPage({
       <PageHeader
         icon={PackagePlus}
         title="خرید"
-        description="خرید از تأمین‌کننده را اینجا ثبت کنید؛ موجودی انبار افزایش می‌یابد و بهای تمام‌شده‌ی کالا بر اساس آن محاسبه می‌شود."
+        description="فاکتور، بدهی خرید را ثبت می‌کند؛ موجودی فقط با رسید انبار مستقل افزایش می‌یابد و تحویل جزئی نیز پشتیبانی می‌شود."
       />
 
       <div className="stat-grid">
@@ -98,7 +100,7 @@ export function PurchasesPage({
                     />
                   )}
                 </div>
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} onDuplicate={handleDuplicate} />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} warehouses={warehouses} onDuplicate={handleDuplicate} onCreatePayment={onCreatePayment} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}

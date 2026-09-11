@@ -578,6 +578,7 @@ export interface CheckRecord {
   contact_name: string | null
   bank_account_id: string | null
   checkbook_id?: string | null
+  voided_at?: string | null
   /** صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`. */
   cashbox_id?: string | null
 }
@@ -1317,6 +1318,8 @@ export interface SalesInvoiceRecord {
   total_cost: string
   tax_rate: string
   tax_amount: string
+  currency_code: string | null
+  exchange_rate: string
   voided_at: string | null
   void_reason: string
   /** فاکتورِ بسته دیگر ویرایش و ابطال نمی‌شود. null = باز. */
@@ -1360,25 +1363,85 @@ export interface PurchaseInvoiceRecord {
   id: string
   number: number | null
   invoice_date: string
-  warehouse_id: string
+  warehouse_id: string | null
   contact_id: string | null
+  supplier_invoice_number: string
   description: string
+  description2: string
   total_amount: string
   total_discount: string
   /** تخفیفِ کلِ فاکتور (تسهیم‌شده در ردیف‌ها؛ در total_discount هم منظور شده). */
   invoice_discount: string
+  total_additions: string
+  total_duties: string
   tax_rate: string
   tax_amount: string
+  currency_code: string | null
+  exchange_rate: string
+  final_amount: string
+  transaction_final_amount: string
+  received_total_qty: string
+  inventory_status: 'not_received' | 'partially_received' | 'fully_received'
+  settled_amount: string
+  remaining_amount: string
+  financial_status: 'unsettled' | 'partially_settled' | 'fully_settled'
   voided_at: string | null
   void_reason: string
   /** ثبت‌کننده‌ی فاکتور — چه کسی و با چه نقشی آن را زد. */
   created_by_id: string | null
   created_by_name: string | null
   created_by_role: string | null
-  lines: (InvoiceLineRecord & { unit_cost: string })[]
+  lines: (InvoiceLineRecord & {
+    unit_cost: string
+    addition: string
+    duty_amount: string
+    item_code_snapshot: string
+    item_name_snapshot: string
+    unit_snapshot: string
+    received_qty: string
+    remaining_qty: string
+  })[]
 }
 
 export const fetchPurchaseInvoices = (token: string) => authedGetAll<PurchaseInvoiceRecord>(token, '/api/purchase-invoices')
+
+export interface WarehouseReceiptRecord {
+  id: string
+  number: number
+  receipt_date: string
+  purchase_invoice_id: string
+  warehouse_id: string
+  status: string
+  description: string
+  voided_at: string | null
+  lines: { id: string; purchase_invoice_line_id: string; item_id: string; qty: string; unit_cost: string }[]
+}
+
+export const fetchWarehouseReceipts = (token: string, invoiceId: string) =>
+  authedGet<WarehouseReceiptRecord[]>(token, `/api/purchase-invoices/${invoiceId}/warehouse-receipts`)
+
+export const createWarehouseReceipt = (
+  token: string,
+  invoiceId: string,
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+) => authedSend<WarehouseReceiptRecord>(token, 'POST', `/api/purchase-invoices/${invoiceId}/warehouse-receipts`, data)
+
+export interface PurchasePricePoint {
+  invoice_id: string
+  invoice_number: number | null
+  invoice_date: string
+  supplier_id: string | null
+  base_unit_cost: string
+  transaction_unit_cost: string
+  currency_code: string
+  exchange_rate: string
+}
+
+export const fetchPurchasePriceInfo = (token: string, itemId: string, supplierId?: string) =>
+  authedGet<{ latest: PurchasePricePoint | null; supplier_latest: PurchasePricePoint | null }>(
+    token,
+    `/api/purchase-price-info/${itemId}${supplierId ? `?supplier_id=${encodeURIComponent(supplierId)}` : ''}`,
+  )
 
 export interface PurchaseSummary {
   invoice_count: number
@@ -1810,11 +1873,12 @@ interface BankAccountLiveOut {
   id: string
   name: string
   bank_name: string
+  currency_code: string
 }
 
 export const fetchBankAccountsLive = async (token: string) => {
   const rows = await authedGet<BankAccountLiveOut[]>(token, '/api/bank-accounts')
-  return rows.map((b) => ({ id: b.id, name: b.name, bank_name: b.bank_name }))
+  return rows.map((b) => ({ id: b.id, name: b.name, bank_name: b.bank_name, currency_code: b.currency_code }))
 }
 
 /** حساب بانکیِ کامل — برای مدیریتِ حساب‌ها و «کارتِ حساب» (دفتر کلِ متناظر). */
@@ -1950,15 +2014,20 @@ export const createPurchaseInvoiceDirect = (
   token: string,
   data: {
     invoice_date: string
-    warehouse_id: string
+    warehouse_id?: string | null
     tax_rate?: number
     cost_center_id?: string | null
     contact_id?: string | null
+    supplier_invoice_number?: string
+    description?: string
+    description2?: string
     currency_code?: string | null
     exchange_rate?: number
     /** تخفیفِ کلِ فاکتور به مبلغِ پایه (ریال). درصد در UI به مبلغ تبدیل می‌شود. */
     invoice_discount?: number
-    lines: { item_id: string; qty: number; unit_cost: number; discount?: number }[]
+    invoice_addition?: number
+    duty_amount?: number
+    lines: { item_id: string; qty: number; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
@@ -2627,6 +2696,7 @@ export interface TreasuryTransactionRecord {
   terminal_no?: string | null
   /** لحظه‌ی تسویه‌ی کارتخوان — NULL یعنی هنوز تسویه نشده. */
   settled_at?: string | null
+  voided_at?: string | null
   psp?: string | null
 }
 
@@ -2649,6 +2719,115 @@ export const createTreasuryReceipt = (token: string, data: TreasuryTransactionIn
 
 export const createTreasuryPayment = (token: string, data: TreasuryTransactionIn) =>
   authedSend<TreasuryTransactionRecord>(token, 'POST', '/api/treasury/payments', data)
+
+// --- اعلامیه‌ی پرداختِ چندابزاری ---------------------------------------------------
+
+export interface PaymentCashIn {
+  cashbox_id?: string | null
+  amount: number
+  description?: string
+}
+
+export interface PaymentBankWithdrawalIn {
+  bank_account_id: string
+  number?: string
+  withdrawal_date?: string | null
+  amount: number
+  bank_fee?: number
+  description?: string
+  description2?: string
+}
+
+export interface PaymentPayableChequeIn {
+  checkbook_id?: string | null
+  bank_account_id?: string | null
+  number: string
+  amount: number
+  due_date: string
+  sayad_id?: string
+  back_number?: string
+  description?: string
+  description2?: string
+}
+
+export interface PaymentDocumentIn {
+  payment_type: 'supplier' | 'customer' | 'other'
+  contact_id: string
+  payment_date: string
+  counterparty_account_id?: string | null
+  bank_fee_account_id?: string | null
+  discount_account_id?: string | null
+  currency_code?: string
+  exchange_rate?: number
+  discount_amount?: number
+  description?: string
+  description2?: string
+  establishment?: string
+  cash: PaymentCashIn[]
+  bank_withdrawals: PaymentBankWithdrawalIn[]
+  payable_cheques: PaymentPayableChequeIn[]
+  endorsed_cheques: { check_id: string }[]
+  related_documents?: { document_type: string; document_id: string; allocated_amount?: number }[]
+}
+
+export interface PaymentComponentRecord {
+  kind: 'cash' | 'bank_withdrawal' | 'payable_cheque' | 'endorsed_cheque'
+  label: string
+  amount: string
+  bank_fee: string
+  source_id: string | null
+  reference_no: string
+  due_date: string | null
+  status: string
+  description: string
+}
+
+export interface PaymentDocumentRecord {
+  id: string
+  number: number
+  payment_type: string
+  payment_type_label: string
+  contact_id: string
+  contact_name: string
+  payment_date: string
+  counterparty_account_id: string
+  bank_fee_account_id: string | null
+  discount_account_id: string | null
+  currency_code: string
+  exchange_rate: string
+  payment_amount: string
+  base_currency_amount: string
+  discount_amount: string
+  settlement_total: string
+  bank_fee_amount: string
+  description: string
+  description2: string
+  establishment: string
+  journal_entry_id: string
+  items_summary: string
+  components: PaymentComponentRecord[]
+  voided_at: string | null
+  created_at: string
+  updated_at: string
+  created_by_name: string
+  updated_by_name: string
+}
+
+export const fetchPaymentDocuments = (token: string) =>
+  authedGetAll<PaymentDocumentRecord>(token, '/api/payments')
+
+export const fetchEligibleReceivedCheques = (token: string) =>
+  authedGet<CheckRecord[]>(token, '/api/payments/eligible-received-cheques')
+
+export const createPaymentDocument = (token: string, data: PaymentDocumentIn, idempotencyKey: string) =>
+  authedSend<PaymentDocumentRecord>(token, 'POST', '/api/payments', data, idempotencyKey)
+
+export const voidPaymentDocument = (token: string, id: string, reason: string) =>
+  authedSend<PaymentDocumentRecord>(token, 'POST', `/api/payments/${id}/void`, { reason })
+
+/** قرینه‌ی چاپِ رسید — همان موتورِ سمتِ سرور، همان رکورد. */
+export const openPaymentPrintView = (token: string, id: string) =>
+  openInvoicePrintView(token, `/api/payments/${id}/print`)
 
 // --- کارتخوان (POS) -----------------------------------------------------------------
 // اتصالِ سخت‌افزار فقط در نسخه‌ی دسکتاپ (window.cubita.posTerminal) رخ می‌دهد؛ ثبتِ
@@ -6089,3 +6268,181 @@ export interface IntegrityReport {
 /** گزارش است، نه گارد: چیزی مسدود نمی‌شود، فقط نشان داده می‌شود. */
 export const fetchIntegrityReport = (token: string, filters: ReportFilters = {}) =>
   authedGet<IntegrityReport>(token, `/api/reports/integrity${reportFiltersQs(filters)}`)
+
+
+// --- رسید دریافت -------------------------------------------------------------------
+// قرینه‌ی «اعلامیه پرداخت». یک رسید می‌تواند هم‌زمان نقد و حواله و کارت‌خوان و چک
+// داشته باشد و همه‌شان **یک** سند حسابداری می‌سازند؛ پس اینجا چهار آرایه‌ی
+// تایپ‌دار داریم، نه یک آرایه‌ی یکسان با فیلدهای اختیاری.
+
+export type ReceiptType = 'customer' | 'supplier' | 'intermediary' | 'other' | 'petty_holder'
+
+export const RECEIPT_TYPE_LABELS: Record<ReceiptType, string> = {
+  customer: 'دریافت از مشتری',
+  supplier: 'دریافت از تأمین‌کننده',
+  intermediary: 'دریافت از واسط',
+  other: 'سایر دریافت‌ها',
+  petty_holder: 'دریافت از تنخواه‌دار',
+}
+
+export interface ReceiptCashIn {
+  amount: number
+  /** خالی = صندوقِ پیش‌فرض، مثلِ بقیه‌ی مسیرها. */
+  cashbox_id?: string | null
+  description?: string
+}
+
+export interface ReceiptTransferIn {
+  amount: number
+  bank_account_id: string
+  /** شماره‌ی حواله — روی ردیفِ سند هم می‌نشیند تا مغایرتِ بانکی پیدایش کند. */
+  reference_no?: string
+  description?: string
+  description2?: string
+}
+
+export interface ReceiptCardIn {
+  amount: number
+  pos_terminal_id: string
+  /** کد پیگیری اجباری است: کلیدِ پیدا کردنِ تراکنش و تطبیق با تسویه. */
+  reference_no: string
+  trace_no?: string
+  card_mask?: string
+  description?: string
+}
+
+export interface ReceiptChequeIn {
+  amount: number
+  number: string
+  due_date: string
+  issue_date?: string | null
+  bank_name?: string
+  /** کد صیادی، **جدا از** شماره‌ی چک. شانزده رقم. */
+  sayad_id?: string
+  back_number?: string
+  branch_name?: string
+  branch_code?: string
+  account_number?: string
+  /** صاحبِ چک — همیشه طرف‌حسابِ ما نیست (چکِ شخصِ ثالث). */
+  owner_name?: string
+  description?: string
+  description2?: string
+}
+
+export interface ReceiptDocumentIn {
+  receipt_type: ReceiptType
+  contact_id: string
+  receipt_date: string
+  currency_code?: string
+  exchange_rate?: number
+  discount_amount?: number
+  discount_account_id?: string | null
+  description?: string
+  description2?: string
+  establishment?: string
+  cash: ReceiptCashIn[]
+  transfers: ReceiptTransferIn[]
+  cards: ReceiptCardIn[]
+  cheques: ReceiptChequeIn[]
+  related_documents?: { document_type: string; document_id: string; allocated_amount?: number }[]
+}
+
+export interface ReceiptComponentRecord {
+  kind: 'cash' | 'transfer' | 'cheque' | 'card'
+  label: string
+  amount: string
+  description: string
+  /** شناسه‌ی موجودیتِ واقعی: تراکنشِ خزانه یا چک. از همین به چک می‌رسیم. */
+  source_id: string | null
+  reference_no: string
+  due_date: string | null
+  status: string
+}
+
+export interface ReceiptDocumentRecord {
+  id: string
+  number: number
+  receipt_type: ReceiptType
+  receipt_type_label: string
+  contact_id: string
+  contact_name: string
+  receipt_date: string
+  counterparty_account_id: string
+  discount_account_id: string | null
+  currency_code: string
+  exchange_rate: string
+  /** پولی که واقعاً رسید. */
+  receipt_amount: string
+  /** معادلش به ارزِ پایه — همان که سند می‌خورد. */
+  base_currency_amount: string
+  discount_amount: string
+  /** مبلغ + تخفیف؛ مانده‌ی طرف‌حساب به اندازه‌ی این حرکت می‌کند. */
+  settlement_total: string
+  description: string
+  description2: string
+  establishment: string
+  journal_entry_id: string
+  /** «وجه نقد، حواله، چک» — مشتق است، نه متنی که کاربر بنویسد. */
+  items_summary: string
+  components: ReceiptComponentRecord[]
+  related_documents: { document_type: string; document_id: string; allocated_amount: string }[]
+  voided_at: string | null
+  created_at: string
+  updated_at: string
+  created_by_name: string
+  updated_by_name: string
+}
+
+export interface ReceiptFilters {
+  receipt_type?: string
+  contact_id?: string
+  date_from?: string
+  date_to?: string
+  search?: string
+}
+
+const receiptFiltersQs = (filters: ReceiptFilters): string => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) qs.set(key, String(value))
+  }
+  const text = qs.toString()
+  return text ? `?${text}` : ''
+}
+
+/** فیلتر سمتِ سرور است؛ کشیدنِ کلِ دفتر برای فیلترکردنش در مرورگر با اولین
+ *  کسب‌وکارِ چندساله از کار می‌افتد. */
+export const fetchReceiptDocuments = (token: string, filters: ReceiptFilters = {}) =>
+  authedGetAll<ReceiptDocumentRecord>(token, `/api/receipts${receiptFiltersQs(filters)}`)
+
+export const fetchReceiptDocument = (token: string, id: string) =>
+  authedGet<ReceiptDocumentRecord>(token, `/api/receipts/${id}`)
+
+export const createReceiptDocument = (token: string, data: ReceiptDocumentIn, idempotencyKey: string) =>
+  authedSend<ReceiptDocumentRecord>(token, 'POST', '/api/receipts', data, idempotencyKey)
+
+export const voidReceiptDocument = (token: string, id: string, reason: string) =>
+  authedSend<ReceiptDocumentRecord>(token, 'POST', `/api/receipts/${id}/void`, { reason })
+
+/** پیش‌نویسِ رسیدِ تازه از روی یکی موجود — شناسه‌های یکتا پاک می‌آیند. */
+export const fetchReceiptDuplicate = (token: string, id: string) =>
+  authedGet<Record<string, unknown>>(token, `/api/receipts/${id}/duplicate`)
+
+export interface RasResult {
+  ras_date: string
+  average_days: string
+  total_amount: string
+  counted_rows: number
+  skipped_rows: number
+}
+
+/** راس‌گیری یک محاسبه است، نه تراکنش — هیچ چیزی ذخیره نمی‌شود. */
+export const previewRas = (
+  token: string,
+  base_date: string,
+  rows: { amount: number; due_date: string }[],
+  include_same_day = true,
+) => authedSend<RasResult>(token, 'POST', '/api/receipts/ras-preview', { base_date, rows, include_same_day })
+
+export const openReceiptPrintView = (token: string, id: string) =>
+  openInvoicePrintView(token, `/api/receipts/${id}/print`)

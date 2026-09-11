@@ -84,9 +84,11 @@ def audited_models() -> dict[type, str]:
     """
     from app.models.accounting import JournalEntry
     from app.models.banking import Check
-    from app.models.invoices import PurchaseInvoice, SalesInvoice
+    from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
     from app.models.payroll import Payslip
     from app.models.period_close import FiscalPeriodClose
+    from app.models.payment import Payment
+    from app.models.receipt import Receipt
     from app.models.returns import PurchaseReturn, SalesReturn
     from app.models.transfers import StockTransfer
     from app.models.treasury import TreasuryTransaction
@@ -95,6 +97,7 @@ def audited_models() -> dict[type, str]:
         JournalEntry: "سند حسابداری",
         SalesInvoice: "فاکتور فروش",
         PurchaseInvoice: "فاکتور خرید",
+        WarehouseReceipt: "رسید انبار خرید",
         SalesReturn: "برگشت از فروش",
         PurchaseReturn: "برگشت از خرید",
         StockTransfer: "انتقال انبار",
@@ -104,6 +107,9 @@ def audited_models() -> dict[type, str]:
         #: خزانه، تنها موجودیتی بود که هیچ ردِ حسابرسی‌ای نمی‌گذاشت.
         Check: "چک",
         FiscalPeriodClose: "بستن دوره",
+        Check: "چک",
+        Receipt: "رسید دریافت",
+        Payment: "اعلامیه پرداخت",
     }
 
 

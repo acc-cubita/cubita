@@ -206,6 +206,7 @@ export type PageKey =
   | 'customslist'
   | 'notelist'
   | 'treasuryledger'
+  | 'paymentnoticelist'
   | 'checkbooklist'
   | 'posterminallist'
   | 'possettlelist'
@@ -462,7 +463,8 @@ for (const key of [
   'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
   'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox', 'cashboxes',
   'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
-  'treasuryledger', 'checkbooklist', 'posterminallist', 'possettlelist', 'checkoplist',
+  'treasuryledger', 'paymentnoticelist', 'checkbooklist', 'posterminallist', 'possettlelist',
+  'checkoplist',
   'statementlist', 'pettylist',
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'banking'

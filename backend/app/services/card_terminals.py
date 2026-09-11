@@ -131,6 +131,7 @@ def unsettled_balance(db: Session, term: PosTerminal) -> Decimal:
         .filter(
             TreasuryTransaction.paid_via == PAID_VIA_TERMINAL,
             TreasuryTransaction.settled_at.is_(None),
+            TreasuryTransaction.voided_at.is_(None),
             _owned_transactions(term),
         )
         .scalar()

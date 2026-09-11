@@ -1,16 +1,89 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.models.treasury import TreasuryTransaction
+from app.models.payment import Payment
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.treasury import CardPaymentIn, TreasuryTransactionIn, TreasuryTransactionOut
+from app.schemas.banking import CheckOut
+from app.schemas.payments import PaymentIn, PaymentOut, PaymentVoidIn
+from app.services import receipts as receipt_service
 from app.services import treasury as treasury_service
+from app.models.inventory import Contact
+from app.services import payments as payment_service
+from app.services.printing import render_payment
 from app.services.idempotency import idempotent
 
 router = APIRouter(tags=["treasury"])
+
+
+@router.get("/api/payments", response_model=Page[PaymentOut])
+def list_payments(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    items, next_cursor = paginate(
+        payment_service.payments_query(db),
+        [Payment.payment_date, Payment.id],
+        params,
+    )
+    return Page(items=[payment_service.to_out(db, item) for item in items], next_cursor=next_cursor)
+
+
+@router.get("/api/payments/eligible-received-cheques", response_model=list[CheckOut])
+def eligible_received_cheques(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    return payment_service.eligible_received_cheques(db)
+
+
+@router.get("/api/payments/{payment_id}", response_model=PaymentOut)
+def get_payment(
+    payment_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    return payment_service.to_out(db, payment_service.resolve(db, payment_id))
+
+
+@router.post("/api/payments", response_model=PaymentOut, status_code=201)
+def create_payment_document(
+    data: PaymentIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("checks_bank", "create")),
+):
+    payment = idempotent(
+        db,
+        request,
+        user,
+        operation="create_payment_document",
+        payload=data,
+        run=lambda: payment_service.create_payment(db, data, user),
+        replay=lambda rid: db.get(Payment, rid),
+    )
+    return payment_service.to_out(db, payment)
+
+
+@router.post("/api/payments/{payment_id}/void", response_model=PaymentOut)
+def void_payment_document(
+    payment_id: UUID,
+    data: PaymentVoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("checks_bank", ("approve", "delete"))),
+):
+    payment = payment_service.void_payment(
+        db, payment_id, reason=data.reason, void_date=data.void_date, user=user
+    )
+    return payment_service.to_out(db, payment)
 
 
 def _to_out(txn) -> TreasuryTransactionOut:
@@ -35,6 +108,7 @@ def _to_out(txn) -> TreasuryTransactionOut:
         #: این دو از قبل در شِما بودند ولی هرگز پر نمی‌شدند — یعنی هر مصرفی از این
         #: مسیر «تسویه‌نشده» را نمی‌دید و صندوقِ رسید هم گم می‌شد.
         settled_at=txn.settled_at,
+        voided_at=txn.voided_at,
         cashbox_id=txn.cashbox_id,
     )
 
@@ -69,7 +143,9 @@ def create_receipt(
             user,
             operation="create_treasury_receipt",
             payload=data,
-            run=lambda: treasury_service.create_receipt(db, data, user),
+            #: از مهاجرتِ ۰۱۰۹ این مسیر هم سربرگِ رسید می‌سازد — قرارداد عوض
+            #: نشده، ولی رسیدِ موبایل هم شماره می‌گیرد و در دفتر دیده می‌شود.
+            run=lambda: receipt_service.create_single_instrument(db, data, user),
             replay=lambda rid: db.get(TreasuryTransaction, rid),
         )
     )
@@ -104,3 +180,45 @@ def create_card_payment(
     user: User = Depends(require_permission("invoices", "create")),
 ):
     return _to_out(treasury_service.record_card_payment(db, data, user))
+
+
+@router.get("/api/payments/{payment_id}/print", response_class=HTMLResponse)
+def print_payment(
+    payment_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """قرینه‌ی `/api/receipts/{id}/print` — همان موتور، همان رکورد.
+
+    بدونِ این، اعلامیه‌ی پرداخت تنها سندِ مالیِ کوبیتا بود که چاپ نمی‌شد، در حالی
+    که خواهرش (رسید دریافت) می‌شد.
+    """
+    payment = payment_service.resolve(db, payment_id)
+    contact = db.get(Contact, payment.contact_id)
+    detail = " — ".join(filter(None, [getattr(contact, "phone", ""), getattr(contact, "address", "")]))
+    currency_line = ""
+    if payment.currency_code and payment.currency_code != "IRR":
+        currency_line = (
+            f"ارز اعلامیه: {payment.currency_code} — نرخ تسعیر: {payment.exchange_rate}؛ "
+            "مبالغ زیر به ریال است"
+        )
+    html = render_payment(
+        business_name=principal.membership.tenant.name,
+        number=int(payment.number),
+        payment_date=payment.payment_date,
+        type_label=payment_service.type_label(payment.payment_type),
+        party_name=contact.name if contact else "—",
+        party_detail=detail,
+        description=payment.description,
+        description2=payment.description2,
+        components=payment_service.components(db, payment),
+        payment_amount=payment.base_currency_amount,
+        discount_amount=payment.discount_amount,
+        bank_fee_amount=payment.bank_fee_amount,
+        settlement_total=payment.base_currency_amount + payment.discount_amount,
+        voided_at=payment.voided_at,
+        void_reason=payment.void_reason,
+        currency_line=currency_line,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
