@@ -10349,3 +10349,78 @@ button.mp-item:focus-visible {
   }
   .check-timeline__where { grid-column: 1 / -1; }
 }
+
+/* ───────────────────────── تسویه‌ی حسابِ طرف مقابل ─────────────────────────
+   دو عدد و اختلافشان. اختلاف تنها چیزی است که تصمیم می‌سازد، پس رنگ می‌گیرد:
+   سبز یعنی قابلِ ثبت، قرمز یعنی هنوز نه — و عددش هم کنارش هست تا کاربر لازم
+   نباشد خودش تفریق کند. */
+.settle-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+}
+
+.settle-totals > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 9rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  border: 1px solid var(--border);
+}
+
+.settle-totals span {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.settle-totals strong {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-lg);
+}
+
+.settle-totals .is-ok { border-color: var(--success); background: var(--success-bg); }
+.settle-totals .is-ok strong { color: var(--success); }
+.settle-totals .is-off { border-color: var(--warning); background: var(--warning-bg); }
+.settle-totals .is-off strong { color: var(--warning); }
+
+/* تاریخچه‌ی تخصیصِ یک سند — هر گام با مبلغ و سمتِ مقابلش. */
+.settle-history {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settle-history li {
+  display: grid;
+  grid-template-columns: 14rem auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-inline-start: 2px solid var(--border);
+  background: var(--surface-2, transparent);
+  border-radius: 6px;
+}
+
+.settle-history li.is-voided { opacity: 0.6; }
+.settle-history li.is-voided .settle-history__amount { text-decoration: line-through; }
+
+.settle-history__head { font-weight: 600; }
+.settle-history__head em { color: var(--text-muted); font-style: normal; font-weight: 400; }
+.settle-history__amount { font-variant-numeric: tabular-nums; }
+.settle-history__counter { color: var(--text-muted); font-size: var(--fs-sm); }
+
+@media (max-width: 760px) {
+  .settle-history li {
+    grid-template-columns: 1fr auto;
+    row-gap: 4px;
+  }
+  .settle-history__counter { grid-column: 1 / -1; }
+  .settle-totals > div { flex: 1 1 8rem; }
+}

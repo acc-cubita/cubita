@@ -198,6 +198,27 @@ def _guard_no_active_returns(db: Session, document, source_type: str) -> None:
         )
 
 
+def guard_no_active_allocations(db: Session, source_type: str, source_id: UUID, label: str) -> None:
+    """ابطالِ سندی که در تسویه‌ای تخصیص خورده را می‌بندد (§۴۱).
+
+    تسویه سندِ حسابداری نمی‌زند، پس اگر این سند بی‌سروصدا باطل شود هیچ ترازی به‌هم
+    نمی‌خورد تا خطا را لو بدهد: تخصیص روی سندی می‌ماند که دیگر مانده‌ای ندارد و
+    «تسویه‌شده»ی طرف حساب برای همیشه از واقعیت جلو می‌افتد.
+
+    راهِ درست برای کاربر همان چیزی است که پیام می‌گوید: اول تسویه را برگرداند
+    (که فقط رابطه را آزاد می‌کند و هیچ سندی را حذف نمی‌کند)، بعد این را باطل کند.
+    """
+    from app.services.open_items import active_allocation_total
+
+    allocated = active_allocation_total(db, source_type, source_id)
+    if allocated > 0:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"این {label} در «تسویه حساب طرف مقابل» تخصیص خورده است. "
+            "اول تسویه‌های مربوط را برگردانید، سپس سند را باطل کنید.",
+        )
+
+
 def _guard_stock_stays_valid(db: Session, moves: list[StockLedger]) -> None:
     """ابطالی که موجودی را منفی کند رد می‌شود.
 
@@ -238,6 +259,7 @@ def _apply_void(
     """مسیر مشترک ابطال برای هر سندی که سند حسابداری و اثر انبار دارد."""
     _guard_not_already_voided(document)
     _guard_no_active_returns(db, document, source_type)
+    guard_no_active_allocations(db, source_type, document.id, label)
 
     # تاریخ ابطال پیش‌فرض همان تاریخ سند است، ولی اگر آن دوره بسته شده باشد کاربر
     # باید تاریخی در دوره‌ی باز بدهد. گارد روی تاریخِ *معکوس* اجرا می‌شود نه تاریخ

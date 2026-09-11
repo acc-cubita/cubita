@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Banknote,
-  CheckCircle2,
   HandCoins,
   Landmark,
   PiggyBank,
@@ -17,16 +16,20 @@ import {
 import {
   createPettyCashCharge,
   createPettyCashExpense,
+  createContactSettlement,
   createTreasuryPayment,
   createTreasuryReceipt,
-  fetchAging,
+  fetchAllocationHistory,
   fetchBankAccountsLive,
   fetchContacts,
+  fetchCounterpartyAccounts,
+  fetchOpenItems,
   fetchPettyCashBalance,
   fetchPettyCashTransactions,
   fetchTreasuryTransactions,
-  type AgingRow,
   type ContactRecord,
+  type OpenItem,
+  type SettlementSide,
 } from '../../api'
 import type { AccountCache } from '../../electron.d'
 import type { PageKey } from '../../lib/navModel'
@@ -393,157 +396,465 @@ export function PaymentVoucherPage({ token }: { token: string }) {
 // ═══════════════════ ۵) تسویه حساب طرف مقابل ═══════════════════
 
 /**
- * مانده‌ی هر طرف‌حساب و تسویه‌ی آن با یک کلیک.
+ * کدام بدهکار با کدام بستانکار تسویه شد.
  *
- * **چرا از گزارشِ سنین می‌خواند و مانده را دوباره حساب نمی‌کند:** مانده‌ی طرف‌حساب یک
- * تعریفِ حسابداری دارد که همان گزارش پیاده کرده. محاسبه‌ی دومِ کلاینتی، دیر یا زود با
- * گزارش اختلاف پیدا می‌کرد و آن‌وقت کدام درست بود؟
+ * **این صفحه پول جابه‌جا نمی‌کند — و تا امروز می‌کرد.** نسخه‌ی پیشین یک دکمه بود که
+ * برای کلِ ماندهٔ شخص یک *رسیدِ دریافت* می‌ساخت. یعنی نامش تسویه بود ولی کارش ثبتِ
+ * پولِ تازه. دریافت و پرداخت همچنان سرِ جای خودشان‌اند («رسید دریافت» و «اعلامیه
+ * پرداخت»)؛ این‌جا فقط رابطه ثبت می‌شود: این دریافت بابتِ آن فاکتور بود.
+ *
+ * پس هیچ سندِ حسابداری‌ای از این صفحه بیرون نمی‌آید. فاکتور و رسید اثرشان را همان
+ * لحظه‌ی ثبت زده‌اند و ماندهٔ مشتری همین حالا درست است؛ چیزی که نبود این بود که
+ * کدام با کدام.
  */
 export function ContactSettlementPage({ token }: { token: string }) {
-  const [kind, setKind] = useState<'receivable' | 'payable'>('receivable')
+  const [accountId, setAccountId] = useState('')
+  const [contactId, setContactId] = useState('')
+  const [settleDate, setSettleDate] = useState(todayIso())
+  const [description, setDescription] = useState('')
+  const [description2, setDescription2] = useState('')
+  /** مبلغِ تسویه‌ی هر قلم، با کلیدِ «نوع:شناسه». خالی یعنی این قلم در تسویه نیست. */
+  const [amounts, setAmounts] = useState<Record<string, string>>({})
+  const [openHistory, setOpenHistory] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  const [method, setMethod] = useState<'cash' | 'bank'>('cash')
-  const [bankAccountId, setBankAccountId] = useState('')
 
-  const data = useAsync(
-    async () => {
-      const [aging, banks] = await Promise.all([fetchAging(token, kind), fetchBankAccountsLive(token)])
-      return { aging, banks }
-    },
-    [token, kind, reloadKey],
+  const base = useAsync(async () => {
+    const [accounts, contacts] = await Promise.all([
+      fetchCounterpartyAccounts(token),
+      fetchContacts(token),
+    ])
+    return { accounts, contacts }
+  }, [token])
+
+  const accounts = base.data?.accounts ?? []
+  const contacts = base.data?.contacts ?? []
+  const activeAccount = accountId || accounts[0]?.id || ''
+
+  const open = useAsync(
+    async () =>
+      activeAccount && contactId
+        ? await fetchOpenItems(token, { accountId: activeAccount, contactId })
+        : null,
+    [token, activeAccount, contactId, reloadKey],
   )
 
-  const rows = useMemo(
-    () => (data.data?.aging.rows ?? []).filter((r) => Number(r.total) !== 0),
-    [data.data],
-  )
-  const banks = data.data?.banks ?? []
-  const pg = usePagination(rows, 12)
+  const summary = open.data
+  const items = useMemo(() => summary?.items ?? [], [summary])
+  const debitItems = items.filter((i) => i.side === 'debit')
+  const creditItems = items.filter((i) => i.side === 'credit')
 
-  async function settle(row: AgingRow) {
-    if (method === 'bank' && !bankAccountId) {
-      setMsg({ text: 'برای روشِ بانکی، اول حساب بانکی را انتخاب کنید.', kind: 'err' })
+  const sideTotal = (side: SettlementSide) =>
+    items
+      .filter((i) => i.side === side)
+      .reduce((sum, i) => sum + (Number(amounts[itemKey(i)]) || 0), 0)
+  const debitTotal = sideTotal('debit')
+  const creditTotal = sideTotal('credit')
+  const difference = debitTotal - creditTotal
+
+  function reset() {
+    setAmounts({})
+    setOpenHistory(null)
+  }
+
+  /**
+   * تخصیصِ خودکار — **فقط با فشردنِ دکمه** (§۴۷).
+   *
+   * قدیمی‌ترین بدهکار را با قدیمی‌ترین بستانکار پر می‌کند تا یکی تمام شود. پیشنهاد
+   * است نه تصمیم: همه‌ی مبالغ بعدش قابلِ ویرایش‌اند، چون پرداختِ واقعی همیشه
+   * FIFO نیست (§۴۸).
+   */
+  function autoAllocate() {
+    const next: Record<string, string> = {}
+    let debitLeft = debitItems.map((i) => ({ item: i, left: Number(i.remaining_amount) }))
+    let creditLeft = creditItems.map((i) => ({ item: i, left: Number(i.remaining_amount) }))
+    let di = 0
+    let ci = 0
+    while (di < debitLeft.length && ci < creditLeft.length) {
+      const take = Math.min(debitLeft[di].left, creditLeft[ci].left)
+      if (take <= 0) {
+        if (debitLeft[di].left <= 0) di += 1
+        else ci += 1
+        continue
+      }
+      const dk = itemKey(debitLeft[di].item)
+      const ck = itemKey(creditLeft[ci].item)
+      next[dk] = String((Number(next[dk]) || 0) + take)
+      next[ck] = String((Number(next[ck]) || 0) + take)
+      debitLeft[di].left -= take
+      creditLeft[ci].left -= take
+      if (debitLeft[di].left === 0) di += 1
+      if (creditLeft[ci].left === 0) ci += 1
+    }
+    setAmounts(next)
+    setMsg(
+      Object.keys(next).length === 0
+        ? { text: 'چیزی برای تخصیص نیست — یکی از دو سمت خالی است.', kind: 'err' }
+        : { text: 'پیشنهادِ تخصیص پر شد؛ مبالغ را می‌توانید تغییر دهید.', kind: 'ok' },
+    )
+  }
+
+  async function submit() {
+    const picked = items
+      .filter((i) => (Number(amounts[itemKey(i)]) || 0) > 0)
+      .map((i) => ({
+        source_type: i.source_type,
+        source_id: i.source_id,
+        side: i.side,
+        amount: Number(amounts[itemKey(i)]),
+      }))
+    if (picked.length === 0) {
+      setMsg({ text: 'هیچ قلمی انتخاب نشده است.', kind: 'err' })
       return
     }
-    const amount = Math.abs(Number(row.total))
-    if (!window.confirm(`تسویه‌ی کاملِ «${row.contact_name}» به مبلغ ${fa(amount)} ریال ثبت شود؟`)) return
-    setBusy(row.contact_id)
+    setBusy(true)
     setMsg(null)
     try {
-      const payload = {
-        transaction_date: todayIso(),
-        contact_id: row.contact_id,
-        amount,
-        method,
-        bank_account_id: method === 'bank' ? bankAccountId : null,
-        description: 'تسویه حساب',
-      }
-      if (kind === 'receivable') await createTreasuryReceipt(token, payload)
-      else await createTreasuryPayment(token, payload)
-      setMsg({ text: `حسابِ «${row.contact_name}» تسویه شد.`, kind: 'ok' })
+      const saved = await createContactSettlement(token, {
+        settlement_date: settleDate,
+        contact_id: contactId,
+        account_id: activeAccount,
+        description,
+        description2,
+        items: picked,
+      })
+      setMsg({
+        text: `تسویه‌ی شماره ${faInt(saved.number)} ثبت شد — ${fa(saved.total_amount)} ریال روی ${faInt(saved.allocations.length)} قلم.`,
+        kind: 'ok',
+      })
+      reset()
+      setDescription('')
+      setDescription2('')
       setReloadKey((k) => k + 1)
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
+
+  const ready = Boolean(activeAccount && contactId)
 
   return (
     <OpsPage
       icon={Scale}
       title="تسویه حساب طرف مقابل"
-      description="مانده‌ی باز هر طرف‌حساب، و تسویه‌ی کاملِ آن با یک رسید یا اعلامیه."
+      description="کدام فاکتور با کدام دریافت تسویه شد. این‌جا پولی جابه‌جا نمی‌شود؛ فقط رابطه‌ی اسنادِ موجود ثبت می‌گردد."
       head={
         <div className="cc-head">
           <div className="cc-toolbar">
-            <div className="cc-presets">
-              <button type="button" className={kind === 'receivable' ? 'is-active' : ''} onClick={() => setKind('receivable')}>
-                طلب از مشتریان
-              </button>
-              <button type="button" className={kind === 'payable' ? 'is-active' : ''} onClick={() => setKind('payable')}>
-                بدهی به تأمین‌کنندگان
-              </button>
-            </div>
             <label className="acc-inline-field">
-              روشِ تسویه
-              <select value={method} onChange={(e) => setMethod(e.target.value as 'cash' | 'bank')}>
-                <option value="cash">صندوق (نقدی)</option>
-                <option value="bank">بانک</option>
+              معین طرف مقابل
+              <select
+                value={activeAccount}
+                onChange={(e) => {
+                  setAccountId(e.target.value)
+                  reset()
+                }}
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
               </select>
             </label>
-            {method === 'bank' && (
-              <label className="acc-inline-field">
-                حساب بانکی
-                <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-                  <option value="">— انتخاب —</option>
-                  {banks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <label className="acc-inline-field">
+              طرف حساب
+              <select
+                value={contactId}
+                onChange={(e) => {
+                  setContactId(e.target.value)
+                  reset()
+                }}
+              >
+                <option value="">— انتخاب —</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="acc-inline-field">
+              تاریخ تسویه
+              <JalaliDatePicker value={settleDate} onChange={setSettleDate} />
+            </label>
+            <label className="acc-inline-field">
+              شرح
+              <input value={description} onChange={(e) => setDescription(e.target.value)} />
+            </label>
+            <label className="acc-inline-field">
+              شرح دوم
+              <input value={description2} onChange={(e) => setDescription2(e.target.value)} />
+            </label>
           </div>
+          {summary && (
+            <div className="cc-summary">
+              <Metric
+                icon={<ArrowDownToLine size={14} />}
+                label="جمع اقلام بدهکار"
+                value={fa(summary.debit_total)}
+                tone="in"
+              />
+              <Metric
+                icon={<ArrowUpFromLine size={14} />}
+                label="جمع اقلام بستانکار"
+                value={fa(summary.credit_total)}
+                tone="out"
+              />
+              <Metric icon={<Scale size={14} />} label="ماندهٔ معین" value={fa(summary.net)} />
+            </div>
+          )}
+          {summary && Number(summary.unattributed) !== 0 && (
+            <p className="muted">
+              {fa(summary.unattributed)} ریال از گردشِ این معین سندِ قابلِ تسویه ندارد و در
+              فهرستِ اقلام نمی‌آید — سندِ دستی، ماندهٔ اول دوره، یا چکی که پیش از نسخه‌ی
+              ۰۱۱۱ ثبت شده. دفتر درست است؛ فقط این گردش‌ها لنگری برای تخصیص ندارند.
+            </p>
+          )}
         </div>
       }
     >
       <Note msg={msg} />
-      <SectionCard
-        icon={Scale}
-        title={kind === 'receivable' ? 'طلب‌های باز' : 'بدهی‌های باز'}
-        description={`${faInt(rows.length)} طرف حساب`}
-        actions={
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw size={13} /> بازخوانی
-          </button>
-        }
-      >
-        <AsyncBlock
-          loading={data.loading}
-          error={data.error}
-          empty={rows.length === 0}
-          emptyText={kind === 'receivable' ? 'طلبِ بازی نیست.' : 'بدهیِ بازی نیست.'}
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>طرف حساب</th>
-                  <th>جاری</th>
-                  <th>۳۱ تا ۶۰</th>
-                  <th>۶۱ تا ۹۰</th>
-                  <th>بیش از ۹۰</th>
-                  <th>مانده</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((r) => (
-                  <tr key={r.contact_id}>
-                    <td className="card-title" data-label="طرف حساب">{r.contact_name}</td>
-                    <td className="num" data-label="جاری">{fa(r.current)}</td>
-                    <td className="num" data-label="۳۱ تا ۶۰">{fa(r.d31_60)}</td>
-                    <td className="num" data-label="۶۱ تا ۹۰">{fa(r.d61_90)}</td>
-                    <td className="num" data-label="بیش از ۹۰">{fa(r.over_90)}</td>
-                    <td className="num" data-label="مانده"><strong>{fa(r.total)}</strong></td>
-                    <td className="card-actions">
-                      <button type="button" onClick={() => void settle(r)} disabled={busy === r.contact_id}>
-                        <CheckCircle2 size={13} /> {busy === r.contact_id ? 'در حالِ ثبت…' : 'تسویه کامل'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
+
+      {!ready ? (
+        <SectionCard icon={Scale} title="طرف حساب را انتخاب کنید">
+          <p className="muted">
+            تسویه همیشه برای یک طرف حساب و روی یک معین انجام می‌شود. اقلامِ باز پس از انتخاب
+            نمایش داده می‌شوند.
+          </p>
+        </SectionCard>
+      ) : (
+        <>
+          <SettleSide
+            token={token}
+            title="اقلام بدهکار"
+            hint="سندهایی که طرف حساب را به ما بدهکار کرده‌اند"
+            icon={ArrowDownToLine}
+            items={debitItems}
+            amounts={amounts}
+            setAmounts={setAmounts}
+            openHistory={openHistory}
+            setOpenHistory={setOpenHistory}
+            loading={open.loading}
+            error={open.error}
+          />
+          <SettleSide
+            token={token}
+            title="اقلام بستانکار"
+            hint="سندهایی که طلبِ ما را کم کرده‌اند — دریافت، برگشت، چک"
+            icon={ArrowUpFromLine}
+            items={creditItems}
+            amounts={amounts}
+            setAmounts={setAmounts}
+            openHistory={openHistory}
+            setOpenHistory={setOpenHistory}
+            loading={open.loading}
+            error={open.error}
+          />
+
+          <SectionCard
+            icon={Scale}
+            title="جمع و ثبت"
+            description="تسویه تنها وقتی ثبت می‌شود که دو سمت برابر باشند."
+            actions={
+              <button type="button" onClick={autoAllocate}>
+                <Wallet size={13} /> تخصیص خودکار
+              </button>
+            }
+          >
+            <div className="settle-totals">
+              <div>
+                <span>جمع اقلام بدهکار</span>
+                <strong>{fa(debitTotal)}</strong>
+              </div>
+              <div>
+                <span>جمع اقلام بستانکار</span>
+                <strong>{fa(creditTotal)}</strong>
+              </div>
+              <div className={difference === 0 ? 'is-ok' : 'is-off'}>
+                <span>اختلاف</span>
+                <strong>{fa(Math.abs(difference))}</strong>
+              </div>
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void submit()}
+                disabled={busy || difference !== 0 || debitTotal === 0}
+              >
+                <Save size={14} /> {busy ? 'در حالِ ثبت…' : 'ثبت تسویه'}
+              </button>
+              <button type="button" onClick={reset} disabled={busy}>
+                پاک کردن اقلام
+              </button>
+            </div>
+            {difference !== 0 && debitTotal + creditTotal > 0 && (
+              <p className="muted">
+                دو سمت {fa(Math.abs(difference))} ریال اختلاف دارند. تا صفر نشود، تسویه ثبت
+                نمی‌شود.
+              </p>
+            )}
+          </SectionCard>
+        </>
+      )}
     </OpsPage>
+  )
+}
+
+/** کلیدِ یکتای یک قلم در حافظه‌ی فرم — سند در دو نوعِ مختلف می‌تواند هم‌شناسه باشد. */
+const itemKey = (item: OpenItem) => `${item.source_type}:${item.source_id}`
+
+/** شماره‌ی خواندنیِ یک قلم: شماره‌ی خودش، وگرنه شماره‌ی سندِ حسابداری‌اش. */
+function itemNumber(item: OpenItem) {
+  if (item.number != null) return faInt(item.number)
+  if (item.entry_number != null) return `سند ${faInt(item.entry_number)}`
+  return '—'
+}
+
+/** یک سمتِ تسویه — همان جدولی که فرمِ مرجع دارد، با مبلغِ تسویه‌ی هر قلم. */
+function SettleSide({
+  token,
+  title,
+  hint,
+  icon,
+  items,
+  amounts,
+  setAmounts,
+  openHistory,
+  setOpenHistory,
+  loading,
+  error,
+}: {
+  token: string
+  title: string
+  hint: string
+  icon: typeof Scale
+  items: OpenItem[]
+  amounts: Record<string, string>
+  setAmounts: (next: Record<string, string>) => void
+  openHistory: string | null
+  setOpenHistory: (key: string | null) => void
+  loading: boolean
+  error: string | null
+}) {
+  return (
+    <SectionCard icon={icon} title={title} description={`${hint} — ${faInt(items.length)} قلم`}>
+      <AsyncBlock
+        loading={loading}
+        error={error}
+        empty={items.length === 0}
+        emptyText="قلمِ بازی در این سمت نیست."
+      >
+        <div className="table-scroll">
+          <table className="cards-on-mobile acc-table">
+            <thead>
+              <tr>
+                <th>نوع</th>
+                <th>شماره</th>
+                <th>تاریخ</th>
+                <th>مبلغ سند</th>
+                <th>تسویه‌شده</th>
+                <th>مانده قابل تسویه</th>
+                <th>مبلغ تسویه</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const key = itemKey(item)
+                return (
+                  <Fragment key={key}>
+                    <tr>
+                      <td className="card-title" data-label="نوع">
+                        {item.label}
+                      </td>
+                      <td data-label="شماره">{itemNumber(item)}</td>
+                      <td data-label="تاریخ">{formatJalali(item.document_date)}</td>
+                      <td className="num" data-label="مبلغ سند">
+                        {fa(item.document_amount)}
+                      </td>
+                      <td className="num" data-label="تسویه‌شده">
+                        {fa(item.settled_amount)}
+                      </td>
+                      <td className="num" data-label="مانده قابل تسویه">
+                        <strong>{fa(item.remaining_amount)}</strong>
+                      </td>
+                      <td data-label="مبلغ تسویه">
+                        <NumberInput
+                          value={amounts[key] ?? ''}
+                          onChange={(v) => setAmounts({ ...amounts, [key]: v })}
+                          placeholder="۰"
+                        />
+                      </td>
+                      <td className="card-actions">
+                        <button
+                          type="button"
+                          onClick={() => setOpenHistory(openHistory === key ? null : key)}
+                        >
+                          <Receipt size={13} /> تاریخچه
+                        </button>
+                      </td>
+                    </tr>
+                    {openHistory === key && (
+                      <tr className="card-full">
+                        <td colSpan={8}>
+                          <AllocationHistory token={token} item={item} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </AsyncBlock>
+    </SectionCard>
+  )
+}
+
+/**
+ * تاریخچه‌ی تخصیصِ یک سند — «تسویه‌شده: ۱۰۰» کافی نیست.
+ *
+ * هر گام با تاریخ و مبلغ و **سمتِ مقابلش** می‌آید؛ تسویه‌های برگشت‌خورده هم
+ * می‌مانند و علامت می‌خورند، وگرنه «چرا مانده برگشت؟» بی‌جواب می‌ماند.
+ */
+function AllocationHistory({ token, item }: { token: string; item: OpenItem }) {
+  const data = useAsync(
+    () => fetchAllocationHistory(token, item.source_type, item.source_id),
+    [token, item.source_type, item.source_id],
+  )
+  const rows = data.data ?? []
+  return (
+    <AsyncBlock
+      loading={data.loading}
+      error={data.error}
+      empty={rows.length === 0}
+      emptyText="این سند هنوز در هیچ تسویه‌ای نیامده است."
+    >
+      <ul className="settle-history">
+        {rows.map((row) => (
+          <li key={row.settlement_id} className={row.voided ? 'is-voided' : ''}>
+            <span className="settle-history__head">
+              تسویه {faInt(row.number)} — {formatJalali(row.settlement_date)}
+              {row.voided && <em> (برگشت‌خورده)</em>}
+            </span>
+            <span className="settle-history__amount">{fa(row.amount)}</span>
+            <span className="settle-history__counter">
+              {row.counter_items.length === 0
+                ? '—'
+                : row.counter_items
+                    .map((c) => `${c.label} ${fa(c.amount)}`)
+                    .join(' · ')}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </AsyncBlock>
   )
 }
 

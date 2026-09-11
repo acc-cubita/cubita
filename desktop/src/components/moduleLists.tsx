@@ -41,6 +41,7 @@ import {
   MapPin,
   Receipt,
   Repeat,
+  Scale,
   Tag,
   Tags,
   Target,
@@ -148,6 +149,9 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     //: «چه عملیاتی کِی روی چه چکی» — نمای دومِ دامنه‌ی چک، در برابرِ
     //: «جستجوی چک» که می‌گوید الان چه داریم و وضعیتشان چیست.
     { key: 'checkoplist', label: 'عملیات چک', icon: History },
+    //: تسویه‌ی طرف مقابل رابطه است نه گردشِ پول، پس دفترِ خودش را دارد و در
+    //: «دریافت‌ها و پرداخت‌ها» قاطیِ رسیدها نمی‌شود.
+    { key: 'contactsettlelist', label: 'تسویه‌های طرف مقابل', icon: Scale },
     { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet },
     { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet },
   ],
@@ -207,6 +211,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   posterminallist: 'دریافت و پرداخت',
   possettlelist: 'دریافت و پرداخت',
   checkoplist: 'دریافت و پرداخت',
+  contactsettlelist: 'دریافت و پرداخت',
   statementlist: 'دریافت و پرداخت',
   pettylist: 'دریافت و پرداخت',
   analyticlist: 'حسابداری',
@@ -266,7 +271,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   payflow: 'none', //: راهنمای مسیر
   receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
   paymentvoucher: 'treasuryledger',
-  contactsettle: 'treasuryledger',
+  contactsettle: 'contactsettlelist',
   //: دفترِ چک‌ها همان «جستجوی چک» است — کاربر صریحاً آن را در کارتِ عملیات خواست،
   //: و فهرستِ دومِ چک یعنی دو نمای یک داده.
   checkops: 'checksearch',

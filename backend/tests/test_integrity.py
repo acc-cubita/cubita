@@ -392,6 +392,8 @@ def test_endpoint_serialises_the_whole_report(client, db, user):
         "leaf_with_children",
         "trial_vs_ledger",
         "empty_entries",
+        "over_allocated",
+        "unsettleable_balance",
     }
     found = next(c for c in body["checks"] if c["key"] == "unbalanced_entries")
     assert found["rows"][0]["entry_id"] == str(entry.id)

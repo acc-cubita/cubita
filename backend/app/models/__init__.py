@@ -109,11 +109,14 @@ from app.models.sales_ops import (
     ProductBundleLine,
     SaleType,
 )
+from app.models.settlement import Settlement, SettlementAllocation
 from app.models.treasury import TreasuryTransaction
 from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.user import Role, User
 
 __all__ = [
+    "Settlement",
+    "SettlementAllocation",
     "CommissionRule",
     "CommissionRun",
     "CommissionRunLine",

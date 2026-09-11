@@ -32,6 +32,7 @@ from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
+from app.services.voiding import guard_no_active_allocations
 
 
 # ───────────────────────── ۱) پیشنهادِ قیمت‌گذاری ─────────────────────────
@@ -339,6 +340,7 @@ def void_note(db: Session, user: User, note_id: UUID, reason: str) -> CreditDebi
         raise HTTPException(status.HTTP_404_NOT_FOUND, "اعلامیه پیدا نشد")
     if note.voided_at is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "این اعلامیه قبلاً باطل شده")
+    guard_no_active_allocations(db, "credit_debit_note", note.id, "اعلامیه")
     assert_period_open(db, date_.today())
 
     receivable = get_account(db, cc.ACCOUNTS_RECEIVABLE)

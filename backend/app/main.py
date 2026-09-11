@@ -52,6 +52,7 @@ from app.routers import (
     recurring,
     reports,
     returns,
+    settlements,
     shop,
     stock_taking,
     storefront,
@@ -134,6 +135,7 @@ app.include_router(billing.router)
 app.include_router(treasury.router)
 app.include_router(pos_settlements.router)
 app.include_router(pos_terminals.router)
+app.include_router(settlements.router)
 app.include_router(audit.router)
 app.include_router(backup.router)
 app.include_router(subscription.router)

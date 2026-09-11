@@ -5481,6 +5481,178 @@ export const settlePosTerminal = (
 export const voidPosSettlement = (token: string, id: string, reason: string) =>
   authedSend<PosSettlement>(token, 'POST', `/api/pos-settlements/${id}/void`, { reason })
 
+// ═══════════════════════ تسویه‌ی حسابِ طرف مقابل ═══════════════════════
+//
+// **تسویه پول جابه‌جا نمی‌کند.** رسیدِ دریافت و اعلامیه‌ی پرداخت (بالاتر در همین
+// فایل) گردشِ پول‌اند؛ این‌جا فقط گفته می‌شود کدام بدهکار با کدام بستانکار تسویه
+// شد. پس هیچ‌کدام از این توابع سندِ حسابداری نمی‌سازند.
+
+export type SettlementSide = 'debit' | 'credit'
+export type OpenItemStatus = 'unsettled' | 'partial' | 'settled' | 'over'
+
+export const OPEN_ITEM_STATUS_LABEL: Record<OpenItemStatus, string> = {
+  unsettled: 'تسویه‌نشده',
+  partial: 'تسویه جزئی',
+  settled: 'تسویه کامل',
+  over: 'تخصیصِ بیش از مانده',
+}
+
+/** معینِ طرف مقابل — دریافتنی یا پرداختنی. */
+export interface CounterpartyAccount {
+  id: string
+  code: string
+  name: string
+}
+
+/** یک قلمِ قابلِ تسویه. مبلغ و سمت از اثرِ واقعیِ سند در دفتر می‌آیند، نه از نامِ فرم. */
+export interface OpenItem {
+  source_type: string
+  source_id: string
+  label: string
+  /** شماره‌ی خودِ سند. رسیدِ دریافت ندارد و با `entry_number` شناخته می‌شود. */
+  number: number | null
+  entry_number: number | null
+  document_date: string
+  side: SettlementSide
+  document_amount: string
+  settled_amount: string
+  remaining_amount: string
+  status: OpenItemStatus
+  status_label: string
+  currency_code: string | null
+  fx_amount: string | null
+}
+
+export interface OpenItemSummary {
+  account_id: string
+  account_name: string
+  /** ماندهٔ خامِ کلِ معین در دفتر — با `net` یکی نیست وقتی گردشِ بی‌سند هست. */
+  account_ledger_net: string
+  /**
+   * گردشی که سندِ قابلِ تسویه ندارد: سندِ دستی روی دریافتنی/پرداختنی، ماندهٔ اول
+   * دوره، و چکِ ثبت‌شده پیش از نسخه‌ی ۰۱۱۱. صفر یعنی هر ریالِ این معین لنگرِ سند دارد.
+   */
+  unattributed: string
+  contact_id: string | null
+  contact_name: string
+  debit_total: string
+  credit_total: string
+  /** جمعِ جبری — باید با ماندهٔ همان معین در دفتر بخواند. */
+  net: string
+  open_debit: string
+  open_credit: string
+  items: OpenItem[]
+}
+
+export interface SettlementAllocation {
+  side: SettlementSide
+  source_type: string
+  source_id: string
+  label: string
+  amount: string
+  number: number | null
+  entry_number: number | null
+  document_date: string | null
+  document_amount: string | null
+  settled_amount: string | null
+  remaining_amount: string | null
+  status: OpenItemStatus | null
+  /** سندِ منبع دیگر روی این معین گردشی ندارد — باطل یا ویرایش شده. */
+  source_missing: boolean
+}
+
+export interface SettlementRow {
+  id: string
+  number: number
+  settlement_date: string
+  contact_id: string
+  contact_name: string
+  account_id: string
+  account_name: string
+  currency_code: string
+  description: string
+  description2: string
+  total_amount: string
+  item_count: number
+  voided_at: string | null
+  void_reason: string
+  created_at: string | null
+}
+
+export interface SettlementDetail extends SettlementRow {
+  allocations: SettlementAllocation[]
+}
+
+/** یک گامِ تخصیص روی یک سند — «کِی، چقدر، و بابتِ چه». */
+export interface AllocationHistoryRow {
+  settlement_id: string
+  number: number
+  settlement_date: string
+  side: SettlementSide
+  amount: string
+  description: string
+  voided: boolean
+  counter_items: { source_type: string; source_id: string; label: string; amount: string }[]
+}
+
+export const fetchCounterpartyAccounts = (token: string) =>
+  authedGet<CounterpartyAccount[]>(token, '/api/settlements/accounts')
+
+export const fetchOpenItems = (
+  token: string,
+  query: {
+    accountId: string
+    contactId?: string
+    asOf?: string
+    onlyOpen?: boolean
+    excludeSettlementId?: string
+  },
+) => {
+  const qs = new URLSearchParams({ account_id: query.accountId })
+  if (query.contactId) qs.set('contact_id', query.contactId)
+  if (query.asOf) qs.set('as_of', query.asOf)
+  if (query.onlyOpen === false) qs.set('only_open', 'false')
+  if (query.excludeSettlementId) qs.set('exclude_settlement_id', query.excludeSettlementId)
+  return authedGet<OpenItemSummary>(token, `/api/settlements/open-items?${qs}`)
+}
+
+export const fetchAllocationHistory = (token: string, sourceType: string, sourceId: string) =>
+  authedGet<AllocationHistoryRow[]>(
+    token,
+    `/api/settlements/history?source_type=${encodeURIComponent(sourceType)}&source_id=${sourceId}`,
+  )
+
+export const fetchContactSettlements = (
+  token: string,
+  query: { contactId?: string; accountId?: string; dateFrom?: string; dateTo?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  if (query.contactId) qs.set('contact_id', query.contactId)
+  if (query.accountId) qs.set('account_id', query.accountId)
+  if (query.dateFrom) qs.set('date_from', query.dateFrom)
+  if (query.dateTo) qs.set('date_to', query.dateTo)
+  return authedGet<SettlementRow[]>(token, `/api/settlements?${qs}`)
+}
+
+export const fetchContactSettlement = (token: string, id: string) =>
+  authedGet<SettlementDetail>(token, `/api/settlements/${id}`)
+
+export const createContactSettlement = (
+  token: string,
+  data: {
+    settlement_date: string
+    contact_id: string
+    account_id: string
+    description?: string
+    description2?: string
+    items: { source_type: string; source_id: string; side: SettlementSide; amount: number }[]
+  },
+) => authedSend<SettlementDetail>(token, 'POST', '/api/settlements', data)
+
+/** برگشتِ تسویه — فقط رابطه آزاد می‌شود؛ فاکتور و رسید دست‌نخورده می‌مانند. */
+export const voidContactSettlement = (token: string, id: string, reason: string) =>
+  authedSend<SettlementRow>(token, 'POST', `/api/settlements/${id}/void`, { reason })
+
 // ═══════════════════════ عملیاتِ ماژولِ فروش ═══════════════════════
 //
 // همه زیرِ `/api/sales-ops`. یک نکته‌ی طراحی که در تایپ‌ها هم دیده می‌شود: تخفیف و

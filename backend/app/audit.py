@@ -88,6 +88,7 @@ def audited_models() -> dict[type, str]:
     from app.models.payroll import Payslip
     from app.models.period_close import FiscalPeriodClose
     from app.models.returns import PurchaseReturn, SalesReturn
+    from app.models.settlement import Settlement
     from app.models.transfers import StockTransfer
     from app.models.treasury import TreasuryTransaction
 
@@ -104,6 +105,9 @@ def audited_models() -> dict[type, str]:
         #: خزانه، تنها موجودیتی بود که هیچ ردِ حسابرسی‌ای نمی‌گذاشت.
         Check: "چک",
         FiscalPeriodClose: "بستن دوره",
+        #: تسویه سندِ حسابداری نمی‌زند، پس دفتر هیچ ردی از تغییرش نشان نمی‌دهد —
+        #: و دقیقاً به همین دلیل حسابرسی‌اش واجب‌تر است، نه کمتر (§۴۹).
+        Settlement: "تسویه حساب طرف مقابل",
     }
 
 

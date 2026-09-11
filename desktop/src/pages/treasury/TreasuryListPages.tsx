@@ -4,13 +4,15 @@ import {
   CreditCard,
   FileSpreadsheet,
   History,
-
+  Scale,
   ScrollText,
   Wallet,
 } from 'lucide-react'
 import {
   fetchBankAccountsAdmin,
   fetchCheckbooks,
+  fetchContactSettlement,
+  fetchContactSettlements,
   fetchPettyCashTransactions,
   CHECK_OPERATION_LABEL,
   fetchCheckOperations,
@@ -18,6 +20,7 @@ import {
   fetchPosSettlements,
   fetchPosTerminals,
   fetchStatementLines,
+  voidContactSettlement,
   voidPosSettlement,
   type BankStatementLineRecord,
 } from '../../api'
@@ -368,6 +371,193 @@ export function PosSettlementListPage({ token }: { token: string }) {
                       </td>
                       <td data-label="کارت"><span dir="ltr">{r.card_mask || '—'}</span></td>
                       <td className="num" data-label="مبلغ">{fa(r.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </AsyncBlock>
+        </SectionCard>
+      ) : null}
+    </OpsPage>
+  )
+}
+
+// ═══════════════════ تسویه‌های طرف مقابل ═══════════════════
+
+/**
+ * دفترِ تسویه‌های حسابِ طرف مقابل.
+ *
+ * **این فهرست گردشِ پول نیست.** «مرور عملیات بانکی» و «صندوق» می‌گویند پول کجا
+ * رفت؛ این می‌گوید کدام بدهکار با کدام بستانکار تسویه شد. هیچ ردیفی از این
+ * فهرست سندِ حسابداری ندارد و نباید داشته باشد — اثرِ مالی را فاکتور و رسید
+ * قبلاً زده‌اند.
+ *
+ * برگشتِ یک ردیف هم چیزی را حذف نمی‌کند: فقط رابطه آزاد می‌شود و اسنادِ منبع
+ * دوباره مانده‌ی قابلِ تسویه پیدا می‌کنند.
+ */
+export function ContactSettlementListPage({ token }: { token: string }) {
+  const [reloadKey, setReloadKey] = useState(0)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [msg, setMsg] = useState<Msg>(null)
+
+  const list = useAsync(() => fetchContactSettlements(token), [token, reloadKey])
+  const detail = useAsync(
+    async () => (openId ? fetchContactSettlement(token, openId) : null),
+    [token, openId, reloadKey],
+  )
+
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 15)
+  const live = rows.filter((r) => !r.voided_at)
+  const total = live.reduce((s, r) => s + Number(r.total_amount), 0)
+
+  async function onVoid(id: string, number: number) {
+    const reason = window.prompt(`دلیلِ برگشتِ تسویه‌ی شماره ${number}؟`)
+    if (!reason || !reason.trim()) return
+    setMsg(null)
+    try {
+      await voidContactSettlement(token, id, reason.trim())
+      setMsg({
+        text: `تسویه‌ی ${faInt(number)} برگشت خورد؛ اسنادش دوباره مانده‌ی قابلِ تسویه دارند. هیچ فاکتور یا رسیدی حذف نشد.`,
+        kind: 'ok',
+      })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
+
+  return (
+    <OpsPage
+      icon={Scale}
+      title="تسویه‌های طرف مقابل"
+      description="هر ردیف یک سندِ تسویه: چند قلمِ بدهکار در برابرِ چند قلمِ بستانکارِ یک طرف حساب."
+      head={
+        <div className="cc-head">
+          <div className="cc-summary">
+            <Metric icon={<Scale size={14} />} label="تسویه‌ها" value={faInt(live.length)} />
+            <Metric icon={<Wallet size={14} />} label="جمعِ تخصیص" value={fa(total)} tone="in" />
+          </div>
+        </div>
+      }
+    >
+      <Note msg={msg} />
+
+      <SectionCard icon={Scale} title="تسویه‌ها" description={`${faInt(rows.length)} ردیف`}>
+        <AsyncBlock
+          loading={list.loading}
+          error={list.error}
+          empty={rows.length === 0}
+          emptyText="هنوز تسویه‌ای ثبت نشده. از «تسویه حساب طرف مقابل» شروع کنید."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>شماره</th>
+                  <th>تاریخ</th>
+                  <th>طرف حساب</th>
+                  <th>معین</th>
+                  <th>اقلام</th>
+                  <th>مبلغ</th>
+                  <th>شرح</th>
+                  <th className="card-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((r) => (
+                  <tr key={r.id} className={r.voided_at ? 'muted-row' : undefined}>
+                    <td className="card-title" data-label="شماره">
+                      {faInt(r.number)}
+                      {r.voided_at ? (
+                        <div className="entity-sub">برگشت‌خورده — {r.void_reason}</div>
+                      ) : null}
+                    </td>
+                    <td data-label="تاریخ">{formatJalali(r.settlement_date)}</td>
+                    <td data-label="طرف حساب">{r.contact_name}</td>
+                    <td data-label="معین">{r.account_name}</td>
+                    <td className="num" data-label="اقلام">{faInt(r.item_count)}</td>
+                    <td className="num" data-label="مبلغ">{fa(r.total_amount)}</td>
+                    <td data-label="شرح">
+                      {r.description || '—'}
+                      {r.description2 ? <div className="entity-sub">{r.description2}</div> : null}
+                    </td>
+                    <td className="card-actions">
+                      <button type="button" onClick={() => setOpenId(openId === r.id ? null : r.id)}>
+                        {openId === r.id ? 'بستنِ اقلام' : 'اقلام'}
+                      </button>
+                      {r.voided_at ? null : (
+                        <button type="button" onClick={() => void onVoid(r.id, r.number)}>
+                          برگشت
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      {openId ? (
+        <SectionCard
+          icon={ScrollText}
+          title={`اقلامِ تسویه‌ی ${faInt(detail.data?.number ?? 0)}`}
+          description="مبلغ و مانده از خودِ سندِ منبع خوانده می‌شوند، نه از کپیِ لحظه‌ی ثبت."
+        >
+          <AsyncBlock
+            loading={detail.loading}
+            error={detail.error}
+            empty={!detail.data || detail.data.allocations.length === 0}
+            emptyText="قلمی به این تسویه وصل نیست."
+          >
+            <div className="table-scroll">
+              <table className="cards-on-mobile acc-table">
+                <thead>
+                  <tr>
+                    <th>سمت</th>
+                    <th>نوع</th>
+                    <th>شماره</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ سند</th>
+                    <th>مبلغ تسویه</th>
+                    <th>مانده کنونی</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(detail.data?.allocations ?? []).map((a) => (
+                    <tr key={`${a.source_type}:${a.source_id}`}>
+                      <td className="card-title" data-label="سمت">
+                        {a.side === 'debit' ? 'بدهکار' : 'بستانکار'}
+                      </td>
+                      <td data-label="نوع">
+                        {a.label}
+                        {a.source_missing ? (
+                          <div className="entity-sub">سندِ منبع دیگر روی این معین گردشی ندارد</div>
+                        ) : null}
+                      </td>
+                      <td data-label="شماره">
+                        {a.number != null
+                          ? faInt(a.number)
+                          : a.entry_number != null
+                            ? `سند ${faInt(a.entry_number)}`
+                            : '—'}
+                      </td>
+                      <td data-label="تاریخ">
+                        {a.document_date ? formatJalali(a.document_date) : '—'}
+                      </td>
+                      <td className="num" data-label="مبلغ سند">
+                        {a.document_amount != null ? fa(a.document_amount) : '—'}
+                      </td>
+                      <td className="num" data-label="مبلغ تسویه">
+                        <strong>{fa(a.amount)}</strong>
+                      </td>
+                      <td className="num" data-label="مانده کنونی">
+                        {a.remaining_amount != null ? fa(a.remaining_amount) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
