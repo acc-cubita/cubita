@@ -9,10 +9,11 @@
 هر دو از همان `checks` و `check_events` می‌آیند، نه از دو منبعِ موازی.
 """
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
@@ -22,30 +23,86 @@ from app.pagination import Page, PageParams, paginate
 from app.schemas.banking import CheckIn, CheckOut, CheckStatusUpdateIn
 from app.schemas.check_ops import (
     CheckEventOut,
+    CheckSummaryOut,
     CheckOperationIn,
     CheckOperationOut,
     CheckOperationRowOut,
 )
 from app.services import check_ops as svc
+from app.services import check_search as search
 from app.services.idempotency import idempotent
 
 router = APIRouter(tags=["checks"])
 
 
+@router.get("/api/checks/summary", response_model=list[CheckSummaryOut])
+def checks_summary(
+    type: str | None = Query(None, description="receivable | payable"),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """شمارش و مبلغِ هر وضعیت (§۳۴).
+
+    **پیش از `/{check_id}` می‌آید**، وگرنه FastAPI رشته‌ی «summary» را شناسه
+    می‌گیرد و ۴۲۲ می‌دهد.
+    """
+    return search.summary(db, type_=type)
+
+
 @router.get("/api/checks", response_model=Page[CheckOut])
 def list_checks(
+    q: str | None = Query(None, description="شماره، صیادی، پشت‌نمره، صاحبِ چک، بانک، طرف حساب"),
+    type: str | None = Query(None, description="receivable | payable"),
+    status: str | None = Query(None),
+    due_from: date | None = Query(None),
+    due_to: date | None = Query(None),
+    amount_min: Decimal | None = Query(None),
+    amount_max: Decimal | None = Query(None),
+    bank_account_id: UUID | None = Query(None),
+    cashbox_id: UUID | None = Query(None),
+    contact_id: UUID | None = Query(None),
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
     _=Depends(require_permission("checks_bank", "view")),
 ):
+    """جستجوی چک — **فیلترها روی سرور** (§۲۲).
+
+    تا امروز این اندپوینت هیچ فیلتری نداشت و کلاینت همه‌ی چک‌ها را می‌گرفت و در
+    مرورگر غربال می‌کرد. نتیجه‌اش برای دفترِ بزرگ مگابایت داده بود برای پیدا‌کردنِ
+    یک برگ — و «جستجو روی کدِ صیادی» اصلاً ممکن نبود چون فیلترِ کلاینت آن ستون را
+    نمی‌دید.
+    """
     # id به‌عنوان شکننده‌ی تساوی: تاریخ به‌تنهایی یکتا نیست و ردیف‌های هم‌تاریخ سر مرز صفحه گم می‌شوند
     items, next_cursor = paginate(
-        db.query(Check).options(selectinload(Check.contact)),
+        search.search(
+            db,
+            q=q,
+            type_=type,
+            status=status,
+            due_from=due_from,
+            due_to=due_to,
+            amount_min=amount_min,
+            amount_max=amount_max,
+            bank_account_id=bank_account_id,
+            cashbox_id=cashbox_id,
+            contact_id=contact_id,
+        ),
         [Check.due_date, Check.id],
         params,
         descending=False,
     )
-    return Page(items=items, next_cursor=next_cursor)
+    return Page(items=[_with_holder(db, c) for c in items], next_cursor=next_cursor)
+
+
+def _with_holder(db: Session, check: Check) -> dict:
+    """ردیفِ خروجی + «الان کجاست» (§۲۰).
+
+    مشتق می‌شود نه ذخیره: ستونِ جدا یعنی عددی که می‌تواند با وضعیت نخواند.
+    """
+    holder = search.current_holder(db, check)
+    row = CheckOut.model_validate(check).model_dump()
+    row.update(holder_kind=holder.kind, holder_label=holder.label, holder_id=holder.id)
+    return row
 
 
 @router.post("/api/checks", response_model=CheckOut, status_code=201)

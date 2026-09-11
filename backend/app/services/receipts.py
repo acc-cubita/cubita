@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import date as date_, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -157,7 +157,7 @@ def assert_reference_free(db: Session, reference_no: str) -> None:
 
 
 def _component_rows(
-    db: Session, data: ReceiptIn, user: User, rate: Decimal
+    db: Session, data: ReceiptIn, user: User, rate: Decimal, *, receipt_id: UUID
 ) -> tuple[list[dict], list[JournalLine], Decimal, Decimal]:
     """اجزا را می‌سنجد و برای هرکدام یک ردیفِ بدهکار می‌سازد (§۳۳).
 
@@ -298,7 +298,11 @@ def _component_rows(
             #: ردیفِ چک این‌جا ساخته می‌شود ولی **سندِ جدا نمی‌زند** — اثرش در
             #: همین سندِ رسید است. `new_check_row` همان گاردهای مسیرِ مستقیم را
             #: اجرا می‌کند (برگ، صیادی)، تا دو مسیر یکسان بسنجند.
-            check = check_ops.new_check_row(db, cheque_in, user)
+            check = check_ops.new_check_row(
+                db, cheque_in, user,
+                #: §۱۴ — رویدادِ «دریافت» باید بگوید در کدام رسید ثبت شده.
+                source_type="receipt", source_id=receipt_id,
+            )
             lines.append(
                 JournalLine(
                     account_id=cheque_account.id,
@@ -356,6 +360,9 @@ def _validate_related_documents(db: Session, data: ReceiptIn, contact: Contact, 
 
 def create_receipt(db: Session, data: ReceiptIn, user: User) -> Receipt:
     """رسیدِ دریافت با یک تا چند ابزار (§۶) و یک سند (§۳۰)."""
+    #: قرینه‌ی `create_payment`: ردیف‌های چک پیش از خودِ رسید ساخته می‌شوند و
+    #: رویدادِ دریافتشان باید همین‌جا به رسید اشاره کند. تاریخچه فقط‌افزودنی است.
+    receipt_id = uuid4()
     assert_period_open(db, data.receipt_date)
 
     contact = db.get(Contact, data.contact_id)
@@ -365,7 +372,9 @@ def create_receipt(db: Session, data: ReceiptIn, user: User) -> Receipt:
     rate = Decimal(data.exchange_rate)
     _assert_currency_known(db, data.currency_code, rate)
 
-    pending, debit_lines, document_total, base_total = _component_rows(db, data, user, rate)
+    pending, debit_lines, document_total, base_total = _component_rows(
+        db, data, user, rate, receipt_id=receipt_id
+    )
     if base_total <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "مبلغ دریافت باید بزرگ‌تر از صفر باشد")
 
@@ -407,6 +416,7 @@ def create_receipt(db: Session, data: ReceiptIn, user: User) -> Receipt:
     )
 
     receipt = Receipt(
+        id=receipt_id,
         number=next_document_number(db, DOC_RECEIPT),
         receipt_type=data.receipt_type,
         contact_id=contact.id,

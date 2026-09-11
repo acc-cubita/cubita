@@ -156,8 +156,8 @@ class CheckOut(BaseModel):
     bank_account_id: UUID | None
     checkbook_id: UUID | None = None
     receipt_id: UUID | None = None
-    sayad_id: str = ""
-    back_number: str = ""
+    #: چکی که با اعلامیه‌ی پرداخت صادر یا خرج شده — راهِ رفتن به همان سند (§۱۵).
+    payment_id: UUID | None = None
     branch_name: str = ""
     branch_code: str = ""
     account_number: str = ""
@@ -165,6 +165,10 @@ class CheckOut(BaseModel):
     voided_at: datetime | None = None
     #: صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`.
     cashbox_id: UUID | None = None
+    #: **«الان کجاست؟» (§۲۰).** مشتق از وضعیت و پیوندها، نه ستونِ ذخیره‌شده.
+    holder_kind: str = "none"
+    holder_label: str = ""
+    holder_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 

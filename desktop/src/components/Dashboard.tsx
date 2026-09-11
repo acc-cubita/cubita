@@ -656,7 +656,7 @@ export function Dashboard({
           {page === 'contactsettle' && <ContactSettlementPage token={token} />}
           {page === 'checkreturn' && <CheckReturnPage token={token} />}
           {page === 'checkpayclear' && <CheckPayableClearPage token={token} />}
-          {page === 'checksearch' && <CheckSearchPage token={token} />}
+          {page === 'checksearch' && <CheckSearchPage token={token} onNavigate={setPage} />}
           {page === 'possettle' && <PosSettlementPage token={token} />}
           {page === 'bankstatement' && <BankStatementPage token={token} />}
           {page === 'bankreconcile' && <BankReconcilePage token={token} bankAccounts={bankAccounts} />}

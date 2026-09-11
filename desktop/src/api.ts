@@ -578,12 +578,75 @@ export interface CheckRecord {
   contact_name: string | null
   bank_account_id: string | null
   checkbook_id?: string | null
+  /** اعلامیه‌ای که چک با آن صادر یا خرج شده — راهِ رفتن به همان سند. */
+  payment_id?: string | null
+  receipt_id?: string | null
+  description2?: string
+  branch_name?: string
+  branch_code?: string
+  account_number?: string
+  owner_name?: string
   voided_at?: string | null
   /** صندوقی که چک در آن نقد شد — فقط برای وضعیتِ `cashed`. */
   cashbox_id?: string | null
+  /** «الان کجاست» — مشتق از وضعیت و پیوندها، نه ستونِ ذخیره‌شده. */
+  holder_kind?: 'company' | 'bank_account' | 'cashbox' | 'contact' | 'none'
+  holder_label?: string
+  holder_id?: string | null
 }
 
-export const fetchChecks = (token: string) => authedGetAll<CheckRecord>(token, '/api/checks')
+/** فیلترهای جستجوی چک — **همه روی سرور** اعمال می‌شوند. */
+export interface CheckSearchQuery {
+  q?: string
+  type?: 'receivable' | 'payable'
+  status?: string
+  dueFrom?: string
+  dueTo?: string
+  amountMin?: string
+  amountMax?: string
+  bankAccountId?: string
+  cashboxId?: string
+  contactId?: string
+}
+
+function checkSearchParams(query: CheckSearchQuery): URLSearchParams {
+  const qs = new URLSearchParams()
+  if (query.q?.trim()) qs.set('q', query.q.trim())
+  if (query.type) qs.set('type', query.type)
+  if (query.status) qs.set('status', query.status)
+  if (query.dueFrom) qs.set('due_from', query.dueFrom)
+  if (query.dueTo) qs.set('due_to', query.dueTo)
+  if (query.amountMin) qs.set('amount_min', query.amountMin)
+  if (query.amountMax) qs.set('amount_max', query.amountMax)
+  if (query.bankAccountId) qs.set('bank_account_id', query.bankAccountId)
+  if (query.cashboxId) qs.set('cashbox_id', query.cashboxId)
+  if (query.contactId) qs.set('contact_id', query.contactId)
+  return qs
+}
+
+/**
+ * جستجوی چک.
+ *
+ * **فیلتر روی سرور است، نه در مرورگر.** نسخه‌ی قبلی همه‌ی چک‌ها را می‌گرفت و
+ * این‌جا غربال می‌کرد؛ برای دفترِ بزرگ یعنی مگابایت داده برای یک برگ، و
+ * «جستجو روی کدِ صیادی» اصلاً ممکن نبود چون آن ستون در غربالِ کلاینت نبود.
+ */
+export const fetchChecks = (token: string, query: CheckSearchQuery = {}) =>
+  authedGetAll<CheckRecord>(token, `/api/checks?${checkSearchParams(query)}`)
+
+/** شمارش و مبلغِ هر وضعیت — KPIهای بالای صفحه‌ی جستجو. */
+export interface CheckStatusSummary {
+  status: string
+  label: string
+  count: number
+  amount: string
+}
+
+export const fetchCheckSummary = (token: string, type?: 'receivable' | 'payable') =>
+  authedGet<CheckStatusSummary[]>(
+    token,
+    `/api/checks/summary${type ? `?type=${type}` : ''}`,
+  )
 
 /** یک گامِ تاریخچه‌ی چک. */
 export interface CheckEventRecord {
@@ -607,6 +670,11 @@ export interface CheckEventRecord {
   contact_id: string | null
   contact_name: string | null
   journal_entry_id: string | null
+  /** سندِ **عملیاتی** که این گذر در آن ثبت شد — با سندِ حسابداری یکی نیست. */
+  source_type?: 'receipt' | 'payment' | null
+  source_id?: string | null
+  source_label?: string | null
+  source_number?: number | null
   note: string
 }
 

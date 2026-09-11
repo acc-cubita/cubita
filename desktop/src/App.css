@@ -10424,3 +10424,52 @@ button.mp-item:focus-visible {
   .settle-history__counter { grid-column: 1 / -1; }
   .settle-totals > div { flex: 1 1 8rem; }
 }
+
+/* ───────────────────────── پرونده‌ی چک (جستجو و ردیابی) ─────────────────────
+   ردیفِ انتخاب‌شده باید در جدولِ پانزده‌ردیفی پیدا باشد، وگرنه کاربر نمی‌داند
+   پرونده‌ی پایینِ صفحه مالِ کدام برگ است. */
+tr.is-selected > td { background: var(--surface-2); }
+tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, currentColor); }
+
+/* مشخصاتِ برگ — جفتِ برچسب/مقدار، دو یا سه ستون بسته به عرض. */
+.check-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0;
+}
+.check-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.check-facts dt { color: var(--text-muted); font-size: var(--fs-sm); }
+.check-facts dd { margin: 0; font-weight: 600; }
+
+/* مسیرِ چک — هر گام: چه شد، کِی، کجا، و در کدام سند. ستونِ آخر همان چیزی است که
+   پیش از نسخه‌ی ۰۱۱۵ اصلاً وجود نداشت. */
+.check-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  counter-reset: trail;
+}
+.check-trail li {
+  display: grid;
+  grid-template-columns: 10rem 7rem 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-inline-start: 2px solid var(--border);
+  background: var(--surface-2, transparent);
+  border-radius: 6px;
+}
+.check-trail__what { font-weight: 600; }
+.check-trail__when,
+.check-trail__where { color: var(--text-muted); font-size: var(--fs-sm); }
+.check-trail__source em { font-style: normal; font-size: var(--fs-sm); }
+
+@media (max-width: 760px) {
+  .check-trail li { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .check-trail__where { grid-column: 1 / -1; }
+  .check-trail__source { grid-column: 1 / -1; }
+}
