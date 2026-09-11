@@ -24,6 +24,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { NumberInput } from '../../components/NumberInput'
 import { Pager, usePagination } from '../../components/Pager'
 import { SectionCard } from '../../components/SectionCard'
+import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 
@@ -36,6 +37,7 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
   const [msg, setMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [journalEntryId, setJournalEntryId] = useState<string | null>(null)
   const requestKey = useRef(newIdempotencyKey())
 
   const [paymentType, setPaymentType] = useState<PaymentType>('supplier')
@@ -239,7 +241,8 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
         payable_cheques: payableCheques, endorsed_cheques: endorsedCheques,
         related_documents: relatedPurchaseId ? [{
           document_type: 'purchase_invoice', document_id: relatedPurchaseId,
-          allocated_amount: principal + Number(discount || 0),
+          // این فقط Reference است؛ تخصیص مبلغ تصمیمِ موتور Settlement است.
+          allocated_amount: 0,
         }] : [],
       }, requestKey.current)
       setMsg({ text: 'اعلامیه‌ی پرداخت و سند متوازن آن ثبت شد.', kind: 'ok' })
@@ -311,8 +314,9 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
       </form>
 
       <SectionCard icon={ArrowUpFromLine} title="آخرین اعلامیه‌ها" description="هر ردیف یک Payment Notice مستقل است.">
-        <AsyncBlock loading={data.loading} error={data.error} empty={recent.length === 0} emptyText="هنوز اعلامیه‌ای ثبت نشده."><div className="table-scroll"><table className="cards-on-mobile acc-table"><thead><tr><th>شماره</th><th>تاریخ</th><th>طرف حساب</th><th>اقلام</th><th>مبلغ پرداخت</th><th>کارمزد</th><th /></tr></thead><tbody>{pg.pageItems.map((row) => <tr key={row.id} className={row.voided_at ? 'acc-row--void' : ''}><td className="card-title" data-label="شماره">{faInt(row.number)}</td><td data-label="تاریخ">{formatJalali(row.payment_date)}</td><td className="card-wide" data-label="طرف حساب">{row.contact_name}</td><td className="card-wide" data-label="اقلام">{row.items_summary}</td><td className="num" data-label="مبلغ پرداخت">{fa(row.payment_amount)}</td><td className="num" data-label="کارمزد">{fa(row.bank_fee_amount)}</td><td className="card-actions"><button type="button" className="link-button" onClick={() => void openPaymentPrintView(token, row.id)}>چاپ</button>{!row.voided_at && <button type="button" className="link-button" onClick={() => void voidRow(row.id, row.number)}><Ban size={14} /> ابطال</button>}</td></tr>)}</tbody></table><Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} /></div></AsyncBlock>
+        <AsyncBlock loading={data.loading} error={data.error} empty={recent.length === 0} emptyText="هنوز اعلامیه‌ای ثبت نشده."><div className="table-scroll"><table className="cards-on-mobile acc-table"><thead><tr><th>شماره</th><th>تاریخ</th><th>طرف حساب</th><th>اقلام</th><th>مبلغ پرداخت</th><th>کارمزد</th><th /></tr></thead><tbody>{pg.pageItems.map((row) => <tr key={row.id} className={row.voided_at ? 'acc-row--void' : ''}><td className="card-title" data-label="شماره">{faInt(row.number)}</td><td data-label="تاریخ">{formatJalali(row.payment_date)}</td><td className="card-wide" data-label="طرف حساب">{row.contact_name}</td><td className="card-wide" data-label="اقلام">{row.items_summary}</td><td className="num" data-label="مبلغ پرداخت">{fa(row.payment_amount)}</td><td className="num" data-label="کارمزد">{fa(row.bank_fee_amount)}</td><td className="card-actions" data-label="عملیات"><button type="button" className="link-button" onClick={() => setJournalEntryId(row.journal_entry_id)}>سند حسابداری</button><button type="button" className="link-button" onClick={() => void openPaymentPrintView(token, row.id)}>چاپ</button>{!row.voided_at && <button type="button" className="link-button" onClick={() => void voidRow(row.id, row.number)}><Ban size={14} /> ابطال</button>}</td></tr>)}</tbody></table><Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} /></div></AsyncBlock>
       </SectionCard>
+      {journalEntryId && <JournalEntryDrawer token={token} entryId={journalEntryId} onClose={() => setJournalEntryId(null)} />}
     </OpsPage>
   )
 }

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact, StockLedger
-from app.models.payment import Payment, PaymentRelatedDocument
 from app.models.sales_ops import SaleType
 from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseReceipt
 from app.models.tenant import Membership
@@ -43,24 +42,10 @@ router = APIRouter(tags=["invoices"])
 
 
 def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None:
-    """دو وضعیت مستقلِ تحویل و تسویه را فقط از اسناد معتبر مشتق می‌کند."""
+    """تحویل را مشتق می‌کند؛ تسویه تا ساخته‌شدن موتور Allocation باز می‌ماند."""
     if not invoices:
         return
     ids = [invoice.id for invoice in invoices]
-    allocations = dict(
-        db.query(
-            PaymentRelatedDocument.document_id,
-            func.coalesce(func.sum(PaymentRelatedDocument.allocated_amount * Payment.exchange_rate), 0),
-        )
-        .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
-        .filter(
-            PaymentRelatedDocument.document_type == "purchase_invoice",
-            PaymentRelatedDocument.document_id.in_(ids),
-            Payment.voided_at.is_(None),
-        )
-        .group_by(PaymentRelatedDocument.document_id)
-        .all()
-    )
     legacy_ids = {
         source_id
         for (source_id,) in db.query(StockLedger.source_id)
@@ -84,13 +69,12 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
             "not_received" if received_total <= 0 else "fully_received" if received_total >= ordered_total else "partially_received"
         )
         final = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
-        settled = min(Decimal(allocations.get(invoice.id, 0)), final)
         invoice.final_amount = final
-        invoice.settled_amount = settled
-        invoice.remaining_amount = max(final - settled, Decimal(0))
-        invoice.financial_status = (
-            "unsettled" if settled <= 0 else "fully_settled" if settled >= final else "partially_settled"
-        )
+        # PaymentRelatedDocument فقط Reference است. وضعیت مالی وقتی قابل محاسبه
+        # می‌شود که موتور Settlement/Allocation با سیاست‌های بازِ §۲۰ ساخته شود.
+        invoice.settled_amount = Decimal(0)
+        invoice.remaining_amount = final
+        invoice.financial_status = "unsettled"
         rate = Decimal(invoice.exchange_rate or 1)
         invoice.transaction_total_amount = (Decimal(invoice.total_amount) / rate).quantize(Decimal("0.01"))
         invoice.transaction_tax_amount = (Decimal(invoice.tax_amount) / rate).quantize(Decimal("0.01"))

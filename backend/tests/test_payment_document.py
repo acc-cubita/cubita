@@ -3,24 +3,30 @@
 import pytest
 from datetime import date, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.banking import BankAccount, BankTransaction, Check
 from app.models.inventory import Contact
-from app.models.payment import Payment, PaymentChequeTransfer
+from app.models.payment import Payment, PaymentChequeTransfer, PaymentRelatedDocument
 from app.schemas.banking import CheckIn, CheckbookIn
+from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn
 from app.schemas.payments import (
     PaymentBankWithdrawalIn,
     PaymentCashIn,
     PaymentEndorsedChequeIn,
     PaymentIn,
     PaymentPayableChequeIn,
+    PaymentRelatedDocumentIn,
 )
 from app.services import check_ops, checkbooks, payments
 from app.services import chart_codes as cc
 from app.services.common import get_account
+from app.services.inventory import post_purchase_invoice
+from tests.factories import make_item
 
 TODAY = date(2026, 6, 1)
 
@@ -290,3 +296,50 @@ def test_a_cheque_spent_through_a_payment_lands_in_the_timeline(db, user):
     assert len(endorse) == 1, "خرج‌کردن با اعلامیه باید در تایم‌لاین بیفتد"
     #: و به سندِ خودِ اعلامیه اشاره کند، نه به سندِ دوم
     assert endorse[0]["journal_entry_id"] is not None
+
+
+def test_related_purchase_is_traceability_not_a_settlement_allocation(db, user, client):
+    supplier = _contact(db)
+    item = make_item(db, name="کالای مرجع پرداخت")
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=TODAY,
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(1), unit_cost=Decimal(100_000))],
+        ),
+        user,
+    )
+    payment = payments.create_payment(
+        db,
+        PaymentIn(
+            payment_type="supplier",
+            contact_id=supplier.id,
+            payment_date=TODAY,
+            description="پرداخت با مرجع خرید",
+            description2="فقط پیوند ردیابی",
+            cash=[PaymentCashIn(amount=Decimal(40_000))],
+            related_documents=[PaymentRelatedDocumentIn(
+                document_type="purchase_invoice", document_id=invoice.id
+            )],
+        ),
+        user,
+    )
+    link = db.query(PaymentRelatedDocument).filter(
+        PaymentRelatedDocument.payment_id == payment.id
+    ).one()
+    assert link.document_id == invoice.id
+    assert Decimal(link.allocated_amount) == 0
+
+    row = client.get("/api/purchase-invoices").json()["items"][0]
+    assert row["financial_status"] == "unsettled"
+    assert Decimal(row["settled_amount"]) == 0
+    assert Decimal(row["remaining_amount"]) == Decimal(row["final_amount"])
+
+
+def test_payment_chapter_cannot_smuggle_allocation_into_related_document():
+    with pytest.raises(ValidationError) as error:
+        PaymentRelatedDocumentIn(
+            document_type="purchase_invoice", document_id=uuid4(), allocated_amount=Decimal(1)
+        )
+    assert "موتور تسویه" in str(error.value)
