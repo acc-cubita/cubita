@@ -69,6 +69,35 @@ class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام. همان الگویی که طرف‌حساب و
+    #: حسابِ بانکی دارند.
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: مشخصاتِ اجراییِ انبار (§۳ §۶ §۷ §۸). این‌ها **متادیتا**ی عملیاتی‌اند و هیچ
+    #: نقشی در موجودی ندارند؛ عوض‌شدنشان هیچ حرکتِ انباری را تغییر نمی‌دهد (§۳۶).
+    #:
+    #: `responsible` عمداً متن است نه کلیدِ خارجی به کاربر/پرسنل: §۶ می‌گوید این
+    #: فصل چنین الزامی را نشان نمی‌دهد، و انبارِ برون‌سپاری‌شده ممکن است مسئولی
+    #: داشته باشد که اصلاً در سیستم کاربر نیست.
+    responsible: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    phone: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    address: Mapped[str] = mapped_column(Text, default="", server_default="")
+    address2: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    #: **معینِ انبار (§۹ §۱۰ §۱۱).** انبار خودش حساب نیست؛ این فقط نگاشتی به
+    #: حسابِ موجودِ چارت است.
+    #:
+    #: `NULL` یعنی «حسابِ پیش‌فرضِ موجودیِ کالا» — همان چیزی که امروز همه‌ی
+    #: انبارها از نقشِ `inventory` می‌گیرند. پس هیچ مستأجری با این مهاجرت رفتارش
+    #: عوض نمی‌شود؛ فقط کسی که صریحاً نگاشت بگذارد، رفتارِ تازه می‌گیرد (§۱۳:
+    #: این فیلد در فرم اجباری نیست).
+    #:
+    #: §۱۴ عمداً باز است: چند انبار می‌توانند به یک حساب اشاره کنند (سیاستِ
+    #: تجمیعی) یا هرکدام به حسابِ خودش. قیدِ یکتایی نمی‌گذاریم چون فصل چنین
+    #: محدودیتی را تثبیت نمی‌کند.
+    gl_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

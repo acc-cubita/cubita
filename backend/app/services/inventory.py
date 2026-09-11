@@ -21,6 +21,7 @@ from app.models.user import User
 from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
+from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
 from app.services.common import number_lines
@@ -218,6 +219,9 @@ def post_sales_invoice(
     فروشنده. شرحِ کامل در [گاردِ اعتبار](credit.py).
     """
     assert_period_open(db, data.invoice_date)
+    #: §۱۵ — انبارِ غیرفعال در ثبتِ تازه انتخاب نمی‌شود. تا امروز این پرچم فقط در
+    #: رسیدِ انبارِ خرید سنجیده می‌شد، پس «غیرفعال» یک برچسبِ نیمه‌کاره بود.
+    warehouses.assert_usable(db, data.warehouse_id, action="فاکتور فروش")
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
@@ -362,7 +366,9 @@ def post_sales_invoice(
         )
         journal_lines.append(
             JournalLine(
-                account_id=_get_account(db, cc.INVENTORY).id,
+                #: معینِ **همان انبار** (§۹). اگر انبار نگاشتِ خودش را نداشته
+                #: باشد، همان حسابِ پیش‌فرض برمی‌گردد — یعنی رفتارِ پیشین.
+                account_id=warehouses.inventory_account_id(db, data.warehouse_id),
                 debit=0,
                 credit=total_cost,
                 description="کسر از موجودی کالا بابت فروش",
@@ -435,6 +441,7 @@ def post_sales_invoice(
 
 def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> PurchaseInvoice:
     assert_period_open(db, data.invoice_date)
+    warehouses.assert_usable(db, data.warehouse_id, action="فاکتور خرید")
 
     if data.warehouse_id is None and data.contact_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انتخاب تأمین‌کننده برای فاکتور خرید الزامی است")
@@ -555,7 +562,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     payable_or_cash = _get_account(db, cc.ACCOUNTS_PAYABLE) if data.contact_id else _get_account(db, cc.CASH)
     journal_lines = [
         JournalLine(
-            account_id=_get_account(db, cc.INVENTORY).id,
+            account_id=warehouses.inventory_account_id(db, data.warehouse_id),
             debit=total_amount,
             credit=0,
             description="بابت خرید کالا",
@@ -652,6 +659,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
 def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> StockAdjustment:
     assert_period_open(db, data.adjustment_date)
+    warehouses.assert_usable(db, data.warehouse_id, action="تعدیل موجودی")
 
     item = db.get(Item, data.item_id)
     if item is None:
@@ -671,10 +679,14 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
     amount = abs(data.qty_diff) * unit_cost
 
     # کسری: بدهکار حساب مغایرت انبار (هزینه)، بستانکار موجودی کالا. اضافی: برعکس (کاهش هزینه‌ی مغایرت).
+    #: سمتِ موجودی از معینِ همان انبار می‌آید؛ سمتِ مغایرت حسابِ هزینه‌ای است و
+    #: به انبار ربطی ندارد.
+    inventory_account_id = warehouses.inventory_account_id(db, data.warehouse_id)
+    adjustment_account_id = _get_account(db, cc.INVENTORY_ADJUSTMENT).id
     if data.qty_diff < 0:
-        debit_account, credit_account = cc.INVENTORY_ADJUSTMENT, cc.INVENTORY
+        debit_id, credit_id = adjustment_account_id, inventory_account_id
     else:
-        debit_account, credit_account = cc.INVENTORY, cc.INVENTORY_ADJUSTMENT
+        debit_id, credit_id = inventory_account_id, adjustment_account_id
 
     journal_entry = None
     if amount > 0:
@@ -686,8 +698,8 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
             source_type="stock_adjustment",
             created_by_id=user.id,
             lines=number_lines([
-                JournalLine(account_id=_get_account(db, debit_account).id, debit=amount, credit=0),
-                JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
+                JournalLine(account_id=debit_id, debit=amount, credit=0),
+                JournalLine(account_id=credit_id, debit=0, credit=amount),
             ]),
         )
         tafsili.assert_entry_has_tafsili(db, journal_entry)

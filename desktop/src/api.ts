@@ -1630,22 +1630,62 @@ export interface LowStockRow {
 
 export const fetchLowStock = (token: string) => authedGet<LowStockRow[]>(token, '/api/stock/low')
 
-/** انبار (کامل، با وضعیتِ فعال) — برای تبِ مدیریتِ انبارها. */
+/**
+ * انبار (کامل) — برای تبِ مدیریتِ انبارها.
+ *
+ * **هیچ فیلدِ موجودی ندارد و نباید داشته باشد.** انبار فقط یکی از ابعادِ موجودی
+ * است؛ مانده همیشه از حرکاتِ انبار می‌آید.
+ */
 export interface WarehouseRecord {
   id: string
   code: string
   name: string
+  /** عنوانِ دوم — فیلدِ مستقل، نه پیوستِ نام. */
+  name2: string
+  responsible: string
+  phone: string
+  address: string
+  address2: string
   is_active: boolean
+  /** معینِ انبار. `null` یعنی حسابِ پیش‌فرضِ موجودیِ کالا. */
+  gl_account_id: string | null
+  gl_account_code: string
+  gl_account_name: string
+  /** درست یعنی این حساب انتخابِ کاربر نبوده، پیش‌فرض است. */
+  gl_account_is_default: boolean
+}
+
+export interface WarehouseInput {
+  code: string
+  name: string
+  name2?: string
+  responsible?: string
+  phone?: string
+  address?: string
+  address2?: string
+  gl_account_id?: string | null
+}
+
+/** کالاهای دارای موجودیِ غیرصفر — پیش از غیرفعال‌کردن پرسیده می‌شود. */
+export interface WarehouseStockPositions {
+  item_count: number
+  items: { item_id: string; item_name: string; qty: string }[]
 }
 
 export const fetchWarehousesAdmin = (token: string) =>
   authedGet<WarehouseRecord[]>(token, '/api/warehouses')
 
-export const createWarehouse = (token: string, data: { code: string; name: string }) =>
+export const createWarehouse = (token: string, data: WarehouseInput) =>
   authedSend<WarehouseRecord>(token, 'POST', '/api/warehouses', data)
 
-export const updateWarehouse = (token: string, id: string, patch: { name?: string; is_active?: boolean }) =>
-  authedSend<WarehouseRecord>(token, 'PATCH', `/api/warehouses/${id}`, patch)
+export const updateWarehouse = (
+  token: string,
+  id: string,
+  patch: Partial<WarehouseInput> & { is_active?: boolean },
+) => authedSend<WarehouseRecord>(token, 'PATCH', `/api/warehouses/${id}`, patch)
+
+export const fetchWarehouseStock = (token: string, id: string) =>
+  authedGet<WarehouseStockPositions>(token, `/api/warehouses/${id}/stock-positions`)
 
 // --- مسیر «وب مستقیم» (بدون Electron): برای اجرای همین اپ در مرورگر (دموی وب/ورود وب)، جای صف آفلاین و
 // کش محلی SQLite، همه‌چیز مستقیم و زنده از API خوانده/نوشته می‌شود. شکل خروجی هرکدام با Cache-type متناظر در

@@ -9,10 +9,17 @@ from app.models.inventory import Item, StockLedger
 from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.user import User
 from app.schemas.transfers import StockTransferIn
+from app.services import warehouses
 from app.services.inventory import get_stock_qty
 
 
 def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> StockTransfer:
+    #: §۲۲ — انتقال یک رویدادِ انباریِ قابلِ ردیابی است، نه «حذف از این‌جا و ساختِ
+    #: آن‌جا». هر دو سرش باید انبارِ فعال باشند: انتقال **به** انبارِ غیرفعال
+    #: یعنی کالا همان‌جا گیر بیفتد.
+    warehouses.assert_usable(db, data.from_warehouse_id, action="انتقال از انبار")
+    warehouses.assert_usable(db, data.to_warehouse_id, action="انتقال به انبار")
+
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
     transfer_lines: list[StockTransferLine] = []

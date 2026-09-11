@@ -16,6 +16,18 @@ from app.models.inventory import (
 class WarehouseIn(BaseModel):
     code: str
     name: str
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام.
+    name2: str = ""
+    #: مشخصاتِ اجرایی (§۳ §۶ §۷ §۸). `responsible` متن است نه کاربر/پرسنل:
+    #: §۶ چنین الزامی را نشان نمی‌دهد و انبارِ برون‌سپاری‌شده ممکن است مسئولی
+    #: داشته باشد که اصلاً کاربرِ سیستم نیست.
+    responsible: str = ""
+    phone: str = ""
+    address: str = ""
+    address2: str = ""
+    #: معینِ انبار — **اختیاری** (§۱۳). خالی یعنی حسابِ پیش‌فرضِ موجودیِ کالا،
+    #: که همان رفتارِ امروزِ همه‌ی انبارهاست.
+    gl_account_id: UUID | None = None
 
 
 class WarehouseUpdateIn(BaseModel):
@@ -23,6 +35,12 @@ class WarehouseUpdateIn(BaseModel):
     (روی حرکاتِ انبار و اسناد نشسته)، پس اینجا نمی‌آید."""
 
     name: str | None = None
+    name2: str | None = None
+    responsible: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    address2: str | None = None
+    gl_account_id: UUID | None = None
     is_active: bool | None = None
 
     @field_validator("name")
@@ -39,9 +57,28 @@ class WarehouseOut(BaseModel):
     id: UUID
     code: str
     name: str
+    name2: str = ""
+    responsible: str = ""
+    phone: str = ""
+    address: str = ""
+    address2: str = ""
     is_active: bool
+    gl_account_id: UUID | None = None
+    #: کد و عنوانِ حسابِ معین برای فهرست (§۲۹). وقتی نگاشت خالی است، حسابِ
+    #: پیش‌فرض نشان داده می‌شود و `is_default` می‌گوید انتخابِ کاربر نبوده —
+    #: نشان‌ندادنش یعنی کاربر فکر کند این انبار به هیچ حسابی نمی‌نشیند.
+    gl_account_code: str = ""
+    gl_account_name: str = ""
+    gl_account_is_default: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class WarehouseStockPositionOut(BaseModel):
+    """اثرِ غیرفعال‌سازی (§۱۷) — چند قلم کالا با موجودیِ غیرصفر."""
+
+    item_count: int
+    items: list[dict] = []
 
 
 ENTITY_TYPES = ("real", "legal")

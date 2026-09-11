@@ -14,6 +14,7 @@ from app.models.returns import PurchaseReturn, PurchaseReturnLine, SalesReturn, 
 from app.models.user import User
 from app.schemas.returns import PurchaseReturnIn, SalesReturnIn
 from app.services import chart_codes as cc
+from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
 from app.services.inventory import (
     compute_tax,
@@ -177,7 +178,9 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     if total_cost > 0:
         journal_lines.append(
             JournalLine(
-                account_id=get_account(db, cc.INVENTORY).id, debit=total_cost, credit=0, description="بازگشت کالا به موجودی"
+                #: معینِ همان انباری که کالا به آن برمی‌گردد (§۹).
+                account_id=warehouses.inventory_account_id(db, invoice.warehouse_id), debit=total_cost, credit=0,
+                description="بازگشت کالا به موجودی"
             )
         )
         journal_lines.append(
@@ -345,7 +348,8 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             description="برگشت از خرید",
         ),
         JournalLine(
-            account_id=get_account(db, cc.INVENTORY).id, debit=0, credit=total_amount, description="کاهش موجودی بابت برگشت از خرید"
+            account_id=warehouses.inventory_account_id(db, invoice.warehouse_id), debit=0, credit=total_amount,
+            description="کاهش موجودی بابت برگشت از خرید"
         ),
     ]
     if tax_amount > 0:

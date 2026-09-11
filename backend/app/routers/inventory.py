@@ -15,6 +15,7 @@ from app.models.company import ContactAddress, ContactChannel
 from app.services import tafsili
 from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
+from app.services import warehouses as warehouses_svc
 from app.schemas.inventory import (
     ContactAddressIn,
     ContactAddressOut,
@@ -32,6 +33,7 @@ from app.schemas.inventory import (
     StockLevelOut,
     WarehouseIn,
     WarehouseOut,
+    WarehouseStockPositionOut,
     WarehouseUpdateIn,
 )
 from app.services.credit import get_credit_status
@@ -42,18 +44,27 @@ router = APIRouter(tags=["inventory"])
 
 @router.get("/api/warehouses", response_model=list[WarehouseOut])
 def list_warehouses(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
-    return db.query(Warehouse).order_by(Warehouse.code).all()
+    """فهرستِ انبارها با کد و عنوانِ حسابِ معینشان (§۲۹)."""
+    return [
+        warehouses_svc.row(db, w) for w in db.query(Warehouse).order_by(Warehouse.code).all()
+    ]
 
 
 @router.post("/api/warehouses", response_model=WarehouseOut, status_code=201)
 def create_warehouse(
     data: WarehouseIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "create"))
 ):
-    warehouse = Warehouse(code=data.code, name=data.name)
+    """**ساختِ انبار رویدادِ مالی نیست (§۳۲).**
+
+    نه سندی می‌زند، نه موجودی می‌سازد، نه حسابِ تازه‌ای در چارت درست می‌کند
+    (§۱۲) — فقط به حسابی که از قبل هست اشاره می‌کند.
+    """
+    warehouses_svc.assert_postable_account(db, data.gl_account_id)
+    warehouse = Warehouse(**data.model_dump())
     db.add(warehouse)
     db.flush()
     db.refresh(warehouse)
-    return warehouse
+    return warehouses_svc.row(db, warehouse)
 
 
 @router.patch("/api/warehouses/{warehouse_id}", response_model=WarehouseOut)
@@ -63,15 +74,54 @@ def update_warehouse(
     db: Session = Depends(get_db),
     _=Depends(require_permission("inventory", "update")),
 ):
-    """ویرایشِ نام/فعال‌بودنِ انبار. کد ثابت می‌ماند (روی حرکاتِ انبار نشسته)."""
+    """ویرایشِ مشخصات/نگاشت/فعال‌بودنِ انبار. کد ثابت می‌ماند (روی حرکاتِ انبار نشسته).
+
+    **تغییرِ عنوان و مسئول و آدرس هیچ حرکتِ انباری را عوض نمی‌کند (§۳۵ §۳۶)** —
+    اسناد به `warehouse_id` وصل‌اند نه به نام.
+
+    **و تغییرِ نگاشتِ حساب، سندهای گذشته را بازنویسی نمی‌کند (§۳۴).** حساب در
+    لحظه‌ی ثبت روی ردیفِ سند می‌نشیند و سند تغییرناپذیر است؛ پس گذشته همان‌طور
+    می‌ماند که بود و فقط ثبت‌های آینده نگاشتِ تازه را می‌گیرند.
+    """
     warehouse = db.get(Warehouse, warehouse_id)
     if warehouse is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "انبار یافت نشد")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "gl_account_id" in changes:
+        warehouses_svc.assert_postable_account(db, changes["gl_account_id"])
+    #: §۱۷ — کالا در انبارِ غیرفعال گیر می‌افتد: نه خارج می‌شود نه وارد.
+    if changes.get("is_active") is False and warehouse.is_active:
+        warehouses_svc.assert_can_deactivate(db, warehouse)
+    for key, value in changes.items():
         setattr(warehouse, key, value)
     db.flush()
     db.refresh(warehouse)
-    return warehouse
+    return warehouses_svc.row(db, warehouse)
+
+
+@router.get("/api/warehouses/{warehouse_id}/stock-positions", response_model=WarehouseStockPositionOut)
+def warehouse_stock_positions(
+    warehouse_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """کالاهای دارای موجودیِ غیرصفر در این انبار (§۱۷).
+
+    رابط پیش از غیرفعال‌کردن این را می‌پرسد تا بتواند **قبل** از خطا بگوید چه
+    چیزی سرِ راه است.
+    """
+    positions = warehouses_svc.stock_positions(db, warehouse_id)
+    names = {
+        i.id: i.name
+        for i in db.query(Item).filter(Item.id.in_([p["item_id"] for p in positions])).all()
+    } if positions else {}
+    return {
+        "item_count": len(positions),
+        "items": [
+            {"item_id": str(p["item_id"]), "item_name": names.get(p["item_id"], "—"), "qty": str(p["qty"])}
+            for p in positions
+        ],
+    }
 
 
 @router.get("/api/contacts", response_model=Page[ContactOut])
