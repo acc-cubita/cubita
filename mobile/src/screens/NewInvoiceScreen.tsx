@@ -4,9 +4,11 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import { createSalesInvoice, fetchWarehouses } from '../api/invoices'
+import { fetchWarehouses } from '../api/invoices'
+import { enqueue } from '../offline/outbox'
 import { isApiError } from '../api/client'
 import type { HomeStackParams } from '../navigation/types'
+import type { SalesInvoiceOut } from '../api/types'
 import { AppText, Button, Card, TextField } from '../ui'
 import { colors, faMoney, faNum, radius, spacing } from '../theme'
 import { normalizeDecimal, todayIso } from '../lib/format'
@@ -71,8 +73,12 @@ export function NewInvoiceScreen() {
   const removeLine = (idx: number) => setLines((prev) => prev.filter((_, i) => i !== idx))
 
   const save = useMutation({
+    // **از صف رد می‌شود، نه مستقیم.** ویزیتوری که در محلِ مشتری آنتن ندارد پیش
+    // از این کارش را از دست می‌داد؛ صف از فازِ ۳ ساخته شده بود ولی هیچ‌جا صدا
+    // زده نمی‌شد. آنلاین که باشیم `enqueue` خودش فوراً می‌فرستد، پس رفتارِ
+    // عادی عوض نمی‌شود.
     mutationFn: () =>
-      createSalesInvoice({
+      enqueue('salesInvoice', {
         invoice_date: todayIso(),
         warehouse_id: warehouse!.id,
         contact_id: contact?.id ?? null,
@@ -84,10 +90,21 @@ export function NewInvoiceScreen() {
           unit_price: normalizeDecimal(l.unit_price),
         })),
       }),
-    onSuccess: (inv) => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['sales-summary'] })
       void qc.invalidateQueries({ queryKey: ['sales-dashboard'] })
       void qc.invalidateQueries({ queryKey: ['alerts'] })
+      if (res.status === 'queued') {
+        // شماره‌ی سند را سرور با شمارنده‌ی بی‌شکاف می‌دهد؛ کلاینت نمی‌تواند از
+        // پیش بسازد. پس صادقانه گفته می‌شود که هنوز شماره‌ای وجود ندارد.
+        Alert.alert(
+          'ثبت شد و در صفِ ارسال است',
+          'اینترنت نبود. فاکتور روی گوشی ذخیره شد و به‌محضِ اتصال خودش می‌رود. شماره‌ی فاکتور بعد از ارسال مشخص می‌شود.',
+          [{ text: 'باشه', onPress: () => nav.goBack() }],
+        )
+        return
+      }
+      const inv = res.data as SalesInvoiceOut
       const total = Number(inv.total_amount) + Number(inv.tax_amount) + Number(inv.rounding)
       Alert.alert(
         'فاکتور ثبت شد',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { AppText } from '../ui'
@@ -14,8 +14,11 @@ import { faNum } from '../theme'
  * هنوز به سرور نرفته) و فکر می‌کند کارش گم شده — پس دوباره ثبتش می‌کند. یعنی
  * نبودِ این نوار خودش باعثِ همان ثبتِ دوباره‌ای می‌شود که کلیدِ idempotency برای
  * جلوگیری از آن گذاشته شده.
+ *
+ * **و قابلِ لمس است.** نوارِ بی‌کنش بن‌بست بود: کاربر می‌دید چیزی ثبت نشده و هیچ
+ * کاری نمی‌توانست بکند.
  */
-export function OutboxBadge() {
+export function OutboxBadge({ onPress }: { onPress?: () => void }) {
   const [items, setItems] = useState<OutboxItem[]>([])
 
   useEffect(() => subscribeOutbox(setItems), [])
@@ -26,7 +29,12 @@ export function OutboxBadge() {
   const pending = items.length - rejected.length
 
   return (
-    <View style={styles.bar}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="دیدنِ صفِ ارسال"
+      style={styles.bar}
+    >
       {rejected.length > 0 ? (
         <>
           <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
@@ -42,7 +50,7 @@ export function OutboxBadge() {
           </AppText>
         </>
       )}
-    </View>
+    </Pressable>
   )
 }
 

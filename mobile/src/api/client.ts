@@ -73,7 +73,13 @@ function tryRefresh(): Promise<boolean> {
   return refreshing
 }
 
-async function request<T>(method: string, path: string, body?: unknown, isRetry = false): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  isRetry = false,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   let res: Response
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
@@ -81,6 +87,7 @@ async function request<T>(method: string, path: string, body?: unknown, isRetry 
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...extraHeaders,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
@@ -95,7 +102,7 @@ async function request<T>(method: string, path: string, body?: unknown, isRetry 
   if (res.status === 401 && !isAuthPath(path)) {
     // یک بار با رفرش‌توکن، accessِ تازه بگیر و همان درخواست را دوباره بزن.
     if (!isRetry && (await tryRefresh())) {
-      return request<T>(method, path, body, true)
+      return request<T>(method, path, body, true, extraHeaders)
     }
     onUnauthorized?.()
     throw { status: 401, message: 'نشست منقضی شده است؛ دوباره وارد شوید.' } as ApiError
@@ -117,7 +124,18 @@ async function request<T>(method: string, path: string, body?: unknown, isRetry 
 }
 
 export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path)
-export const apiPost = <T>(path: string, body?: unknown): Promise<T> => request<T>('POST', path, body)
+/**
+ * `headers` برای صفِ نوشتنِ آفلاین است: `Idempotency-Key` و هدرِ replay.
+ *
+ * صف عمداً `fetch`ِ خودش را ندارد — با آن، توکن تزریق نمی‌شد (سرِ بازگشتِ شبکه
+ * ۴۰۱ می‌گرفت و کار تا ابد در صف می‌ماند)، رفرشِ خودکار نداشت، و `detail`ِ خطای
+ * سرور دور ریخته می‌شد.
+ */
+export const apiPost = <T>(
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> => request<T>('POST', path, body, false, headers)
 export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => request<T>('PATCH', path, body)
 export const apiPut = <T>(path: string, body?: unknown): Promise<T> => request<T>('PUT', path, body)
 export const apiDelete = <T>(path: string): Promise<T> => request<T>('DELETE', path)

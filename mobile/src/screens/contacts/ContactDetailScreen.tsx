@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import type { RouteProp } from '@react-navigation/native'
-import { useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { fetchContactStatement, fetchCreditStatus, KIND_LABEL } from '../../api/contacts'
@@ -10,10 +10,15 @@ import { MoneyRow, ReportScaffold, Section } from '../../ui/report'
 import { AppText, Button, Card } from '../../ui'
 import { colors, faMoney, spacing } from '../../theme'
 import type { ContactsStackParams } from '../../navigation/types'
+import { useAuth } from '../../auth/AuthContext'
+import { canAccess } from '../../auth/access'
 
 export function ContactDetailScreen() {
   const { params } = useRoute<RouteProp<ContactsStackParams, 'ContactDetail'>>()
   const { id } = params
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nav = useNavigation<any>()
+  const { me } = useAuth()
   const stmtQ = useQuery({ queryKey: ['statement', id], queryFn: () => fetchContactStatement(id) })
   const creditQ = useQuery({ queryKey: ['credit', id], queryFn: () => fetchCreditStatus(id) })
   const [sharing, setSharing] = useState(false)
@@ -59,6 +64,36 @@ export function ContactDetailScreen() {
                 <AppText variant="label" color={colors.danger}>از سقفِ اعتبار عبور کرده است</AppText>
               </View>
             ) : null}
+          </View>
+        ) : null}
+
+        {/* **ثبت از همین‌جا.** پیش از این تنها کنشِ این صفحه اشتراکِ PDF بود:
+            ویزیتور مانده را می‌دید، پول می‌گرفت، و باید برمی‌گشت به خانه ←
+            ثبتِ دریافت ← و همان مشتری را دوباره از فهرست پیدا می‌کرد.
+
+            نوعِ کنش از **علامتِ مانده** می‌آید نه از فرض: مثبت یعنی او به ما
+            بدهکار است (دریافت)، منفی یعنی ما به او (پرداخت). */}
+        {s && canAccess(me, 'treasury') && closing !== 0 ? (
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              label={closing > 0 ? 'ثبتِ دریافت از این شخص' : 'ثبتِ پرداخت به این شخص'}
+              onPress={() =>
+                nav.navigate('Home', {
+                  screen: 'Treasury',
+                  params: {
+                    type: closing > 0 ? 'receipt' : 'payment',
+                    pickedContact: { id, name: s.contact_name },
+                  },
+                })
+              }
+              icon={
+                <Ionicons
+                  name={closing > 0 ? 'arrow-down-circle' : 'arrow-up-circle'}
+                  size={18}
+                  color={colors.onAccent}
+                />
+              }
+            />
           </View>
         ) : null}
 

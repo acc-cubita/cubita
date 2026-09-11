@@ -4,9 +4,11 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import { createPayment, createReceipt, fetchBankAccounts } from '../api/treasury'
+import { fetchBankAccounts } from '../api/treasury'
+import { enqueue } from '../offline/outbox'
 import { isApiError } from '../api/client'
 import type { HomeStackParams } from '../navigation/types'
+import type { TreasuryTxn } from '../api/types'
 import { AppText, Button, Card, TextField } from '../ui'
 import { colors, faMoney, radius, spacing } from '../theme'
 import { normalizeInt, todayIso } from '../lib/format'
@@ -46,13 +48,23 @@ export function TreasuryScreen() {
         bank_account_id: method === 'bank' ? bankId : null,
         description: description.trim(),
       }
-      return isReceipt ? createReceipt(body) : createPayment(body)
+      // از صف رد می‌شود تا ثبتِ بی‌آنتن گم نشود؛ آنلاین که باشیم فوراً می‌رود.
+      return enqueue(isReceipt ? 'receipt' : 'payment', body)
     },
-    onSuccess: (txn) => {
+    onSuccess: (res) => {
       // داشبورد/هشدارها/کارتِ حساب همه تغییر کرده‌اند.
       void qc.invalidateQueries({ queryKey: ['sales-summary'] })
       void qc.invalidateQueries({ queryKey: ['alerts'] })
       void qc.invalidateQueries({ queryKey: ['contacts'] })
+      if (res.status === 'queued') {
+        Alert.alert(
+          'ثبت شد و در صفِ ارسال است',
+          `اینترنت نبود. ${faMoney(normalizeInt(amount))} ریال روی گوشی ذخیره شد و به‌محضِ اتصال خودش می‌رود.`,
+          [{ text: 'باشه', onPress: () => nav.goBack() }],
+        )
+        return
+      }
+      const txn = res.data as TreasuryTxn
       Alert.alert(
         isReceipt ? 'دریافت ثبت شد' : 'پرداخت ثبت شد',
         `${faMoney(txn.amount)} ریال — ${txn.contact_name}`,
