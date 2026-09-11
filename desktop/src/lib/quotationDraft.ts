@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import {
-  createSalesQuotation,
+  createSalesQuotationIdempotent,
   updateSalesQuotation,
   fetchContacts,
   fetchStockLevels,
+  newIdempotencyKey,
   type ContactRecord,
   type SalesQuotationRecord,
   type StockLevel,
@@ -46,6 +47,7 @@ export function useQuotationDraft({
   const [lines, setLines] = usePersistentState<QuotationDraftLine[]>('cubita.draft.quotation.lines', [{ itemId: '', qty: '1', unitPrice: '' }], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const idempotencyKey = useRef(newIdempotencyKey())
 
   // مشتری: از فهرستِ اشخاص یا دستی
   const [customerMode, setCustomerMode] = usePersistentState<'list' | 'manual'>('cubita.draft.quotation.customerMode', 'list', persistOff)
@@ -178,7 +180,8 @@ export function useQuotationDraft({
         resetForm()
         setMessage('پیش‌فاکتور ویرایش شد.')
       } else {
-        await createSalesQuotation(token, payload)
+        await createSalesQuotationIdempotent(token, payload, idempotencyKey.current)
+        idempotencyKey.current = newIdempotencyKey()
         resetForm()
         setMessage('پیش‌فاکتور ثبت شد.')
         onCreated()

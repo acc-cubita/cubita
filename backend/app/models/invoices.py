@@ -64,6 +64,16 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     # شناسه‌ی سفارش روی سایت فروشگاهی؛ برای idempotent بودن sync (جلوگیری از وارد کردن دوباره‌ی همان سفارش)
     source_order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
+    source_quotation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "sales_quotations.id",
+            name="fk_sales_invoices_source_quotation",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
 
     #: **بستنِ فاکتور** — قفل از ویرایش و ابطال. همان معنایی که «دائم» برای سند
     #: دارد: فاکتورِ بسته امضاشده است. یک‌طرفه؛ راهِ بازکردن عمداً نیست.
@@ -112,6 +122,9 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # بهای تمام‌شده در لحظه‌ی فروش (برای COGS)
     description: Mapped[str] = mapped_column(Text, default="")
+    source_quotation_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_quotation_lines.id"), nullable=True, index=True
+    )
 
     #: وضعیتِ مالیاتیِ کالا **در لحظه‌ی فروش** — از `Item.vat_status` کپی می‌شود.
     #:

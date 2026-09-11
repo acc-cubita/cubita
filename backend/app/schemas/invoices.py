@@ -13,6 +13,7 @@ class SalesInvoiceLineIn(BaseModel):
     #: رقمِ ذخیره‌شده بی‌ابهام باشد و با فیلدِ تخفیفِ صورتحساب مؤدیان هم بخواند.
     discount: Decimal = Decimal(0)
     description: str = ""
+    source_quotation_line_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_positive(self) -> "SalesInvoiceLineIn":
@@ -58,6 +59,7 @@ class SalesInvoiceIn(BaseModel):
     #: تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات)، علامت‌دار: منفی = رند به پایین.
     rounding: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
+    source_quotation_id: UUID | None = None
     #: ارز فاکتور (مثل USD). None/خالی = پایه (ریال). مبالغِ سطرها همیشه پایه‌اند —
     #: کلاینت پیش از ارسال با نرخ تبدیل می‌کند؛ این‌ها فقط برای نمایش ذخیره می‌شوند.
     currency_code: str | None = None
@@ -86,6 +88,7 @@ class SalesInvoiceLineOut(BaseModel):
     discount: Decimal = Decimal(0)
     unit_cost: Decimal
     description: str
+    source_quotation_line_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -109,6 +112,7 @@ class SalesInvoiceOut(BaseModel):
     exchange_rate: Decimal = Decimal(1)
     journal_entry_id: UUID | None
     source_order_id: int | None
+    source_quotation_id: UUID | None = None
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
     voided_at: datetime | None = None
     void_reason: str = ""

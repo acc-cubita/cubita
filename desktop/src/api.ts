@@ -6499,3 +6499,42 @@ export interface PurchaseInvoiceDuplicateDraft {
 /** پیش‌نویس رونوشت از سرور می‌آید تا هیچ شناسه یا تخصیص تاریخی دوباره استفاده نشود. */
 export const fetchPurchaseInvoiceDuplicate = (token: string, id: string) =>
   authedGet<PurchaseInvoiceDuplicateDraft>(token, `/api/purchase-invoices/${id}/duplicate`)
+
+// قرارداد تکمیلی پیش‌فاکتور در انتهای فایل می‌ماند تا declaration merging از
+// دست‌کاری بلوک قدیمی و پرتصادم جلوگیری کند.
+export interface SalesQuotationRecord {
+  customer_name2: string
+  delivery_location: string
+  sale_type_id: string | null
+  currency_code: string | null
+  exchange_rate: string
+  terminated_at: string | null
+  is_expired: boolean
+  commercial_status: 'not_invoiced' | 'partially_invoiced' | 'fully_invoiced'
+  invoiced_invoice_ids: string[]
+}
+
+export interface SalesQuotationLine {
+  item_code_snapshot: string
+  item_name_snapshot: string
+  unit_snapshot: string
+  invoiced_qty: string
+  remaining_invoiceable_qty: string
+  issued_qty: string
+  remaining_issueable_qty: string
+}
+
+export const duplicateSalesQuotation = (token: string, id: string) =>
+  authedSend<SalesQuotationRecord>(token, 'POST', `/api/sales-quotations/${id}/duplicate`, {}, newIdempotencyKey())
+
+export const terminateSalesQuotation = (token: string, id: string) =>
+  authedSend<SalesQuotationRecord>(token, 'POST', `/api/sales-quotations/${id}/terminate`, {})
+
+export const reopenSalesQuotation = (token: string, id: string) =>
+  authedSend<SalesQuotationRecord>(token, 'POST', `/api/sales-quotations/${id}/reopen`, {})
+
+export const createSalesQuotationIdempotent = (token: string, data: SalesQuotationInput, key: string) =>
+  authedSend<SalesQuotationRecord>(token, 'POST', '/api/sales-quotations', data, key)
+
+export const convertQuotationToInvoiceIdempotent = (token: string, id: string, key: string) =>
+  authedSend<unknown>(token, 'POST', `/api/sales-quotations/${id}/convert`, {}, key)

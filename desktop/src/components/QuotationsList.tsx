@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
-import { FileCheck, RefreshCw, ArrowLeftCircle, Printer, FileDown, Pencil } from 'lucide-react'
+import { FileCheck, RefreshCw, ArrowLeftCircle, Printer, FileDown, Pencil, Copy, Ban, RotateCcw } from 'lucide-react'
 import {
   fetchSalesQuotations,
   fetchContacts,
   updateQuotationStatus,
-  convertQuotationToInvoice,
+  convertQuotationToInvoiceIdempotent,
   printSalesQuotation,
   downloadSalesQuotationPdf,
+  duplicateSalesQuotation,
+  reopenSalesQuotation,
+  terminateSalesQuotation,
   type SalesQuotationRecord,
+  newIdempotencyKey,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
@@ -102,11 +106,26 @@ export function QuotationsList({
     setError(null)
     setBusyId(id)
     try {
-      await convertQuotationToInvoice(token, id)
+      await convertQuotationToInvoiceIdempotent(token, id, newIdempotencyKey())
       await refresh()
       onConverted()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleCommand(q: SalesQuotationRecord, command: 'duplicate' | 'terminate' | 'reopen') {
+    setError(null)
+    setBusyId(q.id)
+    try {
+      if (command === 'duplicate') await duplicateSalesQuotation(token, q.id)
+      else if (command === 'terminate') await terminateSalesQuotation(token, q.id)
+      else await reopenSalesQuotation(token, q.id)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'عملیات پیش‌فاکتور انجام نشد.')
     } finally {
       setBusyId(null)
     }
@@ -149,7 +168,9 @@ export function QuotationsList({
                 <td data-label="مبلغ">{Number(q.total_amount).toLocaleString('fa-IR')}</td>
                 <td data-label="وضعیت">
                   <span className={`status-badge tone-${STATUS_TONE[q.status] ?? 'default'}`}>
-                    {STATUS_LABELS[q.status] ?? q.status}
+                    {q.terminated_at ? 'خاتمه‌یافته' : q.is_expired ? 'منقضی' : STATUS_LABELS[q.status] ?? q.status}
+                    {' — '}
+                    {({ not_invoiced: 'فاکتورنشده', partially_invoiced: 'فاکتور جزئی', fully_invoiced: 'فاکتور کامل' } as const)[q.commercial_status]}
                   </span>
                 </td>
                 <td className="card-actions" data-label="اقدام">
@@ -160,12 +181,24 @@ export function QuotationsList({
                     <button type="button" onClick={() => void handlePdf(q)}>
                       <FileDown size={13} /> PDF
                     </button>
-                    {q.status !== 'converted' && (
+                    {!q.terminated_at && q.commercial_status === 'not_invoiced' && (
                       <button type="button" onClick={() => onEdit(q)}>
                         <Pencil size={13} /> ویرایش
                       </button>
                     )}
-                    {q.status === 'draft' && (
+                    <button type="button" disabled={busyId === q.id} onClick={() => void handleCommand(q, 'duplicate')}>
+                      <Copy size={13} /> تکثیر
+                    </button>
+                    {q.terminated_at ? (
+                      <button type="button" disabled={busyId === q.id} onClick={() => void handleCommand(q, 'reopen')}>
+                        <RotateCcw size={13} /> بازگشایی
+                      </button>
+                    ) : (
+                      <button type="button" disabled={busyId === q.id} onClick={() => void handleCommand(q, 'terminate')}>
+                        <Ban size={13} /> خاتمه
+                      </button>
+                    )}
+                    {!q.terminated_at && q.status === 'draft' && (
                       <>
                         <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'sent')}>
                           ارسال شد
@@ -178,7 +211,7 @@ export function QuotationsList({
                         </button>
                       </>
                     )}
-                    {q.status === 'sent' && (
+                    {!q.terminated_at && q.status === 'sent' && (
                       <>
                         <button type="button" disabled={busyId === q.id} onClick={() => void handleStatusChange(q.id, 'accepted')}>
                           تأیید شد
@@ -188,7 +221,7 @@ export function QuotationsList({
                         </button>
                       </>
                     )}
-                    {(q.status === 'draft' || q.status === 'sent' || q.status === 'accepted') && (
+                    {!q.terminated_at && q.commercial_status !== 'fully_invoiced' && (q.status === 'draft' || q.status === 'sent' || q.status === 'accepted') && (
                       <button
                         type="button"
                         className="btn-primary"

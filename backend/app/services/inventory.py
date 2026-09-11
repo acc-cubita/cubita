@@ -212,7 +212,7 @@ def lock_items(db: Session, item_ids) -> None:
 
 
 def post_sales_invoice(
-    db: Session, data: SalesInvoiceIn, user: User, *, enforce_credit: bool = True
+    db: Session, data: SalesInvoiceIn, user: User, *, enforce_credit: bool = True, move_inventory: bool = True
 ) -> SalesInvoice:
     """فاکتورِ فروش را ثبت می‌کند.
 
@@ -232,7 +232,7 @@ def post_sales_invoice(
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
-        if not item.is_service:
+        if move_inventory and not item.is_service:
             requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
@@ -276,7 +276,8 @@ def post_sales_invoice(
         # پایه‌ی مالیات هر دو «پس از تخفیف»اند.
         total_amount += (line.qty * line.unit_price) - line_discount
         total_discount += line_discount
-        total_cost += line.qty * unit_cost
+        if move_inventory:
+            total_cost += line.qty * unit_cost
         invoice_lines.append(
             SalesInvoiceLine(
                 item_id=line.item_id,
@@ -285,13 +286,14 @@ def post_sales_invoice(
                 discount=line_discount,
                 unit_cost=unit_cost,
                 description=line.description,
+                source_quotation_line_id=line.source_quotation_line_id,
                 #: وضعیتِ مالیاتی **در لحظه‌ی فروش** قفل می‌شود. اگر گزارش بعداً از
                 #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
                 #: نشان می‌داد. همان دلیلی که `tax_amount` کنارِ `tax_rate` می‌نشیند.
                 vat_status=item.vat_status,
             )
         )
-        if not item.is_service:
+        if move_inventory and not item.is_service:
             stock_moves.append(
                 StockLedger(
                     item_id=line.item_id,
@@ -407,6 +409,7 @@ def post_sales_invoice(
         exchange_rate=data.exchange_rate,
         journal_entry_id=journal_entry.id,
         source_order_id=data.source_order_id,
+        source_quotation_id=data.source_quotation_id,
         broker_id=broker_id,
         broker_commission=broker_commission,
         salesperson_id=salesperson_id,
