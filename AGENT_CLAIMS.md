@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Opus 5 | `backend/app/models/invoices.py` (بخشِ WarehouseReceipt) · `backend/app/services/warehouse_receipts.py` · `backend/app/schemas/invoices.py` (بخشِ رسید) · `backend/app/routers/invoices.py` (نقاطِ رسید) · `backend/app/services/freight.py` · `backend/app/models/returns.py` · `backend/app/services/returns.py` · `backend/app/schemas/returns.py` · `backend/app/routers/returns.py` · `backend/app/services/printing.py` (برگه‌ی انبار) · `backend/app/services/payments.py` (سندِ مرتبط) · `desktop/src/components/WarehouseReceiptsTab.tsx` · `desktop/src/components/PurchaseReturnForm.tsx` · `desktop/src/pages/treasury/PaymentVoucherPage.tsx` · `desktop/src/components/Dashboard.tsx` (سیم‌کشیِ خرید) · `desktop/src/components/moduleSections.tsx` · `desktop/src/components/moduleLists.tsx` · `desktop/scripts/verify-pages.mjs` · `backend/app/services/reports.py` (گزارشِ موجودی) · `desktop/src/pages/InventoryPage.tsx` · `backend/alembic/versions/0128…0131` · `desktop/src/pages/PurchasesPage.tsx` · انتهای `desktop/src/api.ts` | فصلِ «رسید انبار» + «برگشت رسید انبار» | ۱۴۰۵/۰۶/۲۱ |
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
@@ -104,6 +103,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Opus 5 | مهاجرت‌های `0128`–`0131` (نخست `0123`–`0126`، دو بار جابه‌جا)، `warehouse_receipts.py`، `freight.py`، `returns.py`، `payments.py`، `printing.py`، `reports.py`، `WarehouseReceiptsTab.tsx`، `PurchasesPage.tsx`، `PaymentVoucherPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصل‌های «رسید انبار» و «برگشت رسید انبار»: رسیدِ مستقیم، کالای در راه، حمل و بهای تمام‌شده، برگشتِ لنگرزده به رسید، چاپ، میان‌برِ اعلامیه پرداخت و رابط | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0126`، `services/sales_posting.py`، `routers/invoices.py`، `models/tenant.py`، `PersonalizationPage.tsx`؛ آزادسازی `pytest` | سیاستِ صدورِ فاکتور فروش (خودکار/دومرحله‌ای) و رفعِ بن‌بستِ ابطال در حالتِ خودکار | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | ادغامِ پنج فصلِ کدکس با master؛ `0114`–`0116` → `0123`–`0125`، `voiding.py`، `warehouse_issues.py`، `sales_invoices.py`، `inventory.py`؛ آزادسازی `pytest` | فرودِ شاخه‌ی سرگردانِ کدکس: شماره‌های متصادم، ستونِ دوبارساخته، انحرافِ میانگینِ بها، و چهار گاردِ master که در ادغام برمی‌گشتند | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0122`، `services/pricing.py`، `routers/advanced_inventory.py`، `routers/sales_ops.py`، `audit.py`، `PriceListsPanel.tsx`، `SalesOpsPages.tsx`، `PosPage.tsx`، `salesInvoiceDraft.ts`؛ آزادسازی `pytest` | فصلِ «اعلامیه قیمت»: ماتریسِ قیمت قابلِ ورود شد، سه موتورِ قیمت یکی شد، مسیری که ماتریس را پاک می‌کرد بسته شد، تغییرِ گروهیِ فی با یکتاسازی | ۱۴۰۵/۰۶/۲۱ |
