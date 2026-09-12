@@ -171,7 +171,10 @@ class PurchaseInvoiceLineIn(BaseModel):
     #: تخفیفِ ردیف به مبلغ. بهای موجودی از همان اول پس از تخفیف ثبت می‌شود.
     discount: Decimal = Decimal(0)
     addition: Decimal = Decimal(0)
-    duty_amount: Decimal = Decimal(0)
+    #: عوارضِ ردیف. `None` (یعنی نفرستادن) = «از نرخِ عوارضِ کالا حساب کن» (§۱۳)؛
+    #: عددِ صریح — حتی صفر — همان عدد است. نرخِ عوارضِ همه‌ی کالاهای موجود صفر
+    #: است، پس رفتارِ امروز تغییر نمی‌کند.
+    duty_amount: Decimal | None = None
     description: str = ""
 
     @model_validator(mode="after")
@@ -182,7 +185,7 @@ class PurchaseInvoiceLineIn(BaseModel):
             raise ValueError("بهای واحد نمی‌تواند منفی باشد")
         if self.discount < 0:
             raise ValueError("تخفیف نمی‌تواند منفی باشد")
-        if self.addition < 0 or self.duty_amount < 0:
+        if self.addition < 0 or (self.duty_amount is not None and self.duty_amount < 0):
             raise ValueError("اضافات و عوارض نمی‌توانند منفی باشند")
         if self.discount > self.qty * self.unit_cost:
             raise ValueError("تخفیف نمی‌تواند از مبلغ ردیف بیشتر باشد")

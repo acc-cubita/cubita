@@ -69,7 +69,72 @@ class Warehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام. همان الگویی که طرف‌حساب و
+    #: حسابِ بانکی دارند.
+    name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: مشخصاتِ اجراییِ انبار (§۳ §۶ §۷ §۸). این‌ها **متادیتا**ی عملیاتی‌اند و هیچ
+    #: نقشی در موجودی ندارند؛ عوض‌شدنشان هیچ حرکتِ انباری را تغییر نمی‌دهد (§۳۶).
+    #:
+    #: `responsible` عمداً متن است نه کلیدِ خارجی به کاربر/پرسنل: §۶ می‌گوید این
+    #: فصل چنین الزامی را نشان نمی‌دهد، و انبارِ برون‌سپاری‌شده ممکن است مسئولی
+    #: داشته باشد که اصلاً در سیستم کاربر نیست.
+    responsible: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    phone: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    address: Mapped[str] = mapped_column(Text, default="", server_default="")
+    address2: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    #: **معینِ انبار (§۹ §۱۰ §۱۱).** انبار خودش حساب نیست؛ این فقط نگاشتی به
+    #: حسابِ موجودِ چارت است.
+    #:
+    #: `NULL` یعنی «حسابِ پیش‌فرضِ موجودیِ کالا» — همان چیزی که امروز همه‌ی
+    #: انبارها از نقشِ `inventory` می‌گیرند. پس هیچ مستأجری با این مهاجرت رفتارش
+    #: عوض نمی‌شود؛ فقط کسی که صریحاً نگاشت بگذارد، رفتارِ تازه می‌گیرد (§۱۳:
+    #: این فیلد در فرم اجباری نیست).
+    #:
+    #: §۱۴ عمداً باز است: چند انبار می‌توانند به یک حساب اشاره کنند (سیاستِ
+    #: تجمیعی) یا هرکدام به حسابِ خودش. قیدِ یکتایی نمی‌گذاریم چون فصل چنین
+    #: محدودیتی را تثبیت نمی‌کند.
+    gl_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+#: نحوه‌ی تبدیلِ واحدِ فرعی به اصلی (§۲۲).
+#:
+#: `fixed` — نسبت همیشه ثابت است: یک کارتن همیشه ۲۴ عدد.
+#: `variable` — نسبت هر بار فرق می‌کند (طاقه‌ی پارچه، شاخه‌ی میلگرد، بارِ فله).
+#:
+#: فصل می‌گوید مدلِ کالا باید **تفاوتِ این دو را بشناسد**، ولی رفتارِ ورودِ نسبتِ
+#: متغیر در تراکنش را «تا وقتی workflowهای اختصاصی تثبیتش کنند» نهایی نکن. پس
+#: این‌جا فقط اعلام می‌شود؛ موتورِ تبدیل نسبتِ متغیر را رد می‌کند نه اینکه عددی
+#: از خودش دربیاورد.
+CONVERSION_MODES = ("fixed", "variable")
+CONVERSION_MODE_LABELS = {"fixed": "نسبت ثابت", "variable": "نسبت متغیر"}
+
+
+class UnitOfMeasure(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """واحدِ سنجش به‌عنوان داده‌ی پایه (§۱۹).
+
+    **چرا موجودیت شد.** تا امروز واحد یک `String(20)`ِ آزاد روی کالا بود. یعنی
+    «کیلوگرم» و «كيلوگرم» (با ک و ی عربی) دو واحدِ متفاوت بودند، و نگاشتِ کدِ
+    واحدِ سامانه‌ی مؤدیان — که روی همان نوشتار کلید می‌خورد — برای هر املا جدا
+    لازم می‌شد. فصل صریح است: «Unit نباید Text آزاد داخل کالا باشد».
+
+    `name` کلیدِ کسب‌وکاری است چون همان چیزی است که تا امروز روی کالا نشسته و
+    مهاجرت از رویش پیوند می‌زند.
+    """
+
+    __tablename__ = "units_of_measure"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_units_of_measure_tenant_name"),
+    )
+
+    name: Mapped[str] = mapped_column(String(20))
+    #: عنوانِ دوم — همان الگوی انبار و طرف‌حساب و کالا.
+    name2: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -258,12 +323,37 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: کالاهایی که بارکد ندارند NULL می‌مانند (چند NULL مجاز است).
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(300))
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام. فصل صریح است: این دو را در یک
+    #: رشته ادغام نکن.
+    name2: Mapped[str] = mapped_column(String(300), default="", server_default="")
     category: Mapped[str] = mapped_column(String(100), default="")
     unit: Mapped[str] = mapped_column(String(20), default="عدد")
     is_service: Mapped[bool] = mapped_column(Boolean, default=False)
     sales_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     average_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    #: **«قابل فروش» جدا از «فعال» (§۷).** هرچه در انبار داریم الزاماً فروختنی
+    #: نیست: موادِ اولیه، قطعاتِ مصرفی و موادِ بسته‌بندی موجودی دارند و گردش
+    #: می‌کنند، ولی نباید در فاکتورِ فروش و صندوق انتخاب شوند.
+    #:
+    #: غیرفعال یعنی «دیگر با این کالا کار نمی‌کنیم»؛ غیرقابل‌فروش یعنی «کار
+    #: می‌کنیم ولی نمی‌فروشیمش». هر دو هم‌زمان ممکن‌اند.
+    is_sellable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: ثبتِ سریالی (§۸). امروز فقط *اعلام* می‌کند که این کالا سریال‌محور است؛
+    #: دفترِ سریال از قبل زیرِ `stock_batch_serials` هست و این پرچم می‌گوید کدام
+    #: کالا انتظارِ سریال دارد.
+    #:
+    #: §۹: روشن/خاموش‌کردنش **پس از وجودِ گردشِ انباری** کنترل‌شده است، چون
+    #: موجودیِ قدیمی سریال ندارد و مبهم می‌شود.
+    is_serial_tracked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: ایران‌کد (§۱۱) و بارکدِ دوبعدی (§۱۲) — **سه شناسه‌ی جدا** با `sku` و
+    #: `barcode`. فصل صریح است که یکی‌شان نکنیم. بارکدِ دوبعدی متنِ بلند است (QR)
+    #: پس اندازه‌اش با بارکدِ خطی یکی نیست.
+    iran_code: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    barcode2: Mapped[str] = mapped_column(String(300), default="", server_default="")
 
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). وقتی موجودیِ کلِ کالا ≤ این عدد باشد، در
     #: «نیازمندِ سفارش» هشدار داده می‌شود. صفر = بدونِ هشدار (پیش‌فرض). فقط برای کالا
@@ -284,8 +374,202 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: خالی = از «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود. راز نیست.
     tax_stuff_id: Mapped[str] = mapped_column(String(20), default="", server_default="")
 
+    #: **وضعیتِ مالیاتیِ سمتِ خرید — جدا از فروش (§۱۳).**
+    #:
+    #: فصل صریح است: `item.tax_exempt = true` به‌تنهایی کافی نیست، چون وضعیتِ
+    #: مالیاتیِ خرید و فروشِ یک قلم الزاماً یکی نیست. `vat_status` بالا از این
+    #: پس فقط سمتِ *فروش* را می‌گوید و این سمتِ *خرید* را.
+    #:
+    #: مهاجرت مقدارِ `vat_status` را در این می‌ریزد، نه «مشمول» را — وگرنه کالایی
+    #: که امروز معاف است یک‌شبه در خرید مشمول می‌شد.
+    purchase_vat_status: Mapped[str] = mapped_column(
+        String(10), default="taxable", server_default="taxable"
+    )
+
+    #: نرخِ مالیات و عوارضِ **خودِ کالا** (§۱۳). صفر = «نرخِ سرِ فاکتور».
+    #:
+    #: **چرا صفر یعنی وراثت و نه معافیت:** معافیت مفهومِ جدایی است و جایش
+    #: `vat_status`/`purchase_vat_status` است. صفر گذاشتن روی همه‌ی کالاهای
+    #: موجود یعنی رفتارِ امروز (نرخِ یکتای فاکتور) بی‌تغییر می‌ماند.
+    #:
+    #: §۱۴: این *تنظیمِ جاری* است. آنچه در فاکتور می‌ماند `tax_rate_snapshot` و
+    #: `tax_amount_snapshot`ِ ردیف است؛ عوض‌شدنِ این نرخ فاکتورِ پارسال را
+    #: بازنویسی نمی‌کند.
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    duty_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    #: **واحدِ اصلی و فرعی (§۱۷ §۱۸ §۲۰).**
+    #:
+    #: `unit` بالا از این پس **پرتوِ نامِ واحدِ اصلی** است، نه منبعِ حقیقت: سرویس
+    #: هر بار که واحد عوض شود آن را هم‌گام می‌کند. نگه‌داشتنش عمدی است — ردیفِ
+    #: فاکتور، بسته‌ی مؤدیان، بازار و فروشگاه همه `unit_snapshot`/`unit` را
+    #: می‌خوانند و شکستنِ همه‌شان ارزشی اضافه نمی‌کرد.
+    primary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    )
+    secondary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    )
+    #: §۲۱ — «۱ کارتن = ۲۴ عدد». صفر یعنی نسبت هنوز تعریف نشده.
+    conversion_factor: Mapped[float] = mapped_column(
+        Numeric(18, 6), default=0, server_default="0"
+    )
+    conversion_mode: Mapped[str] = mapped_column(
+        String(10), default="fixed", server_default="fixed"
+    )
+
+    #: §۲۳ — وزن و حجمِ **یک واحدِ اصلی**. متادیتای کالا برای حمل‌ونقل و توزین
+    #: است، **نه موجودی**: هیچ‌جا از این‌ها مانده‌ای مشتق نمی‌شود.
+    unit_weight: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
+    unit_volume: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
+
+    #: **گروه‌بندی (§۳۴).** `category` بالا از این پس پرتوِ نامِ این گروه است.
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_groups.id", ondelete="SET NULL"), nullable=True
+    )
+
+    #: **کنترلِ موجودی (§۲۴ §۲۵ §۲۶).**
+    #:
+    #: `reorder_point` از قبل بود و «نیازمندِ سفارش» رویش تکیه دارد؛ دست‌نخورده
+    #: می‌ماند. این دو کنارش می‌نشینند چون فصل سه مفهومِ **جدا** می‌شناسد:
+    #: حداقل، حداکثر، و نقطه‌ی سفارش.
+    #:
+    #: §۲۶ صریح است: این‌ها **قاعده‌ی برنامه‌ریزی‌اند، نه سدِ تراکنش**. حداکثر
+    #: موجودی جلوی ورودِ کالا را نمی‌گیرد؛ فقط هشدار می‌سازد.
+    #:
+    #: §۲۸ می‌گوید انبارمحور یا سراسری‌بودنشان را **فرض نکن**. پس عددِ این‌جا
+    #: سراسری است (همان رفتارِ امروزِ `reorder_point`) و ردیفِ `item_warehouses`
+    #: می‌تواند برای یک انبارِ خاص override بگذارد. هیچ‌کدام تحمیل نشده.
+    min_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    max_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+
+    #: **معینِ هزینه‌ی خرید (§۱۵).** برای خدمت: «مشاوره حقوقی» هنگام خرید به یک
+    #: حسابِ هزینه می‌نشیند، نه به موجودیِ کالا.
+    #:
+    #: `NULL` یعنی حسابِ پیش‌فرضِ نقشِ `service_expense`. مثلِ معینِ انبار، نگاشت
+    #: اختیاری است و از چارتِ موجود حل می‌شود — کد و نامِ حساب hard-code نمی‌شود.
+    expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
+
+
+class ItemGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """گروه‌بندیِ کالا/خدمت (§۳۴).
+
+    **چرا رکورد شد و نه همان متنِ `category`:** متنِ آزاد گزارشِ گروهی را
+    غیرقابل‌اعتماد می‌کند («لوازم خانگی» و «لوازم‌خانگی» دو گروه می‌شوند) و
+    نمی‌شود گروهی را بست بی‌آنکه کالاهای قدیمی‌اش گم شوند.
+
+    **شکلش عمداً همان `ContactGroup` است.** §۳۴ می‌گوید «ساختارِ نهاییِ
+    گروه‌بندی را فقط از این فصل تثبیت نکن» و «مفاهیمِ گروه‌بندیِ موجودِ کوبیتا را
+    بازاستفاده کن» — پس الگوی موجود تکرار می‌شود، نه یک طرحِ تازه.
+
+    `Item.category` می‌ماند ولی از این پس **پرتوِ نامِ گروه** است؛ فروشگاه،
+    گزارش‌ها و ورودِ گروهی همه آن را می‌خوانند.
+    """
+
+    __tablename__ = "item_groups"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_item_groups_tenant_name"),
+    )
+
+    code: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    name: Mapped[str] = mapped_column(String(100))
+    name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+class ItemAttribute(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تعریفِ یک مشخصه‌ی کالا (§۳۵ §۳۶) — «رنگ»، «سایز»، «کشور سازنده».
+
+    **چرا ستونِ ثابت نساختیم:** §۳۶ صریح است — اگر امروز «رنگ» لازم است و فردا
+    «توان موتور»، نباید برای هر مشخصه ستونِ تازه‌ای روی `items` بنشیند. الگو
+    همان چیزی است که فصل می‌خواهد: *تعریفِ مشخصه* ← *مقدارِ مشخصه‌ی کالا*.
+
+    **و نوعِ داده عمداً نیست.** فصل نوع (متن/عدد/فهرست) را تثبیت نمی‌کند و
+    می‌گوید با فصلِ اختصاصیِ «تعریف مشخصات کالا/خدمت» هماهنگ شود. اختراعِ
+    نوع‌بندی این‌جا یعنی همان چیزی که بعداً باید بازنویسی شود.
+    """
+
+    __tablename__ = "item_attributes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_item_attributes_tenant_name"),
+    )
+
+    name: Mapped[str] = mapped_column(String(100))
+    name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class ItemAttributeValue(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """مقدارِ یک مشخصه برای یک کالا (§۳۵)."""
+
+    __tablename__ = "item_attribute_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "item_id", "attribute_id", name="uq_item_attribute_values_pair"
+        ),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
+    )
+    attribute_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_attributes.id", ondelete="CASCADE"), index=True
+    )
+    value: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+class ItemWarehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """انبارهای مرتبطِ یک کالا (§۲۹ §۳۰ §۳۱).
+
+    **رابطه ذاتاً چندبه‌چند است (§۳۰):** یک کالا در چند انبار، و یک انبار پرِ
+    چند کالا.
+
+    **فهرستِ خالی یعنی «همه‌ی انبارها»** — یعنی دقیقاً رفتارِ امروزِ کوبیتا. پس
+    این جدول هیچ کالای موجودی را محدود نمی‌کند؛ فقط کسی که صریحاً فهرست بگذارد
+    محدودیت می‌گیرد.
+
+    **`is_default` مالکیت نیست (§۳۲):** فقط پیشنهادِ اولیه‌ی فرم است. کالا به
+    انبارِ پیش‌فرضش قفل نمی‌شود.
+
+    **و حذفِ رابطه گذشته را پاک نمی‌کند (§۳۳):** حرکاتِ انبار و کاردکس جای دیگری
+    زندگی می‌کنند و این جدول فقط *آینده* را می‌گوید.
+    """
+
+    __tablename__ = "item_warehouses"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "item_id", "warehouse_id", name="uq_item_warehouses_pair"),
+        #: یک انبارِ پیش‌فرض برای هر کالا — نه صفر، نه دو تا. ایندکسِ جزئی چون
+        #: نبودِ پیش‌فرض مجاز است.
+        Index(
+            "uq_item_warehouses_default",
+            "tenant_id",
+            "item_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouses.id", ondelete="CASCADE"), index=True
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: override‌های انبارمحورِ کنترلِ موجودی (§۲۸). `NULL` = «همان عددِ کالا».
+    #: فصل تصمیم نمی‌گیرد که کنترل سراسری باشد یا انبارمحور؛ این ساختار هر دو را
+    #: می‌پذیرد بی‌آنکه یکی را تحمیل کند.
+    min_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    max_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+
+    warehouse: Mapped["Warehouse"] = relationship()
 
 
 class StockLedger(TenantMixin, UUIDPKMixin, Base):

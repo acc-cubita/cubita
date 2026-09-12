@@ -1074,18 +1074,60 @@ export interface ItemRecord {
   id: string
   sku: string
   name: string
+  /** عنوانِ دوم — فیلدِ مستقل، نه پیوستِ نام. */
+  name2: string
   category: string
   unit: string
   is_service: boolean
   is_active: boolean
+  /** «قابل فروش» جدا از «فعال»: موادِ اولیه موجودی دارند و فروختنی نیستند. */
+  is_sellable: boolean
+  is_serial_tracked: boolean
   sales_price: string
   average_cost: string
   barcode: string | null
+  /** سه شناسه‌ی جدا با sku و barcode — ایران‌کد و بارکدِ دوبعدی. */
+  iran_code: string
+  barcode2: string
   storefront_product_id: number | null
   reorder_point: string
   tax_stuff_id: string
-  /** `taxable` (مشمول) یا `exempt` (معاف). */
+  /** `taxable` (مشمول) یا `exempt` (معاف) — سمتِ **فروش**. */
   vat_status: string
+  /** وضعیتِ مالیاتیِ سمتِ **خرید**، مستقل از فروش. */
+  purchase_vat_status: string
+  /** نرخِ کالا؛ «۰» یعنی «نرخِ سرِ فاکتور»، نه معافیت. */
+  tax_rate: string
+  duty_rate: string
+  /** معینِ هزینه‌ی خریدِ خدمت. خالی = حسابِ پیش‌فرضِ «هزینه خرید خدمات». */
+  expense_account_id: string | null
+  expense_account_code: string
+  expense_account_name: string
+  expense_account_is_default: boolean
+  /** واحدِ اصلی از داده‌ی پایه؛ `unit` بالا پرتوِ نامِ همین است. */
+  primary_unit_id: string | null
+  primary_unit_name: string
+  secondary_unit_id: string | null
+  secondary_unit_name: string
+  /** «۱ کارتن = ۲۴ عدد». صفر یعنی نسبت هنوز تعریف نشده. */
+  conversion_factor: string
+  /** `fixed` یا `variable` — نسبتِ متغیر عمداً بی‌عدد است. */
+  conversion_mode: string
+  /** متادیتای حمل‌ونقل، نه موجودی. */
+  unit_weight: string
+  unit_volume: string
+  /** قاعده‌ی برنامه‌ریزی، نه سدِ تراکنش. */
+  min_stock: string
+  max_stock: string
+  /** فهرستِ خالی یعنی «همه‌ی انبارها»، نه «هیچ انباری». */
+  warehouses: ItemWarehouseLink[]
+  /** پیشنهادِ فرمِ فروش/خرید، نه قفل. */
+  default_warehouse_id: string | null
+  /** گروه یک رکورد است؛ `category` بالا پرتوِ نامِ همین است. */
+  group_id: string | null
+  group_name: string
+  /** مشخصه‌ها ستونِ ثابتِ کالا نیستند: تعریف ← مقدار. */
+  attributes: { attribute_id: string; attribute_name: string; value: string }[]
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -1102,25 +1144,50 @@ export const importBackup = (token: string, data: unknown) =>
 export interface ItemIn {
   sku: string
   name: string
+  name2?: string
   category?: string
   unit?: string
   is_service?: boolean
+  is_sellable?: boolean
+  is_serial_tracked?: boolean
   sales_price?: number
   barcode?: string | null
+  iran_code?: string
+  barcode2?: string
   reorder_point?: number
   tax_stuff_id?: string
   vat_status?: string
+  purchase_vat_status?: string
+  tax_rate?: number
+  duty_rate?: number
+  expense_account_id?: string | null
+  primary_unit_id?: string | null
+  secondary_unit_id?: string | null
+  conversion_factor?: number
+  conversion_mode?: string
+  unit_weight?: number
+  unit_volume?: number
+  min_stock?: number
+  max_stock?: number
+  warehouses?: { warehouse_id: string; is_default?: boolean; min_stock?: number | null; max_stock?: number | null }[]
+  group_id?: string | null
+  attributes?: { attribute_id: string; value: string }[]
+}
+
+/** فیلدهایی که سرور در `ItemUpdateIn` می‌پذیرد. `is_service` عمداً نیست: تبدیلِ
+ *  کالا به خدمت پس از گردش، تاریخِ انبار را غیرمنطقی می‌کند. */
+export type ItemPatch = Partial<Omit<ItemIn, 'is_service'>> & {
+  is_active?: boolean
+  average_cost?: number
+  storefront_product_id?: number | null
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
   authedSend<ItemRecord>(token, 'POST', '/api/items', data)
 
 /** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد. */
-export const updateItemLive = (
-  token: string,
-  itemId: string,
-  patch: { name?: string; sales_price?: number; is_active?: boolean; barcode?: string | null; reorder_point?: number; tax_stuff_id?: string; vat_status?: string },
-) => authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
+export const updateItemLive = (token: string, itemId: string, patch: ItemPatch) =>
+  authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
 export const deleteItemLive = (token: string, itemId: string) => authedDelete(token, `/api/items/${itemId}`)
@@ -1617,7 +1684,7 @@ export interface StockLevel {
 
 export const fetchStockLevels = (token: string) => authedGet<StockLevel[]>(token, '/api/stock')
 
-/** کالاهایی که موجودی‌شان به/زیرِ نقطه‌ی سفارش رسیده — هشدارِ سفارشِ مجدد. */
+/** کالاهایی که موجودی‌شان به/زیرِ نقطه‌ی سفارش یا حداقلِ موجودی رسیده. */
 export interface LowStockRow {
   item_id: string
   sku: string
@@ -1626,26 +1693,69 @@ export interface LowStockRow {
   qty_on_hand: string
   reorder_point: string
   shortfall: string
+  /** کدام آستانه این ردیف را آورده: `reorder` یا `min` — دو مفهومِ جدا. */
+  trigger: string
+  min_stock: string
 }
 
 export const fetchLowStock = (token: string) => authedGet<LowStockRow[]>(token, '/api/stock/low')
 
-/** انبار (کامل، با وضعیتِ فعال) — برای تبِ مدیریتِ انبارها. */
+/**
+ * انبار (کامل) — برای تبِ مدیریتِ انبارها.
+ *
+ * **هیچ فیلدِ موجودی ندارد و نباید داشته باشد.** انبار فقط یکی از ابعادِ موجودی
+ * است؛ مانده همیشه از حرکاتِ انبار می‌آید.
+ */
 export interface WarehouseRecord {
   id: string
   code: string
   name: string
+  /** عنوانِ دوم — فیلدِ مستقل، نه پیوستِ نام. */
+  name2: string
+  responsible: string
+  phone: string
+  address: string
+  address2: string
   is_active: boolean
+  /** معینِ انبار. `null` یعنی حسابِ پیش‌فرضِ موجودیِ کالا. */
+  gl_account_id: string | null
+  gl_account_code: string
+  gl_account_name: string
+  /** درست یعنی این حساب انتخابِ کاربر نبوده، پیش‌فرض است. */
+  gl_account_is_default: boolean
+}
+
+export interface WarehouseInput {
+  code: string
+  name: string
+  name2?: string
+  responsible?: string
+  phone?: string
+  address?: string
+  address2?: string
+  gl_account_id?: string | null
+}
+
+/** کالاهای دارای موجودیِ غیرصفر — پیش از غیرفعال‌کردن پرسیده می‌شود. */
+export interface WarehouseStockPositions {
+  item_count: number
+  items: { item_id: string; item_name: string; qty: string }[]
 }
 
 export const fetchWarehousesAdmin = (token: string) =>
   authedGet<WarehouseRecord[]>(token, '/api/warehouses')
 
-export const createWarehouse = (token: string, data: { code: string; name: string }) =>
+export const createWarehouse = (token: string, data: WarehouseInput) =>
   authedSend<WarehouseRecord>(token, 'POST', '/api/warehouses', data)
 
-export const updateWarehouse = (token: string, id: string, patch: { name?: string; is_active?: boolean }) =>
-  authedSend<WarehouseRecord>(token, 'PATCH', `/api/warehouses/${id}`, patch)
+export const updateWarehouse = (
+  token: string,
+  id: string,
+  patch: Partial<WarehouseInput> & { is_active?: boolean },
+) => authedSend<WarehouseRecord>(token, 'PATCH', `/api/warehouses/${id}`, patch)
+
+export const fetchWarehouseStock = (token: string, id: string) =>
+  authedGet<WarehouseStockPositions>(token, `/api/warehouses/${id}/stock-positions`)
 
 // --- مسیر «وب مستقیم» (بدون Electron): برای اجرای همین اپ در مرورگر (دموی وب/ورود وب)، جای صف آفلاین و
 // کش محلی SQLite، همه‌چیز مستقیم و زنده از API خوانده/نوشته می‌شود. شکل خروجی هرکدام با Cache-type متناظر در
@@ -6686,3 +6796,115 @@ export const previewRas = (
 
 export const openReceiptPrintView = (token: string, id: string) =>
   openInvoicePrintView(token, `/api/receipts/${id}/print`)
+
+// ──────────────────────────── واحدهای سنجش (§۱۷–§۲۳) ────────────────────────────
+//
+// واحد تا امروز یک رشته‌ی آزاد روی کالا بود، پس «کیلوگرم» و «كيلوگرم» دو واحدِ
+// متفاوت بودند و نگاشتِ کدِ واحدِ مؤدیان برای هر املا جدا لازم می‌شد.
+
+export interface UnitRecord {
+  id: string
+  name: string
+  name2: string
+  is_active: boolean
+  /** چند قلم کالا رویش نشسته — تا فهرست پیش از غیرفعال‌سازی خبر بدهد. */
+  item_count: number
+}
+
+export const fetchUnits = (token: string) => authedGet<UnitRecord[]>(token, '/api/units')
+
+export const createUnit = (token: string, data: { name: string; name2?: string }) =>
+  authedSend<UnitRecord>(token, 'POST', '/api/units', data)
+
+export const updateUnit = (
+  token: string,
+  unitId: string,
+  patch: { name?: string; name2?: string; is_active?: boolean },
+) => authedSend<UnitRecord>(token, 'PATCH', `/api/units/${unitId}`, patch)
+
+/** حذف فقط برای واحدِ استفاده‌نشده؛ وگرنه سرور ۴۰۹ با پیامِ «غیرفعالش کنید» می‌دهد. */
+export const deleteUnit = (token: string, unitId: string) => authedDelete(token, `/api/units/${unitId}`)
+
+// ─────────────────── انبارهای مرتبط و مازادِ موجودی (§۲۴–§۳۳) ───────────────────
+
+/** یک انبارِ مرتبط. `is_default` فقط پیشنهادِ فرم است، نه مالکیت. */
+export interface ItemWarehouseLink {
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  is_default: boolean
+  /** override‌های انبارمحور؛ `null` یعنی «همان عددِ کالا». */
+  min_stock: string | null
+  max_stock: string | null
+}
+
+/**
+ * مازادِ موجودی — **سدِ تراکنش نیست**.
+ *
+ * حداکثرِ موجودی جلوی ورودِ کالا را نمی‌گیرد؛ فقط می‌گوید کجا مازاد داریم.
+ */
+export interface OverStockRow {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  qty_on_hand: string
+  max_stock: string
+  excess: string
+}
+
+export const fetchOverStock = (token: string) => authedGet<OverStockRow[]>(token, '/api/stock/over')
+
+// ─────────────────── گروه‌بندی و مشخصات کالا (§۳۴–§۳۶) ───────────────────
+//
+// `category` یک متنِ آزاد بود، پس «لوازم خانگی» و «لوازم‌خانگی» دو گروه می‌شدند
+// و گزارشِ گروهی قابلِ اعتماد نبود. برای «رنگ» و «سایز» هم جایی نبود — و برای هر
+// مشخصه نباید ستونِ تازه‌ای روی کالا بنشیند.
+
+export interface ItemGroupRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  notes: string
+  is_active: boolean
+  item_count: number
+}
+
+export const fetchItemGroups = (token: string) => authedGet<ItemGroupRecord[]>(token, '/api/item-groups')
+
+export const createItemGroup = (token: string, data: { code?: string; name: string; name2?: string; notes?: string }) =>
+  authedSend<ItemGroupRecord>(token, 'POST', '/api/item-groups', data)
+
+export const updateItemGroup = (
+  token: string,
+  groupId: string,
+  patch: { code?: string; name?: string; name2?: string; notes?: string; is_active?: boolean },
+) => authedSend<ItemGroupRecord>(token, 'PATCH', `/api/item-groups/${groupId}`, patch)
+
+/** حذف فقط برای گروهِ بی‌کالا؛ وگرنه سرور ۴۰۹ با پیامِ «ببندیدش» می‌دهد. */
+export const deleteItemGroup = (token: string, groupId: string) =>
+  authedDelete(token, `/api/item-groups/${groupId}`)
+
+export interface ItemAttributeRecord {
+  id: string
+  name: string
+  name2: string
+  is_active: boolean
+}
+
+export const fetchItemAttributes = (token: string) =>
+  authedGet<ItemAttributeRecord[]>(token, '/api/item-attributes')
+
+export const createItemAttribute = (token: string, data: { name: string; name2?: string }) =>
+  authedSend<ItemAttributeRecord>(token, 'POST', '/api/item-attributes', data)
+
+export const updateItemAttribute = (
+  token: string,
+  attributeId: string,
+  patch: { name?: string; name2?: string; is_active?: boolean },
+) => authedSend<ItemAttributeRecord>(token, 'PATCH', `/api/item-attributes/${attributeId}`, patch)
+
+/** حذفِ مشخصه، مقدارهایش روی همه‌ی کالاها را هم می‌برد. */
+export const deleteItemAttribute = (token: string, attributeId: string) =>
+  authedDelete(token, `/api/item-attributes/${attributeId}`)

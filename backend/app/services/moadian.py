@@ -404,14 +404,20 @@ def build_invoice_packet(
     discount_total = _rial(invoice.total_discount or 0)
     tax_total = _rial(invoice.tax_amount)
     gross_total = net_total + discount_total
-    rate = Decimal(invoice.tax_rate or 0)
 
     body = []
     for line in invoice.lines:
         line_gross = _rial(Decimal(line.qty) * Decimal(line.unit_price))
         line_discount = _rial(line.discount or 0)
         line_net = line_gross - line_discount
-        line_tax = _rial(Decimal(line_net) * rate / Decimal(100))
+        #: نرخ و مالیاتِ **همان ردیف**، نه نرخِ سرِ فاکتور.
+        #:
+        #: پیش از این نرخِ فاکتور روی هر ردیف می‌نشست، پس قلمِ معاف هم با مالیات
+        #: به سازمان اظهار می‌شد و جمعِ `vam`ها با `tvam`ِ سربرگ نمی‌خواند.
+        #: حالا هر ردیف نرخ و مبلغِ قفل‌شده‌ی خودش را دارد و جمعشان دقیقاً
+        #: `invoice.tax_amount` است.
+        rate = Decimal(line.tax_rate_snapshot or 0)
+        line_tax = _rial(line.tax_amount_snapshot or 0)
         body.append(
             {
                 "sstid": _resolve_stuff_id(line.item, settings),  # شناسه کالا/خدمتِ ۱۳رقمی

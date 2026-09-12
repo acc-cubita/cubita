@@ -22,6 +22,7 @@ from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.stock_count import StockCountLine, StockCountSession
 from app.models.user import User
 from app.services import chart_codes as cc
+from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import number_lines
 from app.services.numbering import next_document_number
@@ -37,6 +38,7 @@ def _get_session(db: Session, session_id: UUID) -> StockCountSession:
 
 def create_session(db: Session, warehouse_id: UUID, count_date, user: User, notes: str = "") -> StockCountSession:
     """جلسه‌ی تازه می‌سازد و از موجودیِ سیستمیِ همه‌ی کالاهای غیرخدماتی عکس‌برداری می‌کند."""
+    warehouses.assert_usable(db, warehouse_id, action="انبارگردانی")
     warehouse = db.get(Warehouse, warehouse_id)
     if warehouse is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبار یافت نشد")
@@ -137,10 +139,13 @@ def post_session(db: Session, session_id: UUID, user: User) -> StockCountSession
 
     if total_delta != 0:
         amount = abs(total_delta)
+        #: سمتِ موجودی معینِ همان انباری است که شمرده شده (§۹).
+        inventory_id = warehouses.inventory_account_id(db, session.warehouse_id)
+        adjustment_id = _get_account(db, cc.INVENTORY_ADJUSTMENT).id
         if total_delta > 0:  # موجودی خالص زیاد شد (اضافی)
-            debit_account, credit_account = cc.INVENTORY, cc.INVENTORY_ADJUSTMENT
+            debit_id, credit_id = inventory_id, adjustment_id
         else:  # موجودی خالص کم شد (کسری)
-            debit_account, credit_account = cc.INVENTORY_ADJUSTMENT, cc.INVENTORY
+            debit_id, credit_id = adjustment_id, inventory_id
         entry = JournalEntry(
             number=next_document_number(db, DOC_JOURNAL_ENTRY),
             entry_date=session.count_date,
@@ -148,8 +153,8 @@ def post_session(db: Session, session_id: UUID, user: User) -> StockCountSession
             source_type="stock_count",
             created_by_id=user.id,
             lines=number_lines([
-                JournalLine(account_id=_get_account(db, debit_account).id, debit=amount, credit=0),
-                JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
+                JournalLine(account_id=debit_id, debit=amount, credit=0),
+                JournalLine(account_id=credit_id, debit=0, credit=amount),
             ]),
         )
         tafsili.assert_entry_has_tafsili(db, entry)

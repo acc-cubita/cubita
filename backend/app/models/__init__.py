@@ -28,7 +28,18 @@ from app.models.currency import Currency, ExchangeRate
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine
 from app.models.installments import Installment, InstallmentPayment, InstallmentPlan
 from app.models.idempotency import IdempotencyKey
-from app.models.inventory import Contact, Item, StockAdjustment, StockLedger, Warehouse
+from app.models.inventory import (
+    Contact,
+    Item,
+    ItemAttribute,
+    ItemAttributeValue,
+    ItemGroup,
+    ItemWarehouse,
+    StockAdjustment,
+    StockLedger,
+    UnitOfMeasure,
+    Warehouse,
+)
 from app.models.invoices import (
     PurchaseInvoice,
     PurchaseInvoiceLine,
@@ -165,6 +176,11 @@ __all__ = [
     "Item",
     "StockAdjustment",
     "StockLedger",
+    "ItemAttribute",
+    "ItemAttributeValue",
+    "ItemGroup",
+    "ItemWarehouse",
+    "UnitOfMeasure",
     "Warehouse",
     "PurchaseInvoice",
     "PurchaseInvoiceLine",

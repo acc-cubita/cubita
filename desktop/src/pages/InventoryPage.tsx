@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp } from 'lucide-react'
+import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
@@ -11,7 +11,9 @@ import { BatchesPanel } from '../components/BatchesPanel'
 import { TransferForm } from '../components/TransferForm'
 import { ProductsPanel } from '../components/ProductsPanel'
 import { BulkImportPanel } from '../components/BulkImportPanel'
-import { LowStockPanel } from '../components/LowStockPanel'
+import { LowStockPanel, OverStockPanel } from '../components/LowStockPanel'
+import { ItemTaxonomyPanel } from '../components/ItemTaxonomyPanel'
+import { UnitsPanel } from '../components/UnitsPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
 import { KardexPanel } from '../components/KardexPanel'
@@ -235,13 +237,30 @@ export function InventoryPage({
             key: 'low',
             label: 'نیازمندِ سفارش',
             icon: AlertTriangle,
-            content: <LowStockPanel token={token} onKardex={setKardex} />,
+            content: (
+              <div className="split-2col">
+                <LowStockPanel token={token} onKardex={setKardex} />
+                <OverStockPanel token={token} onKardex={setKardex} />
+              </div>
+            ),
           },
           {
             key: 'warehouses',
             label: 'انبارها',
             icon: Warehouse,
             content: <WarehousesPanel token={token} onChanged={() => void refreshStock()} />,
+          },
+          {
+            key: 'units',
+            label: 'واحدها',
+            icon: Ruler,
+            content: <UnitsPanel token={token} onChanged={onChanged} />,
+          },
+          {
+            key: 'taxonomy',
+            label: 'گروه و مشخصات',
+            icon: Tags,
+            content: <ItemTaxonomyPanel token={token} onChanged={onChanged} />,
           },
           {
             key: 'count',

@@ -16,7 +16,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalLine
-from app.models.advanced_inventory import PriceList, PriceListItem
+from app.models.advanced_inventory import PriceList
+from app.services import pricing
 from app.models.counters import DOC_CREDIT_DEBIT_NOTE
 from app.models.invoices import SalesInvoice
 from app.models.sales_ops import (
@@ -51,7 +52,17 @@ def _active_factors(db: Session, on: date_) -> list[PricingFactor]:
     )
 
 
-def suggest_pricing(db: Session, item_id: UUID, qty: Decimal, on: date_ | None = None) -> dict:
+def suggest_pricing(
+    db: Session,
+    item_id: UUID,
+    qty: Decimal,
+    on: date_ | None = None,
+    *,
+    sale_type_id: UUID | None = None,
+    unit_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    currency_code: str = "IRR",
+) -> dict:
     """قیمت و تخفیفِ پیشنهادی برای یک ردیفِ فاکتور.
 
     **پیشنهاد است نه حکم.** فرم عدد را می‌گذارد و کاربر می‌تواند عوضش کند، و
@@ -65,22 +76,29 @@ def suggest_pricing(db: Session, item_id: UUID, qty: Decimal, on: date_ | None =
     on = on or date_.today()
     qty = Decimal(qty or 0)
 
-    # آخرین اعلامیه‌ای که تا این تاریخ اجرا شده — نه هر اعلامیه‌ی فعالی.
-    row = (
-        db.query(PriceListItem.price, PriceList.name, PriceList.effective_from)
-        .join(PriceList, PriceList.id == PriceListItem.price_list_id)
-        .filter(
-            PriceListItem.item_id == item_id,
-            PriceList.is_active.is_(True),
-            PriceList.effective_from <= on,
-        )
-        .order_by(PriceList.effective_from.desc())
-        .first()
+    #: قیمت از موتورِ مشترک می‌آید، نه از کوئریِ محلی (§۳۷ §۳۹ §۴۰ §۴۱):
+    #: مشخص‌ترین قاعده‌ای که با نوعِ فروش، واحد، گروهِ مشتری و ارزِ این ردیف
+    #: می‌خواند. زمینه‌ی خالی همان رفتارِ پیشین را می‌دهد.
+    rule = pricing.resolve(
+        db,
+        item_id,
+        on=on,
+        sale_type_id=sale_type_id,
+        unit_id=unit_id,
+        contact_id=contact_id,
+        currency_code=currency_code,
     )
     applied: list[dict] = []
-    unit_price = Decimal(row[0]) if row else Decimal(0)
-    if row:
-        applied.append({"kind": "price_list", "name": row[1], "value": Decimal(row[0])})
+    unit_price = Decimal(rule.price) if rule else Decimal(0)
+    if rule is not None:
+        announcement = db.get(PriceList, rule.price_list_id)
+        applied.append(
+            {
+                "kind": "price_list",
+                "name": announcement.name if announcement else "",
+                "value": Decimal(rule.price),
+            }
+        )
 
     group_ids = {
         g for (g,) in db.query(DiscountItemGroupMember.group_id).filter(

@@ -121,6 +121,16 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     #: لحظه قطعی شده» که `tax_amount` هم به همان دلیل کنارِ `tax_rate` ذخیره می‌شود.
     vat_status: Mapped[str] = mapped_column(String(10), default="taxable", server_default="taxable")
 
+    #: نرخ و مبلغِ مالیاتِ **همین ردیف**، قفل‌شده در لحظه‌ی فروش — قرینه‌ی همان دو
+    #: ستونی که ردیفِ فاکتورِ خرید از قبل داشت.
+    #:
+    #: **چرا لازم شد:** مالیات روی جمعِ فاکتور حساب می‌شد، پس ردیفِ معاف هم
+    #: مالیات می‌خورد و هیچ‌جا ثبت نمی‌شد که کدام ردیف چقدر مالیات داشته.
+    #: بسته‌ی مؤدیان هم نرخِ سرِ فاکتور را روی *هر* ردیف می‌زد — یعنی قلمِ معاف
+    #: با مالیات به سازمان اظهار می‌شد.
+    tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
     invoice: Mapped["SalesInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
 

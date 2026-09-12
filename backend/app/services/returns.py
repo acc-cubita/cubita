@@ -14,6 +14,8 @@ from app.models.returns import PurchaseReturn, PurchaseReturnLine, SalesReturn, 
 from app.models.user import User
 from app.schemas.returns import PurchaseReturnIn, SalesReturnIn
 from app.services import chart_codes as cc
+from app.services import items as items_svc
+from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
 from app.services.inventory import (
     compute_tax,
@@ -37,6 +39,13 @@ def _sales_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dic
         # برمی‌گرداند و تخفیف عملاً دو بار داده می‌شود.
         entry["amount"] += (Decimal(line.qty) * Decimal(line.unit_price)) - Decimal(line.discount or 0)
         entry["cost_amount"] += Decimal(line.qty) * Decimal(line.unit_cost)
+        #: نرخِ مالیاتِ **همان ردیف**، وزن‌دار به خالصش. تا امروز نرخِ سرِ فاکتور
+        #: به کار می‌رفت، پس برگشتِ یک قلمِ **معاف** مالیاتی را آزاد می‌کرد که
+        #: اصلاً بسته نشده بود — و ماندهٔ «مالیات پرداختنی» کمتر از واقع می‌شد.
+        entry["tax_weight"] = entry.get("tax_weight", Decimal(0)) + (
+            (Decimal(line.qty) * Decimal(line.unit_price) - Decimal(line.discount or 0))
+            * Decimal(line.tax_rate_snapshot or 0)
+        )
 
     already_returned = (
         db.query(SalesReturnLine.item_id, func.coalesce(func.sum(SalesReturnLine.qty), 0))
@@ -50,6 +59,9 @@ def _sales_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dic
     for item_id, entry in summary.items():
         entry["unit_price"] = entry["amount"] / entry["qty"] if entry["qty"] else Decimal(0)
         entry["unit_cost"] = entry["cost_amount"] / entry["qty"] if entry["qty"] else Decimal(0)
+        entry["tax_rate"] = (
+            entry["tax_weight"] / entry["amount"] if entry["amount"] else Decimal(0)
+        )
         entry["already_returned"] = returned_by_item.get(item_id, Decimal(0))
         entry["remaining"] = entry["qty"] - entry["already_returned"]
     return summary
@@ -102,6 +114,8 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
 
     total_amount = Decimal(0)
     total_cost = Decimal(0)
+    tax_amount = Decimal(0)
+    tax_weight = Decimal(0)
     return_lines: list[SalesReturnLine] = []
     stock_moves: list[StockLedger] = []
 
@@ -118,8 +132,12 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
 
         unit_price = info["unit_price"]
         unit_cost = info["unit_cost"]
-        total_amount += line.qty * unit_price
+        line_net = line.qty * unit_price
+        total_amount += line_net
         total_cost += line.qty * unit_cost
+        #: مالیات با نرخِ **همان ردیفِ فاکتورِ اصلی** برمی‌گردد، نه نرخِ سرِ فاکتور.
+        tax_amount += compute_tax(line_net, Decimal(info["tax_rate"]))
+        tax_weight += line_net * Decimal(info["tax_rate"])
         return_lines.append(
             SalesReturnLine(
                 item_id=line.item_id,
@@ -146,11 +164,13 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
                 )
             )
 
-    # مالیات با همان نرخِ فاکتورِ اصلی برمی‌گردد. بدون این، مالیاتی که هنگام فروش
-    # بستانکار شده بود با برگشتِ کالا آزاد نمی‌شد و ماندهٔ «مالیات پرداختنی» — همان
-    # عددی که مبنای اظهارنامه است — برای همیشه بیشتر از واقعیت می‌ماند.
-    tax_rate = Decimal(invoice.tax_rate or 0)
-    tax_amount = compute_tax(total_amount, tax_rate)
+    # مالیاتی که هنگام فروش بستانکار شده بود باید با برگشتِ کالا آزاد شود، وگرنه
+    # ماندهٔ «مالیات پرداختنی» — همان عددی که مبنای اظهارنامه است — برای همیشه
+    # بیشتر از واقعیت می‌ماند.
+    #
+    # نرخ از ردیف‌های خودِ فاکتور می‌آید نه از سربرگش: اگر فاکتور هم قلمِ مشمول
+    # داشته و هم معاف، نرخِ سربرگ برای هیچ‌کدام درست نیست.
+    tax_rate = (tax_weight / total_amount) if total_amount else Decimal(0)
 
     journal_lines = [
         JournalLine(
@@ -177,7 +197,9 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     if total_cost > 0:
         journal_lines.append(
             JournalLine(
-                account_id=get_account(db, cc.INVENTORY).id, debit=total_cost, credit=0, description="بازگشت کالا به موجودی"
+                #: معینِ همان انباری که کالا به آن برمی‌گردد (§۹).
+                account_id=warehouses.inventory_account_id(db, invoice.warehouse_id), debit=total_cost, credit=0,
+                description="بازگشت کالا به موجودی"
             )
         )
         journal_lines.append(
@@ -230,6 +252,12 @@ def _purchase_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, 
         # پس از کسر تخفیف — به همان دلیلِ برگشت از فروش: باید همان مبلغی به
         # تأمین‌کننده برگردد که به او پرداخت شده، نه قیمتِ فهرست.
         entry["cost_amount"] += (Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
+        #: نرخِ مالیاتِ همان ردیف، وزن‌دار — قرینه‌ی برگشت از فروش. برگشتِ قلمِ
+        #: معاف نباید اعتبارِ مالیاتی‌ای را پس بدهد که هرگز گرفته نشده بود.
+        entry["tax_weight"] = entry.get("tax_weight", Decimal(0)) + (
+            ((Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0))
+            * Decimal(line.tax_rate_snapshot or 0)
+        )
 
     already_returned = (
         db.query(PurchaseReturnLine.item_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0))
@@ -242,6 +270,9 @@ def _purchase_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, 
 
     for item_id, entry in summary.items():
         entry["unit_cost"] = entry["cost_amount"] / entry["qty"] if entry["qty"] else Decimal(0)
+        entry["tax_rate"] = (
+            entry["tax_weight"] / entry["cost_amount"] if entry["cost_amount"] else Decimal(0)
+        )
         entry["already_returned"] = returned_by_item.get(item_id, Decimal(0))
         entry["remaining"] = entry["qty"] - entry["already_returned"]
     return summary
@@ -291,8 +322,15 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
     total_amount = Decimal(0)
+    tax_amount = Decimal(0)
+    tax_weight = Decimal(0)
     return_lines: list[PurchaseReturnLine] = []
     stock_moves: list[StockLedger] = []
+    #: خالصِ برگشتیِ هر حساب — قرینه‌ی تفکیکِ کالا/خدمتِ فاکتورِ خرید (§۱۵ §۱۶).
+    #: برگشتِ خریدِ خدمت باید حسابِ **هزینه** را بستانکار کند، نه موجودیِ کالا؛
+    #: وگرنه موجودیِ دفتری بی‌آنکه کالایی جابه‌جا شود کم می‌شود.
+    credit_by_account: dict[UUID, Decimal] = {}
+    inventory_account_id = warehouses.inventory_account_id(db, invoice.warehouse_id)
 
     for line in data.lines:
         item = items_by_id.get(line.item_id)
@@ -313,7 +351,12 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
                 )
 
         unit_cost = info["unit_cost"]
-        total_amount += line.qty * unit_cost
+        line_net = line.qty * unit_cost
+        total_amount += line_net
+        tax_amount += compute_tax(line_net, Decimal(info["tax_rate"]))
+        tax_weight += line_net * Decimal(info["tax_rate"])
+        account_id = items_svc.purchase_account_id(db, item, inventory_account_id=inventory_account_id)
+        credit_by_account[account_id] = credit_by_account.get(account_id, Decimal(0)) + line_net
         return_lines.append(PurchaseReturnLine(item_id=line.item_id, qty=line.qty, unit_cost=unit_cost, description=line.description))
 
         if not item.is_service:
@@ -333,9 +376,9 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             )
 
     # قرینهٔ برگشت از فروش: اعتبار مالیاتیِ خرید هم باید پس برود، وگرنه اعتبارِ
-    # مالیاتی بابت کالایی که دیگر نداریم روی حساب می‌ماند.
-    tax_rate = Decimal(invoice.tax_rate or 0)
-    tax_amount = compute_tax(total_amount, tax_rate)
+    # مالیاتی بابت کالایی که دیگر نداریم روی حساب می‌ماند. نرخ از ردیف‌های خودِ
+    # فاکتور می‌آید نه از سربرگش.
+    tax_rate = (tax_weight / total_amount) if total_amount else Decimal(0)
 
     journal_lines = [
         JournalLine(
@@ -344,9 +387,18 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             credit=0,
             description="برگشت از خرید",
         ),
+    ] + [
         JournalLine(
-            account_id=get_account(db, cc.INVENTORY).id, debit=0, credit=total_amount, description="کاهش موجودی بابت برگشت از خرید"
-        ),
+            account_id=account_id,
+            debit=0,
+            credit=amount,
+            description=(
+                "کاهش موجودی بابت برگشت از خرید"
+                if account_id == inventory_account_id
+                else "برگشت هزینه‌ی خریدِ خدمت"
+            ),
+        )
+        for account_id, amount in credit_by_account.items()
     ]
     if tax_amount > 0:
         journal_lines.append(

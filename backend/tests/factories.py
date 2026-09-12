@@ -19,6 +19,7 @@ def make_item(
     sales_price: Decimal | int = 1_000_000,
     average_cost: Decimal | int = 0,
     is_service: bool = False,
+    **fields,
 ) -> Item:
     item = Item(
         sku=sku or f"TEST-{next(_seq):05d}",
@@ -26,6 +27,7 @@ def make_item(
         sales_price=Decimal(sales_price),
         average_cost=Decimal(average_cost),
         is_service=is_service,
+        **fields,
     )
     db.add(item)
     db.flush()

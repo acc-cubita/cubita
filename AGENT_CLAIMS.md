@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Opus 5 | `models/inventory.py` (فقط `Warehouse`), `services/warehouses.py`, `services/inventory.py`, `routers/inventory.py`, `schemas/inventory.py`, `0116_warehouse_master.py`, صفحه‌ی انبارها | فصلِ «تعریف و مدیریت انبار»؛ **شماره‌ی مهاجرتِ ۰۱۱۶ برداشته شد** | ۱۴۰۵/۰۶/۲۰ |
+| _(خالی)_ | | | |
 
 ---
 
@@ -94,3 +94,5 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/open_items.py`, `services/settlements.py`, `models/settlement.py`, `0114_counterparty_settlement.py`, `TreasuryOpsPages.tsx` + merge با master | تسویه حساب طرف مقابل؛ شماره‌ی مهاجرت ۰۱۱۴ برداشته شد | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |
+| Claude Opus 5 | `models/inventory.py`, `advanced_inventory.py`, `services/items.py`, `units.py`, `pricing.py`, `0117`–`0120`, `ProductsPanel.tsx`, `UnitsPanel.tsx`, `ItemTaxonomyPanel.tsx` | تعریف کالا و خدمت — Item Master (مهاجرت‌های ۰۱۱۷ تا ۰۱۲۰) | ۱۴۰۵/۰۶/۲۰ |
+| Claude Opus 5 | `services/warehouses.py`, `models/inventory.py`, `routers/inventory.py`, `0116_warehouse_master.py`, `WarehousesPanel.tsx` | تعریف و مدیریت انبار (مهاجرت ۰۱۱۶) | ۱۴۰۵/۰۶/۲۰ |

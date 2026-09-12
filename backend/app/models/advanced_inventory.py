@@ -11,7 +11,18 @@
 import uuid
 from datetime import date as date_
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,13 +50,42 @@ class PriceList(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class PriceListItem(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """قیمتِ یک کالا در یک لیستِ قیمت (هر کالا حداکثر یک قیمت در هر لیست)."""
+    """قیمتِ یک کالا در یک لیستِ قیمت — **در یک زمینه‌ی مشخص** (§۳۷–§۴۲).
+
+    **چرا دیگر «هر کالا یک قیمت» نیست.** §۳۸ صریح است: `product.sale_price = 100`
+    مدلِ کافی‌ای نیست. یک کالا می‌تواند هم‌زمان قیمتِ عمده به ریال، قیمتِ خرده به
+    ریال و قیمتِ صادراتی به دلار داشته باشد — و قیمتِ کارتن با قیمتِ عدد یکی
+    نیست (§۴۱).
+
+    `NULL` در هر بُعد یعنی «هر مقداری» — پس ردیف‌های موجود، که هر چهار بُعدشان
+    خالی است، دقیقاً مثلِ امروز روی همه‌ی زمینه‌ها می‌نشینند.
+
+    **نوعِ فروش، ارز و گروهِ مشتری از داده‌ی موجود می‌آیند (§۳۹ §۴۰).** فصل منع
+    می‌کند که زیرسیستمِ قیمت تعریفِ موازیِ خودش را بسازد.
+
+    و §۴۳: این *سیاست* است. قیمتِ واقعیِ ثبت‌شده روی ردیفِ فاکتور snapshot خودش
+    را دارد و با عوض‌شدنِ این جدول تغییر نمی‌کند.
+    """
 
     __tablename__ = "price_list_items"
     # tenant_id در قید هست تا با گاردِ «ایندکسِ یکتا باید مستأجر داشته باشد» بخواند
     # (price_list خودش مستأجرمحور است، ولی قید باید صراحتاً مستأجر را ببیند).
+    #
+    # یکتایی روی **کلِ زمینه** است، نه فقط کالا. `COALESCE` لازم است چون در
+    # Postgres دو `NULL` در ایندکسِ یکتا با هم برابر شمرده نمی‌شوند — بی آن،
+    # همان ردیفِ «بی‌زمینه» می‌توانست بی‌نهایت بار تکرار شود.
     __table_args__ = (
-        UniqueConstraint("tenant_id", "price_list_id", "item_id", name="uq_price_list_items_list_item"),
+        Index(
+            "uq_price_list_items_context",
+            "tenant_id",
+            "price_list_id",
+            "item_id",
+            text("COALESCE(sale_type_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("COALESCE(unit_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("COALESCE(contact_group_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            "currency_code",
+            unique=True,
+        ),
     )
 
     price_list_id: Mapped[uuid.UUID] = mapped_column(
@@ -53,6 +93,32 @@ class PriceListItem(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     price: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    #: ابعادِ زمینه (§۳۹ §۴۰ §۴۱). `NULL` = «هر مقداری».
+    sale_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sale_types.id", ondelete="CASCADE"), nullable=True
+    )
+    unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id", ondelete="CASCADE"), nullable=True
+    )
+    contact_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contact_groups.id", ondelete="CASCADE"), nullable=True
+    )
+    #: ارز صریح است، نه محاسبه‌ی تسعیر (§۴۰): شرکت می‌تواند واقعاً لیستِ دلاریِ
+    #: مستقل داشته باشد که با نرخِ روز از ریال درنمی‌آید.
+    currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
+
+    #: **کنترلِ تغییرِ نرخ (§۴۲).**
+    #:
+    #: صفر یعنی **بی‌حد** — یعنی رفتارِ امروز، پس هیچ فروشی یک‌شبه مسدود نمی‌شود.
+    #: فقط کسی که صریحاً حد بگذارد کنترل می‌گیرد.
+    allow_rate_change: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    max_increase_percent: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, server_default="0"
+    )
+    max_decrease_percent: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, server_default="0"
+    )
 
     price_list: Mapped["PriceList"] = relationship(back_populates="items")
 

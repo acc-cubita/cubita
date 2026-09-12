@@ -21,6 +21,9 @@ from app.models.user import User
 from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
+from app.services import items as items_svc
+from app.services import pricing
+from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
 from app.services.common import number_lines
@@ -218,6 +221,9 @@ def post_sales_invoice(
     فروشنده. شرحِ کامل در [گاردِ اعتبار](credit.py).
     """
     assert_period_open(db, data.invoice_date)
+    #: §۱۵ — انبارِ غیرفعال در ثبتِ تازه انتخاب نمی‌شود. تا امروز این پرچم فقط در
+    #: رسیدِ انبارِ خرید سنجیده می‌شد، پس «غیرفعال» یک برچسبِ نیمه‌کاره بود.
+    warehouses.assert_usable(db, data.warehouse_id, action="فاکتور فروش")
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
@@ -231,6 +237,27 @@ def post_sales_invoice(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
         if not item.is_service:
             requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
+
+    #: §۷ §۵۳ — موادِ اولیه و موادِ بسته‌بندی موجودی دارند ولی فروختنی نیستند.
+    items_svc.assert_sellable(db, [items_by_id[line.item_id] for line in data.lines])
+    #: §۲۹ — کالا فقط در انبارهای مرتبطش گردش می‌کند. فهرستِ خالی یعنی «همه».
+    for line in data.lines:
+        items_svc.assert_warehouse_allowed(db, items_by_id[line.item_id], data.warehouse_id)
+
+    #: §۴۲ — حدِ مجازِ تغییرِ نرخ نسبت به اعلامیه‌ی قیمت.
+    #:
+    #: پیش‌فرض **بی‌حد** است (حدهای صفر = بدونِ کنترل)، پس هیچ فروشی با افزودنِ
+    #: این گارد مسدود نمی‌شود؛ فقط اعلامیه‌ای که صریحاً سقف گذاشته اثر دارد.
+    for line in data.lines:
+        pricing.assert_within_policy(
+            db,
+            items_by_id[line.item_id],
+            Decimal(line.unit_price),
+            on=data.invoice_date,
+            sale_type_id=data.sale_type_id,
+            contact_id=data.contact_id,
+            currency_code=data.currency_code or "IRR",
+        )
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
     # هر دو پاس می‌شوند و موجودی منفی می‌شود — یعنی کالایی فروخته می‌شود که وجود ندارد.
@@ -263,6 +290,8 @@ def post_sales_invoice(
     total_cost = Decimal(0)
     invoice_lines: list[SalesInvoiceLine] = []
     stock_moves: list[StockLedger] = []
+    #: خالصِ هر ردیف — پایه‌ی مالیاتِ همان ردیف.
+    line_nets: list[Decimal] = []
 
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
@@ -271,7 +300,9 @@ def post_sales_invoice(
         line_discount = Decimal(line.discount or 0) + allocated[idx]
         # خالصِ ردیف = ناخالص − تخفیف. جمعِ همین‌ها می‌شود total_amount، یعنی درآمد و
         # پایه‌ی مالیات هر دو «پس از تخفیف»اند.
-        total_amount += (line.qty * line.unit_price) - line_discount
+        line_net = (line.qty * line.unit_price) - line_discount
+        line_nets.append(line_net)
+        total_amount += line_net
         total_discount += line_discount
         total_cost += line.qty * unit_cost
         invoice_lines.append(
@@ -286,6 +317,11 @@ def post_sales_invoice(
                 #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
                 #: نشان می‌داد. همان دلیلی که `tax_amount` کنارِ `tax_rate` می‌نشیند.
                 vat_status=item.vat_status,
+                #: نرخِ مؤثرِ **همین ردیف** (§۱۳ §۱۴): ردیفِ معاف صفر می‌گیرد،
+                #: کالای نرخ‌دار نرخِ خودش را، بقیه نرخِ سرِ فاکتور را.
+                tax_rate_snapshot=items_svc.effective_tax_rate(
+                    item, data.tax_rate, side="sales"
+                ),
             )
         )
         if not item.is_service:
@@ -300,7 +336,17 @@ def post_sales_invoice(
                 )
             )
 
-    tax_amount = compute_tax(total_amount, data.tax_rate)
+    #: **مالیات ردیف‌به‌ردیف، نه روی جمعِ فاکتور.**
+    #:
+    #: تا امروز نرخِ سرِ فاکتور روی کلِ خالص می‌نشست، یعنی قلمِ **معاف** هم مالیات
+    #: می‌خورد. `vat_status` روی ردیف ذخیره و در گزارشِ ارزش افزوده شمرده می‌شد،
+    #: ولی در محاسبه اثری نداشت — گزارش می‌گفت «فروشِ معاف: X» در حالی که همان
+    #: فاکتور روی X مالیات بسته بود. بسته‌ی مؤدیان هم همان نرخ را به *هر* ردیف
+    #: می‌زد، پس قلمِ معاف با مالیات به سازمان اظهار می‌شد.
+    for line_obj, line_net in zip(invoice_lines, line_nets, strict=True):
+        line_obj.tax_amount_snapshot = compute_tax(line_net, Decimal(line_obj.tax_rate_snapshot))
+    tax_amount = sum((Decimal(line.tax_amount_snapshot) for line in invoice_lines), Decimal(0))
+
     # گِرد کردن: تعدیلِ مبلغِ نهایی پس از مالیات. مبلغِ قابل‌پرداخت نباید منفی شود.
     rounding = Decimal(data.rounding or 0)
     if total_amount + tax_amount + rounding < 0:
@@ -362,7 +408,9 @@ def post_sales_invoice(
         )
         journal_lines.append(
             JournalLine(
-                account_id=_get_account(db, cc.INVENTORY).id,
+                #: معینِ **همان انبار** (§۹). اگر انبار نگاشتِ خودش را نداشته
+                #: باشد، همان حسابِ پیش‌فرض برمی‌گردد — یعنی رفتارِ پیشین.
+                account_id=warehouses.inventory_account_id(db, data.warehouse_id),
                 debit=0,
                 credit=total_cost,
                 description="کسر از موجودی کالا بابت فروش",
@@ -435,6 +483,7 @@ def post_sales_invoice(
 
 def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> PurchaseInvoice:
     assert_period_open(db, data.invoice_date)
+    warehouses.assert_usable(db, data.warehouse_id, action="فاکتور خرید")
 
     if data.warehouse_id is None and data.contact_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انتخاب تأمین‌کننده برای فاکتور خرید الزامی است")
@@ -454,6 +503,25 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
     number = next_document_number(db, DOC_PURCHASE_INVOICE)
 
+    #: §۲۹ — کالا فقط به انبارهای مرتبطش وارد می‌شود.
+    for line in data.lines:
+        items_svc.assert_warehouse_allowed(db, items_by_id[line.item_id], data.warehouse_id)
+
+    #: عوارضِ هر ردیف: اگر فرستاده نشده باشد (`None`) از **نرخِ عوارضِ کالا**
+    #: می‌آید (§۱۳)، وگرنه همان عددِ فرستاده‌شده. صفرِ صریح یعنی صفر.
+    #:
+    #: نرخِ عوارضِ همه‌ی کالاهای موجود صفر است، پس این لایه هیچ فاکتوری را تکان
+    #: نمی‌دهد؛ فقط کسی که صریحاً نرخ بگذارد رفتارِ تازه می‌گیرد.
+    line_duties_own = [
+        Decimal(line.duty_amount)
+        if line.duty_amount is not None
+        else compute_tax(
+            (line.qty * line.unit_cost) - Decimal(line.discount or 0),
+            Decimal(items_by_id[line.item_id].duty_rate or 0),
+        )
+        for line in data.lines
+    ]
+
     # تخفیفِ کلِ فاکتور به‌نسبتِ خالصِ هر ردیف تسهیم می‌شود، پس ارزش‌گذاریِ موجودی،
     # پایه‌ی مالیات و بهای برگشت همگی خودکار درست می‌مانند.
     base_nets = [
@@ -461,10 +529,10 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             (line.qty * line.unit_cost)
             - Decimal(line.discount or 0)
             + Decimal(line.addition or 0)
-            + Decimal(line.duty_amount or 0),
+            + line_duties_own[idx],
             Decimal(0),
         )
-        for line in data.lines
+        for idx, line in enumerate(data.lines)
     ]
     gross_net = sum(base_nets, Decimal(0))
     invoice_discount = Decimal(data.invoice_discount or 0)
@@ -482,6 +550,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     total_duties = Decimal(0)
     invoice_lines: list[PurchaseInvoiceLine] = []
     stock_moves: list[StockLedger] = []
+    #: خالصِ هر ردیف، به همان ترتیبِ `data.lines`. هم پایه‌ی مالیاتِ ردیف است و
+    #: هم مشخص می‌کند چه مبلغی به کدام حساب بدهکار شود.
+    line_nets: list[Decimal] = []
     # هر ردیفِ کالا یک «بارِ ورودی» جدا می‌سازد تا کسری/معیوب قابلِ ردیابی به همان بار باشد.
     batch_seeds: list[dict] = []
 
@@ -489,8 +560,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         item = items_by_id[line.item_id]
         line_discount = Decimal(line.discount or 0) + allocated[idx]
         line_addition = Decimal(line.addition or 0) + allocated_additions[idx]
-        line_duty = Decimal(line.duty_amount or 0) + allocated_duties[idx]
+        line_duty = line_duties_own[idx] + allocated_duties[idx]
         line_net = (line.qty * line.unit_cost) - line_discount + line_addition + line_duty
+        line_nets.append(line_net)
         # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
         # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
         # فروشِ بعدی کمتر از واقع گزارش می‌شود.
@@ -506,11 +578,18 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 addition=line_addition,
                 duty_amount=line_duty,
                 description=line.description,
-                vat_status=item.vat_status,  # قفل در لحظه‌ی خرید — مثلِ فروش
+                #: **سمتِ خرید پرچمِ خودش را دارد (§۱۳).** تا امروز همان
+                #: `vat_status`ِ فروش کپی می‌شد، یعنی کوبیتا فرض می‌کرد وضعیتِ
+                #: مالیاتیِ خرید و فروشِ یک قلم همیشه یکی است. نیست.
+                vat_status=item.purchase_vat_status,
                 item_code_snapshot=item.sku,
                 item_name_snapshot=item.name,
                 unit_snapshot=item.unit,
-                tax_rate_snapshot=data.tax_rate,
+                #: نرخِ **مؤثرِ همین ردیف** قفل می‌شود، نه نرخِ سرِ فاکتور: ردیفِ
+                #: معاف صفر می‌گیرد و کالای نرخ‌دار نرخِ خودش را (§۱۴).
+                tax_rate_snapshot=items_svc.effective_tax_rate(
+                    item, data.tax_rate, side="purchase"
+                ),
             )
         )
         total_additions += line_addition
@@ -541,25 +620,49 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 }
             )
 
-    tax_amount = compute_tax(total_amount, data.tax_rate)
-    taxable_weights = [
-        Decimal(line.qty) * Decimal(line.unit_cost)
-        - Decimal(line.discount)
-        + Decimal(line.addition)
-        + Decimal(line.duty_amount)
-        for line in invoice_lines
-    ]
-    for line, share in zip(invoice_lines, _allocate_discount(tax_amount, taxable_weights), strict=True):
-        line.tax_amount_snapshot = share
+    #: **مالیات ردیف‌به‌ردیف حساب می‌شود، نه روی جمعِ فاکتور.**
+    #:
+    #: تا امروز `compute_tax(total_amount, data.tax_rate)` بود — یعنی ردیفِ
+    #: **معاف** هم مالیات می‌خورد. `vat_status` روی ردیف ذخیره و در گزارشِ ارزش
+    #: افزوده شمرده می‌شد، ولی در *محاسبه* هیچ اثری نداشت: فاکتوری با یک قلم
+    #: مشمول و یک قلم معاف، روی هر دو مالیات می‌گرفت. گزارش می‌گفت «خریدِ معاف:
+    #: X» در حالی که همان فاکتور روی X مالیات بسته بود.
+    #:
+    #: حالا هر ردیف نرخِ مؤثرِ خودش را دارد و جمعشان مالیاتِ فاکتور است — پس
+    #: `tax_amount_snapshot` دیگر سهمِ تسهیم‌شده نیست، عددِ دقیقِ همان ردیف است.
+    for line_obj, line_net in zip(invoice_lines, line_nets, strict=True):
+        line_obj.tax_amount_snapshot = compute_tax(line_net, Decimal(line_obj.tax_rate_snapshot))
+    tax_amount = sum((Decimal(line.tax_amount_snapshot) for line in invoice_lines), Decimal(0))
+
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     payable_or_cash = _get_account(db, cc.ACCOUNTS_PAYABLE) if data.contact_id else _get_account(db, cc.CASH)
+
+    #: **این‌جا کالا و خدمت از هم جدا می‌شوند — و تنها این‌جا (§۱۵ §۱۶).**
+    #:
+    #: پیش از این کلِ `total_amount` بدهکارِ «موجودی کالا» می‌شد، چه کالا بود چه
+    #: خدمت. خدمت حرکتِ انباری نمی‌سازد، پس آن مبلغ به‌عنوان دارایی می‌نشست و
+    #: **هرگز خارج نمی‌شد**؛ هزینه‌اش هم هیچ‌وقت به سود و زیان نمی‌رسید.
+    #:
+    #: جمع‌بندی بر اساسِ حساب است نه ردیف: ده ردیفِ خدمت با یک معین، یک ردیفِ
+    #: سند می‌شود — نه ده ردیفِ تکراری.
+    inventory_account_id = warehouses.inventory_account_id(db, data.warehouse_id)
+    debit_by_account: dict[UUID, Decimal] = {}
+    for line, line_net in zip(data.lines, line_nets, strict=True):
+        account_id = items_svc.purchase_account_id(
+            db, items_by_id[line.item_id], inventory_account_id=inventory_account_id
+        )
+        debit_by_account[account_id] = debit_by_account.get(account_id, Decimal(0)) + line_net
+
     journal_lines = [
         JournalLine(
-            account_id=_get_account(db, cc.INVENTORY).id,
-            debit=total_amount,
+            account_id=account_id,
+            debit=amount,
             credit=0,
-            description="بابت خرید کالا",
-        ),
+            description=(
+                "بابت خرید کالا" if account_id == inventory_account_id else "بابت خرید خدمت"
+            ),
+        )
+        for account_id, amount in debit_by_account.items()
     ]
     if tax_amount > 0:
         journal_lines.append(
@@ -652,12 +755,14 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
 def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> StockAdjustment:
     assert_period_open(db, data.adjustment_date)
+    warehouses.assert_usable(db, data.warehouse_id, action="تعدیل موجودی")
 
     item = db.get(Item, data.item_id)
     if item is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالا یافت نشد")
     if item.is_service:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "خدمت موجودی ندارد که تعدیل شود")
+    items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
 
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)
@@ -671,10 +776,14 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
     amount = abs(data.qty_diff) * unit_cost
 
     # کسری: بدهکار حساب مغایرت انبار (هزینه)، بستانکار موجودی کالا. اضافی: برعکس (کاهش هزینه‌ی مغایرت).
+    #: سمتِ موجودی از معینِ همان انبار می‌آید؛ سمتِ مغایرت حسابِ هزینه‌ای است و
+    #: به انبار ربطی ندارد.
+    inventory_account_id = warehouses.inventory_account_id(db, data.warehouse_id)
+    adjustment_account_id = _get_account(db, cc.INVENTORY_ADJUSTMENT).id
     if data.qty_diff < 0:
-        debit_account, credit_account = cc.INVENTORY_ADJUSTMENT, cc.INVENTORY
+        debit_id, credit_id = adjustment_account_id, inventory_account_id
     else:
-        debit_account, credit_account = cc.INVENTORY, cc.INVENTORY_ADJUSTMENT
+        debit_id, credit_id = inventory_account_id, adjustment_account_id
 
     journal_entry = None
     if amount > 0:
@@ -686,8 +795,8 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
             source_type="stock_adjustment",
             created_by_id=user.id,
             lines=number_lines([
-                JournalLine(account_id=_get_account(db, debit_account).id, debit=amount, credit=0),
-                JournalLine(account_id=_get_account(db, credit_account).id, debit=0, credit=amount),
+                JournalLine(account_id=debit_id, debit=amount, credit=0),
+                JournalLine(account_id=credit_id, debit=0, credit=amount),
             ]),
         )
         tafsili.assert_entry_has_tafsili(db, journal_entry)

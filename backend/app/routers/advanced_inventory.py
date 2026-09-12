@@ -111,12 +111,22 @@ def set_price_list_items(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "لیستِ قیمت یافت نشد")
     pl.items.clear()
     db.flush()
-    seen: set[UUID] = set()
+    #: کلیدِ تکراری دیگر «کالا» نیست، **کلِ زمینه** است (§۳۸): یک کالا می‌تواند
+    #: هم‌زمان قیمتِ عمده و خرده و صادراتی داشته باشد. اگر این‌جا همچنان روی
+    #: `item_id` یکتا می‌کردیم، دومین قاعده بی‌صدا دور ریخته می‌شد.
+    seen: set[tuple] = set()
     for row in data.items:
-        if row.item_id in seen:
+        key = (
+            row.item_id,
+            row.sale_type_id,
+            row.unit_id,
+            row.contact_group_id,
+            row.currency_code,
+        )
+        if key in seen:
             continue
-        seen.add(row.item_id)
-        pl.items.append(PriceListItem(item_id=row.item_id, price=row.price))
+        seen.add(key)
+        pl.items.append(PriceListItem(**row.model_dump()))
     db.flush()
     return db.query(PriceListItem).filter(PriceListItem.price_list_id == list_id).all()
 

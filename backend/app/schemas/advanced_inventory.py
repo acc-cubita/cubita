@@ -34,8 +34,23 @@ class PriceListOut(BaseModel):
 
 
 class PriceListItemIn(BaseModel):
+    """یک قاعده‌ی قیمت — کالا + زمینه + نرخ + حدِ تغییر (§۳۷–§۴۲).
+
+    هر سه بُعدِ زمینه اختیاری‌اند و `None` یعنی «هر مقداری»، پس ردیفِ ساده‌ی
+    امروزی دقیقاً مثلِ قبل کار می‌کند.
+    """
+
     item_id: UUID
     price: Decimal
+    #: §۳۹ §۴۰ §۴۱ — از داده‌ی موجود، نه تعریفِ موازی.
+    sale_type_id: UUID | None = None
+    unit_id: UUID | None = None
+    contact_group_id: UUID | None = None
+    currency_code: str = "IRR"
+    #: §۴۲ — صفر یعنی **بی‌حد**، یعنی رفتارِ امروز.
+    allow_rate_change: bool = True
+    max_increase_percent: Decimal = Decimal(0)
+    max_decrease_percent: Decimal = Decimal(0)
 
     @field_validator("price")
     @classmethod
@@ -44,11 +59,25 @@ class PriceListItemIn(BaseModel):
             raise ValueError("قیمت نمی‌تواند منفی باشد")
         return v
 
+    @field_validator("max_increase_percent", "max_decrease_percent")
+    @classmethod
+    def _sane_limit(cls, v: Decimal) -> Decimal:
+        if not (0 <= v <= 100):
+            raise ValueError("حدِ تغییرِ نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
 
 class PriceListItemOut(BaseModel):
     id: UUID
     item_id: UUID
     price: Decimal
+    sale_type_id: UUID | None = None
+    unit_id: UUID | None = None
+    contact_group_id: UUID | None = None
+    currency_code: str = "IRR"
+    allow_rate_change: bool = True
+    max_increase_percent: Decimal = Decimal(0)
+    max_decrease_percent: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 

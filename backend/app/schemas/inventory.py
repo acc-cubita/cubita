@@ -16,6 +16,18 @@ from app.models.inventory import (
 class WarehouseIn(BaseModel):
     code: str
     name: str
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام.
+    name2: str = ""
+    #: مشخصاتِ اجرایی (§۳ §۶ §۷ §۸). `responsible` متن است نه کاربر/پرسنل:
+    #: §۶ چنین الزامی را نشان نمی‌دهد و انبارِ برون‌سپاری‌شده ممکن است مسئولی
+    #: داشته باشد که اصلاً کاربرِ سیستم نیست.
+    responsible: str = ""
+    phone: str = ""
+    address: str = ""
+    address2: str = ""
+    #: معینِ انبار — **اختیاری** (§۱۳). خالی یعنی حسابِ پیش‌فرضِ موجودیِ کالا،
+    #: که همان رفتارِ امروزِ همه‌ی انبارهاست.
+    gl_account_id: UUID | None = None
 
 
 class WarehouseUpdateIn(BaseModel):
@@ -23,6 +35,12 @@ class WarehouseUpdateIn(BaseModel):
     (روی حرکاتِ انبار و اسناد نشسته)، پس اینجا نمی‌آید."""
 
     name: str | None = None
+    name2: str | None = None
+    responsible: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    address2: str | None = None
+    gl_account_id: UUID | None = None
     is_active: bool | None = None
 
     @field_validator("name")
@@ -39,9 +57,28 @@ class WarehouseOut(BaseModel):
     id: UUID
     code: str
     name: str
+    name2: str = ""
+    responsible: str = ""
+    phone: str = ""
+    address: str = ""
+    address2: str = ""
     is_active: bool
+    gl_account_id: UUID | None = None
+    #: کد و عنوانِ حسابِ معین برای فهرست (§۲۹). وقتی نگاشت خالی است، حسابِ
+    #: پیش‌فرض نشان داده می‌شود و `is_default` می‌گوید انتخابِ کاربر نبوده —
+    #: نشان‌ندادنش یعنی کاربر فکر کند این انبار به هیچ حسابی نمی‌نشیند.
+    gl_account_code: str = ""
+    gl_account_name: str = ""
+    gl_account_is_default: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class WarehouseStockPositionOut(BaseModel):
+    """اثرِ غیرفعال‌سازی (§۱۷) — چند قلم کالا با موجودیِ غیرصفر."""
+
+    item_count: int
+    items: list[dict] = []
 
 
 ENTITY_TYPES = ("real", "legal")
@@ -363,14 +400,219 @@ class CreditStatusOut(BaseModel):
     over_limit: bool
 
 
+class UnitIn(BaseModel):
+    """واحدِ سنجش — داده‌ی پایه (§۱۹)."""
+
+    name: str
+    name2: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ واحد نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class UnitUpdateIn(BaseModel):
+    name: str | None = None
+    name2: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ واحد نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class UnitOut(BaseModel):
+    id: UUID
+    name: str
+    name2: str = ""
+    is_active: bool
+    #: چند قلم کالا رویش نشسته — تا فهرست پیش از غیرفعال‌سازی خبر بدهد.
+    item_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ItemGroupIn(BaseModel):
+    """گروه‌بندیِ کالا/خدمت (§۳۴)."""
+
+    code: str = ""
+    name: str
+    name2: str = ""
+    notes: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ گروه نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class ItemGroupUpdateIn(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    name2: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ گروه نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class ItemGroupOut(BaseModel):
+    id: UUID
+    code: str = ""
+    name: str
+    name2: str = ""
+    notes: str = ""
+    is_active: bool
+    item_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ItemAttributeIn(BaseModel):
+    """تعریفِ یک مشخصه (§۳۵ §۳۶) — «رنگ»، «سایز»، «کشور سازنده».
+
+    **نوعِ داده عمداً نیست.** فصل نوع را تثبیت نمی‌کند و می‌گوید با فصلِ
+    اختصاصیِ مشخصات هماهنگ شود؛ اختراعِ نوع‌بندی این‌جا یعنی چیزی که بعداً باید
+    بازنویسی شود.
+    """
+
+    name: str
+    name2: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ مشخصه نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class ItemAttributeUpdateIn(BaseModel):
+    name: str | None = None
+    name2: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ مشخصه نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class ItemAttributeOut(BaseModel):
+    id: UUID
+    name: str
+    name2: str = ""
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ItemAttributeValueIn(BaseModel):
+    attribute_id: UUID
+    value: str = ""
+
+
+class ItemAttributeValueOut(BaseModel):
+    attribute_id: UUID
+    attribute_name: str
+    value: str
+
+
+class ItemWarehouseIn(BaseModel):
+    """یک انبارِ مرتبط (§۲۹ §۳۱). `is_default` فقط پیشنهادِ فرم است، نه مالکیت."""
+
+    warehouse_id: UUID
+    is_default: bool = False
+    #: override‌های انبارمحورِ کنترلِ موجودی (§۲۸). `None` = «همان عددِ کالا».
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+
+
+class ItemWarehouseOut(BaseModel):
+    warehouse_id: UUID
+    warehouse_code: str
+    warehouse_name: str
+    is_default: bool
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+
+
 class ItemIn(BaseModel):
     sku: str
     name: str
+    #: عنوانِ دوم (§۵) — فیلدِ مستقل، نه پیوستِ نام.
+    name2: str = ""
     category: str = ""
     unit: str = "عدد"
     is_service: bool = False
     sales_price: Decimal = Decimal(0)
     barcode: str | None = None
+    #: سه شناسه‌ی جدا (§۴ §۱۱ §۱۲): `sku` کدِ داخلی، `barcode` خطی، `iran_code`
+    #: و `barcode2` هرکدام مفهومِ خودشان. یکی‌شان نمی‌کنیم.
+    iran_code: str = ""
+    barcode2: str = ""
+    #: §۷ — «فعال» و «قابل فروش» دو چیزند. موادِ اولیه فعال‌اند و فروختنی نیستند.
+    is_sellable: bool = True
+    #: §۸ — کالا سریال‌محور است یا نه.
+    is_serial_tracked: bool = False
+    #: §۱۳ — نرخِ کالا. صفر = «نرخِ سرِ فاکتور»، نه معافیت (معافیت پرچمِ جداست).
+    tax_rate: Decimal = Decimal(0)
+    duty_rate: Decimal = Decimal(0)
+    #: §۱۳ — وضعیتِ مالیاتیِ سمتِ خرید، مستقل از فروش.
+    purchase_vat_status: str = "taxable"
+    #: §۱۵ — معینِ هزینه‌ی خریدِ خدمت. خالی = حسابِ پیش‌فرضِ «هزینه خرید خدمات».
+    expense_account_id: UUID | None = None
+    #: §۱۷ §۱۸ — واحدِ اصلی از داده‌ی پایه. اگر فرستاده نشود، از نوشتارِ `unit`
+    #: ساخته/پیدا می‌شود؛ این‌طور مسیرهای قدیمی (ورودِ گروهی، بازار، بازیابیِ
+    #: پشتیبان) نمی‌شکنند و متنِ آزاد هم دیگر سرگردان نمی‌ماند.
+    primary_unit_id: UUID | None = None
+    #: §۲۰ §۲۱ §۲۲ — واحدِ فرعی و نسبتش.
+    secondary_unit_id: UUID | None = None
+    conversion_factor: Decimal = Decimal(0)
+    conversion_mode: str = "fixed"
+    #: §۲۳ — متادیتای حمل‌ونقل، نه موجودی.
+    unit_weight: Decimal = Decimal(0)
+    unit_volume: Decimal = Decimal(0)
+    #: §۲۴ §۲۵ §۲۶ — قاعده‌ی برنامه‌ریزی، نه سدِ تراکنش.
+    min_stock: Decimal = Decimal(0)
+    max_stock: Decimal = Decimal(0)
+    #: §۲۹ §۳۰ — فهرستِ خالی یعنی «همه‌ی انبارها»، نه «هیچ انباری».
+    warehouses: list[ItemWarehouseIn] = []
+    #: §۳۴ — گروه‌بندی. اگر فرستاده نشود، از نوشتارِ `category` ساخته/پیدا می‌شود.
+    group_id: UUID | None = None
+    #: §۳۵ — مقدارِ مشخصه‌ها. مقدارِ خالی یعنی «این مشخصه را ندارد».
+    attributes: list[ItemAttributeValueIn] = []
+
+    @field_validator("conversion_mode")
+    @classmethod
+    def _known_mode(cls, v: str) -> str:
+        from app.models.inventory import CONVERSION_MODES
+
+        if v not in CONVERSION_MODES:
+            raise ValueError("نحوه‌ی تبدیلِ واحد نامعتبر است")
+        return v
+
+    @field_validator("conversion_factor", "unit_weight", "unit_volume")
+    @classmethod
+    def _non_negative(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("این مقدار نمی‌تواند منفی باشد")
+        return v
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). ۰ = بدونِ هشدار.
     reorder_point: Decimal = Decimal(0)
     #: شناسه‌ی کالا/خدمتِ مالیاتی (sstid، ۱۳رقمیِ مؤدیان). خالی = پیش‌فرضِ کسب‌وکار.
@@ -394,7 +636,7 @@ class ItemIn(BaseModel):
             raise ValueError("نقطه‌ی سفارش نمی‌تواند منفی باشد")
         return v
 
-    @field_validator("vat_status")
+    @field_validator("vat_status", "purchase_vat_status")
     @classmethod
     def _known_vat_status(cls, v: str) -> str:
         from app.models.inventory import VAT_STATUSES
@@ -403,11 +645,19 @@ class ItemIn(BaseModel):
             raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
         return v
 
+    @field_validator("tax_rate", "duty_rate")
+    @classmethod
+    def _sane_rate(cls, v: Decimal) -> Decimal:
+        if not (0 <= v <= 100):
+            raise ValueError("نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
 
 class ItemOut(BaseModel):
     id: UUID
     sku: str
     name: str
+    name2: str = ""
     category: str
     unit: str
     is_service: bool
@@ -419,6 +669,36 @@ class ItemOut(BaseModel):
     reorder_point: Decimal
     tax_stuff_id: str
     vat_status: str
+    iran_code: str = ""
+    barcode2: str = ""
+    is_sellable: bool = True
+    is_serial_tracked: bool = False
+    tax_rate: Decimal = Decimal(0)
+    duty_rate: Decimal = Decimal(0)
+    purchase_vat_status: str = "taxable"
+    expense_account_id: UUID | None = None
+    #: کد و عنوانِ معینِ هزینه — برای خدمتِ بی‌نگاشت، حسابِ پیش‌فرض نشان داده
+    #: می‌شود و `is_default` می‌گوید انتخابِ کاربر نبوده. برای کالا خالی است،
+    #: چون بهای خرید به موجودیِ انبار می‌نشیند نه به حسابِ هزینه.
+    expense_account_code: str = ""
+    expense_account_name: str = ""
+    expense_account_is_default: bool = True
+    primary_unit_id: UUID | None = None
+    primary_unit_name: str = ""
+    secondary_unit_id: UUID | None = None
+    secondary_unit_name: str = ""
+    conversion_factor: Decimal = Decimal(0)
+    conversion_mode: str = "fixed"
+    unit_weight: Decimal = Decimal(0)
+    unit_volume: Decimal = Decimal(0)
+    min_stock: Decimal = Decimal(0)
+    max_stock: Decimal = Decimal(0)
+    warehouses: list[ItemWarehouseOut] = []
+    #: انبارِ پیش‌فرض — پیشنهادِ فرمِ فروش/خرید، نه قفل (§۳۲).
+    default_warehouse_id: UUID | None = None
+    group_id: UUID | None = None
+    group_name: str = ""
+    attributes: list[ItemAttributeValueOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -432,6 +712,32 @@ class ItemUpdateIn(BaseModel):
     """
 
     name: str | None = None
+    #: §۴ — کد یک شناسه‌ی کسب‌وکاری است و کاربر می‌تواند اصلاحش کند؛ روابطِ
+    #: داخلی روی `id` بسته‌اند و ردیفِ فاکتور کدِ روزِ خودش را snapshot دارد.
+    sku: str | None = None
+    name2: str | None = None
+    category: str | None = None
+    unit: str | None = None
+    iran_code: str | None = None
+    barcode2: str | None = None
+    is_sellable: bool | None = None
+    is_serial_tracked: bool | None = None
+    tax_rate: Decimal | None = None
+    duty_rate: Decimal | None = None
+    purchase_vat_status: str | None = None
+    expense_account_id: UUID | None = None
+    primary_unit_id: UUID | None = None
+    secondary_unit_id: UUID | None = None
+    conversion_factor: Decimal | None = None
+    conversion_mode: str | None = None
+    unit_weight: Decimal | None = None
+    unit_volume: Decimal | None = None
+    min_stock: Decimal | None = None
+    max_stock: Decimal | None = None
+    #: `None` = دست‌نزن؛ فهرستِ خالی = همه‌ی انبارها.
+    warehouses: list[ItemWarehouseIn] | None = None
+    group_id: UUID | None = None
+    attributes: list[ItemAttributeValueIn] | None = None
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None
@@ -443,7 +749,7 @@ class ItemUpdateIn(BaseModel):
     #: لحظه‌ی معامله‌ی خودشان را نگه می‌دارند.
     vat_status: str | None = None
 
-    @field_validator("vat_status")
+    @field_validator("vat_status", "purchase_vat_status")
     @classmethod
     def _known_vat_status(cls, v: str | None) -> str | None:
         from app.models.inventory import VAT_STATUSES
@@ -451,6 +757,31 @@ class ItemUpdateIn(BaseModel):
         if v is not None and v not in VAT_STATUSES:
             raise ValueError("وضعیت مالیاتی باید «مشمول» یا «معاف» باشد")
         return v
+
+    @field_validator("tax_rate", "duty_rate")
+    @classmethod
+    def _sane_rate(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and not (0 <= v <= 100):
+            raise ValueError("نرخ باید بینِ ۰ و ۱۰۰ باشد")
+        return v
+
+    @field_validator("conversion_mode")
+    @classmethod
+    def _known_mode(cls, v: str | None) -> str | None:
+        from app.models.inventory import CONVERSION_MODES
+
+        if v is not None and v not in CONVERSION_MODES:
+            raise ValueError("نحوه‌ی تبدیلِ واحد نامعتبر است")
+        return v
+
+    @field_validator("sku", "name", "unit")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not v.strip():
+            raise ValueError("این فیلد نمی‌تواند خالی باشد")
+        return v.strip()
 
     @field_validator("barcode")
     @classmethod
@@ -482,7 +813,7 @@ class StockLevelOut(BaseModel):
 
 
 class LowStockRowOut(BaseModel):
-    """کالایی که موجودیِ کلش به/زیرِ نقطه‌ی سفارش رسیده."""
+    """کالایی که موجودیِ کلش به/زیرِ نقطه‌ی سفارش یا حداقلِ موجودی رسیده."""
 
     item_id: UUID
     sku: str
@@ -490,7 +821,27 @@ class LowStockRowOut(BaseModel):
     unit: str
     qty_on_hand: Decimal
     reorder_point: Decimal
-    shortfall: Decimal  # کمبود تا نقطه‌ی سفارش = max(reorder_point − qty, 0)
+    shortfall: Decimal  # کمبود تا آستانه = max(threshold − qty, 0)
+    #: کدام آستانه این ردیف را آورده: `reorder` یا `min`. §۲۵ این دو را جدا
+    #: می‌داند و یکی‌کردنشان یعنی کاربر نفهمد چرا هشدار گرفته.
+    trigger: str = "reorder"
+    min_stock: Decimal = Decimal(0)
+
+
+class OverStockRowOut(BaseModel):
+    """§۲۶ — موجودی از حداکثر گذشته.
+
+    **سدِ تراکنش نیست، سیگنالِ برنامه‌ریزی است:** حداکثرِ موجودی جلوی ورودِ کالا
+    را نمی‌گیرد؛ فقط می‌گوید مازاد داریم.
+    """
+
+    item_id: UUID
+    sku: str
+    name: str
+    unit: str
+    qty_on_hand: Decimal
+    max_stock: Decimal
+    excess: Decimal
 
 
 class StockAdjustmentIn(BaseModel):
