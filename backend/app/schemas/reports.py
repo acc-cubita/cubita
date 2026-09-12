@@ -408,3 +408,87 @@ class IntegrityReportOut(BaseModel):
     difference: Decimal
     ok: bool
     checks: list[IntegrityCheckOut]
+
+
+# ───────────────────── مرور جامع طرف حساب ─────────────────────
+
+
+class RolePositionOut(BaseModel):
+    """مانده‌ی یک نقشِ طرف حساب — و اینکه با دفتر می‌خواند یا نه."""
+
+    role: str
+    role_label: str
+    account_id: UUID
+    account_code: str
+    account_name: str
+    debit_total: Decimal
+    credit_total: Decimal
+    net: Decimal
+    #: مانده‌ی **قابلِ تسویه** — با `net` یکی نیست و نباید یکی گرفته شود.
+    open_net: Decimal
+    #: `None` یعنی این طرف حساب تفصیلی ندارد و مانده‌ی دفتریِ شخصی‌اش قابلِ
+    #: استخراج نیست. با صفر یکی نیست.
+    ledger_net: Decimal | None = None
+    unattributed: Decimal | None = None
+    document_count: int
+
+
+class CounterpartySummaryOut(BaseModel):
+    contact_id: UUID
+    contact_name: str
+    contact_type: str
+    has_analytic: bool
+    positions: list[RolePositionOut]
+    #: جمعِ نقش‌ها — **مشتق**، نه ذخیره‌شده. و هیچ تهاتری در دفتر نمی‌کند.
+    total_net: Decimal
+    open_net: Decimal
+    uncleared_cheques: Decimal
+    net_without_uncleared_cheques: Decimal
+
+
+class CounterpartyEventOut(BaseModel):
+    """یک رویداد در خطِ زمانیِ طرف حساب — با لنگرِ ساختاریافته‌اش."""
+
+    source_type: str
+    source_id: UUID
+    label: str
+    number: int | None = None
+    entry_number: int | None = None
+    document_date: date
+    role: str
+    role_label: str
+    account_id: UUID
+    account_code: str
+    account_name: str
+    side: str
+    document_amount: Decimal
+    currency_code: str | None = None
+    fx_amount: Decimal | None = None
+    settled_amount: Decimal
+    remaining_amount: Decimal
+    status: str
+    status_label: str
+    running_balance: Decimal
+
+
+class CounterpartyEventLineOut(BaseModel):
+    """یک قلم — نوعش می‌گوید کدام ستون‌ها برایش معنی دارند."""
+
+    kind: str
+    seq: int
+    code: str
+    title: str
+    description: str
+    quantity: Decimal | None = None
+    unit_price: Decimal | None = None
+    net_unit_price: Decimal | None = None
+    debit: Decimal | None = None
+    credit: Decimal | None = None
+
+
+class CounterpartyEventDetailOut(BaseModel):
+    source_type: str
+    source_id: UUID
+    label: str
+    journal_entry_id: UUID | None = None
+    lines: list[CounterpartyEventLineOut]

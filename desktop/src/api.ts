@@ -7403,3 +7403,110 @@ export const fetchSalesPosting = (token: string) =>
 
 export const setSalesPosting = (token: string, mode: string) =>
   authedSend<SalesPosting>(token, 'PATCH', '/api/sales-invoice-posting', { mode })
+
+// ───────────────────── مرور جامع طرف حساب ─────────────────────
+
+/** مانده‌ی یک نقشِ طرف حساب. `ledger_net` برابرِ null یعنی طرف حساب تفصیلی ندارد. */
+export interface RolePosition {
+  role: 'customer' | 'supplier'
+  role_label: string
+  account_id: string
+  account_code: string
+  account_name: string
+  debit_total: string
+  credit_total: string
+  net: string
+  open_net: string
+  ledger_net: string | null
+  unattributed: string | null
+  document_count: number
+}
+
+export interface CounterpartySummary {
+  contact_id: string
+  contact_name: string
+  contact_type: string
+  has_analytic: boolean
+  positions: RolePosition[]
+  total_net: string
+  open_net: string
+  uncleared_cheques: string
+  net_without_uncleared_cheques: string
+}
+
+export interface CounterpartyEvent {
+  source_type: string
+  source_id: string
+  label: string
+  number: number | null
+  entry_number: number | null
+  document_date: string
+  role: 'customer' | 'supplier'
+  role_label: string
+  account_id: string
+  account_code: string
+  account_name: string
+  side: 'debit' | 'credit'
+  document_amount: string
+  currency_code: string | null
+  fx_amount: string | null
+  settled_amount: string
+  remaining_amount: string
+  status: string
+  status_label: string
+  running_balance: string
+}
+
+export interface CounterpartyEventLine {
+  kind: 'product' | 'journal' | 'adjustment'
+  seq: number
+  code: string
+  title: string
+  description: string
+  quantity: string | null
+  unit_price: string | null
+  net_unit_price: string | null
+  debit: string | null
+  credit: string | null
+}
+
+export interface CounterpartyEventDetail {
+  source_type: string
+  source_id: string
+  label: string
+  journal_entry_id: string | null
+  lines: CounterpartyEventLine[]
+}
+
+export const fetchCounterpartySummary = (token: string, contactId: string, asOf?: string) =>
+  authedGet<CounterpartySummary>(
+    token,
+    `/api/reports/counterparty/${contactId}/summary${asOf ? `?as_of=${asOf}` : ''}`,
+  )
+
+export const fetchCounterpartyEvents = (
+  token: string,
+  contactId: string,
+  opts: { from?: string; to?: string; role?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  if (opts.from) q.set('date_from', opts.from)
+  if (opts.to) q.set('date_to', opts.to)
+  if (opts.role) q.set('role', opts.role)
+  const qs = q.toString()
+  return authedGet<CounterpartyEvent[]>(
+    token,
+    `/api/reports/counterparty/${contactId}/events${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export const fetchCounterpartyEventLines = (
+  token: string,
+  contactId: string,
+  sourceType: string,
+  sourceId: string,
+) =>
+  authedGet<CounterpartyEventDetail>(
+    token,
+    `/api/reports/counterparty/${contactId}/events/${sourceType}/${sourceId}/lines`,
+  )

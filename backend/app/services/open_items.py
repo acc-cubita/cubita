@@ -34,7 +34,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, func, or_
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
@@ -87,7 +87,12 @@ class SettleableKind:
     #: سمت دارد و هر سمتش می‌تواند طرف حسابِ دیگری باشد؛ `contact_col` برای این
     #: شکل ساخته نشده بود. این قلاب یک شرطِ `EXISTS` می‌سازد — نه `JOIN` — چون
     #: پیوستن به ردیف‌ها جمعِ ردیف‌های سند را در تعدادِ ردیف‌ها ضرب می‌کرد.
-    contact_clause: Callable[[UUID | None], Any] | None = None
+    #:
+    #: **معین هم به آن داده می‌شود، و این ضروری است.** اگر شرط فقط طرف حساب را
+    #: ببیند، تهاترِ «تأمین‌کننده → مشتری» برای *هر دو* طرف کلِ سند را می‌گیرد و
+    #: بعد فیلترِ حساب، سمتِ آن یکی را به پای این یکی می‌نویسد: مشتری روی
+    #: پرداختنی ۴۰۰۰ بدهکار می‌شد که هرگز نبوده.
+    contact_clause: Callable[[UUID | None, UUID], Any] | None = None
 
     #: آیا برای جداکردنِ دو طرف حساب باید ردیفِ سند را با **تفصیلی** هم فیلتر کرد.
     #: وقتی هر دو سمتِ یک سند روی *همان* معین بنشینند (تهاترِ مشتری با مشتری،
@@ -96,18 +101,35 @@ class SettleableKind:
     by_analytic: bool = False
 
 
-def _notice_contact_clause(contact_id: UUID | None):
-    """اعلامیه‌ای که این طرف حساب در یکی از دو سمتِ ردیف‌هایش هست."""
+def _notice_contact_clause(contact_id: UUID | None, account_id: UUID):
+    """اعلامیه‌ای که این طرف حساب **روی همین معین** سمتی در آن دارد.
+
+    جفتِ (طرف حساب، معین) با هم سنجیده می‌شود، نه جدا: در تهاترِ
+    «تأمین‌کننده بدهکارِ پرداختنی / مشتری بستانکارِ دریافتنی» هر دو طرف در سند
+    هستند، ولی هرکدام فقط روی معینِ خودشان.
+    """
     line = CreditDebitNoteLine.note_id == CreditDebitNote.id
     if contact_id is None:
         who = or_(
-            CreditDebitNoteLine.debit_contact_id.isnot(None),
-            CreditDebitNoteLine.credit_contact_id.isnot(None),
+            and_(
+                CreditDebitNoteLine.debit_contact_id.isnot(None),
+                CreditDebitNoteLine.debit_account_id == account_id,
+            ),
+            and_(
+                CreditDebitNoteLine.credit_contact_id.isnot(None),
+                CreditDebitNoteLine.credit_account_id == account_id,
+            ),
         )
     else:
         who = or_(
-            CreditDebitNoteLine.debit_contact_id == contact_id,
-            CreditDebitNoteLine.credit_contact_id == contact_id,
+            and_(
+                CreditDebitNoteLine.debit_contact_id == contact_id,
+                CreditDebitNoteLine.debit_account_id == account_id,
+            ),
+            and_(
+                CreditDebitNoteLine.credit_contact_id == contact_id,
+                CreditDebitNoteLine.credit_account_id == account_id,
+            ),
         )
     return exists().where(line).where(who)
 
@@ -292,7 +314,7 @@ def _kind_effects(
     if kind.contact_clause is not None:
         #: سندِ دوسویه: طرف حساب روی یک ستون نمی‌نشیند. برای اعلامیه‌های *قدیمیِ*
         #: بی‌ردیف هم ستونِ میراثی همچنان کار می‌کند.
-        clause = kind.contact_clause(contact_id)
+        clause = kind.contact_clause(contact_id, account_id)
         if contact_id is not None:
             query = query.filter(or_(clause, kind.contact_col == contact_id))
         else:

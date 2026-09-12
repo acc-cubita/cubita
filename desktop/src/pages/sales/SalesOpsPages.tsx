@@ -10,6 +10,7 @@ import {
   Percent,
   PlusCircle,
   Route,
+  Scale,
   Search,
   Ship,
   Tags,
@@ -46,6 +47,9 @@ import {
   fetchSalesInvoices,
   fetchSalesReturnReasons,
   fetchSalesSummary,
+  fetchCounterpartyEventLines,
+  fetchCounterpartyEvents,
+  fetchCounterpartySummary,
   fetchSaleTypes,
   fetchUnits,
   updateSalesReturnReason,
@@ -1991,41 +1995,94 @@ export function ContactStatementPage({ token }: { token: string }) {
   )
 }
 
+/**
+ * مرور جامع طرف حساب — سه سطح، و هیچ‌کدام از دیگری ساخته نمی‌شود.
+ *
+ * تا امروز این صفحه فقط **فاکتورهای فروش** را نشان می‌داد، و برای فیلترکردنشان
+ * کلِ فاکتورهای فروشِ کسب‌وکار را به مرورگر می‌کشید. نه مانده‌ای داشت، نه سمتِ
+ * تأمین‌کننده، نه خطِ زمانی.
+ *
+ * سه سطح عمداً سه درخواستِ جدا دارند: اگر یک پاسخِ واحد همه را می‌داد، رابط
+ * وادار می‌شد اقلام را جمع بزند تا خلاصه دربیاورد — و همان‌جاست که یک مبلغ
+ * چند بار شمرده می‌شود.
+ */
 export function ContactOverviewPage({ token }: { token: string }) {
   const contacts = useContacts(token)
+  const range = useRange('year')
   const [contactId, setContactId] = useState('')
+  const [role, setRole] = useState<'' | 'customer' | 'supplier'>('')
+  const [open, setOpen] = useState<{ type: string; id: string } | null>(null)
   const picked = contacts.find((c) => c.id === contactId)
 
-  const invoices = useAsync(
-    () => (contactId ? fetchSalesInvoices(token) : Promise.resolve([])),
+  const summary = useAsync(
+    () => (contactId ? fetchCounterpartySummary(token, contactId) : Promise.resolve(null)),
     [token, contactId],
   )
-  const mine = (invoices.data ?? []).filter((i) => i.contact_id === contactId)
-  const live = mine.filter((i) => !i.voided_at)
-  const net = live.reduce((s, i) => s + Number(i.total_amount || 0), 0)
-  const tax = live.reduce((s, i) => s + Number(i.tax_amount || 0), 0)
-  const last = live.length ? live.map((i) => i.invoice_date).sort().at(-1) : null
+  const events = useAsync(
+    () =>
+      contactId
+        ? fetchCounterpartyEvents(token, contactId, {
+            from: range.from,
+            to: range.to,
+            role: role || undefined,
+          })
+        : Promise.resolve([]),
+    [token, contactId, range.from, range.to, role],
+  )
+  const lines = useAsync(
+    () =>
+      contactId && open
+        ? fetchCounterpartyEventLines(token, contactId, open.type, open.id)
+        : Promise.resolve(null),
+    [token, contactId, open?.type, open?.id],
+  )
+
+  const rows = events.data ?? []
+  const pg = usePagination(rows, 20, `${contactId}${range.from}${range.to}${role}`)
+  const sum = summary.data
 
   return (
     <OpsPage
       icon={Users}
       title="مرور جامع طرف حساب"
-      description="همه‌چیزِ یک طرف حساب در یک صفحه — مشخصات، سقفِ اعتبار، و خلاصه‌ی خرید."
+      description="مانده‌ی هر نقش، خطِ زمانیِ رویدادها، و اقلامِ هر سند — همه از دفتر، در یک صفحه."
       head={
         <div className="cc-head">
-          <div className="cc-toolbar">
-            <ContactPicker contacts={contacts} value={contactId} onChange={setContactId} />
-          </div>
-          {picked && (
+          <RangeBar
+            range={range}
+            extra={
+              <>
+                <ContactPicker contacts={contacts} value={contactId} onChange={setContactId} />
+                <label className="acc-inline-field">
+                  نقش
+                  <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+                    <option value="">همه</option>
+                    <option value="customer">مشتری</option>
+                    <option value="supplier">تأمین‌کننده</option>
+                  </select>
+                </label>
+              </>
+            }
+          />
+          {sum && (
             <div className="cc-summary">
-              <Metric icon={<ClipboardList size={14} />} label="فاکتور" value={faInt(live.length)} />
-              <Metric icon={<TrendingUp size={14} />} label="خالصِ خرید" value={faAmount(net)} tone="in" />
-              <Metric icon={<Percent size={14} />} label="مالیات" value={faAmount(tax)} />
-              <Metric
-                icon={<Wallet size={14} />}
-                label="سقفِ اعتبار"
-                value={Number(picked.credit_limit) > 0 ? faAmount(picked.credit_limit) : 'بدون سقف'}
-              />
+              {sum.positions.map((p) => (
+                <Metric
+                  key={p.role}
+                  icon={p.role === 'customer' ? <TrendingUp size={14} /> : <Wallet size={14} />}
+                  label={p.role_label}
+                  value={faAmount(p.net)}
+                  tone={Number(p.net) >= 0 ? 'in' : 'out'}
+                />
+              ))}
+              <Metric icon={<Scale size={14} />} label="مانده کل" value={faAmount(sum.total_net)} />
+              {Number(sum.uncleared_cheques) > 0 && (
+                <Metric
+                  icon={<ClipboardList size={14} />}
+                  label="چکِ وصول‌نشده"
+                  value={faAmount(sum.uncleared_cheques)}
+                />
+              )}
             </div>
           )}
         </div>
@@ -2037,88 +2094,262 @@ export function ContactOverviewPage({ token }: { token: string }) {
         </SectionCard>
       ) : (
         <>
-          <SectionCard icon={Users} title="مشخصات" description={picked?.name ?? ''}>
-            <div className="table-scroll">
-              <table className="cards-on-mobile acc-table">
-                <tbody>
-                  <tr>
-                    <td className="card-title" data-label="نوع">
-                      نوع
-                    </td>
-                    <td data-label="مقدار">{picked?.type === 'supplier' ? 'تأمین‌کننده' : 'مشتری'}</td>
-                  </tr>
-                  <tr>
-                    <td className="card-title" data-label="تلفن">
-                      تلفن
-                    </td>
-                    <td data-label="مقدار" dir="ltr">
-                      {picked?.phone || '—'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="card-title" data-label="آخرین خرید">
-                      آخرین خرید
-                    </td>
-                    <td data-label="مقدار">{last ? formatJalali(last) : '—'}</td>
-                  </tr>
-                  <tr>
-                    <td className="card-title" data-label="فاکتورِ باطل">
-                      فاکتورِ باطل
-                    </td>
-                    <td data-label="مقدار">{faInt(mine.length - live.length)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-
-          <SectionCard icon={ClipboardList} title="آخرین فاکتورها" description="ده فاکتورِ اخیر">
+          {/* ── سطحِ ۱: نقش‌ها ───────────────────────────────────────────── */}
+          <SectionCard
+            icon={Scale}
+            title="مانده به تفکیکِ نقش"
+            description={`${picked?.name ?? ''} — طلبِ ما از او و بدهیِ ما به او دو عددِ جدا می‌مانند.`}
+          >
             <AsyncBlock
-              loading={invoices.loading}
-              error={invoices.error}
-              empty={live.length === 0}
-              emptyText="این طرف حساب هنوز فاکتوری ندارد."
+              loading={summary.loading}
+              error={summary.error}
+              empty={!sum || sum.positions.length === 0}
+              emptyText="هیچ معینِ طرف مقابلی در چارت پیدا نشد."
             >
               <div className="table-scroll">
                 <table className="cards-on-mobile acc-table">
                   <thead>
                     <tr>
-                      <th>شماره</th>
-                      <th>تاریخ</th>
-                      <th>خالص</th>
-                      <th>وضعیت</th>
+                      <th>نقش</th>
+                      <th>حساب معین</th>
+                      <th>بدهکار</th>
+                      <th>بستانکار</th>
+                      <th>مانده</th>
+                      <th>ماندهٔ قابل تسویه</th>
+                      <th>ماندهٔ دفتری</th>
+                      <th>بی‌سند</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {live
-                      .slice()
-                      .sort((a, b) => b.invoice_date.localeCompare(a.invoice_date))
-                      .slice(0, 10)
-                      .map((i) => (
-                        <tr key={i.id}>
-                          <td className="card-title" data-label="شماره">
-                            {fa(i.number ?? 0)}
-                          </td>
-                          <td data-label="تاریخ">{formatJalali(i.invoice_date)}</td>
-                          <td className="num" data-label="خالص">
-                            {faAmount(i.total_amount)}
-                          </td>
-                          <td data-label="وضعیت">
-                            <span className={`status-badge ${i.closed_at ? 'tone-default' : 'tone-success'}`}>
-                              {i.closed_at ? 'بسته' : 'باز'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                    {(sum?.positions ?? []).map((p) => (
+                      <tr key={p.role}>
+                        <td className="card-title" data-label="نقش">
+                          {p.role_label}
+                        </td>
+                        <td data-label="حساب معین">
+                          <span dir="ltr">{p.account_code}</span> — {p.account_name}
+                        </td>
+                        <td className="num" data-label="بدهکار">
+                          {faAmount(p.debit_total)}
+                        </td>
+                        <td className="num" data-label="بستانکار">
+                          {faAmount(p.credit_total)}
+                        </td>
+                        <td className="num" data-label="مانده">
+                          {faAmount(p.net)}
+                        </td>
+                        <td className="num" data-label="ماندهٔ قابل تسویه">
+                          {faAmount(p.open_net)}
+                        </td>
+                        <td className="num" data-label="ماندهٔ دفتری">
+                          {p.ledger_net == null ? '—' : faAmount(p.ledger_net)}
+                        </td>
+                        <td className="num" data-label="بی‌سند">
+                          {p.unattributed == null ? '—' : faAmount(p.unattributed)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
+              {sum && !sum.has_analytic && (
+                <span className="field-hint">
+                  این طرف حساب کدِ تفصیلی ندارد، پس ماندهٔ دفتریِ شخصی‌اش قابلِ استخراج نیست و
+                  ستونش خط تیره می‌ماند. «مانده» از اسنادِ خودش حساب می‌شود.
+                </span>
+              )}
+              {sum?.positions.some((p) => p.unattributed != null && Number(p.unattributed) !== 0) && (
+                <span className="field-hint">
+                  ستونِ «بی‌سند» یعنی گردشی روی آن معین هست که سندِ شناخته‌شده‌ای پشتش نیست —
+                  معمولاً سندِ دستی یا ماندهٔ اول دوره. پنهان نمی‌شود تا معلوم باشد اختلافِ
+                  گزارش و دفتر از کجاست.
+                </span>
+              )}
             </AsyncBlock>
           </SectionCard>
+
+          {/* ── سطحِ ۲: رویدادها ─────────────────────────────────────────── */}
+          <SectionCard
+            icon={ClipboardList}
+            title="رویدادها"
+            description={`${faInt(rows.length)} رویداد — فاکتور، دریافت، پرداخت و اعلامیه در یک خطِ زمانی. روی هر ردیف بزنید تا اقلامش را ببینید.`}
+          >
+            <AsyncBlock
+              loading={events.loading}
+              error={events.error}
+              empty={rows.length === 0}
+              emptyText="در این بازه رویدادی برای این طرف حساب ثبت نشده."
+            >
+              <div className="table-scroll">
+                <table className="cards-on-mobile acc-table">
+                  <thead>
+                    <tr>
+                      <th>تاریخ</th>
+                      <th>نوع</th>
+                      <th>شماره</th>
+                      <th>نقش</th>
+                      <th>سند حسابداری</th>
+                      <th>بدهکار</th>
+                      <th>بستانکار</th>
+                      <th>ارز</th>
+                      <th>ماندهٔ در خط</th>
+                      <th>تسویه</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pg.pageItems.map((e) => {
+                      const isOpen = open?.type === e.source_type && open?.id === e.source_id
+                      return (
+                        <tr key={`${e.source_type}-${e.source_id}`} className={isOpen ? 'row-open' : undefined}>
+                          <td data-label="تاریخ">{formatJalali(e.document_date)}</td>
+                          <td className="card-title" data-label="نوع">
+                            {e.label}
+                          </td>
+                          <td data-label="شماره">{e.number != null ? fa(e.number) : '—'}</td>
+                          <td data-label="نقش">{e.role_label}</td>
+                          <td data-label="سند حسابداری">
+                            {e.entry_number != null ? fa(e.entry_number) : '—'}
+                          </td>
+                          <td className="num" data-label="بدهکار">
+                            {e.side === 'debit' ? faAmount(e.document_amount) : '—'}
+                          </td>
+                          <td className="num" data-label="بستانکار">
+                            {e.side === 'credit' ? faAmount(e.document_amount) : '—'}
+                          </td>
+                          <td data-label="ارز">
+                            {e.fx_amount == null ? (
+                              '—'
+                            ) : (
+                              <>
+                                {faAmount(e.fx_amount)} <span dir="ltr">{e.currency_code}</span>
+                              </>
+                            )}
+                          </td>
+                          <td className="num" data-label="ماندهٔ در خط">
+                            {faAmount(e.running_balance)}
+                          </td>
+                          <td data-label="تسویه">
+                            <span
+                              className={`status-badge ${
+                                e.status === 'settled' ? 'tone-success' : e.status === 'over' ? 'tone-danger' : 'tone-default'
+                              }`}
+                            >
+                              {e.status_label}
+                            </span>
+                          </td>
+                          <td className="card-actions">
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() =>
+                                setOpen(isOpen ? null : { type: e.source_type, id: e.source_id })
+                              }
+                            >
+                              {isOpen ? 'بستنِ اقلام' : 'اقلام'}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+              </div>
+              <span className="field-hint">
+                سندِ حسابداریِ هر رویداد ردیفِ جدا نمی‌گیرد و شماره‌اش روی همان ردیف می‌نشیند —
+                وگرنه فاکتور و سندش دو اثرِ مستقل به نظر می‌رسیدند و مانده دو برابر می‌شد.
+              </span>
+            </AsyncBlock>
+          </SectionCard>
+
+          {/* ── سطحِ ۳: اقلام ────────────────────────────────────────────── */}
+          {open && (
+            <SectionCard
+              icon={Layers}
+              title="اقلامِ سند"
+              description={lines.data?.label ?? 'در حال بارگذاری…'}
+              actions={
+                <button type="button" className="btn-ghost" onClick={() => setOpen(null)}>
+                  بستن
+                </button>
+              }
+            >
+              <AsyncBlock
+                loading={lines.loading}
+                error={lines.error}
+                empty={(lines.data?.lines.length ?? 0) === 0}
+                emptyText="این سند قلمی برای نمایش ندارد."
+              >
+                <div className="table-scroll">
+                  <table className="cards-on-mobile acc-table">
+                    <thead>
+                      <tr>
+                        <th>نوع قلم</th>
+                        <th>کد</th>
+                        <th>عنوان</th>
+                        <th>شرح</th>
+                        <th>تعداد</th>
+                        <th>فی</th>
+                        <th>فیِ خالص</th>
+                        <th>بدهکار</th>
+                        <th>بستانکار</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(lines.data?.lines ?? []).map((l, i) => (
+                        <tr key={`${l.kind}-${l.seq}-${i}`}>
+                          <td className="card-title" data-label="نوع قلم">
+                            {LINE_KIND_LABELS[l.kind] ?? l.kind}
+                          </td>
+                          <td data-label="کد" dir="ltr">
+                            {l.code || '—'}
+                          </td>
+                          <td className="card-wide" data-label="عنوان">
+                            {l.title}
+                          </td>
+                          <td className="card-wide" data-label="شرح">
+                            {l.description || '—'}
+                          </td>
+                          <td className="num" data-label="تعداد">
+                            {l.quantity == null ? '—' : fa(l.quantity)}
+                          </td>
+                          <td className="num" data-label="فی">
+                            {l.unit_price == null ? '—' : faAmount(l.unit_price)}
+                          </td>
+                          <td className="num" data-label="فیِ خالص">
+                            {l.net_unit_price == null ? '—' : faAmount(l.net_unit_price)}
+                          </td>
+                          <td className="num" data-label="بدهکار">
+                            {l.debit == null ? '—' : faAmount(l.debit)}
+                          </td>
+                          <td className="num" data-label="بستانکار">
+                            {l.credit == null ? '—' : faAmount(l.credit)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <span className="field-hint">
+                  ستونی که برای یک قلم معنی ندارد خط تیره می‌ماند، نه صفر: «فی» برای ردیفِ
+                  کالا معنی دارد و برای ردیفِ دفتر یا چک نه. و <strong>جمعِ ردیف‌های کالا با
+                  ردیف‌های دفتر اثرِ اقتصادی نیست</strong> — اثر همان ردیف‌های دفتر است.
+                </span>
+              </AsyncBlock>
+            </SectionCard>
+          )}
         </>
       )}
     </OpsPage>
   )
+}
+
+/** برچسبِ نوعِ قلم — اقلامِ یک سند همه از یک جنس نیستند. */
+const LINE_KIND_LABELS: Record<string, string> = {
+  product: 'کالا/خدمت',
+  journal: 'ردیف سند',
+  adjustment: 'تعدیل',
 }
 
 // ═════════════════ کمکی: پیشنهادِ قیمت (برای فرمِ فاکتور) ═════════════════
