@@ -6,6 +6,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
+import { PriceRuleHint } from './PriceRuleHint'
 import { useSalesInvoiceDraft } from '../lib/salesInvoiceDraft'
 import { BlacklistBanner } from './BlacklistBanner'
 
@@ -233,6 +234,7 @@ export function SalesInvoiceForm({
                             return u ? `قیمت هر ${u}` : 'قیمت واحد'
                           })()}
                         />
+                        <PriceRuleHint rule={d.priceInfo[line.itemId]} entered={line.unitPrice} />
                       </td>
                       <td data-label="تخفیف">
                         <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />

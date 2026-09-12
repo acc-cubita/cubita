@@ -28,10 +28,18 @@ def test_price_list_crud_and_prices(client):
     prices = {x["item_id"]: float(x["price"]) for x in r.json()}
     assert prices[a] == 8000 and prices[b] == 12000
 
-    # replace prices (b removed, a changed)
+    # ذخیره‌ی دوباره فقط ردیفِ فرستاده‌شده را عوض می‌کند؛ ردیفِ نیامده می‌ماند.
+    #
+    # این تست تا امروز عکسِ این را تثبیت می‌کرد («b removed») — و همان یک خط
+    # رفتاری را قانونی می‌کرد که کلِ ماتریسِ قیمت را با یک «ذخیره» پاک می‌کرد.
     r = client.put(f"/api/price-lists/{pl}/items", json={"items": [{"item_id": a, "price": 7500}]})
-    got = client.get(f"/api/price-lists/{pl}/items").json()
-    assert len(got) == 1 and float(got[0]["price"]) == 7500
+    got = {x["item_id"]: float(x["price"]) for x in client.get(f"/api/price-lists/{pl}/items").json()}
+    assert got == {a: 7500, b: 12000}
+
+    # حذفِ یک قاعده مسیرِ صریحِ خودش را دارد
+    row_b = next(x["id"] for x in client.get(f"/api/price-lists/{pl}/items").json() if x["item_id"] == b)
+    assert client.delete(f"/api/price-lists/{pl}/items/{row_b}").status_code == 204
+    assert [x["item_id"] for x in client.get(f"/api/price-lists/{pl}/items").json()] == [a]
 
     # deactivate
     r = client.patch(f"/api/price-lists/{pl}", json={"is_active": False})

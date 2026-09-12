@@ -75,11 +75,26 @@ def delete_price_list(
     db: Session = Depends(get_db),
     _=Depends(require_permission("inventory", "delete")),
 ):
+    """اعلامیه‌ی ردیف‌دار **غیرفعال** می‌شود، حذف نمی‌شود (§۸۳ §۸۴).
+
+    تا امروز این مسیر سخت‌حذف بود و ردیف‌هایش با `ondelete CASCADE` می‌رفتند.
+    ولی فاکتورِ پارسال `price_rule_id` دارد و باید بتواند بگوید نرخش از کجا آمد؛
+    حذفِ فیزیکیِ قاعده آن توضیح را برای همیشه از بین می‌برد. غیرفعال‌کردن هم
+    همان کار را می‌کند — اعلامیه دیگر در حلِ قیمت شرکت نمی‌کند — بدونِ نابودکردنِ
+    تاریخ. اعلامیه‌ی خالی چیزی برای از دست دادن ندارد، پس واقعاً حذف می‌شود.
+    """
     pl = db.get(PriceList, list_id)
     if pl is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "لیستِ قیمت یافت نشد")
+    has_rows = (
+        db.query(PriceListItem.id).filter(PriceListItem.price_list_id == list_id).first() is not None
+    )
+    if has_rows:
+        pl.is_active = False
+        db.flush()
+        return
     # مشتری‌هایی که این لیست را پیش‌فرض دارند رها می‌شوند (به قیمتِ پایه)، وگرنه قیدِ FK
-    # حذف را با ۵۰۰ می‌شکند. اجزای لیست خودشان با ondelete CASCADE پاک می‌شوند.
+    # حذف را با ۵۰۰ می‌شکند.
     db.query(Contact).filter(Contact.default_price_list_id == list_id).update(
         {Contact.default_price_list_id: None}, synchronize_session="evaluate"
     )
@@ -98,6 +113,22 @@ def list_price_list_items(
     return db.query(PriceListItem).filter(PriceListItem.price_list_id == list_id).all()
 
 
+def _context_key(row) -> tuple:
+    """کلیدِ یکتاییِ یک قاعده = **کلِ زمینه‌اش**، نه فقط کالا (§۳۴ §۳۸).
+
+    یک کالا می‌تواند هم‌زمان قیمتِ عمده و خرده و صادراتی داشته باشد. همین تاپل
+    است که ایندکسِ `uq_price_list_items_context` در دیتابیس نگه می‌دارد.
+    """
+    return (
+        row.item_id,
+        row.item_group_id,
+        row.sale_type_id,
+        row.unit_id,
+        row.contact_group_id,
+        row.currency_code,
+    )
+
+
 @router.put("/price-lists/{list_id}/items", response_model=list[PriceListItemOut])
 def set_price_list_items(
     list_id: UUID,
@@ -105,30 +136,64 @@ def set_price_list_items(
     db: Session = Depends(get_db),
     _=Depends(require_permission("inventory", "update")),
 ):
-    """قیمت‌های لیست را یک‌جا جایگزین می‌کند (کالاهای نیامده حذف می‌شوند)."""
+    """قاعده‌های فرستاده‌شده را **می‌نشاند یا به‌روز می‌کند** — چیزی را پاک نمی‌کند.
+
+    **این مسیر تا امروز ماتریسِ قیمت را نابود می‌کرد.** اول `pl.items.clear()`
+    می‌زد و بعد هرچه رسیده بود می‌نشاند؛ یعنی هر فرستنده‌ای که زمینه‌ها را
+    نمی‌شناخت — و فرمِ «لیست قیمت»ِ انبار دقیقاً همین بود، چون ردیف‌ها را در یک
+    نگاشتِ `item_id → price` می‌ریخت — با یک بار «ذخیره» **هر قیمتِ
+    عمده/خرده/واحد/گروهِ مشتری و هر حدِ تغییرِ نرخِ آن اعلامیه را برای همیشه پاک
+    می‌کرد.** بی‌صدا، بی‌خطا، و بی‌ردِ حسابرسی.
+
+    پس «حذف با نیامدن» برداشته شد: حذفِ یک قاعده حالا مسیرِ صریحِ خودش را دارد
+    (`DELETE .../items/{row_id}`). همین §۴۷ را هم آرام می‌کند — دو مدیرِ هم‌زمان
+    دیگر کارِ هم را نمی‌بلعند، فقط ردیف‌های مشترک را بازنویسی می‌کنند.
+    """
     pl = db.get(PriceList, list_id)
     if pl is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "لیستِ قیمت یافت نشد")
-    pl.items.clear()
-    db.flush()
-    #: کلیدِ تکراری دیگر «کالا» نیست، **کلِ زمینه** است (§۳۸): یک کالا می‌تواند
-    #: هم‌زمان قیمتِ عمده و خرده و صادراتی داشته باشد. اگر این‌جا همچنان روی
-    #: `item_id` یکتا می‌کردیم، دومین قاعده بی‌صدا دور ریخته می‌شد.
+
+    existing = {
+        _context_key(row): row
+        for row in db.query(PriceListItem)
+        .filter(PriceListItem.price_list_id == list_id)
+        .order_by(PriceListItem.id)
+        .with_for_update()
+        .all()
+    }
+
     seen: set[tuple] = set()
     for row in data.items:
-        key = (
-            row.item_id,
-            row.sale_type_id,
-            row.unit_id,
-            row.contact_group_id,
-            row.currency_code,
-        )
+        key = _context_key(row)
         if key in seen:
             continue
         seen.add(key)
-        pl.items.append(PriceListItem(**row.model_dump()))
+        current = existing.get(key)
+        if current is None:
+            pl.items.append(PriceListItem(**row.model_dump()))
+            continue
+        for field, value in row.model_dump().items():
+            setattr(current, field, value)
     db.flush()
     return db.query(PriceListItem).filter(PriceListItem.price_list_id == list_id).all()
+
+
+@router.delete("/price-lists/{list_id}/items/{row_id}", status_code=204)
+def delete_price_list_item(
+    list_id: UUID,
+    row_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    """حذفِ یک قاعده‌ی قیمت — صریح، نه به‌عنوانِ عارضه‌ی جانبیِ یک ذخیره."""
+    row = (
+        db.query(PriceListItem)
+        .filter(PriceListItem.id == row_id, PriceListItem.price_list_id == list_id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "قاعده‌ی قیمت یافت نشد")
+    db.delete(row)
 
 
 # ── بچ / بارِ ورودی / سریالِ کارتن ──────────────────────────
