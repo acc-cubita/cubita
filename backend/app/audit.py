@@ -87,7 +87,13 @@ def audited_models() -> dict[type, str]:
     from app.models.sales_ops import CreditDebitNote
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
-    from app.models.payroll import Payslip
+    from app.models.payroll import (
+        PayrollFactor,
+        PayrollSettings,
+        PayrollTaxGroup,
+        Payslip,
+        SalaryContract,
+    )
     from app.models.period_close import FiscalPeriodClose
     from app.models.payment import Payment
     from app.models.receipt import Receipt
@@ -106,6 +112,19 @@ def audited_models() -> dict[type, str]:
         PurchaseReturn: "برگشت از خرید",
         StockTransfer: "انتقال انبار",
         Payslip: "فیش حقوقی",
+        #: **تنظیماتِ حقوق حساس‌ترین پیکربندیِ کوبیتا بعد از چارتِ حساب‌هاست.**
+        #: عوض‌کردنِ یک پله‌ی مالیات، مالیاتِ *همه‌ی* کارکنان را عوض می‌کند؛
+        #: عوض‌کردنِ نرخِ بیمه، سهمِ همه را. تا امروز هیچ‌کدام ردی نمی‌گذاشتند —
+        #: همان شکلِ باگی که «اعلامیه قیمت» داشت.
+        PayrollSettings: "تنظیمات حقوق",
+        #: عامل تعیین می‌کند چه چیزی مزایاست و چه چیزی کسور، و کدام مبنای بیمه و
+        #: مالیات است. تغییرش روی هر فیشِ بعدی می‌نشیند.
+        PayrollFactor: "عامل حقوق",
+        #: درصدِ مالیاتِ گروه — می‌تواند مالیاتِ یک دسته از کارکنان را صفر کند.
+        PayrollTaxGroup: "گروه مالیاتی حقوق",
+        #: حکمِ حقوقی. حقوقِ پایه و مزایای هر کارمند از این‌جا می‌آید، و تغییرش
+        #: بدونِ ردِ حسابرسی یعنی «چرا حقوقِ من عوض شد؟» جوابی ندارد.
+        SalaryContract: "حکم حقوقی",
         TreasuryTransaction: "تراکنش خزانه",
         #: چک تا امروز در این فهرست نبود — موجودیتی با غنی‌ترین چرخه‌ی عمرِ
         #: خزانه، تنها موجودیتی بود که هیچ ردِ حسابرسی‌ای نمی‌گذاشت.
