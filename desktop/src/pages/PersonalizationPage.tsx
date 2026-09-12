@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, BookMarked, CheckCircle2, FileText, Info, Layers, Settings2 } from 'lucide-react'
+import { AlertTriangle, BookMarked, CheckCircle2, ClipboardList, FileText, Info, Layers, Settings2 } from 'lucide-react'
 import {
   fetchChequeControl,
+  fetchSalesPosting,
   fetchTafsiliMode,
   setChequeControl,
+  setSalesPosting,
   setTafsiliMode,
   type ChequeControl,
   type ChequeControlOption,
+  type SalesPosting,
+  type SalesPostingOption,
   type TafsiliMode,
   type TafsiliModeOption,
 } from '../api'
@@ -44,6 +48,7 @@ export function PersonalizationPage({ token }: { token: string }) {
       )}
 
       <TafsiliModeCard token={token} onMessage={setMsg} />
+      <SalesPostingCard token={token} onMessage={setMsg} />
       <ChequeControlCard token={token} onMessage={setMsg} />
     </div>
   )
@@ -189,6 +194,123 @@ function TafsiliModeCard({
  * خرج‌نشده باشد — وگرنه «برگِ مانده» عددِ دروغ می‌دهد. این انتخاب فقط می‌گوید
  * صدورِ چکِ **بی‌دسته** مجاز است یا نه.
  */
+/**
+ * «ثبت فاکتور» چه‌قدر کار انجام دهد.
+ *
+ * فاکتور فروش سه حقیقتِ جدا دارد: سندِ **تجاری** (خودِ فاکتور)، سندِ
+ * **حسابداری**، و **خروجِ فیزیکی**. جداکردنشان برای کسب‌وکاری که امروز فاکتور
+ * می‌دهد و هفته‌ی بعد کالا را می‌فرستد لازم است — بدونش نمی‌شود نصفِ یک فاکتور
+ * را فرستاد.
+ *
+ * ولی برای مغازه‌ای که فاکتور و تحویل یک لحظه‌اند، سه سند یعنی دو دکمه‌ی اضافه
+ * و دو فراموشیِ ممکن: فاکتوری که در دفتر نیست، و کالایی که از انبار کم نشده.
+ *
+ * **مرزی که این کارت عوضش نمی‌کند:** در هر دو حالت فروشِ بیش از موجودی رد
+ * می‌شود. این انتخاب فقط می‌گوید آن دو گام *کِی* انجام شوند، نه اینکه بشود از
+ * زیرشان در رفت.
+ */
+function SalesPostingCard({
+  token,
+  onMessage,
+}: {
+  token: string
+  onMessage: (m: { text: string; kind: 'ok' | 'err' }) => void
+}) {
+  const [data, setData] = useState<SalesPosting | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void fetchSalesPosting(token)
+      .then((r) => {
+        setData(r)
+        setPicked(r.mode)
+      })
+      .catch(() => {})
+  }, [token])
+
+  async function save() {
+    if (!data || !picked || picked === data.mode) return
+    setBusy(true)
+    try {
+      const r = await setSalesPosting(token, picked)
+      setData(r)
+      setPicked(r.mode)
+      const label = r.options.find((o) => o.key === r.mode)?.label ?? r.mode
+      onMessage({ text: `صدورِ فاکتور فروش روی «${label}» تنظیم شد.`, kind: 'ok' })
+    } catch (err) {
+      onMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const shown: SalesPostingOption | undefined = data?.options.find((o) => o.key === picked)
+  const dirty = data != null && picked != null && picked !== data.mode
+
+  return (
+    <SectionCard
+      icon={ClipboardList}
+      title="صدور فاکتور فروش"
+      description="با «ثبت فاکتور»، سندِ حسابداری و خروجِ انبار هم همان لحظه صادر شوند، یا جدا؟"
+    >
+      {data == null ? (
+        <p className="muted">در حال بارگذاری…</p>
+      ) : (
+        <>
+          <div className="pz-options">
+            {data.options.map((o) => (
+              <label key={o.key} className={`pz-option${picked === o.key ? ' pz-option--on' : ''}`}>
+                <input
+                  type="radio"
+                  name="sales-invoice-posting"
+                  checked={picked === o.key}
+                  onChange={() => setPicked(o.key)}
+                />
+                <div className="pz-option-body">
+                  <div className="pz-option-head">
+                    <strong>{o.label}</strong>
+                    {o.is_default && <span className="chart-trait-tag">پیش‌فرض</span>}
+                    {data.mode === o.key && <span className="fy-badge fy-badge--open">فعلی</span>}
+                  </div>
+                  <span className="pz-option-hint">{o.hint}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {shown && (
+            <div className="pz-effects">
+              <div className="pz-effects-head">
+                <Info size={14} />
+                اگر «{shown.label}» را انتخاب کنید چه می‌شود؟
+              </div>
+              {shown.effects.map((text) => (
+                <Effect key={text} icon={CheckCircle2} text={text} />
+              ))}
+            </div>
+          )}
+
+          <div className="pz-actions">
+            <button type="button" className="btn-primary" onClick={() => void save()} disabled={!dirty || busy}>
+              ذخیره‌ی انتخاب
+            </button>
+            {dirty && (
+              <button type="button" onClick={() => setPicked(data.mode)} disabled={busy}>
+                انصراف
+              </button>
+            )}
+            <span className="bk-hint">
+              این تنظیم فقط فاکتورهای بعدی را می‌سنجد؛ فاکتورهای ثبت‌شده دست‌نخورده می‌مانند.
+            </span>
+          </div>
+        </>
+      )}
+    </SectionCard>
+  )
+}
+
+
 function ChequeControlCard({
   token,
   onMessage,

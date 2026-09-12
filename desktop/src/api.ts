@@ -7338,3 +7338,25 @@ export const createWarehouseIssueIdempotent = (
 
 export const voidWarehouseIssue = (token: string, id: string, reason: string) =>
   authedSend<WarehouseIssueRecord>(token, 'POST', `/api/warehouse-issues/${id}/void`, { reason })
+
+
+// ── سیاستِ صدورِ فاکتور فروش ─────────────────────────────────────────────
+//
+// «ثبت فاکتور» سندِ حسابداری و خروجِ انبار را هم بزند، یا آن دو را به فهرست
+// بسپارد؟ همان شکلِ `ChequeControl` — یک پرچمِ سیاست روی کسب‌وکار.
+
+/** همان شکلِ گزینه‌های سیاست؛ نامِ جدا فقط برای خوانایی در فراخوان‌هاست. */
+export type SalesPostingOption = ChequeControlOption
+
+export interface SalesPosting {
+  mode: string
+  options: SalesPostingOption[]
+  /** False یعنی هنوز روی پیش‌فرضِ سرویس است، نه انتخابِ کاربر. */
+  is_explicit: boolean
+}
+
+export const fetchSalesPosting = (token: string) =>
+  authedGet<SalesPosting>(token, '/api/sales-invoice-posting')
+
+export const setSalesPosting = (token: string, mode: string) =>
+  authedSend<SalesPosting>(token, 'PATCH', '/api/sales-invoice-posting', { mode })
