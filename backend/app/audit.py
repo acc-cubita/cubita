@@ -84,6 +84,7 @@ def audited_models() -> dict[type, str]:
     """
     from app.models.accounting import JournalEntry
     from app.models.advanced_inventory import PriceList
+    from app.models.sales_ops import CreditDebitNote
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.payroll import Payslip
@@ -124,6 +125,11 @@ def audited_models() -> dict[type, str]:
         #: سند، نه برای هر ردیف» است. تغییرِ گروهیِ فی به‌جایش یک رکوردِ
         #: قبل/بعد با `record_change` می‌سازد.
         PriceList: "اعلامیه قیمت",
+        #: اعلامیه‌ی بدهکار/بستانکار، بدونِ فاکتور و بدونِ رسید، مانده‌ی دو طرف
+        #: حساب را مستقیم جابه‌جا می‌کند — و می‌تواند طلبِ ما از یکی را با بدهیِ
+        #: ما به دیگری تهاتر کند. از نظرِ کنترلِ داخلی حساس‌ترین سندِ این ماژول
+        #: است، پس «چه کسی، کِی، چه‌قدر» باید بماند (فصلِ اعلامیه، §۴۹ §۵۰).
+        CreditDebitNote: "اعلامیه بدهکار/بستانکار",
     }
 
 

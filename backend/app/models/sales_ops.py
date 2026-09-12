@@ -19,6 +19,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -296,22 +297,45 @@ class CreditDebitNote(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     تعدیلِ واقعیِ مانده نیست و اگر در دفتر ننشیند، صورت‌حسابِ طرف مقابل با دفتر
     نمی‌خواند.
 
-    * بدهکار: طرف به ما بدهکارتر می‌شود (بدهکار حساب‌های دریافتنی / بستانکار درآمد).
-    * بستانکار: طلبِ ما کم می‌شود (بدهکار درآمد / بستانکار حساب‌های دریافتنی).
+    **سربرگ سمت ندارد؛ ردیف‌ها دارند.** تا مهاجرتِ ۰۱۲۷ این سند یک طرف حساب و یک
+    مبلغ بود و سمتِ دومش همیشه حسابِ فروش — یعنی تعدیلِ مانده، درآمد می‌ساخت، و
+    تهاترِ «بدهیِ ما به فلانی در برابرِ طلبِ ما از او» اصلاً ممکن نبود. حالا هر
+    ردیف یک جفتِ کامل است و سند فقط ظرفِ آن‌هاست.
+
+    این سند **مانده‌ی حسابداری** را جابه‌جا می‌کند و نه چیزِ دیگری: نه پول
+    (خزانه)، نه کالا (انبار)، نه مالیات — و **نه تسویه‌ی قلمِ باز**. اینکه این
+    ۲۰ میلیون بابتِ کدام فاکتور بوده، دامنه‌ی `settlements` است و تخصیصِ صریح
+    می‌خواهد؛ کم‌شدنِ مانده به‌خودیِ‌خود هیچ فاکتوری را تسویه‌شده نمی‌کند.
     """
 
     __tablename__ = "credit_debit_notes"
     __table_args__ = (
+        #: `NULL` از این قید رد می‌شود — و ردیف‌های تازه دقیقاً همین‌اند.
         CheckConstraint(f"kind IN {NOTE_KINDS}", name="ck_credit_debit_notes_kind"),
         CheckConstraint("amount > 0", name="ck_credit_debit_notes_amount_positive"),
         UniqueConstraint("tenant_id", "number", name="uq_credit_debit_notes_tenant_number"),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
-    kind: Mapped[str] = mapped_column(String(10), index=True)
     note_date: Mapped[date_] = mapped_column(Date, default=date_.today)
-    contact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), index=True)
+
+    #: **میراثِ شکلِ تک‌سمتی — دیگر نوشته نمی‌شوند.** ردیف‌های پیش از ۰۱۲۷ سمت و
+    #: طرف حسابشان را این‌جا داشتند. ستون می‌ماند تا آن ردیف‌ها خوانا بمانند؛ کدِ
+    #: تازه هیچ‌وقت به این دو نگاه نمی‌کند و سمت را از ردیف‌ها می‌گیرد.
+    kind: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+
+    #: جمعِ ردیف‌ها — عکسِ لحظه‌ی ثبت، نه منبعِ حقیقت. همان الگوی
+    #: `Settlement.total_amount`: فهرست بدونِ جمع‌زدنِ دوباره خوانده می‌شود و
+    #: سرویس این دو را مقابلِ هم می‌گذارد.
     amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+
+    #: ارزِ سند و نرخش. دفتر همیشه به ارزِ پایه می‌نشیند — همان قاعده‌ای که تسویه
+    #: دارد؛ سازوکارِ تفاوتِ تسعیر این‌جا ساخته نمی‌شود.
+    currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
     reason: Mapped[str] = mapped_column(Text, default="", server_default="")
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sales_invoices.id", ondelete="SET NULL"), nullable=True
@@ -321,3 +345,56 @@ class CreditDebitNote(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    lines: Mapped[list["CreditDebitNoteLine"]] = relationship(
+        back_populates="note", cascade="all, delete-orphan", order_by="CreditDebitNoteLine.seq"
+    )
+
+
+class CreditDebitNoteLine(TenantMixin, UUIDPKMixin, Base):
+    """یک تعدیل: این حساب/طرف بدهکار، آن حساب/طرف بستانکار، به این مبلغ.
+
+    **ردیف ذاتاً تراز است** چون یک مبلغ دارد که هر دو سمت را می‌سازد؛ پس سندِ
+    چندردیفی هم بی‌آنکه کسی حسابش را نگه دارد تراز می‌ماند.
+
+    **طرف حساب اختیاری است، حساب نه.** سمتِ مقابلِ یک تعدیل همیشه طرف حساب ندارد
+    (مثلاً تخفیفِ اعطایی)، ولی همیشه یک معین دارد. و هر سمتی که طرف حساب دارد،
+    تفصیلیِ همان طرف روی ردیفِ سند می‌نشیند — وگرنه کارتِ حسابِ او این تعدیل را
+    نمی‌بیند، که دقیقاً همان چیزی است که این سند برایش ساخته شده.
+
+    **نقشِ طرف حساب، معینِ پیش‌فرض را تعیین می‌کند** (مشتری ← دریافتنی،
+    تأمین‌کننده ← پرداختنی) ولی قفلش نمی‌کند: کاربر می‌تواند از میانِ معین‌های
+    مجازِ طرف مقابل یکی دیگر بردارد. پیش‌فرض شاهد دارد، «تنها گزینه» نه.
+    """
+
+    __tablename__ = "credit_debit_note_lines"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_credit_debit_note_lines_amount_positive"),
+        #: سندی که همان حساب و همان تفصیلی را در دو سمت می‌گذارد هیچ‌چیز را
+        #: جابه‌جا نمی‌کند. بی‌صدا پذیرفتنش یعنی ردیفی در دفتر که معنی ندارد.
+        CheckConstraint(
+            "debit_account_id <> credit_account_id "
+            "OR debit_contact_id IS DISTINCT FROM credit_contact_id",
+            name="ck_credit_debit_note_lines_not_noop",
+        ),
+        UniqueConstraint("tenant_id", "note_id", "seq", name="uq_credit_debit_note_lines_seq"),
+    )
+
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("credit_debit_notes.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, default=1)
+
+    debit_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    debit_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
+    credit_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    credit_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
+
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    note: Mapped["CreditDebitNote"] = relationship(back_populates="lines")

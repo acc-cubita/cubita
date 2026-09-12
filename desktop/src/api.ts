@@ -6267,31 +6267,74 @@ export const createCustoms = (
   data: Omit<CustomsDeclaration, 'id' | 'invoice_number' | 'declared_value'> & { declared_value: number },
 ) => authedSend<CustomsDeclaration>(token, 'POST', '/api/sales-ops/customs', data)
 
+/** یک تعدیل: این سمت بدهکار، آن سمت بستانکار، به یک مبلغِ مشترک. */
+export interface CreditDebitNoteLine {
+  id: string
+  seq: number
+  debit_contact_id: string | null
+  debit_contact_name: string
+  debit_account_id: string
+  debit_account_code: string
+  debit_account_name: string
+  credit_contact_id: string | null
+  credit_contact_name: string
+  credit_account_id: string
+  credit_account_code: string
+  credit_account_name: string
+  amount: string
+  description: string
+}
+
 export interface CreditDebitNote {
   id: string
   number: number | null
-  kind: 'debit' | 'credit'
   note_date: string
-  contact_id: string
-  contact_name: string
   amount: string
   reason: string
+  currency_code: string
+  exchange_rate: string
+  lines: CreditDebitNoteLine[]
   invoice_id: string | null
   journal_entry_id: string | null
   voided_at: string | null
+  /** میراثِ شکلِ تک‌سمتی — فقط اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ پرش دارند. */
+  kind: 'debit' | 'credit' | null
+  contact_id: string | null
+  contact_name: string
 }
-export const fetchNotes = (token: string, kind?: 'debit' | 'credit') =>
-  authedGet<CreditDebitNote[]>(token, `/api/sales-ops/notes${kind ? `?kind=${kind}` : ''}`)
+
+/** معینی که یک سمتِ اعلامیه می‌تواند رویش بنشیند — با عنوانش، نه فقط کدش. */
+export interface NoteAccount {
+  id: string
+  code: string
+  name: string
+}
+
+export interface CreditDebitNoteLineIn {
+  debit_contact_id?: string | null
+  debit_account_id?: string | null
+  credit_contact_id?: string | null
+  credit_account_id?: string | null
+  amount: number
+  description?: string
+}
+
+export const fetchNotes = (token: string) =>
+  authedGet<CreditDebitNote[]>(token, '/api/sales-ops/notes')
+export const fetchNoteAccounts = (token: string) =>
+  authedGet<NoteAccount[]>(token, '/api/sales-ops/notes/accounts')
 export const createNote = (
   token: string,
   data: {
-    kind: 'debit' | 'credit'
     note_date: string
-    contact_id: string
-    amount: number
-    reason: string
+    lines: CreditDebitNoteLineIn[]
+    reason?: string
+    currency_code?: string
+    exchange_rate?: number
   },
-) => authedSend<CreditDebitNote>(token, 'POST', '/api/sales-ops/notes', data)
+  idempotencyKey?: string,
+) =>
+  authedSend<CreditDebitNote>(token, 'POST', '/api/sales-ops/notes', data, idempotencyKey)
 export const voidNote = (token: string, id: string, reason: string) =>
   authedSend<CreditDebitNote>(token, 'POST', `/api/sales-ops/notes/${id}/void`, { reason })
 
