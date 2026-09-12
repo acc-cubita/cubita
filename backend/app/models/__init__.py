@@ -109,6 +109,7 @@ from app.models.returns import (
     PurchaseReturnLine,
     SalesReturn,
     SalesReturnLine,
+    SalesReturnReason,
 )
 from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.sales_ops import (
@@ -221,6 +222,7 @@ __all__ = [
     "PurchaseReturnLine",
     "SalesReturn",
     "SalesReturnLine",
+    "SalesReturnReason",
     "StockTransfer",
     "StockTransferLine",
     "Plan",

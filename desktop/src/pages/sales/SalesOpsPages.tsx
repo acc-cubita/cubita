@@ -14,6 +14,7 @@ import {
   Ship,
   Tags,
   TrendingUp,
+  Undo2,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ import {
   createPriceAnnouncement,
   createPricingFactor,
   createSaleType,
+  createSalesReturnReason,
   fetchCommissionPreview,
   fetchCommissionRules,
   fetchContacts,
@@ -37,7 +39,9 @@ import {
   fetchMembers,
   fetchPricingSuggestion,
   fetchSalesInvoices,
+  fetchSalesReturnReasons,
   fetchSalesSummary,
+  updateSalesReturnReason,
   type ContactRecord,
   type ItemRecord,
   type PricingFactor,
@@ -591,6 +595,116 @@ function PricingFactorForm({ token, kind }: { token: string; kind: 'discount' | 
         <JalaliDatePicker value={validTo} onChange={setValidTo} />
       </label>
     </FormCard>
+  )
+}
+
+// ═════════════════ علت برگشت کالا ═════════════════
+
+/**
+ * مِسترِ علتِ برگشتِ کالا.
+ *
+ * **چرا جدول و نه متنِ آزاد روی ردیفِ برگشت:** «خرابی»، «خراب بود» و «کالا خراب»
+ * سه نوشته‌ی یک علت‌اند. با متنِ آزاد، گزارشِ «برگشت به تفکیکِ علت» هیچ‌وقت
+ * ساخته نمی‌شود چون هیچ دو ردیفی با هم جمع نمی‌شوند.
+ *
+ * غیرفعال‌کردن هست، حذف نیست: علتِ غیرفعال در انتخابِ تازه نمی‌آید ولی روی
+ * برگشت‌های تاریخی همچنان دیده می‌شود.
+ */
+export function ReturnReasonPage({ token }: { token: string }) {
+  const { msg, submitting, run } = useSubmit()
+  const [title, setTitle] = useState('')
+  const [title2, setTitle2] = useState('')
+  const list = useAsync(() => fetchSalesReturnReasons(token), [token])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20)
+
+  return (
+    <OpsPage
+      icon={Undo2}
+      title="علت برگشت کالا"
+      description="علت‌هایی که هنگامِ ثبتِ فاکتور برگشتی روی هر ردیف انتخاب می‌شوند."
+    >
+      <FormCard
+        icon={Undo2}
+        title="علتِ تازه"
+        description="عنوان یکتاست. علتِ ثبت‌شده حذف نمی‌شود — غیرفعال می‌شود."
+        msg={msg}
+        submitting={submitting}
+        disabled={!title.trim()}
+        onSubmit={() =>
+          void run(async () => {
+            await createSalesReturnReason(token, { title: title.trim(), title2: title2.trim() })
+            setTitle('')
+            setTitle2('')
+            list.reload()
+          }, 'علتِ برگشت ثبت شد.')
+        }
+      >
+        <label>
+          عنوان
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
+        </label>
+        <label>
+          عنوان دوم
+          <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={120} />
+          <span className="field-hint">اختیاری — نامِ جایگزین یا لاتین.</span>
+        </label>
+      </FormCard>
+
+      <SectionCard icon={Undo2} title="علت‌ها" description={`${faInt(rows.length)} ردیف`}>
+        <AsyncBlock
+          loading={list.loading}
+          error={list.error}
+          empty={rows.length === 0}
+          emptyText="هنوز علتی تعریف نشده. اولین علت را از فرمِ بالا بسازید."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>عنوان</th>
+                  <th>عنوان دوم</th>
+                  <th>وضعیت</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((reason) => (
+                  <tr key={reason.id} className={reason.is_active ? '' : 'acc-row--void'}>
+                    <td className="card-title" data-label="عنوان">
+                      {reason.title}
+                    </td>
+                    <td className="card-wide" data-label="عنوان دوم" dir="ltr">
+                      {reason.title2 || '—'}
+                    </td>
+                    <td data-label="وضعیت">{reason.is_active ? 'فعال' : 'غیرفعال'}</td>
+                    <td className="card-actions" data-label="عملیات">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void updateSalesReturnReason(token, reason.id, {
+                            title: reason.title,
+                            title2: reason.title2,
+                            is_active: !reason.is_active,
+                          }).then(
+                            () => list.reload(),
+                            (err: unknown) =>
+                              window.alert(err instanceof Error ? err.message : 'خطای ناشناخته'),
+                          )
+                        }
+                      >
+                        {reason.is_active ? 'غیرفعال کن' : 'فعال کن'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+    </OpsPage>
   )
 }
 

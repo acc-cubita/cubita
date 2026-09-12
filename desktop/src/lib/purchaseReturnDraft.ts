@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   createPurchaseReturn,
   fetchPurchaseReturnable,
   fetchPurchaseInvoices,
   fetchPurchaseReturns,
+  newIdempotencyKey,
   printPurchaseReturn,
   type ReturnableLine,
   type PurchaseInvoiceRecord,
   type PurchaseReturnRecord,
 } from '../api'
 import { todayIso } from './jalali'
+import { returnableKey } from './salesReturnDraft'
 
 /** منطقِ مشترکِ «برگشت از خرید» — قرینه‌ی [useSalesReturnDraft] با api و شناسه‌ی خرید. */
 export function usePurchaseReturnDraft({ token }: { token: string }) {
@@ -19,9 +21,12 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   const [returnable, setReturnable] = useState<ReturnableLine[]>([])
   const [returnDate, setReturnDate] = useState(todayIso())
   const [description, setDescription] = useState('')
-  const [qtyByItem, setQtyByItem] = useState<Record<string, string>>({})
+  const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  //: یک کلید برای عمرِ این فرم — تلاشِ دوباره‌ی شبکه سندِ دوم نمی‌سازد.
+  const idempotencyKey = useRef(newIdempotencyKey())
 
   const selectedInvoice = invoices.find((inv) => inv.id === invoiceId) ?? null
   const invoiceNumberById = new Map(invoices.map((inv) => [inv.id, inv.number]))
@@ -42,7 +47,7 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   }, [])
 
   useEffect(() => {
-    setQtyByItem({})
+    setQtyByLine({})
     if (!invoiceId) {
       setReturnable([])
       return
@@ -57,14 +62,41 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   }, [token, invoiceId])
 
   const anyReturnable = returnable.some((r) => Number(r.remaining) > 0)
-  const enteredLines = Object.entries(qtyByItem)
+  const rowByKey = new Map(returnable.map((r) => [returnableKey(r), r]))
+
+  //: کلید ردیفِ فاکتور است نه کالا — قرینه‌ی برگشت از فروش، و به همان دلیل:
+  //: یک کالا می‌تواند در یک فاکتور دو ردیف با دو بها داشته باشد.
+  const enteredLines = Object.entries(qtyByLine)
     .filter(([, qty]) => Number(qty) > 0)
-    .map(([itemId, qty]) => ({ item_id: itemId, qty: Number(qty) }))
-  const overRemaining = enteredLines.some((l) => {
-    const r = returnable.find((x) => x.item_id === l.item_id)
-    return r && l.qty > Number(r.remaining)
+    .map(([key, qty]) => {
+      const row = rowByKey.get(key)
+      return {
+        ...(row?.purchase_invoice_line_id
+          ? { purchase_invoice_line_id: row.purchase_invoice_line_id }
+          : { item_id: row?.item_id ?? key }),
+        qty: Number(qty),
+      }
+    })
+  const overRemaining = Object.entries(qtyByLine).some(([key, qty]) => {
+    const row = rowByKey.get(key)
+    return row !== undefined && Number(qty) > Number(row.remaining)
   })
   const returnLinesValid = enteredLines.length > 0 && !overRemaining
+
+  //: نمای نمایشی — جدا از `enteredLines` که دقیقاً payloadِ API است.
+  const enteredRows = Object.entries(qtyByLine)
+    .filter(([, qty]) => Number(qty) > 0)
+    .map(([key, qty]) => {
+      const row = rowByKey.get(key)
+      return {
+        key,
+        name: row?.item_name ?? '—',
+        unit: row?.unit ?? '',
+        qty: Number(qty),
+        unitPrice: Number(row?.unit_price ?? 0),
+      }
+    })
+  const enteredTotal = enteredRows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0)
 
   async function submit(): Promise<boolean> {
     setMessage(null)
@@ -82,13 +114,18 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
     }
     setBusy(true)
     try {
-      await createPurchaseReturn(token, {
-        return_date: returnDate,
-        purchase_invoice_id: selectedInvoice.id,
-        description,
-        lines: enteredLines,
-      })
-      setQtyByItem({})
+      await createPurchaseReturn(
+        token,
+        {
+          return_date: returnDate,
+          purchase_invoice_id: selectedInvoice.id,
+          description,
+          lines: enteredLines,
+        },
+        idempotencyKey.current,
+      )
+      idempotencyKey.current = newIdempotencyKey()
+      setQtyByLine({})
       setDescription('')
       setMessage('برگشت از خرید با موفقیت ثبت شد.')
       await refresh()
@@ -122,8 +159,8 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
     setReturnDate,
     description,
     setDescription,
-    qtyByItem,
-    setQtyByItem,
+    qtyByLine,
+    setQtyByLine,
     message,
     setMessage,
     busy,
@@ -131,6 +168,8 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
     invoiceNumberById,
     anyReturnable,
     enteredLines,
+    enteredRows,
+    enteredTotal,
     returnLinesValid,
     submit,
     refresh,

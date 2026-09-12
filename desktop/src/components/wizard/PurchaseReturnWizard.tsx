@@ -119,8 +119,6 @@ function InvoiceStep({ r }: { r: PurchaseReturnDraft }) {
 }
 
 function ReviewStep({ r }: { r: PurchaseReturnDraft }) {
-  const nameOf = (id: string) => r.returnable.find((x) => x.item_id === id)?.item_name ?? '—'
-  const unitOf = (id: string) => r.returnable.find((x) => x.item_id === id)?.unit ?? ''
   return (
     <div className="review-step">
       <div className="review-facts">
@@ -133,10 +131,10 @@ function ReviewStep({ r }: { r: PurchaseReturnDraft }) {
             <tr><th>کالا</th><th>مقدار برگشتی</th></tr>
           </thead>
           <tbody>
-            {r.enteredLines.map((l) => (
-              <tr key={l.item_id}>
-                <td data-label="کالا">{nameOf(l.item_id)}</td>
-                <td data-label="مقدار برگشتی">{fa(l.qty)} {unitOf(l.item_id)}</td>
+            {r.enteredRows.map((row) => (
+              <tr key={row.key}>
+                <td data-label="کالا">{row.name}</td>
+                <td data-label="مقدار برگشتی">{fa(row.qty)} {row.unit}</td>
               </tr>
             ))}
           </tbody>
@@ -147,14 +145,14 @@ function ReviewStep({ r }: { r: PurchaseReturnDraft }) {
 }
 
 function LivePreview({ r }: { r: PurchaseReturnDraft }) {
-  const totalQty = r.enteredLines.reduce((s, l) => s + l.qty, 0)
+  const totalQty = r.enteredRows.reduce((s, row) => s + row.qty, 0)
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ برگشت</p>
       <div className="live-preview-row"><span>فاکتور اصلی</span><strong>شماره {r.selectedInvoice?.number ?? '—'}</strong></div>
       <div className="live-preview-row"><span>تاریخ برگشت</span><strong>{r.returnDate}</strong></div>
       <div className="live-preview-divider" />
-      <div className="live-preview-row"><span>تعداد ردیف</span><strong>{r.enteredLines.length.toLocaleString('fa-IR')}</strong></div>
+      <div className="live-preview-row"><span>تعداد ردیف</span><strong>{r.enteredRows.length.toLocaleString('fa-IR')}</strong></div>
       <div className="live-preview-row live-preview-total"><span>مجموع مقدار</span><strong>{fa(totalQty)}</strong></div>
     </div>
   )

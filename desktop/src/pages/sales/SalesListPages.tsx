@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   BadgePercent,
+  Ban,
   Boxes,
   Calculator,
   ClipboardList,
@@ -31,11 +32,21 @@ import {
   fetchSalesInvoices,
   fetchSalesReturns,
   voidNote,
+  voidSalesReturn,
   type CreditDebitNote,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali } from '../../lib/jalali'
+
+/** وضعیتِ مالیِ سندِ برگشت. «باطل» عمداً از «تسویه‌نشده» جداست — یکی پولی است که
+ *  هنوز نرفته، دیگری پولی که اصلاً قرار نیست برود. */
+const RETURN_STATUS_LABELS: Record<string, string> = {
+  unsettled: 'تسویه‌نشده',
+  partially_settled: 'تسویهٔ جزئی',
+  fully_settled: 'تسویه‌شده',
+  voided: 'باطل‌شده',
+}
 import {
   AsyncBlock,
   Metric,
@@ -221,7 +232,9 @@ export function SalesReturnListPage({ token }: { token: string }) {
     [list.data, range.from, range.to],
   )
   const pg = usePagination(rows, 20, `${range.from}${range.to}`)
-  const total = rows.reduce((s, r) => s + Number(r.total_amount || 0), 0)
+  //: برگشتِ باطل‌شده در جمع نمی‌آید — وگرنه سرصفحه عددی می‌گوید که دفتر نمی‌گوید.
+  const total = rows.reduce((s, r) => (r.voided_at ? s : s + Number(r.total_amount || 0)), 0)
+  const openTotal = rows.reduce((s, r) => (r.voided_at ? s : s + Number(r.remaining_amount || 0)), 0)
 
   return (
     <OpsPage
@@ -234,6 +247,7 @@ export function SalesReturnListPage({ token }: { token: string }) {
           <div className="cc-summary">
             <Metric icon={<Undo2 size={14} />} label="برگشتی" value={faInt(rows.length)} />
             <Metric icon={<TrendingUp size={14} />} label="جمع" value={faAmount(total)} tone="out" />
+            <Metric icon={<Undo2 size={14} />} label="ماندهٔ باز" value={faAmount(openTotal)} />
           </div>
         </div>
       }
@@ -253,12 +267,18 @@ export function SalesReturnListPage({ token }: { token: string }) {
                   <th>تاریخ</th>
                   <th>مبلغ</th>
                   <th>مالیات</th>
+                  {/* سه عددِ جدا: جمعِ برگشت، آنچه واقعاً پرداخت شده، و ماندهٔ باز.
+                      هیچ‌کدام ستونِ ذخیره‌شده نیستند؛ سرور از منبع می‌خواندشان. */}
+                  <th>پرداخت‌شده</th>
+                  <th>ماندهٔ برگشت</th>
+                  <th>وضعیت</th>
                   <th>شرح</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {pg.pageItems.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={r.voided_at ? 'acc-row--void' : ''}>
                     <td className="card-title" data-label="شماره">
                       {fa(r.number ?? 0)}
                     </td>
@@ -269,8 +289,36 @@ export function SalesReturnListPage({ token }: { token: string }) {
                     <td className="num" data-label="مالیات">
                       {faAmount(r.tax_amount)}
                     </td>
+                    <td className="num" data-label="پرداخت‌شده">
+                      {faAmount(r.settled_amount)}
+                    </td>
+                    <td className="num" data-label="ماندهٔ برگشت">
+                      {faAmount(r.remaining_amount)}
+                    </td>
+                    <td data-label="وضعیت">
+                      {RETURN_STATUS_LABELS[r.financial_status] ?? r.financial_status}
+                    </td>
                     <td className="card-wide" data-label="شرح">
                       {r.description || '—'}
+                    </td>
+                    <td className="card-actions" data-label="عملیات">
+                      {!r.voided_at && (
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => {
+                            const reason = window.prompt('دلیلِ ابطالِ این برگشت؟')
+                            if (reason === null) return
+                            void voidSalesReturn(token, r.id, reason).then(
+                              () => list.reload(),
+                              (err: unknown) =>
+                                window.alert(err instanceof Error ? err.message : 'خطای ناشناخته'),
+                            )
+                          }}
+                        >
+                          <Ban size={13} /> ابطال
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

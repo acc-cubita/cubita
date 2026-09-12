@@ -1601,12 +1601,34 @@ export interface SalesReturnRecord {
   total_cost: string
   tax_rate: string
   tax_amount: string
-  lines: { id: string; item_id: string; qty: string; unit_price: string; unit_cost: string; description: string }[]
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+  /** مشتق سمتِ سرور — هیچ‌کدام ستونِ ذخیره‌شده نیستند. */
+  final_amount: string
+  settled_amount: string
+  remaining_amount: string
+  accounting_status: string
+  financial_status: string
+  lines: {
+    id: string
+    item_id: string
+    sales_invoice_line_id: string | null
+    qty: string
+    unit_price: string
+    unit_cost: string
+    return_reason_id: string | null
+    description: string
+  }[]
 }
 
 export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
 
 export interface ReturnableLine {
+  /** هویتِ ردیفِ مبدأ. یک کالا می‌تواند در یک فاکتور چند ردیف با چند قیمت داشته باشد. */
+  sales_invoice_line_id: string | null
+  purchase_invoice_line_id: string | null
+  invoice_number: number | null
   item_id: string
   item_name: string
   unit: string
@@ -1626,8 +1648,14 @@ export const fetchPurchaseReturnable = (token: string, invoiceId: string) =>
 
 export const createSalesReturn = (
   token: string,
-  data: { return_date: string; sales_invoice_id: string; description: string; lines: { item_id: string; qty: number }[] },
-) => authedSend<SalesReturnRecord>(token, 'POST', '/api/sales-returns', data)
+  data: {
+    return_date: string
+    sales_invoice_id: string
+    description: string
+    lines: { item_id?: string; sales_invoice_line_id?: string; qty: number; return_reason_id?: string | null }[]
+  },
+  idempotencyKey?: string,
+) => authedSend<SalesReturnRecord>(token, 'POST', '/api/sales-returns', data, idempotencyKey)
 
 export interface PurchaseReturnRecord {
   id: string
@@ -1638,15 +1666,36 @@ export interface PurchaseReturnRecord {
   total_amount: string
   tax_rate: string
   tax_amount: string
-  lines: { id: string; item_id: string; qty: string; unit_cost: string; description: string }[]
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+  final_amount: string
+  settled_amount: string
+  remaining_amount: string
+  accounting_status: string
+  financial_status: string
+  lines: {
+    id: string
+    item_id: string
+    purchase_invoice_line_id: string | null
+    qty: string
+    unit_cost: string
+    description: string
+  }[]
 }
 
 export const fetchPurchaseReturns = (token: string) => authedGetAll<PurchaseReturnRecord>(token, '/api/purchase-returns')
 
 export const createPurchaseReturn = (
   token: string,
-  data: { return_date: string; purchase_invoice_id: string; description: string; lines: { item_id: string; qty: number }[] },
-) => authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data)
+  data: {
+    return_date: string
+    purchase_invoice_id: string
+    description: string
+    lines: { item_id?: string; purchase_invoice_line_id?: string; qty: number }[]
+  },
+  idempotencyKey?: string,
+) => authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data, idempotencyKey)
 
 export interface StockTransferRecord {
   id: string
@@ -6908,3 +6957,47 @@ export const updateItemAttribute = (
 /** حذفِ مشخصه، مقدارهایش روی همه‌ی کالاها را هم می‌برد. */
 export const deleteItemAttribute = (token: string, attributeId: string) =>
   authedDelete(token, `/api/item-attributes/${attributeId}`)
+
+// ═══════════════ برگشت از فروش: ابطال و علتِ برگشت (فصلِ «فاکتور برگشتی») ═══════════════
+//
+// بلوکِ تازه در **انتهای فایل** — قاعده‌ی تخته‌ی ادعا، تا دو ایجنتِ هم‌زمان در
+// بدترین حالت یک تعارضِ ساده‌ی ته‌فایل بسازند نه یک فایلِ درهم.
+
+/** علتِ برگشتِ کالا — مِسترِ مستقل، نه متنِ آزاد. */
+export interface SalesReturnReasonRecord {
+  id: string
+  title: string
+  title2: string
+  is_active: boolean
+}
+
+/** `onlyActive` برای فرمِ ثبت است؛ فهرستِ کامل برای صفحه‌ی مدیریت و سندهای تاریخی. */
+export const fetchSalesReturnReasons = (token: string, onlyActive = false) =>
+  authedGet<SalesReturnReasonRecord[]>(
+    token,
+    `/api/sales-return-reasons${onlyActive ? '?only_active=true' : ''}`,
+  )
+
+export const createSalesReturnReason = (
+  token: string,
+  data: { title: string; title2?: string; is_active?: boolean },
+) => authedSend<SalesReturnReasonRecord>(token, 'POST', '/api/sales-return-reasons', data)
+
+export const updateSalesReturnReason = (
+  token: string,
+  id: string,
+  data: { title: string; title2?: string; is_active?: boolean },
+) => authedSend<SalesReturnReasonRecord>(token, 'PATCH', `/api/sales-return-reasons/${id}`, data)
+
+/** ابطالِ سندِ برگشت — سندِ معکوس می‌خورد، ردیف پاک نمی‌شود. */
+export const voidSalesReturn = (token: string, id: string, reason: string, voidDate?: string) =>
+  authedSend<SalesReturnRecord>(token, 'POST', `/api/sales-returns/${id}/void`, {
+    reason,
+    void_date: voidDate ?? null,
+  })
+
+export const voidPurchaseReturn = (token: string, id: string, reason: string, voidDate?: string) =>
+  authedSend<PurchaseReturnRecord>(token, 'POST', `/api/purchase-returns/${id}/void`, {
+    reason,
+    void_date: voidDate ?? null,
+  })

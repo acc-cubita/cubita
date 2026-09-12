@@ -363,6 +363,9 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   commissioncalc: 'commissionrunlist',
   customs: 'customslist',
   saletype: 'saletypelist',
+  //: مِسترِ کوچکی که دفترش خودِ همان صفحه است — فرمِ ساخت و جدولِ علت‌ها کنارِ
+  //: هم. صفحه‌ی فهرستِ جدا فقط همان جدول را دوباره نشان می‌داد.
+  returnreason: 'view',
   priceannounce: 'priceannouncelist',
   bundle: 'bundlelist',
   discount: 'pricingfactorlist', //: تخفیف و افزاینده یک جدول‌اند → دفترِ مشترک
