@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude (hesabdari-93) | مهاجرت `0126`، `models/tenant.py`، `services/sales_posting.py`، `routers/invoices.py`، `PersonalizationPage.tsx`، `api.ts`؛ و `pytest` | سیاستِ صدورِ فاکتور فروش: خودکار یا دومرحله‌ای، انتخابِ خودِ کسب‌وکار | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
@@ -91,6 +90,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude (hesabdari-93) | مهاجرت `0126`، `services/sales_posting.py`، `routers/invoices.py`، `models/tenant.py`، `PersonalizationPage.tsx`؛ آزادسازی `pytest` | سیاستِ صدورِ فاکتور فروش (خودکار/دومرحله‌ای) و رفعِ بن‌بستِ ابطال در حالتِ خودکار | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | ادغامِ پنج فصلِ کدکس با master؛ `0114`–`0116` → `0123`–`0125`، `voiding.py`، `warehouse_issues.py`، `sales_invoices.py`، `inventory.py`؛ آزادسازی `pytest` | فرودِ شاخه‌ی سرگردانِ کدکس: شماره‌های متصادم، ستونِ دوبارساخته، انحرافِ میانگینِ بها، و چهار گاردِ master که در ادغام برمی‌گشتند | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0122`، `services/pricing.py`، `routers/advanced_inventory.py`، `routers/sales_ops.py`، `audit.py`، `PriceListsPanel.tsx`، `SalesOpsPages.tsx`، `PosPage.tsx`، `salesInvoiceDraft.ts`؛ آزادسازی `pytest` | فصلِ «اعلامیه قیمت»: ماتریسِ قیمت قابلِ ورود شد، سه موتورِ قیمت یکی شد، مسیری که ماتریس را پاک می‌کرد بسته شد، تغییرِ گروهیِ فی با یکتاسازی | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0121`، `services/returns.py`، `voiding.py`، `open_items.py`، `reports.py`، `credit.py`، `chart_codes.py`، UI برگشت و مِسترِ علت؛ آزادسازی `pytest` | فصلِ «فاکتور برگشتی»: تخصیصِ سطحِ ردیف، ابطالِ برگشت (و رفعِ قفلِ ابدیِ فاکتور)، حسابِ ۴۱۰۷، علتِ برگشت | ۱۴۰۵/۰۶/۲۱ |

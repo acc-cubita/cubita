@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
@@ -14,7 +15,7 @@ from app.models.sales_ops import SaleType
 from app.models.invoices import (
     PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseIssue, WarehouseReceipt,
 )
-from app.models.tenant import Membership
+from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import (
@@ -30,6 +31,7 @@ from app.schemas.invoices import (
     SalesSummaryOut,
 )
 from app.schemas.voiding import VoidIn, VoidOut
+from app.services import sales_posting
 from app.services.idempotency import idempotent
 from app.services.inventory import duplicate_purchase_invoice_draft, post_purchase_invoice, post_sales_invoice
 from app.services.reports import get_purchase_summary, get_sales_summary
@@ -197,6 +199,80 @@ def sales_summary(
     return SalesSummaryOut(**get_sales_summary(db))
 
 
+# ─────────────────── سیاستِ صدورِ فاکتور فروش ───────────────────
+
+
+class SalesPostingOut(BaseModel):
+    mode: str
+    options: list[dict]
+    #: True یعنی کاربر خودش انتخاب کرده؛ False یعنی هنوز روی پیش‌فرضِ سرویس است.
+    is_explicit: bool
+
+
+class SalesPostingIn(BaseModel):
+    mode: str
+
+
+def _sales_posting_out(tenant: Tenant) -> SalesPostingOut:
+    return SalesPostingOut(
+        mode=tenant.sales_invoice_posting or sales_posting.DEFAULT_POSTING_MODE,
+        is_explicit=tenant.sales_invoice_posting is not None,
+        options=[
+            {
+                "key": key,
+                "label": sales_posting.POSTING_MODE_LABELS[key],
+                "hint": sales_posting.POSTING_MODE_HINTS[key],
+                "effects": sales_posting.POSTING_MODE_EFFECTS[key],
+                "is_default": key == sales_posting.DEFAULT_POSTING_MODE,
+            }
+            for key in sales_posting.POSTING_MODES
+        ],
+    )
+
+
+def _posting_tenant(db: Session, principal: Principal) -> Tenant:
+    tenant = db.get(Tenant, principal.tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
+    return tenant
+
+
+@router.get("/api/sales-invoice-posting", response_model=SalesPostingOut)
+def get_sales_invoice_posting(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """«ثبت فاکتور» سند و خروجِ انبار را هم بزند یا نه؟"""
+    return _sales_posting_out(_posting_tenant(db, principal))
+
+
+@router.patch("/api/sales-invoice-posting", response_model=SalesPostingOut)
+def set_sales_invoice_posting(
+    data: SalesPostingIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    #: تصمیمی در سطحِ کلِ کسب‌وکار است، نه ویرایشِ یک فاکتور — پس مالک و حسابدار،
+    #: نه هر کسی که مجوزِ ثبتِ فاکتور دارد. (همان تاپلی که کنترلِ شماره‌ی چک دارد:
+    #: `approve` از «*»ِ مالک می‌آید و `update` دستِ حسابدار است.)
+    _=Depends(require_permission("invoices", ("approve", "update"))),
+):
+    """تغییرِ سیاست.
+
+    **روی فاکتورهای گذشته اثری ندارد.** فاکتوری که دیروز بدونِ سند ثبت شده، با
+    عوض‌کردنِ این گزینه سند نمی‌گیرد؛ سندش را از فهرست صادر می‌کنید. و برعکس،
+    رفتنِ به «دومرحله‌ای» سندِ فاکتورهای دیروز را پس نمی‌گیرد — تاریخ بازنویسی
+    نمی‌شود.
+    """
+    tenant = _posting_tenant(db, principal)
+    try:
+        sales_posting.set_posting_mode(tenant, data.mode)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+    db.flush()
+    return _sales_posting_out(tenant)
+
+
 @router.post("/api/sales-invoices", response_model=SalesInvoiceOut, status_code=201)
 def create_sales_invoice(
     data: SalesInvoiceIn,
@@ -211,6 +287,14 @@ def create_sales_invoice(
     #: می‌تواند همان تنظیم را در فرمِ طرف حساب روی «هشدار بده» بگذارد.
     x_cubita_offline_replay: str | None = Header(default=None),
 ):
+    #: **«ثبت فاکتور» چه‌قدر کار انجام دهد، انتخابِ خودِ کسب‌وکار است.**
+    #:
+    #: `immediate` (پیش‌فرض) سند و خروج را همان لحظه می‌زند — رفتاری که کاربران
+    #: سال‌ها داشته‌اند. `staged` فقط سندِ تجاری را ثبت می‌کند و آن دو گام را به
+    #: فهرستِ فاکتورها می‌سپارد، برای فروشی که تحویلش روزِ دیگری است.
+    #:
+    #: مسیر یکی است در هر دو حالت؛ فقط خودکار بودنِ دو گام عوض می‌شود.
+    immediate = sales_posting.posts_immediately(db)
     invoice = idempotent(
         db,
         request,
@@ -219,7 +303,7 @@ def create_sales_invoice(
         payload=data,
         run=lambda: post_sales_invoice(
             db, data, user, enforce_credit=not x_cubita_offline_replay,
-            move_inventory=False, issue_accounting=False,
+            move_inventory=immediate, issue_accounting=immediate,
         ),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
@@ -478,7 +562,15 @@ def void_sales(
     دارد و نباید در اختیار نقشی باشد که فقط اجازه‌ی ویرایش دارد. با نقش‌های پیش‌فرض
     یعنی فقط مالک — فروشنده که «create» دارد نمی‌تواند فاکتور خودش را پاک کند.
     """
-    if db.query(WarehouseIssue.id).filter(
+    #: **گاردِ «اول خروج را باطل کنید» فقط وقتی معنی دارد که کاربر خودش خروج را
+    #: ساخته باشد.**
+    #:
+    #: فلسفه‌اش این است که کسی ناخواسته حرکتِ انبارِ یک سندِ مستقل را برنگرداند.
+    #: ولی در سیاستِ «خودکار»، خروج را *سیستم* به‌عنوان بخشی از همان «ثبت فاکتور»
+    #: ساخته؛ کاربر سندی نمی‌بیند که بخواهد آگاهانه باطلش کند، و این گارد فقط
+    #: یک بن‌بست می‌شود — همان بن‌بستی که فصلِ «فاکتور برگشتی» یکی‌اش را بست.
+    #: `void_sales_invoice` خودش خروج‌های فعال را آبشاری باطل می‌کند.
+    if not sales_posting.posts_immediately(db) and db.query(WarehouseIssue.id).filter(
         WarehouseIssue.sales_invoice_id == invoice_id, WarehouseIssue.voided_at.is_(None)
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "این فاکتور خروج انبار فعال دارد؛ ابتدا خروج را باطل کنید")

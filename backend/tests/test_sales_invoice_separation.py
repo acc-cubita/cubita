@@ -1,4 +1,10 @@
-"""مرزهای فصل فاکتور فروش: حقیقت تجاری، حسابداری، انبار و وصول مستقل‌اند."""
+"""مرزهای فصل فاکتور فروش: حقیقت تجاری، حسابداری، انبار و وصول مستقل‌اند.
+
+این‌ها **سیاستِ «دومرحله‌ای»** را می‌سنجند و صریح انتخابش می‌کنند: پیش‌فرضِ
+کسب‌وکار «خودکار» است (فاکتور همان لحظه سند و خروج می‌زند)، چون بیشترِ
+کاربران فاکتور و تحویل را یک لحظه دارند. جداسازی برای کسی است که لازمش دارد،
+و همین فایل مرزهایش را نگه می‌دارد.
+"""
 
 from datetime import date
 from decimal import Decimal
@@ -29,7 +35,14 @@ def _stock(db, user, item, warehouse, qty=10, cost=400):
     )
 
 
+
+def _staged(client):
+    """سیاستِ دومرحله‌ای — چیزی که این فایل می‌سنجدش."""
+    r = client.patch("/api/sales-invoice-posting", json={"mode": "staged"})
+    assert r.status_code == 200, r.text
+
 def test_api_save_has_no_journal_or_stock_then_journal_is_idempotent(client, db, user):
+    _staged(client)
     warehouse = main_warehouse(db)
     item = make_item(db, name="کالای فروش مستقل")
     customer = make_contact(db, name="مشتری تاریخی")
@@ -102,6 +115,7 @@ def test_immediate_sale_orchestrates_separate_documents_atomically(client, db, u
 
 
 def test_partial_warehouse_issue_owns_stock_cogs_and_can_be_voided(client, db, user):
+    _staged(client)
     warehouse = main_warehouse(db)
     item = make_item(db, name="کالای خروج جزئی")
     service = make_item(db, name="خدمت بدون خروج", is_service=True)
@@ -172,6 +186,7 @@ def test_partial_warehouse_issue_owns_stock_cogs_and_can_be_voided(client, db, u
 
 
 def test_sales_print_uses_transaction_time_customer_and_item_snapshots(client, db, user):
+    _staged(client)
     item = make_item(db, name="کالای تاریخی", sku="HIST-1")
     customer = make_contact(db, name="مشتری زمان ثبت")
     customer.address = "نشانی زمان ثبت"

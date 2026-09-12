@@ -102,6 +102,19 @@ class Tenant(UUIDPKMixin, TimestampMixin, Base):
     #: دسته و خرج‌نشده باشد — وگرنه «برگِ مانده» عددِ دروغ می‌دهد. منطق در
     #: `app/services/checkbooks.py`.
     cheque_number_control: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: سیاستِ صدورِ فاکتور فروش — «ثبت فاکتور» چه‌قدر کار انجام دهد:
+    #:   immediate = همان لحظه سندِ حسابداری و خروجِ انبار هم می‌زند (پیش‌فرض)
+    #:   staged    = فاکتور فقط سندِ **تجاری** است؛ سند و خروج جدا صادر می‌شوند
+    #: NULL = پیش‌فرضِ سرویس.
+    #:
+    #: **چرا پیش‌فرض `immediate` است و نه رفتارِ تازه.** جداسازیِ فاکتور از خروجِ
+    #: انبار یک قابلیتِ درست است — کسب‌وکاری که فاکتور را امروز می‌دهد و کالا را
+    #: هفته‌ی بعد، بدونش نمی‌تواند درست کار کند. ولی برای مغازه‌ای که فاکتور و
+    #: تحویل یک لحظه‌اند، دو دکمه‌ی اضافه یعنی دو فراموشیِ ممکن: فاکتوری که سند
+    #: ندارد و کالایی که از انبار کم نشده. پس **انتخاب** است، نه حکم.
+    #:
+    #: منطق در `app/services/sales_posting.py`.
+    sales_invoice_posting: Mapped[str | None] = mapped_column(String(20), nullable=True)
     #: «حقِ دسترسی»: ماژول‌های محدودی که سوپرادمین به این اکانت داده (مثلِ تولید).
     granted_modules: Mapped[list] = mapped_column(
         JSONB, default=list, server_default="[]", nullable=False
