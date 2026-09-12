@@ -4792,11 +4792,38 @@ export interface PriceListRecord {
   name: string
   is_active: boolean
   notes: string
+  effective_from: string
 }
+/** یک قاعده‌ی قیمت: هدف + زمینه + نرخ + سیاستِ تغییر — همان ستون‌های ماتریسِ اعلامیه. */
 export interface PriceListItemRecord {
   id: string
-  item_id: string
+  item_id: string | null
+  item_group_id: string | null
   price: string
+  sale_type_id: string | null
+  unit_id: string | null
+  contact_group_id: string | null
+  currency_code: string
+  addition_percent: string
+  allow_rate_change: boolean
+  allow_discount_change: boolean
+  max_increase_percent: string
+  max_decrease_percent: string
+}
+/** ورودیِ یک قاعده. هدف اجباری است (کالا یا گروهِ فروشِ کالا)؛ بقیه پیش‌فرض دارند. */
+export interface PriceRuleIn {
+  item_id?: string | null
+  item_group_id?: string | null
+  price: number
+  sale_type_id?: string | null
+  unit_id?: string | null
+  contact_group_id?: string | null
+  currency_code?: string
+  addition_percent?: number
+  allow_rate_change?: boolean
+  allow_discount_change?: boolean
+  max_increase_percent?: number
+  max_decrease_percent?: number
 }
 export interface StockBatchRecord {
   id: string
@@ -4833,7 +4860,8 @@ export const updatePriceList = (token: string, id: string, patch: { name?: strin
 export const deletePriceList = (token: string, id: string) => authedDelete(token, `/api/price-lists/${id}`)
 export const fetchPriceListItems = (token: string, listId: string) =>
   authedGet<PriceListItemRecord[]>(token, `/api/price-lists/${listId}/items`)
-export const setPriceListItems = (token: string, listId: string, items: { item_id: string; price: number }[]) =>
+/** قاعده‌های فرستاده‌شده را می‌نشاند یا به‌روز می‌کند — ردیفِ نیامده **پاک نمی‌شود**. */
+export const setPriceListItems = (token: string, listId: string, items: PriceRuleIn[]) =>
   authedSend<PriceListItemRecord[]>(token, 'PUT', `/api/price-lists/${listId}/items`, { items })
 
 export const fetchStockBatches = (token: string, itemId?: string) =>
@@ -6131,7 +6159,7 @@ export interface PriceAnnouncement {
   notes: string
   is_active: boolean
   line_count: number
-  lines: { item_id: string; price: string }[]
+  lines: PriceListItemRecord[]
 }
 export const fetchPriceAnnouncements = (token: string) =>
   authedGet<PriceAnnouncement[]>(token, '/api/sales-ops/price-announcements')
@@ -6142,7 +6170,7 @@ export const createPriceAnnouncement = (
     effective_from: string
     notes: string
     is_active: boolean
-    lines: { item_id: string; price: number }[]
+    lines: PriceRuleIn[]
   },
 ) => authedSend<PriceAnnouncement>(token, 'POST', '/api/sales-ops/price-announcements', data)
 
@@ -7001,3 +7029,92 @@ export const voidPurchaseReturn = (token: string, id: string, reason: string, vo
     reason,
     void_date: voidDate ?? null,
   })
+
+
+// ── اعلامیه قیمت: حلِ قیمت و تغییرِ گروهیِ فی ──────────────────────────
+//
+// «چرا فیِ این ردیف این عدد است؟» تنها از این‌جا پرسیده می‌شود. تا پیش از فصلِ
+// «اعلامیه قیمت» فرمِ فاکتور و صندوق هرکدام نگاشتِ `item_id → price`ِ خودشان را
+// می‌ساختند و تاریخِ اجرا، فعال‌بودن و چهار بُعدِ زمینه را نمی‌دیدند — پس فرم یک
+// قیمت پر می‌کرد و سرور با قاعده‌ی دیگری اعتبارش را می‌سنجید.
+
+/** پاسخِ حلِ قیمت. `null` یعنی هیچ قاعده‌ای با این زمینه نخواند. */
+export interface ResolvedPrice {
+  rule_id: string
+  announcement_id: string
+  announcement_name: string
+  effective_from: string
+  unit_price: string
+  currency_code: string
+  addition_percent: string
+  allow_rate_change: boolean
+  allow_discount_change: boolean
+  max_increase_percent: string
+  max_decrease_percent: string
+  /** حدها در دامنه حساب شده‌اند؛ رابط دوباره حسابشان نمی‌کند. `null` = بی‌حد. */
+  min_price: string | null
+  max_price: string | null
+  /** چند قاعده هم‌رتبه خواندند: برنده پایدار است ولی پیکربندی مبهم است. */
+  ambiguous: boolean
+}
+
+export interface PriceContext {
+  saleTypeId?: string | null
+  unitId?: string | null
+  contactId?: string | null
+  currencyCode?: string
+  on?: string | null
+}
+
+export const resolvePrice = (token: string, itemId: string, ctx: PriceContext = {}) => {
+  const q = new URLSearchParams({ item_id: itemId })
+  if (ctx.saleTypeId) q.set('sale_type_id', ctx.saleTypeId)
+  if (ctx.unitId) q.set('unit_id', ctx.unitId)
+  if (ctx.contactId) q.set('contact_id', ctx.contactId)
+  if (ctx.currencyCode) q.set('currency_code', ctx.currencyCode)
+  if (ctx.on) q.set('on', ctx.on)
+  return authedGet<ResolvedPrice | null>(token, `/api/sales-ops/pricing/resolve?${q.toString()}`)
+}
+
+/** حالت‌های دیالوگِ «تغییر فی». */
+export type BulkPriceMode =
+  | 'increase_percent'
+  | 'increase_amount'
+  | 'decrease_percent'
+  | 'decrease_amount'
+  | 'fixed'
+  | 'none'
+
+export interface BulkPriceIn {
+  mode: BulkPriceMode
+  value: number
+  /** رند به مضربِ ریال (۱، ۱۰، ۱۰۰، ۱۰۰۰…) — قیمت عددِ صحیحِ ریالی است. */
+  rounding?: number
+  rule_ids?: string[]
+  item_ids?: string[]
+  sale_type_id?: string | null
+  currency_code?: string | null
+}
+
+/**
+ * «۲۰٪ اضافه کن» جابه‌جاکننده است نه نشاننده: تکرارِ درخواست ۱۰۰ را به ۱۴۴
+ * می‌برد. پس کلیدِ یکتاسازی اینجا اختیاری نیست — فراخوان باید یک کلیدِ پایدار
+ * بدهد و تا موفق‌شدن همان را نگه دارد.
+ */
+export const bulkChangePrices = (
+  token: string,
+  announcementId: string,
+  data: BulkPriceIn,
+  idempotencyKey: string,
+) =>
+  authedSend<{ announcement_id: string; changed: number; replayed: boolean }>(
+    token,
+    'POST',
+    `/api/sales-ops/price-announcements/${announcementId}/bulk-price`,
+    data,
+    idempotencyKey,
+  )
+
+/** حذفِ یک قاعده‌ی قیمت — صریح، نه عارضه‌ی جانبیِ یک ذخیره. */
+export const deletePriceListItem = (token: string, listId: string, rowId: string) =>
+  authedDelete(token, `/api/price-lists/${listId}/items/${rowId}`)

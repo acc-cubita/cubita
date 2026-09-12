@@ -131,6 +131,24 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
+    #: **ردِ قیمت (§۹ §۵۹ §۹۱): این ردیف چرا این نرخ را دارد؟**
+    #:
+    #: `declared_unit_price` نرخی است که اعلامیه‌ی قیمت *در لحظه‌ی ثبت* داد، و
+    #: `price_rule_id` می‌گوید کدام قاعده آن را داد. هر دو snapshotاند — به همان
+    #: دلیلِ `tax_rate_snapshot` بالا: بازخواندنِ اعلامیه‌ی **امروز** برای توضیحِ
+    #: فاکتورِ پارسال یعنی پیکربندیِ جاری تاریخ را بازنویسی کند (§۹۳).
+    #:
+    #: و §۶۱ (دست‌کاریِ دستی ≠ قیمت‌گذاریِ دوباره ≠ نگه‌داشتنِ قیمت) با همین دو
+    #: ستون **مشتق** می‌شود، نه با یک پرچمِ `price_changed`ِ مبهم:
+    #: `unit_price != declared_unit_price` یعنی کاربر عدد را عوض کرده.
+    #:
+    #: `NULL` یعنی «ردِ نامعلوم» — ردیف‌های پیش از مهاجرتِ ۰۱۲۲، و هر ردیفی که
+    #: هیچ قاعده‌ی قیمتی با زمینه‌اش نخوانده باشد.
+    declared_unit_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    price_rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("price_list_items.id", ondelete="SET NULL"), nullable=True
+    )
+
     invoice: Mapped["SalesInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
 

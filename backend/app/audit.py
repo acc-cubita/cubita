@@ -83,6 +83,7 @@ def audited_models() -> dict[type, str]:
     و این ماژول به مدل‌ها.
     """
     from app.models.accounting import JournalEntry
+    from app.models.advanced_inventory import PriceList
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
     from app.models.payroll import Payslip
@@ -113,6 +114,15 @@ def audited_models() -> dict[type, str]:
         #: تسویه سندِ حسابداری نمی‌زند، پس دفتر هیچ ردی از تغییرش نشان نمی‌دهد —
         #: و دقیقاً به همین دلیل حسابرسی‌اش واجب‌تر است، نه کمتر (§۴۹).
         Settlement: "تسویه حساب طرف مقابل",
+        #: اعلامیه‌ی قیمت هم سند نمی‌زند و هم **سیاست** است: قیمتِ فروش، سقفِ
+        #: تخفیف و اینکه فروشنده اصلاً حق دارد نرخ را عوض کند یا نه. تا امروز
+        #: تنها تصمیمِ مالیِ شرکت بود که تغییرش هیچ ردی نمی‌گذاشت — و مسیری
+        #: وجود داشت که کلِ ماتریس را بی‌صدا پاک می‌کرد (فصلِ اعلامیه قیمت، §۴۰ §۸۵).
+        #:
+        #: ردیف‌های اعلامیه عمداً این‌جا نیستند: قاعده‌ی این فایل «یک رکورد برای
+        #: سند، نه برای هر ردیف» است. تغییرِ گروهیِ فی به‌جایش یک رکوردِ
+        #: قبل/بعد با `record_change` می‌سازد.
+        PriceList: "اعلامیه قیمت",
     }
 
 
@@ -140,6 +150,13 @@ def _jsonable(value):
         return str(value)
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
+    #: مقدارهای تودرتو (فهرستِ قبل/بعدِ یک عملیاتِ گروهی) بازگشتی تبدیل می‌شوند،
+    #: نه با `str()` — وگرنه یک ردِ حسابرسیِ ساخت‌یافته به یک متنِ خوانانشدنی
+    #: تبدیل می‌شد، و اگر اصلاً تبدیل نمی‌شد درجِ رکورد با TypeError می‌ترکید.
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(v) for v in value]
     return str(value)
 
 
@@ -286,10 +303,15 @@ def record_change(session: Session, obj, changes: dict, summary: str) -> None:
 
     `changes` همان شکلِ `{"field": {"from": ..., "to": ...}}`ِ ثبتِ خودکار را دارد
     تا خواننده‌ی دفتر مجبور نباشد دو قالب را بشناسد.
+
+    مقدارها از همان `_jsonable`ِ مسیرِ خودکار رد می‌شوند — بی آن، یک `Decimal`ِ
+    ساده درجِ رکورد را با `TypeError` می‌شکست و **کلِ تراکنشِ مالی** را با خودش
+    می‌برد، فقط به‌خاطرِ ردِ حسابرسی.
     """
     label = audited_models().get(type(obj))
     if label is None:
         return
+    changes = _jsonable(changes) if changes else None
     actor_id, actor_email = _actor(session)
     session.add(
         AuditLog(

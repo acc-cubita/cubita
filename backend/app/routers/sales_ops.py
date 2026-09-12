@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -28,7 +28,10 @@ from app.models.sales_ops import (
     SaleType,
 )
 from app.models.user import User
+from app.schemas.advanced_inventory import PriceListItemOut, ResolvedPriceOut
 from app.schemas.sales_ops import (
+    BulkPriceIn,
+    BulkPriceOut,
     CloseInvoicesIn,
     CloseInvoicesOut,
     CommissionPreviewOut,
@@ -53,7 +56,9 @@ from app.schemas.sales_ops import (
     SaleTypeOut,
     VoidNoteIn,
 )
+from app.services import pricing
 from app.services import sales_ops as svc
+from app.services.idempotency import idempotent
 
 router = APIRouter(prefix="/api/sales-ops", tags=["sales-ops"])
 
@@ -220,6 +225,9 @@ def _assert_scope(data: PricingFactorIn) -> None:
 
 
 def _price_out(pl: PriceList, lines: list[PriceListItem]) -> PriceAnnouncementOut:
+    #: ردیف‌ها با **کلِ زمینه‌شان** بیرون می‌روند، نه فقط کالا و قیمت. تا امروز
+    #: این‌جا `{item_id, price}` بود، پس صفحه‌ی اعلامیه هرگز نمی‌توانست نشان دهد
+    #: که یک ردیف مالِ کدام نوعِ فروش است — و در ذخیره‌ی بعدی همان زمینه گم می‌شد.
     return PriceAnnouncementOut(
         id=pl.id,
         name=pl.name,
@@ -227,7 +235,7 @@ def _price_out(pl: PriceList, lines: list[PriceListItem]) -> PriceAnnouncementOu
         notes=pl.notes,
         is_active=pl.is_active,
         line_count=len(lines),
-        lines=[{"item_id": str(l.item_id), "price": l.price} for l in lines],
+        lines=[PriceListItemOut.model_validate(l) for l in lines],
     )
 
 
@@ -254,11 +262,55 @@ def create_price_announcement(
         is_active=data.is_active,
         created_by_id=user.id,
     )
-    pl.items = [PriceListItem(item_id=l.item_id, price=l.price) for l in data.lines]
+    #: **هر ستونِ ماتریس منتقل می‌شود، نه فقط کالا و قیمت.** تا امروز این‌جا
+    #: `PriceListItem(item_id=…, price=…)` بود، یعنی صفحه‌ی «اعلامیه قیمت» فقط
+    #: می‌توانست قاعده‌ی بی‌زمینه بسازد — و شاهدِ مرکزیِ فصل (یک کالا، سه نوعِ
+    #: فروش، سه قیمت) از هیچ‌جای محصول قابلِ ورود نبود.
+    pl.items = [PriceListItem(**line.model_dump()) for line in data.lines]
     db.add(pl)
     db.flush()
     db.refresh(pl)
     return _price_out(pl, pl.items)
+
+
+@router.post("/price-announcements/{list_id}/bulk-price", response_model=BulkPriceOut)
+def bulk_price_change(
+    list_id: UUID,
+    data: BulkPriceIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_update),
+):
+    """«تغییر فی» — تغییرِ گروهیِ قیمتِ ردیف‌های یک اعلامیه (§۴۲–§۴۸).
+
+    **چرا این یکی حتماً باید یکتا باشد (§۴۵ §۴۶ §۹۴).** «۲۰٪ اضافه کن» برخلافِ
+    یک ذخیره‌ی معمولی *جابه‌جاکننده* است، نه *نشاننده*: اگر پاسخ گم شود و
+    کلاینت دوباره بفرستد، ۱۰۰ که به ۱۲۰ رفته بود به ۱۴۴ می‌رود — و هیچ‌کس
+    متوجه نمی‌شود، چون هر دو اجرا «موفق» بوده‌اند. پس همان `idempotent(...)`ِ
+    فاکتور این‌جا هم می‌نشیند و اجرای دوم فقط پاسخِ اول را پس می‌دهد.
+    """
+    result = idempotent(
+        db,
+        request,
+        user,
+        operation="bulk_price_change",
+        payload=data,
+        run=lambda: pricing.bulk_change(
+            db,
+            list_id,
+            mode=data.mode,
+            value=data.value,
+            rounding=data.rounding,
+            rule_ids=data.rule_ids or None,
+            item_ids=data.item_ids or None,
+            sale_type_id=data.sale_type_id,
+            currency_code=data.currency_code,
+        ),
+        replay=lambda rid: pricing.BulkResult(id=rid, changed=0, replayed=True),
+    )
+    return BulkPriceOut(
+        announcement_id=result.id, changed=result.changed, replayed=result.replayed
+    )
 
 
 # ────────────────────────── بسته‌ی محصول ───────────────────────────
@@ -530,6 +582,40 @@ def pricing_suggest(
         item_id,
         qty,
         on,
+        sale_type_id=sale_type_id,
+        unit_id=unit_id,
+        contact_id=contact_id,
+        currency_code=currency_code,
+    )
+
+
+@router.get("/pricing/resolve", response_model=ResolvedPriceOut | None)
+def pricing_resolve(
+    item_id: UUID,
+    on: date | None = None,
+    sale_type_id: UUID | None = None,
+    unit_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    currency_code: str = "IRR",
+    db: Session = Depends(get_db),
+    _=Depends(_view),
+):
+    """فیِ مصوبِ این کالا در این زمینه، و **چرا** (§۲۱ §۹۱).
+
+    **تنها موتورِ قیمت (§۵۴ §۹۲).** تا پیش از این فصل، فرمِ فاکتور و صندوق هرکدام
+    نگاشتِ `item_id → price`ِ خودشان را از `contact.default_price_list_id`
+    می‌ساختند — بی‌اعتنا به تاریخِ اجرا، فعال‌بودن، و هر چهار بُعدِ زمینه. یعنی
+    فرم یک عدد پر می‌کرد و `assert_within_policy` با قاعده‌ی **دیگری** اعتبارش را
+    می‌سنجید. حالا هر دو از همین‌جا می‌آیند.
+
+    `null` یعنی هیچ قاعده‌ای با این زمینه نخواند — که سیاستی هم برای نقض‌شدن
+    نیست (§۵۸). کلاینت در آن حالت به قیمتِ پایه‌ی کالا برمی‌گردد، همان رفتارِ
+    امروز.
+    """
+    return pricing.resolve_detail(
+        db,
+        item_id,
+        on=on,
         sale_type_id=sale_type_id,
         unit_id=unit_id,
         contact_id=contact_id,

@@ -5,7 +5,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.sales_ops import COMMISSION_BASES, FACTOR_KINDS, FACTOR_MODES, FACTOR_SCOPES, NOTE_KINDS
+from app.models.sales_ops import (
+    BULK_PRICE_MODES,
+    COMMISSION_BASES,
+    FACTOR_KINDS,
+    FACTOR_MODES,
+    FACTOR_SCOPES,
+    NOTE_KINDS,
+)
+from app.schemas.advanced_inventory import PriceListItemIn, PriceListItemOut
 
 
 class _Named(BaseModel):
@@ -117,9 +125,12 @@ class PricingFactorOut(_Named):
 # ─────────────────────── اعلامیه‌ی قیمت ────────────────────────
 
 
-class PriceListLineIn(BaseModel):
-    item_id: UUID
-    price: Decimal = Field(ge=0)
+#: ردیفِ اعلامیه **همان** `PriceListItemIn` است، نه یک شکلِ دوم.
+#:
+#: تا پیش از این فصل این‌جا یک `{item_id, price}`ِ کوتاه بود، و نتیجه‌اش این بود
+#: که صفحه‌ی «اعلامیه قیمت» فقط می‌توانست ردیفِ بی‌زمینه بسازد — یعنی ماتریسی که
+#: مدل و حل‌کننده‌اش وجود داشت، از هیچ‌جای محصول قابلِ ورود نبود.
+PriceListLineIn = PriceListItemIn
 
 
 class PriceAnnouncementIn(BaseModel):
@@ -137,7 +148,41 @@ class PriceAnnouncementOut(_Named):
     notes: str
     is_active: bool
     line_count: int = 0
-    lines: list[dict] = []
+    lines: list[PriceListItemOut] = []
+
+
+class BulkPriceIn(BaseModel):
+    """فرمانِ «تغییر فی» (§۴۲ §۴۳).
+
+    `rounding` جای «رقمِ اعشار»ِ دیالوگِ مرجع را می‌گیرد: قیمت این‌جا
+    `Numeric(18, 0)` است — ریالِ صحیح — پس اعشار روی آن معنا ندارد و تطبیقِ
+    صادقانه‌اش رند به مضربِ ریال است (۱، ۱۰، ۱۰۰، ۱۰۰۰…).
+    """
+
+    mode: str
+    value: Decimal = Field(default=Decimal(0), ge=0)
+    rounding: int = Field(default=1, ge=1, le=1_000_000)
+    #: دامنه‌ی فرمان. خالی یعنی «همه‌ی ردیف‌های این اعلامیه». `rule_ids` همان
+    #: «ردیف‌های انتخاب‌شده»ی گرید است.
+    rule_ids: list[UUID] = []
+    item_ids: list[UUID] = []
+    sale_type_id: UUID | None = None
+    currency_code: str | None = None
+
+    @field_validator("mode")
+    @classmethod
+    def _known_mode(cls, v: str) -> str:
+        if v not in BULK_PRICE_MODES:
+            raise ValueError("حالتِ تغییرِ گروهی نامعتبر است")
+        return v
+
+
+class BulkPriceOut(BaseModel):
+    announcement_id: UUID
+    changed: int
+    #: §۴۵ §۹۴ — «همین فرمان قبلاً اجرا شده بود و دوباره اعمال نشد». بدونِ این،
+    #: پاسخِ تکراری از «هیچ ردیفی واجدِ شرایط نبود» قابلِ تشخیص نیست.
+    replayed: bool = False
 
 
 # ─────────────────────── بسته‌ی محصول ─────────────────────────

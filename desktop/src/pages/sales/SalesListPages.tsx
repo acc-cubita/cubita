@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import {
   BadgePercent,
   Ban,
@@ -19,6 +19,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import {
+  bulkChangePrices,
   fetchBundles,
   fetchCommissionRules,
   fetchCommissionRuns,
@@ -31,11 +32,15 @@ import {
   fetchSaleTypes,
   fetchSalesInvoices,
   fetchSalesReturns,
+  newIdempotencyKey,
   voidNote,
   voidSalesReturn,
+  type BulkPriceMode,
   type CreditDebitNote,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
+import { NumberInput } from '../../components/NumberInput'
+import { PriceRuleTable } from '../../components/PriceRuleTable'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali } from '../../lib/jalali'
 
@@ -590,10 +595,64 @@ export function DiscountGroupListPage({ token }: { token: string }) {
 
 // ═════════════════ اعلامیه‌های قیمت ═════════════════
 
+/** حالت‌های دیالوگِ «تغییر فی»، با برچسبِ فارسی. */
+const BULK_MODE_LABELS: Record<BulkPriceMode, string> = {
+  increase_percent: 'افزایش — درصدی',
+  increase_amount: 'افزایش — مبلغی',
+  decrease_percent: 'کاهش — درصدی',
+  decrease_amount: 'کاهش — مبلغی',
+  fixed: 'مبلغِ ثابت',
+  none: 'بدونِ تغییر (فقط رند)',
+}
+
+/** دقتِ رند — «رقمِ اعشار» روی قیمتِ ریالیِ صحیح معنا ندارد. */
+const ROUNDING_STEPS = [1, 10, 100, 1_000, 10_000]
+
 export function PriceAnnouncementListPage({ token }: { token: string }) {
   const list = useAsync(() => fetchPriceAnnouncements(token), [token])
   const rows = list.data ?? []
   const pg = usePagination(rows, 20)
+  const [openId, setOpenId] = useState('')
+  const [bulkFor, setBulkFor] = useState('')
+  const [mode, setMode] = useState<BulkPriceMode>('increase_percent')
+  const [value, setValue] = useState('')
+  const [rounding, setRounding] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  // کلید به *این فرمان* گره می‌خورد نه به هر تلاشِ شبکه‌ای: اگر پاسخ گم شود و
+  // کاربر دوباره بزند، همان کلید می‌رود و «۲۰٪» دوباره اعمال نمی‌شود.
+  const bulkKey = useRef(newIdempotencyKey())
+
+  function openBulk(id: string) {
+    setBulkFor(id === bulkFor ? '' : id)
+    setMsg(null)
+    setValue('')
+    bulkKey.current = newIdempotencyKey()
+  }
+
+  async function applyBulk(id: string) {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const res = await bulkChangePrices(
+        token,
+        id,
+        { mode, value: Number(value) || 0, rounding },
+        bulkKey.current,
+      )
+      setMsg(
+        res.replayed
+          ? 'این فرمان قبلاً اجرا شده بود؛ دوباره اعمال نشد.'
+          : `${faInt(res.changed)} قاعده به‌روزرسانی شد.`,
+      )
+      if (!res.replayed) bulkKey.current = newIdempotencyKey()
+      list.reload()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <OpsPage
@@ -626,28 +685,87 @@ export function PriceAnnouncementListPage({ token }: { token: string }) {
                 <tr>
                   <th>نام</th>
                   <th>تاریخِ اجرا</th>
-                  <th>تعدادِ کالا</th>
+                  <th>تعدادِ قاعده</th>
                   <th>توضیح</th>
                   <th>وضعیت</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {pg.pageItems.map((p) => (
-                  <tr key={p.id}>
-                    <td className="card-title" data-label="نام">
-                      {p.name}
-                    </td>
-                    <td data-label="تاریخِ اجرا">{formatJalali(p.effective_from)}</td>
-                    <td className="num" data-label="تعدادِ کالا">
-                      {faInt(p.line_count)}
-                    </td>
-                    <td className="card-wide" data-label="توضیح">
-                      {p.notes || '—'}
-                    </td>
-                    <td data-label="وضعیت">
-                      <ActiveChip active={p.is_active} />
-                    </td>
-                  </tr>
+                  <Fragment key={p.id}>
+                    <tr className={p.is_active ? '' : 'acc-row--void'}>
+                      <td className="card-title" data-label="نام">
+                        <button type="button" className="link-like" onClick={() => setOpenId(openId === p.id ? '' : p.id)}>
+                          {p.name}
+                        </button>
+                      </td>
+                      <td data-label="تاریخِ اجرا">{formatJalali(p.effective_from)}</td>
+                      <td className="num" data-label="تعدادِ قاعده">
+                        {faInt(p.line_count)}
+                      </td>
+                      <td className="card-wide" data-label="توضیح">
+                        {p.notes || '—'}
+                      </td>
+                      <td data-label="وضعیت">
+                        <ActiveChip active={p.is_active} />
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" onClick={() => openBulk(p.id)}>
+                          <Percent size={13} /> تغییر فی
+                        </button>
+                      </td>
+                    </tr>
+                    {bulkFor === p.id && (
+                      <tr className="card-full">
+                        <td colSpan={6}>
+                          <div className="invoice-form form-full">
+                            <label>
+                              نحوه‌ی تغییر
+                              <select value={mode} onChange={(e) => setMode(e.target.value as BulkPriceMode)}>
+                                {(Object.keys(BULK_MODE_LABELS) as BulkPriceMode[]).map((m) => (
+                                  <option key={m} value={m}>{BULK_MODE_LABELS[m]}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              مقدار
+                              <NumberInput value={value} onChange={setValue} disabled={mode === 'none'} />
+                            </label>
+                            <label>
+                              رندِ فی
+                              <select value={rounding} onChange={(e) => setRounding(Number(e.target.value))}>
+                                {ROUNDING_STEPS.map((step) => (
+                                  <option key={step} value={step}>{`${faInt(step)} ریال`}</option>
+                                ))}
+                              </select>
+                              <span className="field-hint">
+                                فی عددِ صحیحِ ریالی است، پس به‌جای رقمِ اعشار، مضربِ رند انتخاب می‌شود.
+                              </span>
+                            </label>
+                            <div className="invoice-form-footer">
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={busy}
+                                onClick={() => void applyBulk(p.id)}
+                              >
+                                اعمال روی همه‌ی قاعده‌های این اعلامیه
+                              </button>
+                            </div>
+                          </div>
+                          {msg && <Note msg={{ kind: 'ok', text: msg }} />}
+                        </td>
+                      </tr>
+                    )}
+                    {openId === p.id && (
+                      <tr className="card-full">
+                        <td colSpan={6}>
+                          <PriceRuleTable token={token} rules={p.lines} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

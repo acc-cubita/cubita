@@ -4,15 +4,15 @@ import {
   createSalesInvoiceDirect,
   fetchContacts,
   fetchItemsLive,
-  fetchPriceListItems,
-  fetchPriceLists,
+  fetchSaleTypes,
   fetchStockLevels,
   fetchWarehousesLive,
   newIdempotencyKey,
+  resolvePrice,
   type ContactRecord,
   type ItemRecord,
   type MeResponse,
-  type PriceListRecord,
+  type SaleType,
   type StockLevel,
   type TreasuryTransactionRecord,
 } from '../api'
@@ -40,8 +40,15 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [warehouseId, setWarehouseId] = useState('')
   const [contactId, setContactId] = useState('') // '' = مشتریِ گذری (فروشِ نقدی)
-  const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
-  const [priceListId, setPriceListId] = useState('') // '' = قیمتِ پایه
+  //: **نوعِ فروش جای «لیستِ قیمت» را گرفت (§۴ §۵۴).**
+  //:
+  //: صندوق تا امروز یک لیستِ قیمت را دستی انتخاب می‌کرد و از رویش نگاشتِ
+  //: `item_id → price` می‌ساخت — بی‌اعتنا به تاریخِ اجرا، فعال‌بودن و بقیه‌ی
+  //: ابعاد. یعنی موتورِ سومِ قیمت، که با آن دو تای دیگر جوابِ یکسان نمی‌داد.
+  //: نوعِ فروش همان نیازِ واقعیِ صندوقدار را برمی‌آورد («برو روی قیمتِ عمده»)
+  //: ولی از همان حل‌کننده‌ای می‌گذرد که سرور اعتبارسنجی می‌کند.
+  const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
+  const [saleTypeId, setSaleTypeId] = useState('')
   const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
   const [taxRate, setTaxRate] = useState('10')
@@ -113,7 +120,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
       })
       .catch(() => {})
     fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.type !== 'supplier'))).catch(() => {})
-    fetchPriceLists(token).then((ls) => setPriceLists(ls.filter((l) => l.is_active))).catch(() => {})
+    fetchSaleTypes(token).then((ts) => setSaleTypes(ts.filter((t) => t.is_active))).catch(() => {})
     fetchStockLevels(token).then(setStockLevels).catch(() => setStockLevels([]))
     scanRef.current?.focus()
   }, [token])
@@ -125,32 +132,56 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
     return row ? Number(row.qty) : 0
   }
 
-  // با انتخابِ لیستِ قیمت، قیمت‌های آن لیست بار می‌شود و سبد دوباره قیمت‌گذاری می‌شود
+  // فیِ کالاهای سبد از حل‌کننده‌ی مشترک می‌آید — با نوعِ فروش و مشتریِ همین لحظه.
+  // تنها کالاهایی حل می‌شوند که در سبدند یا تازه اسکن شده‌اند؛ کلِ فهرست نه، چون
+  // یک صندوقِ چندهزارکالایی نباید سرِ هر تغییرِ نوعِ فروش هزار درخواست بفرستد.
+  const [pricedKey, setPricedKey] = useState('')
   useEffect(() => {
-    if (!priceListId) {
+    const key = `${saleTypeId}|${contactId}`
+    if (key === pricedKey) return
+    const ids = [...new Set(cart.map((l) => l.item.id))]
+    setPricedKey(key)
+    if (ids.length === 0) {
       setPriceMap(new Map())
       return
     }
-    fetchPriceListItems(token, priceListId)
-      .then((rows) => setPriceMap(new Map(rows.map((r) => [r.item_id, Number(r.price)]))))
-      .catch(() => setPriceMap(new Map()))
-  }, [token, priceListId])
+    let cancelled = false
+    void Promise.all(
+      ids.map(async (id) => {
+        const got = await resolvePrice(token, id, {
+          saleTypeId: saleTypeId || null,
+          contactId: contactId || null,
+        }).catch(() => null)
+        return [id, got ? Number(got.unit_price) : null] as const
+      }),
+    ).then((pairs) => {
+      if (cancelled) return
+      const next = new Map(pairs.filter(([, p]) => p != null) as [string, number][])
+      setPriceMap(next)
+      setCart((prev) =>
+        prev.map((l) => ({ ...l, unitPrice: next.get(l.item.id) ?? (Number(l.item.sales_price) || 0) })),
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [token, saleTypeId, contactId, cart, pricedKey])
 
-  // با انتخابِ مشتری، اگر لیستِ قیمتِ پیش‌فرض داشته باشد، خودکار همان انتخاب می‌شود
-  useEffect(() => {
-    const c = contacts.find((x) => x.id === contactId)
-    if (c && c.default_price_list_id) setPriceListId(c.default_price_list_id)
-  }, [contactId, contacts])
-
-  function priceFor(it: ItemRecord): number {
-    return priceMap.get(it.id) ?? Number(it.sales_price) ?? 0
+  /** فیِ یک کالا: از اعلامیه اگر قاعده‌ای بخواند، وگرنه قیمتِ پایه (§۵۸). */
+  async function priceFor(it: ItemRecord): Promise<number> {
+    const cached = priceMap.get(it.id)
+    if (cached != null) return cached
+    const got = await resolvePrice(token, it.id, {
+      saleTypeId: saleTypeId || null,
+      contactId: contactId || null,
+    }).catch(() => null)
+    if (got) {
+      const value = Number(got.unit_price)
+      setPriceMap((prev) => new Map(prev).set(it.id, value))
+      return value
+    }
+    return Number(it.sales_price) || 0
   }
-
-  // وقتی لیستِ قیمت عوض شد، قیمتِ ردیف‌های داخلِ سبد را هم به‌روزرسانی کن
-  useEffect(() => {
-    setCart((prev) => prev.map((l) => ({ ...l, unitPrice: priceMap.get(l.item.id) ?? Number(l.item.sales_price) ?? 0 })))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceMap])
 
   // نگاشتِ بارکد و کدِ کالا برای جست‌وجوی فوریِ سمتِ کلاینت (بدونِ رفت‌وبرگشتِ شبکه در هر اسکن)
   const codeMap = useMemo(() => {
@@ -163,6 +194,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   }, [items])
 
   function addItem(it: ItemRecord) {
+    let isNew = false
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.item.id === it.id)
       if (idx >= 0) {
@@ -170,8 +202,14 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
         copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 }
         return copy
       }
-      return [...prev, { item: it, qty: 1, unitPrice: priceFor(it) }]
+      isNew = true
+      // قیمتِ پایه فوراً می‌نشیند تا اسکن کُند نشود؛ فیِ مصوب پشتِ سر می‌رسد.
+      return [...prev, { item: it, qty: 1, unitPrice: Number(it.sales_price) || 0 }]
     })
+    if (!isNew) return
+    void priceFor(it).then((price) =>
+      setCart((prev) => prev.map((l) => (l.item.id === it.id ? { ...l, unitPrice: price } : l))),
+    )
   }
 
   // جست‌وجوی کد (بارکد/SKU) و افزودن به سبد — مشترکِ ورودِ دستی و دوربین.
@@ -240,6 +278,9 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
           warehouse_id: warehouseId,
           tax_rate: taxRateNum,
           contact_id: contactId || null,
+          //: بدونِ این، صندوق فیِ «عمده» را پر می‌کرد و سرور آن را در زمینه‌ی
+          //: پیش‌فرض اعتبارسنجی می‌کرد — همان ناهم‌خوانی‌ای که این فصل می‌بندد.
+          sale_type_id: saleTypeId || null,
           invoice_discount: discountAmount,
           rounding: roundAdjust,
           lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
@@ -279,6 +320,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
           warehouse_id: warehouseId,
           tax_rate: taxRateNum,
           contact_id: contactId || txn.contact_id,
+          sale_type_id: saleTypeId || null,
           invoice_discount: discountAmount,
           rounding: roundAdjust,
           lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
@@ -331,13 +373,13 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
             ))}
           </select>
         </label>
-        {priceLists.length > 0 && (
+        {saleTypes.length > 0 && (
           <label>
-            لیست قیمت
-            <select value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>
-              <option value="">قیمتِ پایه</option>
-              {priceLists.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+            نوع فروش
+            <select value={saleTypeId} onChange={(e) => setSaleTypeId(e.target.value)}>
+              <option value="">عادی</option>
+              {saleTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
           </label>
