@@ -17,6 +17,8 @@ from app.models.invoices import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from app.models.moadian import MoadianSettings
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
@@ -30,6 +32,7 @@ from app.services.common import number_lines
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.credit import assert_within_credit_limit
 from app.services.period_close import assert_period_open
+from app.tenant_context import require_session_tenant
 
 
 def vat_payable_account(db: Session):
@@ -228,7 +231,13 @@ def lock_items(db: Session, item_ids) -> None:
 
 
 def post_sales_invoice(
-    db: Session, data: SalesInvoiceIn, user: User, *, enforce_credit: bool = True
+    db: Session,
+    data: SalesInvoiceIn,
+    user: User,
+    *,
+    enforce_credit: bool = True,
+    move_inventory: bool = True,
+    issue_accounting: bool = True,
 ) -> SalesInvoice:
     """فاکتورِ فروش را ثبت می‌کند.
 
@@ -236,10 +245,32 @@ def post_sales_invoice(
     قبلاً انجام شده و کالایش رفته؛ ردّش سرِ همگام‌سازی یعنی نابودکردنِ کارِ
     فروشنده. شرحِ کامل در [گاردِ اعتبار](credit.py).
     """
+    if move_inventory and data.warehouse_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "برای خروج هم‌زمان موجودی، انتخاب انبار الزامی است",
+        )
     assert_period_open(db, data.invoice_date)
     #: §۱۵ — انبارِ غیرفعال در ثبتِ تازه انتخاب نمی‌شود. تا امروز این پرچم فقط در
     #: رسیدِ انبارِ خرید سنجیده می‌شد، پس «غیرفعال» یک برچسبِ نیمه‌کاره بود.
     warehouses.assert_usable(db, data.warehouse_id, action="فاکتور فروش")
+
+    customer = db.get(Contact, data.contact_id) if data.contact_id else None
+    if data.contact_id and customer is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مشتری انتخاب‌شده یافت نشد")
+    customer_snapshot = {} if customer is None else {
+        key: (getattr(customer, key, None) or "") for key in (
+            "name", "name2", "national_id", "economic_code", "registration_no",
+            "tax_id", "postal_code", "phone", "address",
+        )
+    }
+    tenant = db.get(Tenant, require_session_tenant(db))
+    taxpayer = db.query(MoadianSettings).first()
+    seller_snapshot = {
+        "name": tenant.name if tenant else "",
+        "economic_code": (taxpayer.economic_code if taxpayer else "") or "",
+        "national_id": (taxpayer.national_id if taxpayer else "") or "",
+    }
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
@@ -251,7 +282,7 @@ def post_sales_invoice(
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
-        if not item.is_service:
+        if move_inventory and not item.is_service:
             requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
 
     #: §۷ §۵۳ — موادِ اولیه و موادِ بسته‌بندی موجودی دارند ولی فروختنی نیستند.
@@ -308,10 +339,15 @@ def post_sales_invoice(
 
     total_amount = Decimal(0)
     total_discount = Decimal(0)
+    total_additions = Decimal(0)
+    total_duties = Decimal(0)
     total_cost = Decimal(0)
     invoice_lines: list[SalesInvoiceLine] = []
-    stock_moves: list[StockLedger] = []
     #: خالصِ هر ردیف — پایه‌ی مالیاتِ همان ردیف.
+    #:
+    #: `stock_moves` این‌جا نیست چون حرکتِ انبار دیگر مالِ فاکتور نیست؛ سندِ
+    #: «خروج انبار» مالکش است. ولی `line_nets` ماند، چون مالیات همچنان
+    #: ردیف‌به‌ردیف حساب می‌شود.
     line_nets: list[Decimal] = []
 
     for idx, line in enumerate(data.lines):
@@ -325,15 +361,22 @@ def post_sales_invoice(
         line_nets.append(line_net)
         total_amount += line_net
         total_discount += line_discount
-        total_cost += line.qty * unit_cost
+        total_additions += Decimal(line.addition or 0)
+        total_duties += Decimal(line.duty_amount or 0)
         invoice_lines.append(
             SalesInvoiceLine(
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_price=line.unit_price,
                 discount=line_discount,
+                addition=line.addition,
+                duty_amount=line.duty_amount,
                 unit_cost=unit_cost,
                 description=line.description,
+                item_code_snapshot=item.sku,
+                item_name_snapshot=item.name,
+                unit_snapshot=item.unit,
+                source_quotation_line_id=line.source_quotation_line_id,
                 #: وضعیتِ مالیاتی **در لحظه‌ی فروش** قفل می‌شود. اگر گزارش بعداً از
                 #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
                 #: نشان می‌داد. همان دلیلی که `tax_amount` کنارِ `tax_rate` می‌نشیند.
@@ -354,17 +397,6 @@ def post_sales_invoice(
                 price_rule_id=price_rules[idx].id if price_rules[idx] is not None else None,
             )
         )
-        if not item.is_service:
-            stock_moves.append(
-                StockLedger(
-                    item_id=line.item_id,
-                    warehouse_id=data.warehouse_id,
-                    qty=-line.qty,
-                    unit_cost=unit_cost,
-                    entry_date=data.invoice_date,
-                    source_type="sales_invoice",
-                )
-            )
 
     #: **مالیات ردیف‌به‌ردیف، نه روی جمعِ فاکتور.**
     #:
@@ -379,13 +411,14 @@ def post_sales_invoice(
 
     # گِرد کردن: تعدیلِ مبلغِ نهایی پس از مالیات. مبلغِ قابل‌پرداخت نباید منفی شود.
     rounding = Decimal(data.rounding or 0)
-    if total_amount + tax_amount + rounding < 0:
+    final_amount = total_amount + total_additions + total_duties + tax_amount + rounding
+    if final_amount < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "گِرد کردن نمی‌تواند مبلغِ قابل‌پرداخت را منفی کند")
 
     #: گاردِ سقفِ اعتبار این‌جاست نه بالاتر، چون به مبلغِ نهایی (پس از تخفیف، مالیات
     #: و گِرد) نیاز دارد — همان عددی که واقعاً به حسابِ دریافتنی می‌نشیند.
     assert_within_credit_limit(
-        db, data.contact_id, total_amount + tax_amount + rounding, enforce=enforce_credit
+        db, data.contact_id, final_amount, enforce=enforce_credit
     )
 
     broker_id, broker_commission = resolve_broker(db, data.broker_id, total_amount)
@@ -393,95 +426,35 @@ def post_sales_invoice(
     sale_type_id = resolve_sale_type_id(db, data.sale_type_id)
 
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
-    receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
-    journal_lines = [
-        JournalLine(
-            account_id=receivable_or_cash.id,
-            debit=total_amount + tax_amount + rounding,  # مشتری خالص + مالیات ± گِرد را می‌پردازد
-            credit=0,
-            description="بابت فروش کالا/خدمت",
-        ),
-        JournalLine(
-            account_id=_get_account(db, cc.SALES_REVENUE).id,
-            debit=0,
-            credit=total_amount,
-            description="بابت فروش کالا/خدمت",
-        ),
-    ]
-    if tax_amount > 0:
-        journal_lines.append(
-            JournalLine(
-                account_id=vat_payable_account(db).id,
-                debit=0,
-                credit=tax_amount,
-                description="مالیات بر ارزش افزوده فروش",
-            )
-        )
-    if rounding != 0:
-        # رند به بالا (rounding>0) درآمدِ ناچیز است → بستانکار؛ رند به پایین بدهکار.
-        journal_lines.append(
-            JournalLine(
-                account_id=sales_rounding_account(db).id,
-                debit=(-rounding if rounding < 0 else Decimal(0)),
-                credit=(rounding if rounding > 0 else Decimal(0)),
-                description="گِرد کردنِ مبلغِ فاکتور",
-            )
-        )
-    if total_cost > 0:
-        journal_lines.append(
-            JournalLine(
-                account_id=_get_account(db, cc.COGS).id,
-                debit=total_cost,
-                credit=0,
-                description="بهای تمام‌شده کالای فروش‌رفته",
-            )
-        )
-        journal_lines.append(
-            JournalLine(
-                #: معینِ **همان انبار** (§۹). اگر انبار نگاشتِ خودش را نداشته
-                #: باشد، همان حسابِ پیش‌فرض برمی‌گردد — یعنی رفتارِ پیشین.
-                account_id=warehouses.inventory_account_id(db, data.warehouse_id),
-                debit=0,
-                credit=total_cost,
-                description="کسر از موجودی کالا بابت فروش",
-            )
-        )
-
-    if cost_center_id is not None:
-        for line in journal_lines:
-            line.cost_center_id = cost_center_id
-
-    entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
-    journal_entry = JournalEntry(
-        number=entry_number,
-        entry_date=data.invoice_date,
-        description=f"فاکتور فروش شماره {number}",
-        source_type="sales_invoice",
-        created_by_id=user.id,
-        lines=number_lines(journal_lines),
-    )
-    tafsili.assert_entry_has_tafsili(db, journal_entry)
-    db.add(journal_entry)
-    db.flush()
 
     invoice = SalesInvoice(
         number=number,
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
+        customer_snapshot=customer_snapshot,
+        seller_snapshot=seller_snapshot,
+        customer_name2=data.customer_name2,
+        delivery_location=data.delivery_location,
+        receivable_account_id=data.receivable_account_id,
+        settlement_terms=data.settlement_terms,
+        statement_date=data.statement_date,
         cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
         total_discount=total_discount,
         invoice_discount=invoice_discount,
+        total_additions=total_additions,
+        total_duties=total_duties,
         rounding=rounding,
         total_cost=total_cost,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
         currency_code=(data.currency_code or None),
         exchange_rate=data.exchange_rate,
-        journal_entry_id=journal_entry.id,
+        journal_entry_id=None,
         source_order_id=data.source_order_id,
+        source_quotation_id=data.source_quotation_id,
         broker_id=broker_id,
         broker_commission=broker_commission,
         salesperson_id=salesperson_id,
@@ -494,16 +467,42 @@ def post_sales_invoice(
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
     db.flush()
-    for move in stock_moves:
-        move.source_id = invoice.id
-        db.add(move)
+    if issue_accounting and move_inventory:
+        # سازگاریِ فراخوان‌های قدیمی: هماهنگ‌سازی خودکار باقی می‌ماند، اما دیگر
+        # حرکت/COGS روی خود فاکتور نیست و دو سند مستقل ساخته می‌شوند.
+        from app.services.sales_invoices import finalize_immediate_sale
+
+        finalize_immediate_sale(db, invoice, data.warehouse_id, user)
+    elif issue_accounting:
+        from app.services.sales_invoices import issue_sales_invoice_journal
+
+        issue_sales_invoice_journal(db, invoice.id, user)
+    elif move_inventory:
+        from app.schemas.invoices import WarehouseIssueIn, WarehouseIssueLineIn
+        from app.services.warehouse_issues import create_warehouse_issue
+
+        physical_lines = [line for line in invoice.lines if not line.item.is_service]
+        if physical_lines:
+            create_warehouse_issue(
+                db,
+                invoice.id,
+                WarehouseIssueIn(
+                    issue_date=invoice.invoice_date,
+                    warehouse_id=data.warehouse_id,
+                    lines=[
+                        WarehouseIssueLineIn(sales_invoice_line_id=line.id, qty=line.qty)
+                        for line in physical_lines
+                    ],
+                ),
+                user,
+            )
 
     # کسبِ خودکارِ امتیازِ وفاداری — فقط اگر مشتری دارد و در تنظیماتِ CRM فعال باشد.
     # عمداً بی‌اثر بر مسیرِ اصلیِ فروش است (تابع خودش بی‌صدا رد می‌شود اگر غیرفعال باشد).
     from app.services import crm as crm_service
 
     crm_service.award_purchase_points(
-        db, data.contact_id, total_amount + tax_amount + rounding, data.invoice_date, user
+        db, data.contact_id, final_amount, data.invoice_date, user
     )
 
     db.flush()
@@ -517,10 +516,27 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
 
     if data.warehouse_id is None and data.contact_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انتخاب تأمین‌کننده برای فاکتور خرید الزامی است")
-    if data.warehouse_id is None and data.contact_id is not None:
-        supplier = db.get(Contact, data.contact_id)
-        if supplier is None or supplier.type not in ("supplier", "both"):
+    supplier = db.get(Contact, data.contact_id) if data.contact_id is not None else None
+    if data.contact_id is not None and supplier is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تأمین‌کننده انتخاب‌شده یافت نشد")
+    if data.warehouse_id is None and supplier is not None:
+        if supplier.type not in ("supplier", "both"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب انتخاب‌شده تأمین‌کننده نیست")
+
+    supplier_snapshot = {
+        key: (getattr(supplier, key, None) or "")
+        for key in (
+            "name", "entity_type", "national_id", "economic_code", "registration_no",
+            "tax_id", "postal_code", "phone", "address",
+        )
+    } if supplier is not None else {}
+    tenant = db.get(Tenant, require_session_tenant(db))
+    taxpayer = db.query(MoadianSettings).first()
+    buyer_snapshot = {
+        "name": tenant.name if tenant is not None else "",
+        "economic_code": (taxpayer.economic_code if taxpayer is not None else "") or "",
+        "national_id": (taxpayer.national_id if taxpayer is not None else "") or "",
+    }
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
     for line in data.lines:
@@ -757,6 +773,8 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         goods_in_transit=goods_pending,
         contact_id=data.contact_id,
         supplier_invoice_number=data.supplier_invoice_number.strip(),
+        supplier_snapshot=supplier_snapshot,
+        buyer_snapshot=buyer_snapshot,
         cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
@@ -804,6 +822,60 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     db.flush()
     db.refresh(invoice)
     return invoice
+
+
+def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
+    """یک پیش‌نویسِ تازه می‌سازد، بی‌آنکه هویت یا وابستگی‌های سند قبلی را کپی کند.
+
+    تخفیف/اضافات/عوارضِ سربرگ هنگام ثبت بین ردیف‌ها تسهیم شده‌اند. بنابراین
+    رونوشت، مقادیر نهایی ردیف‌ها را می‌گیرد و مقادیر سربرگ را صفر می‌کند؛ کپیِ
+    هم‌زمان هر دو، همان تعدیل را برای بار دوم اعمال می‌کرد.
+    """
+    invoice = db.get(PurchaseInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
+
+    rate = Decimal(invoice.exchange_rate or 1)
+    if rate <= 0:
+        rate = Decimal(1)
+
+    def transaction_amount(value) -> Decimal:
+        return (Decimal(value or 0) / rate).quantize(Decimal("0.01"))
+
+    return {
+        "source_invoice_number": invoice.number,
+        "contact_id": invoice.contact_id,
+        "cost_center_id": invoice.cost_center_id,
+        "description": invoice.description,
+        "description2": invoice.description2,
+        "tax_rate": Decimal(invoice.tax_rate),
+        "currency_code": invoice.currency_code,
+        "exchange_rate": rate,
+        "invoice_discount": Decimal(0),
+        "invoice_addition": Decimal(0),
+        "duty_amount": Decimal(0),
+        "lines": [
+            {
+                "item_id": line.item_id,
+                "qty": Decimal(line.qty),
+                "unit_cost": transaction_amount(line.unit_cost),
+                "discount": transaction_amount(line.discount),
+                "addition": transaction_amount(line.addition),
+                "duty_amount": transaction_amount(line.duty_amount),
+                "description": line.description,
+            }
+            for line in invoice.lines
+        ],
+        "cleared_fields": [
+            "شماره داخلی فاکتور",
+            "شماره فاکتور تأمین‌کننده",
+            "تاریخ فاکتور",
+            "رسیدهای انبار",
+            "اعلامیه‌های پرداخت",
+            "تخصیص‌های تسویه",
+            "سند حسابداری",
+        ],
+    }
 
 
 def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> StockAdjustment:

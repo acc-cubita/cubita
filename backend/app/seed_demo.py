@@ -28,6 +28,7 @@ from app.services import chart_codes as cc
 from app.services.banking import create_bank_transaction, create_check
 from app.services.common import get_account, make_journal_entry
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.sales_invoices import finalize_immediate_sale
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 DEMO_TENANT_SLUG = "default"
@@ -287,7 +288,7 @@ def seed_demo() -> None:
                 continue
             tax = Decimal(10) if rng.random() < 0.5 else Decimal(0)
             channel = "آنلاین" if wh is online_wh else "حضوری"
-            post_sales_invoice(
+            invoice = post_sales_invoice(
                 db,
                 SalesInvoiceIn(
                     invoice_date=d(days_ago),
@@ -298,7 +299,10 @@ def seed_demo() -> None:
                     tax_rate=tax,
                 ),
                 owner,
+                move_inventory=False,
+                issue_accounting=False,
             )
+            finalize_immediate_sale(db, invoice, wh.id, owner)
         db.commit()
 
         # ── دریافت/پرداختِ بانکی (تسویه‌ی بخشی از مشتریان و تأمین‌کنندگان) ─────

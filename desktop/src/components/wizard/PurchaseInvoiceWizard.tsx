@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../../electron.d'
-import type { PurchaseInvoiceRecord } from '../../api'
+import type { PurchaseInvoiceDuplicateDraft } from '../../api'
 import { usePurchaseInvoiceDraft, type PurchaseInvoiceDraft } from '../../lib/purchaseInvoiceDraft'
 import { NumberInput } from '../NumberInput'
 import { JalaliDatePicker } from '../JalaliDatePicker'
@@ -26,7 +26,7 @@ export function PurchaseInvoiceWizard({
   warehouses: WarehouseCache[]
   items: ItemCache[]
   onQueued: () => void
-  prefill?: PurchaseInvoiceRecord | null
+  prefill?: PurchaseInvoiceDuplicateDraft | null
   onPrefillConsumed?: () => void
 }) {
   const d = usePurchaseInvoiceDraft({ token, warehouses, items, onQueued, prefill, onPrefillConsumed })

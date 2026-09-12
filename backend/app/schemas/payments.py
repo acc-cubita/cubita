@@ -74,8 +74,10 @@ class PaymentRelatedDocumentIn(BaseModel):
         self.document_type = self.document_type.strip()
         if not self.document_type:
             raise ValueError("نوع سند مرتبط لازم است")
-        if self.allocated_amount < 0:
-            raise ValueError("مبلغ تخصیص نمی‌تواند منفی باشد")
+        if self.allocated_amount != 0:
+            raise ValueError(
+                "سند مرتبط در اعلامیه فقط مرجع است؛ مبلغ تخصیص را موتور تسویه طرف حساب ثبت می‌کند"
+            )
         return self
 
 

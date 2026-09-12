@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
 from app.services.common import number_lines
@@ -101,6 +101,13 @@ def _voided_sources(db: Session) -> set:
         #: منحرف می‌شود** — خطایی که هیچ ترازی لو نمی‌دهد چون سند متوازن است.
         (SalesReturn, "sales_return"),
         (PurchaseReturn, "purchase_return"),
+        #: **و خروجِ انبار.** از وقتی حرکتِ انبارِ فروش از فاکتور به این سند
+        #: منتقل شد، نبودنش این‌جا یعنی حرکتِ خروجِ باطل‌شده در بازپخش شمرده
+        #: می‌شود: مقدارِ پایه غلط می‌ماند و **خریدِ بعدی میانگین را منحرف
+        #: می‌کند**. ردیفِ جبرانیِ `void` به‌تنهایی کافی نیست — خودِ حرکتِ اصلی
+        #: هم باید حذف شود، همان چیزی که docstringِ `recompute_average_cost`
+        #: می‌گوید: «میانگین باید همانی باشد که اگر آن سند اصلاً ثبت نشده بود».
+        (WarehouseIssue, "warehouse_issue"),
     ):
         for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
             voided.add((source_type, doc_id))
@@ -339,10 +346,33 @@ def _apply_void(
 
 def void_sales_invoice(
     db: Session, invoice_id: UUID, *, reason: str, user: User, void_date: date_ | None = None
-) -> JournalEntry:
+) -> JournalEntry | None:
     invoice = db.get(SalesInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
+    if invoice.journal_entry_id is None:
+        _guard_not_already_voided(invoice)
+        _guard_no_active_returns(db, invoice, "sales_invoice")
+        invoice.voided_at = datetime.now(timezone.utc)
+        invoice.voided_by_id = user.id
+        invoice.void_reason = reason.strip()
+        db.flush()
+        return None
+    # سازگاریِ مسیر سرویس قدیمی که فروش فوری را یک‌مرحله‌ای می‌ساخت: اسنادِ خروج
+    # همچنان جدا و با معکوس خودشان باطل می‌شوند. مسیر HTTP جدید قبل از رسیدن به
+    # این تابع وابستگی فعال را مسدود می‌کند و از کاربر اقدام صریح می‌خواهد.
+    active_issues = db.query(WarehouseIssue).filter(
+        WarehouseIssue.sales_invoice_id == invoice.id,
+        WarehouseIssue.voided_at.is_(None),
+    ).all()
+    if active_issues:
+        from app.services.warehouse_issues import void_warehouse_issue
+
+        for issue in active_issues:
+            void_warehouse_issue(
+                db, issue.id, reason=reason, user=user,
+                void_date=void_date or invoice.invoice_date,
+            )
     return _apply_void(
         db,
         invoice,

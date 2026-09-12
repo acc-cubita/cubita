@@ -34,8 +34,8 @@ export function SalesInvoiceForm({
 
   return (
     <SectionCard icon={ShoppingCart} title="ثبت فاکتور فروش">
-      {warehouses.length === 0 || items.length === 0 ? (
-        <p className="hint">قبل از ثبت فاکتور، یک‌بار «هم‌گام‌سازی» کنید تا انبار و کالاها در دسترس باشند.</p>
+      {items.length === 0 ? (
+        <p className="hint">قبل از ثبت فاکتور، یک‌بار «هم‌گام‌سازی» کنید تا کالاها در دسترس باشند.</p>
       ) : (
         <form
           className="invoice-form"
@@ -45,8 +45,9 @@ export function SalesInvoiceForm({
           }}
         >
           <label>
-            انبار
+            انبار پیشنهادی (اختیاری)
             <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+              <option value="">— خروج انبار بعداً تعیین می‌شود —</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
@@ -93,6 +94,31 @@ export function SalesInvoiceForm({
               )}
             </label>
           )}
+          <label>
+            نام دوم مشتری (اختیاری)
+            <input value={d.customerName2} onChange={(e) => d.setCustomerName2(e.target.value)} maxLength={200} />
+          </label>
+          <label>
+            محل تحویل (اختیاری)
+            <input value={d.deliveryLocation} onChange={(e) => d.setDeliveryLocation(e.target.value)} />
+          </label>
+          <label>
+            شرایط تسویه
+            <select value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
+              <option value="credit">نسیه</option>
+              <option value="cash">نقدی</option>
+              <option value="mixed">نقدی/نسیه</option>
+            </select>
+            <span className="field-hint">نقدی بودن، وصول را خودکار نمی‌سازد؛ رسید دریافت جدا ثبت می‌شود.</span>
+          </label>
+          <label>
+            تاریخ سررسید/صورتحساب (اختیاری)
+            <JalaliDatePicker value={d.statementDate} onChange={d.setStatementDate} />
+          </label>
+          <label>
+            شرح فاکتور (اختیاری)
+            <input value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
+          </label>
           {d.salespeople.length > 0 && (
             <label>
               فروشنده (اختیاری)
@@ -190,6 +216,8 @@ export function SalesInvoiceForm({
                   <th>موجودی انبار</th>
                   <th>قیمت واحد</th>
                   <th>تخفیف</th>
+                  <th>اضافات</th>
+                  <th>عوارض</th>
                   <th>مبلغ</th>
                   <th></th>
                 </tr>
@@ -238,6 +266,12 @@ export function SalesInvoiceForm({
                       </td>
                       <td data-label="تخفیف">
                         <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />
+                      </td>
+                      <td data-label="اضافات">
+                        <NumberInput value={line.addition} onChange={(v) => d.updateLine(i, { addition: v })} placeholder="۰" />
+                      </td>
+                      <td data-label="عوارض">
+                        <NumberInput value={line.dutyAmount} onChange={(v) => d.updateLine(i, { dutyAmount: v })} placeholder="۰" />
                       </td>
                       <td data-label="مبلغ">
                         <span className={`line-amount${line.itemId ? '' : ' muted'}`}>
@@ -308,6 +342,8 @@ export function SalesInvoiceForm({
               {d.discountTotal > 0 && <span>تخفیف سطری: {d.discountTotal.toLocaleString('fa-IR')}</span>}
               {d.invoiceDiscountAmount > 0 && <span>تخفیف کل: {d.invoiceDiscountAmount.toLocaleString('fa-IR')}</span>}
               <span>جمع خالص: {d.total.toLocaleString('fa-IR')}</span>
+              {d.additionsTotal > 0 && <span>اضافات: {d.additionsTotal.toLocaleString('fa-IR')}</span>}
+              {d.dutiesTotal > 0 && <span>عوارض: {d.dutiesTotal.toLocaleString('fa-IR')}</span>}
               <span>مالیات ({d.taxRateNum.toLocaleString('fa-IR')}٪): {d.taxAmount.toLocaleString('fa-IR')}</span>
               <span className="invoice-total">
                 قابل پرداخت: {d.grandTotal.toLocaleString('fa-IR')}

@@ -42,11 +42,14 @@ def get_sales_summary(db: Session) -> dict:
     فقط فاکتورهای باطل‌نشده. سود ناخالص = خالص − بهای تمام‌شده؛ مالیات درآمد نیست و
     در سود نمی‌آید.
     """
-    count, net, tax, cost = (
+    count, net, tax, additions, duties, rounding, cost = (
         db.query(
             func.count(SalesInvoice.id),
             func.coalesce(func.sum(SalesInvoice.total_amount), 0),
             func.coalesce(func.sum(SalesInvoice.tax_amount), 0),
+            func.coalesce(func.sum(SalesInvoice.total_additions), 0),
+            func.coalesce(func.sum(SalesInvoice.total_duties), 0),
+            func.coalesce(func.sum(SalesInvoice.rounding), 0),
             func.coalesce(func.sum(SalesInvoice.total_cost), 0),
         )
         .filter(SalesInvoice.voided_at.is_(None))
@@ -55,13 +58,16 @@ def get_sales_summary(db: Session) -> dict:
 
     cutoff = date.today() - timedelta(days=30)
     last30 = (
-        db.query(func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0))
+        db.query(func.coalesce(func.sum(
+            SalesInvoice.total_amount + SalesInvoice.tax_amount + SalesInvoice.total_additions
+            + SalesInvoice.total_duties + SalesInvoice.rounding
+        ), 0))
         .filter(SalesInvoice.voided_at.is_(None), SalesInvoice.invoice_date >= cutoff)
         .scalar()
     )
 
     net, tax, cost = Decimal(net), Decimal(tax), Decimal(cost)
-    with_tax = net + tax
+    with_tax = net + tax + Decimal(additions) + Decimal(duties) + Decimal(rounding)
     profit = net - cost
     margin = (profit / net * 100) if net > 0 else Decimal(0)
     avg = (with_tax / count) if count else Decimal(0)
@@ -966,6 +972,8 @@ def get_cash_flow(db: Session, date_from: date | None, date_to: date | None) -> 
 STOCK_SOURCE_LABELS = {
     "purchase_invoice": "فاکتور خرید",
     "sales_invoice": "فاکتور فروش",
+    "warehouse_receipt": "رسید انبار خرید",
+    "warehouse_issue": "خروج انبار فروش",
     "purchase_return": "برگشت از خرید",
     "sales_return": "برگشت از فروش",
     "adjustment": "تعدیل انبار",
@@ -1241,7 +1249,7 @@ def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | N
                 "unit_cost": unit_cost,
                 #: **به ریالِ صحیح، چون این عدد باید با دفتر بخواند.**
                 #:
-                #: `average_cost` از مهاجرتِ ۰۱۲۵ چهار رقم اعشار دارد (بهای
+                #: `average_cost` از مهاجرتِ ۰۱۲۸ چهار رقم اعشار دارد (بهای
                 #: تمام‌شده نتیجه‌ی یک تقسیم است و ریالِ صحیح ده‌ها ریال خطا
                 #: می‌ساخت). ولی دفتر به ریالِ صحیح می‌نویسد، پس اگر این‌جا
                 #: کسر بماند جمعِ گزارش با ماندهٔ «موجودی کالا» مو نمی‌زند

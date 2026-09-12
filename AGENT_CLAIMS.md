@@ -104,8 +104,14 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude (hesabdari-93) | ادغامِ پنج فصلِ کدکس با master؛ `0114`–`0116` → `0123`–`0125`، `voiding.py`، `warehouse_issues.py`، `sales_invoices.py`، `inventory.py`؛ آزادسازی `pytest` | فرودِ شاخه‌ی سرگردانِ کدکس: شماره‌های متصادم، ستونِ دوبارساخته، انحرافِ میانگینِ بها، و چهار گاردِ master که در ادغام برمی‌گشتند | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0122`، `services/pricing.py`، `routers/advanced_inventory.py`، `routers/sales_ops.py`، `audit.py`، `PriceListsPanel.tsx`، `SalesOpsPages.tsx`، `PosPage.tsx`، `salesInvoiceDraft.ts`؛ آزادسازی `pytest` | فصلِ «اعلامیه قیمت»: ماتریسِ قیمت قابلِ ورود شد، سه موتورِ قیمت یکی شد، مسیری که ماتریس را پاک می‌کرد بسته شد، تغییرِ گروهیِ فی با یکتاسازی | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0121`، `services/returns.py`، `voiding.py`، `open_items.py`، `reports.py`، `credit.py`، `chart_codes.py`، UI برگشت و مِسترِ علت؛ آزادسازی `pytest` | فصلِ «فاکتور برگشتی»: تخصیصِ سطحِ ردیف، ابطالِ برگشت (و رفعِ قفلِ ابدیِ فاکتور)، حسابِ ۴۱۰۷، علتِ برگشت | ۱۴۰۵/۰۶/۲۱ |
+| Codex | مهاجرت `0116`، فاکتور فروش/خروج مستقل، UI، مستندات و تست‌ها؛ آزادسازی `pytest` و probe | جداسازی فاکتور/سند/خروج/وصول، Snapshot و وضعیت‌های مستقل | ۱۴۰۵/۰۶/۲۰ |
+| Codex | مهاجرت `0115`، مسیر پیش‌فاکتور و Source Link فروش، UI، مستندات و تست‌ها؛ آزادسازی `pytest` و probe | تبدیل جزئی امن، Snapshot تاریخی، خاتمه/بازگشایی، تکثیر و جداسازی خروج انبار | ۱۴۰۵/۰۶/۲۰ |
+| Codex | مهاجرت `0114`، مسیر Purchase/print، UI فهرست خرید، مستندات و تست‌ها؛ آزادسازی `pytest` و probe | Snapshot تاریخی طرفین، Trace پرداخت/سند و گارد ابطال وابستگی | ۱۴۰۵/۰۶/۲۰ |
+| Codex | مسیر Payment/Purchase در بک‌اند، UI اعلامیه پرداخت، مستندات و تست‌ها؛ آزادسازی شماره `0114` و `pytest` | Reference بدون تخصیص زودهنگام، مجوز درست ابطال و ناوبری سند حسابداری | ۱۴۰۵/۰۶/۲۰ |
+| Codex | مسیر خرید/رسید انبار در بک‌اند و `desktop/src/`؛ مستندات و تست‌ها؛ آزادسازی شماره `0114` | ابطال رسید در UI، idempotency صدور، و همگامی مانده بچ با ابطال | ۱۴۰۵/۰۶/۲۰ |
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/open_items.py`, `services/settlements.py`, `models/settlement.py`, `0114_counterparty_settlement.py`, `TreasuryOpsPages.tsx` + merge با master | تسویه حساب طرف مقابل؛ شماره‌ی مهاجرت ۰۱۱۴ برداشته شد | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |

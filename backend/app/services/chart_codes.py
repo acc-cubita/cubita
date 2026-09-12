@@ -52,6 +52,8 @@ SALES_ROUNDING = "sales_rounding"  # تعدیلِ گِرد کردنِ مبلغِ
 #: می‌گرفت و دو حساب با یک معنی کنارِ هم می‌نشست. ۴۱۰۷ در seed، قالب‌ها و
 #: مهاجرت‌ها آزاد است، پس هیچ‌کس کدِ دوم نمی‌گیرد.
 SALES_RETURN = "sales_return"
+SALES_ADDITIONS = "sales_additions"
+SALES_DISCOUNT = "sales_discount"
 FX_GAIN = "fx_gain"  # سودِ تسعیرِ ارز (درآمد)
 FX_LOSS = "fx_loss"  # زیانِ تسعیرِ ارز (هزینه)
 BANK_FEE = "bank_fee"  # کارمزد و هزینه‌های بانکی (هزینه) — کارمزدِ تسویه‌ی کارتخوان هم اینجا می‌نشیند
@@ -116,6 +118,8 @@ DEFAULT_CODE_BY_ROLE = {
     SALES_REVENUE: "4101",
     SALES_ROUNDING: "4102",
     SALES_RETURN: "4107",
+    SALES_ADDITIONS: "4198",
+    SALES_DISCOUNT: "4199",
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
     EMPLOYEE_LOAN: "1111",

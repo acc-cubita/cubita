@@ -191,7 +191,10 @@ def rfm_segments(db: Session, today: date | None = None) -> dict:
             Contact.name.label("name"),
             func.count(SalesInvoice.id).label("freq"),
             func.max(SalesInvoice.invoice_date).label("last"),
-            func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0).label("monetary"),
+            func.coalesce(func.sum(
+                SalesInvoice.total_amount + SalesInvoice.tax_amount + SalesInvoice.total_additions
+                + SalesInvoice.total_duties + SalesInvoice.rounding
+            ), 0).label("monetary"),
         )
         .join(Contact, Contact.id == SalesInvoice.contact_id)
         .filter(SalesInvoice.contact_id.isnot(None))
@@ -243,7 +246,10 @@ def rfm_segments(db: Session, today: date | None = None) -> dict:
 def _annual_spend(db: Session, contact_id: UUID, today: date) -> Decimal:
     since = today - timedelta(days=365)
     total = (
-        db.query(func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0))
+        db.query(func.coalesce(func.sum(
+            SalesInvoice.total_amount + SalesInvoice.tax_amount + SalesInvoice.total_additions
+            + SalesInvoice.total_duties + SalesInvoice.rounding
+        ), 0))
         .filter(SalesInvoice.contact_id == contact_id)
         .filter(SalesInvoice.voided_at.is_(None))
         .filter(SalesInvoice.invoice_date >= since)
@@ -310,7 +316,10 @@ def tier_members(db: Session, today: date | None = None) -> list[dict]:
             db.query(
                 SalesInvoice.contact_id,
                 Contact.name,
-                func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0),
+                func.coalesce(func.sum(
+                    SalesInvoice.total_amount + SalesInvoice.tax_amount + SalesInvoice.total_additions
+                    + SalesInvoice.total_duties + SalesInvoice.rounding
+                ), 0),
             )
             .join(Contact, Contact.id == SalesInvoice.contact_id)
             .filter(SalesInvoice.contact_id.isnot(None))

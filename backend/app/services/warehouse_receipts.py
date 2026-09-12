@@ -704,6 +704,15 @@ def void_warehouse_receipt(
                 description=f"ابطال رسید انبار شماره {receipt.number}",
             )
 
+    # StockBatch دفترِ بارِ سالمِ قابل‌استفاده است و از StockLedger مشتق نمی‌شود.
+    # اگر فقط حرکتِ کاردکس را برگردانیم، فهرستِ بچ همچنان یک بارِ سالم و مثبت نشان
+    # می‌دهد که دیگر در موجودی وجود ندارد. received_qty را برای تاریخچه نگه می‌داریم
+    # و فقط مانده‌ی سالمِ بارِ باطل‌شده را صفر می‌کنیم.
+    for batch in db.query(StockBatch).filter(
+        StockBatch.source_type == "warehouse_receipt", StockBatch.source_id == receipt.id
+    ).all():
+        batch.qty = Decimal(0)
+
     receipt.voided_at = datetime.now(timezone.utc)
     receipt.voided_by_id = user.id
     receipt.void_reason = reason.strip()

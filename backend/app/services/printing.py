@@ -234,6 +234,9 @@ def render_invoice(
     voided_at=None,
     void_reason: str = "",
     currency_line: str = "",
+    business_detail: str = "",
+    party_label: str = "طرف حساب",
+    business_party_label: str = "",
 ) -> str:
     """HTML کامل و مستقل — بدون هیچ منبع بیرونی، تا آفلاین و در چاپ هم درست باشد."""
     banner = ""
@@ -292,6 +295,13 @@ def render_invoice(
         if note
         else ""
     )
+    business_party = (
+        f"<div class='party'><h2>{escape(business_party_label)}</h2>"
+        f"<div class='big'>{escape(business_name)}</div>"
+        f"<div class='sub'>{escape(business_detail)}</div></div>"
+        if business_party_label
+        else ""
+    )
 
     return f"""<!doctype html>
 <html lang="fa" dir="rtl">
@@ -321,8 +331,9 @@ def render_invoice(
   </div>
 
   <div class="parties">
+    {business_party}
     <div class="party">
-      <h2>طرف حساب</h2>
+      <h2>{escape(party_label)}</h2>
       <div class="big">{escape(party_name)}</div>
       <div class="sub">{escape(party_detail)}</div>
     </div>

@@ -50,6 +50,7 @@ from app.schemas.returns import (
 from app.schemas.treasury import TreasuryTransactionIn
 from app.services import treasury
 from app.services.inventory import _allocate_discount, post_purchase_invoice, post_sales_invoice
+from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return
 from app.services.payment_providers import ProviderError, get_provider
 from app.tenant_context import tenant_scope
@@ -996,7 +997,10 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
                 invoice_date=today, warehouse_id=dist_wh.id, contact_id=customer.id, lines=sales_lines, description=order_tag
             ),
             distributor_user,
+            move_inventory=False,
+            issue_accounting=False,
         )
+        finalize_immediate_sale(db, sales_invoice, dist_wh.id, distributor_user)
         sales_invoice_id = sales_invoice.id
 
     # ── دفترِ فروشگاه: فاکتورِ خرید (ورودِ انبار) ────────────────────────

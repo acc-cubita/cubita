@@ -31,6 +31,7 @@ from app.schemas.storefront_native import (
     StorefrontSettingsOut,
 )
 from app.services.inventory import post_sales_invoice
+from app.services.sales_invoices import finalize_immediate_sale
 from app.tenant_context import require_session_tenant
 
 ONLINE_WAREHOUSE_CODE = "ONLINE"
@@ -327,7 +328,10 @@ def confirm_payment(db: Session, order_id, user: User, *, provider: str = "manua
             lines=lines,
         ),
         user,
+        move_inventory=False,
+        issue_accounting=False,
     )
+    finalize_immediate_sale(db, invoice, warehouse.id, user)
     order.sales_invoice_id = invoice.id
     order.payment_status = "paid"
     order.payment_provider = provider

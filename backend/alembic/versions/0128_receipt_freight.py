@@ -1,7 +1,7 @@
 """هزینه‌ی حمل جایی برای نشستن نداشت، پس موجودی ارزان‌تر از واقع ثبت می‌شد
 
-Revision ID: 0125
-Revises: 0124
+Revision ID: 0128
+Revises: 0127
 
 ## نقصی که بسته می‌شود
 
@@ -81,8 +81,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0125"
-down_revision: Union[str, None] = "0124"
+revision: str = "0128"
+down_revision: Union[str, None] = "0127"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,8 +1,8 @@
 import uuid
-from datetime import date as date_
+from datetime import date as date_, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,7 +28,15 @@ class SalesQuotation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: نامِ مشتریِ دستی — وقتی مشتری از فهرستِ اشخاص انتخاب نشده و آزادانه تایپ شده.
     #: نمایش/چاپِ پیش‌فاکتور = نامِ طرف‌حساب (اگر contact_id باشد) وگرنه همین.
     customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True)
+    customer_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    customer_name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    delivery_location: Mapped[str] = mapped_column(Text, default="", server_default="")
+    sale_type_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("sale_types.id", ondelete="SET NULL"), nullable=True)
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
+    terminated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terminated_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")
 
@@ -53,6 +61,9 @@ class SalesQuotationLine(TenantMixin, UUIDPKMixin, Base):
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     description: Mapped[str] = mapped_column(Text, default="")
+    item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
 
     quotation: Mapped["SalesQuotation"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

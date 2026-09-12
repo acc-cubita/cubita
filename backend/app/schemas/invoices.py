@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SalesInvoiceLineIn(BaseModel):
@@ -12,7 +12,10 @@ class SalesInvoiceLineIn(BaseModel):
     #: تخفیفِ ردیف به مبلغ (نه درصد). درصد در رابط کاربری به مبلغ تبدیل می‌شود تا
     #: رقمِ ذخیره‌شده بی‌ابهام باشد و با فیلدِ تخفیفِ صورتحساب مؤدیان هم بخواند.
     discount: Decimal = Decimal(0)
+    addition: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
     description: str = ""
+    source_quotation_line_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_positive(self) -> "SalesInvoiceLineIn":
@@ -22,6 +25,8 @@ class SalesInvoiceLineIn(BaseModel):
             raise ValueError("قیمت واحد نمی‌تواند منفی باشد")
         if self.discount < 0:
             raise ValueError("تخفیف نمی‌تواند منفی باشد")
+        if self.addition < 0 or self.duty_amount < 0:
+            raise ValueError("اضافات و عوارض نمی‌توانند منفی باشند")
         # تخفیفِ بیشتر از مبلغِ ردیف یعنی خالصِ منفی؛ به‌جای گردکردنِ بی‌صدا رد می‌شود
         # تا اشتباهِ ورود اطلاعات همان‌جا دیده شود.
         if self.discount > self.qty * self.unit_price:
@@ -36,8 +41,13 @@ MAX_ROUNDING = Decimal(100_000)
 
 class SalesInvoiceIn(BaseModel):
     invoice_date: date
-    warehouse_id: UUID
+    warehouse_id: UUID | None = None
     contact_id: UUID | None = None
+    customer_name2: str = ""
+    delivery_location: str = ""
+    receivable_account_id: UUID | None = None
+    settlement_terms: str = "credit"
+    statement_date: date | None = None
     cost_center_id: UUID | None = None
     description: str = ""
     #: واسطه‌ی معامله. باید طرف‌حسابی با نقشِ «واسط» باشد؛ کارمزدش از نرخِ همان
@@ -58,6 +68,7 @@ class SalesInvoiceIn(BaseModel):
     #: تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات)، علامت‌دار: منفی = رند به پایین.
     rounding: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
+    source_quotation_id: UUID | None = None
     #: ارز فاکتور (مثل USD). None/خالی = پایه (ریال). مبالغِ سطرها همیشه پایه‌اند —
     #: کلاینت پیش از ارسال با نرخ تبدیل می‌کند؛ این‌ها فقط برای نمایش ذخیره می‌شوند.
     currency_code: str | None = None
@@ -71,6 +82,8 @@ class SalesInvoiceIn(BaseModel):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
         if self.invoice_discount < 0:
             raise ValueError("تخفیفِ کلِ فاکتور نمی‌تواند منفی باشد")
+        if self.settlement_terms not in {"cash", "credit", "mixed"}:
+            raise ValueError("نوع تسویه باید نقدی، نسیه یا نقدی/نسیه باشد")
         if abs(self.rounding) > MAX_ROUNDING:
             raise ValueError("مبلغِ گِرد کردن خارج از حدِّ مجاز است")
         if self.currency_code and self.exchange_rate <= 0:
@@ -84,8 +97,18 @@ class SalesInvoiceLineOut(BaseModel):
     qty: Decimal
     unit_price: Decimal
     discount: Decimal = Decimal(0)
+    addition: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
     unit_cost: Decimal
     description: str
+    source_quotation_line_id: UUID | None = None
+    item_code_snapshot: str = ""
+    item_name_snapshot: str = ""
+    unit_snapshot: str = ""
+    tax_rate_snapshot: Decimal = Decimal(0)
+    tax_amount_snapshot: Decimal = Decimal(0)
+    issued_qty: Decimal = Decimal(0)
+    remaining_issueable_qty: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -94,13 +117,22 @@ class SalesInvoiceOut(BaseModel):
     id: UUID
     number: int | None
     invoice_date: date
-    warehouse_id: UUID
+    warehouse_id: UUID | None = None
     contact_id: UUID | None
+    customer_snapshot: dict = Field(default_factory=dict)
+    seller_snapshot: dict = Field(default_factory=dict)
+    customer_name2: str = ""
+    delivery_location: str = ""
+    receivable_account_id: UUID | None = None
+    settlement_terms: str = "credit"
+    statement_date: date | None = None
     cost_center_id: UUID | None = None
     description: str
     total_amount: Decimal
     total_discount: Decimal = Decimal(0)
     invoice_discount: Decimal = Decimal(0)
+    total_additions: Decimal = Decimal(0)
+    total_duties: Decimal = Decimal(0)
     rounding: Decimal = Decimal(0)
     total_cost: Decimal
     tax_rate: Decimal
@@ -108,7 +140,16 @@ class SalesInvoiceOut(BaseModel):
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
     journal_entry_id: UUID | None
+    accounting_status: str = "unposted"
+    fulfillment_status: str = "not_issued"
+    issued_total_qty: Decimal = Decimal(0)
+    settled_amount: Decimal = Decimal(0)
+    remaining_amount: Decimal = Decimal(0)
+    financial_status: str = "unsettled"
+    related_receipt_count: int = 0
+    final_amount: Decimal = Decimal(0)
     source_order_id: int | None
+    source_quotation_id: UUID | None = None
     #: بدون این، رابط کاربری فاکتور باطل را عیناً مثل معتبر نشان می‌دهد
     voided_at: datetime | None = None
     void_reason: str = ""
@@ -276,6 +317,7 @@ class PurchaseInvoiceOut(BaseModel):
     settled_amount: Decimal = Decimal(0)
     remaining_amount: Decimal = Decimal(0)
     financial_status: str = "unsettled"
+    related_payment_count: int = 0
     journal_entry_id: UUID | None
     voided_at: datetime | None = None
     void_reason: str = ""
@@ -457,5 +499,63 @@ class WarehouseReceiptOut(BaseModel):
     void_reason: str = ""
     created_by_id: UUID
     lines: list[WarehouseReceiptLineOut]
+
+    model_config = {"from_attributes": True}
+
+
+class WarehouseIssueLineIn(BaseModel):
+    sales_invoice_line_id: UUID
+    qty: Decimal
+    description: str = ""
+
+    @model_validator(mode="after")
+    def validate_qty(self) -> "WarehouseIssueLineIn":
+        if self.qty <= 0:
+            raise ValueError("مقدار خروج باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class WarehouseIssueIn(BaseModel):
+    issue_date: date
+    warehouse_id: UUID
+    description: str = ""
+    lines: list[WarehouseIssueLineIn]
+
+    @model_validator(mode="after")
+    def validate_lines(self) -> "WarehouseIssueIn":
+        if not self.lines:
+            raise ValueError("خروج انبار باید حداقل یک ردیف داشته باشد")
+        if len({line.sales_invoice_line_id for line in self.lines}) != len(self.lines):
+            raise ValueError("هر ردیف فاکتور در خروج فقط یک‌بار مجاز است")
+        return self
+
+
+class WarehouseIssueLineOut(BaseModel):
+    id: UUID
+    sales_invoice_line_id: UUID
+    item_id: UUID
+    qty: Decimal
+    unit_cost: Decimal
+    item_code_snapshot: str = ""
+    item_name_snapshot: str = ""
+    unit_snapshot: str = ""
+    description: str = ""
+
+    model_config = {"from_attributes": True}
+
+
+class WarehouseIssueOut(BaseModel):
+    id: UUID
+    number: int
+    issue_date: date
+    sales_invoice_id: UUID
+    warehouse_id: UUID
+    status: str
+    description: str = ""
+    journal_entry_id: UUID | None = None
+    voided_at: datetime | None = None
+    void_reason: str = ""
+    created_by_id: UUID
+    lines: list[WarehouseIssueLineOut]
 
     model_config = {"from_attributes": True}

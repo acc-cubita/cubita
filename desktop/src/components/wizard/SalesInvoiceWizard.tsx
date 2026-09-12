@@ -104,8 +104,9 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
   return (
     <div className="invoice-form">
       <label>
-        انبار
+        انبار پیشنهادی (اختیاری)
         <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+          <option value="">— خروج انبار بعداً تعیین می‌شود —</option>
           {warehouses.map((w) => (
             <option key={w.id} value={w.id}>
               {w.name}
@@ -148,6 +149,30 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
           )}
         </label>
       )}
+      <label>
+        نام دوم مشتری (اختیاری)
+        <input value={d.customerName2} onChange={(e) => d.setCustomerName2(e.target.value)} maxLength={200} />
+      </label>
+      <label>
+        محل تحویل (اختیاری)
+        <input value={d.deliveryLocation} onChange={(e) => d.setDeliveryLocation(e.target.value)} />
+      </label>
+      <label>
+        شرایط تسویه
+        <select value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
+          <option value="credit">نسیه</option>
+          <option value="cash">نقدی</option>
+          <option value="mixed">نقدی/نسیه</option>
+        </select>
+      </label>
+      <label>
+        تاریخ سررسید/صورتحساب (اختیاری)
+        <JalaliDatePicker value={d.statementDate} onChange={d.setStatementDate} />
+      </label>
+      <label>
+        شرح فاکتور (اختیاری)
+        <input value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
+      </label>
           {d.salespeople.length > 0 && (
         <label>
           فروشنده (اختیاری)
@@ -251,6 +276,8 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
               <th>موجودی انبار</th>
               <th>قیمت واحد</th>
               <th>تخفیف</th>
+              <th>اضافات</th>
+              <th>عوارض</th>
               <th>مبلغ</th>
               <th></th>
             </tr>
@@ -299,6 +326,12 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
                   </td>
                   <td data-label="تخفیف">
                     <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />
+                  </td>
+                  <td data-label="اضافات">
+                    <NumberInput value={line.addition} onChange={(v) => d.updateLine(i, { addition: v })} placeholder="۰" />
+                  </td>
+                  <td data-label="عوارض">
+                    <NumberInput value={line.dutyAmount} onChange={(v) => d.updateLine(i, { dutyAmount: v })} placeholder="۰" />
                   </td>
                   <td data-label="مبلغ">
                     <span className={`line-amount${line.itemId ? '' : ' muted'}`}>

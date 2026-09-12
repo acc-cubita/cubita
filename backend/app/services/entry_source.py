@@ -30,7 +30,12 @@ from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
 from app.models.check_event import CheckEvent
 from app.models.inventory import StockAdjustment
-from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
+from app.models.invoices import (
+    PurchaseInvoice,
+    SalesInvoice,
+    WarehouseIssue,
+    WarehouseReceipt,
+)
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.pos_settlement import PosSettlement
@@ -49,6 +54,7 @@ from app.models.treasury import TreasuryTransaction
 SOURCE_MODELS: dict[str, type] = {
     "sales_invoice": SalesInvoice,
     "purchase_invoice": PurchaseInvoice,
+    "warehouse_issue": WarehouseIssue,
     "sales_return": SalesReturn,
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
@@ -109,6 +115,7 @@ ACCOUNTING_NATIVE: frozenset[str] = frozenset(
 SOURCE_LABELS: dict[str, str] = {
     "sales_invoice": "فاکتور فروش",
     "purchase_invoice": "فاکتور خرید",
+    "warehouse_issue": "خروج انبار فروش",
     "sales_return": "برگشت از فروش",
     "purchase_return": "برگشت از خرید",
     "treasury_receipt": "رسید دریافت",

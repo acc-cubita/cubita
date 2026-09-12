@@ -14,7 +14,7 @@ export interface TaskLauncher {
 }
 
 export const TASK_LAUNCHERS: TaskLauncher[] = [
-  { key: 'sales-invoice', title: 'فاکتور فروش', desc: 'ثبتِ فروش — انبار و سندِ آن خودکار ثبت می‌شود.', icon: ShoppingCart, page: 'salesinvoice' },
+  { key: 'sales-invoice', title: 'فاکتور فروش', desc: 'ثبت فروش؛ سند حسابداری و خروج انبار جدا صادر می‌شوند.', icon: ShoppingCart, page: 'salesinvoice' },
   { key: 'quotation', title: 'پیش‌فاکتور', desc: 'صدورِ پیش‌فاکتور برای مشتری.', icon: FileText, page: 'quotations' },
   { key: 'purchase-invoice', title: 'فاکتور خرید', desc: 'ثبتِ خرید از تأمین‌کننده.', icon: PackagePlus, page: 'purchases', section: 'invoices' },
   { key: 'treasury', title: 'دریافت و پرداخت', desc: 'ثبتِ دریافت/پرداختِ نقد و بانک.', icon: HandCoins, page: 'contacts', section: 'treasury' },

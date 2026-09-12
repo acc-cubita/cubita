@@ -9,8 +9,11 @@ from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact, StockLedger
 from app.models.payment import Payment, PaymentRelatedDocument
+from app.models.receipt import Receipt, ReceiptRelatedDocument
 from app.models.sales_ops import SaleType
-from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseReceipt
+from app.models.invoices import (
+    PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseIssue, WarehouseReceipt,
+)
 from app.models.tenant import Membership
 from app.models.user import Role, User
 from app.pagination import Page, PageParams, paginate
@@ -20,14 +23,22 @@ from app.schemas.invoices import (
     PurchaseSummaryOut,
     WarehouseReceiptIn,
     WarehouseReceiptOut,
+    WarehouseIssueIn,
+    WarehouseIssueOut,
     SalesInvoiceIn,
     SalesInvoiceOut,
     SalesSummaryOut,
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services.idempotency import idempotent
-from app.services.inventory import post_purchase_invoice, post_sales_invoice
+from app.services.inventory import duplicate_purchase_invoice_draft, post_purchase_invoice, post_sales_invoice
 from app.services.reports import get_purchase_summary, get_sales_summary
+from app.services.sales_invoices import (
+    attach_sales_state,
+    cancel_unposted_sales_invoice,
+    finalize_immediate_sale,
+    issue_sales_invoice_journal,
+)
 from decimal import Decimal
 
 from app.services.pdf_invoice import render_invoice_pdf
@@ -38,20 +49,18 @@ from app.services.warehouse_receipts import (
     received_by_line,
     void_warehouse_receipt,
 )
+from app.services.warehouse_issues import create_warehouse_issue, void_warehouse_issue
 
 router = APIRouter(tags=["invoices"])
 
 
 def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None:
-    """دو وضعیت مستقلِ تحویل و تسویه را فقط از اسناد معتبر مشتق می‌کند."""
+    """تحویل را مشتق می‌کند؛ تسویه تا ساخته‌شدن موتور Allocation باز می‌ماند."""
     if not invoices:
         return
     ids = [invoice.id for invoice in invoices]
-    allocations = dict(
-        db.query(
-            PaymentRelatedDocument.document_id,
-            func.coalesce(func.sum(PaymentRelatedDocument.allocated_amount * Payment.exchange_rate), 0),
-        )
+    related_payment_counts = dict(
+        db.query(PaymentRelatedDocument.document_id, func.count(func.distinct(Payment.id)))
         .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
         .filter(
             PaymentRelatedDocument.document_type == "purchase_invoice",
@@ -84,13 +93,14 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
             "not_received" if received_total <= 0 else "fully_received" if received_total >= ordered_total else "partially_received"
         )
         final = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
-        settled = min(Decimal(allocations.get(invoice.id, 0)), final)
         invoice.final_amount = final
-        invoice.settled_amount = settled
-        invoice.remaining_amount = max(final - settled, Decimal(0))
-        invoice.financial_status = (
-            "unsettled" if settled <= 0 else "fully_settled" if settled >= final else "partially_settled"
-        )
+        # PaymentRelatedDocument فقط Reference است. وضعیت مالی وقتی قابل محاسبه
+        # می‌شود که موتور Settlement/Allocation با سیاست‌های بازِ §۲۰ ساخته شود.
+        invoice.settled_amount = Decimal(0)
+        invoice.remaining_amount = final
+        invoice.financial_status = "unsettled"
+        # شمارش برای Trace است، نه مبنای تسویه؛ مبلغ همچنان فقط کارِ موتور Allocation است.
+        invoice.related_payment_count = related_payment_counts.get(invoice.id, 0)
         rate = Decimal(invoice.exchange_rate or 1)
         invoice.transaction_total_amount = (Decimal(invoice.total_amount) / rate).quantize(Decimal("0.01"))
         invoice.transaction_tax_amount = (Decimal(invoice.tax_amount) / rate).quantize(Decimal("0.01"))
@@ -174,6 +184,7 @@ def list_sales_invoices(
     _attach_creators(db, items)
     _attach_brokers(db, items)
     _attach_sales_meta(db, items)
+    attach_sales_state(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -207,14 +218,104 @@ def create_sales_invoice(
         operation="create_sales_invoice",
         payload=data,
         run=lambda: post_sales_invoice(
-            db, data, user, enforce_credit=not x_cubita_offline_replay
+            db, data, user, enforce_credit=not x_cubita_offline_replay,
+            move_inventory=False, issue_accounting=False,
         ),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
     _attach_creators(db, [invoice])
     _attach_brokers(db, [invoice])
     _attach_sales_meta(db, [invoice])
+    attach_sales_state(db, [invoice])
     return invoice
+
+
+@router.post("/api/sales-invoices/{invoice_id}/journal", response_model=SalesInvoiceOut)
+def issue_sales_journal(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "create")),
+):
+    issue_sales_invoice_journal(db, invoice_id, user)
+    invoice = db.get(SalesInvoice, invoice_id)
+    _attach_creators(db, [invoice])
+    _attach_brokers(db, [invoice])
+    _attach_sales_meta(db, [invoice])
+    attach_sales_state(db, [invoice])
+    return invoice
+
+
+@router.post("/api/sales-invoices/immediate", response_model=SalesInvoiceOut, status_code=201)
+def create_immediate_sales_invoice(
+    data: SalesInvoiceIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    """فروش یک‌کلیکی POS؛ تراکنش واحد، اما با فاکتور/سند/خروج مستقل."""
+    if data.warehouse_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبار فروش فوری الزامی است")
+
+    def run() -> SalesInvoice:
+        invoice = post_sales_invoice(
+            db, data, user, move_inventory=False, issue_accounting=False,
+        )
+        finalize_immediate_sale(db, invoice, data.warehouse_id, user)
+        return invoice
+
+    invoice = idempotent(
+        db,
+        request,
+        user,
+        operation="create_immediate_sales_invoice",
+        payload=data,
+        run=run,
+        replay=lambda rid: db.get(SalesInvoice, rid),
+    )
+    _attach_creators(db, [invoice])
+    _attach_brokers(db, [invoice])
+    _attach_sales_meta(db, [invoice])
+    attach_sales_state(db, [invoice])
+    return invoice
+
+
+@router.get("/api/sales-invoices/{invoice_id}/warehouse-issues", response_model=list[WarehouseIssueOut])
+def list_warehouse_issues(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    if db.get(SalesInvoice, invoice_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
+    return (
+        db.query(WarehouseIssue).options(selectinload(WarehouseIssue.lines))
+        .filter(WarehouseIssue.sales_invoice_id == invoice_id)
+        .order_by(WarehouseIssue.issue_date.desc(), WarehouseIssue.number.desc()).all()
+    )
+
+
+@router.post(
+    "/api/sales-invoices/{invoice_id}/warehouse-issues",
+    response_model=WarehouseIssueOut, status_code=201,
+)
+def issue_sales_warehouse(
+    invoice_id: UUID, data: WarehouseIssueIn, request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "create")),
+):
+    return idempotent(
+        db, request, user, operation=f"create_warehouse_issue:{invoice_id}", payload=data,
+        run=lambda: create_warehouse_issue(db, invoice_id, data, user),
+        replay=lambda rid: db.get(WarehouseIssue, rid),
+    )
+
+
+@router.post("/api/warehouse-issues/{issue_id}/void", response_model=WarehouseIssueOut)
+def void_sales_warehouse_issue(
+    issue_id: UUID, data: VoidIn, db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "delete")),
+):
+    return void_warehouse_issue(db, issue_id, reason=data.reason, user=user, void_date=data.void_date)
 
 
 @router.get("/api/purchase-invoices", response_model=Page[PurchaseInvoiceOut])
@@ -304,6 +405,16 @@ def create_purchase_invoice(
     return invoice
 
 
+@router.get("/api/purchase-invoices/{invoice_id}/duplicate")
+def duplicate_purchase_invoice(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "create")),
+):
+    """پیش‌نویسِ امنِ فاکتور تازه؛ این درخواست هیچ رکوردی نمی‌نویسد."""
+    return duplicate_purchase_invoice_draft(db, invoice_id)
+
+
 @router.get("/api/purchase-invoices/{invoice_id}/warehouse-receipts", response_model=list[WarehouseReceiptOut])
 def list_warehouse_receipts(
     invoice_id: UUID,
@@ -329,11 +440,20 @@ def list_warehouse_receipts(
 def issue_warehouse_receipt(
     invoice_id: UUID,
     data: WarehouseReceiptIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
     """رسید از دلِ یک فاکتورِ خرید — گردشِ قدیمی، دست‌نخورده."""
-    return create_warehouse_receipt(db, invoice_id, data, user)
+    return idempotent(
+        db,
+        request,
+        user,
+        operation=f"create_warehouse_receipt:{invoice_id}",
+        payload=data,
+        run=lambda: create_warehouse_receipt(db, invoice_id, data, user),
+        replay=lambda rid: db.get(WarehouseReceipt, rid),
+    )
 
 
 @router.get("/api/warehouse-receipts", response_model=Page[WarehouseReceiptOut])
@@ -384,7 +504,7 @@ def void_receipt(
     receipt_id: UUID,
     data: VoidIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("invoices", "delete")),
+    user: User = Depends(require_permission("accounting", "delete")),
 ):
     return void_warehouse_receipt(db, receipt_id, reason=data.reason, user=user, void_date=data.void_date)
 
@@ -402,6 +522,24 @@ def void_sales(
     دارد و نباید در اختیار نقشی باشد که فقط اجازه‌ی ویرایش دارد. با نقش‌های پیش‌فرض
     یعنی فقط مالک — فروشنده که «create» دارد نمی‌تواند فاکتور خودش را پاک کند.
     """
+    if db.query(WarehouseIssue.id).filter(
+        WarehouseIssue.sales_invoice_id == invoice_id, WarehouseIssue.voided_at.is_(None)
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "این فاکتور خروج انبار فعال دارد؛ ابتدا خروج را باطل کنید")
+    if db.query(Receipt.id).join(
+        ReceiptRelatedDocument, ReceiptRelatedDocument.receipt_id == Receipt.id
+    ).filter(
+        ReceiptRelatedDocument.document_type == "sales_invoice",
+        ReceiptRelatedDocument.document_id == invoice_id,
+        Receipt.voided_at.is_(None),
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "این فاکتور رسید دریافت فعال دارد؛ ابتدا رسید مرتبط را باطل کنید")
+    invoice = db.get(SalesInvoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
+    if invoice.journal_entry_id is None:
+        cancel_unposted_sales_invoice(db, invoice_id, reason=data.reason, user=user)
+        return VoidOut(reversal_entry_id=None, reversal_entry_number=None)
     reversal = void_sales_invoice(db, invoice_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
 
@@ -421,6 +559,17 @@ def void_purchase(
             status.HTTP_409_CONFLICT,
             "این فاکتور رسید انبار فعال دارد؛ ابتدا رسیدهای وابسته را باطل کنید",
         )
+    if db.query(Payment.id).join(
+        PaymentRelatedDocument, PaymentRelatedDocument.payment_id == Payment.id
+    ).filter(
+        PaymentRelatedDocument.document_type == "purchase_invoice",
+        PaymentRelatedDocument.document_id == invoice_id,
+        Payment.voided_at.is_(None),
+    ).first():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این فاکتور اعلامیه پرداخت فعال دارد؛ ابتدا اعلامیه‌های مرتبط را باطل کنید",
+        )
     reversal = void_purchase_invoice(db, invoice_id, reason=data.reason, user=user, void_date=data.void_date)
     return VoidOut(reversal_entry_id=reversal.id, reversal_entry_number=reversal.number)
 
@@ -436,6 +585,23 @@ def _party(db: Session, contact_id, fallback: str) -> tuple[str, str]:
     return contact.name, " — ".join(filter(None, [contact.phone, contact.address]))
 
 
+def _snapshot_party(snapshot: dict, fallback: tuple[str, str]) -> tuple[str, str]:
+    """Snapshot خالی یعنی سند قدیمی؛ فقط در آن حالت Master فعلی fallback است."""
+    if not snapshot:
+        return fallback
+    labels = (
+        ("شماره ثبت", "registration_no"),
+        ("شناسه ملی", "national_id"),
+        ("کد اقتصادی", "economic_code"),
+        ("شناسه مالیاتی", "tax_id"),
+        ("کد پستی", "postal_code"),
+        ("تلفن", "phone"),
+        ("نشانی", "address"),
+    )
+    detail = " — ".join(f"{label}: {snapshot[key]}" for label, key in labels if snapshot.get(key))
+    return snapshot.get("name") or fallback[0], detail
+
+
 def _currency_line(invoice) -> str:
     """اگر فاکتور ارزی باشد، رشته‌ی «ارز/نرخ/معادل» را برای چاپ و PDF می‌سازد.
 
@@ -444,7 +610,12 @@ def _currency_line(invoice) -> str:
     if not invoice.currency_code:
         return ""
     rate = Decimal(str(invoice.exchange_rate or 1))
-    grand = Decimal(str(invoice.total_amount)) + Decimal(str(invoice.tax_amount))
+    grand = (
+        Decimal(str(invoice.total_amount)) + Decimal(str(invoice.tax_amount))
+        + Decimal(str(getattr(invoice, "total_additions", 0)))
+        + Decimal(str(getattr(invoice, "total_duties", 0)))
+        + Decimal(str(getattr(invoice, "rounding", 0)))
+    )
     foreign = (grand / rate).quantize(Decimal("0.01")) if rate else Decimal(0)
     return (
         f"ارز فاکتور: {invoice.currency_code} — نرخ برابری: {fa_number(rate)} ریال — "
@@ -453,10 +624,16 @@ def _currency_line(invoice) -> str:
 
 
 def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoice) -> dict:
-    name, detail = _party(db, invoice.contact_id, "مشتری نقدی")
+    name, detail = _snapshot_party(
+        invoice.customer_snapshot or {}, _party(db, invoice.contact_id, "مشتری"),
+    )
+    seller_name, seller_detail = _snapshot_party(
+        invoice.seller_snapshot or {}, (principal.membership.tenant.name, ""),
+    )
     return dict(
         kind="فاکتور فروش",
-        business_name=principal.membership.tenant.name,
+        business_name=seller_name,
+        business_detail=seller_detail,
         number=invoice.number,
         invoice_date=invoice.invoice_date,
         party_name=name,
@@ -464,10 +641,10 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
         description=invoice.description,
         lines=[
             {
-                "name": line.item.name,
+                "name": line.item_name_snapshot or line.item.name,
                 "description": line.description,
                 "qty": line.qty,
-                "unit": line.item.unit,
+                "unit": line.unit_snapshot or line.item.unit,
                 "unit_price": line.unit_price,
                 "discount": line.discount,
             }
@@ -476,6 +653,8 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
         total=invoice.total_amount,
         tax_amount=invoice.tax_amount,
         total_discount=invoice.total_discount,
+        total_additions=invoice.total_additions,
+        total_duties=invoice.total_duties,
         rounding=invoice.rounding,
         voided_at=invoice.voided_at,
         void_reason=invoice.void_reason,
@@ -484,14 +663,24 @@ def _sales_render_kwargs(db: Session, principal: Principal, invoice: SalesInvoic
 
 
 def _purchase_render_kwargs(db: Session, principal: Principal, invoice: PurchaseInvoice) -> dict:
-    name, detail = _party(db, invoice.contact_id, "تأمین‌کننده نقدی")
+    name, detail = _snapshot_party(
+        invoice.supplier_snapshot or {},
+        _party(db, invoice.contact_id, "تأمین‌کننده نقدی"),
+    )
+    buyer_name, buyer_detail = _snapshot_party(
+        invoice.buyer_snapshot or {},
+        (principal.membership.tenant.name, ""),
+    )
     return dict(
         kind="فاکتور خرید",
-        business_name=principal.membership.tenant.name,
+        business_name=buyer_name,
+        business_detail=buyer_detail,
+        business_party_label="خریدار",
         number=invoice.number,
         invoice_date=invoice.invoice_date,
         party_name=name,
         party_detail=detail,
+        party_label="فروشنده",
         description=" — ".join(filter(None, [
             f"شماره فاکتور تأمین‌کننده: {invoice.supplier_invoice_number}" if invoice.supplier_invoice_number else "",
             invoice.description,

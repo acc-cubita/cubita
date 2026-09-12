@@ -1,22 +1,27 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact
+from app.models.invoices import SalesInvoice
 from app.models.quotations import SalesQuotation
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import SalesInvoiceOut
-from app.schemas.quotations import SalesQuotationIn, SalesQuotationOut, SalesQuotationStatusUpdateIn
+from app.schemas.quotations import SalesQuotationConvertIn, SalesQuotationIn, SalesQuotationOut, SalesQuotationStatusUpdateIn
+from app.services.idempotency import idempotent
 from app.services.pdf_invoice import render_invoice_pdf
 from app.services.printing import render_invoice
 from app.services.quotations import (
+    attach_progress,
     convert_quotation_to_invoice,
     create_quotation,
+    duplicate_quotation,
+    set_termination,
     update_quotation,
     update_quotation_status,
 )
@@ -35,16 +40,19 @@ def list_quotations(
         [SalesQuotation.quotation_date, SalesQuotation.number],
         params,
     )
+    attach_progress(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/sales-quotations", response_model=SalesQuotationOut, status_code=201)
 def create_sales_quotation(
     data: SalesQuotationIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return create_quotation(db, data, user)
+    return idempotent(db, request, user, operation="create_sales_quotation", payload=data,
+                      run=lambda: create_quotation(db, data, user), replay=lambda rid: db.get(SalesQuotation, rid))
 
 
 @router.put("/api/sales-quotations/{quotation_id}", response_model=SalesQuotationOut)
@@ -70,14 +78,42 @@ def patch_quotation_status(
 @router.post("/api/sales-quotations/{quotation_id}/convert", response_model=SalesInvoiceOut, status_code=201)
 def convert_quotation(
     quotation_id: UUID,
+    request: Request,
+    data: SalesQuotationConvertIn | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return convert_quotation_to_invoice(db, quotation_id, user)
+    payload = data or SalesQuotationConvertIn()
+    return idempotent(db, request, user, operation=f"convert_sales_quotation:{quotation_id}", payload=payload,
+                      run=lambda: convert_quotation_to_invoice(db, quotation_id, payload, user),
+                      replay=lambda rid: db.get(SalesInvoice, rid))
+
+
+@router.post("/api/sales-quotations/{quotation_id}/duplicate", response_model=SalesQuotationOut, status_code=201)
+def duplicate_sales_quotation(
+    quotation_id: UUID, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    payload = SalesQuotationStatusUpdateIn(status="duplicate")
+    return idempotent(db, request, user, operation=f"duplicate_sales_quotation:{quotation_id}", payload=payload,
+                      run=lambda: duplicate_quotation(db, quotation_id, user), replay=lambda rid: db.get(SalesQuotation, rid))
+
+
+@router.post("/api/sales-quotations/{quotation_id}/terminate", response_model=SalesQuotationOut)
+def terminate_sales_quotation(quotation_id: UUID, db: Session = Depends(get_db), user: User = Depends(require_permission("invoices", "update"))):
+    return set_termination(db, quotation_id, terminated=True, user=user)
+
+
+@router.post("/api/sales-quotations/{quotation_id}/reopen", response_model=SalesQuotationOut)
+def reopen_sales_quotation(quotation_id: UUID, db: Session = Depends(get_db), user: User = Depends(require_permission("invoices", "update"))):
+    return set_termination(db, quotation_id, terminated=False, user=user)
 
 
 def _quotation_party(db: Session, quotation: SalesQuotation) -> tuple[str, str]:
     """نامِ مشتریِ پیش‌فاکتور: طرف‌حسابِ انتخاب‌شده، وگرنه نامِ دستی، وگرنه «مشتری»."""
+    if quotation.customer_snapshot:
+        snap = quotation.customer_snapshot
+        return snap.get("name") or quotation.customer_name or "مشتری", " — ".join(filter(None, [snap.get("phone"), snap.get("address"), quotation.delivery_location]))
     if quotation.contact_id:
         contact = db.get(Contact, quotation.contact_id)
         if contact is not None:
@@ -99,10 +135,10 @@ def _quotation_render_kwargs(db: Session, principal: Principal, quotation: Sales
         description=quotation.description or "",
         lines=[
             {
-                "name": line.item.name,
+                "name": line.item_name_snapshot or line.item.name,
                 "description": line.description,
                 "qty": line.qty,
-                "unit": line.item.unit,
+                "unit": line.unit_snapshot or line.item.unit,
                 "unit_price": line.unit_price,
                 "discount": 0,
             }
