@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+| Claude Opus 5 | `backend/app/models/invoices.py` (بخشِ WarehouseReceipt) · `backend/app/services/warehouse_receipts.py` · `backend/app/schemas/invoices.py` (بخشِ رسید) · `backend/app/routers/invoices.py` (نقاطِ رسید) · `backend/alembic/versions/0123…0126` · `desktop/src/pages/PurchasesPage.tsx` · انتهای `desktop/src/api.ts` | فصلِ «رسید انبار» | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
