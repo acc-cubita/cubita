@@ -34,6 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude (hesabdari-93) | مهاجرت `0126`، `models/tenant.py`، `services/sales_posting.py`، `routers/invoices.py`، `PersonalizationPage.tsx`، `api.ts`؛ و `pytest` | سیاستِ صدورِ فاکتور فروش: خودکار یا دومرحله‌ای، انتخابِ خودِ کسب‌وکار | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
