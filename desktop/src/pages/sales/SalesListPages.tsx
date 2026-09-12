@@ -1118,24 +1118,65 @@ export function CustomsListPage({ token }: { token: string }) {
 
 // ═════════════════ اعلامیه‌های بدهکار/بستانکار ═════════════════
 
+/**
+ * هر سمتِ اعلامیه، از **ردیف‌هایش**.
+ *
+ * اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ ردیف ندارند و سمتشان روی سربرگ بود؛ همان‌ها
+ * با `kind` خوانده می‌شوند تا در دفتر گم نشوند.
+ */
+function noteSide(n: CreditDebitNote, side: 'debit' | 'credit'): string {
+  if (n.lines.length === 0) {
+    const legacy = (n.kind ?? 'debit') === side
+    return legacy ? n.contact_name : '—'
+  }
+  const names = n.lines.map((l) =>
+    side === 'debit'
+      ? l.debit_contact_name !== '—'
+        ? l.debit_contact_name
+        : l.debit_account_name
+      : l.credit_contact_name !== '—'
+        ? l.credit_contact_name
+        : l.credit_account_name,
+  )
+  return [...new Set(names)].join('، ')
+}
+
 export function NoteListPage({ token }: { token: string }) {
   const range = useRange('year')
-  const [kind, setKind] = useState<'' | 'debit' | 'credit'>('')
+  const [who, setWho] = useState('')
   const [msg, setMsg] = useState<Msg>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const list = useAsync(() => fetchNotes(token), [token, reloadKey])
+
+  //: فهرستِ فیلتر از خودِ اعلامیه‌ها می‌آید، نه از کلِ طرف‌حساب‌ها — فقط کسانی که
+  //: واقعاً در اعلامیه‌ای هستند، و بدونِ درخواستِ دوم.
+  const noteContacts = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const n of list.data ?? []) {
+      if (n.contact_id) seen.set(n.contact_id, n.contact_name)
+      for (const l of n.lines) {
+        if (l.debit_contact_id) seen.set(l.debit_contact_id, l.debit_contact_name)
+        if (l.credit_contact_id) seen.set(l.credit_contact_id, l.credit_contact_name)
+      }
+    }
+    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'fa'))
+  }, [list.data])
 
   const rows = useMemo(
     () =>
       (list.data ?? [])
         .filter((n) => inRange(n.note_date, range.from, range.to))
-        .filter((n) => !kind || n.kind === kind),
-    [list.data, range.from, range.to, kind],
+        .filter(
+          (n) =>
+            !who ||
+            n.contact_id === who ||
+            n.lines.some((l) => l.debit_contact_id === who || l.credit_contact_id === who),
+        ),
+    [list.data, range.from, range.to, who],
   )
-  const pg = usePagination(rows, 20, `${range.from}${range.to}${kind}`)
+  const pg = usePagination(rows, 20, `${range.from}${range.to}${who}`)
   const live = rows.filter((n) => !n.voided_at)
-  const debit = live.filter((n) => n.kind === 'debit').reduce((s, n) => s + Number(n.amount || 0), 0)
-  const credit = live.filter((n) => n.kind === 'credit').reduce((s, n) => s + Number(n.amount || 0), 0)
+  const total = live.reduce((s, n) => s + Number(n.amount || 0), 0)
 
   async function handleVoid(n: CreditDebitNote) {
     const reason = window.prompt(
@@ -1162,18 +1203,21 @@ export function NoteListPage({ token }: { token: string }) {
             range={range}
             extra={
               <label className="acc-inline-field">
-                نوع
-                <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+                طرف حساب
+                <select value={who} onChange={(e) => setWho(e.target.value)}>
                   <option value="">همه</option>
-                  <option value="debit">بدهکار</option>
-                  <option value="credit">بستانکار</option>
+                  {noteContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </label>
             }
           />
           <div className="cc-summary">
-            <Metric icon={<TrendingUp size={14} />} label="بدهکار" value={faAmount(debit)} tone="in" />
-            <Metric icon={<Undo2 size={14} />} label="بستانکار" value={faAmount(credit)} tone="out" />
+            <Metric icon={<TrendingUp size={14} />} label="جمعِ تعدیل" value={faAmount(total)} tone="in" />
+            <Metric icon={<Undo2 size={14} />} label="اعلامیه" value={faInt(live.length)} />
           </div>
         </div>
       }
@@ -1192,10 +1236,10 @@ export function NoteListPage({ token }: { token: string }) {
                 <tr>
                   <th>شماره</th>
                   <th>تاریخ</th>
-                  <th>نوع</th>
-                  <th>طرف حساب</th>
+                  <th>بدهکار</th>
+                  <th>بستانکار</th>
                   <th>مبلغ</th>
-                  <th>علت</th>
+                  <th>شرح</th>
                   <th />
                 </tr>
               </thead>
@@ -1206,16 +1250,12 @@ export function NoteListPage({ token }: { token: string }) {
                       {fa(n.number ?? 0)}
                     </td>
                     <td data-label="تاریخ">{formatJalali(n.note_date)}</td>
-                    <td data-label="نوع">
-                      <span className={`status-badge ${n.kind === 'debit' ? 'tone-success' : 'tone-warning'}`}>
-                        {n.kind === 'debit' ? 'بدهکار' : 'بستانکار'}
-                      </span>
-                    </td>
-                    <td data-label="طرف حساب">{n.contact_name}</td>
+                    <td data-label="بدهکار">{noteSide(n, 'debit')}</td>
+                    <td data-label="بستانکار">{noteSide(n, 'credit')}</td>
                     <td className="num" data-label="مبلغ">
                       {faAmount(n.amount)}
                     </td>
-                    <td className="card-wide" data-label="علت">
+                    <td className="card-wide" data-label="شرح">
                       {n.reason || '—'}
                     </td>
                     <td className="card-actions">

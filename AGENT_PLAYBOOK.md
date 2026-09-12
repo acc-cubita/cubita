@@ -232,17 +232,39 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 سرور **مخزنِ git نیست**. `deploy.sh` از `/tmp` می‌خواند و اگر تازه نکنی، **کدِ
 قدیمی را دوباره مستقر می‌کند و موفق هم گزارش می‌دهد**. این یک بار واقعاً افتاد.
 
+**شکلِ بسته‌ی کد مهم است.** خطِ ۱۲۸ِ `deploy.sh` این است:
+
 ```bash
-# ۱) بسته‌ی کد
-tar --exclude=__pycache__ --exclude='*.pyc' --exclude=venv \
-    -czf /tmp/cubita_code.tgz backend
-# ۲) بسته‌ی وب
+tar xzf "$CODE_TGZ" -C "$APP_DIR" app alembic alembic.ini scripts
+```
+
+یعنی آن چهار عضو باید در **ریشه‌ی** آرشیو باشند. اگر با `tar -czf … backend`
+بسازی، همه‌چیز زیرِ `backend/` می‌نشیند و tar با `app: Not found in archive`
+می‌شکند. این یک بار واقعاً افتاد و یک چرخه‌ی استقرار سوزاند.
+
+```bash
+# ۱) بسته‌ی کد — با ‎-C backend‎، نه ‎backend‎
+tar --exclude=__pycache__ --exclude='*.pyc' --exclude='.pytest_cache' \
+    -czf /tmp/cubita_code.tgz -C backend app alembic alembic.ini scripts
+# ۲) بسته‌ی وب — محتویاتِ dist در ریشه
 cd desktop && npm run build && tar -czf /tmp/cubita_web_production.tgz -C dist .
 # ۳) انتقال
 scp -i ~/.ssh/cubita_vps /tmp/cubita_code.tgz /tmp/cubita_web_production.tgz root@62.60.129.39:/tmp/
 # ۴) استقرار (کاربر اجرا می‌کند — برای ایجنت مسدود است)
 ssh -i ~/.ssh/cubita_vps root@62.60.129.39 '/opt/hesabdari/deploy.sh production'
 ```
+
+**پیش از گامِ ۳ بسنج، نه بعدش:**
+
+```bash
+tar -tzf /tmp/cubita_code.tgz | awk -F/ '{print $1}' | sort -u
+# باید دقیقاً بدهد:  alembic   alembic.ini   app   scripts
+```
+
+**اگر شبکه‌ات به سرور نمی‌رسد ولی گیت‌هاب کار می‌کند:** ممکن است چند مسیرِ
+اینترنت داشته باشی و مسیرِ پیش‌فرض به آن میزبان نرسد. با `ipconfig` آدرسِ محلیِ
+کارتی را که وصل می‌شود پیدا کن و اتصال را به همان ببند:
+`ssh -b <local-ip> …` و `scp -o BindAddress=<local-ip> …`
 
 **پیش از گام ۴ به آرش اطلاع بده.** بعدش بسنج: نسخه‌ی مهاجرت روی سرور، سلامتِ
 سرویس، و اینکه فایلِ باندلِ سرو‌شده همان است که ساختی.

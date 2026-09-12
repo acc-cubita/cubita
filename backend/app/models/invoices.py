@@ -428,7 +428,7 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
     purchase_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), nullable=True, index=True
     )
-    #: شماره‌ی ردیف در همین رسید (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۲۸»،
+    #: شماره‌ی ردیف در همین رسید (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۰»،
     #: که ترتیبش بازیابی‌شدنی نبود.
     seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)

@@ -333,7 +333,7 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: **چهار رقم اعشار، و این تزئینی نیست.** بهای تمام‌شده نتیجه‌ی یک تقسیم
     #: است (مبلغِ ردیف ÷ تعداد) و با ریالِ صحیح، `مقدار × میانگین` از مبلغِ
     #: واقعی فاصله می‌گرفت — روی نمونه‌ی واقعی ۵۰ ریال، بی‌آنکه ترازی به‌هم
-    #: بخورد. چهار رقم اختلاف را به کسری از ریال می‌برد (مهاجرت ۰۱۲۸).
+    #: بخورد. چهار رقم اختلاف را به کسری از ریال می‌برد (مهاجرت ۰۱۳۰).
     average_cost: Mapped[float] = mapped_column(Numeric(18, 4), default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

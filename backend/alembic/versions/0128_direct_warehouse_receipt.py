@@ -1,7 +1,7 @@
 """رسید انبار بدونِ فاکتورِ خرید ممکن نبود
 
-Revision ID: 0126
-Revises: 0125
+Revision ID: 0128
+Revises: 0127
 
 ## چه چیزی غلط بود
 
@@ -48,8 +48,8 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.migration_utils import rls_disabled
 
-revision: str = "0126"
-down_revision: Union[str, None] = "0125"
+revision: str = "0128"
+down_revision: Union[str, None] = "0127"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

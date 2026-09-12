@@ -26,6 +26,9 @@ import {
   createCustoms,
   createDiscountGroup,
   createNote,
+  fetchNoteAccounts,
+  newIdempotencyKey,
+  type NoteAccount,
   createPriceAnnouncement,
   createPricingFactor,
   createSaleType,
@@ -61,7 +64,7 @@ import { ItemPicker } from '../../components/ItemPicker'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
-import { formatJalali, todayIso } from '../../lib/jalali'
+import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import {
   AsyncBlock,
   Metric,
@@ -365,74 +368,219 @@ export function InvoiceClosePage({ token }: { token: string }) {
 
 // ═════════════════════ ۹) اعلامیه بدهکار/بستانکار ═════════════════════
 
+type NoticeRow = {
+  key: number
+  debitContactId: string
+  debitAccountId: string
+  creditContactId: string
+  creditAccountId: string
+  amount: string
+  description: string
+}
+
+const emptyRow = (key: number): NoticeRow => ({
+  key,
+  debitContactId: '',
+  debitAccountId: '',
+  creditContactId: '',
+  creditAccountId: '',
+  amount: '',
+  description: '',
+})
+
+/**
+ * سمتی که نقشِ طرف حساب حسابش را تعیین می‌کند — و کاربر می‌تواند عوضش کند.
+ *
+ * وقتی «مشتری» انتخاب می‌شود حسابِ پیشنهادی دریافتنی است و با «تأمین‌کننده»
+ * پرداختنی؛ همان رابطه‌ای که سرور هم اعمالش می‌کند. عنوانِ حساب کنارِ کدش دیده
+ * می‌شود چون کدِ تنها، انتخابِ اشتباهِ حساب را آسان می‌کند.
+ */
+function NoticeSide({
+  label,
+  contacts,
+  accounts,
+  contactId,
+  accountId,
+  onContact,
+  onAccount,
+}: {
+  label: string
+  contacts: ContactRecord[]
+  accounts: NoteAccount[]
+  contactId: string
+  accountId: string
+  onContact: (v: string) => void
+  onAccount: (v: string) => void
+}) {
+  const chosen = accounts.find((a) => a.id === accountId)
+  return (
+    <>
+      <label>
+        طرف حسابِ {label}
+        <select value={contactId} onChange={(e) => onContact(e.target.value)}>
+          <option value="">— بدونِ طرف حساب —</option>
+          {contacts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        حسابِ {label}
+        <select value={accountId} onChange={(e) => onAccount(e.target.value)}>
+          <option value="">— پیش‌فرضِ نقش —</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.code} — {a.name}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          {chosen ? `${chosen.name} (${toFaDigits(chosen.code)})` : 'از نقشِ طرف حساب حل می‌شود.'}
+        </span>
+      </label>
+    </>
+  )
+}
+
 export function CreditDebitNotePage({ token }: { token: string }) {
   const contacts = useContacts(token)
   const { msg, submitting, run } = useSubmit()
-  const [kind, setKind] = useState<'debit' | 'credit'>('debit')
+  const [accounts, setAccounts] = useState<NoteAccount[]>([])
   const [noteDate, setNoteDate] = useState(todayIso())
-  const [contactId, setContactId] = useState('')
-  const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
+  const [rows, setRows] = useState<NoticeRow[]>([emptyRow(1)])
+  const nextKey = useRef(2)
+  //: کلیدِ یکتاسازی در `useRef` می‌ماند تا رندرِ دوباره کلیدِ تازه نسازد — وگرنه
+  //: محافظ بی‌اثر می‌شد و همان چیزی که باید یک بار اعمال شود دو بار می‌شد.
+  const idemKey = useRef(newIdempotencyKey())
+
+  useEffect(() => {
+    fetchNoteAccounts(token)
+      .then(setAccounts)
+      .catch(() => setAccounts([]))
+  }, [token])
+
+  const patch = (key: number, part: Partial<NoticeRow>) =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...part } : r)))
+
+  const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  const ready = rows.every(
+    (r) =>
+      Number(r.amount) > 0 &&
+      (r.debitContactId || r.debitAccountId) &&
+      (r.creditContactId || r.creditAccountId),
+  )
 
   return (
     <OpsPage
       icon={FileSpreadsheet}
       title="اعلامیه بدهکار بستانکار"
-      description="تعدیلِ حسابِ طرف مقابل بیرون از فاکتور. برخلافِ بقیه‌ی تعریف‌های این ماژول، این یکی سند حسابداری می‌زند."
+      description="مانده‌ی یک طرف حساب را به طرفِ دیگر منتقل می‌کند — بدونِ هیچ دریافت و پرداختی. تهاترِ طلبِ ما از یک مشتری با بدهیِ ما به یک تأمین‌کننده، کارِ همین سند است."
     >
       <FormCard
         icon={FileSpreadsheet}
         title="صدور اعلامیه"
-        description="بدهکار = طرف به شما بدهکارتر می‌شود. بستانکار = طلبِ شما کم می‌شود."
+        description="هر ردیف یک تعدیل است: یک سمت بدهکار، یک سمت بستانکار، به یک مبلغ. سند در دفتر می‌نشیند ولی هیچ فاکتوری را تسویه‌شده نمی‌کند."
         msg={msg}
         submitting={submitting}
         submitLabel="صدور و ثبتِ سند"
-        disabled={!contactId || !Number(amount)}
+        disabled={!ready}
         onSubmit={() =>
           void run(async () => {
-            await createNote(token, {
-              kind,
-              note_date: noteDate,
-              contact_id: contactId,
-              amount: Number(amount),
-              reason,
-            })
-            setAmount('')
+            await createNote(
+              token,
+              {
+                note_date: noteDate,
+                reason,
+                lines: rows.map((r) => ({
+                  debit_contact_id: r.debitContactId || null,
+                  debit_account_id: r.debitAccountId || null,
+                  credit_contact_id: r.creditContactId || null,
+                  credit_account_id: r.creditAccountId || null,
+                  amount: Number(r.amount),
+                  description: r.description,
+                })),
+              },
+              idemKey.current,
+            )
+            idemKey.current = newIdempotencyKey()
+            setRows([emptyRow(nextKey.current++)])
             setReason('')
           }, 'اعلامیه صادر و سندش ثبت شد.')
         }
       >
         <label>
-          نوعِ اعلامیه
-          <select value={kind} onChange={(e) => setKind(e.target.value as 'debit' | 'credit')}>
-            <option value="debit">بدهکار — بدهیِ طرف بیشتر می‌شود</option>
-            <option value="credit">بستانکار — طلبِ ما کمتر می‌شود</option>
-          </select>
-        </label>
-        <label>
           تاریخ
           <JalaliDatePicker value={noteDate} onChange={setNoteDate} />
         </label>
         <label>
-          طرف حساب
-          <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
-            <option value="">— انتخاب کنید —</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          مبلغ (ریال)
-          <NumberInput value={amount} onChange={setAmount} />
-        </label>
-        <label>
-          علت
+          شرح
           <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
         </label>
       </FormCard>
+
+      <SectionCard
+        icon={FileSpreadsheet}
+        title="ردیف‌های اعلامیه"
+        description={`جمع: ${faAmount(total)} ریال`}
+        actions={
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setRows((rs) => [...rs, emptyRow(nextKey.current++)])}
+          >
+            افزودن ردیف
+          </button>
+        }
+      >
+        {rows.map((r, i) => (
+          <section key={r.key} className="cdn-row">
+            <h4 className="cdn-row-title">ردیفِ {toFaDigits(String(i + 1))}</h4>
+            <NoticeSide
+              label="بدهکار"
+              contacts={contacts}
+              accounts={accounts}
+              contactId={r.debitContactId}
+              accountId={r.debitAccountId}
+              onContact={(v) => patch(r.key, { debitContactId: v })}
+              onAccount={(v) => patch(r.key, { debitAccountId: v })}
+            />
+            <NoticeSide
+              label="بستانکار"
+              contacts={contacts}
+              accounts={accounts}
+              contactId={r.creditContactId}
+              accountId={r.creditAccountId}
+              onContact={(v) => patch(r.key, { creditContactId: v })}
+              onAccount={(v) => patch(r.key, { creditAccountId: v })}
+            />
+            <label>
+              مبلغ (ریال)
+              <NumberInput value={r.amount} onChange={(v) => patch(r.key, { amount: v })} />
+            </label>
+            <label>
+              شرحِ ردیف
+              <input
+                type="text"
+                value={r.description}
+                onChange={(e) => patch(r.key, { description: e.target.value })}
+                maxLength={300}
+              />
+            </label>
+            {rows.length > 1 && (
+              <button
+                type="button"
+                className="btn-ghost danger"
+                onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+              >
+                حذفِ ردیف
+              </button>
+            )}
+          </section>
+        ))}
+      </SectionCard>
     </OpsPage>
   )
 }

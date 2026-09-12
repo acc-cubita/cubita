@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import require_permission
+from app.models.accounting import Account
 from app.models.advanced_inventory import PriceList, PriceListItem
 from app.models.inventory import Contact
 from app.models.invoices import SalesInvoice
@@ -43,7 +44,9 @@ from app.schemas.sales_ops import (
     CustomsOut,
     DiscountGroupIn,
     DiscountGroupOut,
+    NoteAccountOut,
     NoteIn,
+    NoteLineOut,
     NoteOut,
     PriceAnnouncementIn,
     PriceAnnouncementOut,
@@ -487,20 +490,55 @@ def create_customs(data: CustomsIn, db: Session = Depends(get_db), _=Depends(_cr
 # ─────────────── اعلامیه‌ی بدهکار / بستانکار (سنددار) ───────────────
 
 
-def _note_out(db: Session, n: CreditDebitNote, names: dict[UUID, str] | None = None) -> NoteOut:
+def _note_out(
+    db: Session,
+    n: CreditDebitNote,
+    names: dict[UUID, str] | None = None,
+    accounts: dict[UUID, tuple[str, str]] | None = None,
+) -> NoteOut:
     names = names if names is not None else {c.id: c.name for c in db.query(Contact).all()}
+    if accounts is None:
+        accounts = {a.id: (a.code, a.name) for a in db.query(Account).all()}
+
+    def who(cid: UUID | None) -> str:
+        return names.get(cid, "—") if cid is not None else "—"
+
+    def acc(aid: UUID) -> tuple[str, str]:
+        return accounts.get(aid, ("", "—"))
+
     return NoteOut(
         id=n.id,
         number=n.number,
-        kind=n.kind,
         note_date=n.note_date,
-        contact_id=n.contact_id,
-        contact_name=names.get(n.contact_id, "—"),
         amount=n.amount,
         reason=n.reason,
+        currency_code=n.currency_code,
+        exchange_rate=n.exchange_rate,
+        lines=[
+            NoteLineOut(
+                id=r.id,
+                seq=r.seq,
+                debit_contact_id=r.debit_contact_id,
+                debit_contact_name=who(r.debit_contact_id),
+                debit_account_id=r.debit_account_id,
+                debit_account_code=acc(r.debit_account_id)[0],
+                debit_account_name=acc(r.debit_account_id)[1],
+                credit_contact_id=r.credit_contact_id,
+                credit_contact_name=who(r.credit_contact_id),
+                credit_account_id=r.credit_account_id,
+                credit_account_code=acc(r.credit_account_id)[0],
+                credit_account_name=acc(r.credit_account_id)[1],
+                amount=r.amount,
+                description=r.description,
+            )
+            for r in n.lines
+        ],
         invoice_id=n.invoice_id,
         journal_entry_id=n.journal_entry_id,
         voided_at=n.voided_at,
+        kind=n.kind,
+        contact_id=n.contact_id,
+        contact_name=who(n.contact_id),
     )
 
 
@@ -515,22 +553,57 @@ def list_notes(
         q = q.filter(CreditDebitNote.kind == kind)
     rows = q.order_by(CreditDebitNote.note_date.desc(), CreditDebitNote.number.desc()).all()
     names = {c.id: c.name for c in db.query(Contact).all()}
-    return [_note_out(db, n, names) for n in rows]
+    accounts = {a.id: (a.code, a.name) for a in db.query(Account).all()}
+    return [_note_out(db, n, names, accounts) for n in rows]
+
+
+@router.get("/notes/accounts", response_model=list[NoteAccountOut])
+def note_accounts(db: Session = Depends(get_db), _=Depends(_view)):
+    """معین‌هایی که یک سمتِ اعلامیه می‌تواند رویشان بنشیند.
+
+    فرم از این می‌خواند تا **کد و عنوان** را کنارِ هم نشان دهد؛ کدِ تنها، انتخابِ
+    اشتباهِ حساب را آسان می‌کند.
+    """
+    return [
+        NoteAccountOut(id=a.id, code=a.code, name=a.name) for a in svc.counterparty_accounts(db)
+    ]
 
 
 @router.post("/notes", response_model=NoteOut, status_code=201)
-def create_note(data: NoteIn, db: Session = Depends(get_db), user: User = Depends(_create)):
-    note = svc.post_note(
+def create_note(
+    data: NoteIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_create),
+):
+    """اعلامیه را ثبت می‌کند — **یک بار**، حتی اگر درخواست دوباره برسد.
+
+    ثبتِ دوباره یعنی تعدیلِ مانده دو بار اعمال شود؛ همان چیزی که در سندی که
+    مستقیم مانده‌ی طرف حساب را جابه‌جا می‌کند بی‌صداترین خطاست.
+    """
+
+    def _run() -> NoteOut:
+        note = svc.post_notice(
+            db,
+            user,
+            note_date=data.note_date,
+            lines=data.lines,
+            description=data.reason,
+            currency_code=data.currency_code,
+            exchange_rate=Decimal(data.exchange_rate),
+        )
+        return _note_out(db, note)
+
+    return idempotent(
         db,
+        request,
         user,
-        kind=data.kind,
-        note_date=data.note_date,
-        contact_id=data.contact_id,
-        amount=Decimal(data.amount),
-        reason=data.reason,
-        invoice_id=data.invoice_id,
+        operation="create_credit_debit_note",
+        payload=data,
+        run=_run,
+        #: پاسخِ اجرای اول از خودِ سند بازساخته می‌شود، نه از یک کپیِ ذخیره‌شده.
+        replay=lambda note_id: _note_out(db, db.get(CreditDebitNote, note_id)),
     )
-    return _note_out(db, note)
 
 
 @router.post("/notes/{note_id}/void", response_model=NoteOut)

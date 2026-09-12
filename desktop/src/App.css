@@ -10473,3 +10473,32 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .check-trail__where { grid-column: 1 / -1; }
   .check-trail__source { grid-column: 1 / -1; }
 }
+
+/* ── ردیفِ اعلامیه‌ی بدهکار/بستانکار ─────────────────────────────────────────
+   هر ردیف یک جفتِ کامل است (دو سمت + مبلغ + شرح)، پس شش فیلد دارد و نمی‌تواند
+   در گریدِ دوستونیِ `workspace-split` بنشیند. فیلدها به‌اندازه‌ی عرض جا باز
+   می‌کنند و زیرِ ۷۶۰ تک‌ستونه می‌شوند — همان رفتاری که بقیه‌ی فرم‌ها دارند. */
+.cdn-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.cdn-row > * { min-width: 0; }
+.cdn-row-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.cdn-row > .btn-ghost { align-self: end; }
+.cdn-row > .btn-ghost.danger { border-color: var(--danger); color: var(--danger); }
+
+@media (max-width: 760px) {
+  .cdn-row { grid-template-columns: 1fr; }
+}

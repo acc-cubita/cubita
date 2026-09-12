@@ -6,11 +6,13 @@
 """
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from app.models.accounting import JournalEntry, JournalLine
+from app.models.analytic import AnalyticAccount
 from app.models.advanced_inventory import PriceList, PriceListItem
 from app.models.inventory import Contact, Item, Warehouse
 from app.models.invoices import SalesInvoice
@@ -259,62 +261,212 @@ def _balance(db, account_id) -> Decimal:
     return sum((Decimal(d) - Decimal(c) for d, c in rows), Decimal(0))
 
 
-def test_a_debit_note_increases_what_the_contact_owes(db, user):
-    c = _contact(db)
-    ar = get_account(db, cc.ACCOUNTS_RECEIVABLE)
-    before = _balance(db, ar.id)
+def _supplier(db, name="تأمین‌کننده‌ی تست"):
+    c = Contact(name=name, type="supplier")
+    db.add(c)
+    db.flush()
+    return c
 
-    note = svc.post_note(db, user, kind="debit", note_date=TODAY, contact_id=c.id, amount=Decimal(50_000))
+
+def _analytic(db, user, code, name):
+    row = AnalyticAccount(code=code, name=name, created_by_id=user.id)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _line(**kw):
+    """ردیفِ اعلامیه به همان شکلی که اسکیما می‌دهد."""
+    return SimpleNamespace(
+        debit_contact_id=kw.get("debit_contact_id"),
+        debit_account_id=kw.get("debit_account_id"),
+        credit_contact_id=kw.get("credit_contact_id"),
+        credit_account_id=kw.get("credit_account_id"),
+        amount=Decimal(kw["amount"]),
+        description=kw.get("description", ""),
+    )
+
+
+def test_a_notice_moves_one_balance_to_another_and_never_touches_revenue(db, user):
+    """کارِ اصلیِ این سند — و چیزی که تا امروز نمی‌کرد.
+
+    تا مهاجرتِ ۰۱۲۷ سمتِ دومِ هر اعلامیه **حسابِ فروش** بود، پس تعدیلِ مانده
+    درآمد می‌ساخت و شکلِ صورتِ سود و زیان را با سندی عوض می‌کرد که هیچ فروشی در
+    آن اتفاق نیفتاده بود.
+    """
+    customer, supplier = _contact(db), _supplier(db)
+    ar = get_account(db, cc.ACCOUNTS_RECEIVABLE)
+    ap = get_account(db, cc.ACCOUNTS_PAYABLE)
+    revenue = get_account(db, cc.SALES_REVENUE)
+    ar_before, ap_before, rev_before = _balance(db, ar.id), _balance(db, ap.id), _balance(db, revenue.id)
+
+    note = svc.post_notice(
+        db,
+        user,
+        note_date=TODAY,
+        description="بابت تهاتر حساب",
+        lines=[_line(debit_contact_id=supplier.id, credit_contact_id=customer.id, amount=20_000_000)],
+    )
 
     assert note.journal_entry_id is not None
-    assert _balance(db, ar.id) - before == Decimal(50_000)
+    assert _balance(db, ap.id) == ap_before + 20_000_000, "بدهیِ ما به تأمین‌کننده کم می‌شود"
+    assert _balance(db, ar.id) == ar_before - 20_000_000, "طلبِ ما از مشتری کم می‌شود"
+    assert _balance(db, revenue.id) == rev_before, "فروش دست نمی‌خورد"
 
 
-def test_a_credit_note_reduces_it(db, user):
-    c = _contact(db)
+def test_the_role_of_each_side_picks_its_account(db, user):
+    """نقشِ طرف حساب، معینِ پیش‌فرض را تعیین می‌کند، نه نامِ فرم."""
+    customer, supplier = _contact(db), _supplier(db)
+    assert svc.default_account_for(db, customer).system_role == cc.ACCOUNTS_RECEIVABLE
+    assert svc.default_account_for(db, supplier).system_role == cc.ACCOUNTS_PAYABLE
+
+
+def test_a_supplier_cannot_sit_on_receivables(db, user):
+    """تأمین‌کننده‌ای روی «دریافتنی» طلبی می‌سازد که وجود ندارد."""
+    supplier, customer = _supplier(db), _contact(db)
     ar = get_account(db, cc.ACCOUNTS_RECEIVABLE)
-    before = _balance(db, ar.id)
+    with pytest.raises(HTTPException) as e:
+        svc.post_notice(
+            db,
+            user,
+            note_date=TODAY,
+            lines=[
+                _line(
+                    debit_contact_id=supplier.id,
+                    debit_account_id=ar.id,
+                    credit_contact_id=customer.id,
+                    amount=1000,
+                )
+            ],
+        )
+    assert e.value.status_code == 400
 
-    svc.post_note(db, user, kind="credit", note_date=TODAY, contact_id=c.id, amount=Decimal(30_000))
 
-    assert _balance(db, ar.id) - before == Decimal(-30_000)
+def test_both_sides_carry_their_own_tafsili(db, user):
+    """بدونِ تفصیلی، سندی که فقط برای مانده‌ی این دو نفر ساخته شده در حسابِ
+    هیچ‌کدامشان نمی‌نشیند."""
+    customer, supplier = _contact(db), _supplier(db)
+    customer.analytic_id = _analytic(db, user, "9001", "تفصیلیِ مشتری").id
+    supplier.analytic_id = _analytic(db, user, "9002", "تفصیلیِ تأمین‌کننده").id
+    db.flush()
 
-
-def test_the_note_entry_balances(db, user):
-    c = _contact(db)
-    note = svc.post_note(db, user, kind="debit", note_date=TODAY, contact_id=c.id, amount=Decimal(12_345))
+    note = svc.post_notice(
+        db,
+        user,
+        note_date=TODAY,
+        lines=[_line(debit_contact_id=supplier.id, credit_contact_id=customer.id, amount=5000)],
+    )
     entry = db.query(JournalEntry).filter(JournalEntry.id == note.journal_entry_id).one()
+    assert {line.analytic_id for line in entry.lines} == {customer.analytic_id, supplier.analytic_id}
 
-    debit = sum((Decimal(l.debit) for l in entry.lines), Decimal(0))
-    credit = sum((Decimal(l.credit) for l in entry.lines), Decimal(0))
-    assert debit == credit == Decimal(12_345)
+
+def test_a_multi_line_notice_is_one_balanced_entry(db, user):
+    """هر ردیف ذاتاً تراز است، پس سند هم — و یک سند، نه چند تا."""
+    a, b = _contact(db, "الف"), _contact(db, "ب")
+    supplier = _supplier(db)
+    note = svc.post_notice(
+        db,
+        user,
+        note_date=TODAY,
+        lines=[
+            _line(debit_contact_id=supplier.id, credit_contact_id=a.id, amount=1000),
+            _line(debit_contact_id=supplier.id, credit_contact_id=b.id, amount=2500),
+        ],
+    )
+    entry = db.query(JournalEntry).filter(JournalEntry.id == note.journal_entry_id).one()
+    assert sum(Decimal(x.debit) for x in entry.lines) == sum(Decimal(x.credit) for x in entry.lines) == 3500
+    assert Decimal(note.amount) == 3500, "جمعِ سربرگ باید جمعِ ردیف‌ها باشد"
+    assert len(note.lines) == 2
+
+
+def test_a_failing_line_takes_the_whole_notice_with_it(db, user):
+    """سندی که نیمی از ردیف‌هایش در دفتر نشسته، بدتر از سندِ ثبت‌نشده است."""
+    customer, supplier = _contact(db), _supplier(db)
+    before = db.query(CreditDebitNote).count()
+    with pytest.raises(HTTPException):
+        svc.post_notice(
+            db,
+            user,
+            note_date=TODAY,
+            lines=[
+                _line(debit_contact_id=supplier.id, credit_contact_id=customer.id, amount=1000),
+                _line(debit_contact_id=supplier.id, credit_contact_id=customer.id, amount=0),
+            ],
+        )
+    assert db.query(CreditDebitNote).count() == before
+
+
+def test_a_notice_that_moves_nothing_is_refused(db, user):
+    """همان حساب و همان تفصیلی در دو سمت یعنی سندی بی‌معنا."""
+    customer = _contact(db)
+    with pytest.raises(HTTPException):
+        svc.post_notice(
+            db,
+            user,
+            note_date=TODAY,
+            lines=[_line(debit_contact_id=customer.id, credit_contact_id=customer.id, amount=1000)],
+        )
+
+
+def test_a_contact_can_offset_their_own_receivable_against_their_payable(db, user):
+    """طرف‌حسابی که هم مشتری است هم تأمین‌کننده — رایج‌ترین تهاتر."""
+    both = Contact(name="هم‌مشتری‌هم‌تأمین‌کننده", type="both")
+    db.add(both)
+    db.flush()
+    ar, ap = get_account(db, cc.ACCOUNTS_RECEIVABLE), get_account(db, cc.ACCOUNTS_PAYABLE)
+    ar_before, ap_before = _balance(db, ar.id), _balance(db, ap.id)
+
+    svc.post_notice(
+        db,
+        user,
+        note_date=TODAY,
+        lines=[
+            _line(
+                debit_contact_id=both.id,
+                debit_account_id=ap.id,
+                credit_contact_id=both.id,
+                credit_account_id=ar.id,
+                amount=7000,
+            )
+        ],
+    )
+    assert _balance(db, ap.id) == ap_before + 7000
+    assert _balance(db, ar.id) == ar_before - 7000
 
 
 def test_notes_get_their_own_gapless_numbers(db, user):
-    c = _contact(db)
-    first = svc.post_note(db, user, kind="debit", note_date=TODAY, contact_id=c.id, amount=Decimal(1000))
-    second = svc.post_note(db, user, kind="credit", note_date=TODAY, contact_id=c.id, amount=Decimal(2000))
-
+    c, s = _contact(db), _supplier(db)
+    first = svc.post_notice(
+        db, user, note_date=TODAY, lines=[_line(debit_contact_id=s.id, credit_contact_id=c.id, amount=1000)]
+    )
+    second = svc.post_notice(
+        db, user, note_date=TODAY, lines=[_line(debit_contact_id=s.id, credit_contact_id=c.id, amount=2000)]
+    )
     assert second.number == first.number + 1
 
 
 def test_voiding_a_note_reverses_its_entry_and_leaves_the_original(db, user):
-    c = _contact(db)
-    ar = get_account(db, cc.ACCOUNTS_RECEIVABLE)
-    before = _balance(db, ar.id)
-    note = svc.post_note(db, user, kind="debit", note_date=TODAY, contact_id=c.id, amount=Decimal(70_000))
+    c, s = _contact(db), _supplier(db)
+    ar, ap = get_account(db, cc.ACCOUNTS_RECEIVABLE), get_account(db, cc.ACCOUNTS_PAYABLE)
+    ar_before, ap_before = _balance(db, ar.id), _balance(db, ap.id)
+    note = svc.post_notice(
+        db, user, note_date=TODAY, lines=[_line(debit_contact_id=s.id, credit_contact_id=c.id, amount=70_000)]
+    )
 
     svc.void_note(db, user, note.id, "اشتباه ثبت شده بود")
     db.refresh(note)
 
     assert note.voided_at is not None
-    assert _balance(db, ar.id) == before, "معکوس باید اثر را دقیقاً صفر کند"
+    assert _balance(db, ar.id) == ar_before, "معکوس باید اثر را دقیقاً صفر کند"
+    assert _balance(db, ap.id) == ap_before
     assert db.query(CreditDebitNote).filter(CreditDebitNote.id == note.id).one() is not None
 
 
 def test_a_note_cannot_be_voided_twice(db, user):
-    c = _contact(db)
-    note = svc.post_note(db, user, kind="credit", note_date=TODAY, contact_id=c.id, amount=Decimal(500))
+    c, s = _contact(db), _supplier(db)
+    note = svc.post_notice(
+        db, user, note_date=TODAY, lines=[_line(debit_contact_id=s.id, credit_contact_id=c.id, amount=500)]
+    )
     svc.void_note(db, user, note.id, "بارِ اول")
 
     with pytest.raises(HTTPException) as e:
@@ -323,10 +475,20 @@ def test_a_note_cannot_be_voided_twice(db, user):
 
 
 def test_a_zero_or_negative_note_is_refused(db, user):
-    c = _contact(db)
+    c, s = _contact(db), _supplier(db)
     for bad in (Decimal(0), Decimal(-5)):
         with pytest.raises(HTTPException):
-            svc.post_note(db, user, kind="debit", note_date=TODAY, contact_id=c.id, amount=bad)
+            svc.post_notice(
+                db,
+                user,
+                note_date=TODAY,
+                lines=[_line(debit_contact_id=s.id, credit_contact_id=c.id, amount=bad)],
+            )
+
+
+def test_an_empty_notice_is_refused(db, user):
+    with pytest.raises(HTTPException):
+        svc.post_notice(db, user, note_date=TODAY, lines=[])
 
 
 # ─────────────────── نامِ تکراری: ۴۰۹ نه ۵۰۰ ────────────────────

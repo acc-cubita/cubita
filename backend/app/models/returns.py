@@ -139,7 +139,7 @@ class PurchaseReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
                                 ├──→  PurchaseReturnLine
         WarehouseReceiptLine  ──┘
 
-    **چرا لنگرِ رسید لازم شد:** از مهاجرتِ ۰۱۲۷ فاکتورِ خرید `warehouse_id`
+    **چرا لنگرِ رسید لازم شد:** از مهاجرتِ ۰۱۲۹ فاکتورِ خرید `warehouse_id`
     ندارد و کالا با رسید وارد می‌شود. برگشت هنوز موجودی را در انبارِ فاکتور
     می‌جست و همیشه صفر می‌دید — یعنی روی گردشِ رسیدِ انبار اصلاً کار نمی‌کرد.
     """
@@ -195,7 +195,7 @@ class PurchaseReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     #: `(seq, id)` و نه `id`: کلید اصلی UUIDِ تصادفی است، پس ستونِ «ردیف»ِ
-    #: برگهٔ چاپی هر بار می‌توانست ترتیبِ دیگری بدهد (همان درسِ ۰۱۲۸).
+    #: برگهٔ چاپی هر بار می‌توانست ترتیبِ دیگری بدهد (همان درسِ ۰۱۳۰).
     lines: Mapped[list["PurchaseReturnLine"]] = relationship(
         back_populates="return_",
         cascade="all, delete-orphan",
@@ -226,7 +226,7 @@ class PurchaseReturnLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "purchase_return_lines"
 
     return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"))
-    #: شماره‌ی ردیف در همین سند (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۲۹».
+    #: شماره‌ی ردیف در همین سند (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۱».
     seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     #: قرینه‌ی `SalesReturnLine.sales_invoice_line_id` — همان دلیل، همان قاعده‌ی `NULL`.
     purchase_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
