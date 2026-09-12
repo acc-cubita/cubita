@@ -36,6 +36,8 @@ FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌
 ACCUMULATED_DEPRECIATION = "accumulated_depreciation"  # استهلاک انباشته (کاهنده‌ی دارایی)
 DEPRECIATION_EXPENSE = "depreciation_expense"  # هزینه‌ی استهلاک دوره (هزینه)
 SALES_ROUNDING = "sales_rounding"  # تعدیلِ گِرد کردنِ مبلغِ فاکتور فروش (کاهنده/افزاینده‌ی درآمد)
+SALES_ADDITIONS = "sales_additions"
+SALES_DISCOUNT = "sales_discount"
 FX_GAIN = "fx_gain"  # سودِ تسعیرِ ارز (درآمد)
 FX_LOSS = "fx_loss"  # زیانِ تسعیرِ ارز (هزینه)
 BANK_FEE = "bank_fee"  # کارمزد و هزینه‌های بانکی (هزینه) — کارمزدِ تسویه‌ی کارتخوان هم اینجا می‌نشیند
@@ -80,6 +82,8 @@ DEFAULT_CODE_BY_ROLE = {
     RETAINED_EARNINGS: "3102",
     SALES_REVENUE: "4101",
     SALES_ROUNDING: "4102",
+    SALES_ADDITIONS: "4198",
+    SALES_DISCOUNT: "4199",
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
     EMPLOYEE_LOAN: "1111",

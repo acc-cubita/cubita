@@ -212,7 +212,13 @@ def lock_items(db: Session, item_ids) -> None:
 
 
 def post_sales_invoice(
-    db: Session, data: SalesInvoiceIn, user: User, *, enforce_credit: bool = True, move_inventory: bool = True
+    db: Session,
+    data: SalesInvoiceIn,
+    user: User,
+    *,
+    enforce_credit: bool = True,
+    move_inventory: bool = True,
+    issue_accounting: bool = True,
 ) -> SalesInvoice:
     """فاکتورِ فروش را ثبت می‌کند.
 
@@ -220,7 +226,29 @@ def post_sales_invoice(
     قبلاً انجام شده و کالایش رفته؛ ردّش سرِ همگام‌سازی یعنی نابودکردنِ کارِ
     فروشنده. شرحِ کامل در [گاردِ اعتبار](credit.py).
     """
+    if move_inventory and data.warehouse_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "برای خروج هم‌زمان موجودی، انتخاب انبار الزامی است",
+        )
     assert_period_open(db, data.invoice_date)
+
+    customer = db.get(Contact, data.contact_id) if data.contact_id else None
+    if data.contact_id and customer is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مشتری انتخاب‌شده یافت نشد")
+    customer_snapshot = {} if customer is None else {
+        key: (getattr(customer, key, None) or "") for key in (
+            "name", "name2", "national_id", "economic_code", "registration_no",
+            "tax_id", "postal_code", "phone", "address",
+        )
+    }
+    tenant = db.get(Tenant, require_session_tenant(db))
+    taxpayer = db.query(MoadianSettings).first()
+    seller_snapshot = {
+        "name": tenant.name if tenant else "",
+        "economic_code": (taxpayer.economic_code if taxpayer else "") or "",
+        "national_id": (taxpayer.national_id if taxpayer else "") or "",
+    }
 
     items_by_id = {item.id: item for item in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
 
@@ -263,9 +291,10 @@ def post_sales_invoice(
 
     total_amount = Decimal(0)
     total_discount = Decimal(0)
+    total_additions = Decimal(0)
+    total_duties = Decimal(0)
     total_cost = Decimal(0)
     invoice_lines: list[SalesInvoiceLine] = []
-    stock_moves: list[StockLedger] = []
 
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
@@ -276,16 +305,21 @@ def post_sales_invoice(
         # پایه‌ی مالیات هر دو «پس از تخفیف»اند.
         total_amount += (line.qty * line.unit_price) - line_discount
         total_discount += line_discount
-        if move_inventory:
-            total_cost += line.qty * unit_cost
+        total_additions += Decimal(line.addition or 0)
+        total_duties += Decimal(line.duty_amount or 0)
         invoice_lines.append(
             SalesInvoiceLine(
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_price=line.unit_price,
                 discount=line_discount,
+                addition=line.addition,
+                duty_amount=line.duty_amount,
                 unit_cost=unit_cost,
                 description=line.description,
+                item_code_snapshot=item.sku,
+                item_name_snapshot=item.name,
+                unit_snapshot=item.unit,
                 source_quotation_line_id=line.source_quotation_line_id,
                 #: وضعیتِ مالیاتی **در لحظه‌ی فروش** قفل می‌شود. اگر گزارش بعداً از
                 #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
@@ -293,28 +327,22 @@ def post_sales_invoice(
                 vat_status=item.vat_status,
             )
         )
-        if move_inventory and not item.is_service:
-            stock_moves.append(
-                StockLedger(
-                    item_id=line.item_id,
-                    warehouse_id=data.warehouse_id,
-                    qty=-line.qty,
-                    unit_cost=unit_cost,
-                    entry_date=data.invoice_date,
-                    source_type="sales_invoice",
-                )
-            )
 
     tax_amount = compute_tax(total_amount, data.tax_rate)
+    tax_shares = _allocate_discount(tax_amount, [Decimal(line.qty) * Decimal(line.unit_price) for line in data.lines])
+    for line, tax_share in zip(invoice_lines, tax_shares):
+        line.tax_rate_snapshot = data.tax_rate
+        line.tax_amount_snapshot = tax_share
     # گِرد کردن: تعدیلِ مبلغِ نهایی پس از مالیات. مبلغِ قابل‌پرداخت نباید منفی شود.
     rounding = Decimal(data.rounding or 0)
-    if total_amount + tax_amount + rounding < 0:
+    final_amount = total_amount + total_additions + total_duties + tax_amount + rounding
+    if final_amount < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "گِرد کردن نمی‌تواند مبلغِ قابل‌پرداخت را منفی کند")
 
     #: گاردِ سقفِ اعتبار این‌جاست نه بالاتر، چون به مبلغِ نهایی (پس از تخفیف، مالیات
     #: و گِرد) نیاز دارد — همان عددی که واقعاً به حسابِ دریافتنی می‌نشیند.
     assert_within_credit_limit(
-        db, data.contact_id, total_amount + tax_amount + rounding, enforce=enforce_credit
+        db, data.contact_id, final_amount, enforce=enforce_credit
     )
 
     broker_id, broker_commission = resolve_broker(db, data.broker_id, total_amount)
@@ -322,92 +350,33 @@ def post_sales_invoice(
     sale_type_id = resolve_sale_type_id(db, data.sale_type_id)
 
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
-    receivable_or_cash = _get_account(db, cc.ACCOUNTS_RECEIVABLE) if data.contact_id else _get_account(db, cc.CASH)
-    journal_lines = [
-        JournalLine(
-            account_id=receivable_or_cash.id,
-            debit=total_amount + tax_amount + rounding,  # مشتری خالص + مالیات ± گِرد را می‌پردازد
-            credit=0,
-            description="بابت فروش کالا/خدمت",
-        ),
-        JournalLine(
-            account_id=_get_account(db, cc.SALES_REVENUE).id,
-            debit=0,
-            credit=total_amount,
-            description="بابت فروش کالا/خدمت",
-        ),
-    ]
-    if tax_amount > 0:
-        journal_lines.append(
-            JournalLine(
-                account_id=vat_payable_account(db).id,
-                debit=0,
-                credit=tax_amount,
-                description="مالیات بر ارزش افزوده فروش",
-            )
-        )
-    if rounding != 0:
-        # رند به بالا (rounding>0) درآمدِ ناچیز است → بستانکار؛ رند به پایین بدهکار.
-        journal_lines.append(
-            JournalLine(
-                account_id=sales_rounding_account(db).id,
-                debit=(-rounding if rounding < 0 else Decimal(0)),
-                credit=(rounding if rounding > 0 else Decimal(0)),
-                description="گِرد کردنِ مبلغِ فاکتور",
-            )
-        )
-    if total_cost > 0:
-        journal_lines.append(
-            JournalLine(
-                account_id=_get_account(db, cc.COGS).id,
-                debit=total_cost,
-                credit=0,
-                description="بهای تمام‌شده کالای فروش‌رفته",
-            )
-        )
-        journal_lines.append(
-            JournalLine(
-                account_id=_get_account(db, cc.INVENTORY).id,
-                debit=0,
-                credit=total_cost,
-                description="کسر از موجودی کالا بابت فروش",
-            )
-        )
-
-    if cost_center_id is not None:
-        for line in journal_lines:
-            line.cost_center_id = cost_center_id
-
-    entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
-    journal_entry = JournalEntry(
-        number=entry_number,
-        entry_date=data.invoice_date,
-        description=f"فاکتور فروش شماره {number}",
-        source_type="sales_invoice",
-        created_by_id=user.id,
-        lines=number_lines(journal_lines),
-    )
-    tafsili.assert_entry_has_tafsili(db, journal_entry)
-    db.add(journal_entry)
-    db.flush()
 
     invoice = SalesInvoice(
         number=number,
         invoice_date=data.invoice_date,
         contact_id=data.contact_id,
+        customer_snapshot=customer_snapshot,
+        seller_snapshot=seller_snapshot,
+        customer_name2=data.customer_name2,
+        delivery_location=data.delivery_location,
+        receivable_account_id=data.receivable_account_id,
+        settlement_terms=data.settlement_terms,
+        statement_date=data.statement_date,
         cost_center_id=cost_center_id,
         warehouse_id=data.warehouse_id,
         description=data.description,
         total_amount=total_amount,
         total_discount=total_discount,
         invoice_discount=invoice_discount,
+        total_additions=total_additions,
+        total_duties=total_duties,
         rounding=rounding,
         total_cost=total_cost,
         tax_rate=data.tax_rate,
         tax_amount=tax_amount,
         currency_code=(data.currency_code or None),
         exchange_rate=data.exchange_rate,
-        journal_entry_id=journal_entry.id,
+        journal_entry_id=None,
         source_order_id=data.source_order_id,
         source_quotation_id=data.source_quotation_id,
         broker_id=broker_id,
@@ -422,16 +391,42 @@ def post_sales_invoice(
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
     db.flush()
-    for move in stock_moves:
-        move.source_id = invoice.id
-        db.add(move)
+    if issue_accounting and move_inventory:
+        # سازگاریِ فراخوان‌های قدیمی: هماهنگ‌سازی خودکار باقی می‌ماند، اما دیگر
+        # حرکت/COGS روی خود فاکتور نیست و دو سند مستقل ساخته می‌شوند.
+        from app.services.sales_invoices import finalize_immediate_sale
+
+        finalize_immediate_sale(db, invoice, data.warehouse_id, user)
+    elif issue_accounting:
+        from app.services.sales_invoices import issue_sales_invoice_journal
+
+        issue_sales_invoice_journal(db, invoice.id, user)
+    elif move_inventory:
+        from app.schemas.invoices import WarehouseIssueIn, WarehouseIssueLineIn
+        from app.services.warehouse_issues import create_warehouse_issue
+
+        physical_lines = [line for line in invoice.lines if not line.item.is_service]
+        if physical_lines:
+            create_warehouse_issue(
+                db,
+                invoice.id,
+                WarehouseIssueIn(
+                    issue_date=invoice.invoice_date,
+                    warehouse_id=data.warehouse_id,
+                    lines=[
+                        WarehouseIssueLineIn(sales_invoice_line_id=line.id, qty=line.qty)
+                        for line in physical_lines
+                    ],
+                ),
+                user,
+            )
 
     # کسبِ خودکارِ امتیازِ وفاداری — فقط اگر مشتری دارد و در تنظیماتِ CRM فعال باشد.
     # عمداً بی‌اثر بر مسیرِ اصلیِ فروش است (تابع خودش بی‌صدا رد می‌شود اگر غیرفعال باشد).
     from app.services import crm as crm_service
 
     crm_service.award_purchase_points(
-        db, data.contact_id, total_amount + tax_amount + rounding, data.invoice_date, user
+        db, data.contact_id, final_amount, data.invoice_date, user
     )
 
     db.flush()

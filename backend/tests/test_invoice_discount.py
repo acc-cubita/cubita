@@ -92,7 +92,7 @@ def test_sales_discount_reduces_net_and_tax_base(db, user):
     assert inv.tax_amount == Decimal(180_000)
 
 
-def test_journal_entry_uses_after_discount_amounts(db, user):
+def test_journal_entry_records_gross_revenue_and_discount_separately(db, user):
     wh = main_warehouse(db)
     item = make_item(db)
     _stock_in(db, user, item, wh, 20, 400_000)
@@ -116,8 +116,11 @@ def test_journal_entry_uses_after_discount_amounts(db, user):
     assert sum(l.debit for l in entry.lines) == sum(l.credit for l in entry.lines)  # متوازن
     revenue = db.query(Account).filter(Account.system_role == cc.SALES_REVENUE).first()
     revenue_lines = [l for l in entry.lines if l.account_id == revenue.id]
-    # درآمد به مبلغِ پس از تخفیف ثبت می‌شود (تخفیف تجاری)
-    assert revenue_lines[0].credit == Decimal(1_800_000)
+    # درآمد ناخالص و تخفیف، دو حقیقت حسابداریِ مستقل‌اند.
+    assert revenue_lines[0].credit == Decimal(2_000_000)
+    discount = db.query(Account).filter(Account.system_role == cc.SALES_DISCOUNT).one()
+    discount_lines = [line for line in entry.lines if line.account_id == discount.id]
+    assert discount_lines[0].debit == Decimal(200_000)
     # بدهکارِ دریافتنی/صندوق = خالص + مالیات
     assert max(l.debit for l in entry.lines) == Decimal(1_980_000)
 

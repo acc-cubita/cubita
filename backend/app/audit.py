@@ -84,7 +84,7 @@ def audited_models() -> dict[type, str]:
     """
     from app.models.accounting import JournalEntry
     from app.models.banking import Check
-    from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
+    from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.payroll import Payslip
     from app.models.period_close import FiscalPeriodClose
     from app.models.payment import Payment
@@ -98,6 +98,7 @@ def audited_models() -> dict[type, str]:
         SalesInvoice: "فاکتور فروش",
         PurchaseInvoice: "فاکتور خرید",
         WarehouseReceipt: "رسید انبار خرید",
+        WarehouseIssue: "خروج انبار فروش",
         SalesReturn: "برگشت از فروش",
         PurchaseReturn: "برگشت از خرید",
         StockTransfer: "انتقال انبار",

@@ -108,7 +108,11 @@ def test_an_automatic_entry_is_numbered_too(db, user, client):
         },
     )
     assert res.status_code == 201, res.text
-    entry_id = res.json()["journal_entry_id"]
+    # ثبت فاکتور تجاری دیگر سند را ضمنی نمی‌سازد؛ صدور صریح هم باید ردیف‌ها را
+    # شماره‌گذاری کند.
+    posted = client.post(f"/api/sales-invoices/{res.json()['id']}/journal")
+    assert posted.status_code == 200, posted.text
+    entry_id = posted.json()["journal_entry_id"]
 
     db.expire_all()
     seqs = [l.seq for l in db.get(JournalEntry, entry_id).lines]

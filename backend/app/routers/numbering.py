@@ -37,6 +37,7 @@ DOC_LABELS: dict[str, str] = {
     "receipt": "رسید دریافت",
     "payment": "اعلامیه پرداخت",
     "warehouse_receipt": "رسید انبار خرید",
+    "warehouse_issue": "خروج انبار فروش",
 }
 
 

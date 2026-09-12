@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import {
-  createSalesInvoiceDirect,
+  createSalesInvoiceCommercial,
   fetchContacts,
   fetchContactTier,
   fetchCostCenters,
@@ -31,6 +31,8 @@ export interface DraftLine {
   qty: string
   unitPrice: string
   discount: string
+  addition: string
+  dutyAmount: string
 }
 
 /**
@@ -41,7 +43,6 @@ export interface DraftLine {
  */
 export function useSalesInvoiceDraft({
   token,
-  warehouses,
   items,
   onQueued,
   prefill,
@@ -62,13 +63,18 @@ export function useSalesInvoiceDraft({
   const [invoiceDiscount, setInvoiceDiscount] = usePersistentState('cubita.draft.salesInvoice.invoiceDiscount', '', persistOff)
   const [invoiceDiscountMode, setInvoiceDiscountMode] = usePersistentState<'amount' | 'percent'>('cubita.draft.salesInvoice.invoiceDiscountMode', 'amount', persistOff)
   const [roundStep, setRoundStep] = usePersistentState('cubita.draft.salesInvoice.roundStep', 0, persistOff) // ۰ = بدون رند
-  const [lines, setLines] = usePersistentState<DraftLine[]>('cubita.draft.salesInvoice.lines', [{ itemId: '', qty: '1', unitPrice: '', discount: '' }], persistOff)
+  const [lines, setLines] = usePersistentState<DraftLine[]>('cubita.draft.salesInvoice.lines', [{ itemId: '', qty: '1', unitPrice: '', discount: '', addition: '', dutyAmount: '' }], persistOff)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.salesInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   const [contactId, setContactId] = usePersistentState('cubita.draft.salesInvoice.contactId', '', persistOff)
+  const [customerName2, setCustomerName2] = usePersistentState('cubita.draft.salesInvoice.customerName2', '', persistOff)
+  const [deliveryLocation, setDeliveryLocation] = usePersistentState('cubita.draft.salesInvoice.deliveryLocation', '', persistOff)
+  const [settlementTerms, setSettlementTerms] = usePersistentState<'cash' | 'credit' | 'mixed'>('cubita.draft.salesInvoice.settlementTerms', 'credit', persistOff)
+  const [statementDate, setStatementDate] = usePersistentState('cubita.draft.salesInvoice.statementDate', '', persistOff)
+  const [description, setDescription] = usePersistentState('cubita.draft.salesInvoice.description', '', persistOff)
   const [brokerId, setBrokerId] = usePersistentState('cubita.draft.salesInvoice.brokerId', '', persistOff)
   //: فروشنده کاربرِ سامانه است نه طرف‌حساب — مبنای «محاسبه پورسانت».
   const [salespeople, setSalespeople] = useState<{ id: string; name: string }[]>([])
@@ -104,10 +110,15 @@ export function useSalesInvoiceDraft({
   // کل و رند صفر می‌مانند تا دوبار حساب نشود. تاریخ و کلیدِ یکتاسازی تازه‌اند.
   useEffect(() => {
     if (!prefill) return
-    setWarehouseId(prefill.warehouse_id)
+    setWarehouseId(prefill.warehouse_id ?? '')
     // رونوشت: تخفیفِ سطح را روی این فاکتور اعمال نکن (تخفیفِ سطری از فاکتورِ اصلی می‌آید).
     suppressTierRef.current = true
     setContactId(prefill.contact_id ?? '')
+    setCustomerName2(prefill.customer_name2 ?? '')
+    setDeliveryLocation(prefill.delivery_location ?? '')
+    setSettlementTerms(prefill.settlement_terms ?? 'credit')
+    setStatementDate(prefill.statement_date ?? '')
+    setDescription(prefill.description ?? '')
     setTaxRate(String(Number(prefill.tax_rate)))
     setCurrencyCode('')
     setInvoiceDiscount('')
@@ -119,6 +130,8 @@ export function useSalesInvoiceDraft({
         qty: String(Number(l.qty)),
         unitPrice: String(Number(l.unit_price)),
         discount: Number(l.discount) ? String(Number(l.discount)) : '',
+        addition: Number(l.addition) ? String(Number(l.addition)) : '',
+        dutyAmount: Number(l.duty_amount) ? String(Number(l.duty_amount)) : '',
       })),
     )
     idempotencyKey.current = newIdempotencyKey()
@@ -254,7 +267,7 @@ export function useSalesInvoiceDraft({
     }
   }, [token, contactId, contacts])
 
-  const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
+  const effectiveWarehouseId = warehouseId
 
   // کالای خدماتی موجودیِ انبار ندارد (is_service در کش عدد ۰/۱ است).
   function isService(itemId: string): boolean {
@@ -284,7 +297,7 @@ export function useSalesInvoiceDraft({
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { itemId: '', qty: '1', unitPrice: '', discount: '' }])
+    setLines((prev) => [...prev, { itemId: '', qty: '1', unitPrice: '', discount: '', addition: '', dutyAmount: '' }])
   }
 
   function removeLine(index: number) {
@@ -293,6 +306,8 @@ export function useSalesInvoiceDraft({
 
   const gross = lines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitPrice) || 0), 0)
   const discountTotal = lines.reduce((sum, line) => sum + (Number(line.discount) || 0), 0)
+  const additionsTotal = lines.reduce((sum, line) => sum + (Number(line.addition) || 0), 0)
+  const dutiesTotal = lines.reduce((sum, line) => sum + (Number(line.dutyAmount) || 0), 0)
   // خالصِ پس از تخفیفِ سطری.
   const netAfterLine = gross - discountTotal
   // تخفیفِ کلِ فاکتور: مبلغی یا درصدی (روی خالصِ پس از تخفیفِ سطری). سقفش همان خالص است.
@@ -305,7 +320,7 @@ export function useSalesInvoiceDraft({
   const total = netAfterLine - invoiceDiscountAmount
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const taxAmount = Math.round((total * taxRateNum) / 100)
-  const grandBeforeRound = total + taxAmount
+  const grandBeforeRound = total + additionsTotal + dutiesTotal + taxAmount
   // رند فقط به پایین (به نفعِ مشتری) و فقط در ریالِ پایه معنا دارد؛ در ارز پنهان است.
   const roundAdjust = roundStep > 0 && !currencyCode ? Math.floor(grandBeforeRound / roundStep) * roundStep - grandBeforeRound : 0
   const grandTotal = grandBeforeRound + roundAdjust
@@ -357,10 +372,6 @@ export function useSalesInvoiceDraft({
   async function submit(): Promise<boolean> {
     setMessage(null)
 
-    if (!effectiveWarehouseId) {
-      setMessage('ابتدا هم‌گام‌سازی کنید تا انبار در دسترس باشد.')
-      return false
-    }
     if (validLines.length === 0) {
       setMessage('حداقل یک ردیف معتبر (کالا + تعداد) لازم است.')
       return false
@@ -372,7 +383,12 @@ export function useSalesInvoiceDraft({
 
     const payload = {
       invoice_date: invoiceDate,
-      warehouse_id: effectiveWarehouseId,
+      warehouse_id: effectiveWarehouseId || null,
+      customer_name2: customerName2.trim(),
+      delivery_location: deliveryLocation.trim(),
+      settlement_terms: settlementTerms,
+      statement_date: statementDate || null,
+      description: description.trim(),
       tax_rate: taxRateNum,
       cost_center_id: costCenterId || null,
       contact_id: contactId || null,
@@ -389,6 +405,8 @@ export function useSalesInvoiceDraft({
         qty: Number(l.qty),
         unit_price: Math.round((Number(l.unitPrice) || 0) * rate),
         discount: Math.round((Number(l.discount) || 0) * rate),
+        addition: Math.round((Number(l.addition) || 0) * rate),
+        duty_amount: Math.round((Number(l.dutyAmount) || 0) * rate),
       })),
     }
 
@@ -398,13 +416,18 @@ export function useSalesInvoiceDraft({
         await window.cubita.queueSalesInvoice(payload)
         setMessage('فاکتور در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.')
       } else {
-        await createSalesInvoiceDirect(token, payload, idempotencyKey.current)
-        setMessage('فاکتور با موفقیت ثبت شد.')
+        await createSalesInvoiceCommercial(token, payload, idempotencyKey.current)
+        setMessage('فاکتور تجاری ثبت شد؛ سند حسابداری و خروج انبار را از فهرست فاکتورها صادر کنید.')
       }
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
-      setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '' }])
+      setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '', addition: '', dutyAmount: '' }])
       setCostCenterId('')
       setContactId('')
+      setCustomerName2('')
+      setDeliveryLocation('')
+      setSettlementTerms('credit')
+      setStatementDate('')
+      setDescription('')
       setBrokerId('')
       setSalespersonId('')
       setSaleTypeId('')
@@ -450,6 +473,16 @@ export function useSalesInvoiceDraft({
     contacts,
     contactId,
     setContactId,
+    customerName2,
+    setCustomerName2,
+    deliveryLocation,
+    setDeliveryLocation,
+    settlementTerms,
+    setSettlementTerms,
+    statementDate,
+    setStatementDate,
+    description,
+    setDescription,
     credit,
     blacklisted,
     creditBlock,
@@ -474,6 +507,8 @@ export function useSalesInvoiceDraft({
     // derived
     gross,
     discountTotal,
+    additionsTotal,
+    dutiesTotal,
     netAfterLine,
     total,
     taxAmount,

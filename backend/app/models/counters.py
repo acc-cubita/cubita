@@ -52,6 +52,7 @@ DOC_CHECK_OPERATION = "check_operation"
 DOC_RECEIPT = "receipt"
 DOC_PAYMENT = "payment"
 DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
+DOC_WAREHOUSE_ISSUE = "warehouse_issue"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -71,6 +72,7 @@ DOC_TYPES = (
     DOC_RECEIPT,
     DOC_PAYMENT,
     DOC_WAREHOUSE_RECEIPT,
+    DOC_WAREHOUSE_ISSUE,
 )
 
 

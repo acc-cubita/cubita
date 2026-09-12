@@ -29,7 +29,10 @@ def customer_outstanding(db: Session, contact_id: UUID, as_of: date | None = Non
     as_of = as_of or date.today()
 
     invoices = db.query(
-        func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0)
+        func.coalesce(func.sum(
+            SalesInvoice.total_amount + SalesInvoice.tax_amount + SalesInvoice.total_additions
+            + SalesInvoice.total_duties + SalesInvoice.rounding
+        ), 0)
     ).filter(
         SalesInvoice.contact_id == contact_id,
         SalesInvoice.voided_at.is_(None),

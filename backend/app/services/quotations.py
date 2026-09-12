@@ -195,14 +195,13 @@ def convert_quotation_to_invoice(db: Session, quotation_id: UUID, data: SalesQuo
     if not invoice_lines:
         raise HTTPException(status.HTTP_409_CONFLICT, "تمام مقدار این پیش‌فاکتور قبلاً فاکتور شده است")
     warehouse_id = data.warehouse_id or quotation.warehouse_id
-    if warehouse_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای صدور فاکتور فروش، انبار زمینه را انتخاب کنید")
     invoice = post_sales_invoice(db, SalesInvoiceIn(
         invoice_date=date.today(), warehouse_id=warehouse_id, contact_id=quotation.contact_id,
+        customer_name2=quotation.customer_name2, delivery_location=quotation.delivery_location,
         description=quotation.description, sale_type_id=quotation.sale_type_id,
         currency_code=quotation.currency_code, exchange_rate=quotation.exchange_rate,
         source_quotation_id=quotation.id, lines=invoice_lines,
-    ), user, move_inventory=False)
+    ), user, move_inventory=False, issue_accounting=False)
     if quotation.converted_invoice_id is None:
         quotation.converted_invoice_id = invoice.id
     db.flush(); attach_progress(db, [quotation])

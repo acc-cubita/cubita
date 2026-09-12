@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ScanLine, Plus, Minus, Trash2, ShoppingCart, Wallet, CheckCircle2, Store, Camera, Printer } from 'lucide-react'
 import {
-  createSalesInvoiceDirect,
+  createImmediateSalesInvoice,
   fetchContacts,
   fetchItemsLive,
   fetchPriceListItems,
@@ -233,7 +233,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
     }
     setBusy(true)
     try {
-      const res = (await createSalesInvoiceDirect(
+      const res = (await createImmediateSalesInvoice(
         token,
         {
           invoice_date: todayIso(),
@@ -272,7 +272,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
     setBusy(true)
     setMessage(null)
     try {
-      const res = (await createSalesInvoiceDirect(
+      const res = (await createImmediateSalesInvoice(
         token,
         {
           invoice_date: todayIso(),

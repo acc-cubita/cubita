@@ -2,24 +2,29 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Ban, FileText, Printer, FileDown, ChevronDown, ChevronLeft, Copy, PackageCheck, CreditCard } from 'lucide-react'
 import {
   can,
+  createWarehouseIssueIdempotent,
   createWarehouseReceiptIdempotent,
   downloadPurchaseInvoicePdf,
   downloadSalesInvoicePdf,
   fetchContacts,
+  fetchWarehouseIssues,
   fetchWarehouseReceipts,
   fetchPurchaseInvoices,
   fetchSalesInvoices,
   newIdempotencyKey,
   printPurchaseInvoice,
   printSalesInvoice,
+  issueSalesInvoiceJournal,
   voidPurchaseInvoice,
   voidSalesInvoice,
   voidWarehouseReceipt,
+  voidWarehouseIssue,
   type ContactRecord,
   type MeResponse,
   type PurchaseInvoiceRecord,
   type SalesInvoiceRecord,
   type WarehouseReceiptRecord,
+  type WarehouseIssueRecord,
 } from '../api'
 import type { WarehouseCache } from '../electron.d'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -70,6 +75,8 @@ export function InvoiceList({
 
   const canVoid = can(me, 'invoices', 'delete')
   const canVoidWarehouseReceipt = can(me, 'accounting', 'delete')
+  const canIssueSalesJournal = can(me, 'accounting', 'create')
+  const canCreateWarehouseIssue = can(me, 'inventory', 'create')
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? id
   const columnCount = isSales ? 8 : 7
   // صفحه‌بندیِ فهرستِ فاکتورها (۱۰ در هر صفحه)؛ با تعویضِ نوع (فروش/خرید) به اولِ فهرست برمی‌گردد.
@@ -116,6 +123,21 @@ export function InvoiceList({
     }
   }
 
+  async function handleIssueJournal(row: SalesInvoiceRecord) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      const updated = await issueSalesInvoiceJournal(token, row.id)
+      setMessage('سند حسابداری فروش صادر شد؛ هیچ حرکت انبار یا وصولی ساخته نشد.')
+      setJournalEntryId(updated.journal_entry_id)
+      await refresh()
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'صدور سند حسابداری ناموفق بود')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleVoid(row: AnyInvoice) {
     // دلیل اجباری است و سرور هم آن را الزام می‌کند؛ اینجا فقط زودتر پرسیده می‌شود
     // تا کاربر بعد از یک رفت‌وبرگشت شبکه پیام خطا نگیرد.
@@ -136,7 +158,9 @@ export function InvoiceList({
       const res = await (isSales
         ? voidSalesInvoice(token, row.id, reason)
         : voidPurchaseInvoice(token, row.id, reason))
-      setMessage(`فاکتور باطل شد. سند معکوس شماره ${res.reversal_entry_number} ثبت شد.`)
+      setMessage(res.reversal_entry_id
+        ? `فاکتور باطل شد. سند معکوس شماره ${res.reversal_entry_number} ثبت شد.`
+        : 'فاکتور سندنشده با ثبت دلیل لغو شد؛ چون اثر حسابداری نداشت، سند معکوس ساخته نشد.')
       await refresh()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'ابطال ناموفق بود')
@@ -177,10 +201,12 @@ export function InvoiceList({
               const isOpen = expanded === row.id
               const net = Number(row.total_amount)
               const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
-              const grand = net + Number(row.tax_amount) + rounding
+              const grand = isSales ? Number((row as SalesInvoiceRecord).final_amount) : net + Number(row.tax_amount) + rounding
               const profit = isSales ? net - Number((row as SalesInvoiceRecord).total_cost) : 0
               const margin = isSales && net > 0 ? (profit / net) * 100 : 0
-              const journalId = isSales ? null : (row as PurchaseInvoiceRecord).journal_entry_id
+              const journalId = isSales
+                ? (row as SalesInvoiceRecord).journal_entry_id
+                : (row as PurchaseInvoiceRecord).journal_entry_id
               return (
               <Fragment key={row.id}>
               <tr
@@ -209,7 +235,15 @@ export function InvoiceList({
                   </td>
                 )}
                 <td data-label="وضعیت">
-                  {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : isSales ? 'معتبر' : (
+                  {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : isSales ? (
+                    <span>
+                      {({ unposted: 'سندنشده', posted: 'سندشده' } as const)[(row as SalesInvoiceRecord).accounting_status]}
+                      {' / '}
+                      {({ not_applicable: 'بدون خروج', not_issued: 'خروج‌نشده', partially_issued: 'خروج جزئی', fully_issued: 'خروج کامل' } as const)[(row as SalesInvoiceRecord).fulfillment_status]}
+                      {' / '}
+                      {({ unsettled: 'تسویه‌نشده', partially_settled: 'تسویه جزئی', fully_settled: 'تسویه کامل' } as const)[(row as SalesInvoiceRecord).financial_status]}
+                    </span>
+                  ) : (
                     <span>
                       {({ not_received: 'تحویل‌نشده', partially_received: 'تحویل جزئی', fully_received: 'تحویل کامل' } as const)[(row as PurchaseInvoiceRecord).inventory_status]}
                       {' / '}
@@ -228,6 +262,11 @@ export function InvoiceList({
                     {journalId && (
                       <button type="button" onClick={() => setJournalEntryId(journalId)}>
                         <FileText size={13} /> سند حسابداری
+                      </button>
+                    )}
+                    {isSales && !journalId && !row.voided_at && canIssueSalesJournal && (
+                      <button type="button" disabled={busy} onClick={() => void handleIssueJournal(row as SalesInvoiceRecord)}>
+                        <FileText size={13} /> صدور سند حسابداری
                       </button>
                     )}
                     {onDuplicate && !row.voided_at && (
@@ -256,7 +295,7 @@ export function InvoiceList({
               {isOpen && (
                 <tr className="invoice-detail-row">
                   <td className="card-full" colSpan={columnCount}>
-                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} token={token} warehouses={warehouses} canVoidWarehouseReceipt={canVoidWarehouseReceipt} onChanged={refresh} />
+                    <InvoiceDetail row={row} isSales={isSales} itemName={itemName} token={token} warehouses={warehouses} canVoidWarehouseReceipt={canVoidWarehouseReceipt} canCreateWarehouseIssue={canCreateWarehouseIssue} onChanged={refresh} />
                   </td>
                 </tr>
               )}
@@ -282,6 +321,7 @@ function InvoiceDetail({
   token,
   warehouses,
   canVoidWarehouseReceipt,
+  canCreateWarehouseIssue,
   onChanged,
 }: {
   row: AnyInvoice
@@ -290,6 +330,7 @@ function InvoiceDetail({
   token: string
   warehouses: WarehouseCache[]
   canVoidWarehouseReceipt: boolean
+  canCreateWarehouseIssue: boolean
   onChanged: () => Promise<void>
 }) {
   const net = Number(row.total_amount)
@@ -297,6 +338,8 @@ function InvoiceDetail({
   const discount = Number(row.total_discount)
   const headerDiscount = Number(row.invoice_discount) // هر دو نوع (فروش/خرید) این را دارند
   const rounding = isSales ? Number((row as SalesInvoiceRecord).rounding) : 0
+  const additions = Number(row.total_additions)
+  const duties = Number(row.total_duties)
   const cost = isSales ? Number((row as SalesInvoiceRecord).total_cost) : 0
   const profit = net - cost
   const margin = net > 0 ? (profit / net) * 100 : 0
@@ -331,6 +374,18 @@ function InvoiceDetail({
         </div>
       )}
       {row.description && <div className="invoice-detail-desc">شرح: {row.description}</div>}
+      {isSales && (row as SalesInvoiceRecord).customer_name2 && (
+        <div className="invoice-detail-desc">نام دوم مشتری: {(row as SalesInvoiceRecord).customer_name2}</div>
+      )}
+      {isSales && (row as SalesInvoiceRecord).delivery_location && (
+        <div className="invoice-detail-desc">محل تحویل: {(row as SalesInvoiceRecord).delivery_location}</div>
+      )}
+      {isSales && (
+        <div className="invoice-detail-desc">
+          شرایط تسویه: {({ cash: 'نقدی', credit: 'نسیه', mixed: 'نقدی/نسیه' } as const)[(row as SalesInvoiceRecord).settlement_terms]}
+          {(row as SalesInvoiceRecord).statement_date && ` — سررسید: ${formatJalali((row as SalesInvoiceRecord).statement_date!)}`}
+        </div>
+      )}
       {!isSales && (row as PurchaseInvoiceRecord).supplier_invoice_number && (
         <div className="invoice-detail-desc">شماره فاکتور تأمین‌کننده: {(row as PurchaseInvoiceRecord).supplier_invoice_number}</div>
       )}
@@ -347,6 +402,7 @@ function InvoiceDetail({
               <th>تعداد</th>
               <th>{isSales ? 'قیمت واحد' : 'بهای واحد'}</th>
               <th>تخفیف</th>
+              {isSales && <th>اضافات/عوارض</th>}
               <th>خالص</th>
               {isSales && <th>بهای تمام‌شده</th>}
               {isSales && <th>سود</th>}
@@ -367,6 +423,7 @@ function InvoiceDetail({
                   <td data-label="تعداد">{qty.toLocaleString('fa-IR')}</td>
                   <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}</td>
                   <td data-label="تخفیف">{lineDiscount ? fa(lineDiscount) : '—'}</td>
+                  {isSales && <td data-label="اضافات/عوارض">{fa(Number(line.addition) + Number(line.duty_amount))}</td>}
                   <td data-label="خالص">{fa(lineNet)}</td>
                   {isSales && <td data-label="بهای تمام‌شده">{fa(lineCost)}</td>}
                   {isSales && <td className={lineProfit >= 0 ? 'stock-ok' : 'stock-over'} data-label="سود">{fa(lineProfit)}</td>}
@@ -380,9 +437,11 @@ function InvoiceDetail({
         {discount > 0 && <span>جمع تخفیف: {fa(discount)}</span>}
         {headerDiscount > 0 && <span>از آن، تخفیف کل فاکتور: {fa(headerDiscount)}</span>}
         <span>جمع خالص: {fa(net)}</span>
+        {additions > 0 && <span>اضافات: {fa(additions)}</span>}
+        {duties > 0 && <span>عوارض: {fa(duties)}</span>}
         {tax > 0 && <span>مالیات: {fa(tax)}</span>}
         {rounding !== 0 && <span>گِرد کردن: {fa(rounding)}</span>}
-        <span>قابل پرداخت: <strong>{fa(net + tax + rounding)}</strong></span>
+        <span>قابل پرداخت: <strong>{fa(net + additions + duties + tax + rounding)}</strong></span>
         {isSales && <span>بهای تمام‌شده: {fa(cost)}</span>}
         {isSales && (
           <span className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
@@ -399,6 +458,147 @@ function InvoiceDetail({
           onCreated={onChanged}
         />
       )}
+      {isSales && !row.voided_at && (
+        <WarehouseIssueEditor
+          token={token}
+          invoice={row as SalesInvoiceRecord}
+          warehouses={warehouses}
+          canCreate={canCreateWarehouseIssue}
+          canVoid={canVoidWarehouseReceipt}
+          onChanged={onChanged}
+        />
+      )}
+    </div>
+  )
+}
+
+function WarehouseIssueEditor({
+  token,
+  invoice,
+  warehouses,
+  canCreate,
+  canVoid,
+  onChanged,
+}: {
+  token: string
+  invoice: SalesInvoiceRecord
+  warehouses: WarehouseCache[]
+  canCreate: boolean
+  canVoid: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [warehouseId, setWarehouseId] = useState(invoice.warehouse_id ?? warehouses[0]?.id ?? '')
+  const [issueDate, setIssueDate] = useState(todayIso())
+  const [qty, setQty] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [issues, setIssues] = useState<WarehouseIssueRecord[] | null>(null)
+  const requestKey = useRef(newIdempotencyKey())
+  const pending = invoice.lines.filter((line) => Number(line.remaining_issueable_qty) > 0)
+
+  const refreshIssues = useCallback(async () => {
+    try {
+      setIssues(await fetchWarehouseIssues(token, invoice.id))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'دریافت سابقه خروج‌های انبار ناموفق بود')
+    }
+  }, [token, invoice.id])
+
+  useEffect(() => {
+    void refreshIssues()
+  }, [refreshIssues])
+
+  async function submit() {
+    const lines = pending
+      .map((line) => ({ sales_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_issueable_qty) }))
+      .filter((line) => line.qty > 0)
+    if (!warehouseId || lines.length === 0) {
+      setMessage('انبار و حداقل یک مقدار خروج لازم است.')
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      await createWarehouseIssueIdempotent(
+        token,
+        invoice.id,
+        { issue_date: issueDate, warehouse_id: warehouseId, lines },
+        requestKey.current,
+      )
+      requestKey.current = newIdempotencyKey()
+      setMessage('خروج مستقل انبار ثبت و بهای تمام‌شده همان خروج صادر شد.')
+      await refreshIssues()
+      await onChanged()
+      setOpen(false)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ثبت خروج انبار ناموفق بود')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleVoid(issue: WarehouseIssueRecord) {
+    const reason = window.prompt(`ابطال خروج انبار شماره ${issue.number.toLocaleString('fa-IR')}؟\nدلیل ابطال:`)
+    if (reason === null) return
+    if (reason.trim().length < 3) {
+      setMessage('دلیل ابطال باید نوشته شود.')
+      return
+    }
+    setBusy(true)
+    try {
+      await voidWarehouseIssue(token, issue.id, reason)
+      setMessage('خروج انبار با حرکت و سند جبرانی باطل شد.')
+      await refreshIssues()
+      await onChanged()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ابطال خروج انبار ناموفق بود')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="invoice-adjustments">
+      {canCreate && (
+        <button type="button" onClick={() => setOpen((value) => !value)} disabled={pending.length === 0}>
+          <PackageCheck size={14} /> {pending.length ? 'صدور خروج انبار' : 'خروج کامل شده'}
+        </button>
+      )}
+      {open && (
+        <div className="invoice-form">
+          <p className="hint">فقط این سند، موجودی کالا و بهای تمام‌شده را تغییر می‌دهد؛ خدمات در این فهرست نمی‌آیند.</p>
+          <label>انبار<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}><option value="">— انتخاب کنید —</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+          <label>تاریخ خروج<JalaliDatePicker value={issueDate} onChange={setIssueDate} /></label>
+          {pending.map((line) => (
+            <label key={line.id}>
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_issueable_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_issueable_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+            </label>
+          ))}
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت خروج</button>
+        </div>
+      )}
+      {issues && issues.length > 0 && (
+        <div className="table-scroll">
+          <table className="cards-on-mobile">
+            <thead><tr><th>شماره خروج</th><th>تاریخ</th><th>انبار</th><th>مقدار</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+            <tbody>{issues.map((issue) => (
+              <tr key={issue.id} style={issue.voided_at ? { opacity: 0.55 } : undefined}>
+                <td data-label="شماره خروج">{issue.number.toLocaleString('fa-IR')}</td>
+                <td data-label="تاریخ">{formatJalali(issue.issue_date)}</td>
+                <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === issue.warehouse_id)?.name ?? '—'}</td>
+                <td data-label="مقدار">{issue.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                <td data-label="وضعیت">{issue.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
+                <td className="card-actions" data-label="عملیات">
+                  {canVoid && !issue.voided_at ? <button type="button" className="icon-btn-danger" disabled={busy} onClick={() => void handleVoid(issue)}><Ban size={13} /> ابطال خروج</button> : '—'}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {message && <span className="hint">{message}</span>}
     </div>
   )
 }

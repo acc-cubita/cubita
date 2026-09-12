@@ -34,6 +34,8 @@ from app.models.invoices import (
     PurchaseInvoiceLine,
     WarehouseReceipt,
     WarehouseReceiptLine,
+    WarehouseIssue,
+    WarehouseIssueLine,
     SalesInvoice,
     SalesInvoiceLine,
 )
@@ -167,6 +169,8 @@ __all__ = [
     "PurchaseInvoiceLine",
     "WarehouseReceipt",
     "WarehouseReceiptLine",
+    "WarehouseIssue",
+    "WarehouseIssueLine",
     "SalesInvoice",
     "SalesInvoiceLine",
     "BankAccount",

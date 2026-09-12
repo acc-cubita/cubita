@@ -6538,3 +6538,132 @@ export const createSalesQuotationIdempotent = (token: string, data: SalesQuotati
 
 export const convertQuotationToInvoiceIdempotent = (token: string, id: string, key: string) =>
   authedSend<unknown>(token, 'POST', `/api/sales-quotations/${id}/convert`, {}, key)
+
+// قرارداد تکمیلی فصل «فاکتور فروش» فقط در انتهای فایل افزوده شده است؛ سند تجاری،
+// سند حسابداری، خروج انبار و وصول چهار وضعیت مستقل دارند.
+export interface SalesInvoiceRecord {
+  customer_snapshot: Record<string, string>
+  seller_snapshot: Record<string, string>
+  customer_name2: string
+  delivery_location: string
+  receivable_account_id: string | null
+  settlement_terms: 'cash' | 'credit' | 'mixed'
+  statement_date: string | null
+  total_additions: string
+  total_duties: string
+  journal_entry_id: string | null
+  accounting_status: 'unposted' | 'posted'
+  fulfillment_status: 'not_applicable' | 'not_issued' | 'partially_issued' | 'fully_issued'
+  issued_total_qty: string
+  settled_amount: string
+  remaining_amount: string
+  financial_status: 'unsettled' | 'partially_settled' | 'fully_settled'
+  related_receipt_count: number
+  final_amount: string
+}
+
+export interface InvoiceLineRecord {
+  addition: string
+  duty_amount: string
+  item_code_snapshot: string
+  item_name_snapshot: string
+  unit_snapshot: string
+  tax_rate_snapshot: string
+  tax_amount_snapshot: string
+  issued_qty: string
+  remaining_issueable_qty: string
+}
+
+export interface SalesInvoiceCommercialInput {
+  invoice_date: string
+  warehouse_id?: string | null
+  contact_id?: string | null
+  customer_name2?: string
+  delivery_location?: string
+  receivable_account_id?: string | null
+  settlement_terms?: 'cash' | 'credit' | 'mixed'
+  statement_date?: string | null
+  description?: string
+  tax_rate?: number
+  cost_center_id?: string | null
+  broker_id?: string | null
+  salesperson_id?: string | null
+  sale_type_id?: string | null
+  currency_code?: string | null
+  exchange_rate?: number
+  invoice_discount?: number
+  rounding?: number
+  lines: Array<{
+    item_id: string
+    qty: number
+    unit_price: number
+    discount?: number
+    addition?: number
+    duty_amount?: number
+    description?: string
+  }>
+}
+
+export const createSalesInvoiceCommercial = (
+  token: string,
+  data: SalesInvoiceCommercialInput,
+  idempotencyKey: string,
+) => authedSend<SalesInvoiceRecord>(token, 'POST', '/api/sales-invoices', data, idempotencyKey)
+
+export const createImmediateSalesInvoice = (
+  token: string,
+  data: Parameters<typeof createSalesInvoiceDirect>[1],
+  idempotencyKey?: string,
+) => authedSend<unknown>(token, 'POST', '/api/sales-invoices/immediate', data, idempotencyKey)
+
+export interface WarehouseIssueRecord {
+  id: string
+  number: number
+  issue_date: string
+  sales_invoice_id: string
+  warehouse_id: string
+  status: string
+  description: string
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+  created_by_id: string
+  lines: Array<{
+    id: string
+    sales_invoice_line_id: string
+    item_id: string
+    qty: string
+    unit_cost: string
+    item_code_snapshot: string
+    item_name_snapshot: string
+    unit_snapshot: string
+    description: string
+  }>
+}
+
+export const issueSalesInvoiceJournal = (token: string, invoiceId: string) =>
+  authedSend<SalesInvoiceRecord>(token, 'POST', `/api/sales-invoices/${invoiceId}/journal`, {})
+
+export const fetchWarehouseIssues = (token: string, invoiceId: string) =>
+  authedGet<WarehouseIssueRecord[]>(token, `/api/sales-invoices/${invoiceId}/warehouse-issues`)
+
+export const createWarehouseIssueIdempotent = (
+  token: string,
+  invoiceId: string,
+  data: {
+    issue_date: string
+    warehouse_id: string
+    description?: string
+    lines: { sales_invoice_line_id: string; qty: number }[]
+  },
+  idempotencyKey: string,
+) => authedSend<WarehouseIssueRecord>(
+  token,
+  'POST',
+  `/api/sales-invoices/${invoiceId}/warehouse-issues`,
+  data,
+  idempotencyKey,
+)
+
+export const voidWarehouseIssue = (token: string, id: string, reason: string) =>
+  authedSend<WarehouseIssueRecord>(token, 'POST', `/api/warehouse-issues/${id}/void`, { reason })
