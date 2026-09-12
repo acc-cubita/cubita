@@ -116,6 +116,7 @@ SOURCE_LABELS: dict[str, str] = {
     "sales_invoice": "فاکتور فروش",
     "purchase_invoice": "فاکتور خرید",
     "warehouse_issue": "خروج انبار فروش",
+    "warehouse_receipt": "رسید انبار",
     "sales_return": "برگشت از فروش",
     "purchase_return": "برگشت از خرید",
     "treasury_receipt": "رسید دریافت",

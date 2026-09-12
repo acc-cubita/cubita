@@ -8,6 +8,7 @@ import {
   fetchLeads,
   fetchProductionOrders,
   fetchPurchaseInvoices,
+  fetchAllWarehouseReceipts,
   fetchPurchaseReturns,
   fetchStockAdjustments,
   fetchStockCounts,
@@ -435,6 +436,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `فاکتور ${faNum(r.number)}`,
       subtitle: day(r.invoice_date),
       meta: fa(r.total_amount),
+    })),
+    receipts: def('رسیدهای انبار', (t) => fetchAllWarehouseReceipts(t), (r) => ({
+      id: r.id,
+      title: `رسید ${faNum(r.number)}`,
+      subtitle: day(r.receipt_date),
+      meta: fa(r.net_amount),
     })),
     returns: def('برگشت از خرید', fetchPurchaseReturns, (r) => ({
       id: r.id,

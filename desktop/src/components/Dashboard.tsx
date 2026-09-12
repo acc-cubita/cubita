@@ -584,6 +584,23 @@ export function Dashboard({
                 }))
                 navigate('paymentvoucher')
               }}
+              onCreateReceiptPayment={(context) => {
+                //: همان مسیرِ پیش‌پرکردنِ فاکتور — اعلامیه سندِ مستقلِ خزانه می‌ماند (§۳۹)
+                //: و مبلغ فقط پیشنهاد است، نه قید (§۴۰).
+                sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
+                  contactId: context.contact_id,
+                  documentId: context.document_id,
+                  documentType: context.document_type,
+                  description: context.description,
+                  amount: context.suggested_amount,
+                  referenceTotal: context.receipt_net_amount,
+                  referenceLabel: 'جمع مبلغ رسید انبار',
+                  currency: context.currency_code || 'IRR',
+                  rate: context.exchange_rate || '1',
+                  number: context.receipt_number,
+                }))
+                navigate('paymentvoucher')
+              }}
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}

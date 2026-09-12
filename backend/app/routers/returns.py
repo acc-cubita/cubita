@@ -24,7 +24,7 @@ from app.schemas.returns import (
 )
 from app.services import voiding
 from app.services.idempotency import idempotent
-from app.services.printing import render_invoice
+from app.services.printing import render_invoice, render_warehouse_document
 from app.services.returns import (
     attach_return_state,
     get_purchase_returnable_summary,
@@ -32,6 +32,7 @@ from app.services.returns import (
     get_returnable_summary,
     post_purchase_return,
     post_sales_return,
+    return_print_projection,
 )
 
 router = APIRouter(tags=["returns"])
@@ -288,7 +289,15 @@ def print_purchase_return(
     if pret is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت یافت نشد")
 
-    invoice = db.get(PurchaseInvoice, pret.purchase_invoice_id)
+    #: برگشتی که به رسید لنگر زده، برگه‌ی **انبار** می‌گیرد (انبار، تحویل‌گیرنده،
+    #: حمل، خالص و خالص توافقی) — نه قالبِ فاکتور که هیچ‌کدام را ندارد.
+    if pret.warehouse_receipt_id is not None:
+        html = render_warehouse_document(
+            business_name=principal.membership.tenant.name, **return_print_projection(db, pret)
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+    invoice = db.get(PurchaseInvoice, pret.purchase_invoice_id) if pret.purchase_invoice_id else None
     contact = db.get(Contact, invoice.contact_id) if invoice and invoice.contact_id else None
     party_name = contact.name if contact else "تأمین‌کننده نقدی"
     party_detail = " — ".join(filter(None, [contact.phone, contact.address])) if contact else ""

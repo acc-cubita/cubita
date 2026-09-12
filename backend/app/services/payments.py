@@ -16,7 +16,7 @@ from app.models.counters import DOC_PAYMENT
 from app.models.currency import Currency
 from app.models.inventory import Contact
 from app.models.payment import Payment, PaymentChequeTransfer, PaymentRelatedDocument
-from app.models.invoices import PurchaseInvoice
+from app.models.invoices import PurchaseInvoice, WarehouseReceipt
 from app.models.treasury import TreasuryTransaction
 from app.models.user import User
 from app.schemas.banking import CheckIn
@@ -257,6 +257,18 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
     # موتور تسویه‌ی طرف حساب واگذار کرده؛ اینجا نباید صرفِ اشاره به یک فاکتور را
     # «تسویه‌شده» اعلام کنیم یا سیاست FIFO/جزئی را بی‌اجازه اختراع کنیم.
     for related in data.related_documents:
+        #: **رسید انبار هم می‌تواند منشأِ پرداخت باشد (§۳۸).** فقط مرجع است — مبلغ
+        #: قید نمی‌شود (§۴۰) و تخصیص همچنان کارِ موتورِ تسویه است. ولی مرجعی که به
+        #: رسیدِ باطل یا به تحویل‌دهنده‌ی دیگری اشاره کند، ردیابی را دروغ می‌کند.
+        if related.document_type == "warehouse_receipt":
+            receipt = db.get(WarehouseReceipt, related.document_id)
+            if receipt is None or receipt.is_voided:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "رسید انبار مرتبط معتبر نیست")
+            if receipt.contact_id is not None and receipt.contact_id != contact.id:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "طرف حساب پرداخت با تحویل‌دهنده‌ی رسید انبار یکسان نیست"
+                )
+            continue
         if related.document_type != "purchase_invoice":
             continue
         invoice = db.get(PurchaseInvoice, related.document_id)

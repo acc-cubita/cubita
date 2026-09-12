@@ -559,3 +559,26 @@ class WarehouseIssueOut(BaseModel):
     lines: list[WarehouseIssueLineOut]
 
     model_config = {"from_attributes": True}
+
+
+class ReceiptPaymentContextOut(BaseModel):
+    """زمینه‌ی اعلامیه پرداخت از روی رسید انبار (§۳۸–§۴۰).
+
+    `receipt_net_amount` برای نمایش است («جمع مبلغ رسید انبار»)؛ `suggested_amount`
+    پیشنهادِ قابلِ‌ویرایش — و عمداً برابرِ خالص نیست، چون حمل بدهیِ حمل‌کننده است.
+    """
+
+    payment_type: str
+    contact_id: UUID
+    contact_name: str
+    document_type: str
+    document_id: UUID
+    receipt_number: int
+    description: str
+    receipt_net_amount: Decimal
+    goods_due: Decimal
+    freight_due: Decimal
+    freight_payee_id: UUID | None = None
+    suggested_amount: Decimal
+    currency_code: str = "IRR"
+    exchange_rate: Decimal = Decimal(1)

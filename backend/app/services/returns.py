@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.counters import DOC_PURCHASE_RETURN, DOC_SALES_RETURN
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
-from app.models.inventory import Item, StockLedger
+from app.models.inventory import Contact, Item, StockLedger, Warehouse
 from app.models.advanced_inventory import StockBatch
 from app.models.invoices import (
     PurchaseInvoice,
@@ -20,6 +20,7 @@ from app.models.invoices import (
     WarehouseReceiptLine,
 )
 from app.models.returns import (
+    RETURN_TYPE_LABELS,
     PurchaseReturn,
     PurchaseReturnLine,
     SalesReturn,
@@ -983,3 +984,61 @@ def attach_return_state(db: Session, returns: list) -> None:
             else "fully_settled" if paid >= final
             else "partially_settled"
         )
+
+
+def return_print_projection(db: Session, pret: PurchaseReturn) -> dict:
+    """ورودیِ برگه‌ی چاپیِ «برگشت رسید انبار» — Projectionِ همان سند.
+
+    فصل هر دو عدد را روی کاغذ می‌خواهد: «خالص» (ارزشِ دفتریِ کالای خارج‌شده) و
+    «خالص توافقی». پس دومی ردیفِ جدای جمع‌هاست، نه جایگزینِ اولی.
+    """
+    warehouse = db.get(Warehouse, pret.warehouse_id) if pret.warehouse_id else None
+    receiver = db.get(Contact, pret.receiver_id) if pret.receiver_id else None
+    receipt = db.get(WarehouseReceipt, pret.warehouse_receipt_id) if pret.warehouse_receipt_id else None
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in pret.lines])).all()}
+    lines = []
+    goods = freight = tax = Decimal(0)
+    for line in pret.lines:
+        item = items.get(line.item_id)
+        amount = line.goods_amount
+        line_freight = Decimal(line.freight_share or 0)
+        line_tax = Decimal(line.tax_amount_snapshot or 0)
+        goods += amount
+        freight += line_freight
+        tax += line_tax
+        lines.append(
+            {
+                "seq": line.seq,
+                "code": item.sku if item else "",
+                "name": item.name if item else "",
+                "unit": item.unit if item else "",
+                "qty": line.qty,
+                "unit_cost": line.unit_cost,
+                "amount": amount,
+                "tax": line_tax,
+                "freight": line_freight,
+                "net": amount + line_freight + line_tax,
+            }
+        )
+    return {
+        "title": "برگشت رسید انبار",
+        "number": pret.number,
+        "doc_date": pret.return_date,
+        "type_label": RETURN_TYPE_LABELS.get(pret.return_type, pret.return_type),
+        "warehouse_code": warehouse.code if warehouse else "",
+        "warehouse_name": warehouse.name if warehouse else "",
+        "party_label": "تحویل‌گیرنده",
+        "party_name": receiver.name if receiver else "بدونِ تحویل‌گیرنده (نقدی)",
+        "party_detail": " — ".join(filter(None, [receiver.phone, receiver.address])) if receiver else "",
+        "lines": lines,
+        "goods_amount": goods,
+        "freight_amount": freight,
+        "duty_amount": Decimal(0),
+        "tax_amount": tax,
+        "net_amount": goods + freight + tax,
+        "description": pret.description or (f"بابت رسید انبار شماره {receipt.number}" if receipt else ""),
+        "sign_labels": ("صادرکننده", "تحویل‌گیرنده"),
+        "extra_totals": [("خالص توافقی (ریال)", pret.agreed_total + tax)],
+        "voided_at": pret.voided_at,
+        "void_reason": pret.void_reason or "",
+    }

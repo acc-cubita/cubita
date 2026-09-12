@@ -867,3 +867,165 @@ def render_payment(
 </div>
 </body>
 </html>"""
+
+
+def _warehouse_rows(lines: list[dict]) -> str:
+    """ردیف‌های برگه‌ی رسید/برگشتِ انبار — ستون‌هایی که §۴۱ نام می‌برد.
+
+    «مالیات» و «حمل» هر ردیف جدا می‌آیند و «خالص» جمعِ همان سه است، تا کاغذ
+    همان تفکیکی را نشان دهد که سندِ حسابداری و فرم دارند (§۲۵ §۴۲).
+    """
+    out = []
+    for i, line in enumerate(lines, start=1):
+        seq = line.get("seq") or i
+        out.append(
+            "<tr>"
+            f"<td class='num'>{fa_number(seq)}</td>"
+            f"<td class='num'>{escape(line.get('code') or '')}</td>"
+            f"<td>{escape(line.get('name') or '')}</td>"
+            f"<td class='num'>{escape(line.get('unit') or '')}</td>"
+            f"<td class='num'>{fa_number(line['qty'])}</td>"
+            f"<td class='num'>{fa_number(line['unit_cost'])}</td>"
+            f"<td class='num'>{fa_number(line['amount'])}</td>"
+            f"<td class='num'>{fa_number(line['tax'])}</td>"
+            f"<td class='num'>{fa_number(line['freight'])}</td>"
+            f"<td class='num'>{fa_number(line['net'])}</td>"
+            "</tr>"
+        )
+    return "\n".join(out)
+
+
+def render_warehouse_document(
+    *,
+    title: str,
+    business_name: str,
+    number,
+    doc_date: date | None,
+    type_label: str,
+    warehouse_code: str,
+    warehouse_name: str,
+    party_label: str,
+    party_name: str,
+    party_detail: str,
+    lines: list[dict],
+    goods_amount: Decimal,
+    freight_amount: Decimal,
+    duty_amount: Decimal,
+    tax_amount: Decimal,
+    net_amount: Decimal,
+    description: str = "",
+    sign_labels: tuple[str, str] = ("صادرکننده", "تحویل‌دهنده"),
+    extra_totals: list[tuple[str, Decimal]] | tuple = (),
+    voided_at=None,
+    void_reason: str = "",
+    currency_line: str = "",
+) -> str:
+    """برگه‌ی چاپیِ رسیدِ انبار و برگشتِ رسید — **Projectionِ همان سند** (§۴۲).
+
+    فصل: «Print نباید مدل مالی دیگری باشد.» پس هیچ عددی این‌جا حساب نمی‌شود؛
+    اجزا (کالا، حمل، عوارض، مالیات، خالص) همان‌هایی‌اند که مدل مشتق می‌کند و
+    سندِ حسابداری از آن‌ها ساخته شده. `render_invoice` به کار نمی‌آمد چون ستونِ
+    «تخفیف» دارد و «حمل» و «کد کالا» ندارد — برگه‌ی انبار زبانِ دیگری است.
+    """
+    banner = ""
+    if voided_at is not None:
+        reason = f" — {escape(void_reason)}" if void_reason else ""
+        banner = f"<div class='voided'>این سند باطل شده است{reason}</div>"
+    currency_banner = f"<div class='currency-note'>{escape(currency_line)}</div>" if currency_line else ""
+
+    net = Decimal(str(net_amount or 0))
+    duty = Decimal(str(duty_amount or 0))
+    rows = [
+        f"<tr><td colspan='9'>جمع کالا (ریال)</td><td class='num'>{fa_number(goods_amount)}</td></tr>",
+        f"<tr><td colspan='9'>حمل (ریال)</td><td class='num'>{fa_number(freight_amount)}</td></tr>",
+    ]
+    if duty > 0:
+        rows.append(f"<tr><td colspan='9'>عوارض (ریال)</td><td class='num'>{fa_number(duty)}</td></tr>")
+    rows.append(f"<tr><td colspan='9'>مالیات (ریال)</td><td class='num'>{fa_number(tax_amount)}</td></tr>")
+    rows.append(f"<tr class='grand'><td colspan='9'>خالص (ریال)</td><td class='num'>{fa_number(net)}</td></tr>")
+    for label, value in extra_totals:
+        rows.append(f"<tr><td colspan='9'>{escape(label)}</td><td class='num'>{fa_number(value)}</td></tr>")
+
+    note = (description or "").strip()
+    notes_block = (
+        f"<div class='notes'><span class='lbl'>توضیحات</span><div class='txt'>{escape(note)}</div></div>"
+        if note
+        else ""
+    )
+    warehouse_line = " — ".join(filter(None, [warehouse_code, warehouse_name]))
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{escape(title)} شماره {fa_number(number)}</title>
+<style>{_STYLE}</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  {banner}
+  {currency_banner}
+  <div class="head">
+    <div class="brand-block">
+      <div>
+        <h1 class="title">{escape(title)}</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="chip"><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>
+      <div class="chip"><span>تاریخ</span> &nbsp;<strong>{format_jalali(doc_date)}</strong></div>
+      <div class="chip"><span>نوع</span> &nbsp;<strong>{escape(type_label)}</strong></div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h2>انبار</h2>
+      <div class="big">{escape(warehouse_line)}</div>
+    </div>
+    <div class="party">
+      <h2>{escape(party_label)}</h2>
+      <div class="big">{escape(party_name)}</div>
+      <div class="sub">{escape(party_detail)}</div>
+    </div>
+  </div>
+
+  <table class="table-plain">
+    <thead>
+      <tr>
+        <th class="num" style="width:5%">ردیف</th>
+        <th class="num" style="width:9%">کد کالا</th>
+        <th style="width:20%">عنوان کالا</th>
+        <th class="num" style="width:6%">واحد</th>
+        <th class="num" style="width:8%">مقدار</th>
+        <th class="num" style="width:10%">فی</th>
+        <th class="num" style="width:11%">مبلغ</th>
+        <th class="num" style="width:10%">مالیات و عوارض</th>
+        <th class="num" style="width:9%">حمل</th>
+        <th class="num" style="width:12%">خالص</th>
+      </tr>
+    </thead>
+    <tbody>
+{_warehouse_rows(lines)}
+    </tbody>
+    <tfoot>
+      {"".join(rows)}
+    </tfoot>
+  </table>
+
+  <div class="words">خالص به حروف: <strong>{amount_in_words(net)}</strong> ریال</div>
+
+  {notes_block}
+
+  <div class="signs">
+    <div class="sign">{escape(sign_labels[0])}</div>
+    <div class="sign">{escape(sign_labels[1])}</div>
+  </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
+</div>
+</body>
+</html>"""

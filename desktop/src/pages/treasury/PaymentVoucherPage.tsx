@@ -66,6 +66,10 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
   const [endorsedId, setEndorsedId] = useState('')
   const [lineDescription, setLineDescription] = useState('')
   const [relatedPurchaseId, setRelatedPurchaseId] = useState('')
+  //: نوعِ سندِ مرتبط — فاکتور خرید یا رسید انبار (§۳۸). فقط مرجع است، نه تخصیص.
+  const [relatedDocType, setRelatedDocType] = useState('purchase_invoice')
+  //: «جمع مبلغ رسید انبار» پایینِ فرم — برای دیدن، نه قیدِ مبلغ (§۴۰).
+  const [referenceNote, setReferenceNote] = useState('')
 
   const [cash, setCash] = useState<PaymentCashIn[]>([])
   const [withdrawals, setWithdrawals] = useState<PaymentBankWithdrawalIn[]>([])
@@ -77,15 +81,25 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
     if (!raw) return
     sessionStorage.removeItem('cubita.payment.prefill')
     try {
-      const prefill = JSON.parse(raw) as { contactId?: string; documentId?: string; amount?: string; currency?: string; rate?: string; number?: number | null }
+      const prefill = JSON.parse(raw) as {
+        contactId?: string; documentId?: string; documentType?: string; description?: string
+        amount?: string; referenceTotal?: string; referenceLabel?: string
+        currency?: string; rate?: string; number?: number | null
+      }
       const fxRate = Math.max(Number(prefill.rate ?? 1), 1)
       setPaymentType('supplier')
       setContactId(prefill.contactId ?? '')
       setRelatedPurchaseId(prefill.documentId ?? '')
+      setRelatedDocType(prefill.documentType ?? 'purchase_invoice')
       setCurrency(prefill.currency ?? 'IRR')
       setRate(String(fxRate))
       setLineAmount(String(Math.round(Number(prefill.amount ?? 0) / fxRate)))
-      setDescription(`بابت فاکتور خرید شماره ${prefill.number ?? ''}`)
+      setDescription(prefill.description ?? `بابت فاکتور خرید شماره ${prefill.number ?? ''}`)
+      if (prefill.referenceTotal) {
+        setReferenceNote(
+          `${prefill.referenceLabel ?? 'جمع مبلغ سند مرتبط'}: ${Math.round(Number(prefill.referenceTotal)).toLocaleString('fa-IR')} ریال — مبلغ پیشنهادی قابلِ تغییر است و می‌توانید بخش‌بخش پرداخت کنید.`,
+        )
+      }
     } catch {
       // پیش‌پرکنی کمکی است؛ خرابی داده‌ی نشست نباید فرم پرداخت را از کار بیندازد.
     }
@@ -240,7 +254,7 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
         description, description2, establishment, cash, bank_withdrawals: withdrawals,
         payable_cheques: payableCheques, endorsed_cheques: endorsedCheques,
         related_documents: relatedPurchaseId ? [{
-          document_type: 'purchase_invoice', document_id: relatedPurchaseId,
+          document_type: relatedDocType, document_id: relatedPurchaseId,
           // این فقط Reference است؛ تخصیص مبلغ تصمیمِ موتور Settlement است.
           allocated_amount: 0,
         }] : [],
@@ -250,6 +264,8 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
       setCash([]); setWithdrawals([]); setPayableCheques([]); setEndorsedCheques([])
       setDiscount(''); setDescription(''); setDescription2('')
       setRelatedPurchaseId('')
+      setRelatedDocType('purchase_invoice')
+      setReferenceNote('')
       setReloadKey((key) => key + 1)
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -277,6 +293,7 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
       </div></div>}
     >
       <Note msg={msg} />
+      {referenceNote && <p className="hint">{referenceNote}</p>}
       <form className="invoice-form form-full" onSubmit={submit}>
         <SectionCard icon={Banknote} title="سربرگ اعلامیه" description="نوع، طرف حساب، ارز و حساب‌های تنظیم‌شده">
           <div className="invoice-form form-full">

@@ -18,6 +18,7 @@ import {
   ListChecks,
   Medal,
   Package,
+  PackageCheck,
   PackagePlus,
   PackageSearch,
   Percent,
@@ -58,6 +59,7 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   ],
   purchases: [
     { key: 'invoices', label: 'فاکتور خرید', icon: PackagePlus },
+    { key: 'receipts', label: 'رسید انبار', icon: PackageCheck },
     { key: 'returns', label: 'برگشت از خرید', icon: Undo2 },
   ],
   inventory: [

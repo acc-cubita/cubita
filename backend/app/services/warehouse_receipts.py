@@ -746,3 +746,99 @@ def void_warehouse_receipt(
         if item is not None:
             recompute_average_cost(db, item)
     return receipt
+
+
+def receipt_print_projection(db: Session, receipt: WarehouseReceipt) -> dict:
+    """ورودیِ برگه‌ی چاپیِ رسید — از همان سندِ ذخیره‌شده (§۴۱ §۴۲).
+
+    هیچ عددی بازمحاسبه نمی‌شود: مبلغ، حمل و مالیاتِ هر ردیف همان Snapshotهایی‌اند
+    که دفترِ انبار و سندِ حسابداری از آن‌ها ساخته شده، و جمع‌ها همان‌هایی‌اند که
+    مدل مشتق می‌کند و فرم نشان می‌دهد.
+    """
+    warehouse = db.get(Warehouse, receipt.warehouse_id)
+    contact = db.get(Contact, receipt.contact_id) if receipt.contact_id else None
+    lines = []
+    for line in receipt.lines:
+        amount = line.goods_amount
+        tax = Decimal(line.tax_amount_snapshot or 0)
+        freight = Decimal(line.freight_share or 0)
+        lines.append(
+            {
+                "seq": line.seq,
+                "code": line.item_code_snapshot or (line.item.sku if line.item else ""),
+                "name": line.item_name_snapshot or (line.item.name if line.item else ""),
+                "unit": line.unit_snapshot or (line.item.unit if line.item else ""),
+                "qty": line.qty,
+                "unit_cost": line.unit_cost,
+                "amount": amount,
+                "tax": tax,
+                "freight": freight,
+                "net": amount + freight + tax,
+            }
+        )
+    return {
+        "title": "رسید انبار",
+        "number": receipt.number,
+        "doc_date": receipt.receipt_date,
+        "type_label": RECEIPT_TYPE_LABELS.get(receipt.receipt_type, receipt.receipt_type),
+        "warehouse_code": warehouse.code if warehouse else "",
+        "warehouse_name": warehouse.name if warehouse else "",
+        "party_label": "تحویل‌دهنده",
+        "party_name": contact.name if contact else "بدونِ تحویل‌دهنده (نقدی)",
+        "party_detail": " — ".join(filter(None, [contact.phone, contact.address])) if contact else "",
+        "lines": lines,
+        "goods_amount": receipt.goods_amount,
+        "freight_amount": Decimal(receipt.freight_amount or 0),
+        "duty_amount": receipt.duty_amount,
+        "tax_amount": receipt.tax_amount,
+        "net_amount": receipt.net_amount,
+        "description": receipt.description or "",
+        "sign_labels": ("صادرکننده", "تحویل‌دهنده"),
+        "voided_at": receipt.voided_at,
+        "void_reason": receipt.void_reason or "",
+    }
+
+
+def receipt_payment_context(db: Session, receipt: WarehouseReceipt) -> dict:
+    """زمینه‌ی «اعلامیه پرداخت» از روی رسید (§۳۸ §۳۹ §۴۰).
+
+    **فقط زمینه منتقل می‌شود، نه پرداخت (§۳۹).** اعلامیه همچنان سندِ مستقلِ خزانه
+    است با هویت و چرخه‌ی عمرِ خودش؛ این تابع هیچ چیزی ذخیره نمی‌کند.
+
+    **و مبلغ پیشنهاد است، نه قید (§۴۰).** شرکت ممکن است امروز بخشی و بعداً بقیه را
+    بپردازد.
+
+    **«خالصِ رسید» همان بدهیِ تحویل‌دهنده نیست.** حمل بدهیِ *حمل‌کننده* است (و بی
+    حمل‌کننده نقد پرداخت شده)؛ اگر خالص را پیشنهاد کنیم، کرایه‌ای که مالِ باربری
+    است به تأمین‌کننده پرداخت می‌شود. پس دو عدد جدا برمی‌گردند: خالص برای نمایش
+    (همان «جمع مبلغ رسید انبار» که فصل پایینِ فرم نشان می‌دهد) و سهمِ تحویل‌دهنده
+    برای پیشنهادِ مبلغ.
+    """
+    if receipt.is_voided:
+        raise HTTPException(status.HTTP_409_CONFLICT, "برای رسیدِ باطل‌شده نمی‌توان اعلامیه پرداخت صادر کرد")
+    if receipt.contact_id is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این رسید تحویل‌دهنده ندارد؛ کالا نقدی ثبت شده و بدهی‌ای برای پرداخت باقی نیست.",
+        )
+    contact = db.get(Contact, receipt.contact_id)
+    goods_tax = sum((Decimal(line.tax_amount_snapshot or 0) for line in receipt.lines), Decimal(0))
+    goods_due = receipt.goods_amount + goods_tax
+    freight_due = receipt.freight_total if receipt.carrier_id else Decimal(0)
+    suggested = goods_due + (freight_due if receipt.carrier_id == receipt.contact_id else Decimal(0))
+    return {
+        "payment_type": "supplier",
+        "contact_id": receipt.contact_id,
+        "contact_name": contact.name if contact else "",
+        "document_type": "warehouse_receipt",
+        "document_id": receipt.id,
+        "receipt_number": receipt.number,
+        "description": f"بابت رسید انبار شماره {receipt.number}",
+        "receipt_net_amount": receipt.net_amount,
+        "goods_due": goods_due,
+        "freight_due": freight_due,
+        "freight_payee_id": receipt.carrier_id,
+        "suggested_amount": suggested,
+        "currency_code": receipt.currency_code or "IRR",
+        "exchange_rate": Decimal(receipt.exchange_rate or 1),
+    }
