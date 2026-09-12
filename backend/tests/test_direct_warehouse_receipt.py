@@ -3,8 +3,9 @@
 مهم‌ترین ادعای این فایل همان هشدارِ مرکزیِ فصل است: فاکتور و رسید نباید یک بدهی
 را دو بار ثبت کنند. پس هر دو مسیر سنجیده می‌شوند:
 
-  فاکتور → رسید   :  بدهی یک‌بار (سرِ فاکتور)، رسید سند نمی‌زند
-  رسیدِ مستقیم     :  بدهی یک‌بار (سرِ رسید)، چون فاکتوری در کار نیست
+  فاکتور → رسید   :  بدهی یک‌بار سرِ فاکتور. رسید فقط کالا را از «در راه»
+                     به انبار می‌برد — طبقه‌بندیِ دوباره، نه شناساییِ تازه.
+  رسیدِ مستقیم     :  بدهی یک‌بار سرِ رسید، چون فاکتوری در کار نیست.
 """
 from datetime import date
 from decimal import Decimal
@@ -155,11 +156,15 @@ def test_a_zero_value_direct_receipt_posts_nothing(db, user):
 # ─────────────── مسیرِ اول: از دلِ فاکتور — بدون ثبتِ دوباره (§۳۷) ───────────────
 
 
-def test_an_invoice_backed_receipt_posts_no_journal(db, user):
-    """**مهم‌ترین ادعای فصل.**
+def test_an_invoice_backed_receipt_never_re_recognises_the_payable(db, user):
+    """**مهم‌ترین ادعای فصل (§۳۷).**
 
     اگر فاکتور و رسید هر دو بدهی را ثبت کنند، حسابِ تأمین‌کننده دقیقاً دو برابر
     می‌شود — و چون هر دو سند متوازن‌اند، هیچ ترازی به‌هم نمی‌خورد که خبر بدهد.
+
+    رسید **می‌تواند** سند بزند (و می‌زند: کالا را از «در راه» به انبار
+    می‌برد)، ولی آن سند فقط طبقه‌بندیِ دوباره‌ی یک دارایی است. ادعای این تست
+    همین تفکیک است، نه «رسید سند نزند».
     """
     item = make_item(db, name="لیوان")
     supplier = make_contact(db, name="تأمین‌کننده", type_="supplier")
@@ -177,7 +182,7 @@ def test_an_invoice_backed_receipt_posts_no_journal(db, user):
     )
     after_invoice = ledger.delta(cc.ACCOUNTS_PAYABLE)
 
-    receipt = create_warehouse_receipt(
+    create_warehouse_receipt(
         db,
         invoice.id,
         WarehouseReceiptIn(
@@ -192,8 +197,44 @@ def test_an_invoice_backed_receipt_posts_no_journal(db, user):
         user,
     )
 
-    assert receipt.journal_entry_id is None, "رسیدِ گره‌خورده به فاکتور نباید سند بزند"
     assert ledger.delta(cc.ACCOUNTS_PAYABLE) == after_invoice == Decimal(-50_000_000)
+
+
+def test_a_receipt_on_a_legacy_invoice_posts_nothing(db, user):
+    """فاکتورهای پیش از «کالای در راه» دست‌نخورده می‌مانند.
+
+    آن‌ها مستقیماً «موجودی کالا» را بدهکار کرده‌اند؛ اگر رسیدشان حالا دوباره
+    موجودی را بدهکار کند، موجودیِ دفتری **دو برابر** می‌شود.
+    """
+    item = make_item(db, name="لیوان")
+    supplier = make_contact(db, name="تأمین‌کننده", type_="supplier")
+    invoice = post_purchase_invoice(
+        db,
+        PurchaseInvoiceIn(
+            invoice_date=TODAY,
+            warehouse_id=None,
+            contact_id=supplier.id,
+            lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(4), unit_cost=Decimal(1_000_000))],
+        ),
+        user,
+    )
+    #: شبیه‌سازیِ ردیفِ قدیمی: سیاستِ ثبتش «مستقیم به موجودی» بوده.
+    invoice.goods_in_transit = False
+    db.flush()
+    ledger = Ledger(db).snap(cc.INVENTORY)
+
+    receipt = create_warehouse_receipt(
+        db,
+        invoice.id,
+        WarehouseReceiptIn(
+            receipt_date=TODAY,
+            warehouse_id=main_warehouse(db).id,
+            lines=[WarehouseReceiptLineIn(purchase_invoice_line_id=invoice.lines[0].id, qty=Decimal(4))],
+        ),
+        user,
+    )
+    assert receipt.journal_entry_id is None
+    assert ledger.delta(cc.INVENTORY) == Decimal(0)
 
 
 def test_the_deliverer_falls_back_to_the_invoice_counterparty(db, user):

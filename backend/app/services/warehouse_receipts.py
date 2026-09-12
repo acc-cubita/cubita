@@ -33,7 +33,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.accounting import JournalLine
+from app.models.accounting import JournalEntry, JournalLine
 from app.models.advanced_inventory import StockBatch
 from app.models.counters import DOC_WAREHOUSE_RECEIPT
 from app.models.inventory import Contact, Item, StockLedger, Warehouse
@@ -51,10 +51,10 @@ from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import warehouses as warehouses_svc
 from app.services.common import get_account, make_journal_entry
-from app.services.inventory import get_total_stock_qty, lock_items
+from app.services.inventory import get_total_stock_qty, goods_in_transit_account, lock_items
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
-from app.services.voiding import recompute_average_cost
+from app.services.voiding import recompute_average_cost, reverse_journal_entry
 
 
 def received_by_line(db: Session, invoice_id: UUID) -> dict[UUID, Decimal]:
@@ -239,6 +239,113 @@ def _post_direct_journal(
     receipt.journal_entry_id = entry.id
 
 
+def _reclassified_so_far(db: Session, invoice_line_id: UUID) -> Decimal:
+    """چقدر از این ردیفِ فاکتور قبلاً از «کالای در راه» خارج شده.
+
+    از خودِ ردیف‌های رسید مشتق می‌شود (مقدار × بهای واحد)، نه از یک ستونِ
+    جداگانه — همان قاعده‌ی «مشتق بهتر از ذخیره».
+    """
+    rows = (
+        db.query(WarehouseReceiptLine.qty, WarehouseReceiptLine.unit_cost)
+        .join(WarehouseReceipt, WarehouseReceipt.id == WarehouseReceiptLine.receipt_id)
+        .filter(
+            WarehouseReceiptLine.purchase_invoice_line_id == invoice_line_id,
+            WarehouseReceipt.voided_at.is_(None),
+            WarehouseReceipt.status == "posted",
+        )
+        .all()
+    )
+    return sum((Decimal(qty) * Decimal(unit_cost) for qty, unit_cost in rows), Decimal(0))
+
+
+def _post_reclassification(
+    db: Session,
+    receipt: WarehouseReceipt,
+    invoice: PurchaseInvoice,
+    rows: list[dict],
+    user: User,
+) -> None:
+    """کالا از «در راه» به «موجودیِ انبار» منتقل می‌شود (§۳۴).
+
+    **این شناساییِ تازه نیست، طبقه‌بندیِ دوباره است.** دارایی از بین نرفته؛ فقط
+    محلش عوض شده. بدهیِ تأمین‌کننده دست نمی‌خورد، پس §۳۷ نقض نمی‌شود — همان
+    الگویی که «چک‌های واگذارشده به بانک» دارد.
+
+    **فاکتورهای پیش از این تغییر دست‌نخورده می‌مانند.** آن‌ها مستقیماً «موجودی
+    کالا» را بدهکار کرده‌اند؛ اگر رسیدشان حالا دوباره موجودی را بدهکار کند،
+    موجودیِ دفتری دو برابر می‌شود. `invoice.goods_in_transit` همین را می‌گوید.
+    """
+    if not invoice.goods_in_transit:
+        return
+
+    inventory_account_id = warehouses_svc.inventory_account_id(db, receipt.warehouse_id)
+    transit_account = goods_in_transit_account(db)
+    total = Decimal(0)
+    for row in rows:
+        if row["item"].is_service:
+            #: خدمت هرگز در راه نبوده — همان لحظه‌ی فاکتور هزینه شده.
+            continue
+        line = db.get(PurchaseInvoiceLine, row["purchase_invoice_line_id"])
+        line_net = (
+            Decimal(line.qty) * Decimal(line.unit_cost)
+            - Decimal(line.discount)
+            + Decimal(line.addition)
+            + Decimal(line.duty_amount)
+        )
+        moved = Decimal(row["qty"]) * Decimal(row["unit_cost"])
+        #: **آخرین تحویلِ یک ردیف، ته‌مانده را هم می‌برد.** بهای واحد عددِ صحیحِ
+        #: گردشده است، پس جمعِ «مقدار × بها» لزوماً با خالصِ ردیف برابر نمی‌شود
+        #: و چند ریال در «کالای در راه» جا می‌ماند — حسابی که باید صفر شود و
+        #: هرگز نمی‌شد.
+        before = _reclassified_so_far(db, line.id) - moved
+        if Decimal(row["qty"]) + _received_before(db, line.id, receipt.id) >= Decimal(line.qty):
+            moved = line_net - before
+        if moved <= 0:
+            continue
+        total += moved
+
+    if total <= 0:
+        return
+
+    entry = make_journal_entry(
+        db,
+        receipt.receipt_date,
+        f"رسید انبار شماره {receipt.number} — ورود کالای در راه به انبار",
+        "warehouse_receipt",
+        user,
+        [
+            JournalLine(
+                account_id=inventory_account_id,
+                debit=total,
+                credit=0,
+                description=f"ورود کالا با رسید انبار شماره {receipt.number}",
+            ),
+            JournalLine(
+                account_id=transit_account.id,
+                debit=0,
+                credit=total,
+                description=f"خروج از کالای در راه (فاکتور خرید {invoice.number})",
+            ),
+        ],
+    )
+    receipt.journal_entry_id = entry.id
+
+
+def _received_before(db: Session, invoice_line_id: UUID, exclude_receipt_id: UUID) -> Decimal:
+    rows = (
+        db.query(func.coalesce(func.sum(WarehouseReceiptLine.qty), 0))
+        .join(WarehouseReceipt, WarehouseReceipt.id == WarehouseReceiptLine.receipt_id)
+        .filter(
+            WarehouseReceiptLine.purchase_invoice_line_id == invoice_line_id,
+            WarehouseReceipt.id != exclude_receipt_id,
+            WarehouseReceipt.voided_at.is_(None),
+            WarehouseReceipt.status == "posted",
+        )
+        .scalar()
+    )
+    return Decimal(rows or 0)
+
+
 def create_warehouse_receipt(
     db: Session, invoice_id: UUID | None, data: WarehouseReceiptIn, user: User
 ) -> WarehouseReceipt:
@@ -343,6 +450,8 @@ def create_warehouse_receipt(
     #: دیگری این خرید را نمی‌شناسد.
     if invoice is None:
         _post_direct_journal(db, receipt, rows, user)
+    else:
+        _post_reclassification(db, receipt, invoice, rows, user)
 
     db.flush()
     db.refresh(receipt)
@@ -382,6 +491,23 @@ def void_warehouse_receipt(
                 source_id=receipt.id,
             )
         )
+    #: **سند هم باید برگردد، نه فقط موجودی.**
+    #:
+    #: تا وقتی رسید سند نمی‌زد، ابطالش فقط کارِ انبار بود. حالا که رسیدِ مستقیم
+    #: بدهی می‌شناسد و رسیدِ فاکتوردار کالا را از «در راه» خارج می‌کند، ابطالِ
+    #: بی‌برگشتِ سند یعنی دفتر و انبار از هم جدا بیفتند: کالا برمی‌گردد ولی
+    #: مبلغش در دفتر می‌ماند.
+    if receipt.journal_entry_id is not None:
+        entry = db.get(JournalEntry, receipt.journal_entry_id)
+        if entry is not None:
+            reverse_journal_entry(
+                db,
+                entry,
+                void_date=effective_date,
+                user=user,
+                description=f"ابطال رسید انبار شماره {receipt.number}",
+            )
+
     receipt.voided_at = datetime.now(timezone.utc)
     receipt.voided_by_id = user.id
     receipt.void_reason = reason.strip()

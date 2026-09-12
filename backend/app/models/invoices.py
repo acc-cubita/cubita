@@ -3,6 +3,7 @@ from datetime import date as date_
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -322,6 +323,21 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
+
+    #: **این فاکتور کالا را در «کالای در راه» گذاشته یا مستقیم در انبار؟**
+    #:
+    #: پرچمِ *سیاستِ ثبت* است، نه وضعیتِ امروز: می‌گوید این سند وقتی زده شد چه
+    #: کرد. رسیدِ انبار به آن نگاه می‌کند تا بداند باید طبقه‌بندیِ دوباره بزند
+    #: یا نه.
+    #:
+    #: **چرا ذخیره و نه مشتق:** فاکتورهای پیش از این تغییر مستقیماً «موجودی
+    #: کالا» را بدهکار کرده‌اند. اگر رسیدشان حالا دوباره موجودی را بدهکار کند،
+    #: موجودیِ دفتری **دو برابر** می‌شود. `False` روی ردیف‌های موجود یعنی
+    #: «رسیدت سند نزند» — همان رفتاری که تا امروز داشته‌اند.
+    goods_in_transit: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     lines: Mapped[list["PurchaseInvoiceLine"]] = relationship(
