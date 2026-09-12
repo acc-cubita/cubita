@@ -34,7 +34,20 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+| Claude (hesabdari-93) | **شماره‌ی مهاجرت `0121`** · `models/returns.py` · `services/returns.py` · `routers/returns.py` · `schemas/returns.py` · `services/open_items.py` · `services/voiding.py` · `services/chart_codes.py` · `lib/salesReturnDraft.ts` · `pages/sales/SalesListPages.tsx` · `pages/sales/SalesOpsPages.tsx` · `api.ts` · `pytest` | فصلِ «برگشت از فروش»: تخصیصِ سطحِ ردیف، ابطالِ برگشت، علتِ برگشت، حسابِ ۴۱۰۳ | ۱۴۰۵/۰۶/۲۱ |
+
+> **دو هشدار برای هر که بعد از من می‌آید:**
+>
+> ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
+>    (`WarehouseIssue`، حساب‌های نوع فروش، Snapshotهای فاکتور خرید، پیش‌فاکتورِ
+>    منبع). هیچ‌کدام روی `master` نیست، **۱۸ کامیت عقب** است، و شماره‌های
+>    `0114`/`0115`/`0116`اش با `master` **تصادم** دارند (آن‌جا
+>    `counterparty_settlement`/`cheque_traceability`/`warehouse_master` نشسته‌اند).
+>    من دست بهش نزدم و checkout را به شاخه‌ی خودم بردم — آن شش کامیت با ref خودِ
+>    شاخه امن‌اند. هر که خواست فرودش بیاورد: اول rebase روی master، بعد
+>    شماره‌گذاریِ دوباره به `0122` به بعد.
+> ۲. به همین دلیل §۳۰–§۳۴ (برگشت خروج انبار) و §۵۲/§۵۳ (حذفِ COGS از سندِ تجاری)
+>    در این فصل **ساخته نشدند** — زیرساختشان همان شاخه است.
 
 ---
 
