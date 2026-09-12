@@ -34,6 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude (hesabdari-93) | مهاجرت `0122`، `services/pricing.py`، `routers/advanced_inventory.py`، `routers/sales_ops.py`، `schemas/advanced_inventory.py`، `schemas/sales_ops.py`، `models/advanced_inventory.py`، `models/invoices.py`، `audit.py`، `salesInvoiceDraft.ts`، `PosPage.tsx`، `PriceListsPanel.tsx`، `SalesOpsPages.tsx`، `api.ts`؛ و `pytest` | فصلِ «اعلامیه قیمت»: ماتریسِ قیمت قابلِ ورود شود، یک موتورِ قیمت به‌جای سه، بستنِ مسیری که ماتریس را پاک می‌کند، تغییرِ گروهیِ فی با یکتاسازی | ۱۴۰۵/۰۶/۲۱ |
 
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
