@@ -12,6 +12,7 @@ from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnReason
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.returns import (
+    ReceiptReturnableLineOut,
     PurchaseReturnIn,
     PurchaseReturnOut,
     ReturnableLineOut,
@@ -27,6 +28,7 @@ from app.services.printing import render_invoice
 from app.services.returns import (
     attach_return_state,
     get_purchase_returnable_summary,
+    get_receipt_returnable_summary,
     get_returnable_summary,
     post_purchase_return,
     post_sales_return,
@@ -43,6 +45,24 @@ def sales_invoice_returnable(
 ):
     """باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور فروش."""
     return [ReturnableLineOut(**row) for row in get_returnable_summary(db, invoice_id)]
+
+
+@router.get(
+    "/api/warehouse-receipts/{receipt_id}/returnable",
+    response_model=list[ReceiptReturnableLineOut],
+)
+def warehouse_receipt_returnable(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """پنجره‌ی «مبنا»: از این رسید چه مقدار هنوز قابلِ برگشت است.
+
+    **چرا از رسید و نه از فاکتور:** فاکتورِ خرید از مهاجرتِ ۰۱۲۷ انبار ندارد —
+    کالا با رسید وارد می‌شود. و اگر یک کالا چند بار با بهای متفاوت وارد شده
+    باشد، فقط رسید می‌داند کدام ورود را داریم برمی‌گردانیم.
+    """
+    return [ReceiptReturnableLineOut(**row) for row in get_receipt_returnable_summary(db, receipt_id)]
 
 
 @router.get("/api/purchase-invoices/{invoice_id}/returnable", response_model=list[ReturnableLineOut])

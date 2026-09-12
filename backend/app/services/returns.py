@@ -10,7 +10,15 @@ from app.models.counters import DOC_PURCHASE_RETURN, DOC_SALES_RETURN
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
 from app.models.inventory import Item, StockLedger
-from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
+from app.models.advanced_inventory import StockBatch
+from app.models.invoices import (
+    PurchaseInvoice,
+    PurchaseInvoiceLine,
+    SalesInvoice,
+    SalesInvoiceLine,
+    WarehouseReceipt,
+    WarehouseReceiptLine,
+)
 from app.models.returns import (
     PurchaseReturn,
     PurchaseReturnLine,
@@ -521,30 +529,220 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
     ]
 
 
-def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> PurchaseReturn:
-    assert_period_open(db, data.return_date)
+def _release_batch(
+    db: Session, receipt: WarehouseReceipt, receipt_line, qty: Decimal
+) -> None:
+    """مقدارِ برگشتی را از **همان بارِ ورودی** کم می‌کند.
 
-    invoice = (
-        db.query(PurchaseInvoice)
-        .filter(PurchaseInvoice.id == data.purchase_invoice_id)
+    فصل: «Where the source Item is Batch/Serial/Tracking controlled, return the
+    actual eligible source tracking identity. Do not detach the returned
+    quantity from its historical tracking context.»
+
+    تا امروز برگشت از خرید اصلاً `StockBatch` را لمس نمی‌کرد — یعنی کاردکس
+    درست می‌شد ولی فهرستِ بارها همچنان یک بارِ سالم و مثبت نشان می‌داد که دیگر
+    در انبار نبود. `received_qty` برای تاریخچه دست نمی‌خورد؛ فقط ماندهٔ سالم کم
+    می‌شود — همان قاعده‌ای که ابطالِ رسید دارد.
+    """
+    batch = (
+        db.query(StockBatch)
+        .filter(
+            StockBatch.source_type == "warehouse_receipt",
+            StockBatch.source_id == receipt.id,
+            StockBatch.item_id == receipt_line.item_id,
+            StockBatch.batch_number == f"WR{receipt.number}-{receipt_line.seq}",
+        )
         .with_for_update()
         .one_or_none()
     )
-    if invoice is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور خرید یافت نشد")
-    if invoice.voided_at is not None:
+    if batch is None:
+        return
+    batch.qty = max(Decimal(batch.qty) - Decimal(qty), Decimal(0))
+
+
+def _receipt_returnable_lines(
+    db: Session, receipt_id: UUID, *, lock: bool = False
+) -> list[_SourceLine]:
+    """ردیف‌های یک رسیدِ انبار با ماندهٔ قابلِ برگشتِ **هر ردیف**.
+
+    **باقیمانده مشتق است، نه ذخیره‌شده:**
+
+        مقدارِ رسید  −  جمعِ برگشت‌های معتبرِ همان ردیف  =  باقیمانده
+
+    فصل صریح می‌گوید «Do not maintain an unrelated manually updated
+    remaining-return scalar when the value can be derived» و «Do not use a
+    simple boolean returned = true/false». پس یک ردیفِ رسید می‌تواند چند بار
+    و جزئی برگشت بخورد تا ماندهٔ آن صفر شود.
+
+    **ابطالِ یک برگشت مقدارش را آزاد می‌کند** — چون فیلترِ `voided_at is NULL`
+    آن را از جمع بیرون می‌گذارد. فصل همین را می‌خواهد: «Releasing a valid
+    Return should restore the corresponding returnable quantity».
+
+    `lock=True` ردیف‌های رسید را تا پایانِ تراکنش قفل می‌کند. بدونش دو برگشتِ
+    هم‌زمان هر دو ماندهٔ ۲۰ را می‌خوانند و در پایان ۳۰ واحد برگشت می‌خورد —
+    دقیقاً سناریوی «Concurrent Return» فصل.
+    """
+    query = db.query(WarehouseReceiptLine).filter(WarehouseReceiptLine.receipt_id == receipt_id)
+    if lock:
+        query = query.with_for_update()
+    lines = query.order_by(WarehouseReceiptLine.seq, WarehouseReceiptLine.id).all()
+
+    allocated = dict(
+        db.query(
+            PurchaseReturnLine.warehouse_receipt_line_id,
+            func.coalesce(func.sum(PurchaseReturnLine.qty), 0),
+        )
+        .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
+        .filter(
+            PurchaseReturn.warehouse_receipt_id == receipt_id,
+            PurchaseReturn.voided_at.is_(None),
+            PurchaseReturnLine.warehouse_receipt_line_id.isnot(None),
+        )
+        .group_by(PurchaseReturnLine.warehouse_receipt_line_id)
+        .all()
+    )
+
+    rows: list[_SourceLine] = []
+    for line in lines:
+        received = Decimal(line.qty)
+        returned = Decimal(allocated.get(line.id, 0))
+        rows.append(
+            _SourceLine(
+                line=line,
+                sold=received,
+                #: «فی» و «فی تمام‌شده» جدا می‌مانند (§۲۰ فصلِ رسید): بدهیِ
+                #: تأمین‌کننده با فی برمی‌گردد، ولی از انبار بهای تمام‌شده خارج
+                #: می‌شود. `unit_price` فی را حمل می‌کند و `unit_cost` بهای
+                #: تمام‌شده را.
+                unit_price=Decimal(line.unit_cost),
+                unit_cost=line.landed_unit_cost,
+                tax_rate=Decimal(line.tax_rate_snapshot or 0),
+                returned=returned,
+                remaining=max(received - returned, Decimal(0)),
+            )
+        )
+    return rows
+
+
+def get_receipt_returnable_summary(db: Session, receipt_id: UUID) -> list[dict]:
+    """پنجره‌ی «مبنا» — چه چیزی از این رسید هنوز قابلِ برگشت است.
+
+    فصل ستون‌های این پنجره را نام می‌برد: تاریخ، باقیمانده، کد کالا، عنوان،
+    ردیابی، مقدار.
+    """
+    receipt = db.get(WarehouseReceipt, receipt_id)
+    if receipt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")
+    rows = _receipt_returnable_lines(db, receipt_id)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    return [
+        {
+            "warehouse_receipt_line_id": row.line.id,
+            "purchase_invoice_line_id": row.line.purchase_invoice_line_id,
+            "receipt_number": receipt.number,
+            "receipt_date": receipt.receipt_date,
+            "item_id": row.line.item_id,
+            "item_code": row.line.item_code_snapshot
+            or (items[row.line.item_id].sku if row.line.item_id in items else ""),
+            "item_name": row.line.item_name_snapshot
+            or (items[row.line.item_id].name if row.line.item_id in items else ""),
+            "unit": row.line.unit_snapshot
+            or (items[row.line.item_id].unit if row.line.item_id in items else ""),
+            "received": row.sold,
+            "already_returned": row.returned,
+            "remaining": row.remaining,
+            #: «فی» و «فی تمام‌شده» هر دو، چون فصل هر دو را در جدول دارد.
+            "unit_cost": row.unit_price,
+            "landed_unit_cost": row.unit_cost,
+            #: وضعیت **مشتق** است، نه یک بولینِ مستقل (§RETURN STATUS).
+            "return_status": (
+                "not_returned"
+                if row.returned == 0
+                else "fully_returned"
+                if row.remaining == 0
+                else "partially_returned"
+            ),
+        }
+        for row in rows
+    ]
+
+
+def _resolve_return_source(
+    db: Session, data: PurchaseReturnIn
+) -> tuple[PurchaseInvoice | None, WarehouseReceipt | None, UUID | None]:
+    """کدام سند مبدأِ این برگشت است — و کالا از کدام انبار خارج می‌شود.
+
+    دو لنگرِ معتبر (§SOURCE / BASIS). رسید ارجح است وقتی داده شده باشد، چون
+    اوست که انبار و بهای تمام‌شده‌ی ورود را می‌شناسد.
+    """
+    receipt: WarehouseReceipt | None = None
+    if data.warehouse_receipt_id is not None:
+        receipt = (
+            db.query(WarehouseReceipt)
+            .filter(WarehouseReceipt.id == data.warehouse_receipt_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if receipt is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "رسید انبار یافت نشد")
+        if receipt.voided_at is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "این رسید انبار باطل شده است؛ روی رسیدِ باطل‌شده نمی‌توان برگشت زد.",
+            )
+
+    invoice_id = data.purchase_invoice_id or (receipt.purchase_invoice_id if receipt else None)
+    invoice: PurchaseInvoice | None = None
+    if invoice_id is not None:
+        invoice = (
+            db.query(PurchaseInvoice)
+            .filter(PurchaseInvoice.id == invoice_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if invoice is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور خرید یافت نشد")
+        if invoice.voided_at is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "این فاکتور خرید باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
+            )
+
+    if invoice is None and receipt is None:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "این فاکتور خرید باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
+            status.HTTP_400_BAD_REQUEST, "برگشت باید به فاکتور خرید یا رسید انبار گره بخورد"
         )
 
-    rows = _purchase_returnable_lines(db, data.purchase_invoice_id, lock=True)
+    warehouse_id = receipt.warehouse_id if receipt is not None else (
+        invoice.warehouse_id if invoice is not None else None
+    )
+    if warehouse_id is None:
+        #: **پیامِ صادق به‌جای «موجودی کافی نیست (موجود: ۰)».**
+        #:
+        #: از مهاجرتِ ۰۱۲۷ فاکتور `warehouse_id` ندارد و کالا با رسید وارد
+        #: می‌شود. تا دیروز برگشت موجودی را در انبارِ خالیِ فاکتور می‌جست و
+        #: همیشه صفر می‌دید — خطایی که کاربر را دنبالِ نخود سیاه می‌فرستاد.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "کالای این فاکتور با رسید انبار وارد شده است؛ برگشت را باید روی همان رسید ثبت کنید.",
+        )
+    return invoice, receipt, warehouse_id
+
+
+def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> PurchaseReturn:
+    assert_period_open(db, data.return_date)
+
+    invoice, receipt, warehouse_id = _resolve_return_source(db, data)
+
+    if receipt is not None:
+        rows = _receipt_returnable_lines(db, receipt.id, lock=True)
+        source_attr, doc_label = "warehouse_receipt_line_id", "رسید انبار"
+    else:
+        rows = _purchase_returnable_lines(db, invoice.id, lock=True)
+        source_attr, doc_label = "purchase_invoice_line_id", "فاکتور خرید"
+
     item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
-    plan = _allocate(
-        rows, data.lines, items_by_id,
-        source_attr="purchase_invoice_line_id", doc_label="فاکتور خرید",
-    )
+    plan = _allocate(rows, data.lines, items_by_id, source_attr=source_attr, doc_label=doc_label)
     lock_items(db, {row.line.item_id for row, _, _ in plan})
 
     total_amount = Decimal(0)
@@ -556,31 +754,77 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     #: برگشتِ خریدِ خدمت باید حسابِ **هزینه** را بستانکار کند، نه موجودیِ کالا؛
     #: وگرنه موجودیِ دفتری بی‌آنکه کالایی جابه‌جا شود کم می‌شود.
     credit_by_account: dict[UUID, Decimal] = {}
-    inventory_account_id = warehouses.inventory_account_id(db, invoice.warehouse_id)
+    inventory_account_id = warehouses.inventory_account_id(db, warehouse_id)
+    agreed_total = Decimal(0)
+    agreed_by_source = {
+        line_in.warehouse_receipt_line_id or line_in.purchase_invoice_line_id: line_in
+        for line_in in data.lines
+    }
 
-    for row, qty, req in plan:
+    for index, (row, qty, req) in enumerate(plan, start=1):
         item = items_by_id[row.line.item_id]
         if not item.is_service:
-            available = get_stock_qty(db, row.line.item_id, invoice.warehouse_id)
+            #: **دو سقفِ جدا، و فصل صریح می‌گوید قاطی‌شان نکنیم.**
+            #:
+            #: «باقیمانده‌ی قابلِ برگشت از مبدأ» را `_allocate` بالاتر گرفته؛
+            #: این‌جا سقفِ دوم است: موجودیِ واقعیِ همان انبار. ممکن است رسیدِ
+            #: ۱۰۰تایی هنوز ۱۰۰ واحد قابلِ برگشت داشته باشد ولی ۷۰ واحدش
+            #: فروخته شده باشد.
+            available = get_stock_qty(db, row.line.item_id, warehouse_id)
             if available < qty:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     f"موجودی «{item.name}» برای این میزان برگشت کافی نیست (موجود: {available})",
                 )
 
+        #: «فی» و «فی تمام‌شده» جدا می‌مانند (§۲۰ فصلِ رسید). از انبار بهای
+        #: تمام‌شده خارج می‌شود؛ بدهیِ تأمین‌کننده با فی برمی‌گردد.
+        unit_price = row.unit_price
         unit_cost = row.unit_cost
-        line_net = qty * unit_cost
-        total_amount += line_net
-        tax_amount += compute_tax(line_net, row.tax_rate)
-        tax_weight += line_net * row.tax_rate
+        line_goods = qty * unit_price
+        line_landed = qty * unit_cost
+        freight_share = line_landed - line_goods
+        line_tax = compute_tax(line_goods, row.tax_rate)
+
+        total_amount += line_landed
+        tax_amount += line_tax
+        tax_weight += line_goods * row.tax_rate
         account_id = items_svc.purchase_account_id(db, item, inventory_account_id=inventory_account_id)
-        credit_by_account[account_id] = credit_by_account.get(account_id, Decimal(0)) + line_net
+        credit_by_account[account_id] = credit_by_account.get(account_id, Decimal(0)) + line_landed
+
+        #: **مبلغ مرجوعی توافقی — جدا، ولی پیش‌فرضش ارزشِ دفتری است.**
+        #:
+        #: فصل می‌گوید این دو را یکی فرض نکنیم و حسابِ اختلاف را هم اختراع
+        #: نکنیم. پس وقتی کاربر عددی نداده، پیش‌فرض همان ارزشِ موجودی است و
+        #: اختلافی وجود ندارد؛ وقتی داده و فرق می‌کند، پایین‌تر رد می‌شود.
+        source_key = row.line.id
+        requested = agreed_by_source.get(source_key)
+        agreed_unit = (
+            Decimal(requested.agreed_unit_value)
+            if requested is not None and requested.agreed_unit_value is not None
+            else unit_cost
+        )
+        line_agreed = (qty * agreed_unit).quantize(Decimal(1))
+        agreed_total += line_agreed
+
         return_lines.append(
             PurchaseReturnLine(
-                purchase_invoice_line_id=row.line.id,
+                seq=index,
+                #: لنگر روی همان سندی که مبدأ بوده — و اگر رسید به فاکتوری گره
+                #: خورده، **هر دو** نوشته می‌شوند تا برگشت از مسیرِ فاکتور هم
+                #: همین مقدار را مصرف‌شده ببیند و کالا دو بار برگشت نخورد.
+                purchase_invoice_line_id=(
+                    row.line.purchase_invoice_line_id if receipt is not None else row.line.id
+                ),
+                warehouse_receipt_line_id=row.line.id if receipt is not None else None,
                 item_id=row.line.item_id,
                 qty=qty,
-                unit_cost=unit_cost,
+                unit_cost=unit_price,
+                freight_share=freight_share,
+                agreed_unit_value=agreed_unit,
+                agreed_amount=line_agreed,
+                tax_rate_snapshot=row.tax_rate,
+                tax_amount_snapshot=line_tax,
                 description=req.description,
             )
         )
@@ -589,27 +833,53 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             existing_qty = get_total_stock_qty(db, item.id)
             new_qty = existing_qty - qty
             if new_qty > 0:
-                item.average_cost = ((existing_qty * item.average_cost) - (qty * unit_cost)) / new_qty
+                item.average_cost = ((existing_qty * item.average_cost) - line_landed) / new_qty
             stock_moves.append(
                 StockLedger(
                     item_id=row.line.item_id,
-                    warehouse_id=invoice.warehouse_id,
+                    warehouse_id=warehouse_id,
                     qty=-qty,
                     unit_cost=unit_cost,
                     entry_date=data.return_date,
                     source_type="purchase_return",
                 )
             )
+            if receipt is not None:
+                _release_batch(db, receipt, row.line, qty)
+
+    #: **اختلافِ ارزشِ دفتری و مبلغ توافقی، سندی ندارد که در آن بنشیند.**
+    #:
+    #: فصل صریح است: «Do not invent or hard-code a price-difference account
+    #: yet.» پس به‌جای اینکه اختلاف را بی‌صدا در یک حسابِ دلخواه بگذاریم یا
+    #: سندِ نامتوازن بسازیم، ثبت رد می‌شود و علتش گفته می‌شود. هر دو مبلغ در
+    #: مدل هستند و وقتی سیاستِ حسابداری‌اش تعریف شد، همین‌جا باز می‌شود.
+    if agreed_total != total_amount:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "مبلغ مرجوعی توافقی با ارزش دفتری کالا برابر نیست "
+            f"({agreed_total:,} در برابر {total_amount:,}). "
+            "سیاست حسابداری این اختلاف هنوز تعریف نشده است.",
+        )
 
     # قرینهٔ برگشت از فروش: اعتبار مالیاتیِ خرید هم باید پس برود، وگرنه اعتبارِ
     # مالیاتی بابت کالایی که دیگر نداریم روی حساب می‌ماند. نرخ از ردیف‌های خودِ
     # فاکتور می‌آید نه از سربرگش.
     tax_rate = (tax_weight / total_amount) if total_amount else Decimal(0)
 
+    #: **طرفِ مقابل از خودِ سندِ مبدأ می‌آید، نه از یک قالبِ ثابت.**
+    #:
+    #: فصل: «اگر Receipt اصلی از Account Mapping خاصی استفاده کرده، Return باید
+    #: بتواند بفهمد چه چیزی را دارد معکوس می‌کند.» رسیدِ مستقیمِ بی‌تحویل‌دهنده
+    #: نقد ثبت شده بود، پس برگشتش هم نقد است.
+    counterparty = (
+        data.receiver_id
+        or (receipt.contact_id if receipt is not None else None)
+        or (invoice.contact_id if invoice is not None else None)
+    )
     journal_lines = [
         JournalLine(
-            account_id=(get_account(db, cc.ACCOUNTS_PAYABLE) if invoice.contact_id else get_account(db, cc.CASH)).id,
-            debit=total_amount + tax_amount,  # کلِ مبلغی که از تأمین‌کننده پس گرفته می‌شود
+            account_id=(get_account(db, cc.ACCOUNTS_PAYABLE) if counterparty else get_account(db, cc.CASH)).id,
+            debit=agreed_total + tax_amount,  # کلِ مبلغی که از طرفِ مقابل پس گرفته می‌شود
             credit=0,
             description="برگشت از خرید",
         ),
@@ -637,13 +907,28 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         )
     number = next_document_number(db, DOC_PURCHASE_RETURN)
     journal_entry = make_journal_entry(
-        db, data.return_date, f"برگشت از خرید شماره {number} (فاکتور خرید {invoice.number})", "purchase_return", user, journal_lines
+        db,
+        data.return_date,
+        (
+            f"برگشت از خرید شماره {number} (رسید انبار {receipt.number})"
+            if receipt is not None
+            else f"برگشت از خرید شماره {number} (فاکتور خرید {invoice.number})"
+        ),
+        "purchase_return",
+        user,
+        journal_lines,
     )
 
     purchase_return = PurchaseReturn(
         number=number,
         return_date=data.return_date,
-        purchase_invoice_id=data.purchase_invoice_id,
+        purchase_invoice_id=invoice.id if invoice is not None else None,
+        warehouse_receipt_id=receipt.id if receipt is not None else None,
+        warehouse_id=warehouse_id,
+        receiver_id=counterparty,
+        return_type=data.return_type,
+        currency_code=(data.currency_code or None),
+        exchange_rate=data.exchange_rate,
         description=data.description,
         total_amount=total_amount,
         tax_rate=tax_rate,

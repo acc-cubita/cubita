@@ -58,6 +58,7 @@ from app.models.invoices import (
     WarehouseReceipt,
     WarehouseReceiptLine,
 )
+from app.models.returns import PurchaseReturn, PurchaseReturnLine
 from app.models.user import User
 from app.schemas.invoices import WarehouseReceiptIn
 from app.services import chart_codes as cc
@@ -664,6 +665,28 @@ def void_warehouse_receipt(
         raise HTTPException(status.HTTP_409_CONFLICT, "این رسید قبلاً باطل شده است")
     effective_date = void_date or receipt.receipt_date
     assert_period_open(db, effective_date)
+
+    #: **§۴۵ §۴۶ — اعتبارسنجیِ پایین‌دست.**
+    #:
+    #: رسیدی که برگشت خورده، منشأِ یک سندِ دیگر است. ابطالش یعنی برگشتی که به
+    #: ردیف‌هایش لنگر زده به سندی اشاره کند که دیگر نیست — «باقیمانده‌ی قابلِ
+    #: برگشت» بی‌معنا می‌شود و کاردکس دو حرکتِ متناقض نشان می‌دهد. فصل صریح
+    #: می‌گوید حذفِ فیزیکیِ ساده نباید زنجیره را خراب کند: اول برگشت باطل شود،
+    #: بعد رسید.
+    returned = (
+        db.query(func.count(PurchaseReturnLine.id))
+        .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
+        .filter(
+            PurchaseReturn.warehouse_receipt_id == receipt.id,
+            PurchaseReturn.voided_at.is_(None),
+        )
+        .scalar()
+    )
+    if returned:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این رسید برگشت خورده است؛ ابتدا سندهای برگشت را باطل کنید.",
+        )
     moves = db.query(StockLedger).filter(
         StockLedger.source_type == "warehouse_receipt", StockLedger.source_id == receipt.id
     ).all()
