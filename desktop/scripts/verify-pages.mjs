@@ -38,6 +38,12 @@ if (!EMAIL || !PASSWORD) {
 /** [گروهِ ناوبری، برچسبِ صفحه] — نماینده‌های هر ماژول. */
 const TARGETS = [
   ['مشتریان و فروش', 'فروش'],
+  //: صفحه‌های تازه‌ی فصل‌های «برگشت از فروش» و «اعلامیه قیمت». بدونِ این سه،
+  //: اجرای این اسکریپت فقط صفحه‌ی ماژولِ فروش را می‌دید و گریدِ ماتریسِ قیمت —
+  //: پهن‌ترین جدولِ تازه‌ی پروژه — هرگز در ۳۹۰ باز نمی‌شد.
+  ['مشتریان و فروش', 'اعلامیه قیمت'],
+  ['مشتریان و فروش', 'اعلامیه‌های قیمت'],
+  ['مشتریان و فروش', 'علت برگشت کالا'],
   ['مشتریان و فروش', 'اشخاص'],
   ['مشتریان و فروش', 'باشگاه مشتریان'],
   ['تامین‌کنندگان و انبار', 'خرید'],
@@ -103,6 +109,7 @@ for (const width of widths) {
         await page.waitForTimeout(450)
         await page.locator('.topnav-mobile-item', { hasText: label }).first().click()
       } else {
+        let navigated = false
         let item = page.locator('.mod-op', { hasText: label }).first()
         if (!(await item.isVisible().catch(() => false))) {
           // گروهِ تک‌صفحه‌ای در نوارِ بالا مستقیم به همان صفحه می‌رود و `.mod-op` ندارد.
@@ -110,17 +117,35 @@ for (const width of widths) {
             const nav = page.getByText(text, { exact: true }).first()
             if (await nav.isVisible().catch(() => false)) {
               await nav.click().catch(() => {})
+              navigated = true
               await page.waitForTimeout(1100)
               break
             }
           }
           item = page.locator('.mod-op', { hasText: label }).first()
         }
-        if (await item.isVisible().catch(() => false)) await item.click()
+        if (await item.isVisible().catch(() => false)) {
+          await item.click()
+        } else if (!navigated) {
+          // نه منوی عملیات پیدا شد و نه نامِ گروه در نوارِ بالا — یعنی هیچ
+          // کلیکی نشد. تا امروز اسکریپت در این حالت بی‌صدا ادامه می‌داد و
+          // **صفحه‌ی قبلی** را می‌سنجید، پس صفحه‌ای که هرگز باز نشده بود `OK`
+          // می‌گرفت. (سنجشِ `.page-header` این‌جا کار نمی‌کند: پوسته‌ی «راهنما»
+          // آن را پنهان می‌کند، پس در DOM هست ولی `isVisible` نیست.)
+          throw new Error('منوی این صفحه در ناوبری پیدا نشد')
+        }
       }
       await page.waitForTimeout(2200)
     } catch (err) {
-      console.log(`  [SKIP] ${label} — باز نشد (${String(err).slice(0, 60)})`)
+      // باز نشدنِ صفحه **شکست** است، نه یادداشت: صفحه‌ای که کاربر نمی‌تواند
+      // بازش کند دقیقاً همان چیزی است که این اسکریپت باید بگیرد. تا امروز
+      // شمرده نمی‌شد و یک اجرای کاملاً ناموفق «همه‌ی صفحه‌ها سالم» می‌گفت.
+      failed++
+      console.log(`  [FAIL] ${label} — باز نشد (${String(err).slice(0, 60)})`)
+      // کشوی موبایل باز مانده و کلیکِ بعدی می‌بنددش؛ بدونِ این، یک شکست همه‌ی
+      // صفحه‌های بعدی را هم با خودش می‌برد.
+      await page.keyboard.press('Escape').catch(() => {})
+      await page.waitForTimeout(300)
       continue
     }
 
