@@ -1,7 +1,7 @@
 """کالایی که نرسیده بود، موجودیِ انبار شمرده می‌شد
 
-Revision ID: 0129
-Revises: 0128
+Revision ID: 0130
+Revises: 0129
 
 ## واگرایی‌ای که ثابت شد
 
@@ -47,8 +47,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0129"
-down_revision: Union[str, None] = "0128"
+revision: str = "0130"
+down_revision: Union[str, None] = "0129"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

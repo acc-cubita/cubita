@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Receipt } from 'lucide-react'
 import {
   fetchEmployees,
@@ -6,6 +6,7 @@ import {
   fetchPayslipLedger,
   type EmployeeRecord,
   type PayrollPeriodRecord,
+  type PayslipLineRecord,
   type PayslipRecord,
 } from '../../api'
 import { EmptyState } from '../../components/EmptyState'
@@ -26,6 +27,13 @@ import { AsyncBlock, OpsPage } from '../accounting/kit'
  * شود و در مرورگر غربال شود — با چند سالِ فیش، آن روش از کار می‌افتد.
  */
 
+const ORIGIN_LABELS: Record<string, string> = {
+  contract: 'حکم حقوقی',
+  attendance: 'کارکرد دوره',
+  settings: 'تنظیمات حقوق',
+  loan: 'وام کارکنان',
+}
+
 const fa = (n: number) => n.toLocaleString('fa-IR')
 const faAmount = (v: string | number) => (Number(v) === 0 ? '—' : Math.round(Number(v)).toLocaleString('fa-IR'))
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -33,11 +41,76 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطا�
 const periodLabel = (p: PayrollPeriodRecord) =>
   `${JALALI_MONTH_NAMES[p.month - 1] ?? p.month} ${fa(p.year)}`
 
+/**
+ * تفکیکِ یک فیش — «این خالص از چه ساخته شد».
+ *
+ * تا مهاجرتِ ۰۱۲۸ این سؤال جواب نداشت: مزایا یک عدد بود و هر عاملی که مسکن یا
+ * خوار‌وبار نبود در همان یک عدد گم می‌شد. حالا هر عامل ردیفِ خودش را دارد، با
+ * **نامی که در لحظه‌ی صدور داشت** — نه نامِ امروزش.
+ *
+ * ستونِ «منشأ» می‌گوید برای عوض‌کردنِ هر جزء کجا باید رفت؛ بدونش کاربر عدد را
+ * می‌بیند و نمی‌داند کدام فرم را باز کند.
+ */
+function PayslipBreakdown({ lines, net }: { lines: PayslipLineRecord[]; net: string }) {
+  const earnings = lines.filter((l) => l.direction === 'earning')
+  const deductions = lines.filter((l) => l.direction === 'deduction')
+  const sum = (rows: PayslipLineRecord[]) => rows.reduce((t, l) => t + Number(l.amount || 0), 0)
+
+  return (
+    <div className="table-scroll">
+      <table className="cards-on-mobile">
+        <thead>
+          <tr>
+            <th>جزء</th>
+            <th>منشأ</th>
+            <th>توضیح</th>
+            <th>مبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {earnings.map((l) => (
+            <tr key={l.id}>
+              <td className="card-title" data-label="جزء">{l.factor_name}</td>
+              <td data-label="منشأ">{ORIGIN_LABELS[l.origin] ?? l.origin}</td>
+              <td className="card-wide" data-label="توضیح">{l.note || '—'}</td>
+              <td className="num" data-label="مبلغ">{faAmount(l.amount)}</td>
+            </tr>
+          ))}
+          <tr>
+            <td className="card-title" data-label="جمع" colSpan={3}>جمعِ درآمدها</td>
+            <td className="num" data-label="مبلغ">{faAmount(sum(earnings))}</td>
+          </tr>
+          {deductions.map((l) => (
+            <tr key={l.id}>
+              <td className="card-title" data-label="جزء">{l.factor_name}</td>
+              <td data-label="منشأ">{ORIGIN_LABELS[l.origin] ?? l.origin}</td>
+              <td className="card-wide" data-label="توضیح">{l.note || '—'}</td>
+              <td className="num" data-label="مبلغ">‎−{faAmount(l.amount)}</td>
+            </tr>
+          ))}
+          <tr>
+            <td className="card-title" data-label="جمع" colSpan={3}>جمعِ کسورات</td>
+            <td className="num" data-label="مبلغ">‎−{faAmount(sum(deductions))}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td className="card-title" data-label="خالص" colSpan={3}>خالص پرداختی</td>
+            <td className="num" data-label="خالص">{faAmount(net)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
 export function PayslipLedgerPage({ token }: { token: string }) {
   const [rows, setRows] = useState<PayslipRecord[] | null>(null)
   const [periods, setPeriods] = useState<PayrollPeriodRecord[]>([])
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
   const [error, setError] = useState<string | null>(null)
+  // کدام فیش تفکیکش باز است — یکی در هر لحظه، وگرنه جدول خوانده نمی‌شود.
+  const [openId, setOpenId] = useState<string | null>(null)
   const [periodId, setPeriodId] = useState('')
   const [employeeId, setEmployeeId] = useState('')
 
@@ -143,11 +216,13 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                       <th>قسط وام</th>
                       <th>سایر کسورات</th>
                       <th>خالص پرداختی</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
                     {pg.pageItems.map((r) => (
-                      <tr key={r.id}>
+                      <Fragment key={r.id}>
+                      <tr>
                         <td className="card-title" data-label="شماره">{r.number == null ? '—' : fa(r.number)}</td>
                         <td data-label="کارمند">{empName.get(r.employee_id) ?? '—'}</td>
                         <td data-label="دوره">{periodName.get(r.period_id) ?? '—'}</td>
@@ -160,7 +235,28 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                         <td className="num" data-label="قسط وام">{faAmount(r.loan_deduction)}</td>
                         <td className="num" data-label="سایر کسورات">{faAmount(r.other_deductions)}</td>
                         <td className="num" data-label="خالص پرداختی">{faAmount(r.net_pay)}</td>
+                        <td className="card-actions">
+                          {r.lines.length > 0 ? (
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => setOpenId(openId === r.id ? null : r.id)}
+                            >
+                              {openId === r.id ? 'بستنِ تفکیک' : 'تفکیک'}
+                            </button>
+                          ) : (
+                            <span className="field-hint">تفکیک ندارد</span>
+                          )}
+                        </td>
                       </tr>
+                      {openId === r.id && (
+                        <tr>
+                          <td className="card-full" colSpan={13}>
+                            <PayslipBreakdown lines={r.lines} net={r.net_pay} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                   <tfoot>
@@ -172,6 +268,7 @@ export function PayslipLedgerPage({ token }: { token: string }) {
                       <td className="num" data-label="قسط وام">{faAmount(totals.loan)}</td>
                       <td className="num" data-label="سایر کسورات">{faAmount(totals.other)}</td>
                       <td className="num" data-label="خالص پرداختی">{faAmount(totals.net)}</td>
+                      <td />
                     </tr>
                   </tfoot>
                 </table>

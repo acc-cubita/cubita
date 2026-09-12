@@ -120,7 +120,7 @@ def test_pay_installment_records_receipt_and_completes_plan(client):
 
     # پرداخت‌ها به‌صورتِ دریافتِ خزانه در کارت‌حسابِ مشتری دیده می‌شوند (بستانکار)
     st = client.get(f"/api/reports/contact-statement/{cust}").json()
-    receipts = [l for l in st["lines"] if l["kind"] == "receipt"]
+    receipts = [l for l in st["lines"] if l["kind"] in ("receipt", "treasury_receipt")]
     assert len(receipts) == 3
     assert sum(float(l["credit"]) for l in receipts) == 300000
 

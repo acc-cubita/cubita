@@ -12,10 +12,18 @@ const faSigned = (s: string) => {
   return n < 0 ? `${Math.abs(n).toLocaleString('fa-IR')} بس` : `${n.toLocaleString('fa-IR')} بد`
 }
 
+/**
+ * کلیدها همان `source_type`ِ قانونیِ کوبیتاست — همان‌هایی که drill-down و
+ * ردیابیِ سند با آن‌ها کار می‌کنند. تا پیش از این، کارتِ حساب کلیدهای
+ * ساختگیِ خودش (`check_in`، `check_out`) را می‌ساخت که به هیچ سندی وصل نبودند.
+ */
 const KIND_LABELS: Record<string, string> = {
   sales_invoice: 'فاکتور فروش', purchase_invoice: 'فاکتور خرید',
   sales_return: 'برگشت فروش', purchase_return: 'برگشت خرید',
-  receipt: 'دریافت', payment: 'پرداخت', check: 'چک', opening: 'مانده اول دوره',
+  receipt: 'رسید دریافت', payment: 'اعلامیه پرداخت',
+  treasury_receipt: 'دریافت', treasury_payment: 'پرداخت',
+  check: 'چک', credit_debit_note: 'اعلامیه بدهکار/بستانکار',
+  opening: 'مانده اول دوره',
 }
 
 /**

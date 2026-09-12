@@ -16,6 +16,8 @@ from app.models.invoices import (
     PurchaseInvoiceLine,
     SalesInvoice,
     SalesInvoiceLine,
+    WarehouseIssue,
+    WarehouseIssueLine,
     WarehouseReceipt,
     WarehouseReceiptLine,
 )
@@ -282,6 +284,93 @@ def sales_return_account(db: Session):
     )
 
 
+
+def _issued_by_warehouse(db: Session, invoice_line_id: UUID) -> list[tuple[UUID, Decimal]]:
+    """انبارهایی که این ردیفِ فاکتور واقعاً از آن‌ها خارج شده، با مقدارِ هرکدام.
+
+    به ترتیبِ خروج برمی‌گردد — کالایی که اول رفته اول هم برمی‌گردد. خروجِ
+    باطل‌شده شمرده نمی‌شود، چون سندِ ابطالش موجودی را از قبل برگردانده.
+    """
+    rows = (
+        db.query(WarehouseIssue.warehouse_id, WarehouseIssueLine.qty)
+        .join(WarehouseIssue, WarehouseIssue.id == WarehouseIssueLine.issue_id)
+        .filter(
+            WarehouseIssueLine.sales_invoice_line_id == invoice_line_id,
+            WarehouseIssue.voided_at.is_(None),
+        )
+        .order_by(WarehouseIssue.issue_date, WarehouseIssue.number)
+        .all()
+    )
+    merged: dict[UUID, Decimal] = {}
+    order: list[UUID] = []
+    for warehouse_id, qty in rows:
+        if warehouse_id not in merged:
+            merged[warehouse_id] = Decimal(0)
+            order.append(warehouse_id)
+        merged[warehouse_id] += Decimal(qty)
+    return [(warehouse_id, merged[warehouse_id]) for warehouse_id in order]
+
+
+def _return_stock_moves(
+    db: Session, invoice: SalesInvoice, invoice_line_id: UUID, item_id: UUID,
+    qty: Decimal, unit_cost: Decimal, entry_date, item_name: str,
+) -> list[StockLedger]:
+    """کالای برگشتی به **همان انباری** برمی‌گردد که از آن خارج شده بود.
+
+    تا امروز انبار از سربرگِ فاکتور خوانده می‌شد. مهاجرتِ ۰۱۲۵ آن ستون را
+    `nullable` کرد و سیاستِ «دومرحله‌ای» فاکتورِ بی‌انبار را دست‌یافتنی کرد — پس
+    برگشتِ چنین فاکتوری `NULL` را در `stock_ledger.warehouse_id` می‌نوشت و با
+    **خطای ۵۰۰ مدیریت‌نشده** می‌شکست.
+
+    ولی مسئله فقط `NULL` نبود. در حالتِ دومرحله‌ای ممکن است کالا **هنوز خارج
+    نشده باشد**؛ برگرداندنش موجودی‌ای اضافه می‌کرد که هرگز کم نشده بود. پس
+    برگشتِ تجاری مجاز است و ثبت می‌شود، ولی حرکتِ موجودی فقط به اندازه‌ای که
+    واقعاً خارج شده انجام می‌شود.
+
+    **مسیرِ فاکتورهای انبار‌دار عوض نمی‌شود.** وقتی سربرگ انبار دارد (هر فاکتوری
+    که در حالتِ خودکار ثبت شده، یعنی همه‌ی فاکتورهای تا امروز) همان انبار
+    استفاده می‌شود و رفتار مو‌به‌مو همان است.
+    """
+    if invoice.warehouse_id is not None:
+        return [
+            StockLedger(
+                item_id=item_id, warehouse_id=invoice.warehouse_id, qty=qty,
+                unit_cost=unit_cost, entry_date=entry_date, source_type="sales_return",
+            )
+        ]
+
+    issued = _issued_by_warehouse(db, invoice_line_id)
+    if not issued:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"«{item_name}» هنوز از انبار خارج نشده، پس برگشتش موجودی‌ای اضافه می‌کند که "
+            "هرگز کم نشده بود. اگر فروش انجام نشده، خودِ فاکتور را باطل کنید؛ اگر کالا "
+            "تحویل رفته، اول «صدور خروج انبار» را بزنید.",
+        )
+
+    #: کالا از چند انبار رفته باشد، به همان نسبت برمی‌گردد — به ترتیبِ خروج.
+    moves: list[StockLedger] = []
+    remaining = qty
+    for warehouse_id, available in issued:
+        if remaining <= 0:
+            break
+        take = min(remaining, available)
+        moves.append(
+            StockLedger(
+                item_id=item_id, warehouse_id=warehouse_id, qty=take,
+                unit_cost=unit_cost, entry_date=entry_date, source_type="sales_return",
+            )
+        )
+        remaining -= take
+    if remaining > 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"از «{item_name}» بیشتر از آنچه از انبار خارج شده برگشت داده‌اید. "
+            "برای بقیه‌اش اول «صدور خروج انبار» را بزنید.",
+        )
+    return moves
+
+
 def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesReturn:
     assert_period_open(db, data.return_date)
 
@@ -348,14 +437,10 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
             new_qty = existing_qty + qty
             if new_qty > 0:
                 item.average_cost = ((existing_qty * item.average_cost) + (qty * row.unit_cost)) / new_qty
-            stock_moves.append(
-                StockLedger(
-                    item_id=row.line.item_id,
-                    warehouse_id=invoice.warehouse_id,
-                    qty=qty,
-                    unit_cost=row.unit_cost,
-                    entry_date=data.return_date,
-                    source_type="sales_return",
+            stock_moves.extend(
+                _return_stock_moves(
+                    db, invoice, row.line.id, row.line.item_id,
+                    qty, row.unit_cost, data.return_date, item.name,
                 )
             )
 
@@ -719,7 +804,7 @@ def _resolve_return_source(
     if warehouse_id is None:
         #: **پیامِ صادق به‌جای «موجودی کافی نیست (موجود: ۰)».**
         #:
-        #: از مهاجرتِ ۰۱۲۹ فاکتور `warehouse_id` ندارد و کالا با رسید وارد
+        #: از مهاجرتِ ۰۱۳۰ فاکتور `warehouse_id` ندارد و کالا با رسید وارد
         #: می‌شود. تا دیروز برگشت موجودی را در انبارِ خالیِ فاکتور می‌جست و
         #: همیشه صفر می‌دید — خطایی که کاربر را دنبالِ نخود سیاه می‌فرستاد.
         raise HTTPException(

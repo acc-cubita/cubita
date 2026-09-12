@@ -970,6 +970,22 @@ export const fetchAttendance = (token: string, periodId: string) =>
     `/api/attendance?period_id=${periodId}`,
   )
 
+/** یک قلمِ فیش — «این عدد از چه ساخته شد».
+ *
+ * `factor_id` برای اجزای سیستمی (پایه، بیمه، مالیات، قسطِ وام) خالی است، و
+ * `factor_name` عکسِ لحظه‌ی صدور است — نه نامِ امروزِ عامل. */
+export interface PayslipLineRecord {
+  id: string
+  seq: number
+  factor_id: string | null
+  factor_name: string
+  direction: 'earning' | 'deduction'
+  /** `contract` | `attendance` | `settings` | `loan` — کجا باید عوضش کرد. */
+  origin: string
+  amount: string
+  note: string
+}
+
 export interface PayslipRecord {
   id: string
   number: number | null
@@ -988,6 +1004,9 @@ export interface PayslipRecord {
   loan_deduction: string
   other_deductions: string
   net_pay: string
+  /** تفکیکِ عامل‌به‌عامل. ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند و این‌ها توضیحشان؛
+   *  جمعشان با خالص برابر است. فیش‌های پیش از مهاجرتِ ۰۱۲۸ خالی دارندش. */
+  lines: PayslipLineRecord[]
 }
 
 export const fetchPayslips = (token: string, periodId: string) =>
@@ -7577,3 +7596,303 @@ export const fetchSalesPosting = (token: string) =>
 
 export const setSalesPosting = (token: string, mode: string) =>
   authedSend<SalesPosting>(token, 'PATCH', '/api/sales-invoice-posting', { mode })
+
+// ───────────────────── مرور جامع طرف حساب ─────────────────────
+
+/** مانده‌ی یک نقشِ طرف حساب. `ledger_net` برابرِ null یعنی طرف حساب تفصیلی ندارد. */
+export interface RolePosition {
+  role: 'customer' | 'supplier'
+  role_label: string
+  account_id: string
+  account_code: string
+  account_name: string
+  debit_total: string
+  credit_total: string
+  net: string
+  open_net: string
+  ledger_net: string | null
+  unattributed: string | null
+  document_count: number
+}
+
+export interface CounterpartySummary {
+  contact_id: string
+  contact_name: string
+  contact_type: string
+  has_analytic: boolean
+  positions: RolePosition[]
+  total_net: string
+  open_net: string
+  uncleared_cheques: string
+  net_without_uncleared_cheques: string
+}
+
+export interface CounterpartyEvent {
+  source_type: string
+  source_id: string
+  label: string
+  number: number | null
+  entry_number: number | null
+  document_date: string
+  role: 'customer' | 'supplier'
+  role_label: string
+  account_id: string
+  account_code: string
+  account_name: string
+  side: 'debit' | 'credit'
+  document_amount: string
+  currency_code: string | null
+  fx_amount: string | null
+  settled_amount: string
+  remaining_amount: string
+  status: string
+  status_label: string
+  running_balance: string
+}
+
+export interface CounterpartyEventLine {
+  kind: 'product' | 'journal' | 'adjustment'
+  seq: number
+  code: string
+  title: string
+  description: string
+  quantity: string | null
+  unit_price: string | null
+  net_unit_price: string | null
+  debit: string | null
+  credit: string | null
+}
+
+export interface CounterpartyEventDetail {
+  source_type: string
+  source_id: string
+  label: string
+  journal_entry_id: string | null
+  lines: CounterpartyEventLine[]
+}
+
+export const fetchCounterpartySummary = (token: string, contactId: string, asOf?: string) =>
+  authedGet<CounterpartySummary>(
+    token,
+    `/api/reports/counterparty/${contactId}/summary${asOf ? `?as_of=${asOf}` : ''}`,
+  )
+
+export const fetchCounterpartyEvents = (
+  token: string,
+  contactId: string,
+  opts: { from?: string; to?: string; role?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  if (opts.from) q.set('date_from', opts.from)
+  if (opts.to) q.set('date_to', opts.to)
+  if (opts.role) q.set('role', opts.role)
+  const qs = q.toString()
+  return authedGet<CounterpartyEvent[]>(
+    token,
+    `/api/reports/counterparty/${contactId}/events${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export const fetchCounterpartyEventLines = (
+  token: string,
+  contactId: string,
+  sourceType: string,
+  sourceId: string,
+) =>
+  authedGet<CounterpartyEventDetail>(
+    token,
+    `/api/reports/counterparty/${contactId}/events/${sourceType}/${sourceId}/lines`,
+  )
+
+// ───────────────────── مرور فروش ─────────────────────
+
+export interface SalesReviewSummary {
+  invoice_count: number
+  line_count: number
+  gross_amount: string
+  discount: string
+  tax: string
+  return_amount: string
+  net_sales: string
+  sold_qty: string
+  issued_qty: string
+  /** فروخته‌شده منهای خارج‌شده. */
+  unissued_qty: string
+  item_count: number
+}
+
+export interface SalesByItem {
+  item_id: string
+  item_code: string
+  item_name: string
+  is_service: boolean
+  unit_name: string
+  secondary_unit_name: string
+  sold_qty: string
+  returned_qty: string
+  net_qty: string
+  issued_qty: string
+  unissued_qty: string
+  /** همان مقدار با واحدِ دیگر — هرگز با مقدارِ اصلی جمع نمی‌شود. */
+  sold_qty_secondary: string | null
+  issued_qty_secondary: string | null
+  line_count: number
+  gross_amount: string
+  discount: string
+  tax: string
+  duty: string
+  addition: string
+  net_amount: string
+  return_amount: string
+  net_sales: string
+  average_unit_price: string | null
+  stock_qty: string
+}
+
+export interface SalesByCustomer {
+  contact_id: string | null
+  contact_name: string
+  contact_type: string
+  group_name: string
+  credit_limit: string
+  invoice_count: number
+  sold_qty: string
+  returned_qty: string
+  issued_qty: string
+  gross_amount: string
+  discount: string
+  tax: string
+  duty: string
+  addition: string
+  net_amount: string
+  return_amount: string
+  net_sales: string
+}
+
+export interface SalesByWarehouse {
+  warehouse_id: string
+  warehouse_name: string
+  issue_count: number
+  invoice_count: number
+  issued_qty: string
+  issued_cost: string
+}
+
+export interface SalesReviewDocument {
+  source_type: string
+  source_id: string
+  label: string
+  number: number | null
+  document_date: string
+  contact_id: string | null
+  contact_name: string
+  sale_type_name: string
+  is_voided: boolean
+  line_count: number
+  sold_qty: string
+  returned_qty: string
+  issued_qty: string
+  gross_amount: string
+  discount: string
+  tax: string
+  duty: string
+  addition: string
+  net_amount: string
+  return_amount: string
+  net_sales: string
+}
+
+export interface SalesReviewLine {
+  line_id: string
+  source_type: string
+  source_id: string
+  number: number | null
+  document_date: string
+  contact_id: string | null
+  contact_name: string
+  sale_type_name: string
+  item_id: string
+  item_code: string
+  item_name: string
+  barcode: string
+  unit_name: string
+  sold_qty: string
+  sold_qty_secondary: string | null
+  returned_qty: string
+  issued_qty: string
+  unissued_qty: string
+  unit_price: string
+  warehouse_names: string[]
+  is_voided: boolean
+  gross_amount: string
+  discount: string
+  tax: string
+  duty: string
+  addition: string
+  net_amount: string
+  return_amount: string
+  net_sales: string
+}
+
+export interface PreinvoiceProgress {
+  quotation_id: string
+  line_id: string
+  number: number | null
+  quotation_date: string
+  contact_id: string | null
+  contact_name: string
+  status: string
+  item_id: string
+  item_name: string
+  unit_price: string
+  quoted_qty: string
+  invoiced_qty: string
+  issued_qty: string
+  invoice_line_count: number
+  remaining_invoiceable: string
+  remaining_issueable: string
+}
+
+export interface SalesReviewScope {
+  from?: string
+  to?: string
+  contactId?: string
+  itemId?: string
+  saleTypeId?: string
+  warehouseId?: string
+  voided?: boolean
+}
+
+function salesReviewQuery(scope: SalesReviewScope): string {
+  const q = new URLSearchParams()
+  if (scope.from) q.set('date_from', scope.from)
+  if (scope.to) q.set('date_to', scope.to)
+  if (scope.contactId) q.set('contact_id', scope.contactId)
+  if (scope.itemId) q.set('item_id', scope.itemId)
+  if (scope.saleTypeId) q.set('sale_type_id', scope.saleTypeId)
+  if (scope.warehouseId) q.set('warehouse_id', scope.warehouseId)
+  if (scope.voided) q.set('voided', 'true')
+  const qs = q.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export const fetchSalesReviewSummary = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesReviewSummary>(token, `/api/reports/sales-review/summary${salesReviewQuery(scope)}`)
+
+export const fetchSalesByItem = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesByItem[]>(token, `/api/reports/sales-review/items${salesReviewQuery(scope)}`)
+
+export const fetchSalesByCustomer = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesByCustomer[]>(token, `/api/reports/sales-review/customers${salesReviewQuery(scope)}`)
+
+export const fetchSalesByWarehouse = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesByWarehouse[]>(token, `/api/reports/sales-review/warehouses${salesReviewQuery(scope)}`)
+
+export const fetchSalesReviewDocuments = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesReviewDocument[]>(token, `/api/reports/sales-review/documents${salesReviewQuery(scope)}`)
+
+export const fetchSalesReviewLines = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<SalesReviewLine[]>(token, `/api/reports/sales-review/lines${salesReviewQuery(scope)}`)
+
+export const fetchPreinvoiceProgress = (token: string, scope: SalesReviewScope = {}) =>
+  authedGet<PreinvoiceProgress[]>(token, `/api/reports/sales-review/preinvoices${salesReviewQuery(scope)}`)

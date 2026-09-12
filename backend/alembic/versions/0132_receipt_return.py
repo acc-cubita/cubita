@@ -1,11 +1,11 @@
 """برگشت، کالا را در انبارِ اشتباه دنبال می‌کرد
 
-Revision ID: 0131
-Revises: 0130
+Revision ID: 0132
+Revises: 0131
 
 ## نقصِ زنده‌ای که ثابت شد
 
-از مهاجرتِ ۰۱۲۹ به بعد، فاکتورِ خرید `warehouse_id` ندارد — کالا با رسیدِ انبار
+از مهاجرتِ ۰۱۳۰ به بعد، فاکتورِ خرید `warehouse_id` ندارد — کالا با رسیدِ انبار
 وارد می‌شود. ولی `post_purchase_return` هنوز موجودی را در
 `invoice.warehouse_id` می‌جست:
 
@@ -62,7 +62,7 @@ account»). پس هر دو عدد ذخیره می‌شوند و قابلِ تف�
 ## ترتیبِ ردیف‌ها
 
 `PurchaseReturnLine` هم با `id` مرتب می‌شد و `id` یک UUIDِ تصادفی است — همان
-نقصی که در ۰۱۳۰ برای ردیف‌های رسید بسته شد. چاپِ برگشت (که فصل ستون «ردیف»
+نقصی که در ۰۱۳۱ برای ردیف‌های رسید بسته شد. چاپِ برگشت (که فصل ستون «ردیف»
 دارد) بدونِ ترتیبِ پایدار هر بار می‌توانست چیزِ دیگری بدهد.
 """
 from typing import Sequence, Union
@@ -73,8 +73,8 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.migration_utils import rls_disabled
 
-revision: str = "0131"
-down_revision: Union[str, None] = "0130"
+revision: str = "0132"
+down_revision: Union[str, None] = "0131"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -181,7 +181,7 @@ def upgrade() -> None:
         )
 
     #: **`purchase_invoice_id` اجباری بود.** برگشتی که به رسید لنگر می‌زند
-    #: می‌تواند هیچ فاکتوری نداشته باشد (رسیدِ مستقیم) — همان کاری که ۰۱۲۸ با
+    #: می‌تواند هیچ فاکتوری نداشته باشد (رسیدِ مستقیم) — همان کاری که ۰۱۲۹ با
     #: خودِ رسید کرد.
     op.alter_column(
         "purchase_returns", "purchase_invoice_id", existing_type=UUID(as_uuid=True), nullable=True

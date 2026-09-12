@@ -408,3 +408,242 @@ class IntegrityReportOut(BaseModel):
     difference: Decimal
     ok: bool
     checks: list[IntegrityCheckOut]
+
+
+# ───────────────────── مرور جامع طرف حساب ─────────────────────
+
+
+class RolePositionOut(BaseModel):
+    """مانده‌ی یک نقشِ طرف حساب — و اینکه با دفتر می‌خواند یا نه."""
+
+    role: str
+    role_label: str
+    account_id: UUID
+    account_code: str
+    account_name: str
+    debit_total: Decimal
+    credit_total: Decimal
+    net: Decimal
+    #: مانده‌ی **قابلِ تسویه** — با `net` یکی نیست و نباید یکی گرفته شود.
+    open_net: Decimal
+    #: `None` یعنی این طرف حساب تفصیلی ندارد و مانده‌ی دفتریِ شخصی‌اش قابلِ
+    #: استخراج نیست. با صفر یکی نیست.
+    ledger_net: Decimal | None = None
+    unattributed: Decimal | None = None
+    document_count: int
+
+
+class CounterpartySummaryOut(BaseModel):
+    contact_id: UUID
+    contact_name: str
+    contact_type: str
+    has_analytic: bool
+    positions: list[RolePositionOut]
+    #: جمعِ نقش‌ها — **مشتق**، نه ذخیره‌شده. و هیچ تهاتری در دفتر نمی‌کند.
+    total_net: Decimal
+    open_net: Decimal
+    uncleared_cheques: Decimal
+    net_without_uncleared_cheques: Decimal
+
+
+class CounterpartyEventOut(BaseModel):
+    """یک رویداد در خطِ زمانیِ طرف حساب — با لنگرِ ساختاریافته‌اش."""
+
+    source_type: str
+    source_id: UUID
+    label: str
+    number: int | None = None
+    entry_number: int | None = None
+    document_date: date
+    role: str
+    role_label: str
+    account_id: UUID
+    account_code: str
+    account_name: str
+    side: str
+    document_amount: Decimal
+    currency_code: str | None = None
+    fx_amount: Decimal | None = None
+    settled_amount: Decimal
+    remaining_amount: Decimal
+    status: str
+    status_label: str
+    running_balance: Decimal
+
+
+class CounterpartyEventLineOut(BaseModel):
+    """یک قلم — نوعش می‌گوید کدام ستون‌ها برایش معنی دارند."""
+
+    kind: str
+    seq: int
+    code: str
+    title: str
+    description: str
+    quantity: Decimal | None = None
+    unit_price: Decimal | None = None
+    net_unit_price: Decimal | None = None
+    debit: Decimal | None = None
+    credit: Decimal | None = None
+
+
+class CounterpartyEventDetailOut(BaseModel):
+    source_type: str
+    source_id: UUID
+    label: str
+    journal_entry_id: UUID | None = None
+    lines: list[CounterpartyEventLineOut]
+
+
+# ───────────────────── مرور فروش ─────────────────────
+
+
+class SalesReviewSummaryOut(BaseModel):
+    invoice_count: int
+    line_count: int
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+    sold_qty: Decimal
+    issued_qty: Decimal
+    #: فروخته‌شده منهای خارج‌شده — عددی که تا این فصل هیچ‌جا دیده نمی‌شد.
+    unissued_qty: Decimal
+    item_count: int
+
+
+class SalesByItemOut(BaseModel):
+    item_id: UUID
+    item_code: str
+    item_name: str
+    is_service: bool
+    unit_name: str
+    secondary_unit_name: str = ""
+    sold_qty: Decimal
+    returned_qty: Decimal
+    net_qty: Decimal
+    issued_qty: Decimal
+    unissued_qty: Decimal
+    #: مقدار به واحدِ دوم — **همان مقدار** با واحدِ دیگر، نه فروشی جدا.
+    #: `None` یعنی واحد دوم یا ضریبش تعریف نشده.
+    sold_qty_secondary: Decimal | None = None
+    issued_qty_secondary: Decimal | None = None
+    line_count: int
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+    #: فیِ متوسطِ **تاریخی و وزنی** — نه قیمتِ اعلامیه‌ی امروز.
+    average_unit_price: Decimal | None = None
+    #: از دفترِ موجودی، نه از «فروش منهای برگشت».
+    stock_qty: Decimal
+
+
+class SalesByCustomerOut(BaseModel):
+    contact_id: UUID | None = None
+    contact_name: str
+    contact_type: str = ""
+    group_name: str = ""
+    credit_limit: Decimal = Decimal(0)
+    invoice_count: int
+    sold_qty: Decimal
+    returned_qty: Decimal
+    issued_qty: Decimal
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class SalesByWarehouseOut(BaseModel):
+    warehouse_id: UUID
+    warehouse_name: str
+    issue_count: int
+    invoice_count: int
+    issued_qty: Decimal
+    issued_cost: Decimal
+
+
+class SalesDocumentOut(BaseModel):
+    source_type: str
+    source_id: UUID
+    label: str
+    number: int | None = None
+    document_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    sale_type_name: str = ""
+    is_voided: bool
+    line_count: int
+    sold_qty: Decimal
+    returned_qty: Decimal
+    issued_qty: Decimal
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class SalesLineOut(BaseModel):
+    line_id: UUID
+    source_type: str
+    source_id: UUID
+    number: int | None = None
+    document_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    sale_type_name: str = ""
+    item_id: UUID
+    item_code: str
+    item_name: str
+    barcode: str = ""
+    unit_name: str = ""
+    sold_qty: Decimal
+    sold_qty_secondary: Decimal | None = None
+    returned_qty: Decimal
+    issued_qty: Decimal
+    unissued_qty: Decimal
+    unit_price: Decimal
+    #: انبارهایی که این ردیف واقعاً از آن‌ها خارج شده — می‌تواند چند تا باشد.
+    warehouse_names: list[str] = []
+    is_voided: bool
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class PreinvoiceProgressOut(BaseModel):
+    quotation_id: UUID
+    line_id: UUID
+    number: int | None = None
+    quotation_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    status: str
+    item_id: UUID
+    item_name: str
+    unit_price: Decimal
+    #: سه عددِ مستقل. «فاکتورشده» و «خارج‌شده» هر دو **مشتق**اند، نه شمارنده.
+    quoted_qty: Decimal
+    invoiced_qty: Decimal
+    issued_qty: Decimal
+    invoice_line_count: int
+    remaining_invoiceable: Decimal
+    remaining_issueable: Decimal

@@ -57,7 +57,7 @@ def test_customer_statement_running_balance(db, user):
     _sell(db, user, wh, item, contact, 1, 2_000_000, date(2026, 3, 10))
 
     st = get_contact_statement(db, contact.id, None, None)
-    assert [l["kind"] for l in st["lines"]] == ["sales_invoice", "receipt", "sales_invoice"]
+    assert [l["kind"] for l in st["lines"]] == ["sales_invoice", "treasury_receipt", "sales_invoice"]
     assert [l["balance"] for l in st["lines"]] == [Decimal(1_000_000), Decimal(600_000), Decimal(2_600_000)]
     assert st["total_debit"] == Decimal(3_000_000)
     assert st["total_credit"] == Decimal(400_000)
@@ -148,7 +148,7 @@ def test_receivable_check_reduces_customer_balance(db, user):
 
     assert contact_balance(db, contact.id) == Decimal(2_000_000)  # ۳م منهای چکِ ۱م
     st = get_contact_statement(db, contact.id, None, None)
-    chk = next(l for l in st["lines"] if l["kind"] == "check_in")
+    chk = next(l for l in st["lines"] if l["kind"] == "check")
     assert chk["credit"] == Decimal(1_000_000)
     assert st["closing_balance"] == Decimal(2_000_000)
 
@@ -179,7 +179,7 @@ def test_payable_check_reduces_supplier_payable(db, user):
 
     assert contact_balance(db, supplier.id) == Decimal(-3_000_000)  # -۵م + چکِ ۲م
     st = get_contact_statement(db, supplier.id, None, None)
-    chk = next(l for l in st["lines"] if l["kind"] == "check_out")
+    chk = next(l for l in st["lines"] if l["kind"] == "check")
     assert chk["debit"] == Decimal(2_000_000)
     assert st["closing_balance"] == Decimal(-3_000_000)
 
