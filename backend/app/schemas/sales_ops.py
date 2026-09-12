@@ -27,6 +27,11 @@ class SaleTypeIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     due_days: int = Field(default=0, ge=0, le=3650)
     default_tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    goods_revenue_account_id: UUID | None = None
+    service_revenue_account_id: UUID | None = None
+    goods_discount_account_id: UUID | None = None
+    service_discount_account_id: UUID | None = None
+    addition_account_id: UUID | None = None
     description: str = ""
     is_active: bool = True
 
@@ -36,6 +41,11 @@ class SaleTypeOut(_Named):
     name: str
     due_days: int
     default_tax_rate: Decimal | None
+    goods_revenue_account_id: UUID | None
+    service_revenue_account_id: UUID | None
+    goods_discount_account_id: UUID | None
+    service_discount_account_id: UUID | None
+    addition_account_id: UUID | None
     description: str
     is_active: bool
 

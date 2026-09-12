@@ -12,7 +12,7 @@ import {
   type CostCenterRecord,
   type Currency,
   type ItemRecord,
-  type PurchaseInvoiceRecord,
+  type PurchaseInvoiceDuplicateDraft,
   type PurchasePricePoint,
 } from '../api'
 import { isElectron } from '../platform'
@@ -46,7 +46,7 @@ export function usePurchaseInvoiceDraft({
   warehouses: WarehouseCache[]
   items: ItemCache[]
   onQueued: () => void
-  prefill?: PurchaseInvoiceRecord | null
+  prefill?: PurchaseInvoiceDuplicateDraft | null
   onPrefillConsumed?: () => void
 }) {
   // در حالتِ رونوشت (prefill) پیش‌نویسِ ماندگار نباید بنشیند تا دیتای رونوشت را نیالاید.
@@ -139,9 +139,14 @@ export function usePurchaseInvoiceDraft({
     setContactId(prefill.contact_id ?? '')
     setSupplierInvoiceNumber('')
     setDescription(prefill.description ?? '')
-    setDescription2('')
+    setDescription2(prefill.description2 ?? '')
     setTaxRate(String(Number(prefill.tax_rate)))
-    setCurrencyCode('')
+    setCostCenterId(prefill.cost_center_id ?? '')
+    setCurrencyCode(prefill.currency_code ?? '')
+    setExchangeRate(String(Number(prefill.exchange_rate || 1)))
+    setInvoiceDiscount('')
+    setInvoiceAddition('')
+    setDutyAmount('')
     setInvoiceDate(todayIso())
     setLines(
       prefill.lines.map((l) => ({
@@ -155,7 +160,7 @@ export function usePurchaseInvoiceDraft({
       })),
     )
     idempotencyKey.current = newIdempotencyKey()
-    setMessage(`رونوشت از فاکتور خرید شماره ${prefill.number ?? ''} بارگذاری شد؛ ویرایش و ثبت کنید.`)
+    setMessage(`رونوشت از فاکتور خرید شماره ${prefill.source_invoice_number ?? ''} بارگذاری شد؛ شناسه‌ها و وابستگی‌های تاریخی کپی نشده‌اند.`)
     onPrefillConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill])

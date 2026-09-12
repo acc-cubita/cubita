@@ -55,6 +55,7 @@ DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
 #: تسویه‌ی حسابِ طرف مقابل — تخصیصِ اقلامِ باز به هم. شماره‌ی مستقل دارد چون
 #: خودش سند است و به شماره‌ی فاکتور و رسیدی که تخصیص می‌دهد گره نمی‌خورد (§۴۹).
 DOC_SETTLEMENT = "settlement"
+DOC_WAREHOUSE_ISSUE = "warehouse_issue"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -75,6 +76,7 @@ DOC_TYPES = (
     DOC_PAYMENT,
     DOC_WAREHOUSE_RECEIPT,
     DOC_SETTLEMENT,
+    DOC_WAREHOUSE_ISSUE,
 )
 
 

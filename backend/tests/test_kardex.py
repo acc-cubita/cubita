@@ -47,7 +47,7 @@ def test_in_out_and_running_balance(db, user):
 
     k = get_kardex(db, item.id, None, None, None)
     assert k["item_id"] == item.id
-    assert [l["source_type"] for l in k["lines"]] == ["purchase_invoice", "sales_invoice"]
+    assert [l["source_type"] for l in k["lines"]] == ["purchase_invoice", "warehouse_issue"]
     assert k["lines"][0]["qty_in"] == Decimal(10)
     assert k["lines"][0]["balance_qty"] == Decimal(10)
     assert k["lines"][1]["qty_out"] == Decimal(4)

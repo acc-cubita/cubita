@@ -1,6 +1,6 @@
 import { PackagePlus, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import type { PurchaseInvoiceRecord } from '../api'
+import type { PurchaseInvoiceDuplicateDraft } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -23,7 +23,7 @@ export function PurchaseInvoiceForm({
   warehouses: WarehouseCache[]
   items: ItemCache[]
   onQueued: () => void
-  prefill?: PurchaseInvoiceRecord | null
+  prefill?: PurchaseInvoiceDuplicateDraft | null
   onPrefillConsumed?: () => void
 }) {
   const d = usePurchaseInvoiceDraft({ token, warehouses, items, onQueued, prefill, onPrefillConsumed })

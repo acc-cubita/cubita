@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.inventory import Item, StockLedger, Warehouse
-from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.returns import SalesReturnIn, SalesReturnLineIn
 from app.services.inventory import get_stock_qty, post_purchase_invoice, post_sales_invoice
@@ -200,9 +200,10 @@ def test_stock_ledger_stays_append_only(db, user, warehouse, widget):
     after = db.query(StockLedger).filter(StockLedger.item_id == widget.id).count()
     assert after > before, "ردیف جبرانی نوشته نشد"
 
+    issue_ids = db.query(WarehouseIssue.id).filter(WarehouseIssue.sales_invoice_id == invoice.id)
     sale_moves = (
         db.query(StockLedger)
-        .filter(StockLedger.source_type == "sales_invoice", StockLedger.source_id == invoice.id)
+        .filter(StockLedger.source_type == "warehouse_issue", StockLedger.source_id.in_(issue_ids))
         .all()
     )
     assert sale_moves, "حرکت اصلی فروش پاک شده — دفتر دیگر append-only نیست"

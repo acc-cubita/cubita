@@ -76,6 +76,21 @@ class SaleType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     due_days: Mapped[int] = mapped_column(default=0, server_default="0")
     #: نرخِ پیش‌فرضِ مالیات بر ارزش افزوده. NULL = از تنظیماتِ عمومی بیاید.
     default_tax_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    goods_revenue_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    service_revenue_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    goods_discount_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    service_discount_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    addition_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
