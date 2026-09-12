@@ -330,7 +330,11 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     unit: Mapped[str] = mapped_column(String(20), default="عدد")
     is_service: Mapped[bool] = mapped_column(Boolean, default=False)
     sales_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
-    average_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: **چهار رقم اعشار، و این تزئینی نیست.** بهای تمام‌شده نتیجه‌ی یک تقسیم
+    #: است (مبلغِ ردیف ÷ تعداد) و با ریالِ صحیح، `مقدار × میانگین` از مبلغِ
+    #: واقعی فاصله می‌گرفت — روی نمونه‌ی واقعی ۵۰ ریال، بی‌آنکه ترازی به‌هم
+    #: بخورد. چهار رقم اختلاف را به کسری از ریال می‌برد (مهاجرت ۰۱۲۵).
+    average_cost: Mapped[float] = mapped_column(Numeric(18, 4), default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     #: **«قابل فروش» جدا از «فعال» (§۷).** هرچه در انبار داریم الزاماً فروختنی
@@ -593,7 +597,10 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), index=True)
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
-    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: بهای تمام‌شده‌ی واحد — چهار رقم اعشار، به همان دلیلِ `Item.average_cost`:
+    #: `recompute_average_cost` میانگین را از همین ستون بازمی‌سازد، پس گِردکردنش
+    #: مستقیماً به ارزش‌گذاری سرایت می‌کرد.
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 4))
     entry_date: Mapped[date_] = mapped_column(Date, default=date_.today)
 
     source_type: Mapped[str] = mapped_column(String(50))  # sales_invoice | purchase_invoice | adjustment

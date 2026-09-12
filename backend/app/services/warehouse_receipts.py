@@ -22,6 +22,19 @@
 `receipt.journal_entry_id` می‌گوید کدام‌یک اتفاق افتاده. §۴۴ می‌خواهد «اثرِ
 انباری» و «اثرِ حسابداری» دو چیزِ جدا باشند، نه یک بولینِ مبهم.
 
+---
+
+**حمل جزءِ سومی است که به هیچ‌کدام از آن دو نمی‌چسبد (§۲۱).**
+
+کرایه بدهیِ *حمل‌کننده* است، نه تأمین‌کننده. پس روی **هر دو** مسیر ثبت می‌شود و
+§۳۷ را نقض نمی‌کند: هیچ سندِ دیگری این تعهد را نشناخته است.
+
+    مبلغ حمل + عوارضِ حمل  →  بهای تمام‌شده‌ی ورودِ کالا (§۲۴)
+    مالیاتِ حمل            →  اعتبارِ مالیاتی، نه بهای کالا (§۲۶)
+
+و چون یک رسید یک `journal_entry_id` دارد، هر سه سهم — کالا، طبقه‌بندیِ دوباره،
+حمل — ردیف‌های **یک** سندند، نه سه سند.
+
 **و حساب‌ها با نقش حل می‌شوند، نه با کد یا نام (§۳۶).**
 """
 
@@ -48,10 +61,17 @@ from app.models.invoices import (
 from app.models.user import User
 from app.schemas.invoices import WarehouseReceiptIn
 from app.services import chart_codes as cc
+from app.services import freight as freight_svc
 from app.services import items as items_svc
 from app.services import warehouses as warehouses_svc
 from app.services.common import get_account, make_journal_entry
-from app.services.inventory import get_total_stock_qty, goods_in_transit_account, lock_items
+from app.services.inventory import (
+    compute_tax,
+    get_total_stock_qty,
+    goods_in_transit_account,
+    lock_items,
+    vat_receivable_account,
+)
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 from app.services.voiding import recompute_average_cost, reverse_journal_entry
@@ -173,25 +193,30 @@ def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
     return rows
 
 
-def _post_direct_journal(
-    db: Session, receipt: WarehouseReceipt, rows: list[dict], user: User
-) -> None:
-    """سندِ حسابداریِ رسیدِ مستقیم (§۳۴ §۳۵ §۳۶).
+def _direct_journal_lines(
+    db: Session, receipt: WarehouseReceipt, rows: list[dict]
+) -> list[JournalLine]:
+    """ردیف‌های سندِ رسیدِ مستقیم (§۳۴ §۳۵ §۳۶).
 
-    **فقط برای رسیدِ مستقیم.** رسیدی که به فاکتور گره خورده هیچ سندی نمی‌زند،
-    چون فاکتور بدهی را از قبل شناخته و ثبتِ دوباره یعنی حسابِ تأمین‌کننده دو
+    **فقط برای رسیدِ مستقیم.** رسیدی که به فاکتور گره خورده بدهی را دوباره
+    نمی‌شناسد، چون فاکتور آن را شناخته و ثبتِ دوباره یعنی حسابِ تأمین‌کننده دو
     برابر شود (§۳۷).
 
     یک رسید می‌تواند **چند ردیفِ سند** بسازد (§۳۵): موجودیِ هر انبار حسابِ
     خودش را دارد و خدمت به حسابِ هزینه می‌نشیند — همان تفکیکی که فاکتورِ خرید
     هم دارد، از همان سرویس. حساب‌ها با `system_role` حل می‌شوند نه با کد یا نام
     (§۳۶).
+
+    **حمل این‌جا نیست و عمداً نیست.** سهمِ حمل ردیف‌های خودش را دارد
+    (`_freight_journal_lines`) تا «کالا» و «حمل» در دفتر هم از هم جدا بمانند،
+    همان‌طور که §۲۵ در فرم و چاپ می‌خواهد.
     """
-    total = sum((row["qty"] * row["unit_cost"] for row in rows), Decimal(0))
-    if total <= 0:
+    goods_total = sum((row["qty"] * row["unit_cost"] for row in rows), Decimal(0))
+    tax_total = sum((row["tax_amount"] for row in rows), Decimal(0))
+    if goods_total <= 0 and tax_total <= 0:
         #: رسیدِ مستقیمِ بی‌بها (مثلاً ورودِ امانی) سندِ صفر نمی‌سازد — سندِ خالی
         #: چیزی توضیح نمی‌دهد و فقط دفتر را شلوغ می‌کند.
-        return
+        return []
 
     inventory_account_id = warehouses_svc.inventory_account_id(db, receipt.warehouse_id)
     debit_by_account: dict[UUID, Decimal] = {}
@@ -219,24 +244,89 @@ def _post_direct_journal(
             ),
         )
         for account_id, amount in debit_by_account.items()
+        if amount > 0
     ]
+    if tax_total > 0:
+        #: §۲۶ — مالیات **وارد بهای کالا نمی‌شود**. اعتبارِ مالیاتی است، نه
+        #: دارایی‌ای که با فروشِ کالا از انبار خارج شود.
+        lines.append(
+            JournalLine(
+                account_id=vat_receivable_account(db).id,
+                debit=tax_total,
+                credit=0,
+                description="مالیات بر ارزش افزوده خرید (اعتبار مالیاتی)",
+            )
+        )
     lines.append(
         JournalLine(
             account_id=credit_account.id,
             debit=0,
-            credit=total,
+            credit=goods_total + tax_total,
             description=f"بابت رسید انبار شماره {receipt.number}",
         )
     )
-    entry = make_journal_entry(
-        db,
-        receipt.receipt_date,
-        f"رسید انبار شماره {receipt.number} ({RECEIPT_TYPE_LABELS[receipt.receipt_type]})",
-        "warehouse_receipt",
-        user,
-        lines,
+    return lines
+
+
+def _freight_journal_lines(
+    db: Session, receipt: WarehouseReceipt, rows: list[dict]
+) -> list[JournalLine]:
+    """ردیف‌های سندِ حمل — روی **هر دو** مسیرِ رسید (§۲۱ §۲۴ §۲۶).
+
+    **چرا §۳۷ نقض نمی‌شود:** کرایه بدهی به *حمل‌کننده* است، نه به تأمین‌کننده.
+    فاکتورِ خرید آن را نشناخته، پس این ثبتِ دوباره نیست؛ تعهدی است که هیچ سندِ
+    دیگری ندیده. اگر ثبت نشود، یا کرایه اصلاً در دفتر نمی‌آید یا هزینه‌ی دوره
+    می‌شود و موجودی ارزان‌تر از واقع ارزش‌گذاری می‌ماند.
+
+    **سه جزء، دو مقصد (§۲۵ §۲۶):**
+
+        مبلغ حمل + عوارض  →  موجودیِ انبار (سهمِ هر ردیف از تسهیم)
+        مالیاتِ حمل        →  اعتبارِ مالیاتی
+
+    فصل صریح هشدار می‌دهد که «ایجنت نباید فرض کند Inventory Cost = Price +
+    Freight + VAT در تمام شرایط»، پس مالیات از بهای کالا بیرون می‌ماند.
+    """
+    landed = sum((row["freight_share"] for row in rows), Decimal(0))
+    tax = Decimal(receipt.freight_tax)
+    if landed <= 0 and tax <= 0:
+        return []
+
+    lines: list[JournalLine] = []
+    if landed > 0:
+        #: حمل فقط روی کالا می‌نشیند، پس همیشه حسابِ موجودیِ همین انبار است —
+        #: خدمت سهمی نگرفته که به حسابِ هزینه برود.
+        lines.append(
+            JournalLine(
+                account_id=warehouses_svc.inventory_account_id(db, receipt.warehouse_id),
+                debit=landed,
+                credit=0,
+                description="هزینه حمل تسهیم‌شده بر بهای ورود کالا",
+            )
+        )
+    if tax > 0:
+        lines.append(
+            JournalLine(
+                account_id=vat_receivable_account(db).id,
+                debit=tax,
+                credit=0,
+                description="مالیات بر ارزش افزوده حمل (اعتبار مالیاتی)",
+            )
+        )
+    #: طرفِ بستانکار: حمل‌کننده اگر نام برده شده، وگرنه نقد. **واسطِ حمل عمداً
+    #: این‌جا نیست** — فصل معنای مالی‌اش را تثبیت نکرده («با قسمت‌های بعدی
+    #: تثبیت شود»)، پس رفتارِ مالی‌ای از رویش ساخته نمی‌شود.
+    credit_account = (
+        get_account(db, cc.ACCOUNTS_PAYABLE) if receipt.carrier_id else get_account(db, cc.CASH)
     )
-    receipt.journal_entry_id = entry.id
+    lines.append(
+        JournalLine(
+            account_id=credit_account.id,
+            debit=0,
+            credit=landed + tax,
+            description=f"بابت حمل رسید انبار شماره {receipt.number}",
+        )
+    )
+    return lines
 
 
 def _reclassified_so_far(db: Session, invoice_line_id: UUID) -> Decimal:
@@ -258,13 +348,12 @@ def _reclassified_so_far(db: Session, invoice_line_id: UUID) -> Decimal:
     return sum((Decimal(qty) * Decimal(unit_cost) for qty, unit_cost in rows), Decimal(0))
 
 
-def _post_reclassification(
+def _reclassification_lines(
     db: Session,
     receipt: WarehouseReceipt,
     invoice: PurchaseInvoice,
     rows: list[dict],
-    user: User,
-) -> None:
+) -> list[JournalLine]:
     """کالا از «در راه» به «موجودیِ انبار» منتقل می‌شود (§۳۴).
 
     **این شناساییِ تازه نیست، طبقه‌بندیِ دوباره است.** دارایی از بین نرفته؛ فقط
@@ -276,7 +365,7 @@ def _post_reclassification(
     موجودیِ دفتری دو برابر می‌شود. `invoice.goods_in_transit` همین را می‌گوید.
     """
     if not invoice.goods_in_transit:
-        return
+        return []
 
     inventory_account_id = warehouses_svc.inventory_account_id(db, receipt.warehouse_id)
     transit_account = goods_in_transit_account(db)
@@ -305,30 +394,22 @@ def _post_reclassification(
         total += moved
 
     if total <= 0:
-        return
+        return []
 
-    entry = make_journal_entry(
-        db,
-        receipt.receipt_date,
-        f"رسید انبار شماره {receipt.number} — ورود کالای در راه به انبار",
-        "warehouse_receipt",
-        user,
-        [
-            JournalLine(
-                account_id=inventory_account_id,
-                debit=total,
-                credit=0,
-                description=f"ورود کالا با رسید انبار شماره {receipt.number}",
-            ),
-            JournalLine(
-                account_id=transit_account.id,
-                debit=0,
-                credit=total,
-                description=f"خروج از کالای در راه (فاکتور خرید {invoice.number})",
-            ),
-        ],
-    )
-    receipt.journal_entry_id = entry.id
+    return [
+        JournalLine(
+            account_id=inventory_account_id,
+            debit=total,
+            credit=0,
+            description=f"ورود کالا با رسید انبار شماره {receipt.number}",
+        ),
+        JournalLine(
+            account_id=transit_account.id,
+            debit=0,
+            credit=total,
+            description=f"خروج از کالای در راه (فاکتور خرید {invoice.number})",
+        ),
+    ]
 
 
 def _received_before(db: Session, invoice_line_id: UUID, exclude_receipt_id: UUID) -> Decimal:
@@ -344,6 +425,76 @@ def _received_before(db: Session, invoice_line_id: UUID, exclude_receipt_id: UUI
         .scalar()
     )
     return Decimal(rows or 0)
+
+
+def _apply_freight(rows: list[dict], data: WarehouseReceiptIn) -> None:
+    """سهمِ حملِ هر ردیف را می‌نشاند (§۲۲ §۲۳ §۲۴).
+
+    **فقط ردیف‌های کالا سهم می‌گیرند.** حمل بهای *آوردنِ جنس* است؛ خدمتی که در
+    همان رسید آمده جابه‌جا نشده و بارگیری نداشته. سهم‌دادن به آن یعنی کرایه به
+    حسابِ هزینه‌ی خدمات برود و بهای موجودی کمتر از واقع بماند.
+
+    **مبلغ و عوارض با هم تسهیم می‌شوند، مالیات نه (§۲۶).** هر دوی آن‌ها جزءِ
+    بهای تمام‌شده‌ی ورودند؛ مالیات نیست. سهمِ هرکدام از عددِ تسهیم‌شده همیشه
+    به‌نسبتِ همان دو عددِ سرِ سند بازیافتنی است، پس §۲۵ («مستقل و قابل Trace»)
+    حفظ می‌شود.
+    """
+    for row in rows:
+        row["freight_share"] = Decimal(0)
+
+    landed_freight = Decimal(data.freight_amount) + Decimal(data.freight_duty)
+    if landed_freight <= 0:
+        return
+
+    goods_rows = [row for row in rows if not row["item"].is_service]
+    if not goods_rows:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "هزینه‌ی حمل روی رسیدی که فقط خدمت دارد تسهیم‌شدنی نیست",
+        )
+    shares = freight_svc.allocate(
+        landed_freight,
+        [row["qty"] * row["unit_cost"] for row in goods_rows],
+        data.freight_basis,
+    )
+    for row, share in zip(goods_rows, shares, strict=True):
+        row["freight_share"] = share
+
+
+def _apply_tax(
+    db: Session, rows: list[dict], data: WarehouseReceiptIn, invoice: PurchaseInvoice | None
+) -> None:
+    """مالیاتِ هر ردیف — مستقل و قابلِ ردیابی (§۲۵).
+
+    **دو معنای کاملاً متفاوت، بسته به مسیر:**
+
+    * رسیدِ **مستقیم** → این رسید سندِ مالیِ خرید است، پس مالیات را خودش
+      می‌شناسد. نرخِ مؤثر از همان موتورِ فصلِ کالا می‌آید (`effective_tax_rate`):
+      ردیفِ معاف صفر می‌گیرد و کالای نرخ‌دار نرخِ خودش را.
+    * رسیدِ **گره‌خورده به فاکتور** → مالیات را فاکتور شناخته. این عدد فقط
+      Snapshotِ سهمِ تحویل‌شده است تا «خالص»ِ رسید از اجزای خودش توضیح‌پذیر
+      بماند (§۲۷) — و **هرگز ثبت نمی‌شود**، وگرنه اعتبارِ مالیاتی دو برابر
+      می‌شد (§۳۷).
+    """
+    for row in rows:
+        if invoice is None:
+            row["tax_rate"] = items_svc.effective_tax_rate(
+                row["item"], data.tax_rate, side="purchase"
+            )
+            #: پایه‌ی مالیات مبلغِ کالاست، نه بهای تمام‌شده: حمل مالیاتِ خودش
+            #: را در سرِ سند دارد و شمردنش این‌جا یعنی دوباره‌شماری.
+            row["tax_amount"] = compute_tax(row["qty"] * row["unit_cost"], row["tax_rate"])
+            continue
+        line = db.get(PurchaseInvoiceLine, row["purchase_invoice_line_id"])
+        row["tax_rate"] = Decimal(line.tax_rate_snapshot or 0)
+        line_qty = Decimal(line.qty)
+        row["tax_amount"] = (
+            (Decimal(line.tax_amount_snapshot or 0) * Decimal(row["qty"]) / line_qty).quantize(
+                Decimal(1)
+            )
+            if line_qty
+            else Decimal(0)
+        )
 
 
 def create_warehouse_receipt(
@@ -378,6 +529,11 @@ def create_warehouse_receipt(
 
     lock_items(db, [row["item"].id for row in rows if not row["item"].is_service])
 
+    #: §۲۲ §۲۵ — تسهیمِ حمل و مالیاتِ ردیف‌ها **پیش از** ساختِ ردیف‌ها، چون
+    #: بهای تمام‌شده‌ای که در دفترِ انبار می‌نشیند از همین‌ها ساخته می‌شود.
+    _apply_freight(rows, data)
+    _apply_tax(db, rows, data, invoice)
+
     receipt = WarehouseReceipt(
         number=next_document_number(db, DOC_WAREHOUSE_RECEIPT),
         receipt_date=data.receipt_date,
@@ -389,6 +545,14 @@ def create_warehouse_receipt(
         freight_agent_id=data.freight_agent_id,
         currency_code=data.currency_code,
         exchange_rate=data.exchange_rate,
+        #: §۲۱ — سه مبلغِ جدا و مبنای تسهیم. جمعشان («جمع مبلغ حمل») ذخیره
+        #: نمی‌شود؛ مشتق است.
+        freight_amount=data.freight_amount,
+        freight_tax=data.freight_tax,
+        freight_duty=data.freight_duty,
+        freight_basis=data.freight_basis,
+        #: در مسیرِ فاکتور معنا ندارد: مالیات را فاکتور شناخته است.
+        tax_rate=data.tax_rate if invoice is None else Decimal(0),
         description=data.description.strip(),
         description2=data.description2.strip(),
         created_by_id=user.id,
@@ -401,9 +565,15 @@ def create_warehouse_receipt(
         receipt.lines.append(
             WarehouseReceiptLine(
                 purchase_invoice_line_id=row["purchase_invoice_line_id"],
+                seq=index,
                 item_id=item.id,
                 qty=row["qty"],
+                #: §۲۰ — «فی» همان بهای خرید می‌ماند و دست نمی‌خورد. «فی
+                #: تمام‌شده» از این و `freight_share` مشتق می‌شود.
                 unit_cost=row["unit_cost"],
+                freight_share=row["freight_share"],
+                tax_rate_snapshot=row["tax_rate"],
+                tax_amount_snapshot=row["tax_amount"],
                 item_code_snapshot=row["code"],
                 item_name_snapshot=row["name"],
                 unit_snapshot=row["unit"],
@@ -412,18 +582,25 @@ def create_warehouse_receipt(
         )
         if item.is_service:
             continue
+        #: **§۲۴ — دفترِ انبار بهای تمام‌شده را می‌نویسد، نه فی.**
+        #:
+        #: اگر این‌جا «فی» بنشیند، کالا به قیمتی ارزش‌گذاری می‌شود که کمتر از
+        #: پولِ واقعاً پرداخت‌شده است، و لحظه‌ی فروش بهای تمام‌شده به همان
+        #: اندازه کم و **سود به همان اندازه زیاد** گزارش می‌شود.
+        landed_amount = row["qty"] * row["unit_cost"] + row["freight_share"]
+        landed_unit_cost = landed_amount / row["qty"] if row["qty"] else Decimal(0)
         old_qty = get_total_stock_qty(db, item.id)
         new_qty = old_qty + row["qty"]
         if new_qty > 0:
             item.average_cost = (
-                (old_qty * Decimal(item.average_cost)) + row["qty"] * row["unit_cost"]
+                (old_qty * Decimal(item.average_cost)) + landed_amount
             ) / new_qty
         db.add(
             StockLedger(
                 item_id=item.id,
                 warehouse_id=data.warehouse_id,
                 qty=row["qty"],
-                unit_cost=row["unit_cost"],
+                unit_cost=landed_unit_cost,
                 entry_date=data.receipt_date,
                 source_type="warehouse_receipt",
                 source_id=receipt.id,
@@ -436,7 +613,7 @@ def create_warehouse_receipt(
                 batch_number=f"WR{receipt.number}-{index}",
                 qty=row["qty"],
                 received_qty=row["qty"],
-                unit_cost=row["unit_cost"],
+                unit_cost=landed_unit_cost,
                 source_type="warehouse_receipt",
                 source_id=receipt.id,
                 received_date=data.receipt_date,
@@ -445,13 +622,32 @@ def create_warehouse_receipt(
             )
         )
 
-    #: **این‌جا نقطه‌ی ثبت تصمیم می‌گیرد (§۳۷).** رسیدِ گره‌خورده به فاکتور سند
-    #: نمی‌زند چون فاکتور بدهی را شناخته؛ رسیدِ مستقیم می‌زند چون هیچ سندِ
-    #: دیگری این خرید را نمی‌شناسد.
-    if invoice is None:
-        _post_direct_journal(db, receipt, rows, user)
-    else:
-        _post_reclassification(db, receipt, invoice, rows, user)
+    #: **این‌جا نقطه‌ی ثبت تصمیم می‌گیرد (§۳۷).**
+    #:
+    #: سه سهمِ ممکن، و هر رسید بعضی‌شان را دارد:
+    #:
+    #: * رسیدِ مستقیم → خودش بدهی را می‌شناسد (هیچ سندِ دیگری این خرید را ندیده)
+    #: * رسیدِ فاکتوردار → فقط کالا را از «در راه» به انبار می‌برد
+    #: * حمل → روی **هر دو**، چون بدهیِ حمل‌کننده است نه تأمین‌کننده
+    #:
+    #: و هر سه ردیف‌های **یک** سندند: رسید یک `journal_entry_id` دارد و ابطال
+    #: باید بتواند همان یکی را برگرداند.
+    journal_lines = (
+        _direct_journal_lines(db, receipt, rows)
+        if invoice is None
+        else _reclassification_lines(db, receipt, invoice, rows)
+    )
+    journal_lines += _freight_journal_lines(db, receipt, rows)
+    if journal_lines:
+        entry = make_journal_entry(
+            db,
+            receipt.receipt_date,
+            f"رسید انبار شماره {receipt.number} ({RECEIPT_TYPE_LABELS[receipt.receipt_type]})",
+            "warehouse_receipt",
+            user,
+            journal_lines,
+        )
+        receipt.journal_entry_id = entry.id
 
     db.flush()
     db.refresh(receipt)

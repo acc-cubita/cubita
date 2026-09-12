@@ -162,7 +162,7 @@ export function InventoryPage({
                                     faQty(s.qty)
                                   )}
                                 </td>
-                                <td data-label="بهای واحد" className="money-cell">{faMoney(Number(s.unit_cost))}</td>
+                                <td data-label="بهای واحد" className="money-cell">{faMoney(Math.round(Number(s.unit_cost)))}</td>
                                 <td data-label="ارزش" className="money-cell"><strong>{faMoney(Math.round(Number(s.stock_value)))}</strong></td>
                                 <td className="lowstock-action card-actions">
                                   <button type="button" onClick={() => setKardex({ id: s.item_id, name: s.item_name, sku: s.item_sku })}>

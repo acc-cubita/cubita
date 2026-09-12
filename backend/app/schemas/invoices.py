@@ -336,6 +336,19 @@ class WarehouseReceiptIn(BaseModel):
     #: §۱۳ — مبالغِ ردیف‌ها همیشه پایه‌اند؛ این‌ها برای نمایشِ معادل و نرخ‌اند.
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
+
+    #: §۲۱ — بلوکِ حمل. سه مبلغِ جدا چون سه مقصدِ جدا دارند (§۲۵ §۲۶): مبلغ و
+    #: عوارض به بهای ورودِ کالا می‌روند، مالیات به اعتبارِ مالیاتی.
+    freight_amount: Decimal = Decimal(0)
+    freight_tax: Decimal = Decimal(0)
+    freight_duty: Decimal = Decimal(0)
+    #: §۲۳ — الگوریتمش در `services/freight.py` است. فعلاً فقط «به نسبت مساوی».
+    freight_basis: str = "equal"
+
+    #: §۲۵ — نرخِ مالیاتِ کالاهای رسیدِ **مستقیم**. در مسیرِ فاکتور نادیده
+    #: گرفته می‌شود؛ آن مالیات را فاکتور شناخته است (§۳۷).
+    tax_rate: Decimal = Decimal(0)
+
     description: str = ""
     description2: str = ""
     lines: list[WarehouseReceiptLineIn]
@@ -348,6 +361,23 @@ class WarehouseReceiptIn(BaseModel):
         if v not in RECEIPT_TYPES:
             raise ValueError("نوعِ رسید نامعتبر است")
         return v
+
+    @field_validator("freight_basis")
+    @classmethod
+    def _known_basis(cls, v: str) -> str:
+        from app.services.freight import POLICIES
+
+        if v not in POLICIES:
+            raise ValueError("مبنای تسهیم حمل پشتیبانی نمی‌شود")
+        return v
+
+    @model_validator(mode="after")
+    def _freight_non_negative(self) -> "WarehouseReceiptIn":
+        if min(self.freight_amount, self.freight_tax, self.freight_duty) < 0:
+            raise ValueError("مبالغ حمل نمی‌توانند منفی باشند")
+        if not (0 <= self.tax_rate <= 100):
+            raise ValueError("نرخ مالیات باید بین صفر تا صد باشد")
+        return self
 
     @model_validator(mode="after")
     def validate_lines(self) -> "WarehouseReceiptIn":
@@ -365,9 +395,15 @@ class WarehouseReceiptIn(BaseModel):
 class WarehouseReceiptLineOut(BaseModel):
     id: UUID
     purchase_invoice_line_id: UUID | None = None
+    seq: int = 0
     item_id: UUID
     qty: Decimal
+    #: §۲۰ — «فی» و «فی تمام‌شده» هر دو می‌آیند، چون یکی نیستند.
     unit_cost: Decimal
+    freight_share: Decimal = Decimal(0)
+    landed_unit_cost: Decimal = Decimal(0)
+    tax_rate_snapshot: Decimal = Decimal(0)
+    tax_amount_snapshot: Decimal = Decimal(0)
     item_code_snapshot: str = ""
     item_name_snapshot: str = ""
     unit_snapshot: str = ""
@@ -388,6 +424,29 @@ class WarehouseReceiptOut(BaseModel):
     freight_agent_id: UUID | None = None
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
+
+    #: §۲۱ — بلوکِ حمل، همان‌طور که وارد شده.
+    freight_amount: Decimal = Decimal(0)
+    freight_tax: Decimal = Decimal(0)
+    freight_duty: Decimal = Decimal(0)
+    freight_basis: str = "equal"
+    tax_rate: Decimal = Decimal(0)
+
+    #: **§۲۵ §۲۷ — اجزای خالص، هر کدام مستقل و قابلِ ردیابی.**
+    #:
+    #: فصل می‌گوید کاربر اگر عددِ خالص را دید، کوبیتا باید بتواند نشان دهد از
+    #: چه ساخته شده — «نه اینکه این عدد جداگانه و دستی نگهداری شود».
+    #:
+    #:     خالص = کالا + حمل + عوارض + مالیات
+    #:
+    #: هیچ‌کدام در پایگاه داده نیست؛ همه از خودِ سند مشتق می‌شوند. §۴۲ هم
+    #: همین را می‌خواهد: چاپ نباید مدلِ مالیِ دیگری باشد.
+    goods_amount: Decimal = Decimal(0)
+    freight_total: Decimal = Decimal(0)
+    tax_amount: Decimal = Decimal(0)
+    duty_amount: Decimal = Decimal(0)
+    net_amount: Decimal = Decimal(0)
+
     #: §۴۴ — «اثرِ حسابداری» جدا از «اثرِ انباری». `None` یعنی این رسید سند
     #: نزده، چون فاکتورش بدهی را شناخته است.
     journal_entry_id: UUID | None = None

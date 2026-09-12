@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from datetime import date as date_
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -200,6 +202,9 @@ class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, 
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),
         CheckConstraint(f"receipt_type IN {RECEIPT_TYPES}", name="ck_warehouse_receipts_type"),
+        CheckConstraint(
+            "freight_basis IN ('equal')", name="ck_warehouse_receipts_freight_basis"
+        ),
     )
 
     number: Mapped[int] = mapped_column(nullable=False, index=True)
@@ -237,6 +242,28 @@ class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, 
     currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
     exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
 
+    #: **بلوکِ حمل (§۲۱).** «Freight فقط یک Description نیست؛ یک جزء مالیِ
+    #: واقعیِ Receipt است.»
+    #:
+    #: سه مبلغِ جدا، چون سه مقصدِ جدا دارند (§۲۵ §۲۶):
+    #:
+    #: * `freight_amount` و `freight_duty` → بهای تمام‌شده‌ی ورودِ کالا
+    #: * `freight_tax` → اعتبارِ مالیاتی، **نه** بهای کالا
+    #:
+    #: فصل صریح هشدار می‌دهد: «ایجنت نباید فرض کند Inventory Cost = Price +
+    #: Freight + VAT در تمام شرایط.» پس هیچ‌کدام در دیگری حل نمی‌شود و
+    #: «جمعِ مبلغِ حمل» از همین سه مشتق می‌شود، نه ذخیره.
+    freight_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    freight_tax: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    freight_duty: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: §۲۳ — مبنای تسهیم. الگوریتمش در `services/freight.py` است، نه در فرم.
+    freight_basis: Mapped[str] = mapped_column(String(20), default="equal", server_default="equal")
+
+    #: §۲۵ — نرخِ مالیاتِ **کالا**های این رسید. فقط در رسیدِ مستقیم ثبت می‌شود؛
+    #: رسیدِ گره‌خورده به فاکتور مالیاتش را از فاکتور دارد و ثبتِ دوباره یعنی
+    #: اعتبارِ مالیاتی دو برابر شود (§۳۷).
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
     #: سندِ حسابداریِ این رسید. `NULL` یعنی رسید اثرِ مالی نداشته — یعنی گره
     #: خورده به فاکتوری که خودش بدهی را شناخته است (§۳۷).
     #:
@@ -251,9 +278,60 @@ class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, 
     description2: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
+    #: `(seq, id)` و نه `id`: کلید اصلی UUIDِ تصادفی است و مرتب‌کردن بر اساسش
+    #: یعنی ردیف‌ها به ترتیبِ ورودِ اپراتور برنگردند — و چاپِ رسید (§۴۱ §۴۲) هر
+    #: بار ترتیبِ دیگری بدهد.
     lines: Mapped[list["WarehouseReceiptLine"]] = relationship(
-        back_populates="receipt", cascade="all, delete-orphan", order_by="WarehouseReceiptLine.id"
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        order_by="(WarehouseReceiptLine.seq, WarehouseReceiptLine.id)",
     )
+
+    # ── §۲۵ §۲۷ — اجزای خالص، مشتق و نه ذخیره ────────────────────────────
+    #
+    # فصل: «کاربر اگر عددِ ۱٬۴۹۵٬۰۰۰ را دید، کوبیتا بتواند نشان دهد
+    # ۱٬۴۰۰٬۰۰۰ کالا + ۵۰٬۰۰۰ حمل + ۴۵٬۰۰۰ مالیات — نه اینکه این عدد
+    # جداگانه و دستی نگهداری شود.»
+    #
+    # هیچ‌کدام ستون نیستند. §۴۲ هم همین را می‌خواهد: چاپ مدلِ مالیِ دیگری
+    # نیست، از همین اجزا می‌خواند.
+
+    @property
+    def goods_amount(self) -> Decimal:
+        """«کل» — جمعِ مبلغِ کالاها، پیش از حمل و مالیات."""
+        return sum((line.goods_amount for line in self.lines), Decimal(0))
+
+    @property
+    def freight_total(self) -> Decimal:
+        """«جمع مبلغ حمل» (§۲۱) — جمعِ خودِ پنجره‌ی حمل.
+
+        **این یک جزءِ خالص نیست.** اجزایش جداگانه در «حمل»، «مالیات» و
+        «عوارض» شمرده شده‌اند؛ افزودنش به خالص یعنی دوباره‌شماری.
+        """
+        return Decimal(self.freight_amount) + Decimal(self.freight_tax) + Decimal(self.freight_duty)
+
+    @property
+    def tax_amount(self) -> Decimal:
+        """«مالیات» — مالیاتِ کالاها به‌علاوه‌ی مالیاتِ حمل.
+
+        §۲۶: این عدد از بهای تمام‌شده‌ی کالا **بیرون** است و عمداً بیرون است.
+        """
+        return (
+            sum((Decimal(line.tax_amount_snapshot) for line in self.lines), Decimal(0))
+            + Decimal(self.freight_tax)
+        )
+
+    @property
+    def duty_amount(self) -> Decimal:
+        """«عوارض» — جدا از مالیات، چون مقصدِ حسابداری‌اش فرق دارد (§۲۵)."""
+        return Decimal(self.freight_duty)
+
+    @property
+    def net_amount(self) -> Decimal:
+        """«خالص» (§۲۷) = کالا + حمل + عوارض + مالیات."""
+        return (
+            self.goods_amount + Decimal(self.freight_amount) + self.duty_amount + self.tax_amount
+        )
 
 
 class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
@@ -266,9 +344,29 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
     purchase_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), nullable=True, index=True
     )
+    #: شماره‌ی ردیف در همین رسید (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۲۵»،
+    #: که ترتیبش بازیابی‌شدنی نبود.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    #: §۲۰ — **«فی»**، نه «فی تمام‌شده». بهای خریدِ واحد، پیش از حمل.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+
+    #: §۲۲ — سهمِ این ردیف از هزینه‌ی حمل، خروجیِ `services/freight.allocate`.
+    #:
+    #: **چرا ذخیره و نه مشتق:** نتیجه‌ی یک تقسیمِ گِردشده است که ته‌مانده‌اش به
+    #: ردیفِ آخر رفته. بازمحاسبه از روی مبلغِ حمل لزوماً همان عدد را نمی‌دهد، و
+    #: همین سهم است که در بهای موجودی نشسته — یعنی Snapshot است، نه مشتق.
+    freight_share: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    #: §۲۵ — مالیاتِ همین ردیف، مستقل و قابلِ ردیابی.
+    #:
+    #: **در رسیدِ گره‌خورده به فاکتور فقط برای چاپ است.** آن مالیات را فاکتور
+    #: شناخته؛ ثبتِ دوباره یعنی اعتبارِ مالیاتی دو برابر شود (§۳۷). این‌جا
+    #: می‌نشیند تا «خالص»ِ رسید از اجزای خودش توضیح‌پذیر باشد (§۲۷).
+    tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
     unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
@@ -276,6 +374,32 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
 
     receipt: Mapped["WarehouseReceipt"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
+
+    @property
+    def goods_amount(self) -> Decimal:
+        """مبلغِ کالا — §۱۹: مقدار × فی."""
+        return Decimal(self.qty) * Decimal(self.unit_cost)
+
+    @property
+    def landed_amount(self) -> Decimal:
+        """بهای تمام‌شده‌ی ورود = مبلغِ کالا + سهمِ حمل (§۲۴).
+
+        مالیات این‌جا نیست و عمداً نیست (§۲۶).
+        """
+        return self.goods_amount + Decimal(self.freight_share)
+
+    @property
+    def landed_unit_cost(self) -> Decimal:
+        """**«فی تمام‌شده» (§۲۰)** — و این با «فی» یکی نیست.
+
+        نمونه‌ی فصل: فیِ ۵٬۰۰۰ پس از تسهیمِ حمل، فیِ تمام‌شده‌ی ۵٬۲۵۰ می‌شود.
+
+        ذخیره نمی‌شود چون از `unit_cost` و `freight_share` مشتق است — همان
+        قاعده‌ی §۲۷ («مشتق بهتر از ذخیره»). عددی که در دفترِ موجودی نشسته
+        Snapshotِ خودِ `stock_ledger` است.
+        """
+        qty = Decimal(self.qty)
+        return (self.landed_amount / qty) if qty else Decimal(0)
 
 
 class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):

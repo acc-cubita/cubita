@@ -34,7 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Opus 5 | `backend/app/models/invoices.py` (بخشِ WarehouseReceipt) · `backend/app/services/warehouse_receipts.py` · `backend/app/schemas/invoices.py` (بخشِ رسید) · `backend/app/routers/invoices.py` (نقاطِ رسید) · `backend/alembic/versions/0123…0126` · `desktop/src/pages/PurchasesPage.tsx` · انتهای `desktop/src/api.ts` | فصلِ «رسید انبار» | ۱۴۰۵/۰۶/۲۱ |
+| Claude Opus 5 | `backend/app/models/invoices.py` (بخشِ WarehouseReceipt) · `backend/app/services/warehouse_receipts.py` · `backend/app/schemas/invoices.py` (بخشِ رسید) · `backend/app/routers/invoices.py` (نقاطِ رسید) · `backend/app/services/freight.py` · `backend/app/services/reports.py` (گزارشِ موجودی) · `desktop/src/pages/InventoryPage.tsx` · `backend/alembic/versions/0123…0126` · `desktop/src/pages/PurchasesPage.tsx` · انتهای `desktop/src/api.ts` | فصلِ «رسید انبار» | ۱۴۰۵/۰۶/۲۱ |
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
