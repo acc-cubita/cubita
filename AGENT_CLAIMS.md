@@ -34,6 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude Code | `services/reports.py` · `services/counterparty.py` (تازه) · `routers/reports.py` · `schemas/reports.py` · `SalesOpsPages.tsx` · `api.ts` | فصلِ «مرور جامع طرف حساب»: یک موتورِ مانده که با دفتر بخواند، مانده‌ی نقش‌محور، و سه سطحِ خلاصه/رویداد/اقلام. **بدونِ مهاجرت.** | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
