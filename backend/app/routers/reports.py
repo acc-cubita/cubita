@@ -8,6 +8,9 @@ from app.database import get_db
 from app.deps import require_permission
 from app.schemas.cost_center import CostCenterReportOut
 from app.schemas.reports import (
+    CounterpartyEventDetailOut,
+    CounterpartyEventOut,
+    CounterpartySummaryOut,
     AgingReportOut,
     BalanceSheetOut,
     CashFlowOut,
@@ -24,6 +27,7 @@ from app.schemas.reports import (
     TrialBalanceRowOut,
     VatReportOut,
 )
+from app.services import counterparty as counterparty_service
 from app.services import cost_centers as cost_centers_service
 from app.services import integrity as integrity_service
 from app.services import reports as reports_service
@@ -254,3 +258,62 @@ def contact_statement(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_contact_statement(db, contact_id, date_from, date_to)
+
+
+# ───────────────────── مرور جامع طرف حساب ─────────────────────
+#
+# سه اندپوینت برای سه دانه‌بندی. عمداً یکی نشده‌اند: یک پاسخِ واحد که هر سه را
+# با هم بدهد، رابط را وادار می‌کند اقلام را جمع بزند تا خلاصه دربیاورد — و
+# همان‌جاست که یک مبلغ چند بار شمرده می‌شود.
+#
+# هر سه `accounting.view` می‌خواهند، چون هر سه مانده‌ی حساب‌های دریافتنی و
+# پرداختنی را نشان می‌دهند — همان چیزی که کارتِ حساب هم می‌خواهد.
+
+
+@router.get("/counterparty/{contact_id}/summary", response_model=CounterpartySummaryOut)
+def counterparty_summary(
+    contact_id: UUID,
+    as_of: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """خلاصه‌ی نقش‌محورِ یک طرف حساب — و تطبیقش با دفتر."""
+    return counterparty_service.position_summary(db, contact_id, as_of=as_of)
+
+
+@router.get("/counterparty/{contact_id}/events", response_model=list[CounterpartyEventOut])
+def counterparty_events(
+    contact_id: UUID,
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    role: str | None = Query(None, description="customer | supplier"),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """خطِ زمانیِ رویدادها با ماندهٔ در حالِ اجرا.
+
+    مانده از **کلِ تاریخ** ساخته می‌شود و بعد بازه بریده می‌شود، وگرنه ردیفِ اولِ
+    بازه از صفر شروع می‌کرد.
+    """
+    return counterparty_service.events(
+        db, contact_id, date_from=date_from, date_to=date_to, role=role
+    )
+
+
+@router.get(
+    "/counterparty/{contact_id}/events/{source_type}/{source_id}/lines",
+    response_model=CounterpartyEventDetailOut,
+)
+def counterparty_event_lines(
+    contact_id: UUID,
+    source_type: str,
+    source_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """اقلامِ یک رویداد — ردیف‌های کالا و ردیف‌های دفتر، هرکدام با برچسبِ نوعش.
+
+    `contact_id` در مسیر می‌ماند تا آدرس خودش بگوید از کجای گزارش آمده، و
+    drill-downِ برعکس هم ممکن باشد.
+    """
+    return counterparty_service.event_lines(db, source_type, source_id)

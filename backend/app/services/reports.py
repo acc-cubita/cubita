@@ -1262,17 +1262,10 @@ def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | N
 
 
 #: ترتیبِ نمایشِ رویدادهای هم‌تاریخ در کارت حساب — اول اسناد، بعد برگشت، بعد وجه.
-_STATEMENT_KIND_ORDER = {
-    "sales_invoice": 1,
-    "purchase_invoice": 1,
-    "sales_return": 2,
-    "purchase_return": 2,
-    "receipt": 3,
-    "payment": 3,
-    "check_in": 4,
-    "check_out": 4,
-    "credit_debit_note": 5,
-}
+#: ترتیبِ درشتِ قدیمیِ رویدادهای هم‌روز برداشته شد. کارتِ حساب حالا ترتیبِ
+#: قطعیِ `counterparty.events` را می‌گیرد — تاریخ، سپس **شماره‌ی سندِ حسابداری**
+#: — که هم‌روزها را هم بی‌ابهام می‌چیند. یک نقشه‌ی دستیِ درشت‌دانه فقط همان
+#: قطعیت را از بین می‌برد.
 
 
 
@@ -1322,66 +1315,25 @@ def _notice_effects(db: Session, contact_id: UUID) -> list[tuple]:
 def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     """ماندهٔ خالصِ طرف‌حساب: مثبت = شخص به ما بدهکار است (طلبِ ما).
 
-    همان قراردادِ علامتِ کارتِ حساب: فروش/برگشتِ‌خرید/پرداختِ‌ما بدهکار، و
-    خرید/برگشتِ‌فروش/دریافت بستانکار. اسنادِ باطل‌شده کنار می‌روند. برای محافظ‌های
-    اقساط استفاده می‌شود تا دریافتی که دریافتنی را منفی می‌کند گرفته شود.
-    """
-    def s(q) -> Decimal:
-        return Decimal(q.scalar() or 0)
+    **از دفتر مشتق می‌شود، نه از جمع‌زدنِ ستون‌های سند.** تا امروز این تابع
+    فاکتور را `total_amount + tax_amount` می‌گرفت — و از مهاجرتِ ۰۱۲۵ که
+    «اضافات»، «عوارض» و «رند» به فاکتور اضافه شدند، این فرمول از سندِ حسابداری
+    عقب افتاد. فاکتوری با ۱۰٬۰۰۰ کالا و ۵٬۰۰۰ اضافات و عوارض، در دفتر ۱۵٬۰۰۰
+    مطالبات می‌ساخت و این‌جا ۱۰٬۰۰۰ گزارش می‌شد؛ بنرِ سقفِ اعتبار (که فرمولِ
+    کاملش را داشت) عددِ سوم می‌داد.
 
-    bal = Decimal(0)
-    bal += s(
-        db.query(func.coalesce(func.sum(SalesInvoice.total_amount + SalesInvoice.tax_amount), 0))
-        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+    حالا هر سه از یک جا می‌آیند: `open_items`، که اثرِ هر سند را از
+    `debit - credit`ِ واقعیِ همان سند در دفتر می‌خواند. ستونِ تازه‌ی فردا هم
+    دیگر نمی‌تواند این را بی‌صدا از دفتر جدا کند.
+
+    قراردادِ علامت همان است: مثبت = طلبِ ما، منفی = بدهیِ ما. جمعِ نقش‌ها فقط
+    **نمایش** است؛ هیچ تهاتری در دفتر انجام نمی‌شود.
+    """
+    from app.services import counterparty
+
+    return sum(
+        (row["net"] for row in counterparty.role_positions(db, contact_id)), Decimal(0)
     )
-    bal -= s(
-        db.query(func.coalesce(func.sum(SalesReturn.total_amount + SalesReturn.tax_amount), 0))
-        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(
-            SalesInvoice.contact_id == contact_id,
-            SalesInvoice.voided_at.is_(None),
-            SalesReturn.voided_at.is_(None),
-        )
-    )
-    bal -= s(
-        db.query(func.coalesce(func.sum(PurchaseInvoice.total_amount + PurchaseInvoice.tax_amount), 0))
-        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
-    )
-    bal += s(
-        db.query(func.coalesce(func.sum(PurchaseReturn.total_amount + PurchaseReturn.tax_amount), 0))
-        .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
-        .filter(
-            PurchaseInvoice.contact_id == contact_id,
-            PurchaseInvoice.voided_at.is_(None),
-            PurchaseReturn.voided_at.is_(None),
-        )
-    )
-    bal -= s(
-        db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
-        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "receipt", TreasuryTransaction.voided_at.is_(None))
-    )
-    bal += s(
-        db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
-        .filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.type == "payment", TreasuryTransaction.voided_at.is_(None))
-    )
-    # چکِ دریافتنیِ غیربرگشتی: مطالباتِ مشتری را کم می‌کند — درست مثلِ دریافتِ نقدی، چون
-    # همان لحظه‌ی ثبت، سندِ حسابداری «حساب‌های دریافتنی» را بستانکار کرده. چکِ برگشتی کنار
-    # می‌رود، چون سندِ برگشت همان دریافتنی را دوباره بدهکار (احیا) می‌کند و اثرش خنثی است.
-    bal -= s(
-        db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
-            Check.contact_id == contact_id, Check.type == "receivable", Check.status != "bounced", Check.voided_at.is_(None)
-        )
-    )
-    # چکِ پرداختنیِ غیربرگشتی: بدهیِ ما به تأمین‌کننده را کم می‌کند — مثلِ پرداختِ نقدی.
-    bal += s(
-        db.query(func.coalesce(func.sum(Check.amount), 0)).filter(
-            Check.contact_id == contact_id, Check.type == "payable", Check.status != "bounced", Check.voided_at.is_(None)
-        )
-    )
-    # اعلامیه‌ی بدهکار/بستانکار — تعدیلِ مستقیمِ مانده، بدونِ هیچ حرکتِ پول.
-    for _date, _number, debit, credit in _notice_effects(db, contact_id):
-        bal += Decimal(debit) - Decimal(credit)
-    return bal
 
 
 def get_contact_statement(
@@ -1389,18 +1341,28 @@ def get_contact_statement(
 ) -> dict:
     """کارت حساب یک طرف‌حساب — همه‌ی رویدادهایش با ماندهٔ در حال اجرا.
 
-    قرارداد علامت از دیدِ کسب‌وکار است: بدهکار یعنی طلبِ ما از شخص بیشتر می‌شود
-    (فروش به او، پرداختِ ما به او، برگشتِ خریدِ ما)، بستانکار یعنی کمتر می‌شود
-    (دریافت از او، برگشتِ فروشِ او، خریدِ ما از او). ماندهٔ مثبت = شخص به ما بدهکار
-    است؛ منفی = ما به او. اسنادِ باطل‌شده کنار گذاشته می‌شوند.
+    قراردادِ علامت از دیدِ کسب‌وکار است: بدهکار یعنی طلبِ ما از شخص بیشتر می‌شود،
+    بستانکار یعنی کمتر. ماندهٔ مثبت = شخص به ما بدهکار است.
+
+    **رویدادها از دفتر می‌آیند، نه از شمردنِ ستون‌های سند.** تا امروز این گزارش
+    هر خانواده‌ی سند را جدا می‌شمرد و فاکتور را `total + tax` می‌گرفت؛ از
+    مهاجرتِ ۰۱۲۵ که «اضافات» و «عوارض» آمدند، این فرمول از سندِ حسابداری عقب
+    افتاد و کارتِ حساب با دفتر نمی‌خواند. حالا هر ردیف اثرِ واقعیِ همان سند در
+    دفتر است — پس ستونِ تازه‌ی فردا هم نمی‌تواند دوباره جدایشان کند.
+
+    **ماندهٔ اول دوره‌ی طرف‌حساب جدا می‌آید.** آن عدد در سندِ *افتتاحیه* نشسته و
+    افتتاحیه سندِ قابلِ تسویه نیست، پس در فهرستِ رویدادها نمی‌آید. نبودش یعنی
+    کارتِ حساب همان چیزی را که کاربر در فرمِ طرف‌حساب وارد کرده نشان ندهد.
     """
     contact = db.get(Contact, contact_id)
     if contact is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
 
+    from app.services import counterparty
+
     events: list[dict] = []
 
-    def add(txn_date, kind, number, description, debit, credit):
+    def add(txn_date, kind, number, description, debit, credit, seq):
         events.append(
             {
                 "txn_date": txn_date,
@@ -1409,15 +1371,11 @@ def get_contact_statement(
                 "description": description,
                 "debit": Decimal(debit),
                 "credit": Decimal(credit),
+                "_seq": seq,
             }
         )
 
     # مانده‌ی اول دوره — پیش از هر رویدادِ دیگری.
-    #
-    # بدونِ این، عددی که کاربر در فرمِ طرف‌حساب وارد کرده در سندِ افتتاحیه می‌نشست
-    # ولی در کارتِ حسابِ خودِ آن شخص دیده نمی‌شد؛ یعنی همان گزارشی که برای آن ثبت
-    # شده بود، نشانش نمی‌داد. تاریخش تاریخِ سندِ افتتاحیه است تا در بازه‌ها درست
-    # بیفتد و در «ماندهٔ اول دوره»ی گزارش هم لحاظ شود.
     opening_entry_date = db.query(func.min(JournalEntry.entry_date)).filter(
         JournalEntry.source_type == "opening", JournalEntry.voided_at.is_(None)
     ).scalar()
@@ -1432,70 +1390,25 @@ def get_contact_statement(
                     opening_entry_date, "opening", None, label,
                     amount if side == "debit" else 0,
                     amount if side == "credit" else 0,
+                    -1,
                 )
 
-    # فروش به این شخص (بدهکار)
-    for number, inv_date, total, tax in db.query(
-        SalesInvoice.number, SalesInvoice.invoice_date, SalesInvoice.total_amount, SalesInvoice.tax_amount
-    ).filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None)).all():
-        add(inv_date, "sales_invoice", number, "فاکتور فروش", Decimal(total) + Decimal(tax), 0)
-
-    # برگشت از فروشِ این شخص (بستانکار)
-    for number, r_date, total, tax in (
-        db.query(SalesReturn.number, SalesReturn.return_date, SalesReturn.total_amount, SalesReturn.tax_amount)
-        .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(
-            SalesInvoice.contact_id == contact_id,
-            SalesInvoice.voided_at.is_(None),
-            SalesReturn.voided_at.is_(None),
+    #: ترتیبِ این فهرست از قبل **قطعی** است (تاریخ، شماره‌ی سندِ حسابداری، منبع).
+    #: مرتب‌کردنِ دوباره‌اش با یک ترتیبِ درشت‌تر همان قطعیت را از بین می‌برد و
+    #: ماندهٔ در حالِ اجرا را غیرقابلِ اتکا می‌کند — پس جایگاهش حفظ می‌شود.
+    for seq, event in enumerate(counterparty.events(db, contact_id)):
+        is_debit = event["side"] == "debit"
+        add(
+            event["document_date"],
+            event["source_type"],
+            event["number"],
+            event["label"],
+            event["document_amount"] if is_debit else 0,
+            0 if is_debit else event["document_amount"],
+            seq,
         )
-        .all()
-    ):
-        add(r_date, "sales_return", number, "برگشت از فروش", 0, Decimal(total) + Decimal(tax))
 
-    # خرید از این شخص (بستانکار — ما به او بدهکار می‌شویم)
-    for number, inv_date, total, tax in db.query(
-        PurchaseInvoice.number, PurchaseInvoice.invoice_date, PurchaseInvoice.total_amount, PurchaseInvoice.tax_amount
-    ).filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None)).all():
-        add(inv_date, "purchase_invoice", number, "فاکتور خرید", 0, Decimal(total) + Decimal(tax))
-
-    # برگشت از خرید به این شخص (بدهکار)
-    for number, r_date, total, tax in (
-        db.query(PurchaseReturn.number, PurchaseReturn.return_date, PurchaseReturn.total_amount, PurchaseReturn.tax_amount)
-        .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
-        .filter(
-            PurchaseInvoice.contact_id == contact_id,
-            PurchaseInvoice.voided_at.is_(None),
-            PurchaseReturn.voided_at.is_(None),
-        )
-        .all()
-    ):
-        add(r_date, "purchase_return", number, "برگشت از خرید", Decimal(total) + Decimal(tax), 0)
-
-    # دریافت/پرداختِ خزانه
-    for t_type, t_date, amount in db.query(
-        TreasuryTransaction.type, TreasuryTransaction.transaction_date, TreasuryTransaction.amount
-    ).filter(TreasuryTransaction.contact_id == contact_id, TreasuryTransaction.voided_at.is_(None)).all():
-        if t_type == "receipt":
-            add(t_date, "receipt", None, "دریافت وجه", 0, Decimal(amount))  # شخص پرداخت کرد
-        else:
-            add(t_date, "payment", None, "پرداخت وجه", Decimal(amount), 0)  # ما پرداخت کردیم
-
-    # چک‌های وصل‌شده به این شخص (برگشتی احیا شده و در مانده خنثی است، پس نمایش نمی‌دهیم).
-    # دریافتنی مطالبات را کم می‌کند (بستانکار)؛ پرداختنی بدهیِ ما را کم می‌کند (بدهکار).
-    for c_type, c_number, c_date, c_amount in db.query(
-        Check.type, Check.number, Check.issue_date, Check.amount
-    ).filter(Check.contact_id == contact_id, Check.status != "bounced", Check.voided_at.is_(None)).all():
-        if c_type == "receivable":
-            add(c_date, "check_in", c_number, "چک دریافتنی", 0, Decimal(c_amount))
-        else:
-            add(c_date, "check_out", c_number, "چک پرداختنی", Decimal(c_amount), 0)
-
-    # اعلامیه‌ی بدهکار/بستانکار — سمتش از خودِ ردیف می‌آید، نه از نامِ سند.
-    for n_date, n_number, n_debit, n_credit in _notice_effects(db, contact_id):
-        add(n_date, "credit_debit_note", n_number, "اعلامیه بدهکار/بستانکار", Decimal(n_debit), Decimal(n_credit))
-
-    events.sort(key=lambda e: (e["txn_date"], _STATEMENT_KIND_ORDER.get(e["kind"], 99)))
+    events.sort(key=lambda e: (e["txn_date"], e["_seq"]))
 
     opening = sum(
         (e["debit"] - e["credit"] for e in events if date_from is not None and e["txn_date"] < date_from),
@@ -1513,10 +1426,10 @@ def get_contact_statement(
         running += e["debit"] - e["credit"]
         total_debit += e["debit"]
         total_credit += e["credit"]
-        lines.append({**e, "balance": running})
+        lines.append({**{k: v for k, v in e.items() if k != "_seq"}, "balance": running})
 
     return {
-        "contact_id": contact.id,
+        "contact_id": contact_id,
         "contact_name": contact.name,
         "date_from": date_from,
         "date_to": date_to,
