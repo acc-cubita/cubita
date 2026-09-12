@@ -5,9 +5,13 @@ import {
   deleteItemLive,
   fetchAccountsLive,
   fetchItemsLive,
+  fetchItemAttributes,
+  fetchItemGroups,
   fetchUnits,
   fetchWarehousesAdmin,
   updateItemLive,
+  type ItemAttributeRecord,
+  type ItemGroupRecord,
   type ItemRecord,
   type UnitRecord,
   type WarehouseRecord,
@@ -58,6 +62,8 @@ interface DraftForm {
   unitVolume: string
   minStock: string
   maxStock: string
+  groupId: string
+  attributes: Record<string, string>
   warehouses: WarehouseLinkDraft[]
   isService: boolean
   isSellable: boolean
@@ -70,7 +76,7 @@ const EMPTY_FORM: DraftForm = {
   vatStatus: 'taxable', purchaseVatStatus: 'taxable', taxRate: '', dutyRate: '',
   expenseAccountId: '', primaryUnitId: '', secondaryUnitId: '', conversionFactor: '',
   conversionMode: 'fixed', unitWeight: '', unitVolume: '',
-  minStock: '', maxStock: '', warehouses: [],
+  minStock: '', maxStock: '', groupId: '', attributes: {}, warehouses: [],
   isService: false, isSellable: true, isSerialTracked: false,
 }
 
@@ -90,6 +96,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
   const [accounts, setAccounts] = useState<{ id: string; code: string; name: string; is_group: number }[]>([])
   const [units, setUnits] = useState<UnitRecord[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([])
+  const [groups, setGroups] = useState<ItemGroupRecord[]>([])
+  const [specs, setSpecs] = useState<ItemAttributeRecord[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM)
@@ -146,6 +154,20 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
         setWarehouses((await fetchWarehousesAdmin(token)).filter((w) => w.is_active))
       } catch {
         setWarehouses([])
+      }
+    })()
+  }, [token])
+
+  useEffect(() => {
+    //: گروه و مشخصه هر دو داده‌ی پایه‌اند و در تبِ «گروه و مشخصات» مدیریت می‌شوند.
+    void (async () => {
+      try {
+        const [g, a] = await Promise.all([fetchItemGroups(token), fetchItemAttributes(token)])
+        setGroups(g.filter((x) => x.is_active))
+        setSpecs(a.filter((x) => x.is_active))
+      } catch {
+        setGroups([])
+        setSpecs([])
       }
     })()
   }, [token])
@@ -232,6 +254,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       unitVolume: String(Number(p.unit_volume) || ''),
       minStock: String(Number(p.min_stock) || ''),
       maxStock: String(Number(p.max_stock) || ''),
+      groupId: p.group_id ?? '',
+      attributes: Object.fromEntries((p.attributes ?? []).map((a) => [a.attribute_id, a.value])),
       warehouses: (p.warehouses ?? []).map((w) => ({
         warehouseId: w.warehouse_id,
         isDefault: w.is_default,
@@ -272,6 +296,10 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       unit_volume: Number(form.unitVolume) || 0,
       min_stock: Number(form.minStock) || 0,
       max_stock: Number(form.maxStock) || 0,
+      group_id: form.groupId || null,
+      attributes: Object.entries(form.attributes)
+        .filter(([, value]) => value.trim())
+        .map(([attribute_id, value]) => ({ attribute_id, value: value.trim() })),
       warehouses: form.isService
         ? []
         : form.warehouses.map((w) => ({
@@ -395,13 +423,14 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               />
             </label>
             <label>
-              دسته
-              <input
-                type="text"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder="اختیاری"
-              />
+              گروه
+              <select value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}>
+                <option value="">— بدون گروه —</option>
+                {groups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
+              </select>
+              <span className="field-hint">
+                گروه یک رکورد است نه یک متن — گروهِ تازه را در تبِ «گروه و مشخصات» بسازید.
+              </span>
             </label>
           </div>
           <div className="field-row">
@@ -780,6 +809,31 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             </>
           )}
 
+          {specs.length > 0 && (
+            <>
+              <h4 className="form-section-title">مشخصات</h4>
+              <div className="field-row spec-row">
+                {specs.map((spec) => (
+                  <label key={spec.id}>
+                    {spec.name}
+                    <input
+                      type="text"
+                      value={form.attributes[spec.id] ?? ''}
+                      onChange={(e) =>
+                        setForm({ ...form, attributes: { ...form.attributes, [spec.id]: e.target.value } })
+                      }
+                      placeholder="اختیاری"
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="hint">
+                مقدارِ خالی یعنی این کالا آن مشخصه را ندارد. فهرستِ مشخصه‌ها در تبِ «گروه و
+                مشخصات» تعریف می‌شود.
+              </p>
+            </>
+          )}
+
           <div className="invoice-form-footer">
             <button type="submit" className="btn-primary" disabled={saving}>
               <Save size={14} /> {editingId ? 'ذخیره تغییرات' : 'ثبت کالا'}
@@ -815,7 +869,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                   <tr>
                     <th>کالا</th>
                     <th>نوع</th>
-                    <th>دسته</th>
+                    <th>گروه</th>
                     <th>واحد</th>
                     <th>قیمت فروش</th>
                     <th>وضعیت</th>
@@ -845,7 +899,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                         </div>
                       </td>
                       <td data-label="نوع">{p.is_service ? 'خدمت' : 'کالا'}</td>
-                      <td data-label="دسته">{p.category || '—'}</td>
+                      <td data-label="گروه">{p.group_name || p.category || '—'}</td>
                       <td data-label="واحد">
                         {p.primary_unit_name || p.unit}
                         {p.secondary_unit_name && (

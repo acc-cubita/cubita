@@ -438,6 +438,101 @@ class UnitOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ItemGroupIn(BaseModel):
+    """گروه‌بندیِ کالا/خدمت (§۳۴)."""
+
+    code: str = ""
+    name: str
+    name2: str = ""
+    notes: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ گروه نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class ItemGroupUpdateIn(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    name2: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ گروه نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class ItemGroupOut(BaseModel):
+    id: UUID
+    code: str = ""
+    name: str
+    name2: str = ""
+    notes: str = ""
+    is_active: bool
+    item_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ItemAttributeIn(BaseModel):
+    """تعریفِ یک مشخصه (§۳۵ §۳۶) — «رنگ»، «سایز»، «کشور سازنده».
+
+    **نوعِ داده عمداً نیست.** فصل نوع را تثبیت نمی‌کند و می‌گوید با فصلِ
+    اختصاصیِ مشخصات هماهنگ شود؛ اختراعِ نوع‌بندی این‌جا یعنی چیزی که بعداً باید
+    بازنویسی شود.
+    """
+
+    name: str
+    name2: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("نامِ مشخصه نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class ItemAttributeUpdateIn(BaseModel):
+    name: str | None = None
+    name2: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("نامِ مشخصه نمی‌تواند خالی باشد")
+        return v.strip() if v is not None else v
+
+
+class ItemAttributeOut(BaseModel):
+    id: UUID
+    name: str
+    name2: str = ""
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ItemAttributeValueIn(BaseModel):
+    attribute_id: UUID
+    value: str = ""
+
+
+class ItemAttributeValueOut(BaseModel):
+    attribute_id: UUID
+    attribute_name: str
+    value: str
+
+
 class ItemWarehouseIn(BaseModel):
     """یک انبارِ مرتبط (§۲۹ §۳۱). `is_default` فقط پیشنهادِ فرم است، نه مالکیت."""
 
@@ -498,6 +593,10 @@ class ItemIn(BaseModel):
     max_stock: Decimal = Decimal(0)
     #: §۲۹ §۳۰ — فهرستِ خالی یعنی «همه‌ی انبارها»، نه «هیچ انباری».
     warehouses: list[ItemWarehouseIn] = []
+    #: §۳۴ — گروه‌بندی. اگر فرستاده نشود، از نوشتارِ `category` ساخته/پیدا می‌شود.
+    group_id: UUID | None = None
+    #: §۳۵ — مقدارِ مشخصه‌ها. مقدارِ خالی یعنی «این مشخصه را ندارد».
+    attributes: list[ItemAttributeValueIn] = []
 
     @field_validator("conversion_mode")
     @classmethod
@@ -597,6 +696,9 @@ class ItemOut(BaseModel):
     warehouses: list[ItemWarehouseOut] = []
     #: انبارِ پیش‌فرض — پیشنهادِ فرمِ فروش/خرید، نه قفل (§۳۲).
     default_warehouse_id: UUID | None = None
+    group_id: UUID | None = None
+    group_name: str = ""
+    attributes: list[ItemAttributeValueOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -634,6 +736,8 @@ class ItemUpdateIn(BaseModel):
     max_stock: Decimal | None = None
     #: `None` = دست‌نزن؛ فهرستِ خالی = همه‌ی انبارها.
     warehouses: list[ItemWarehouseIn] | None = None
+    group_id: UUID | None = None
+    attributes: list[ItemAttributeValueIn] | None = None
     sales_price: Decimal | None = None
     average_cost: Decimal | None = None
     is_active: bool | None = None

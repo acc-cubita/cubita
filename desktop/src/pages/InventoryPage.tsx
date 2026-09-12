@@ -12,6 +12,7 @@ import { TransferForm } from '../components/TransferForm'
 import { ProductsPanel } from '../components/ProductsPanel'
 import { BulkImportPanel } from '../components/BulkImportPanel'
 import { LowStockPanel, OverStockPanel } from '../components/LowStockPanel'
+import { ItemTaxonomyPanel } from '../components/ItemTaxonomyPanel'
 import { UnitsPanel } from '../components/UnitsPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
@@ -254,6 +255,12 @@ export function InventoryPage({
             label: 'واحدها',
             icon: Ruler,
             content: <UnitsPanel token={token} onChanged={onChanged} />,
+          },
+          {
+            key: 'taxonomy',
+            label: 'گروه و مشخصات',
+            icon: Tags,
+            content: <ItemTaxonomyPanel token={token} onChanged={onChanged} />,
           },
           {
             key: 'count',

@@ -28,7 +28,15 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account
-from app.models.inventory import Item, ItemWarehouse, StockLedger, Warehouse
+from app.models.inventory import (
+    Item,
+    ItemAttribute,
+    ItemAttributeValue,
+    ItemGroup,
+    ItemWarehouse,
+    StockLedger,
+    Warehouse,
+)
 from app.services import chart_codes as cc
 from app.services.common import assert_postable_account as assert_postable
 from app.services.common import get_or_create_account
@@ -311,4 +319,103 @@ def warehouse_rows(db: Session, item: Item) -> list[dict]:
             "max_stock": link.max_stock,
         }
         for link, warehouse in rows
+    ]
+
+
+# ───────────────────── گروه‌بندی و مشخصات (§۳۴–§۳۶) ─────────────────────
+
+
+def sync_item_category(db: Session, item: Item) -> None:
+    """`Item.category` را با نامِ گروه هم‌گام می‌کند.
+
+    **تنها جای نوشتنِ آن ستون.** از این پس `category` پرتوِ نامِ گروه است، نه
+    منبعِ حقیقت — نگه‌داشتنش عمدی است چون فروشگاه، گزارش‌ها و ورودِ گروهی همه
+    آن را می‌خوانند.
+    """
+    if item.group_id is None:
+        return
+    group = db.get(ItemGroup, item.group_id)
+    if group is not None:
+        item.category = group.name
+
+
+def group_get_or_create(db: Session, name: str) -> ItemGroup:
+    """گروه را با نامش پیدا می‌کند و اگر نبود می‌سازد.
+
+    برای مسیرهایی که هنوز دسته را به‌صورتِ نوشتار می‌دهند (ورودِ گروهی، بازار،
+    بازیابیِ پشتیبان) — همان قاعده‌ای که واحد دارد: هر نوشتاری که از بیرون
+    می‌آید یک رکورد می‌شود، نه یک رشته‌ی سرگردان.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نامِ گروه نمی‌تواند خالی باشد")
+    group = db.query(ItemGroup).filter(ItemGroup.name == name).first()
+    if group is None:
+        group = ItemGroup(name=name)
+        db.add(group)
+        db.flush()
+    return group
+
+
+def assert_group_usable(db: Session, group_id: UUID | None) -> None:
+    if group_id is None:
+        return
+    group = db.get(ItemGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "گروهِ کالا یافت نشد")
+    if not group.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"گروهِ «{group.name}» بسته است و در تعریفِ تازه انتخاب نمی‌شود.",
+        )
+
+
+def set_attributes(db: Session, item: Item, values: list[dict]) -> None:
+    """مقدارِ مشخصه‌های کالا را جایگزین می‌کند (§۳۵).
+
+    مقدارِ خالی یعنی «این مشخصه را ندارد» و ردیفش پاک می‌شود — نگه‌داشتنِ ردیفِ
+    تهی یعنی فهرستِ مشخصات پر از خطوطِ بی‌معنا شود.
+    """
+    wanted = {}
+    for row in values:
+        attribute_id = row.get("attribute_id")
+        if attribute_id is None:
+            continue
+        if db.get(ItemAttribute, attribute_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "مشخصه یافت نشد")
+        wanted[attribute_id] = (row.get("value") or "").strip()
+
+    existing = {
+        row.attribute_id: row
+        for row in db.query(ItemAttributeValue).filter(ItemAttributeValue.item_id == item.id).all()
+    }
+    for attribute_id, row in existing.items():
+        if attribute_id not in wanted or not wanted[attribute_id]:
+            db.delete(row)
+    for attribute_id, value in wanted.items():
+        if not value:
+            continue
+        row = existing.get(attribute_id)
+        if row is None:
+            row = ItemAttributeValue(item_id=item.id, attribute_id=attribute_id)
+            db.add(row)
+        row.value = value
+    db.flush()
+
+
+def attribute_rows(db: Session, item: Item) -> list[dict]:
+    rows = (
+        db.query(ItemAttributeValue, ItemAttribute)
+        .join(ItemAttribute, ItemAttribute.id == ItemAttributeValue.attribute_id)
+        .filter(ItemAttributeValue.item_id == item.id)
+        .order_by(ItemAttribute.name)
+        .all()
+    )
+    return [
+        {
+            "attribute_id": value.attribute_id,
+            "attribute_name": attribute.name,
+            "value": value.value,
+        }
+        for value, attribute in rows
     ]

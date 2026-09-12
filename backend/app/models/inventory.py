@@ -423,6 +423,11 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     unit_weight: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
     unit_volume: Mapped[float] = mapped_column(Numeric(18, 6), default=0, server_default="0")
 
+    #: **گروه‌بندی (§۳۴).** `category` بالا از این پس پرتوِ نامِ این گروه است.
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_groups.id", ondelete="SET NULL"), nullable=True
+    )
+
     #: **کنترلِ موجودی (§۲۴ §۲۵ §۲۶).**
     #:
     #: `reorder_point` از قبل بود و «نیازمندِ سفارش» رویش تکیه دارد؛ دست‌نخورده
@@ -449,6 +454,74 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     # نگاشت به کالای متناظر روی سایت فروشگاهی (ipnetcity.ir) برای فاز Integration
     storefront_product_id: Mapped[int | None] = mapped_column(nullable=True)
+
+
+class ItemGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """گروه‌بندیِ کالا/خدمت (§۳۴).
+
+    **چرا رکورد شد و نه همان متنِ `category`:** متنِ آزاد گزارشِ گروهی را
+    غیرقابل‌اعتماد می‌کند («لوازم خانگی» و «لوازم‌خانگی» دو گروه می‌شوند) و
+    نمی‌شود گروهی را بست بی‌آنکه کالاهای قدیمی‌اش گم شوند.
+
+    **شکلش عمداً همان `ContactGroup` است.** §۳۴ می‌گوید «ساختارِ نهاییِ
+    گروه‌بندی را فقط از این فصل تثبیت نکن» و «مفاهیمِ گروه‌بندیِ موجودِ کوبیتا را
+    بازاستفاده کن» — پس الگوی موجود تکرار می‌شود، نه یک طرحِ تازه.
+
+    `Item.category` می‌ماند ولی از این پس **پرتوِ نامِ گروه** است؛ فروشگاه،
+    گزارش‌ها و ورودِ گروهی همه آن را می‌خوانند.
+    """
+
+    __tablename__ = "item_groups"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_item_groups_tenant_name"),
+    )
+
+    code: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    name: Mapped[str] = mapped_column(String(100))
+    name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+class ItemAttribute(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تعریفِ یک مشخصه‌ی کالا (§۳۵ §۳۶) — «رنگ»، «سایز»، «کشور سازنده».
+
+    **چرا ستونِ ثابت نساختیم:** §۳۶ صریح است — اگر امروز «رنگ» لازم است و فردا
+    «توان موتور»، نباید برای هر مشخصه ستونِ تازه‌ای روی `items` بنشیند. الگو
+    همان چیزی است که فصل می‌خواهد: *تعریفِ مشخصه* ← *مقدارِ مشخصه‌ی کالا*.
+
+    **و نوعِ داده عمداً نیست.** فصل نوع (متن/عدد/فهرست) را تثبیت نمی‌کند و
+    می‌گوید با فصلِ اختصاصیِ «تعریف مشخصات کالا/خدمت» هماهنگ شود. اختراعِ
+    نوع‌بندی این‌جا یعنی همان چیزی که بعداً باید بازنویسی شود.
+    """
+
+    __tablename__ = "item_attributes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_item_attributes_tenant_name"),
+    )
+
+    name: Mapped[str] = mapped_column(String(100))
+    name2: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class ItemAttributeValue(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """مقدارِ یک مشخصه برای یک کالا (§۳۵)."""
+
+    __tablename__ = "item_attribute_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "item_id", "attribute_id", name="uq_item_attribute_values_pair"
+        ),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
+    )
+    attribute_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_attributes.id", ondelete="CASCADE"), index=True
+    )
+    value: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class ItemWarehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

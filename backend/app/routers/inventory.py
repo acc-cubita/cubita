@@ -7,7 +7,17 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.inventory import Contact, Item, ItemWarehouse, UnitOfMeasure, StockAdjustment, StockLedger, Warehouse
+from app.models.inventory import (
+    Contact,
+    Item,
+    ItemAttribute,
+    ItemGroup,
+    ItemWarehouse,
+    StockAdjustment,
+    StockLedger,
+    UnitOfMeasure,
+    Warehouse,
+)
 from app.models.user import User
 from decimal import Decimal
 
@@ -26,6 +36,12 @@ from app.schemas.inventory import (
     ContactIn,
     ContactOut,
     CreditStatusOut,
+    ItemAttributeIn,
+    ItemAttributeOut,
+    ItemAttributeUpdateIn,
+    ItemGroupIn,
+    ItemGroupOut,
+    ItemGroupUpdateIn,
     ItemIn,
     ItemOut,
     ItemWarehouseIn,
@@ -446,6 +462,7 @@ def contact_credit_status(
 def _item_out(db: Session, item: Item, default_account=None) -> dict:
     """ردیفِ کالا + نگاشتِ حسابِ هزینه، واحدها و انبارهای مرتبط."""
     links = items_svc.warehouse_rows(db, item)
+    group = db.get(ItemGroup, item.group_id) if item.group_id else None
     return {
         **ItemOut.model_validate(item).model_dump(),
         **items_svc.row(db, item, default_account=default_account),
@@ -454,7 +471,20 @@ def _item_out(db: Session, item: Item, default_account=None) -> dict:
         "default_warehouse_id": next(
             (link["warehouse_id"] for link in links if link["is_default"]), None
         ),
+        "group_name": group.name if group else item.category,
+        "attributes": items_svc.attribute_rows(db, item),
     }
+
+
+def _apply_group(db: Session, item: Item) -> None:
+    """گروه را حل می‌کند و `Item.category` را هم‌گام نگه می‌دارد (§۳۴).
+
+    اگر `group_id` نیامده باشد، از نوشتارِ `category` ساخته/پیدا می‌شود — همان
+    قاعده‌ای که واحد دارد، تا مسیرهای قدیمی نشکنند و متنِ آزاد هم سرگردان نماند.
+    """
+    if item.group_id is None and (item.category or "").strip():
+        item.group_id = items_svc.group_get_or_create(db, item.category).id
+    items_svc.sync_item_category(db, item)
 
 
 def _apply_units(db: Session, item: Item, fields: dict) -> None:
@@ -472,6 +502,149 @@ def _apply_units(db: Session, item: Item, fields: dict) -> None:
         units_svc.assert_usable(db, item.secondary_unit_id)
     units_svc.assert_conversion(item)
     units_svc.sync_item_unit(db, item)
+
+
+# ─────────────────── گروه‌بندی و مشخصات کالا (§۳۴–§۳۶) ───────────────────
+#
+# `Item.category` یک متنِ آزاد بود، پس «لوازم خانگی» و «لوازم‌خانگی» دو گروه
+# می‌شدند و گزارشِ گروهی قابلِ اعتماد نبود. و برای «رنگ» و «سایز» جایی نبود —
+# فصل صریح است که برای هر مشخصه نباید ستونِ تازه‌ای روی کالا بنشیند.
+
+
+def _group_out(db: Session, group: ItemGroup) -> dict:
+    used = db.query(Item.id).filter(Item.group_id == group.id).count()
+    return {**ItemGroupOut.model_validate(group).model_dump(), "item_count": used}
+
+
+@router.get("/api/item-groups", response_model=list[ItemGroupOut])
+def list_item_groups(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    groups = db.query(ItemGroup).order_by(ItemGroup.name).all()
+    return [_group_out(db, group) for group in groups]
+
+
+@router.post("/api/item-groups", response_model=ItemGroupOut, status_code=201)
+def create_item_group(
+    data: ItemGroupIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "create")),
+):
+    if db.query(ItemGroup).filter(ItemGroup.name == data.name).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"گروهِ «{data.name}» از قبل هست.")
+    group = ItemGroup(**data.model_dump())
+    db.add(group)
+    db.flush()
+    db.refresh(group)
+    return _group_out(db, group)
+
+
+@router.patch("/api/item-groups/{group_id}", response_model=ItemGroupOut)
+def update_item_group(
+    group_id: UUID,
+    data: ItemGroupUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    group = db.get(ItemGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "گروهِ کالا یافت نشد")
+    fields = data.model_dump(exclude_unset=True)
+    if "name" in fields:
+        clash = (
+            db.query(ItemGroup)
+            .filter(ItemGroup.name == fields["name"], ItemGroup.id != group.id)
+            .first()
+        )
+        if clash is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"گروهِ «{fields['name']}» از قبل هست.")
+    for key, value in fields.items():
+        setattr(group, key, value)
+    db.flush()
+    #: تغییرِ نامِ گروه باید روی کالاهایش هم دیده شود — وگرنه `category` و گروه
+    #: از هم جدا می‌افتند و فروشگاه نامِ قدیمی را نشان می‌دهد.
+    if "name" in fields:
+        for item in db.query(Item).filter(Item.group_id == group.id).all():
+            item.category = group.name
+        db.flush()
+    db.refresh(group)
+    return _group_out(db, group)
+
+
+@router.delete("/api/item-groups/{group_id}", status_code=204)
+def delete_item_group(
+    group_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "delete")),
+):
+    """§۶ — گروهِ بی‌کالا حذف می‌شود؛ گروهی که کالا دارد بسته می‌شود نه پاک.
+
+    کلیدِ خارجی `SET NULL` است، پس حذف تاریخچه را نمی‌شکند — ولی کالاها بی‌گروه
+    می‌شوند و کاربر باید بداند، نه اینکه بی‌صدا اتفاق بیفتد.
+    """
+    group = db.get(ItemGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "گروهِ کالا یافت نشد")
+    used = db.query(Item.id).filter(Item.group_id == group.id).count()
+    if used:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"گروهِ «{group.name}» روی {used:,} قلم کالا نشسته و حذف نمی‌شود؛ "
+            "به‌جای حذف، آن را ببندید.",
+        )
+    db.delete(group)
+    db.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/api/item-attributes", response_model=list[ItemAttributeOut])
+def list_item_attributes(db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    return db.query(ItemAttribute).order_by(ItemAttribute.name).all()
+
+
+@router.post("/api/item-attributes", response_model=ItemAttributeOut, status_code=201)
+def create_item_attribute(
+    data: ItemAttributeIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "create")),
+):
+    if db.query(ItemAttribute).filter(ItemAttribute.name == data.name).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"مشخصه‌ی «{data.name}» از قبل هست.")
+    attribute = ItemAttribute(**data.model_dump())
+    db.add(attribute)
+    db.flush()
+    db.refresh(attribute)
+    return attribute
+
+
+@router.patch("/api/item-attributes/{attribute_id}", response_model=ItemAttributeOut)
+def update_item_attribute(
+    attribute_id: UUID,
+    data: ItemAttributeUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    attribute = db.get(ItemAttribute, attribute_id)
+    if attribute is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "مشخصه یافت نشد")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(attribute, key, value)
+    db.flush()
+    db.refresh(attribute)
+    return attribute
+
+
+@router.delete("/api/item-attributes/{attribute_id}", status_code=204)
+def delete_item_attribute(
+    attribute_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "delete")),
+):
+    """حذفِ مشخصه، مقدارهایش را هم می‌برد (`CASCADE`) — پس عمداً تأیید می‌خواهد."""
+    attribute = db.get(ItemAttribute, attribute_id)
+    if attribute is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "مشخصه یافت نشد")
+    db.delete(attribute)
+    db.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ──────────────────────────── واحدهای سنجش (§۱۷–§۲۳) ────────────────────────────
@@ -636,17 +809,24 @@ def _assert_barcode_free(db: Session, barcode: str | None, exclude_id: UUID | No
 
 @router.post("/api/items", response_model=ItemOut, status_code=201)
 def create_item(data: ItemIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "create"))):
+    #: کدِ تکراری تا امروز به قیدِ یکتاییِ پایگاه‌داده می‌خورد و **۵۰۰ خام**
+    #: می‌داد — همان گاردی که ویرایش داشت، ساخت نداشت.
+    _assert_sku_free(db, data.sku)
     _assert_barcode_free(db, data.barcode)
     #: §۱۵ — حسابِ نگاشت باید سند بپذیرد و نقشِ ماژولِ دیگری نباشد؛ وگرنه دو
     #: موتور روی یک حساب می‌نویسند با دو معنی.
     items_svc.assert_expense_account(db, data.expense_account_id)
     fields = data.model_dump()
     links = fields.pop("warehouses", [])
+    attributes = fields.pop("attributes", [])
+    items_svc.assert_group_usable(db, fields.get("group_id"))
     item = Item(**fields)
     db.add(item)
     db.flush()
     items_svc.set_warehouses(db, item, links)
+    items_svc.set_attributes(db, item, attributes)
     _apply_units(db, item, fields)
+    _apply_group(db, item)
     db.flush()
     db.refresh(item)
     return _item_out(db, item)
@@ -675,11 +855,17 @@ def update_item(
         items_svc.assert_serial_toggle_allowed(db, item, fields["is_serial_tracked"])
     #: `None` یعنی «دست نزن»؛ فهرستِ خالی یعنی «همه‌ی انبارها» (§۲۹).
     links = fields.pop("warehouses", None)
+    attributes = fields.pop("attributes", None)
+    if "group_id" in fields:
+        items_svc.assert_group_usable(db, fields["group_id"])
     for key, value in fields.items():
         setattr(item, key, value)
     if links is not None:
         items_svc.set_warehouses(db, item, links)
+    if attributes is not None:
+        items_svc.set_attributes(db, item, attributes)
     _apply_units(db, item, fields)
+    _apply_group(db, item)
     db.flush()
     db.refresh(item)
     return _item_out(db, item)

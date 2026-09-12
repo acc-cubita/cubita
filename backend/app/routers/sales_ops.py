@@ -516,7 +516,22 @@ def pricing_suggest(
     item_id: UUID,
     qty: Decimal = Query(default=Decimal(1), gt=0),
     on: date | None = None,
+    #: زمینه‌ی قیمت (§۳۹ §۴۰ §۴۱). همه اختیاری‌اند و نفرستادنشان همان رفتارِ
+    #: پیشین را می‌دهد — قاعده‌ی «هر زمینه‌ای».
+    sale_type_id: UUID | None = None,
+    unit_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    currency_code: str = "IRR",
     db: Session = Depends(get_db),
     _=Depends(_view),
 ):
-    return svc.suggest_pricing(db, item_id, qty, on)
+    return svc.suggest_pricing(
+        db,
+        item_id,
+        qty,
+        on,
+        sale_type_id=sale_type_id,
+        unit_id=unit_id,
+        contact_id=contact_id,
+        currency_code=currency_code,
+    )

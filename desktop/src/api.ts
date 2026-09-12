@@ -1123,6 +1123,11 @@ export interface ItemRecord {
   warehouses: ItemWarehouseLink[]
   /** پیشنهادِ فرمِ فروش/خرید، نه قفل. */
   default_warehouse_id: string | null
+  /** گروه یک رکورد است؛ `category` بالا پرتوِ نامِ همین است. */
+  group_id: string | null
+  group_name: string
+  /** مشخصه‌ها ستونِ ثابتِ کالا نیستند: تعریف ← مقدار. */
+  attributes: { attribute_id: string; attribute_name: string; value: string }[]
 }
 
 export const fetchItemsLive = (token: string) => authedGetAll<ItemRecord>(token, '/api/items')
@@ -1165,6 +1170,8 @@ export interface ItemIn {
   min_stock?: number
   max_stock?: number
   warehouses?: { warehouse_id: string; is_default?: boolean; min_stock?: number | null; max_stock?: number | null }[]
+  group_id?: string | null
+  attributes?: { attribute_id: string; value: string }[]
 }
 
 /** فیلدهایی که سرور در `ItemUpdateIn` می‌پذیرد. `is_service` عمداً نیست: تبدیلِ
@@ -6847,3 +6854,57 @@ export interface OverStockRow {
 }
 
 export const fetchOverStock = (token: string) => authedGet<OverStockRow[]>(token, '/api/stock/over')
+
+// ─────────────────── گروه‌بندی و مشخصات کالا (§۳۴–§۳۶) ───────────────────
+//
+// `category` یک متنِ آزاد بود، پس «لوازم خانگی» و «لوازم‌خانگی» دو گروه می‌شدند
+// و گزارشِ گروهی قابلِ اعتماد نبود. برای «رنگ» و «سایز» هم جایی نبود — و برای هر
+// مشخصه نباید ستونِ تازه‌ای روی کالا بنشیند.
+
+export interface ItemGroupRecord {
+  id: string
+  code: string
+  name: string
+  name2: string
+  notes: string
+  is_active: boolean
+  item_count: number
+}
+
+export const fetchItemGroups = (token: string) => authedGet<ItemGroupRecord[]>(token, '/api/item-groups')
+
+export const createItemGroup = (token: string, data: { code?: string; name: string; name2?: string; notes?: string }) =>
+  authedSend<ItemGroupRecord>(token, 'POST', '/api/item-groups', data)
+
+export const updateItemGroup = (
+  token: string,
+  groupId: string,
+  patch: { code?: string; name?: string; name2?: string; notes?: string; is_active?: boolean },
+) => authedSend<ItemGroupRecord>(token, 'PATCH', `/api/item-groups/${groupId}`, patch)
+
+/** حذف فقط برای گروهِ بی‌کالا؛ وگرنه سرور ۴۰۹ با پیامِ «ببندیدش» می‌دهد. */
+export const deleteItemGroup = (token: string, groupId: string) =>
+  authedDelete(token, `/api/item-groups/${groupId}`)
+
+export interface ItemAttributeRecord {
+  id: string
+  name: string
+  name2: string
+  is_active: boolean
+}
+
+export const fetchItemAttributes = (token: string) =>
+  authedGet<ItemAttributeRecord[]>(token, '/api/item-attributes')
+
+export const createItemAttribute = (token: string, data: { name: string; name2?: string }) =>
+  authedSend<ItemAttributeRecord>(token, 'POST', '/api/item-attributes', data)
+
+export const updateItemAttribute = (
+  token: string,
+  attributeId: string,
+  patch: { name?: string; name2?: string; is_active?: boolean },
+) => authedSend<ItemAttributeRecord>(token, 'PATCH', `/api/item-attributes/${attributeId}`, patch)
+
+/** حذفِ مشخصه، مقدارهایش روی همه‌ی کالاها را هم می‌برد. */
+export const deleteItemAttribute = (token: string, attributeId: string) =>
+  authedDelete(token, `/api/item-attributes/${attributeId}`)

@@ -22,6 +22,7 @@ from app.schemas.inventory import StockAdjustmentIn
 from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
 from app.services import items as items_svc
+from app.services import pricing
 from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
@@ -242,6 +243,21 @@ def post_sales_invoice(
     #: §۲۹ — کالا فقط در انبارهای مرتبطش گردش می‌کند. فهرستِ خالی یعنی «همه».
     for line in data.lines:
         items_svc.assert_warehouse_allowed(db, items_by_id[line.item_id], data.warehouse_id)
+
+    #: §۴۲ — حدِ مجازِ تغییرِ نرخ نسبت به اعلامیه‌ی قیمت.
+    #:
+    #: پیش‌فرض **بی‌حد** است (حدهای صفر = بدونِ کنترل)، پس هیچ فروشی با افزودنِ
+    #: این گارد مسدود نمی‌شود؛ فقط اعلامیه‌ای که صریحاً سقف گذاشته اثر دارد.
+    for line in data.lines:
+        pricing.assert_within_policy(
+            db,
+            items_by_id[line.item_id],
+            Decimal(line.unit_price),
+            on=data.invoice_date,
+            sale_type_id=data.sale_type_id,
+            contact_id=data.contact_id,
+            currency_code=data.currency_code or "IRR",
+        )
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
     # هر دو پاس می‌شوند و موجودی منفی می‌شود — یعنی کالایی فروخته می‌شود که وجود ندارد.
