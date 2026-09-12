@@ -46,6 +46,18 @@ FACTOR_SCOPES = ("all", "item", "group")
 COMMISSION_BASES = ("net", "profit")
 #: اعلامیه به سودِ ما (بدهکار کردنِ طرف) یا به زیانِ ما (بستانکار کردنِ طرف).
 NOTE_KINDS = ("debit", "credit")
+#: حالت‌های «تغییر فی»ِ گروهی روی اعلامیه‌ی قیمت (§۴۳).
+#:
+#: «بدونِ تغییر» واقعاً کاری می‌کند: قیمت‌ها را دست نمی‌زند ولی دوباره **رند**
+#: می‌کند — تنها راهِ یکدست‌کردنِ رندِ یک اعلامیه‌ی از پیش ثبت‌شده.
+BULK_PRICE_MODES = (
+    "increase_percent",
+    "increase_amount",
+    "decrease_percent",
+    "decrease_amount",
+    "fixed",
+    "none",
+)
 
 
 class SaleType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

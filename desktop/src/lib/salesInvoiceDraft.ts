@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import {
   createSalesInvoiceDirect,
@@ -10,14 +10,15 @@ import {
   fetchLatestRate,
   fetchLoyaltySettings,
   fetchMembers,
-  fetchPriceListItems,
   fetchSaleTypes,
   fetchStockLevels,
   newIdempotencyKey,
+  resolvePrice,
   type ContactRecord,
   type CostCenterRecord,
   type CreditStatus,
   type Currency,
+  type ResolvedPrice,
   type SaleType,
   type SalesInvoiceRecord,
   type StockLevel,
@@ -236,23 +237,53 @@ export function useSalesInvoiceDraft({
     }
   }, [token, contactId, tierAuto])
 
-  // لیستِ قیمتِ مشتریِ انتخاب‌شده — با انتخابِ کالا در هر ردیف، قیمت خودکار پر می‌شود.
-  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
+  // ── قیمت از اعلامیه، با **همه‌ی** زمینه‌اش (§۵۳ §۵۴ §۹۲) ──────────────
+  //
+  // تا پیش از فصلِ «اعلامیه قیمت» این‌جا یک نگاشتِ محلیِ `item_id → price` ساخته
+  // می‌شد از `contact.default_price_list_id` — ستونی که حل‌کننده‌ی سرور اصلاً
+  // نگاهش نمی‌کند. آن نگاشت نه تاریخِ اجرا را می‌دید، نه فعال‌بودنِ اعلامیه را، و
+  // نه نوعِ فروش/واحد/گروهِ مشتری/ارز را؛ و چند ردیفِ یک کالا را دلبخواه به یکی
+  // فرو می‌ریخت. نتیجه این بود که فرم یک قیمت پر می‌کرد و `assert_within_policy`
+  // با قاعده‌ی **دیگری** اعتبارش را می‌سنجید — پس اولین اعلامیه‌ای که حدِ واقعی
+  // می‌گذاشت، قیمتی را رد می‌کرد که خودِ فرم پر کرده بود.
+  const priceContext = useMemo(
+    () => ({
+      saleTypeId: saleTypeId || null,
+      contactId: contactId || null,
+      currencyCode: currencyCode || 'IRR',
+      on: invoiceDate,
+    }),
+    [saleTypeId, contactId, currencyCode, invoiceDate],
+  )
+  const contextKey = `${priceContext.saleTypeId}|${priceContext.contactId}|${priceContext.currencyCode}|${priceContext.on}`
+
+  // نرخِ مصوب و حدهای هر کالا، برای نمایش کنارِ ردیف. با عوض‌شدنِ زمینه دور
+  // ریخته می‌شود، چون دیگر جوابِ همان پرسش نیست.
+  const [priceInfo, setPriceInfo] = useState<Record<string, ResolvedPrice | null>>({})
+  const priceInfoRef = useRef(priceInfo)
+  priceInfoRef.current = priceInfo
   useEffect(() => {
-    const c = contacts.find((x) => x.id === contactId)
-    const plId = c?.default_price_list_id
-    if (!plId) {
-      setPriceMap(new Map())
-      return
-    }
-    let cancelled = false
-    fetchPriceListItems(token, plId)
-      .then((rows) => !cancelled && setPriceMap(new Map(rows.map((r) => [r.item_id, Number(r.price)]))))
-      .catch(() => !cancelled && setPriceMap(new Map()))
-    return () => {
-      cancelled = true
-    }
-  }, [token, contactId, contacts])
+    // ref هم همین‌جا پاک می‌شود، نه در رندرِ بعدی: وگرنه یک `resolveFor` که
+    // بلافاصله پس از تغییرِ زمینه صدا زده شود، جوابِ زمینه‌ی قبلی را از کش می‌دهد.
+    priceInfoRef.current = {}
+    setPriceInfo({})
+  }, [contextKey])
+
+  const resolveFor = useCallback(
+    async (itemId: string): Promise<ResolvedPrice | null> => {
+      if (itemId in priceInfoRef.current) return priceInfoRef.current[itemId]
+      let got: ResolvedPrice | null = null
+      try {
+        got = await resolvePrice(token, itemId, priceContext)
+      } catch {
+        got = null // آفلاین یا خطا: به قیمتِ پایه برمی‌گردیم، مثلِ همیشه
+      }
+      priceInfoRef.current = { ...priceInfoRef.current, [itemId]: got }
+      setPriceInfo(priceInfoRef.current)
+      return got
+    },
+    [token, priceContext],
+  )
 
   const effectiveWarehouseId = warehouseId || warehouses[0]?.id || ''
 
@@ -272,15 +303,69 @@ export function useSalesInvoiceDraft({
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
   }
 
-  // انتخابِ کالا در یک ردیف: قیمتِ واحد از لیستِ قیمتِ مشتری (یا قیمتِ پایه) پر می‌شود.
+  /** قیمتِ پایه‌ی کالا — وقتی هیچ قاعده‌ای با این زمینه نمی‌خواند (§۵۸). */
+  function basePrice(itemId: string): number {
+    const it = items.find((x) => x.id === itemId)
+    return it ? Number(it.sales_price) : 0
+  }
+
+  // انتخابِ کالا در یک ردیف: فی از اعلامیه‌ی قیمت پر می‌شود، وگرنه قیمتِ پایه.
   function chooseLineItem(index: number, itemId: string) {
     if (!itemId) {
       updateLine(index, { itemId: '', unitPrice: '' })
       return
     }
-    const it = items.find((x) => x.id === itemId)
-    const price = priceMap.get(itemId) ?? (it ? Number(it.sales_price) : 0)
-    updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
+    updateLine(index, { itemId, unitPrice: '' })
+    void resolveFor(itemId).then((rule) => {
+      const price = rule ? Number(rule.unit_price) : basePrice(itemId)
+      updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
+    })
+  }
+
+  /**
+   * تغییرِ نوعِ فروش **می‌پرسد**، بی‌صدا قیمت‌ها را بازنویسی نمی‌کند (§۷ §۸ §۹۵).
+   *
+   * نوعِ فروش یکی از ابعادِ قیمت است، پس عوض‌کردنش یعنی قیمتِ ردیف‌های موجود
+   * ممکن است دیگر آن چیزی نباشد که اعلامیه می‌گوید. ولی قیمتِ روی ردیف شاید
+   * نتیجه‌ی یک توافقِ تجاری باشد؛ بازنویسیِ خاموشش به‌عنوانِ عارضه‌ی جانبیِ یک
+   * setter، تصمیمِ کاربر را از او می‌گیرد.
+   *
+   * پرسش این‌جاست و نه در فرم/ویزارد، چون هر دو از همین هوک می‌آیند و دو
+   * پیاده‌سازیِ جدا دیر یا زود از هم جدا می‌افتند.
+   */
+  function changeSaleType(next: string) {
+    setSaleTypeId(next)
+    const priced = lines.filter((l) => l.itemId && Number(l.unitPrice) > 0)
+    if (priced.length === 0) return
+    const ok = window.confirm('آیا مایلید فی با توجه به نوعِ فروشِ جدید تغییر یابد؟')
+    if (!ok) return
+    void repriceAll({ ...priceContext, saleTypeId: next || null })
+  }
+
+  /** هر ردیفِ قیمت‌خورده را با زمینه‌ی تازه دوباره حل می‌کند. */
+  async function repriceAll(ctx: typeof priceContext) {
+    const targets = [...new Set(lines.filter((l) => l.itemId).map((l) => l.itemId))]
+    const resolved = new Map<string, ResolvedPrice | null>()
+    await Promise.all(
+      targets.map(async (id) => {
+        try {
+          resolved.set(id, await resolvePrice(token, id, ctx))
+        } catch {
+          resolved.set(id, null)
+        }
+      }),
+    )
+    priceInfoRef.current = Object.fromEntries(resolved)
+    setPriceInfo(priceInfoRef.current)
+    setLines((prev) =>
+      prev.map((line) => {
+        if (!line.itemId) return line
+        const rule = resolved.get(line.itemId)
+        // قاعده‌ای نبود یعنی سیاستی نیست که اعمال شود — قیمتِ ردیف دست‌نخورده می‌ماند.
+        if (!rule) return line
+        return { ...line, unitPrice: String(Number(rule.unit_price)) }
+      }),
+    )
   }
 
   function addLine() {
@@ -462,7 +547,9 @@ export function useSalesInvoiceDraft({
     setSalespersonId,
     saleTypes,
     saleTypeId,
-    setSaleTypeId,
+    //: فرم و ویزارد همین را صدا می‌زنند؛ پرسشِ «فی تغییر کند؟» داخلش است.
+    setSaleTypeId: changeSaleType,
+    priceInfo,
     autoTier,
     currencies,
     currencyCode,

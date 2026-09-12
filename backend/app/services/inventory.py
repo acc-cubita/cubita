@@ -248,16 +248,21 @@ def post_sales_invoice(
     #:
     #: پیش‌فرض **بی‌حد** است (حدهای صفر = بدونِ کنترل)، پس هیچ فروشی با افزودنِ
     #: این گارد مسدود نمی‌شود؛ فقط اعلامیه‌ای که صریحاً سقف گذاشته اثر دارد.
-    for line in data.lines:
+    #: قاعده‌ی برنده‌ی هر ردیف نگه داشته می‌شود تا پایین‌تر روی ردیف بنشیند — حل
+    #: دو بار انجام نمی‌شود.
+    price_rules = [
         pricing.assert_within_policy(
             db,
             items_by_id[line.item_id],
             Decimal(line.unit_price),
+            discount=Decimal(line.discount or 0),
             on=data.invoice_date,
             sale_type_id=data.sale_type_id,
             contact_id=data.contact_id,
             currency_code=data.currency_code or "IRR",
         )
+        for line in data.lines
+    ]
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
     # هر دو پاس می‌شوند و موجودی منفی می‌شود — یعنی کالایی فروخته می‌شود که وجود ندارد.
@@ -322,6 +327,15 @@ def post_sales_invoice(
                 tax_rate_snapshot=items_svc.effective_tax_rate(
                     item, data.tax_rate, side="sales"
                 ),
+                #: **ردِ قیمت (§۹ §۵۹ §۹۱).** نرخی که اعلامیه *در همین لحظه* داد و
+                #: قاعده‌ای که دادش. `NULL` یعنی هیچ قاعده‌ای با این زمینه نخواند.
+                #:
+                #: §۶۱ از همین دو **مشتق** می‌شود و پرچمِ جداگانه‌ای لازم ندارد:
+                #: `unit_price != declared_unit_price` یعنی کاربر عدد را عوض کرده.
+                declared_unit_price=(
+                    Decimal(price_rules[idx].price or 0) if price_rules[idx] is not None else None
+                ),
+                price_rule_id=price_rules[idx].id if price_rules[idx] is not None else None,
             )
         )
         if not item.is_service:

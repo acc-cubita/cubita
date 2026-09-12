@@ -116,15 +116,14 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
     فقط فاکتورهای باطل‌نشده حساب می‌شوند؛ فاکتور باطل اثری در بدهیِ مالیاتی ندارد.
     """
 
-    def sums(model, date_col, voidable: bool) -> tuple[Decimal, Decimal]:
+    def sums(model, date_col) -> tuple[Decimal, Decimal]:
         query = db.query(
             func.coalesce(func.sum(model.total_amount), 0),
             func.coalesce(func.sum(model.tax_amount), 0),
-        )
-        # برگشت‌ها ستون ابطال ندارند (خودشان سندِ اصلاحی‌اند)، پس این فیلتر فقط
-        # برای فاکتورها معنا دارد.
-        if voidable:
-            query = query.filter(model.voided_at.is_(None))
+        ).filter(model.voided_at.is_(None))
+        # تا مهاجرتِ ۰۱۲۱ برگشت‌ها ستونِ ابطال نداشتند و این فیلتر فقط برای
+        # فاکتورها اجرا می‌شد. حالا هر چهار مدل ابطال‌پذیرند و اگر برگشتِ
+        # باطل‌شده شمرده شود، رقمِ اظهارنامه کمتر از واقع می‌شود.
         if date_from is not None:
             query = query.filter(date_col >= date_from)
         if date_to is not None:
@@ -229,10 +228,10 @@ def get_vat_report(db: Session, date_from: date | None, date_to: date | None) ->
             for iid, number, idate, tax, _kinds, ex_net in rows
         ]
 
-    sales_net, output_vat = sums(SalesInvoice, SalesInvoice.invoice_date, True)
-    purchase_net, input_vat = sums(PurchaseInvoice, PurchaseInvoice.invoice_date, True)
-    sales_ret_net, sales_ret_vat = sums(SalesReturn, SalesReturn.return_date, False)
-    purchase_ret_net, purchase_ret_vat = sums(PurchaseReturn, PurchaseReturn.return_date, False)
+    sales_net, output_vat = sums(SalesInvoice, SalesInvoice.invoice_date)
+    purchase_net, input_vat = sums(PurchaseInvoice, PurchaseInvoice.invoice_date)
+    sales_ret_net, sales_ret_vat = sums(SalesReturn, SalesReturn.return_date)
+    purchase_ret_net, purchase_ret_vat = sums(PurchaseReturn, PurchaseReturn.return_date)
 
     # کالایی که برگشت خورده نه فروش است نه خرید؛ پس هم از پایه و هم از مالیات کم
     # می‌شود. رقمِ اظهارنامه باید همان چیزی باشد که واقعاً در دفاتر مانده.
@@ -357,6 +356,7 @@ def get_seasonal_report(db: Session, year: int, quarter: int) -> dict:
             .join(invoice_model, return_fk == invoice_model.id)
             .filter(
                 invoice_model.voided_at.is_(None),
+                return_model.voided_at.is_(None),
                 return_date_col >= date_from,
                 return_date_col <= date_to,
             )
@@ -1091,7 +1091,11 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     for ret_date, amount in (
         db.query(SalesReturn.return_date, SalesReturn.total_amount)
         .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .filter(
+            SalesInvoice.voided_at.is_(None),
+            SalesReturn.voided_at.is_(None),
+            SalesReturn.return_date >= lower,
+        )
         .all()
     ):
         i = index_of.get(gregorian_to_jalali(ret_date)[:2])
@@ -1108,7 +1112,11 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     for ret_date, amount in (
         db.query(PurchaseReturn.return_date, PurchaseReturn.total_amount)
         .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
-        .filter(PurchaseInvoice.voided_at.is_(None), PurchaseReturn.return_date >= lower)
+        .filter(
+            PurchaseInvoice.voided_at.is_(None),
+            PurchaseReturn.voided_at.is_(None),
+            PurchaseReturn.return_date >= lower,
+        )
         .all()
     ):
         i = index_of.get(gregorian_to_jalali(ret_date)[:2])
@@ -1146,7 +1154,11 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
         )
         .join(SalesReturn, SalesReturnLine.return_id == SalesReturn.id)
         .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .filter(
+            SalesInvoice.voided_at.is_(None),
+            SalesReturn.voided_at.is_(None),
+            SalesReturn.return_date >= lower,
+        )
         .group_by(SalesReturnLine.item_id)
         .all()
     ):
@@ -1173,7 +1185,11 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     for contact_id, total in (
         db.query(SalesInvoice.contact_id, func.coalesce(func.sum(SalesReturn.total_amount), 0))
         .join(SalesReturn, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(SalesInvoice.voided_at.is_(None), SalesReturn.return_date >= lower)
+        .filter(
+            SalesInvoice.voided_at.is_(None),
+            SalesReturn.voided_at.is_(None),
+            SalesReturn.return_date >= lower,
+        )
         .group_by(SalesInvoice.contact_id)
         .all()
     ):
@@ -1267,7 +1283,11 @@ def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     bal -= s(
         db.query(func.coalesce(func.sum(SalesReturn.total_amount + SalesReturn.tax_amount), 0))
         .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+        .filter(
+            SalesInvoice.contact_id == contact_id,
+            SalesInvoice.voided_at.is_(None),
+            SalesReturn.voided_at.is_(None),
+        )
     )
     bal -= s(
         db.query(func.coalesce(func.sum(PurchaseInvoice.total_amount + PurchaseInvoice.tax_amount), 0))
@@ -1276,7 +1296,11 @@ def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     bal += s(
         db.query(func.coalesce(func.sum(PurchaseReturn.total_amount + PurchaseReturn.tax_amount), 0))
         .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
-        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
+        .filter(
+            PurchaseInvoice.contact_id == contact_id,
+            PurchaseInvoice.voided_at.is_(None),
+            PurchaseReturn.voided_at.is_(None),
+        )
     )
     bal -= s(
         db.query(func.coalesce(func.sum(TreasuryTransaction.amount), 0))
@@ -1363,7 +1387,11 @@ def get_contact_statement(
     for number, r_date, total, tax in (
         db.query(SalesReturn.number, SalesReturn.return_date, SalesReturn.total_amount, SalesReturn.tax_amount)
         .join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id)
-        .filter(SalesInvoice.contact_id == contact_id, SalesInvoice.voided_at.is_(None))
+        .filter(
+            SalesInvoice.contact_id == contact_id,
+            SalesInvoice.voided_at.is_(None),
+            SalesReturn.voided_at.is_(None),
+        )
         .all()
     ):
         add(r_date, "sales_return", number, "برگشت از فروش", 0, Decimal(total) + Decimal(tax))
@@ -1378,7 +1406,11 @@ def get_contact_statement(
     for number, r_date, total, tax in (
         db.query(PurchaseReturn.number, PurchaseReturn.return_date, PurchaseReturn.total_amount, PurchaseReturn.tax_amount)
         .join(PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id)
-        .filter(PurchaseInvoice.contact_id == contact_id, PurchaseInvoice.voided_at.is_(None))
+        .filter(
+            PurchaseInvoice.contact_id == contact_id,
+            PurchaseInvoice.voided_at.is_(None),
+            PurchaseReturn.voided_at.is_(None),
+        )
         .all()
     ):
         add(r_date, "purchase_return", number, "برگشت از خرید", Decimal(total) + Decimal(tax), 0)
@@ -1505,7 +1537,12 @@ def get_aging(db: Session, kind: str, as_of: date | None) -> dict:
     returns = (
         db.query(Invoice.contact_id, func.coalesce(func.sum(Return.total_amount + Return.tax_amount), 0))
         .join(Invoice, return_fk == Invoice.id)
-        .filter(Invoice.contact_id.isnot(None), Invoice.voided_at.is_(None), Return.return_date <= as_of)
+        .filter(
+            Invoice.contact_id.isnot(None),
+            Invoice.voided_at.is_(None),
+            Return.voided_at.is_(None),
+            Return.return_date <= as_of,
+        )
         .group_by(Invoice.contact_id)
         .all()
     )

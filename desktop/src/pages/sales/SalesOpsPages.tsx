@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgePercent,
   Boxes,
@@ -14,6 +14,7 @@ import {
   Ship,
   Tags,
   TrendingUp,
+  Undo2,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -28,22 +29,35 @@ import {
   createPriceAnnouncement,
   createPricingFactor,
   createSaleType,
+  createSalesReturnReason,
   fetchCommissionPreview,
   fetchCommissionRules,
+  fetchContactGroups,
   fetchContacts,
+  fetchCurrencies,
   fetchDiscountGroups,
   fetchItemsLive,
   fetchJournalEntriesFiltered,
   fetchMembers,
   fetchPricingSuggestion,
   fetchSalesInvoices,
+  fetchSalesReturnReasons,
   fetchSalesSummary,
+  fetchSaleTypes,
+  fetchUnits,
+  updateSalesReturnReason,
+  type ContactGroupRecord,
   type ContactRecord,
+  type Currency,
+  type DiscountGroup,
   type ItemRecord,
   type PricingFactor,
+  type SaleType,
+  type UnitRecord,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
+import { ItemPicker } from '../../components/ItemPicker'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
@@ -594,6 +608,116 @@ function PricingFactorForm({ token, kind }: { token: string; kind: 'discount' | 
   )
 }
 
+// ═════════════════ علت برگشت کالا ═════════════════
+
+/**
+ * مِسترِ علتِ برگشتِ کالا.
+ *
+ * **چرا جدول و نه متنِ آزاد روی ردیفِ برگشت:** «خرابی»، «خراب بود» و «کالا خراب»
+ * سه نوشته‌ی یک علت‌اند. با متنِ آزاد، گزارشِ «برگشت به تفکیکِ علت» هیچ‌وقت
+ * ساخته نمی‌شود چون هیچ دو ردیفی با هم جمع نمی‌شوند.
+ *
+ * غیرفعال‌کردن هست، حذف نیست: علتِ غیرفعال در انتخابِ تازه نمی‌آید ولی روی
+ * برگشت‌های تاریخی همچنان دیده می‌شود.
+ */
+export function ReturnReasonPage({ token }: { token: string }) {
+  const { msg, submitting, run } = useSubmit()
+  const [title, setTitle] = useState('')
+  const [title2, setTitle2] = useState('')
+  const list = useAsync(() => fetchSalesReturnReasons(token), [token])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20)
+
+  return (
+    <OpsPage
+      icon={Undo2}
+      title="علت برگشت کالا"
+      description="علت‌هایی که هنگامِ ثبتِ فاکتور برگشتی روی هر ردیف انتخاب می‌شوند."
+    >
+      <FormCard
+        icon={Undo2}
+        title="علتِ تازه"
+        description="عنوان یکتاست. علتِ ثبت‌شده حذف نمی‌شود — غیرفعال می‌شود."
+        msg={msg}
+        submitting={submitting}
+        disabled={!title.trim()}
+        onSubmit={() =>
+          void run(async () => {
+            await createSalesReturnReason(token, { title: title.trim(), title2: title2.trim() })
+            setTitle('')
+            setTitle2('')
+            list.reload()
+          }, 'علتِ برگشت ثبت شد.')
+        }
+      >
+        <label>
+          عنوان
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
+        </label>
+        <label>
+          عنوان دوم
+          <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={120} />
+          <span className="field-hint">اختیاری — نامِ جایگزین یا لاتین.</span>
+        </label>
+      </FormCard>
+
+      <SectionCard icon={Undo2} title="علت‌ها" description={`${faInt(rows.length)} ردیف`}>
+        <AsyncBlock
+          loading={list.loading}
+          error={list.error}
+          empty={rows.length === 0}
+          emptyText="هنوز علتی تعریف نشده. اولین علت را از فرمِ بالا بسازید."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile acc-table">
+              <thead>
+                <tr>
+                  <th>عنوان</th>
+                  <th>عنوان دوم</th>
+                  <th>وضعیت</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {pg.pageItems.map((reason) => (
+                  <tr key={reason.id} className={reason.is_active ? '' : 'acc-row--void'}>
+                    <td className="card-title" data-label="عنوان">
+                      {reason.title}
+                    </td>
+                    <td className="card-wide" data-label="عنوان دوم" dir="ltr">
+                      {reason.title2 || '—'}
+                    </td>
+                    <td data-label="وضعیت">{reason.is_active ? 'فعال' : 'غیرفعال'}</td>
+                    <td className="card-actions" data-label="عملیات">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void updateSalesReturnReason(token, reason.id, {
+                            title: reason.title,
+                            title2: reason.title2,
+                            is_active: !reason.is_active,
+                          }).then(
+                            () => list.reload(),
+                            (err: unknown) =>
+                              window.alert(err instanceof Error ? err.message : 'خطای ناشناخته'),
+                          )
+                        }
+                      >
+                        {reason.is_active ? 'غیرفعال کن' : 'فعال کن'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+    </OpsPage>
+  )
+}
+
 export function DiscountPage({ token }: { token: string }) {
   return (
     <OpsPage
@@ -732,36 +856,104 @@ export function DiscountGroupPage({ token }: { token: string }) {
 
 // ═════════════════ ۱۱) اعلامیه قیمت ═════════════════
 
+/** یک قاعده‌ی قیمت در حالِ ساخته‌شدن. */
+interface RuleDraft {
+  key: number
+  targetKind: 'item' | 'group'
+  itemId: string
+  itemGroupId: string
+  saleTypeId: string
+  unitId: string
+  contactGroupId: string
+  currencyCode: string
+  price: string
+  additionPercent: string
+  allowRate: boolean
+  allowDiscount: boolean
+  maxDecrease: string
+  maxIncrease: string
+}
+
+const EMPTY_RULE: Omit<RuleDraft, 'key'> = {
+  targetKind: 'item',
+  itemId: '',
+  itemGroupId: '',
+  saleTypeId: '',
+  unitId: '',
+  contactGroupId: '',
+  currencyCode: 'IRR',
+  price: '',
+  additionPercent: '',
+  allowRate: true,
+  allowDiscount: true,
+  maxDecrease: '',
+  maxIncrease: '',
+}
+
+/**
+ * اعلامیه قیمت — **ماتریسِ قیمت، نه یک عدد برای هر کالا.**
+ *
+ * یک کالا هم‌زمان می‌تواند قیمتِ «عادی»، «خرده» و «عمده» داشته باشد، و هرکدام
+ * حدِ تغییرِ خودشان را. این صفحه تا امروز فقط `{کالا، قیمت}` می‌فرستاد — یعنی
+ * ماتریسی که مدل و حل‌کننده‌اش وجود داشت، از هیچ‌جای محصول قابلِ ورود نبود.
+ *
+ * قاعده‌ها یکی‌یکی ساخته می‌شوند و بعد با هم ثبت: یک جدولِ دوازده‌ستونیِ ویرایشی
+ * روی موبایل غیرقابلِ استفاده است، و اشتباهِ تایپی در آن دیده نمی‌شود.
+ */
 export function PriceAnnouncementPage({ token }: { token: string }) {
   const items = useItems(token)
   const { msg, submitting, run } = useSubmit()
   const [name, setName] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(todayIso())
   const [notes, setNotes] = useState('')
-  const [prices, setPrices] = useState<Record<string, string>>({})
-  const [search, setSearch] = useState('')
 
-  const shown = useMemo(() => {
-    const t = search.trim()
-    const base = t ? items.filter((i) => i.name.includes(t) || i.sku.includes(t)) : items
-    return base.slice(0, 60)
-  }, [items, search])
-  const filled = Object.entries(prices).filter(([, v]) => Number(v) > 0)
+  const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
+  const [units, setUnits] = useState<UnitRecord[]>([])
+  const [contactGroups, setContactGroups] = useState<ContactGroupRecord[]>([])
+  const [itemGroups, setItemGroups] = useState<DiscountGroup[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
+  useEffect(() => {
+    fetchSaleTypes(token).then((r) => setSaleTypes(r.filter((x) => x.is_active))).catch(() => {})
+    fetchUnits(token).then(setUnits).catch(() => {})
+    fetchContactGroups(token).then((r) => setContactGroups(r.filter((x) => x.is_active))).catch(() => {})
+    fetchDiscountGroups(token).then((r) => setItemGroups(r.filter((x) => x.is_active))).catch(() => {})
+    fetchCurrencies(token).then(setCurrencies).catch(() => {})
+  }, [token])
+
+  const [draft, setDraft] = useState<RuleDraft>({ key: 0, ...EMPTY_RULE })
+  const [rules, setRules] = useState<RuleDraft[]>([])
+  const nextKey = useRef(1)
+
+  const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? '—'
+  const label = <T extends { id: string; name: string }>(rows: T[], id: string) =>
+    id ? (rows.find((r) => r.id === id)?.name ?? '—') : 'همه'
+
+  const draftValid =
+    Number(draft.price) > 0 &&
+    (draft.targetKind === 'item' ? !!draft.itemId : !!draft.itemGroupId)
+
+  function addRule() {
+    if (!draftValid) return
+    setRules((prev) => [...prev, { ...draft, key: nextKey.current++ }])
+    // نوعِ فروش و ارز عمداً می‌مانند: معمولاً چند کالا پشتِ‌هم برای *یک* نوعِ فروش
+    // قیمت می‌خورند، و پاک‌کردنشان یعنی کاربر هر بار دوباره انتخابشان کند.
+    setDraft((prev) => ({ ...EMPTY_RULE, key: 0, saleTypeId: prev.saleTypeId, currencyCode: prev.currencyCode }))
+  }
 
   return (
     <OpsPage
       icon={FileSpreadsheet}
       title="اعلامیه قیمت"
-      description="قیمتِ کالاها با تاریخِ اجرا. اعلامیه‌ی تازه کنارِ قبلی می‌نشیند، نه به‌جایش — تا فاکتورهای گذشته قابلِ توضیح بمانند."
+      description="قیمتِ کالاها به ازای نوعِ فروش، واحد، گروهِ مشتری و ارز — با تاریخِ اجرا. اعلامیه‌ی تازه کنارِ قبلی می‌نشیند، نه به‌جایش، تا فاکتورهای گذشته قابلِ توضیح بمانند."
     >
       <FormCard
         icon={FileSpreadsheet}
         title="اعلامیه‌ی تازه"
-        description="فقط کالاهایی که قیمت وارد کرده‌اید ثبت می‌شوند."
+        description="سربرگِ اعلامیه. قاعده‌ها را در کارتِ پایین بسازید."
         msg={msg}
         submitting={submitting}
-        submitLabel={`ثبتِ اعلامیه (${faInt(filled.length)} کالا)`}
-        disabled={!name.trim() || filled.length === 0}
+        submitLabel={`ثبتِ اعلامیه (${faInt(rules.length)} قاعده)`}
+        disabled={!name.trim() || rules.length === 0}
         onSubmit={() =>
           void run(async () => {
             await createPriceAnnouncement(token, {
@@ -769,11 +961,24 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
               effective_from: effectiveFrom,
               notes,
               is_active: true,
-              lines: filled.map(([item_id, v]) => ({ item_id, price: Number(v) })),
+              lines: rules.map((r) => ({
+                item_id: r.targetKind === 'item' ? r.itemId : null,
+                item_group_id: r.targetKind === 'group' ? r.itemGroupId : null,
+                price: Number(r.price),
+                sale_type_id: r.saleTypeId || null,
+                unit_id: r.unitId || null,
+                contact_group_id: r.contactGroupId || null,
+                currency_code: r.currencyCode || 'IRR',
+                addition_percent: Number(r.additionPercent) || 0,
+                allow_rate_change: r.allowRate,
+                allow_discount_change: r.allowDiscount,
+                max_decrease_percent: Number(r.maxDecrease) || 0,
+                max_increase_percent: Number(r.maxIncrease) || 0,
+              })),
             })
             setName('')
             setNotes('')
-            setPrices({})
+            setRules([])
           }, 'اعلامیه‌ی قیمت ثبت شد.')
         }
       >
@@ -795,43 +1000,186 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
           توضیح
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
-        <label>
-          جست‌وجوی کالا
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="نام یا کدِ کالا" />
-        </label>
       </FormCard>
 
-      <SectionCard icon={Boxes} title="قیمت‌ها" description="قیمتِ کالاهایی که در این اعلامیه می‌آیند">
-        {shown.length === 0 ? (
-          <EmptyState icon={Boxes} text="کالایی با این جست‌وجو نیست." />
+      <SectionCard
+        icon={Tags}
+        title="افزودنِ قاعده"
+        description="هدف و زمینه را مشخص کنید. هر زمینه‌ای که خالی بماند یعنی «همه»."
+        actions={
+          <button type="button" className="btn-primary" disabled={!draftValid} onClick={addRule}>
+            <PlusCircle size={14} /> افزودن
+          </button>
+        }
+      >
+        <div className="invoice-form form-full">
+          <label>
+            هدفِ قاعده
+            <select
+              value={draft.targetKind}
+              onChange={(e) =>
+                setDraft({ ...draft, targetKind: e.target.value as 'item' | 'group', itemId: '', itemGroupId: '' })
+              }
+            >
+              <option value="item">یک کالا/خدمت</option>
+              <option value="group">گروهِ فروشِ کالا</option>
+            </select>
+            <span className="field-hint">
+              قاعده‌ای که خودِ کالا را نام ببرد بر قاعده‌ی گروهش می‌چربد.
+            </span>
+          </label>
+          {draft.targetKind === 'item' ? (
+            <label>
+              کالا/خدمت
+              <ItemPicker items={items} value={draft.itemId} onChange={(id) => setDraft({ ...draft, itemId: id })} />
+            </label>
+          ) : (
+            <label>
+              گروهِ فروشِ کالا
+              <select value={draft.itemGroupId} onChange={(e) => setDraft({ ...draft, itemGroupId: e.target.value })}>
+                <option value="">— انتخاب گروه —</option>
+                {itemGroups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            نوعِ فروش
+            <select value={draft.saleTypeId} onChange={(e) => setDraft({ ...draft, saleTypeId: e.target.value })}>
+              <option value="">همه</option>
+              {saleTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            واحد
+            <select value={draft.unitId} onChange={(e) => setDraft({ ...draft, unitId: e.target.value })}>
+              <option value="">همه</option>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+            <span className="field-hint">
+              قیمتِ کارتن از قیمتِ عدد ضربِ ضریبِ تبدیل درنمی‌آید؛ هر واحد قاعده‌ی خودش را دارد.
+            </span>
+          </label>
+          <label>
+            گروهِ مشتری
+            <select value={draft.contactGroupId} onChange={(e) => setDraft({ ...draft, contactGroupId: e.target.value })}>
+              <option value="">همه</option>
+              {contactGroups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            ارز
+            <select value={draft.currencyCode} onChange={(e) => setDraft({ ...draft, currencyCode: e.target.value })}>
+              <option value="IRR">ریال</option>
+              {currencies.filter((c) => c.code !== 'IRR').map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            فی
+            <NumberInput value={draft.price} onChange={(v) => setDraft({ ...draft, price: v })} />
+          </label>
+          <label>
+            درصدِ اضافات
+            <NumberInput value={draft.additionPercent} onChange={(v) => setDraft({ ...draft, additionPercent: v })} />
+            <span className="field-hint">ثبت و نمایش می‌شود؛ روی مبلغِ فاکتور اعمال نمی‌شود.</span>
+          </label>
+          <label className="cal-check-inline">
+            <input
+              type="checkbox"
+              checked={draft.allowRate}
+              onChange={(e) => setDraft({ ...draft, allowRate: e.target.checked })}
+            />
+            امکانِ تغییرِ فی در فاکتور
+          </label>
+          <label className="cal-check-inline">
+            <input
+              type="checkbox"
+              checked={draft.allowDiscount}
+              onChange={(e) => setDraft({ ...draft, allowDiscount: e.target.checked })}
+            />
+            امکانِ تغییرِ تخفیف در فاکتور
+          </label>
+          <label>
+            درصدِ کاهشِ مجاز
+            <NumberInput
+              value={draft.maxDecrease}
+              onChange={(v) => setDraft({ ...draft, maxDecrease: v })}
+              disabled={!draft.allowRate}
+            />
+            <span className="field-hint">خالی یا صفر = بی‌حد.</span>
+          </label>
+          <label>
+            درصدِ افزایشِ مجاز
+            <NumberInput
+              value={draft.maxIncrease}
+              onChange={(v) => setDraft({ ...draft, maxIncrease: v })}
+              disabled={!draft.allowRate}
+            />
+            <span className="field-hint">لازم نیست با کاهش یکی باشد.</span>
+          </label>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        icon={Boxes}
+        title="قاعده‌های این اعلامیه"
+        description={`${faInt(rules.length)} قاعده — با ثبتِ اعلامیه همگی با هم ذخیره می‌شوند`}
+      >
+        {rules.length === 0 ? (
+          <EmptyState icon={Boxes} text="هنوز قاعده‌ای افزوده نشده." />
         ) : (
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
-                  <th>کد</th>
-                  <th>نام</th>
-                  <th>قیمتِ فعلی</th>
-                  <th>قیمتِ تازه</th>
+                  <th>هدف</th>
+                  <th>نوع فروش</th>
+                  <th>واحد</th>
+                  <th>گروه مشتری</th>
+                  <th>ارز</th>
+                  <th>فی</th>
+                  <th>اضافات</th>
+                  <th>تغییر فی</th>
+                  <th>تغییر تخفیف</th>
+                  <th>کاهش/افزایش</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {shown.map((i) => (
-                  <tr key={i.id}>
-                    <td className="card-title" data-label="کد">
-                      {i.sku}
+                {rules.map((r) => (
+                  <tr key={r.key}>
+                    <td className="card-title" data-label="هدف">
+                      {r.targetKind === 'item' ? itemName(r.itemId) : `گروه: ${label(itemGroups, r.itemGroupId)}`}
                     </td>
-                    <td className="card-wide" data-label="نام">
-                      {i.name}
+                    <td data-label="نوع فروش">{label(saleTypes, r.saleTypeId)}</td>
+                    <td data-label="واحد">{label(units, r.unitId)}</td>
+                    <td data-label="گروه مشتری">{label(contactGroups, r.contactGroupId)}</td>
+                    <td data-label="ارز">{r.currencyCode}</td>
+                    <td className="num" data-label="فی">{faAmount(r.price)}</td>
+                    <td className="num" data-label="اضافات">{r.additionPercent ? `${fa(r.additionPercent)}٪` : '—'}</td>
+                    <td data-label="تغییر فی">{r.allowRate ? 'آزاد' : 'قفل'}</td>
+                    <td data-label="تغییر تخفیف">{r.allowDiscount ? 'آزاد' : 'قفل'}</td>
+                    <td className="num" data-label="کاهش/افزایش">
+                      {r.allowRate ? `${fa(r.maxDecrease || 0)}٪ / ${fa(r.maxIncrease || 0)}٪` : '—'}
                     </td>
-                    <td className="num" data-label="قیمتِ فعلی">
-                      {faAmount(i.sales_price)}
-                    </td>
-                    <td data-label="قیمتِ تازه">
-                      <NumberInput
-                        value={prices[i.id] ?? ''}
-                        onChange={(v) => setPrices((p) => ({ ...p, [i.id]: v }))}
-                      />
+                    <td className="card-actions">
+                      <button
+                        type="button"
+                        className="icon-btn-danger"
+                        onClick={() => setRules((prev) => prev.filter((x) => x.key !== r.key))}
+                        aria-label="حذفِ قاعده"
+                      >
+                        <Undo2 size={13} /> حذف
+                      </button>
                     </td>
                   </tr>
                 ))}

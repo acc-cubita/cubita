@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -8,7 +8,7 @@ from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import Contact, Item
 from app.models.invoices import PurchaseInvoice, SalesInvoice
-from app.models.returns import PurchaseReturn, SalesReturn
+from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnReason
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.returns import (
@@ -17,9 +17,15 @@ from app.schemas.returns import (
     ReturnableLineOut,
     SalesReturnIn,
     SalesReturnOut,
+    SalesReturnReasonIn,
+    SalesReturnReasonOut,
+    VoidIn,
 )
+from app.services import voiding
+from app.services.idempotency import idempotent
 from app.services.printing import render_invoice
 from app.services.returns import (
+    attach_return_state,
     get_purchase_returnable_summary,
     get_returnable_summary,
     post_purchase_return,
@@ -60,16 +66,27 @@ def list_sales_returns(
         [SalesReturn.return_date, SalesReturn.number],
         params,
     )
+    attach_return_state(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/sales-returns", response_model=SalesReturnOut, status_code=201)
 def create_sales_return(
     data: SalesReturnIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return post_sales_return(db, data, user)
+    """§۵۴ — همان کلید، همان برگشت. تلاشِ دوباره‌ی شبکه سندِ دوم نمی‌سازد."""
+    sales_return = idempotent(
+        db, request, user,
+        operation="create_sales_return",
+        payload=data,
+        run=lambda: post_sales_return(db, data, user),
+        replay=lambda rid: db.get(SalesReturn, rid),
+    )
+    attach_return_state(db, [sales_return])
+    return sales_return
 
 
 @router.get("/api/purchase-returns", response_model=Page[PurchaseReturnOut])
@@ -83,16 +100,117 @@ def list_purchase_returns(
         [PurchaseReturn.return_date, PurchaseReturn.number],
         params,
     )
+    attach_return_state(db, items)
     return Page(items=items, next_cursor=next_cursor)
 
 
 @router.post("/api/purchase-returns", response_model=PurchaseReturnOut, status_code=201)
 def create_purchase_return(
     data: PurchaseReturnIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
-    return post_purchase_return(db, data, user)
+    purchase_return = idempotent(
+        db, request, user,
+        operation="create_purchase_return",
+        payload=data,
+        run=lambda: post_purchase_return(db, data, user),
+        replay=lambda rid: db.get(PurchaseReturn, rid),
+    )
+    attach_return_state(db, [purchase_return])
+    return purchase_return
+
+
+# ═══════════════════ ابطالِ برگشت (§۷۱–§۷۸) ═══════════════════
+#
+# تا امروز راهی نبود. و `voiding._guard_no_active_returns` هنگامِ ابطالِ فاکتور
+# می‌گفت «اول سندِ برگشت را برگردانید» — کاری که هیچ مسیری نداشت، پس یک برگشتِ
+# اشتباهی فاکتورش را برای همیشه قفل می‌کرد.
+#
+# مجوز `("accounting", "delete")` است نه `invoices` — همان مجوزی که ابطالِ خودِ
+# فاکتور می‌خواهد. ابطال، ثبتِ تازه نیست.
+
+
+@router.post("/api/sales-returns/{return_id}/void", response_model=SalesReturnOut)
+def void_sales_return(
+    return_id: UUID,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "delete")),
+):
+    voiding.void_sales_return(
+        db, return_id, reason=data.reason, user=user, void_date=data.void_date
+    )
+    sales_return = db.get(SalesReturn, return_id)
+    attach_return_state(db, [sales_return])
+    return sales_return
+
+
+@router.post("/api/purchase-returns/{return_id}/void", response_model=PurchaseReturnOut)
+def void_purchase_return(
+    return_id: UUID,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "delete")),
+):
+    voiding.void_purchase_return(
+        db, return_id, reason=data.reason, user=user, void_date=data.void_date
+    )
+    purchase_return = db.get(PurchaseReturn, return_id)
+    attach_return_state(db, [purchase_return])
+    return purchase_return
+
+
+# ═══════════════════ مِسترِ علتِ برگشتِ کالا (§۲۴ §۲۵) ═══════════════════
+
+
+@router.get("/api/sales-return-reasons", response_model=list[SalesReturnReasonOut])
+def list_sales_return_reasons(
+    only_active: bool = False,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """`only_active` برای فرمِ ثبت است؛ فهرستِ کامل برای صفحه‌ی مدیریت.
+
+    سندِ تاریخی علتِ غیرفعالش را نگه می‌دارد (§۸۵)، پس فهرستِ کامل هم لازم است.
+    """
+    query = db.query(SalesReturnReason)
+    if only_active:
+        query = query.filter(SalesReturnReason.is_active.is_(True))
+    return query.order_by(SalesReturnReason.title).all()
+
+
+@router.post("/api/sales-return-reasons", response_model=SalesReturnReasonOut, status_code=201)
+def create_sales_return_reason(
+    data: SalesReturnReasonIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "create")),
+):
+    reason = SalesReturnReason(
+        title=data.title.strip(), title2=data.title2.strip(), is_active=data.is_active
+    )
+    db.add(reason)
+    db.flush()
+    return reason
+
+
+@router.patch("/api/sales-return-reasons/{reason_id}", response_model=SalesReturnReasonOut)
+def update_sales_return_reason(
+    reason_id: UUID,
+    data: SalesReturnReasonIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "create")),
+):
+    """غیرفعال می‌کند، حذف نمی‌کند — سندهای تاریخی علتشان را از دست نمی‌دهند."""
+    reason = db.get(SalesReturnReason, reason_id)
+    if reason is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "علتِ برگشت یافت نشد")
+    reason.title = data.title.strip()
+    reason.title2 = data.title2.strip()
+    reason.is_active = data.is_active
+    db.flush()
+    return reason
 
 
 @router.get("/api/sales-returns/{return_id}/print", response_class=HTMLResponse)

@@ -6,6 +6,7 @@ import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../../lib/salesInv
 import { NumberInput } from '../NumberInput'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
+import { PriceRuleHint } from '../PriceRuleHint'
 import { CardPaymentButton } from '../CardPaymentDialog'
 import { CreditBanner } from '../SalesInvoiceForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
@@ -294,6 +295,7 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
                         return u ? `قیمت هر ${u}` : 'قیمت واحد'
                       })()}
                     />
+                    <PriceRuleHint rule={d.priceInfo[line.itemId]} entered={line.unitPrice} />
                   </td>
                   <td data-label="تخفیف">
                     <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />

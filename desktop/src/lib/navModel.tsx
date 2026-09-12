@@ -186,6 +186,7 @@ export type PageKey =
   | 'contactstatement'
   | 'creditnote'
   | 'saletype'
+  | 'returnreason'
   | 'priceannounce'
   | 'bundle'
   | 'discount'
@@ -284,6 +285,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'commissioncalc', label: 'محاسبه پورسانت', icon: <Calculator size={18} /> },
       { key: 'customs', label: 'اظهارنامه گمرکی', icon: <Ship size={18} /> },
       { key: 'saletype', label: 'نوع فروش', icon: <Tags size={18} /> },
+      { key: 'returnreason', label: 'علت برگشت کالا', icon: <Undo2 size={18} /> },
       { key: 'priceannounce', label: 'اعلامیه قیمت', icon: <FileSpreadsheet size={18} /> },
       { key: 'bundle', label: 'بسته محصول جدید', icon: <Boxes size={18} /> },
       { key: 'discount', label: 'تخفیف جدید', icon: <Percent size={18} /> },
@@ -475,7 +477,7 @@ for (const key of [
 //: کسب‌وکاری که ماژولِ فروش را ندارد همه‌ی این منوها را می‌دید.
 for (const key of [
   'salesflow', 'salesinvoice', 'quotations', 'salesreturn', 'invoiceclose', 'creditnote',
-  'contactstatement', 'commission', 'commissioncalc', 'customs', 'saletype', 'priceannounce',
+  'contactstatement', 'commission', 'commissioncalc', 'customs', 'saletype', 'returnreason', 'priceannounce',
   'bundle', 'discount', 'discountgroup', 'markup', 'salesbrowse', 'contactoverview',
   'saleslist', 'quotationlist', 'returnlist', 'notelist', 'commissionrulelist',
   'commissionrunlist', 'customslist', 'saletypelist', 'priceannouncelist', 'bundlelist',

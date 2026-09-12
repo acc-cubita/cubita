@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
@@ -10,95 +11,279 @@ from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
 from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
-from app.models.returns import PurchaseReturn, PurchaseReturnLine, SalesReturn, SalesReturnLine
+from app.models.returns import (
+    PurchaseReturn,
+    PurchaseReturnLine,
+    SalesReturn,
+    SalesReturnLine,
+    SalesReturnReason,
+)
 from app.models.user import User
 from app.schemas.returns import PurchaseReturnIn, SalesReturnIn
 from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import warehouses
-from app.services.common import get_account, make_journal_entry
+from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.inventory import (
     compute_tax,
     get_stock_qty,
     get_total_stock_qty,
+    lock_items,
     vat_payable_account,
     vat_receivable_account,
 )
 from app.services.period_close import assert_period_open
 
 
-def _sales_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dict]:
-    """برای هر کالای فاکتور: تعداد فروخته‌شده، میانگین وزنی قیمت/بهای آن، و مجموع قبلاً برگشت‌خورده."""
-    lines = db.query(SalesInvoiceLine).filter(SalesInvoiceLine.invoice_id == invoice_id).all()
-    summary: dict[UUID, dict] = {}
-    for line in lines:
-        entry = summary.setdefault(line.item_id, {"qty": Decimal(0), "amount": Decimal(0), "cost_amount": Decimal(0)})
-        entry["qty"] += Decimal(line.qty)
-        # مبلغ **پس از کسر تخفیف** جمع می‌شود تا قیمتِ واحدِ مؤثرِ پایین‌تر همان چیزی
-        # باشد که مشتری واقعاً پرداخت کرده؛ وگرنه برگشت، بیش از دریافتی به او
-        # برمی‌گرداند و تخفیف عملاً دو بار داده می‌شود.
-        entry["amount"] += (Decimal(line.qty) * Decimal(line.unit_price)) - Decimal(line.discount or 0)
-        entry["cost_amount"] += Decimal(line.qty) * Decimal(line.unit_cost)
-        #: نرخِ مالیاتِ **همان ردیف**، وزن‌دار به خالصش. تا امروز نرخِ سرِ فاکتور
-        #: به کار می‌رفت، پس برگشتِ یک قلمِ **معاف** مالیاتی را آزاد می‌کرد که
-        #: اصلاً بسته نشده بود — و ماندهٔ «مالیات پرداختنی» کمتر از واقع می‌شد.
-        entry["tax_weight"] = entry.get("tax_weight", Decimal(0)) + (
-            (Decimal(line.qty) * Decimal(line.unit_price) - Decimal(line.discount or 0))
-            * Decimal(line.tax_rate_snapshot or 0)
-        )
+@dataclass
+class _SourceLine:
+    """یک ردیفِ فاکتورِ فروش، به‌همراهِ آن‌چه از آن برگشت خورده و آن‌چه مانده."""
 
-    already_returned = (
-        db.query(SalesReturnLine.item_id, func.coalesce(func.sum(SalesReturnLine.qty), 0))
+    line: SalesInvoiceLine
+    sold: Decimal
+    #: قیمتِ واحدِ **مؤثر** — پس از کسرِ تخفیفِ همین ردیف. مشتری همین را پرداخته.
+    unit_price: Decimal
+    unit_cost: Decimal
+    #: نرخِ مالیاتِ قفل‌شده‌ی همین ردیف. سربرگ به کار نمی‌آید: فاکتوری که هم قلمِ
+    #: مشمول دارد هم معاف، نرخِ سربرگش برای هیچ‌کدام درست نیست.
+    tax_rate: Decimal
+    returned: Decimal
+    remaining: Decimal
+
+
+def _drain_legacy(rows: list[_SourceLine], legacy_by_item: dict[UUID, Decimal]) -> None:
+    """برگشت‌های پیش از مهاجرتِ ۰۱۲۱ را از استخرِ همان کالا کم می‌کند.
+
+    آن ردیف‌ها `sales_invoice_line_id` ندارند (مهاجرت روی جدولِ RLS‌دار `UPDATE`
+    نمی‌زند، پس backfill نشدند) و فقط می‌دانیم «از این کالا چقدر برگشت خورده».
+    اگر نادیده گرفته می‌شدند، لحظه‌ی مهاجرت مانده‌ی قابلِ برگشت بی‌صدا بالا
+    می‌پرید و کالایی که کامل برگشت خورده بود دوباره قابلِ برگشت می‌شد.
+
+    ترتیب همان ترتیبی است که خودِ فاکتور ردیف‌هایش را نشان می‌دهد
+    (`order_by(id)` — روی UUID دلخواه است ولی **پایدار**، و همان ترتیبی که
+    `SalesInvoice.lines` و در نتیجه فرم و چاپ دارند). قطعی‌بودنش کافی است:
+    مهم این است که **جمعِ کل** حفظ شود و هیچ مقداری دوبار شمرده نشود.
+    """
+    for row in rows:
+        left = legacy_by_item.get(row.line.item_id, Decimal(0))
+        if left <= 0:
+            continue
+        take = min(left, row.remaining)
+        row.returned += take
+        row.remaining -= take
+        legacy_by_item[row.line.item_id] = left - take
+
+
+def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> list[_SourceLine]:
+    """ردیف‌های فاکتور با ماندهٔ قابلِ برگشتِ **هر ردیف** (§۷ §۹).
+
+    `lock=True` ردیف‌ها را تا پایانِ تراکنش قفل می‌کند. بدونش دو برگشتِ هم‌زمان
+    هر دو ماندهٔ ۵ را می‌بینند و هر دو ۵ ثبت می‌کنند — مجموع ۱۰ از فروشِ ۵ (§۱۳).
+    """
+    query = db.query(SalesInvoiceLine).filter(SalesInvoiceLine.invoice_id == invoice_id)
+    if lock:
+        query = query.with_for_update()
+    lines = query.order_by(SalesInvoiceLine.id).all()
+
+    #: تخصیص‌های **فعال** — برگشتِ باطل‌شده مانده را آزاد می‌کند (§۷۶).
+    allocated = dict(
+        db.query(SalesReturnLine.sales_invoice_line_id, func.coalesce(func.sum(SalesReturnLine.qty), 0))
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
-        .filter(SalesReturn.sales_invoice_id == invoice_id)
-        .group_by(SalesReturnLine.item_id)
+        .filter(
+            SalesReturn.sales_invoice_id == invoice_id,
+            SalesReturn.voided_at.is_(None),
+            SalesReturnLine.sales_invoice_line_id.isnot(None),
+        )
+        .group_by(SalesReturnLine.sales_invoice_line_id)
         .all()
     )
-    returned_by_item = {item_id: Decimal(qty) for item_id, qty in already_returned}
-
-    for item_id, entry in summary.items():
-        entry["unit_price"] = entry["amount"] / entry["qty"] if entry["qty"] else Decimal(0)
-        entry["unit_cost"] = entry["cost_amount"] / entry["qty"] if entry["qty"] else Decimal(0)
-        entry["tax_rate"] = (
-            entry["tax_weight"] / entry["amount"] if entry["amount"] else Decimal(0)
+    legacy = {
+        item_id: Decimal(qty)
+        for item_id, qty in db.query(
+            SalesReturnLine.item_id, func.coalesce(func.sum(SalesReturnLine.qty), 0)
         )
-        entry["already_returned"] = returned_by_item.get(item_id, Decimal(0))
-        entry["remaining"] = entry["qty"] - entry["already_returned"]
-    return summary
+        .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
+        .filter(
+            SalesReturn.sales_invoice_id == invoice_id,
+            SalesReturn.voided_at.is_(None),
+            SalesReturnLine.sales_invoice_line_id.is_(None),
+        )
+        .group_by(SalesReturnLine.item_id)
+        .all()
+    }
+
+    rows: list[_SourceLine] = []
+    for line in lines:
+        sold = Decimal(line.qty)
+        # مبلغ **پس از کسر تخفیف** تا قیمتِ واحدِ مؤثر همان چیزی باشد که مشتری
+        # واقعاً پرداخت کرده؛ وگرنه برگشت، بیش از دریافتی به او برمی‌گرداند و
+        # تخفیف عملاً دو بار داده می‌شود.
+        net = (sold * Decimal(line.unit_price)) - Decimal(line.discount or 0)
+        returned = Decimal(allocated.get(line.id, 0))
+        rows.append(
+            _SourceLine(
+                line=line,
+                sold=sold,
+                unit_price=net / sold if sold else Decimal(0),
+                unit_cost=Decimal(line.unit_cost or 0),
+                tax_rate=Decimal(line.tax_rate_snapshot or 0),
+                returned=returned,
+                remaining=max(sold - returned, Decimal(0)),
+            )
+        )
+    _drain_legacy(rows, legacy)
+    return rows
 
 
 def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
-    """برای هر کالای فاکتور فروش: فروخته‌شده، قبلاً برگشت‌خورده، و باقی‌ماندهٔ قابل‌برگشت.
+    """برای هر **ردیفِ** فاکتور فروش: فروخته‌شده، قبلاً برگشت‌خورده، و باقی‌ماندهٔ قابل‌برگشت.
 
-    تا فرمِ برگشت «باقی‌مانده» را نشان دهد نه «تعداد فروخته‌شده» — کاربر همان لحظه
-    بداند چقدر هنوز قابلِ برگشت است.
+    تا فرمِ برگشت «باقی‌مانده» را نشان دهد نه «تعداد فروخته‌شده» — و تا کاربر
+    ببیند از **کدام ردیف** با **کدام قیمت** برمی‌گرداند. فاکتوری که یک کالا را
+    در دو ردیف با دو قیمت فروخته، اینجا دو سطر دارد نه یک میانگین.
     """
     invoice = db.get(SalesInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
-    summary = _sales_invoice_line_summary(db, invoice_id)
-    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(summary.keys()))).all()}
-    rows: list[dict] = []
-    for item_id, info in summary.items():
-        it = items.get(item_id)
-        rows.append(
-            {
-                "item_id": item_id,
-                "item_name": it.name if it else "",
-                "unit": it.unit if it else "",
-                "sold": info["qty"],
-                "already_returned": info["already_returned"],
-                "remaining": info["remaining"],
-                "unit_price": info["unit_price"],
-            }
-        )
-    return rows
+    rows = _returnable_lines(db, invoice_id)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    return [
+        {
+            "sales_invoice_line_id": row.line.id,
+            "invoice_number": invoice.number,
+            "item_id": row.line.item_id,
+            "item_name": items[row.line.item_id].name if row.line.item_id in items else "",
+            "unit": items[row.line.item_id].unit if row.line.item_id in items else "",
+            "sold": row.sold,
+            "already_returned": row.returned,
+            "remaining": row.remaining,
+            "unit_price": row.unit_price,
+        }
+        for row in rows
+    ]
+
+
+def _allocate(
+    rows: list[_SourceLine],
+    requested,
+    items_by_id: dict[UUID, Item],
+    *,
+    source_attr: str,
+    doc_label: str,
+) -> list[tuple[_SourceLine, Decimal, object]]:
+    """هر ردیفِ درخواست را به ردیف(های) واقعیِ فاکتور می‌بندد (§۷ §۱۲).
+
+    دو شکلِ ورودی پذیرفته می‌شود و **هر دو** به تخصیصِ سطحِ ردیف ختم می‌شوند:
+
+    * شناسه‌ی ردیفِ فاکتور داده شده → همان ردیف، بی‌ابهام.
+    * فقط `item_id` داده شده → روی ردیف‌های همان کالا پخش می‌شود، به همان
+      ترتیبِ پایداری که فاکتور نشان می‌دهد. این مسیر برای فراخوان‌های موجود است
+      (`marketplace` و اپِ موبایل هنوز کالا-محور می‌فرستند)؛ شکلِ درخواستشان عوض
+      نمی‌شود ولی ردیفِ حاصل از این پس هویتِ مبدأ دارد.
+
+    `remaining` همان‌جا کم می‌شود تا دو ردیفِ درخواست روی یک ردیفِ فاکتور
+    نتوانند از ماندهٔ مشترک بیشتر بردارند.
+    """
+    by_line = {row.line.id: row for row in rows}
+    plan: list[tuple[_SourceLine, Decimal, object]] = []
+
+    for req in requested:
+        item = items_by_id.get(req.item_id) if req.item_id else None
+        source_id = getattr(req, source_attr, None)
+
+        if source_id is not None:
+            row = by_line.get(source_id)
+            if row is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"ردیفِ انتخاب‌شده متعلق به این {doc_label} نیست"
+                )
+            if Decimal(req.qty) > row.remaining:
+                name = items_by_id.get(row.line.item_id)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"مقدار برگشتی «{name.name if name else ''}» بیش از باقی‌ماندهٔ این ردیف است "
+                    f"(باقی‌مانده: {row.remaining})",
+                )
+            row.remaining -= Decimal(req.qty)
+            plan.append((row, Decimal(req.qty), req))
+            continue
+
+        candidates = [row for row in rows if row.line.item_id == req.item_id]
+        if not candidates:
+            label = item.name if item else req.item_id
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"کالا «{label}» در این {doc_label} نبوده است"
+            )
+        available = sum((row.remaining for row in candidates), Decimal(0))
+        if Decimal(req.qty) > available:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"مقدار برگشتی «{item.name if item else ''}» بیش از باقی‌مانده‌ی قابل‌برگشت است "
+                f"(باقی‌مانده: {available})",
+            )
+        left = Decimal(req.qty)
+        for row in candidates:
+            if left <= 0:
+                break
+            take = min(left, row.remaining)
+            if take <= 0:
+                continue
+            row.remaining -= take
+            left -= take
+            plan.append((row, take, req))
+    return plan
+
+
+def _assert_reasons_selectable(db: Session, requested) -> None:
+    """علتِ برگشتِ **غیرفعال** روی سندِ تازه ننشیند (§۸۵).
+
+    غیرفعال‌کردن یعنی «دیگر این را انتخاب نکن»، نه «هرگز نبوده». پس سندهای
+    تاریخی علتشان را نگه می‌دارند و فقط انتخابِ تازه بسته می‌شود.
+    """
+    ids = {r.return_reason_id for r in requested if getattr(r, "return_reason_id", None)}
+    if not ids:
+        return
+    found = {
+        reason.id: reason
+        for reason in db.query(SalesReturnReason).filter(SalesReturnReason.id.in_(ids)).all()
+    }
+    for reason_id in ids:
+        reason = found.get(reason_id)
+        if reason is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "علتِ برگشتِ انتخاب‌شده پیدا نشد")
+        if not reason.is_active:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"علتِ برگشتِ «{reason.title}» غیرفعال شده و برای سندِ تازه قابلِ انتخاب نیست",
+            )
+
+
+def sales_return_account(db: Session):
+    """حسابِ «برگشت از فروش» — کاهنده‌ی درآمد، نه بدهکارکردنِ خودِ درآمد (§۴۵ §۹۴).
+
+    تنبل ساخته می‌شود تا چارتِ کسب‌وکارهای موجود هم بدونِ مهاجرتِ داده تکمیل شود.
+    """
+    return get_or_create_account(
+        db,
+        cc.SALES_RETURN,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.SALES_RETURN],
+        name="برگشت از فروش",
+        acc_type="income",
+        parent_code="4",
+    )
 
 
 def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesReturn:
     assert_period_open(db, data.return_date)
 
-    invoice = db.get(SalesInvoice, data.sales_invoice_id)
+    #: قفلِ سربرگ پیش از هر خواندنی. همراهِ قفلِ ردیف‌ها در `_returnable_lines`،
+    #: دو برگشتِ هم‌زمان روی یک فاکتور پشتِ سرِ هم اجرا می‌شوند نه موازی (§۱۳).
+    invoice = (
+        db.query(SalesInvoice)
+        .filter(SalesInvoice.id == data.sales_invoice_id)
+        .with_for_update()
+        .one_or_none()
+    )
     if invoice is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور فروش یافت نشد")
     # روی فاکتورِ باطل‌شده نباید برگشت خورد: ابطال، خودش کلِ فروش را معکوس کرده؛ یک
@@ -109,8 +294,18 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
             "این فاکتور فروش باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
         )
 
-    summary = _sales_invoice_line_summary(db, data.sales_invoice_id)
-    items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
+    rows = _returnable_lines(db, data.sales_invoice_id, lock=True)
+    item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
+    items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
+    _assert_reasons_selectable(db, data.lines)
+    plan = _allocate(
+        rows, data.lines, items_by_id,
+        source_attr="sales_invoice_line_id", doc_label="فاکتور فروش",
+    )
+
+    #: قفلِ کالاها پیش از خواندنِ موجودی و بازمحاسبه‌ی میانگین — همان دلیلی که
+    #: `voiding._apply_void` دارد: read-modify-write روی `average_cost`.
+    lock_items(db, {row.line.item_id for row, _, _ in plan})
 
     total_amount = Decimal(0)
     total_cost = Decimal(0)
@@ -119,46 +314,37 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     return_lines: list[SalesReturnLine] = []
     stock_moves: list[StockLedger] = []
 
-    for line in data.lines:
-        item = items_by_id.get(line.item_id)
-        info = summary.get(line.item_id)
-        if info is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا «{item.name if item else line.item_id}» در این فاکتور فروش نبوده است")
-        if line.qty > info["remaining"]:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"مقدار برگشتی «{item.name}» بیش از باقی‌مانده‌ی قابل‌برگشت است (باقی‌مانده: {info['remaining']})",
-            )
-
-        unit_price = info["unit_price"]
-        unit_cost = info["unit_cost"]
-        line_net = line.qty * unit_price
+    for row, qty, req in plan:
+        item = items_by_id[row.line.item_id]
+        line_net = qty * row.unit_price
         total_amount += line_net
-        total_cost += line.qty * unit_cost
+        total_cost += qty * row.unit_cost
         #: مالیات با نرخِ **همان ردیفِ فاکتورِ اصلی** برمی‌گردد، نه نرخِ سرِ فاکتور.
-        tax_amount += compute_tax(line_net, Decimal(info["tax_rate"]))
-        tax_weight += line_net * Decimal(info["tax_rate"])
+        tax_amount += compute_tax(line_net, row.tax_rate)
+        tax_weight += line_net * row.tax_rate
         return_lines.append(
             SalesReturnLine(
-                item_id=line.item_id,
-                qty=line.qty,
-                unit_price=unit_price,
-                unit_cost=unit_cost,
-                description=line.description,
+                sales_invoice_line_id=row.line.id,
+                item_id=row.line.item_id,
+                qty=qty,
+                unit_price=row.unit_price,
+                unit_cost=row.unit_cost,
+                return_reason_id=getattr(req, "return_reason_id", None),
+                description=req.description,
             )
         )
 
         if not item.is_service:
             existing_qty = get_total_stock_qty(db, item.id)
-            new_qty = existing_qty + line.qty
+            new_qty = existing_qty + qty
             if new_qty > 0:
-                item.average_cost = ((existing_qty * item.average_cost) + (line.qty * unit_cost)) / new_qty
+                item.average_cost = ((existing_qty * item.average_cost) + (qty * row.unit_cost)) / new_qty
             stock_moves.append(
                 StockLedger(
-                    item_id=line.item_id,
+                    item_id=row.line.item_id,
                     warehouse_id=invoice.warehouse_id,
-                    qty=line.qty,
-                    unit_cost=unit_cost,
+                    qty=qty,
+                    unit_cost=row.unit_cost,
                     entry_date=data.return_date,
                     source_type="sales_return",
                 )
@@ -174,7 +360,10 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
 
     journal_lines = [
         JournalLine(
-            account_id=get_account(db, cc.SALES_REVENUE).id, debit=total_amount, credit=0, description="برگشت از فروش"
+            #: **کاهنده‌ی درآمد، نه بدهکارکردنِ درآمد** (§۴۵ §۹۴): فروشِ ناخالص و
+            #: برگشتی باید هر دو قابلِ گزارش بمانند، وگرنه «چقدر فروختیم و چقدر
+            #: برگشت خورد؟» — مبنای نرخِ برگشت — دیگر پرسیدنی نیست.
+            account_id=sales_return_account(db).id, debit=total_amount, credit=0, description="برگشت از فروش"
         ),
     ]
     if tax_amount > 0:
@@ -243,43 +432,70 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     return sales_return
 
 
-def _purchase_invoice_line_summary(db: Session, invoice_id: UUID) -> dict[UUID, dict]:
-    lines = db.query(PurchaseInvoiceLine).filter(PurchaseInvoiceLine.invoice_id == invoice_id).all()
-    summary: dict[UUID, dict] = {}
-    for line in lines:
-        entry = summary.setdefault(line.item_id, {"qty": Decimal(0), "cost_amount": Decimal(0)})
-        entry["qty"] += Decimal(line.qty)
-        # پس از کسر تخفیف — به همان دلیلِ برگشت از فروش: باید همان مبلغی به
-        # تأمین‌کننده برگردد که به او پرداخت شده، نه قیمتِ فهرست.
-        entry["cost_amount"] += (Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
-        #: نرخِ مالیاتِ همان ردیف، وزن‌دار — قرینه‌ی برگشت از فروش. برگشتِ قلمِ
-        #: معاف نباید اعتبارِ مالیاتی‌ای را پس بدهد که هرگز گرفته نشده بود.
-        entry["tax_weight"] = entry.get("tax_weight", Decimal(0)) + (
-            ((Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0))
-            * Decimal(line.tax_rate_snapshot or 0)
-        )
+def _purchase_returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> list[_SourceLine]:
+    """قرینه‌ی `_returnable_lines` برای خرید — همان قاعده‌ها، همان دلایل.
 
-    already_returned = (
-        db.query(PurchaseReturnLine.item_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0))
+    `unit_price` و `unit_cost` هر دو بهای واحدِ **پس از تخفیف** را حمل می‌کنند:
+    باید همان مبلغی به تأمین‌کننده برگردد که به او پرداخت شده، نه قیمتِ فهرست.
+    """
+    query = db.query(PurchaseInvoiceLine).filter(PurchaseInvoiceLine.invoice_id == invoice_id)
+    if lock:
+        query = query.with_for_update()
+    lines = query.order_by(PurchaseInvoiceLine.id).all()
+
+    allocated = dict(
+        db.query(
+            PurchaseReturnLine.purchase_invoice_line_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0)
+        )
         .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
-        .filter(PurchaseReturn.purchase_invoice_id == invoice_id)
-        .group_by(PurchaseReturnLine.item_id)
+        .filter(
+            PurchaseReturn.purchase_invoice_id == invoice_id,
+            PurchaseReturn.voided_at.is_(None),
+            PurchaseReturnLine.purchase_invoice_line_id.isnot(None),
+        )
+        .group_by(PurchaseReturnLine.purchase_invoice_line_id)
         .all()
     )
-    returned_by_item = {item_id: Decimal(qty) for item_id, qty in already_returned}
-
-    for item_id, entry in summary.items():
-        entry["unit_cost"] = entry["cost_amount"] / entry["qty"] if entry["qty"] else Decimal(0)
-        entry["tax_rate"] = (
-            entry["tax_weight"] / entry["cost_amount"] if entry["cost_amount"] else Decimal(0)
+    legacy = {
+        item_id: Decimal(qty)
+        for item_id, qty in db.query(
+            PurchaseReturnLine.item_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0)
         )
-        entry["already_returned"] = returned_by_item.get(item_id, Decimal(0))
-        entry["remaining"] = entry["qty"] - entry["already_returned"]
-    return summary
+        .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
+        .filter(
+            PurchaseReturn.purchase_invoice_id == invoice_id,
+            PurchaseReturn.voided_at.is_(None),
+            PurchaseReturnLine.purchase_invoice_line_id.is_(None),
+        )
+        .group_by(PurchaseReturnLine.item_id)
+        .all()
+    }
+
+    rows: list[_SourceLine] = []
+    for line in lines:
+        bought = Decimal(line.qty)
+        net = (bought * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
+        unit = net / bought if bought else Decimal(0)
+        returned = Decimal(allocated.get(line.id, 0))
+        rows.append(
+            _SourceLine(
+                line=line,
+                sold=bought,
+                unit_price=unit,
+                unit_cost=unit,
+                #: برگشتِ قلمِ معاف نباید اعتبارِ مالیاتی‌ای را پس بدهد که هرگز
+                #: گرفته نشده بود — پس نرخ از خودِ ردیف می‌آید، نه سربرگ.
+                tax_rate=Decimal(line.tax_rate_snapshot or 0),
+                returned=returned,
+                remaining=max(bought - returned, Decimal(0)),
+            )
+        )
+    _drain_legacy(rows, legacy)
+    return rows
 
 
 def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
-    """قرینه‌ی get_returnable_summary برای خرید: باقی‌ماندهٔ قابلِ برگشتِ هر کالا.
+    """قرینه‌ی get_returnable_summary برای خرید: باقی‌ماندهٔ قابلِ برگشتِ هر **ردیف**.
 
     `unit_price` در خروجی بهای واحد (unit_cost) را حمل می‌کند تا از همان اسکیمای
     ReturnableLineOut استفاده شود.
@@ -287,29 +503,33 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
     invoice = db.get(PurchaseInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
-    summary = _purchase_invoice_line_summary(db, invoice_id)
-    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(summary.keys()))).all()}
-    rows: list[dict] = []
-    for item_id, info in summary.items():
-        it = items.get(item_id)
-        rows.append(
-            {
-                "item_id": item_id,
-                "item_name": it.name if it else "",
-                "unit": it.unit if it else "",
-                "sold": info["qty"],
-                "already_returned": info["already_returned"],
-                "remaining": info["remaining"],
-                "unit_price": info["unit_cost"],
-            }
-        )
-    return rows
+    rows = _purchase_returnable_lines(db, invoice_id)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    return [
+        {
+            "purchase_invoice_line_id": row.line.id,
+            "invoice_number": invoice.number,
+            "item_id": row.line.item_id,
+            "item_name": items[row.line.item_id].name if row.line.item_id in items else "",
+            "unit": items[row.line.item_id].unit if row.line.item_id in items else "",
+            "sold": row.sold,
+            "already_returned": row.returned,
+            "remaining": row.remaining,
+            "unit_price": row.unit_cost,
+        }
+        for row in rows
+    ]
 
 
 def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> PurchaseReturn:
     assert_period_open(db, data.return_date)
 
-    invoice = db.get(PurchaseInvoice, data.purchase_invoice_id)
+    invoice = (
+        db.query(PurchaseInvoice)
+        .filter(PurchaseInvoice.id == data.purchase_invoice_id)
+        .with_for_update()
+        .one_or_none()
+    )
     if invoice is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور خرید یافت نشد")
     if invoice.voided_at is not None:
@@ -318,8 +538,14 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
             "این فاکتور خرید باطل شده است؛ روی فاکتورِ باطل‌شده نمی‌توان برگشت زد.",
         )
 
-    summary = _purchase_invoice_line_summary(db, data.purchase_invoice_id)
-    items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
+    rows = _purchase_returnable_lines(db, data.purchase_invoice_id, lock=True)
+    item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
+    items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
+    plan = _allocate(
+        rows, data.lines, items_by_id,
+        source_attr="purchase_invoice_line_id", doc_label="فاکتور خرید",
+    )
+    lock_items(db, {row.line.item_id for row, _, _ in plan})
 
     total_amount = Decimal(0)
     tax_amount = Decimal(0)
@@ -332,43 +558,43 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     credit_by_account: dict[UUID, Decimal] = {}
     inventory_account_id = warehouses.inventory_account_id(db, invoice.warehouse_id)
 
-    for line in data.lines:
-        item = items_by_id.get(line.item_id)
-        info = summary.get(line.item_id)
-        if info is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا «{item.name if item else line.item_id}» در این فاکتور خرید نبوده است")
-        if line.qty > info["remaining"]:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"مقدار برگشتی «{item.name}» بیش از باقی‌مانده‌ی قابل‌برگشت است (باقی‌مانده: {info['remaining']})",
-            )
+    for row, qty, req in plan:
+        item = items_by_id[row.line.item_id]
         if not item.is_service:
-            available = get_stock_qty(db, line.item_id, invoice.warehouse_id)
-            if available < line.qty:
+            available = get_stock_qty(db, row.line.item_id, invoice.warehouse_id)
+            if available < qty:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     f"موجودی «{item.name}» برای این میزان برگشت کافی نیست (موجود: {available})",
                 )
 
-        unit_cost = info["unit_cost"]
-        line_net = line.qty * unit_cost
+        unit_cost = row.unit_cost
+        line_net = qty * unit_cost
         total_amount += line_net
-        tax_amount += compute_tax(line_net, Decimal(info["tax_rate"]))
-        tax_weight += line_net * Decimal(info["tax_rate"])
+        tax_amount += compute_tax(line_net, row.tax_rate)
+        tax_weight += line_net * row.tax_rate
         account_id = items_svc.purchase_account_id(db, item, inventory_account_id=inventory_account_id)
         credit_by_account[account_id] = credit_by_account.get(account_id, Decimal(0)) + line_net
-        return_lines.append(PurchaseReturnLine(item_id=line.item_id, qty=line.qty, unit_cost=unit_cost, description=line.description))
+        return_lines.append(
+            PurchaseReturnLine(
+                purchase_invoice_line_id=row.line.id,
+                item_id=row.line.item_id,
+                qty=qty,
+                unit_cost=unit_cost,
+                description=req.description,
+            )
+        )
 
         if not item.is_service:
             existing_qty = get_total_stock_qty(db, item.id)
-            new_qty = existing_qty - line.qty
+            new_qty = existing_qty - qty
             if new_qty > 0:
-                item.average_cost = ((existing_qty * item.average_cost) - (line.qty * unit_cost)) / new_qty
+                item.average_cost = ((existing_qty * item.average_cost) - (qty * unit_cost)) / new_qty
             stock_moves.append(
                 StockLedger(
-                    item_id=line.item_id,
+                    item_id=row.line.item_id,
                     warehouse_id=invoice.warehouse_id,
-                    qty=-line.qty,
+                    qty=-qty,
                     unit_cost=unit_cost,
                     entry_date=data.return_date,
                     source_type="purchase_return",
@@ -438,3 +664,37 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     db.flush()
     db.refresh(purchase_return)
     return purchase_return
+
+
+def attach_return_state(db: Session, returns: list) -> None:
+    """وضعیت‌های **مشتق** روی هر سندِ برگشت — بدونِ هیچ شمارنده‌ی ذخیره‌شده (§۹۲).
+
+    فهرستِ مرجع سه عدد کنارِ هم دارد: مبلغِ برگشت، پرداخت‌شده، و ماندهٔ برگشت
+    (§۶۴ §۶۵). این‌ها سه حقیقتِ جدا هستند و «پرداخت‌شده» از خزانه/تسویه می‌آید،
+    نه از خودِ برگشت — یک برگشتِ پرداخت‌نشده حالتِ کاملاً معتبری است (§۶۷).
+
+    ذخیره‌کردنشان روی سربرگ یعنی دو نمای یک داده که بی‌صدا از هم جدا می‌افتند؛
+    پس هر بار از منبع خوانده می‌شوند.
+    """
+    if not returns:
+        return
+    # import دیرهنگام: open_items خودش returns را می‌شناسد.
+    from app.services.open_items import settled_amounts
+
+    kind = "sales_return" if isinstance(returns[0], SalesReturn) else "purchase_return"
+    settled = settled_amounts(db, [(kind, r.id) for r in returns])
+    for doc in returns:
+        final = Decimal(doc.total_amount or 0) + Decimal(doc.tax_amount or 0)
+        paid = settled.get((kind, doc.id), Decimal(0))
+        doc.final_amount = final
+        doc.settled_amount = paid
+        doc.remaining_amount = max(final - paid, Decimal(0))
+        doc.accounting_status = "posted" if doc.journal_entry_id else "unposted"
+        #: «باطل» یک وضعیتِ مالی نیست، ولی در فهرست باید از «تسویه‌نشده» جدا
+        #: دیده شود وگرنه کاربر دنبالِ پولی می‌گردد که اصلاً قرار نیست برود.
+        doc.financial_status = (
+            "voided" if doc.voided_at is not None
+            else "unsettled" if paid == 0
+            else "fully_settled" if paid >= final
+            else "partially_settled"
+        )

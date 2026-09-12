@@ -118,7 +118,9 @@ SETTLEABLE: dict[str, SettleableKind] = {
         contact_col=SalesInvoice.contact_id,
         number_col=SalesReturn.number,
         joins=((SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id),),
-        filters=(SalesInvoice.voided_at.is_(None),),
+        #: هر دو لازم‌اند. از مهاجرتِ ۰۱۲۱ خودِ برگشت هم ابطال‌پذیر است و بدونِ
+        #: فیلترِ دومی، برگشتِ باطل‌شده همچنان از ماندهٔ بازِ طرف‌حساب کم می‌کرد.
+        filters=(SalesInvoice.voided_at.is_(None), SalesReturn.voided_at.is_(None)),
     ),
     "purchase_return": SettleableKind(
         key="purchase_return",
@@ -128,7 +130,7 @@ SETTLEABLE: dict[str, SettleableKind] = {
         contact_col=PurchaseInvoice.contact_id,
         number_col=PurchaseReturn.number,
         joins=((PurchaseInvoice, PurchaseReturn.purchase_invoice_id == PurchaseInvoice.id),),
-        filters=(PurchaseInvoice.voided_at.is_(None),),
+        filters=(PurchaseInvoice.voided_at.is_(None), PurchaseReturn.voided_at.is_(None)),
     ),
     #: **سربرگ، نه اجزا.** از مهاجرتِ ۰۱۱۱ رسید یک سند است با چند ابزار (نقد،
     #: حواله، کارت‌خوان، چک) و **همه‌ی اجزا یک `journal_entry_id` مشترک دارند**.
