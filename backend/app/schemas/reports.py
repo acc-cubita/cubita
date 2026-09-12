@@ -492,3 +492,158 @@ class CounterpartyEventDetailOut(BaseModel):
     label: str
     journal_entry_id: UUID | None = None
     lines: list[CounterpartyEventLineOut]
+
+
+# ───────────────────── مرور فروش ─────────────────────
+
+
+class SalesReviewSummaryOut(BaseModel):
+    invoice_count: int
+    line_count: int
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+    sold_qty: Decimal
+    issued_qty: Decimal
+    #: فروخته‌شده منهای خارج‌شده — عددی که تا این فصل هیچ‌جا دیده نمی‌شد.
+    unissued_qty: Decimal
+    item_count: int
+
+
+class SalesByItemOut(BaseModel):
+    item_id: UUID
+    item_code: str
+    item_name: str
+    is_service: bool
+    unit_name: str
+    secondary_unit_name: str = ""
+    sold_qty: Decimal
+    returned_qty: Decimal
+    net_qty: Decimal
+    issued_qty: Decimal
+    unissued_qty: Decimal
+    #: مقدار به واحدِ دوم — **همان مقدار** با واحدِ دیگر، نه فروشی جدا.
+    #: `None` یعنی واحد دوم یا ضریبش تعریف نشده.
+    sold_qty_secondary: Decimal | None = None
+    issued_qty_secondary: Decimal | None = None
+    line_count: int
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+    #: فیِ متوسطِ **تاریخی و وزنی** — نه قیمتِ اعلامیه‌ی امروز.
+    average_unit_price: Decimal | None = None
+    #: از دفترِ موجودی، نه از «فروش منهای برگشت».
+    stock_qty: Decimal
+
+
+class SalesByCustomerOut(BaseModel):
+    contact_id: UUID | None = None
+    contact_name: str
+    contact_type: str = ""
+    group_name: str = ""
+    credit_limit: Decimal = Decimal(0)
+    invoice_count: int
+    sold_qty: Decimal
+    returned_qty: Decimal
+    issued_qty: Decimal
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class SalesByWarehouseOut(BaseModel):
+    warehouse_id: UUID
+    warehouse_name: str
+    issue_count: int
+    invoice_count: int
+    issued_qty: Decimal
+    issued_cost: Decimal
+
+
+class SalesDocumentOut(BaseModel):
+    source_type: str
+    source_id: UUID
+    label: str
+    number: int | None = None
+    document_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    sale_type_name: str = ""
+    is_voided: bool
+    line_count: int
+    sold_qty: Decimal
+    returned_qty: Decimal
+    issued_qty: Decimal
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class SalesLineOut(BaseModel):
+    line_id: UUID
+    source_type: str
+    source_id: UUID
+    number: int | None = None
+    document_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    sale_type_name: str = ""
+    item_id: UUID
+    item_code: str
+    item_name: str
+    barcode: str = ""
+    unit_name: str = ""
+    sold_qty: Decimal
+    sold_qty_secondary: Decimal | None = None
+    returned_qty: Decimal
+    issued_qty: Decimal
+    unissued_qty: Decimal
+    unit_price: Decimal
+    #: انبارهایی که این ردیف واقعاً از آن‌ها خارج شده — می‌تواند چند تا باشد.
+    warehouse_names: list[str] = []
+    is_voided: bool
+    gross_amount: Decimal
+    discount: Decimal
+    tax: Decimal
+    duty: Decimal
+    addition: Decimal
+    net_amount: Decimal
+    return_amount: Decimal
+    net_sales: Decimal
+
+
+class PreinvoiceProgressOut(BaseModel):
+    quotation_id: UUID
+    line_id: UUID
+    number: int | None = None
+    quotation_date: date
+    contact_id: UUID | None = None
+    contact_name: str
+    status: str
+    item_id: UUID
+    item_name: str
+    unit_price: Decimal
+    #: سه عددِ مستقل. «فاکتورشده» و «خارج‌شده» هر دو **مشتق**اند، نه شمارنده.
+    quoted_qty: Decimal
+    invoiced_qty: Decimal
+    issued_qty: Decimal
+    invoice_line_count: int
+    remaining_invoiceable: Decimal
+    remaining_issueable: Decimal

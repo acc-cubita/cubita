@@ -8,6 +8,13 @@ from app.database import get_db
 from app.deps import require_permission
 from app.schemas.cost_center import CostCenterReportOut
 from app.schemas.reports import (
+    PreinvoiceProgressOut,
+    SalesByCustomerOut,
+    SalesByItemOut,
+    SalesByWarehouseOut,
+    SalesDocumentOut,
+    SalesLineOut,
+    SalesReviewSummaryOut,
     CounterpartyEventDetailOut,
     CounterpartyEventOut,
     CounterpartySummaryOut,
@@ -28,6 +35,7 @@ from app.schemas.reports import (
     VatReportOut,
 )
 from app.services import counterparty as counterparty_service
+from app.services import sales_review as sales_review_service
 from app.services import cost_centers as cost_centers_service
 from app.services import integrity as integrity_service
 from app.services import reports as reports_service
@@ -317,3 +325,156 @@ def counterparty_event_lines(
     drill-downِ برعکس هم ممکن باشد.
     """
     return counterparty_service.event_lines(db, source_type, source_id)
+
+
+# ───────────────────── مرور فروش ─────────────────────
+#
+# شش نما، شش اندپوینت. یکی نشده‌اند چون دانه‌بندی‌شان فرق دارد و یک پاسخِ واحد
+# رابط را وادار می‌کرد از یکی، دیگری را بسازد — همان‌جا که یک مبلغ دو بار
+# شمرده می‌شود.
+#
+# `accounting.view` نمی‌خواهند: این‌ها فروش‌اند نه دفتر. همان مجوزِ `sales.view`
+# که فهرستِ فاکتورها دارد.
+
+
+def _sales_scope(
+    date_from: date | None,
+    date_to: date | None,
+    contact_id: UUID | None,
+    item_id: UUID | None,
+    sale_type_id: UUID | None,
+    warehouse_id: UUID | None,
+) -> sales_review_service.Scope:
+    return sales_review_service.Scope(
+        date_from=date_from,
+        date_to=date_to,
+        contact_id=contact_id,
+        item_id=item_id,
+        sale_type_id=sale_type_id,
+        warehouse_id=warehouse_id,
+    )
+
+
+_sales_view = require_permission("sales", "view")
+
+
+@router.get("/sales-review/summary", response_model=SalesReviewSummaryOut)
+def sales_review_summary(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """شاخص‌های بازه — از دانه‌بندیِ سند، نه از جمعِ نمایی دیگر."""
+    return sales_review_service.summary(
+        db, _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    )
+
+
+@router.get("/sales-review/items", response_model=list[SalesByItemOut])
+def sales_review_items(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """نمای کالا — فروش، برگشت، و تحققِ فیزیکی کنارِ هم."""
+    return sales_review_service.by_item(
+        db, _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    )
+
+
+@router.get("/sales-review/customers", response_model=list[SalesByCustomerOut])
+def sales_review_customers(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """نمای مشتری — فروشِ همین بازه. **مانده‌ی طرف حساب نیست.**"""
+    return sales_review_service.by_customer(
+        db, _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    )
+
+
+@router.get("/sales-review/warehouses", response_model=list[SalesByWarehouseOut])
+def sales_review_warehouses(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """نمای انبار — تحققِ فیزیکی. **دفترِ موجودی نیست.**"""
+    return sales_review_service.by_warehouse(
+        db, _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    )
+
+
+@router.get("/sales-review/documents", response_model=list[SalesDocumentOut])
+def sales_review_documents(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    voided: bool = Query(False, description="فقط فاکتورهای ابطالی"),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """نمای اسنادِ فروش — یک ردیف برای هر سند.
+
+    `voided=true` نمای **فاکتورهای ابطالی** را می‌دهد: آن‌ها در هیچ نمای دیگری
+    شمرده نمی‌شوند، ولی تاریخ پاک نمی‌شود.
+    """
+    scope = _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    if voided:
+        return sales_review_service.voided_documents(db, scope)
+    return sales_review_service.documents(db, scope)
+
+
+@router.get("/sales-review/lines", response_model=list[SalesLineOut])
+def sales_review_lines(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    sale_type_id: UUID | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """نمای اقلامِ فروش — ریزترین دانه‌بندی. با نمای اسناد **جمع نمی‌شود**."""
+    return sales_review_service.lines(
+        db, _sales_scope(date_from, date_to, contact_id, item_id, sale_type_id, warehouse_id)
+    )
+
+
+@router.get("/sales-review/preinvoices", response_model=list[PreinvoiceProgressOut])
+def sales_review_preinvoices(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(_sales_view),
+):
+    """پیشرفتِ پیش‌فاکتور — پیشنهادشده، فاکتورشده، خارج‌شده."""
+    return sales_review_service.preinvoices(
+        db, _sales_scope(date_from, date_to, contact_id, None, None, None)
+    )
