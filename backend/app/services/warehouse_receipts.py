@@ -1,4 +1,29 @@
-"""ورود فیزیکیِ خرید؛ مستقل از ثبت تجاری و بدهی فاکتور."""
+"""ورودِ واقعیِ کالا به انبار — و در گردشِ خرید، سندِ عملیاتیِ همان ورود.
+
+**دو مسیرِ معتبر (§۹).** رسید یا به فاکتورِ خرید گره می‌خورد، یا مستقیم ثبت
+می‌شود. تا امروز فقط مسیرِ اول ممکن بود؛ خریدی که فاکتورش بعداً می‌آید — یا
+اصلاً نمی‌آید — هیچ راهی برای ورودِ کالا نداشت.
+
+---
+
+**نقطه‌ی ثبتِ حسابداری صریح است، و این مهم‌ترین قاعده‌ی این فایل است (§۳۷).**
+
+فصل هشدار می‌دهد که فاکتور و رسید نباید یک بدهی را دو بار ثبت کنند. سیاستِ
+موجودِ کوبیتا سنجیده شد و منسجم است: بدهی را **فاکتور** می‌شناسد و رسید هیچ
+سندی نمی‌زند. آن دست نمی‌خورد.
+
+ولی رسیدِ **مستقیم** فاکتوری ندارد که بدهی را شناخته باشد. نزدنِ سند برایش یعنی
+کالا بی‌هیچ اثرِ حسابداری وارد انبار شود و دفتر با گزارشِ انبار برای همیشه
+واگرا بماند — همان بیماری‌ای که این فصل می‌خواهد درمانش کند. پس:
+
+    رسیدِ گره‌خورده به فاکتور  →  فقط حرکتِ فیزیکی
+    رسیدِ مستقیم               →  حرکتِ فیزیکی + سندِ حسابداری
+
+`receipt.journal_entry_id` می‌گوید کدام‌یک اتفاق افتاده. §۴۴ می‌خواهد «اثرِ
+انباری» و «اثرِ حسابداری» دو چیزِ جدا باشند، نه یک بولینِ مبهم.
+
+**و حساب‌ها با نقش حل می‌شوند، نه با کد یا نام (§۳۶).**
+"""
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -8,10 +33,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.accounting import JournalLine
 from app.models.advanced_inventory import StockBatch
 from app.models.counters import DOC_WAREHOUSE_RECEIPT
-from app.models.inventory import Item, StockLedger, Warehouse
+from app.models.inventory import Contact, Item, StockLedger, Warehouse
 from app.models.invoices import (
+    RECEIPT_TYPE_LABELS,
+    RECEIPT_TYPES,
     PurchaseInvoice,
     PurchaseInvoiceLine,
     WarehouseReceipt,
@@ -19,6 +47,10 @@ from app.models.invoices import (
 )
 from app.models.user import User
 from app.schemas.invoices import WarehouseReceiptIn
+from app.services import chart_codes as cc
+from app.services import items as items_svc
+from app.services import warehouses as warehouses_svc
+from app.services.common import get_account, make_journal_entry
 from app.services.inventory import get_total_stock_qty, lock_items
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
@@ -40,20 +72,31 @@ def received_by_line(db: Session, invoice_id: UUID) -> dict[UUID, Decimal]:
     return {line_id: Decimal(qty) for line_id, qty in rows}
 
 
-def create_warehouse_receipt(
-    db: Session, invoice_id: UUID, data: WarehouseReceiptIn, user: User
-) -> WarehouseReceipt:
-    assert_period_open(db, data.receipt_date)
+def _resolve_invoice(db: Session, invoice_id: UUID | None) -> PurchaseInvoice | None:
+    """فاکتورِ مبدأ، اگر رسید به یکی گره خورده باشد (§۸).
+
+    `None` یعنی رسیدِ مستقیم — یک سناریوی واقعی، نه یک حالتِ خطا.
+    """
+    if invoice_id is None:
+        return None
     invoice = db.get(PurchaseInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
     if invoice.is_voided:
         raise HTTPException(status.HTTP_409_CONFLICT, "برای فاکتور باطل‌شده نمی‌توان رسید انبار ساخت")
-    warehouse = db.get(Warehouse, data.warehouse_id)
-    if warehouse is None or not warehouse.is_active:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبار فعال یافت نشد")
+    return invoice
 
+
+def _invoice_backed_lines(
+    db: Session, invoice: PurchaseInvoice, data: WarehouseReceiptIn
+) -> list[dict]:
+    """ردیف‌های رسید از روی ردیف‌های فاکتور، با گاردِ «بیش از مانده»."""
     requested = {row.purchase_invoice_line_id: Decimal(row.qty) for row in data.lines}
+    if None in requested:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "وقتی رسید به فاکتور گره خورده، هر ردیف باید ردیفِ فاکتورش را نام ببرد.",
+        )
     purchase_lines = (
         db.query(PurchaseInvoiceLine)
         .filter(PurchaseInvoiceLine.invoice_id == invoice.id, PurchaseInvoiceLine.id.in_(requested))
@@ -62,7 +105,9 @@ def create_warehouse_receipt(
     )
     if len(purchase_lines) != len(requested):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "یکی از ردیف‌ها متعلق به این فاکتور نیست")
+
     already = received_by_line(db, invoice.id)
+    rows = []
     for line in purchase_lines:
         remaining = Decimal(line.qty) - already.get(line.id, Decimal(0))
         if requested[line.id] > remaining:
@@ -70,55 +115,208 @@ def create_warehouse_receipt(
                 status.HTTP_409_CONFLICT,
                 f"مقدار تحویل «{line.item_name_snapshot or line.item.name}» از مانده {remaining} بیشتر است",
             )
-
-    stock_item_ids = [line.item_id for line in purchase_lines if not line.item.is_service]
-    lock_items(db, stock_item_ids)
-    receipt = WarehouseReceipt(
-        number=next_document_number(db, DOC_WAREHOUSE_RECEIPT),
-        receipt_date=data.receipt_date,
-        purchase_invoice_id=invoice.id,
-        warehouse_id=data.warehouse_id,
-        description=data.description.strip(),
-        created_by_id=user.id,
-    )
-    db.add(receipt)
-    db.flush()
-
-    for line in purchase_lines:
-        qty = requested[line.id]
+        #: بهای ورود از **خالصِ ردیفِ فاکتور** می‌آید (پس از تخفیف، با اضافات و
+        #: عوارض) — نه از قیمتِ فهرستِ تأمین‌کننده. وگرنه انبار گران‌تر از چیزی
+        #: که پول داده‌ایم ارزش‌گذاری می‌شود.
         line_value = (
             Decimal(line.qty) * Decimal(line.unit_cost)
             - Decimal(line.discount)
             + Decimal(line.addition)
             + Decimal(line.duty_amount)
         )
-        unit_cost = line_value / Decimal(line.qty)
+        rows.append(
+            {
+                "purchase_invoice_line_id": line.id,
+                "item": line.item,
+                "qty": requested[line.id],
+                "unit_cost": line_value / Decimal(line.qty),
+                "code": line.item_code_snapshot or line.item.sku,
+                "name": line.item_name_snapshot or line.item.name,
+                "unit": line.unit_snapshot or line.item.unit,
+                "description": next(
+                    row.description
+                    for row in data.lines
+                    if row.purchase_invoice_line_id == line.id
+                ),
+            }
+        )
+    return rows
+
+
+def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
+    """ردیف‌های رسیدِ مستقیم — کالا و مقدار و بها مستقیم وارد می‌شوند (§۹).
+
+    کالا از **Item Master** می‌آید و این‌جا هیچ کالای تازه‌ای ساخته نمی‌شود
+    (§۱۵).
+    """
+    items = {
+        item.id: item
+        for item in db.query(Item).filter(Item.id.in_([row.item_id for row in data.lines])).all()
+    }
+    rows = []
+    for row in data.lines:
+        item = items.get(row.item_id)
+        if item is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {row.item_id} یافت نشد")
+        rows.append(
+            {
+                "purchase_invoice_line_id": None,
+                "item": item,
+                "qty": Decimal(row.qty),
+                "unit_cost": Decimal(row.unit_cost or 0),
+                "code": item.sku,
+                "name": item.name,
+                "unit": item.unit,
+                "description": row.description,
+            }
+        )
+    return rows
+
+
+def _post_direct_journal(
+    db: Session, receipt: WarehouseReceipt, rows: list[dict], user: User
+) -> None:
+    """سندِ حسابداریِ رسیدِ مستقیم (§۳۴ §۳۵ §۳۶).
+
+    **فقط برای رسیدِ مستقیم.** رسیدی که به فاکتور گره خورده هیچ سندی نمی‌زند،
+    چون فاکتور بدهی را از قبل شناخته و ثبتِ دوباره یعنی حسابِ تأمین‌کننده دو
+    برابر شود (§۳۷).
+
+    یک رسید می‌تواند **چند ردیفِ سند** بسازد (§۳۵): موجودیِ هر انبار حسابِ
+    خودش را دارد و خدمت به حسابِ هزینه می‌نشیند — همان تفکیکی که فاکتورِ خرید
+    هم دارد، از همان سرویس. حساب‌ها با `system_role` حل می‌شوند نه با کد یا نام
+    (§۳۶).
+    """
+    total = sum((row["qty"] * row["unit_cost"] for row in rows), Decimal(0))
+    if total <= 0:
+        #: رسیدِ مستقیمِ بی‌بها (مثلاً ورودِ امانی) سندِ صفر نمی‌سازد — سندِ خالی
+        #: چیزی توضیح نمی‌دهد و فقط دفتر را شلوغ می‌کند.
+        return
+
+    inventory_account_id = warehouses_svc.inventory_account_id(db, receipt.warehouse_id)
+    debit_by_account: dict[UUID, Decimal] = {}
+    for row in rows:
+        account_id = items_svc.purchase_account_id(
+            db, row["item"], inventory_account_id=inventory_account_id
+        )
+        debit_by_account[account_id] = debit_by_account.get(account_id, Decimal(0)) + (
+            row["qty"] * row["unit_cost"]
+        )
+
+    #: طرفِ بستانکار: اگر تحویل‌دهنده‌ای نام برده شده، بدهی به اوست؛ وگرنه نقد.
+    #: همان قاعده‌ای که `post_purchase_invoice` دارد — دو موتور یک تصمیم را دو
+    #: جور نمی‌گیرند.
+    credit_account = (
+        get_account(db, cc.ACCOUNTS_PAYABLE) if receipt.contact_id else get_account(db, cc.CASH)
+    )
+    lines = [
+        JournalLine(
+            account_id=account_id,
+            debit=amount,
+            credit=0,
+            description=(
+                "بابت ورود کالا" if account_id == inventory_account_id else "بابت ورود خدمت"
+            ),
+        )
+        for account_id, amount in debit_by_account.items()
+    ]
+    lines.append(
+        JournalLine(
+            account_id=credit_account.id,
+            debit=0,
+            credit=total,
+            description=f"بابت رسید انبار شماره {receipt.number}",
+        )
+    )
+    entry = make_journal_entry(
+        db,
+        receipt.receipt_date,
+        f"رسید انبار شماره {receipt.number} ({RECEIPT_TYPE_LABELS[receipt.receipt_type]})",
+        "warehouse_receipt",
+        user,
+        lines,
+    )
+    receipt.journal_entry_id = entry.id
+
+
+def create_warehouse_receipt(
+    db: Session, invoice_id: UUID | None, data: WarehouseReceiptIn, user: User
+) -> WarehouseReceipt:
+    """رسیدِ انبار — گره‌خورده به فاکتور یا مستقیم (§۹).
+
+    `invoice_id` می‌تواند از مسیرِ URL بیاید (گردشِ قدیمی) یا از خودِ بدنه.
+    """
+    assert_period_open(db, data.receipt_date)
+    invoice_id = invoice_id if invoice_id is not None else data.purchase_invoice_id
+    invoice = _resolve_invoice(db, invoice_id)
+
+    #: انبارِ غیرفعال کالا نمی‌پذیرد — همان گاردِ مشترکِ فصلِ انبار، نه یک
+    #: بررسیِ محلیِ دوباره.
+    warehouses_svc.assert_usable(db, data.warehouse_id, action="رسید انبار")
+
+    if data.receipt_type not in RECEIPT_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ رسید نامعتبر است")
+    if data.contact_id is not None and db.get(Contact, data.contact_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تحویل‌دهنده معتبر نیست")
+
+    rows = (
+        _invoice_backed_lines(db, invoice, data)
+        if invoice is not None
+        else _direct_lines(db, data)
+    )
+
+    #: §۲۹ — کالا فقط به انبارهای مرتبطش وارد می‌شود. فهرستِ خالی یعنی «همه».
+    for row in rows:
+        items_svc.assert_warehouse_allowed(db, row["item"], data.warehouse_id)
+
+    lock_items(db, [row["item"].id for row in rows if not row["item"].is_service])
+
+    receipt = WarehouseReceipt(
+        number=next_document_number(db, DOC_WAREHOUSE_RECEIPT),
+        receipt_date=data.receipt_date,
+        purchase_invoice_id=invoice.id if invoice is not None else None,
+        warehouse_id=data.warehouse_id,
+        receipt_type=data.receipt_type,
+        contact_id=data.contact_id if invoice is None else (data.contact_id or invoice.contact_id),
+        carrier_id=data.carrier_id,
+        freight_agent_id=data.freight_agent_id,
+        currency_code=data.currency_code,
+        exchange_rate=data.exchange_rate,
+        description=data.description.strip(),
+        description2=data.description2.strip(),
+        created_by_id=user.id,
+    )
+    db.add(receipt)
+    db.flush()
+
+    for index, row in enumerate(rows, start=1):
+        item = row["item"]
         receipt.lines.append(
             WarehouseReceiptLine(
-                purchase_invoice_line_id=line.id,
-                item_id=line.item_id,
-                qty=qty,
-                unit_cost=unit_cost,
-                item_code_snapshot=line.item_code_snapshot or line.item.sku,
-                item_name_snapshot=line.item_name_snapshot or line.item.name,
-                unit_snapshot=line.unit_snapshot or line.item.unit,
-                description=next(
-                    row.description for row in data.lines if row.purchase_invoice_line_id == line.id
-                ),
+                purchase_invoice_line_id=row["purchase_invoice_line_id"],
+                item_id=item.id,
+                qty=row["qty"],
+                unit_cost=row["unit_cost"],
+                item_code_snapshot=row["code"],
+                item_name_snapshot=row["name"],
+                unit_snapshot=row["unit"],
+                description=row["description"],
             )
         )
-        if line.item.is_service:
+        if item.is_service:
             continue
-        old_qty = get_total_stock_qty(db, line.item_id)
-        new_qty = old_qty + qty
+        old_qty = get_total_stock_qty(db, item.id)
+        new_qty = old_qty + row["qty"]
         if new_qty > 0:
-            line.item.average_cost = ((old_qty * Decimal(line.item.average_cost)) + qty * unit_cost) / new_qty
+            item.average_cost = (
+                (old_qty * Decimal(item.average_cost)) + row["qty"] * row["unit_cost"]
+            ) / new_qty
         db.add(
             StockLedger(
-                item_id=line.item_id,
+                item_id=item.id,
                 warehouse_id=data.warehouse_id,
-                qty=qty,
-                unit_cost=unit_cost,
+                qty=row["qty"],
+                unit_cost=row["unit_cost"],
                 entry_date=data.receipt_date,
                 source_type="warehouse_receipt",
                 source_id=receipt.id,
@@ -126,12 +324,12 @@ def create_warehouse_receipt(
         )
         db.add(
             StockBatch(
-                item_id=line.item_id,
+                item_id=item.id,
                 warehouse_id=data.warehouse_id,
-                batch_number=f"WR{receipt.number}-{len(receipt.lines)}",
-                qty=qty,
-                received_qty=qty,
-                unit_cost=unit_cost,
+                batch_number=f"WR{receipt.number}-{index}",
+                qty=row["qty"],
+                received_qty=row["qty"],
+                unit_cost=row["unit_cost"],
                 source_type="warehouse_receipt",
                 source_id=receipt.id,
                 received_date=data.receipt_date,
@@ -139,6 +337,13 @@ def create_warehouse_receipt(
                 created_by_id=user.id,
             )
         )
+
+    #: **این‌جا نقطه‌ی ثبت تصمیم می‌گیرد (§۳۷).** رسیدِ گره‌خورده به فاکتور سند
+    #: نمی‌زند چون فاکتور بدهی را شناخته؛ رسیدِ مستقیم می‌زند چون هیچ سندِ
+    #: دیگری این خرید را نمی‌شناسد.
+    if invoice is None:
+        _post_direct_journal(db, receipt, rows, user)
+
     db.flush()
     db.refresh(receipt)
     return receipt

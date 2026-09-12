@@ -30,7 +30,7 @@ from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
 from app.models.check_event import CheckEvent
 from app.models.inventory import StockAdjustment
-from app.models.invoices import PurchaseInvoice, SalesInvoice
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseReceipt
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.pos_settlement import PosSettlement
@@ -68,6 +68,9 @@ SOURCE_MODELS: dict[str, type] = {
     "depreciation": DepreciationEntry,
     "production_order": ProductionOrder,
     "stock_adjustment": StockAdjustment,
+    #: رسیدِ **مستقیم** (بی‌فاکتور) خودش منشأِ مالی است و سند می‌زند؛ رسیدِ
+    #: گره‌خورده به فاکتور سند نمی‌زند چون فاکتور بدهی را شناخته (§۳۷).
+    "warehouse_receipt": WarehouseReceipt,
     "stock_count": StockCountSession,
     "credit_debit_note": CreditDebitNote,
     "period_close": FiscalPeriodClose,

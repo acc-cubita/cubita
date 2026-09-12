@@ -332,7 +332,51 @@ def issue_warehouse_receipt(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
+    """رسید از دلِ یک فاکتورِ خرید — گردشِ قدیمی، دست‌نخورده."""
     return create_warehouse_receipt(db, invoice_id, data, user)
+
+
+@router.get("/api/warehouse-receipts", response_model=Page[WarehouseReceiptOut])
+def list_all_warehouse_receipts(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    receipt_type: str | None = None,
+    warehouse_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    _=Depends(require_permission("invoices", "view")),
+):
+    """فهرستِ همه‌ی رسیدهای انبار (§۴۳).
+
+    تا امروز رسید فقط از دلِ فاکتورش دیده می‌شد؛ رسیدِ مستقیم اصلاً فاکتوری
+    ندارد که زیرش پیدا شود. پس رسید باید موجودیتِ قابلِ جست‌وجوی خودش باشد، نه
+    یک حرکتِ ناشناس در دفترِ انبار.
+    """
+    query = db.query(WarehouseReceipt).options(selectinload(WarehouseReceipt.lines))
+    if receipt_type:
+        query = query.filter(WarehouseReceipt.receipt_type == receipt_type)
+    if warehouse_id:
+        query = query.filter(WarehouseReceipt.warehouse_id == warehouse_id)
+    if contact_id:
+        query = query.filter(WarehouseReceipt.contact_id == contact_id)
+    items, next_cursor = paginate(
+        query, [WarehouseReceipt.receipt_date, WarehouseReceipt.id], params
+    )
+    return Page(items=items, next_cursor=next_cursor)
+
+
+@router.post("/api/warehouse-receipts", response_model=WarehouseReceiptOut, status_code=201)
+def create_direct_warehouse_receipt(
+    data: WarehouseReceiptIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    """رسیدِ مستقل — با یا بدونِ فاکتورِ خرید (§۹).
+
+    **بدونِ فاکتور یک سناریوی واقعی است، نه یک حالتِ خطا:** خریدی که فاکتورش
+    بعداً می‌آید یا اصلاً نمی‌آید. چنین رسیدی خودش سندِ حسابداری می‌زند، چون
+    هیچ سندِ دیگری این خرید را نمی‌شناسد.
+    """
+    return create_warehouse_receipt(db, None, data, user)
 
 
 @router.post("/api/warehouse-receipts/{receipt_id}/void", response_model=WarehouseReceiptOut)

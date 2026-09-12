@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class SalesInvoiceLineIn(BaseModel):
@@ -289,35 +289,82 @@ class PurchaseInvoiceOut(BaseModel):
 
 
 class WarehouseReceiptLineIn(BaseModel):
-    purchase_invoice_line_id: UUID
+    """یک ردیفِ رسید.
+
+    در رسیدِ **گره‌خورده به فاکتور** ردیف با `purchase_invoice_line_id` نام برده
+    می‌شود و بها از خودِ فاکتور می‌آید. در رسیدِ **مستقیم** کالا و بها مستقیم
+    وارد می‌شوند — کالا از Item Master، نه ساختِ تازه (§۱۵).
+    """
+
+    purchase_invoice_line_id: UUID | None = None
+    item_id: UUID | None = None
     qty: Decimal
+    #: فقط در رسیدِ مستقیم معنا دارد؛ در مسیرِ فاکتور نادیده گرفته می‌شود چون
+    #: بهای ورود از خالصِ ردیفِ فاکتور مشتق می‌شود.
+    unit_cost: Decimal = Decimal(0)
     description: str = ""
 
     @model_validator(mode="after")
-    def validate_qty(self) -> "WarehouseReceiptLineIn":
+    def _positive(self) -> "WarehouseReceiptLineIn":
         if self.qty <= 0:
             raise ValueError("مقدار تحویل باید بزرگ‌تر از صفر باشد")
+        if self.unit_cost < 0:
+            raise ValueError("بهای واحد نمی‌تواند منفی باشد")
+        if self.purchase_invoice_line_id is None and self.item_id is None:
+            raise ValueError("هر ردیف باید یا ردیفِ فاکتور را نام ببرد یا کالا را")
         return self
 
 
 class WarehouseReceiptIn(BaseModel):
+    """رسیدِ انبار — گره‌خورده به فاکتور یا مستقیم (§۹).
+
+    نبودِ `purchase_invoice_id` یعنی **رسیدِ مستقیم**، که یک سناریوی واقعی است
+    نه یک حالتِ خطا: خریدی که فاکتورش بعداً می‌آید یا اصلاً نمی‌آید.
+    """
+
     receipt_date: date
     warehouse_id: UUID
+    #: §۸ — ارجاع است نه پیش‌نیاز. از مسیرِ URL هم می‌تواند بیاید (گردشِ قدیمی).
+    purchase_invoice_id: UUID | None = None
+    #: §۲ — پیش‌فرض «خرید (داخلی)»، همان چیزی که رسیدهای موجود بوده‌اند.
+    receipt_type: str = "purchase_domestic"
+    #: §۶ §۷ — سه نقشِ جدا. تحویل‌دهنده طرفِ معامله است، حمل‌کننده کالا را
+    #: آورده، و واسطِ حمل زمینه‌ی مالیِ حمل — قاطی‌شان نمی‌کنیم.
+    contact_id: UUID | None = None
+    carrier_id: UUID | None = None
+    freight_agent_id: UUID | None = None
+    #: §۱۳ — مبالغِ ردیف‌ها همیشه پایه‌اند؛ این‌ها برای نمایشِ معادل و نرخ‌اند.
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
     description: str = ""
+    description2: str = ""
     lines: list[WarehouseReceiptLineIn]
+
+    @field_validator("receipt_type")
+    @classmethod
+    def _known_type(cls, v: str) -> str:
+        from app.models.invoices import RECEIPT_TYPES
+
+        if v not in RECEIPT_TYPES:
+            raise ValueError("نوعِ رسید نامعتبر است")
+        return v
 
     @model_validator(mode="after")
     def validate_lines(self) -> "WarehouseReceiptIn":
         if not self.lines:
             raise ValueError("رسید انبار باید حداقل یک ردیف داشته باشد")
-        if len({line.purchase_invoice_line_id for line in self.lines}) != len(self.lines):
+        backed = [line for line in self.lines if line.purchase_invoice_line_id is not None]
+        if backed and len({line.purchase_invoice_line_id for line in backed}) != len(backed):
             raise ValueError("هر ردیف فاکتور در رسید فقط یک‌بار مجاز است")
+        #: بررسیِ «یا ردیفِ فاکتور یا کالا» روی خودِ ردیف است، نه این‌جا:
+        #: فاکتور می‌تواند از مسیرِ URL بیاید و در بدنه نباشد، پس خالی‌بودنِ
+        #: `purchase_invoice_id` این‌جا لزوماً یعنی رسیدِ مستقیم نیست.
         return self
 
 
 class WarehouseReceiptLineOut(BaseModel):
     id: UUID
-    purchase_invoice_line_id: UUID
+    purchase_invoice_line_id: UUID | None = None
     item_id: UUID
     qty: Decimal
     unit_cost: Decimal
@@ -333,10 +380,20 @@ class WarehouseReceiptOut(BaseModel):
     id: UUID
     number: int
     receipt_date: date
-    purchase_invoice_id: UUID
+    purchase_invoice_id: UUID | None = None
     warehouse_id: UUID
+    receipt_type: str = "purchase_domestic"
+    contact_id: UUID | None = None
+    carrier_id: UUID | None = None
+    freight_agent_id: UUID | None = None
+    currency_code: str | None = None
+    exchange_rate: Decimal = Decimal(1)
+    #: §۴۴ — «اثرِ حسابداری» جدا از «اثرِ انباری». `None` یعنی این رسید سند
+    #: نزده، چون فاکتورش بدهی را شناخته است.
+    journal_entry_id: UUID | None = None
     status: str
     description: str = ""
+    description2: str = ""
     voided_at: datetime | None = None
     void_reason: str = ""
     created_by_id: UUID

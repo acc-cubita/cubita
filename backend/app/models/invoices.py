@@ -153,20 +153,101 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item: Mapped["Item"] = relationship()
 
 
+#: انواعِ رسیدِ انبار (§۲).
+#:
+#: **یک موتور، چند منشأ (§۳).** پنج جدول و پنج موتورِ انبار نمی‌سازیم؛ یک دامنه
+#: با رفتارِ وابسته به نوع.
+#:
+#: فصل فقط **خریدِ داخلی** را کامل باز می‌کند. برای بقیه از روی *اسمشان*
+#: workflow اختراع نمی‌کنیم: نوع ثبت می‌شود و رفتارِ اختصاصی‌اش وقتی می‌آید که
+#: فصلِ خودش بیاید.
+RECEIPT_TYPES = (
+    "purchase_domestic",
+    "purchase_import",
+    "production",
+    "other",
+    "opening",
+)
+RECEIPT_TYPE_LABELS = {
+    "purchase_domestic": "خرید (داخلی)",
+    "purchase_import": "خرید (وارداتی)",
+    "production": "تولید",
+    "other": "سایر",
+    "opening": "موجودی اول دوره",
+}
+
+
 class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
-    """رسید مستقل ورود فیزیکی؛ یک فاکتور می‌تواند چند رسید جزئی داشته باشد."""
+    """ورودِ واقعیِ کالا به یک انبار — و در گردشِ خرید، سندِ عملیاتیِ همان ورود.
+
+    **دو مسیرِ معتبر (§۹).** رسید می‌تواند به فاکتورِ خرید گره بخورد، یا مستقیم
+    و بدونِ فاکتور ثبت شود. تا امروز فقط مسیرِ اول ممکن بود چون
+    `purchase_invoice_id` اجباری بود — یعنی خریدی که فاکتورش بعداً می‌آید (یا
+    اصلاً نمی‌آید) هیچ راهی برای ورودِ کالا نداشت.
+
+    **نقطه‌ی ثبتِ حسابداری صریح است (§۳۷).** بدهیِ تأمین‌کننده را *یک* سند
+    می‌سازد، نه دو تا:
+
+    * رسیدِ گره‌خورده به فاکتور → فقط حرکتِ فیزیکی. فاکتور بدهی را از قبل
+      شناخته و ثبتِ دوباره یعنی حسابِ تأمین‌کننده دو برابر شود.
+    * رسیدِ مستقیم → خودش منشأِ مالی است، چون هیچ سندِ دیگری این خرید را
+      نمی‌شناسد. نزدنِ سند یعنی کالا بی‌هیچ اثرِ حسابداری وارد انبار شود و
+      دفتر با گزارشِ انبار برای همیشه واگرا بماند.
+    """
 
     __tablename__ = "warehouse_receipts"
-    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),
+        CheckConstraint(f"receipt_type IN {RECEIPT_TYPES}", name="ck_warehouse_receipts_type"),
+    )
 
     number: Mapped[int] = mapped_column(nullable=False, index=True)
     receipt_date: Mapped[date_] = mapped_column(Date, default=date_.today)
-    purchase_invoice_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("purchase_invoices.id"), index=True
+    #: §۸ §۹ — **اختیاری.** ارجاع است، نه پیش‌نیاز.
+    purchase_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoices.id"), nullable=True, index=True
     )
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    receipt_type: Mapped[str] = mapped_column(
+        String(20), default="purchase_domestic", server_default="purchase_domestic"
+    )
+
+    #: **سه نقشِ جدا (§۶ §۷).**
+    #:
+    #: تحویل‌دهنده طرفِ معامله است (در خریدِ داخلی همان تأمین‌کننده)، حمل‌کننده
+    #: کسی است که کالا را آورده، و واسطِ حمل زمینه‌ی مالیِ حمل است. فصل صریح
+    #: می‌گوید این سه را در یک فیلدِ `supplier` قاطی نکنیم.
+    #:
+    #: معنای دقیقِ «واسطِ حمل» را فصل تثبیت نمی‌کند («با قسمت‌های بعدی تثبیت
+    #: شود»)، پس این‌جا فقط *ارجاع* نگه داشته می‌شود و هیچ رفتارِ مالی‌ای از
+    #: رویش ساخته نمی‌شود.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    carrier_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+    freight_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+
+    #: §۱۳ — ارز و نرخ از موتورِ ارزِ موجود. مبالغِ ردیف‌ها همیشه پایه‌اند؛
+    #: این‌ها فقط برای نمایشِ معادل و نرخ‌اند — همان قراردادی که فاکتور دارد.
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
+
+    #: سندِ حسابداریِ این رسید. `NULL` یعنی رسید اثرِ مالی نداشته — یعنی گره
+    #: خورده به فاکتوری که خودش بدهی را شناخته است (§۳۷).
+    #:
+    #: §۴۴: «اثرِ انباری» و «اثرِ حسابداری» دو چیزند و یک بولینِ مبهم نباید
+    #: نماینده‌ی هر دو باشد. این ستون دومی را می‌گوید و `status` اولی را.
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    description2: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     lines: Mapped[list["WarehouseReceiptLine"]] = relationship(
@@ -180,8 +261,9 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
     receipt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_receipts.id", ondelete="CASCADE"), index=True
     )
-    purchase_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), index=True
+    #: §۹ — در رسیدِ مستقیم ردیفِ مبدأیی وجود ندارد، پس اختیاری است.
+    purchase_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
