@@ -16,6 +16,7 @@ from app.models.payroll import (
     PayrollPeriod,
     PayrollSettings,
     Payslip,
+    PayslipLine,
     SalaryContract,
 )
 from app.models.user import User
@@ -239,6 +240,125 @@ def contract_deductions(contract: SalaryContract) -> Decimal:
     return total
 
 
+def payslip_breakdown(
+    contract: SalaryContract,
+    amounts: dict,
+    *,
+    proration: Decimal,
+    overtime_hours: Decimal,
+) -> list[dict]:
+    """تفکیکِ عامل‌به‌عاملِ یک فیش — «این عدد از چه ساخته شد؟».
+
+    **این لایه‌ی توضیح است، نه لایه‌ی محاسبه.** اعداد از `amounts` می‌آیند که
+    سرویسِ محاسبه ساخته؛ این‌جا هیچ ریاضیِ تازه‌ای انجام نمی‌شود جز خردکردنِ
+    `allowances_total` و `other_deductions` به اجزایشان. اگر دو فرمول می‌شد،
+    جمعِ ردیف‌ها دیر یا زود از خودِ فیش جدا می‌افتاد — و تستی همین را قفل می‌کند.
+
+    **ترتیب معنی دارد:** اول درآمدها به ترتیبِ منشأ (قرارداد، بعد کارکرد)، بعد
+    کسورها. کاربر فیش را از بالا به پایین می‌خواند.
+
+    ردیف‌های قرارداد **همان تناسبِ کارکرد** را می‌خورند که خودِ محاسبه اعمال کرده
+    (`proration`)، وگرنه جمعِ ردیف‌ها با عددِ فیش نمی‌خواند برای کارمندی که تمامِ
+    ماه را کار نکرده.
+    """
+    rows: list[dict] = []
+
+    def add(name, direction, origin, amount, *, factor_id=None, note=""):
+        amount = Decimal(amount)
+        #: صفر ردیف نمی‌گیرد. فیشی با ده ردیفِ صفر، توضیح‌پذیرتر نیست — شلوغ‌تر است.
+        if amount == 0:
+            return
+        rows.append(
+            {
+                "factor_id": factor_id,
+                "factor_name": name,
+                "direction": direction,
+                "origin": origin,
+                "amount": amount,
+                "note": note,
+            }
+        )
+
+    # ── درآمدها ──────────────────────────────────────────────────────────────
+    add(
+        "حقوق پایه",
+        "earning",
+        "contract",
+        amounts["base_salary"],
+        note="" if proration >= 1 else f"به نسبتِ کارکرد ({proration * 100:.0f}٪)",
+    )
+
+    #: مزایای قرارداد، **عامل به عامل**. تا امروز هر عاملی که `housing`/`food`
+    #: نبود در `other_allowance` جمع می‌شد و بعد در `allowances_total` — پس
+    #: «بیمه‌ی تکمیلی» و «حقِ اولاد» یک عدد می‌شدند.
+    benefit_total = Decimal(0)
+    for line in getattr(contract, "lines", []) or []:
+        factor = getattr(line, "factor", None)
+        if factor is None or factor.category != "benefit":
+            continue
+        #: **عاملِ «حقوق پایه» این‌جا نمی‌آید.** دسته‌اش `benefit` است (همه‌ی
+        #: عوامل پیش‌فرض همین‌اند) ولی مبلغش از قبل در `base_salary` نشسته و
+        #: ردیفِ خودش را بالاتر گرفته. دوباره آوردنش یعنی پایه دو بار شمرده شود.
+        if factor.system_key == "base":
+            continue
+        amount = _round(Decimal(line.amount) * proration)
+        benefit_total += amount
+        add(factor.name, "earning", "contract", amount, factor_id=factor.id)
+
+    #: باقی‌مانده‌ی مزایا — مزایایی که روی ستون‌های قرارداد نشسته‌اند ولی ردیفِ
+    #: عاملی ندارند (قراردادهای پیش از مدلِ عامل‌محور). نادیده‌گرفتنش یعنی جمعِ
+    #: ردیف‌ها با فیش نخواند.
+    residual = Decimal(amounts["allowances_total"]) - benefit_total
+    add("سایر مزایا", "earning", "contract", residual, note="بدونِ عاملِ تفکیک‌شده")
+
+    add(
+        "اضافه‌کار",
+        "earning",
+        "attendance",
+        amounts["overtime_pay"],
+        note=f"{overtime_hours:g} ساعت" if overtime_hours else "",
+    )
+
+    # ── کسورها ───────────────────────────────────────────────────────────────
+    add("بیمه سهم کارمند", "deduction", "settings", amounts["insurance_employee_share"])
+    add("مالیات بر درآمد حقوق", "deduction", "settings", amounts["tax_amount"])
+
+    deduction_total = Decimal(0)
+    for line in getattr(contract, "lines", []) or []:
+        factor = getattr(line, "factor", None)
+        if factor is None or factor.category != "deduction":
+            continue
+        amount = _round(Decimal(line.amount) * proration)
+        deduction_total += amount
+        add(factor.name, "deduction", "contract", amount, factor_id=factor.id)
+
+    residual_deduction = Decimal(amounts["other_deductions"]) - deduction_total
+    add("سایر کسورات", "deduction", "contract", residual_deduction, note="بدونِ عاملِ تفکیک‌شده")
+
+    add("قسط وام", "deduction", "loan", amounts["loan_deduction"])
+
+    for index, row in enumerate(rows, start=1):
+        row["seq"] = index
+    return rows
+
+
+def assert_breakdown_matches(amounts: dict, rows: list[dict]) -> None:
+    """جمعِ ردیف‌ها باید دقیقاً خالصِ فیش را بدهد.
+
+    این گارد این‌جاست چون تفکیک و محاسبه دو کد هستند و دو کد دیر یا زود از هم
+    جدا می‌افتند. اگر عاملِ تازه‌ای به محاسبه اضافه شود و این‌جا نیاید، همین
+    گارد همان لحظه می‌گیردش — نه ماه‌ها بعد سرِ شکایتِ کارمند.
+    """
+    earnings = sum((r["amount"] for r in rows if r["direction"] == "earning"), Decimal(0))
+    deductions = sum((r["amount"] for r in rows if r["direction"] == "deduction"), Decimal(0))
+    if earnings - deductions != Decimal(amounts["net_pay"]):
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "تفکیکِ فیش با خالصِ محاسبه‌شده نمی‌خواند؛ صدور متوقف شد تا عددِ "
+            f"ناتوضیح‌پذیر ثبت نشود (تفکیک: {earnings - deductions}، فیش: {amounts['net_pay']})",
+        )
+
+
 def compute_payslip_amounts(
     contract: SalaryContract,
     attendance: Attendance | None,
@@ -387,10 +507,24 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         amounts["loan_deduction"] = loan_deduction
         total_loan_deduction += loan_deduction
 
+        #: تفکیک **در همان لحظه** ساخته می‌شود، از همان قراردادی که محاسبه با آن
+        #: انجام شد. ساختنش بعداً یعنی خواندنِ قراردادِ *آن‌موقع* — که ممکن است
+        #: دیگر وجود نداشته باشد.
+        attendance_row = attendance_by_employee.get(employee.id)
+        worked = Decimal(attendance_row.worked_days) if attendance_row else Decimal(30)
+        breakdown = payslip_breakdown(
+            contract,
+            amounts,
+            proration=min(Decimal(1), worked / Decimal(30)),
+            overtime_hours=Decimal(attendance_row.overtime_hours) if attendance_row else Decimal(0),
+        )
+        assert_breakdown_matches(amounts, breakdown)
+
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
             number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
         )
+        payslip.lines = [PayslipLine(**row) for row in breakdown]
         db.add(payslip)
         payslips.append(payslip)
 

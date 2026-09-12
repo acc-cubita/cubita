@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
+from app.services.idempotency import idempotent
 from app.models.inventory import Contact
 from app.models.payroll import (
     CONTRACT_TYPE_LABELS,
@@ -161,13 +163,47 @@ def list_attendance(
     return db.query(Attendance).filter(Attendance.period_id == period_id).all()
 
 
+class _GeneratePayslipsKey(BaseModel):
+    """اثرانگشتِ فرمانِ صدور — همان دوره، همان کلید.
+
+    `idempotent(...)` یک مدل می‌خواهد و این اندپوینت بدنه ندارد؛ پس شناسه‌ی دوره
+    خودش اثرانگشت می‌شود. این‌طور اگر کلاینت همان کلید را برای دوره‌ی *دیگری*
+    بفرستد، تعارض دیده می‌شود نه اینکه پاسخِ دوره‌ی قبلی پس داده شود.
+    """
+
+    period_id: UUID
+
+
 @router.post("/api/payroll-periods/{period_id}/generate-payslips", response_model=list[PayslipOut])
 def generate_payslips(
     period_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("payroll", "approve")),
 ):
-    return generate_payslips_for_period(db, period_id, user)
+    """فیش‌های دوره را صادر می‌کند — **یک بار**، حتی اگر درخواست دوباره برسد.
+
+    داده از قبل هم خراب نمی‌شد: قیدِ یکتای `(employee, period)` و گاردِ
+    «دوره نهایی شده» جلوی فیشِ دوم را می‌گرفتند. ولی کاربری که پاسخش در راه گم
+    شده بود و دوباره می‌زد، **۴۰۰** می‌گرفت و نمی‌فهمید حقوق صادر شده یا نه —
+    برای فرمانی که حقوقِ همه‌ی کارکنان را صادر می‌کند، بدترین جوابِ ممکن.
+
+    حالا اجرای دوم همان فهرستِ اول را پس می‌دهد.
+    """
+    return idempotent(
+        db,
+        request,
+        user,
+        operation="generate_payslips",
+        payload=_GeneratePayslipsKey(period_id=period_id),
+        run=lambda: generate_payslips_for_period(db, period_id, user),
+        #: شناسه‌ی منبع خودِ دوره است، نه یک فیشِ خاص — فرمان دوره‌ای است.
+        resource_id=lambda _: period_id,
+        #: پاسخِ اجرای اول از خودِ فیش‌ها بازساخته می‌شود، نه از یک کپیِ ذخیره‌شده.
+        replay=lambda pid: (
+            db.query(Payslip).filter(Payslip.period_id == pid).order_by(Payslip.number).all()
+        ),
+    )
 
 
 @router.get("/api/payroll-periods/{period_id}/insurance-list.csv")

@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `alembic/versions/0128_*` · `models/payroll.py` · `services/payroll.py` · `services/payroll_contracts.py` · `routers/payroll.py` · `schemas/payroll.py` · `audit.py` · `models/__init__.py` · پایتختِ حقوق در رابط · `api.ts` | فصلِ «آشنایی با حقوق و دستمزد»: تفکیکِ عامل‌به‌عاملِ فیش، حسابرسیِ تنظیماتِ حقوق، و یکتاسازیِ فرمانِ محاسبه. **شماره‌ی مهاجرت `0128` گرفته شد.** | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 

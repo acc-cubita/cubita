@@ -81,6 +81,13 @@ BRANCH_KIND_LABELS = {"insurance": "شعبه بیمه", "tax": "حوزه مال�
 
 
 
+#: جهتِ اثرِ یک قلمِ فیش روی خالص.
+PAYSLIP_LINE_DIRECTIONS = ("earning", "deduction")
+
+#: از کجا آمده — تا کاربر بداند برای عوض‌کردنش کجا باید برود.
+PAYSLIP_LINE_ORIGINS = ("contract", "attendance", "settings", "loan")
+
+
 class Employee(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "employees"
 
@@ -260,6 +267,51 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    #: تفکیکِ عامل‌به‌عاملِ همین فیش. **ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند** و این
+    #: ردیف‌ها توضیحشان؛ سرویس هنگامِ صدور هر دو را با هم می‌نویسد و تستی جمعشان
+    #: را مقابلِ هم می‌گذارد.
+    lines: Mapped[list["PayslipLine"]] = relationship(
+        back_populates="payslip", cascade="all, delete-orphan", order_by="PayslipLine.seq"
+    )
+
+
+class PayslipLine(TenantMixin, UUIDPKMixin, Base):
+    """یک قلمِ فیش: کدام عامل، چه مبلغی، از کجا.
+
+    **چرا لازم است.** فیش اعدادش را snapshot می‌گیرد و این درست است — حقوقِ تیر با
+    جدولِ مالیاتِ مرداد بازمحاسبه نمی‌شود. ولی تا امروز snapshot در سطحِ *جمع* بود:
+    `allowances_total` یک عدد، و هر عاملی که `housing`/`food` نبود اول در
+    `other_allowance`ِ قرارداد جمع می‌شد و بعد در آن یک عدد. پس «این مبلغ از چه
+    ساخته شد؟» جواب نداشت، و بازخواندنش از قرارداد هم جواب نمی‌دهد چون قرارداد
+    می‌تواند از آن موقع عوض شده باشد.
+
+    `factor_id` عمداً `NULL`پذیر است: حقوقِ پایه، بیمه، مالیات و قسطِ وام عاملِ
+    تعریف‌شده‌ی کاربر نیستند. و `factor_name` عکسِ لحظه‌ی ثبت است، وگرنه تغییرِ
+    نامِ یک عامل فیشِ پارسال را بازنویسی می‌کرد.
+    """
+
+    __tablename__ = "payslip_lines"
+    __table_args__ = (
+        CheckConstraint(f"direction IN {PAYSLIP_LINE_DIRECTIONS}", name="ck_payslip_lines_direction"),
+        CheckConstraint(f"origin IN {PAYSLIP_LINE_ORIGINS}", name="ck_payslip_lines_origin"),
+        UniqueConstraint("tenant_id", "payslip_id", "seq", name="uq_payslip_lines_seq"),
+    )
+
+    payslip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payslips.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    factor_name: Mapped[str] = mapped_column(String(150))
+    direction: Mapped[str] = mapped_column(String(10))
+    origin: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    payslip: Mapped["Payslip"] = relationship(back_populates="lines")
 
 
 class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

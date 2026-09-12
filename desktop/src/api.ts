@@ -970,6 +970,22 @@ export const fetchAttendance = (token: string, periodId: string) =>
     `/api/attendance?period_id=${periodId}`,
   )
 
+/** یک قلمِ فیش — «این عدد از چه ساخته شد».
+ *
+ * `factor_id` برای اجزای سیستمی (پایه، بیمه، مالیات، قسطِ وام) خالی است، و
+ * `factor_name` عکسِ لحظه‌ی صدور است — نه نامِ امروزِ عامل. */
+export interface PayslipLineRecord {
+  id: string
+  seq: number
+  factor_id: string | null
+  factor_name: string
+  direction: 'earning' | 'deduction'
+  /** `contract` | `attendance` | `settings` | `loan` — کجا باید عوضش کرد. */
+  origin: string
+  amount: string
+  note: string
+}
+
 export interface PayslipRecord {
   id: string
   number: number | null
@@ -988,6 +1004,9 @@ export interface PayslipRecord {
   loan_deduction: string
   other_deductions: string
   net_pay: string
+  /** تفکیکِ عامل‌به‌عامل. ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند و این‌ها توضیحشان؛
+   *  جمعشان با خالص برابر است. فیش‌های پیش از مهاجرتِ ۰۱۲۸ خالی دارندش. */
+  lines: PayslipLineRecord[]
 }
 
 export const fetchPayslips = (token: string, periodId: string) =>

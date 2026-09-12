@@ -379,6 +379,28 @@ class AttendanceOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PayslipLineOut(BaseModel):
+    """یک قلمِ فیش — «این عدد از چه ساخته شد».
+
+    `factor_id` برای اجزای سیستمی (حقوقِ پایه، بیمه، مالیات، قسطِ وام) خالی است،
+    و `factor_name` عکسِ لحظه‌ی ثبت — نه نامِ امروزِ عامل.
+    """
+
+    id: UUID
+    seq: int
+    factor_id: UUID | None = None
+    factor_name: str
+    #: `earning` | `deduction`
+    direction: str
+    #: `contract` | `attendance` | `settings` | `loan` — تا کاربر بداند برای
+    #: عوض‌کردنش کجا باید برود.
+    origin: str
+    amount: Decimal
+    note: str = ""
+
+    model_config = {"from_attributes": True}
+
+
 class PayslipOut(BaseModel):
     id: UUID
     number: int | None
@@ -398,6 +420,11 @@ class PayslipOut(BaseModel):
     other_deductions: Decimal
     net_pay: Decimal
     journal_entry_id: UUID | None
+
+    #: تفکیکِ عامل‌به‌عامل. **ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند** و این ردیف‌ها
+    #: توضیحشان؛ جمعشان با خالص برابر است و سرویس هنگامِ صدور همین را می‌سنجد.
+    #: فیش‌های پیش از مهاجرتِ ۰۱۲۸ این فهرست را خالی دارند.
+    lines: list[PayslipLineOut] = []
 
     model_config = {"from_attributes": True}
 
