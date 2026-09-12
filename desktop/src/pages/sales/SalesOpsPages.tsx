@@ -11,7 +11,6 @@ import {
   PlusCircle,
   Route,
   Scale,
-  Search,
   Ship,
   Tags,
   TrendingUp,
@@ -46,10 +45,16 @@ import {
   fetchPricingSuggestion,
   fetchSalesInvoices,
   fetchSalesReturnReasons,
-  fetchSalesSummary,
   fetchCounterpartyEventLines,
   fetchCounterpartyEvents,
   fetchCounterpartySummary,
+  fetchPreinvoiceProgress,
+  fetchSalesByCustomer,
+  fetchSalesByItem,
+  fetchSalesByWarehouse,
+  fetchSalesReviewDocuments,
+  fetchSalesReviewLines,
+  fetchSalesReviewSummary,
   fetchSaleTypes,
   fetchUnits,
   updateSalesReturnReason,
@@ -60,6 +65,8 @@ import {
   type ItemRecord,
   type PricingFactor,
   type SaleType,
+  type SalesReviewDocument,
+  type SalesReviewScope,
   type UnitRecord,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
@@ -1772,109 +1779,504 @@ export function CustomsPage({ token }: { token: string }) {
 
 // ═════════════════ ۱۶) مرور فروش ═════════════════
 
+/**
+ * مرور فروش — شش نما روی یک حقیقت.
+ *
+ * تا امروز این صفحه یک تب داشت (فهرستِ فاکتور) و برای فیلترکردنش کلِ فاکتورهای
+ * کسب‌وکار را به مرورگر می‌کشید. نه مقداری داشت، نه سمتِ کالا، نه سمتِ انبار، و
+ * نه — مهم‌تر از همه — مقایسه‌ی «فروخته‌شده» با «خارج‌شده».
+ *
+ * هر تب یک درخواستِ جدا دارد و هیچ‌کدام از دیگری ساخته نمی‌شود؛ چون دانه‌بندی‌شان
+ * فرق دارد و جمع‌زدنِ دو تب با هم، یک مبلغ را دو بار می‌شمارد.
+ */
+
+const SALES_REVIEW_TABS = [
+  { key: 'items', label: 'کالا' },
+  { key: 'customers', label: 'مشتری' },
+  { key: 'documents', label: 'اسناد فروش' },
+  { key: 'lines', label: 'اقلام فروش' },
+  { key: 'warehouses', label: 'انبار' },
+  { key: 'preinvoices', label: 'پیش‌فاکتور' },
+  { key: 'voided', label: 'فاکتورهای ابطالی' },
+] as const
+
 export function SalesBrowsePage({ token }: { token: string }) {
   const range = useRange('month')
-  const names = useContactNames(token)
-  const summary = useAsync(() => fetchSalesSummary(token), [token])
-  const invoices = useAsync(() => fetchSalesInvoices(token), [token])
-  const [search, setSearch] = useState('')
+  const contacts = useContacts(token)
+  const [contactId, setContactId] = useState('')
+  const [tab, setTab] = useState<string>('items')
 
-  const rows = useMemo(() => {
-    const t = search.trim()
-    const base = (invoices.data ?? []).filter((i) => inRange(i.invoice_date, range.from, range.to))
-    if (!t) return base
-    return base.filter(
-      (i) => (names.get(i.contact_id ?? '') ?? '').includes(t) || String(i.number ?? '').includes(t),
-    )
-  }, [invoices.data, search, names, range.from, range.to])
-  const pg = usePagination(rows, 20, `${range.from}${range.to}${search}`)
-  const net = rows.reduce((s, i) => s + Number(i.total_amount || 0), 0)
-  const closed = rows.filter((i) => i.closed_at).length
+  const scope = useMemo(
+    () => ({ from: range.from, to: range.to, contactId: contactId || undefined }),
+    [range.from, range.to, contactId],
+  )
+  const key = `${scope.from}${scope.to}${scope.contactId ?? ''}`
+
+  const summary = useAsync(() => fetchSalesReviewSummary(token, scope), [token, key])
+  const sum = summary.data
 
   return (
     <OpsPage
       icon={TrendingUp}
       title="مرور فروش"
-      description="تصویرِ کلیِ فروش در یک بازه — شاخص‌ها و فهرستِ فاکتورها با جست‌وجو."
+      description="فروش از چند زاویه — کالا، مشتری، سند، قلم، انبار و پیش‌فاکتور. همه از اسنادِ واقعی."
       head={
         <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric icon={<ClipboardList size={14} />} label="فاکتور" value={faInt(rows.length)} />
-            <Metric icon={<TrendingUp size={14} />} label="خالصِ بازه" value={faAmount(net)} tone="in" />
-            <Metric icon={<Lock size={14} />} label="بسته‌شده" value={faInt(closed)} />
-            <Metric
-              icon={<Wallet size={14} />}
-              label="سودِ ناخالصِ کل"
-              value={faAmount(summary.data?.gross_profit ?? 0)}
-              tone="in"
-            />
-          </div>
+          <RangeBar
+            range={range}
+            extra={<ContactPicker contacts={contacts} value={contactId} onChange={setContactId} />}
+          />
+          {sum && (
+            <div className="cc-summary">
+              <Metric icon={<ClipboardList size={14} />} label="فاکتور" value={faInt(sum.invoice_count)} />
+              <Metric icon={<TrendingUp size={14} />} label="فروشِ خالص" value={faAmount(sum.net_sales)} tone="in" />
+              <Metric icon={<Undo2 size={14} />} label="برگشت" value={faAmount(sum.return_amount)} tone="out" />
+              <Metric icon={<Percent size={14} />} label="تخفیف" value={faAmount(sum.discount)} />
+              <Metric
+                icon={<Boxes size={14} />}
+                label="فروخته / خارج‌شده"
+                value={`${fa(sum.sold_qty)} / ${fa(sum.issued_qty)}`}
+              />
+              {Number(sum.unissued_qty) !== 0 && (
+                <Metric
+                  icon={<Ship size={14} />}
+                  label="فروخته و نرفته"
+                  value={fa(sum.unissued_qty)}
+                  tone="out"
+                />
+              )}
+            </div>
+          )}
         </div>
       }
     >
-      <SectionCard icon={TrendingUp} title="فاکتورهای بازه" description={`${faInt(rows.length)} فاکتور`}>
+      <SectionCard
+        icon={TrendingUp}
+        title="نما"
+        description="هر نما دانه‌بندیِ خودش را دارد و با نمای دیگر جمع نمی‌شود."
+      >
         <div className="acc-filters">
-          <label className="acc-search">
-            <Search size={14} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="شماره یا نامِ طرف حساب"
-            />
+          <label className="acc-inline-field">
+            زاویه
+            <select value={tab} onChange={(e) => setTab(e.target.value)}>
+              {SALES_REVIEW_TABS.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
-        <AsyncBlock
-          loading={invoices.loading}
-          error={invoices.error}
-          empty={rows.length === 0}
-          emptyText="فاکتوری با این شرایط پیدا نشد."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>شماره</th>
-                  <th>تاریخ</th>
-                  <th>طرف حساب</th>
-                  <th>خالص</th>
-                  <th>مالیات</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((i) => (
-                  <tr key={i.id} className={i.voided_at ? 'acc-row--void' : ''}>
-                    <td className="card-title" data-label="شماره">
-                      {fa(i.number ?? 0)}
-                    </td>
-                    <td data-label="تاریخ">{formatJalali(i.invoice_date)}</td>
-                    <td data-label="طرف حساب">{names.get(i.contact_id ?? '') ?? '—'}</td>
-                    <td className="num" data-label="خالص">
-                      {faAmount(i.total_amount)}
-                    </td>
-                    <td className="num" data-label="مالیات">
-                      {faAmount(i.tax_amount)}
-                    </td>
-                    <td data-label="وضعیت">
-                      <span
-                        className={`status-badge ${
-                          i.voided_at ? 'tone-danger' : i.closed_at ? 'tone-default' : 'tone-success'
-                        }`}
-                      >
-                        {i.voided_at ? 'باطل' : i.closed_at ? 'بسته' : 'باز'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
+        {tab === 'items' && <SalesItemsView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'customers' && <SalesCustomersView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'documents' && <SalesDocumentsView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'lines' && <SalesLinesView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'warehouses' && <SalesWarehousesView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'preinvoices' && <PreinvoiceProgressView token={token} scope={scope} cacheKey={key} />}
+        {tab === 'voided' && <SalesVoidedView token={token} scope={scope} cacheKey={key} />}
       </SectionCard>
     </OpsPage>
+  )
+}
+
+type ViewProps = { token: string; scope: SalesReviewScope; cacheKey: string }
+
+/** تفاوتِ تجاری و فیزیکی — همان چیزی که این گزارش برایش ساخته شده. */
+function GapCell({ value }: { value: string }) {
+  const n = Number(value || 0)
+  if (n === 0) return <>—</>
+  return <span className={n > 0 ? 'stock-over' : undefined}>{fa(value)}</span>
+}
+
+function SalesItemsView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchSalesByItem(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20, cacheKey)
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه فروشی ثبت نشده."
+    >
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>کد</th>
+              <th>کالا/خدمت</th>
+              <th>واحد</th>
+              <th>فروخته</th>
+              <th>برگشت</th>
+              <th>خارج‌شده</th>
+              <th>فروخته و نرفته</th>
+              <th>فیِ متوسط</th>
+              <th>تخفیف</th>
+              <th>مالیات</th>
+              <th>فروشِ خالص</th>
+              <th>موجودی</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.pageItems.map((r) => (
+              <tr key={r.item_id}>
+                <td data-label="کد" dir="ltr">{r.item_code || '—'}</td>
+                <td className="card-title" data-label="کالا/خدمت">
+                  {r.item_name}
+                  {r.is_service && <span className="status-badge tone-default">خدمت</span>}
+                </td>
+                <td data-label="واحد">{r.unit_name || '—'}</td>
+                <td className="num" data-label="فروخته">
+                  {fa(r.sold_qty)}
+                  {r.sold_qty_secondary != null && (
+                    <span className="field-hint">
+                      {fa(r.sold_qty_secondary)} {r.secondary_unit_name}
+                    </span>
+                  )}
+                </td>
+                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
+                <td className="num" data-label="خارج‌شده">
+                  {r.is_service ? '—' : fa(r.issued_qty)}
+                </td>
+                <td className="num" data-label="فروخته و نرفته">
+                  {r.is_service ? '—' : <GapCell value={r.unissued_qty} />}
+                </td>
+                <td className="num" data-label="فیِ متوسط">
+                  {r.average_unit_price == null ? '—' : faAmount(r.average_unit_price)}
+                </td>
+                <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
+                <td className="num" data-label="مالیات">{faAmount(r.tax)}</td>
+                <td className="num" data-label="فروشِ خالص">{faAmount(r.net_sales)}</td>
+                <td className="num" data-label="موجودی">
+                  {r.is_service ? '—' : fa(r.stock_qty)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+      </div>
+      <span className="field-hint">
+        «فروخته» و «خارج‌شده» دو عددِ مستقل‌اند و هیچ‌کدام از دیگری حساب نمی‌شود؛ ستونِ
+        «فروخته و نرفته» اختلافشان است. «موجودی» از دفترِ موجودی می‌آید و «فیِ متوسط»
+        از معاملاتِ واقعی — نه از اعلامیه‌ی قیمتِ امروز.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function SalesCustomersView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchSalesByCustomer(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20, cacheKey)
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه فروشی ثبت نشده."
+    >
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>مشتری</th>
+              <th>گروه</th>
+              <th>فاکتور</th>
+              <th>فروخته</th>
+              <th>خارج‌شده</th>
+              <th>ناخالص</th>
+              <th>تخفیف</th>
+              <th>برگشت</th>
+              <th>فروشِ خالص</th>
+              <th>سقفِ اعتبار</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.pageItems.map((r) => (
+              <tr key={r.contact_id ?? 'walk-in'}>
+                <td className="card-title" data-label="مشتری">{r.contact_name}</td>
+                <td data-label="گروه">{r.group_name || '—'}</td>
+                <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
+                <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
+                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
+                <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
+                <td className="num" data-label="برگشت">{faAmount(r.return_amount)}</td>
+                <td className="num" data-label="فروشِ خالص">{faAmount(r.net_sales)}</td>
+                <td className="num" data-label="سقفِ اعتبار">
+                  {Number(r.credit_limit) > 0 ? faAmount(r.credit_limit) : 'بدون سقف'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+      </div>
+      <span className="field-hint">
+        این اعداد <strong>فروشِ همین بازه</strong> است، نه ماندهٔ حساب. ماندهٔ طرف حساب —
+        که دریافت و پرداخت و اعلامیه را هم می‌بیند — در «مرور جامع طرف حساب» است. و گروهِ
+        مشتری از مِسترِ <strong>امروز</strong> خوانده می‌شود، پس اگر مشتری گروهش عوض شده
+        باشد فروشِ گذشته‌اش زیرِ گروهِ تازه دیده می‌شود.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function DocumentsTable({ rows, cacheKey, voided }: { rows: SalesReviewDocument[]; cacheKey: string; voided?: boolean }) {
+  const pg = usePagination(rows, 20, cacheKey)
+  return (
+    <div className="table-scroll">
+      <table className="cards-on-mobile acc-table">
+        <thead>
+          <tr>
+            <th>شماره</th>
+            <th>تاریخ</th>
+            <th>مشتری</th>
+            <th>نوع فروش</th>
+            <th>ردیف</th>
+            <th>فروخته</th>
+            <th>خارج‌شده</th>
+            <th>ناخالص</th>
+            <th>تخفیف</th>
+            <th>مالیات</th>
+            <th>برگشت</th>
+            <th>فروشِ خالص</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pg.pageItems.map((r) => (
+            <tr key={r.source_id} className={r.is_voided ? 'acc-row--void' : ''}>
+              <td className="card-title" data-label="شماره">{r.number != null ? fa(r.number) : '—'}</td>
+              <td data-label="تاریخ">{formatJalali(r.document_date)}</td>
+              <td data-label="مشتری">{r.contact_name}</td>
+              <td data-label="نوع فروش">{r.sale_type_name || '—'}</td>
+              <td className="num" data-label="ردیف">{faInt(r.line_count)}</td>
+              <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
+              <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+              <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
+              <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
+              <td className="num" data-label="مالیات">{faAmount(r.tax)}</td>
+              <td className="num" data-label="برگشت">{faAmount(r.return_amount)}</td>
+              <td className="num" data-label="فروشِ خالص">
+                {voided ? '—' : faAmount(r.net_sales)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+    </div>
+  )
+}
+
+function SalesDocumentsView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchSalesReviewDocuments(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه سندی ثبت نشده."
+    >
+      <DocumentsTable rows={rows} cacheKey={cacheKey} />
+      <span className="field-hint">
+        مبلغِ هر سند از جمعِ ردیف‌های خودش می‌آید — فاکتورِ سه‌ردیفی یک سند است و یک بار
+        شمرده می‌شود. برای دیدنِ ردیف‌ها به نمای «اقلام فروش» بروید؛ آن دو با هم
+        <strong> جمع نمی‌شوند</strong>.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function SalesVoidedView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(
+    () => fetchSalesReviewDocuments(token, { ...scope, voided: true }),
+    [token, cacheKey],
+  )
+  const rows = list.data ?? []
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه فاکتوری باطل نشده."
+    >
+      <DocumentsTable rows={rows} cacheKey={`v${cacheKey}`} voided />
+      <span className="field-hint">
+        این فاکتورها در <strong>هیچ نمای دیگری</strong> شمرده نمی‌شوند — نه در فروشِ خالص،
+        نه در کالا و مشتری. ولی تاریخ پاک نمی‌شود: «فاکتوری بود و باطل شد» خودش یک واقعیتِ
+        حسابرسی است.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function SalesLinesView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchSalesReviewLines(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 25, cacheKey)
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه قلمی ثبت نشده."
+    >
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>سند</th>
+              <th>تاریخ</th>
+              <th>مشتری</th>
+              <th>کالا/خدمت</th>
+              <th>بارکد</th>
+              <th>انبار</th>
+              <th>فروخته</th>
+              <th>خارج‌شده</th>
+              <th>برگشت</th>
+              <th>فی</th>
+              <th>خالص</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.pageItems.map((r) => (
+              <tr key={r.line_id} className={r.is_voided ? 'acc-row--void' : ''}>
+                <td className="card-title" data-label="سند">{r.number != null ? fa(r.number) : '—'}</td>
+                <td data-label="تاریخ">{formatJalali(r.document_date)}</td>
+                <td data-label="مشتری">{r.contact_name}</td>
+                <td className="card-wide" data-label="کالا/خدمت">{r.item_name}</td>
+                <td data-label="بارکد" dir="ltr">{r.barcode || '—'}</td>
+                <td data-label="انبار">
+                  {r.warehouse_names.length ? r.warehouse_names.join('، ') : '—'}
+                </td>
+                <td className="num" data-label="فروخته">
+                  {fa(r.sold_qty)}
+                  {r.sold_qty_secondary != null && (
+                    <span className="field-hint">{fa(r.sold_qty_secondary)}</span>
+                  )}
+                </td>
+                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
+                <td className="num" data-label="فی">{faAmount(r.unit_price)}</td>
+                <td className="num" data-label="خالص">{faAmount(r.net_sales)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+      </div>
+      <span className="field-hint">
+        ستونِ «انبار» از <strong>سندِ خروج</strong> می‌آید نه از سربرگِ فاکتور — پس یک قلم
+        می‌تواند چند انبار داشته باشد، و قلمی که هنوز نرفته خط تیره است.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function SalesWarehousesView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchSalesByWarehouse(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه خروجی بابتِ فروش ثبت نشده."
+    >
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>انبار</th>
+              <th>سندِ خروج</th>
+              <th>فاکتور</th>
+              <th>مقدارِ خارج‌شده</th>
+              <th>بهای تمام‌شده</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.warehouse_id}>
+                <td className="card-title" data-label="انبار">{r.warehouse_name}</td>
+                <td className="num" data-label="سندِ خروج">{faInt(r.issue_count)}</td>
+                <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
+                <td className="num" data-label="مقدارِ خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="بهای تمام‌شده">{faAmount(r.issued_cost)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <span className="field-hint">
+        این نما <strong>دفترِ موجودی نیست</strong> و ماندهٔ انبار را نگه نمی‌دارد؛ فقط
+        می‌گوید بابتِ فروشِ این بازه از هر انبار چه‌قدر خارج شده. ماندهٔ انبار در «انبار ←
+        موجودی» است.
+      </span>
+    </AsyncBlock>
+  )
+}
+
+function PreinvoiceProgressView({ token, scope, cacheKey }: ViewProps) {
+  const list = useAsync(() => fetchPreinvoiceProgress(token, scope), [token, cacheKey])
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20, cacheKey)
+  return (
+    <AsyncBlock
+      loading={list.loading}
+      error={list.error}
+      empty={rows.length === 0}
+      emptyText="در این بازه پیش‌فاکتوری ثبت نشده."
+    >
+      <div className="table-scroll">
+        <table className="cards-on-mobile acc-table">
+          <thead>
+            <tr>
+              <th>شماره</th>
+              <th>تاریخ</th>
+              <th>مشتری</th>
+              <th>وضعیت</th>
+              <th>کالا/خدمت</th>
+              <th>پیشنهادشده</th>
+              <th>فاکتورشده</th>
+              <th>خارج‌شده</th>
+              <th>ماندهٔ فاکتورشدنی</th>
+              <th>ماندهٔ ارسالی</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.pageItems.map((r) => (
+              <tr key={r.line_id}>
+                <td className="card-title" data-label="شماره">{r.number != null ? fa(r.number) : '—'}</td>
+                <td data-label="تاریخ">{formatJalali(r.quotation_date)}</td>
+                <td data-label="مشتری">{r.contact_name}</td>
+                <td data-label="وضعیت">
+                  <span className="status-badge tone-default">{r.status}</span>
+                </td>
+                <td className="card-wide" data-label="کالا/خدمت">{r.item_name}</td>
+                <td className="num" data-label="پیشنهادشده">{fa(r.quoted_qty)}</td>
+                <td className="num" data-label="فاکتورشده">{fa(r.invoiced_qty)}</td>
+                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="ماندهٔ فاکتورشدنی">
+                  <GapCell value={r.remaining_invoiceable} />
+                </td>
+                <td className="num" data-label="ماندهٔ ارسالی">
+                  <GapCell value={r.remaining_issueable} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+      </div>
+      <span className="field-hint">
+        <strong>وضعیتِ سند و پیشرفتِ تحقق دو چیزند:</strong> پیش‌فاکتوری می‌تواند
+        «تأییدشده» باشد و هنوز هیچ فاکتوری نخورده باشد. هر سه مقدار مستقل‌اند و
+        «فاکتورشده»/«خارج‌شده» هیچ‌جا ذخیره نمی‌شوند — از تخصیص‌های واقعی مشتق می‌شوند.
+      </span>
+    </AsyncBlock>
   )
 }
 

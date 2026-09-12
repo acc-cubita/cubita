@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `services/sales_review.py` (تازه) · `routers/reports.py` · `schemas/reports.py` · `SalesOpsPages.tsx` · `api.ts` · `HelpPage.tsx` | فصلِ «مرور فروش»: جریان‌های واقعیتِ جدا با تجمیعِ پیش از اتصال، و شش نما به‌جای یک تب. **بدونِ مهاجرت.** | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
