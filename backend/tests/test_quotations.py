@@ -1,6 +1,9 @@
 """پیش‌فاکتور: مشتری از فهرستِ اشخاص یا نامِ دستی."""
 from datetime import date
 
+from app.models.inventory import Contact, StockLedger
+from app.models.invoices import SalesInvoice
+
 TODAY = str(date.today())
 
 
@@ -150,3 +153,75 @@ def test_quotation_pdf_endpoint(client):
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("application/pdf")
     assert r.content[:4] == b"%PDF"  # امضای فایلِ PDF
+
+
+def test_partial_conversion_is_line_traced_and_does_not_issue_stock(client, db):
+    wh, item = _wh(client), _item(client)
+    _buy(client, wh, item)
+    q = _quote(client, wh, item).json()
+    line_id = q["lines"][0]["id"]
+
+    first = client.post(
+        f"/api/sales-quotations/{q['id']}/convert",
+        json={"lines": [{"quotation_line_id": line_id, "qty": 1}]},
+    )
+    assert first.status_code == 201, first.text
+    first_invoice = first.json()
+    assert first_invoice["source_quotation_id"] == q["id"]
+    assert first_invoice["lines"][0]["source_quotation_line_id"] == line_id
+    assert db.query(StockLedger).filter(
+        StockLedger.source_type == "sales_invoice", StockLedger.source_id == first_invoice["id"]
+    ).count() == 0
+
+    state = client.get("/api/sales-quotations").json()["items"][0]
+    assert state["commercial_status"] == "partially_invoiced"
+    assert float(state["lines"][0]["invoiced_qty"]) == 1
+    assert float(state["lines"][0]["issued_qty"]) == 0
+
+    second = client.post(
+        f"/api/sales-quotations/{q['id']}/convert",
+        json={"lines": [{"quotation_line_id": line_id, "qty": 2}]},
+    )
+    assert second.status_code == 201, second.text
+    state = client.get("/api/sales-quotations").json()["items"][0]
+    assert state["commercial_status"] == "fully_invoiced"
+    assert len(state["invoiced_invoice_ids"]) == 2
+
+
+def test_conversion_retry_and_lifecycle_are_safe(client, db):
+    wh, item = _wh(client), _item(client)
+    q = _quote(client, wh, item).json()
+    assert client.post(f"/api/sales-quotations/{q['id']}/terminate").status_code == 200
+    blocked = client.post(f"/api/sales-quotations/{q['id']}/convert")
+    assert blocked.status_code == 409
+    assert client.post(f"/api/sales-quotations/{q['id']}/reopen").status_code == 200
+
+    headers = {"Idempotency-Key": "quotation-convert-once"}
+    first = client.post(f"/api/sales-quotations/{q['id']}/convert", json={}, headers=headers)
+    second = client.post(f"/api/sales-quotations/{q['id']}/convert", json={}, headers=headers)
+    assert first.status_code == 201 and second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    assert db.query(SalesInvoice).filter(SalesInvoice.source_quotation_id == q["id"]).count() == 1
+
+
+def test_duplicate_and_print_keep_the_right_history(client, db):
+    wh, item = _wh(client), _item(client)
+    customer_id = client.post("/api/contacts", json={"name": "مشتری تاریخی", "type": "customer", "address": "نشانی قدیم"}).json()["id"]
+    q = _quote(client, wh, item, contact_id=customer_id).json()
+    customer = db.get(Contact, customer_id)
+    customer.name = "نام تازه"
+    customer.address = "نشانی تازه"
+    db.flush()
+    html = client.get(f"/api/sales-quotations/{q['id']}/print").text
+    assert "مشتری تاریخی" in html and "نشانی قدیم" in html
+    assert "نام تازه" not in html
+
+    duplicate = client.post(
+        f"/api/sales-quotations/{q['id']}/duplicate",
+        json={}, headers={"Idempotency-Key": "duplicate-quote-once"},
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    copied = duplicate.json()
+    assert copied["id"] != q["id"] and copied["number"] != q["number"]
+    assert copied["terminated_at"] is None
+    assert copied["invoiced_invoice_ids"] == []

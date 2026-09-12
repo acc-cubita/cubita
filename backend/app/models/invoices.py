@@ -12,7 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,28 +27,46 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
         UniqueConstraint("tenant_id", "number", name="uq_sales_invoices_tenant_number"),
         UniqueConstraint("tenant_id", "source_order_id", name="uq_sales_invoices_tenant_source_order_id"),
         CheckConstraint("broker_commission >= 0", name="ck_sales_invoices_broker_commission"),
+        CheckConstraint(
+            "settlement_terms IN ('cash', 'credit', 'mixed')",
+            name="ck_sales_invoices_settlement_terms",
+        ),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     invoice_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
-    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    # فقط زمینه/پیشنهاد تجاری؛ انبار قطعی روی WarehouseIssue است.
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True
+    )
+    customer_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    seller_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    customer_name2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    delivery_location: Mapped[str] = mapped_column(Text, default="", server_default="")
+    receivable_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    settlement_terms: Mapped[str] = mapped_column(String(10), default="credit", server_default="credit")
+    statement_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
     )
     description: Mapped[str] = mapped_column(Text, default="")
 
-    #: خالصِ **پس از تخفیف** و بدون مالیات. پایه‌ی ثبتِ درآمد و محاسبه‌ی مالیات.
+    #: خالصِ **پس از تخفیف** و بدون مالیات. پایه‌ی محاسبه‌ی مالیات؛ در سند، درآمد
+    #: ناخالص و تخفیف فروش جداگانه ثبت می‌شوند.
     total_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     #: جمع تخفیفِ ردیف‌ها (شاملِ سهمِ تسهیم‌شده‌ی تخفیفِ کلِ فاکتور). فقط برای
-    #: نمایش/صورتحساب مؤدیان؛ در سند حسابداری نمی‌آید چون درآمد از همان اول به مبلغِ
-    #: پس از تخفیف ثبت می‌شود (تخفیف تجاری).
+    #: نمایش/صورتحساب مؤدیان و ثبتِ بدهکارِ مستقلِ تخفیف فروش در سند حسابداری.
     total_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: تخفیفِ کلِ فاکتور که کاربر روی سرِ فاکتور اعمال کرده. هنگام ثبت به‌نسبتِ خالصِ
     #: هر ردیف بینِ ردیف‌ها تسهیم می‌شود (پس در total_discount هم منظور شده)؛ اینجا
     #: فقط برای نمایشِ شفافِ «چه مقدار از تخفیف، تخفیفِ کل بوده» جدا نگه داشته می‌شود.
     invoice_discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    total_additions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    total_duties: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: تعدیلِ گِرد کردنِ مبلغِ نهایی (پس از مالیات). علامت‌دار: منفی = رند به پایین
     #: (تخفیفِ نقدی)، مثبت = رند به بالا. مبلغِ قابل‌پرداخت = خالص + مالیات + rounding.
     rounding: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -64,6 +82,16 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
 
     # شناسه‌ی سفارش روی سایت فروشگاهی؛ برای idempotent بودن sync (جلوگیری از وارد کردن دوباره‌ی همان سفارش)
     source_order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
+    source_quotation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "sales_quotations.id",
+            name="fk_sales_invoices_source_quotation",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
 
     #: **بستنِ فاکتور** — قفل از ویرایش و ابطال. همان معنایی که «دائم» برای سند
     #: دارد: فاکتورِ بسته امضاشده است. یک‌طرفه؛ راهِ بازکردن عمداً نیست.
@@ -110,8 +138,19 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     #: تخفیفِ این ردیف به مبلغ (نه درصد). خالصِ ردیف = qty×unit_price − discount.
     discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
-    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # بهای تمام‌شده در لحظه‌ی فروش (برای COGS)
+    # فقط snapshot کمکی؛ بهای قطعی و COGS روی ردیف خروج انبار قفل می‌شود.
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     description: Mapped[str] = mapped_column(Text, default="")
+    addition: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    duty_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    source_quotation_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_quotation_lines.id"), nullable=True, index=True
+    )
 
     #: وضعیتِ مالیاتیِ کالا **در لحظه‌ی فروش** — از `Item.vat_status` کپی می‌شود.
     #:
@@ -150,6 +189,52 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     )
 
     invoice: Mapped["SalesInvoice"] = relationship(back_populates="lines")
+    item: Mapped["Item"] = relationship()
+
+
+class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+    """خروج فیزیکی مستقل فروش؛ مالک کاهش موجودی و COGS."""
+
+    __tablename__ = "warehouse_issues"
+    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_issues_tenant_number"),)
+
+    number: Mapped[int] = mapped_column(nullable=False, index=True)
+    issue_date: Mapped[date_] = mapped_column(Date, default=date_.today)
+    sales_invoice_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoices.id"), index=True
+    )
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    lines: Mapped[list["WarehouseIssueLine"]] = relationship(
+        back_populates="issue", cascade="all, delete-orphan", order_by="WarehouseIssueLine.id"
+    )
+
+
+class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
+    __tablename__ = "warehouse_issue_lines"
+    __table_args__ = (CheckConstraint("qty > 0", name="ck_warehouse_issue_lines_qty_positive"),)
+
+    issue_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouse_issues.id", ondelete="CASCADE"), index=True
+    )
+    sales_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), index=True
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
+    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    issue: Mapped["WarehouseIssue"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
 
 
@@ -210,6 +295,10 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
         UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True
     )
     supplier_invoice_number: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    #: هویت طرفین در لحظه‌ی ثبت. چاپ سند قطعی نباید با تغییر بعدی Contact یا
+    #: تنظیمات مؤدی بازنویسی شود؛ JSONB شکلِ داده را بدون ستون‌های همیشه‌خالی حفظ می‌کند.
+    supplier_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    buyer_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     #: مرکز هزینه/پروژه‌ی این فاکتور؛ به ردیف‌های سندش هم منتقل می‌شود. NULL = بدون مرکز.
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True

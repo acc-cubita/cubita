@@ -7,7 +7,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.accounting import Account, JournalEntry, JournalLine
@@ -254,9 +253,9 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
     if discount_base:
         discount_account = _postable_account(db, data.discount_account_id, "حساب تخفیف")
 
-    allocated = sum((Decimal(row.allocated_amount) for row in data.related_documents), Decimal(0))
-    if allocated > payment_amount + data.discount_amount:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "جمع تخصیص اسناد مرتبط از جمع تسویه بیشتر است")
+    # سند مرتبط فقط منشأ/مرجع است. فصل اعلامیه صریحاً تعیینِ Allocation را به
+    # موتور تسویه‌ی طرف حساب واگذار کرده؛ اینجا نباید صرفِ اشاره به یک فاکتور را
+    # «تسویه‌شده» اعلام کنیم یا سیاست FIFO/جزئی را بی‌اجازه اختراع کنیم.
     for related in data.related_documents:
         if related.document_type != "purchase_invoice":
             continue
@@ -265,19 +264,6 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور خرید مرتبط معتبر نیست")
         if invoice.contact_id != contact.id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "تأمین‌کننده پرداخت با فاکتور خرید یکسان نیست")
-        previously_allocated = Decimal(
-            db.query(func.coalesce(func.sum(PaymentRelatedDocument.allocated_amount * Payment.exchange_rate), 0))
-            .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
-            .filter(
-                PaymentRelatedDocument.document_type == "purchase_invoice",
-                PaymentRelatedDocument.document_id == invoice.id,
-                Payment.voided_at.is_(None),
-            )
-            .scalar()
-        )
-        invoice_total = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
-        if previously_allocated + _base(related.allocated_amount, rate) > invoice_total:
-            raise HTTPException(status.HTTP_409_CONFLICT, "تخصیص پرداخت از مانده فاکتور خرید بیشتر است")
 
     description = data.description.strip() or f"{type_label(data.payment_type)} — {contact.name}"
     debit_lines = [
@@ -362,7 +348,7 @@ def create_payment(db: Session, data: PaymentIn, user: User) -> Payment:
     for row in data.related_documents:
         db.add(PaymentRelatedDocument(
             payment_id=payment.id, document_type=row.document_type,
-            document_id=row.document_id, allocated_amount=row.allocated_amount,
+            document_id=row.document_id, allocated_amount=Decimal(0),
         ))
 
     db.flush()

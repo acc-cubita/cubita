@@ -26,5 +26,6 @@ class VoidIn(BaseModel):
 
 
 class VoidOut(BaseModel):
-    reversal_entry_id: UUID
-    reversal_entry_number: int | None
+    #: لغوِ سند تجاریِ هنوز سندنشده، سند معکوس ندارد؛ ابطالِ سندشده همیشه دارد.
+    reversal_entry_id: UUID | None = None
+    reversal_entry_number: int | None = None

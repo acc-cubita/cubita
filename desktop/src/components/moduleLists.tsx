@@ -108,7 +108,13 @@ export interface ListMenuItem {
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: «فروش» — دفترِ نظیرِ هر عملیاتِ رکوردساز. «تخفیف‌ها و عوامل» عمداً یک دفترِ
   //: مشترک است، چون دو منوی عملیات در یک جدول می‌نویسند (استثنای دومِ قاعده‌ی نظیر).
-  'فروش': [
+  //: کلید باید **دقیقاً** `heading`ِ گروهِ ناوبری باشد، نه نامِ ماژول: هم
+  //: `ModulePanels` و هم کشوی موبایل با `group.heading` این نگاشت را می‌خوانند.
+  //: تا امروز این‌جا «فروش» بود در حالی که heading «مشتریان و فروش» است، پس هر
+  //: دوازده صفحه‌ی فهرستِ فروش — از فاکتورهای فروش تا اعلامیه‌های قیمت — از
+  //: هیچ عرضی قابلِ باز کردن نبودند. نه تایپ‌اسکریپت می‌دیدش (کلید `string` است)
+  //: و نه ممیزِ ایستا، چون ثبتشان در `OPS_LIST_MAP` درست بود.
+  'مشتریان و فروش': [
     { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList },
     { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText },
     { key: 'returnlist', label: 'فاکتورهای برگشتی', icon: Undo2 },
@@ -195,18 +201,18 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
-  saleslist: 'فروش',
-  quotationlist: 'فروش',
-  returnlist: 'فروش',
-  notelist: 'فروش',
-  commissionrulelist: 'فروش',
-  commissionrunlist: 'فروش',
-  customslist: 'فروش',
-  saletypelist: 'فروش',
-  priceannouncelist: 'فروش',
-  bundlelist: 'فروش',
-  pricingfactorlist: 'فروش',
-  discountgrouplist: 'فروش',
+  saleslist: 'مشتریان و فروش',
+  quotationlist: 'مشتریان و فروش',
+  returnlist: 'مشتریان و فروش',
+  notelist: 'مشتریان و فروش',
+  commissionrulelist: 'مشتریان و فروش',
+  commissionrunlist: 'مشتریان و فروش',
+  customslist: 'مشتریان و فروش',
+  saletypelist: 'مشتریان و فروش',
+  priceannouncelist: 'مشتریان و فروش',
+  bundlelist: 'مشتریان و فروش',
+  pricingfactorlist: 'مشتریان و فروش',
+  discountgrouplist: 'مشتریان و فروش',
   treasuryledger: 'دریافت و پرداخت',
   paymentnoticelist: 'دریافت و پرداخت',
   checkbooklist: 'دریافت و پرداخت',

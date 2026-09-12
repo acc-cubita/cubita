@@ -19,7 +19,14 @@ import pytest
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.advanced_inventory import StockBatch
 from app.models.inventory import Item, StockLedger, Warehouse
-from app.models.invoices import PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, SalesInvoiceLine
+from app.models.invoices import (
+    PurchaseInvoice,
+    PurchaseInvoiceLine,
+    SalesInvoice,
+    SalesInvoiceLine,
+    WarehouseIssue,
+    WarehouseIssueLine,
+)
 from app.models.user import User
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.services import inventory as inventory_service
@@ -69,6 +76,24 @@ def _purge_items(*item_ids) -> None:
             entry_ids += [
                 row[0] for row in session.query(inv_model.journal_entry_id).filter(inv_model.id.in_(inv_ids))
             ]
+            if inv_model is SalesInvoice:
+                issue_ids = [
+                    row[0] for row in session.query(WarehouseIssue.id).filter(
+                        WarehouseIssue.sales_invoice_id.in_(inv_ids)
+                    )
+                ]
+                if issue_ids:
+                    entry_ids += [
+                        row[0] for row in session.query(WarehouseIssue.journal_entry_id).filter(
+                            WarehouseIssue.id.in_(issue_ids)
+                        )
+                    ]
+                    session.query(WarehouseIssueLine).filter(
+                        WarehouseIssueLine.issue_id.in_(issue_ids)
+                    ).delete(synchronize_session=False)
+                    session.query(WarehouseIssue).filter(
+                        WarehouseIssue.id.in_(issue_ids)
+                    ).delete(synchronize_session=False)
             session.query(line_model).filter(line_model.invoice_id.in_(inv_ids)).delete(synchronize_session=False)
             session.query(inv_model).filter(inv_model.id.in_(inv_ids)).delete(synchronize_session=False)
 

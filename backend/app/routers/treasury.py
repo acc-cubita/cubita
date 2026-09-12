@@ -78,7 +78,7 @@ def void_payment_document(
     payment_id: UUID,
     data: PaymentVoidIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("checks_bank", ("approve", "delete"))),
+    user: User = Depends(require_permission("accounting", "delete")),
 ):
     payment = payment_service.void_payment(
         db, payment_id, reason=data.reason, void_date=data.void_date, user=user

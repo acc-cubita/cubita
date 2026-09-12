@@ -23,6 +23,7 @@ from app.models.storefront import StorefrontSettings
 from app.models.user import User
 from app.schemas.invoices import SalesInvoiceIn, SalesInvoiceLineIn
 from app.services.inventory import get_total_stock_qty, post_sales_invoice
+from app.services.sales_invoices import finalize_immediate_sale
 
 # فقط همین فیلدها را PUT /api/admin/products/{id} می‌پذیرد (ProductIn روی main.py سایت)؛
 # بقیه‌ی فیلدهای برگشتی از GET (id, sold, rating, slug, ...) باید قبل از PUT حذف شوند.
@@ -230,7 +231,7 @@ def pull_new_orders(
                 # است، rollback کامل سفارش‌های موفقِ همین اجرا را هم پاک می‌کرد.
                 try:
                     with db.begin_nested():
-                        post_sales_invoice(
+                        invoice = post_sales_invoice(
                             db,
                             SalesInvoiceIn(
                                 invoice_date=invoice_date,
@@ -241,7 +242,10 @@ def pull_new_orders(
                                 source_order_id=order_id,
                             ),
                             user,
+                            move_inventory=False,
+                            issue_accounting=False,
                         )
+                        finalize_immediate_sale(db, invoice, warehouse.id, user)
                     result.imported.append(order_id)
                     already_imported.add(order_id)
                 except Exception as err:  # noqa: BLE001 - می‌خواهیم یک سفارش خراب بقیه‌ی sync را متوقف نکند

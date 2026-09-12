@@ -336,7 +336,10 @@ def _validate_related_documents(db: Session, data: ReceiptIn, contact: Contact, 
     for related in data.related_documents:
         if related.document_type != "sales_invoice":
             continue
-        invoice = db.get(SalesInvoice, related.document_id)
+        invoice = (
+            db.query(SalesInvoice).filter(SalesInvoice.id == related.document_id)
+            .with_for_update().one_or_none()
+        )
         if invoice is None or invoice.is_voided:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتور فروش مرتبط معتبر نیست")
         if invoice.contact_id != contact.id:
@@ -353,7 +356,10 @@ def _validate_related_documents(db: Session, data: ReceiptIn, contact: Contact, 
             )
             .scalar()
         )
-        invoice_total = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
+        invoice_total = (
+            Decimal(invoice.total_amount) + Decimal(invoice.total_additions)
+            + Decimal(invoice.total_duties) + Decimal(invoice.tax_amount) + Decimal(invoice.rounding)
+        )
         if previously + _base(related.allocated_amount, rate) > invoice_total:
             raise HTTPException(status.HTTP_409_CONFLICT, "تخصیص رسید از مانده فاکتور فروش بیشتر است")
 

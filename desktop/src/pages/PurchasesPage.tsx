@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Inbox, PackagePlus, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
-import { fetchPurchaseSummary, type MeResponse, type PurchaseInvoiceRecord, type PurchaseSummary } from '../api'
+import {
+  fetchPurchaseInvoiceDuplicate,
+  fetchPurchaseSummary,
+  type MeResponse,
+  type PurchaseInvoiceDuplicateDraft,
+  type PurchaseInvoiceRecord,
+  type PurchaseSummary,
+} from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
 import { PurchaseInvoiceForm } from '../components/PurchaseInvoiceForm'
@@ -35,7 +42,7 @@ export function PurchasesPage({
   // شاخص‌ها از سرور می‌آیند (قرینه‌ی صفحه‌ی فروش؛ رفعِ دانلودِ کلِ تاریخچه در کلاینت).
   const [summary, setSummary] = useState<PurchaseSummary | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [prefill, setPrefill] = useState<PurchaseInvoiceRecord | null>(null)
+  const [prefill, setPrefill] = useState<PurchaseInvoiceDuplicateDraft | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
   const refresh = useCallback(() => {
     void fetchPurchaseSummary(token).then(setSummary).catch(() => {})
@@ -48,10 +55,14 @@ export function PurchasesPage({
     onQueued()
     refresh()
   }, [onQueued, refresh])
-  const handleDuplicate = useCallback((inv: AnyInvoice) => {
-    setPrefill(inv as PurchaseInvoiceRecord)
-    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  const handleDuplicate = useCallback(async (inv: AnyInvoice) => {
+    try {
+      setPrefill(await fetchPurchaseInvoiceDuplicate(token, inv.id))
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'پیش‌نویس رونوشت فاکتور خرید بارگذاری نشد.')
+    }
+  }, [token])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
   const guided = useTheme().theme.content === 'guided'
 
@@ -100,7 +111,7 @@ export function PurchasesPage({
                     />
                   )}
                 </div>
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} warehouses={warehouses} onDuplicate={handleDuplicate} onCreatePayment={onCreatePayment} />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} warehouses={warehouses} onDuplicate={(invoice) => void handleDuplicate(invoice)} onCreatePayment={onCreatePayment} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}

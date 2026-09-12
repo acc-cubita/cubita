@@ -24,6 +24,7 @@ from datetime import date
 import pytest
 
 from app.models.inventory import Item, StockLedger, Warehouse
+from app.models.invoices import WarehouseIssue
 from app.schemas.invoices import (
     PurchaseInvoiceIn,
     PurchaseInvoiceLineIn,
@@ -91,10 +92,11 @@ def test_sales_stock_moves_know_their_invoice(db, user, warehouse, widget):
         user,
     )
     db.flush()
-    moves = db.query(StockLedger).filter(StockLedger.source_type == "sales_invoice").all()
+    issue = db.query(WarehouseIssue).filter(WarehouseIssue.sales_invoice_id == invoice.id).one()
+    moves = db.query(StockLedger).filter(StockLedger.source_type == "warehouse_issue").all()
     assert moves, "هیچ حرکت انباری ثبت نشد"
     for move in moves:
-        assert move.source_id == invoice.id, "حرکت انبار به فاکتور فروشش وصل نیست"
+        assert move.source_id == issue.id, "حرکت انبار به سند خروج فروش وصل نیست"
 
 
 def test_no_stock_movement_anywhere_is_orphaned(db, user, warehouse, widget):
