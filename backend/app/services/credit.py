@@ -50,6 +50,9 @@ def customer_outstanding(db: Session, contact_id: UUID, as_of: date | None = Non
     ).join(SalesInvoice, SalesReturn.sales_invoice_id == SalesInvoice.id).filter(
         SalesInvoice.contact_id == contact_id,
         SalesInvoice.voided_at.is_(None),
+        #: برگشتِ باطل‌شده سقفِ اعتبار را آزاد نمی‌کند — وگرنه با یک برگشتِ
+        #: اشتباهی و ابطالش، مشتری بی‌سروصدا اعتبارِ اضافه می‌گرفت.
+        SalesReturn.voided_at.is_(None),
         SalesReturn.return_date <= as_of,
     ).scalar()
 

@@ -96,6 +96,11 @@ def _voided_sources(db: Session) -> set:
         (SalesInvoice, "sales_invoice"),
         (PurchaseInvoice, "purchase_invoice"),
         (WarehouseReceipt, "warehouse_receipt"),
+        #: از مهاجرتِ ۰۱۲۱ برگشت هم ابطال‌پذیر است. بدونِ این دو، حرکتِ انبارِ
+        #: برگشتِ باطل‌شده در محاسبه می‌ماند و **میانگینِ بهای تمام‌شده بی‌صدا
+        #: منحرف می‌شود** — خطایی که هیچ ترازی لو نمی‌دهد چون سند متوازن است.
+        (SalesReturn, "sales_return"),
+        (PurchaseReturn, "purchase_return"),
     ):
         for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
             voided.add((source_type, doc_id))
@@ -185,12 +190,27 @@ def _guard_no_active_returns(db: Session, document, source_type: str) -> None:
     ابطال، خودش کلِ فاکتور را معکوس می‌کند؛ اگر برگشتی هم روی همان فاکتور ثبت شده
     باشد، همان فروش/خرید **دوبار** برمی‌گردد و ماندهٔ صندوق/فروش (یا خرید) منفیِ
     بی‌معنا می‌شود. کاربر باید اول سندِ برگشت را برگرداند، بعد فاکتور را باطل کند.
+
+    **فقط برگشتِ فعال می‌بندد.** تا پیش از مهاجرتِ ۰۱۲۱ برگشت اصلاً ابطال نداشت،
+    پس این گارد کاری را می‌خواست که هیچ راهی برایش نبود: یک برگشتِ اشتباهی
+    فاکتورش را **برای همیشه** قفل می‌کرد. حالا ابطالِ برگشت قفل را باز می‌کند.
     """
     if source_type == "sales_invoice":
-        has_return = db.query(SalesReturn.id).filter(SalesReturn.sales_invoice_id == document.id).first()
+        has_return = (
+            db.query(SalesReturn.id)
+            .filter(SalesReturn.sales_invoice_id == document.id, SalesReturn.voided_at.is_(None))
+            .first()
+        )
         kind = "برگشت از فروش"
     elif source_type == "purchase_invoice":
-        has_return = db.query(PurchaseReturn.id).filter(PurchaseReturn.purchase_invoice_id == document.id).first()
+        has_return = (
+            db.query(PurchaseReturn.id)
+            .filter(
+                PurchaseReturn.purchase_invoice_id == document.id,
+                PurchaseReturn.voided_at.is_(None),
+            )
+            .first()
+        )
         kind = "برگشت از خرید"
     else:
         return
@@ -198,7 +218,7 @@ def _guard_no_active_returns(db: Session, document, source_type: str) -> None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             f"این فاکتور «{kind}» دارد؛ ابطال، فروش را دوباره برمی‌گرداند. "
-            "اول سندِ برگشت را حذف/برگردانید، سپس فاکتور را باطل کنید.",
+            "اول سندِ برگشت را باطل کنید، سپس فاکتور را باطل کنید.",
         )
 
 
@@ -268,7 +288,10 @@ def _apply_void(
     # تاریخ ابطال پیش‌فرض همان تاریخ سند است، ولی اگر آن دوره بسته شده باشد کاربر
     # باید تاریخی در دوره‌ی باز بدهد. گارد روی تاریخِ *معکوس* اجرا می‌شود نه تاریخ
     # سند اصلی — چون چیزی که الان نوشته می‌شود همان است.
-    effective_date = void_date or document.invoice_date
+    #
+    # فاکتور `invoice_date` دارد و برگشت `return_date`؛ همین یک دسترسی کافی بود
+    # تا کلِ این مسیر برای برگشت هم بازاستفاده شود و ابطالِ دوم نوشته نشود.
+    effective_date = void_date or getattr(document, "invoice_date", None) or document.return_date
     assert_period_open(db, effective_date)
 
     entry = db.get(JournalEntry, document.journal_entry_id) if document.journal_entry_id else None
@@ -342,6 +365,48 @@ def void_purchase_invoice(
         invoice,
         source_type="purchase_invoice",
         label="فاکتور خرید",
+        void_date=void_date,
+        reason=reason,
+        user=user,
+    )
+
+
+def void_sales_return(
+    db: Session, return_id: UUID, *, reason: str, user: User, void_date: date_ | None = None
+) -> JournalEntry:
+    """ابطالِ برگشت از فروش (§۷۱–§۷۸) — از همان مسیرِ مشترک.
+
+    هیچ گاردِ تازه‌ای لازم نشد و این عمدی است: `_apply_void` از قبل ابطالِ دوباره،
+    تخصیصِ فعالِ تسویه، منفی‌نشدنِ موجودی، بازبودنِ دوره و بازمحاسبه‌ی میانگین را
+    می‌سنجد. تنها چیزی که برگشت اضافه می‌کند این است که ماندهٔ قابلِ برگشتِ
+    فاکتور خودبه‌خود برمی‌گردد (§۷۶) — چون مشتق است، نه شمارنده.
+    """
+    document = db.get(SalesReturn, return_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت از فروش یافت نشد")
+    return _apply_void(
+        db,
+        document,
+        source_type="sales_return",
+        label="برگشت از فروش",
+        void_date=void_date,
+        reason=reason,
+        user=user,
+    )
+
+
+def void_purchase_return(
+    db: Session, return_id: UUID, *, reason: str, user: User, void_date: date_ | None = None
+) -> JournalEntry:
+    """قرینه‌ی `void_sales_return` برای خرید."""
+    document = db.get(PurchaseReturn, return_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت از خرید یافت نشد")
+    return _apply_void(
+        db,
+        document,
+        source_type="purchase_return",
+        label="برگشت از خرید",
         void_date=void_date,
         reason=reason,
         user=user,

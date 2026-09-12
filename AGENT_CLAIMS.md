@@ -34,7 +34,19 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| _(خالی)_ | | | |
+
+> **دو هشدار برای هر که بعد از من می‌آید:**
+>
+> ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
+>    (`WarehouseIssue`، حساب‌های نوع فروش، Snapshotهای فاکتور خرید، پیش‌فاکتورِ
+>    منبع). هیچ‌کدام روی `master` نیست، **۱۸ کامیت عقب** است، و شماره‌های
+>    `0114`/`0115`/`0116`اش با `master` **تصادم** دارند (آن‌جا
+>    `counterparty_settlement`/`cheque_traceability`/`warehouse_master` نشسته‌اند).
+>    من دست بهش نزدم و checkout را به شاخه‌ی خودم بردم — آن شش کامیت با ref خودِ
+>    شاخه امن‌اند. هر که خواست فرودش بیاورد: اول rebase روی master، بعد
+>    شماره‌گذاریِ دوباره به `0122` به بعد.
+> ۲. به همین دلیل §۳۰–§۳۴ (برگشت خروج انبار) و §۵۲/§۵۳ (حذفِ COGS از سندِ تجاری)
+>    در این فصل **ساخته نشدند** — زیرساختشان همان شاخه است.
 
 ---
 
@@ -91,6 +103,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude (hesabdari-93) | مهاجرت `0121`، `services/returns.py`، `voiding.py`، `open_items.py`، `reports.py`، `credit.py`، `chart_codes.py`، UI برگشت و مِسترِ علت؛ آزادسازی `pytest` | فصلِ «فاکتور برگشتی»: تخصیصِ سطحِ ردیف، ابطالِ برگشت (و رفعِ قفلِ ابدیِ فاکتور)، حسابِ ۴۱۰۷، علتِ برگشت | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | `services/receipts.py`, `routers/receipts.py`, `0111_receipt_document.py`, `ReceiptVoucherPage.tsx` + merge با master | رسید دریافت، و حلِ تصادمِ شماره‌ی مهاجرت | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/open_items.py`, `services/settlements.py`, `models/settlement.py`, `0114_counterparty_settlement.py`, `TreasuryOpsPages.tsx` + merge با master | تسویه حساب طرف مقابل؛ شماره‌ی مهاجرت ۰۱۱۴ برداشته شد | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |

@@ -76,6 +76,7 @@ import {
   MarkupPage,
   PriceAnnouncementPage,
   ProductBundlePage,
+  ReturnReasonPage,
   SaleTypePage,
   SalesBrowsePage,
   SalesFlowPage,
@@ -227,6 +228,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   commissioncalc: 'محاسبه پورسانت',
   customs: 'اظهارنامه گمرکی',
   saletype: 'نوع فروش',
+  returnreason: 'علت برگشت کالا',
   priceannounce: 'اعلامیه قیمت',
   bundle: 'بسته محصول جدید',
   discount: 'تخفیف جدید',
@@ -540,6 +542,7 @@ export function Dashboard({
           {page === 'commissioncalc' && <CommissionCalcPage token={token} />}
           {page === 'customs' && <CustomsPage token={token} />}
           {page === 'saletype' && <SaleTypePage token={token} />}
+          {page === 'returnreason' && <ReturnReasonPage token={token} />}
           {page === 'priceannounce' && <PriceAnnouncementPage token={token} />}
           {page === 'bundle' && <ProductBundlePage token={token} />}
           {page === 'discount' && <DiscountPage token={token} />}
