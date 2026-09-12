@@ -11,7 +11,6 @@ from app.models.sales_ops import (
     FACTOR_KINDS,
     FACTOR_MODES,
     FACTOR_SCOPES,
-    NOTE_KINDS,
 )
 from app.schemas.advanced_inventory import PriceListItemIn, PriceListItemOut
 
@@ -313,34 +312,73 @@ class CustomsOut(_Named):
 # ──────────────── اعلامیه‌ی بدهکار / بستانکار ─────────────────
 
 
-class NoteIn(BaseModel):
-    kind: str
-    note_date: date
-    contact_id: UUID
+class NoteLineIn(BaseModel):
+    """یک تعدیل: این سمت بدهکار، آن سمت بستانکار، به این مبلغ.
+
+    `*_account_id` اختیاری است: نیامدنش یعنی «از نقشِ طرف حساب حل کن». این تنها
+    جایی است که حساب حدس زده می‌شود، و حدسش همان قاعده‌ای است که فرم نشان می‌دهد.
+    """
+
+    debit_contact_id: UUID | None = None
+    debit_account_id: UUID | None = None
+    credit_contact_id: UUID | None = None
+    credit_account_id: UUID | None = None
     amount: Decimal = Field(gt=0)
+    description: str = ""
+
+
+class NoteIn(BaseModel):
+    note_date: date
+    lines: list[NoteLineIn] = Field(min_length=1)
     reason: str = ""
+    currency_code: str = "IRR"
+    exchange_rate: Decimal = Field(default=Decimal(1), gt=0)
     invoice_id: UUID | None = None
 
-    @field_validator("kind")
-    @classmethod
-    def _kind(cls, v: str) -> str:
-        if v not in NOTE_KINDS:
-            raise ValueError("نوعِ اعلامیه نامعتبر است")
-        return v
+
+class NoteLineOut(BaseModel):
+    id: UUID
+    seq: int
+    debit_contact_id: UUID | None
+    debit_contact_name: str = "—"
+    debit_account_id: UUID
+    debit_account_code: str = ""
+    debit_account_name: str = "—"
+    credit_contact_id: UUID | None
+    credit_contact_name: str = "—"
+    credit_account_id: UUID
+    credit_account_code: str = ""
+    credit_account_name: str = "—"
+    amount: Decimal
+    description: str
 
 
 class NoteOut(_Named):
     id: UUID
     number: int | None
-    kind: str
     note_date: date
-    contact_id: UUID
-    contact_name: str = "—"
     amount: Decimal
     reason: str
+    currency_code: str = "IRR"
+    exchange_rate: Decimal = Decimal(1)
+    lines: list[NoteLineOut] = []
     invoice_id: UUID | None
     journal_entry_id: UUID | None
     voided_at: datetime | None
+
+    #: میراثِ شکلِ تک‌سمتی. برای اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ پر است و برای
+    #: تازه‌ها خالی — رابط از `lines` می‌خواند.
+    kind: str | None = None
+    contact_id: UUID | None = None
+    contact_name: str = "—"
+
+
+class NoteAccountOut(BaseModel):
+    """معینی که یک سمتِ اعلامیه می‌تواند رویش بنشیند — با عنوانش، نه فقط کدش."""
+
+    id: UUID
+    code: str
+    name: str
 
 
 class VoidNoteIn(BaseModel):

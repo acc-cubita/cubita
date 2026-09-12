@@ -30,11 +30,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
@@ -44,7 +44,7 @@ from app.models.invoices import PurchaseInvoice, SalesInvoice
 from app.models.payment import Payment
 from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
-from app.models.sales_ops import CreditDebitNote
+from app.models.sales_ops import CreditDebitNote, CreditDebitNoteLine
 from app.models.settlement import Settlement, SettlementAllocation
 from app.models.treasury import TreasuryTransaction
 from app.services import chart_codes as cc
@@ -82,6 +82,34 @@ class SettleableKind:
     number_col: Any | None = None
     joins: tuple = ()
     filters: tuple = ()
+
+    #: **سندی که طرفِ حسابش روی یک ستون نمی‌نشیند.** اعلامیه‌ی بدهکار/بستانکار دو
+    #: سمت دارد و هر سمتش می‌تواند طرف حسابِ دیگری باشد؛ `contact_col` برای این
+    #: شکل ساخته نشده بود. این قلاب یک شرطِ `EXISTS` می‌سازد — نه `JOIN` — چون
+    #: پیوستن به ردیف‌ها جمعِ ردیف‌های سند را در تعدادِ ردیف‌ها ضرب می‌کرد.
+    contact_clause: Callable[[UUID | None], Any] | None = None
+
+    #: آیا برای جداکردنِ دو طرف حساب باید ردیفِ سند را با **تفصیلی** هم فیلتر کرد.
+    #: وقتی هر دو سمتِ یک سند روی *همان* معین بنشینند (تهاترِ مشتری با مشتری،
+    #: هر دو روی دریافتنی) اثرِ خالصِ سند روی آن معین صفر است و بدونِ تفصیلی هیچ‌کدام
+    #: قلمِ باز نمی‌شوند. با تفصیلی، هرکدام مالِ خودش را می‌بیند.
+    by_analytic: bool = False
+
+
+def _notice_contact_clause(contact_id: UUID | None):
+    """اعلامیه‌ای که این طرف حساب در یکی از دو سمتِ ردیف‌هایش هست."""
+    line = CreditDebitNoteLine.note_id == CreditDebitNote.id
+    if contact_id is None:
+        who = or_(
+            CreditDebitNoteLine.debit_contact_id.isnot(None),
+            CreditDebitNoteLine.credit_contact_id.isnot(None),
+        )
+    else:
+        who = or_(
+            CreditDebitNoteLine.debit_contact_id == contact_id,
+            CreditDebitNoteLine.credit_contact_id == contact_id,
+        )
+    return exists().where(line).where(who)
 
 
 #: **رجیستریِ منبع‌های قابلِ تسویه (§۳۴).** نوعِ منبع حفظ می‌شود؛ همه‌چیز به یک
@@ -181,7 +209,11 @@ SETTLEABLE: dict[str, SettleableKind] = {
         label="اعلامیه بدهکار/بستانکار",
         model=CreditDebitNote,
         date_col=CreditDebitNote.note_date,
+        #: میراثِ شکلِ تک‌سمتی — فقط برای اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ که ردیف
+        #: ندارند. مسیرِ زنده از `contact_clause` می‌آید.
         contact_col=CreditDebitNote.contact_id,
+        contact_clause=_notice_contact_clause,
+        by_analytic=True,
         number_col=CreditDebitNote.number,
         filters=(CreditDebitNote.voided_at.is_(None),),
     ),
@@ -257,10 +289,29 @@ def _kind_effects(
         .filter(*kind.filters)
         .group_by(*group_cols)
     )
-    if contact_id is not None:
+    if kind.contact_clause is not None:
+        #: سندِ دوسویه: طرف حساب روی یک ستون نمی‌نشیند. برای اعلامیه‌های *قدیمیِ*
+        #: بی‌ردیف هم ستونِ میراثی همچنان کار می‌کند.
+        clause = kind.contact_clause(contact_id)
+        if contact_id is not None:
+            query = query.filter(or_(clause, kind.contact_col == contact_id))
+        else:
+            query = query.filter(or_(clause, kind.contact_col.isnot(None)))
+    elif contact_id is not None:
         query = query.filter(kind.contact_col == contact_id)
     else:
         query = query.filter(kind.contact_col.isnot(None))
+
+    #: **تفکیک با تفصیلی.** وقتی هر دو سمتِ سند روی همان معین بنشینند، اثرِ خالصش
+    #: روی آن معین صفر است و هیچ‌کدام از دو طرف قلمِ باز نمی‌شوند. تفصیلیِ ردیف این
+    #: را تفکیک می‌کند. اگر طرف حساب تفصیلی نداشته باشد (حالتِ «شناور») مانده‌اش در
+    #: دفتر هم از بقیه جدا نیست، پس این‌جا هم چیزی برای جداکردن نمی‌ماند.
+    if kind.by_analytic and contact_id is not None:
+        analytic_id = db.query(Contact.analytic_id).filter(Contact.id == contact_id).scalar()
+        if analytic_id is not None:
+            query = query.filter(
+                or_(JournalLine.analytic_id == analytic_id, JournalLine.analytic_id.is_(None))
+            )
     if as_of is not None:
         query = query.filter(kind.date_col <= as_of)
 

@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `alembic/versions/0127_*` · `models/sales_ops.py` · `services/sales_ops.py` · `services/reports.py` · `services/open_items.py` · `routers/sales_ops.py` · `schemas/sales_ops.py` · `models/__init__.py` · `SalesOpsPages.tsx` · `SalesListPages.tsx` · `api.ts` | فصلِ «اعلامیه بدهکار و بستانکار»: جفتِ دوسویه‌ی طرف حساب، حذفِ hard-codeِ حسابِ فروش، تفصیلی روی سند، و دیده‌شدن در صورت‌حساب. **شماره‌ی مهاجرت `0127` گرفته شد.** | ۱۴۰۵/۰۶/۲۱ |
 
 ---
 
