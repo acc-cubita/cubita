@@ -1,5 +1,6 @@
 import uuid
 from datetime import date as date_
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -60,6 +61,19 @@ FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "مت�
 #: کلیدِ سیستمیِ عامل — پلِ عاملِ کاربر به ستون‌های موتورِ فیشِ حقوقی. خالی یعنی
 #: عاملِ ساخته‌ی کاربر که در «سایر مزایا» جمع می‌شود.
 FACTOR_SYSTEM_KEYS = ("", "base", "housing", "food", "child")
+#: هدف‌هایی که یک عاملِ حقوق می‌تواند در مبنایشان شرکت کند. **پنج‌تا، چون کوبیتا
+#: امروز دقیقاً برای همین پنج‌تا موتور دارد** — هدفی که موتوری پشتش نیست، تنظیمی
+#: است که هیچ عددی را عوض نمی‌کند و کاربر را گمراه می‌کند.
+FACTOR_PURPOSES = ("insurance_base", "tax_base", "eidi_base", "severance_base", "leave_base")
+FACTOR_PURPOSE_LABELS = {
+    "insurance_base": "مبنای بیمه",
+    "tax_base": "مبنای مالیات",
+    "eidi_base": "مبنای عیدی",
+    "severance_base": "مبنای سنوات",
+    "leave_base": "مبنای بازخرید مرخصی",
+}
+#: سه هدفی که پیش‌فرضشان «فقط حقوق پایه» است، نه «همه‌ی عوامل».
+BENEFIT_BASE_PURPOSES = ("eidi_base", "severance_base", "leave_base")
 DEFAULT_FACTORS = (
     ("حقوق پایه", "base"),
     ("حق مسکن", "housing"),
@@ -295,6 +309,12 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
     loan_deduction: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تعدیلِ گِردکردنِ خالص (مثبت = بالا گِرد شد، منفی = پایین). با تنظیمِ
+    #: `payment_rounding_digits` ساخته می‌شود و پیش‌فرضش صفر است.
+    #:
+    #: **چرا روی فیش و نه فقط در سند:** بی این ستون، تساویِ «خالص = ناخالص −
+    #: کسورات» می‌شکست و کارمند چند ریال اختلافِ بی‌توضیح می‌دید.
+    rounding_adjustment: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     net_pay: Mapped[float] = mapped_column(Numeric(18, 0))
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -393,6 +413,29 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "year", name="uq_payroll_settings_tenant_year"),
+        CheckConstraint("insurance_daily_ceiling >= 0", name="ck_payroll_settings_ceiling"),
+        CheckConstraint("unemployment_rate >= 0 AND unemployment_rate <= 1", name="ck_payroll_settings_unemployment_rate"),
+        CheckConstraint("hard_job_rate >= 0 AND hard_job_rate <= 1", name="ck_payroll_settings_hard_job_rate"),
+        CheckConstraint(
+            "eidi_base_multiplier > 0 AND eidi_base_multiplier <= 12", name="ck_payroll_settings_eidi_multiplier"
+        ),
+        CheckConstraint(
+            "severance_days_per_year > 0 AND severance_days_per_year <= 365", name="ck_payroll_settings_severance_days"
+        ),
+        CheckConstraint("monthly_work_days > 0 AND monthly_work_days <= 31", name="ck_payroll_settings_month_days"),
+        CheckConstraint(
+            "standard_monthly_hours > 0 AND standard_monthly_hours <= 744", name="ck_payroll_settings_month_hours"
+        ),
+        CheckConstraint(
+            "overtime_multiplier > 0 AND overtime_multiplier <= 10", name="ck_payroll_settings_overtime_multiplier"
+        ),
+        CheckConstraint(
+            "tax_exempt_coef_social >= 0 AND tax_exempt_coef_social <= 1", name="ck_payroll_settings_coef_social"
+        ),
+        CheckConstraint(
+            "payment_rounding_digits >= 0 AND payment_rounding_digits <= 6",
+            name="ck_payroll_settings_rounding_digits",
+        ),
     )
 
     year: Mapped[int] = mapped_column(Integer)
@@ -405,6 +448,61 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     min_base_wage: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: روزهای مرخصی استحقاقیِ سالانه (قانون کار: ۲۶ روز کاری).
     annual_leave_days: Mapped[int] = mapped_column(Integer, default=26, server_default="26")
+
+    # ── پارامترهای قانونی که تا مهاجرتِ ۰۱۳۸ داخلِ سورس‌کد ثابت بودند ───────────
+    #
+    #: عددِ قانونی در کد یعنی هر مصوبه‌ی تازه یک استقرار می‌خواهد، و یعنی هیچ
+    #: مستأجری نمی‌تواند عددِ خودش را داشته باشد. پیش‌فرضِ هر کدام **دقیقاً همان
+    #: ثابتی است که جایش را گرفته**، پس عددِ هیچ فیشی با این مهاجرت عوض نشد.
+
+    #: سقفِ روزانه‌ی دستمزدِ مشمولِ بیمه. **صفر یعنی بی‌سقف** — همان رفتاری که تا
+    #: امروز بود، چون هیچ سقفی اعمال نمی‌شد. ماهانه = این × `monthly_work_days`.
+    insurance_daily_ceiling: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: بیمه‌ی بیکاری و مشاغل سخت: سهمِ **کارفرما**، جدا از نرخِ اصلی. صفر = غیرفعال.
+    #: شمولشان از خودِ حکم می‌آید (`exempt_unemployment_insurance` و `is_hard_job`)،
+    #: نه از این‌جا — این فقط نرخِ سالِ جاری است.
+    unemployment_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
+    hard_job_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
+
+    #: عیدی = مبنا × این ضریب. تا امروز `base * 2` در `benefits.py` بود.
+    eidi_base_multiplier: Mapped[float] = mapped_column(Numeric(5, 2), default=2, server_default="2")
+    #: سنوات = مبنا × (روزهای سابقه ÷ ۳۶۵) × (این ÷ روزهای ماه). ۳۰ = یک ماه در سال.
+    severance_days_per_year: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+
+    #: مبنای روز کاریِ ماه — مقسومٌ‌علیهِ نسبتِ کارکرد و دستمزدِ روزانه.
+    monthly_work_days: Mapped[float] = mapped_column(Numeric(5, 2), default=30, server_default="30")
+    #: ساعتِ کارِ ماهانه‌ی قانونی و ضریبِ اضافه‌کار — مبنای نرخِ ساعتی.
+    standard_monthly_hours: Mapped[float] = mapped_column(Numeric(6, 2), default=194, server_default="194")
+    overtime_multiplier: Mapped[float] = mapped_column(Numeric(5, 2), default=Decimal("1.4"), server_default="1.4")
+
+    #: چه کسری از سهمِ بیمه‌ی تأمین اجتماعیِ کارمند از **مبنای مالیات** کم می‌شود.
+    #: تا امروز این ضریب عددِ ثابتِ ۱ در فرمول بود.
+    tax_exempt_coef_social: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+    #: دو ضریبِ دیگرِ فرمِ مرجع. بی سه ارجاعِ پایین بی‌مصرف‌اند، چون کوبیتا
+    #: نمی‌دانست کدام ردیفِ کسور بیمه‌ی تکمیلی است و کدام درمان.
+    tax_exempt_coef_supplementary: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+    tax_exempt_coef_medical: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+
+    #: **کدام عاملِ موجود این نقش را دارد** — نه ستونِ مبلغِ تازه. همان تفکیکی که
+    #: فرمِ مرجع دارد: تعریفِ عامل جای خودش است، نسبت‌دادنِ نقش این‌جا.
+    #: `NULL` = نسبت داده نشده، و آن‌وقت ضریبِ متناظر روی هیچ مبلغی نمی‌نشیند.
+    supplementary_employee_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    supplementary_employer_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    medical_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    #: «مالیاتِ منفی محاسبه نشود» — یک سیاستِ صریح، نه یک `if tax < 0` پراکنده.
+    #: `False` (پیش‌فرض) همان رفتارِ امروز است: استرداد کارِ تعدیلِ پایانِ سال است.
+    allow_negative_tax: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: خالصِ پرداختی تا این تعداد رقم گِرد می‌شود (۳ = تا هزار ریال). صفر = بدونِ
+    #: رند. اختلافِ رند در سند به نقشِ `payroll_rounding` می‌رود، نه داخلِ هزینه.
+    payment_rounding_digits: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     notes: Mapped[str] = mapped_column(Text, default="")
 
 
@@ -506,6 +604,44 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_extraordinary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     system_key: Mapped[str] = mapped_column(String(20), default="", server_default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class PayrollFactorParticipation(TenantMixin, UUIDPKMixin, Base):
+    """آیا این عامل در این محاسبه شرکت می‌کند — و با چه ضریبی.
+
+    **جدولِ استثناهاست، نه جدولِ همه‌چیز.** نبودنِ ردیف یعنی «پیش‌فرض»، و پیش‌فرض
+    عمداً همان رفتاری است که کوبیتا پیش از مهاجرتِ ۰۱۳۹ داشت:
+
+    * هدفِ بیمه و مالیات → شریک، با ضریبِ ۱ (کلِ ناخالص مشمول بود)
+    * هدفِ عیدی/سنوات/مرخصی → شریک فقط اگر عاملِ «حقوق پایه» باشد
+
+    این عدمِ‌تقارن انتخابِ سلیقه‌ای نیست؛ رمزگذاریِ دقیقِ فرمولِ امروز است. پس
+    جدولِ خالی یعنی «هیچ عددی عوض نشده»، و هر ردیف یک تصمیمِ صریحِ کاربر است.
+
+    منطقِ حل در [`factor_participation`](../services/factor_participation.py) است،
+    نه این‌جا — تا هر مصرف‌کننده‌ای (فیش، عیدی، سنوات، مرخصی) از یک قاعده بگذرد.
+    """
+
+    __tablename__ = "payroll_factor_participations"
+    __table_args__ = (
+        CheckConstraint(f"purpose IN {FACTOR_PURPOSES}", name="ck_factor_participations_purpose"),
+        CheckConstraint("coefficient >= 0 AND coefficient <= 1", name="ck_factor_participations_coefficient"),
+        Index(
+            "uq_factor_participations_factor_purpose",
+            "tenant_id", "factor_id", "purpose",
+            unique=True,
+        ),
+        Index("ix_factor_participations_purpose", "tenant_id", "purpose"),
+    )
+
+    factor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="CASCADE")
+    )
+    purpose: Mapped[str] = mapped_column(String(30))
+    included: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    coefficient: Mapped[float] = mapped_column(Numeric(6, 4), default=1, server_default="1")
+
+    factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
 
 
 class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

@@ -18,6 +18,7 @@ import {
   fetchInsuranceTaxBranches,
   fetchJobTitles,
   fetchPayrollFactors,
+  setFactorParticipation,
   fetchPayrollTaxGroups,
   fetchServiceLocations,
   updateInsuranceTaxBranch,
@@ -25,6 +26,7 @@ import {
   type CostCenterRecord,
   type InsuranceTaxBranchRecord,
   type JobTitleRecord,
+  FACTOR_PURPOSE_LABELS,
   type PayrollFactorRecord,
   type PayrollTaxGroupRecord,
   type ServiceLocationRecord,
@@ -248,6 +250,10 @@ export function JobTitlePage({ token }: { token: string }) {
 
 // ── عوامل حقوق و مزایا ───────────────────────────────────────────────────────
 
+//: ترتیبِ ستون‌های ماتریس — همان ترتیبی که موتور در آن حساب می‌کند:
+//: اول مبناهای ماهانه (بیمه، مالیات)، بعد سه مبنای مزایا.
+const PURPOSES = ['insurance_base', 'tax_base', 'eidi_base', 'severance_base', 'leave_base'] as const
+
 export function PayrollFactorPage({ token }: { token: string }) {
   const [rows, setRows] = useState<PayrollFactorRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -271,6 +277,21 @@ export function PayrollFactorPage({ token }: { token: string }) {
   useEffect(() => {
     void refresh()
   }, [token])
+
+  /** تیکِ یک خانه‌ی ماتریس. سرور ردیفِ برابرِ پیش‌فرض را پاک می‌کند، پس
+   *  برگرداندنِ یک تیک به حالتِ اولش داده‌ی اضافه جا نمی‌گذارد. */
+  async function toggle(row: PayrollFactorRecord, purpose: string, on: boolean) {
+    setBusy(true)
+    setMsg(null)
+    try {
+      await setFactorParticipation(token, row.id, { [purpose]: on ? 1 : 0 })
+      await refresh()
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -383,6 +404,53 @@ export function PayrollFactorPage({ token }: { token: string }) {
             r.is_active ? 'فعال' : 'غیرفعال',
           ]}
         />
+      </SectionCard>
+
+      <SectionCard
+        icon={SlidersHorizontal}
+        title="مشارکت عوامل در مبناها"
+        description="هر عامل در کدام محاسبه شمرده شود. تیک‌ها پیش‌فرضِ امروز را نشان می‌دهند؛ تا دست نزنید هیچ عددی عوض نمی‌شود."
+      >
+        <p className="field-hint">
+          «مشمولِ بیمه» یک پرچمِ واحد نیست: یک عامل می‌تواند مبنای بیمه را بسازد ولی در مبنای عیدی نیاید.
+          پیش‌فرضِ مبنای بیمه و مالیات «همهٔ عوامل» است و پیش‌فرضِ سه مبنای مزایا «فقط حقوق پایه» —
+          دقیقاً همان فرمولی که تا امروز اجرا می‌شد.
+        </p>
+        <AsyncBlock
+          loading={rows == null}
+          error={error}
+          empty={rows != null && rows.length === 0}
+          emptyText="اول یک عامل بسازید."
+        >
+          <div className="table-scroll">
+            <table className="cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>عامل</th>
+                  {PURPOSES.map((key) => <th key={key}>{FACTOR_PURPOSE_LABELS[key]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {(rows ?? []).map((row) => (
+                  <tr key={row.id}>
+                    <td className="card-title" data-label="عامل">{row.name}</td>
+                    {PURPOSES.map((key) => (
+                      <td key={key} data-label={FACTOR_PURPOSE_LABELS[key]}>
+                        <input
+                          type="checkbox"
+                          checked={Number(row.participation?.[key] ?? 0) > 0}
+                          disabled={busy}
+                          onChange={(e) => void toggle(row, key, e.target.checked)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AsyncBlock>
+        <Note msg={msg} />
       </SectionCard>
     </OpsPage>
   )

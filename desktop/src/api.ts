@@ -1073,7 +1073,59 @@ export interface TaxBracket {
   rate: string // نرخ بین ۰ و ۱
 }
 
-export interface PayrollSettingsRecord {
+/**
+ * پارامترهای قانونی‌ای که تا مهاجرتِ ۰۱۳۸ داخلِ سورس‌کدِ سرور ثابت بودند.
+ *
+ * پیش‌فرضِ هر کدام **همان ثابتی است که جایش را گرفته**، پس فرمی که این‌ها را
+ * نفرستد دقیقاً رفتارِ قبلی را می‌گیرد.
+ */
+export interface PayrollStatutoryParams {
+  /** سقفِ روزانه‌ی دستمزدِ مشمولِ بیمه. صفر = بی‌سقف. */
+  insurance_daily_ceiling: string
+  /** بیمه‌ی بیکاری — سهمِ کارفرما، به نرخِ کارفرما اضافه می‌شود. */
+  unemployment_rate: string
+  /** نرخِ مشاغل سخت: ذخیره و نمایش داده می‌شود، ولی **اعمال نمی‌شود** —
+   *  شمولش به کارمند وابسته است و کوبیتا هنوز آن پرچم را ندارد. */
+  hard_job_rate: string
+  eidi_base_multiplier: string
+  severance_days_per_year: number
+  monthly_work_days: string
+  standard_monthly_hours: string
+  overtime_multiplier: string
+  /** چه کسری از هر بیمه از مبنای مالیات کم می‌شود. */
+  tax_exempt_coef_social: string
+  tax_exempt_coef_supplementary: string
+  tax_exempt_coef_medical: string
+  /** کدام عاملِ موجود نقشِ بیمه‌ی تکمیلی/درمان را دارد. */
+  supplementary_employee_factor_id: string | null
+  supplementary_employer_factor_id: string | null
+  medical_factor_id: string | null
+  allow_negative_tax: boolean
+  /** خالص تا این تعداد رقم گِرد می‌شود (۳ = تا هزار ریال). صفر = بدونِ رند. */
+  payment_rounding_digits: number
+}
+
+/** همان پارامترها هنگامِ **نوشتن** — عدد، نه رشته (خروجیِ سرور `Decimal` است). */
+export interface PayrollStatutoryParamsIn {
+  insurance_daily_ceiling: number
+  unemployment_rate: number
+  hard_job_rate: number
+  eidi_base_multiplier: number
+  severance_days_per_year: number
+  monthly_work_days: number
+  standard_monthly_hours: number
+  overtime_multiplier: number
+  tax_exempt_coef_social: number
+  tax_exempt_coef_supplementary: number
+  tax_exempt_coef_medical: number
+  supplementary_employee_factor_id: string | null
+  supplementary_employer_factor_id: string | null
+  medical_factor_id: string | null
+  allow_negative_tax: boolean
+  payment_rounding_digits: number
+}
+
+export interface PayrollSettingsRecord extends PayrollStatutoryParams {
   id: string
   year: number
   insurance_employee_rate: string
@@ -1099,7 +1151,7 @@ export const upsertPayrollSettings = (
     min_base_wage: number
     annual_leave_days: number
     notes: string
-  },
+  } & Partial<PayrollStatutoryParamsIn>,
 ) => authedSend<PayrollSettingsRecord>(token, 'PUT', '/api/payroll-settings', data)
 
 export interface ItemRecord {
@@ -6533,6 +6585,9 @@ export interface PayrollFactorRecord {
   /** خالی = عاملِ ساخته‌ی کاربر؛ کلیددار = عاملی که موتورِ فیش می‌شناسدش. */
   system_key: string
   is_active: boolean
+  /** ضریبِ **مؤثرِ** شرکت در هر مبنا — با پیش‌فرض‌ها حل‌شده، همان چیزی که موتور
+   *  استفاده می‌کند. رابط قاعده‌ی پیش‌فرض را دوباره پیاده نمی‌کند. */
+  participation: Record<string, string>
 }
 
 export interface PayrollTaxGroupRecord {
@@ -8331,3 +8386,22 @@ export const deleteTaxTable = (token: string, id: string) =>
   authedDelete(token, `/api/tax-tables/${id}`)
 export const fetchTaxBreakdown = (token: string, payslipId: string) =>
   authedGet<TaxBreakdown>(token, `/api/payslips/${payslipId}/tax-breakdown`)
+
+/** مبناهایی که یک عاملِ حقوق می‌تواند در آن‌ها شرکت کند. */
+export const FACTOR_PURPOSE_LABELS: Record<string, string> = {
+  insurance_base: 'مبنای بیمه',
+  tax_base: 'مبنای مالیات',
+  eidi_base: 'مبنای عیدی',
+  severance_base: 'مبنای سنوات',
+  leave_base: 'مبنای بازخرید مرخصی',
+}
+
+/** ضریبِ شرکتِ یک عامل در مبناها. ردیفِ برابرِ پیش‌فرض روی سرور پاک می‌شود. */
+export const setFactorParticipation = (
+  token: string,
+  factorId: string,
+  participation: Record<string, number>,
+) =>
+  authedSend<PayrollFactorRecord>(token, 'PUT', `/api/payroll-factors/${factorId}/participation`, {
+    participation,
+  })
