@@ -1,5 +1,6 @@
 import uuid
 from datetime import date as date_
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -56,10 +57,34 @@ FACTOR_CATEGORIES = ("benefit", "deduction")
 FACTOR_CATEGORY_LABELS = {"benefit": "مزایا", "deduction": "کسورات"}
 FACTOR_KINDS = ("fixed", "variable")
 FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "متغیر"}
+#: بُعدِ تفصیلیِ ردیفِ سندی که این عامل می‌سازد. خالی = بی‌بُعد (رفتارِ امروز).
+#:
+#: **فهرست عمداً همان دو بُعدی است که کوبیتا دارد** — `cost_center` و
+#: `analytic`. بُعدِ سومی که زیرساخت ندارد یعنی تنظیمی که هیچ ردیفی را برچسب
+#: نمی‌زند.
+FACTOR_DETAIL_CLASSES = ("", "cost_center", "counterparty")
+FACTOR_DETAIL_CLASS_LABELS = {
+    "": "بدون تفصیلی",
+    "cost_center": "مرکز هزینه",
+    "counterparty": "طرف مقابل",
+}
 
 #: کلیدِ سیستمیِ عامل — پلِ عاملِ کاربر به ستون‌های موتورِ فیشِ حقوقی. خالی یعنی
 #: عاملِ ساخته‌ی کاربر که در «سایر مزایا» جمع می‌شود.
 FACTOR_SYSTEM_KEYS = ("", "base", "housing", "food", "child")
+#: هدف‌هایی که یک عاملِ حقوق می‌تواند در مبنایشان شرکت کند. **پنج‌تا، چون کوبیتا
+#: امروز دقیقاً برای همین پنج‌تا موتور دارد** — هدفی که موتوری پشتش نیست، تنظیمی
+#: است که هیچ عددی را عوض نمی‌کند و کاربر را گمراه می‌کند.
+FACTOR_PURPOSES = ("insurance_base", "tax_base", "eidi_base", "severance_base", "leave_base")
+FACTOR_PURPOSE_LABELS = {
+    "insurance_base": "مبنای بیمه",
+    "tax_base": "مبنای مالیات",
+    "eidi_base": "مبنای عیدی",
+    "severance_base": "مبنای سنوات",
+    "leave_base": "مبنای بازخرید مرخصی",
+}
+#: سه هدفی که پیش‌فرضشان «فقط حقوق پایه» است، نه «همه‌ی عوامل».
+BENEFIT_BASE_PURPOSES = ("eidi_base", "severance_base", "leave_base")
 DEFAULT_FACTORS = (
     ("حقوق پایه", "base"),
     ("حق مسکن", "housing"),
@@ -76,8 +101,42 @@ TAX_GROUP_KIND_LABELS = {
 #: درصدِ پیش‌فرضِ هر نوع — کاربر می‌تواند عوضش کند، ولی این‌ها نقطه‌ی شروع‌اند.
 TAX_GROUP_DEFAULT_PERCENT = {"normal": 100, "deprived": 50, "exempt": 0}
 
-BRANCH_KINDS = ("insurance", "tax")
-BRANCH_KIND_LABELS = {"insurance": "شعبه بیمه", "tax": "حوزه مالیاتی"}
+#: سه نوعِ شعبه‌ی قانونی — **هر سه در همان فرم و همان فهرست**، نه سه زیرسیستمِ
+#: موازی. «بیمه تکمیلی» نوعِ سومِ همان کرکره است، پس `supplementary_branch`ِ
+#: متنیِ روی حکم باید سرانجام به همین مِستر برسد.
+BRANCH_KINDS = ("insurance", "tax", "supplementary")
+BRANCH_KIND_LABELS = {
+    "insurance": "شعبه بیمه",
+    "tax": "حوزه مالیاتی",
+    "supplementary": "بیمه تکمیلی",
+}
+
+#: «نحوه محاسبه مالیات» — **فقط برای حوزه‌ی مالیاتی**.
+#:
+#: در فهرستِ شعب، ردیفِ مالیاتی «تعدیل ماهانه» دارد و ردیفِ تأمین اجتماعی همین
+#: ستون را **خالی** نشان می‌دهد. یعنی وجودِ میدان در فرمِ مشترک به معنای
+#: کاربردش برای هر نوع نیست، و این تفاوت باید سمتِ سرور فهمیده شود نه فقط با
+#: غیرفعال‌کردنِ یک ورودی در مرورگر.
+#:
+#: فهرست عمداً به همان مقادیرِ **دیده‌شده** بسته است — همان کاری که `0131` با
+#: `FREIGHT_BASES` کرد: قید این‌جاست تا روشی که موتوری برایش وجود ندارد از درِ
+#: پشتی وارد پایگاه داده نشود.
+#:
+#: **و هنوز مصرف نمی‌شود:** موتورِ مالیاتِ امروز تعدیلِ تجمیعی انجام می‌دهد و این
+#: ستون را نمی‌خواند. داده‌ی ثبتِ قانونی است، نه سوییچِ محاسبه.
+#: هدفِ محاسبه‌ی یک جدولِ مالیات. فقط دو مقدارِ **دیده‌شده** — «حقوق» و «عیدی» —
+#: و قید این‌جاست تا هدفی که موتوری برایش وجود ندارد وارد پایگاه داده نشود.
+#: افزودنِ هدفِ سوم یک مهاجرتِ یک‌خطی است؛ ساختارِ جدول هیچ‌جا «دقیقاً دو» را فرض
+#: نمی‌کند و همین مهم است.
+TAX_CALC_PURPOSES = ("salary", "eidi")
+TAX_CALC_PURPOSE_LABELS = {"salary": "حقوق", "eidi": "عیدی"}
+
+TAX_CALC_METHODS = ("monthly", "annual", "none")
+TAX_CALC_METHOD_LABELS = {
+    "monthly": "تعدیل ماهانه",
+    "annual": "تعدیل سالانه",
+    "none": "بدون تعدیل",
+}
 
 
 
@@ -261,12 +320,55 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
     loan_deduction: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: تعدیلِ گِردکردنِ خالص (مثبت = بالا گِرد شد، منفی = پایین). با تنظیمِ
+    #: `payment_rounding_digits` ساخته می‌شود و پیش‌فرضش صفر است.
+    #:
+    #: **چرا روی فیش و نه فقط در سند:** بی این ستون، تساویِ «خالص = ناخالص −
+    #: کسورات» می‌شکست و کارمند چند ریال اختلافِ بی‌توضیح می‌دید.
+    rounding_adjustment: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     net_pay: Mapped[float] = mapped_column(Numeric(18, 0))
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    # ── عکسِ شعبه‌ی قانونیِ لحظه‌ی صدور ─────────────────────────────────────────
+    #
+    #: **چرا عکس و نه پیوند.** فایلِ بیمه و فایلِ مالیات باید *بازتولیدپذیر*
+    #: باشند: اگر کارگاه سالِ بعد دوباره ثبت شود و کد یا نامش عوض شود، فایلِ
+    #: پارسال باید همان چیزی را بدهد که پارسال داد. خواندنِ مِسترِ امروز یعنی
+    #: خروجیِ یک دوره‌ی بسته بی‌صدا عوض شود.
+    #:
+    #: همان الگوی `PayslipLine.factor_name` که از قبل این‌جاست — و همان تفاوتی که
+    #: با **هویتِ کارمند** دارد: اصلاحِ نامِ یک آدم باید به فایل برسد (غلطِ تایپی
+    #: بوده)، ولی ثبتِ تازه‌ی کارگاه نباید گذشته را بازنویسی کند (رویدادِ واقعیِ
+    #: تازه‌ای بوده).
+    #:
+    #: `NULL` یعنی فیشی که پیش از این مهاجرت صادر شده؛ خروجی برای آن‌ها به حلِ
+    #: زنده برمی‌گردد، چون عکسی وجود ندارد که برگردانده شود.
+    insurance_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    insurance_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    insurance_branch_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    tax_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    tax_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tax_branch_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
+    #: **کدام قاعده این مالیات را ساخت.**
+    #:
+    #: `tax_amount` یک عدد بود و بس. با این پیوند می‌شود پرسید «مالیاتِ مرداد از
+    #: کدام جدول آمد؟» و جواب گرفت — و تفکیکِ پله‌به‌پله از همین‌جا بازسازی
+    #: می‌شود (`tax_breakdown`)، بی‌آنکه چیزی اضافه ذخیره شود.
+    #:
+    #: `RESTRICT` روی جدول: جدولی که فیشی به آن استناد کرده حذف‌شدنی نیست.
+    #: `NULL` = فیشِ پیش از مهاجرتِ ۰۱۳۷.
+    tax_table_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tax_tables.id", ondelete="RESTRICT"), nullable=True
+    )
 
     #: تفکیکِ عامل‌به‌عاملِ همین فیش. **ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند** و این
     #: ردیف‌ها توضیحشان؛ سرویس هنگامِ صدور هر دو را با هم می‌نویسد و تستی جمعشان
@@ -322,6 +424,29 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "year", name="uq_payroll_settings_tenant_year"),
+        CheckConstraint("insurance_daily_ceiling >= 0", name="ck_payroll_settings_ceiling"),
+        CheckConstraint("unemployment_rate >= 0 AND unemployment_rate <= 1", name="ck_payroll_settings_unemployment_rate"),
+        CheckConstraint("hard_job_rate >= 0 AND hard_job_rate <= 1", name="ck_payroll_settings_hard_job_rate"),
+        CheckConstraint(
+            "eidi_base_multiplier > 0 AND eidi_base_multiplier <= 12", name="ck_payroll_settings_eidi_multiplier"
+        ),
+        CheckConstraint(
+            "severance_days_per_year > 0 AND severance_days_per_year <= 365", name="ck_payroll_settings_severance_days"
+        ),
+        CheckConstraint("monthly_work_days > 0 AND monthly_work_days <= 31", name="ck_payroll_settings_month_days"),
+        CheckConstraint(
+            "standard_monthly_hours > 0 AND standard_monthly_hours <= 744", name="ck_payroll_settings_month_hours"
+        ),
+        CheckConstraint(
+            "overtime_multiplier > 0 AND overtime_multiplier <= 10", name="ck_payroll_settings_overtime_multiplier"
+        ),
+        CheckConstraint(
+            "tax_exempt_coef_social >= 0 AND tax_exempt_coef_social <= 1", name="ck_payroll_settings_coef_social"
+        ),
+        CheckConstraint(
+            "payment_rounding_digits >= 0 AND payment_rounding_digits <= 6",
+            name="ck_payroll_settings_rounding_digits",
+        ),
     )
 
     year: Mapped[int] = mapped_column(Integer)
@@ -334,6 +459,61 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     min_base_wage: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: روزهای مرخصی استحقاقیِ سالانه (قانون کار: ۲۶ روز کاری).
     annual_leave_days: Mapped[int] = mapped_column(Integer, default=26, server_default="26")
+
+    # ── پارامترهای قانونی که تا مهاجرتِ ۰۱۳۸ داخلِ سورس‌کد ثابت بودند ───────────
+    #
+    #: عددِ قانونی در کد یعنی هر مصوبه‌ی تازه یک استقرار می‌خواهد، و یعنی هیچ
+    #: مستأجری نمی‌تواند عددِ خودش را داشته باشد. پیش‌فرضِ هر کدام **دقیقاً همان
+    #: ثابتی است که جایش را گرفته**، پس عددِ هیچ فیشی با این مهاجرت عوض نشد.
+
+    #: سقفِ روزانه‌ی دستمزدِ مشمولِ بیمه. **صفر یعنی بی‌سقف** — همان رفتاری که تا
+    #: امروز بود، چون هیچ سقفی اعمال نمی‌شد. ماهانه = این × `monthly_work_days`.
+    insurance_daily_ceiling: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: بیمه‌ی بیکاری و مشاغل سخت: سهمِ **کارفرما**، جدا از نرخِ اصلی. صفر = غیرفعال.
+    #: شمولشان از خودِ حکم می‌آید (`exempt_unemployment_insurance` و `is_hard_job`)،
+    #: نه از این‌جا — این فقط نرخِ سالِ جاری است.
+    unemployment_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
+    hard_job_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
+
+    #: عیدی = مبنا × این ضریب. تا امروز `base * 2` در `benefits.py` بود.
+    eidi_base_multiplier: Mapped[float] = mapped_column(Numeric(5, 2), default=2, server_default="2")
+    #: سنوات = مبنا × (روزهای سابقه ÷ ۳۶۵) × (این ÷ روزهای ماه). ۳۰ = یک ماه در سال.
+    severance_days_per_year: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+
+    #: مبنای روز کاریِ ماه — مقسومٌ‌علیهِ نسبتِ کارکرد و دستمزدِ روزانه.
+    monthly_work_days: Mapped[float] = mapped_column(Numeric(5, 2), default=30, server_default="30")
+    #: ساعتِ کارِ ماهانه‌ی قانونی و ضریبِ اضافه‌کار — مبنای نرخِ ساعتی.
+    standard_monthly_hours: Mapped[float] = mapped_column(Numeric(6, 2), default=194, server_default="194")
+    overtime_multiplier: Mapped[float] = mapped_column(Numeric(5, 2), default=Decimal("1.4"), server_default="1.4")
+
+    #: چه کسری از سهمِ بیمه‌ی تأمین اجتماعیِ کارمند از **مبنای مالیات** کم می‌شود.
+    #: تا امروز این ضریب عددِ ثابتِ ۱ در فرمول بود.
+    tax_exempt_coef_social: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+    #: دو ضریبِ دیگرِ فرمِ مرجع. بی سه ارجاعِ پایین بی‌مصرف‌اند، چون کوبیتا
+    #: نمی‌دانست کدام ردیفِ کسور بیمه‌ی تکمیلی است و کدام درمان.
+    tax_exempt_coef_supplementary: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+    tax_exempt_coef_medical: Mapped[float] = mapped_column(Numeric(5, 4), default=1, server_default="1")
+
+    #: **کدام عاملِ موجود این نقش را دارد** — نه ستونِ مبلغِ تازه. همان تفکیکی که
+    #: فرمِ مرجع دارد: تعریفِ عامل جای خودش است، نسبت‌دادنِ نقش این‌جا.
+    #: `NULL` = نسبت داده نشده، و آن‌وقت ضریبِ متناظر روی هیچ مبلغی نمی‌نشیند.
+    supplementary_employee_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    supplementary_employer_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    medical_factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="SET NULL"), nullable=True
+    )
+    #: «مالیاتِ منفی محاسبه نشود» — یک سیاستِ صریح، نه یک `if tax < 0` پراکنده.
+    #: `False` (پیش‌فرض) همان رفتارِ امروز است: استرداد کارِ تعدیلِ پایانِ سال است.
+    allow_negative_tax: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: خالصِ پرداختی تا این تعداد رقم گِرد می‌شود (۳ = تا هزار ریال). صفر = بدونِ
+    #: رند. اختلافِ رند در سند به نقشِ `payroll_rounding` می‌رود، نه داخلِ هزینه.
+    payment_rounding_digits: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     notes: Mapped[str] = mapped_column(Text, default="")
 
 
@@ -420,6 +600,20 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
             "system_key IN ('', 'base', 'housing', 'food', 'child')",
             name="ck_payroll_factors_system_key",
         ),
+        CheckConstraint(
+            f"expense_detail_class IN {FACTOR_DETAIL_CLASSES}",
+            name="ck_payroll_factors_expense_detail_class",
+        ),
+        CheckConstraint(
+            f"payable_detail_class IN {FACTOR_DETAIL_CLASSES}",
+            name="ck_payroll_factors_payable_detail_class",
+        ),
+        #: بُعد بی‌حساب بی‌معنی است: ردیفِ سندی نیست که بُعد بگیرد.
+        CheckConstraint(
+            "(expense_detail_class = '' OR expense_account_id IS NOT NULL) "
+            "AND (payable_detail_class = '' OR payable_account_id IS NOT NULL)",
+            name="ck_payroll_factors_detail_needs_account",
+        ),
         #: هر کلیدِ سیستمی حداکثر یک عامل، وگرنه «حقوق پایه» دوتا می‌شود و ستونِ
         #: `base_salary` نمی‌داند از کدام ساخته شود.
         Index(
@@ -434,7 +628,72 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(20), default="fixed", server_default="fixed")
     is_extraordinary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     system_key: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    #: **از مهاجرتِ ۰۱۴۰ واقعاً خوانده می‌شود.** پیش از آن نوشته می‌شد و هیچ‌کس
+    #: نمی‌خوانْدَش، پس عاملِ «غیرفعال» همچنان به قراردادِ تازه اضافه می‌شد.
+    #: حالا غیرفعال یعنی «دیگر انتخاب نشو» — نه «از گذشته پاک شو»: ردیف‌های
+    #: موجودِ قرارداد و فیش‌های صادرشده دست نمی‌خورند.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: ترتیبِ ردیف‌های فیش. **فقط نمایشی** — هیچ محاسبه‌ای از آن نمی‌خوانَد، و
+    #: چون `PayslipLine.seq` لحظه‌ی صدور منجمد می‌شود، تغییرش فیشِ گذشته را تکان
+    #: نمی‌دهد. صفر برای همه = ترتیبِ الفباییِ امروز.
+    display_priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # ── پروفایلِ حسابداریِ عامل ────────────────────────────────────────────────
+    #
+    #: **تقدم صریح است:** عاملی که حساب دارد سهمش به همان می‌رود، عاملِ بی‌حساب
+    #: به حسابِ عمومیِ `payroll_expense`/`payroll_deductions_payable`. پس تا وقتی
+    #: هیچ عاملی حسابی نگیرد، سند بایت‌به‌بایت همان می‌ماند.
+    #:
+    #: دو سمت مستقل‌اند و عمداً در یک ستون خلاصه نشدند: مزایا سمتِ **هزینه** دارد
+    #: و کسور سمتِ **پرداختنی** (بیمه‌گرِ تکمیلی، صندوق…). یک ستونِ مشترک یعنی
+    #: نشود گفت کدام‌یک منظور است.
+    expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    expense_detail_class: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    payable_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    payable_detail_class: Mapped[str] = mapped_column(String(20), default="", server_default="")
+
+
+class PayrollFactorParticipation(TenantMixin, UUIDPKMixin, Base):
+    """آیا این عامل در این محاسبه شرکت می‌کند — و با چه ضریبی.
+
+    **جدولِ استثناهاست، نه جدولِ همه‌چیز.** نبودنِ ردیف یعنی «پیش‌فرض»، و پیش‌فرض
+    عمداً همان رفتاری است که کوبیتا پیش از مهاجرتِ ۰۱۳۹ داشت:
+
+    * هدفِ بیمه و مالیات → شریک، با ضریبِ ۱ (کلِ ناخالص مشمول بود)
+    * هدفِ عیدی/سنوات/مرخصی → شریک فقط اگر عاملِ «حقوق پایه» باشد
+
+    این عدمِ‌تقارن انتخابِ سلیقه‌ای نیست؛ رمزگذاریِ دقیقِ فرمولِ امروز است. پس
+    جدولِ خالی یعنی «هیچ عددی عوض نشده»، و هر ردیف یک تصمیمِ صریحِ کاربر است.
+
+    منطقِ حل در [`factor_participation`](../services/factor_participation.py) است،
+    نه این‌جا — تا هر مصرف‌کننده‌ای (فیش، عیدی، سنوات، مرخصی) از یک قاعده بگذرد.
+    """
+
+    __tablename__ = "payroll_factor_participations"
+    __table_args__ = (
+        CheckConstraint(f"purpose IN {FACTOR_PURPOSES}", name="ck_factor_participations_purpose"),
+        CheckConstraint("coefficient >= 0 AND coefficient <= 1", name="ck_factor_participations_coefficient"),
+        Index(
+            "uq_factor_participations_factor_purpose",
+            "tenant_id", "factor_id", "purpose",
+            unique=True,
+        ),
+        Index("ix_factor_participations_purpose", "tenant_id", "purpose"),
+    )
+
+    factor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="CASCADE")
+    )
+    purpose: Mapped[str] = mapped_column(String(30))
+    included: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    coefficient: Mapped[float] = mapped_column(Numeric(6, 4), default=1, server_default="1")
+
+    factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
 
 
 class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -457,23 +716,230 @@ class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
-class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """شعبه‌ی تأمین اجتماعی یا حوزه‌ی مالیاتی.
+class TaxTable(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """جدولِ مالیاتِ حقوق: یک قاعده‌ی قانونیِ تاریخ‌دار، نه «نرخِ جاری».
 
-    یک جدول برای هر دو، چون شکلشان یکی است (کد + عنوان) و فرمِ قرارداد هر دو را از
-    یک‌جا می‌خواهد. `kind` تفکیکشان می‌کند.
+    تا امروز پلکانِ مالیات یک ستونِ JSONB روی `PayrollSettings` بود، یکتا روی
+    `(مستأجر، سال)`. یعنی یک بُعد داشت — سال — در حالی که قاعده‌ی واقعی سه بُعد
+    دارد:
+
+        (تاریخِ اجرا، گروهِ مالیاتی، نوعِ محاسبه)  →  پلکان
+
+    و این سه هم‌زمان لازم‌اند: در یک سال، «عادی» و «مناطق محروم» دو **جدولِ
+    مستقل** دارند، و «حقوق» و «عیدی» هم دو جدولِ مستقلِ دیگر.
+
+    **چرا تاریخِ اجرا و نه سال.** قانون لزوماً اولِ فروردین عوض نمی‌شود. جدولِ
+    مؤثر آخرین جدولی است که `effective_from` آن از تاریخِ محاسبه نگذشته — و
+    هرگز از روی *عنوان* پیدا نمی‌شود. عنوان فقط نمایشی است.
+
+    **جدولِ تازه جای قبلی را نمی‌گیرد.** سالِ تازه یعنی رکوردِ تازه؛ جدول‌های
+    سال‌های قبل می‌مانند تا محاسبه‌ی گذشته بازتولیدپذیر بماند.
+
+    **شعبه این‌جا نیست، و عمداً.** «نحوه محاسبه مالیات» (تعدیل ماهانه/سالانه)
+    روی شعبه می‌نشیند و می‌گوید *چطور* تعدیل شود؛ این جدول می‌گوید *چه نرخی* روی
+    *چه پایه‌ای*. یک جدول را چند شعبه می‌توانند استفاده کنند.
+    """
+
+    __tablename__ = "tax_tables"
+    __table_args__ = (
+        CheckConstraint(
+            f"calculation_type IN {TAX_CALC_PURPOSES}", name="ck_tax_tables_calculation_type"
+        ),
+        #: **یکتاییِ قاعده، نه یکتاییِ عنوان.** دو جدولِ هم‌زمان با همان گروه و
+        #: همان نوعِ محاسبه، محاسبه را مبهم می‌کند و حل‌کننده باید بی‌صدا یکی را
+        #: انتخاب کند — که همان چیزی است که نباید بشود.
+        #:
+        #: `COALESCE` چون «بی‌گروه» خودش یک حالتِ معتبر است: جدولِ پیش‌فرضی که
+        #: برای حکم‌های بدونِ گروهِ مالیاتی به کار می‌رود.
+        Index(
+            "uq_tax_tables_scope",
+            "tenant_id",
+            "effective_from",
+            "calculation_type",
+            text("COALESCE(tax_group_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
+        ),
+    )
+
+    #: عنوان و عنوانِ دوم — **فقط نمایشی**. حل‌کننده هرگز متنشان را نمی‌خواند.
+    title: Mapped[str] = mapped_column(String(200))
+    title2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: تاریخِ شروعِ اعتبار. تاریخِ پایان عمداً ستون ندارد: از جدولِ بعدیِ همان
+    #: دامنه مشتق می‌شود، و دو منبع برای یک بازه بالاخره از هم عقب می‌مانند.
+    effective_from: Mapped[date_] = mapped_column(Date, index=True)
+
+    #: `NULL` یعنی **جدولِ پیش‌فرض** — برای حکم‌هایی که گروهِ مالیاتی ندارند.
+    tax_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_tax_groups.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    tax_group: Mapped["PayrollTaxGroup | None"] = relationship(lazy="joined")
+
+    #: هدفِ محاسبه: حقوقِ ماهانه یا عیدی. **جدولِ حقوق برای عیدی به کار نمی‌رود**
+    #: — پله‌ها و آستانه‌هایشان یکی نیستند.
+    calculation_type: Mapped[str] = mapped_column(String(20), default="salary", server_default="salary")
+
+    brackets: Mapped[list["TaxTableBracket"]] = relationship(
+        back_populates="table", cascade="all, delete-orphan", order_by="TaxTableBracket.seq"
+    )
+
+
+class TaxTableBracket(TenantMixin, UUIDPKMixin, Base):
+    """یک پله‌ی تصاعدیِ جدولِ مالیات.
+
+    **مدلِ «سقفِ تجمعی» و نه «از/تا»** — تصمیمی که از پیاده‌سازیِ قبلی می‌آید و
+    عمداً حفظ شد: با سقفِ تجمعی، مرزِ پایینِ هر پله سقفِ پله‌ی قبل است، پس
+    **شکاف و همپوشانیِ پله‌ها ساختاراً ناممکن‌اند**. با `from/to`ِ آزاد هر دو
+    ممکن‌اند و باید با اعتبارسنجی جلویشان گرفته شود؛ این‌جا موضوعیت ندارند.
+
+    «مبلغ جزء» و «مبلغ کل» ستون ندارند: هر دو از سقف و نرخ **مشتق** می‌شوند، و
+    ذخیره‌شان یعنی دو حقیقت که با ویرایشِ یک نرخ از هم جدا می‌افتند.
+    """
+
+    __tablename__ = "tax_table_brackets"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "table_id", "seq", name="uq_tax_table_brackets_seq"),
+        CheckConstraint("rate >= 0 AND rate <= 1", name="ck_tax_table_brackets_rate"),
+        CheckConstraint("up_to IS NULL OR up_to > 0", name="ck_tax_table_brackets_up_to"),
+    )
+
+    table_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tax_tables.id", ondelete="CASCADE"), index=True
+    )
+    #: ترتیبِ نمایش. **مرجعِ محاسبه نیست** — موتور از روی `up_to` مرتب می‌کند، تا
+    #: یک ردیفِ جابه‌جا در رابط مالیات را عوض نکند.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: سقفِ تجمعیِ سالانه. `NULL` یعنی نامحدود — و **فقط ردیفِ آخر**.
+    #: عددِ جادوییِ «۹۹٬۹۹۹٬۹۹۹٬۹۹۹» عمداً استفاده نشد.
+    up_to: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    #: نرخ به‌صورتِ کسر (۰٫۰۷۵ = ۷٫۵٪). شش رقمِ اعشار، چون نرخِ اعشاری واقعی است
+    #: و `Numeric` — نه `float` — چون این یک محاسبه‌ی مالیِ قانونی است.
+    rate: Mapped[float] = mapped_column(Numeric(9, 6), default=0, server_default="0")
+
+    table: Mapped["TaxTable"] = relationship(back_populates="brackets")
+
+
+class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """شعبه‌ی قانونی: تأمین اجتماعی، حوزه‌ی مالیاتی، یا بیمه‌ی تکمیلی.
+
+    **یک مِستر برای هر سه**، نه سه زیرسیستمِ موازی — چون فرم یکی است، فهرست یکی
+    است، و هر سه نوع از همان کرکره انتخاب می‌شوند. `kind` تفکیکشان می‌کند.
+
+    ساختارش دو لایه است:
+
+    * **هسته‌ی مشترکِ ثبت** — هویت، طرف حساب، شناسه‌ی ثبت، کارگاه، کارفرما،
+      نشانی، شماره‌ی پیمان، نفراتِ معاف، مرکز هزینه. این‌ها برای هر سه نوع
+      معنا دارند، حتی اگر همه‌ی نوع‌ها همه‌شان را پر نکنند.
+    * **سیاستِ نوع‌محور** — `tax_calculation_method` که **فقط** برای حوزه‌ی
+      مالیاتی است. در فهرستِ شعب، ردیفِ مالیاتی مقدار دارد و ردیفِ تأمین
+      اجتماعی همان ستون را خالی نشان می‌دهد.
+
+    این مِستر **ثبت** است نه نرخ: نرخِ بیمه‌ی کارمند و کارفرما، سقف و کفِ بیمه،
+    و بیمه‌ی بیکاری هیچ‌کدام این‌جا نیستند و نباید بیایند — از `PayrollSettings`
+    می‌آیند.
     """
 
     __tablename__ = "insurance_tax_branches"
     __table_args__ = (
         UniqueConstraint("tenant_id", "kind", "name", name="uq_insurance_tax_branches_tenant_kind_name"),
         CheckConstraint(f"kind IN {BRANCH_KINDS}", name="ck_insurance_tax_branches_kind"),
+        #: **قیدِ نوع‌محور، در خودِ پایگاه داده.** غیرفعال‌کردنِ ورودی در مرورگر
+        #: کافی نیست: یک درخواستِ مستقیمِ API می‌تواند «نحوه محاسبه مالیات» را روی
+        #: شعبه‌ی بیمه بنشاند و آن‌وقت فهرست چیزی نشان می‌دهد که معنا ندارد.
+        CheckConstraint(
+            "tax_calculation_method = '' OR kind = 'tax'",
+            name="ck_insurance_tax_branches_tax_method_is_tax_only",
+        ),
+        CheckConstraint(
+            f"tax_calculation_method = '' OR tax_calculation_method IN {TAX_CALC_METHODS}",
+            name="ck_insurance_tax_branches_tax_method",
+        ),
+        CheckConstraint(
+            "insurance_exempt_count >= 0", name="ck_insurance_tax_branches_exempt_count"
+        ),
     )
 
     code: Mapped[str] = mapped_column(String(20), default="", server_default="")
     name: Mapped[str] = mapped_column(String(150))
     kind: Mapped[str] = mapped_column(String(20), default="insurance", server_default="insurance")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: **هویتِ حسابداریِ شعبه**.
+    #:
+    #: شعبه تا امروز فقط یک نام بود، در حالی که بدهیِ بیمه و مالیاتِ تکلیفی
+    #: واقعاً **به همان سازمان پرداخت می‌شود** — و پرداخت طرفِ حساب می‌خواهد.
+    #: پیوند به `Contact` است نه به تفصیلی: طرف حساب از قبل `analytic_id` دارد،
+    #: و شناسه‌اش پایدار می‌ماند حتی وقتی کد و عنوانِ تفصیلی عوض شوند.
+    #:
+    #: **یکتا نیست، و عمداً:** یک سازمان می‌تواند چند شعبه داشته باشد.
+    #: `NULL` یعنی «هنوز وصل نشده» — شعبه‌های پیش از این مهاجرت همه همین‌اند.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact: Mapped["Contact | None"] = relationship(lazy="joined")  # noqa: F821
+
+    # ── هسته‌ی مشترکِ ثبتِ قانونی ──────────────────────────────────────────────
+
+    #: «کد شرکت / شماره پرونده». عمداً **عمومی** نام‌گذاری شده و نه
+    #: `tax_file_number`: برچسبِ فرم خودش ترکیبی است، و معنایش با نوعِ شعبه عوض
+    #: می‌شود — پرونده‌ی مالیاتی برای حوزه، کدِ کارگاه برای تأمین اجتماعی.
+    #: قالب و طولش هیچ‌جا اثبات نشده، پس هیچ اعتبارسنجیِ عددی روی آن نیست.
+    registration_code: Mapped[str] = mapped_column(String(50), default="", server_default="")
+
+    #: کارگاهِ ثبت‌شده نزدِ مرجع. **«محل خدمت» نیست** — `ServiceLocation` می‌گوید
+    #: کارمند کجا کار می‌کند، این می‌گوید کارفرما زیرِ کدام کارگاه ثبت شده. ممکن
+    #: است روزی نگاشت پیدا کنند، ولی یکی‌کردنشان امروز شاهدی ندارد.
+    workplace_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    #: نشانیِ کارگاه — **نشانیِ خودِ سازمان نیست**؛ آن روی طرف حساب است.
+    workplace_address: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: نامِ کارفرما همان‌طور که نزدِ مرجع ثبت شده. ممکن است با نامِ حقوقیِ شرکت
+    #: یکی باشد و ممکن است نباشد؛ تا وقتی سیاستش روشن نشده، این‌جا مستقل می‌ماند
+    #: و از مِسترِ شرکت خوانده یا بازنویسی نمی‌شود.
+    employer_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: «شماره پیمان» — قراردادِ کارفرما با مرجعِ قانونی. **قراردادِ استخدامیِ
+    #: کارمند نیست** و هیچ کلیدِ خارجی‌ای به `SalaryContract` ندارد.
+    agreement_number: Mapped[str] = mapped_column(String(50), default="", server_default="")
+
+    #: «نفرات معاف از بیمه» — یک عددِ سرصفحه‌ی ثبتِ کارگاه.
+    #:
+    #: **این عدد نمی‌گوید کدام کارمندان معاف‌اند** و نباید طوری رفتار شود که
+    #: بگوید: معافیتِ واقعی کارمند‌به‌کارمند روی خودِ حکم است
+    #: (`exempt_employee_insurance` و برادرانش). ترکیبِ این دو یعنی دو حقیقت، و
+    #: هیچ محاسبه‌ای این عدد را نمی‌خواند.
+    insurance_exempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    #: بُعدِ مرکز هزینه‌ی شعبه — از همان مِسترِ مشترک.
+    #:
+    #: **«محل خدمت» نیست و «حسابِ هزینه» هم نیست.** و هیچ سندی از روی آن زده
+    #: نمی‌شود: نقشش در ثبتِ حسابداریِ حقوق هیچ‌جا اثبات نشده، پس ذخیره می‌شود و
+    #: نمایش داده می‌شود، ولی قاعده‌ی ثبتی از آن ساخته نمی‌شود.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cost_center: Mapped["CostCenter | None"] = relationship(lazy="joined")  # noqa: F821
+
+    # ── سیاستِ نوع‌محور ────────────────────────────────────────────────────────
+
+    #: «نحوه محاسبه مالیات» — **فقط برای `kind = 'tax'`**، با قیدِ پایگاه داده.
+    #: خالی یعنی «تعیین نشده». هنوز هیچ محاسبه‌ای نمی‌خواندش.
+    tax_calculation_method: Mapped[str] = mapped_column(
+        String(30), default="", server_default=""
+    )
+
+    #: **هویتِ حسابداریِ شعبه** (مهاجرت ۰۱۳۶).
+    #:
+    #: شعبه تا امروز فقط یک نام بود، در حالی که بدهیِ بیمه و مالیاتِ تکلیفی
+    #: واقعاً **به همان سازمان پرداخت می‌شود** — و پرداخت طرفِ حساب می‌خواهد.
+    #: پیوند به `Contact` است نه به تفصیلی: طرف حساب از قبل `analytic_id` دارد،
+    #: و شناسه‌اش پایدار می‌ماند حتی وقتی کد و عنوانِ تفصیلی عوض شوند.
+    #:
+    #: `NULL` یعنی «هنوز وصل نشده» — شعبه‌های پیش از ۰۱۳۶ همه همین‌اند و دقیقاً
+    #: مثلِ قبل کار می‌کنند.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact: Mapped["Contact | None"] = relationship(lazy="joined")  # noqa: F821
 
 
 class SalaryContractLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

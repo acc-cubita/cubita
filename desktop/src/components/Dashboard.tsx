@@ -55,6 +55,7 @@ import {
   PayrollTaxGroupPage,
   ServiceLocationPage,
 } from '../pages/payroll/PayrollRefPages'
+import { TaxTablesPage } from '../pages/payroll/TaxTablesPage'
 import { ContactNewPage } from '../pages/company/ContactFormPage'
 import { NumberingPage } from '../pages/NumberingPage'
 import { BackupListPage } from '../pages/BackupListPage'
@@ -309,6 +310,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   jobtitle: 'شغل جدید',
   payrollfactors: 'عوامل حقوق و مزایا',
   payrolltaxgroups: 'گروه مالیاتی و شعب',
+  taxtables: 'جداول مالیات',
   integration: 'اتصال فروشگاه',
   billing: 'خریدهای سایت تجاری',
   accounts: 'مدیریت اکانت‌ها',
@@ -730,6 +732,7 @@ export function Dashboard({
           {page === 'jobtitle' && <JobTitlePage token={token} />}
           {page === 'payrollfactors' && <PayrollFactorPage token={token} />}
           {page === 'payrolltaxgroups' && <PayrollTaxGroupPage token={token} />}
+          {page === 'taxtables' && <TaxTablesPage token={token} />}
           {page === 'payroll' && (
             <div className="page panels">
               <PageHeader

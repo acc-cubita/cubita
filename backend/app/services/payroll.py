@@ -1,5 +1,6 @@
 import csv
 import io
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
@@ -10,9 +11,11 @@ from sqlalchemy.orm import Session
 from app.models.counters import DOC_PAYSLIP
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
+from app.models.inventory import Contact
 from app.models.payroll import (
     Attendance,
     Employee,
+    PayrollFactor,
     PayrollPeriod,
     PayrollSettings,
     Payslip,
@@ -21,38 +24,171 @@ from app.models.payroll import (
 )
 from app.models.user import User
 from app.services import chart_codes as cc
-from app.services import payroll_loans
+from app.services import factor_participation, payroll_loans
 from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
+from app.services.tax_tables import bracket_rows, resolve_tax_table
 
-# طبق قانون کار ایران: پایه‌ی ساعتی از تقسیم بر ۱۹۴ ساعت کاری استاندارد ماهانه و ضریب اضافه‌کاری ۱.۴ به‌دست می‌آید.
+#: **پیش‌فرض، نه قانون.** تا مهاجرتِ ۰۱۳۸ این دو عدد قانونِ سخت‌کدشده بودند؛ حالا
+#: `payroll_settings` می‌گویدشان و این‌ها فقط مقدارِ پیش‌فرضِ همان ستون‌ها هستند تا
+#: فراخوانی‌هایی که تنظیمات ندارند (تست‌های ریاضی) دست‌نخورده بمانند.
 STANDARD_MONTHLY_HOURS = Decimal("194")
 OVERTIME_MULTIPLIER = Decimal("1.4")
+MONTHLY_WORK_DAYS = Decimal("30")
 
 
 def _round(value: Decimal) -> Decimal:
     return value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def calc_overtime_pay(base_salary: Decimal, overtime_hours: Decimal) -> Decimal:
+def policy_value(settings, name: str, fallback: Decimal) -> Decimal:
+    """یک پارامترِ قانونی از تنظیمات، با پیش‌فرضِ «همان رفتارِ قبلی».
+
+    `getattr` عمدی است: `compute_payslip_amounts` از چند مسیر صدا زده می‌شود و
+    بعضی‌شان شیءِ ساختگی می‌دهند. نبودِ ستون نباید محاسبه را بشکند — باید همان
+    عددی را بدهد که پیش از مهاجرتِ ۰۱۳۸ می‌داد.
+
+    **صفر مقدارِ معتبری است** و به پیش‌فرض برنمی‌گردد: سقفِ صفر یعنی «بی‌سقف»، نرخِ
+    صفر یعنی «غیرفعال»، و ضریبِ معافیتِ صفر یعنی «هیچ بخشی از بیمه از مالیات کم
+    نشود» — هر سه انتخابِ صریحِ کاربرند، نه نبودِ مقدار.
+    """
+    raw = getattr(settings, name, None)
+    if raw is None or raw == "":
+        return fallback
+    return Decimal(str(raw))
+
+
+def _line_amount_for(contract, factor_id, proration: Decimal) -> Decimal:
+    """مبلغِ ردیفِ قرارداد برای یک عاملِ مشخص، به نسبتِ کارکرد. نبود = صفر.
+
+    `factor_id` وقتی `None` است که کاربر هنوز نقشِ بیمه‌ی تکمیلی/درمان را به هیچ
+    عاملی نداده — و آن‌وقت ضریبِ معافیتش روی هیچ مبلغی نمی‌نشیند، که همان رفتارِ
+    امروز است.
+    """
+    if factor_id is None:
+        return Decimal(0)
+    for line in getattr(contract, "lines", []) or []:
+        if line.factor_id == factor_id:
+            return Decimal(str(line.amount)) * proration
+    return Decimal(0)
+
+
+def calc_overtime_pay(
+    base_salary: Decimal,
+    overtime_hours: Decimal,
+    *,
+    monthly_hours: Decimal | None = None,
+    multiplier: Decimal | None = None,
+) -> Decimal:
     if overtime_hours <= 0:
         return Decimal(0)
-    hourly_rate = base_salary / STANDARD_MONTHLY_HOURS
-    return _round(hourly_rate * OVERTIME_MULTIPLIER * overtime_hours)
+    hourly_rate = base_salary / (monthly_hours or STANDARD_MONTHLY_HOURS)
+    return _round(hourly_rate * (multiplier or OVERTIME_MULTIPLIER) * overtime_hours)
 
 
-def calc_insurance_shares(insurable_pay: Decimal, employee_rate: Decimal, employer_rate: Decimal) -> tuple[Decimal, Decimal]:
+def calc_insurance_shares(
+    insurable_pay: Decimal,
+    employee_rate: Decimal,
+    employer_rate: Decimal,
+    *,
+    ceiling: Decimal | None = None,
+) -> tuple[Decimal, Decimal]:
+    """سهمِ کارمند و کارفرما از دستمزدِ مشمولِ بیمه.
+
+    `ceiling` سقفِ **ماهانه**‌ی دستمزدِ مشمول است (سقفِ روزانه × روزهای ماه).
+    `None` یا صفر یعنی بی‌سقف — رفتاری که تا پیش از مهاجرتِ ۰۱۳۸ تنها رفتارِ ممکن
+    بود، چون کوبیتا اصلاً سقف نداشت و نرخ را روی کلِ ناخالص می‌زد.
+    """
+    if ceiling is not None and ceiling > 0:
+        insurable_pay = min(insurable_pay, ceiling)
     return _round(insurable_pay * employee_rate), _round(insurable_pay * employer_rate)
 
 
+def contract_insurance_rates(contract, settings) -> tuple[Decimal, Decimal]:
+    """نرخِ مؤثرِ بیمه‌ی این **حکم** — سهمِ کارمند و سهمِ کارفرما.
+
+    **پنج پرچمِ مرده.** `salary_contracts` از قبل این‌ها را داشت و **هیچ‌کدام
+    خوانده نمی‌شدند**؛ کاربر «معاف از بیمه» را تیک می‌زد و بیمه همچنان کامل کسر
+    می‌شد. پروب: حکمی با `is_insured=False` و `exempt_employee_insurance=True`
+    باز هم ۲۱٬۰۰۰٬۰۰۰ سهمِ کارمند می‌گرفت.
+
+    معنیِ هرکدام از برچسبِ خودِ فرم می‌آید:
+
+        is_insured                     «مشمول بیمه تأمین اجتماعی»
+        exempt_employee_insurance      «معاف از بیمه سهم کارمند»
+        exempt_employer_insurance      «معاف از بیمه سهم کارفرما»
+        employer_exempt_percent        «درصد معافیت سهم کارفرما»
+        exempt_unemployment_insurance  «معاف از بیمه بیکاری»
+        is_hard_job                    «شغل سخت و زیان‌آور»
+
+    **درصدِ صفر با تیکِ معافیت یعنی معافیتِ کامل.** فرم آن میدان را فقط وقتی
+    نشان می‌دهد که تیک خورده باشد، و خواندنِ «صفر درصد معاف» یعنی تیک هیچ کاری
+    نکند — همان باگی که این تابع می‌بندد. پس درصد یک **تعدیلِ اختیاری** است، نه
+    شرطِ فعال‌شدن.
+
+    پیش‌فرضِ حکم (`is_insured=True` و بقیه خاموش) دقیقاً همان نرخ‌های تنظیمات را
+    می‌دهد، پس هیچ حکمی که این پرچم‌ها را دست نزده باشد عوض نمی‌شود.
+    """
+    if not bool(getattr(contract, "is_insured", True)):
+        return Decimal(0), Decimal(0)
+
+    employee_rate = (
+        Decimal(0)
+        if bool(getattr(contract, "exempt_employee_insurance", False))
+        else Decimal(str(settings.insurance_employee_rate))
+    )
+
+    employer_rate = Decimal(str(settings.insurance_employer_rate))
+    if bool(getattr(contract, "exempt_employer_insurance", False)):
+        percent = Decimal(str(getattr(contract, "employer_exempt_percent", 0) or 0))
+        employer_rate *= (Decimal(100) - (percent if percent > 0 else Decimal(100))) / Decimal(100)
+
+    #: بیمه‌ی بیکاری و مشاغل سخت هر دو سهمِ **کارفرما**یند و به نرخِ او افزوده
+    #: می‌شوند. معافیتِ درصدیِ بالا عمداً رویشان اعمال نمی‌شود: برچسبِ فرم
+    #: «درصد معافیت سهم کارفرما» است و این دو نرخِ مستقل‌اند، نه بخشی از آن.
+    if not bool(getattr(contract, "exempt_unemployment_insurance", False)):
+        employer_rate += policy_value(settings, "unemployment_rate", Decimal(0))
+    if bool(getattr(contract, "is_hard_job", False)):
+        employer_rate += policy_value(settings, "hard_job_rate", Decimal(0))
+
+    return employee_rate, employer_rate
+
+
+def round_payment(amount: Decimal, digits: int) -> Decimal:
+    """خالصِ پرداختی را تا `digits` رقم گِرد می‌کند. صفر = بدونِ رند.
+
+    **یک‌جا و قطعی.** فصلِ مرجع صریح است که رند نباید در محاسبه، سند، فایلِ بانک و
+    رابط جداگانه و متفاوت انجام شود؛ همه‌ی آن‌ها باید از همین یک تابع بگذرند.
+    """
+    if digits <= 0:
+        return _round(amount)
+    step = Decimal(10) ** digits
+    return (amount / step).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * step
+
+
+def _ascending(brackets: list[dict]) -> list[dict]:
+    """پلکان را صعودی می‌کند — گاردِ دومِ باگِ ترتیب.
+
+    اعتبارسنجیِ ورودی جلوی پلکانِ نامرتبِ *تازه* را می‌گیرد، ولی هر مستأجری که
+    پیش از آن یک فهرستِ نامرتب ذخیره کرده باشد همچنان مالیاتِ اشتباه می‌گرفت.
+    مرتب‌سازی این‌جا آن داده را هم درست می‌کند، بی‌آنکه چیزی را بازنویسی کند.
+
+    سقفِ `None` یعنی نامحدود، پس همیشه آخر می‌نشیند.
+    """
+    return sorted(
+        brackets,
+        key=lambda b: (b.get("up_to") is None, Decimal(str(b.get("up_to") or 0))),
+    )
+
+
 def calc_annual_tax(annual_taxable: Decimal, brackets: list[dict]) -> Decimal:
-    """محاسبه‌ی پلکانی مالیات سالانه. brackets صعودی و هر ردیف {"up_to": سقف تجمعی یا None, "rate": نرخ}."""
+    """محاسبه‌ی پلکانی مالیات سالانه. هر ردیف {"up_to": سقف تجمعی یا None, "rate": نرخ}."""
     if annual_taxable <= 0:
         return Decimal(0)
 
     tax = Decimal(0)
     lower = Decimal(0)
-    for bracket in brackets:
+    for bracket in _ascending(brackets):
         rate = Decimal(str(bracket["rate"]))
         up_to = bracket["up_to"]
         upper = Decimal(str(up_to)) if up_to is not None else None
@@ -87,6 +223,7 @@ def calc_cumulative_monthly_tax(
     annual_exemption: Decimal,
     brackets: list[dict],
     tax_percent: Decimal = Decimal(100),
+    allow_negative: bool = False,
 ) -> Decimal:
     """مالیاتِ این ماه، بر مبنای **تجمیعیِ سال** نه فقط همین ماه.
 
@@ -110,9 +247,11 @@ def calc_cumulative_monthly_tax(
     روی مالیاتِ *سالانه* اعمال می‌شود نه ماهانه، وگرنه با کسرِ «قبلاً پرداخت‌شده»
     ناسازگار می‌شد.
 
-    مقدارِ منفی برنمی‌گرداند: اگر ماهی کم‌درآمد باعث شود مالیاتِ تجمیعیِ لازم از
-    آنچه تا حالا کسر شده کمتر باشد، **مسترد نمی‌کنیم** — استردادِ مالیات کارِ
-    تعدیلِ پایانِ سال است، نه فیشِ ماهانه.
+    `allow_negative` سیاستِ «مالیاتِ منفی محاسبه نشود» است — یک تنظیم، نه یک `if`
+    پراکنده در فرمول. پیش‌فرضش (`False`) همان رفتارِ همیشگی است: اگر ماهی کم‌درآمد
+    باعث شود مالیاتِ تجمیعیِ لازم از آنچه تا حالا کسر شده کمتر باشد، **مسترد
+    نمی‌کنیم** — استردادِ مالیات کارِ تعدیلِ پایانِ سال است، نه فیشِ ماهانه. با
+    `True` همان مقدارِ منفی برگردانده می‌شود و فیش آن را به کارمند پس می‌دهد.
     """
     months = max(1, min(12, month_index))
     ytd_taxable = max(Decimal(0), prior_taxable + monthly_taxable)
@@ -124,7 +263,8 @@ def calc_cumulative_monthly_tax(
     annual_tax = calc_annual_tax(annual_after_exemption, brackets) * tax_percent / 100
 
     tax_due_to_date = annual_tax * months / 12
-    return max(Decimal(0), _round(tax_due_to_date - prior_tax))
+    this_month = _round(tax_due_to_date - prior_tax)
+    return this_month if allow_negative else max(Decimal(0), this_month)
 
 
 def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContract | None:
@@ -134,6 +274,35 @@ def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContrac
         .order_by(SalaryContract.effective_from.desc())
         .first()
     )
+
+
+def _branch_snapshot(db: Session, contract: SalaryContract) -> dict:
+    """کد و نامِ شعبه‌های قانونیِ حکم، برای نشستن روی فیش.
+
+    شش ستون، دو شعبه. `None` یعنی حکم آن شعبه را تعیین نکرده — و همان `None` روی
+    فیش می‌ماند، چون «تعیین نشده» با «خالی» یکی نیست و خروجی باید بتواند
+    تفکیکشان کند از فیشِ پیش از این مهاجرت که اصلاً عکسی ندارد.
+    """
+    from app.models.payroll import InsuranceTaxBranch
+
+    wanted = {
+        "insurance": getattr(contract, "insurance_branch_id", None),
+        "tax": getattr(contract, "tax_branch_id", None),
+    }
+    ids = {value for value in wanted.values() if value is not None}
+    rows = (
+        {row.id: row for row in db.query(InsuranceTaxBranch).filter(InsuranceTaxBranch.id.in_(ids)).all()}
+        if ids
+        else {}
+    )
+
+    snapshot: dict = {}
+    for prefix, branch_id in wanted.items():
+        branch = rows.get(branch_id) if branch_id is not None else None
+        snapshot[f"{prefix}_branch_id"] = branch.id if branch is not None else None
+        snapshot[f"{prefix}_branch_code"] = (branch.code or "") if branch is not None else None
+        snapshot[f"{prefix}_branch_name"] = (branch.name or "") if branch is not None else None
+    return snapshot
 
 
 def _tax_percent(db: Session, contract: SalaryContract) -> Decimal:
@@ -214,6 +383,35 @@ def _employee_loan_account(db: Session):
     )
 
 
+def _payroll_deductions_account(db: Session):
+    """«سایر کسورِ حقوق پرداختنی» — بدهی.
+
+    پولی که از کارمند نگه داشته شده (بیمه‌ی تکمیلی، صندوق، …) و به شخصِ ثالث
+    بدهکاریم. مثلِ حسابِ وام با `get_or_create_account` ساخته می‌شود تا چارتِ
+    کسب‌وکارهای موجود نشکند.
+    """
+    return get_or_create_account(
+        db,
+        cc.PAYROLL_DEDUCTIONS_PAYABLE,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.PAYROLL_DEDUCTIONS_PAYABLE],
+        name="سایر کسور حقوق پرداختنی",
+        acc_type="liability",
+        parent_code="21",
+    )
+
+
+def _payroll_rounding_account(db: Session):
+    """«تعدیلِ رندِ حقوق» — هزینه، هم‌خانواده‌ی `SALES_ROUNDING`."""
+    return get_or_create_account(
+        db,
+        cc.PAYROLL_ROUNDING,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.PAYROLL_ROUNDING],
+        name="تعدیل رند حقوق",
+        acc_type="expense",
+        parent_code="5",
+    )
+
+
 def _period_as_of_date(period: PayrollPeriod):
     # دوره‌ی حقوق شمسی است (سال/ماهِ شمسی)؛ تاریخِ سررسیدِ سند = آخرین روزِ همان ماهِ
     # شمسی، به میلادی (که در دفتر ذخیره می‌شود).
@@ -238,6 +436,27 @@ def contract_deductions(contract: SalaryContract) -> Decimal:
         if factor is not None and factor.category == "deduction":
             total += Decimal(line.amount)
     return total
+
+
+def _by_display_priority(contract) -> list:
+    """ردیف‌های قرارداد به ترتیبِ «اولویتِ نمایش»ِ عاملشان، بعد نام.
+
+    **فقط ترتیبِ نمایش را عوض می‌کند، نه هیچ عددی را.** جمعِ ردیف‌ها ثابت است و
+    گاردِ `assert_breakdown_matches` همان را می‌سنجد.
+
+    و **فیشِ گذشته را کهنه نمی‌کند**: `PayslipLine.seq` لحظه‌ی صدور منجمد
+    می‌شود، پس تغییرِ اولویت فقط روی فیشِ بعدی اثر دارد.
+
+    اولویتِ یکسان (پیش‌فرضِ صفر برای همه) یعنی ترتیب با نام تعیین شود — همان
+    چیزی که پیش از مهاجرتِ ۰۱۴۰ بود.
+    """
+    return sorted(
+        getattr(contract, "lines", []) or [],
+        key=lambda line: (
+            int(getattr(getattr(line, "factor", None), "display_priority", 0) or 0),
+            getattr(getattr(line, "factor", None), "name", "") or "",
+        ),
+    )
 
 
 def payslip_breakdown(
@@ -292,7 +511,7 @@ def payslip_breakdown(
     #: نبود در `other_allowance` جمع می‌شد و بعد در `allowances_total` — پس
     #: «بیمه‌ی تکمیلی» و «حقِ اولاد» یک عدد می‌شدند.
     benefit_total = Decimal(0)
-    for line in getattr(contract, "lines", []) or []:
+    for line in _by_display_priority(contract):
         factor = getattr(line, "factor", None)
         if factor is None or factor.category != "benefit":
             continue
@@ -324,7 +543,7 @@ def payslip_breakdown(
     add("مالیات بر درآمد حقوق", "deduction", "settings", amounts["tax_amount"])
 
     deduction_total = Decimal(0)
-    for line in getattr(contract, "lines", []) or []:
+    for line in _by_display_priority(contract):
         factor = getattr(line, "factor", None)
         if factor is None or factor.category != "deduction":
             continue
@@ -336,6 +555,14 @@ def payslip_breakdown(
     add("سایر کسورات", "deduction", "contract", residual_deduction, note="بدونِ عاملِ تفکیک‌شده")
 
     add("قسط وام", "deduction", "loan", amounts["loan_deduction"])
+
+    #: تعدیلِ رند — مثبت یعنی خالص بالا گِرد شده (به نفعِ کارمند)، منفی یعنی پایین.
+    #: یک ردیفِ دیدنی، نه چند ریالِ بی‌توضیح در ته فیش.
+    adjustment = Decimal(amounts.get("rounding_adjustment", 0))
+    if adjustment > 0:
+        add("تعدیل رند", "earning", "settings", adjustment)
+    elif adjustment < 0:
+        add("تعدیل رند", "deduction", "settings", -adjustment)
 
     for index, row in enumerate(rows, start=1):
         row["seq"] = index
@@ -368,6 +595,8 @@ def compute_payslip_amounts(
     prior_taxable: Decimal | None = None,
     prior_tax: Decimal | None = None,
     tax_percent: Decimal | None = None,
+    brackets: list[dict] | None = None,
+    participation: dict | None = None,
 ) -> dict:
     """اعدادِ یک فیش.
 
@@ -375,30 +604,72 @@ def compute_payslip_amounts(
     «ماهِ اول، بی‌سابقه، صد درصد» است — یعنی همان رفتارِ قبلی — تا فراخوانی‌های
     موجود دست‌نخورده بمانند.
     """
-    worked_days = attendance.worked_days if attendance else Decimal(30)
+    month_days = policy_value(settings, "monthly_work_days", MONTHLY_WORK_DAYS)
+    worked_days = attendance.worked_days if attendance else month_days
     overtime_hours = attendance.overtime_hours if attendance else Decimal(0)
 
-    proration = min(Decimal(1), Decimal(worked_days) / Decimal(30))
+    proration = min(Decimal(1), Decimal(worked_days) / month_days)
     base_salary = _round(Decimal(contract.base_salary) * proration)
     allowances_total = _round(
         (Decimal(contract.housing_allowance) + Decimal(contract.food_allowance) + Decimal(contract.other_allowance))
         * proration
     )
-    overtime_pay = calc_overtime_pay(Decimal(contract.base_salary), Decimal(overtime_hours))
+    overtime_pay = calc_overtime_pay(
+        Decimal(contract.base_salary),
+        Decimal(overtime_hours),
+        monthly_hours=policy_value(settings, "standard_monthly_hours", STANDARD_MONTHLY_HOURS),
+        multiplier=policy_value(settings, "overtime_multiplier", OVERTIME_MULTIPLIER),
+    )
 
     gross_pay = base_salary + allowances_total + overtime_pay
-    insurance_employee_share, insurance_employer_share = calc_insurance_shares(
-        gross_pay, Decimal(settings.insurance_employee_rate), Decimal(settings.insurance_employer_rate)
+    #: سقفِ **ماهانه** = سقفِ روزانه × روزهای ماه، و به نسبتِ کارکرد کوچک می‌شود:
+    #: کسی که نصفِ ماه کار کرده نصفِ سقف را دارد، وگرنه سقف برای او بی‌اثر می‌شد.
+    daily_ceiling = policy_value(settings, "insurance_daily_ceiling", Decimal(0))
+    monthly_ceiling = _round(daily_ceiling * month_days * proration) if daily_ceiling > 0 else None
+    employee_rate, employer_rate = contract_insurance_rates(contract, settings)
+    #: **مبنای بیمه ≠ ناخالص، اگر کاربر استثنایی تعریف کرده باشد.** جدولِ مشارکت
+    #: خالی یعنی مبنا همان ناخالص است — دقیقاً رفتارِ پیش از مهاجرتِ ۰۱۳۹.
+    insurance_base = gross_pay - _round(
+        factor_participation.excluded_from_wage_base(contract, "insurance_base", proration, participation)
     )
-    taxable_pay = max(Decimal(0), gross_pay - insurance_employee_share)
+    insurance_employee_share, insurance_employer_share = calc_insurance_shares(
+        max(Decimal(0), insurance_base),
+        employee_rate,
+        employer_rate,
+        ceiling=monthly_ceiling,
+    )
+    #: مبنای مالیات: ناخالص منهای عواملِ غیرمشمول، منهای سهمِ بیمه‌هایی که طبق
+    #: ضریبِ معافیت از مبنا کم می‌شوند. تا مهاجرتِ ۰۱۳۸ ضریبِ تأمین اجتماعی عددِ
+    #: ثابتِ ۱ بود و دو ضریبِ دیگر اصلاً وجود نداشتند.
+    tax_base = gross_pay - _round(
+        factor_participation.excluded_from_wage_base(contract, "tax_base", proration, participation)
+    )
+    exempt = _round(insurance_employee_share * policy_value(settings, "tax_exempt_coef_social", Decimal(1)))
+    exempt += _round(
+        _line_amount_for(contract, getattr(settings, "supplementary_employee_factor_id", None), proration)
+        * policy_value(settings, "tax_exempt_coef_supplementary", Decimal(1))
+    )
+    exempt += _round(
+        _line_amount_for(contract, getattr(settings, "medical_factor_id", None), proration)
+        * policy_value(settings, "tax_exempt_coef_medical", Decimal(1))
+    )
+    #: «قسط وام مسکن معاف از مالیات» — ششمین ستونِ حکم که نوشته می‌شد و هیچ‌جا
+    #: خوانده نمی‌شد. مبلغِ ماهانه است، پس به نسبتِ کارکرد کوچک می‌شود مثلِ بقیه.
+    #: صفر (پیش‌فرض) = رفتارِ امروز.
+    exempt += _round(Decimal(str(getattr(contract, "housing_loan_exempt_amount", 0) or 0)) * proration)
+    taxable_pay = max(Decimal(0), tax_base - exempt)
     tax_amount = calc_cumulative_monthly_tax(
         monthly_taxable=taxable_pay,
         prior_taxable=prior_taxable if prior_taxable is not None else Decimal(0),
         prior_tax=prior_tax if prior_tax is not None else Decimal(0),
         month_index=month_index,
         annual_exemption=Decimal(settings.tax_exemption_annual),
-        brackets=settings.tax_brackets,
+        #: پله‌ها از **جدولِ مالیاتِ مؤثر** می‌آیند وقتی داده شده باشند. اگر نه،
+        #: همان ستونِ `payroll_settings` — مسیرِ میراثی، برای فراخوانی‌هایی که
+        #: جدول ندارند.
+        brackets=brackets if brackets is not None else settings.tax_brackets,
         tax_percent=tax_percent if tax_percent is not None else Decimal(100),
+        allow_negative=bool(getattr(settings, "allow_negative_tax", False)),
     )
 
     #: کسوراتِ قرارداد بعد از مالیات کم می‌شوند — مبنای بیمه و مالیات را تکان
@@ -418,6 +689,10 @@ def compute_payslip_amounts(
         "tax_amount": tax_amount,
         "loan_deduction": Decimal(0),
         "other_deductions": other_deductions,
+        #: رند **بعد از** کسرِ قسطِ وام اعمال می‌شود، و قسط به دوره وابسته است نه
+        #: به قرارداد؛ پس این‌جا صفر می‌ماند و `generate_payslips_for_period`
+        #: پُرش می‌کند. رندکردنِ این‌جا را قسطِ بعدی به‌هم می‌زد.
+        "rounding_adjustment": Decimal(0),
         "net_pay": net_pay,
     }
 
@@ -435,6 +710,49 @@ def _is_placeholder_tax_config(settings: PayrollSettings) -> bool:
     if not brackets:
         return True
     return all(Decimal(str(b.get("rate", "0"))) == 0 for b in brackets)
+
+
+def _employee_analytic_id(db: Session, employee, cache: dict):
+    """تفصیلیِ طرف‌حسابِ کارمند — برای عاملی که بُعدش «طرف مقابل» است.
+
+    کارمند و طرف حساب یک آدم‌اند (مهاجرتِ «یک آدم، یک رکورد»)، پس تفصیلی از
+    همان طرف حساب می‌آید. `None` یعنی طرف حساب تفصیلی ندارد — ردیف بی‌بُعد
+    می‌نشیند، نه اینکه صدور بشکند.
+    """
+    if employee.id in cache:
+        return cache[employee.id]
+    contact = db.query(Contact).filter(Contact.employee_id == employee.id).first()
+    cache[employee.id] = getattr(contact, "analytic_id", None)
+    return cache[employee.id]
+
+
+def _accumulate_factor_splits(db, splits: dict, rows: list[dict], contract, employee, cache: dict) -> None:
+    """سهمِ هر عاملِ حساب‌دار را در سطلِ `(سمت، حساب، مرکز هزینه، تفصیلی)` جمع می‌کند.
+
+    **فقط عاملی که حساب دارد.** بقیه اصلاً وارد این نگاشت نمی‌شوند و روی حسابِ
+    عمومی می‌مانند — به همین دلیل جدولِ خالی یعنی سندِ دست‌نخورده.
+
+    مزایا سمتِ **هزینه** می‌روند و کسور سمتِ **پرداختنی**: یک عاملِ مزایا هزینه‌ی
+    کارفرماست، و یک عاملِ کسور پولی است که از کارمند نگه داشته‌ایم و به کسِ
+    دیگری بدهکاریم.
+    """
+    for row in rows:
+        factor_id = row.get("factor_id")
+        if factor_id is None:
+            continue
+        factor = db.get(PayrollFactor, factor_id)
+        if factor is None:
+            continue
+        if row["direction"] == "earning":
+            side, account_id, detail = "expense", factor.expense_account_id, factor.expense_detail_class
+        else:
+            side, account_id, detail = "payable", factor.payable_account_id, factor.payable_detail_class
+        if account_id is None:
+            continue
+        cost_center_id = contract.cost_center_id if detail == "cost_center" else None
+        analytic_id = _employee_analytic_id(db, employee, cache) if detail == "counterparty" else None
+        key = (side, account_id, cost_center_id, analytic_id, factor.name)
+        splits[key] = splits.get(key, Decimal(0)) + Decimal(row["amount"])
 
 
 def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> list[Payslip]:
@@ -478,6 +796,18 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     total_tax = Decimal(0)
     total_net = Decimal(0)
     total_loan_deduction = Decimal(0)
+    total_other_deductions = Decimal(0)
+    total_rounding = Decimal(0)
+    #: `(سمت، حساب، مرکز هزینه، تفصیلی، نام) → مبلغ` — فقط عامل‌های حساب‌دار.
+    factor_splits: dict[tuple, Decimal] = {}
+    analytic_cache: dict = {}
+    #: یک‌بار خوانده می‌شود و برای **همه‌ی** فیش‌های دوره همین می‌ماند — یک اجرا،
+    #: یک نسخه‌ی منسجم از تنظیمات. اگر وسطِ اجرا کسی تنظیم را عوض کند، نصفِ
+    #: کارکنان با قاعده‌ی قدیم و نصف با قاعده‌ی تازه حساب می‌شدند.
+    rounding_digits = int(getattr(settings, "payment_rounding_digits", 0) or 0)
+    #: همان دلیل: استثناهای مشارکتِ عامل یک‌بار خوانده می‌شوند و برای همه‌ی
+    #: فیش‌های این دوره همان می‌مانند.
+    participation = factor_participation.participation_map(db)
 
     for employee in employees:
         contract = get_current_contract(db, employee.id, as_of)
@@ -485,15 +815,28 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             continue  # کارمندی بدون حکم حقوقی فعال، از این دوره صرف‌نظر می‌شود
 
         prior = _year_to_date(db, employee.id, period)
+
+        #: **کدام قاعده؟** جدولِ مؤثرِ همین تاریخ، برای گروهِ مالیاتیِ همین حکم.
+        #: اگر جدولی نبود (داده‌ی پیش از ۰۱۳۷، یا جدولِ حذف‌شده) به ستونِ
+        #: `payroll_settings` و ضربِ درصدِ گروه برمی‌گردد — رفتارِ دیروز، تا
+        #: هیچ مستأجری بی‌محاسبه نماند.
+        table = resolve_tax_table(
+            db, on=as_of, tax_group_id=getattr(contract, "tax_group_id", None), calculation_type="salary"
+        )
         amounts = compute_payslip_amounts(
             contract,
             attendance_by_employee.get(employee.id),
             settings,
+            brackets=bracket_rows(table) if table is not None else None,
             #: ماهِ شمسیِ دوره همان شماره‌ی ماه در سالِ مالی است (۱ = فروردین).
             month_index=period.month,
             prior_taxable=prior["taxable"],
             prior_tax=prior["tax"],
-            tax_percent=_tax_percent(db, contract),
+            #: **درصدِ گروه فقط در مسیرِ میراثی ضرب می‌شود.** جدولِ گروه نرخ‌هایش
+            #: را از قبل دارد (مهاجرتِ ۰۱۳۷ ضرب را یک‌بار در داده منجمد کرد)، و
+            #: ضربِ دوباره یعنی «مناطق محروم» ۲۵٪ بگیرد به‌جای ۵۰٪.
+            tax_percent=Decimal(100) if table is not None else _tax_percent(db, contract),
+            participation=participation,
         )
 
         #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
@@ -507,6 +850,14 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         amounts["loan_deduction"] = loan_deduction
         total_loan_deduction += loan_deduction
 
+        #: **رند، یک‌جا و آخرِ همه.** فصلِ مرجع صریح است که رند نباید در محاسبه،
+        #: سند، فایلِ بانک و رابط جداگانه انجام شود. این‌جا تنها جایی است که خالص
+        #: گِرد می‌شود؛ باقیِ سیستم همین عدد را برمی‌دارد.
+        rounded_net = round_payment(amounts["net_pay"], rounding_digits)
+        amounts["rounding_adjustment"] = rounded_net - amounts["net_pay"]
+        amounts["net_pay"] = rounded_net
+        total_rounding += amounts["rounding_adjustment"]
+
         #: تفکیک **در همان لحظه** ساخته می‌شود، از همان قراردادی که محاسبه با آن
         #: انجام شد. ساختنش بعداً یعنی خواندنِ قراردادِ *آن‌موقع* — که ممکن است
         #: دیگر وجود نداشته باشد.
@@ -519,10 +870,22 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             overtime_hours=Decimal(attendance_row.overtime_hours) if attendance_row else Decimal(0),
         )
         assert_breakdown_matches(amounts, breakdown)
+        _accumulate_factor_splits(db, factor_splits, breakdown, contract, employee, analytic_cache)
 
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
-            number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
+            number=payslip_number,
+            employee_id=employee.id,
+            period_id=period_id,
+            created_by_id=user.id,
+            #: عکسِ شعبه‌ی قانونی **در همان لحظه**، از همان حکمی که محاسبه با آن
+            #: انجام شد. خواندنش بعداً یعنی خواندنِ مِسترِ *امروز* — و آن‌وقت
+            #: بازتولیدِ فایلِ بیمه‌ی یک دوره‌ی بسته عددِ دیگری می‌دهد.
+            **_branch_snapshot(db, contract),
+            #: **کدام قاعده این مالیات را ساخت.** بی این پیوند، `tax_amount` یک
+            #: عددِ بی‌توضیح است و «چرا این‌قدر؟» جوابی ندارد.
+            tax_table_id=table.id if table is not None else None,
+            **amounts,
         )
         payslip.lines = [PayslipLine(**row) for row in breakdown]
         db.add(payslip)
@@ -533,14 +896,38 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         total_insurance_employer += amounts["insurance_employer_share"]
         total_tax += amounts["tax_amount"]
         total_net += amounts["net_pay"]
+        total_other_deductions += amounts["other_deductions"]
 
     if not payslips:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "هیچ کارمند فعالی با حکم حقوقی معتبر برای این دوره یافت نشد")
 
     # سند حسابداری جمعی دوره: هزینه‌ی حقوق ناخالص + سهم بیمه کارفرما در برابر بدهی به کارکنان/بیمه و مالیات پرداختنی
     total_employer_cost = total_gross + total_insurance_employer
+
+    #: **عاملی که حسابِ خودش را دارد، سهمش به همان می‌رود.** باقی — و تا وقتی
+    #: هیچ عاملی حسابی نگرفته، *همه‌ی* مبلغ — روی حسابِ عمومی می‌ماند، پس سند
+    #: بایت‌به‌بایت همان چیزی است که پیش از مهاجرتِ ۰۱۴۰ بود.
+    total_employer_cost -= sum(
+        (amount for (side, *_), amount in factor_splits.items() if side == "expense"), Decimal(0)
+    )
+    total_other_deductions -= sum(
+        (amount for (side, *_), amount in factor_splits.items() if side == "payable"), Decimal(0)
+    )
+
     journal_lines = [
         JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=total_employer_cost, credit=0),
+        *(
+            JournalLine(
+                account_id=account_id,
+                debit=amount if side == "expense" else 0,
+                credit=amount if side == "payable" else 0,
+                cost_center_id=cost_center_id,
+                analytic_id=analytic_id,
+                description=name,
+            )
+            for (side, account_id, cost_center_id, analytic_id, name), amount in factor_splits.items()
+            if amount
+        ),
         JournalLine(
             account_id=get_account(db, cc.PAYROLL_PAYABLE).id,
             debit=0,
@@ -569,6 +956,35 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
                 debit=0,
                 credit=total_loan_deduction,
                 description="بازپرداختِ اقساطِ وامِ کارکنان",
+            )
+        )
+    #: **باگی که تا امروز سند را نامتوازن می‌کرد.** ردیف‌های کسوراتِ قرارداد خالص
+    #: را کم می‌کردند ولی هیچ ردیفِ بستانکاری نداشتند، پس سندِ حقوقِ هر قراردادی
+    #: که کسور داشت دقیقاً به همان اندازه بدهکارِ بیشتر ثبت می‌شد. تراز آزمایشی
+    #: به‌هم می‌خورد و هیچ نگهبانی خبر نمی‌داد.
+    #:
+    #: این پول از کارمند نگه داشته شده و به شخصِ ثالث بدهکاریم — بدهی است، نه
+    #: کاهشِ هزینه.
+    if total_other_deductions:
+        journal_lines.append(
+            JournalLine(
+                account_id=_payroll_deductions_account(db).id,
+                debit=0,
+                credit=total_other_deductions,
+                description="سایر کسورِ حقوق (نگه‌داشته از کارکنان)",
+            )
+        )
+    #: تعدیلِ رند. مثبت یعنی خالص بالا گِرد شده، پس چند ریال بیشتر پرداختنی است و
+    #: همان‌قدر هزینه‌ی رند بدهکار می‌شود؛ منفی برعکس. **داخلِ هزینه‌ی حقوق گم
+    #: نمی‌شود** تا هزینه‌ی حقوقِ دفتر با جمعِ فیش‌ها بخواند.
+    if total_rounding:
+        rounding_account = _payroll_rounding_account(db)
+        journal_lines.append(
+            JournalLine(
+                account_id=rounding_account.id,
+                debit=total_rounding if total_rounding > 0 else 0,
+                credit=-total_rounding if total_rounding < 0 else 0,
+                description="تعدیلِ گِرد کردنِ خالصِ حقوق",
             )
         )
     journal_entry = make_journal_entry(
@@ -607,6 +1023,188 @@ def _period_payslips(db: Session, period_id: UUID) -> tuple[list, PayrollPeriod]
     return rows, period
 
 
+
+# ─────────────────────── هویتِ کارمند: یک آدم، یک حقیقت ───────────────────────
+
+
+@dataclass(frozen=True)
+class EmployeeIdentity:
+    """نام و شناسه‌ی کارمند، از **طرف حسابِ متصل**.
+
+    `Employee` هنگامِ استخدام نام و کدِ ملی و تلفن را از طرف حساب کپی می‌کرد و
+    بعد هرگز همگام نمی‌شد. نتیجه دو حقیقت از یک آدم بود — و چون هر سه خروجیِ
+    قانونی (مالیات، بیمه، دیسکتِ پرداخت) از همان کپی می‌خواندند، **اصلاحِ نام یا
+    کدِ ملی هیچ‌وقت به فایلِ بانک و اظهارنامه نمی‌رسید**.
+
+    حالا یک جا حل می‌شود: اگر طرف حسابی به این کارمند وصل باشد، هویت از آن‌جا
+    می‌آید. ستون‌های خودِ `Employee` **پشتیبان** می‌مانند، نه حقیقتِ دوم — برای
+    کارمندانِ میراثی که هنوز طرف حساب ندارند.
+
+    **این‌جا چیزی ذخیره نمی‌شود.** فیشِ صادرشده اعدادش را snapshot دارد و آن
+    درست است؛ ولی نامِ روی فایلِ بانکِ *این ماه* باید نامِ امروزِ آن آدم باشد، نه
+    نامی که سالِ پیش موقعِ استخدام کپی شده.
+    """
+
+    first_name: str
+    last_name: str
+    national_id: str
+    phone: str
+    #: `True` یعنی هویت از طرف حساب آمد. `False` یعنی کارمندِ بی‌طرف‌حساب — که
+    #: از این پس ساخته نمی‌شود ولی ممکن است از قبل مانده باشد.
+    from_contact: bool
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+def employee_identities(db: Session, employee_ids: list[UUID]) -> dict[UUID, EmployeeIdentity]:
+    """هویتِ چند کارمند با **یک** کوئری — نه یکی به‌ازای هر ردیفِ فایل."""
+    if not employee_ids:
+        return {}
+    employees = {e.id: e for e in db.query(Employee).filter(Employee.id.in_(employee_ids)).all()}
+    contacts = {
+        c.employee_id: c
+        for c in db.query(Contact).filter(Contact.employee_id.in_(employee_ids)).all()
+    }
+    out: dict[UUID, EmployeeIdentity] = {}
+    for employee_id in employee_ids:
+        employee = employees.get(employee_id)
+        contact = contacts.get(employee_id)
+        if contact is not None:
+            #: نامِ تفکیک‌شده ترجیح دارد؛ طرف‌حسابِ یک‌تکه (شرکت) `name` دارد و
+            #: `first_name` ندارد، پس آن‌جا کلِ نام در نامِ کوچک می‌نشیند.
+            first = (contact.first_name or contact.name or "").strip()
+            last = (contact.last_name or "").strip()
+            out[employee_id] = EmployeeIdentity(
+                first_name=first,
+                last_name=last,
+                #: کدِ ملیِ خالیِ طرف حساب به کپیِ کارمند برنمی‌گردد — اگر کاربر
+                #: پاکش کرده، فایل هم باید خالی باشد تا دیده شود، نه اینکه
+                #: مقدارِ کهنه را بی‌صدا جا بزند.
+                national_id=(contact.national_id or "").strip(),
+                phone=(contact.phone or "").strip(),
+                from_contact=True,
+            )
+        elif employee is not None:
+            out[employee_id] = EmployeeIdentity(
+                first_name=(employee.first_name or "").strip(),
+                last_name=(employee.last_name or "").strip(),
+                national_id=(employee.national_id or "").strip(),
+                phone=(employee.phone or "").strip(),
+                from_contact=False,
+            )
+    return out
+
+
+def employee_identity(db: Session, employee_id: UUID) -> EmployeeIdentity | None:
+    return employee_identities(db, [employee_id]).get(employee_id)
+
+
+# ────────────────── شعبه‌ی بیمه و حوزه‌ی مالیاتی در فایلِ قانونی ──────────────────
+
+
+@dataclass(frozen=True)
+class BranchRef:
+    """کد و عنوانِ شعبه‌ای که یک کارمند زیرِ آن بیمه یا مالیات می‌دهد."""
+
+    code: str
+    name: str
+
+
+#: کدام ستونِ قرارداد برای کدام نوعِ شعبه. `BRANCH_KINDS` مقادیرِ مجاز را دارد و
+#: این نگاشت فقط می‌گوید هرکدام روی قرارداد کجا نشسته است.
+_BRANCH_COLUMN = {"insurance": "insurance_branch_id", "tax": "tax_branch_id"}
+
+
+def payslip_branches(db: Session, rows, as_of, *, kind: str) -> dict[UUID, BranchRef]:
+    """شعبه‌ی هر ردیفِ فایل — **اول از عکسِ فیش**، بعد از حکمِ زنده.
+
+    ترتیب مهم است و کلِ نکته‌ی همین‌جاست: فیشی که عکس دارد هرگز به مِسترِ امروز
+    نگاه نمی‌کند، پس بازتولیدِ فایلِ یک دوره‌ی بسته همیشه همان عدد را می‌دهد حتی
+    اگر کارگاه دوباره ثبت شده و کدش عوض شده باشد.
+
+    حلِ زنده فقط برای فیش‌هایی است که **پیش از مهاجرتِ ۰۱۳۶** صادر شده‌اند و
+    عکسی ندارند. برای آن‌ها بهترین کاری که می‌شود کرد همان حکمِ آن تاریخ است؛
+    اختراعِ عکسی که گرفته نشده، دروغِ تازه‌ای می‌سازد.
+    """
+    snapshot: dict[UUID, BranchRef] = {}
+    needs_live: list[UUID] = []
+    for payslip, employee in rows:
+        code = getattr(payslip, f"{kind}_branch_code", None)
+        name = getattr(payslip, f"{kind}_branch_name", None)
+        if code is None and name is None:
+            #: هر دو `None` یعنی عکسی گرفته نشده. رشته‌ی خالی یعنی عکس گرفته شد و
+            #: شعبه‌ای نبود — که جوابِ قطعی است، نه جای برگشت به مِستر.
+            needs_live.append(employee.id)
+            continue
+        snapshot[employee.id] = BranchRef(code=code or "", name=name or "")
+
+    if needs_live:
+        snapshot.update(employee_branches(db, needs_live, as_of, kind=kind))
+    return snapshot
+
+
+def employee_branches(db: Session, employee_ids: list[UUID], as_of, *, kind: str) -> dict[UUID, BranchRef]:
+    """شعبه‌ی هر کارمند در تاریخِ `as_of`، از **حکمِ جاری‌اش**.
+
+    تا امروز `tax_branch_id` و `insurance_branch_id` روی قرارداد نشسته بودند و
+    **هیچ‌جا خوانده نمی‌شدند** — نه در محاسبه، نه در خروجی. یعنی کاربر شعبه را
+    انتخاب می‌کرد و هیچ اتفاقی نمی‌افتاد. فایلِ بیمه و مالیات اولین جایی است که
+    این انتخاب واقعاً به کار می‌آید: سازمان می‌خواهد بداند هر نفر زیرِ کدام شعبه
+    است.
+
+    شعبه از **حکمِ همان تاریخ** می‌آید و نه از آخرین حکم: کارمندی که ماهِ پیش
+    منتقل شده، در فایلِ ماهِ پیش باید زیرِ شعبه‌ی قبلی بیاید.
+
+    یک کوئری برای قراردادها و یکی برای شعبه‌ها — نه یکی به‌ازای هر ردیفِ فایل.
+    """
+    column = _BRANCH_COLUMN.get(kind)
+    if not employee_ids or column is None:
+        return {}
+
+    #: همه‌ی حکم‌های *مؤثرِ* این کارکنان، تازه‌ترین اول. اولین ردیفِ هر کارمند
+    #: حکمِ جاری‌اش است — همان معیارِ `get_current_contract`، ولی یک‌جا.
+    contracts = (
+        db.query(SalaryContract)
+        .filter(
+            SalaryContract.employee_id.in_(employee_ids),
+            SalaryContract.effective_from <= as_of,
+        )
+        .order_by(SalaryContract.employee_id, SalaryContract.effective_from.desc())
+        .all()
+    )
+    branch_of: dict[UUID, UUID] = {}
+    seen: set[UUID] = set()
+    for contract in contracts:
+        if contract.employee_id in seen:
+            continue
+        #: **فقط حکمِ جاری.** اگر حکمِ جاری شعبه ندارد، کارمند شعبه ندارد — سُر
+        #: خوردن به حکمِ قبلی یعنی فایل شعبه‌ای را گزارش کند که کاربر عمداً از
+        #: حکمِ تازه برداشته.
+        seen.add(contract.employee_id)
+        branch_id = getattr(contract, column, None)
+        if branch_id is not None:
+            branch_of[contract.employee_id] = branch_id
+
+    if not branch_of:
+        return {}
+
+    from app.models.payroll import InsuranceTaxBranch
+
+    branches = {
+        row.id: BranchRef(code=(row.code or "").strip(), name=(row.name or "").strip())
+        for row in db.query(InsuranceTaxBranch)
+        .filter(InsuranceTaxBranch.id.in_(set(branch_of.values())))
+        .all()
+    }
+    return {
+        employee_id: branches[branch_id]
+        for employee_id, branch_id in branch_of.items()
+        if branch_id in branches
+    }
+
+
 def _csv_text(header: list[str], body: list[list[str]], footer: list[str] | None = None) -> str:
     """CSVِ فارسی‌خوان برای اکسل.
 
@@ -634,17 +1232,29 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
     """
     rows, period = _period_payslips(db, period_id)
 
+    employee_ids = [employee.id for _, employee in rows]
+    who = employee_identities(db, employee_ids)
+    #: حوزه‌ی مالیاتی از **عکسِ فیش**؛ برای فیش‌های پیش از ۰۱۳۶ از حکمِ همان
+    #: دوره — نه از آخرین حکم و نه از مِسترِ امروز.
+    branches = payslip_branches(db, rows, _period_as_of_date(period), kind="tax")
+
     body = []
     total_taxable = Decimal(0)
     total_tax = Decimal(0)
     for payslip, employee in rows:
         taxable = Decimal(payslip.taxable_pay)
         tax = Decimal(payslip.tax_amount)
+        person = who[employee.id]
+        branch = branches.get(employee.id)
         body.append(
             [
-                employee.national_id,
-                employee.first_name,
-                employee.last_name,
+                person.national_id,
+                person.first_name,
+                person.last_name,
+                #: حوزه خالی می‌ماند اگر حکم تعیینش نکرده — پرکردنش با حدس یعنی
+                #: فایل چیزی را به سازمان بگوید که کسی تصمیمش نگرفته.
+                branch.code if branch else "",
+                branch.name if branch else "",
                 str(payslip.gross_pay),
                 str(taxable),
                 str(tax),
@@ -654,9 +1264,18 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
         total_tax += tax
 
     text = _csv_text(
-        ["کد ملی", "نام", "نام خانوادگی", "ناخالص حقوق", "درآمد مشمول مالیات", "مالیات"],
+        [
+            "کد ملی",
+            "نام",
+            "نام خانوادگی",
+            "کد حوزه مالیاتی",
+            "حوزه مالیاتی",
+            "ناخالص حقوق",
+            "درآمد مشمول مالیات",
+            "مالیات",
+        ],
         body,
-        ["جمع کل", "", "", "", str(total_taxable), str(total_tax)],
+        ["جمع کل", "", "", "", "", "", str(total_taxable), str(total_tax)],
     )
     return text, period
 
@@ -670,15 +1289,20 @@ def generate_payment_list_csv(db: Session, period_id: UUID) -> tuple[str, Payrol
     """
     rows, period = _period_payslips(db, period_id)
 
+    who = employee_identities(db, [employee.id for _, employee in rows])
+
     body = []
     total = Decimal(0)
     for payslip, employee in rows:
         net = Decimal(payslip.net_pay)
+        person = who[employee.id]
         body.append(
             [
+                #: شماره‌حساب همچنان روی خودِ کارمند است — مقصدِ پرداخت واقعیتِ
+                #: *استخدام* است نه هویتِ شخص، و طرف حساب ستونش را ندارد.
                 employee.bank_account_number or "",
-                f"{employee.first_name} {employee.last_name}".strip(),
-                employee.national_id,
+                person.full_name,
+                person.national_id,
                 str(net),
             ]
         )
@@ -712,19 +1336,39 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        ["کد ملی", "نام", "نام خانوادگی", "حقوق مشمول بیمه", "سهم بیمه کارمند", "سهم بیمه کارفرما", "جمع بیمه"]
+        [
+            "کد ملی",
+            "نام",
+            "نام خانوادگی",
+            "کد شعبه بیمه",
+            "شعبه بیمه",
+            "حقوق مشمول بیمه",
+            "سهم بیمه کارمند",
+            "سهم بیمه کارفرما",
+            "جمع بیمه",
+        ]
     )
+
+    employee_ids = [employee.id for _, employee in rows]
+    who = employee_identities(db, employee_ids)
+    #: شعبه‌ی بیمه از **عکسِ فیش**. بازتولیدِ فایلِ یک دوره‌ی بسته نباید با ثبتِ
+    #: تازه‌ی کارگاه عوض شود؛ فیش‌های پیش از ۰۱۳۶ به حکمِ همان دوره برمی‌گردند.
+    branches = payslip_branches(db, rows, _period_as_of_date(period), kind="insurance")
 
     total_employee = Decimal(0)
     total_employer = Decimal(0)
     for payslip, employee in rows:
         employee_share = Decimal(payslip.insurance_employee_share)
         employer_share = Decimal(payslip.insurance_employer_share)
+        person = who[employee.id]
+        branch = branches.get(employee.id)
         writer.writerow(
             [
-                employee.national_id,
-                employee.first_name,
-                employee.last_name,
+                person.national_id,
+                person.first_name,
+                person.last_name,
+                branch.code if branch else "",
+                branch.name if branch else "",
                 str(payslip.gross_pay),
                 str(employee_share),
                 str(employer_share),
@@ -735,7 +1379,19 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
         total_employer += employer_share
 
     writer.writerow([])
-    writer.writerow(["جمع کل", "", "", "", str(total_employee), str(total_employer), str(total_employee + total_employer)])
+    writer.writerow(
+        [
+            "جمع کل",
+            "",
+            "",
+            "",
+            "",
+            "",
+            str(total_employee),
+            str(total_employer),
+            str(total_employee + total_employer),
+        ]
+    )
 
     # BOM ابتدای فایل تا اکسل متن فارسی UTF-8 را درست نمایش دهد
     return "﻿" + buffer.getvalue(), period

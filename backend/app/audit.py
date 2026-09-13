@@ -89,11 +89,13 @@ def audited_models() -> dict[type, str]:
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
     from app.models.payroll import (
+        InsuranceTaxBranch,
         PayrollFactor,
         PayrollSettings,
         PayrollTaxGroup,
         Payslip,
         SalaryContract,
+        TaxTable,
     )
     from app.models.period_close import FiscalPeriodClose
     from app.models.payment import Payment
@@ -124,6 +126,16 @@ def audited_models() -> dict[type, str]:
         PayrollFactor: "عامل حقوق",
         #: درصدِ مالیاتِ گروه — می‌تواند مالیاتِ یک دسته از کارکنان را صفر کند.
         PayrollTaxGroup: "گروه مالیاتی حقوق",
+        #: شعبه‌ی بیمه/حوزه‌ی مالیاتی: مقصدِ فایلِ قانونی و — از مهاجرت ۰۱۳۶ —
+        #: طرف حسابی که بدهیِ سازمان رویش می‌نشیند. عوض‌کردنِ طرف حسابِ یک شعبه
+        #: یعنی بدهیِ ده‌ها قرارداد جای دیگری برود؛ مثلِ تسویه، هیچ سندی این
+        #: تغییر را نشان نمی‌دهد و دقیقاً به همین دلیل حسابرسی‌اش واجب‌تر است.
+        InsuranceTaxBranch: "شعبه بیمه / حوزه مالیاتی",
+        #: **جدولِ مالیات حساس‌ترین پیکربندیِ حقوق است.** یک آستانه‌ی اشتباه،
+        #: مالیاتِ *همه‌ی* کارکنانِ آن گروه را عوض می‌کند و هیچ سندی نشانش
+        #: نمی‌دهد. ردیف‌های پله عمداً این‌جا نیستند: همان قاعده‌ی «یک رکورد برای
+        #: سند، نه برای هر ردیف» که برای اعلامیه‌ی قیمت هم برقرار است.
+        TaxTable: "جدول مالیات",
         #: حکمِ حقوقی. حقوقِ پایه و مزایای هر کارمند از این‌جا می‌آید، و تغییرش
         #: بدونِ ردِ حسابرسی یعنی «چرا حقوقِ من عوض شد؟» جوابی ندارد.
         SalaryContract: "حکم حقوقی",
