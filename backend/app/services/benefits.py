@@ -3,7 +3,8 @@
 قواعدِ قانون کار ایران (ساده‌شده و قابلِ‌تنظیم؛ ارقامِ مصوب هرسال تغییر می‌کنند):
 - **عیدی:** دو ماه حقوقِ پایه، محدود به بازه‌ی [۲×، ۳×] حداقلِ حقوقِ ماهانه‌ی همان سال،
   و به‌نسبتِ روزهای کارکرد در سال. (اگر `min_base_wage` صفر باشد، سقف/کف اعمال نمی‌شود.)
-- **سنوات/پایان خدمت:** یک ماه حقوقِ پایه به‌ازای هر سال سابقه = پایه × (روزهای سابقه ÷ ۳۶۵).
+- **سنوات/پایان خدمت:** پایه × (روزهای سابقه ÷ ۳۶۵) × (روزهای سنواتِ سال ÷ روزهای ماه).
+  پیش‌فرضِ ۳۰/۳۰ یعنی یک ماه به‌ازای هر سال؛ هر دو از `payroll_settings` می‌آیند.
 - **مرخصی:** استحقاقیِ سالانه (پیش‌فرض ۲۶ روز) به‌نسبتِ کارکرد، منهای مرخصی‌های استفاده‌شده؛
   طلبِ مرخصی = ماندهٔ روز × دستمزدِ روزانه (پایه ÷ ۳۰).
 
@@ -28,8 +29,10 @@ from app.models.user import User
 from app.schemas.payroll import LeaveRecordIn
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
-from app.services.payroll import get_current_contract
+from app.services import factor_participation
+from app.services.payroll import get_current_contract, policy_value
 from app.services.period_close import assert_period_open
+from app.services.tax_tables import eidi_tax
 
 _DAILY_DIVISOR = Decimal(30)  # ماه = ۳۰ روز
 _YEAR_DIVISOR = Decimal(365)
@@ -59,24 +62,36 @@ def _year_proration(emp: Employee, year: int) -> Decimal:
     return Decimal(_employed_days_in_year(emp, year)) / Decimal(_days_in_year(year))
 
 
-def calc_eidi(contract, settings, emp: Employee, year: int) -> Decimal:
-    base = Decimal(contract.base_salary)
-    full = base * 2
+def calc_eidi(contract, settings, emp: Employee, year: int, rules=None) -> Decimal:
+    #: **مبنا از عوامل ساخته می‌شود، نه از `base_salary`ِ تنها.** جدولِ مشارکتِ
+    #: خالی همان حقوق پایه را می‌دهد، پس پیش‌فرض دقیقاً رفتارِ قبلی است.
+    base = factor_participation.benefit_base(contract, "eidi_base", rules)
+    #: ضریبِ مبنای عیدی. تا مهاجرتِ ۰۱۳۸ عددِ ۲ مستقیم در کد بود؛ حالا تنظیم است و
+    #: پیش‌فرضش همان ۲ می‌ماند.
+    full = base * policy_value(settings, "eidi_base_multiplier", Decimal(2))
     min_wage = Decimal(getattr(settings, "min_base_wage", 0) or 0)
     if min_wage > 0:
         full = max(min(full, min_wage * 3), min_wage * 2)  # کف ۲×، سقف ۳×
     return _round(full * _year_proration(emp, year))
 
 
-def calc_severance(contract, emp: Employee, as_of: date) -> Decimal:
-    base = Decimal(contract.base_salary)
+def calc_severance(contract, emp: Employee, as_of: date, settings=None, rules=None) -> Decimal:
+    """سنوات = مبنا × (روزهای سابقه ÷ ۳۶۵) × (روزهای سنواتِ سال ÷ روزهای ماه).
+
+    تا مهاجرتِ ۰۱۳۸ فرمول `مبنا × روزهای سابقه ÷ ۳۶۵` بود، یعنی **یک ماه در هر
+    سال** به‌صورتِ ثابت. حالا «تعداد روزهای مبنای سنوات در هر سال» تنظیم است و
+    پیش‌فرضش ۳۰ است — که همان یک ماه را می‌دهد، پس هیچ عددی عوض نشد.
+    """
+    base = factor_participation.benefit_base(contract, "severance_base", rules)
     end = as_of
     if emp.termination_date is not None and emp.termination_date < as_of:
         end = emp.termination_date
     service_days = (end - emp.hire_date).days
     if service_days <= 0:
         return Decimal(0)
-    return _round(base * Decimal(service_days) / _YEAR_DIVISOR)
+    days_per_year = policy_value(settings, "severance_days_per_year", Decimal(30))
+    month_days = policy_value(settings, "monthly_work_days", _DAILY_DIVISOR)
+    return _round(base * Decimal(service_days) / _YEAR_DIVISOR * days_per_year / month_days)
 
 
 def _leave_used(db: Session, employee_id: UUID, year: int) -> Decimal:
@@ -92,12 +107,15 @@ def _leave_used(db: Session, employee_id: UUID, year: int) -> Decimal:
     return Decimal(total)
 
 
-def calc_leave(db: Session, contract, settings, emp: Employee, year: int) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+def calc_leave(
+    db: Session, contract, settings, emp: Employee, year: int, rules=None
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
     entitled_days = Decimal(getattr(settings, "annual_leave_days", 26) or 26)
     entitled = (entitled_days * _year_proration(emp, year)).quantize(Decimal("0.01"))
     used = _leave_used(db, emp.id, year)
     remaining = entitled - used
-    daily = Decimal(contract.base_salary) / _DAILY_DIVISOR
+    base = factor_participation.benefit_base(contract, "leave_base", rules)
+    daily = base / policy_value(settings, "monthly_work_days", _DAILY_DIVISOR)
     value = _round(max(Decimal(0), remaining) * daily)
     return entitled, used, remaining, value
 
@@ -115,6 +133,8 @@ def get_benefits_report(db: Session, year: int, as_of: date | None = None) -> di
     settings = _settings_for(db, year)
     employees = db.query(Employee).order_by(Employee.first_name, Employee.last_name).all()
 
+    #: یک‌بار برای کلِ گزارش — همان نسخه‌ی منسجمِ قاعده‌ها برای همه‌ی کارکنان.
+    rules = factor_participation.participation_map(db)
     rows = []
     total_eidi = total_sev = total_leave = Decimal(0)
     for emp in employees:
@@ -123,9 +143,9 @@ def get_benefits_report(db: Session, year: int, as_of: date | None = None) -> di
         contract = get_current_contract(db, emp.id, as_of)
         if contract is None:
             continue
-        eidi = calc_eidi(contract, settings, emp, year)
-        severance = calc_severance(contract, emp, as_of)
-        entitled, used, remaining, value = calc_leave(db, contract, settings, emp, year)
+        eidi = calc_eidi(contract, settings, emp, year, rules)
+        severance = calc_severance(contract, emp, as_of, settings, rules)
+        entitled, used, remaining, value = calc_leave(db, contract, settings, emp, year, rules)
         rows.append(
             {
                 "employee_id": emp.id,
@@ -205,12 +225,39 @@ def list_leave(db: Session, employee_id: UUID | None = None) -> list[LeaveRecord
 # --- صدور (ثبت سند) -----------------------------------------------------------------
 
 
-def _post_benefit(db: Session, description: str, amount: Decimal, run_date: date, user: User):
-    """سندِ دوطرفه‌ی مزیت: بدهکارِ هزینه‌ی حقوق، بستانکارِ حقوقِ پرداختنی."""
-    lines = [
-        JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=amount, credit=0),
-        JournalLine(account_id=get_account(db, cc.PAYROLL_PAYABLE).id, debit=0, credit=amount, description=description),
-    ]
+def _post_benefit(
+    db: Session, description: str, amount: Decimal, run_date: date, user: User, *, tax: Decimal = Decimal(0)
+):
+    """سندِ مزیت: بدهکارِ هزینه‌ی حقوق، بستانکارِ پرداختنی — و مالیات اگر باشد.
+
+    بی مالیات دوخطی می‌ماند، دقیقاً مثلِ قبل. با مالیات سه‌خطی می‌شود: هزینه
+    همچنان ناخالص است (هزینه‌ی کارفرما عوض نشده)، ولی بخشی از آن به‌جای جیبِ
+    کارمند به «بیمه و مالیات پرداختنی» می‌رود.
+    """
+    lines = [JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=amount, credit=0)]
+    if tax > 0:
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.PAYROLL_PAYABLE).id,
+                debit=0,
+                credit=amount - tax,
+                description=description,
+            )
+        )
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.INSURANCE_TAX_PAYABLE).id,
+                debit=0,
+                credit=tax,
+                description=f"مالیات {description}",
+            )
+        )
+    else:
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.PAYROLL_PAYABLE).id, debit=0, credit=amount, description=description
+            )
+        )
     return make_journal_entry(db, run_date, description, "payroll_benefit", user, lines)
 
 
@@ -225,11 +272,21 @@ def issue_eidi(db: Session, year: int, user: User, run_date: date | None = None)
     if total <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای این سال عیدیِ قابلِ صدوری وجود ندارد")
 
-    entry = _post_benefit(db, f"عیدی و پاداش سال {year}", total, run_date, user)
+    #: **عیدی جدولِ مالیاتِ خودش را دارد، نه جدولِ حقوق.**
+    #:
+    #: آستانه‌ها و پله‌هایشان یکی نیستند، پس استفاده از جدولِ حقوق برای عیدی یک
+    #: عددِ اشتباه می‌دهد که هیچ‌چیز آشکارش نمی‌کند.
+    #:
+    #: تا وقتی کاربر جدولِ عیدی تعریف نکرده، `None` برمی‌گردد و عیدی **بی‌مالیات**
+    #: می‌ماند — همان رفتارِ امروز. ساختنِ خودکارِ جدولِ عیدی یعنی یک مهاجرت
+    #: بی‌خبر مالیات کسر کند، و آن تصمیمِ کاربر است نه ما.
+    tax = eidi_tax(db, total, on=run_date)
+
+    entry = _post_benefit(db, f"عیدی و پاداش سال {year}", total, run_date, user, tax=tax)
     run = BenefitRun(kind="eidi", year=year, amount=total, run_date=run_date, journal_entry_id=entry.id, created_by_id=user.id)
     db.add(run)
     db.flush()
-    return {"kind": "eidi", "amount": total, "journal_entry_number": entry.number}
+    return {"kind": "eidi", "amount": total, "tax": tax, "journal_entry_number": entry.number}
 
 
 def issue_severance(db: Session, employee_id: UUID, user: User, as_of: date | None = None) -> dict:
@@ -242,7 +299,13 @@ def issue_severance(db: Session, employee_id: UUID, user: User, as_of: date | No
     contract = get_current_contract(db, employee_id, as_of)
     if contract is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این کارمند حکمِ حقوقی ندارد")
-    amount = calc_severance(contract, emp, as_of)
+    #: تنظیماتِ **سالِ همان تاریخ** — نه سالِ جاری. سنواتِ پایانِ خدمتِ یک نفر که
+    #: پارسال رفته باید با قاعده‌ی پارسال حساب شود.
+    amount = calc_severance(
+        contract, emp, as_of,
+        _settings_for(db, gregorian_to_jalali(as_of)[0]),
+        factor_participation.participation_map(db),
+    )
     if amount <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سابقه‌ی خدمت برای محاسبه‌ی سنوات کافی نیست")
     assert_period_open(db, as_of)
@@ -274,7 +337,9 @@ def issue_leave_payout(db: Session, employee_id: UUID, year: int, user: User, ru
     contract = get_current_contract(db, employee_id, persian_year_end(year))
     if contract is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این کارمند حکمِ حقوقی ندارد")
-    _, _, _, value = calc_leave(db, contract, _settings_for(db, year), emp, year)
+    _, _, _, value = calc_leave(
+        db, contract, _settings_for(db, year), emp, year, factor_participation.participation_map(db)
+    )
     if value <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "ماندهٔ مرخصیِ قابلِ بازخریدی وجود ندارد")
     assert_period_open(db, as_of)

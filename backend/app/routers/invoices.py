@@ -510,7 +510,7 @@ def list_purchase_invoices(
         if kind not in ("goods", "service"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ فاکتور خرید نامعتبر است")
         query = query.filter(PurchaseInvoice.kind == kind)
-    #: `id` کلیدِ سوم است چون از ۰۱۳۵ هر نوع سریِ شماره‌ی خودش را دارد: «فاکتور ۵» کالا
+    #: `id` کلیدِ سوم است چون از ۰۱۴۱ هر نوع سریِ شماره‌ی خودش را دارد: «فاکتور ۵» کالا
     #: و «فاکتور ۵» خدمات در یک روز، با کرسرِ (تاریخ، شماره) یکی از دو صفحه گم می‌شد.
     items, next_cursor = paginate(
         query,

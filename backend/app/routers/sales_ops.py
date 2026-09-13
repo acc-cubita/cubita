@@ -537,7 +537,7 @@ def _notes_out(db: Session, notes: list[CreditDebitNote]) -> list[NoteOut]:
         {e.id: e for e in db.query(JournalEntry).filter(JournalEntry.id.in_(entry_ids)).all()} if entry_ids else {}
     )
     #: سندِ معکوس با `reverses_entry_id` پیدا می‌شود — همان پیوندی که دفتر روزنامه
-    #: می‌خواند. اعلامیه‌ای که پیش از مهاجرتِ ۰۱۳۶ باطل شده این پیوند را ندارد.
+    #: می‌خواند. اعلامیه‌ای که پیش از مهاجرتِ ۰۱۴۲ باطل شده این پیوند را ندارد.
     reversals = (
         {
             e.reverses_entry_id: e
