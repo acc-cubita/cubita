@@ -10,6 +10,7 @@ from app.models.payroll import (
     CONTRACT_TYPES,
     EMPLOYMENT_TYPES,
     FACTOR_CATEGORIES,
+    FACTOR_DETAIL_CLASSES,
     FACTOR_KINDS,
     FACTOR_SYSTEM_KEYS,
     JOB_FAMILIES,
@@ -146,6 +147,13 @@ class PayrollFactorIn(BaseModel):
     #: چون هر کلید حداکثر یک عامل دارد و دستکاریِ دستی‌اش محاسبه را می‌شکند.
     system_key: str = ""
     is_active: bool = True
+    #: ترتیبِ ردیف‌های فیش. **فقط نمایشی** — هیچ محاسبه‌ای از آن نمی‌خوانَد.
+    display_priority: int = 0
+    #: پروفایلِ حسابداریِ عامل. خالی = حسابِ عمومیِ حقوق، یعنی رفتارِ امروز.
+    expense_account_id: UUID | None = None
+    expense_detail_class: str = ""
+    payable_account_id: UUID | None = None
+    payable_detail_class: str = ""
 
     @model_validator(mode="after")
     def _valid(self) -> "PayrollFactorIn":
@@ -157,6 +165,47 @@ class PayrollFactorIn(BaseModel):
             raise ValueError("نوع عامل باید ثابت یا متغیر باشد")
         if self.system_key not in FACTOR_SYSTEM_KEYS:
             raise ValueError("کلید سیستمی نامعتبر است")
+        for value in (self.expense_detail_class, self.payable_detail_class):
+            if value not in FACTOR_DETAIL_CLASSES:
+                raise ValueError("طبقه‌ی تفصیلی نامعتبر است")
+        if self.display_priority < 0:
+            raise ValueError("اولویت نمایش نمی‌تواند منفی باشد")
+        return self
+
+
+class PayrollFactorPatch(BaseModel):
+    """ویرایشِ **جزئیِ** عامل — هر میدانی که نیامده دست نمی‌خورد.
+
+    تا امروز `PATCH` همان `PayrollFactorIn` را می‌گرفت، که `name` را الزامی
+    می‌کند؛ پس «فقط این عامل را غیرفعال کن» ۴۲۲ می‌گرفت و عملاً هیچ مسیری برای
+    غیرفعال‌کردن نبود — بخشی از همان باگی که `is_active` را بی‌اثر کرده بود.
+    """
+
+    name: str | None = None
+    name2: str | None = None
+    category: str | None = None
+    kind: str | None = None
+    is_extraordinary: bool | None = None
+    is_active: bool | None = None
+    display_priority: int | None = None
+    expense_account_id: UUID | None = None
+    expense_detail_class: str | None = None
+    payable_account_id: UUID | None = None
+    payable_detail_class: str | None = None
+
+    @model_validator(mode="after")
+    def _valid(self) -> "PayrollFactorPatch":
+        if self.name is not None and not self.name.strip():
+            raise ValueError("عنوان عامل نمی‌تواند خالی باشد")
+        if self.category is not None and self.category not in FACTOR_CATEGORIES:
+            raise ValueError("طبقه‌ی عامل باید مزایا یا کسورات باشد")
+        if self.kind is not None and self.kind not in FACTOR_KINDS:
+            raise ValueError("نوع عامل باید ثابت یا متغیر باشد")
+        for value in (self.expense_detail_class, self.payable_detail_class):
+            if value is not None and value not in FACTOR_DETAIL_CLASSES:
+                raise ValueError("طبقه‌ی تفصیلی نامعتبر است")
+        if self.display_priority is not None and self.display_priority < 0:
+            raise ValueError("اولویت نمایش نمی‌تواند منفی باشد")
         return self
 
 
@@ -169,6 +218,13 @@ class PayrollFactorOut(BaseModel):
     is_extraordinary: bool
     system_key: str
     is_active: bool
+    display_priority: int = 0
+    expense_account_id: UUID | None = None
+    expense_detail_class: str = ""
+    payable_account_id: UUID | None = None
+    payable_detail_class: str = ""
+    #: آیا در حکمی یا فیشی نشسته — گاردِ قفلِ طبقه از همین می‌آید.
+    in_use: bool = False
     #: ضریبِ **مؤثرِ** شرکتِ این عامل در هر مبنا — نه ردیف‌های خام.
     #:
     #: عمداً همان چیزی برگردانده می‌شود که موتور استفاده می‌کند، با پیش‌فرض‌ها حل
@@ -179,12 +235,13 @@ class PayrollFactorOut(BaseModel):
     model_config = {"from_attributes": True}
 
     @classmethod
-    def of(cls, row, rules=None) -> "PayrollFactorOut":
+    def of(cls, row, rules=None, *, in_use: bool = False) -> "PayrollFactorOut":
         from app.models.payroll import FACTOR_PURPOSES
         from app.services.factor_participation import coefficient
 
         out = cls.model_validate(row)
         out.participation = {p: coefficient(row, p, rules) for p in FACTOR_PURPOSES}
+        out.in_use = in_use
         return out
 
 

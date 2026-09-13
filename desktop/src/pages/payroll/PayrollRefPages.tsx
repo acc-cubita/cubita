@@ -17,8 +17,10 @@ import {
   fetchCostCenters,
   fetchInsuranceTaxBranches,
   fetchJobTitles,
+  fetchAccountsLive,
   fetchPayrollFactors,
   setFactorParticipation,
+  updatePayrollFactor,
   fetchPayrollTaxGroups,
   fetchServiceLocations,
   updateInsuranceTaxBranch,
@@ -26,6 +28,7 @@ import {
   type CostCenterRecord,
   type InsuranceTaxBranchRecord,
   type JobTitleRecord,
+  FACTOR_DETAIL_CLASS_LABELS,
   FACTOR_PURPOSE_LABELS,
   type PayrollFactorRecord,
   type PayrollTaxGroupRecord,
@@ -252,6 +255,9 @@ export function JobTitlePage({ token }: { token: string }) {
 
 //: ترتیبِ ستون‌های ماتریس — همان ترتیبی که موتور در آن حساب می‌کند:
 //: اول مبناهای ماهانه (بیمه، مالیات)، بعد سه مبنای مزایا.
+/** حسابِ برگی — تنها چیزی که ردیفِ سند می‌گیرد. */
+type PostableAccount = { id: string; code: string; name: string; is_group: number }
+
 const PURPOSES = ['insurance_base', 'tax_base', 'eidi_base', 'severance_base', 'leave_base'] as const
 
 export function PayrollFactorPage({ token }: { token: string }) {
@@ -264,10 +270,24 @@ export function PayrollFactorPage({ token }: { token: string }) {
   const [category, setCategory] = useState('benefit')
   const [kind, setKind] = useState('fixed')
   const [extraordinary, setExtraordinary] = useState(false)
+  const [editing, setEditing] = useState<PayrollFactorRecord | null>(null)
+  const [priority, setPriority] = useState('0')
+  const [expenseAccount, setExpenseAccount] = useState('')
+  const [expenseDetail, setExpenseDetail] = useState('')
+  const [payableAccount, setPayableAccount] = useState('')
+  const [payableDetail, setPayableDetail] = useState('')
+  const [accounts, setAccounts] = useState<PostableAccount[]>([])
 
   async function refresh() {
     try {
-      setRows(await fetchPayrollFactors(token))
+      const [factorRows, accountRows] = await Promise.all([
+        fetchPayrollFactors(token),
+        fetchAccountsLive(token),
+      ])
+      setRows(factorRows)
+      //: فقط حسابِ برگی سند می‌گیرد؛ حسابِ گروه ردیف نمی‌پذیرد و سرور هم ردش
+      //: می‌کند، پس نشان‌دادنش در فهرست فقط کاربر را به خطا می‌برد.
+      setAccounts(accountRows.filter((a) => !a.is_group))
       setError(null)
     } catch (err) {
       setError(errText(err))
@@ -293,21 +313,82 @@ export function PayrollFactorPage({ token }: { token: string }) {
     }
   }
 
+  function clearForm() {
+    setEditing(null)
+    setName('')
+    setName2('')
+    setCategory('benefit')
+    setKind('fixed')
+    setExtraordinary(false)
+    setPriority('0')
+    setExpenseAccount('')
+    setExpenseDetail('')
+    setPayableAccount('')
+    setPayableDetail('')
+    setMsg(null)
+  }
+
+  function edit(row: PayrollFactorRecord) {
+    setEditing(row)
+    setName(row.name)
+    setName2(row.name2)
+    setCategory(row.category)
+    setKind(row.kind)
+    setExtraordinary(row.is_extraordinary)
+    setPriority(String(row.display_priority ?? 0))
+    setExpenseAccount(row.expense_account_id ?? '')
+    setExpenseDetail(row.expense_detail_class ?? '')
+    setPayableAccount(row.payable_account_id ?? '')
+    setPayableDetail(row.payable_detail_class ?? '')
+    setMsg(null)
+  }
+
+  /** فعال/غیرفعال. **غیرفعال یعنی «دیگر انتخاب نشو»، نه «از گذشته پاک شو»** —
+   *  حکم‌های موجود و فیش‌های صادرشده دست نمی‌خورند. */
+  async function toggleActive(row: PayrollFactorRecord) {
+    setBusy(true)
+    setMsg(null)
+    try {
+      await updatePayrollFactor(token, row.id, { is_active: !row.is_active })
+      setMsg({
+        text: row.is_active
+          ? `«${row.name}» غیرفعال شد؛ به حکمِ تازه اضافه نمی‌شود.`
+          : `«${row.name}» فعال شد.`,
+        kind: 'ok',
+      })
+      await refresh()
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setMsg(null)
     try {
-      await createPayrollFactor(token, {
+      const body = {
         name: name.trim(),
         name2: name2.trim(),
         category,
         kind,
         is_extraordinary: extraordinary,
-      })
-      setMsg({ text: `عاملِ «${name.trim()}» ساخته شد.`, kind: 'ok' })
-      setName('')
-      setName2('')
+        display_priority: Number(priority) || 0,
+        expense_account_id: expenseAccount || null,
+        expense_detail_class: expenseAccount ? expenseDetail : '',
+        payable_account_id: payableAccount || null,
+        payable_detail_class: payableAccount ? payableDetail : '',
+      }
+      if (editing) {
+        await updatePayrollFactor(token, editing.id, body)
+        setMsg({ text: `«${body.name}» به‌روز شد.`, kind: 'ok' })
+      } else {
+        await createPayrollFactor(token, body)
+        setMsg({ text: `عاملِ «${body.name}» ساخته شد.`, kind: 'ok' })
+      }
+      clearForm()
       await refresh()
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -338,7 +419,7 @@ export function PayrollFactorPage({ token }: { token: string }) {
     >
       <SectionCard
         icon={Plus}
-        title="ثبت عامل"
+        title={editing ? `ویرایش «${editing.name}»` : 'ثبت عامل'}
         actions={
           <button type="button" onClick={seed} disabled={busy}>
             ساخت عوامل پیش‌فرض
@@ -375,16 +456,89 @@ export function PayrollFactorPage({ token }: { token: string }) {
               ))}
             </select>
           </label>
+          <label>
+            <span>اولویت نمایش</span>
+            <input
+              dir="ltr"
+              type="number"
+              min="0"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            />
+            <span className="field-hint">
+              ترتیبِ ردیف‌های فیش. فقط نمایشی است؛ هیچ محاسبه‌ای از آن نمی‌خوانَد و فیشِ صادرشده را هم تکان نمی‌دهد.
+            </span>
+          </label>
           <div className="cmp-form-wide role-picker">
             <label className="fy-check">
               <input type="checkbox" checked={extraordinary} onChange={(e) => setExtraordinary(e.target.checked)} />
               فوق‌العاده است
             </label>
           </div>
+
+          {category === 'benefit' ? (
+            <>
+              <label>
+                <span>حساب معین هزینه</span>
+                <select value={expenseAccount} onChange={(e) => setExpenseAccount(e.target.value)}>
+                  <option value="">— حساب عمومی حقوق —</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  خالی یعنی سهمِ این عامل مثلِ امروز به «هزینه حقوق» می‌رود.
+                </span>
+              </label>
+              <label>
+                <span>طبقه تفصیلی</span>
+                <select
+                  value={expenseDetail}
+                  onChange={(e) => setExpenseDetail(e.target.value)}
+                  disabled={!expenseAccount}
+                >
+                  {Object.entries(FACTOR_DETAIL_CLASS_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                <span>حساب معین پرداختنی</span>
+                <select value={payableAccount} onChange={(e) => setPayableAccount(e.target.value)}>
+                  <option value="">— حساب عمومی سایر کسور —</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  مثلاً بیمه‌گرِ تکمیلی: پولی که از کارمند نگه داشته‌ایم و به او بدهکاریم.
+                </span>
+              </label>
+              <label>
+                <span>طبقه تفصیلی</span>
+                <select
+                  value={payableDetail}
+                  onChange={(e) => setPayableDetail(e.target.value)}
+                  disabled={!payableAccount}
+                >
+                  {Object.entries(FACTOR_DETAIL_CLASS_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+
           <div className="invoice-form-footer">
             <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              <Save size={13} /> ثبت عامل
+              <Save size={13} /> {editing ? 'ذخیره تغییرات' : 'ثبت عامل'}
             </button>
+            {editing ? (
+              <button type="button" onClick={clearForm} disabled={busy}>انصراف</button>
+            ) : null}
           </div>
           <Note msg={msg} />
         </form>
@@ -395,13 +549,26 @@ export function PayrollFactorPage({ token }: { token: string }) {
           rows={rows}
           error={error}
           emptyText="هنوز عاملی نیست — «ساخت عوامل پیش‌فرض» را بزنید تا چهار عاملِ اصلی ساخته شوند."
-          head={['عنوان', 'طبقه', 'نوع', 'فوق‌العاده', 'وضعیت']}
+          head={['عنوان', 'طبقه', 'نوع', 'فوق‌العاده', 'اولویت', 'حساب اختصاصی', 'وضعیت', '']}
           render={(r) => [
             r.name,
             FACTOR_CATEGORY_LABELS[r.category] ?? r.category,
             FACTOR_KIND_LABELS[r.kind] ?? r.kind,
             r.is_extraordinary ? 'بله' : 'خیر',
+            fa(r.display_priority ?? 0),
+            r.expense_account_id || r.payable_account_id ? 'دارد' : '—',
             r.is_active ? 'فعال' : 'غیرفعال',
+            <span className="card-actions" key="actions">
+              <button type="button" onClick={() => edit(r)} disabled={busy}>ویرایش</button>
+              <button
+                type="button"
+                onClick={() => void toggleActive(r)}
+                disabled={busy}
+                title={r.is_active ? 'دیگر به حکمِ تازه اضافه نمی‌شود' : 'دوباره قابلِ انتخاب می‌شود'}
+              >
+                {r.is_active ? 'غیرفعال کن' : 'فعال کن'}
+              </button>
+            </span>,
           ]}
         />
       </SectionCard>

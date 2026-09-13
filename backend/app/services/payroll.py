@@ -15,6 +15,7 @@ from app.models.inventory import Contact
 from app.models.payroll import (
     Attendance,
     Employee,
+    PayrollFactor,
     PayrollPeriod,
     PayrollSettings,
     Payslip,
@@ -437,6 +438,27 @@ def contract_deductions(contract: SalaryContract) -> Decimal:
     return total
 
 
+def _by_display_priority(contract) -> list:
+    """ردیف‌های قرارداد به ترتیبِ «اولویتِ نمایش»ِ عاملشان، بعد نام.
+
+    **فقط ترتیبِ نمایش را عوض می‌کند، نه هیچ عددی را.** جمعِ ردیف‌ها ثابت است و
+    گاردِ `assert_breakdown_matches` همان را می‌سنجد.
+
+    و **فیشِ گذشته را کهنه نمی‌کند**: `PayslipLine.seq` لحظه‌ی صدور منجمد
+    می‌شود، پس تغییرِ اولویت فقط روی فیشِ بعدی اثر دارد.
+
+    اولویتِ یکسان (پیش‌فرضِ صفر برای همه) یعنی ترتیب با نام تعیین شود — همان
+    چیزی که پیش از مهاجرتِ ۰۱۴۰ بود.
+    """
+    return sorted(
+        getattr(contract, "lines", []) or [],
+        key=lambda line: (
+            int(getattr(getattr(line, "factor", None), "display_priority", 0) or 0),
+            getattr(getattr(line, "factor", None), "name", "") or "",
+        ),
+    )
+
+
 def payslip_breakdown(
     contract: SalaryContract,
     amounts: dict,
@@ -489,7 +511,7 @@ def payslip_breakdown(
     #: نبود در `other_allowance` جمع می‌شد و بعد در `allowances_total` — پس
     #: «بیمه‌ی تکمیلی» و «حقِ اولاد» یک عدد می‌شدند.
     benefit_total = Decimal(0)
-    for line in getattr(contract, "lines", []) or []:
+    for line in _by_display_priority(contract):
         factor = getattr(line, "factor", None)
         if factor is None or factor.category != "benefit":
             continue
@@ -521,7 +543,7 @@ def payslip_breakdown(
     add("مالیات بر درآمد حقوق", "deduction", "settings", amounts["tax_amount"])
 
     deduction_total = Decimal(0)
-    for line in getattr(contract, "lines", []) or []:
+    for line in _by_display_priority(contract):
         factor = getattr(line, "factor", None)
         if factor is None or factor.category != "deduction":
             continue
@@ -690,6 +712,49 @@ def _is_placeholder_tax_config(settings: PayrollSettings) -> bool:
     return all(Decimal(str(b.get("rate", "0"))) == 0 for b in brackets)
 
 
+def _employee_analytic_id(db: Session, employee, cache: dict):
+    """تفصیلیِ طرف‌حسابِ کارمند — برای عاملی که بُعدش «طرف مقابل» است.
+
+    کارمند و طرف حساب یک آدم‌اند (مهاجرتِ «یک آدم، یک رکورد»)، پس تفصیلی از
+    همان طرف حساب می‌آید. `None` یعنی طرف حساب تفصیلی ندارد — ردیف بی‌بُعد
+    می‌نشیند، نه اینکه صدور بشکند.
+    """
+    if employee.id in cache:
+        return cache[employee.id]
+    contact = db.query(Contact).filter(Contact.employee_id == employee.id).first()
+    cache[employee.id] = getattr(contact, "analytic_id", None)
+    return cache[employee.id]
+
+
+def _accumulate_factor_splits(db, splits: dict, rows: list[dict], contract, employee, cache: dict) -> None:
+    """سهمِ هر عاملِ حساب‌دار را در سطلِ `(سمت، حساب، مرکز هزینه، تفصیلی)` جمع می‌کند.
+
+    **فقط عاملی که حساب دارد.** بقیه اصلاً وارد این نگاشت نمی‌شوند و روی حسابِ
+    عمومی می‌مانند — به همین دلیل جدولِ خالی یعنی سندِ دست‌نخورده.
+
+    مزایا سمتِ **هزینه** می‌روند و کسور سمتِ **پرداختنی**: یک عاملِ مزایا هزینه‌ی
+    کارفرماست، و یک عاملِ کسور پولی است که از کارمند نگه داشته‌ایم و به کسِ
+    دیگری بدهکاریم.
+    """
+    for row in rows:
+        factor_id = row.get("factor_id")
+        if factor_id is None:
+            continue
+        factor = db.get(PayrollFactor, factor_id)
+        if factor is None:
+            continue
+        if row["direction"] == "earning":
+            side, account_id, detail = "expense", factor.expense_account_id, factor.expense_detail_class
+        else:
+            side, account_id, detail = "payable", factor.payable_account_id, factor.payable_detail_class
+        if account_id is None:
+            continue
+        cost_center_id = contract.cost_center_id if detail == "cost_center" else None
+        analytic_id = _employee_analytic_id(db, employee, cache) if detail == "counterparty" else None
+        key = (side, account_id, cost_center_id, analytic_id, factor.name)
+        splits[key] = splits.get(key, Decimal(0)) + Decimal(row["amount"])
+
+
 def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> list[Payslip]:
     period = db.get(PayrollPeriod, period_id)
     if period is None:
@@ -733,6 +798,9 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     total_loan_deduction = Decimal(0)
     total_other_deductions = Decimal(0)
     total_rounding = Decimal(0)
+    #: `(سمت، حساب، مرکز هزینه، تفصیلی، نام) → مبلغ` — فقط عامل‌های حساب‌دار.
+    factor_splits: dict[tuple, Decimal] = {}
+    analytic_cache: dict = {}
     #: یک‌بار خوانده می‌شود و برای **همه‌ی** فیش‌های دوره همین می‌ماند — یک اجرا،
     #: یک نسخه‌ی منسجم از تنظیمات. اگر وسطِ اجرا کسی تنظیم را عوض کند، نصفِ
     #: کارکنان با قاعده‌ی قدیم و نصف با قاعده‌ی تازه حساب می‌شدند.
@@ -802,6 +870,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             overtime_hours=Decimal(attendance_row.overtime_hours) if attendance_row else Decimal(0),
         )
         assert_breakdown_matches(amounts, breakdown)
+        _accumulate_factor_splits(db, factor_splits, breakdown, contract, employee, analytic_cache)
 
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
@@ -834,8 +903,31 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
 
     # سند حسابداری جمعی دوره: هزینه‌ی حقوق ناخالص + سهم بیمه کارفرما در برابر بدهی به کارکنان/بیمه و مالیات پرداختنی
     total_employer_cost = total_gross + total_insurance_employer
+
+    #: **عاملی که حسابِ خودش را دارد، سهمش به همان می‌رود.** باقی — و تا وقتی
+    #: هیچ عاملی حسابی نگرفته، *همه‌ی* مبلغ — روی حسابِ عمومی می‌ماند، پس سند
+    #: بایت‌به‌بایت همان چیزی است که پیش از مهاجرتِ ۰۱۴۰ بود.
+    total_employer_cost -= sum(
+        (amount for (side, *_), amount in factor_splits.items() if side == "expense"), Decimal(0)
+    )
+    total_other_deductions -= sum(
+        (amount for (side, *_), amount in factor_splits.items() if side == "payable"), Decimal(0)
+    )
+
     journal_lines = [
         JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=total_employer_cost, credit=0),
+        *(
+            JournalLine(
+                account_id=account_id,
+                debit=amount if side == "expense" else 0,
+                credit=amount if side == "payable" else 0,
+                cost_center_id=cost_center_id,
+                analytic_id=analytic_id,
+                description=name,
+            )
+            for (side, account_id, cost_center_id, analytic_id, name), amount in factor_splits.items()
+            if amount
+        ),
         JournalLine(
             account_id=get_account(db, cc.PAYROLL_PAYABLE).id,
             debit=0,
