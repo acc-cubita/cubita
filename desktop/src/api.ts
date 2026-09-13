@@ -3903,6 +3903,10 @@ export interface ContactStatementLine {
   debit: string
   credit: string
   balance: string
+  /** ردیابی — مانده‌ی اول دوره هیچ‌کدام را ندارد. */
+  source_id?: string | null
+  entry_number?: number | null
+  entry_date?: string | null
 }
 
 export interface ContactStatement {
@@ -6390,7 +6394,10 @@ export interface CreditDebitNoteLine {
   credit_account_id: string
   credit_account_code: string
   credit_account_name: string
+  /** به ارزِ سند. */
   amount: string
+  /** معادلِ ریالی — همان عددی که در سندِ حسابداری نشسته. */
+  base_amount: string
   description: string
 }
 
@@ -6399,13 +6406,21 @@ export interface CreditDebitNote {
   number: number | null
   note_date: string
   amount: string
+  base_amount: string
   reason: string
   currency_code: string
   exchange_rate: string
   lines: CreditDebitNoteLine[]
   invoice_id: string | null
   journal_entry_id: string | null
+  journal_entry_number: number | null
+  journal_entry_date: string | null
   voided_at: string | null
+  voided_by_name: string | null
+  void_reason: string
+  void_entry_id: string | null
+  void_entry_number: number | null
+  void_entry_date: string | null
   /** میراثِ شکلِ تک‌سمتی — فقط اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ پرش دارند. */
   kind: 'debit' | 'credit' | null
   contact_id: string | null
@@ -6417,6 +6432,8 @@ export interface NoteAccount {
   id: string
   code: string
   name: string
+  /** `accounts_receivable` / `accounts_payable` برای حساب‌های طرف مقابل. */
+  system_role: string | null
 }
 
 export interface CreditDebitNoteLineIn {
@@ -6428,10 +6445,24 @@ export interface CreditDebitNoteLineIn {
   description?: string
 }
 
-export const fetchNotes = (token: string) =>
-  authedGet<CreditDebitNote[]>(token, '/api/sales-ops/notes')
-export const fetchNoteAccounts = (token: string) =>
-  authedGet<NoteAccount[]>(token, '/api/sales-ops/notes/accounts')
+export interface NoteFilter {
+  date_from?: string
+  date_to?: string
+  contact_id?: string
+  status?: 'all' | 'active' | 'voided'
+  q?: string
+}
+
+/** فیلتر سمتِ سرور؛ صفحه‌ها با کرسر جمع می‌شوند تا سقفِ ۲۰۰ردیفی نخورد. */
+export const fetchNotes = (token: string, filter: NoteFilter = {}) => {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(filter)) if (v) qs.set(k, v)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGetAll<CreditDebitNote>(token, `/api/sales-ops/notes${suffix}`)
+}
+/** `counterparty` = سمتِ دارای طرف حساب (دریافتنی/پرداختنی)؛ `other` = سمتِ بی‌طرف‌حساب. */
+export const fetchNoteAccounts = (token: string, scope: 'counterparty' | 'other' = 'counterparty') =>
+  authedGet<NoteAccount[]>(token, `/api/sales-ops/notes/accounts?scope=${scope}`)
 export const createNote = (
   token: string,
   data: {
@@ -6444,8 +6475,12 @@ export const createNote = (
   idempotencyKey?: string,
 ) =>
   authedSend<CreditDebitNote>(token, 'POST', '/api/sales-ops/notes', data, idempotencyKey)
-export const voidNote = (token: string, id: string, reason: string) =>
-  authedSend<CreditDebitNote>(token, 'POST', `/api/sales-ops/notes/${id}/void`, { reason })
+/** `voidDate` خالی = تاریخِ خودِ اعلامیه. */
+export const voidNote = (token: string, id: string, reason: string, voidDate?: string) =>
+  authedSend<CreditDebitNote>(token, 'POST', `/api/sales-ops/notes/${id}/void`, {
+    reason,
+    void_date: voidDate || null,
+  })
 
 export const closeInvoices = (
   token: string,
@@ -8455,6 +8490,39 @@ export const createServicePurchaseInvoice = (token: string, data: ServicePurchas
 export interface PurchaseInvoiceDuplicateDraft {
   kind: PurchaseInvoiceKind
   deductions: { deduction_type_id: string | null; rate: string | number }[]
+}
+
+// ── اعلامیه بدهکار/بستانکار — جزئیات و رونوشت (مهاجرتِ ۰۱۴۲) ──────────────
+
+export const fetchNote = (token: string, id: string) =>
+  authedGet<CreditDebitNote>(token, `/api/sales-ops/notes/${id}`)
+
+/** پیش‌نویسِ «رونوشت» — بدونِ شماره، تاریخ، سند و ابطال؛ سرور چیزی نمی‌نویسد. */
+export interface NoteDraft {
+  reason: string
+  currency_code: string
+  exchange_rate: string
+  source_number: number | null
+  lines: {
+    debit_contact_id: string | null
+    debit_account_id: string | null
+    credit_contact_id: string | null
+    credit_account_id: string | null
+    amount: string
+    description: string
+  }[]
+  cleared_fields: string[]
+}
+
+export const fetchNoteDuplicateDraft = (token: string, id: string) =>
+  authedGet<NoteDraft>(token, `/api/sales-ops/notes/${id}/duplicate-draft`)
+
+/** پیش‌پرکردنِ فرمِ اعلامیه از فهرست («رونوشت» یا «اصلاح»). */
+export const NOTE_PREFILL_KEY = 'cubita.note.prefill'
+export interface NotePrefill {
+  draft: NoteDraft
+  /** اگر از «اصلاح» آمده: شماره‌ی اعلامیه‌ای که همین حالا باطل شد. */
+  corrects?: number | null
 }
 /** ویرایشِ شعبه — تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند (مهاجرت ۰۱۳۶). */
 export const updateInsuranceTaxBranch = (

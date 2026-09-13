@@ -105,6 +105,7 @@ export function ContactStatementDrawer({
                           <th>بدهکار</th>
                           <th>بستانکار</th>
                           <th>مانده</th>
+                          <th>سند حسابداری</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -116,6 +117,12 @@ export function ContactStatementDrawer({
                             <td data-label="بدهکار" className="money-cell">{Number(l.debit) > 0 ? fa(Number(l.debit)) : '—'}</td>
                             <td data-label="بستانکار" className="money-cell">{Number(l.credit) > 0 ? fa(Number(l.credit)) : '—'}</td>
                             <td data-label="مانده" className="money-cell"><strong>{faSigned(l.balance)}</strong></td>
+                            {/* شماره و تاریخِ سندِ حسابداری روی همان ردیف — کارتِ حساب بن‌بست نیست. */}
+                            <td data-label="سند حسابداری">
+                              {l.entry_number != null
+                                ? `${l.entry_number.toLocaleString('fa-IR')}${l.entry_date ? ` — ${formatJalali(l.entry_date)}` : ''}`
+                                : '—'}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

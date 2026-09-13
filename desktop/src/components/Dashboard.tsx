@@ -538,7 +538,7 @@ export function Dashboard({
           )}
           {page === 'salesreturn' && <SalesReturnPage token={token} />}
           {page === 'invoiceclose' && <InvoiceClosePage token={token} />}
-          {page === 'creditnote' && <CreditDebitNotePage token={token} />}
+          {page === 'creditnote' && <CreditDebitNotePage token={token} onNavigate={navigate} />}
           {page === 'contactstatement' && <ContactStatementPage token={token} />}
           {page === 'commission' && <CommissionPage token={token} />}
           {page === 'commissioncalc' && <CommissionCalcPage token={token} />}
@@ -557,7 +557,7 @@ export function Dashboard({
             <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
           )}
           {page === 'returnlist' && <SalesReturnListPage token={token} onNavigate={navigate} />}
-          {page === 'notelist' && <NoteListPage token={token} />}
+          {page === 'notelist' && <NoteListPage token={token} onNavigate={navigate} />}
           {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
           {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}
           {page === 'customslist' && <CustomsListPage token={token} />}

@@ -9,7 +9,7 @@ import {
   Building2,
   Download,
 } from 'lucide-react'
-import { buildNav, type PageKey } from '../lib/navModel'
+import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
 import { LIST_MENUS } from './moduleLists'
 import { isElectron } from '../platform'
 
@@ -193,7 +193,7 @@ export function TopNav({
 
   // جست‌وجوی سریعِ ماژول‌ها: همه‌ی آیتم‌ها را تخت می‌کند و با متنِ ورودی فیلتر می‌کند.
   const allItems = useMemo(
-    () => [...groups.flatMap((g) => g.items), ...secondary],
+    () => uniqueNavItems(groups, secondary),
     [groups, secondary],
   )
   const results = query.trim()

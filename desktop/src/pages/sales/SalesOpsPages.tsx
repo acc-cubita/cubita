@@ -6,6 +6,7 @@ import {
   ClipboardList,
   FileSpreadsheet,
   Layers,
+  ListChecks,
   Lock,
   Percent,
   PlusCircle,
@@ -26,9 +27,12 @@ import {
   createCustoms,
   createDiscountGroup,
   createNote,
+  fetchLatestRate,
   fetchNoteAccounts,
   newIdempotencyKey,
+  NOTE_PREFILL_KEY,
   type NoteAccount,
+  type NotePrefill,
   createPriceAnnouncement,
   createPricingFactor,
   createSaleType,
@@ -69,6 +73,7 @@ import {
   type SalesReviewScope,
   type UnitRecord,
 } from '../../api'
+import type { PageKey } from '../../lib/navModel'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { ItemPicker } from '../../components/ItemPicker'
@@ -379,125 +384,272 @@ export function InvoiceClosePage({ token }: { token: string }) {
 
 // ═════════════════════ ۹) اعلامیه بدهکار/بستانکار ═════════════════════
 
+/** نوعِ یک سمت — همان «نوع بدهکار/بستانکار»ِ فصل. «حساب» یعنی سمتی که طرف حساب ندارد
+ *  (مثلاً تخفیفِ اعطایی)؛ فهرستِ نوع‌ها عمداً بسته نیست و از همین نگاشت می‌آید. */
+type SideType = 'customer' | 'supplier' | 'account'
+
+const SIDE_TYPE_LABELS: Record<SideType, string> = {
+  customer: 'مشتری',
+  supplier: 'تأمین‌کننده',
+  account: 'حساب (بدونِ طرف حساب)',
+}
+
+const ROLE_OF_SIDE: Record<'customer' | 'supplier', string> = {
+  customer: 'accounts_receivable',
+  supplier: 'accounts_payable',
+}
+
+type NoticeSideState = { type: SideType; contactId: string; accountId: string }
+
 type NoticeRow = {
   key: number
-  debitContactId: string
-  debitAccountId: string
-  creditContactId: string
-  creditAccountId: string
+  debit: NoticeSideState
+  credit: NoticeSideState
   amount: string
   description: string
 }
 
+const emptySide = (type: SideType): NoticeSideState => ({ type, contactId: '', accountId: '' })
+
 const emptyRow = (key: number): NoticeRow => ({
   key,
-  debitContactId: '',
-  debitAccountId: '',
-  creditContactId: '',
-  creditAccountId: '',
+  debit: emptySide('supplier'),
+  credit: emptySide('customer'),
   amount: '',
   description: '',
 })
 
+/** ارقامِ فارسی/عربی و ممیزِ فارسی به شکلِ لاتین — نرخ با کیبوردِ فارسی هم تایپ می‌شود. */
+const latinNumber = (s: string) =>
+  s
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[٫,]/g, '.')
+
 /**
- * سمتی که نقشِ طرف حساب حسابش را تعیین می‌کند — و کاربر می‌تواند عوضش کند.
+ * یک سمتِ ردیف: نوع، طرف حساب، معین — و پنلِ «اطلاعات حساب».
  *
- * وقتی «مشتری» انتخاب می‌شود حسابِ پیشنهادی دریافتنی است و با «تأمین‌کننده»
- * پرداختنی؛ همان رابطه‌ای که سرور هم اعمالش می‌کند. عنوانِ حساب کنارِ کدش دیده
- * می‌شود چون کدِ تنها، انتخابِ اشتباهِ حساب را آسان می‌کند.
+ * معینِ سمتِ دارای طرف حساب از **نقش** پیشنهاد می‌شود (مشتری ← دریافتنی، تأمین‌کننده
+ * ← پرداختنی) و قفل نیست. سمتِ بی‌طرف‌حساب فقط معین‌هایی را می‌بیند که سرور مجاز
+ * می‌داند: نه دریافتنی/پرداختنی، نه حساب‌های خزانه، انبار و مالیات.
  */
 function NoticeSide({
   label,
+  side,
   contacts,
-  accounts,
-  contactId,
-  accountId,
-  onContact,
-  onAccount,
+  partyAccounts,
+  otherAccounts,
+  onChange,
 }: {
   label: string
+  side: NoticeSideState
   contacts: ContactRecord[]
-  accounts: NoteAccount[]
-  contactId: string
-  accountId: string
-  onContact: (v: string) => void
-  onAccount: (v: string) => void
+  partyAccounts: NoteAccount[]
+  otherAccounts: NoteAccount[]
+  onChange: (next: NoticeSideState) => void
 }) {
-  const chosen = accounts.find((a) => a.id === accountId)
+  const party = side.type !== 'account'
+  const pool = party ? partyAccounts : otherAccounts
+  const roleDefault = party ? partyAccounts.find((a) => a.system_role === ROLE_OF_SIDE[side.type as 'customer']) : undefined
+  const effective = pool.find((a) => a.id === side.accountId) ?? roleDefault
+  const contact = contacts.find((c) => c.id === side.contactId)
+  const options = party ? contacts.filter((c) => c.type === side.type || c.type === 'both') : []
+
   return (
-    <>
+    <div className="cdn-side">
+      <h5 className="cdn-side-title">{label}</h5>
       <label>
-        طرف حسابِ {label}
-        <select value={contactId} onChange={(e) => onContact(e.target.value)}>
-          <option value="">— بدونِ طرف حساب —</option>
-          {contacts.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+        نوعِ {label}
+        <select value={side.type} onChange={(e) => onChange(emptySide(e.target.value as SideType))}>
+          {(Object.keys(SIDE_TYPE_LABELS) as SideType[]).map((t) => (
+            <option key={t} value={t}>
+              {SIDE_TYPE_LABELS[t]}
             </option>
           ))}
         </select>
       </label>
+      {party && (
+        <label>
+          {SIDE_TYPE_LABELS[side.type]}
+          <select value={side.contactId} onChange={(e) => onChange({ ...side, contactId: e.target.value })}>
+            <option value="">— انتخاب کنید —</option>
+            {options.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label>
-        حسابِ {label}
-        <select value={accountId} onChange={(e) => onAccount(e.target.value)}>
-          <option value="">— پیش‌فرضِ نقش —</option>
-          {accounts.map((a) => (
+        حساب معین
+        <select value={side.accountId} onChange={(e) => onChange({ ...side, accountId: e.target.value })}>
+          <option value="">
+            {party
+              ? `پیش‌فرضِ نقش${roleDefault ? ` — ${toFaDigits(roleDefault.code)} ${roleDefault.name}` : ''}`
+              : '— انتخاب کنید —'}
+          </option>
+          {pool.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
+              {toFaDigits(a.code)} — {a.name}
             </option>
           ))}
         </select>
-        <span className="field-hint">
-          {chosen ? `${chosen.name} (${toFaDigits(chosen.code)})` : 'از نقشِ طرف حساب حل می‌شود.'}
-        </span>
       </label>
-    </>
+      <dl className="cdn-side-info">
+        <div>
+          <dt>عنوانِ حساب معین</dt>
+          <dd>{effective ? `${effective.name} (${toFaDigits(effective.code)})` : '—'}</dd>
+        </div>
+        <div>
+          <dt>تفصیل</dt>
+          <dd>{party ? contact?.name ?? '—' : 'ندارد'}</dd>
+        </div>
+      </dl>
+    </div>
   )
 }
 
-export function CreditDebitNotePage({ token }: { token: string }) {
+export function CreditDebitNotePage({ token, onNavigate }: { token: string; onNavigate?: (p: PageKey) => void }) {
   const contacts = useContacts(token)
-  const { msg, submitting, run } = useSubmit()
-  const [accounts, setAccounts] = useState<NoteAccount[]>([])
+  const { msg, setMsg, submitting, run } = useSubmit()
+  const [partyAccounts, setPartyAccounts] = useState<NoteAccount[]>([])
+  const [otherAccounts, setOtherAccounts] = useState<NoteAccount[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [noteDate, setNoteDate] = useState(todayIso())
   const [reason, setReason] = useState('')
+  const [currency, setCurrency] = useState('IRR')
+  const [rate, setRate] = useState('1')
   const [rows, setRows] = useState<NoticeRow[]>([emptyRow(1)])
+  const [origin, setOrigin] = useState<string | null>(null)
   const nextKey = useRef(2)
   //: کلیدِ یکتاسازی در `useRef` می‌ماند تا رندرِ دوباره کلیدِ تازه نسازد — وگرنه
   //: محافظ بی‌اثر می‌شد و همان چیزی که باید یک بار اعمال شود دو بار می‌شد.
   const idemKey = useRef(newIdempotencyKey())
+  //: «رونوشت» یا «اصلاح» از دفترِ اعلامیه‌ها. در initializer فقط خوانده می‌شود و
+  //: پس از مصرف پاک — StrictMode این تابع را دو بار صدا می‌زند.
+  const [prefill, setPrefill] = useState<NotePrefill | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(NOTE_PREFILL_KEY)
+      return raw ? (JSON.parse(raw) as NotePrefill) : null
+    } catch {
+      return null
+    }
+  })
 
   useEffect(() => {
-    fetchNoteAccounts(token)
-      .then(setAccounts)
-      .catch(() => setAccounts([]))
-  }, [token])
+    Promise.all([fetchNoteAccounts(token, 'counterparty'), fetchNoteAccounts(token, 'other'), fetchCurrencies(token)])
+      .then(([party, other, cur]) => {
+        setPartyAccounts(party)
+        setOtherAccounts(other)
+        setCurrencies(cur)
+        setLoaded(true)
+      })
+      .catch((err) => setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' }))
+  }, [token, setMsg])
+
+  useEffect(() => {
+    if (!prefill || !loaded) return
+    //: نوعِ سمت از **نقشِ معین** بازسازی می‌شود، نه از نوعِ طرف حساب: طرف‌حسابی که
+    //: هر دو نقش را دارد روی پرداختنی «تأمین‌کننده» است و روی دریافتنی «مشتری».
+    const roleOf = (id: string | null) => partyAccounts.find((a) => a.id === id)?.system_role
+    const sideFrom = (contactId: string | null, accountId: string | null): NoticeSideState => ({
+      type: !contactId ? 'account' : roleOf(accountId) === 'accounts_payable' ? 'supplier' : 'customer',
+      contactId: contactId ?? '',
+      accountId: accountId ?? '',
+    })
+    const d = prefill.draft
+    setReason(d.reason)
+    setCurrency(d.currency_code)
+    setRate(String(Number(d.exchange_rate)))
+    setRows(
+      d.lines.map((l) => ({
+        key: nextKey.current++,
+        debit: sideFrom(l.debit_contact_id, l.debit_account_id),
+        credit: sideFrom(l.credit_contact_id, l.credit_account_id),
+        amount: String(Math.round(Number(l.amount))),
+        description: l.description,
+      })),
+    )
+    setOrigin(
+      prefill.corrects != null
+        ? `اصلاحِ اعلامیه‌ی ${fa(prefill.corrects)}: آن اعلامیه باطل شد و این پیش‌نویسِ جایگزینِ آن است. ردیف‌ها را درست کنید و صادر کنید — شماره، تاریخ و سندِ تازه می‌گیرد.`
+        : `رونوشت از اعلامیه‌ی ${fa(d.source_number ?? 0)} — ${d.cleared_fields.join('، ')} کپی نشده‌اند و تازه ساخته می‌شوند.`,
+    )
+    idemKey.current = newIdempotencyKey()
+    try {
+      sessionStorage.removeItem(NOTE_PREFILL_KEY)
+    } catch {
+      /* ذخیره‌ی مرورگر در دسترس نیست؛ چیزی برای پاک‌کردن نیست */
+    }
+    setPrefill(null)
+  }, [prefill, loaded, partyAccounts])
+
+  async function chooseCurrency(code: string) {
+    setCurrency(code)
+    if (code === 'IRR') {
+      setRate('1')
+      return
+    }
+    try {
+      const latest = await fetchLatestRate(token, code)
+      if (latest.rate) setRate(String(Number(latest.rate)))
+      else setMsg({ text: `برای ارز ${code} تا امروز نرخی ثبت نشده است؛ نرخ را دستی وارد کنید.`, kind: 'err' })
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
+  }
 
   const patch = (key: number, part: Partial<NoticeRow>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...part } : r)))
 
+  const rateNum = Number(latinNumber(rate))
+  const foreign = currency !== 'IRR'
+  //: همان گردکردنِ سرور (نیم به بالا) — برای مبلغِ مثبت همان `Math.round` است.
+  const baseOf = (amount: string) => Math.round((Number(amount) || 0) * (rateNum || 0))
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
-  const ready = rows.every(
-    (r) =>
-      Number(r.amount) > 0 &&
-      (r.debitContactId || r.debitAccountId) &&
-      (r.creditContactId || r.creditAccountId),
-  )
+  const baseTotal = rows.reduce((s, r) => s + baseOf(r.amount), 0)
+  const sideReady = (s: NoticeSideState) => (s.type === 'account' ? !!s.accountId : !!s.contactId)
+  const ready =
+    rateNum > 0 &&
+    (!foreign || rateNum !== 0) &&
+    rows.every(
+      (r) => Number(r.amount) > 0 && Number.isInteger(Number(r.amount)) && sideReady(r.debit) && sideReady(r.credit),
+    )
+
+  //: معینِ سمتِ دارای طرف حساب **صریح** فرستاده می‌شود: همان که پنل نشان داده. اگر
+  //: خالی می‌رفت، سرور برای طرف‌حسابی با هر دو نقش همیشه دریافتنی را برمی‌داشت —
+  //: حتی وقتی کاربر «تأمین‌کننده» انتخاب کرده بود.
+  const accountFor = (s: NoticeSideState): string | null => {
+    if (s.accountId) return s.accountId
+    if (s.type === 'account') return null
+    return partyAccounts.find((a) => a.system_role === ROLE_OF_SIDE[s.type as 'customer'])?.id ?? null
+  }
 
   return (
     <OpsPage
       icon={FileSpreadsheet}
       title="اعلامیه بدهکار بستانکار"
-      description="مانده‌ی یک طرف حساب را به طرفِ دیگر منتقل می‌کند — بدونِ هیچ دریافت و پرداختی. تهاترِ طلبِ ما از یک مشتری با بدهیِ ما به یک تأمین‌کننده، کارِ همین سند است."
+      description="مانده‌ی یک حساب یا طرف حساب را به دیگری منتقل می‌کند — بدونِ هیچ دریافت، پرداخت یا حرکتِ کالا. تهاترِ طلبِ ما از یک مشتری با بدهیِ ما به یک تأمین‌کننده، کارِ همین سند است."
+      head={
+        onNavigate && (
+          <div className="cdn-links">
+            <button type="button" className="btn-ghost" onClick={() => onNavigate('notelist')}>
+              <ListChecks size={14} /> دفترِ اعلامیه‌ها
+            </button>
+          </div>
+        )
+      }
     >
       <FormCard
         icon={FileSpreadsheet}
         title="صدور اعلامیه"
-        description="هر ردیف یک تعدیل است: یک سمت بدهکار، یک سمت بستانکار، به یک مبلغ. سند در دفتر می‌نشیند ولی هیچ فاکتوری را تسویه‌شده نمی‌کند."
+        description="با «صدور»، اعلامیه و سندِ حسابداری‌اش در یک تراکنش ثبت می‌شوند — سندِ دومی برای یک اعلامیه ساخته نمی‌شود. هیچ فاکتوری هم تسویه‌شده نمی‌شود."
         msg={msg}
         submitting={submitting}
         submitLabel="صدور و ثبتِ سند"
-        disabled={!ready}
+        disabled={!ready || !loaded}
         onSubmit={() =>
           void run(async () => {
             await createNote(
@@ -505,11 +657,13 @@ export function CreditDebitNotePage({ token }: { token: string }) {
               {
                 note_date: noteDate,
                 reason,
+                currency_code: currency,
+                exchange_rate: rateNum,
                 lines: rows.map((r) => ({
-                  debit_contact_id: r.debitContactId || null,
-                  debit_account_id: r.debitAccountId || null,
-                  credit_contact_id: r.creditContactId || null,
-                  credit_account_id: r.creditAccountId || null,
+                  debit_contact_id: r.debit.type === 'account' ? null : r.debit.contactId,
+                  debit_account_id: accountFor(r.debit),
+                  credit_contact_id: r.credit.type === 'account' ? null : r.credit.contactId,
+                  credit_account_id: accountFor(r.credit),
                   amount: Number(r.amount),
                   description: r.description,
                 })),
@@ -519,12 +673,39 @@ export function CreditDebitNotePage({ token }: { token: string }) {
             idemKey.current = newIdempotencyKey()
             setRows([emptyRow(nextKey.current++)])
             setReason('')
+            setOrigin(null)
           }, 'اعلامیه صادر و سندش ثبت شد.')
         }
       >
+        {origin && <p className="hint cdn-origin">{origin}</p>}
         <label>
           تاریخ
           <JalaliDatePicker value={noteDate} onChange={setNoteDate} />
+        </label>
+        <label>
+          ارز
+          <select value={currency} onChange={(e) => void chooseCurrency(e.target.value)}>
+            <option value="IRR">ریال (IRR)</option>
+            {currencies
+              .filter((c) => c.code !== 'IRR')
+              .map((c) => (
+                <option key={c.id} value={c.code}>
+                  {c.name} ({c.code})
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          نرخ ارز
+          <input
+            type="text"
+            inputMode="decimal"
+            dir="ltr"
+            value={rate}
+            disabled={!foreign}
+            onChange={(e) => setRate(latinNumber(e.target.value))}
+          />
+          <span className="field-hint">عکسِ همین لحظه — تغییرِ نرخِ روز، اعلامیه‌ی ثبت‌شده را عوض نمی‌کند.</span>
         </label>
         <label>
           شرح
@@ -535,7 +716,11 @@ export function CreditDebitNotePage({ token }: { token: string }) {
       <SectionCard
         icon={FileSpreadsheet}
         title="ردیف‌های اعلامیه"
-        description={`جمع: ${faAmount(total)} ریال`}
+        description={
+          foreign
+            ? `جمع: ${faAmount(total)} ${currency} — معادل ${faAmount(baseTotal)} ریال`
+            : `جمع: ${faAmount(total)} ریال`
+        }
         actions={
           <button
             type="button"
@@ -551,44 +736,47 @@ export function CreditDebitNotePage({ token }: { token: string }) {
             <h4 className="cdn-row-title">ردیفِ {toFaDigits(String(i + 1))}</h4>
             <NoticeSide
               label="بدهکار"
+              side={r.debit}
               contacts={contacts}
-              accounts={accounts}
-              contactId={r.debitContactId}
-              accountId={r.debitAccountId}
-              onContact={(v) => patch(r.key, { debitContactId: v })}
-              onAccount={(v) => patch(r.key, { debitAccountId: v })}
+              partyAccounts={partyAccounts}
+              otherAccounts={otherAccounts}
+              onChange={(next) => patch(r.key, { debit: next })}
             />
             <NoticeSide
               label="بستانکار"
+              side={r.credit}
               contacts={contacts}
-              accounts={accounts}
-              contactId={r.creditContactId}
-              accountId={r.creditAccountId}
-              onContact={(v) => patch(r.key, { creditContactId: v })}
-              onAccount={(v) => patch(r.key, { creditAccountId: v })}
+              partyAccounts={partyAccounts}
+              otherAccounts={otherAccounts}
+              onChange={(next) => patch(r.key, { credit: next })}
             />
-            <label>
-              مبلغ (ریال)
-              <NumberInput value={r.amount} onChange={(v) => patch(r.key, { amount: v })} />
-            </label>
-            <label>
-              شرحِ ردیف
-              <input
-                type="text"
-                value={r.description}
-                onChange={(e) => patch(r.key, { description: e.target.value })}
-                maxLength={300}
-              />
-            </label>
-            {rows.length > 1 && (
-              <button
-                type="button"
-                className="btn-ghost danger"
-                onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
-              >
-                حذفِ ردیف
-              </button>
-            )}
+            <div className="cdn-row-amount">
+              <label>
+                مبلغ ({foreign ? currency : 'ریال'})
+                <NumberInput value={r.amount} onChange={(v) => patch(r.key, { amount: v })} />
+                {foreign && Number(r.amount) > 0 && (
+                  <span className="field-hint">معادل: {faAmount(baseOf(r.amount))} ریال</span>
+                )}
+              </label>
+              <label>
+                شرحِ ردیف
+                <input
+                  type="text"
+                  value={r.description}
+                  onChange={(e) => patch(r.key, { description: e.target.value })}
+                  maxLength={300}
+                />
+              </label>
+              {rows.length > 1 && (
+                <button
+                  type="button"
+                  className="btn-ghost danger"
+                  onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+                >
+                  حذفِ ردیف
+                </button>
+              )}
+            </div>
           </section>
         ))}
       </SectionCard>

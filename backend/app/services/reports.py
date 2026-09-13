@@ -17,7 +17,6 @@ from app.models.invoices import (
     SalesInvoiceLine,
 )
 from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
-from app.models.sales_ops import CreditDebitNote, CreditDebitNoteLine
 from app.models.treasury import TreasuryTransaction
 from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
 from app.services import chart_codes as cc
@@ -1278,49 +1277,6 @@ def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | N
 
 
 
-def _notice_effects(db: Session, contact_id: UUID) -> list[tuple]:
-    """اثرِ اعلامیه‌های بدهکار/بستانکار روی این طرف حساب: (تاریخ، شماره، بدهکار، بستانکار).
-
-    **این سند تا امروز در کارتِ حساب دیده نمی‌شد.** سندش دریافتنی را تکان می‌داد و
-    گزارش خبر نداشت، پس صورت‌حساب و دفتر دقیقاً به اندازه‌ی همان اعلامیه از هم جدا
-    می‌افتادند — و چون `contact_balance` هم نمی‌دیدش، اعلامیه‌ی بستانکار سقفِ
-    اعتبارِ مشتری را آزاد نمی‌کرد.
-
-    سمت از **خودِ ردیف** می‌آید، نه از نامِ سند: طرفی که سمتِ بدهکارِ ردیف نشسته
-    بدهکار می‌شود و طرفی که سمتِ بستانکار نشسته بستانکار — همان قاعده‌ای که
-    `open_items` از قبل دارد. اگر یک طرف حساب در هر دو سمتِ یک ردیف باشد (تهاترِ
-    دریافتنی با پرداختنیِ خودش) هر دو اثر دیده می‌شوند و در مانده خنثی‌اند.
-    """
-    return (
-        db.query(
-            CreditDebitNote.note_date,
-            CreditDebitNote.number,
-            func.coalesce(
-                func.sum(
-                    case((CreditDebitNoteLine.debit_contact_id == contact_id, CreditDebitNoteLine.amount), else_=0)
-                ),
-                0,
-            ),
-            func.coalesce(
-                func.sum(
-                    case((CreditDebitNoteLine.credit_contact_id == contact_id, CreditDebitNoteLine.amount), else_=0)
-                ),
-                0,
-            ),
-        )
-        .join(CreditDebitNoteLine, CreditDebitNoteLine.note_id == CreditDebitNote.id)
-        .filter(
-            CreditDebitNote.voided_at.is_(None),
-            or_(
-                CreditDebitNoteLine.debit_contact_id == contact_id,
-                CreditDebitNoteLine.credit_contact_id == contact_id,
-            ),
-        )
-        .group_by(CreditDebitNote.id, CreditDebitNote.note_date, CreditDebitNote.number)
-        .all()
-    )
-
-
 def contact_balance(db: Session, contact_id: UUID) -> Decimal:
     """ماندهٔ خالصِ طرف‌حساب: مثبت = شخص به ما بدهکار است (طلبِ ما).
 
@@ -1371,7 +1327,7 @@ def get_contact_statement(
 
     events: list[dict] = []
 
-    def add(txn_date, kind, number, description, debit, credit, seq):
+    def add(txn_date, kind, number, description, debit, credit, seq, *, source_id=None, entry_number=None, entry_date=None):
         events.append(
             {
                 "txn_date": txn_date,
@@ -1380,6 +1336,9 @@ def get_contact_statement(
                 "description": description,
                 "debit": Decimal(debit),
                 "credit": Decimal(credit),
+                "source_id": source_id,
+                "entry_number": entry_number,
+                "entry_date": entry_date,
                 "_seq": seq,
             }
         )
@@ -1415,6 +1374,11 @@ def get_contact_statement(
             event["document_amount"] if is_debit else 0,
             0 if is_debit else event["document_amount"],
             seq,
+            #: شماره و تاریخِ سندِ حسابداری روی **همان** ردیف — نه ردیفِ جدا، وگرنه
+            #: سند و منبعش دو اثرِ اقتصادی به نظر می‌رسیدند (§۲۲ §۲۵).
+            source_id=event["source_id"],
+            entry_number=event["entry_number"],
+            entry_date=event.get("entry_date"),
         )
 
     events.sort(key=lambda e: (e["txn_date"], e["_seq"]))

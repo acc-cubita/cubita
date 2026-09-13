@@ -1,18 +1,19 @@
 """اندپوینت‌های عملیاتِ ماژولِ فروش.
 
-مجوزها روی ماژولِ `sales` می‌نشینند، جز اعلامیه‌ی بدهکار/بستانکار که سند حسابداری
-می‌زند و مثلِ ابطالِ فاکتور مجوزِ سنگین‌تری می‌خواهد.
+مجوزها روی ماژولِ `sales` می‌نشینند، جز اعلامیه‌ی بدهکار/بستانکار که مالِ دو ماژول
+است و سند حسابداری می‌زند — مجوزش کنارِ خودش توضیح داده شده.
 """
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.accounting import Account
+from app.models.accounting import Account, JournalEntry
 from app.models.advanced_inventory import PriceList, PriceListItem
 from app.models.inventory import Contact
 from app.models.invoices import SalesInvoice
@@ -20,6 +21,7 @@ from app.models.sales_ops import (
     CommissionRule,
     CommissionRun,
     CreditDebitNote,
+    CreditDebitNoteLine,
     CustomsDeclaration,
     DiscountItemGroup,
     DiscountItemGroupMember,
@@ -45,6 +47,7 @@ from app.schemas.sales_ops import (
     DiscountGroupIn,
     DiscountGroupOut,
     NoteAccountOut,
+    NoteDraftOut,
     NoteIn,
     NoteLineOut,
     NoteOut,
@@ -59,6 +62,7 @@ from app.schemas.sales_ops import (
     SaleTypeOut,
     VoidNoteIn,
 )
+from app.pagination import Page, PageParams, paginate
 from app.services import pricing
 from app.services import sales_ops as svc
 from app.services.idempotency import idempotent
@@ -489,16 +493,59 @@ def create_customs(data: CustomsIn, db: Session = Depends(get_db), _=Depends(_cr
 
 # ─────────────── اعلامیه‌ی بدهکار / بستانکار (سنددار) ───────────────
 
+#: **مجوزِ اعلامیه مالِ دو ماژول است، نه فروش.** سند هم از مسیرِ فروش صادر می‌شود و
+#: هم از مسیرِ خرید (§۶)، و ماژولِ مجوزِ `sales` اصلاً در رجیستریِ مجوزها نیست — یعنی
+#: تا امروز هیچ‌کس جز مالک نمی‌توانست اعلامیه بزند، حتی حسابدار. `invoices` («فاکتور
+#: فروش و خرید») و `accounting` هر دو معنی دارند: یکی کارِ طرف مقابل است، دیگری سند.
+_notes_view = require_permission(("invoices", "accounting"), "view")
+_notes_create = require_permission(("invoices", "accounting"), "create")
+#: ابطال اثرِ حسابداری دارد و «اصلاحِ معمولی» نیست (§۵۹) — همان مجوزی که ابطالِ
+#: برگشت از فروش و خرید می‌خواهد.
+_notes_void = require_permission("accounting", "delete")
 
-def _note_out(
-    db: Session,
-    n: CreditDebitNote,
-    names: dict[UUID, str] | None = None,
-    accounts: dict[UUID, tuple[str, str]] | None = None,
-) -> NoteOut:
-    names = names if names is not None else {c.id: c.name for c in db.query(Contact).all()}
-    if accounts is None:
-        accounts = {a.id: (a.code, a.name) for a in db.query(Account).all()}
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def _notes_out(db: Session, notes: list[CreditDebitNote]) -> list[NoteOut]:
+    """خروجیِ چند اعلامیه با **یک** کوئری برای هر نوعِ نام، نه یکی برای هر ردیف.
+
+    تا امروز هر درخواست کلِ طرف‌حساب‌ها و کلِ چارت را می‌کشید تا چند نام را پیدا کند.
+    """
+    contact_ids: set[UUID] = set()
+    account_ids: set[UUID] = set()
+    user_ids: set[UUID] = set()
+    entry_ids: set[UUID] = set()
+    for n in notes:
+        if n.contact_id:
+            contact_ids.add(n.contact_id)
+        if n.voided_by_id:
+            user_ids.add(n.voided_by_id)
+        if n.journal_entry_id:
+            entry_ids.add(n.journal_entry_id)
+        for r in n.lines:
+            contact_ids.update(x for x in (r.debit_contact_id, r.credit_contact_id) if x)
+            account_ids.update((r.debit_account_id, r.credit_account_id))
+
+    names = dict(db.query(Contact.id, Contact.name).filter(Contact.id.in_(contact_ids)).all()) if contact_ids else {}
+    accounts = (
+        {a.id: (a.code, a.name) for a in db.query(Account).filter(Account.id.in_(account_ids)).all()}
+        if account_ids
+        else {}
+    )
+    users = dict(db.query(User.id, User.name).filter(User.id.in_(user_ids)).all()) if user_ids else {}
+    entries = (
+        {e.id: e for e in db.query(JournalEntry).filter(JournalEntry.id.in_(entry_ids)).all()} if entry_ids else {}
+    )
+    #: سندِ معکوس با `reverses_entry_id` پیدا می‌شود — همان پیوندی که دفتر روزنامه
+    #: می‌خواند. اعلامیه‌ای که پیش از مهاجرتِ ۰۱۴۲ باطل شده این پیوند را ندارد.
+    reversals = (
+        {
+            e.reverses_entry_id: e
+            for e in db.query(JournalEntry).filter(JournalEntry.reverses_entry_id.in_(entry_ids)).all()
+        }
+        if entry_ids
+        else {}
+    )
 
     def who(cid: UUID | None) -> str:
         return names.get(cid, "—") if cid is not None else "—"
@@ -506,67 +553,131 @@ def _note_out(
     def acc(aid: UUID) -> tuple[str, str]:
         return accounts.get(aid, ("", "—"))
 
-    return NoteOut(
-        id=n.id,
-        number=n.number,
-        note_date=n.note_date,
-        amount=n.amount,
-        reason=n.reason,
-        currency_code=n.currency_code,
-        exchange_rate=n.exchange_rate,
-        lines=[
-            NoteLineOut(
-                id=r.id,
-                seq=r.seq,
-                debit_contact_id=r.debit_contact_id,
-                debit_contact_name=who(r.debit_contact_id),
-                debit_account_id=r.debit_account_id,
-                debit_account_code=acc(r.debit_account_id)[0],
-                debit_account_name=acc(r.debit_account_id)[1],
-                credit_contact_id=r.credit_contact_id,
-                credit_contact_name=who(r.credit_contact_id),
-                credit_account_id=r.credit_account_id,
-                credit_account_code=acc(r.credit_account_id)[0],
-                credit_account_name=acc(r.credit_account_id)[1],
-                amount=r.amount,
-                description=r.description,
+    out = []
+    for n in notes:
+        entry = entries.get(n.journal_entry_id) if n.journal_entry_id else None
+        reversal = reversals.get(n.journal_entry_id) if n.journal_entry_id else None
+        out.append(
+            NoteOut(
+                id=n.id,
+                number=n.number,
+                note_date=n.note_date,
+                amount=n.amount,
+                base_amount=n.base_amount,
+                reason=n.reason,
+                currency_code=n.currency_code,
+                exchange_rate=n.exchange_rate,
+                lines=[
+                    NoteLineOut(
+                        id=r.id,
+                        seq=r.seq,
+                        debit_contact_id=r.debit_contact_id,
+                        debit_contact_name=who(r.debit_contact_id),
+                        debit_account_id=r.debit_account_id,
+                        debit_account_code=acc(r.debit_account_id)[0],
+                        debit_account_name=acc(r.debit_account_id)[1],
+                        credit_contact_id=r.credit_contact_id,
+                        credit_contact_name=who(r.credit_contact_id),
+                        credit_account_id=r.credit_account_id,
+                        credit_account_code=acc(r.credit_account_id)[0],
+                        credit_account_name=acc(r.credit_account_id)[1],
+                        amount=r.amount,
+                        base_amount=r.base_amount,
+                        description=r.description,
+                    )
+                    for r in n.lines
+                ],
+                invoice_id=n.invoice_id,
+                journal_entry_id=n.journal_entry_id,
+                journal_entry_number=entry.number if entry else None,
+                journal_entry_date=entry.entry_date if entry else None,
+                voided_at=n.voided_at,
+                voided_by_name=users.get(n.voided_by_id) if n.voided_by_id else None,
+                void_reason=n.void_reason or "",
+                void_entry_id=reversal.id if reversal else None,
+                void_entry_number=reversal.number if reversal else None,
+                void_entry_date=reversal.entry_date if reversal else None,
+                kind=n.kind,
+                contact_id=n.contact_id,
+                contact_name=who(n.contact_id),
             )
-            for r in n.lines
-        ],
-        invoice_id=n.invoice_id,
-        journal_entry_id=n.journal_entry_id,
-        voided_at=n.voided_at,
-        kind=n.kind,
-        contact_id=n.contact_id,
-        contact_name=who(n.contact_id),
-    )
+        )
+    return out
 
 
-@router.get("/notes", response_model=list[NoteOut])
+def _note_out(db: Session, n: CreditDebitNote) -> NoteOut:
+    return _notes_out(db, [n])[0]
+
+
+@router.get("/notes", response_model=Page[NoteOut])
 def list_notes(
-    kind: str | None = Query(None, description="debit | credit"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    contact_id: UUID | None = Query(None, description="طرف حسابی که در هر سمتِ هر ردیفی آمده باشد"),
+    status_filter: str = Query("all", alias="status", pattern="^(all|active|voided)$"),
+    q: str | None = Query(None, max_length=100, description="شماره‌ی اعلامیه یا بخشی از شرح"),
+    page: PageParams = Depends(),
     db: Session = Depends(get_db),
-    _=Depends(_view),
+    _=Depends(_notes_view),
 ):
-    q = db.query(CreditDebitNote)
-    if kind in ("debit", "credit"):
-        q = q.filter(CreditDebitNote.kind == kind)
-    rows = q.order_by(CreditDebitNote.note_date.desc(), CreditDebitNote.number.desc()).all()
-    names = {c.id: c.name for c in db.query(Contact).all()}
-    accounts = {a.id: (a.code, a.name) for a in db.query(Account).all()}
-    return [_note_out(db, n, names, accounts) for n in rows]
+    """دفترِ اعلامیه‌ها — **فیلتر سمتِ سرور** و صفحه‌بندیِ keyset.
+
+    تا امروز این اندپوینت کلِ اعلامیه‌ها را یک‌جا برمی‌گرداند و رابط بازه و طرف حساب
+    را در مرورگر می‌برید؛ با اولین کسب‌وکارِ چندساله از کار می‌افتاد.
+    """
+    query = db.query(CreditDebitNote).options(selectinload(CreditDebitNote.lines))
+    if date_from is not None:
+        query = query.filter(CreditDebitNote.note_date >= date_from)
+    if date_to is not None:
+        query = query.filter(CreditDebitNote.note_date <= date_to)
+    if status_filter == "active":
+        query = query.filter(CreditDebitNote.voided_at.is_(None))
+    elif status_filter == "voided":
+        query = query.filter(CreditDebitNote.voided_at.isnot(None))
+    if contact_id is not None:
+        in_lines = (
+            exists()
+            .where(CreditDebitNoteLine.note_id == CreditDebitNote.id)
+            .where(
+                or_(
+                    CreditDebitNoteLine.debit_contact_id == contact_id,
+                    CreditDebitNoteLine.credit_contact_id == contact_id,
+                )
+            )
+        )
+        #: `contact_id`ِ سربرگ فقط برای اعلامیه‌های تک‌سمتیِ پیش از ۰۱۲۷ پر است.
+        query = query.filter(or_(in_lines, CreditDebitNote.contact_id == contact_id))
+    if q and q.strip():
+        term = q.strip().translate(_FA_DIGITS)
+        if term.isdigit():
+            query = query.filter(CreditDebitNote.number == int(term))
+        else:
+            query = query.filter(CreditDebitNote.reason.ilike(f"%{term}%"))
+
+    rows, next_cursor = paginate(
+        query, [CreditDebitNote.note_date, CreditDebitNote.number, CreditDebitNote.id], page
+    )
+    return Page(items=_notes_out(db, rows), next_cursor=next_cursor)
 
 
 @router.get("/notes/accounts", response_model=list[NoteAccountOut])
-def note_accounts(db: Session = Depends(get_db), _=Depends(_view)):
+def note_accounts(
+    scope: str = Query("counterparty", pattern="^(counterparty|other)$"),
+    db: Session = Depends(get_db),
+    _=Depends(_notes_view),
+):
     """معین‌هایی که یک سمتِ اعلامیه می‌تواند رویشان بنشیند.
+
+    `counterparty` — سمتی که طرف حساب دارد: دریافتنی و پرداختنیِ تجاری.
+    `other` — سمتِ بی‌طرف‌حساب: هر معینِ قابلِ ثبت جز آن دو و جز حساب‌های خزانه،
+    انبار و مالیات. همان قاعده‌ای که سرویس هنگامِ صدور اعمال می‌کند؛ فرم فقط
+    گزینه‌ی ممنوع را از اول نشان نمی‌دهد.
 
     فرم از این می‌خواند تا **کد و عنوان** را کنارِ هم نشان دهد؛ کدِ تنها، انتخابِ
     اشتباهِ حساب را آسان می‌کند.
     """
-    return [
-        NoteAccountOut(id=a.id, code=a.code, name=a.name) for a in svc.counterparty_accounts(db)
-    ]
+    rows = svc.counterparty_accounts(db) if scope == "counterparty" else svc.other_accounts(db)
+    return [NoteAccountOut(id=a.id, code=a.code, name=a.name, system_role=a.system_role) for a in rows]
 
 
 @router.post("/notes", response_model=NoteOut, status_code=201)
@@ -574,12 +685,12 @@ def create_note(
     data: NoteIn,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(_create),
+    user: User = Depends(_notes_create),
 ):
-    """اعلامیه را ثبت می‌کند — **یک بار**، حتی اگر درخواست دوباره برسد.
+    """ثبتِ اعلامیه با کلیدِ یکتاسازی.
 
-    ثبتِ دوباره یعنی تعدیلِ مانده دو بار اعمال شود؛ همان چیزی که در سندی که
-    مستقیم مانده‌ی طرف حساب را جابه‌جا می‌کند بی‌صداترین خطاست.
+    ثبتِ دوباره‌ی این سند یعنی تعدیلِ مانده دو بار — بی‌صداترین خطای ممکن، چون هر
+    دو سند تراز و معتبرند و هیچ گزارشی خبر نمی‌دهد (§۴۶).
     """
 
     def _run() -> NoteOut:
@@ -606,15 +717,29 @@ def create_note(
     )
 
 
+@router.get("/notes/{note_id}", response_model=NoteOut)
+def get_note(note_id: UUID, db: Session = Depends(get_db), _=Depends(_notes_view)):
+    """یک اعلامیه — مقصدِ drill-down از کارتِ حساب و از سندِ حسابداری (§۲۳)."""
+    note = db.get(CreditDebitNote, note_id)
+    if note is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "اعلامیه پیدا نشد")
+    return _note_out(db, note)
+
+
+@router.get("/notes/{note_id}/duplicate-draft", response_model=NoteDraftOut)
+def duplicate_note_draft(note_id: UUID, db: Session = Depends(get_db), _=Depends(_notes_view)):
+    """پیش‌نویسِ «رونوشت» — چیزی نمی‌نویسد، پس تکرارش هم چیزی نمی‌سازد (§۶۵)."""
+    return svc.duplicate_note_draft(db, note_id)
+
+
 @router.post("/notes/{note_id}/void", response_model=NoteOut)
 def void_note(
     note_id: UUID,
     data: VoidNoteIn,
     db: Session = Depends(get_db),
-    #: ابطال اثرِ حسابداری دارد — مثلِ ابطالِ فاکتور مجوزِ delete می‌خواهد.
-    user: User = Depends(require_permission("sales", "delete")),
+    user: User = Depends(_notes_void),
 ):
-    return _note_out(db, svc.void_note(db, user, note_id, data.reason))
+    return _note_out(db, svc.void_note(db, user, note_id, data.reason, data.void_date))
 
 
 # ─────────────────────────── بستنِ فاکتور ─────────────────────────

@@ -78,9 +78,16 @@ export const SOURCE_LABELS: Record<string, string> = {
   opening_balance: 'مانده اول دوره',
   opening: 'افتتاحیه',
   installment: 'اقساط',
+  credit_debit_note: 'اعلامیه بدهکار/بستانکار',
 }
 
-export const sourceLabel = (key: string) => SOURCE_LABELS[key] ?? key
+/** سندِ معکوسِ ابطال منبعِ `void_<منبع>` دارد؛ برچسبش از همان منبع ساخته می‌شود
+ *  («ابطال اعلامیه بدهکار/بستانکار») تا در دفتر روزنامه کلیدِ خام دیده نشود. */
+export const sourceLabel = (key: string): string => {
+  if (SOURCE_LABELS[key]) return SOURCE_LABELS[key]
+  if (key.startsWith('void_')) return `ابطال ${SOURCE_LABELS[key.slice(5)] ?? key.slice(5)}`
+  return key
+}
 
 /**
  * منشأِ سند با هویتش — «فاکتور فروش ۱۲۵»، نه فقط «فاکتور فروش».

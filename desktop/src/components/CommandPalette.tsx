@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import type { MeResponse } from '../api'
-import { buildNav, type PageKey } from '../lib/navModel'
+import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
 import { TASK_LAUNCHERS } from '../lib/taskRegistry'
 
 interface Command {
@@ -59,7 +59,7 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
       section: t.section,
       kind: 'task',
     }))
-    const pageItems = [...groups.flatMap((g) => g.items), ...secondary]
+    const pageItems = uniqueNavItems(groups, secondary)
     const pages: Command[] = pageItems.map((it) => ({
       id: `page-${it.key}`,
       title: it.label,
