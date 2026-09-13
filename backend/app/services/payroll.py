@@ -23,29 +23,96 @@ from app.models.payroll import (
 )
 from app.models.user import User
 from app.services import chart_codes as cc
-from app.services import payroll_loans
+from app.services import factor_participation, payroll_loans
 from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
 from app.services.tax_tables import bracket_rows, resolve_tax_table
 
-# طبق قانون کار ایران: پایه‌ی ساعتی از تقسیم بر ۱۹۴ ساعت کاری استاندارد ماهانه و ضریب اضافه‌کاری ۱.۴ به‌دست می‌آید.
+#: **پیش‌فرض، نه قانون.** تا مهاجرتِ ۰۱۳۸ این دو عدد قانونِ سخت‌کدشده بودند؛ حالا
+#: `payroll_settings` می‌گویدشان و این‌ها فقط مقدارِ پیش‌فرضِ همان ستون‌ها هستند تا
+#: فراخوانی‌هایی که تنظیمات ندارند (تست‌های ریاضی) دست‌نخورده بمانند.
 STANDARD_MONTHLY_HOURS = Decimal("194")
 OVERTIME_MULTIPLIER = Decimal("1.4")
+MONTHLY_WORK_DAYS = Decimal("30")
 
 
 def _round(value: Decimal) -> Decimal:
     return value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def calc_overtime_pay(base_salary: Decimal, overtime_hours: Decimal) -> Decimal:
+def policy_value(settings, name: str, fallback: Decimal) -> Decimal:
+    """یک پارامترِ قانونی از تنظیمات، با پیش‌فرضِ «همان رفتارِ قبلی».
+
+    `getattr` عمدی است: `compute_payslip_amounts` از چند مسیر صدا زده می‌شود و
+    بعضی‌شان شیءِ ساختگی می‌دهند. نبودِ ستون نباید محاسبه را بشکند — باید همان
+    عددی را بدهد که پیش از مهاجرتِ ۰۱۳۸ می‌داد.
+
+    **صفر مقدارِ معتبری است** و به پیش‌فرض برنمی‌گردد: سقفِ صفر یعنی «بی‌سقف»، نرخِ
+    صفر یعنی «غیرفعال»، و ضریبِ معافیتِ صفر یعنی «هیچ بخشی از بیمه از مالیات کم
+    نشود» — هر سه انتخابِ صریحِ کاربرند، نه نبودِ مقدار.
+    """
+    raw = getattr(settings, name, None)
+    if raw is None or raw == "":
+        return fallback
+    return Decimal(str(raw))
+
+
+def _line_amount_for(contract, factor_id, proration: Decimal) -> Decimal:
+    """مبلغِ ردیفِ قرارداد برای یک عاملِ مشخص، به نسبتِ کارکرد. نبود = صفر.
+
+    `factor_id` وقتی `None` است که کاربر هنوز نقشِ بیمه‌ی تکمیلی/درمان را به هیچ
+    عاملی نداده — و آن‌وقت ضریبِ معافیتش روی هیچ مبلغی نمی‌نشیند، که همان رفتارِ
+    امروز است.
+    """
+    if factor_id is None:
+        return Decimal(0)
+    for line in getattr(contract, "lines", []) or []:
+        if line.factor_id == factor_id:
+            return Decimal(str(line.amount)) * proration
+    return Decimal(0)
+
+
+def calc_overtime_pay(
+    base_salary: Decimal,
+    overtime_hours: Decimal,
+    *,
+    monthly_hours: Decimal | None = None,
+    multiplier: Decimal | None = None,
+) -> Decimal:
     if overtime_hours <= 0:
         return Decimal(0)
-    hourly_rate = base_salary / STANDARD_MONTHLY_HOURS
-    return _round(hourly_rate * OVERTIME_MULTIPLIER * overtime_hours)
+    hourly_rate = base_salary / (monthly_hours or STANDARD_MONTHLY_HOURS)
+    return _round(hourly_rate * (multiplier or OVERTIME_MULTIPLIER) * overtime_hours)
 
 
-def calc_insurance_shares(insurable_pay: Decimal, employee_rate: Decimal, employer_rate: Decimal) -> tuple[Decimal, Decimal]:
+def calc_insurance_shares(
+    insurable_pay: Decimal,
+    employee_rate: Decimal,
+    employer_rate: Decimal,
+    *,
+    ceiling: Decimal | None = None,
+) -> tuple[Decimal, Decimal]:
+    """سهمِ کارمند و کارفرما از دستمزدِ مشمولِ بیمه.
+
+    `ceiling` سقفِ **ماهانه**‌ی دستمزدِ مشمول است (سقفِ روزانه × روزهای ماه).
+    `None` یا صفر یعنی بی‌سقف — رفتاری که تا پیش از مهاجرتِ ۰۱۳۸ تنها رفتارِ ممکن
+    بود، چون کوبیتا اصلاً سقف نداشت و نرخ را روی کلِ ناخالص می‌زد.
+    """
+    if ceiling is not None and ceiling > 0:
+        insurable_pay = min(insurable_pay, ceiling)
     return _round(insurable_pay * employee_rate), _round(insurable_pay * employer_rate)
+
+
+def round_payment(amount: Decimal, digits: int) -> Decimal:
+    """خالصِ پرداختی را تا `digits` رقم گِرد می‌کند. صفر = بدونِ رند.
+
+    **یک‌جا و قطعی.** فصلِ مرجع صریح است که رند نباید در محاسبه، سند، فایلِ بانک و
+    رابط جداگانه و متفاوت انجام شود؛ همه‌ی آن‌ها باید از همین یک تابع بگذرند.
+    """
+    if digits <= 0:
+        return _round(amount)
+    step = Decimal(10) ** digits
+    return (amount / step).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * step
 
 
 def _ascending(brackets: list[dict]) -> list[dict]:
@@ -105,6 +172,7 @@ def calc_cumulative_monthly_tax(
     annual_exemption: Decimal,
     brackets: list[dict],
     tax_percent: Decimal = Decimal(100),
+    allow_negative: bool = False,
 ) -> Decimal:
     """مالیاتِ این ماه، بر مبنای **تجمیعیِ سال** نه فقط همین ماه.
 
@@ -128,9 +196,11 @@ def calc_cumulative_monthly_tax(
     روی مالیاتِ *سالانه* اعمال می‌شود نه ماهانه، وگرنه با کسرِ «قبلاً پرداخت‌شده»
     ناسازگار می‌شد.
 
-    مقدارِ منفی برنمی‌گرداند: اگر ماهی کم‌درآمد باعث شود مالیاتِ تجمیعیِ لازم از
-    آنچه تا حالا کسر شده کمتر باشد، **مسترد نمی‌کنیم** — استردادِ مالیات کارِ
-    تعدیلِ پایانِ سال است، نه فیشِ ماهانه.
+    `allow_negative` سیاستِ «مالیاتِ منفی محاسبه نشود» است — یک تنظیم، نه یک `if`
+    پراکنده در فرمول. پیش‌فرضش (`False`) همان رفتارِ همیشگی است: اگر ماهی کم‌درآمد
+    باعث شود مالیاتِ تجمیعیِ لازم از آنچه تا حالا کسر شده کمتر باشد، **مسترد
+    نمی‌کنیم** — استردادِ مالیات کارِ تعدیلِ پایانِ سال است، نه فیشِ ماهانه. با
+    `True` همان مقدارِ منفی برگردانده می‌شود و فیش آن را به کارمند پس می‌دهد.
     """
     months = max(1, min(12, month_index))
     ytd_taxable = max(Decimal(0), prior_taxable + monthly_taxable)
@@ -142,7 +212,8 @@ def calc_cumulative_monthly_tax(
     annual_tax = calc_annual_tax(annual_after_exemption, brackets) * tax_percent / 100
 
     tax_due_to_date = annual_tax * months / 12
-    return max(Decimal(0), _round(tax_due_to_date - prior_tax))
+    this_month = _round(tax_due_to_date - prior_tax)
+    return this_month if allow_negative else max(Decimal(0), this_month)
 
 
 def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContract | None:
@@ -258,6 +329,35 @@ def _employee_loan_account(db: Session):
         name="وام و مساعده‌ی کارکنان",
         acc_type="asset",
         parent_code="11",
+    )
+
+
+def _payroll_deductions_account(db: Session):
+    """«سایر کسورِ حقوق پرداختنی» — بدهی.
+
+    پولی که از کارمند نگه داشته شده (بیمه‌ی تکمیلی، صندوق، …) و به شخصِ ثالث
+    بدهکاریم. مثلِ حسابِ وام با `get_or_create_account` ساخته می‌شود تا چارتِ
+    کسب‌وکارهای موجود نشکند.
+    """
+    return get_or_create_account(
+        db,
+        cc.PAYROLL_DEDUCTIONS_PAYABLE,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.PAYROLL_DEDUCTIONS_PAYABLE],
+        name="سایر کسور حقوق پرداختنی",
+        acc_type="liability",
+        parent_code="21",
+    )
+
+
+def _payroll_rounding_account(db: Session):
+    """«تعدیلِ رندِ حقوق» — هزینه، هم‌خانواده‌ی `SALES_ROUNDING`."""
+    return get_or_create_account(
+        db,
+        cc.PAYROLL_ROUNDING,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.PAYROLL_ROUNDING],
+        name="تعدیل رند حقوق",
+        acc_type="expense",
+        parent_code="5",
     )
 
 
@@ -384,6 +484,14 @@ def payslip_breakdown(
 
     add("قسط وام", "deduction", "loan", amounts["loan_deduction"])
 
+    #: تعدیلِ رند — مثبت یعنی خالص بالا گِرد شده (به نفعِ کارمند)، منفی یعنی پایین.
+    #: یک ردیفِ دیدنی، نه چند ریالِ بی‌توضیح در ته فیش.
+    adjustment = Decimal(amounts.get("rounding_adjustment", 0))
+    if adjustment > 0:
+        add("تعدیل رند", "earning", "settings", adjustment)
+    elif adjustment < 0:
+        add("تعدیل رند", "deduction", "settings", -adjustment)
+
     for index, row in enumerate(rows, start=1):
         row["seq"] = index
     return rows
@@ -416,6 +524,7 @@ def compute_payslip_amounts(
     prior_tax: Decimal | None = None,
     tax_percent: Decimal | None = None,
     brackets: list[dict] | None = None,
+    participation: dict | None = None,
 ) -> dict:
     """اعدادِ یک فیش.
 
@@ -423,22 +532,61 @@ def compute_payslip_amounts(
     «ماهِ اول، بی‌سابقه، صد درصد» است — یعنی همان رفتارِ قبلی — تا فراخوانی‌های
     موجود دست‌نخورده بمانند.
     """
-    worked_days = attendance.worked_days if attendance else Decimal(30)
+    month_days = policy_value(settings, "monthly_work_days", MONTHLY_WORK_DAYS)
+    worked_days = attendance.worked_days if attendance else month_days
     overtime_hours = attendance.overtime_hours if attendance else Decimal(0)
 
-    proration = min(Decimal(1), Decimal(worked_days) / Decimal(30))
+    proration = min(Decimal(1), Decimal(worked_days) / month_days)
     base_salary = _round(Decimal(contract.base_salary) * proration)
     allowances_total = _round(
         (Decimal(contract.housing_allowance) + Decimal(contract.food_allowance) + Decimal(contract.other_allowance))
         * proration
     )
-    overtime_pay = calc_overtime_pay(Decimal(contract.base_salary), Decimal(overtime_hours))
+    overtime_pay = calc_overtime_pay(
+        Decimal(contract.base_salary),
+        Decimal(overtime_hours),
+        monthly_hours=policy_value(settings, "standard_monthly_hours", STANDARD_MONTHLY_HOURS),
+        multiplier=policy_value(settings, "overtime_multiplier", OVERTIME_MULTIPLIER),
+    )
 
     gross_pay = base_salary + allowances_total + overtime_pay
-    insurance_employee_share, insurance_employer_share = calc_insurance_shares(
-        gross_pay, Decimal(settings.insurance_employee_rate), Decimal(settings.insurance_employer_rate)
+    #: سقفِ **ماهانه** = سقفِ روزانه × روزهای ماه، و به نسبتِ کارکرد کوچک می‌شود:
+    #: کسی که نصفِ ماه کار کرده نصفِ سقف را دارد، وگرنه سقف برای او بی‌اثر می‌شد.
+    daily_ceiling = policy_value(settings, "insurance_daily_ceiling", Decimal(0))
+    monthly_ceiling = _round(daily_ceiling * month_days * proration) if daily_ceiling > 0 else None
+    #: بیمه‌ی بیکاری سهمِ **کارفرما**ست و به نرخِ کارفرما اضافه می‌شود.
+    #: نرخِ مشاغل سخت عمداً اعمال **نمی‌شود** — شمولِ آن به کارمند وابسته است و
+    #: کوبیتا هنوز جایی برای «این کارمند مشمولِ مشاغل سخت است» ندارد. اعمالش روی
+    #: همه یعنی کسرِ بیمه از کسانی که مشمول نیستند؛ نگه‌داشتنِ نرخ یعنی وقتی آن
+    #: پرچم آمد، عدد از قبل جای خودش است.
+    employer_rate = Decimal(settings.insurance_employer_rate) + policy_value(settings, "unemployment_rate", Decimal(0))
+    #: **مبنای بیمه ≠ ناخالص، اگر کاربر استثنایی تعریف کرده باشد.** جدولِ مشارکت
+    #: خالی یعنی مبنا همان ناخالص است — دقیقاً رفتارِ پیش از مهاجرتِ ۰۱۳۹.
+    insurance_base = gross_pay - _round(
+        factor_participation.excluded_from_wage_base(contract, "insurance_base", proration, participation)
     )
-    taxable_pay = max(Decimal(0), gross_pay - insurance_employee_share)
+    insurance_employee_share, insurance_employer_share = calc_insurance_shares(
+        max(Decimal(0), insurance_base),
+        Decimal(settings.insurance_employee_rate),
+        employer_rate,
+        ceiling=monthly_ceiling,
+    )
+    #: مبنای مالیات: ناخالص منهای عواملِ غیرمشمول، منهای سهمِ بیمه‌هایی که طبق
+    #: ضریبِ معافیت از مبنا کم می‌شوند. تا مهاجرتِ ۰۱۳۸ ضریبِ تأمین اجتماعی عددِ
+    #: ثابتِ ۱ بود و دو ضریبِ دیگر اصلاً وجود نداشتند.
+    tax_base = gross_pay - _round(
+        factor_participation.excluded_from_wage_base(contract, "tax_base", proration, participation)
+    )
+    exempt = _round(insurance_employee_share * policy_value(settings, "tax_exempt_coef_social", Decimal(1)))
+    exempt += _round(
+        _line_amount_for(contract, getattr(settings, "supplementary_employee_factor_id", None), proration)
+        * policy_value(settings, "tax_exempt_coef_supplementary", Decimal(1))
+    )
+    exempt += _round(
+        _line_amount_for(contract, getattr(settings, "medical_factor_id", None), proration)
+        * policy_value(settings, "tax_exempt_coef_medical", Decimal(1))
+    )
+    taxable_pay = max(Decimal(0), tax_base - exempt)
     tax_amount = calc_cumulative_monthly_tax(
         monthly_taxable=taxable_pay,
         prior_taxable=prior_taxable if prior_taxable is not None else Decimal(0),
@@ -450,6 +598,7 @@ def compute_payslip_amounts(
         #: جدول ندارند.
         brackets=brackets if brackets is not None else settings.tax_brackets,
         tax_percent=tax_percent if tax_percent is not None else Decimal(100),
+        allow_negative=bool(getattr(settings, "allow_negative_tax", False)),
     )
 
     #: کسوراتِ قرارداد بعد از مالیات کم می‌شوند — مبنای بیمه و مالیات را تکان
@@ -469,6 +618,10 @@ def compute_payslip_amounts(
         "tax_amount": tax_amount,
         "loan_deduction": Decimal(0),
         "other_deductions": other_deductions,
+        #: رند **بعد از** کسرِ قسطِ وام اعمال می‌شود، و قسط به دوره وابسته است نه
+        #: به قرارداد؛ پس این‌جا صفر می‌ماند و `generate_payslips_for_period`
+        #: پُرش می‌کند. رندکردنِ این‌جا را قسطِ بعدی به‌هم می‌زد.
+        "rounding_adjustment": Decimal(0),
         "net_pay": net_pay,
     }
 
@@ -529,6 +682,15 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     total_tax = Decimal(0)
     total_net = Decimal(0)
     total_loan_deduction = Decimal(0)
+    total_other_deductions = Decimal(0)
+    total_rounding = Decimal(0)
+    #: یک‌بار خوانده می‌شود و برای **همه‌ی** فیش‌های دوره همین می‌ماند — یک اجرا،
+    #: یک نسخه‌ی منسجم از تنظیمات. اگر وسطِ اجرا کسی تنظیم را عوض کند، نصفِ
+    #: کارکنان با قاعده‌ی قدیم و نصف با قاعده‌ی تازه حساب می‌شدند.
+    rounding_digits = int(getattr(settings, "payment_rounding_digits", 0) or 0)
+    #: همان دلیل: استثناهای مشارکتِ عامل یک‌بار خوانده می‌شوند و برای همه‌ی
+    #: فیش‌های این دوره همان می‌مانند.
+    participation = factor_participation.participation_map(db)
 
     for employee in employees:
         contract = get_current_contract(db, employee.id, as_of)
@@ -557,6 +719,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             #: را از قبل دارد (مهاجرتِ ۰۱۳۷ ضرب را یک‌بار در داده منجمد کرد)، و
             #: ضربِ دوباره یعنی «مناطق محروم» ۲۵٪ بگیرد به‌جای ۵۰٪.
             tax_percent=Decimal(100) if table is not None else _tax_percent(db, contract),
+            participation=participation,
         )
 
         #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
@@ -569,6 +732,14 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             amounts["net_pay"] -= loan_deduction
         amounts["loan_deduction"] = loan_deduction
         total_loan_deduction += loan_deduction
+
+        #: **رند، یک‌جا و آخرِ همه.** فصلِ مرجع صریح است که رند نباید در محاسبه،
+        #: سند، فایلِ بانک و رابط جداگانه انجام شود. این‌جا تنها جایی است که خالص
+        #: گِرد می‌شود؛ باقیِ سیستم همین عدد را برمی‌دارد.
+        rounded_net = round_payment(amounts["net_pay"], rounding_digits)
+        amounts["rounding_adjustment"] = rounded_net - amounts["net_pay"]
+        amounts["net_pay"] = rounded_net
+        total_rounding += amounts["rounding_adjustment"]
 
         #: تفکیک **در همان لحظه** ساخته می‌شود، از همان قراردادی که محاسبه با آن
         #: انجام شد. ساختنش بعداً یعنی خواندنِ قراردادِ *آن‌موقع* — که ممکن است
@@ -607,6 +778,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
         total_insurance_employer += amounts["insurance_employer_share"]
         total_tax += amounts["tax_amount"]
         total_net += amounts["net_pay"]
+        total_other_deductions += amounts["other_deductions"]
 
     if not payslips:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "هیچ کارمند فعالی با حکم حقوقی معتبر برای این دوره یافت نشد")
@@ -643,6 +815,35 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
                 debit=0,
                 credit=total_loan_deduction,
                 description="بازپرداختِ اقساطِ وامِ کارکنان",
+            )
+        )
+    #: **باگی که تا امروز سند را نامتوازن می‌کرد.** ردیف‌های کسوراتِ قرارداد خالص
+    #: را کم می‌کردند ولی هیچ ردیفِ بستانکاری نداشتند، پس سندِ حقوقِ هر قراردادی
+    #: که کسور داشت دقیقاً به همان اندازه بدهکارِ بیشتر ثبت می‌شد. تراز آزمایشی
+    #: به‌هم می‌خورد و هیچ نگهبانی خبر نمی‌داد.
+    #:
+    #: این پول از کارمند نگه داشته شده و به شخصِ ثالث بدهکاریم — بدهی است، نه
+    #: کاهشِ هزینه.
+    if total_other_deductions:
+        journal_lines.append(
+            JournalLine(
+                account_id=_payroll_deductions_account(db).id,
+                debit=0,
+                credit=total_other_deductions,
+                description="سایر کسورِ حقوق (نگه‌داشته از کارکنان)",
+            )
+        )
+    #: تعدیلِ رند. مثبت یعنی خالص بالا گِرد شده، پس چند ریال بیشتر پرداختنی است و
+    #: همان‌قدر هزینه‌ی رند بدهکار می‌شود؛ منفی برعکس. **داخلِ هزینه‌ی حقوق گم
+    #: نمی‌شود** تا هزینه‌ی حقوقِ دفتر با جمعِ فیش‌ها بخواند.
+    if total_rounding:
+        rounding_account = _payroll_rounding_account(db)
+        journal_lines.append(
+            JournalLine(
+                account_id=rounding_account.id,
+                debit=total_rounding if total_rounding > 0 else 0,
+                credit=-total_rounding if total_rounding < 0 else 0,
+                description="تعدیلِ گِرد کردنِ خالصِ حقوق",
             )
         )
     journal_entry = make_journal_entry(

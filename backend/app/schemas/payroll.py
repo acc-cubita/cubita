@@ -169,8 +169,40 @@ class PayrollFactorOut(BaseModel):
     is_extraordinary: bool
     system_key: str
     is_active: bool
+    #: ضریبِ **مؤثرِ** شرکتِ این عامل در هر مبنا — نه ردیف‌های خام.
+    #:
+    #: عمداً همان چیزی برگردانده می‌شود که موتور استفاده می‌کند، با پیش‌فرض‌ها حل
+    #: شده. اگر ردیف‌های خام برمی‌گشت، رابط باید همان قاعده‌ی پیش‌فرض را دوباره
+    #: پیاده می‌کرد — و دو پیاده‌سازیِ یک قاعده دیر یا زود از هم جدا می‌افتند.
+    participation: dict[str, Decimal] = {}
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def of(cls, row, rules=None) -> "PayrollFactorOut":
+        from app.models.payroll import FACTOR_PURPOSES
+        from app.services.factor_participation import coefficient
+
+        out = cls.model_validate(row)
+        out.participation = {p: coefficient(row, p, rules) for p in FACTOR_PURPOSES}
+        return out
+
+
+class FactorParticipationIn(BaseModel):
+    """ضریبِ شرکتِ یک عامل در یک یا چند مبنا. کلید = هدف، مقدار = ضریب (۰..۱)."""
+
+    participation: dict[str, Decimal]
+
+    @model_validator(mode="after")
+    def _check(self) -> "FactorParticipationIn":
+        from app.models.payroll import FACTOR_PURPOSE_LABELS
+
+        for purpose, value in self.participation.items():
+            if purpose not in FACTOR_PURPOSE_LABELS:
+                raise ValueError(f"مبنای ناشناخته: {purpose}")
+            if not (0 <= value <= 1):
+                raise ValueError(f"ضریب «{FACTOR_PURPOSE_LABELS[purpose]}» باید بین ۰ و ۱ باشد")
+        return self
 
 
 class PayrollTaxGroupIn(BaseModel):
@@ -534,9 +566,11 @@ class PayslipOut(BaseModel):
     taxable_pay: Decimal
     tax_amount: Decimal
     #: دو کسورِ بعد از مالیات، تا فیش جمع بزند:
-    #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات
+    #: خالص = ناخالص − بیمه − مالیات − قسطِ وام − سایر کسورات + تعدیلِ رند
     loan_deduction: Decimal
     other_deductions: Decimal
+    #: تعدیلِ گِردکردنِ خالص؛ صفر یعنی رند خاموش است (پیش‌فرض).
+    rounding_adjustment: Decimal = Decimal(0)
     net_pay: Decimal
     journal_entry_id: UUID | None
 
@@ -697,7 +731,62 @@ class TaxBreakdownOut(BaseModel):
     steps: list[TaxBreakdownStep] = []
 
 
-class PayrollSettingsIn(BaseModel):
+#: پارامترهای قانونی‌ای که تا مهاجرتِ ۰۱۳۸ داخلِ سورس‌کد ثابت بودند. پیش‌فرضِ هر
+#: کدام **همان ثابتی است که جایش را گرفته**، پس فرمی که این‌ها را نفرستد دقیقاً
+#: رفتارِ قبلی را می‌گیرد.
+class PayrollStatutoryParams(BaseModel):
+    insurance_daily_ceiling: Decimal = Decimal(0)  # صفر = بی‌سقف
+    unemployment_rate: Decimal = Decimal(0)
+    hard_job_rate: Decimal = Decimal(0)
+    eidi_base_multiplier: Decimal = Decimal(2)
+    severance_days_per_year: int = 30
+    monthly_work_days: Decimal = Decimal(30)
+    standard_monthly_hours: Decimal = Decimal(194)
+    overtime_multiplier: Decimal = Decimal("1.4")
+    tax_exempt_coef_social: Decimal = Decimal(1)
+    tax_exempt_coef_supplementary: Decimal = Decimal(1)
+    tax_exempt_coef_medical: Decimal = Decimal(1)
+    #: **کدام عاملِ موجود این نقش را دارد** — نه ستونِ مبلغِ تازه. بی این‌ها دو
+    #: ضریبِ بالا بی‌مصرف‌اند، چون کوبیتا نمی‌داند کدام ردیفِ کسور کدام است.
+    supplementary_employee_factor_id: UUID | None = None
+    supplementary_employer_factor_id: UUID | None = None
+    medical_factor_id: UUID | None = None
+    allow_negative_tax: bool = False
+    payment_rounding_digits: int = 0
+
+
+def assert_statutory_params_sane(p: "PayrollSettingsIn") -> None:
+    """همان قیدهای `CHECK`ِ دیتابیس، ولی با پیامِ فارسی.
+
+    بی این، کاربرِ فرم به‌جای «نرخ باید بین ۰ و ۱ باشد» یک `IntegrityError`ِ خام
+    می‌گرفت — همان درسی که در جدولِ مالیات گرفته شد.
+    """
+    if p.insurance_daily_ceiling < 0:
+        raise ValueError("سقف روزانه‌ی بیمه نمی‌تواند منفی باشد (صفر یعنی بی‌سقف)")
+    for value, label in (
+        (p.unemployment_rate, "نرخ بیمه‌ی بیکاری"),
+        (p.hard_job_rate, "نرخ بیمه‌ی مشاغل سخت"),
+        (p.tax_exempt_coef_social, "ضریب معافیت بیمه از مالیات"),
+        (p.tax_exempt_coef_supplementary, "ضریب معافیت بیمه تکمیلی از مالیات"),
+        (p.tax_exempt_coef_medical, "ضریب معافیت بیمه درمان از مالیات"),
+    ):
+        if not (0 <= value <= 1):
+            raise ValueError(f"{label} باید بین ۰ و ۱ باشد")
+    if not (0 < p.eidi_base_multiplier <= 12):
+        raise ValueError("ضریب مبنای عیدی باید بزرگ‌تر از صفر و حداکثر ۱۲ باشد")
+    if not (0 < p.severance_days_per_year <= 365):
+        raise ValueError("روزهای مبنای سنوات در هر سال باید بین ۱ و ۳۶۵ باشد")
+    if not (0 < p.monthly_work_days <= 31):
+        raise ValueError("مبنای روز کاری ماه باید بین ۱ و ۳۱ باشد")
+    if not (0 < p.standard_monthly_hours <= 744):
+        raise ValueError("ساعت کار ماهانه باید بزرگ‌تر از صفر و حداکثر ۷۴۴ باشد")
+    if not (0 < p.overtime_multiplier <= 10):
+        raise ValueError("ضریب اضافه‌کار باید بزرگ‌تر از صفر و حداکثر ۱۰ باشد")
+    if not (0 <= p.payment_rounding_digits <= 6):
+        raise ValueError("تعداد رقم رند پرداخت باید بین ۰ و ۶ باشد")
+
+
+class PayrollSettingsIn(PayrollStatutoryParams):
     year: int
     insurance_employee_rate: Decimal
     insurance_employer_rate: Decimal
@@ -710,10 +799,11 @@ class PayrollSettingsIn(BaseModel):
     @model_validator(mode="after")
     def validate_brackets(self) -> "PayrollSettingsIn":
         assert_brackets_sane([(b.up_to, b.rate) for b in self.tax_brackets])
+        assert_statutory_params_sane(self)
         return self
 
 
-class PayrollSettingsOut(BaseModel):
+class PayrollSettingsOut(PayrollStatutoryParams):
     id: UUID
     year: int
     insurance_employee_rate: Decimal

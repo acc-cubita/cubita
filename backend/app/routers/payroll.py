@@ -20,6 +20,7 @@ from app.models.payroll import (
     LoanType,
     PayrollDeploymentInfo,
     PayrollFactor,
+    PayrollFactorParticipation,
     PayrollPeriod,
     PayrollSettings,
     PayrollSettlement,
@@ -41,6 +42,7 @@ from app.schemas.payroll import (
     EmployeeLoanIn,
     EmployeeLoanOut,
     EmployeeOut,
+    FactorParticipationIn,
     InsuranceTaxBranchIn,
     InsuranceTaxBranchOut,
     JobTitleIn,
@@ -52,6 +54,7 @@ from app.schemas.payroll import (
     PayrollPeriodIn,
     PayrollPeriodOut,
     PayrollSettingsIn,
+    PayrollStatutoryParams,
     PayrollSettingsOut,
     PayrollSettlementIn,
     PayrollSettlementOut,
@@ -66,7 +69,7 @@ from app.schemas.payroll import (
     ServiceLocationIn,
     ServiceLocationOut,
 )
-from app.services import payroll_contracts, payroll_loans
+from app.services import factor_participation, payroll_contracts, payroll_loans
 from app.services.tax_tables import (
     assert_scope_free,
     build_tax_breakdown,
@@ -300,27 +303,27 @@ def upsert_payroll_settings(
     # brackets صریحاً به dict قابل‌سریالایز JSON تبدیل می‌شوند (Decimal به‌صورت خام قابل ذخیره در JSONB نیست)
     brackets = [{"up_to": str(b.up_to) if b.up_to is not None else None, "rate": str(b.rate)} for b in data.tax_brackets]
 
+    #: **یک فهرست، نه دو.** پیش از این هر ستون دو بار نوشته می‌شد (یک‌بار در
+    #: سازنده، یک‌بار در شاخه‌ی ویرایش) و هر ستونِ تازه‌ای می‌توانست یکی از دو جا
+    #: را جا بیندازد — همان باگی که سکوت می‌کند تا ماه‌ها بعد.
+    fields = {
+        "insurance_employee_rate": data.insurance_employee_rate,
+        "insurance_employer_rate": data.insurance_employer_rate,
+        "tax_exemption_annual": data.tax_exemption_annual,
+        "tax_brackets": brackets,
+        "min_base_wage": data.min_base_wage,
+        "annual_leave_days": data.annual_leave_days,
+        "notes": data.notes,
+        **{name: getattr(data, name) for name in PayrollStatutoryParams.model_fields},
+    }
+
     settings = db.query(PayrollSettings).filter(PayrollSettings.year == data.year).first()
     if settings is None:
-        settings = PayrollSettings(
-            year=data.year,
-            insurance_employee_rate=data.insurance_employee_rate,
-            insurance_employer_rate=data.insurance_employer_rate,
-            tax_exemption_annual=data.tax_exemption_annual,
-            tax_brackets=brackets,
-            min_base_wage=data.min_base_wage,
-            annual_leave_days=data.annual_leave_days,
-            notes=data.notes,
-        )
+        settings = PayrollSettings(year=data.year, **fields)
         db.add(settings)
     else:
-        settings.insurance_employee_rate = data.insurance_employee_rate
-        settings.insurance_employer_rate = data.insurance_employer_rate
-        settings.tax_exemption_annual = data.tax_exemption_annual
-        settings.tax_brackets = brackets
-        settings.min_base_wage = data.min_base_wage
-        settings.annual_leave_days = data.annual_leave_days
-        settings.notes = data.notes
+        for name, value in fields.items():
+            setattr(settings, name, value)
     db.flush()
 
     mirror_default_tax_table(db, year=data.year, brackets=data.tax_brackets)
@@ -548,11 +551,13 @@ def update_job_title(
 def list_payroll_factors(
     db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
 ):
-    return (
+    rules = factor_participation.participation_map(db)
+    rows = (
         db.query(PayrollFactor)
         .order_by(PayrollFactor.category, PayrollFactor.system_key.desc(), PayrollFactor.name)
         .all()
     )
+    return [PayrollFactorOut.of(row, rules) for row in rows]
 
 
 @router.post("/api/payroll-factors/defaults", response_model=list[PayrollFactorOut])
@@ -592,7 +597,47 @@ def update_payroll_factor(
         setattr(row, field, value)
     db.flush()
     db.refresh(row)
-    return row
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
+
+
+@router.put("/api/payroll-factors/{row_id}/participation", response_model=PayrollFactorOut)
+def set_factor_participation(
+    row_id: UUID,
+    data: FactorParticipationIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ضریبِ شرکتِ یک عامل در مبناها را می‌گذارد.
+
+    **ردیفی که با پیش‌فرض یکی است پاک می‌شود، نه ذخیره.** جدول فقط استثناها را
+    نگه می‌دارد؛ اگر هر ردیفِ «مثلِ پیش‌فرض» هم ذخیره می‌شد، دو نمایشِ یک حقیقت
+    پیدا می‌کردیم و تغییرِ بعدیِ پیش‌فرض به ردیف‌های ذخیره‌شده نمی‌رسید.
+
+    فقط هدف‌هایی که فرستاده شده‌اند لمس می‌شوند؛ بقیه دست نمی‌خورند.
+    """
+    row = _fetch(db, PayrollFactor, row_id, "عامل")
+    existing = {
+        p.purpose: p
+        for p in db.query(PayrollFactorParticipation).filter(PayrollFactorParticipation.factor_id == row_id).all()
+    }
+    for purpose, value in data.participation.items():
+        default = factor_participation.coefficient(row, purpose, None)
+        current = existing.get(purpose)
+        if value == default:
+            if current is not None:
+                db.delete(current)
+            continue
+        if current is None:
+            db.add(
+                PayrollFactorParticipation(
+                    factor_id=row_id, purpose=purpose, included=value > 0, coefficient=value
+                )
+            )
+        else:
+            current.included = value > 0
+            current.coefficient = value
+    db.flush()
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
 
 
 @router.get("/api/payroll-tax-groups", response_model=list[PayrollTaxGroupOut])
