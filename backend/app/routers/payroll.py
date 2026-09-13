@@ -26,6 +26,7 @@ from app.models.payroll import (
     PayrollTaxGroup,
     Payslip,
     SalaryContract,
+    TaxTable,
     ServiceLocation,
 )
 from app.models.user import User
@@ -59,10 +60,20 @@ from app.schemas.payroll import (
     PayslipOut,
     SalaryContractIn,
     SalaryContractOut,
+    TaxBreakdownOut,
+    TaxTableIn,
+    TaxTableOut,
     ServiceLocationIn,
     ServiceLocationOut,
 )
 from app.services import payroll_contracts, payroll_loans
+from app.services.tax_tables import (
+    assert_scope_free,
+    build_tax_breakdown,
+    mirror_default_tax_table,
+    replace_brackets,
+    table_is_used,
+)
 from app.services.payroll import (
     generate_insurance_list_csv,
     generate_payment_list_csv,
@@ -311,8 +322,144 @@ def upsert_payroll_settings(
         settings.annual_leave_days = data.annual_leave_days
         settings.notes = data.notes
     db.flush()
+
+    mirror_default_tax_table(db, year=data.year, brackets=data.tax_brackets)
     db.refresh(settings)
     return settings
+
+
+# ── جدولِ مالیات ──────────────────────────────────────────────────────────────
+
+
+def _tax_table_out(db: Session, table: TaxTable) -> TaxTableOut:
+    return TaxTableOut.of(table, in_use=table_is_used(db, table.id))
+
+
+def _check_tax_table(db: Session, data: TaxTableIn, *, table_id=None) -> None:
+    """گروه و دامنه را می‌سنجد — **پیش از اینکه شیئی به جلسه اضافه شود**.
+
+    ترتیب اتفاقی نیست: هر کوئری روی جلسه‌ای که یک `TaxTable`ِ نیمه‌ساخته دارد،
+    autoflush را راه می‌اندازد و همان جدولِ خالی قیدِ `NOT NULL` را می‌شکند.
+    """
+    if data.tax_group_id is not None and db.get(PayrollTaxGroup, data.tax_group_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "گروه مالیاتی یافت نشد")
+    assert_scope_free(
+        db,
+        table_id=table_id,
+        effective_from=data.effective_from,
+        calculation_type=data.calculation_type,
+        tax_group_id=data.tax_group_id,
+    )
+
+
+def _apply_tax_table(db: Session, table: TaxTable, data: TaxTableIn) -> None:
+    """سرصفحه را می‌نشاند، **بعد** flush، **بعد** پله‌ها.
+
+    پله‌ها `table.id` می‌خواهند، پس جدول باید پیش از آن‌ها flush شده باشد.
+    """
+    table.title = data.title.strip()
+    table.title2 = data.title2.strip()
+    table.effective_from = data.effective_from
+    table.tax_group_id = data.tax_group_id
+    table.calculation_type = data.calculation_type
+    db.flush()
+    replace_brackets(db, table, [(b.up_to, b.rate) for b in data.brackets])
+
+
+@router.get("/api/tax-tables", response_model=list[TaxTableOut])
+def list_tax_tables(
+    calculation_type: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    """فهرستِ جدول‌های مالیات — همه‌ی سال‌ها، همه‌ی گروه‌ها، کنارِ هم.
+
+    جدولِ سالِ گذشته **پاک نمی‌شود**؛ تاریخچه سرِ جایش می‌ماند تا محاسبه‌ی گذشته
+    بازتولیدپذیر بماند.
+    """
+    query = db.query(TaxTable)
+    if calculation_type:
+        query = query.filter(TaxTable.calculation_type == calculation_type)
+    rows = query.order_by(TaxTable.effective_from.desc(), TaxTable.title).all()
+    used = {
+        payslip_table_id
+        for (payslip_table_id,) in db.query(Payslip.tax_table_id).filter(Payslip.tax_table_id.isnot(None)).distinct()
+    }
+    return [TaxTableOut.of(row, in_use=row.id in used) for row in rows]
+
+
+@router.post("/api/tax-tables", response_model=TaxTableOut, status_code=201)
+def create_tax_table(
+    data: TaxTableIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
+):
+    _check_tax_table(db, data)
+    table = TaxTable(
+        title=data.title.strip(),
+        title2=data.title2.strip(),
+        effective_from=data.effective_from,
+        tax_group_id=data.tax_group_id,
+        calculation_type=data.calculation_type,
+    )
+    db.add(table)
+    _apply_tax_table(db, table, data)
+    db.refresh(table)
+    return _tax_table_out(db, table)
+
+
+@router.patch("/api/tax-tables/{table_id}", response_model=TaxTableOut)
+def update_tax_table(
+    table_id: UUID,
+    data: TaxTableIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ویرایشِ جدول.
+
+    **فیش‌های صادرشده تکان نمی‌خورند** — عددشان از لحظه‌ی صدور عکس است. ولی
+    محاسبه‌های *بعدی* از این پس با اعدادِ تازه انجام می‌شوند، پس رابط باید
+    بگوید جدول در استفاده بوده.
+    """
+    table = db.get(TaxTable, table_id)
+    if table is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جدول مالیات یافت نشد")
+    _check_tax_table(db, data, table_id=table.id)
+    _apply_tax_table(db, table, data)
+    db.refresh(table)
+    return _tax_table_out(db, table)
+
+
+@router.delete("/api/tax-tables/{table_id}", status_code=204)
+def delete_tax_table(
+    table_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "update"))
+):
+    """حذفِ جدولی که هیچ فیشی به آن استناد نکرده.
+
+    جدولِ استفاده‌شده حذف نمی‌شود: فیشِ پارسال باید بتواند بگوید مالیاتش از کدام
+    قاعده آمد، و جدولِ حذف‌شده آن جواب را برای همیشه می‌برد.
+    """
+    table = db.get(TaxTable, table_id)
+    if table is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جدول مالیات یافت نشد")
+    if table_is_used(db, table_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "فیش‌هایی به این جدول استناد کرده‌اند و حذفش توضیحِ مالیاتشان را از بین می‌برد. "
+            "برای سال یا گروه تازه، جدول تازه بسازید.",
+        )
+    db.delete(table)
+    return Response(status_code=204)
+
+
+@router.get("/api/payslips/{payslip_id}/tax-breakdown", response_model=TaxBreakdownOut)
+def payslip_tax_breakdown(
+    payslip_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    """«این مالیات از کجا آمد؟» — پله‌به‌پله.
+
+    هیچ‌چیز ذخیره نمی‌شود: از جدولِ ثبت‌شده‌ی همان فیش و مبنایش **بازسازی**
+    می‌شود، پس نمی‌تواند با آن‌ها ناسازگار شود.
+    """
+    return build_tax_breakdown(db, payslip_id)
 
 
 # ── جدول‌های مرجعِ حقوق و دستمزد ───────────────────────────────────────────────

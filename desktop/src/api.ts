@@ -8266,3 +8266,68 @@ export const updateInsuranceTaxBranch = (
   id: string,
   body: Partial<InsuranceTaxBranchRecord>,
 ) => authedSend<InsuranceTaxBranchRecord>(token, 'PATCH', `/api/insurance-tax-branches/${id}`, body)
+
+// ── جدول مالیات ─────────────────────────────────────────────────────────────
+
+export interface TaxBracketRow {
+  seq: number
+  /** مرزِ پایینِ پله — مشتق از سقفِ پله‌ی قبل، نه ستونِ ذخیره‌شده. */
+  from_amount: string
+  /** `null` = سقفِ نامحدود. */
+  up_to: string | null
+  /** کسر، نه درصد: ۰٫۰۷۵ یعنی ۷٫۵٪. */
+  rate: string
+}
+
+export interface TaxTableRecord {
+  id: string
+  title: string
+  title2: string
+  effective_from: string
+  tax_group_id: string | null
+  tax_group_name: string
+  calculation_type: string
+  brackets: TaxBracketRow[]
+  /** فیشی به این جدول استناد کرده؟ */
+  in_use: boolean
+}
+
+export interface TaxBreakdownStep {
+  seq: number
+  from_amount: string
+  up_to: string | null
+  rate: string
+  consumed: string
+  tax: string
+  cumulative: string
+}
+
+export interface TaxBreakdown {
+  payslip_id: string
+  tax_amount: string
+  annual_taxable: string
+  annual_exemption: string
+  tax_table_id: string | null
+  tax_table_title: string
+  tax_group_name: string
+  steps: TaxBreakdownStep[]
+}
+
+export const TAX_CALC_PURPOSE_LABELS: Record<string, string> = {
+  salary: 'حقوق',
+  eidi: 'عیدی',
+}
+
+export const fetchTaxTables = (token: string, calculationType?: string) =>
+  authedGet<TaxTableRecord[]>(
+    token,
+    calculationType ? `/api/tax-tables?calculation_type=${calculationType}` : '/api/tax-tables',
+  )
+export const createTaxTable = (token: string, body: unknown) =>
+  authedSend<TaxTableRecord>(token, 'POST', '/api/tax-tables', body)
+export const updateTaxTable = (token: string, id: string, body: unknown) =>
+  authedSend<TaxTableRecord>(token, 'PATCH', `/api/tax-tables/${id}`, body)
+export const deleteTaxTable = (token: string, id: string) =>
+  authedDelete(token, `/api/tax-tables/${id}`)
+export const fetchTaxBreakdown = (token: string, payslipId: string) =>
+  authedGet<TaxBreakdown>(token, `/api/payslips/${payslipId}/tax-breakdown`)

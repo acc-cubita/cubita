@@ -14,6 +14,7 @@ from app.models.payroll import (
     FACTOR_SYSTEM_KEYS,
     JOB_FAMILIES,
     TAX_CALC_METHODS,
+    TAX_CALC_PURPOSES,
     TAX_GROUP_DEFAULT_PERCENT,
     TAX_GROUP_KINDS,
 )
@@ -552,6 +553,150 @@ class TaxBracketIn(BaseModel):
     rate: Decimal  # بین ۰ و ۱
 
 
+def assert_brackets_sane(brackets: list[tuple[Decimal | None, Decimal]]) -> None:
+    """پلکانِ مالیات را می‌سنجد — یک تابع، چون دو جا واردش می‌شوند.
+
+    **باگی که این‌جا بسته شد:** موتور فرض می‌کند فهرست **صعودی** است (سقفِ هر پله
+    را مرزِ پایینِ پله‌ی بعد می‌گیرد) ولی تا امروز هیچ‌کس این را نمی‌سنجید. با
+    پلکانِ نامرتب، مالیات بی‌صدا و بدونِ هیچ خطایی اشتباه درمی‌آمد:
+
+        پله‌ها ۱۰۰@۱۰٪ · ۲۰۰@۲۰٪ · ∞@۳۰٪ ، مبنا ۳۰۰
+
+        مرتب   ⇒ ۶۰   ✓
+        نامرتب ⇒ ۱۰۰  ✗   (۶۷٪ اضافه)
+
+    و اسکیما فهرستِ نامرتب را می‌پذیرفت، یعنی از رابط و از API قابلِ ورود بود.
+
+    مدلِ «سقفِ تجمعی» (`up_to`) عمداً به‌جای بازه‌ی `from/to` مانده: با آن، شکاف و
+    همپوشانیِ پله‌ها **ساختاراً ناممکن** است و کلِ خانواده‌ی اعتبارسنجی‌هایشان
+    بی‌موضوع می‌شود. تنها چیزی که باید سنجیده شود همین ترتیب است.
+    """
+    if not brackets:
+        raise ValueError("حداقل یک پلکان مالیاتی لازم است")
+    if brackets[-1][0] is not None:
+        raise ValueError("آخرین پلکان مالیاتی باید سقف نامحدود (up_to=null) داشته باشد")
+
+    previous: Decimal | None = None
+    for index, (up_to, rate) in enumerate(brackets):
+        if not (0 <= rate <= 1):
+            raise ValueError("نرخ هر پلکان باید بین ۰ و ۱ باشد")
+        if up_to is None:
+            #: سقفِ نامحدود فقط در ردیفِ آخر مجاز است — وگرنه ردیف‌های بعدی هرگز
+            #: به آن‌ها نمی‌رسد و بی‌صدا نادیده می‌مانند.
+            if index != len(brackets) - 1:
+                raise ValueError("سقف نامحدود فقط برای آخرین پلکان مجاز است")
+            continue
+        if up_to <= 0:
+            raise ValueError("سقف هر پلکان باید بزرگ‌تر از صفر باشد")
+        if previous is not None and up_to <= previous:
+            raise ValueError(
+                "پلکان‌های مالیاتی باید صعودی باشند؛ سقف هر پله باید از پله‌ی قبل بیشتر باشد"
+            )
+        previous = up_to
+
+
+class TaxTableIn(BaseModel):
+    """جدولِ مالیات — سرصفحه‌ی قاعده به‌علاوه‌ی پله‌هایش."""
+
+    title: str
+    title2: str = ""
+    effective_from: date
+    #: `None` = جدولِ پیش‌فرض، برای حکم‌هایی که گروهِ مالیاتی ندارند.
+    tax_group_id: UUID | None = None
+    calculation_type: str = "salary"
+    brackets: list[TaxBracketIn]
+
+    @model_validator(mode="after")
+    def _valid(self) -> "TaxTableIn":
+        if not self.title.strip():
+            raise ValueError("عنوان جدول الزامی است")
+        if self.calculation_type not in TAX_CALC_PURPOSES:
+            raise ValueError("نوع محاسبه باید حقوق یا عیدی باشد")
+        assert_brackets_sane([(b.up_to, b.rate) for b in self.brackets])
+        return self
+
+
+class TaxBracketOut(BaseModel):
+    seq: int
+    #: مرزِ پایینِ این پله — **مشتق** از سقفِ پله‌ی قبل، نه ستون. «از مبلغ»ِ فرم.
+    from_amount: Decimal
+    up_to: Decimal | None
+    rate: Decimal
+
+
+class TaxTableOut(BaseModel):
+    id: UUID
+    title: str
+    title2: str
+    effective_from: date
+    tax_group_id: UUID | None
+    tax_group_name: str = ""
+    calculation_type: str
+    brackets: list[TaxBracketOut] = []
+    #: فیشی به این جدول استناد کرده؟ آن‌وقت ویرایشش گذشته را عوض نمی‌کند (اعدادِ
+    #: فیش عکس‌اند) ولی رابط باید هشدار بدهد.
+    in_use: bool = False
+
+    model_config = {"from_attributes": True}
+
+    @classmethod
+    def of(cls, table, *, in_use: bool = False) -> "TaxTableOut":
+        rows = sorted(
+            table.brackets,
+            key=lambda b: (b.up_to is None, Decimal(str(b.up_to or 0))),
+        )
+        brackets: list[TaxBracketOut] = []
+        lower = Decimal(0)
+        for seq, row in enumerate(rows, start=1):
+            brackets.append(
+                TaxBracketOut(
+                    seq=seq,
+                    from_amount=lower,
+                    up_to=None if row.up_to is None else Decimal(str(row.up_to)),
+                    rate=Decimal(str(row.rate)),
+                )
+            )
+            if row.up_to is not None:
+                lower = Decimal(str(row.up_to))
+        group = getattr(table, "tax_group", None)
+        return cls(
+            id=table.id,
+            title=table.title,
+            title2=table.title2 or "",
+            effective_from=table.effective_from,
+            tax_group_id=table.tax_group_id,
+            tax_group_name=(getattr(group, "name", "") or "") if group is not None else "",
+            calculation_type=table.calculation_type,
+            brackets=brackets,
+            in_use=in_use,
+        )
+
+
+class TaxBreakdownStep(BaseModel):
+    seq: int
+    from_amount: Decimal
+    up_to: Decimal | None
+    rate: Decimal
+    consumed: Decimal
+    tax: Decimal
+    cumulative: Decimal
+
+
+class TaxBreakdownOut(BaseModel):
+    """«این مالیات از کجا آمد؟» — همه‌چیز مشتق، هیچ‌چیز ذخیره‌شده."""
+
+    payslip_id: UUID
+    tax_amount: Decimal
+    #: مبنای **سالانه‌ی** مصرف‌شده. تفکیک در همین سطح معنا دارد، چون موتور
+    #: تعدیلِ تجمیعی می‌کند: مالیاتِ ماه سهمی از مالیاتِ سالانه است.
+    annual_taxable: Decimal
+    annual_exemption: Decimal
+    tax_table_id: UUID | None = None
+    tax_table_title: str = ""
+    tax_group_name: str = ""
+    steps: list[TaxBreakdownStep] = []
+
+
 class PayrollSettingsIn(BaseModel):
     year: int
     insurance_employee_rate: Decimal
@@ -564,13 +709,7 @@ class PayrollSettingsIn(BaseModel):
 
     @model_validator(mode="after")
     def validate_brackets(self) -> "PayrollSettingsIn":
-        if not self.tax_brackets:
-            raise ValueError("حداقل یک پلکان مالیاتی لازم است")
-        if self.tax_brackets[-1].up_to is not None:
-            raise ValueError("آخرین پلکان مالیاتی باید سقف نامحدود (up_to=null) داشته باشد")
-        for bracket in self.tax_brackets:
-            if not (0 <= bracket.rate <= 1):
-                raise ValueError("نرخ هر پلکان باید بین ۰ و ۱ باشد")
+        assert_brackets_sane([(b.up_to, b.rate) for b in self.tax_brackets])
         return self
 
 

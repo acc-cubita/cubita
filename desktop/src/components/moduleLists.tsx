@@ -401,6 +401,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   jobtitle: 'view',
   payrollfactors: 'view',
   payrolltaxgroups: 'view',
+  taxtables: 'view',
   loantype: 'view',
   employeeloans: 'view',
   settlement: 'view',

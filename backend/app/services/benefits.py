@@ -30,6 +30,7 @@ from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
 from app.services.payroll import get_current_contract
 from app.services.period_close import assert_period_open
+from app.services.tax_tables import eidi_tax
 
 _DAILY_DIVISOR = Decimal(30)  # ماه = ۳۰ روز
 _YEAR_DIVISOR = Decimal(365)
@@ -205,12 +206,39 @@ def list_leave(db: Session, employee_id: UUID | None = None) -> list[LeaveRecord
 # --- صدور (ثبت سند) -----------------------------------------------------------------
 
 
-def _post_benefit(db: Session, description: str, amount: Decimal, run_date: date, user: User):
-    """سندِ دوطرفه‌ی مزیت: بدهکارِ هزینه‌ی حقوق، بستانکارِ حقوقِ پرداختنی."""
-    lines = [
-        JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=amount, credit=0),
-        JournalLine(account_id=get_account(db, cc.PAYROLL_PAYABLE).id, debit=0, credit=amount, description=description),
-    ]
+def _post_benefit(
+    db: Session, description: str, amount: Decimal, run_date: date, user: User, *, tax: Decimal = Decimal(0)
+):
+    """سندِ مزیت: بدهکارِ هزینه‌ی حقوق، بستانکارِ پرداختنی — و مالیات اگر باشد.
+
+    بی مالیات دوخطی می‌ماند، دقیقاً مثلِ قبل. با مالیات سه‌خطی می‌شود: هزینه
+    همچنان ناخالص است (هزینه‌ی کارفرما عوض نشده)، ولی بخشی از آن به‌جای جیبِ
+    کارمند به «بیمه و مالیات پرداختنی» می‌رود.
+    """
+    lines = [JournalLine(account_id=get_account(db, cc.PAYROLL_EXPENSE).id, debit=amount, credit=0)]
+    if tax > 0:
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.PAYROLL_PAYABLE).id,
+                debit=0,
+                credit=amount - tax,
+                description=description,
+            )
+        )
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.INSURANCE_TAX_PAYABLE).id,
+                debit=0,
+                credit=tax,
+                description=f"مالیات {description}",
+            )
+        )
+    else:
+        lines.append(
+            JournalLine(
+                account_id=get_account(db, cc.PAYROLL_PAYABLE).id, debit=0, credit=amount, description=description
+            )
+        )
     return make_journal_entry(db, run_date, description, "payroll_benefit", user, lines)
 
 
@@ -225,11 +253,21 @@ def issue_eidi(db: Session, year: int, user: User, run_date: date | None = None)
     if total <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای این سال عیدیِ قابلِ صدوری وجود ندارد")
 
-    entry = _post_benefit(db, f"عیدی و پاداش سال {year}", total, run_date, user)
+    #: **عیدی جدولِ مالیاتِ خودش را دارد، نه جدولِ حقوق.**
+    #:
+    #: آستانه‌ها و پله‌هایشان یکی نیستند، پس استفاده از جدولِ حقوق برای عیدی یک
+    #: عددِ اشتباه می‌دهد که هیچ‌چیز آشکارش نمی‌کند.
+    #:
+    #: تا وقتی کاربر جدولِ عیدی تعریف نکرده، `None` برمی‌گردد و عیدی **بی‌مالیات**
+    #: می‌ماند — همان رفتارِ امروز. ساختنِ خودکارِ جدولِ عیدی یعنی یک مهاجرت
+    #: بی‌خبر مالیات کسر کند، و آن تصمیمِ کاربر است نه ما.
+    tax = eidi_tax(db, total, on=run_date)
+
+    entry = _post_benefit(db, f"عیدی و پاداش سال {year}", total, run_date, user, tax=tax)
     run = BenefitRun(kind="eidi", year=year, amount=total, run_date=run_date, journal_entry_id=entry.id, created_by_id=user.id)
     db.add(run)
     db.flush()
-    return {"kind": "eidi", "amount": total, "journal_entry_number": entry.number}
+    return {"kind": "eidi", "amount": total, "tax": tax, "journal_entry_number": entry.number}
 
 
 def issue_severance(db: Session, employee_id: UUID, user: User, as_of: date | None = None) -> dict:
