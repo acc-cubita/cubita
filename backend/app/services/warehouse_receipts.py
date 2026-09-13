@@ -72,6 +72,7 @@ from app.services.inventory import (
     goods_in_transit_account,
     lock_items,
     vat_receivable_account,
+    work_in_process_account,
 )
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
@@ -209,6 +210,31 @@ def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
     return rows
 
 
+def _direct_credit_account(db: Session, receipt: WarehouseReceipt):
+    """طرفِ بستانکارِ رسیدِ مستقیم — **از روی نوعِ رسید**، نه فقط تحویل‌دهنده.
+
+    تا پیش از این تنها یک قاعده بود («تحویل‌دهنده داری؟ بدهی؛ نداری؟ نقد») و روی
+    هر پنج نوع اجرا می‌شد. برای خرید درست است و برای دو نوعِ دیگر **اثباتاً غلط**:
+
+    * **تولید:** بابتِ کالایی که خودمان ساخته‌ایم پولی پرداخت نشده. ورودِ
+      ۲٬۴۰۰٬۰۰۰ ریال محصول صندوق را ۲٬۴۰۰٬۰۰۰ ریال کم می‌کرد (یا بدهیِ ساختگی به
+      تأمین‌کننده می‌ساخت). طرفِ درست خروجِ همان ارزش از **جریانِ ساخت** است.
+    * **موجودی اول دوره:** افتتاحیه مسیرِ درستِ خودش را دارد
+      (`onboarding.create_opening_entry`) و مقابلِ سرمایه می‌بندد. رسیدی با این
+      نوع تا امروز به‌جای آن صندوق را کم می‌کرد؛ حالا به **حساب افتتاحیه**
+      می‌خورد — همان حسابی که سندِ افتتاحیه‌ی اصلی هم با آن کار می‌کند.
+
+    خرید (داخلی/وارداتی) و «سایر» رفتارشان دست‌نخورده است.
+    """
+    if receipt.receipt_type == "production":
+        return work_in_process_account(db)
+    if receipt.receipt_type == "opening":
+        return get_account(db, cc.OPENING_ACCOUNT)
+    #: همان قاعده‌ای که `post_purchase_invoice` دارد — دو موتور یک تصمیم را دو
+    #: جور نمی‌گیرند.
+    return get_account(db, cc.ACCOUNTS_PAYABLE) if receipt.contact_id else get_account(db, cc.CASH)
+
+
 def _direct_journal_lines(
     db: Session, receipt: WarehouseReceipt, rows: list[dict]
 ) -> list[JournalLine]:
@@ -244,12 +270,7 @@ def _direct_journal_lines(
             row["qty"] * row["unit_cost"]
         )
 
-    #: طرفِ بستانکار: اگر تحویل‌دهنده‌ای نام برده شده، بدهی به اوست؛ وگرنه نقد.
-    #: همان قاعده‌ای که `post_purchase_invoice` دارد — دو موتور یک تصمیم را دو
-    #: جور نمی‌گیرند.
-    credit_account = (
-        get_account(db, cc.ACCOUNTS_PAYABLE) if receipt.contact_id else get_account(db, cc.CASH)
-    )
+    credit_account = _direct_credit_account(db, receipt)
     lines = [
         JournalLine(
             account_id=account_id,
@@ -492,10 +513,17 @@ def _apply_tax(
       بماند (§۲۷) — و **هرگز ثبت نمی‌شود**، وگرنه اعتبارِ مالیاتی دو برابر
       می‌شد (§۳۷).
     """
+    #: **دو نوع اصلاً خرید نیستند، پس مالیاتِ خرید هم ندارند.** نرخِ مؤثر از
+    #: خودِ کالا می‌آید، پس بی این گارد تولیدِ یک کالای نرخ‌دار «اعتبارِ مالیاتی»
+    #: می‌ساخت — مالیاتی که به هیچ‌کس پرداخت نشده. افتتاحیه هم همین‌طور.
+    taxable = data.receipt_type not in ("production", "opening")
+
     for row in rows:
         if invoice is None:
-            row["tax_rate"] = items_svc.effective_tax_rate(
-                row["item"], data.tax_rate, side="purchase"
+            row["tax_rate"] = (
+                items_svc.effective_tax_rate(row["item"], data.tax_rate, side="purchase")
+                if taxable
+                else Decimal(0)
             )
             #: پایه‌ی مالیات مبلغِ کالاست، نه بهای تمام‌شده: حمل مالیاتِ خودش
             #: را در سرِ سند دارد و شمردنش این‌جا یعنی دوباره‌شماری.
