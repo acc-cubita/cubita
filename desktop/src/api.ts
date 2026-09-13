@@ -1623,6 +1623,12 @@ export interface SalesReturnRecord {
   journal_entry_id: string | null
   voided_at: string | null
   void_reason: string
+  /** برگشتِ فیزیکی (مهاجرتِ ۰۱۳۴) — `inline` یعنی خودِ این سند موجودی را برگردانده. */
+  stock_mode?: 'inline' | 'issue_return'
+  physical_status?: string
+  physical_qty?: string
+  physical_returned_qty?: string
+  physical_remaining_qty?: string
   /** مشتق سمتِ سرور — هیچ‌کدام ستونِ ذخیره‌شده نیستند. */
   final_amount: string
   settled_amount: string
@@ -1680,7 +1686,16 @@ export interface PurchaseReturnRecord {
   id: string
   number: number | null
   return_date: string
-  purchase_invoice_id: string
+  /** برگشتی که به رسیدِ مستقیم لنگر زده فاکتوری ندارد. */
+  purchase_invoice_id: string | null
+  warehouse_receipt_id?: string | null
+  warehouse_id?: string | null
+  /** «تحویل‌گیرنده» — با تحویل‌دهنده‌ی رسید یکی نیست. */
+  receiver_id?: string | null
+  return_type?: string
+  /** «خالص» (ارزشِ دفتری) و «خالص توافقی» — دو ستونِ جدا در فهرست. */
+  base_amount?: string
+  agreed_total?: string
   description: string
   total_amount: string
   tax_rate: string
@@ -1723,6 +1738,9 @@ export interface StockTransferRecord {
   from_warehouse_id: string
   to_warehouse_id: string
   description: string
+  journal_entry_id?: string | null
+  voided_at?: string | null
+  void_reason?: string
   lines: { id: string; item_id: string; qty: string }[]
 }
 
@@ -1737,7 +1755,9 @@ export const createStockTransfer = (
     description: string
     lines: { item_id: string; qty: number }[]
   },
-) => authedSend<StockTransferRecord>(token, 'POST', '/api/stock-transfers', data)
+  //: تکرارِ شبکه‌ای نباید دو انتقال بسازد — کلید به همین حواله گره می‌خورد.
+  idempotencyKey?: string,
+) => authedSend<StockTransferRecord>(token, 'POST', '/api/stock-transfers', data, idempotencyKey)
 
 export interface StockLevel {
   item_id: string
@@ -7326,6 +7346,8 @@ export interface SalesInvoiceCommercialInput {
   exchange_rate?: number
   invoice_discount?: number
   rounding?: number
+  /** فاکتوری که از خروجِ ثبت‌شده ساخته می‌شود — موجودی را دوباره کم نمی‌کند. */
+  source_warehouse_issue_id?: string | null
   lines: Array<{
     item_id: string
     qty: number
@@ -7334,6 +7356,7 @@ export interface SalesInvoiceCommercialInput {
     addition?: number
     duty_amount?: number
     description?: string
+    source_issue_line_id?: string | null
   }>
 }
 
@@ -7353,20 +7376,36 @@ export interface WarehouseIssueRecord {
   id: string
   number: number
   issue_date: string
-  sales_invoice_id: string
+  /** `sale` | `consumption` | `other` — انتقال سندِ خودش را دارد. */
+  issue_type: string
+  /** `invoice`: «ثبت فاکتور» ساختش · `direct`: مستقل ثبت شد و شاید بعد فاکتور گرفت. */
+  origin: string
+  sales_invoice_id: string | null
   warehouse_id: string
+  receiver_id: string | null
+  source_quotation_id: string | null
+  cost_center_id: string | null
   status: string
   description: string
   journal_entry_id: string | null
   voided_at: string | null
   void_reason: string
   created_by_id: string
+  total_qty: string
+  total_cost: string
   lines: Array<{
     id: string
-    sales_invoice_line_id: string
+    seq: number
+    sales_invoice_line_id: string | null
     item_id: string
     qty: string
     unit_cost: string
+    amount: string
+    secondary_qty: string | null
+    secondary_unit_snapshot: string
+    account_id: string | null
+    account_code: string
+    account_name: string
     item_code_snapshot: string
     item_name_snapshot: string
     unit_snapshot: string
@@ -7401,6 +7440,171 @@ export const createWarehouseIssueIdempotent = (
 export const voidWarehouseIssue = (token: string, id: string, reason: string) =>
   authedSend<WarehouseIssueRecord>(token, 'POST', `/api/warehouse-issues/${id}/void`, { reason })
 
+// ── رسید انبار: رسیدِ مستقیم، حمل، برگشتِ رسید، چاپ و زمینه‌ی پرداخت ──────────
+//
+// همه‌ی عددها از سرور می‌آیند. «فی تمام‌شده»، سهمِ حمل و «خالص» در این‌جا حساب
+// نمی‌شوند (§۲۳: «الگوریتم تسهیم را داخل UI ننویسیم»؛ §۲۷: خالص مشتق است).
+
+/** انواعِ رسیدِ **انبار** — با `RECEIPT_TYPE_LABELS` (رسید دریافتِ خزانه) یکی نیست. */
+export const WAREHOUSE_RECEIPT_TYPE_LABELS: Record<string, string> = {
+  purchase_domestic: 'خرید (داخلی)',
+  purchase_import: 'خرید (وارداتی)',
+  production: 'تولید',
+  other: 'سایر',
+  opening: 'موجودی اول دوره',
+}
+
+/** برگشت «موجودی اول دوره» ندارد — فرمِ مرجع هم ندارَدش. */
+export const RETURN_TYPE_LABELS: Record<string, string> = {
+  purchase_domestic: 'خرید (داخلی)',
+  purchase_import: 'خرید (وارداتی)',
+  production: 'تولید',
+  other: 'سایر',
+}
+
+export interface WarehouseReceiptLineFull {
+  id: string
+  seq: number
+  purchase_invoice_line_id: string | null
+  item_id: string
+  qty: string
+  /** «فی» — بهای خرید، پیش از حمل. */
+  unit_cost: string
+  freight_share: string
+  /** «فی تمام‌شده» — با «فی» یکی نیست. */
+  landed_unit_cost: string
+  tax_rate_snapshot: string
+  tax_amount_snapshot: string
+  item_code_snapshot: string
+  item_name_snapshot: string
+  unit_snapshot: string
+  description: string
+}
+
+export interface WarehouseReceiptFull {
+  id: string
+  number: number
+  receipt_date: string
+  purchase_invoice_id: string | null
+  warehouse_id: string
+  receipt_type: string
+  contact_id: string | null
+  carrier_id: string | null
+  freight_agent_id: string | null
+  currency_code: string | null
+  exchange_rate: string
+  freight_amount: string
+  freight_tax: string
+  freight_duty: string
+  freight_basis: string
+  tax_rate: string
+  goods_amount: string
+  /** «جمع مبلغ حمل»ِ پنجره‌ی حمل — جزءِ خالص نیست. */
+  freight_total: string
+  tax_amount: string
+  duty_amount: string
+  net_amount: string
+  journal_entry_id: string | null
+  status: string
+  description: string
+  description2: string
+  voided_at: string | null
+  void_reason: string
+  created_by_id: string
+  lines: WarehouseReceiptLineFull[]
+}
+
+export const fetchAllWarehouseReceipts = (
+  token: string,
+  filters: { receipt_type?: string; warehouse_id?: string; contact_id?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGetAll<WarehouseReceiptFull>(token, `/api/warehouse-receipts${query ? `?${query}` : ''}`)
+}
+
+export interface DirectWarehouseReceiptIn {
+  receipt_date: string
+  warehouse_id: string
+  receipt_type: string
+  contact_id?: string | null
+  carrier_id?: string | null
+  freight_amount?: number
+  freight_tax?: number
+  freight_duty?: number
+  freight_basis?: string
+  tax_rate?: number
+  description?: string
+  lines: { item_id: string; qty: number; unit_cost: number; description?: string }[]
+}
+
+export const createDirectWarehouseReceipt = (token: string, data: DirectWarehouseReceiptIn, idempotencyKey: string) =>
+  authedSend<WarehouseReceiptFull>(token, 'POST', '/api/warehouse-receipts', data, idempotencyKey)
+
+export const printWarehouseReceipt = (token: string, receiptId: string) =>
+  openInvoicePrintView(token, `/api/warehouse-receipts/${receiptId}/print`)
+
+export interface ReceiptReturnableLine {
+  warehouse_receipt_line_id: string
+  purchase_invoice_line_id: string | null
+  receipt_number: number
+  receipt_date: string
+  item_id: string
+  item_code: string
+  item_name: string
+  unit: string
+  received: string
+  already_returned: string
+  remaining: string
+  unit_cost: string
+  landed_unit_cost: string
+  /** مشتق از مقدارها، نه یک بولینِ مستقل. */
+  return_status: 'not_returned' | 'partially_returned' | 'fully_returned'
+}
+
+export const fetchReceiptReturnable = (token: string, receiptId: string) =>
+  authedGet<ReceiptReturnableLine[]>(token, `/api/warehouse-receipts/${receiptId}/returnable`)
+
+export interface ReceiptReturnIn {
+  return_date: string
+  warehouse_receipt_id: string
+  receiver_id?: string | null
+  return_type: string
+  description?: string
+  lines: {
+    warehouse_receipt_line_id: string
+    qty: number
+    /** خالی یعنی «همان ارزشِ دفتری» — هیچ اختلافی ساخته نمی‌شود. */
+    agreed_unit_value?: number | null
+    description?: string
+  }[]
+}
+
+export const createReceiptReturn = (token: string, data: ReceiptReturnIn, idempotencyKey: string) =>
+  authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data, idempotencyKey)
+
+export interface ReceiptPaymentContext {
+  payment_type: string
+  contact_id: string
+  contact_name: string
+  document_type: 'warehouse_receipt'
+  document_id: string
+  receipt_number: number
+  description: string
+  /** «جمع مبلغ رسید انبار» — برای نمایش. */
+  receipt_net_amount: string
+  goods_due: string
+  freight_due: string
+  freight_payee_id: string | null
+  /** پیشنهادِ قابلِ‌ویرایش — عمداً برابرِ خالص نیست؛ حمل بدهیِ حمل‌کننده است. */
+  suggested_amount: string
+  currency_code: string
+  exchange_rate: string
+}
+
+export const fetchReceiptPaymentContext = (token: string, receiptId: string) =>
+  authedGet<ReceiptPaymentContext>(token, `/api/warehouse-receipts/${receiptId}/payment-context`)
 
 // ── سیاستِ صدورِ فاکتور فروش ─────────────────────────────────────────────
 //
@@ -7722,3 +7926,294 @@ export const fetchSalesReviewLines = (token: string, scope: SalesReviewScope = {
 
 export const fetchPreinvoiceProgress = (token: string, scope: SalesReviewScope = {}) =>
   authedGet<PreinvoiceProgress[]>(token, `/api/reports/sales-review/preinvoices${salesReviewQuery(scope)}`)
+
+// ═══════════════════ خروج انبار (مهاجرت ۰۱۳۳) ═══════════════════
+
+/** نوعِ خروج — «انتقال بین انبار» سندِ خودش را دارد ولی در همین فهرست می‌آید. */
+export const WAREHOUSE_ISSUE_TYPE_LABELS: Record<string, string> = {
+  sale: 'فروش',
+  consumption: 'مصرف',
+  other: 'سایر',
+  transfer: 'انتقال بین انبار',
+}
+
+/** ردیفِ فهرستِ خروج‌ها — خروج یا انتقال، با ستون‌هایی که به نوع بسته‌اند. */
+export interface WarehouseIssueRow {
+  kind: 'issue' | 'transfer'
+  id: string
+  number: number | null
+  doc_date: string
+  issue_type: string
+  type_label: string
+  origin: string
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  receiver_id: string | null
+  receiver_name: string
+  destination_warehouse_id: string | null
+  destination_warehouse_code: string
+  destination_warehouse_name: string
+  sales_invoice_id: string | null
+  sales_invoice_number: number | null
+  source_quotation_id: string | null
+  quotation_number: number | null
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  created_by_name: string
+  line_count: number
+  total_qty: string
+  total_cost: string
+  description: string
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface WarehouseIssueLedgerFilters {
+  issue_type?: string
+  warehouse_id?: string
+  receiver_id?: string
+  date_from?: string
+  date_to?: string
+  state?: string
+}
+
+/** فیلتر سمتِ سرور است؛ صفحه‌ها با کرسر خوانده می‌شوند (سقفِ ۲۰۰). */
+export const fetchWarehouseIssueLedger = (token: string, filters: WarehouseIssueLedgerFilters = {}) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGetAll<WarehouseIssueRow>(token, `/api/warehouse-issues${query ? `?${query}` : ''}`)
+}
+
+export const fetchWarehouseIssue = (token: string, issueId: string) =>
+  authedGet<WarehouseIssueRecord>(token, `/api/warehouse-issues/${issueId}`)
+
+export interface DirectWarehouseIssueIn {
+  issue_date: string
+  issue_type: 'sale' | 'consumption' | 'other'
+  warehouse_id: string
+  receiver_id?: string | null
+  source_quotation_id?: string | null
+  cost_center_id?: string | null
+  account_id?: string | null
+  description?: string
+  lines: { item_id: string; qty: number; unit_id?: string | null; account_id?: string | null; description?: string }[]
+}
+
+export const createDirectWarehouseIssue = (token: string, data: DirectWarehouseIssueIn, idempotencyKey: string) =>
+  authedSend<WarehouseIssueRecord>(token, 'POST', '/api/warehouse-issues', data, idempotencyKey)
+
+/** قالبِ استاندارد یا A5 — همان سند، کاغذِ دیگر. */
+export const printWarehouseIssue = (token: string, issueId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/warehouse-issues/${issueId}/print?template=${template}`)
+
+export const printStockTransfer = (token: string, transferId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/stock-transfers/${transferId}/print?template=${template}`)
+
+export const voidStockTransfer = (token: string, transferId: string, reason: string) =>
+  authedSend<StockTransferRecord>(token, 'POST', `/api/stock-transfers/${transferId}/void`, { reason })
+
+export interface IssueInvoiceContext {
+  issue_id: string
+  issue_number: number
+  warehouse_id: string
+  receiver_id: string | null
+  receiver_name: string
+  lines: {
+    issue_line_id: string
+    item_id: string
+    item_name: string
+    qty: string
+    unit: string
+    suggested_unit_price: string
+  }[]
+}
+
+export const fetchIssueInvoiceContext = (token: string, issueId: string) =>
+  authedGet<IssueInvoiceContext>(token, `/api/warehouse-issues/${issueId}/invoice-context`)
+
+// ═════════════════ برگشت خروج انبار (مهاجرتِ ۰۱۳۴) ═════════════════
+
+export type IssueReturnType = 'sale' | 'consumption' | 'other'
+
+/** سه نوع — «انتقال» برگشت ندارد؛ انتقالِ برعکس یک انتقالِ دیگر است. */
+export const ISSUE_RETURN_TYPE_LABELS: Record<string, string> = {
+  sale: 'فروش',
+  consumption: 'مصرف',
+  other: 'سایر',
+}
+
+/** وضعیتِ برگشتِ فیزیکیِ یک فاکتور برگشتی — کنارِ وضعیتِ مالی، نه جایش. */
+export const SALES_RETURN_PHYSICAL_LABELS: Record<string, string> = {
+  inline: 'همراهِ برگشت',
+  none: '—',
+  not_returned: 'برنگشته',
+  partially_returned: 'بخشی برگشته',
+  fully_returned: 'کامل برگشته',
+}
+
+/** «ثبت برگشت به انبار» از دفترِ فاکتورهای برگشتی — فقط زمینه منتقل می‌شود. */
+export const ISSUE_RETURN_PREFILL_KEY = 'cubita.inventory.issueReturnPrefill'
+export type IssueReturnPrefill = { kind: 'sales_return' | 'issue'; id: string; return_type: IssueReturnType }
+
+export interface IssueReturnRow {
+  id: string
+  number: number
+  return_date: string
+  return_type: IssueReturnType
+  type_label: string
+  origin: 'direct' | 'sales_return'
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  deliverer_id: string | null
+  deliverer_name: string
+  sales_return_numbers: number[]
+  issue_numbers: number[]
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  journal_entry_date: string | null
+  created_by_name: string
+  line_count: number
+  total_qty: string
+  total_cost: string
+  description: string
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface IssueReturnLedgerFilters {
+  return_type?: string
+  warehouse_id?: string
+  deliverer_id?: string
+  date_from?: string
+  date_to?: string
+  state?: string
+}
+
+/** فیلتر سمتِ سرور است؛ صفحه‌ها با کرسر خوانده می‌شوند (سقفِ ۲۰۰). */
+export const fetchIssueReturnLedger = (token: string, filters: IssueReturnLedgerFilters = {}) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGetAll<IssueReturnRow>(token, `/api/warehouse-issue-returns${query ? `?${query}` : ''}`)
+}
+
+export interface IssueReturnLineRecord {
+  id: string
+  seq: number
+  warehouse_issue_line_id: string
+  sales_return_line_id: string | null
+  item_id: string
+  qty: string
+  unit_cost: string
+  amount: string
+  account_id: string | null
+  account_code: string
+  account_name: string
+  cost_center_id: string | null
+  secondary_qty: string | null
+  secondary_unit_snapshot: string
+  item_code_snapshot: string
+  item_name_snapshot: string
+  unit_snapshot: string
+  description: string
+  issue_id: string | null
+  issue_number: number | null
+  sales_return_id: string | null
+  sales_return_number: number | null
+}
+
+export interface IssueReturnRecord {
+  id: string
+  number: number
+  return_date: string
+  return_type: IssueReturnType
+  origin: 'direct' | 'sales_return'
+  warehouse_id: string
+  deliverer_id: string | null
+  sales_return_id: string | null
+  description: string
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+  created_by_id: string
+  total_qty: string
+  total_cost: string
+  lines: IssueReturnLineRecord[]
+}
+
+export const fetchIssueReturn = (token: string, returnId: string) =>
+  authedGet<IssueReturnRecord>(token, `/api/warehouse-issue-returns/${returnId}`)
+
+/** هر ردیف دقیقاً یک مبنا دارد: ردیفِ فاکتور برگشتی یا ردیفِ خود خروج. */
+export interface IssueReturnIn {
+  return_date: string
+  return_type: IssueReturnType
+  warehouse_id: string
+  deliverer_id?: string | null
+  description?: string
+  lines: {
+    sales_return_line_id?: string | null
+    warehouse_issue_line_id?: string | null
+    qty: number
+    unit_id?: string | null
+    description?: string
+  }[]
+}
+
+export const createIssueReturn = (token: string, data: IssueReturnIn, idempotencyKey: string) =>
+  authedSend<IssueReturnRecord>(token, 'POST', '/api/warehouse-issue-returns', data, idempotencyKey)
+
+export const voidIssueReturn = (token: string, returnId: string, reason: string) =>
+  authedSend<IssueReturnRecord>(token, 'POST', `/api/warehouse-issue-returns/${returnId}/void`, { reason })
+
+/** برگه‌ی «برگشت خروج انبار» — با فی و مبلغِ بها؛ استاندارد یا A5. */
+export const printIssueReturn = (token: string, returnId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/warehouse-issue-returns/${returnId}/print?template=${template}`)
+
+export interface IssueReturnBasisDoc {
+  kind: 'sales_return' | 'issue'
+  id: string
+  number: number | null
+  doc_date: string
+  party_id: string | null
+  party_name: string
+  warehouse_id: string | null
+  warehouse_name: string
+  remaining_qty: string
+}
+
+/** پنجره‌ی «مبنا» — سندهایی که هنوز کالایی برای برگشت دارند. */
+export const fetchIssueReturnBasis = (token: string, returnType: IssueReturnType) =>
+  authedGet<IssueReturnBasisDoc[]>(token, `/api/warehouse-issue-returns/basis?return_type=${returnType}`)
+
+export interface IssueReturnBasisLine {
+  kind: 'sales_return' | 'issue'
+  basis_line_id: string
+  item_id: string
+  item_code: string
+  item_name: string
+  unit: string
+  qty: string
+  returned: string
+  remaining: string
+  unit_cost: string
+  amount: string
+  source_warehouse_id: string | null
+}
+
+export interface IssueReturnBasis {
+  kind: 'sales_return' | 'issue'
+  id: string
+  number: number | null
+  doc_date: string
+  party_id: string | null
+  party_name: string
+  warehouse_id: string | null
+  lines: IssueReturnBasisLine[]
+}
+
+export const fetchIssueReturnBasisDetail = (token: string, kind: string, docId: string) =>
+  authedGet<IssueReturnBasis>(token, `/api/warehouse-issue-returns/basis/${kind}/${docId}`)

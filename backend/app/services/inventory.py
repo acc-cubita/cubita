@@ -91,6 +91,22 @@ def _allocate_discount(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
     return shares
 
 
+def goods_in_transit_account(db: Session):
+    """حسابِ «کالای در راه» — و اگر نبود، ساختنش.
+
+    `get_or_create` است نه `get`، چون این نقش بعد از استقرارِ کسب‌وکارهای موجود
+    اضافه شده و چارتشان آن را ندارد. همان الگوی «چک‌های واگذارشده به بانک».
+    """
+    return get_or_create_account(
+        db,
+        cc.GOODS_IN_TRANSIT,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.GOODS_IN_TRANSIT],
+        name="کالای در راه",
+        acc_type="asset",
+        parent_code="1",
+    )
+
+
 def compute_tax(net: Decimal, rate: Decimal) -> Decimal:
     """مبلغ مالیات = خالص × نرخ٪، گردشده به عددِ صحیحِ ریال/تومان (ROUND_HALF_UP)."""
     if rate is None or rate <= 0:
@@ -675,12 +691,30 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     #:
     #: جمع‌بندی بر اساسِ حساب است نه ردیف: ده ردیفِ خدمت با یک معین، یک ردیفِ
     #: سند می‌شود — نه ده ردیفِ تکراری.
+    #: **کالایی که هنوز نرسیده، موجودیِ انبار نیست.**
+    #:
+    #: تا امروز فاکتور همان لحظه «موجودی کالا» را بدهکار می‌کرد، حتی وقتی
+    #: `warehouse_id` نداشت و کالا قرار بود بعداً با رسیدِ انبار بیاید. نتیجه:
+    #: ترازنامه کالایی را دارایی نشان می‌داد که در هیچ انباری نبود، و گزارشِ
+    #: انبار — که از `stock_ledger` مشتق می‌شود — صفر می‌گفت. دو عدد برای یک چیز.
+    #:
+    #: حالا فاکتورِ بی‌انبار «کالای در راه» را بدهکار می‌کند و رسیدِ انبار آن را
+    #: به موجودیِ همان انبار منتقل می‌کند. بدهی دست‌نخورده می‌ماند — این
+    #: طبقه‌بندیِ دوباره است، نه شناساییِ تازه (§۳۷).
+    #:
+    #: **خدمت هرگز در راه نیست:** خدمت حرکتِ انباری نمی‌سازد و رسیدی هم قرار
+    #: نیست بیاوردش، پس همان لحظه هزینه می‌شود.
+    goods_pending = data.warehouse_id is None
     inventory_account_id = warehouses.inventory_account_id(db, data.warehouse_id)
+    transit_account_id = goods_in_transit_account(db).id if goods_pending else None
     debit_by_account: dict[UUID, Decimal] = {}
     for line, line_net in zip(data.lines, line_nets, strict=True):
+        item = items_by_id[line.item_id]
         account_id = items_svc.purchase_account_id(
-            db, items_by_id[line.item_id], inventory_account_id=inventory_account_id
+            db, item, inventory_account_id=inventory_account_id
         )
+        if goods_pending and not item.is_service:
+            account_id = transit_account_id
         debit_by_account[account_id] = debit_by_account.get(account_id, Decimal(0)) + line_net
 
     journal_lines = [
@@ -689,7 +723,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             debit=amount,
             credit=0,
             description=(
-                "بابت خرید کالا" if account_id == inventory_account_id else "بابت خرید خدمت"
+                "بابت خرید کالا"
+                if account_id == inventory_account_id
+                else ("کالای در راه" if account_id == transit_account_id else "بابت خرید خدمت")
             ),
         )
         for account_id, amount in debit_by_account.items()
@@ -732,6 +768,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     invoice = PurchaseInvoice(
         number=number,
         invoice_date=data.invoice_date,
+        #: سیاستِ ثبتِ همین سند، قفل‌شده در لحظه. رسیدِ انبار به آن نگاه می‌کند
+        #: تا بداند باید طبقه‌بندیِ دوباره بزند یا نه.
+        goods_in_transit=goods_pending,
         contact_id=data.contact_id,
         supplier_invoice_number=data.supplier_invoice_number.strip(),
         supplier_snapshot=supplier_snapshot,
@@ -849,6 +888,12 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
     if item.is_service:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "خدمت موجودی ندارد که تعدیل شود")
     items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
+
+    #: قفل پیش از خواندنِ موجودی — همان قاعده‌ی فروش و خروج. بدونش دو تعدیلِ
+    #: کسریِ هم‌زمان هر دو موجودیِ ۱۰ را می‌دیدند و موجودی منفی می‌شد. کالا بعد از
+    #: قفل دوباره خوانده می‌شود تا بها مالِ پس از تراکنشِ هم‌زمان باشد.
+    lock_items(db, [data.item_id])
+    item = db.query(Item).filter(Item.id == data.item_id).populate_existing().one()
 
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)

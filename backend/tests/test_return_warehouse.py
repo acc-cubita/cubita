@@ -100,7 +100,11 @@ def test_returning_an_invoice_without_a_warehouse_no_longer_crashes(client, db):
 
 
 def test_after_the_goods_leave_the_return_finds_their_warehouse(client, db):
-    """انبار از **خروجِ واقعی** خوانده می‌شود، نه از سربرگِ فاکتور."""
+    """دومرحله‌ای: برگشتِ تجاری موجودی را تکان نمی‌دهد؛ برگشتِ خروج کالا را برمی‌گرداند.
+
+    از مهاجرتِ ۰۱۳۴ مالکِ برگشتِ فیزیکی «برگشت خروج انبار» است. پیشنهادِ انبارِ
+    برگشت از **خروجِ واقعی** می‌آید، نه از سربرگِ فاکتور.
+    """
     _mode(client, "staged")
     wh, item = _stocked(client, "RW-B")
     invoice = _sell(client, item, qty=5)
@@ -111,14 +115,24 @@ def test_after_the_goods_leave_the_return_finds_their_warehouse(client, db):
 
     r = _return(client, invoice["id"], line, 2)
     assert r.status_code == 201, r.text
+    assert r.json()["stock_mode"] == "issue_return"
+    assert r.json()["physical_status"] == "not_returned"
+    db.expire_all()
+    assert _stock_rows(db) == [], "برگشتِ تجاری در دومرحله‌ای حرکتِ انبار نمی‌سازد"
+
+    basis = client.get(f"/api/warehouse-issue-returns/basis/sales_return/{r.json()['id']}").json()
+    assert basis["warehouse_id"] == wh
+    back = client.post(
+        "/api/warehouse-issue-returns",
+        json={
+            "return_date": TODAY, "return_type": "sale", "warehouse_id": basis["warehouse_id"],
+            "lines": [{"sales_return_line_id": basis["lines"][0]["basis_line_id"], "qty": 2}],
+        },
+    )
+    assert back.status_code == 201, back.text
 
     db.expire_all()
-    rows = [
-        (str(w), float(q))
-        for w, q in db.query(StockLedger.warehouse_id, StockLedger.qty)
-        .filter(StockLedger.source_type == "sales_return")
-        .all()
-    ]
+    rows = [(str(w), float(q)) for w, q in _stock_rows(db, "warehouse_issue_return")]
     assert (wh, 2.0) in rows, "کالا به همان انباری برگشت که از آن خارج شده بود"
 
 
@@ -150,26 +164,26 @@ def test_goods_issued_from_two_warehouses_return_to_both(client, db):
     assert _issue(client, invoice["id"], wh_a, line, 6).status_code in (200, 201)
     assert _issue(client, invoice["id"], wh_b, line, 4).status_code in (200, 201)
 
+    #: در سیاستِ خودکار برگشت کالا را همان لحظه برمی‌گرداند — یک برگشتِ خروج برای هر انبار.
+    _mode(client, "immediate")
     r = _return(client, invoice["id"], line, 8)
     assert r.status_code == 201, r.text
 
     db.expire_all()
-    rows = {
-        str(w): float(q)
-        for w, q in db.query(StockLedger.warehouse_id, StockLedger.qty)
-        .filter(StockLedger.source_type == "sales_return")
-        .all()
-    }
+    rows: dict[str, float] = {}
+    for w, q in _stock_rows(db, "warehouse_issue_return"):
+        rows[str(w)] = rows.get(str(w), 0.0) + float(q)
     #: به ترتیبِ خروج کشیده می‌شود: ۶ از انبارِ اول، ۲ از دومی.
     assert rows.get(wh_a) == 6.0
     assert rows.get(wh_b) == 2.0
+    assert _stock_rows(db) == []
 
 
 # ───────────────────── مسیرِ امروز دست‌نخورده ─────────────────────
 
 
-def test_the_ordinary_path_behaves_exactly_as_before(client, db):
-    """فاکتوری که سربرگش انبار دارد — یعنی هر فاکتورِ حالتِ خودکار — عوض نمی‌شود."""
+def test_the_ordinary_path_still_returns_the_goods_at_once(client, db):
+    """حالتِ خودکار برای کاربر عوض نمی‌شود: کالا همان لحظه برمی‌گردد — فقط با سندِ خودش."""
     _mode(client, "immediate")
     wh, item = _stocked(client, "RW-F")
     invoice = _sell(client, item, wh=wh, qty=5)
@@ -177,15 +191,12 @@ def test_the_ordinary_path_behaves_exactly_as_before(client, db):
 
     r = _return(client, invoice["id"], _line_id(db, invoice["id"]), 3)
     assert r.status_code == 201, r.text
+    assert r.json()["physical_status"] == "fully_returned"
 
     db.expire_all()
-    rows = [
-        (str(w), float(q))
-        for w, q in db.query(StockLedger.warehouse_id, StockLedger.qty)
-        .filter(StockLedger.source_type == "sales_return")
-        .all()
-    ]
+    rows = [(str(w), float(q)) for w, q in _stock_rows(db, "warehouse_issue_return")]
     assert (wh, 3.0) in rows
+    assert _stock_rows(db) == [], "دقیقاً یک حرکتِ مثبت — نه دو تا"
 
 
 @pytest.mark.parametrize("mode", ["immediate", "staged"])

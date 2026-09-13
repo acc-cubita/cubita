@@ -1794,6 +1794,8 @@ def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: U
                 lines=[SalesReturnLineIn(item_id=iid, qty=qty) for iid, qty in dist_items.items()],
             ),
             distributor_user,
+            #: فاکتورِ بازار همیشه خودکار صادر می‌شود؛ مرجوعی‌اش هم کالا را همان لحظه برمی‌گرداند.
+            physical=True,
         )
         sales_return_id = sr.id
 

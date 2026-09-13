@@ -182,6 +182,10 @@ def cancel_unposted_sales_invoice(
     #: از مانده‌ی طرف‌حساب کم می‌کند و موجودی را برمی‌گرداند. بدونِ این خط، مسیرِ
     #: تازه‌ی لغو از گاردی که مسیرِ قدیمی داشت رد می‌شد.
     _guard_no_active_returns(db, invoice, "sales_invoice")
+    from app.services.warehouse_issues import detach_direct_issues
+
+    #: فاکتورِ سندنشده‌ای که از خروجِ مستقل ساخته شده: خروج جدا می‌شود، نه باطل.
+    detach_direct_issues(db, invoice)
     invoice.voided_at = datetime.now(timezone.utc)
     invoice.voided_by_id = user.id
     invoice.void_reason = reason.strip()

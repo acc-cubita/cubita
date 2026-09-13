@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { FileText, Inbox, ShoppingCart, Undo2 } from 'lucide-react'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../../electron.d'
-import type { SalesInvoiceRecord, SalesQuotationRecord } from '../../api'
+import type { IssueInvoiceContext, SalesInvoiceRecord, SalesQuotationRecord } from '../../api'
 import { SalesInvoiceForm } from '../../components/SalesInvoiceForm'
 import { SalesInvoiceWizard } from '../../components/wizard/SalesInvoiceWizard'
 import { SalesReturnForm } from '../../components/SalesReturnForm'
@@ -43,6 +43,24 @@ export function SalesInvoicePage({
 }) {
   const guided = useTheme().theme.content === 'guided'
   const [prefill, setPrefill] = useState<SalesInvoiceRecord | null>(null)
+  //: «صدور فاکتور فروش» از روی خروج انبار (§۱۶). در initializer فقط خوانده می‌شود و
+  //: پس از مصرف پاک — StrictMode این تابع را دو بار صدا می‌زند.
+  const [issuePrefill, setIssuePrefill] = useState<IssueInvoiceContext | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('cubita.sales.issuePrefill')
+      return raw ? (JSON.parse(raw) as IssueInvoiceContext) : null
+    } catch {
+      return null
+    }
+  })
+  const consumeIssuePrefill = () => {
+    try {
+      sessionStorage.removeItem('cubita.sales.issuePrefill')
+    } catch {
+      /* ذخیره‌ی مرورگر در دسترس نیست؛ چیزی برای پاک‌کردن نیست */
+    }
+    setIssuePrefill(null)
+  }
   const formRef = useRef<HTMLDivElement>(null)
 
   return (
@@ -60,6 +78,8 @@ export function SalesInvoicePage({
             onQueued={onQueued}
             prefill={prefill}
             onPrefillConsumed={() => setPrefill(null)}
+            issuePrefill={issuePrefill}
+            onIssuePrefillConsumed={consumeIssuePrefill}
           />
         ) : (
           <SalesInvoiceForm
@@ -69,6 +89,8 @@ export function SalesInvoicePage({
             onQueued={onQueued}
             prefill={prefill}
             onPrefillConsumed={() => setPrefill(null)}
+            issuePrefill={issuePrefill}
+            onIssuePrefillConsumed={consumeIssuePrefill}
           />
         )}
       </div>

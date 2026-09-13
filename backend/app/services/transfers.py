@@ -1,82 +1,193 @@
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+"""انتقال بین انبار — خروج از مبدأ و ورود به مقصد، اتمی و قابلِ ردیابی (§۲۷–§۲۹ فصلِ خروج).
+
+تا امروز این مسیر پنج شکاف داشت که همه‌شان بی‌صدا بودند:
+
+* **قفل نداشت.** دو انتقالِ هم‌زمان (یا یک انتقال و یک خروج) از یک انبار هر دو
+  همان موجودی را می‌خواندند و هر دو پاس می‌شدند؛ موجودی منفی می‌شد.
+* **ردیف‌ها را جمع نمی‌زد.** دو ردیفِ ۶تایی از یک کالا هرکدام جدا با موجودیِ ۱۰
+  سنجیده می‌شدند — همان خطایی که فاکتورِ فروش سال‌ها پیش بسته بود.
+* **دوره‌ی بسته و انبارهای مجازِ کالا را نمی‌سنجید.**
+* **کلیدِ تکرار و ابطال نداشت.** تکرارِ شبکه‌ای انتقالِ دوم می‌ساخت و اشتباه اصلاح‌پذیر نبود.
+* **سند نمی‌زد، حتی میانِ دو انبار با دو معینِ موجودیِ متفاوت.**
+"""
+
+from collections import defaultdict
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
+from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_STOCK_TRANSFER
-from app.services.numbering import next_document_number
-from app.models.inventory import Item, StockLedger
+from app.models.inventory import Item, StockLedger, Warehouse
 from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.user import User
 from app.schemas.transfers import StockTransferIn
+from app.services import items as items_svc
 from app.services import warehouses
-from app.services.inventory import get_stock_qty
+from app.services.common import make_journal_entry
+from app.services.inventory import get_stock_qty, lock_items
+from app.services.numbering import next_document_number
+from app.services.period_close import assert_period_open
+from app.services.voiding import reverse_journal_entry
 
 
 def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> StockTransfer:
-    #: §۲۲ — انتقال یک رویدادِ انباریِ قابلِ ردیابی است، نه «حذف از این‌جا و ساختِ
-    #: آن‌جا». هر دو سرش باید انبارِ فعال باشند: انتقال **به** انبارِ غیرفعال
-    #: یعنی کالا همان‌جا گیر بیفتد.
+    assert_period_open(db, data.transfer_date)
+    #: §۲۲ فصلِ انبار — هر دو سر باید انبارِ فعال باشند: انتقال **به** انبارِ
+    #: غیرفعال یعنی کالا همان‌جا گیر بیفتد.
     warehouses.assert_usable(db, data.from_warehouse_id, action="انتقال از انبار")
     warehouses.assert_usable(db, data.to_warehouse_id, action="انتقال به انبار")
 
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
-
-    transfer_lines: list[StockTransferLine] = []
-    stock_moves: list[StockLedger] = []
-
+    requested: dict[UUID, Decimal] = defaultdict(Decimal)
     for line in data.lines:
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
         if item.is_service:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و قابل جابه‌جایی بین انبارها نیست")
+        requested[line.item_id] += Decimal(line.qty)
+    for item_id in requested:
+        #: §۲۹ فصلِ کالا — کالا فقط به انبارهای مرتبطش وارد می‌شود.
+        items_svc.assert_warehouse_allowed(db, items_by_id[item_id], data.to_warehouse_id)
 
-        available = get_stock_qty(db, line.item_id, data.from_warehouse_id)
-        if available < line.qty:
+    lock_items(db, requested.keys())
+    fresh = {i.id: i for i in db.query(Item).filter(Item.id.in_(requested.keys())).populate_existing().all()}
+    for item_id, qty in requested.items():
+        available = get_stock_qty(db, item_id, data.from_warehouse_id)
+        if available < qty:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                f"موجودی «{item.name}» در انبار مبدأ کافی نیست (موجود: {available}, درخواستی: {line.qty})",
+                f"موجودی «{fresh[item_id].name}» در انبار مبدأ کافی نیست (موجود: {available}, درخواستی: {qty})",
             )
 
-        transfer_lines.append(StockTransferLine(item_id=line.item_id, qty=line.qty))
-        stock_moves.append(
-            StockLedger(
-                item_id=line.item_id,
-                warehouse_id=data.from_warehouse_id,
-                qty=-line.qty,
-                unit_cost=item.average_cost,
-                entry_date=data.transfer_date,
-                source_type="transfer_out",
-            )
-        )
-        stock_moves.append(
-            StockLedger(
-                item_id=line.item_id,
-                warehouse_id=data.to_warehouse_id,
-                qty=line.qty,
-                unit_cost=item.average_cost,
-                entry_date=data.transfer_date,
-                source_type="transfer_in",
-            )
-        )
-
-    number = next_document_number(db, DOC_STOCK_TRANSFER)
     transfer = StockTransfer(
-        number=number,
+        number=next_document_number(db, DOC_STOCK_TRANSFER),
         transfer_date=data.transfer_date,
         from_warehouse_id=data.from_warehouse_id,
         to_warehouse_id=data.to_warehouse_id,
         description=data.description,
         created_by_id=user.id,
-        lines=transfer_lines,
+        lines=[StockTransferLine(item_id=line.item_id, qty=line.qty) for line in data.lines],
     )
     db.add(transfer)
     db.flush()
-    for move in stock_moves:
-        move.source_id = transfer.id
-        db.add(move)
+
+    total = Decimal(0)
+    for line in data.lines:
+        unit_cost = Decimal(fresh[line.item_id].average_cost or 0)
+        total += (Decimal(line.qty) * unit_cost).quantize(Decimal(1))
+        for warehouse_id, qty, source_type in (
+            (data.from_warehouse_id, -Decimal(line.qty), "transfer_out"),
+            (data.to_warehouse_id, Decimal(line.qty), "transfer_in"),
+        ):
+            db.add(StockLedger(
+                item_id=line.item_id, warehouse_id=warehouse_id, qty=qty, unit_cost=unit_cost,
+                entry_date=data.transfer_date, source_type=source_type, source_id=transfer.id,
+            ))
+
+    #: جمعِ موجودیِ شرکت عوض نمی‌شود (§۲۸)، پس میانِ دو انبارِ هم‌حساب سندی نیست.
+    #: ولی دو معینِ متفاوت یعنی ارزش واقعاً از یکی به دیگری رفته.
+    source_account = warehouses.inventory_account_id(db, data.from_warehouse_id)
+    target_account = warehouses.inventory_account_id(db, data.to_warehouse_id)
+    if source_account != target_account and total > 0:
+        journal = make_journal_entry(
+            db, data.transfer_date, f"انتقال بین انبار شماره {transfer.number}", "stock_transfer", user,
+            [
+                JournalLine(account_id=target_account, debit=total, credit=0, description="ورودِ کالا به انبارِ مقصد"),
+                JournalLine(account_id=source_account, debit=0, credit=total, description="خروجِ کالا از انبارِ مبدأ"),
+            ],
+        )
+        transfer.journal_entry_id = journal.id
 
     db.flush()
     db.refresh(transfer)
     return transfer
+
+
+def void_stock_transfer(
+    db: Session, transfer_id: UUID, *, reason: str, user: User, void_date: date | None = None
+) -> StockTransfer:
+    """هر دو حرکت با هم برمی‌گردند — همان اتمی‌بودنی که ثبت داشت."""
+    transfer = db.query(StockTransfer).filter(StockTransfer.id == transfer_id).with_for_update().one_or_none()
+    if transfer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "انتقال یافت نشد")
+    if transfer.voided_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این انتقال قبلاً باطل شده است")
+    effective = void_date or transfer.transfer_date
+    assert_period_open(db, effective)
+
+    moves = db.query(StockLedger).filter(
+        StockLedger.source_id == transfer.id, StockLedger.source_type.in_(("transfer_out", "transfer_in"))
+    ).all()
+    arrived: dict[UUID, Decimal] = defaultdict(Decimal)
+    for move in moves:
+        if move.source_type == "transfer_in":
+            arrived[move.item_id] += Decimal(move.qty)
+    lock_items(db, arrived.keys())
+    for item_id, qty in arrived.items():
+        available = get_stock_qty(db, item_id, transfer.to_warehouse_id)
+        if available < qty:
+            item = db.get(Item, item_id)
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"«{item.name if item else ''}» از انبارِ مقصد خارج شده است (موجود: {available}، لازم برای "
+                f"ابطال: {qty}). ابطال یعنی کالا به مبدأ برگردد؛ اول خروج‌های بعدی را باطل کنید.",
+            )
+
+    for move in moves:
+        db.add(StockLedger(
+            item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),
+            unit_cost=move.unit_cost, entry_date=effective, source_type="void", source_id=transfer.id,
+        ))
+    original = db.get(JournalEntry, transfer.journal_entry_id) if transfer.journal_entry_id else None
+    if original is not None:
+        reverse_journal_entry(
+            db, original, void_date=effective, user=user,
+            description=f"ابطال انتقال بین انبار شماره {transfer.number} — {reason.strip()}",
+        )
+    transfer.voided_at = datetime.now(timezone.utc)
+    transfer.voided_by_id = user.id
+    transfer.void_reason = reason.strip()
+    db.flush()
+    return transfer
+
+
+def transfer_print_projection(db: Session, transfer: StockTransfer) -> dict:
+    """همان «مجوز خروج انبار»، با انبارِ مقصد به‌جای تحویل‌گیرنده."""
+    source = db.get(Warehouse, transfer.from_warehouse_id)
+    target = db.get(Warehouse, transfer.to_warehouse_id)
+    lines = []
+    for seq, line in enumerate(transfer.lines, start=1):
+        item = line.item
+        lines.append({
+            "seq": seq,
+            "code": item.sku if item else "",
+            "name": item.name if item else "",
+            "qty": line.qty,
+            "unit": item.unit if item else "",
+            "secondary_qty": None,
+            "secondary_unit": "",
+            "description": "",
+        })
+    return {
+        "title": "مجوز خروج انبار (انتقال بین انبار)",
+        "number": transfer.number,
+        "doc_date": transfer.transfer_date,
+        "type_label": "انتقال بین انبار",
+        "warehouse_code": source.code if source else "",
+        "warehouse_name": source.name if source else "",
+        "party_label": "انبار مقصد",
+        "party_name": target.name if target else "",
+        "party_detail": target.code if target else "",
+        "lines": lines,
+        "total_qty": sum((Decimal(line.qty) for line in transfer.lines), Decimal(0)),
+        "references": [],
+        "description": transfer.description or "",
+        "sign_labels": ("صادرکننده", "تحویل‌گیرنده‌ی انبارِ مقصد"),
+        "voided_at": transfer.voided_at,
+        "void_reason": transfer.void_reason or "",
+    }

@@ -6,12 +6,22 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 
-class StockTransfer(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """حواله بین‌انباری: انتقال کالا از یک انبار به انبار دیگر. بدون سند حسابداری چون فقط جابه‌جایی موجودی است، نه تغییر ارزش."""
+class StockTransfer(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+    """حواله‌ی بین‌انباری: خروج از مبدأ و ورود به مقصد در **یک** سند.
+
+    **اتمی، نه دو سندِ جدا (§۲۹).** اگر خروج و ورود دو سند بودند، خطایی بینِ آن‌ها
+    کالا را «گم» می‌کرد: از مبدأ کم شده و به مقصد نرسیده. این‌جا هر دو حرکت در
+    یک تراکنش نوشته می‌شوند و ابطال هم هر دو را با هم برمی‌گرداند.
+
+    **سندِ حسابداری فقط وقتی دو انبار دو معینِ متفاوت دارند.** جمعِ موجودیِ شرکت
+    عوض نمی‌شود (§۲۸)، پس انتقال میانِ دو انبارِ هم‌حساب هیچ سندی نمی‌زند. ولی از
+    وقتی هر انبار می‌تواند معینِ موجودیِ خودش را داشته باشد، نزدنِ سند یعنی مانده‌ی
+    آن دو معین با ارزشِ کالای هر انبار برای همیشه نخواند.
+    """
 
     __tablename__ = "stock_transfers"
     __table_args__ = (
@@ -24,6 +34,10 @@ class StockTransfer(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     from_warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     to_warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     description: Mapped[str] = mapped_column(Text, default="")
+    #: فقط وقتی دو انبار به دو معینِ موجودیِ متفاوت نگاشت شده‌اند (مهاجرتِ ۰۱۳۳).
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 

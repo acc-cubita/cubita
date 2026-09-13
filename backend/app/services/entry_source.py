@@ -30,7 +30,13 @@ from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
 from app.models.check_event import CheckEvent
 from app.models.inventory import StockAdjustment
-from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue
+from app.models.invoices import (
+    PurchaseInvoice,
+    SalesInvoice,
+    WarehouseIssue,
+    WarehouseReceipt,
+)
+from app.models.issue_returns import WarehouseIssueReturn
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.pos_settlement import PosSettlement
@@ -40,6 +46,7 @@ from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.sales_ops import CreditDebitNote
 from app.models.stock_count import StockCountSession
+from app.models.transfers import StockTransfer
 from app.models.treasury import TreasuryTransaction
 
 #: `source_type`ِ سند → مدلی که با `journal_entry_id` به آن برمی‌گردد.
@@ -50,6 +57,7 @@ SOURCE_MODELS: dict[str, type] = {
     "sales_invoice": SalesInvoice,
     "purchase_invoice": PurchaseInvoice,
     "warehouse_issue": WarehouseIssue,
+    "warehouse_issue_return": WarehouseIssueReturn,
     "sales_return": SalesReturn,
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
@@ -69,6 +77,11 @@ SOURCE_MODELS: dict[str, type] = {
     "depreciation": DepreciationEntry,
     "production_order": ProductionOrder,
     "stock_adjustment": StockAdjustment,
+    #: انتقال فقط میانِ دو انبار با دو معینِ متفاوت سند می‌زند (مهاجرتِ ۰۱۳۳).
+    "stock_transfer": StockTransfer,
+    #: رسیدِ **مستقیم** (بی‌فاکتور) خودش منشأِ مالی است و سند می‌زند؛ رسیدِ
+    #: گره‌خورده به فاکتور سند نمی‌زند چون فاکتور بدهی را شناخته (§۳۷).
+    "warehouse_receipt": WarehouseReceipt,
     "stock_count": StockCountSession,
     "credit_debit_note": CreditDebitNote,
     "period_close": FiscalPeriodClose,
@@ -107,7 +120,10 @@ ACCOUNTING_NATIVE: frozenset[str] = frozenset(
 SOURCE_LABELS: dict[str, str] = {
     "sales_invoice": "فاکتور فروش",
     "purchase_invoice": "فاکتور خرید",
-    "warehouse_issue": "خروج انبار فروش",
+    "warehouse_issue": "خروج انبار",
+    "warehouse_issue_return": "برگشت خروج انبار",
+    "warehouse_receipt": "رسید انبار",
+    "stock_transfer": "انتقال بین انبار",
     "sales_return": "برگشت از فروش",
     "purchase_return": "برگشت از خرید",
     "treasury_receipt": "رسید دریافت",

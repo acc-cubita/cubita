@@ -34,6 +34,19 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+> **دو هشدار برای هر که بعد از من می‌آید:**
+>
+> ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
+>    (`WarehouseIssue`، حساب‌های نوع فروش، Snapshotهای فاکتور خرید، پیش‌فاکتورِ
+>    منبع). هیچ‌کدام روی `master` نیست، **۱۸ کامیت عقب** است، و شماره‌های
+>    `0114`/`0115`/`0116`اش با `master` **تصادم** دارند (آن‌جا
+>    `counterparty_settlement`/`cheque_traceability`/`warehouse_master` نشسته‌اند).
+>    من دست بهش نزدم و checkout را به شاخه‌ی خودم بردم — آن شش کامیت با ref خودِ
+>    شاخه امن‌اند. هر که خواست فرودش بیاورد: اول rebase روی master، بعد
+>    شماره‌گذاریِ دوباره به `0122` به بعد.
+> ۲. به همین دلیل §۳۰–§۳۴ (برگشت خروج انبار) و §۵۲/§۵۳ (حذفِ COGS از سندِ تجاری)
+>    در این فصل **ساخته نشدند** — زیرساختشان همان شاخه است.
+
 
 ---
 
@@ -90,6 +103,9 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Opus 5 | مهاجرت `0134` (روی `feat/warehouse-issue-return`، پشتِ `0133` — ادعای `0129`–`0134` روی شاخه‌ی `chore/claim-0129-0134` برای master)، `models/issue_returns.py`، `services/issue_returns.py`، `routers/issue_returns.py`، `services/returns.py`، `services/warehouse_issues.py`، `voiding.py`، `printing.py`، `marketplace.py`، `IssueReturnsTab.tsx`، `InventoryPage.tsx`، `SalesListPages.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «برگشت خروج انبار»: سندِ مستقل با مبنای اجباری، بها و حساب از خروجِ مبدأ، جداشدنِ برگشتِ فیزیکی از فاکتور برگشتی (`stock_mode`)، دو باگِ برگشتِ فروش، چاپ و رابط | ۱۴۰۵/۰۶/۲۱ |
+| Claude Opus 5 | مهاجرت `0133` (روی `feat/warehouse-issue`، پشتِ `0132`ِ `feat/warehouse-receipt` — هیچ‌کدام هنوز روی master نیست)، `services/warehouse_issues.py`، `services/transfers.py`، `routers/warehouse_issues.py`، `routers/transfers.py`، `services/returns.py`، `voiding.py`، `printing.py`، `WarehouseIssuesTab.tsx`، `InventoryPage.tsx`، `salesInvoiceDraft.ts`، فرم و ویزاردِ انتقال، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «خروج انبار»: خروجِ مستقیم (فروش/مصرف/سایر)، انتقال از موتورِ خودش با پنج گاردِ تازه، خروج ← فاکتور فروش، چاپِ مجوز، فهرستِ خروج‌ها، بهای برگشتِ فروش | ۱۴۰۵/۰۶/۲۱ |
+| Claude Opus 5 | مهاجرت‌های `0129`–`0132` (نخست `0123`–`0126`، سه بار جابه‌جا)، `warehouse_receipts.py`، `freight.py`، `returns.py`، `payments.py`، `printing.py`، `reports.py`، `WarehouseReceiptsTab.tsx`، `PurchasesPage.tsx`، `PaymentVoucherPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصل‌های «رسید انبار» و «برگشت رسید انبار»: رسیدِ مستقیم، کالای در راه، حمل و بهای تمام‌شده، برگشتِ لنگرزده به رسید، چاپ، میان‌برِ اعلامیه پرداخت و رابط | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0126`، `services/sales_posting.py`، `routers/invoices.py`، `models/tenant.py`، `PersonalizationPage.tsx`؛ آزادسازی `pytest` | سیاستِ صدورِ فاکتور فروش (خودکار/دومرحله‌ای) و رفعِ بن‌بستِ ابطال در حالتِ خودکار | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | ادغامِ پنج فصلِ کدکس با master؛ `0114`–`0116` → `0123`–`0125`، `voiding.py`، `warehouse_issues.py`، `sales_invoices.py`، `inventory.py`؛ آزادسازی `pytest` | فرودِ شاخه‌ی سرگردانِ کدکس: شماره‌های متصادم، ستونِ دوبارساخته، انحرافِ میانگینِ بها، و چهار گاردِ master که در ادغام برمی‌گشتند | ۱۴۰۵/۰۶/۲۱ |
 | Claude (hesabdari-93) | مهاجرت `0122`، `services/pricing.py`، `routers/advanced_inventory.py`، `routers/sales_ops.py`، `audit.py`، `PriceListsPanel.tsx`، `SalesOpsPages.tsx`، `PosPage.tsx`، `salesInvoiceDraft.ts`؛ آزادسازی `pytest` | فصلِ «اعلامیه قیمت»: ماتریسِ قیمت قابلِ ورود شد، سه موتورِ قیمت یکی شد، مسیری که ماتریس را پاک می‌کرد بسته شد، تغییرِ گروهیِ فی با یکتاسازی | ۱۴۰۵/۰۶/۲۱ |

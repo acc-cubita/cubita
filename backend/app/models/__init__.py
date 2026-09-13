@@ -50,6 +50,7 @@ from app.models.invoices import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from app.models.issue_returns import WarehouseIssueReturn, WarehouseIssueReturnLine
 from app.models.marketplace import (
     MarketplaceConnection,
     MarketplaceItemLink,
@@ -194,6 +195,8 @@ __all__ = [
     "WarehouseReceiptLine",
     "WarehouseIssue",
     "WarehouseIssueLine",
+    "WarehouseIssueReturn",
+    "WarehouseIssueReturnLine",
     "SalesInvoice",
     "SalesInvoiceLine",
     "BankAccount",

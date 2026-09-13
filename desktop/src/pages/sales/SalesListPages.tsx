@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   Layers,
   Lock,
+  PackagePlus,
   Percent,
   Search,
   Ship,
@@ -32,12 +33,17 @@ import {
   fetchSaleTypes,
   fetchSalesInvoices,
   fetchSalesReturns,
+  ISSUE_RETURN_PREFILL_KEY,
   newIdempotencyKey,
+  SALES_RETURN_PHYSICAL_LABELS,
   voidNote,
   voidSalesReturn,
   type BulkPriceMode,
   type CreditDebitNote,
+  type IssueReturnPrefill,
+  type SalesReturnRecord,
 } from '../../api'
+import type { PageKey } from '../../lib/navModel'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { PriceRuleTable } from '../../components/PriceRuleTable'
@@ -226,7 +232,23 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
 
 // ═════════════════ دفترِ برگشت از فروش ═════════════════
 
-export function SalesReturnListPage({ token }: { token: string }) {
+/** برگشتِ فیزیکی کنارِ وضعیتِ مالی — دو حقیقتِ مستقل (فصلِ «برگشت خروج انبار» §۲۱). */
+function physicalLabel(r: SalesReturnRecord): string {
+  const status = r.physical_status ?? 'inline'
+  const label = SALES_RETURN_PHYSICAL_LABELS[status] ?? status
+  const remaining = Number(r.physical_remaining_qty || 0)
+  return remaining > 0 && status !== 'inline'
+    ? `${label} · مانده ${remaining.toLocaleString('fa-IR', { maximumFractionDigits: 3 })}`
+    : label
+}
+
+export function SalesReturnListPage({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate?: (page: PageKey, section?: string | null) => void
+}) {
   const range = useRange('month')
   const list = useAsync(() => fetchSalesReturns(token), [token])
   const rows = useMemo(
@@ -245,7 +267,7 @@ export function SalesReturnListPage({ token }: { token: string }) {
     <OpsPage
       icon={Undo2}
       title="فاکتورهای برگشتی"
-      description="دفترِ برگشت از فروش. هر برگشت موجودی را برمی‌گرداند و سندِ معکوسِ خودش را دارد."
+      description="دفترِ برگشت از فروش — سندِ تجاری با سندِ معکوسِ خودش. کالا با «برگشت خروج انبار» به انبار برمی‌گردد و ستونِ «برگشت به انبار» می‌گوید چه مقدار واقعاً برگشته."
       head={
         <div className="cc-head">
           <RangeBar range={range} />
@@ -277,6 +299,7 @@ export function SalesReturnListPage({ token }: { token: string }) {
                   <th>پرداخت‌شده</th>
                   <th>ماندهٔ برگشت</th>
                   <th>وضعیت</th>
+                  <th>برگشت به انبار</th>
                   <th>شرح</th>
                   <th />
                 </tr>
@@ -303,10 +326,27 @@ export function SalesReturnListPage({ token }: { token: string }) {
                     <td data-label="وضعیت">
                       {RETURN_STATUS_LABELS[r.financial_status] ?? r.financial_status}
                     </td>
+                    <td data-label="برگشت به انبار">{r.voided_at ? '—' : physicalLabel(r)}</td>
                     <td className="card-wide" data-label="شرح">
                       {r.description || '—'}
                     </td>
                     <td className="card-actions" data-label="عملیات">
+                      {!r.voided_at &&
+                        onNavigate &&
+                        r.stock_mode === 'issue_return' &&
+                        Number(r.physical_remaining_qty || 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              //: فقط زمینه منتقل می‌شود؛ برگشتِ انبار سندِ مستقلِ خودش است.
+                              const prefill: IssueReturnPrefill = { kind: 'sales_return', id: r.id, return_type: 'sale' }
+                              sessionStorage.setItem(ISSUE_RETURN_PREFILL_KEY, JSON.stringify(prefill))
+                              onNavigate('inventory', 'issue-returns')
+                            }}
+                          >
+                            <PackagePlus size={13} /> ثبت برگشت به انبار
+                          </button>
+                        )}
                       {!r.voided_at && (
                         <button
                           type="button"

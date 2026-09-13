@@ -1,14 +1,26 @@
 import { ShoppingCart, Plus, Trash2, Save, AlertTriangle } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
-import type { CreditStatus, SalesInvoiceRecord } from '../api'
+import type { CreditStatus, IssueInvoiceContext, SalesInvoiceRecord } from '../api'
 import { CardPaymentButton } from './CardPaymentDialog'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { PriceRuleHint } from './PriceRuleHint'
-import { useSalesInvoiceDraft } from '../lib/salesInvoiceDraft'
+import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../lib/salesInvoiceDraft'
 import { BlacklistBanner } from './BlacklistBanner'
+
+/** فاکتوری که از خروج انبار ساخته می‌شود — مشترکِ فرم و ویزارد (§۱۵ §۱۶). */
+export function SourceIssueBanner({ d }: { d: SalesInvoiceDraft }) {
+  if (!d.sourceIssue) return null
+  return (
+    <p className="hint field-full">
+      این فاکتور از <strong>خروج انبار شماره {d.sourceIssue.issue_number.toLocaleString('fa-IR')}</strong> ساخته
+      می‌شود. کالا از قبل از انبار رفته، پس فاکتور موجودی را دوباره کم نمی‌کند. کالا، مقدار و انبار همان خروج
+      می‌مانند؛ قیمت، تخفیف و مالیات مالِ فاکتور است.
+    </p>
+  )
+}
 
 /**
  * فرمِ کلاسیکِ «ثبتِ فاکتورِ فروش» (پوسته‌های تیره/روشن) — همه‌ی فیلدها در یک صفحه.
@@ -21,6 +33,8 @@ export function SalesInvoiceForm({
   onQueued,
   prefill,
   onPrefillConsumed,
+  issuePrefill,
+  onIssuePrefillConsumed,
 }: {
   token: string
   warehouses: WarehouseCache[]
@@ -29,8 +43,12 @@ export function SalesInvoiceForm({
   /** رونوشتِ فاکتور: فرم را با اقلامِ یک فاکتورِ موجود پیش‌پر می‌کند (به‌عنوان پیش‌نویسِ تازه). */
   prefill?: SalesInvoiceRecord | null
   onPrefillConsumed?: () => void
+  issuePrefill?: IssueInvoiceContext | null
+  onIssuePrefillConsumed?: () => void
 }) {
-  const d = useSalesInvoiceDraft({ token, warehouses, items, onQueued, prefill, onPrefillConsumed })
+  const d = useSalesInvoiceDraft({
+    token, warehouses, items, onQueued, prefill, onPrefillConsumed, issuePrefill, onIssuePrefillConsumed,
+  })
 
   return (
     <SectionCard icon={ShoppingCart} title="ثبت فاکتور فروش">
@@ -44,9 +62,14 @@ export function SalesInvoiceForm({
             void d.submit()
           }}
         >
+          <SourceIssueBanner d={d} />
           <label>
             انبار پیشنهادی (اختیاری)
-            <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+            <select
+              value={d.effectiveWarehouseId}
+              disabled={!!d.sourceIssue}
+              onChange={(e) => d.setWarehouseId(e.target.value)}
+            >
               <option value="">— خروج انبار بعداً تعیین می‌شود —</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>

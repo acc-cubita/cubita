@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Inbox, PackagePlus, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
+import { Inbox, PackagePlus, PackageCheck, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
 import {
   fetchPurchaseInvoiceDuplicate,
   fetchPurchaseSummary,
@@ -7,6 +7,7 @@ import {
   type PurchaseInvoiceDuplicateDraft,
   type PurchaseInvoiceRecord,
   type PurchaseSummary,
+  type ReceiptPaymentContext,
 } from '../api'
 import type { ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { StatCard } from '../components/StatCard'
@@ -16,6 +17,7 @@ import { PurchaseReturnWizard } from '../components/wizard/PurchaseReturnWizard'
 import { useTheme } from '../lib/theme'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
+import { WarehouseReceiptsTab } from '../components/WarehouseReceiptsTab'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -30,6 +32,7 @@ export function PurchasesPage({
   outbox,
   onQueued,
   onCreatePayment,
+  onCreateReceiptPayment,
 }: {
   token: string
   me: MeResponse
@@ -38,6 +41,8 @@ export function PurchasesPage({
   outbox: OutboxEntry[]
   onQueued: () => void
   onCreatePayment: (invoice: PurchaseInvoiceRecord) => void
+  /** میان‌برِ «اعلامیه پرداخت» از روی رسید — فقط زمینه منتقل می‌شود (§۳۹). */
+  onCreateReceiptPayment: (context: ReceiptPaymentContext) => void
 }) {
   // شاخص‌ها از سرور می‌آیند (قرینه‌ی صفحه‌ی فروش؛ رفعِ دانلودِ کلِ تاریخچه در کلاینت).
   const [summary, setSummary] = useState<PurchaseSummary | null>(null)
@@ -122,6 +127,24 @@ export function PurchasesPage({
                   </SectionCard>
                 )}
               </>
+            ),
+          },
+          {
+            //: رسیدِ انبار دیگر فقط از دلِ یک فاکتور ساخته نمی‌شود: رسیدِ مستقیم، حمل،
+            //: برگشتِ رسید، چاپ و میان‌برِ پرداخت همه این‌جا هستند — و دفترِ رسیدها
+            //: داخلِ همین تب است، طبقِ قراردادِ ماژول‌های تب‌دار.
+            key: 'receipts',
+            label: 'رسید انبار',
+            icon: PackageCheck,
+            content: (
+              <WarehouseReceiptsTab
+                token={token}
+                me={me}
+                warehouses={warehouses}
+                items={items}
+                onChanged={handleQueued}
+                onCreatePayment={onCreateReceiptPayment}
+              />
             ),
           },
           {

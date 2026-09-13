@@ -1,12 +1,15 @@
 import uuid
+from decimal import Decimal
 from datetime import date as date_
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -192,18 +195,88 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     item: Mapped["Item"] = relationship()
 
 
+#: انواعِ رسیدِ انبار (§۲).
+#:
+#: **یک موتور، چند منشأ (§۳).** پنج جدول و پنج موتورِ انبار نمی‌سازیم؛ یک دامنه
+#: با رفتارِ وابسته به نوع.
+#:
+#: فصل فقط **خریدِ داخلی** را کامل باز می‌کند. برای بقیه از روی *اسمشان*
+#: workflow اختراع نمی‌کنیم: نوع ثبت می‌شود و رفتارِ اختصاصی‌اش وقتی می‌آید که
+#: فصلِ خودش بیاید.
+RECEIPT_TYPES = (
+    "purchase_domestic",
+    "purchase_import",
+    "production",
+    "other",
+    "opening",
+)
+RECEIPT_TYPE_LABELS = {
+    "purchase_domestic": "خرید (داخلی)",
+    "purchase_import": "خرید (وارداتی)",
+    "production": "تولید",
+    "other": "سایر",
+    "opening": "موجودی اول دوره",
+}
+
+#: **چهار نوعِ خروجِ فصل، سه‌تا در این جدول.** «انتقال بین انبار» سندِ خودش را
+#: دارد (`StockTransfer`) — خروج از مبدأ و ورود به مقصد در *یک* سند و یک تراکنش —
+#: و فهرستِ خروج‌ها آن را کنارِ این سه نشان می‌دهد. ساختنِ نسخه‌ی دومی از انتقال
+#: این‌جا یعنی دو موتور که هرکدام نیمی از یک جابه‌جایی را بدانند (§۲۸ §۲۹).
+ISSUE_TYPES = ("sale", "consumption", "other")
+ISSUE_TYPE_LABELS = {
+    "sale": "فروش",
+    "consumption": "مصرف",
+    "other": "سایر",
+    "transfer": "انتقال بین انبار",
+}
+#: **منشأِ خروج، برای روزِ ابطالِ فاکتور.** خروجی که «ثبت فاکتور» خودش ساخته با
+#: همان فاکتور باطل می‌شود. ولی خروجی که کاربر مستقل ثبت کرده و *بعد* از رویش
+#: فاکتور صادر کرده، با ابطالِ فاکتور فقط جدا می‌شود: کالا واقعاً از انبار رفته و
+#: ابطالِ یک سندِ تجاری آن را به قفسه برنمی‌گرداند.
+ISSUE_ORIGINS = ("invoice", "direct")
+
+
 class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
-    """خروج فیزیکی مستقل فروش؛ مالک کاهش موجودی و COGS."""
+    """خروجِ واقعیِ کالا از یک انبار — مالکِ کاهشِ موجودی و سندِ بهای آن.
+
+    **خروج ≠ فاکتور فروش ≠ ویرایشِ موجودی.** خروج می‌گوید چه کالایی، چند تا، از
+    کدام انبار و به دستِ چه کسی رفت؛ فاکتور می‌گوید به چه قیمت فروخته شد. تا
+    مهاجرتِ ۰۱۳۳ خروج فقط زیرِ ردیفِ فاکتور ساخته می‌شد، پس «مصرف» و «سایر» هیچ
+    راهی جز تعدیلِ دستیِ موجودی نداشتند و فروشی که کالایش پیش از فاکتور تحویل
+    می‌شد، ثبت‌شدنی نبود.
+
+    **بها همان لحظه معلوم است.** کوبیتا میانگینِ موزونِ دائمی دارد و گردشِ
+    «قیمت‌گذاری اسناد انبار» ندارد؛ پس وضعیتِ «در انتظارِ قیمت‌گذاری» ساخته نشد —
+    وضعیتی که هیچ فرایندی تمامش نکند دروغ است (§۲۰ §۴۴).
+    """
 
     __tablename__ = "warehouse_issues"
-    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_issues_tenant_number"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_warehouse_issues_tenant_number"),
+        CheckConstraint(f"issue_type IN {ISSUE_TYPES}", name="ck_warehouse_issues_type"),
+        CheckConstraint(f"origin IN {ISSUE_ORIGINS}", name="ck_warehouse_issues_origin"),
+    )
 
     number: Mapped[int] = mapped_column(nullable=False, index=True)
     issue_date: Mapped[date_] = mapped_column(Date, default=date_.today)
-    sales_invoice_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sales_invoices.id"), index=True
+    issue_type: Mapped[str] = mapped_column(String(20), default="sale", server_default="sale")
+    origin: Mapped[str] = mapped_column(String(10), default="invoice", server_default="invoice")
+    #: خالی یعنی خروجی که هنوز فاکتور ندارد (§۴۰) — یا اصلاً نخواهد داشت (مصرف).
+    sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoices.id"), nullable=True, index=True
     )
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    #: **تحویل‌گیرنده**، مقصدِ فیزیکیِ کالا — عمداً جدا از مشتریِ فاکتور (§۵).
+    receiver_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    #: مرجعِ پیش‌فاکتور — اختیاری؛ خروجِ فروشِ مستقیم هم معتبر است (§۷).
+    source_quotation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_quotations.id"), nullable=True, index=True
+    )
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -212,8 +285,19 @@ class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     lines: Mapped[list["WarehouseIssueLine"]] = relationship(
-        back_populates="issue", cascade="all, delete-orphan", order_by="WarehouseIssueLine.id"
+        back_populates="issue",
+        cascade="all, delete-orphan",
+        order_by="(WarehouseIssueLine.seq, WarehouseIssueLine.id)",
     )
+
+    @property
+    def total_qty(self) -> Decimal:
+        return sum((Decimal(line.qty) for line in self.lines), Decimal(0))
+
+    @property
+    def total_cost(self) -> Decimal:
+        """جمعِ بهای ردیف‌ها — همان عددی که سندِ حسابداری زده، نه بازمحاسبه‌ی امروز."""
+        return sum((line.amount for line in self.lines), Decimal(0))
 
 
 class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
@@ -223,12 +307,27 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
     issue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_issues.id", ondelete="CASCADE"), index=True
     )
-    sales_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), index=True
+    #: شماره‌ی ردیف در همین خروج (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۳» —
+    #: همان درسِ رسید: شناسه‌ی UUID ترتیبِ ورود را نگه نمی‌دارد.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sales_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
+    #: مقدار **به واحدِ اصلی** — تنها مقداری که دفترِ انبار می‌شناسد.
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
-    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: هم‌دقتِ `stock_ledger.unit_cost` (مهاجرتِ ۰۱۳۱)؛ دو گِردکردنِ متفاوتِ یک عدد
+    #: همان واگراییِ دفتر و کاردکس را می‌سازد.
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 4))
+    #: معینِ طرفِ بدهکار: بهای تمام‌شده برای فروش، حسابِ انتخابیِ کاربر برای مصرف
+    #: و سایر (§۲۲ §۲۵). حسابی که واقعاً سند خورده — نه حسابِ امروزِ آن نقش.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    #: مقدارِ فرعی **برای نمایش و چاپ** (§۱۱)، از نسبتِ ثابتِ همان کالا در لحظه‌ی
+    #: ثبت. نسبتِ متغیر عدد ندارد و خالی می‌ماند — حدس‌زدنش بدتر از نبودنش است.
+    secondary_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    secondary_unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
     unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
@@ -237,26 +336,164 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
     issue: Mapped["WarehouseIssue"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
 
+    @property
+    def amount(self) -> Decimal:
+        """بهای ریالیِ ردیف — به ریالِ صحیح، چون سندِ حسابداری کسرِ ریال نمی‌پذیرد."""
+        return (Decimal(self.qty) * Decimal(self.unit_cost or 0)).quantize(Decimal(1))
+
 
 class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
-    """رسید مستقل ورود فیزیکی؛ یک فاکتور می‌تواند چند رسید جزئی داشته باشد."""
+    """ورودِ واقعیِ کالا به یک انبار — و در گردشِ خرید، سندِ عملیاتیِ همان ورود.
+
+    **دو مسیرِ معتبر (§۹).** رسید می‌تواند به فاکتورِ خرید گره بخورد، یا مستقیم
+    و بدونِ فاکتور ثبت شود. تا امروز فقط مسیرِ اول ممکن بود چون
+    `purchase_invoice_id` اجباری بود — یعنی خریدی که فاکتورش بعداً می‌آید (یا
+    اصلاً نمی‌آید) هیچ راهی برای ورودِ کالا نداشت.
+
+    **نقطه‌ی ثبتِ حسابداری صریح است (§۳۷).** بدهیِ تأمین‌کننده را *یک* سند
+    می‌سازد، نه دو تا:
+
+    * رسیدِ گره‌خورده به فاکتور → فقط حرکتِ فیزیکی. فاکتور بدهی را از قبل
+      شناخته و ثبتِ دوباره یعنی حسابِ تأمین‌کننده دو برابر شود.
+    * رسیدِ مستقیم → خودش منشأِ مالی است، چون هیچ سندِ دیگری این خرید را
+      نمی‌شناسد. نزدنِ سند یعنی کالا بی‌هیچ اثرِ حسابداری وارد انبار شود و
+      دفتر با گزارشِ انبار برای همیشه واگرا بماند.
+    """
 
     __tablename__ = "warehouse_receipts"
-    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_warehouse_receipts_tenant_number"),
+        CheckConstraint(f"receipt_type IN {RECEIPT_TYPES}", name="ck_warehouse_receipts_type"),
+        CheckConstraint(
+            "freight_basis IN ('equal')", name="ck_warehouse_receipts_freight_basis"
+        ),
+    )
 
     number: Mapped[int] = mapped_column(nullable=False, index=True)
     receipt_date: Mapped[date_] = mapped_column(Date, default=date_.today)
-    purchase_invoice_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("purchase_invoices.id"), index=True
+    #: §۸ §۹ — **اختیاری.** ارجاع است، نه پیش‌نیاز.
+    purchase_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoices.id"), nullable=True, index=True
     )
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    receipt_type: Mapped[str] = mapped_column(
+        String(20), default="purchase_domestic", server_default="purchase_domestic"
+    )
+
+    #: **سه نقشِ جدا (§۶ §۷).**
+    #:
+    #: تحویل‌دهنده طرفِ معامله است (در خریدِ داخلی همان تأمین‌کننده)، حمل‌کننده
+    #: کسی است که کالا را آورده، و واسطِ حمل زمینه‌ی مالیِ حمل است. فصل صریح
+    #: می‌گوید این سه را در یک فیلدِ `supplier` قاطی نکنیم.
+    #:
+    #: معنای دقیقِ «واسطِ حمل» را فصل تثبیت نمی‌کند («با قسمت‌های بعدی تثبیت
+    #: شود»)، پس این‌جا فقط *ارجاع* نگه داشته می‌شود و هیچ رفتارِ مالی‌ای از
+    #: رویش ساخته نمی‌شود.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    carrier_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+    freight_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+
+    #: §۱۳ — ارز و نرخ از موتورِ ارزِ موجود. مبالغِ ردیف‌ها همیشه پایه‌اند؛
+    #: این‌ها فقط برای نمایشِ معادل و نرخ‌اند — همان قراردادی که فاکتور دارد.
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
+
+    #: **بلوکِ حمل (§۲۱).** «Freight فقط یک Description نیست؛ یک جزء مالیِ
+    #: واقعیِ Receipt است.»
+    #:
+    #: سه مبلغِ جدا، چون سه مقصدِ جدا دارند (§۲۵ §۲۶):
+    #:
+    #: * `freight_amount` و `freight_duty` → بهای تمام‌شده‌ی ورودِ کالا
+    #: * `freight_tax` → اعتبارِ مالیاتی، **نه** بهای کالا
+    #:
+    #: فصل صریح هشدار می‌دهد: «ایجنت نباید فرض کند Inventory Cost = Price +
+    #: Freight + VAT در تمام شرایط.» پس هیچ‌کدام در دیگری حل نمی‌شود و
+    #: «جمعِ مبلغِ حمل» از همین سه مشتق می‌شود، نه ذخیره.
+    freight_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    freight_tax: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    freight_duty: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: §۲۳ — مبنای تسهیم. الگوریتمش در `services/freight.py` است، نه در فرم.
+    freight_basis: Mapped[str] = mapped_column(String(20), default="equal", server_default="equal")
+
+    #: §۲۵ — نرخِ مالیاتِ **کالا**های این رسید. فقط در رسیدِ مستقیم ثبت می‌شود؛
+    #: رسیدِ گره‌خورده به فاکتور مالیاتش را از فاکتور دارد و ثبتِ دوباره یعنی
+    #: اعتبارِ مالیاتی دو برابر شود (§۳۷).
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    #: سندِ حسابداریِ این رسید. `NULL` یعنی رسید اثرِ مالی نداشته — یعنی گره
+    #: خورده به فاکتوری که خودش بدهی را شناخته است (§۳۷).
+    #:
+    #: §۴۴: «اثرِ انباری» و «اثرِ حسابداری» دو چیزند و یک بولینِ مبهم نباید
+    #: نماینده‌ی هر دو باشد. این ستون دومی را می‌گوید و `status` اولی را.
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    description2: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
+    #: `(seq, id)` و نه `id`: کلید اصلی UUIDِ تصادفی است و مرتب‌کردن بر اساسش
+    #: یعنی ردیف‌ها به ترتیبِ ورودِ اپراتور برنگردند — و چاپِ رسید (§۴۱ §۴۲) هر
+    #: بار ترتیبِ دیگری بدهد.
     lines: Mapped[list["WarehouseReceiptLine"]] = relationship(
-        back_populates="receipt", cascade="all, delete-orphan", order_by="WarehouseReceiptLine.id"
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        order_by="(WarehouseReceiptLine.seq, WarehouseReceiptLine.id)",
     )
+
+    # ── §۲۵ §۲۷ — اجزای خالص، مشتق و نه ذخیره ────────────────────────────
+    #
+    # فصل: «کاربر اگر عددِ ۱٬۴۹۵٬۰۰۰ را دید، کوبیتا بتواند نشان دهد
+    # ۱٬۴۰۰٬۰۰۰ کالا + ۵۰٬۰۰۰ حمل + ۴۵٬۰۰۰ مالیات — نه اینکه این عدد
+    # جداگانه و دستی نگهداری شود.»
+    #
+    # هیچ‌کدام ستون نیستند. §۴۲ هم همین را می‌خواهد: چاپ مدلِ مالیِ دیگری
+    # نیست، از همین اجزا می‌خواند.
+
+    @property
+    def goods_amount(self) -> Decimal:
+        """«کل» — جمعِ مبلغِ کالاها، پیش از حمل و مالیات."""
+        return sum((line.goods_amount for line in self.lines), Decimal(0))
+
+    @property
+    def freight_total(self) -> Decimal:
+        """«جمع مبلغ حمل» (§۲۱) — جمعِ خودِ پنجره‌ی حمل.
+
+        **این یک جزءِ خالص نیست.** اجزایش جداگانه در «حمل»، «مالیات» و
+        «عوارض» شمرده شده‌اند؛ افزودنش به خالص یعنی دوباره‌شماری.
+        """
+        return Decimal(self.freight_amount) + Decimal(self.freight_tax) + Decimal(self.freight_duty)
+
+    @property
+    def tax_amount(self) -> Decimal:
+        """«مالیات» — مالیاتِ کالاها به‌علاوه‌ی مالیاتِ حمل.
+
+        §۲۶: این عدد از بهای تمام‌شده‌ی کالا **بیرون** است و عمداً بیرون است.
+        """
+        return (
+            sum((Decimal(line.tax_amount_snapshot) for line in self.lines), Decimal(0))
+            + Decimal(self.freight_tax)
+        )
+
+    @property
+    def duty_amount(self) -> Decimal:
+        """«عوارض» — جدا از مالیات، چون مقصدِ حسابداری‌اش فرق دارد (§۲۵)."""
+        return Decimal(self.freight_duty)
+
+    @property
+    def net_amount(self) -> Decimal:
+        """«خالص» (§۲۷) = کالا + حمل + عوارض + مالیات."""
+        return (
+            self.goods_amount + Decimal(self.freight_amount) + self.duty_amount + self.tax_amount
+        )
 
 
 class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
@@ -265,12 +502,33 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
     receipt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_receipts.id", ondelete="CASCADE"), index=True
     )
-    purchase_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), index=True
+    #: §۹ — در رسیدِ مستقیم ردیفِ مبدأیی وجود ندارد، پس اختیاری است.
+    purchase_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_invoice_lines.id"), nullable=True, index=True
     )
+    #: شماره‌ی ردیف در همین رسید (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۱»،
+    #: که ترتیبش بازیابی‌شدنی نبود.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    #: §۲۰ — **«فی»**، نه «فی تمام‌شده». بهای خریدِ واحد، پیش از حمل.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+
+    #: §۲۲ — سهمِ این ردیف از هزینه‌ی حمل، خروجیِ `services/freight.allocate`.
+    #:
+    #: **چرا ذخیره و نه مشتق:** نتیجه‌ی یک تقسیمِ گِردشده است که ته‌مانده‌اش به
+    #: ردیفِ آخر رفته. بازمحاسبه از روی مبلغِ حمل لزوماً همان عدد را نمی‌دهد، و
+    #: همین سهم است که در بهای موجودی نشسته — یعنی Snapshot است، نه مشتق.
+    freight_share: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    #: §۲۵ — مالیاتِ همین ردیف، مستقل و قابلِ ردیابی.
+    #:
+    #: **در رسیدِ گره‌خورده به فاکتور فقط برای چاپ است.** آن مالیات را فاکتور
+    #: شناخته؛ ثبتِ دوباره یعنی اعتبارِ مالیاتی دو برابر شود (§۳۷). این‌جا
+    #: می‌نشیند تا «خالص»ِ رسید از اجزای خودش توضیح‌پذیر باشد (§۲۷).
+    tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
     unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
@@ -278,6 +536,32 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
 
     receipt: Mapped["WarehouseReceipt"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
+
+    @property
+    def goods_amount(self) -> Decimal:
+        """مبلغِ کالا — §۱۹: مقدار × فی."""
+        return Decimal(self.qty) * Decimal(self.unit_cost)
+
+    @property
+    def landed_amount(self) -> Decimal:
+        """بهای تمام‌شده‌ی ورود = مبلغِ کالا + سهمِ حمل (§۲۴).
+
+        مالیات این‌جا نیست و عمداً نیست (§۲۶).
+        """
+        return self.goods_amount + Decimal(self.freight_share)
+
+    @property
+    def landed_unit_cost(self) -> Decimal:
+        """**«فی تمام‌شده» (§۲۰)** — و این با «فی» یکی نیست.
+
+        نمونه‌ی فصل: فیِ ۵٬۰۰۰ پس از تسهیمِ حمل، فیِ تمام‌شده‌ی ۵٬۲۵۰ می‌شود.
+
+        ذخیره نمی‌شود چون از `unit_cost` و `freight_share` مشتق است — همان
+        قاعده‌ی §۲۷ («مشتق بهتر از ذخیره»). عددی که در دفترِ موجودی نشسته
+        Snapshotِ خودِ `stock_ledger` است.
+        """
+        qty = Decimal(self.qty)
+        return (self.landed_amount / qty) if qty else Decimal(0)
 
 
 class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -329,6 +613,21 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
+
+    #: **این فاکتور کالا را در «کالای در راه» گذاشته یا مستقیم در انبار؟**
+    #:
+    #: پرچمِ *سیاستِ ثبت* است، نه وضعیتِ امروز: می‌گوید این سند وقتی زده شد چه
+    #: کرد. رسیدِ انبار به آن نگاه می‌کند تا بداند باید طبقه‌بندیِ دوباره بزند
+    #: یا نه.
+    #:
+    #: **چرا ذخیره و نه مشتق:** فاکتورهای پیش از این تغییر مستقیماً «موجودی
+    #: کالا» را بدهکار کرده‌اند. اگر رسیدشان حالا دوباره موجودی را بدهکار کند،
+    #: موجودیِ دفتری **دو برابر** می‌شود. `False` روی ردیف‌های موجود یعنی
+    #: «رسیدت سند نزند» — همان رفتاری که تا امروز داشته‌اند.
+    goods_in_transit: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     lines: Mapped[list["PurchaseInvoiceLine"]] = relationship(
