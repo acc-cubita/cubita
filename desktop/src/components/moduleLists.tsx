@@ -4,6 +4,7 @@ import {
   fetchEmployees,
   fetchFixedAssets,
   fetchInstallmentPlans,
+  fetchIssueReturnLedger,
   fetchItemsLive,
   fetchLeads,
   fetchProductionOrders,
@@ -468,6 +469,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `${r.type_label} ${faNum(r.number)}`,
       subtitle: day(r.doc_date),
       meta: r.kind === 'transfer' ? `به ${r.destination_warehouse_name}` : r.receiver_name || `${faNum(r.line_count)} قلم`,
+    })),
+    'issue-returns': def('برگشت‌های خروج انبار', (t) => fetchIssueReturnLedger(t), (r) => ({
+      id: r.id,
+      title: `برگشت ${r.type_label} ${faNum(r.number)}`,
+      subtitle: day(r.return_date),
+      meta: r.deliverer_name || `${faNum(r.line_count)} قلم`,
     })),
     //: همان دفترِ خروج‌ها با نوعِ انتقال — نه فراخوانیِ جداگانه‌ی حواله‌ها.
     transfer: def('انتقال‌های بین انبار', (t) => fetchWarehouseIssueLedger(t, { issue_type: 'transfer' }), (r) => ({

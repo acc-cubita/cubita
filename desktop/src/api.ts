@@ -1623,6 +1623,12 @@ export interface SalesReturnRecord {
   journal_entry_id: string | null
   voided_at: string | null
   void_reason: string
+  /** برگشتِ فیزیکی (مهاجرتِ ۰۱۳۴) — `inline` یعنی خودِ این سند موجودی را برگردانده. */
+  stock_mode?: 'inline' | 'issue_return'
+  physical_status?: string
+  physical_qty?: string
+  physical_returned_qty?: string
+  physical_remaining_qty?: string
   /** مشتق سمتِ سرور — هیچ‌کدام ستونِ ذخیره‌شده نیستند. */
   final_amount: string
   settled_amount: string
@@ -8026,3 +8032,188 @@ export interface IssueInvoiceContext {
 
 export const fetchIssueInvoiceContext = (token: string, issueId: string) =>
   authedGet<IssueInvoiceContext>(token, `/api/warehouse-issues/${issueId}/invoice-context`)
+
+// ═════════════════ برگشت خروج انبار (مهاجرتِ ۰۱۳۴) ═════════════════
+
+export type IssueReturnType = 'sale' | 'consumption' | 'other'
+
+/** سه نوع — «انتقال» برگشت ندارد؛ انتقالِ برعکس یک انتقالِ دیگر است. */
+export const ISSUE_RETURN_TYPE_LABELS: Record<string, string> = {
+  sale: 'فروش',
+  consumption: 'مصرف',
+  other: 'سایر',
+}
+
+/** وضعیتِ برگشتِ فیزیکیِ یک فاکتور برگشتی — کنارِ وضعیتِ مالی، نه جایش. */
+export const SALES_RETURN_PHYSICAL_LABELS: Record<string, string> = {
+  inline: 'همراهِ برگشت',
+  none: '—',
+  not_returned: 'برنگشته',
+  partially_returned: 'بخشی برگشته',
+  fully_returned: 'کامل برگشته',
+}
+
+/** «ثبت برگشت به انبار» از دفترِ فاکتورهای برگشتی — فقط زمینه منتقل می‌شود. */
+export const ISSUE_RETURN_PREFILL_KEY = 'cubita.inventory.issueReturnPrefill'
+export type IssueReturnPrefill = { kind: 'sales_return' | 'issue'; id: string; return_type: IssueReturnType }
+
+export interface IssueReturnRow {
+  id: string
+  number: number
+  return_date: string
+  return_type: IssueReturnType
+  type_label: string
+  origin: 'direct' | 'sales_return'
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  deliverer_id: string | null
+  deliverer_name: string
+  sales_return_numbers: number[]
+  issue_numbers: number[]
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  journal_entry_date: string | null
+  created_by_name: string
+  line_count: number
+  total_qty: string
+  total_cost: string
+  description: string
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface IssueReturnLedgerFilters {
+  return_type?: string
+  warehouse_id?: string
+  deliverer_id?: string
+  date_from?: string
+  date_to?: string
+  state?: string
+}
+
+/** فیلتر سمتِ سرور است؛ صفحه‌ها با کرسر خوانده می‌شوند (سقفِ ۲۰۰). */
+export const fetchIssueReturnLedger = (token: string, filters: IssueReturnLedgerFilters = {}) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGetAll<IssueReturnRow>(token, `/api/warehouse-issue-returns${query ? `?${query}` : ''}`)
+}
+
+export interface IssueReturnLineRecord {
+  id: string
+  seq: number
+  warehouse_issue_line_id: string
+  sales_return_line_id: string | null
+  item_id: string
+  qty: string
+  unit_cost: string
+  amount: string
+  account_id: string | null
+  account_code: string
+  account_name: string
+  cost_center_id: string | null
+  secondary_qty: string | null
+  secondary_unit_snapshot: string
+  item_code_snapshot: string
+  item_name_snapshot: string
+  unit_snapshot: string
+  description: string
+  issue_id: string | null
+  issue_number: number | null
+  sales_return_id: string | null
+  sales_return_number: number | null
+}
+
+export interface IssueReturnRecord {
+  id: string
+  number: number
+  return_date: string
+  return_type: IssueReturnType
+  origin: 'direct' | 'sales_return'
+  warehouse_id: string
+  deliverer_id: string | null
+  sales_return_id: string | null
+  description: string
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+  created_by_id: string
+  total_qty: string
+  total_cost: string
+  lines: IssueReturnLineRecord[]
+}
+
+export const fetchIssueReturn = (token: string, returnId: string) =>
+  authedGet<IssueReturnRecord>(token, `/api/warehouse-issue-returns/${returnId}`)
+
+/** هر ردیف دقیقاً یک مبنا دارد: ردیفِ فاکتور برگشتی یا ردیفِ خود خروج. */
+export interface IssueReturnIn {
+  return_date: string
+  return_type: IssueReturnType
+  warehouse_id: string
+  deliverer_id?: string | null
+  description?: string
+  lines: {
+    sales_return_line_id?: string | null
+    warehouse_issue_line_id?: string | null
+    qty: number
+    unit_id?: string | null
+    description?: string
+  }[]
+}
+
+export const createIssueReturn = (token: string, data: IssueReturnIn, idempotencyKey: string) =>
+  authedSend<IssueReturnRecord>(token, 'POST', '/api/warehouse-issue-returns', data, idempotencyKey)
+
+export const voidIssueReturn = (token: string, returnId: string, reason: string) =>
+  authedSend<IssueReturnRecord>(token, 'POST', `/api/warehouse-issue-returns/${returnId}/void`, { reason })
+
+/** برگه‌ی «برگشت خروج انبار» — با فی و مبلغِ بها؛ استاندارد یا A5. */
+export const printIssueReturn = (token: string, returnId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/warehouse-issue-returns/${returnId}/print?template=${template}`)
+
+export interface IssueReturnBasisDoc {
+  kind: 'sales_return' | 'issue'
+  id: string
+  number: number | null
+  doc_date: string
+  party_id: string | null
+  party_name: string
+  warehouse_id: string | null
+  warehouse_name: string
+  remaining_qty: string
+}
+
+/** پنجره‌ی «مبنا» — سندهایی که هنوز کالایی برای برگشت دارند. */
+export const fetchIssueReturnBasis = (token: string, returnType: IssueReturnType) =>
+  authedGet<IssueReturnBasisDoc[]>(token, `/api/warehouse-issue-returns/basis?return_type=${returnType}`)
+
+export interface IssueReturnBasisLine {
+  kind: 'sales_return' | 'issue'
+  basis_line_id: string
+  item_id: string
+  item_code: string
+  item_name: string
+  unit: string
+  qty: string
+  returned: string
+  remaining: string
+  unit_cost: string
+  amount: string
+  source_warehouse_id: string | null
+}
+
+export interface IssueReturnBasis {
+  kind: 'sales_return' | 'issue'
+  id: string
+  number: number | null
+  doc_date: string
+  party_id: string | null
+  party_name: string
+  warehouse_id: string | null
+  lines: IssueReturnBasisLine[]
+}
+
+export const fetchIssueReturnBasisDetail = (token: string, kind: string, docId: string) =>
+  authedGet<IssueReturnBasis>(token, `/api/warehouse-issue-returns/basis/${kind}/${docId}`)

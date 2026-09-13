@@ -28,7 +28,7 @@ export function SalesReturnForm({ token }: { token: string }) {
     <SectionCard
       icon={Undo2}
       title="برگشت از فروش"
-      description="بابت یک فاکتور فروش مشخص؛ موجودی برمی‌گردد و درآمد/بهای تمام‌شده معکوس می‌شود."
+      description="بابت یک فاکتور فروش مشخص؛ درآمد، مالیات و طلبِ مشتری معکوس می‌شود. کالا با «برگشت خروج انبار» برمی‌گردد — در حالتِ خودکار همان لحظه."
       actions={
         <button onClick={() => void r.refresh()}>
           <RefreshCw size={13} /> به‌روزرسانی

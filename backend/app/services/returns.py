@@ -377,7 +377,35 @@ def _return_stock_moves(
     return moves
 
 
-def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesReturn:
+def _invoice_moved_stock_itself(db: Session, invoice_id: UUID) -> bool:
+    """فاکتورهای پیش از مهاجرتِ ۰۱۲۵ کالا را **مستقیم** از خودشان کم کرده‌اند و خروج ندارند.
+
+    آن مهاجرت خروجِ گذشته را backfill نکرد؛ پس برگشتِ چنین فاکتوری راهی جز برگرداندنِ
+    مستقیمِ موجودی ندارد — همان مسیری که تا امروز داشت.
+    """
+    return (
+        db.query(StockLedger.id)
+        .filter(StockLedger.source_type == "sales_invoice", StockLedger.source_id == invoice_id)
+        .first()
+        is not None
+    )
+
+
+def post_sales_return(
+    db: Session, data: SalesReturnIn, user: User, *, physical: bool | None = None
+) -> SalesReturn:
+    """برگشت از فروش — **سندِ تجاری** (درآمد، مالیات، طلبِ مشتری).
+
+    **برگشتِ فیزیکی مالِ «برگشت خروج انبار» است (مهاجرتِ ۰۱۳۴).** این سند دیگر خودش
+    موجودی را زیاد نمی‌کند و «موجودی / بهای تمام‌شده» نمی‌زند:
+
+    * `physical=None` → سیاستِ صدورِ فاکتورِ همین کسب‌وکار. «خودکار» کالا را همان لحظه
+      با برگشتِ خروجی که خودش می‌سازد برمی‌گرداند؛ «دومرحله‌ای» فقط تجاری ثبت می‌کند و
+      برگشتِ انبار بعداً — جزئی و چندباره — روی همین سند ثبت می‌شود.
+    * فاکتوری که پیش از ۰۱۲۵ ثبت شده خروج ندارد و مسیرِ قدیمی (`inline`) را می‌رود.
+
+    در هر دو حالت برای هر برگشتِ فیزیکی دقیقاً **یک** حرکتِ مثبت ساخته می‌شود.
+    """
     assert_period_open(db, data.return_date)
 
     #: قفلِ سربرگ پیش از هر خواندنی. همراهِ قفلِ ردیف‌ها در `_returnable_lines`،
@@ -410,6 +438,9 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
     #: قفلِ کالاها پیش از خواندنِ موجودی و بازمحاسبه‌ی میانگین — همان دلیلی که
     #: `voiding._apply_void` دارد: read-modify-write روی `average_cost`.
     lock_items(db, {row.line.item_id for row, _, _ in plan})
+    inline = _invoice_moved_stock_itself(db, invoice.id)
+    #: مقدارِ کالاییِ درخواستیِ هر ردیفِ فاکتور — برای سقفِ «آنچه واقعاً بیرون است».
+    requested_physical: dict[UUID, Decimal] = {}
 
     total_amount = Decimal(0)
     total_cost = Decimal(0)
@@ -438,7 +469,7 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
             )
         )
 
-        if not item.is_service:
+        if not item.is_service and inline:
             existing_qty = get_total_stock_qty(db, item.id)
             new_qty = existing_qty + qty
             if new_qty > 0:
@@ -448,6 +479,35 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
                     db, invoice, row.line.id, row.line.item_id,
                     qty, row.unit_cost, data.return_date, item.name,
                 )
+            )
+        elif not item.is_service:
+            requested_physical[row.line.id] = requested_physical.get(row.line.id, Decimal(0)) + qty
+
+    #: **کالایی که بیرون نرفته، برگشتِ تجاری هم ندارد.** سقفِ جمعِ برگشت‌های هر ردیف
+    #: همان مقداری است که خروج‌های معتبر واقعاً بیرون فرستاده‌اند. بدونِ این، خروجی که
+    #: باطل شده و فاکتورش مانده، برگشتی می‌پذیرفت که موجودیِ نداشته می‌ساخت.
+    if requested_physical:
+        from app.services.issue_returns import issued_net_by_invoice_line
+
+        out = issued_net_by_invoice_line(db, list(requested_physical))
+        rows_by_line = {row.line.id: row for row, _, _ in plan}
+        for line_id, qty in requested_physical.items():
+            row = rows_by_line[line_id]
+            name = items_by_id[row.line.item_id].name
+            available = out.get(line_id, Decimal(0))
+            if row.returned + qty <= available:
+                continue
+            if available <= 0:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"«{name}» هنوز از انبار خارج نشده، پس برگشتش موجودی‌ای اضافه می‌کند که "
+                    "هرگز کم نشده بود. اگر فروش انجام نشده، خودِ فاکتور را باطل کنید؛ اگر کالا "
+                    "تحویل رفته، اول «صدور خروج انبار» را بزنید.",
+                )
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"از «{name}» بیشتر از آنچه از انبار خارج شده برگشت داده‌اید. "
+                "برای بقیه‌اش اول «صدور خروج انبار» را بزنید.",
             )
 
     # مالیاتی که هنگام فروش بستانکار شده بود باید با برگشتِ کالا آزاد شود، وگرنه
@@ -483,7 +543,9 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
             description="برگشت از فروش",
         )
     )
-    if total_cost > 0:
+    #: «موجودی / بهای تمام‌شده» فقط در مسیرِ قدیمی این‌جاست؛ در مسیرِ تازه سندِ
+    #: برگشتِ خروج آن را با معینِ انبارِ واقعی و حسابِ خودِ خروج می‌زند.
+    if total_cost > 0 and inline:
         journal_lines.append(
             JournalLine(
                 #: معینِ همان انباری که کالا به آن برمی‌گردد (§۹).
@@ -514,6 +576,7 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
         total_cost=total_cost,
         tax_rate=tax_rate,
         tax_amount=tax_amount,
+        stock_mode="inline" if inline else "issue_return",
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
         lines=return_lines,
@@ -528,6 +591,15 @@ def post_sales_return(db: Session, data: SalesReturnIn, user: User) -> SalesRetu
         db.add(move)
 
     db.flush()
+    if not inline:
+        if physical is None:
+            from app.services.sales_posting import posts_immediately
+
+            physical = posts_immediately(db)
+        if physical:
+            from app.services.issue_returns import return_goods_for_sales_return
+
+            return_goods_for_sales_return(db, sales_return, invoice, user)
     db.refresh(sales_return)
     return sales_return
 
@@ -1075,6 +1147,11 @@ def attach_return_state(db: Session, returns: list) -> None:
             else "fully_settled" if paid >= final
             else "partially_settled"
         )
+    if kind == "sales_return":
+        #: وضعیتِ فیزیکی **کنارِ** وضعیتِ مالی، نه جایش — دو حقیقتِ مستقل.
+        from app.services.issue_returns import attach_physical_state
+
+        attach_physical_state(db, returns)
 
 
 def return_print_projection(db: Session, pret: PurchaseReturn) -> dict:

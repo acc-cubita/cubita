@@ -36,6 +36,7 @@ from app.models.invoices import (
     WarehouseIssue,
     WarehouseReceipt,
 )
+from app.models.issue_returns import WarehouseIssueReturn
 from app.models.manufacturing import ProductionOrder
 from app.models.payroll import BenefitRun, Payslip
 from app.models.pos_settlement import PosSettlement
@@ -56,6 +57,7 @@ SOURCE_MODELS: dict[str, type] = {
     "sales_invoice": SalesInvoice,
     "purchase_invoice": PurchaseInvoice,
     "warehouse_issue": WarehouseIssue,
+    "warehouse_issue_return": WarehouseIssueReturn,
     "sales_return": SalesReturn,
     "purchase_return": PurchaseReturn,
     "treasury_receipt": TreasuryTransaction,
@@ -119,6 +121,7 @@ SOURCE_LABELS: dict[str, str] = {
     "sales_invoice": "فاکتور فروش",
     "purchase_invoice": "فاکتور خرید",
     "warehouse_issue": "خروج انبار",
+    "warehouse_issue_return": "برگشت خروج انبار",
     "warehouse_receipt": "رسید انبار",
     "stock_transfer": "انتقال بین انبار",
     "sales_return": "برگشت از فروش",

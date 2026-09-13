@@ -74,6 +74,14 @@ class SalesReturnOut(BaseModel):
     remaining_amount: Decimal = Decimal(0)
     accounting_status: str = "unposted"
     financial_status: str = "unsettled"
+    #: **برگشتِ تجاری ≠ برگشتِ فیزیکی.** `inline` = خودِ این سند موجودی را برگردانده
+    #: (برگشت‌های پیش از مهاجرتِ ۰۱۳۴ و فاکتورهای بی‌خروجِ قدیمی)؛ `issue_return` =
+    #: کالا با «برگشت خروج انبار» برمی‌گردد و وضعیتش مشتق است.
+    stock_mode: str = "inline"
+    physical_status: str = "inline"  # inline | none | not_returned | partially_returned | fully_returned
+    physical_qty: Decimal = Decimal(0)
+    physical_returned_qty: Decimal = Decimal(0)
+    physical_remaining_qty: Decimal = Decimal(0)
     lines: list[SalesReturnLineOut]
 
     model_config = {"from_attributes": True}

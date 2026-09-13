@@ -30,6 +30,7 @@ from app.models.invoices import (
     WarehouseIssue,
     WarehouseIssueLine,
 )
+from app.models.issue_returns import WarehouseIssueReturn, WarehouseIssueReturnLine
 from app.models.quotations import SalesQuotation
 from app.models.returns import SalesReturn
 from app.models.transfers import StockTransfer
@@ -105,6 +106,27 @@ def issued_by_line(db: Session, invoice_id: UUID) -> dict[UUID, Decimal]:
         .group_by(WarehouseIssueLine.sales_invoice_line_id).all()
     )
     return {line_id: Decimal(qty) for line_id, qty in rows if line_id is not None}
+
+
+def returned_by_issue_line(db: Session, issue_line_ids) -> dict[UUID, Decimal]:
+    """آنچه از هر ردیفِ خروج با «برگشت خروج انبار»ِ **معتبر** برگشته (مهاجرتِ ۰۱۳۴).
+
+    مشتق است، نه شمارنده: ابطالِ برگشت مقدارش را خودبه‌خود آزاد می‌کند.
+    """
+    ids = [line_id for line_id in issue_line_ids if line_id]
+    if not ids:
+        return {}
+    rows = (
+        db.query(WarehouseIssueReturnLine.warehouse_issue_line_id, func.sum(WarehouseIssueReturnLine.qty))
+        .join(WarehouseIssueReturn, WarehouseIssueReturn.id == WarehouseIssueReturnLine.return_id)
+        .filter(
+            WarehouseIssueReturnLine.warehouse_issue_line_id.in_(ids),
+            WarehouseIssueReturn.voided_at.is_(None),
+        )
+        .group_by(WarehouseIssueReturnLine.warehouse_issue_line_id)
+        .all()
+    )
+    return {line_id: Decimal(qty) for line_id, qty in rows}
 
 
 def issued_unit_cost_by_line(db: Session, invoice_id: UUID) -> dict[UUID, Decimal]:
@@ -391,6 +413,21 @@ def void_warehouse_issue(
             status.HTTP_409_CONFLICT,
             "فاکتورِ این خروج برگشتِ فعال دارد؛ ابتدا برگشت را باطل کنید، وگرنه کالای برگشتی دو بار به انبار برمی‌گردد.",
         )
+    #: **همان خطر از مسیرِ برگشتِ خروج** — این گارد برخلافِ بالایی آبشاری هم می‌زند:
+    #: کالایی که با «برگشت خروج انبار» برگشته، با ابطالِ خروج دوباره برمی‌گشت.
+    returned_back = (
+        db.query(WarehouseIssueReturn.number)
+        .join(WarehouseIssueReturnLine, WarehouseIssueReturnLine.return_id == WarehouseIssueReturn.id)
+        .join(WarehouseIssueLine, WarehouseIssueLine.id == WarehouseIssueReturnLine.warehouse_issue_line_id)
+        .filter(WarehouseIssueLine.issue_id == issue.id, WarehouseIssueReturn.voided_at.is_(None))
+        .first()
+    )
+    if returned_back is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"برای این خروج «برگشت خروج انبار» شماره {returned_back.number} ثبت شده است؛ ابتدا برگشت را "
+            "باطل کنید، وگرنه کالای برگشتی دو بار به انبار برمی‌گردد.",
+        )
     effective = void_date or issue.issue_date
     assert_period_open(db, effective)
     moves = db.query(StockLedger).filter(
@@ -447,7 +484,18 @@ def detach_direct_issues(db: Session, invoice: SalesInvoice) -> None:
 # ─────────────────────────── خروج ← فاکتور فروش ───────────────────────────
 
 
-def _lock_issue_for_invoice(db: Session, data: SalesInvoiceIn) -> tuple[WarehouseIssue, dict[int, UUID]]:
+def _net_issue_qty(db: Session, issue: WarehouseIssue) -> dict[UUID, Decimal]:
+    """مقدارِ **خالصِ** هر ردیفِ خروج — خارج‌شده منهای آنچه پیش از فاکتور برگشته.
+
+    مشتری ده عدد تحویل گرفت و دو عدد را پیش از فاکتور برگرداند؛ فاکتور هشت عدد است.
+    """
+    returned = returned_by_issue_line(db, [line.id for line in issue.lines])
+    return {line.id: Decimal(line.qty) - returned.get(line.id, Decimal(0)) for line in issue.lines}
+
+
+def _lock_issue_for_invoice(
+    db: Session, data: SalesInvoiceIn
+) -> tuple[WarehouseIssue, dict[int, UUID], dict[UUID, Decimal]]:
     issue = (
         db.query(WarehouseIssue)
         .options(selectinload(WarehouseIssue.lines))
@@ -475,7 +523,12 @@ def _lock_issue_for_invoice(db: Session, data: SalesInvoiceIn) -> tuple[Warehous
     if data.warehouse_id is not None and data.warehouse_id != issue.warehouse_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبارِ فاکتور باید همان انبارِ خروج باشد")
 
-    by_id = {line.id: line for line in issue.lines}
+    net = _net_issue_qty(db, issue)
+    if all(qty <= 0 for qty in net.values()):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "همه‌ی کالای این خروج به انبار برگشته؛ چیزی برای فاکتور نمانده است."
+        )
+    by_id = {line.id: line for line in issue.lines if net[line.id] > 0}
     linked: dict[int, UUID] = {}
     for index, line in enumerate(data.lines):
         if line.source_issue_line_id is None:
@@ -492,16 +545,16 @@ def _lock_issue_for_invoice(db: Session, data: SalesInvoiceIn) -> tuple[Warehous
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "ردیفی از فاکتور به ردیفِ خروجِ دیگری اشاره می‌کند")
         if source.id in linked.values():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "هر ردیفِ خروج فقط یک بار در فاکتور می‌آید")
-        if line.item_id != source.item_id or Decimal(line.qty) != Decimal(source.qty):
+        if line.item_id != source.item_id or Decimal(line.qty) != net[source.id]:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                f"مقدارِ «{source.item_name_snapshot}» در فاکتور باید همان مقدارِ خروج "
-                f"({Decimal(source.qty).normalize()}) باشد؛ مقدار را خروج تعیین کرده است.",
+                f"مقدارِ «{source.item_name_snapshot}» در فاکتور باید همان مقدارِ خالصِ خروج "
+                f"({net[source.id].normalize()}) باشد؛ مقدار را خروج و برگشتش تعیین کرده‌اند.",
             )
         linked[index] = source.id
     if set(by_id) - set(linked.values()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "همه‌ی ردیف‌های خروج باید در فاکتور بیایند")
-    return issue, linked
+    return issue, linked, net
 
 
 def post_sales_invoice_from_issue(
@@ -514,7 +567,7 @@ def post_sales_invoice_from_issue(
     (درآمد و طلب) طبقِ سیاستِ صدورِ همان کسب‌وکار زده می‌شود؛ COGS را خروج از قبل
     زده و فاکتور هرگز دوباره نمی‌زند.
     """
-    issue, linked = _lock_issue_for_invoice(db, data)
+    issue, linked, net = _lock_issue_for_invoice(db, data)
     payload = data.model_copy(update={"warehouse_id": issue.warehouse_id, "source_warehouse_issue_id": None})
     invoice = post_sales_invoice(
         db, payload, user, enforce_credit=enforce_credit, move_inventory=False, issue_accounting=issue_accounting,
@@ -532,14 +585,14 @@ def post_sales_invoice_from_issue(
         match = next(
             line for line in pool
             if line.item_id == source.item_id
-            and Decimal(line.qty) == Decimal(source.qty)
+            and Decimal(line.qty) == net[source_id]
             and Decimal(line.unit_price) == Decimal(wanted.unit_price)
         )
         pool.remove(match)
         source.sales_invoice_line_id = match.id
         #: بهای این ردیفِ فاکتور همان بهایی است که خروج واقعاً سند زد.
         match.unit_cost = Decimal(source.unit_cost)
-        total += source.amount
+        total += (net[source_id] * Decimal(source.unit_cost)).quantize(Decimal(1))
     issue.sales_invoice_id = invoice.id
     invoice.total_cost = Decimal(invoice.total_cost or 0) + total
     db.flush()
@@ -559,6 +612,7 @@ def invoice_context(db: Session, issue: WarehouseIssue) -> dict:
             f"برای این خروج قبلاً فاکتور فروش شماره {existing.number if existing else ''} صادر شده است.",
         )
     receiver = db.get(Contact, issue.receiver_id) if issue.receiver_id else None
+    net = _net_issue_qty(db, issue)
     return {
         "issue_id": issue.id,
         "issue_number": issue.number,
@@ -570,11 +624,13 @@ def invoice_context(db: Session, issue: WarehouseIssue) -> dict:
                 "issue_line_id": line.id,
                 "item_id": line.item_id,
                 "item_name": line.item_name_snapshot or (line.item.name if line.item else ""),
-                "qty": line.qty,
+                #: خالص — کالایی که پیش از فاکتور برگشته فاکتور نمی‌شود.
+                "qty": net[line.id],
                 "unit": line.unit_snapshot,
                 "suggested_unit_price": Decimal(line.item.sales_price or 0) if line.item else Decimal(0),
             }
             for line in issue.lines
+            if net[line.id] > 0
         ],
     }
 

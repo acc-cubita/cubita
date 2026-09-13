@@ -53,6 +53,7 @@ class SalesReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_sales_returns_tenant_number"),
+        CheckConstraint("stock_mode IN ('inline', 'issue_return')", name="ck_sales_returns_stock_mode"),
     )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
@@ -65,6 +66,17 @@ class SalesReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base)
     # مالیاتِ برگشتی — با همان نرخِ فاکتورِ اصلی. مبلغِ بازگرداندنی به مشتری = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+
+    #: **چه کسی کالا را به انبار برمی‌گرداند (مهاجرتِ ۰۱۳۴).**
+    #:
+    #: * `inline` — خودِ همین سند حرکتِ مثبت و «موجودی / بهای تمام‌شده» را زده. همه‌ی
+    #:   برگشت‌های پیش از ۰۱۳۴ این‌اند، و برگشتِ فاکتورهایی که پیش از ۰۱۲۵ ثبت شده‌اند
+    #:   (آن فاکتورها خروج ندارند و کالایشان مستقیم از خودِ فاکتور کم شده بود).
+    #: * `issue_return` — این سند فقط تجاری است (درآمد، مالیات، طلب). کالا با «برگشت
+    #:   خروج انبار» برمی‌گردد؛ در سیاستِ خودکار همان لحظه و خودکار، در دومرحله‌ای بعداً.
+    #:
+    #: دقیقاً **یک** حرکتِ مثبت برای هر برگشتِ فیزیکی — هرگز هر دو.
+    stock_mode: Mapped[str] = mapped_column(String(12), default="inline", server_default="inline")
 
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True

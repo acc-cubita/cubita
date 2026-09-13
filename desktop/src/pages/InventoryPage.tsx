@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, PackageMinus, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler } from 'lucide-react'
+import { PackageSearch, Package, PackageMinus, PackagePlus, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler } from 'lucide-react'
 import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
+import { IssueReturnsTab } from '../components/IssueReturnsTab'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
@@ -306,6 +307,15 @@ export function InventoryPage({
                 onChanged={() => void refreshStock()}
                 onCreateInvoice={onCreateInvoiceFromIssue}
               />
+            ),
+          },
+          {
+            //: کالایی که با یک خروج رفته و برمی‌گردد — فرمِ «مبنا» و دفترِ برگشت‌ها.
+            key: 'issue-returns',
+            label: 'برگشت خروج انبار',
+            icon: PackagePlus,
+            content: (
+              <IssueReturnsTab token={token} me={me} warehouses={warehouses} onChanged={() => void refreshStock()} />
             ),
           },
           {

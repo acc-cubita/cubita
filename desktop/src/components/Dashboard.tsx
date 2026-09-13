@@ -554,7 +554,7 @@ export function Dashboard({
           {page === 'quotationlist' && (
             <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
           )}
-          {page === 'returnlist' && <SalesReturnListPage token={token} />}
+          {page === 'returnlist' && <SalesReturnListPage token={token} onNavigate={navigate} />}
           {page === 'notelist' && <NoteListPage token={token} />}
           {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
           {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}

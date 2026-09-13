@@ -930,12 +930,17 @@ def render_issue_permit(
     voided_at=None,
     void_reason: str = "",
     template: str = "standard",
+    show_amounts: bool = False,
+    total_amount: Decimal | None = None,
 ) -> str:
     """«مجوز خروج انبار» — برگه‌ی فیزیکیِ بیرون‌رفتنِ کالا (§۳۳ §۳۴).
 
     **بی‌مبلغ، عمداً.** مجوزِ خروج فاکتور نیست؛ نگهبانِ درِ انبار باید بداند چه
     کالایی و چند تا بیرون می‌رود، نه به چه قیمتی فروخته شده. ستون‌ها همان‌هایی‌اند
     که فصل نام می‌برد: مقدار و واحدِ اصلی، مقدار و واحدِ فرعی، توضیحات، و جمع.
+
+    `show_amounts` برای «برگشت خروج انبار» است که فصلش فی و مبلغ را روی برگه
+    می‌خواهد — مبلغِ **بهای موجودی**، نه قیمتی که به مشتری برمی‌گردد.
     """
     banner = ""
     if voided_at is not None:
@@ -954,9 +959,25 @@ def render_issue_permit(
             f"<td class='num'>{escape(line.get('unit') or '')}</td>"
             f"<td class='num'>{fa_number(secondary) if secondary is not None else '—'}</td>"
             f"<td class='num'>{escape(line.get('secondary_unit') or '') or '—'}</td>"
-            f"<td>{escape(line.get('description') or '')}</td>"
+            + (
+                f"<td class='num'>{fa_number(line.get('unit_cost') or 0)}</td>"
+                f"<td class='num'>{fa_number(line.get('amount') or 0)}</td>"
+                if show_amounts
+                else ""
+            )
+            + f"<td>{escape(line.get('description') or '')}</td>"
             "</tr>"
         )
+    amount_heads = (
+        '<th class="num" style="width:9%">فی</th><th class="num" style="width:10%">مبلغ</th>'
+        if show_amounts
+        else ""
+    )
+    foot_tail = (
+        f'<td colspan="4"></td><td class="num">{fa_number(total_amount or 0)}</td><td></td>'
+        if show_amounts
+        else '<td colspan="4"></td>'
+    )
     reference_chips = "".join(
         f"<div class='chip'><span>{escape(label)}</span> &nbsp;<strong>{fa_number(value)}</strong></div>"
         for label, value in references
@@ -1019,6 +1040,7 @@ def render_issue_permit(
         <th class="num" style="width:9%">واحد اصلی</th>
         <th class="num" style="width:10%">مقدار فرعی</th>
         <th class="num" style="width:9%">واحد فرعی</th>
+        {amount_heads}
         <th style="width:20%">توضیحات</th>
       </tr>
     </thead>
@@ -1026,7 +1048,7 @@ def render_issue_permit(
 {"".join(rows)}
     </tbody>
     <tfoot>
-      <tr class="grand"><td colspan="3">جمع</td><td class="num">{fa_number(total_qty)}</td><td colspan="4"></td></tr>
+      <tr class="grand"><td colspan="3">جمع</td><td class="num">{fa_number(total_qty)}</td>{foot_tail}</tr>
     </tfoot>
   </table>
 

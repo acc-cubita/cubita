@@ -27,6 +27,7 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
+from app.models.issue_returns import WarehouseIssueReturn
 from app.models.transfers import StockTransfer
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
@@ -114,6 +115,9 @@ def _voided_sources(db: Session) -> set:
         #: انتقالِ باطل‌شده باید انگار هرگز نبوده باشد، مثلِ هر سندِ دیگری.
         (StockTransfer, "transfer_out"),
         (StockTransfer, "transfer_in"),
+        #: برگشتِ خروج (مهاجرتِ ۰۱۳۴) حرکتِ **مثبت** است و مستقیم در میانگین می‌نشیند؛
+        #: باطل‌شده‌اش اگر در بازپخش بماند، میانگین را بی‌صدا منحرف می‌کند.
+        (WarehouseIssueReturn, "warehouse_issue_return"),
     ):
         for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
             voided.add((source_type, doc_id))
@@ -426,6 +430,12 @@ def void_sales_return(
     document = db.get(SalesReturn, return_id)
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت از فروش یافت نشد")
+    if document.stock_mode == "issue_return" and document.voided_at is None:
+        #: کالا را «برگشت خروج انبار» برگردانده، نه این سند. برگشتی که همین سند ساخته
+        #: همراهش باطل می‌شود؛ برگشتی که کاربر ثبت کرده جلوی ابطال را می‌گیرد.
+        from app.services.issue_returns import release_for_sales_return
+
+        release_for_sales_return(db, document, reason=reason, user=user, void_date=void_date)
     return _apply_void(
         db,
         document,

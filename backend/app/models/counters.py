@@ -56,6 +56,7 @@ DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
 #: خودش سند است و به شماره‌ی فاکتور و رسیدی که تخصیص می‌دهد گره نمی‌خورد (§۴۹).
 DOC_SETTLEMENT = "settlement"
 DOC_WAREHOUSE_ISSUE = "warehouse_issue"
+DOC_WAREHOUSE_ISSUE_RETURN = "warehouse_issue_return"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -77,6 +78,7 @@ DOC_TYPES = (
     DOC_WAREHOUSE_RECEIPT,
     DOC_SETTLEMENT,
     DOC_WAREHOUSE_ISSUE,
+    DOC_WAREHOUSE_ISSUE_RETURN,
 )
 
 
