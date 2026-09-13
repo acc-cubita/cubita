@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.payroll import (
+    BRANCH_KIND_LABELS,
     BRANCH_KINDS,
     CONTRACT_TYPES,
     EMPLOYMENT_TYPES,
@@ -12,6 +13,7 @@ from app.models.payroll import (
     FACTOR_KINDS,
     FACTOR_SYSTEM_KEYS,
     JOB_FAMILIES,
+    TAX_CALC_METHODS,
     TAX_GROUP_DEFAULT_PERCENT,
     TAX_GROUP_KINDS,
 )
@@ -201,21 +203,59 @@ class PayrollTaxGroupOut(BaseModel):
 
 
 class InsuranceTaxBranchIn(BaseModel):
+    """شعبه‌ی قانونی — یک ورودی برای هر سه نوع، با اعتبارسنجیِ **نوع‌محور**.
+
+    فرمِ مشترک همه‌ی میدان‌ها را نشان می‌دهد، ولی همه‌شان برای همه‌ی نوع‌ها معنا
+    ندارند. «نحوه محاسبه مالیات» فقط برای حوزه‌ی مالیاتی است و این‌جا رد می‌شود
+    — نه فقط در مرورگر پنهان.
+    """
+
     name: str
     code: str = ""
     kind: str = "insurance"
     is_active: bool = True
-    #: طرف حسابِ سازمان — سازمانِ تأمین اجتماعی یا امورِ مالیاتی. اختیاری، چون
-    #: شعبه‌های ثبت‌شده‌ی امروز ندارندش و حدس‌زدنش از روی نام اتصالِ اشتباه
-    #: می‌سازد. با این پیوند، بدهیِ حقوق به سازمان تفصیلی و مانده پیدا می‌کند.
+    #: طرف حسابِ سازمان — سازمانِ تأمین اجتماعی، امورِ مالیاتی، یا بیمه‌گرِ
+    #: تکمیلی. اختیاری، چون شعبه‌های ثبت‌شده‌ی امروز ندارندش و حدس‌زدنش از روی
+    #: نام اتصالِ اشتباه می‌سازد. با این پیوند، بدهیِ حقوق به سازمان تفصیلی و
+    #: مانده پیدا می‌کند.
     contact_id: UUID | None = None
+
+    # ── هسته‌ی مشترکِ ثبتِ قانونی ──────────────────────────────────────────────
+    #: «کد شرکت / شماره پرونده» — پرونده‌ی مالیاتی برای حوزه، کدِ کارگاه برای
+    #: تأمین اجتماعی. عمداً بی‌اعتبارسنجیِ قالب: هیچ‌جا اثبات نشده.
+    registration_code: str = ""
+    workplace_name: str = ""
+    workplace_address: str = ""
+    employer_name: str = ""
+    #: قراردادِ کارفرما با مرجعِ قانونی — **نه** قراردادِ استخدامیِ کارمند.
+    agreement_number: str = ""
+    #: عددِ سرصفحه‌ی ثبتِ کارگاه. نمی‌گوید *کدام* کارمندان معاف‌اند؛ آن روی حکم است.
+    insurance_exempt_count: int = 0
+    cost_center_id: UUID | None = None
+
+    # ── سیاستِ نوع‌محور ────────────────────────────────────────────────────────
+    #: فقط برای `kind = "tax"`. خالی یعنی «تعیین نشده».
+    tax_calculation_method: str = ""
 
     @model_validator(mode="after")
     def _valid(self) -> "InsuranceTaxBranchIn":
         if not self.name.strip():
             raise ValueError("عنوان شعبه الزامی است")
         if self.kind not in BRANCH_KINDS:
-            raise ValueError("نوع شعبه باید بیمه یا مالیات باشد")
+            raise ValueError("نوع شعبه باید بیمه، مالیات یا بیمه تکمیلی باشد")
+        if self.insurance_exempt_count < 0:
+            raise ValueError("تعداد نفرات معاف نمی‌تواند منفی باشد")
+
+        method = (self.tax_calculation_method or "").strip()
+        if method:
+            if self.kind != "tax":
+                raise ValueError(
+                    "«نحوه محاسبه مالیات» فقط برای حوزه مالیاتی معنا دارد؛ "
+                    f"برای «{BRANCH_KIND_LABELS.get(self.kind, self.kind)}» خالی بماند"
+                )
+            if method not in TAX_CALC_METHODS:
+                raise ValueError("نحوه محاسبه مالیات نامعتبر است")
+        self.tax_calculation_method = method
         return self
 
 
@@ -231,12 +271,26 @@ class InsuranceTaxBranchOut(BaseModel):
     contact_name: str = ""
     analytic_code: str = ""
 
+    registration_code: str = ""
+    workplace_name: str = ""
+    workplace_address: str = ""
+    employer_name: str = ""
+    agreement_number: str = ""
+    insurance_exempt_count: int = 0
+    cost_center_id: UUID | None = None
+    cost_center_name: str = ""
+    tax_calculation_method: str = ""
+    #: `True` یعنی این شعبه روی حکمی نشسته — نوعش دیگر عوض‌شدنی نیست و رابط هم
+    #: باید همین را نشان دهد، نه اینکه کاربر بزند و ۴۰۰ بگیرد.
+    in_use: bool = False
+
     model_config = {"from_attributes": True}
 
     @classmethod
-    def of(cls, row) -> "InsuranceTaxBranchOut":
+    def of(cls, row, *, in_use: bool = False) -> "InsuranceTaxBranchOut":
         contact = getattr(row, "contact", None)
         analytic = getattr(contact, "analytic", None) if contact is not None else None
+        cost_center = getattr(row, "cost_center", None)
         return cls(
             id=row.id,
             code=row.code,
@@ -246,6 +300,16 @@ class InsuranceTaxBranchOut(BaseModel):
             contact_id=row.contact_id,
             contact_name=(getattr(contact, "name", "") or "") if contact is not None else "",
             analytic_code=(getattr(analytic, "code", "") or "") if analytic is not None else "",
+            registration_code=row.registration_code or "",
+            workplace_name=row.workplace_name or "",
+            workplace_address=row.workplace_address or "",
+            employer_name=row.employer_name or "",
+            agreement_number=row.agreement_number or "",
+            insurance_exempt_count=row.insurance_exempt_count or 0,
+            cost_center_id=row.cost_center_id,
+            cost_center_name=(getattr(cost_center, "name", "") or "") if cost_center is not None else "",
+            tax_calculation_method=row.tax_calculation_method or "",
+            in_use=in_use,
         )
 
 

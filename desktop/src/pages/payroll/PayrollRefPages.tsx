@@ -5,6 +5,7 @@ import {
   FACTOR_CATEGORY_LABELS,
   FACTOR_KIND_LABELS,
   JOB_FAMILIES,
+  TAX_CALC_METHOD_LABELS,
   TAX_GROUP_KIND_LABELS,
   createDefaultPayrollFactors,
   createInsuranceTaxBranch,
@@ -13,6 +14,7 @@ import {
   createPayrollTaxGroup,
   createServiceLocation,
   fetchContacts,
+  fetchCostCenters,
   fetchInsuranceTaxBranches,
   fetchJobTitles,
   fetchPayrollFactors,
@@ -20,6 +22,7 @@ import {
   fetchServiceLocations,
   updateInsuranceTaxBranch,
   type ContactRecord,
+  type CostCenterRecord,
   type InsuranceTaxBranchRecord,
   type JobTitleRecord,
   type PayrollFactorRecord,
@@ -387,6 +390,44 @@ export function PayrollFactorPage({ token }: { token: string }) {
 
 // ── گروه مالیاتی و شعب ───────────────────────────────────────────────────────
 
+/**
+ * فرمِ شعبه‌ی قانونی — **یک فرم برای هر سه نوع**.
+ *
+ * همه‌ی میدان‌ها همیشه در فرم هستند، ولی همه‌شان برای همه‌ی نوع‌ها معنا ندارند:
+ * «نحوه محاسبه مالیات» فقط برای حوزه‌ی مالیاتی است، و پنهان‌کردنش این‌جا فقط
+ * نیمی از کار است — سرور هم همان قید را دارد، چون یک درخواستِ مستقیمِ API
+ * می‌تواند مرورگر را دور بزند.
+ */
+type BranchForm = {
+  kind: string
+  name: string
+  code: string
+  contact_id: string
+  registration_code: string
+  workplace_name: string
+  workplace_address: string
+  employer_name: string
+  agreement_number: string
+  insurance_exempt_count: string
+  cost_center_id: string
+  tax_calculation_method: string
+}
+
+const EMPTY_BRANCH: BranchForm = {
+  kind: 'insurance',
+  name: '',
+  code: '',
+  contact_id: '',
+  registration_code: '',
+  workplace_name: '',
+  workplace_address: '',
+  employer_name: '',
+  agreement_number: '',
+  insurance_exempt_count: '',
+  cost_center_id: '',
+  tax_calculation_method: '',
+}
+
 export function PayrollTaxGroupPage({ token }: { token: string }) {
   const [rows, setRows] = useState<PayrollTaxGroupRecord[] | null>(null)
   const [branches, setBranches] = useState<InsuranceTaxBranchRecord[] | null>(null)
@@ -396,24 +437,26 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState('normal')
   const [percent, setPercent] = useState('')
-  const [branchName, setBranchName] = useState('')
-  const [branchCode, setBranchCode] = useState('')
-  const [branchKind, setBranchKind] = useState('insurance')
-  const [branchContact, setBranchContact] = useState('')
+  const [form, setForm] = useState(EMPTY_BRANCH)
   //: خالی = «شعبه‌ی تازه». پر = همان شعبه دارد ویرایش می‌شود.
   const [editingBranch, setEditingBranch] = useState<InsuranceTaxBranchRecord | null>(null)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
+  const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
+
+  const set = (patch: Partial<BranchForm>) => setForm((f) => ({ ...f, ...patch }))
 
   async function refresh() {
     try {
-      const [groups, allBranches, allContacts] = await Promise.all([
+      const [groups, allBranches, allContacts, allCenters] = await Promise.all([
         fetchPayrollTaxGroups(token),
         fetchInsuranceTaxBranches(token),
         fetchContacts(token),
+        fetchCostCenters(token),
       ])
       setRows(groups)
       setBranches(allBranches)
       setContacts(allContacts.filter((c) => c.is_active))
+      setCostCenters(allCenters)
       setError(null)
     } catch (err) {
       setError(errText(err))
@@ -422,18 +465,26 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
 
   function editBranch(branch: InsuranceTaxBranchRecord) {
     setEditingBranch(branch)
-    setBranchName(branch.name)
-    setBranchCode(branch.code)
-    setBranchKind(branch.kind)
-    setBranchContact(branch.contact_id ?? '')
+    setForm({
+      kind: branch.kind,
+      name: branch.name,
+      code: branch.code,
+      contact_id: branch.contact_id ?? '',
+      registration_code: branch.registration_code,
+      workplace_name: branch.workplace_name,
+      workplace_address: branch.workplace_address,
+      employer_name: branch.employer_name,
+      agreement_number: branch.agreement_number,
+      insurance_exempt_count: String(branch.insurance_exempt_count || ''),
+      cost_center_id: branch.cost_center_id ?? '',
+      tax_calculation_method: branch.tax_calculation_method,
+    })
     setMsg(null)
   }
 
   function clearBranchForm() {
     setEditingBranch(null)
-    setBranchName('')
-    setBranchCode('')
-    setBranchContact('')
+    setForm(EMPTY_BRANCH)
     setMsg(null)
   }
 
@@ -468,10 +519,21 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
     setMsg(null)
     try {
       const body = {
-        name: branchName.trim(),
-        code: branchCode.trim(),
-        kind: branchKind,
-        contact_id: branchContact || null,
+        kind: form.kind,
+        name: form.name.trim(),
+        code: form.code.trim(),
+        contact_id: form.contact_id || null,
+        registration_code: form.registration_code.trim(),
+        workplace_name: form.workplace_name.trim(),
+        workplace_address: form.workplace_address.trim(),
+        employer_name: form.employer_name.trim(),
+        agreement_number: form.agreement_number.trim(),
+        insurance_exempt_count: Number(form.insurance_exempt_count || 0),
+        cost_center_id: form.cost_center_id || null,
+        //: روشِ مالیات فقط با نوعِ مالیاتی فرستاده می‌شود. اگر کاربر نوع را بعدِ
+        //: پرکردنش عوض کرده باشد، فرستادنش ۴۰۰ می‌گیرد — و همان مقدارِ جامانده
+        //: چیزی است که کاربر دیگر نمی‌بیند تا پاکش کند.
+        tax_calculation_method: form.kind === 'tax' ? form.tax_calculation_method : '',
       }
       if (editingBranch) {
         await updateInsuranceTaxBranch(token, editingBranch.id, body)
@@ -481,9 +543,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
         setMsg({ text: `«${body.name}» ساخته شد.`, kind: 'ok' })
       }
       setEditingBranch(null)
-      setBranchName('')
-      setBranchCode('')
-      setBranchContact('')
+      setForm(EMPTY_BRANCH)
       await refresh()
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -536,23 +596,33 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
         <form className="cmp-form" onSubmit={submitBranch}>
           <label>
             <span>نوع</span>
-            <select value={branchKind} onChange={(e) => setBranchKind(e.target.value)}>
+            <select
+              value={form.kind}
+              onChange={(e) => set({ kind: e.target.value })}
+              disabled={editingBranch?.in_use}
+            >
               {Object.entries(BRANCH_KIND_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
+            {editingBranch?.in_use ? (
+              <span className="field-hint">
+                این شعبه روی حکم‌های حقوقی استفاده شده و نوعش دیگر عوض نمی‌شود. اگر نوعش
+                اشتباه بوده، شعبه‌ی درست را بسازید و حکم‌ها را به آن ببرید.
+              </span>
+            ) : null}
           </label>
           <label>
             <span>عنوان *</span>
-            <input value={branchName} onChange={(e) => setBranchName(e.target.value)} maxLength={150} required />
+            <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={150} required />
           </label>
           <label>
-            <span>کد</span>
-            <input dir="ltr" value={branchCode} onChange={(e) => setBranchCode(e.target.value)} maxLength={20} />
+            <span>کد تفصیلی شعبه</span>
+            <input dir="ltr" value={form.code} onChange={(e) => set({ code: e.target.value })} maxLength={20} />
           </label>
           <label>
             <span>طرف حساب سازمان</span>
-            <select value={branchContact} onChange={(e) => setBranchContact(e.target.value)}>
+            <select value={form.contact_id} onChange={(e) => set({ contact_id: e.target.value })}>
               <option value="">— وصل نشده —</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -563,8 +633,103 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
               تفصیلی‌اش در دفتر پیدا می‌شود. خالی گذاشتنش چیزی را خراب نمی‌کند.
             </span>
           </label>
+
+          <label>
+            <span>کد شرکت / شماره پرونده</span>
+            <input
+              dir="ltr"
+              value={form.registration_code}
+              onChange={(e) => set({ registration_code: e.target.value })}
+              maxLength={50}
+            />
+            <span className="field-hint">
+              {form.kind === 'tax' ? 'شماره پرونده مالیاتی.' : 'کد کارگاه نزد مرجع.'}
+            </span>
+          </label>
+          <label>
+            <span>نام کارگاه</span>
+            <input
+              value={form.workplace_name}
+              onChange={(e) => set({ workplace_name: e.target.value })}
+              maxLength={200}
+            />
+            <span className="field-hint">
+              کارگاهِ ثبت‌شده نزد مرجع — با «محل خدمت» یکی نیست.
+            </span>
+          </label>
+          <label className="cmp-form-wide">
+            <span>نشانی کارگاه</span>
+            <input
+              value={form.workplace_address}
+              onChange={(e) => set({ workplace_address: e.target.value })}
+            />
+          </label>
+          <label>
+            <span>نام کارفرما</span>
+            <input
+              value={form.employer_name}
+              onChange={(e) => set({ employer_name: e.target.value })}
+              maxLength={200}
+            />
+          </label>
+          <label>
+            <span>شماره پیمان</span>
+            <input
+              dir="ltr"
+              value={form.agreement_number}
+              onChange={(e) => set({ agreement_number: e.target.value })}
+              maxLength={50}
+            />
+            <span className="field-hint">
+              قرارداد کارفرما با مرجع قانونی — نه قرارداد استخدامی کارمند.
+            </span>
+          </label>
+          <label>
+            <span>نفرات معاف از بیمه</span>
+            <input
+              dir="ltr"
+              type="number"
+              min={0}
+              value={form.insurance_exempt_count}
+              onChange={(e) => set({ insurance_exempt_count: e.target.value })}
+            />
+            <span className="field-hint">
+              عددِ سرصفحه‌ی ثبت کارگاه. معافیتِ هر کارمند روی حکمِ خودش تعیین می‌شود و این
+              عدد در هیچ محاسبه‌ای استفاده نمی‌شود.
+            </span>
+          </label>
+          <label>
+            <span>مرکز هزینه</span>
+            <select value={form.cost_center_id} onChange={(e) => set({ cost_center_id: e.target.value })}>
+              <option value="">— ندارد —</option>
+              {costCenters.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {/* فقط برای حوزه مالیاتی — سرور هم همین را می‌سنجد، نه فقط این‌جا. */}
+          {form.kind === 'tax' ? (
+            <label>
+              <span>نحوه محاسبه مالیات</span>
+              <select
+                value={form.tax_calculation_method}
+                onChange={(e) => set({ tax_calculation_method: e.target.value })}
+              >
+                <option value="">— تعیین نشده —</option>
+                {Object.entries(TAX_CALC_METHOD_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+              <span className="field-hint">
+                فعلاً ثبت می‌شود ولی در محاسبه‌ی مالیات اعمال نمی‌شود؛ موتور امروز تعدیل
+                تجمیعی انجام می‌دهد.
+              </span>
+            </label>
+          ) : null}
+
           <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !branchName.trim()}>
+            <button type="submit" className="btn-primary" disabled={busy || !form.name.trim()}>
               <Save size={13} /> {editingBranch ? 'ذخیره تغییرات' : 'ثبت شعبه'}
             </button>
             {editingBranch ? (
@@ -592,13 +757,36 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
           rows={branches}
           error={error}
           emptyText="هنوز شعبه‌ای ثبت نشده."
-          head={['عنوان', 'نوع', 'کد', 'طرف حساب سازمان', 'کد تفصیلی', '']}
+          head={[
+            'عنوان',
+            'نوع',
+            'کد تفصیلی شعبه',
+            'طرف حساب سازمان',
+            'کد شرکت / شماره پرونده',
+            'شماره پیمان',
+            'نفرات معاف از بیمه',
+            'نحوه محاسبه مالیات',
+            'نام کارگاه',
+            'نام کارفرما',
+            'نشانی کارگاه',
+            'مرکز هزینه',
+            '',
+          ]}
           render={(r) => [
             r.name,
             BRANCH_KIND_LABELS[r.kind] ?? r.kind,
-            r.code || '—',
+            r.code ? <span key="code" dir="ltr">{r.code}</span> : '—',
             r.contact_name || '—',
-            r.analytic_code ? <span key="analytic" dir="ltr">{r.analytic_code}</span> : '—',
+            r.registration_code ? <span key="reg" dir="ltr">{r.registration_code}</span> : '—',
+            r.agreement_number ? <span key="agr" dir="ltr">{r.agreement_number}</span> : '—',
+            r.insurance_exempt_count ? fa(r.insurance_exempt_count) : '—',
+            //: عمداً خالی برای شعبه‌ای که مالیاتی نیست — همان چیزی که فهرستِ
+            //: سپیدار نشان می‌دهد، و همان قیدی که سرور دارد.
+            TAX_CALC_METHOD_LABELS[r.tax_calculation_method] ?? '—',
+            r.workplace_name || '—',
+            r.employer_name || '—',
+            r.workplace_address || '—',
+            r.cost_center_name || '—',
             <button key="edit" type="button" onClick={() => editBranch(r)}>
               ویرایش
             </button>,

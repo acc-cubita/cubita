@@ -76,8 +76,35 @@ TAX_GROUP_KIND_LABELS = {
 #: درصدِ پیش‌فرضِ هر نوع — کاربر می‌تواند عوضش کند، ولی این‌ها نقطه‌ی شروع‌اند.
 TAX_GROUP_DEFAULT_PERCENT = {"normal": 100, "deprived": 50, "exempt": 0}
 
-BRANCH_KINDS = ("insurance", "tax")
-BRANCH_KIND_LABELS = {"insurance": "شعبه بیمه", "tax": "حوزه مالیاتی"}
+#: سه نوعِ شعبه‌ی قانونی — **هر سه در همان فرم و همان فهرست**، نه سه زیرسیستمِ
+#: موازی. «بیمه تکمیلی» نوعِ سومِ همان کرکره است، پس `supplementary_branch`ِ
+#: متنیِ روی حکم باید سرانجام به همین مِستر برسد.
+BRANCH_KINDS = ("insurance", "tax", "supplementary")
+BRANCH_KIND_LABELS = {
+    "insurance": "شعبه بیمه",
+    "tax": "حوزه مالیاتی",
+    "supplementary": "بیمه تکمیلی",
+}
+
+#: «نحوه محاسبه مالیات» — **فقط برای حوزه‌ی مالیاتی**.
+#:
+#: در فهرستِ شعب، ردیفِ مالیاتی «تعدیل ماهانه» دارد و ردیفِ تأمین اجتماعی همین
+#: ستون را **خالی** نشان می‌دهد. یعنی وجودِ میدان در فرمِ مشترک به معنای
+#: کاربردش برای هر نوع نیست، و این تفاوت باید سمتِ سرور فهمیده شود نه فقط با
+#: غیرفعال‌کردنِ یک ورودی در مرورگر.
+#:
+#: فهرست عمداً به همان مقادیرِ **دیده‌شده** بسته است — همان کاری که `0131` با
+#: `FREIGHT_BASES` کرد: قید این‌جاست تا روشی که موتوری برایش وجود ندارد از درِ
+#: پشتی وارد پایگاه داده نشود.
+#:
+#: **و هنوز مصرف نمی‌شود:** موتورِ مالیاتِ امروز تعدیلِ تجمیعی انجام می‌دهد و این
+#: ستون را نمی‌خواند. داده‌ی ثبتِ قانونی است، نه سوییچِ محاسبه.
+TAX_CALC_METHODS = ("monthly", "annual", "none")
+TAX_CALC_METHOD_LABELS = {
+    "monthly": "تعدیل ماهانه",
+    "annual": "تعدیل سالانه",
+    "none": "بدون تعدیل",
+}
 
 
 
@@ -267,6 +294,31 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    # ── عکسِ شعبه‌ی قانونیِ لحظه‌ی صدور ─────────────────────────────────────────
+    #
+    #: **چرا عکس و نه پیوند.** فایلِ بیمه و فایلِ مالیات باید *بازتولیدپذیر*
+    #: باشند: اگر کارگاه سالِ بعد دوباره ثبت شود و کد یا نامش عوض شود، فایلِ
+    #: پارسال باید همان چیزی را بدهد که پارسال داد. خواندنِ مِسترِ امروز یعنی
+    #: خروجیِ یک دوره‌ی بسته بی‌صدا عوض شود.
+    #:
+    #: همان الگوی `PayslipLine.factor_name` که از قبل این‌جاست — و همان تفاوتی که
+    #: با **هویتِ کارمند** دارد: اصلاحِ نامِ یک آدم باید به فایل برسد (غلطِ تایپی
+    #: بوده)، ولی ثبتِ تازه‌ی کارگاه نباید گذشته را بازنویسی کند (رویدادِ واقعیِ
+    #: تازه‌ای بوده).
+    #:
+    #: `NULL` یعنی فیشی که پیش از این مهاجرت صادر شده؛ خروجی برای آن‌ها به حلِ
+    #: زنده برمی‌گردد، چون عکسی وجود ندارد که برگردانده شود.
+    insurance_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    insurance_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    insurance_branch_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    tax_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("insurance_tax_branches.id", ondelete="SET NULL"), nullable=True
+    )
+    tax_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tax_branch_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     #: تفکیکِ عامل‌به‌عاملِ همین فیش. **ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند** و این
     #: ردیف‌ها توضیحشان؛ سرویس هنگامِ صدور هر دو را با هم می‌نویسد و تستی جمعشان
@@ -458,22 +510,112 @@ class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """شعبه‌ی تأمین اجتماعی یا حوزه‌ی مالیاتی.
+    """شعبه‌ی قانونی: تأمین اجتماعی، حوزه‌ی مالیاتی، یا بیمه‌ی تکمیلی.
 
-    یک جدول برای هر دو، چون شکلشان یکی است (کد + عنوان) و فرمِ قرارداد هر دو را از
-    یک‌جا می‌خواهد. `kind` تفکیکشان می‌کند.
+    **یک مِستر برای هر سه**، نه سه زیرسیستمِ موازی — چون فرم یکی است، فهرست یکی
+    است، و هر سه نوع از همان کرکره انتخاب می‌شوند. `kind` تفکیکشان می‌کند.
+
+    ساختارش دو لایه است:
+
+    * **هسته‌ی مشترکِ ثبت** — هویت، طرف حساب، شناسه‌ی ثبت، کارگاه، کارفرما،
+      نشانی، شماره‌ی پیمان، نفراتِ معاف، مرکز هزینه. این‌ها برای هر سه نوع
+      معنا دارند، حتی اگر همه‌ی نوع‌ها همه‌شان را پر نکنند.
+    * **سیاستِ نوع‌محور** — `tax_calculation_method` که **فقط** برای حوزه‌ی
+      مالیاتی است. در فهرستِ شعب، ردیفِ مالیاتی مقدار دارد و ردیفِ تأمین
+      اجتماعی همان ستون را خالی نشان می‌دهد.
+
+    این مِستر **ثبت** است نه نرخ: نرخِ بیمه‌ی کارمند و کارفرما، سقف و کفِ بیمه،
+    و بیمه‌ی بیکاری هیچ‌کدام این‌جا نیستند و نباید بیایند — از `PayrollSettings`
+    می‌آیند.
     """
 
     __tablename__ = "insurance_tax_branches"
     __table_args__ = (
         UniqueConstraint("tenant_id", "kind", "name", name="uq_insurance_tax_branches_tenant_kind_name"),
         CheckConstraint(f"kind IN {BRANCH_KINDS}", name="ck_insurance_tax_branches_kind"),
+        #: **قیدِ نوع‌محور، در خودِ پایگاه داده.** غیرفعال‌کردنِ ورودی در مرورگر
+        #: کافی نیست: یک درخواستِ مستقیمِ API می‌تواند «نحوه محاسبه مالیات» را روی
+        #: شعبه‌ی بیمه بنشاند و آن‌وقت فهرست چیزی نشان می‌دهد که معنا ندارد.
+        CheckConstraint(
+            "tax_calculation_method = '' OR kind = 'tax'",
+            name="ck_insurance_tax_branches_tax_method_is_tax_only",
+        ),
+        CheckConstraint(
+            f"tax_calculation_method = '' OR tax_calculation_method IN {TAX_CALC_METHODS}",
+            name="ck_insurance_tax_branches_tax_method",
+        ),
+        CheckConstraint(
+            "insurance_exempt_count >= 0", name="ck_insurance_tax_branches_exempt_count"
+        ),
     )
 
     code: Mapped[str] = mapped_column(String(20), default="", server_default="")
     name: Mapped[str] = mapped_column(String(150))
     kind: Mapped[str] = mapped_column(String(20), default="insurance", server_default="insurance")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: **هویتِ حسابداریِ شعبه**.
+    #:
+    #: شعبه تا امروز فقط یک نام بود، در حالی که بدهیِ بیمه و مالیاتِ تکلیفی
+    #: واقعاً **به همان سازمان پرداخت می‌شود** — و پرداخت طرفِ حساب می‌خواهد.
+    #: پیوند به `Contact` است نه به تفصیلی: طرف حساب از قبل `analytic_id` دارد،
+    #: و شناسه‌اش پایدار می‌ماند حتی وقتی کد و عنوانِ تفصیلی عوض شوند.
+    #:
+    #: **یکتا نیست، و عمداً:** یک سازمان می‌تواند چند شعبه داشته باشد.
+    #: `NULL` یعنی «هنوز وصل نشده» — شعبه‌های پیش از این مهاجرت همه همین‌اند.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact: Mapped["Contact | None"] = relationship(lazy="joined")  # noqa: F821
+
+    # ── هسته‌ی مشترکِ ثبتِ قانونی ──────────────────────────────────────────────
+
+    #: «کد شرکت / شماره پرونده». عمداً **عمومی** نام‌گذاری شده و نه
+    #: `tax_file_number`: برچسبِ فرم خودش ترکیبی است، و معنایش با نوعِ شعبه عوض
+    #: می‌شود — پرونده‌ی مالیاتی برای حوزه، کدِ کارگاه برای تأمین اجتماعی.
+    #: قالب و طولش هیچ‌جا اثبات نشده، پس هیچ اعتبارسنجیِ عددی روی آن نیست.
+    registration_code: Mapped[str] = mapped_column(String(50), default="", server_default="")
+
+    #: کارگاهِ ثبت‌شده نزدِ مرجع. **«محل خدمت» نیست** — `ServiceLocation` می‌گوید
+    #: کارمند کجا کار می‌کند، این می‌گوید کارفرما زیرِ کدام کارگاه ثبت شده. ممکن
+    #: است روزی نگاشت پیدا کنند، ولی یکی‌کردنشان امروز شاهدی ندارد.
+    workplace_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    #: نشانیِ کارگاه — **نشانیِ خودِ سازمان نیست**؛ آن روی طرف حساب است.
+    workplace_address: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: نامِ کارفرما همان‌طور که نزدِ مرجع ثبت شده. ممکن است با نامِ حقوقیِ شرکت
+    #: یکی باشد و ممکن است نباشد؛ تا وقتی سیاستش روشن نشده، این‌جا مستقل می‌ماند
+    #: و از مِسترِ شرکت خوانده یا بازنویسی نمی‌شود.
+    employer_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: «شماره پیمان» — قراردادِ کارفرما با مرجعِ قانونی. **قراردادِ استخدامیِ
+    #: کارمند نیست** و هیچ کلیدِ خارجی‌ای به `SalaryContract` ندارد.
+    agreement_number: Mapped[str] = mapped_column(String(50), default="", server_default="")
+
+    #: «نفرات معاف از بیمه» — یک عددِ سرصفحه‌ی ثبتِ کارگاه.
+    #:
+    #: **این عدد نمی‌گوید کدام کارمندان معاف‌اند** و نباید طوری رفتار شود که
+    #: بگوید: معافیتِ واقعی کارمند‌به‌کارمند روی خودِ حکم است
+    #: (`exempt_employee_insurance` و برادرانش). ترکیبِ این دو یعنی دو حقیقت، و
+    #: هیچ محاسبه‌ای این عدد را نمی‌خواند.
+    insurance_exempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    #: بُعدِ مرکز هزینه‌ی شعبه — از همان مِسترِ مشترک.
+    #:
+    #: **«محل خدمت» نیست و «حسابِ هزینه» هم نیست.** و هیچ سندی از روی آن زده
+    #: نمی‌شود: نقشش در ثبتِ حسابداریِ حقوق هیچ‌جا اثبات نشده، پس ذخیره می‌شود و
+    #: نمایش داده می‌شود، ولی قاعده‌ی ثبتی از آن ساخته نمی‌شود.
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cost_center: Mapped["CostCenter | None"] = relationship(lazy="joined")  # noqa: F821
+
+    # ── سیاستِ نوع‌محور ────────────────────────────────────────────────────────
+
+    #: «نحوه محاسبه مالیات» — **فقط برای `kind = 'tax'`**، با قیدِ پایگاه داده.
+    #: خالی یعنی «تعیین نشده». هنوز هیچ محاسبه‌ای نمی‌خواندش.
+    tax_calculation_method: Mapped[str] = mapped_column(
+        String(30), default="", server_default=""
+    )
 
     #: **هویتِ حسابداریِ شعبه** (مهاجرت ۰۱۳۶).
     #:

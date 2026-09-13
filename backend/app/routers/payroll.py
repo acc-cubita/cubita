@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -467,16 +468,34 @@ def create_payroll_tax_group(
     return row
 
 
-def _assert_branch_contact(db: Session, contact_id) -> None:
-    """طرف حسابِ شعبه باید واقعاً وجود داشته باشد.
+def _assert_branch_refs(db: Session, data: InsuranceTaxBranchIn) -> None:
+    """طرف حساب و مرکز هزینه‌ی شعبه باید واقعاً وجود داشته باشند.
 
-    بی این گارد، یک `contact_id`ِ اشتباه فقط با خطای کلیدِ خارجیِ پایگاه داده
-    گرفته می‌شد — پیامی که به کاربر می‌گوید چیزی خراب شده، نه اینکه چه کند.
+    بی این گارد، شناسه‌ی اشتباه فقط با خطای کلیدِ خارجیِ پایگاه داده گرفته می‌شد
+    — پیامی که می‌گوید چیزی خراب شده، نه اینکه کاربر چه کند.
     """
-    if contact_id is None:
-        return
-    if db.get(Contact, contact_id) is None:
+    if data.contact_id is not None and db.get(Contact, data.contact_id) is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب یافت نشد")
+    if data.cost_center_id is not None:
+        from app.models.cost_center import CostCenter
+
+        if db.get(CostCenter, data.cost_center_id) is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرکز هزینه یافت نشد")
+
+
+def _branch_in_use(db: Session, branch_id: UUID) -> bool:
+    """آیا این شعبه روی حکمی نشسته است؟"""
+    return (
+        db.query(SalaryContract.id)
+        .filter(
+            or_(
+                SalaryContract.insurance_branch_id == branch_id,
+                SalaryContract.tax_branch_id == branch_id,
+            )
+        )
+        .first()
+        is not None
+    )
 
 
 @router.get("/api/insurance-tax-branches", response_model=list[InsuranceTaxBranchOut])
@@ -487,8 +506,18 @@ def list_insurance_tax_branches(
 ):
     query = db.query(InsuranceTaxBranch)
     if kind:
+        #: فیلترِ ساخت‌یافته روی خودِ ستون — نه جست‌وجوی متن در نام. فهرست هر سه
+        #: نوع را کنارِ هم نگه می‌دارد، پس تفکیکشان باید قطعی باشد.
         query = query.filter(InsuranceTaxBranch.kind == kind)
-    return [InsuranceTaxBranchOut.of(row) for row in query.order_by(InsuranceTaxBranch.name).all()]
+    rows = query.order_by(InsuranceTaxBranch.name).all()
+    #: «در استفاده؟» با **یک** کوئری برای همه، نه یکی به‌ازای هر ردیف.
+    used = {
+        branch_id
+        for row in db.query(SalaryContract.insurance_branch_id, SalaryContract.tax_branch_id).all()
+        for branch_id in row
+        if branch_id is not None
+    }
+    return [InsuranceTaxBranchOut.of(row, in_use=row.id in used) for row in rows]
 
 
 @router.post("/api/insurance-tax-branches", response_model=InsuranceTaxBranchOut, status_code=201)
@@ -497,7 +526,7 @@ def create_insurance_tax_branch(
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "create")),
 ):
-    _assert_branch_contact(db, data.contact_id)
+    _assert_branch_refs(db, data)
     row = InsuranceTaxBranch(**data.model_dump())
     db.add(row)
     db.flush()
@@ -525,12 +554,25 @@ def update_insurance_tax_branch(
     row = db.get(InsuranceTaxBranch, branch_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "شعبه یافت نشد")
-    _assert_branch_contact(db, data.contact_id)
+    _assert_branch_refs(db, data)
+
+    in_use = _branch_in_use(db, branch_id)
+    #: **نوع، هویت است.** شعبه‌ای که با کارگاه و شماره‌ی پیمان و زمینه‌ی بیمه‌ای
+    #: ثبت شده نباید یک‌شبه حوزه‌ی مالیاتی شود: حکم‌هایی که به آن وصل‌اند معنایشان
+    #: زیرِ پا عوض می‌شود، بی‌آنکه چیزی در آن حکم‌ها تغییر کرده باشد. تا وقتی
+    #: هیچ حکمی به آن وصل نیست آزاد است.
+    if in_use and data.kind != row.kind:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این شعبه روی حکم‌های حقوقی استفاده شده و نوعش دیگر عوض نمی‌شود. "
+            "اگر نوعش اشتباه بوده، شعبه‌ی درست را بسازید و حکم‌ها را به آن ببرید.",
+        )
+
     for field, value in data.model_dump().items():
         setattr(row, field, value)
     db.flush()
     db.refresh(row)
-    return InsuranceTaxBranchOut.of(row)
+    return InsuranceTaxBranchOut.of(row, in_use=in_use)
 
 
 # ── فرمِ قرارداد ──────────────────────────────────────────────────────────────
