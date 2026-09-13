@@ -23,7 +23,9 @@ def _stock_in(db, user, item, wh, qty, unit_cost):
     return post_purchase_invoice(
         db,
         PurchaseInvoiceIn(
-            invoice_date=TODAY,
+            #: پیش از همه‌ی فروش‌های این پرونده — فروشِ ۴۰ روز پیش نمی‌تواند کالای خریدِ امروز را
+            #: بفروشد؛ گاردِ خطِ زمانِ موجودی (فصلِ قیمت‌گذاری) آن را رد می‌کند.
+            invoice_date=TODAY - timedelta(days=60),
             warehouse_id=wh.id,
             lines=[PurchaseInvoiceLineIn(item_id=item.id, qty=Decimal(qty), unit_cost=Decimal(unit_cost))],
         ),

@@ -20,6 +20,7 @@ from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnLine
 from app.models.treasury import TreasuryTransaction
 from app.jalali import jalali_to_gregorian, persian_year_end, persian_year_start
 from app.services import chart_codes as cc
+from app.services import valuation
 
 AGING_KINDS = ("receivable", "payable")
 
@@ -968,20 +969,8 @@ def get_cash_flow(db: Session, date_from: date | None, date_to: date | None) -> 
     }
 
 
-#: برچسبِ فارسیِ منشأ هر حرکتِ انبار — همان مقادیری که سرویس‌ها می‌نویسند.
-STOCK_SOURCE_LABELS = {
-    "purchase_invoice": "فاکتور خرید",
-    "sales_invoice": "فاکتور فروش",
-    "warehouse_receipt": "رسید انبار خرید",
-    "warehouse_issue": "خروج انبار",
-    "warehouse_issue_return": "برگشت خروج انبار",
-    "purchase_return": "برگشت از خرید",
-    "sales_return": "برگشت از فروش",
-    "adjustment": "تعدیل انبار",
-    "transfer_in": "انتقال (ورود)",
-    "transfer_out": "انتقال (خروج)",
-    "opening": "موجودی اول دوره",
-}
+#: برچسبِ فارسیِ منشأ هر حرکتِ انبار — تعریفش در `valuation` است، کنارِ قاعده‌ی هر منشأ.
+STOCK_SOURCE_LABELS = valuation.SOURCE_LABELS
 
 
 def get_kardex(
@@ -991,55 +980,24 @@ def get_kardex(
     date_from: date | None,
     date_to: date | None,
 ) -> dict:
-    """کاردکس یک کالا — هر ورود/خروج با موجودیِ در حال اجرا.
+    """کاردکس یک کالا — هر ورود/خروج با موجودی **و ارزشِ** در حال اجرا.
 
-    ترتیب بر اساس `seq` است نه تاریخ: `entry_date` فقط روز را دارد و چند حرکت در یک
-    روز ترتیبِ مشخصی نمی‌گیرند، در حالی که موجودیِ در حال اجرا به ترتیب وابسته است.
+    ترتیب **(تاریخِ سند، seq)** است: سندِ پیش‌تاریخ سرِ جای زمانی‌اش می‌نشیند، نه
+    ته فهرست. تا امروز مانده‌ی اول دوره با تاریخ بریده می‌شد ولی ردیف‌ها با `seq`
+    چیده می‌شدند، پس موجودیِ در حال اجرای کنارِ سندِ پیش‌تاریخ عددی بود که هیچ روزی
+    واقعاً نبوده.
+
+    ارزش از موتورِ `valuation` می‌آید — همان بازپخشی که میانگین را پس از ابطال
+    می‌سازد. «بهای واحد» بهای درستِ همان تاریخ است؛ اگر با بهایی که سند نوشته فرق
+    کند، ردیف «منقضی» علامت می‌خورد و بهای ثبت‌شده کنارش می‌آید.
     """
     item = db.get(Item, item_id)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
 
-    def base():
-        query = db.query(StockLedger).filter(StockLedger.item_id == item_id)
-        if warehouse_id is not None:
-            query = query.filter(StockLedger.warehouse_id == warehouse_id)
-        return query
-
-    opening = Decimal(0)
-    if date_from is not None:
-        opening_rows = base().filter(StockLedger.entry_date < date_from).all()
-        opening = sum((Decimal(r.qty) for r in opening_rows), Decimal(0))
-
-    query = base()
-    if date_from is not None:
-        query = query.filter(StockLedger.entry_date >= date_from)
-    if date_to is not None:
-        query = query.filter(StockLedger.entry_date <= date_to)
-
-    running = opening
-    total_in = Decimal(0)
-    total_out = Decimal(0)
-    lines = []
-    for move in query.order_by(StockLedger.seq).all():
-        qty = Decimal(move.qty)
-        running += qty
-        qty_in = qty if qty > 0 else Decimal(0)
-        qty_out = -qty if qty < 0 else Decimal(0)
-        total_in += qty_in
-        total_out += qty_out
-        lines.append(
-            {
-                "entry_date": move.entry_date,
-                "source_type": move.source_type,
-                "source_label": STOCK_SOURCE_LABELS.get(move.source_type, move.source_type),
-                "qty_in": qty_in,
-                "qty_out": qty_out,
-                "unit_cost": Decimal(move.unit_cost),
-                "balance_qty": running,
-            }
-        )
-
+    body = valuation.kardex_lines(
+        db, item_id, warehouse_id=warehouse_id, date_from=date_from, date_to=date_to
+    )
     return {
         "item_id": item.id,
         "item_sku": item.sku,
@@ -1048,11 +1006,7 @@ def get_kardex(
         "warehouse_id": warehouse_id,
         "date_from": date_from,
         "date_to": date_to,
-        "opening_qty": opening,
-        "lines": lines,
-        "total_in": total_in,
-        "total_out": total_out,
-        "closing_qty": running,
+        **body,
     }
 
 
@@ -1214,31 +1168,38 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     return {"months": months, "monthly": monthly, "top_items": top_items, "top_customers": top_customers}
 
 
-def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | None) -> dict:
-    """ارزش‌گذاری موجودی: موجودیِ هر کالا × بهای میانگین موزون.
+def get_inventory_report(
+    db: Session, warehouse_id: UUID | None, as_of: date | None, date_from: date | None = None
+) -> dict:
+    """ارزشِ موجودی: مانده‌ی اول، ورود، خروج و مانده‌ی پایانِ هر کالا — به مقدار و ریال.
 
-    موجودیِ فعلی از جمعِ حرکاتِ دفترِ موجودی می‌آید و ارزش با `average_cost`ِ روزِ
-    کالا حساب می‌شود — همان روشی که حسابِ «موجودی کالا» در دفتر با آن نگه‌داری
-    می‌شود، پس جمعِ این گزارش باید با ماندهٔ آن حساب بخواند. کالاهای خدماتی و اقلامِ
-    با موجودیِ صفر نمایش داده نمی‌شوند.
+    **ارزشِ «تا تاریخ» ارزشِ همان تاریخ است.** تا امروز مقدارِ تاریخی در میانگینِ
+    *امروز* ضرب می‌شد: کالایی که ماهِ پیش ۱۰۰ و امروز ۳۰۰ خریده شده بود، ارزشِ ماهِ
+    پیشش با میانگینِ امروز گزارش می‌شد. حالا مقدار و ارزش هر دو از بازپخشِ دفتر تا
+    همان تاریخ می‌آیند (`valuation.positions`).
+
+    **به ریالِ صحیح، چون این عدد باید با دفتر بخواند.** `average_cost` چهار رقم اعشار
+    دارد ولی دفتر به ریالِ صحیح می‌نویسد؛ کسرِ مانده «تقریباً برابر» می‌سازد — همان
+    چیزی که کسی نمی‌تواند توضیحش بدهد. تطبیقِ واقعی با دفتر در «بررسی یکپارچگی» است.
+
+    `book_value` جمعِ «مقدار × بهای ثبت‌شده» است؛ اختلافش با `stock_value` یعنی
+    ارزش‌گذاریِ منقضی (`stale_from`).
+
+    ردیف‌ها: بی `date_from` فقط کالایی که مانده دارد (رفتارِ همیشگی)؛ با `date_from`
+    هر کالایی که در بازه مانده یا گردش داشته. خدمت هیچ‌وقت.
     """
-    qty_query = db.query(
-        StockLedger.item_id, func.coalesce(func.sum(StockLedger.qty), 0)
-    )
-    if warehouse_id is not None:
-        qty_query = qty_query.filter(StockLedger.warehouse_id == warehouse_id)
-    if as_of is not None:
-        qty_query = qty_query.filter(StockLedger.entry_date <= as_of)
-    qty_by_item = {item_id: Decimal(qty) for item_id, qty in qty_query.group_by(StockLedger.item_id).all()}
-
+    positions = valuation.positions(db, date_from=date_from, date_to=as_of, warehouse_id=warehouse_id)
     items = {i.id: i for i in db.query(Item).filter(Item.is_service.is_(False)).all()}
 
     rows = []
-    for item_id, qty in qty_by_item.items():
+    for item_id, position in positions.items():
         item = items.get(item_id)
-        if item is None or qty == 0:
+        if item is None:
             continue
-        unit_cost = Decimal(item.average_cost)
+        stock_value = valuation.rial(position.closing_value)
+        moved = date_from is not None and bool(position.opening_qty or position.in_qty or position.out_qty)
+        if position.closing_qty == 0 and stock_value == 0 and not moved:
+            continue
         rows.append(
             {
                 "item_id": item.id,
@@ -1246,25 +1207,37 @@ def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | N
                 "name": item.name,
                 "unit": item.unit,
                 "category": item.category,
-                "qty_on_hand": qty,
-                "unit_cost": unit_cost,
-                #: **به ریالِ صحیح، چون این عدد باید با دفتر بخواند.**
-                #:
-                #: `average_cost` از مهاجرتِ ۰۱۳۱ چهار رقم اعشار دارد (بهای
-                #: تمام‌شده نتیجه‌ی یک تقسیم است و ریالِ صحیح ده‌ها ریال خطا
-                #: می‌ساخت). ولی دفتر به ریالِ صحیح می‌نویسد، پس اگر این‌جا
-                #: کسر بماند جمعِ گزارش با ماندهٔ «موجودی کالا» مو نمی‌زند
-                #: ولی دقیقاً هم برابر نمی‌شود — و همین «تقریباً برابر» همان
-                #: چیزی است که کسی نمی‌تواند توضیحش بدهد.
-                "stock_value": (qty * unit_cost).quantize(Decimal(1)),
+                "qty_on_hand": position.closing_qty,
+                #: میانگینِ **کلِ شرکت** در پایانِ بازه — حتی در گزارشِ یک انبار.
+                "unit_cost": position.average,
+                "stock_value": stock_value,
+                "opening_qty": position.opening_qty,
+                "opening_value": valuation.rial(position.opening_value),
+                "in_qty": position.in_qty,
+                "in_value": valuation.rial(position.in_value),
+                "out_qty": position.out_qty,
+                "out_value": valuation.rial(position.out_value),
+                "book_value": valuation.rial(position.book_value),
+                "stale_from": position.stale_from,
             }
         )
 
     rows.sort(key=lambda r: r["stock_value"], reverse=True)  # بیشترین ارزش اول
+
+    def total(key: str) -> Decimal:
+        return sum((r[key] for r in rows), Decimal(0))
+
     return {
         "as_of": as_of,
+        "date_from": date_from,
+        "warehouse_id": warehouse_id,
         "rows": rows,
-        "total_value": sum((r["stock_value"] for r in rows), Decimal(0)),
+        "total_value": total("stock_value"),
+        "total_opening_value": total("opening_value"),
+        "total_in_value": total("in_value"),
+        "total_out_value": total("out_value"),
+        "total_book_value": total("book_value"),
+        "stale_item_count": sum(1 for r in rows if r["stale_from"] is not None),
         "item_count": len(rows),
     }
 

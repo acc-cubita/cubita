@@ -239,10 +239,11 @@ def sales_dashboard(
 def inventory_report(
     warehouse_id: UUID | None = Query(None),
     as_of: date | None = Query(None),
+    date_from: date | None = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return reports_service.get_inventory_report(db, warehouse_id, as_of)
+    return reports_service.get_inventory_report(db, warehouse_id, as_of, date_from)
 
 
 @router.get("/kardex/{item_id}", response_model=KardexReportOut)

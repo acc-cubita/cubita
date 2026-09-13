@@ -23,6 +23,7 @@ from app.schemas.manufacturing import ProductionOrderIn
 from app.services import chart_codes as cc
 from app.services.common import get_account, number_lines
 from app.services.inventory import get_stock_qty, get_total_stock_qty, lock_items
+from app.services import valuation
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 
@@ -81,7 +82,8 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
     stock_moves: list[StockLedger] = []
     for cid, need in needs.items():
         comp = components[cid]
-        unit = Decimal(comp.average_cost)
+        #: تولیدِ پیش‌تاریخ اجزا را با میانگینِ همان روز مصرف می‌کند.
+        unit = valuation.cost_for_posting(db, comp, data.production_date)
         component_cost += need * unit
         order_lines.append(ProductionOrderLine(component_item_id=cid, qty=need, unit_cost=_whole(unit)))
         stock_moves.append(
@@ -152,6 +154,6 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
     db.add(order)
     for move in stock_moves:
         db.add(move)
-    db.flush()
+    valuation.settle_posting(db, stock_moves)
     db.refresh(order)
     return order

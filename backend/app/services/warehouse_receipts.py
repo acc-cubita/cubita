@@ -75,7 +75,8 @@ from app.services.inventory import (
 )
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
-from app.services.voiding import recompute_average_cost, reverse_journal_entry
+from app.services import valuation
+from app.services.voiding import reverse_journal_entry
 
 
 def received_by_line(db: Session, invoice_id: UUID) -> dict[UUID, Decimal]:
@@ -575,6 +576,7 @@ def create_warehouse_receipt(
     db.add(receipt)
     db.flush()
 
+    moves: list[StockLedger] = []
     for index, row in enumerate(rows, start=1):
         item = row["item"]
         receipt.lines.append(
@@ -610,17 +612,17 @@ def create_warehouse_receipt(
             item.average_cost = (
                 (old_qty * Decimal(item.average_cost)) + landed_amount
             ) / new_qty
-        db.add(
-            StockLedger(
-                item_id=item.id,
-                warehouse_id=data.warehouse_id,
-                qty=row["qty"],
-                unit_cost=landed_unit_cost,
-                entry_date=data.receipt_date,
-                source_type="warehouse_receipt",
-                source_id=receipt.id,
-            )
+        move = StockLedger(
+            item_id=item.id,
+            warehouse_id=data.warehouse_id,
+            qty=row["qty"],
+            unit_cost=landed_unit_cost,
+            entry_date=data.receipt_date,
+            source_type="warehouse_receipt",
+            source_id=receipt.id,
         )
+        db.add(move)
+        moves.append(move)
         db.add(
             StockBatch(
                 item_id=item.id,
@@ -647,6 +649,9 @@ def create_warehouse_receipt(
     #:
     #: و هر سه ردیف‌های **یک** سندند: رسید یک `journal_entry_id` دارد و ابطال
     #: باید بتواند همان یکی را برگرداند.
+    #: رسیدِ پیش‌تاریخ: میانگین از بازپخش، چون فرمولِ بالا فرض کرده این رسید آخرین است.
+    valuation.settle_posting(db, moves)
+
     journal_lines = (
         _direct_journal_lines(db, receipt, rows)
         if invoice is None
@@ -724,6 +729,8 @@ def void_warehouse_receipt(
                 source_id=receipt.id,
             )
         )
+    #: گاردِ بالا موجودیِ امروز را دید؛ این یکی خطِ زمان را.
+    valuation.guard_void(db, ("warehouse_receipt",), receipt.id)
     #: **سند هم باید برگردد، نه فقط موجودی.**
     #:
     #: تا وقتی رسید سند نمی‌زد، ابطالش فقط کارِ انبار بود. حالا که رسیدِ مستقیم
@@ -754,11 +761,7 @@ def void_warehouse_receipt(
     receipt.voided_by_id = user.id
     receipt.void_reason = reason.strip()
     receipt.status = "voided"
-    db.flush()
-    for item_id in {move.item_id for move in moves}:
-        item = db.get(Item, item_id)
-        if item is not None:
-            recompute_average_cost(db, item)
+    valuation.settle_void(db, [move.item_id for move in moves])
     return receipt
 
 

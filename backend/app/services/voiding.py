@@ -26,11 +26,10 @@ from sqlalchemy.orm import Session
 from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
-from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
-from app.models.issue_returns import WarehouseIssueReturn
-from app.models.transfers import StockTransfer
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
+from app.services import valuation
 from app.services.common import number_lines
 from app.services.inventory import lock_items
 from app.services.numbering import next_document_number
@@ -38,7 +37,7 @@ from app.services.period_close import assert_period_open
 
 #: منشأ ردیف‌های جبرانی دفتر موجودی. جدا از منشأ اصلی نگه داشته می‌شود تا در
 #: گزارش کاردکس معلوم باشد این حرکت، اصلاح است نه یک خرید/فروش تازه.
-VOID_SOURCE = "void"
+VOID_SOURCE = valuation.VOID_SOURCE
 
 
 def _reverse_lines(entry: JournalEntry) -> list[JournalLine]:
@@ -92,36 +91,13 @@ def reverse_journal_entry(
 
 
 def _voided_sources(db: Session) -> set:
-    """کلیدِ (نوع، شناسه) هر سندی که باطل شده."""
-    voided = set()
-    for model, source_type in (
-        (SalesInvoice, "sales_invoice"),
-        (PurchaseInvoice, "purchase_invoice"),
-        (WarehouseReceipt, "warehouse_receipt"),
-        #: از مهاجرتِ ۰۱۲۱ برگشت هم ابطال‌پذیر است. بدونِ این دو، حرکتِ انبارِ
-        #: برگشتِ باطل‌شده در محاسبه می‌ماند و **میانگینِ بهای تمام‌شده بی‌صدا
-        #: منحرف می‌شود** — خطایی که هیچ ترازی لو نمی‌دهد چون سند متوازن است.
-        (SalesReturn, "sales_return"),
-        (PurchaseReturn, "purchase_return"),
-        #: **و خروجِ انبار.** از وقتی حرکتِ انبارِ فروش از فاکتور به این سند
-        #: منتقل شد، نبودنش این‌جا یعنی حرکتِ خروجِ باطل‌شده در بازپخش شمرده
-        #: می‌شود: مقدارِ پایه غلط می‌ماند و **خریدِ بعدی میانگین را منحرف
-        #: می‌کند**. ردیفِ جبرانیِ `void` به‌تنهایی کافی نیست — خودِ حرکتِ اصلی
-        #: هم باید حذف شود، همان چیزی که docstringِ `recompute_average_cost`
-        #: می‌گوید: «میانگین باید همانی باشد که اگر آن سند اصلاً ثبت نشده بود».
-        (WarehouseIssue, "warehouse_issue"),
-        #: انتقال از مهاجرتِ ۰۱۳۳ ابطال‌پذیر است. دو حرکتش جمعِ صفر دارند، ولی
-        #: ورودِ مقصد در بازپخش با بهای *همان روز* میانگین را جابه‌جا می‌کند؛ پس
-        #: انتقالِ باطل‌شده باید انگار هرگز نبوده باشد، مثلِ هر سندِ دیگری.
-        (StockTransfer, "transfer_out"),
-        (StockTransfer, "transfer_in"),
-        #: برگشتِ خروج (مهاجرتِ ۰۱۳۴) حرکتِ **مثبت** است و مستقیم در میانگین می‌نشیند؛
-        #: باطل‌شده‌اش اگر در بازپخش بماند، میانگین را بی‌صدا منحرف می‌کند.
-        (WarehouseIssueReturn, "warehouse_issue_return"),
-    ):
-        for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
-            voided.add((source_type, doc_id))
-    return voided
+    """کلیدِ (نوع، شناسه) هر سندی که باطل شده.
+
+    فهرستِ اسنادِ ابطال‌پذیر و دلیلِ هر ردیفش حالا در `valuation` است: بازپخشِ
+    میانگین، گاردِ خطِ زمان و گزارشِ ارزش هر سه همان را می‌خوانند. دو فهرستِ موازی
+    دقیقاً همان‌جایی است که سندِ تازه در یکی ثبت می‌شد و در دیگری نه.
+    """
+    return valuation.voided_sources(db)
 
 
 def recompute_average_cost(db: Session, item: Item) -> None:
@@ -141,38 +117,13 @@ def recompute_average_cost(db: Session, item: Item) -> None:
     این تفاوت با تست گرفته می‌شود: خرید ۱۰@۱۰۰۰ سپس ۱۰@۲۰۰۰ میانگین را ۱۵۰۰
     می‌کند؛ ابطال خرید دوم باید ۱۰۰۰ بدهد، و بازپخشِ ساده ۱۵۰۰ می‌داد.
 
-    ترتیب با `seq` گرفته می‌شود و نه با شناسه یا تاریخ: شناسه UUID تصادفی است و
-    تاریخ فقط روز را دارد. با ترتیب غیرقطعی، همین تابع می‌توانست هر بار عدد
-    متفاوتی بدهد — که در اجرای کامل تست‌ها دقیقاً همین اتفاق افتاد.
+    ترتیب **(تاریخِ سند، seq)** است (فصلِ «قیمت‌گذاری اسناد انبار»): شناسه UUID
+    تصادفی است و `seq` به‌تنها ترتیبِ *ثبت* است نه ترتیبِ *زمان* — سندِ پیش‌تاریخ با
+    `seq` بعد از اسنادی می‌نشست که در زمان پیش از آن‌ها بوده. تعریفِ کامل و قاعده‌ی
+    هر نوع حرکت (از جمله برگشت از خرید که با بهای خودش بیرون می‌رود) در `valuation`
+    است؛ این تابع همان را صدا می‌زند تا دو تعریف از میانگین وجود نداشته باشد.
     """
-    ignored = _voided_sources(db)
-
-    moves = (
-        db.query(StockLedger)
-        .filter(StockLedger.item_id == item.id)
-        .order_by(StockLedger.seq)
-        .all()
-    )
-
-    qty = Decimal(0)
-    average = Decimal(0)
-    for move in moves:
-        if move.source_type == VOID_SOURCE:
-            continue  # ردیف جبرانی؛ خودِ حرکتِ اصلی پایین‌تر نادیده گرفته می‌شود
-        if (move.source_type, move.source_id) in ignored:
-            continue  # سندش باطل شده — انگار هرگز نبوده
-
-        move_qty = Decimal(move.qty)
-        if move_qty > 0:
-            new_qty = qty + move_qty
-            if new_qty > 0:
-                average = ((qty * average) + (move_qty * Decimal(move.unit_cost))) / new_qty
-            qty = new_qty
-        else:
-            # خروج، میانگین را عوض نمی‌کند — فقط مقدار را کم می‌کند.
-            qty += move_qty
-
-    item.average_cost = average
+    valuation.recompute(db, item)
 
 
 def _compensating_moves(db: Session, source_type: str, source_id: UUID, void_date: date_) -> list[StockLedger]:
@@ -323,6 +274,9 @@ def _apply_void(
     # فاکتور هم‌زمان می‌توانند محاسبه‌ی یکدیگر را بازنویسی کنند.
     lock_items(db, affected_items)
     _guard_stock_stays_valid(db, moves)
+    #: گاردِ بالا موجودیِ امروز را می‌بیند؛ این یکی خطِ زمان را — خروجی که بعد از این
+    #: ورود و به پشتوانه‌ی آن رفته، با ابطال بی‌پشتوانه نشود.
+    valuation.guard_void(db, (source_type,), document.id)
 
     reversal = reverse_journal_entry(
         db,
@@ -345,12 +299,7 @@ def _apply_void(
     document.void_reason = reason.strip()
     db.flush()
 
-    for item_id in affected_items:
-        item = db.get(Item, item_id)
-        if item is not None:
-            recompute_average_cost(db, item)
-
-    db.flush()
+    valuation.settle_void(db, affected_items)
     return reversal
 
 

@@ -40,6 +40,7 @@ from app.schemas.invoices import DirectWarehouseIssueIn, SalesInvoiceIn, Warehou
 from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import units
+from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
 from app.services.cost_centers import resolve_cost_center_id
@@ -218,9 +219,12 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
     debit_text, credit_text = _JOURNAL_TEXT[issue.issue_type]
     debits: dict[UUID, Decimal] = defaultdict(Decimal)
     total = Decimal(0)
+    moves: list[StockLedger] = []
     for seq, row in enumerate(rows, start=1):
         item = fresh[row.item.id]
-        unit_cost = Decimal(item.average_cost or 0)
+        #: خروجِ پیش‌تاریخ میانگینِ **همان روز** را می‌گیرد: خروجِ دهمِ ماه نباید بهای
+        #: خریدِ بیستم را بخورد. سندِ هم‌تاریخ یا تازه‌تر همان میانگینِ ذخیره‌شده را.
+        unit_cost = valuation.cost_for_posting(db, item, issue.issue_date)
         secondary_qty, secondary_unit = _secondary(db, item, row.qty)
         line = WarehouseIssueLine(
             seq=seq,
@@ -237,13 +241,17 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
             description=row.description,
         )
         issue.lines.append(line)
-        db.add(StockLedger(
+        move = StockLedger(
             item_id=item.id, warehouse_id=issue.warehouse_id, qty=-row.qty, unit_cost=unit_cost,
             entry_date=issue.issue_date, source_type="warehouse_issue", source_id=issue.id,
-        ))
+        )
+        db.add(move)
+        moves.append(move)
         amount = line.amount
         debits[row.account_id] += amount
         total += amount
+    #: خروجِ پیش‌تاریخ نباید گذشته را منفی کند — گاردِ بالا فقط موجودیِ امروز را دید.
+    valuation.settle_posting(db, moves)
 
     if total > 0:
         journal_lines = [
@@ -452,7 +460,8 @@ def void_warehouse_issue(
     invoice = db.get(SalesInvoice, issue.sales_invoice_id) if issue.sales_invoice_id else None
     if invoice:
         invoice.total_cost = max(Decimal(invoice.total_cost or 0) - issue.total_cost, Decimal(0))
-    db.flush()
+    #: برداشتنِ خروج هم میانگین را عوض می‌کند (وزنِ ورودهای بعدی) — تا امروز بازمحاسبه نمی‌شد.
+    valuation.settle_void(db, [move.item_id for move in moves])
     return issue
 
 

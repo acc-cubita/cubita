@@ -5358,6 +5358,12 @@ button:disabled {
   color: var(--text-muted);
 }
 .kardex-stat strong { margin-inline-start: auto; color: var(--text-h); font-size: 15px; }
+/* ارزشِ ریالیِ هر خانه‌ی خلاصه — سطرِ دوم، تمام‌عرض */
+.kardex-stat small { flex-basis: 100%; text-align: end; font-variant-numeric: tabular-nums; }
+.kardex-stale-note { display: flex; align-items: center; gap: 6px; }
+/* نشانِ «منقضی/باطل» کنارِ عددِ همان خانه */
+.kardex-table .status-badge, .rep-kardex-table .status-badge, .rep-inv-table .status-badge { margin-inline-start: 6px; }
+tr.kardex-voided td { color: var(--text-muted); }
 
 /* ── موبایل (≤۷۶۰px): جدول‌های تازه‌ی انبار به کارتِ برچسب‌دار تبدیل می‌شوند ── */
 @media (max-width: 760px) {

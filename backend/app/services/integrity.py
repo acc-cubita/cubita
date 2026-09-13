@@ -25,6 +25,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.inventory import Item, Warehouse
+from app.services import chart_codes as cc
+from app.services import valuation
 from app.services.accounting_ops import get_balances
 from app.services.reports import (
     SYSTEM_SOURCE_TYPES,
@@ -48,6 +51,7 @@ def _row(
     difference: Decimal = Decimal(0),
     entry_id: UUID | None = None,
     account_id: UUID | None = None,
+    item_id: UUID | None = None,
 ) -> dict:
     """ردیفِ یکنواختِ هر بررسی — تا یک جدول در رابط، همه را نشان بدهد.
 
@@ -63,6 +67,7 @@ def _row(
         "difference": difference,
         "entry_id": entry_id,
         "account_id": account_id,
+        "item_id": item_id,
     }
 
 
@@ -383,6 +388,173 @@ def _unsettleable_balance(db: Session) -> dict:
     )
 
 
+#: پسوندِ توضیحِ بررسی‌های انبار وقتی دامنه باریک شده — تا «چیزی پیدا نکرد» با «اجرا نشد» یکی خوانده نشود.
+_NARROWED = " (با فیلترِ شماره‌ی سند، وضعیت، منشأ، بُعد یا بدونِ اسنادِ سیستمی اجرا نمی‌شود.)"
+
+
+def _ledger_wide(filters: ReportFilters) -> bool:
+    """بررسی‌های انبار فقط روی کلِ دفتر معنا دارند.
+
+    ارزشِ موجودی شماره‌ی سند، مرکز هزینه یا تفصیلی ندارد: با فیلترِ «سند ۱۲ تا ۱۲»
+    مانده‌ی معینِ موجودی از یک سند می‌آمد و ارزشِ انبار از همه‌ی حرکات، و اختلافی
+    ساخته می‌شد که هیچ معنایی ندارد. بازه‌ی تاریخ اما معنا دارد (ارزش تا پایانِ بازه).
+    """
+    return (
+        filters.entry_from is None
+        and filters.entry_to is None
+        and filters.status is None
+        and not filters.source_type
+        and filters.cost_center_id is None
+        and filters.analytic_id is None
+        and filters.include_system_entries
+    )
+
+
+def _inventory_vs_ledger(db: Session, filters: ReportFilters) -> dict:
+    """ارزشِ انبار در برابرِ مانده‌ی معینِ موجودی — یک عدد از دو دفترِ مستقل.
+
+    مسیرِ اول دفترِ حسابداری است: مانده‌ی هر معینی که موجودیِ کالا رویش می‌نشیند
+    (نقشِ «موجودی کالا» و هر معینی که به انباری نگاشت شده). مسیرِ دوم دفترِ موجودی
+    است: ارزشِ کالای انبارهای همان معین، از بازپخشِ `valuation`. تا امروز گزارشِ
+    ارزشِ موجودی در مستنداتش می‌گفت «باید با ماندهٔ حساب بخواند» و هیچ‌جا سنجیده
+    نمی‌شد.
+
+    اختلاف دو جزء دارد و جزئیات هر دو را جدا می‌گوید: **ارزش‌گذاریِ منقضی** (بهایی که
+    اسناد نوشته‌اند با بازپخشِ زمانی نمی‌خواند) و **بقیه** — سندِ دستی روی معینِ
+    موجودی، سندی بی‌حرکتِ انبار یا حرکتی بی‌سند.
+
+    **هشدار است نه خطا:** دفتر متوازن است و گزارش‌های مالی با خودشان می‌خوانند؛ دو
+    دفتر فقط از هم فاصله گرفته‌اند. فقط `date_to` را می‌گیرد — ارزشِ موجودی بُعدِ
+    مرکز هزینه یا تفصیلی ندارد که فیلترهای دیگر رویش معنا داشته باشند.
+    """
+    from app.services.printing import fa_number
+
+    key, title = "inventory_vs_ledger", "ارزشِ انبار در برابرِ دفتر"
+    description = (
+        "مانده‌ی معینِ موجودی با ارزشِ کالای انبارهایی که به آن نگاشت شده‌اند یکی نیست. "
+        "«بدهکار» مانده‌ی دفتر است و «بستانکار» ارزشِ انبار."
+    )
+    if not _ledger_wide(filters):
+        return _check(key, title, description + _NARROWED, "warning", [], 0)
+
+    positions = valuation.positions(db, date_to=filters.date_to)
+    by_warehouse: dict[UUID, list[Decimal]] = {}
+    for position in positions.values():
+        for warehouse_id, (_qty, value, book) in position.by_warehouse.items():
+            slot = by_warehouse.setdefault(warehouse_id, [Decimal(0), Decimal(0)])
+            slot[0] += value
+            slot[1] += book
+
+    mapping = dict(db.query(Warehouse.id, Warehouse.gl_account_id).all())
+    default = db.query(Account.id).filter(Account.system_role == cc.INVENTORY).first()
+    default_id = default[0] if default is not None else None
+
+    per_account: dict[UUID, list[Decimal]] = {}
+    for warehouse_id, (value, book) in by_warehouse.items():
+        account_id = mapping.get(warehouse_id) or default_id
+        if account_id is None:
+            continue
+        slot = per_account.setdefault(account_id, [Decimal(0), Decimal(0)])
+        slot[0] += value
+        slot[1] += book
+
+    account_ids = set(per_account) | {gl for gl in mapping.values() if gl is not None}
+    if default_id is not None:
+        account_ids.add(default_id)
+
+    rows = []
+    if account_ids:
+        ledger_query = (
+            db.query(
+                JournalLine.account_id,
+                func.coalesce(func.sum(JournalLine.debit), 0) - func.coalesce(func.sum(JournalLine.credit), 0),
+            )
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .filter(JournalLine.account_id.in_(account_ids))
+        )
+        if filters.date_to is not None:
+            ledger_query = ledger_query.filter(JournalEntry.entry_date <= filters.date_to)
+        ledger = {account_id: Decimal(balance) for account_id, balance in ledger_query.group_by(JournalLine.account_id).all()}
+
+        for account in db.query(Account).filter(Account.id.in_(account_ids)).order_by(Account.code).all():
+            balance = valuation.rial(ledger.get(account.id, Decimal(0)))
+            value, book = (valuation.rial(amount) for amount in per_account.get(account.id, (Decimal(0), Decimal(0))))
+            difference = balance - value
+            if difference == 0:
+                continue
+            parts = []
+            if book != value:
+                parts.append(f"{fa_number(book - value)} از ارزش‌گذاریِ منقضی")
+            if balance != book:
+                parts.append(f"{fa_number(balance - book)} از سندِ بی‌حرکت یا حرکتِ بی‌سند روی این معین")
+            rows.append(
+                _row(
+                    f"{account.code} — {account.name}",
+                    f"مانده‌ی دفتر {fa_number(balance)}، ارزشِ انبار {fa_number(value)}"
+                    + (" — " + "؛ ".join(parts) if parts else ""),
+                    debit=balance,
+                    credit=value,
+                    difference=difference,
+                    account_id=account.id,
+                )
+            )
+    return _check(key, title, description, "warning", rows, len(rows))
+
+
+def _stale_valuation(db: Session, filters: ReportFilters) -> dict:
+    """کالاهایی که بهای ثبت‌شده‌ی حرکاتشان با بازپخشِ دفتر به ترتیبِ تاریخ نمی‌خواند.
+
+    «منقضی» ذخیره نمی‌شود؛ هر بار از دفتر مشتق می‌شود (`valuation.stale_items`)، پس
+    دفترِ پیش از این نسخه را هم می‌بیند و با اصلاحِ ارزش‌گذاری خودش پاک می‌شود. علت
+    هم از دفتر می‌آید: سندی که بعداً با تاریخِ گذشته ثبت شده، یا ابطالی که سندِ
+    پیش از آن حرکت را برداشته.
+    """
+    from app.services.printing import fa_number, format_jalali
+
+    key, title = "stale_valuation", "ارزش‌گذاریِ منقضی"
+    description = (
+        "حرکتی که با میانگین ارزش‌گذاری شده و بهای ثبت‌شده‌اش با میانگینِ همان تاریخ نمی‌خواند — "
+        "معمولاً چون سندی بعداً با تاریخِ گذشته ثبت یا باطل شده. سندِ حسابداریِ آن حرکات هنوز "
+        "بهای کهنه را دارد؛ «اختلاف» اثرش بر ارزشِ موجودی است."
+    )
+    if not _ledger_wide(filters):
+        return _check(key, title, description + _NARROWED, "warning", [], 0)
+
+    found = valuation.stale_items(db, until=filters.date_to)
+    items = (
+        {item.id: item for item in db.query(Item).filter(Item.id.in_([entry["item_id"] for entry in found])).all()}
+        if found
+        else {}
+    )
+    numbers = valuation.document_numbers(
+        db, [(source_type, source_id) for entry in found for _kind, source_type, source_id in entry["causes"]]
+    )
+    rows = []
+    for entry in found:
+        item = items.get(entry["item_id"])
+        causes = []
+        for kind, source_type, source_id in entry["causes"][:3]:
+            label = valuation.document_label(source_type, numbers.get((source_type, source_id)))
+            causes.append(f"ابطالِ {label}" if kind == "void" else f"{label} با تاریخِ گذشته")
+        if len(entry["causes"]) > 3:
+            causes.append(f"و {fa_number(len(entry['causes']) - 3)} سندِ دیگر")
+        why = (
+            "، ".join(causes)
+            if causes
+            else "بهای ثبت‌شده از همان روزِ ثبت با میانگینِ آن تاریخ نمی‌خوانده "
+            "(دفترِ پیش از ترتیبِ تاریخی، یا انبارگردانی با بهای روزِ بازکردنِ جلسه)"
+        )
+        rows.append(
+            _row(
+                f"{item.sku} — {item.name}" if item is not None else str(entry["item_id"]),
+                f"از {format_jalali(entry['from_date'])}، {fa_number(entry['count'])} حرکت با بهای کهنه — علت: {why}",
+                difference=valuation.rial(entry["difference"]),
+                item_id=entry["item_id"],
+            )
+        )
+    return _check(key, title, description, "warning", rows, len(rows))
+
+
 def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> dict:
     """همه‌ی بررسی‌ها، با جمعِ کلِ دفتر به‌عنوانِ سرخطِ گزارش.
 
@@ -410,6 +582,8 @@ def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> di
         _empty_entries(db, filters),
         _over_allocated_settlements(db),
         _unsettleable_balance(db),
+        _inventory_vs_ledger(db, filters),
+        _stale_valuation(db, filters),
     ]
     return {
         "date_from": filters.date_from,

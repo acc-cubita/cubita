@@ -9,6 +9,7 @@ import {
 } from '../../api'
 import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
 import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
+import { KardexDrawer } from '../../components/KardexDrawer'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
@@ -31,6 +32,7 @@ export function IntegrityPage({ token }: { token: string }) {
   const [filters, setFilters] = useState<ReportFilters>({})
   const [entryId, setEntryId] = useState<string | null>(null)
   const [drill, setDrill] = useState<{ id: string; code: string; name: string } | null>(null)
+  const [kardexItem, setKardexItem] = useState<{ id: string; sku: string; name: string } | null>(null)
 
   const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
   const report = useAsync<IntegrityReport>(
@@ -46,6 +48,13 @@ export function IntegrityPage({ token }: { token: string }) {
     if (!row.account_id) return
     const [code, ...rest] = row.label.split(' — ')
     setDrill({ id: row.account_id, code, name: rest.join(' — ') || code })
+  }, [])
+
+  //: همان قراردادِ برچسبِ حساب: «کد — نام». ردیف‌های انبار به کاردکسِ کالا می‌روند.
+  const openItem = useCallback((row: IntegrityRow) => {
+    if (!row.item_id) return
+    const [sku, ...rest] = row.label.split(' — ')
+    setKardexItem({ id: row.item_id, sku, name: rest.join(' — ') || sku })
   }, [])
 
   return (
@@ -94,7 +103,7 @@ export function IntegrityPage({ token }: { token: string }) {
         emptyText="بررسی هنوز اجرا نشده است."
       >
         {(data?.checks ?? []).map((check) => (
-          <CheckCard key={check.key} check={check} onEntry={setEntryId} onAccount={openAccount} />
+          <CheckCard key={check.key} check={check} onEntry={setEntryId} onAccount={openAccount} onItem={openItem} />
         ))}
       </AsyncBlock>
 
@@ -111,6 +120,9 @@ export function IntegrityPage({ token }: { token: string }) {
           onClose={() => setDrill(null)}
         />
       )}
+      {kardexItem && (
+        <KardexDrawer token={token} item={kardexItem} onClose={() => setKardexItem(null)} />
+      )}
     </OpsPage>
   )
 }
@@ -119,10 +131,12 @@ function CheckCard({
   check,
   onEntry,
   onAccount,
+  onItem,
 }: {
   check: IntegrityCheck
   onEntry: (id: string) => void
   onAccount: (row: IntegrityRow) => void
+  onItem: (row: IntegrityRow) => void
 }) {
   const bad = !check.ok
   return (
@@ -159,13 +173,18 @@ function CheckCard({
             </thead>
             <tbody>
               {check.rows.map((row, i) => (
-                <tr key={`${check.key}-${row.entry_id ?? row.account_id ?? i}`}>
+                <tr key={`${check.key}-${row.entry_id ?? row.account_id ?? row.item_id ?? i}`}>
                   <td className="card-title" data-label="مورد">{row.label}</td>
                   <td className="card-wide" data-label="توضیح">{row.detail || '—'}</td>
                   <td className="num" data-label="بدهکار">{faAmount(row.debit)}</td>
                   <td className="num" data-label="بستانکار">{faAmount(row.credit)}</td>
                   <td className="num" data-label="اختلاف">{faAmount(row.difference)}</td>
                   <td className="card-actions">
+                    {row.item_id && (
+                      <button type="button" onClick={() => onItem(row)}>
+                        کاردکس
+                      </button>
+                    )}
                     {row.entry_id && (
                       <button type="button" onClick={() => onEntry(row.entry_id as string)}>
                         نمایشِ سند

@@ -26,6 +26,7 @@ from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.user import User
 from app.schemas.transfers import StockTransferIn
 from app.services import items as items_svc
+from app.services import valuation
 from app.services import warehouses
 from app.services.common import make_journal_entry
 from app.services.inventory import get_stock_qty, lock_items
@@ -77,17 +78,22 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
     db.flush()
 
     total = Decimal(0)
+    moves: list[StockLedger] = []
     for line in data.lines:
-        unit_cost = Decimal(fresh[line.item_id].average_cost or 0)
+        #: انتقالِ پیش‌تاریخ با میانگینِ همان روز — همان قاعده‌ی خروج.
+        unit_cost = valuation.cost_for_posting(db, fresh[line.item_id], data.transfer_date)
         total += (Decimal(line.qty) * unit_cost).quantize(Decimal(1))
         for warehouse_id, qty, source_type in (
             (data.from_warehouse_id, -Decimal(line.qty), "transfer_out"),
             (data.to_warehouse_id, Decimal(line.qty), "transfer_in"),
         ):
-            db.add(StockLedger(
+            move = StockLedger(
                 item_id=line.item_id, warehouse_id=warehouse_id, qty=qty, unit_cost=unit_cost,
                 entry_date=data.transfer_date, source_type=source_type, source_id=transfer.id,
-            ))
+            )
+            db.add(move)
+            moves.append(move)
+    valuation.settle_posting(db, moves)
 
     #: جمعِ موجودیِ شرکت عوض نمی‌شود (§۲۸)، پس میانِ دو انبارِ هم‌حساب سندی نیست.
     #: ولی دو معینِ متفاوت یعنی ارزش واقعاً از یکی به دیگری رفته.
@@ -138,6 +144,8 @@ def void_stock_transfer(
                 f"ابطال: {qty}). ابطال یعنی کالا به مبدأ برگردد؛ اول خروج‌های بعدی را باطل کنید.",
             )
 
+    #: ابطالِ انتقال ورودِ انبارِ مقصد را برمی‌دارد؛ خروجی که بعد از آن رفته بی‌پشتوانه نشود.
+    valuation.guard_void(db, ("transfer_out", "transfer_in"), transfer.id)
     for move in moves:
         db.add(StockLedger(
             item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),
@@ -152,7 +160,7 @@ def void_stock_transfer(
     transfer.voided_at = datetime.now(timezone.utc)
     transfer.voided_by_id = user.id
     transfer.void_reason = reason.strip()
-    db.flush()
+    valuation.settle_void(db, [move.item_id for move in moves])
     return transfer
 
 

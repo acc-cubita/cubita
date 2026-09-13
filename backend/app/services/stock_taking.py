@@ -25,6 +25,7 @@ from app.services import chart_codes as cc
 from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import number_lines
+from app.services import valuation
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 
@@ -120,22 +121,24 @@ def post_session(db: Session, session_id: UUID, user: User) -> StockCountSession
     assert_period_open(db, session.count_date)
 
     total_delta = Decimal(0)  # تغییرِ خالصِ ارزشِ موجودی (علامت‌دار)
+    moves: list[StockLedger] = []
     for line in session.lines:
         variance = Decimal(line.counted_qty) - Decimal(line.system_qty)
         if variance == 0:
             continue
-        db.add(
-            StockLedger(
-                item_id=line.item_id,
-                warehouse_id=session.warehouse_id,
-                qty=variance,
-                unit_cost=line.unit_cost,
-                entry_date=session.count_date,
-                source_type="stock_count",
-                source_id=session.id,
-            )
+        move = StockLedger(
+            item_id=line.item_id,
+            warehouse_id=session.warehouse_id,
+            qty=variance,
+            unit_cost=line.unit_cost,
+            entry_date=session.count_date,
+            source_type="stock_count",
+            source_id=session.id,
         )
+        db.add(move)
+        moves.append(move)
         total_delta += variance * Decimal(line.unit_cost)
+    valuation.settle_posting(db, moves)
 
     if total_delta != 0:
         amount = abs(total_delta)

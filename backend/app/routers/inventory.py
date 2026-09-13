@@ -858,6 +858,23 @@ def update_item(
     attributes = fields.pop("attributes", None)
     if "group_id" in fields:
         items_svc.assert_group_usable(db, fields["group_id"])
+    if fields.get("average_cost") is not None and Decimal(fields["average_cost"]) != Decimal(item.average_cost or 0):
+        #: **میانگینِ کالایی که موجودی دارد دستی عوض نمی‌شود** (فصلِ قیمت‌گذاری).
+        #:
+        #: این ویرایش هیچ سندی نمی‌زد: ارزشِ انبار از مانده‌ی «موجودی کالا» جدا می‌افتاد
+        #: و خروج‌های بعدی با عددی سند می‌خوردند که دفتر نمی‌شناخت. اولین ابطال یا سندِ
+        #: پیش‌تاریخ هم آن را بی‌صدا با بازپخش جایگزین می‌کرد. کالای بی‌موجودی اما ارزشی
+        #: ندارد که جابه‌جا شود — آن‌جا عدد فقط پیش‌فرضِ نمایشی است و آزاد می‌ماند.
+        on_hand = Decimal(
+            db.query(func.coalesce(func.sum(StockLedger.qty), 0)).filter(StockLedger.item_id == item.id).scalar()
+        )
+        if on_hand != 0:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"«{item.name}» موجودی دارد ({on_hand.normalize():f})؛ بهای میانگینش از اسنادِ انبار "
+                "ساخته می‌شود و ویرایشِ دستی ارزشِ انبار را از دفتر جدا می‌کند. برای اصلاحِ بها، "
+                "سندِ ورودِ اشتباه را باطل و درست ثبت کنید.",
+            )
     for key, value in fields.items():
         setattr(item, key, value)
     if links is not None:

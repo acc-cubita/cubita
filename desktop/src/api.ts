@@ -3871,19 +3871,42 @@ export interface InventoryRow {
   unit: string
   category: string
   qty_on_hand: string
+  /** میانگینِ کلِ شرکت در پایانِ بازه. */
   unit_cost: string
   stock_value: string
+  opening_qty: string
+  opening_value: string
+  in_qty: string
+  in_value: string
+  out_qty: string
+  out_value: string
+  /** جمعِ «مقدار × بهای سند»؛ اختلافش با stock_value ارزش‌گذاریِ منقضی است. */
+  book_value: string
+  stale_from: string | null
 }
 
 export interface InventoryReport {
   as_of: string | null
+  date_from: string | null
+  warehouse_id: string | null
   rows: InventoryRow[]
   total_value: string
+  total_opening_value: string
+  total_in_value: string
+  total_out_value: string
+  total_book_value: string
+  stale_item_count: number
   item_count: number
 }
 
-export const fetchInventoryReport = (token: string, asOf?: string) =>
-  authedGet<InventoryReport>(token, `/api/reports/inventory${asOf ? `?as_of=${asOf}` : ''}`)
+/** بدونِ `dateFrom` فقط کالاهای دارای مانده؛ با آن، هر کالایی که در بازه گردش داشته. */
+export const fetchInventoryReport = (token: string, asOf?: string, dateFrom?: string) => {
+  const qs = new URLSearchParams()
+  if (asOf) qs.set('as_of', asOf)
+  if (dateFrom) qs.set('date_from', dateFrom)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return authedGet<InventoryReport>(token, `/api/reports/inventory${suffix}`)
+}
 
 export interface DashboardMonth {
   jy: number
@@ -3919,10 +3942,24 @@ export interface KardexLine {
   entry_date: string
   source_type: string
   source_label: string
+  source_id: string | null
+  source_number: number | null
+  /** حرکتِ سندِ باطل یا جبرانش — جمعشان صفر است و میانگین را تکان نمی‌دهند. */
+  voided: boolean
   qty_in: string
   qty_out: string
+  /** بهای ارزش‌گذاری (بازپخشِ دفتر به ترتیبِ تاریخ). */
   unit_cost: string
+  /** بهایی که خودِ سند نوشته. */
+  recorded_unit_cost: string
+  /** بهای سند با میانگینِ همان تاریخ نمی‌خواند. */
+  stale: boolean
+  value_in: string
+  value_out: string
   balance_qty: string
+  balance_value: string
+  /** میانگینِ کلِ شرکت پس از این حرکت. */
+  average_cost: string
 }
 
 export interface KardexReport {
@@ -3934,10 +3971,16 @@ export interface KardexReport {
   date_from: string | null
   date_to: string | null
   opening_qty: string
+  opening_value: string
   lines: KardexLine[]
   total_in: string
   total_out: string
+  total_value_in: string
+  total_value_out: string
   closing_qty: string
+  closing_value: string
+  average_cost: string
+  stale_count: number
 }
 
 export const fetchKardex = (token: string, itemId: string, dateFrom?: string, dateTo?: string) => {
@@ -6789,6 +6832,8 @@ export interface IntegrityRow {
   difference: string
   entry_id?: string | null
   account_id?: string | null
+  /** لنگرِ کاردکس — برای بررسی‌های انبار. */
+  item_id?: string | null
 }
 
 export interface IntegrityCheck {
