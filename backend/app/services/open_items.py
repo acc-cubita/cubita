@@ -295,7 +295,9 @@ def _kind_effects(
     )
     #: ستون‌های گروه‌بندی جدا از تجمیع‌ها نگه داشته می‌شوند؛ گذاشتنِ `max(...)` در
     #: `GROUP BY` خطای Postgres است، نه فقط بدسلیقگی.
-    group_cols = [model.id, kind.date_col, JournalEntry.number]
+    #: تاریخِ سندِ حسابداری کنارِ شماره‌اش — کارتِ حساب هر دو را نشان می‌دهد (§۲۲).
+    #: معمولاً همان تاریخِ سند است، ولی سندی که بعداً صادر شده تاریخِ خودش را دارد.
+    group_cols = [model.id, kind.date_col, JournalEntry.number, JournalEntry.entry_date]
     if kind.number_col is not None:
         group_cols.append(kind.number_col)
     currency = func.max(JournalLine.currency_code)
@@ -340,8 +342,8 @@ def _kind_effects(
     rows = []
     for row in query.all():
         values = list(row)
-        source_id, doc_date, entry_number = values[0], values[1], values[2]
-        number = values[3] if kind.number_col is not None else None
+        source_id, doc_date, entry_number, entry_date = values[0], values[1], values[2], values[3]
+        number = values[4] if kind.number_col is not None else None
         currency_code, net_amount, fx_amount = values[-3], values[-2], values[-1]
         amount = Decimal(net_amount)
         if amount == 0:
@@ -355,6 +357,7 @@ def _kind_effects(
                 "label": kind.label,
                 "number": int(number) if number is not None else None,
                 "entry_number": int(entry_number) if entry_number is not None else None,
+                "entry_date": entry_date,
                 "document_date": doc_date,
                 "side": "debit" if amount > 0 else "credit",
                 "document_amount": abs(amount),

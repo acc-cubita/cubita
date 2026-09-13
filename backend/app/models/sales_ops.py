@@ -331,9 +331,12 @@ class CreditDebitNote(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: `Settlement.total_amount`: فهرست بدونِ جمع‌زدنِ دوباره خوانده می‌شود و
     #: سرویس این دو را مقابلِ هم می‌گذارد.
     amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    #: معادلِ ریالیِ همان جمع — جمعِ `base_amount`ِ ردیف‌ها و دقیقاً جمعِ دفتر.
+    base_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
-    #: ارزِ سند و نرخش. دفتر همیشه به ارزِ پایه می‌نشیند — همان قاعده‌ای که تسویه
-    #: دارد؛ سازوکارِ تفاوتِ تسعیر این‌جا ساخته نمی‌شود.
+    #: ارزِ سند و نرخش (مهاجرتِ ۰۱۳۶). مبلغِ ردیف به ارزِ سند است و دفتر به ارزِ
+    #: پایه می‌نشیند: `مبلغ × نرخ`، ردیف‌به‌ردیف گرد — همان قراردادِ رسید و اعلامیه
+    #: پرداخت. نرخ عکسِ لحظه‌ی ثبت است؛ عوض‌شدنِ نرخِ روز سندِ قدیمی را تکان نمی‌دهد.
     currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
     exchange_rate: Mapped[float] = mapped_column(Numeric(18, 4), default=1, server_default="1")
     reason: Mapped[str] = mapped_column(Text, default="", server_default="")
@@ -344,7 +347,13 @@ class CreditDebitNote(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    #: همان سه ستونِ `VoidableMixin`. خودِ میکسین استفاده نشد چون `voided_at` از
+    #: پیش از آن روی این جدول نشسته و تعریفِ میکسین نمایه‌ای دارد که این ستون ندارد.
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    voided_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    void_reason: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     lines: Mapped[list["CreditDebitNoteLine"]] = relationship(
         back_populates="note", cascade="all, delete-orphan", order_by="CreditDebitNoteLine.seq"
@@ -370,6 +379,7 @@ class CreditDebitNoteLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "credit_debit_note_lines"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_credit_debit_note_lines_amount_positive"),
+        CheckConstraint("base_amount > 0", name="ck_credit_debit_note_lines_base_amount_positive"),
         #: سندی که همان حساب و همان تفصیلی را در دو سمت می‌گذارد هیچ‌چیز را
         #: جابه‌جا نمی‌کند. بی‌صدا پذیرفتنش یعنی ردیفی در دفتر که معنی ندارد.
         CheckConstraint(
@@ -394,7 +404,10 @@ class CreditDebitNoteLine(TenantMixin, UUIDPKMixin, Base):
     )
     credit_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
 
+    #: به ارزِ سند.
     amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: معادلِ ریالیِ همین ردیف — همان عددی که دو سمتِ سندِ حسابداری می‌گیرند.
+    base_amount: Mapped[float] = mapped_column(Numeric(18, 0))
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     note: Mapped["CreditDebitNote"] = relationship(back_populates="lines")

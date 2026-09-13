@@ -1,14 +1,17 @@
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { Fragment, useDeferredValue, useMemo, useRef, useState } from 'react'
 import {
   BadgePercent,
   Ban,
   Boxes,
   Calculator,
   ClipboardList,
+  Copy,
+  Eye,
   FileSpreadsheet,
   Layers,
   Lock,
   PackagePlus,
+  PenLine,
   Percent,
   Search,
   Ship,
@@ -27,6 +30,7 @@ import {
   fetchContacts,
   fetchCustoms,
   fetchDiscountGroups,
+  fetchNoteDuplicateDraft,
   fetchNotes,
   fetchPriceAnnouncements,
   fetchPricingFactors,
@@ -35,12 +39,14 @@ import {
   fetchSalesReturns,
   ISSUE_RETURN_PREFILL_KEY,
   newIdempotencyKey,
+  NOTE_PREFILL_KEY,
   SALES_RETURN_PHYSICAL_LABELS,
   voidNote,
   voidSalesReturn,
   type BulkPriceMode,
   type CreditDebitNote,
   type IssueReturnPrefill,
+  type NotePrefill,
   type SalesReturnRecord,
 } from '../../api'
 import type { PageKey } from '../../lib/navModel'
@@ -48,7 +54,8 @@ import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { PriceRuleTable } from '../../components/PriceRuleTable'
 import { Pager, usePagination } from '../../components/Pager'
-import { formatJalali } from '../../lib/jalali'
+import { JalaliDatePicker } from '../../components/JalaliDatePicker'
+import { formatJalali, toFaDigits } from '../../lib/jalali'
 
 /** وضعیتِ مالیِ سندِ برگشت. «باطل» عمداً از «تسویه‌نشده» جداست — یکی پولی است که
  *  هنوز نرفته، دیگری پولی که اصلاً قرار نیست برود. */
@@ -1181,83 +1188,149 @@ function noteSide(n: CreditDebitNote, side: 'debit' | 'credit'): string {
   return [...new Set(names)].join('، ')
 }
 
-export function NoteListPage({ token }: { token: string }) {
+/** یک سمتِ یک ردیف: «طرف حساب — کد معین عنوان». */
+function lineSide(l: CreditDebitNote['lines'][number], side: 'debit' | 'credit'): string {
+  const who = side === 'debit' ? l.debit_contact_name : l.credit_contact_name
+  const code = side === 'debit' ? l.debit_account_code : l.credit_account_code
+  const name = side === 'debit' ? l.debit_account_name : l.credit_account_name
+  return `${who !== '—' ? `${who} — ` : ''}${toFaDigits(code)} ${name}`
+}
+
+type NoteAction = { id: string; mode: 'void' | 'correct'; reason: string; date: string }
+
+const NOTE_COLUMNS = 9
+
+export function NoteListPage({ token, onNavigate }: { token: string; onNavigate: (p: PageKey) => void }) {
   const range = useRange('year')
   const [who, setWho] = useState('')
+  const [status, setStatus] = useState<'all' | 'active' | 'voided'>('all')
+  const [search, setSearch] = useState('')
+  const q = useDeferredValue(search.trim())
   const [msg, setMsg] = useState<Msg>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const list = useAsync(() => fetchNotes(token), [token, reloadKey])
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [action, setAction] = useState<NoteAction | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  //: فهرستِ فیلتر از خودِ اعلامیه‌ها می‌آید، نه از کلِ طرف‌حساب‌ها — فقط کسانی که
-  //: واقعاً در اعلامیه‌ای هستند، و بدونِ درخواستِ دوم.
-  const noteContacts = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const n of list.data ?? []) {
-      if (n.contact_id) seen.set(n.contact_id, n.contact_name)
-      for (const l of n.lines) {
-        if (l.debit_contact_id) seen.set(l.debit_contact_id, l.debit_contact_name)
-        if (l.credit_contact_id) seen.set(l.credit_contact_id, l.credit_contact_name)
-      }
-    }
-    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'fa'))
-  }, [list.data])
-
-  const rows = useMemo(
+  const contacts = useAsync(() => fetchContacts(token), [token])
+  //: **فیلتر سمتِ سرور.** تا امروز کلِ اعلامیه‌ها کشیده و در مرورگر بریده می‌شدند.
+  const list = useAsync(
     () =>
-      (list.data ?? [])
-        .filter((n) => inRange(n.note_date, range.from, range.to))
-        .filter(
-          (n) =>
-            !who ||
-            n.contact_id === who ||
-            n.lines.some((l) => l.debit_contact_id === who || l.credit_contact_id === who),
-        ),
-    [list.data, range.from, range.to, who],
+      fetchNotes(token, {
+        date_from: range.from || undefined,
+        date_to: range.to || undefined,
+        contact_id: who || undefined,
+        status,
+        q: q || undefined,
+      }),
+    [token, reloadKey, range.from, range.to, who, status, q],
   )
-  const pg = usePagination(rows, 20, `${range.from}${range.to}${who}`)
+  const rows = list.data ?? []
+  const pg = usePagination(rows, 20, `${range.from}${range.to}${who}${status}${q}`)
   const live = rows.filter((n) => !n.voided_at)
-  const total = live.reduce((s, n) => s + Number(n.amount || 0), 0)
+  const baseTotal = live.reduce((s, n) => s + Number(n.base_amount || 0), 0)
 
-  async function handleVoid(n: CreditDebitNote) {
-    const reason = window.prompt(
-      `ابطالِ اعلامیه‌ی ${fa(n.number ?? 0)} یک سندِ معکوس می‌زند و اصل سرِ جایش می‌ماند.\nعلتِ ابطال:`,
-    )
-    if (reason === null) return
+  const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
+
+  /** «رونوشت» و مرحله‌ی دومِ «اصلاح»: پیش‌نویس از سرور، فرمِ صدور پیش‌پر. */
+  async function openDraft(n: CreditDebitNote, corrects: number | null) {
+    const draft = await fetchNoteDuplicateDraft(token, n.id)
+    const payload: NotePrefill = { draft, corrects }
     try {
-      await voidNote(token, n.id, reason)
-      setMsg({ text: 'اعلامیه باطل و سندِ معکوسش ثبت شد.', kind: 'ok' })
-      setReloadKey((k) => k + 1)
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+      sessionStorage.setItem(NOTE_PREFILL_KEY, JSON.stringify(payload))
+    } catch {
+      throw new Error('ذخیره‌ی موقتِ مرورگر در دسترس نیست؛ پیش‌نویس به فرم نمی‌رسد.')
     }
+    onNavigate('creditnote')
+  }
+
+  async function duplicate(n: CreditDebitNote) {
+    setMsg(null)
+    try {
+      await openDraft(n, null)
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+    }
+  }
+
+  async function confirmAction(n: CreditDebitNote) {
+    if (!action) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      await voidNote(token, n.id, action.reason.trim(), action.date === n.note_date ? undefined : action.date)
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+      setBusy(false)
+      return
+    }
+    setAction(null)
+    setReloadKey((k) => k + 1)
+    if (action.mode === 'correct') {
+      try {
+        await openDraft(n, n.number)
+        return
+      } catch (err) {
+        setMsg({
+          text: `اعلامیه باطل شد، ولی فرمِ اصلاح باز نشد: ${errText(err)} — از «رونوشت» روی همین ردیف دوباره امتحان کنید.`,
+          kind: 'err',
+        })
+      }
+    } else {
+      setMsg({ text: `اعلامیه‌ی ${fa(n.number ?? 0)} باطل و سندِ معکوسش ثبت شد.`, kind: 'ok' })
+    }
+    setBusy(false)
   }
 
   return (
     <OpsPage
       icon={FileSpreadsheet}
       title="اعلامیه‌های بدهکار و بستانکار"
-      description="دفترِ اعلامیه‌ها. هرکدام سند حسابداریِ خودش را دارد؛ ابطال با سندِ معکوس انجام می‌شود."
+      description="دفترِ اعلامیه‌ها با سندِ حسابداریِ هرکدام. اصلاح با ابطال (سندِ معکوس) و صدورِ دوباره انجام می‌شود، نه با ویرایشِ سند."
       head={
         <div className="cc-head">
           <RangeBar
             range={range}
             extra={
-              <label className="acc-inline-field">
-                طرف حساب
-                <select value={who} onChange={(e) => setWho(e.target.value)}>
-                  <option value="">همه</option>
-                  {noteContacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <>
+                <label className="acc-inline-field">
+                  طرف حساب
+                  <select value={who} onChange={(e) => setWho(e.target.value)}>
+                    <option value="">همه</option>
+                    {(contacts.data ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="acc-inline-field">
+                  وضعیت
+                  <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                    <option value="all">همه</option>
+                    <option value="active">فعال</option>
+                    <option value="voided">باطل‌شده</option>
+                  </select>
+                </label>
+                <label className="acc-inline-field">
+                  جست‌وجو
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="شماره یا شرح"
+                  />
+                </label>
+                <button type="button" className="btn-ghost" onClick={() => onNavigate('creditnote')}>
+                  <PackagePlus size={14} /> صدورِ اعلامیه
+                </button>
+              </>
             }
           />
           <div className="cc-summary">
-            <Metric icon={<TrendingUp size={14} />} label="جمعِ تعدیل" value={faAmount(total)} tone="in" />
-            <Metric icon={<Undo2 size={14} />} label="اعلامیه" value={faInt(live.length)} />
+            <Metric icon={<TrendingUp size={14} />} label="جمعِ ریالیِ فعال" value={faAmount(baseTotal)} tone="in" />
+            <Metric icon={<FileSpreadsheet size={14} />} label="فعال" value={faInt(live.length)} />
+            <Metric icon={<Ban size={14} />} label="باطل‌شده" value={faInt(rows.length - live.length)} />
           </div>
         </div>
       }
@@ -1268,7 +1341,7 @@ export function NoteListPage({ token }: { token: string }) {
           loading={list.loading}
           error={list.error}
           empty={rows.length === 0}
-          emptyText="در این بازه اعلامیه‌ای صادر نشده."
+          emptyText="با این فیلترها اعلامیه‌ای پیدا نشد. بازه یا طرف حساب را عوض کنید، یا از «صدورِ اعلامیه» یکی بسازید."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
@@ -1279,33 +1352,169 @@ export function NoteListPage({ token }: { token: string }) {
                   <th>بدهکار</th>
                   <th>بستانکار</th>
                   <th>مبلغ</th>
+                  <th>سند حسابداری</th>
                   <th>شرح</th>
+                  <th>وضعیت</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {pg.pageItems.map((n) => (
-                  <tr key={n.id} className={n.voided_at ? 'acc-row--void' : ''}>
-                    <td className="card-title" data-label="شماره">
-                      {fa(n.number ?? 0)}
-                    </td>
-                    <td data-label="تاریخ">{formatJalali(n.note_date)}</td>
-                    <td data-label="بدهکار">{noteSide(n, 'debit')}</td>
-                    <td data-label="بستانکار">{noteSide(n, 'credit')}</td>
-                    <td className="num" data-label="مبلغ">
-                      {faAmount(n.amount)}
-                    </td>
-                    <td className="card-wide" data-label="شرح">
-                      {n.reason || '—'}
-                    </td>
-                    <td className="card-actions">
-                      {!n.voided_at && (
-                        <button type="button" className="danger" onClick={() => void handleVoid(n)}>
-                          <Trash2 size={13} /> ابطال
+                  <Fragment key={n.id}>
+                    <tr className={n.voided_at ? 'acc-row--void' : ''}>
+                      <td className="card-title" data-label="شماره">
+                        {fa(n.number ?? 0)}
+                      </td>
+                      <td data-label="تاریخ">{formatJalali(n.note_date)}</td>
+                      <td data-label="بدهکار">{noteSide(n, 'debit')}</td>
+                      <td data-label="بستانکار">{noteSide(n, 'credit')}</td>
+                      <td className="num" data-label="مبلغ">
+                        {n.currency_code === 'IRR' ? (
+                          faAmount(n.base_amount)
+                        ) : (
+                          <>
+                            {faAmount(n.amount)} <span dir="ltr">{n.currency_code}</span>
+                            <span className="cdn-base">معادل {faAmount(n.base_amount)} ریال</span>
+                          </>
+                        )}
+                      </td>
+                      <td data-label="سند حسابداری">
+                        {n.journal_entry_number != null
+                          ? `${fa(n.journal_entry_number)}${n.journal_entry_date ? ` — ${formatJalali(n.journal_entry_date)}` : ''}`
+                          : '—'}
+                      </td>
+                      <td className="card-wide" data-label="شرح">
+                        {n.reason || '—'}
+                      </td>
+                      <td data-label="وضعیت">
+                        {n.voided_at ? (
+                          <>
+                            <span className="status-badge tone-default">باطل</span>
+                            <span className="cdn-void-note">
+                              {n.void_entry_number != null && `سندِ معکوس ${fa(n.void_entry_number)}`}
+                              {n.void_reason && ` — ${n.void_reason}`}
+                              {n.voided_by_name && ` (${n.voided_by_name})`}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="status-badge tone-success">فعال</span>
+                        )}
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" className="btn-ghost" onClick={() => setOpenId(openId === n.id ? null : n.id)}>
+                          <Eye size={13} /> {openId === n.id ? 'بستنِ ردیف‌ها' : 'ردیف‌ها'}
                         </button>
-                      )}
-                    </td>
-                  </tr>
+                        {n.lines.length > 0 && (
+                          <button type="button" className="btn-ghost" onClick={() => void duplicate(n)}>
+                            <Copy size={13} /> رونوشت
+                          </button>
+                        )}
+                        {!n.voided_at && n.lines.length > 0 && (
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => setAction({ id: n.id, mode: 'correct', reason: '', date: n.note_date })}
+                          >
+                            <PenLine size={13} /> اصلاح
+                          </button>
+                        )}
+                        {!n.voided_at && (
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => setAction({ id: n.id, mode: 'void', reason: '', date: n.note_date })}
+                          >
+                            <Trash2 size={13} /> ابطال
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {action?.id === n.id && (
+                      <tr>
+                        <td className="card-full" colSpan={NOTE_COLUMNS}>
+                          <div className="cdn-void">
+                            <p className="cdn-void-title">
+                              {action.mode === 'correct'
+                                ? `اصلاحِ اعلامیه‌ی ${fa(n.number ?? 0)}: اول با سندِ معکوس باطل می‌شود، بعد فرمِ صدور با همین ردیف‌ها باز می‌شود تا نسخه‌ی درست را ثبت کنید. سندِ ثبت‌شده ویرایش نمی‌شود.`
+                                : `ابطالِ اعلامیه‌ی ${fa(n.number ?? 0)}: یک سندِ معکوس زده می‌شود و اصل سرِ جایش می‌ماند.`}
+                            </p>
+                            <label>
+                              تاریخِ سندِ معکوس
+                              <JalaliDatePicker value={action.date} onChange={(d) => setAction({ ...action, date: d })} />
+                              <span className="field-hint">پیش‌فرض تاریخِ خودِ اعلامیه است؛ اگر آن دوره بسته شده، تاریخی در دوره‌ی باز بدهید.</span>
+                            </label>
+                            <label>
+                              علتِ ابطال
+                              <input
+                                type="text"
+                                value={action.reason}
+                                maxLength={300}
+                                onChange={(e) => setAction({ ...action, reason: e.target.value })}
+                              />
+                              <span className="field-hint">دستِ‌کم سه حرف — در سندِ معکوس و روی اعلامیه می‌ماند.</span>
+                            </label>
+                            <div className="cdn-void-actions">
+                              <button
+                                type="button"
+                                className="danger"
+                                disabled={busy || action.reason.trim().length < 3}
+                                onClick={() => void confirmAction(n)}
+                              >
+                                {action.mode === 'correct' ? 'ابطال و بازکردنِ فرمِ اصلاح' : 'ابطال'}
+                              </button>
+                              <button type="button" className="btn-ghost" onClick={() => setAction(null)}>
+                                انصراف
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {openId === n.id && (
+                      <tr>
+                        <td className="card-full" colSpan={NOTE_COLUMNS}>
+                          {n.lines.length === 0 ? (
+                            <p className="muted">این اعلامیه از شکلِ قدیمیِ تک‌سمتی است و ردیف ندارد.</p>
+                          ) : (
+                            <div className="table-scroll">
+                              <table className="cards-on-mobile acc-table cdn-lines">
+                                <thead>
+                                  <tr>
+                                    <th>ردیف</th>
+                                    <th>بدهکار</th>
+                                    <th>بستانکار</th>
+                                    <th>مبلغ</th>
+                                    <th>معادل ریالی</th>
+                                    <th>شرح</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {n.lines.map((l) => (
+                                    <tr key={l.id}>
+                                      <td className="card-title" data-label="ردیف">
+                                        ردیفِ {fa(l.seq)}
+                                      </td>
+                                      <td data-label="بدهکار">{lineSide(l, 'debit')}</td>
+                                      <td data-label="بستانکار">{lineSide(l, 'credit')}</td>
+                                      <td className="num" data-label="مبلغ">
+                                        {faAmount(l.amount)}
+                                      </td>
+                                      <td className="num" data-label="معادل ریالی">
+                                        {faAmount(l.base_amount)}
+                                      </td>
+                                      <td className="card-wide" data-label="شرح">
+                                        {l.description || '—'}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

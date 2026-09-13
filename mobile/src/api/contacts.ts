@@ -16,4 +16,8 @@ export const KIND_LABEL: Record<string, string> = {
   purchase_return: 'برگشت از خرید',
   receipt: 'دریافت',
   payment: 'پرداخت',
+  //: کلیدهای قانونیِ دیگرِ کارتِ حساب — بدونِ این‌ها ردیف با کلیدِ خام دیده می‌شد.
+  credit_debit_note: 'اعلامیه بدهکار/بستانکار',
+  check: 'چک',
+  opening: 'مانده اول دوره',
 }

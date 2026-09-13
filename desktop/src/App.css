@@ -10523,6 +10523,33 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .cdn-row > .btn-ghost { align-self: end; }
 .cdn-row > .btn-ghost.danger { border-color: var(--danger); color: var(--danger); }
 
+/* هر سمتِ ردیف یک ستونِ خودکفا: نوع، طرف حساب، معین، و پنلِ «اطلاعات حساب». */
+.cdn-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cdn-side-title { margin: 0; font-size: 0.85rem; font-weight: 700; }
+.cdn-side-info {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2, var(--bg));
+  font-size: 0.8rem;
+}
+.cdn-side-info > div { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.cdn-side-info dt { color: var(--muted); }
+.cdn-side-info dd { margin: 0; overflow-wrap: anywhere; }
+.cdn-row-amount { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cdn-row-amount > .btn-ghost.danger { align-self: start; border-color: var(--danger); color: var(--danger); }
+.cdn-origin { grid-column: 1 / -1; margin: 0; }
+.cdn-links { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.cdn-base, .cdn-void-note { display: block; font-size: 0.78rem; color: var(--muted); }
+.cdn-void { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 16px; align-items: start; }
+.cdn-void > * { min-width: 0; }
+.cdn-void-title, .cdn-void-actions { grid-column: 1 / -1; margin: 0; }
+.cdn-void-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 @media (max-width: 760px) {
   .cdn-row { grid-template-columns: 1fr; }
+  .cdn-void { grid-template-columns: 1fr; }
+  .cdn-links { justify-content: stretch; }
 }

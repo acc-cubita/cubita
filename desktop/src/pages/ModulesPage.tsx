@@ -7,7 +7,7 @@ import {
   type ModulesState,
   type MeResponse,
 } from '../api'
-import { NAV_GROUPS } from '../lib/navModel'
+import { NAV_GROUPS, uniqueNavItems } from '../lib/navModel'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 
@@ -100,7 +100,7 @@ export function ModulesPage({
   // پس آوردنشان در شمارش عددی می‌سازد که کاربر نمی‌تواند تغییرش دهد.
   const toggleable = useMemo(
     () =>
-      groups.flatMap((g) => g.items).filter((i) => kindOf(i.key) === 'toggle').map((i) => i.key),
+      uniqueNavItems(groups).filter((i) => kindOf(i.key) === 'toggle').map((i) => i.key),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groups, state],
   )

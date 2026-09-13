@@ -211,6 +211,11 @@ class ContactStatementLineOut(BaseModel):
     debit: Decimal  # بدهیِ شخص به ما را زیاد می‌کند
     credit: Decimal  # بدهیِ شخص به ما را کم می‌کند
     balance: Decimal  # ماندهٔ در حال اجرا؛ مثبت = شخص به ما بدهکار است
+    #: ردیابی — کارتِ حساب بن‌بست نیست: از ردیف به خودِ سند و به سندِ حسابداری‌اش
+    #: می‌شود رفت (فصلِ اعلامیه، §۲۲ §۲۳). مانده‌ی اول دوره هیچ‌کدام را ندارد.
+    source_id: UUID | None = None
+    entry_number: int | None = None
+    entry_date: date | None = None
 
 
 class ContactStatementOut(BaseModel):

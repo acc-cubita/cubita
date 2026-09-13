@@ -331,9 +331,14 @@ class NoteIn(BaseModel):
     note_date: date
     lines: list[NoteLineIn] = Field(min_length=1)
     reason: str = ""
-    currency_code: str = "IRR"
+    currency_code: str = Field(default="IRR", min_length=3, max_length=3)
     exchange_rate: Decimal = Field(default=Decimal(1), gt=0)
     invoice_id: UUID | None = None
+
+    @field_validator("currency_code")
+    @classmethod
+    def _upper(cls, v: str) -> str:
+        return v.strip().upper()
 
 
 class NoteLineOut(BaseModel):
@@ -349,7 +354,10 @@ class NoteLineOut(BaseModel):
     credit_account_id: UUID
     credit_account_code: str = ""
     credit_account_name: str = "—"
+    #: به ارزِ سند.
     amount: Decimal
+    #: معادلِ ریالی — همان عددی که در سندِ حسابداری نشسته.
+    base_amount: Decimal
     description: str
 
 
@@ -358,13 +366,23 @@ class NoteOut(_Named):
     number: int | None
     note_date: date
     amount: Decimal
+    base_amount: Decimal
     reason: str
     currency_code: str = "IRR"
     exchange_rate: Decimal = Decimal(1)
     lines: list[NoteLineOut] = []
     invoice_id: UUID | None
     journal_entry_id: UUID | None
+    #: شماره و تاریخِ سندِ حسابداری — تا فهرست و کارتِ حساب بن‌بست نباشند (§۲۲ §۲۳).
+    journal_entry_number: int | None = None
+    journal_entry_date: date | None = None
     voided_at: datetime | None
+    voided_by_name: str | None = None
+    void_reason: str = ""
+    #: سندِ معکوسِ ابطال — پیداشده با `reverses_entry_id`، نه ستونِ دومی روی اعلامیه.
+    void_entry_id: UUID | None = None
+    void_entry_number: int | None = None
+    void_entry_date: date | None = None
 
     #: میراثِ شکلِ تک‌سمتی. برای اعلامیه‌های پیش از مهاجرتِ ۰۱۲۷ پر است و برای
     #: تازه‌ها خالی — رابط از `lines` می‌خواند.
@@ -379,10 +397,35 @@ class NoteAccountOut(BaseModel):
     id: UUID
     code: str
     name: str
+    #: نقشِ سیستمی — فرم از همین می‌داند کدام دریافتنی است و کدام پرداختنی، نه از کد.
+    system_role: str | None = None
 
 
 class VoidNoteIn(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
+    #: تاریخِ سندِ معکوس. خالی = تاریخِ خودِ اعلامیه، همان پیش‌فرضِ بقیه‌ی ابطال‌ها؛
+    #: اگر آن دوره بسته باشد، کاربر تاریخی در دوره‌ی باز می‌دهد.
+    void_date: date | None = None
+
+
+class NoteDraftLineOut(BaseModel):
+    debit_contact_id: UUID | None
+    debit_account_id: UUID | None
+    credit_contact_id: UUID | None
+    credit_account_id: UUID | None
+    amount: Decimal
+    description: str
+
+
+class NoteDraftOut(BaseModel):
+    """پیش‌نویسِ «رونوشت» — **بدونِ** شماره، سند، ابطال و کلیدِ یکتاسازی (§۳۷)."""
+
+    reason: str
+    currency_code: str
+    exchange_rate: Decimal
+    lines: list[NoteDraftLineOut]
+    source_number: int | None
+    cleared_fields: list[str]
 
 
 # ──────────────────────── بستنِ فاکتور ───────────────────────

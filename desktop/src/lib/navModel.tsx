@@ -309,6 +309,11 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'purchases', label: 'خرید', icon: <PackagePlus size={18} /> },
       { key: 'inventory', label: 'انبار', icon: <Warehouse size={18} /> },
+      //: **همان صفحه‌ی گروهِ فروش، نه نسخه‌ی دوم.** اعلامیه سندِ مشترکِ طرف مقابل
+      //: است و تهاترِ تأمین‌کننده با تأمین‌کننده نباید پشتِ ماژولِ فروش پنهان
+      //: بماند (فصلِ اعلامیه، §۶). فهرست‌های تخت (جست‌وجو، فرمان) با
+      //: `uniqueNavItems` تکرارش را حذف می‌کنند.
+      { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} /> },
     ],
   },
   {
@@ -449,7 +454,10 @@ export const NAV_GROUPS: NavGroup[] = [
 //: صفحه‌هایی که خودشان کلیدِ ماژول نیستند ولی زیرِ چترِ یک ماژول گیت می‌شوند.
 //: بدونِ این نگاشت، خاموش‌کردنِ «حسابداری» در شخصی‌سازیِ پنل هجده ورودی را روشن
 //: می‌گذاشت — و بدتر، گرنت‌نداشتنِ ماژول هم جلویشان را نمی‌گرفت.
-const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
+//:
+//: مقدارِ آرایه یعنی «هر یک از این ماژول‌ها کافی است» — برای صفحه‌ای که واقعاً مالِ
+//: دو ماژول است.
+const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Object.fromEntries(
   (
     [
       'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
@@ -459,7 +467,7 @@ const PAGE_MODULE_KEY: Partial<Record<PageKey, string>> = Object.fromEntries(
       'entrylist', 'accountlist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
     ] as PageKey[]
   ).map((key) => [key, 'accounting']),
-) as Partial<Record<PageKey, string>>
+) as Partial<Record<PageKey, string | string[]>>
 
 //: هجده عملیاتِ «دریافت و پرداخت» + فهرستش، همگی زیرِ چترِ ماژولِ `banking`.
 for (const key of [
@@ -485,6 +493,11 @@ for (const key of [
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'sales'
 }
+
+//: اعلامیه‌ی بدهکار/بستانکار و دفترش مالِ فروش **یا** خرید‌اند: کسب‌وکاری که فقط
+//: خرید دارد هم تهاترِ تأمین‌کننده‌ها را لازم دارد.
+PAGE_MODULE_KEY.creditnote = ['sales', 'purchases']
+PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
 //: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
 PAGE_MODULE_KEY.analyticlist = 'accounting'
@@ -519,6 +532,20 @@ const MODULES_SETTINGS_ITEM: NavItem = {
   icon: <SlidersHorizontal size={18} />,
 }
 
+/** آیتم‌های همه‌ی گروه‌ها، **یک بار** هر صفحه.
+ *
+ *  صفحه‌ای که در دو گروه آمده (اعلامیه بدهکار/بستانکار در فروش و در خرید) در
+ *  فهرستِ تخت دو بار نمی‌آید — نه در نتیجه‌ی جست‌وجو، و نه به‌صورتِ کلیدِ تکراریِ React.
+ */
+export function uniqueNavItems(groups: NavGroup[], extra: NavItem[] = []): NavItem[] {
+  const seen = new Set<PageKey>()
+  return [...groups.flatMap((g) => g.items), ...extra].filter((i) => {
+    if (seen.has(i.key)) return false
+    seen.add(i.key)
+    return true
+  })
+}
+
 /** فهرستِ گروه‌ها و آیتم‌های ثانویه را با گیتِ نقش/نوعِ حساب و شخصی‌سازیِ ماژول می‌سازد.
  *  Sidebar و TopNav هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
 export function buildNav({
@@ -545,6 +572,7 @@ export function buildNav({
   const isVisible = (key: PageKey) => {
     if (!filterModules) return true
     const moduleKey = PAGE_MODULE_KEY[key]
+    if (Array.isArray(moduleKey)) return moduleKey.some((k) => visible.has(k))
     if (moduleKey) return visible.has(moduleKey)
     return !GATED_MODULE_KEYS.has(key) || visible.has(key)
   }

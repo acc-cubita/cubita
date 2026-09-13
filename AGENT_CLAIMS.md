@@ -34,6 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
@@ -103,6 +104,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Opus 5 | مهاجرت `0136` (شاخه‌ی `feat/credit-debit-notice`، پشتِ `0135`ِ PR #47)، `models/sales_ops.py`، `schemas/sales_ops.py`، `services/sales_ops.py`، `routers/sales_ops.py`، `deps.py`، `services/open_items.py`، `services/reports.py`، `schemas/reports.py`، `SalesOpsPages.tsx`، `SalesListPages.tsx`، `ContactStatementDrawer.tsx`، `navModel.tsx`، `TopNav.tsx`، `CommandPalette.tsx`، `ModulesPage.tsx`، `Dashboard.tsx`، `kit.tsx`، `HelpPage.tsx`، `App.css`، `api.ts`، `mobile/src/api/contacts.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «اعلامیه بدهکار و بستانکار» (نوبتِ دوم): ارزِ اعمال‌شده، گاردِ دوقاعده‌ای حساب، ابطالِ قفل‌دار از مسیرِ مشترک، رونوشت/اصلاح، دفترِ سمتِ سرور، ردیابیِ کارتِ حساب، مجوزِ `invoices`/`accounting`، دسترسی از خرید | ۱۴۰۵/۰۶/۲۲ |
 | Claude Opus 5 | مهاجرت `0135` (شاخه‌ی `feat/service-purchase-invoice`)، `models/invoices.py`، `models/purchase_deductions.py`، `schemas/purchase_deductions.py`، `services/purchase_deductions.py`، `routers/purchase_deductions.py`، `services/inventory.py`، `services/returns.py`، `services/warehouse_receipts.py`، `services/chart_codes.py`، `seed.py`، `printing.py`، `pdf_invoice.py`، `routers/invoices.py`، `ServicePurchaseTab.tsx`، `PurchaseDeductionTypesPanel.tsx`، `InvoiceList.tsx`، `PurchasesPage.tsx`، `Dashboard.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «فاکتور خرید خدمات»: نوعِ سند با سریِ شماره‌ی خودش، انواعِ کسر و کسوراتِ Snapshot، سندِ سه‌بدهی، حسابِ هزینه روی ردیف (باگِ برگشت)، مانده‌ی واقعی و میان‌برِ پرداخت، چاپ و رابط | ۱۴۰۵/۰۶/۲۲ |
 | Claude Opus 5 | مهاجرت `0134` (روی `feat/warehouse-issue-return`، پشتِ `0133` — ادعای `0129`–`0134` روی شاخه‌ی `chore/claim-0129-0134` برای master)، `models/issue_returns.py`، `services/issue_returns.py`، `routers/issue_returns.py`، `services/returns.py`، `services/warehouse_issues.py`، `voiding.py`، `printing.py`، `marketplace.py`، `IssueReturnsTab.tsx`، `InventoryPage.tsx`، `SalesListPages.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «برگشت خروج انبار»: سندِ مستقل با مبنای اجباری، بها و حساب از خروجِ مبدأ، جداشدنِ برگشتِ فیزیکی از فاکتور برگشتی (`stock_mode`)، دو باگِ برگشتِ فروش، چاپ و رابط | ۱۴۰۵/۰۶/۲۱ |
 | Claude Opus 5 | مهاجرت `0133` (روی `feat/warehouse-issue`، پشتِ `0132`ِ `feat/warehouse-receipt` — هیچ‌کدام هنوز روی master نیست)، `services/warehouse_issues.py`، `services/transfers.py`، `routers/warehouse_issues.py`، `routers/transfers.py`، `services/returns.py`، `voiding.py`، `printing.py`، `WarehouseIssuesTab.tsx`، `InventoryPage.tsx`، `salesInvoiceDraft.ts`، فرم و ویزاردِ انتقال، انتهای `api.ts`؛ آزادسازی `pytest` و پایگاه دادهٔ توسعه | فصلِ «خروج انبار»: خروجِ مستقیم (فروش/مصرف/سایر)، انتقال از موتورِ خودش با پنج گاردِ تازه، خروج ← فاکتور فروش، چاپِ مجوز، فهرستِ خروج‌ها، بهای برگشتِ فروش | ۱۴۰۵/۰۶/۲۱ |
