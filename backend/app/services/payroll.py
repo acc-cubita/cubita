@@ -26,6 +26,7 @@ from app.services import chart_codes as cc
 from app.services import payroll_loans
 from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
+from app.services.tax_tables import bracket_rows, resolve_tax_table
 
 # طبق قانون کار ایران: پایه‌ی ساعتی از تقسیم بر ۱۹۴ ساعت کاری استاندارد ماهانه و ضریب اضافه‌کاری ۱.۴ به‌دست می‌آید.
 STANDARD_MONTHLY_HOURS = Decimal("194")
@@ -47,14 +48,29 @@ def calc_insurance_shares(insurable_pay: Decimal, employee_rate: Decimal, employ
     return _round(insurable_pay * employee_rate), _round(insurable_pay * employer_rate)
 
 
+def _ascending(brackets: list[dict]) -> list[dict]:
+    """پلکان را صعودی می‌کند — گاردِ دومِ باگِ ترتیب.
+
+    اعتبارسنجیِ ورودی جلوی پلکانِ نامرتبِ *تازه* را می‌گیرد، ولی هر مستأجری که
+    پیش از آن یک فهرستِ نامرتب ذخیره کرده باشد همچنان مالیاتِ اشتباه می‌گرفت.
+    مرتب‌سازی این‌جا آن داده را هم درست می‌کند، بی‌آنکه چیزی را بازنویسی کند.
+
+    سقفِ `None` یعنی نامحدود، پس همیشه آخر می‌نشیند.
+    """
+    return sorted(
+        brackets,
+        key=lambda b: (b.get("up_to") is None, Decimal(str(b.get("up_to") or 0))),
+    )
+
+
 def calc_annual_tax(annual_taxable: Decimal, brackets: list[dict]) -> Decimal:
-    """محاسبه‌ی پلکانی مالیات سالانه. brackets صعودی و هر ردیف {"up_to": سقف تجمعی یا None, "rate": نرخ}."""
+    """محاسبه‌ی پلکانی مالیات سالانه. هر ردیف {"up_to": سقف تجمعی یا None, "rate": نرخ}."""
     if annual_taxable <= 0:
         return Decimal(0)
 
     tax = Decimal(0)
     lower = Decimal(0)
-    for bracket in brackets:
+    for bracket in _ascending(brackets):
         rate = Decimal(str(bracket["rate"]))
         up_to = bracket["up_to"]
         upper = Decimal(str(up_to)) if up_to is not None else None
@@ -399,6 +415,7 @@ def compute_payslip_amounts(
     prior_taxable: Decimal | None = None,
     prior_tax: Decimal | None = None,
     tax_percent: Decimal | None = None,
+    brackets: list[dict] | None = None,
 ) -> dict:
     """اعدادِ یک فیش.
 
@@ -428,7 +445,10 @@ def compute_payslip_amounts(
         prior_tax=prior_tax if prior_tax is not None else Decimal(0),
         month_index=month_index,
         annual_exemption=Decimal(settings.tax_exemption_annual),
-        brackets=settings.tax_brackets,
+        #: پله‌ها از **جدولِ مالیاتِ مؤثر** می‌آیند وقتی داده شده باشند. اگر نه،
+        #: همان ستونِ `payroll_settings` — مسیرِ میراثی، برای فراخوانی‌هایی که
+        #: جدول ندارند.
+        brackets=brackets if brackets is not None else settings.tax_brackets,
         tax_percent=tax_percent if tax_percent is not None else Decimal(100),
     )
 
@@ -516,15 +536,27 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             continue  # کارمندی بدون حکم حقوقی فعال، از این دوره صرف‌نظر می‌شود
 
         prior = _year_to_date(db, employee.id, period)
+
+        #: **کدام قاعده؟** جدولِ مؤثرِ همین تاریخ، برای گروهِ مالیاتیِ همین حکم.
+        #: اگر جدولی نبود (داده‌ی پیش از ۰۱۳۷، یا جدولِ حذف‌شده) به ستونِ
+        #: `payroll_settings` و ضربِ درصدِ گروه برمی‌گردد — رفتارِ دیروز، تا
+        #: هیچ مستأجری بی‌محاسبه نماند.
+        table = resolve_tax_table(
+            db, on=as_of, tax_group_id=getattr(contract, "tax_group_id", None), calculation_type="salary"
+        )
         amounts = compute_payslip_amounts(
             contract,
             attendance_by_employee.get(employee.id),
             settings,
+            brackets=bracket_rows(table) if table is not None else None,
             #: ماهِ شمسیِ دوره همان شماره‌ی ماه در سالِ مالی است (۱ = فروردین).
             month_index=period.month,
             prior_taxable=prior["taxable"],
             prior_tax=prior["tax"],
-            tax_percent=_tax_percent(db, contract),
+            #: **درصدِ گروه فقط در مسیرِ میراثی ضرب می‌شود.** جدولِ گروه نرخ‌هایش
+            #: را از قبل دارد (مهاجرتِ ۰۱۳۷ ضرب را یک‌بار در داده منجمد کرد)، و
+            #: ضربِ دوباره یعنی «مناطق محروم» ۲۵٪ بگیرد به‌جای ۵۰٪.
+            tax_percent=Decimal(100) if table is not None else _tax_percent(db, contract),
         )
 
         #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
@@ -561,6 +593,9 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             #: انجام شد. خواندنش بعداً یعنی خواندنِ مِسترِ *امروز* — و آن‌وقت
             #: بازتولیدِ فایلِ بیمه‌ی یک دوره‌ی بسته عددِ دیگری می‌دهد.
             **_branch_snapshot(db, contract),
+            #: **کدام قاعده این مالیات را ساخت.** بی این پیوند، `tax_amount` یک
+            #: عددِ بی‌توضیح است و «چرا این‌قدر؟» جوابی ندارد.
+            tax_table_id=table.id if table is not None else None,
             **amounts,
         )
         payslip.lines = [PayslipLine(**row) for row in breakdown]

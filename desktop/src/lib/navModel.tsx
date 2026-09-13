@@ -104,6 +104,7 @@ export type PageKey =
   | 'jobtitle'
   | 'payrollfactors'
   | 'payrolltaxgroups'
+  | 'taxtables'
   | 'loantype'
   | 'employeeloans'
   | 'settlement'
@@ -392,6 +393,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'jobtitle', label: 'شغل جدید', icon: <Briefcase size={18} /> },
       { key: 'payrollfactors', label: 'عوامل حقوق و مزایا', icon: <SlidersHorizontal size={18} /> },
       { key: 'payrolltaxgroups', label: 'گروه مالیاتی و شعب', icon: <Percent size={18} /> },
+      { key: 'taxtables', label: 'جداول مالیات', icon: <Percent size={18} /> },
       { key: 'loantype', label: 'نوع وام جدید', icon: <Banknote size={18} /> },
       { key: 'employeeloans', label: 'تقسیط — وام‌های پرسنلی', icon: <HandCoins size={18} /> },
       { key: 'settlement', label: 'تسویه حساب', icon: <Undo2 size={18} /> },

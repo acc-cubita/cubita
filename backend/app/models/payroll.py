@@ -99,6 +99,13 @@ BRANCH_KIND_LABELS = {
 #:
 #: **و هنوز مصرف نمی‌شود:** موتورِ مالیاتِ امروز تعدیلِ تجمیعی انجام می‌دهد و این
 #: ستون را نمی‌خواند. داده‌ی ثبتِ قانونی است، نه سوییچِ محاسبه.
+#: هدفِ محاسبه‌ی یک جدولِ مالیات. فقط دو مقدارِ **دیده‌شده** — «حقوق» و «عیدی» —
+#: و قید این‌جاست تا هدفی که موتوری برایش وجود ندارد وارد پایگاه داده نشود.
+#: افزودنِ هدفِ سوم یک مهاجرتِ یک‌خطی است؛ ساختارِ جدول هیچ‌جا «دقیقاً دو» را فرض
+#: نمی‌کند و همین مهم است.
+TAX_CALC_PURPOSES = ("salary", "eidi")
+TAX_CALC_PURPOSE_LABELS = {"salary": "حقوق", "eidi": "عیدی"}
+
 TAX_CALC_METHODS = ("monthly", "annual", "none")
 TAX_CALC_METHOD_LABELS = {
     "monthly": "تعدیل ماهانه",
@@ -320,6 +327,18 @@ class Payslip(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     tax_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     tax_branch_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
+    #: **کدام قاعده این مالیات را ساخت.**
+    #:
+    #: `tax_amount` یک عدد بود و بس. با این پیوند می‌شود پرسید «مالیاتِ مرداد از
+    #: کدام جدول آمد؟» و جواب گرفت — و تفکیکِ پله‌به‌پله از همین‌جا بازسازی
+    #: می‌شود (`tax_breakdown`)، بی‌آنکه چیزی اضافه ذخیره شود.
+    #:
+    #: `RESTRICT` روی جدول: جدولی که فیشی به آن استناد کرده حذف‌شدنی نیست.
+    #: `NULL` = فیشِ پیش از مهاجرتِ ۰۱۳۷.
+    tax_table_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tax_tables.id", ondelete="RESTRICT"), nullable=True
+    )
+
     #: تفکیکِ عامل‌به‌عاملِ همین فیش. **ستون‌های تجمیعیِ بالا حقیقتِ فیش‌اند** و این
     #: ردیف‌ها توضیحشان؛ سرویس هنگامِ صدور هر دو را با هم می‌نویسد و تستی جمعشان
     #: را مقابلِ هم می‌گذارد.
@@ -507,6 +526,109 @@ class PayrollTaxGroup(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
     percent: Mapped[float] = mapped_column(Numeric(5, 2), default=100, server_default="100")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class TaxTable(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """جدولِ مالیاتِ حقوق: یک قاعده‌ی قانونیِ تاریخ‌دار، نه «نرخِ جاری».
+
+    تا امروز پلکانِ مالیات یک ستونِ JSONB روی `PayrollSettings` بود، یکتا روی
+    `(مستأجر، سال)`. یعنی یک بُعد داشت — سال — در حالی که قاعده‌ی واقعی سه بُعد
+    دارد:
+
+        (تاریخِ اجرا، گروهِ مالیاتی، نوعِ محاسبه)  →  پلکان
+
+    و این سه هم‌زمان لازم‌اند: در یک سال، «عادی» و «مناطق محروم» دو **جدولِ
+    مستقل** دارند، و «حقوق» و «عیدی» هم دو جدولِ مستقلِ دیگر.
+
+    **چرا تاریخِ اجرا و نه سال.** قانون لزوماً اولِ فروردین عوض نمی‌شود. جدولِ
+    مؤثر آخرین جدولی است که `effective_from` آن از تاریخِ محاسبه نگذشته — و
+    هرگز از روی *عنوان* پیدا نمی‌شود. عنوان فقط نمایشی است.
+
+    **جدولِ تازه جای قبلی را نمی‌گیرد.** سالِ تازه یعنی رکوردِ تازه؛ جدول‌های
+    سال‌های قبل می‌مانند تا محاسبه‌ی گذشته بازتولیدپذیر بماند.
+
+    **شعبه این‌جا نیست، و عمداً.** «نحوه محاسبه مالیات» (تعدیل ماهانه/سالانه)
+    روی شعبه می‌نشیند و می‌گوید *چطور* تعدیل شود؛ این جدول می‌گوید *چه نرخی* روی
+    *چه پایه‌ای*. یک جدول را چند شعبه می‌توانند استفاده کنند.
+    """
+
+    __tablename__ = "tax_tables"
+    __table_args__ = (
+        CheckConstraint(
+            f"calculation_type IN {TAX_CALC_PURPOSES}", name="ck_tax_tables_calculation_type"
+        ),
+        #: **یکتاییِ قاعده، نه یکتاییِ عنوان.** دو جدولِ هم‌زمان با همان گروه و
+        #: همان نوعِ محاسبه، محاسبه را مبهم می‌کند و حل‌کننده باید بی‌صدا یکی را
+        #: انتخاب کند — که همان چیزی است که نباید بشود.
+        #:
+        #: `COALESCE` چون «بی‌گروه» خودش یک حالتِ معتبر است: جدولِ پیش‌فرضی که
+        #: برای حکم‌های بدونِ گروهِ مالیاتی به کار می‌رود.
+        Index(
+            "uq_tax_tables_scope",
+            "tenant_id",
+            "effective_from",
+            "calculation_type",
+            text("COALESCE(tax_group_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
+        ),
+    )
+
+    #: عنوان و عنوانِ دوم — **فقط نمایشی**. حل‌کننده هرگز متنشان را نمی‌خواند.
+    title: Mapped[str] = mapped_column(String(200))
+    title2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+    #: تاریخِ شروعِ اعتبار. تاریخِ پایان عمداً ستون ندارد: از جدولِ بعدیِ همان
+    #: دامنه مشتق می‌شود، و دو منبع برای یک بازه بالاخره از هم عقب می‌مانند.
+    effective_from: Mapped[date_] = mapped_column(Date, index=True)
+
+    #: `NULL` یعنی **جدولِ پیش‌فرض** — برای حکم‌هایی که گروهِ مالیاتی ندارند.
+    tax_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_tax_groups.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    tax_group: Mapped["PayrollTaxGroup | None"] = relationship(lazy="joined")
+
+    #: هدفِ محاسبه: حقوقِ ماهانه یا عیدی. **جدولِ حقوق برای عیدی به کار نمی‌رود**
+    #: — پله‌ها و آستانه‌هایشان یکی نیستند.
+    calculation_type: Mapped[str] = mapped_column(String(20), default="salary", server_default="salary")
+
+    brackets: Mapped[list["TaxTableBracket"]] = relationship(
+        back_populates="table", cascade="all, delete-orphan", order_by="TaxTableBracket.seq"
+    )
+
+
+class TaxTableBracket(TenantMixin, UUIDPKMixin, Base):
+    """یک پله‌ی تصاعدیِ جدولِ مالیات.
+
+    **مدلِ «سقفِ تجمعی» و نه «از/تا»** — تصمیمی که از پیاده‌سازیِ قبلی می‌آید و
+    عمداً حفظ شد: با سقفِ تجمعی، مرزِ پایینِ هر پله سقفِ پله‌ی قبل است، پس
+    **شکاف و همپوشانیِ پله‌ها ساختاراً ناممکن‌اند**. با `from/to`ِ آزاد هر دو
+    ممکن‌اند و باید با اعتبارسنجی جلویشان گرفته شود؛ این‌جا موضوعیت ندارند.
+
+    «مبلغ جزء» و «مبلغ کل» ستون ندارند: هر دو از سقف و نرخ **مشتق** می‌شوند، و
+    ذخیره‌شان یعنی دو حقیقت که با ویرایشِ یک نرخ از هم جدا می‌افتند.
+    """
+
+    __tablename__ = "tax_table_brackets"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "table_id", "seq", name="uq_tax_table_brackets_seq"),
+        CheckConstraint("rate >= 0 AND rate <= 1", name="ck_tax_table_brackets_rate"),
+        CheckConstraint("up_to IS NULL OR up_to > 0", name="ck_tax_table_brackets_up_to"),
+    )
+
+    table_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tax_tables.id", ondelete="CASCADE"), index=True
+    )
+    #: ترتیبِ نمایش. **مرجعِ محاسبه نیست** — موتور از روی `up_to` مرتب می‌کند، تا
+    #: یک ردیفِ جابه‌جا در رابط مالیات را عوض نکند.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: سقفِ تجمعیِ سالانه. `NULL` یعنی نامحدود — و **فقط ردیفِ آخر**.
+    #: عددِ جادوییِ «۹۹٬۹۹۹٬۹۹۹٬۹۹۹» عمداً استفاده نشد.
+    up_to: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    #: نرخ به‌صورتِ کسر (۰٫۰۷۵ = ۷٫۵٪). شش رقمِ اعشار، چون نرخِ اعشاری واقعی است
+    #: و `Numeric` — نه `float` — چون این یک محاسبه‌ی مالیِ قانونی است.
+    rate: Mapped[float] = mapped_column(Numeric(9, 6), default=0, server_default="0")
+
+    table: Mapped["TaxTable"] = relationship(back_populates="brackets")
 
 
 class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
