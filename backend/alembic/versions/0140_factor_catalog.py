@@ -49,6 +49,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.migration_utils import rls_disabled
+
 revision = "0140"
 down_revision = "0139"
 branch_labels = None
@@ -67,15 +69,18 @@ def upgrade() -> None:
     #: `(اولویت، نام)` است و با اولویتِ یکسان نام تعیین‌کننده می‌شود.
 
     for side in ("expense", "payable"):
-        op.add_column(
-            "payroll_factors",
-            sa.Column(
-                f"{side}_account_id",
-                UUID(as_uuid=True),
-                sa.ForeignKey("accounts.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
-        )
+        #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+        #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+        with rls_disabled(op.get_bind(), ("payroll_factors", "accounts")):
+            op.add_column(
+                "payroll_factors",
+                sa.Column(
+                    f"{side}_account_id",
+                    UUID(as_uuid=True),
+                    sa.ForeignKey("accounts.id", ondelete="SET NULL"),
+                    nullable=True,
+                ),
+            )
         op.add_column(
             "payroll_factors",
             sa.Column(f"{side}_detail_class", sa.String(20), nullable=False, server_default=""),

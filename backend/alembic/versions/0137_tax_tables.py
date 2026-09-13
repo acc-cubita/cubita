@@ -75,6 +75,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.migration_utils import rls_disabled
 from app.tenancy import policy_name
 
 revision: str = "0137"
@@ -152,9 +153,12 @@ def upgrade() -> None:
     _enable_rls("tax_table_brackets")
 
     op.add_column("payslips", sa.Column("tax_table_id", UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key(
-        "fk_payslips_tax_table", "payslips", "tax_tables", ["tax_table_id"], ["id"], ondelete="RESTRICT"
-    )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), ("payslips", "tax_tables")):
+        op.create_foreign_key(
+            "fk_payslips_tax_table", "payslips", "tax_tables", ["tax_table_id"], ["id"], ondelete="RESTRICT"
+        )
 
     _migrate_existing_brackets()
 
