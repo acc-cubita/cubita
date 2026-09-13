@@ -31,6 +31,7 @@ from app.schemas.invoices import PurchaseInvoiceIn, SalesInvoiceIn
 from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import pricing
+from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
@@ -871,6 +872,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for move in stock_moves:
         move.source_id = invoice.id
         db.add(move)
+    valuation.settle_posting(db, stock_moves)
 
     # یک بارِ ورودی به‌ازای هر ردیفِ کالا (نه خدمت). شماره‌ی بار خودکار = P{شماره‌فاکتور}-{ردیف}؛
     # اپراتور بعداً می‌تواند سریالِ کارتن و کسری/معیوب را روی همین بار ثبت کند.
@@ -983,7 +985,8 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
                 f"موجودی «{item.name}» برای این میزان کسری کافی نیست (موجود: {available})",
             )
 
-    unit_cost = item.average_cost
+    #: تعدیلِ پیش‌تاریخ با میانگینِ همان روز — نه میانگینِ امروز (فصلِ قیمت‌گذاری).
+    unit_cost = valuation.cost_for_posting(db, item, data.adjustment_date)
     amount = abs(data.qty_diff) * unit_cost
 
     # کسری: بدهکار حساب مغایرت انبار (هزینه)، بستانکار موجودی کالا. اضافی: برعکس (کاهش هزینه‌ی مغایرت).
@@ -1025,16 +1028,15 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         created_by_id=user.id,
     )
     db.add(adjustment)
-    db.add(
-        StockLedger(
-            item_id=data.item_id,
-            warehouse_id=data.warehouse_id,
-            qty=data.qty_diff,
-            unit_cost=unit_cost,
-            entry_date=data.adjustment_date,
-            source_type="adjustment",
-        )
+    move = StockLedger(
+        item_id=data.item_id,
+        warehouse_id=data.warehouse_id,
+        qty=data.qty_diff,
+        unit_cost=unit_cost,
+        entry_date=data.adjustment_date,
+        source_type="adjustment",
     )
-    db.flush()
+    db.add(move)
+    valuation.settle_posting(db, [move])
     db.refresh(adjustment)
     return adjustment

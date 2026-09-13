@@ -45,6 +45,7 @@ from app.schemas.issue_returns import IssueReturnIn
 from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import units
+from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
 from app.services.inventory import get_total_stock_qty, lock_items
@@ -53,7 +54,6 @@ from app.services.period_close import assert_period_open
 from app.services.voiding import (
     _compensating_moves,
     _guard_stock_stays_valid,
-    recompute_average_cost,
     reverse_journal_entry,
 )
 from app.services.warehouse_issues import _secondary, _user_label, returned_by_issue_line
@@ -261,6 +261,7 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
     debit_text, credit_text = _JOURNAL_TEXT[ret.return_type]
     cogs_id: UUID | None = None
     debits: dict[UUID | None, Decimal] = defaultdict(Decimal)
+    moves: list[StockLedger] = []
     credits: dict[tuple[UUID, UUID | None], Decimal] = defaultdict(Decimal)
 
     for seq, row in enumerate(rows, start=1):
@@ -292,10 +293,12 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
             description=row.description,
         )
         ret.lines.append(line)
-        db.add(StockLedger(
+        move = StockLedger(
             item_id=item.id, warehouse_id=ret.warehouse_id, qty=row.qty, unit_cost=unit_cost,
             entry_date=ret.return_date, source_type=SOURCE_TYPE, source_id=ret.id,
-        ))
+        )
+        db.add(move)
+        moves.append(move)
 
         qty_before, average = running[item.id]
         qty_after = qty_before + row.qty
@@ -309,6 +312,7 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
 
     for item_id, (_, average) in running.items():
         fresh[item_id].average_cost = average
+    valuation.settle_posting(db, moves)
 
     total = sum(debits.values(), Decimal(0))
     if total > 0:
@@ -565,6 +569,8 @@ def void_issue_return(
     lock_items(db, item_ids)
     #: کالای برگشتی ممکن است دوباره فروخته یا مصرف شده باشد؛ ابطال موجودی را منفی نکند.
     _guard_stock_stays_valid(db, moves)
+    #: همان گاردِ خطِ زمانِ هر ابطالِ ورود.
+    valuation.guard_void(db, (SOURCE_TYPE,), ret.id)
 
     entry = db.get(JournalEntry, ret.journal_entry_id) if ret.journal_entry_id else None
     if entry is not None:
@@ -580,11 +586,7 @@ def void_issue_return(
     ret.void_reason = reason.strip()
     db.flush()
     #: پس از علامتِ ابطال — بازپخش حرکتِ اسنادِ باطل را کنار می‌گذارد.
-    for item_id in item_ids:
-        item = db.get(Item, item_id)
-        if item is not None:
-            recompute_average_cost(db, item)
-    db.flush()
+    valuation.settle_void(db, item_ids)
     return ret
 
 

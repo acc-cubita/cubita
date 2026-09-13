@@ -44,6 +44,7 @@ from app.services.inventory import (
     vat_receivable_account,
 )
 from app.services.period_close import assert_period_open
+from app.services import valuation
 
 
 @dataclass
@@ -591,6 +592,7 @@ def post_sales_return(
         db.add(move)
 
     db.flush()
+    valuation.settle_posting(db, stock_moves)
     if not inline:
         if physical is None:
             from app.services.sales_posting import posts_immediately
@@ -1142,6 +1144,9 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         db.add(move)
 
     db.flush()
+    #: برگشتِ پیش‌تاریخ نباید گذشته را منفی کند؛ و میانگین از بازپخش — که حالا همان
+    #: خروجِ با بهای تمام‌شده‌ی بالا را می‌شناسد.
+    valuation.settle_posting(db, stock_moves)
     db.refresh(purchase_return)
     return purchase_return
 

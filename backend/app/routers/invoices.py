@@ -365,6 +365,13 @@ def create_sales_invoice(
     #:
     #: مسیر یکی است در هر دو حالت؛ فقط خودکار بودنِ دو گام عوض می‌شود.
     immediate = sales_posting.posts_immediately(db)
+    if x_cubita_offline_replay:
+        from app.services import valuation
+
+        #: همان استدلالِ سقفِ اعتبار برای گاردِ خطِ زمانِ موجودی: فروشِ آفلاینِ دیروز
+        #: وقتی همگام می‌شود که خریدِ امروز پیش از آن ثبت شده. گاردِ موجودیِ امروز
+        #: سر جایش است؛ اثرِ ترتیب در «ارزش‌گذاریِ منقضی» دیده می‌شود.
+        db.info[valuation.LENIENT_TIMELINE] = True
     invoice = idempotent(
         db,
         request,

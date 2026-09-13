@@ -32,6 +32,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { KardexSummary, KardexTable } from './KardexTable'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
 
 const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
@@ -75,8 +76,9 @@ type ReportKind =
 type PeriodPreset = 'all' | 'month' | 'quarter' | 'year' | 'custom'
 
 // گزارش‌هایی که «به تاریخِ مشخص» هستند (نه بازه‌ای) — بازه‌ی تاریخ برایشان بی‌معناست و
-// فقط تاریخِ پایان (as_of) اهمیت دارد؛ توضیحِ کنارشان هم متفاوت است.
-const POINT_IN_TIME: ReportKind[] = ['balance-sheet', 'inventory', 'receivable-aging', 'payable-aging']
+// فقط تاریخِ پایان (as_of) اهمیت دارد. «ارزش موجودی انبار» از این فهرست بیرون آمد:
+// حالا مانده‌ی اول، ورود و خروجِ بازه را هم دارد.
+const POINT_IN_TIME: ReportKind[] = ['balance-sheet', 'receivable-aging', 'payable-aging']
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -158,7 +160,7 @@ export function Reports({ token }: { token: string }) {
         case 'cost-center': setCostCenterReport(await fetchCostCenterReport(token, from, to)); break
         case 'receivable-aging': setAging(await fetchAging(token, 'receivable', asOf)); break
         case 'payable-aging': setAging(await fetchAging(token, 'payable', asOf)); break
-        case 'inventory': setInventory(await fetchInventoryReport(token, asOf)); break
+        case 'inventory': setInventory(await fetchInventoryReport(token, to, from)); break
         case 'kardex': if (kardexItemId) setKardex(await fetchKardex(token, kardexItemId, from, to)); break
         case 'contact-statement': if (statementContactId) setContactStatement(await fetchContactStatement(token, statementContactId, from, to)); break
         case 'seasonal': break // فصلی سال/فصلِ خودش را دارد
@@ -269,16 +271,23 @@ export function Reports({ token }: { token: string }) {
       case 'inventory':
         return inventory && {
           name: 'ارزش-موجودی-انبار',
-          headers: ['کد', 'کالا', 'واحد', 'موجودی', 'بهای واحد', 'ارزش'],
-          rows: inventory.rows.map((r) => [r.sku, r.name, r.unit, r.qty_on_hand, r.unit_cost, r.stock_value]),
+          headers: ['کد', 'کالا', 'واحد', 'اول دوره', 'ارزش اول دوره', 'ورود', 'ارزش ورود', 'خروج', 'ارزش خروج', 'موجودی', 'بهای میانگین', 'ارزش', 'منقضی از'],
+          rows: inventory.rows.map((r) => [
+            r.sku, r.name, r.unit, r.opening_qty, r.opening_value, r.in_qty, r.in_value,
+            r.out_qty, r.out_value, r.qty_on_hand, r.unit_cost, r.stock_value,
+            r.stale_from ? formatJalali(r.stale_from) : '',
+          ]),
         }
       case 'kardex':
         return kardex && {
           name: `کاردکس-${kardex.item_sku}`,
-          headers: ['تاریخ', 'شرح', 'ورود', 'خروج', 'بهای واحد', 'موجودی'],
+          headers: ['تاریخ', 'شرح', 'شماره', 'ورود', 'خروج', 'بهای واحد', 'بهای سند', 'مبلغ ورود', 'مبلغ خروج', 'موجودی', 'ارزش مانده', 'میانگین'],
           rows: [
-            ['', 'موجودی ابتدای دوره', '', '', '', kardex.opening_qty],
-            ...kardex.lines.map((l) => [formatJalali(l.entry_date), l.source_label, l.qty_in, l.qty_out, l.unit_cost, l.balance_qty] as (string | number)[]),
+            ['', 'موجودی ابتدای دوره', '', '', '', '', '', '', '', kardex.opening_qty, kardex.opening_value, ''],
+            ...kardex.lines.map((l) => [
+              formatJalali(l.entry_date), l.source_label, l.source_number ?? '', l.qty_in, l.qty_out,
+              l.unit_cost, l.recorded_unit_cost, l.value_in, l.value_out, l.balance_qty, l.balance_value, l.average_cost,
+            ] as (string | number)[]),
           ],
         }
       case 'seasonal':
@@ -409,40 +418,8 @@ export function Reports({ token }: { token: string }) {
           <h3>
             {kardex.item_sku} — {kardex.item_name} ({kardex.unit})
           </h3>
-          <div className="report-kpis">
-            <div className="report-kpi"><span>موجودی ابتدای دوره</span><strong>{fa(kardex.opening_qty)}</strong></div>
-            <div className="report-kpi"><span>جمع ورود</span><strong className="pos-in">{fa(kardex.total_in)}</strong></div>
-            <div className="report-kpi"><span>جمع خروج</span><strong className="pos-out">{fa(kardex.total_out)}</strong></div>
-            <div className="report-kpi"><span>موجودی پایان دوره</span><strong>{fa(kardex.closing_qty)}</strong></div>
-          </div>
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-kardex-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>تاریخ</th>
-                    <th>شرح</th>
-                    <th>ورود</th>
-                    <th>خروج</th>
-                    <th>بهای واحد</th>
-                    <th>موجودی</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kardex.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
-                      <td className="entity-name" data-label="شرح">{l.source_label}</td>
-                      <td data-label="ورود" className="pos-in">{Number(l.qty_in) ? fa(l.qty_in) : '—'}</td>
-                      <td data-label="خروج" className="pos-out">{Number(l.qty_out) ? fa(l.qty_out) : '—'}</td>
-                      <td data-label="بهای واحد" className="money-cell">{fa(l.unit_cost)}</td>
-                      <td data-label="موجودی" className="money-cell"><strong>{fa(l.balance_qty)}</strong></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <KardexSummary data={kardex} />
+          <KardexTable data={kardex} className="rep-kardex-table" />
         </div>
       )}
 
@@ -839,10 +816,16 @@ export function Reports({ token }: { token: string }) {
       {active === 'inventory' && inventory && (
         <div>
           <p className="hint">
-            ارزش ریالیِ موجودیِ هر کالا = تعداد موجود × بهای میانگین موزون. جمعِ کل باید با ماندهٔ حسابِ «موجودی کالا» بخواند.
+            مانده‌ی اولِ دوره، ورود، خروج و مانده‌ی پایانِ هر کالا — به تعداد و ریال. ارزش از بازپخشِ دفترِ انبار به ترتیبِ تاریخ می‌آید، پس «تا تاریخ» ارزشِ همان روز است، نه تعدادِ آن روز ضربِ میانگینِ امروز. تطبیقش با مانده‌ی «موجودی کالا» در «بررسی یکپارچگی» است.
           </p>
+          {inventory.stale_item_count > 0 && (
+            <p className="hint">
+              <span className="status-badge tone-warning">منقضی</span>{' '}
+              {`ارزش‌گذاریِ ${fa(inventory.stale_item_count)} کالا منقضی است: سندی بعداً با تاریخِ گذشته ثبت یا باطل شده و بهای بعضی خروج‌ها با میانگینِ همان تاریخ نمی‌خواند. کاردکسِ همان کالا حرکت‌ها را نشان می‌دهد.`}
+            </p>
+          )}
           {inventory.rows.length === 0 ? (
-            <p className="hint">موجودی کالایی برای نمایش نیست.</p>
+            <p className="hint">در این بازه کالایی مانده یا گردش ندارد.</p>
           ) : (
             <div className="entity-table-wrap">
               <div className="table-scroll">
@@ -852,8 +835,14 @@ export function Reports({ token }: { token: string }) {
                       <th>کد</th>
                       <th>کالا</th>
                       <th>واحد</th>
+                      <th>اول دوره</th>
+                      <th>ارزش اول دوره</th>
+                      <th>ورود</th>
+                      <th>ارزش ورود</th>
+                      <th>خروج</th>
+                      <th>ارزش خروج</th>
                       <th>موجودی</th>
-                      <th>بهای واحد</th>
+                      <th>بهای میانگین</th>
                       <th>ارزش</th>
                     </tr>
                   </thead>
@@ -861,19 +850,34 @@ export function Reports({ token }: { token: string }) {
                     {inventory.rows.map((r) => (
                       <tr key={r.item_id}>
                         <td data-label="کد">{r.sku}</td>
-                        <td className="entity-name" data-label="کالا">{r.name}</td>
+                        <td className="entity-name" data-label="کالا">
+                          {r.name}
+                          {r.stale_from && <span className="status-badge tone-warning">منقضی از {formatJalali(r.stale_from)}</span>}
+                        </td>
                         <td data-label="واحد">{r.unit}</td>
+                        <td data-label="اول دوره">{fa(r.opening_qty)}</td>
+                        <td data-label="ارزش اول دوره" className="money-cell">{fa(r.opening_value)}</td>
+                        <td data-label="ورود" className="pos-in">{fa(r.in_qty)}</td>
+                        <td data-label="ارزش ورود" className="money-cell">{fa(r.in_value)}</td>
+                        <td data-label="خروج" className="pos-out">{fa(r.out_qty)}</td>
+                        <td data-label="ارزش خروج" className="money-cell">{fa(r.out_value)}</td>
                         <td data-label="موجودی">{Number(r.qty_on_hand) < 0 ? <span className="status-badge tone-danger">{fa(r.qty_on_hand)}</span> : fa(r.qty_on_hand)}</td>
-                        <td data-label="بهای واحد" className="money-cell">{fa(r.unit_cost)}</td>
+                        <td data-label="بهای میانگین" className="money-cell">{fa(Math.round(Number(r.unit_cost)))}</td>
                         <td data-label="ارزش" className="money-cell"><strong>{fa(r.stock_value)}</strong></td>
                       </tr>
                     ))}
                     <tr className="rep-foot">
-                      <td className="entity-name" data-label="کد">جمع ارزش موجودی ({fa(inventory.item_count)} قلم)</td>
-                      <td data-label="کد"></td>
+                      <td className="entity-name" data-label="کد">جمع ({fa(inventory.item_count)} قلم)</td>
+                      <td data-label="کالا"></td>
                       <td data-label="واحد"></td>
+                      <td data-label="اول دوره"></td>
+                      <td data-label="ارزش اول دوره" className="money-cell">{fa(inventory.total_opening_value)}</td>
+                      <td data-label="ورود"></td>
+                      <td data-label="ارزش ورود" className="money-cell">{fa(inventory.total_in_value)}</td>
+                      <td data-label="خروج"></td>
+                      <td data-label="ارزش خروج" className="money-cell">{fa(inventory.total_out_value)}</td>
                       <td data-label="موجودی"></td>
-                      <td data-label="بهای واحد"></td>
+                      <td data-label="بهای میانگین"></td>
                       <td data-label="ارزش" className="invoice-total">{fa(inventory.total_value)}</td>
                     </tr>
                   </tbody>

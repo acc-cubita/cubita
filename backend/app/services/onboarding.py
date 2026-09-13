@@ -179,6 +179,7 @@ def create_opening_entry(db: Session, data: OpeningBalancesIn, user: User) -> Jo
 
     # موجودیِ اول دوره → حرکتِ انبار + میانگینِ بها + ارزشِ ریالی
     inventory_value = Decimal(0)
+    opening_moves: list[StockLedger] = []
     for s in data.stock:
         item = db.get(Item, s.item_id)
         if item is None:
@@ -191,10 +192,17 @@ def create_opening_entry(db: Session, data: OpeningBalancesIn, user: User) -> Jo
         new_qty = existing_qty + s.qty
         if new_qty > 0:
             item.average_cost = ((existing_qty * Decimal(item.average_cost)) + line_value) / new_qty
-        db.add(StockLedger(
+        opening_moves.append(StockLedger(
             item_id=s.item_id, warehouse_id=s.warehouse_id, qty=s.qty,
             unit_cost=s.unit_cost, entry_date=data.entry_date, source_type="opening",
         ))
+        db.add(opening_moves[-1])
+
+    from app.services import valuation
+
+    #: موجودیِ اول دوره معمولاً قدیمی‌ترین تاریخ را دارد، پس «پیش‌تاریخ» است اگر
+    #: پیش از آن حرکتی ثبت شده باشد — و آن‌وقت میانگین باید از بازپخش بیاید.
+    valuation.settle_posting(db, opening_moves)
 
     if inventory_value > 0:
         journal_lines.append(JournalLine(
