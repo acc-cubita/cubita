@@ -1,7 +1,7 @@
 """اعلامیه‌ی بدهکار/بستانکار — معادلِ ریالی، و «چه کسی و چرا» باطلش کرد.
 
-Revision ID: 0136
-Revises: 0135
+Revision ID: 0142
+Revises: 0141
 
 دو شکافِ فصلِ «اعلامیه بدهکار و بستانکار» (نوبتِ دوم) ستون می‌خواهند:
 
@@ -27,8 +27,8 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.migration_utils import rls_disabled
 
-revision: str = "0136"
-down_revision: Union[str, None] = "0135"
+revision: str = "0142"
+down_revision: Union[str, None] = "0141"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

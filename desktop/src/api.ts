@@ -8492,7 +8492,7 @@ export interface PurchaseInvoiceDuplicateDraft {
   deductions: { deduction_type_id: string | null; rate: string | number }[]
 }
 
-// ── اعلامیه بدهکار/بستانکار — جزئیات و رونوشت (مهاجرتِ ۰۱۳۶) ──────────────
+// ── اعلامیه بدهکار/بستانکار — جزئیات و رونوشت (مهاجرتِ ۰۱۴۲) ──────────────
 
 export const fetchNote = (token: string, id: string) =>
   authedGet<CreditDebitNote>(token, `/api/sales-ops/notes/${id}`)

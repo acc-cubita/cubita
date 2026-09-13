@@ -334,7 +334,7 @@ class CreditDebitNote(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: معادلِ ریالیِ همان جمع — جمعِ `base_amount`ِ ردیف‌ها و دقیقاً جمعِ دفتر.
     base_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
-    #: ارزِ سند و نرخش (مهاجرتِ ۰۱۳۶). مبلغِ ردیف به ارزِ سند است و دفتر به ارزِ
+    #: ارزِ سند و نرخش (مهاجرتِ ۰۱۴۲). مبلغِ ردیف به ارزِ سند است و دفتر به ارزِ
     #: پایه می‌نشیند: `مبلغ × نرخ`، ردیف‌به‌ردیف گرد — همان قراردادِ رسید و اعلامیه
     #: پرداخت. نرخ عکسِ لحظه‌ی ثبت است؛ عوض‌شدنِ نرخِ روز سندِ قدیمی را تکان نمی‌دهد.
     currency_code: Mapped[str] = mapped_column(String(3), default="IRR", server_default="IRR")
