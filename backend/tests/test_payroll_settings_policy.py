@@ -605,3 +605,81 @@ def test_saving_settings_creates_no_journal(db, user, client):
     before = db.query(JournalEntry).count()
     _settings(client, _year(), insurance_daily_ceiling=9_000_000, payment_rounding_digits=2)
     assert db.query(JournalEntry).count() == before
+
+
+# ── پرچم‌های بیمه‌ی حکم ──────────────────────────────────────────────────────
+#
+# **شش ستونِ مرده.** `salary_contracts` این‌ها را از قبل داشت و هیچ‌کدام خوانده
+# نمی‌شدند: کاربر «معاف از بیمه» را تیک می‌زد و بیمه کامل کسر می‌شد. با پروب
+# اندازه گرفته شد — حکمی با `is_insured=False` باز هم ۲۱٬۰۰۰٬۰۰۰ می‌گرفت.
+
+
+def _flagged_run(db, client, **flags) -> dict:
+    from app.models.payroll import SalaryContract
+
+    _hybrid(db)
+    year = _year()
+    _settings(client, year, unemployment_rate=0.03, hard_job_rate=0.04)
+    employee = _employee(client)
+    made = _contract(client, employee["id"], [{"factor_id": _factors(client)["base"], "amount": BASE}])
+    row = db.get(SalaryContract, made["id"])
+    for field, value in flags.items():
+        setattr(row, field, value)
+    db.flush()
+    return _run(client, year)[0]
+
+
+def test_an_uninsured_contract_pays_no_insurance_at_all(db, user, client):
+    slip = _flagged_run(db, client, is_insured=False)
+    assert _d(slip, "insurance_employee_share") == 0
+    assert _d(slip, "insurance_employer_share") == 0
+    assert _d(slip, "gross_pay") == Decimal(BASE), "ناخالص نباید تکان بخورد"
+
+
+def test_employee_insurance_exemption_leaves_the_employer_share_alone(db, user, client):
+    slip = _flagged_run(db, client, exempt_employee_insurance=True)
+    assert _d(slip, "insurance_employee_share") == 0
+    assert _d(slip, "insurance_employer_share") > 0
+
+
+def test_a_checked_employer_exemption_with_no_percent_means_full_exemption(db, user, client):
+    """**درصدِ صفر با تیکِ معافیت یعنی معافیتِ کامل.**
+
+    فرم آن میدان را فقط وقتی نشان می‌دهد که تیک خورده باشد؛ خواندنِ «صفر درصد
+    معاف» یعنی تیک هیچ کاری نکند — همان باگی که بسته شد. نرخِ بیکاری مستقل است
+    و باقی می‌ماند.
+    """
+    slip = _flagged_run(db, client, exempt_employer_insurance=True)
+    assert _d(slip, "insurance_employer_share") == Decimal(BASE) * Decimal("0.03")
+
+
+def test_a_partial_employer_exemption_scales_the_employer_rate(db, user, client):
+    slip = _flagged_run(db, client, exempt_employer_insurance=True, employer_exempt_percent=Decimal(50))
+    #: ۲۳٪ نصف می‌شود، و ۳٪ بیکاری دست‌نخورده می‌ماند.
+    assert _d(slip, "insurance_employer_share") == Decimal(BASE) * (Decimal("0.115") + Decimal("0.03"))
+
+
+def test_unemployment_exemption_removes_only_that_rate(db, user, client):
+    slip = _flagged_run(db, client, exempt_unemployment_insurance=True)
+    assert _d(slip, "insurance_employer_share") == Decimal(BASE) * Decimal("0.23")
+
+
+def test_a_hard_job_contract_finally_picks_up_the_hard_job_rate(db, user, client):
+    """**تصحیحِ یک ادعای غلطِ قبلی.** در PR #51 نوشتم کوبیتا پرچمِ مشاغل سخت
+    ندارد؛ `SalaryContract.is_hard_job` از قبل بود و فقط خوانده نمی‌شد.
+    """
+    slip = _flagged_run(db, client, is_hard_job=True)
+    assert _d(slip, "insurance_employer_share") == Decimal(BASE) * Decimal("0.30")  # ۲۳ + ۳ + ۴
+
+
+def test_a_plain_contract_is_untouched_by_any_of_it(db, user, client):
+    """گاردِ عدم‌تغییر: حکمی که پرچم‌ها را دست نزده دقیقاً نرخ‌های تنظیمات را می‌گیرد."""
+    slip = _flagged_run(db, client)
+    assert _d(slip, "insurance_employee_share") == Decimal(BASE) * Decimal("0.07")
+    assert _d(slip, "insurance_employer_share") == Decimal(BASE) * Decimal("0.26")  # ۲۳ + ۳ بیکاری
+
+
+def test_the_housing_loan_exemption_lowers_the_tax_base(db, user, client):
+    slip = _flagged_run(db, client, housing_loan_exempt_amount=Decimal(10_000_000))
+    expected = _d(slip, "gross_pay") - _d(slip, "insurance_employee_share") - Decimal(10_000_000)
+    assert _d(slip, "taxable_pay") == expected

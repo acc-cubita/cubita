@@ -459,6 +459,8 @@ class PayrollSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: امروز بود، چون هیچ سقفی اعمال نمی‌شد. ماهانه = این × `monthly_work_days`.
     insurance_daily_ceiling: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: بیمه‌ی بیکاری و مشاغل سخت: سهمِ **کارفرما**، جدا از نرخِ اصلی. صفر = غیرفعال.
+    #: شمولشان از خودِ حکم می‌آید (`exempt_unemployment_insurance` و `is_hard_job`)،
+    #: نه از این‌جا — این فقط نرخِ سالِ جاری است.
     unemployment_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
     hard_job_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0, server_default="0")
 

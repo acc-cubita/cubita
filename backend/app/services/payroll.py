@@ -103,6 +103,56 @@ def calc_insurance_shares(
     return _round(insurable_pay * employee_rate), _round(insurable_pay * employer_rate)
 
 
+def contract_insurance_rates(contract, settings) -> tuple[Decimal, Decimal]:
+    """نرخِ مؤثرِ بیمه‌ی این **حکم** — سهمِ کارمند و سهمِ کارفرما.
+
+    **پنج پرچمِ مرده.** `salary_contracts` از قبل این‌ها را داشت و **هیچ‌کدام
+    خوانده نمی‌شدند**؛ کاربر «معاف از بیمه» را تیک می‌زد و بیمه همچنان کامل کسر
+    می‌شد. پروب: حکمی با `is_insured=False` و `exempt_employee_insurance=True`
+    باز هم ۲۱٬۰۰۰٬۰۰۰ سهمِ کارمند می‌گرفت.
+
+    معنیِ هرکدام از برچسبِ خودِ فرم می‌آید:
+
+        is_insured                     «مشمول بیمه تأمین اجتماعی»
+        exempt_employee_insurance      «معاف از بیمه سهم کارمند»
+        exempt_employer_insurance      «معاف از بیمه سهم کارفرما»
+        employer_exempt_percent        «درصد معافیت سهم کارفرما»
+        exempt_unemployment_insurance  «معاف از بیمه بیکاری»
+        is_hard_job                    «شغل سخت و زیان‌آور»
+
+    **درصدِ صفر با تیکِ معافیت یعنی معافیتِ کامل.** فرم آن میدان را فقط وقتی
+    نشان می‌دهد که تیک خورده باشد، و خواندنِ «صفر درصد معاف» یعنی تیک هیچ کاری
+    نکند — همان باگی که این تابع می‌بندد. پس درصد یک **تعدیلِ اختیاری** است، نه
+    شرطِ فعال‌شدن.
+
+    پیش‌فرضِ حکم (`is_insured=True` و بقیه خاموش) دقیقاً همان نرخ‌های تنظیمات را
+    می‌دهد، پس هیچ حکمی که این پرچم‌ها را دست نزده باشد عوض نمی‌شود.
+    """
+    if not bool(getattr(contract, "is_insured", True)):
+        return Decimal(0), Decimal(0)
+
+    employee_rate = (
+        Decimal(0)
+        if bool(getattr(contract, "exempt_employee_insurance", False))
+        else Decimal(str(settings.insurance_employee_rate))
+    )
+
+    employer_rate = Decimal(str(settings.insurance_employer_rate))
+    if bool(getattr(contract, "exempt_employer_insurance", False)):
+        percent = Decimal(str(getattr(contract, "employer_exempt_percent", 0) or 0))
+        employer_rate *= (Decimal(100) - (percent if percent > 0 else Decimal(100))) / Decimal(100)
+
+    #: بیمه‌ی بیکاری و مشاغل سخت هر دو سهمِ **کارفرما**یند و به نرخِ او افزوده
+    #: می‌شوند. معافیتِ درصدیِ بالا عمداً رویشان اعمال نمی‌شود: برچسبِ فرم
+    #: «درصد معافیت سهم کارفرما» است و این دو نرخِ مستقل‌اند، نه بخشی از آن.
+    if not bool(getattr(contract, "exempt_unemployment_insurance", False)):
+        employer_rate += policy_value(settings, "unemployment_rate", Decimal(0))
+    if bool(getattr(contract, "is_hard_job", False)):
+        employer_rate += policy_value(settings, "hard_job_rate", Decimal(0))
+
+    return employee_rate, employer_rate
+
+
 def round_payment(amount: Decimal, digits: int) -> Decimal:
     """خالصِ پرداختی را تا `digits` رقم گِرد می‌کند. صفر = بدونِ رند.
 
@@ -554,12 +604,7 @@ def compute_payslip_amounts(
     #: کسی که نصفِ ماه کار کرده نصفِ سقف را دارد، وگرنه سقف برای او بی‌اثر می‌شد.
     daily_ceiling = policy_value(settings, "insurance_daily_ceiling", Decimal(0))
     monthly_ceiling = _round(daily_ceiling * month_days * proration) if daily_ceiling > 0 else None
-    #: بیمه‌ی بیکاری سهمِ **کارفرما**ست و به نرخِ کارفرما اضافه می‌شود.
-    #: نرخِ مشاغل سخت عمداً اعمال **نمی‌شود** — شمولِ آن به کارمند وابسته است و
-    #: کوبیتا هنوز جایی برای «این کارمند مشمولِ مشاغل سخت است» ندارد. اعمالش روی
-    #: همه یعنی کسرِ بیمه از کسانی که مشمول نیستند؛ نگه‌داشتنِ نرخ یعنی وقتی آن
-    #: پرچم آمد، عدد از قبل جای خودش است.
-    employer_rate = Decimal(settings.insurance_employer_rate) + policy_value(settings, "unemployment_rate", Decimal(0))
+    employee_rate, employer_rate = contract_insurance_rates(contract, settings)
     #: **مبنای بیمه ≠ ناخالص، اگر کاربر استثنایی تعریف کرده باشد.** جدولِ مشارکت
     #: خالی یعنی مبنا همان ناخالص است — دقیقاً رفتارِ پیش از مهاجرتِ ۰۱۳۹.
     insurance_base = gross_pay - _round(
@@ -567,7 +612,7 @@ def compute_payslip_amounts(
     )
     insurance_employee_share, insurance_employer_share = calc_insurance_shares(
         max(Decimal(0), insurance_base),
-        Decimal(settings.insurance_employee_rate),
+        employee_rate,
         employer_rate,
         ceiling=monthly_ceiling,
     )
@@ -586,6 +631,10 @@ def compute_payslip_amounts(
         _line_amount_for(contract, getattr(settings, "medical_factor_id", None), proration)
         * policy_value(settings, "tax_exempt_coef_medical", Decimal(1))
     )
+    #: «قسط وام مسکن معاف از مالیات» — ششمین ستونِ حکم که نوشته می‌شد و هیچ‌جا
+    #: خوانده نمی‌شد. مبلغِ ماهانه است، پس به نسبتِ کارکرد کوچک می‌شود مثلِ بقیه.
+    #: صفر (پیش‌فرض) = رفتارِ امروز.
+    exempt += _round(Decimal(str(getattr(contract, "housing_loan_exempt_amount", 0) or 0)) * proration)
     taxable_pay = max(Decimal(0), tax_base - exempt)
     tax_amount = calc_cumulative_monthly_tax(
         monthly_taxable=taxable_pay,
