@@ -419,6 +419,8 @@ export function PayrollSettingsPanel({
             <thead>
               <tr><th>ردیف</th><th>تا سقفِ سالانه (ریال)</th><th>نرخ (٪)</th><th></th></tr>
             </thead>
+            {/* audit-r9-exempt: پلکانِ فرم همیشه دستِ‌کم یک ردیف دارد و
+                به‌جای حالتِ خالی دکمه‌ی «افزودنِ پلکان» می‌گیرد. */}
             <tbody>
               {brackets.map((b, i) => {
                 const last = i === brackets.length - 1
