@@ -138,6 +138,35 @@ def get_current_contract(db: Session, employee_id: UUID, as_of) -> SalaryContrac
     )
 
 
+def _branch_snapshot(db: Session, contract: SalaryContract) -> dict:
+    """کد و نامِ شعبه‌های قانونیِ حکم، برای نشستن روی فیش.
+
+    شش ستون، دو شعبه. `None` یعنی حکم آن شعبه را تعیین نکرده — و همان `None` روی
+    فیش می‌ماند، چون «تعیین نشده» با «خالی» یکی نیست و خروجی باید بتواند
+    تفکیکشان کند از فیشِ پیش از این مهاجرت که اصلاً عکسی ندارد.
+    """
+    from app.models.payroll import InsuranceTaxBranch
+
+    wanted = {
+        "insurance": getattr(contract, "insurance_branch_id", None),
+        "tax": getattr(contract, "tax_branch_id", None),
+    }
+    ids = {value for value in wanted.values() if value is not None}
+    rows = (
+        {row.id: row for row in db.query(InsuranceTaxBranch).filter(InsuranceTaxBranch.id.in_(ids)).all()}
+        if ids
+        else {}
+    )
+
+    snapshot: dict = {}
+    for prefix, branch_id in wanted.items():
+        branch = rows.get(branch_id) if branch_id is not None else None
+        snapshot[f"{prefix}_branch_id"] = branch.id if branch is not None else None
+        snapshot[f"{prefix}_branch_code"] = (branch.code or "") if branch is not None else None
+        snapshot[f"{prefix}_branch_name"] = (branch.name or "") if branch is not None else None
+    return snapshot
+
+
 def _tax_percent(db: Session, contract: SalaryContract) -> Decimal:
     """سهمِ گروهِ مالیاتیِ قرارداد: عادی ۱۰۰، مناطقِ محروم ۵۰، معاف ۰.
 
@@ -524,7 +553,15 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
 
         payslip_number = next_document_number(db, DOC_PAYSLIP)
         payslip = Payslip(
-            number=payslip_number, employee_id=employee.id, period_id=period_id, created_by_id=user.id, **amounts
+            number=payslip_number,
+            employee_id=employee.id,
+            period_id=period_id,
+            created_by_id=user.id,
+            #: عکسِ شعبه‌ی قانونی **در همان لحظه**، از همان حکمی که محاسبه با آن
+            #: انجام شد. خواندنش بعداً یعنی خواندنِ مِسترِ *امروز* — و آن‌وقت
+            #: بازتولیدِ فایلِ بیمه‌ی یک دوره‌ی بسته عددِ دیگری می‌دهد.
+            **_branch_snapshot(db, contract),
+            **amounts,
         )
         payslip.lines = [PayslipLine(**row) for row in breakdown]
         db.add(payslip)
@@ -687,6 +724,110 @@ def employee_identity(db: Session, employee_id: UUID) -> EmployeeIdentity | None
     return employee_identities(db, [employee_id]).get(employee_id)
 
 
+# ────────────────── شعبه‌ی بیمه و حوزه‌ی مالیاتی در فایلِ قانونی ──────────────────
+
+
+@dataclass(frozen=True)
+class BranchRef:
+    """کد و عنوانِ شعبه‌ای که یک کارمند زیرِ آن بیمه یا مالیات می‌دهد."""
+
+    code: str
+    name: str
+
+
+#: کدام ستونِ قرارداد برای کدام نوعِ شعبه. `BRANCH_KINDS` مقادیرِ مجاز را دارد و
+#: این نگاشت فقط می‌گوید هرکدام روی قرارداد کجا نشسته است.
+_BRANCH_COLUMN = {"insurance": "insurance_branch_id", "tax": "tax_branch_id"}
+
+
+def payslip_branches(db: Session, rows, as_of, *, kind: str) -> dict[UUID, BranchRef]:
+    """شعبه‌ی هر ردیفِ فایل — **اول از عکسِ فیش**، بعد از حکمِ زنده.
+
+    ترتیب مهم است و کلِ نکته‌ی همین‌جاست: فیشی که عکس دارد هرگز به مِسترِ امروز
+    نگاه نمی‌کند، پس بازتولیدِ فایلِ یک دوره‌ی بسته همیشه همان عدد را می‌دهد حتی
+    اگر کارگاه دوباره ثبت شده و کدش عوض شده باشد.
+
+    حلِ زنده فقط برای فیش‌هایی است که **پیش از مهاجرتِ ۰۱۳۶** صادر شده‌اند و
+    عکسی ندارند. برای آن‌ها بهترین کاری که می‌شود کرد همان حکمِ آن تاریخ است؛
+    اختراعِ عکسی که گرفته نشده، دروغِ تازه‌ای می‌سازد.
+    """
+    snapshot: dict[UUID, BranchRef] = {}
+    needs_live: list[UUID] = []
+    for payslip, employee in rows:
+        code = getattr(payslip, f"{kind}_branch_code", None)
+        name = getattr(payslip, f"{kind}_branch_name", None)
+        if code is None and name is None:
+            #: هر دو `None` یعنی عکسی گرفته نشده. رشته‌ی خالی یعنی عکس گرفته شد و
+            #: شعبه‌ای نبود — که جوابِ قطعی است، نه جای برگشت به مِستر.
+            needs_live.append(employee.id)
+            continue
+        snapshot[employee.id] = BranchRef(code=code or "", name=name or "")
+
+    if needs_live:
+        snapshot.update(employee_branches(db, needs_live, as_of, kind=kind))
+    return snapshot
+
+
+def employee_branches(db: Session, employee_ids: list[UUID], as_of, *, kind: str) -> dict[UUID, BranchRef]:
+    """شعبه‌ی هر کارمند در تاریخِ `as_of`، از **حکمِ جاری‌اش**.
+
+    تا امروز `tax_branch_id` و `insurance_branch_id` روی قرارداد نشسته بودند و
+    **هیچ‌جا خوانده نمی‌شدند** — نه در محاسبه، نه در خروجی. یعنی کاربر شعبه را
+    انتخاب می‌کرد و هیچ اتفاقی نمی‌افتاد. فایلِ بیمه و مالیات اولین جایی است که
+    این انتخاب واقعاً به کار می‌آید: سازمان می‌خواهد بداند هر نفر زیرِ کدام شعبه
+    است.
+
+    شعبه از **حکمِ همان تاریخ** می‌آید و نه از آخرین حکم: کارمندی که ماهِ پیش
+    منتقل شده، در فایلِ ماهِ پیش باید زیرِ شعبه‌ی قبلی بیاید.
+
+    یک کوئری برای قراردادها و یکی برای شعبه‌ها — نه یکی به‌ازای هر ردیفِ فایل.
+    """
+    column = _BRANCH_COLUMN.get(kind)
+    if not employee_ids or column is None:
+        return {}
+
+    #: همه‌ی حکم‌های *مؤثرِ* این کارکنان، تازه‌ترین اول. اولین ردیفِ هر کارمند
+    #: حکمِ جاری‌اش است — همان معیارِ `get_current_contract`، ولی یک‌جا.
+    contracts = (
+        db.query(SalaryContract)
+        .filter(
+            SalaryContract.employee_id.in_(employee_ids),
+            SalaryContract.effective_from <= as_of,
+        )
+        .order_by(SalaryContract.employee_id, SalaryContract.effective_from.desc())
+        .all()
+    )
+    branch_of: dict[UUID, UUID] = {}
+    seen: set[UUID] = set()
+    for contract in contracts:
+        if contract.employee_id in seen:
+            continue
+        #: **فقط حکمِ جاری.** اگر حکمِ جاری شعبه ندارد، کارمند شعبه ندارد — سُر
+        #: خوردن به حکمِ قبلی یعنی فایل شعبه‌ای را گزارش کند که کاربر عمداً از
+        #: حکمِ تازه برداشته.
+        seen.add(contract.employee_id)
+        branch_id = getattr(contract, column, None)
+        if branch_id is not None:
+            branch_of[contract.employee_id] = branch_id
+
+    if not branch_of:
+        return {}
+
+    from app.models.payroll import InsuranceTaxBranch
+
+    branches = {
+        row.id: BranchRef(code=(row.code or "").strip(), name=(row.name or "").strip())
+        for row in db.query(InsuranceTaxBranch)
+        .filter(InsuranceTaxBranch.id.in_(set(branch_of.values())))
+        .all()
+    }
+    return {
+        employee_id: branches[branch_id]
+        for employee_id, branch_id in branch_of.items()
+        if branch_id in branches
+    }
+
+
 def _csv_text(header: list[str], body: list[list[str]], footer: list[str] | None = None) -> str:
     """CSVِ فارسی‌خوان برای اکسل.
 
@@ -714,7 +855,11 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
     """
     rows, period = _period_payslips(db, period_id)
 
-    who = employee_identities(db, [employee.id for _, employee in rows])
+    employee_ids = [employee.id for _, employee in rows]
+    who = employee_identities(db, employee_ids)
+    #: حوزه‌ی مالیاتی از **عکسِ فیش**؛ برای فیش‌های پیش از ۰۱۳۶ از حکمِ همان
+    #: دوره — نه از آخرین حکم و نه از مِسترِ امروز.
+    branches = payslip_branches(db, rows, _period_as_of_date(period), kind="tax")
 
     body = []
     total_taxable = Decimal(0)
@@ -723,11 +868,16 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
         taxable = Decimal(payslip.taxable_pay)
         tax = Decimal(payslip.tax_amount)
         person = who[employee.id]
+        branch = branches.get(employee.id)
         body.append(
             [
                 person.national_id,
                 person.first_name,
                 person.last_name,
+                #: حوزه خالی می‌ماند اگر حکم تعیینش نکرده — پرکردنش با حدس یعنی
+                #: فایل چیزی را به سازمان بگوید که کسی تصمیمش نگرفته.
+                branch.code if branch else "",
+                branch.name if branch else "",
                 str(payslip.gross_pay),
                 str(taxable),
                 str(tax),
@@ -737,9 +887,18 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
         total_tax += tax
 
     text = _csv_text(
-        ["کد ملی", "نام", "نام خانوادگی", "ناخالص حقوق", "درآمد مشمول مالیات", "مالیات"],
+        [
+            "کد ملی",
+            "نام",
+            "نام خانوادگی",
+            "کد حوزه مالیاتی",
+            "حوزه مالیاتی",
+            "ناخالص حقوق",
+            "درآمد مشمول مالیات",
+            "مالیات",
+        ],
         body,
-        ["جمع کل", "", "", "", str(total_taxable), str(total_tax)],
+        ["جمع کل", "", "", "", "", "", str(total_taxable), str(total_tax)],
     )
     return text, period
 
@@ -800,10 +959,24 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        ["کد ملی", "نام", "نام خانوادگی", "حقوق مشمول بیمه", "سهم بیمه کارمند", "سهم بیمه کارفرما", "جمع بیمه"]
+        [
+            "کد ملی",
+            "نام",
+            "نام خانوادگی",
+            "کد شعبه بیمه",
+            "شعبه بیمه",
+            "حقوق مشمول بیمه",
+            "سهم بیمه کارمند",
+            "سهم بیمه کارفرما",
+            "جمع بیمه",
+        ]
     )
 
-    who = employee_identities(db, [employee.id for _, employee in rows])
+    employee_ids = [employee.id for _, employee in rows]
+    who = employee_identities(db, employee_ids)
+    #: شعبه‌ی بیمه از **عکسِ فیش**. بازتولیدِ فایلِ یک دوره‌ی بسته نباید با ثبتِ
+    #: تازه‌ی کارگاه عوض شود؛ فیش‌های پیش از ۰۱۳۶ به حکمِ همان دوره برمی‌گردند.
+    branches = payslip_branches(db, rows, _period_as_of_date(period), kind="insurance")
 
     total_employee = Decimal(0)
     total_employer = Decimal(0)
@@ -811,11 +984,14 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
         employee_share = Decimal(payslip.insurance_employee_share)
         employer_share = Decimal(payslip.insurance_employer_share)
         person = who[employee.id]
+        branch = branches.get(employee.id)
         writer.writerow(
             [
                 person.national_id,
                 person.first_name,
                 person.last_name,
+                branch.code if branch else "",
+                branch.name if branch else "",
                 str(payslip.gross_pay),
                 str(employee_share),
                 str(employer_share),
@@ -826,7 +1002,19 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
         total_employer += employer_share
 
     writer.writerow([])
-    writer.writerow(["جمع کل", "", "", "", str(total_employee), str(total_employer), str(total_employee + total_employer)])
+    writer.writerow(
+        [
+            "جمع کل",
+            "",
+            "",
+            "",
+            "",
+            "",
+            str(total_employee),
+            str(total_employer),
+            str(total_employee + total_employer),
+        ]
+    )
 
     # BOM ابتدای فایل تا اکسل متن فارسی UTF-8 را درست نمایش دهد
     return "﻿" + buffer.getvalue(), period

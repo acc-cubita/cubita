@@ -6495,6 +6495,14 @@ export const TAX_GROUP_KIND_LABELS: Record<string, string> = {
 export const BRANCH_KIND_LABELS: Record<string, string> = {
   insurance: 'شعبه بیمه',
   tax: 'حوزه مالیاتی',
+  supplementary: 'بیمه تکمیلی',
+}
+
+/** «نحوه محاسبه مالیات» — فقط برای حوزه مالیاتی؛ سرور هم همین را می‌سنجد. */
+export const TAX_CALC_METHOD_LABELS: Record<string, string> = {
+  monthly: 'تعدیل ماهانه',
+  annual: 'تعدیل سالانه',
+  none: 'بدون تعدیل',
 }
 
 export interface ServiceLocationRecord {
@@ -6541,6 +6549,27 @@ export interface InsuranceTaxBranchRecord {
   name: string
   kind: string
   is_active: boolean
+  /** طرف‌حسابِ سازمان — بدهیِ بیمه/مالیات رویش می‌نشیند. خالی = هنوز وصل نشده. */
+  contact_id: string | null
+  /** خوانده‌شده از خودِ طرف حساب، نه کپی‌شده. */
+  contact_name: string
+  analytic_code: string
+
+  /** «کد شرکت / شماره پرونده» — پرونده مالیاتی یا کد کارگاه، بسته به نوع. */
+  registration_code: string
+  workplace_name: string
+  workplace_address: string
+  employer_name: string
+  /** قرارداد کارفرما با مرجع قانونی — نه قرارداد استخدامی کارمند. */
+  agreement_number: string
+  /** عدد سرصفحه ثبت کارگاه؛ نمی‌گوید کدام کارمندان معاف‌اند. */
+  insurance_exempt_count: number
+  cost_center_id: string | null
+  cost_center_name: string
+  /** فقط برای `kind === 'tax'`. */
+  tax_calculation_method: string
+  /** روی حکمی نشسته؟ اگر بله، نوعش دیگر عوض نمی‌شود. */
+  in_use: boolean
 }
 
 /** طرف‌حسابی که تیکِ «کارمند» دارد — ورودیِ فهرستِ «نام کارمند»ِ فرمِ قرارداد. */
@@ -8230,3 +8259,10 @@ export interface IssueReturnBasis {
 
 export const fetchIssueReturnBasisDetail = (token: string, kind: string, docId: string) =>
   authedGet<IssueReturnBasis>(token, `/api/warehouse-issue-returns/basis/${kind}/${docId}`)
+
+/** ویرایشِ شعبه — تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند (مهاجرت ۰۱۳۶). */
+export const updateInsuranceTaxBranch = (
+  token: string,
+  id: string,
+  body: Partial<InsuranceTaxBranchRecord>,
+) => authedSend<InsuranceTaxBranchRecord>(token, 'PATCH', `/api/insurance-tax-branches/${id}`, body)
