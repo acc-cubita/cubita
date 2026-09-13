@@ -564,13 +564,24 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
         return (self.landed_amount / qty) if qty else Decimal(0)
 
 
+#: نوعِ فاکتورِ خرید. `goods` همان فاکتورِ تا امروز است (کالا با رسیدِ انبار می‌آید و
+#: ردیفِ خدمت هم می‌پذیرد)؛ `service` فاکتور خرید خدمات است: فقط خدمت، بی‌انبار،
+#: با کسورات، و سریِ شماره‌ی خودش.
+PURCHASE_INVOICE_KINDS = ("goods", "service")
+PURCHASE_INVOICE_KIND_LABELS = {"goods": "فاکتور خرید", "service": "فاکتور خرید خدمات"}
+
+
 class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "purchase_invoices"
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "number", name="uq_purchase_invoices_tenant_number"),
+        #: هر نوع سریِ شماره‌ی خودش را دارد، پس «فاکتور ۱» کالا و «فاکتور ۱» خدمات
+        #: هم‌زمان معتبرند (مهاجرت ۰۱۴۱).
+        UniqueConstraint("tenant_id", "kind", "number", name="uq_purchase_invoices_tenant_kind_number"),
+        CheckConstraint(f"kind IN {PURCHASE_INVOICE_KINDS}", name="ck_purchase_invoices_kind"),
     )
 
+    kind: Mapped[str] = mapped_column(String(10), default="goods", server_default="goods")
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     invoice_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
@@ -604,6 +615,11 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     # مالیات بر ارزش افزوده: نرخ درصدی و مبلغِ محاسبه‌شده. مبلغِ پرداختنی به تأمین‌کننده = total_amount + tax_amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: جمعِ کسوراتِ فاکتور خرید خدمات (مالیات تکلیفی، بیمه). **از جمعِ فاکتور کم
+    #: نمی‌شود** — هزینه همان می‌ماند — فقط از بدهیِ مستقیم به تأمین‌کننده. جزئیاتش
+    #: در `purchase_invoice_deductions` است؛ این جمع برای فهرست و مانده نگه داشته
+    #: می‌شود و با خودِ ردیف‌ها در یک تراکنش نوشته می‌شود.
+    total_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     #: ارزِ فاکتور. NULL = پایه (ریال). مبالغِ بالا همیشه پایه‌اند؛ این‌ها فقط برای
     #: نمایشِ معادلِ ارزی و نرخ‌اند — دفتر پایه می‌ماند.
@@ -633,6 +649,29 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     lines: Mapped[list["PurchaseInvoiceLine"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", order_by="PurchaseInvoiceLine.id"
     )
+    #: کسوراتِ فاکتور خرید خدمات (مالیات تکلیفی، بیمه) — Snapshotِ لحظه‌ی ثبت.
+    deductions: Mapped[list["PurchaseInvoiceDeduction"]] = relationship(
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="PurchaseInvoiceDeduction.seq",
+    )
+
+    @property
+    def is_service(self) -> bool:
+        return self.kind == "service"
+
+    @property
+    def payable_amount(self) -> Decimal:
+        """بدهیِ مستقیم به تأمین‌کننده: جمعِ فاکتور منهای کسورات.
+
+        **با «جمعِ فاکتور» یکی نیست.** هزینه‌ی خدمت کلِ مبلغ است، ولی بخشِ کسرشده
+        به سازمانِ مالیاتی و بیمه بدهکاریم، نه به فروشنده.
+        """
+        return (
+            Decimal(self.total_amount or 0)
+            + Decimal(self.tax_amount or 0)
+            - Decimal(self.total_deductions or 0)
+        )
 
 
 class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
@@ -640,6 +679,16 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_invoices.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
+    #: **حسابِ هزینه‌ای که ردیفِ خدمت واقعاً خورد (فصلِ خرید خدمات §۱۳ §۴۹).**
+    #:
+    #: پیش از این روی ردیف نبود و برگشت از خرید حساب را از نگاشتِ *امروزِ* خدمت
+    #: می‌گرفت: اگر معینِ هزینه‌ی خدمت عوض می‌شد، برگشت حسابی را بستانکار می‌کرد
+    #: که فاکتور هرگز بدهکارش نکرده بود. برای کالا `NULL` است — بهای کالا به موجودیِ
+    #: همان انبار می‌نشیند، نه به حسابِ هزینه. ردیف‌های پیش از ۰۱۴۱ هم `NULL`اند و
+    #: به نگاشتِ امروز برمی‌گردند.
+    expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: تخفیفِ این ردیف به مبلغ. خالصِ ردیف = qty×unit_cost − discount.

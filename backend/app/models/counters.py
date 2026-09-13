@@ -57,6 +57,9 @@ DOC_WAREHOUSE_RECEIPT = "warehouse_receipt"
 DOC_SETTLEMENT = "settlement"
 DOC_WAREHOUSE_ISSUE = "warehouse_issue"
 DOC_WAREHOUSE_ISSUE_RETURN = "warehouse_issue_return"
+#: فاکتور خرید خدمات — سریِ شماره‌ی خودش را دارد، جدا از فاکتور خرید کالا. هر دو
+#: در یک جدول‌اند و ستونِ `kind` جدایشان می‌کند.
+DOC_SERVICE_PURCHASE_INVOICE = "service_purchase_invoice"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -79,6 +82,7 @@ DOC_TYPES = (
     DOC_SETTLEMENT,
     DOC_WAREHOUSE_ISSUE,
     DOC_WAREHOUSE_ISSUE_RETURN,
+    DOC_SERVICE_PURCHASE_INVOICE,
 )
 
 

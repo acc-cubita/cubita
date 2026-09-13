@@ -576,6 +576,11 @@ export function Dashboard({
               outbox={purchaseOutbox}
               onQueued={() => void refreshFromLocalCache()}
               onCreatePayment={(invoice) => {
+                //: مبلغِ پیشنهادی **مانده‌ی بدهی به تأمین‌کننده** است، نه جمعِ فاکتور: در
+                //: فاکتور خرید خدمات مالیات تکلیفی و بیمه به فروشنده داده نمی‌شوند (§۳۹).
+                //: جمعِ فاکتور فقط مرجع نمایش داده می‌شود.
+                const service = invoice.kind === 'service'
+                const hasDeductions = Number(invoice.total_deductions) > 0
                 sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
                   contactId: invoice.contact_id,
                   documentId: invoice.id,
@@ -583,6 +588,11 @@ export function Dashboard({
                   currency: invoice.currency_code || 'IRR',
                   rate: invoice.exchange_rate || '1',
                   number: invoice.number,
+                  description: `بابت ${service ? 'فاکتور خرید خدمات' : 'فاکتور خرید'} شماره ${invoice.number ?? ''}`,
+                  referenceTotal: hasDeductions ? invoice.final_amount : undefined,
+                  referenceLabel: hasDeductions
+                    ? `جمع فاکتور (کسورات ${Math.round(Number(invoice.total_deductions)).toLocaleString('fa-IR')} ریال به تأمین‌کننده پرداخت نمی‌شود)`
+                    : undefined,
                 }))
                 navigate('paymentvoucher')
               }}

@@ -211,8 +211,32 @@ class PurchaseSummaryOut(BaseModel):
     avg_invoice: Decimal
 
 
+class PurchaseDeductionIn(BaseModel):
+    """یک کسر روی فاکتور خرید خدمات.
+
+    `rate` و `amount` هر دو اختیاری‌اند: نفرستادنِ نرخ یعنی نرخِ نوعِ کسر، و نفرستادنِ
+    مبلغ یعنی «از مبنا × نرخ حساب کن». مبلغِ صریح بر محاسبه مقدم است — قرارداد
+    گاهی عددِ خودش را دارد.
+    """
+
+    deduction_type_id: UUID
+    rate: Decimal | None = None
+    amount: Decimal | None = None
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "PurchaseDeductionIn":
+        if self.rate is not None and not (Decimal(0) <= self.rate <= Decimal(100)):
+            raise ValueError("نرخِ کسر باید بین ۰ تا ۱۰۰ باشد")
+        if self.amount is not None and self.amount < 0:
+            raise ValueError("مبلغِ کسر نمی‌تواند منفی باشد")
+        return self
+
+
 class PurchaseInvoiceLineIn(BaseModel):
     item_id: UUID
+    #: معینِ هزینه‌ی ردیفِ خدمت. خالی = همان معینی که روی خودِ خدمت تعریف شده.
+    #: فقط در فاکتور خرید خدمات پذیرفته می‌شود.
+    expense_account_id: UUID | None = None
     qty: Decimal
     unit_cost: Decimal
     #: تخفیفِ ردیف به مبلغ. بهای موجودی از همان اول پس از تخفیف ثبت می‌شود.
@@ -259,11 +283,28 @@ class PurchaseInvoiceIn(BaseModel):
     #: ارز فاکتور (مثل USD). None/خالی = پایه. مبالغِ سطرها همیشه پایه‌اند.
     currency_code: str | None = None
     exchange_rate: Decimal = Decimal(1)
+    #: `goods` = فاکتور خرید (کالا با رسید انبار می‌آید)؛ `service` = فاکتور خرید
+    #: خدمات: فقط خدمت، بی‌انبار، با سریِ شماره‌ی خودش و کسورات.
+    kind: str = "goods"
+    #: مالیات تکلیفی، بیمه و … — فقط در فاکتور خرید خدمات.
+    deductions: list[PurchaseDeductionIn] = []
 
     @model_validator(mode="after")
     def validate_lines(self) -> "PurchaseInvoiceIn":
         if not self.lines:
             raise ValueError("فاکتور باید حداقل یک ردیف داشته باشد")
+        if self.kind not in ("goods", "service"):
+            raise ValueError("نوعِ فاکتور خرید نامعتبر است")
+        if self.kind == "service":
+            if self.warehouse_id is not None:
+                raise ValueError("فاکتور خرید خدمات انبار ندارد؛ خدمت وارد انبار نمی‌شود")
+        else:
+            if self.deductions:
+                raise ValueError(
+                    "کسورات (مالیات تکلیفی، بیمه) فقط در «فاکتور خرید خدمات» ثبت می‌شوند"
+                )
+            if any(line.expense_account_id is not None for line in self.lines):
+                raise ValueError("انتخابِ معینِ هزینه برای ردیف فقط در «فاکتور خرید خدمات» ممکن است")
         if not (Decimal(0) <= self.tax_rate <= Decimal(100)):
             raise ValueError("نرخ مالیات باید بین ۰ تا ۱۰۰ باشد")
         if self.invoice_discount < 0:
@@ -291,12 +332,43 @@ class PurchaseInvoiceLineOut(BaseModel):
     received_qty: Decimal = Decimal(0)
     remaining_qty: Decimal = Decimal(0)
     description: str
+    #: معینِ هزینه‌ای که ردیفِ خدمت خورد (Snapshot). برای کالا و ردیف‌های قدیمی خالی.
+    expense_account_id: UUID | None = None
+    expense_account_code: str = ""
+    expense_account_name: str = ""
+
+    model_config = {"from_attributes": True}
+
+
+class PurchaseInvoiceDeductionOut(BaseModel):
+    id: UUID
+    deduction_type_id: UUID | None
+    nature: str
+    name_snapshot: str
+    basis: str
+    basis_amount: Decimal
+    rate: Decimal
+    amount: Decimal
+    account_id: UUID
+    account_code: str = ""
+    account_name: str = ""
 
     model_config = {"from_attributes": True}
 
 
 class PurchaseInvoiceOut(BaseModel):
     id: UUID
+    #: `goods` = فاکتور خرید، `service` = فاکتور خرید خدمات. هر نوع سریِ شماره‌ی خودش را دارد.
+    kind: str = "goods"
+    #: جمعِ کسورات؛ `final_amount` (جمعِ فاکتور) را کم نمی‌کند، فقط `payable_amount` را.
+    total_deductions: Decimal = Decimal(0)
+    #: بدهیِ مستقیم به تأمین‌کننده = جمعِ فاکتور − کسورات. مانده از همین است.
+    payable_amount: Decimal = Decimal(0)
+    withholding_total: Decimal = Decimal(0)
+    insurance_total: Decimal = Decimal(0)
+    deductions: list[PurchaseInvoiceDeductionOut] = []
+    journal_entry_number: int | None = None
+    journal_entry_date: date | None = None
     number: int | None
     invoice_date: date
     warehouse_id: UUID | None = None

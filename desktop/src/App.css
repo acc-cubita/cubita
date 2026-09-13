@@ -1451,6 +1451,24 @@ button:disabled {
 .adj-field .qty-with-unit { gap: 8px; flex-wrap: wrap; }
 .adj-field input { width: 130px; }
 
+/* کسوراتِ فاکتور خرید خدمات — زیرِ ردیف‌ها، جدا از تخفیف و اضافات چون ماهیتشان
+   بدهی است نه قیمت. */
+.invoice-deductions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 4px 4px;
+}
+.invoice-deductions h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.invoice-deductions .table-scroll { align-self: stretch; }
+
 /* کنترل‌های تخفیف و رند در صندوقِ فروشگاهی */
 .pos-adjust {
   display: flex;
@@ -1888,6 +1906,12 @@ button:disabled {
 .invoice-lines td .qty-with-unit { flex-wrap: nowrap; }
 .invoice-lines td .qty-with-unit input { min-width: 56px; }
 .invoice-lines td .item-picker { min-width: 150px; }
+/* معینِ هزینه‌ی ردیفِ خرید خدمات — بدونِ کف، ستون تا «پیش‌فر…» جمع می‌شد و کاربر
+   نمی‌دید کدام حساب می‌خورد. در حالتِ کارت کف برداشته می‌شود. */
+.invoice-lines td select.line-account { min-width: 200px; }
+@media (max-width: 760px) {
+  .invoice-lines td select.line-account { min-width: 0; }
+}
 .invoice-lines td .stock-cell { min-width: 96px; }
 
 /* ── موبایل: ردیف‌های فاکتور به‌جای جدولِ فشرده/اسکرولِ افقی، «کارتِ برچسب‌دار» می‌شوند.

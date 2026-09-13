@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Briefcase,
   BellRing,
   Cake,
   CalendarClock,
@@ -60,8 +61,10 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   ],
   purchases: [
     { key: 'invoices', label: 'فاکتور خرید', icon: PackagePlus },
+    { key: 'services', label: 'فاکتور خرید خدمات', icon: Briefcase },
     { key: 'receipts', label: 'رسید انبار', icon: PackageCheck },
     { key: 'returns', label: 'برگشت از خرید', icon: Undo2 },
+    { key: 'deductions', label: 'انواع کسورات', icon: Percent },
   ],
   inventory: [
     { key: 'products', label: 'کالاها', icon: Package },

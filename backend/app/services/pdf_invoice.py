@@ -170,6 +170,7 @@ def render_invoice_pdf(
     business_detail: str = "",
     party_label: str = "طرف حساب",
     business_party_label: str = "",
+    deductions: list[tuple[str, Decimal]] | None = None,
 ) -> bytes:
     pdf = _InvoicePDF()
     usable = _usable(pdf)
@@ -300,15 +301,30 @@ def render_invoice_pdf(
         y = total_row(y, "جمع اضافات (ریال)", additions, bold=False)
     if duties > 0:
         y = total_row(y, "جمع عوارض (ریال)", duties, bold=False)
+    #: کسوراتِ فاکتور خرید خدمات — همان قاعده‌ی برگه‌ی HTML: بعد از جمعِ فاکتور و
+    #: پیش از «خالص فاکتور»، نه کم‌شده از جمع.
+    deduction_rows = [
+        (label, Decimal(str(amount))) for label, amount in (deductions or []) if Decimal(str(amount))
+    ]
+    payable = grand_total - sum((amount for _, amount in deduction_rows), Decimal(0))
     if tax > 0 or rnd != 0 or additions > 0 or duties > 0:
         y = total_row(y, "جمع خالص (ریال)", subtotal, bold=False)
         if tax > 0:
             y = total_row(y, "مالیات بر ارزش افزوده (ریال)", tax, bold=False)
         if rnd != 0:
             y = total_row(y, "گِرد کردن (ریال)", rnd, bold=False)
-        y = total_row(y, "مبلغ قابل پرداخت (ریال)", grand_total, grand=True)
+        y = total_row(
+            y,
+            "جمع فاکتور (ریال)" if deduction_rows else "مبلغ قابل پرداخت (ریال)",
+            grand_total,
+            grand=not deduction_rows,
+        )
     else:
-        y = total_row(y, "جمع کل (ریال)", subtotal, grand=True)
+        y = total_row(y, "جمع کل (ریال)", subtotal, grand=not deduction_rows)
+    for label, amount in deduction_rows:
+        y = total_row(y, f"{label} (−) (ریال)", amount, bold=False)
+    if deduction_rows:
+        y = total_row(y, "خالص فاکتور (ریال)", payable, grand=True)
 
     y += 6
 
@@ -320,7 +336,7 @@ def render_invoice_pdf(
     pdf.set_xy(pdf.l_margin + 3, y + 2.5)
     pdf.set_font("Vazir", "", 10)
     pdf.set_text_color(*_INK)
-    pdf.cell(usable - 6, 5, f"مبلغ به حروف: {amount_in_words(grand_total)} ریال", align="R")
+    pdf.cell(usable - 6, 5, f"مبلغ به حروف: {amount_in_words(payable)} ریال", align="R")
     y += 15
 
     # --- شرح (بالای امضاها، فقط اگر متنی باشد) ---
