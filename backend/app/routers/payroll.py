@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
+from app.services.payroll_contracts import activate_employee_role, resolve_employee_contact
 from app.services.idempotency import idempotent
 from app.models.inventory import Contact
 from app.models.payroll import (
@@ -80,11 +81,23 @@ def list_employees(db: Session = Depends(get_db), _=Depends(require_permission("
 def create_employee(
     data: EmployeeIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
 ):
-    employee = Employee(**data.model_dump())
-    db.add(employee)
-    db.flush()
-    db.refresh(employee)
-    return employee
+    """نقشِ کارمند را روی یک طرف حسابِ موجود فعال می‌کند.
+
+    **هویتِ تازه‌ای ساخته نمی‌شود.** تا امروز این اندپوینت نام و کدِ ملی می‌گرفت
+    و کارمندی می‌ساخت که به هیچ طرف حسابی وصل نبود — همان آدم دو رکورد داشت و
+    اصلاحِ یکی به دیگری نمی‌رسید. همان دری که معماریِ «یک آدم، یک رکورد» را از
+    پشت دور می‌زد.
+    """
+    contact = resolve_employee_contact(
+        db,
+        contact_id=data.contact_id,
+        first_name=data.first_name or "",
+        last_name=data.last_name or "",
+        national_id=data.national_id or "",
+        phone=data.phone,
+        email=data.email,
+    )
+    return activate_employee_role(db, contact, data.hire_date, data.bank_account_number)
 
 
 @router.get("/api/salary-contracts", response_model=list[SalaryContractOut])
