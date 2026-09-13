@@ -34,6 +34,8 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude Opus 5 | **شماره‌های مهاجرت `0129`–`0133`** — روی شاخه‌های `feat/warehouse-receipt` (`0129`–`0132`) و `feat/warehouse-issue` (`0133`)، هر دو در صفِ PR | رسید انبار، برگشت رسید انبار، خروج انبار — کد تمام شده، merge نشده | ۱۴۰۵/۰۶/۲۱ |
+| Claude Opus 5 | **شماره‌ی مهاجرت `0134`** (شاخه‌ی `feat/warehouse-issue-return`، پشتِ `0133`)، `services/issue_returns.py`، `routers/issue_returns.py`، `models/issue_returns.py`، `services/returns.py`، `services/warehouse_issues.py`، `voiding.py`، `models/counters.py`، `IssueReturnsTab.tsx`، `InventoryPage.tsx`، `SalesListPages.tsx`، انتهای `api.ts`؛ `pytest` و پایگاه دادهٔ توسعه | فصلِ «برگشت خروج انبار» | ۱۴۰۵/۰۶/۲۲ |
 
 ---
 
