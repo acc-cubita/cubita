@@ -554,7 +554,7 @@ export function Dashboard({
           {page === 'quotationlist' && (
             <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
           )}
-          {page === 'returnlist' && <SalesReturnListPage token={token} />}
+          {page === 'returnlist' && <SalesReturnListPage token={token} onNavigate={navigate} />}
           {page === 'notelist' && <NoteListPage token={token} />}
           {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
           {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}
@@ -584,6 +584,23 @@ export function Dashboard({
                 }))
                 navigate('paymentvoucher')
               }}
+              onCreateReceiptPayment={(context) => {
+                //: همان مسیرِ پیش‌پرکردنِ فاکتور — اعلامیه سندِ مستقلِ خزانه می‌ماند (§۳۹)
+                //: و مبلغ فقط پیشنهاد است، نه قید (§۴۰).
+                sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
+                  contactId: context.contact_id,
+                  documentId: context.document_id,
+                  documentType: context.document_type,
+                  description: context.description,
+                  amount: context.suggested_amount,
+                  referenceTotal: context.receipt_net_amount,
+                  referenceLabel: 'جمع مبلغ رسید انبار',
+                  currency: context.currency_code || 'IRR',
+                  rate: context.exchange_rate || '1',
+                  number: context.receipt_number,
+                }))
+                navigate('paymentvoucher')
+              }}
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
@@ -592,9 +609,15 @@ export function Dashboard({
           {page === 'inventory' && (
             <InventoryPage
               token={token}
+              me={me}
               warehouses={warehouses}
               items={items}
               onChanged={() => void refreshFromLocalCache()}
+              onCreateInvoiceFromIssue={(context) => {
+                //: فقط زمینه منتقل می‌شود؛ فاکتور همان سندِ مستقلِ فروش است (§۱۶ §۱۷).
+                sessionStorage.setItem('cubita.sales.issuePrefill', JSON.stringify(context))
+                navigate('salesinvoice')
+              }}
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}

@@ -12,6 +12,7 @@ from app.models.returns import PurchaseReturn, SalesReturn, SalesReturnReason
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.returns import (
+    ReceiptReturnableLineOut,
     PurchaseReturnIn,
     PurchaseReturnOut,
     ReturnableLineOut,
@@ -23,13 +24,15 @@ from app.schemas.returns import (
 )
 from app.services import voiding
 from app.services.idempotency import idempotent
-from app.services.printing import render_invoice
+from app.services.printing import render_invoice, render_warehouse_document
 from app.services.returns import (
     attach_return_state,
     get_purchase_returnable_summary,
+    get_receipt_returnable_summary,
     get_returnable_summary,
     post_purchase_return,
     post_sales_return,
+    return_print_projection,
 )
 
 router = APIRouter(tags=["returns"])
@@ -43,6 +46,24 @@ def sales_invoice_returnable(
 ):
     """باقی‌ماندهٔ قابلِ برگشتِ هر کالای یک فاکتور فروش."""
     return [ReturnableLineOut(**row) for row in get_returnable_summary(db, invoice_id)]
+
+
+@router.get(
+    "/api/warehouse-receipts/{receipt_id}/returnable",
+    response_model=list[ReceiptReturnableLineOut],
+)
+def warehouse_receipt_returnable(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """پنجره‌ی «مبنا»: از این رسید چه مقدار هنوز قابلِ برگشت است.
+
+    **چرا از رسید و نه از فاکتور:** فاکتورِ خرید از مهاجرتِ ۰۱۳۰ انبار ندارد —
+    کالا با رسید وارد می‌شود. و اگر یک کالا چند بار با بهای متفاوت وارد شده
+    باشد، فقط رسید می‌داند کدام ورود را داریم برمی‌گردانیم.
+    """
+    return [ReceiptReturnableLineOut(**row) for row in get_receipt_returnable_summary(db, receipt_id)]
 
 
 @router.get("/api/purchase-invoices/{invoice_id}/returnable", response_model=list[ReturnableLineOut])
@@ -268,7 +289,15 @@ def print_purchase_return(
     if pret is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سند برگشت یافت نشد")
 
-    invoice = db.get(PurchaseInvoice, pret.purchase_invoice_id)
+    #: برگشتی که به رسید لنگر زده، برگه‌ی **انبار** می‌گیرد (انبار، تحویل‌گیرنده،
+    #: حمل، خالص و خالص توافقی) — نه قالبِ فاکتور که هیچ‌کدام را ندارد.
+    if pret.warehouse_receipt_id is not None:
+        html = render_warehouse_document(
+            business_name=principal.membership.tenant.name, **return_print_projection(db, pret)
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+    invoice = db.get(PurchaseInvoice, pret.purchase_invoice_id) if pret.purchase_invoice_id else None
     contact = db.get(Contact, invoice.contact_id) if invoice and invoice.contact_id else None
     party_name = contact.name if contact else "تأمین‌کننده نقدی"
     party_detail = " — ".join(filter(None, [contact.phone, contact.address])) if contact else ""

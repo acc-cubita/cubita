@@ -5,6 +5,7 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { ReturnableTable } from './SalesReturnForm'
 import { formatJalali } from '../lib/jalali'
 import { usePurchaseReturnDraft, type PurchaseReturnDraft } from '../lib/purchaseReturnDraft'
+import { RETURN_TYPE_LABELS } from '../api'
 
 /** فرمِ کلاسیکِ «برگشت از خرید» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [usePurchaseReturnDraft]؛ جدولِ اقلامِ قابلِ برگشت با فروش مشترک است ([ReturnableTable]). */
@@ -88,8 +89,10 @@ export function PurchaseReturnsList({ r }: { r: PurchaseReturnDraft }) {
           <tr>
             <th>شماره</th>
             <th>تاریخ</th>
-            <th>فاکتور اصلی</th>
+            <th>مبدأ</th>
+            <th>نوع</th>
             <th>خالص</th>
+            <th>خالص توافقی</th>
             <th>مالیات</th>
             <th>جمع کل</th>
             <th>عملیات</th>
@@ -100,8 +103,18 @@ export function PurchaseReturnsList({ r }: { r: PurchaseReturnDraft }) {
             <tr key={row.id}>
               <td className="card-title" data-label="شماره">برگشت {row.number != null ? '#' + row.number.toLocaleString('fa-IR') : '—'}</td>
               <td data-label="تاریخ">{formatJalali(row.return_date)}</td>
-              <td data-label="فاکتور اصلی">{(r.invoiceNumberById.get(row.purchase_invoice_id) ?? '—')?.toLocaleString('fa-IR') ?? '—'}</td>
-              <td data-label="خالص">{Number(row.total_amount).toLocaleString('fa-IR')}</td>
+              {/* برگشت یا به فاکتور لنگر می‌زند یا به رسیدِ انبار — رسیدِ مستقیم فاکتوری ندارد. */}
+              <td data-label="مبدأ">
+                {row.warehouse_receipt_id
+                  ? 'رسید انبار'
+                  : row.purchase_invoice_id
+                    ? `فاکتور ${(r.invoiceNumberById.get(row.purchase_invoice_id) ?? '—').toLocaleString('fa-IR')}`
+                    : '—'}
+              </td>
+              <td data-label="نوع">{RETURN_TYPE_LABELS[row.return_type ?? 'purchase_domestic'] ?? '—'}</td>
+              {/* «خالص» (ارزشِ دفتری) و «خالص توافقی» دو مفهومِ جدایند و جدا نشان داده می‌شوند. */}
+              <td data-label="خالص">{Number(row.base_amount ?? row.total_amount).toLocaleString('fa-IR')}</td>
+              <td data-label="خالص توافقی">{Number(row.agreed_total ?? row.total_amount).toLocaleString('fa-IR')}</td>
               <td data-label="مالیات">{Number(row.tax_amount).toLocaleString('fa-IR')}</td>
               <td data-label="جمع کل">{(Number(row.total_amount) + Number(row.tax_amount)).toLocaleString('fa-IR')}</td>
               <td className="card-actions" data-label="عملیات">

@@ -1,10 +1,8 @@
-import { ArrowLeftRight, Plus, Trash2, Save, RefreshCw } from 'lucide-react'
+import { ArrowLeftRight, Plus, Trash2, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
-import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
-import { formatJalali } from '../lib/jalali'
 import { useTransferDraft, type TransferDraft } from '../lib/transferDraft'
 
 /** فرمِ کلاسیکِ «انتقال بین انبار» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ [useTransferDraft]. */
@@ -12,23 +10,20 @@ export function TransferForm({
   token,
   warehouses,
   items,
+  onCreated,
 }: {
   token: string
   warehouses: WarehouseCache[]
   items: ItemCache[]
+  onCreated?: () => void
 }) {
-  const d = useTransferDraft({ token, warehouses, items })
+  const d = useTransferDraft({ token, warehouses, items, onCreated })
 
   return (
     <SectionCard
       icon={ArrowLeftRight}
       title="حواله انتقال بین انبارها"
-      description="جابه‌جایی کالا بین دو انبار؛ چون فقط محل موجودی تغییر می‌کند، سند حسابداری‌ای ساخته نمی‌شود."
-      actions={
-        <button onClick={() => void d.refresh()}>
-          <RefreshCw size={13} /> به‌روزرسانی
-        </button>
-      }
+      description="جابه‌جایی کالا بین دو انبار. جمعِ موجودیِ شرکت عوض نمی‌شود؛ سندِ حسابداری فقط وقتی صادر می‌شود که دو انبار معینِ موجودیِ متفاوت داشته باشند."
     >
       {warehouses.length < 2 || d.goodsItems.length === 0 ? (
         <p className="hint">برای ثبت حواله حداقل به دو انبار و یک کالای غیرخدماتی نیاز است.</p>
@@ -76,8 +71,6 @@ export function TransferForm({
           {d.message && <div className="hint">{d.message}</div>}
         </form>
       )}
-
-      <TransfersList d={d} />
     </SectionCard>
   )
 }
@@ -115,31 +108,3 @@ export function TransferLinesTable({ d }: { d: TransferDraft }) {
   )
 }
 
-/** فهرستِ حواله‌های ثبت‌شده — مشترکِ فرم و ویزارد. */
-export function TransfersList({ d }: { d: TransferDraft }) {
-  if (d.transfers.length === 0) {
-    return <EmptyState icon={ArrowLeftRight} text="حواله‌ای ثبت نشده." />
-  }
-  return (
-    <div className="table-scroll">
-      <table className="cards-on-mobile">
-        <thead>
-          <tr><th>شماره</th><th>تاریخ</th><th>از</th><th>به</th><th>ردیف‌ها</th></tr>
-        </thead>
-        <tbody>
-          {d.transfers.map((t) => (
-            <tr key={t.id}>
-              <td data-label="شماره">{t.number != null ? t.number.toLocaleString('fa-IR') : '—'}</td>
-              <td data-label="تاریخ">{formatJalali(t.transfer_date)}</td>
-              <td data-label="از">{d.warehouseById.get(t.from_warehouse_id)?.name ?? '—'}</td>
-              <td data-label="به">{d.warehouseById.get(t.to_warehouse_id)?.name ?? '—'}</td>
-              <td data-label="ردیف‌ها">
-                {t.lines.map((l) => `${d.itemById.get(l.item_id)?.name ?? l.item_id} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}

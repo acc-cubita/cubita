@@ -17,6 +17,7 @@ import {
   type ContactRecord,
   type CostCenterRecord,
   type CreditStatus,
+  type IssueInvoiceContext,
   type Currency,
   type ResolvedPrice,
   type SaleType,
@@ -48,6 +49,8 @@ export function useSalesInvoiceDraft({
   onQueued,
   prefill,
   onPrefillConsumed,
+  issuePrefill,
+  onIssuePrefillConsumed,
 }: {
   token: string
   warehouses: WarehouseCache[]
@@ -55,9 +58,15 @@ export function useSalesInvoiceDraft({
   onQueued: () => void
   prefill?: SalesInvoiceRecord | null
   onPrefillConsumed?: () => void
+  /** فاکتور از روی خروجِ ثبت‌شده (§۱۵ §۱۶) — اقلام، انبار و تحویل‌گیرنده از خروج می‌آیند. */
+  issuePrefill?: IssueInvoiceContext | null
+  onIssuePrefillConsumed?: () => void
 }) {
   // در حالتِ رونوشت (prefill) پیش‌نویسِ ماندگار نباید بنشیند تا دیتای رونوشت را نیالاید.
-  const persistOff = !!prefill
+  const persistOff = !!prefill || !!issuePrefill
+  //: خروجی که این فاکتور از آن ساخته می‌شود. تا وقتی هست، ارسال ردیف‌ها را به همان
+  //: خروج وصل می‌کند و سرور موجودی را دوباره کم نمی‌کند.
+  const [sourceIssue, setSourceIssue] = useState<IssueInvoiceContext | null>(null)
   const [warehouseId, setWarehouseId] = usePersistentState('cubita.draft.salesInvoice.warehouseId', '', persistOff)
   const [invoiceDate, setInvoiceDate] = usePersistentState('cubita.draft.salesInvoice.invoiceDate', todayIso(), persistOff)
   const [taxRate, setTaxRate] = usePersistentState('cubita.draft.salesInvoice.taxRate', '10', persistOff)
@@ -140,6 +149,35 @@ export function useSalesInvoiceDraft({
     onPrefillConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill])
+
+  // فاکتور از روی خروج: کالا و مقدار همان خروج‌اند؛ قیمت فقط پیشنهادِ کارتِ کالاست و
+  // مالِ فاکتور است (§۱۷). کلیدِ یکتاسازی تازه می‌شود چون این سندِ دیگری است.
+  useEffect(() => {
+    if (!issuePrefill) return
+    setWarehouseId(issuePrefill.warehouse_id)
+    setContactId(issuePrefill.receiver_id ?? '')
+    setCurrencyCode('')
+    setInvoiceDiscount('')
+    setRoundStep(0)
+    setInvoiceDate(todayIso())
+    setLines(
+      issuePrefill.lines.map((l) => ({
+        itemId: l.item_id,
+        qty: String(Number(l.qty)),
+        unitPrice: Number(l.suggested_unit_price) ? String(Number(l.suggested_unit_price)) : '',
+        discount: '',
+        addition: '',
+        dutyAmount: '',
+      })),
+    )
+    setSourceIssue(issuePrefill)
+    idempotencyKey.current = newIdempotencyKey()
+    setMessage(
+      `اقلامِ خروج انبار شماره ${issuePrefill.issue_number.toLocaleString('fa-IR')} بارگذاری شد؛ قیمت‌ها را بررسی و فاکتور را ثبت کنید.`,
+    )
+    onIssuePrefillConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issuePrefill])
 
   // مراکز هزینه زنده خوانده می‌شوند؛ آفلاین که نشد، انتخاب‌گر پنهان و فاکتور بدون مرکز است.
   useEffect(() => {
@@ -466,8 +504,17 @@ export function useSalesInvoiceDraft({
       return false
     }
 
+    //: هر ردیفِ کالا به یک ردیفِ خروج با همان کالا و همان مقدار وصل می‌شود. اگر کاربر
+    //: مقدار را عوض کرده باشد، پیوندی پیدا نمی‌شود و سرور با پیامِ روشن ردش می‌کند.
+    const issuePool = sourceIssue ? [...sourceIssue.lines] : []
+    const issueLineFor = (l: DraftLine): string | null => {
+      const index = issuePool.findIndex((p) => p.item_id === l.itemId && Number(p.qty) === Number(l.qty))
+      return index < 0 ? null : issuePool.splice(index, 1)[0].issue_line_id
+    }
+
     const payload = {
       invoice_date: invoiceDate,
+      source_warehouse_issue_id: sourceIssue?.issue_id ?? null,
       warehouse_id: effectiveWarehouseId || null,
       customer_name2: customerName2.trim(),
       delivery_location: deliveryLocation.trim(),
@@ -492,6 +539,7 @@ export function useSalesInvoiceDraft({
         discount: Math.round((Number(l.discount) || 0) * rate),
         addition: Math.round((Number(l.addition) || 0) * rate),
         duty_amount: Math.round((Number(l.dutyAmount) || 0) * rate),
+        source_issue_line_id: sourceIssue ? issueLineFor(l) : null,
       })),
     }
 
@@ -502,9 +550,14 @@ export function useSalesInvoiceDraft({
         setMessage('فاکتور در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.')
       } else {
         await createSalesInvoiceCommercial(token, payload, idempotencyKey.current)
-        setMessage('فاکتور تجاری ثبت شد؛ سند حسابداری و خروج انبار را از فهرست فاکتورها صادر کنید.')
+        setMessage(
+          sourceIssue
+            ? `فاکتور از خروج انبار شماره ${sourceIssue.issue_number.toLocaleString('fa-IR')} ثبت شد؛ موجودی دوباره کم نشد.`
+            : 'فاکتور تجاری ثبت شد؛ سند حسابداری و خروج انبار را از فهرست فاکتورها صادر کنید.',
+        )
       }
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
+      setSourceIssue(null)
       setLines([{ itemId: '', qty: '1', unitPrice: '', discount: '', addition: '', dutyAmount: '' }])
       setCostCenterId('')
       setContactId('')
@@ -607,6 +660,7 @@ export function useSalesInvoiceDraft({
     setMessage,
     submitting,
     submit,
+    sourceIssue,
   }
 }
 

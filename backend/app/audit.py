@@ -87,6 +87,7 @@ def audited_models() -> dict[type, str]:
     from app.models.sales_ops import CreditDebitNote
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
+    from app.models.issue_returns import WarehouseIssueReturn
     from app.models.payroll import (
         PayrollFactor,
         PayrollSettings,
@@ -108,6 +109,7 @@ def audited_models() -> dict[type, str]:
         PurchaseInvoice: "فاکتور خرید",
         WarehouseReceipt: "رسید انبار خرید",
         WarehouseIssue: "خروج انبار فروش",
+        WarehouseIssueReturn: "برگشت خروج انبار",
         SalesReturn: "برگشت از فروش",
         PurchaseReturn: "برگشت از خرید",
         StockTransfer: "انتقال انبار",

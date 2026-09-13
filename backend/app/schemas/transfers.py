@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -47,6 +47,9 @@ class StockTransferOut(BaseModel):
     from_warehouse_id: UUID
     to_warehouse_id: UUID
     description: str
+    journal_entry_id: UUID | None = None
+    voided_at: datetime | None = None
+    void_reason: str = ""
     lines: list[StockTransferLineOut]
 
     model_config = {"from_attributes": True}

@@ -974,7 +974,8 @@ STOCK_SOURCE_LABELS = {
     "purchase_invoice": "فاکتور خرید",
     "sales_invoice": "فاکتور فروش",
     "warehouse_receipt": "رسید انبار خرید",
-    "warehouse_issue": "خروج انبار فروش",
+    "warehouse_issue": "خروج انبار",
+    "warehouse_issue_return": "برگشت خروج انبار",
     "purchase_return": "برگشت از خرید",
     "sales_return": "برگشت از فروش",
     "adjustment": "تعدیل انبار",
@@ -1248,7 +1249,15 @@ def get_inventory_report(db: Session, warehouse_id: UUID | None, as_of: date | N
                 "category": item.category,
                 "qty_on_hand": qty,
                 "unit_cost": unit_cost,
-                "stock_value": qty * unit_cost,
+                #: **به ریالِ صحیح، چون این عدد باید با دفتر بخواند.**
+                #:
+                #: `average_cost` از مهاجرتِ ۰۱۳۱ چهار رقم اعشار دارد (بهای
+                #: تمام‌شده نتیجه‌ی یک تقسیم است و ریالِ صحیح ده‌ها ریال خطا
+                #: می‌ساخت). ولی دفتر به ریالِ صحیح می‌نویسد، پس اگر این‌جا
+                #: کسر بماند جمعِ گزارش با ماندهٔ «موجودی کالا» مو نمی‌زند
+                #: ولی دقیقاً هم برابر نمی‌شود — و همین «تقریباً برابر» همان
+                #: چیزی است که کسی نمی‌تواند توضیحش بدهد.
+                "stock_value": (qty * unit_cost).quantize(Decimal(1)),
             }
         )
 

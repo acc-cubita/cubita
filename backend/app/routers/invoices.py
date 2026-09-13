@@ -22,6 +22,7 @@ from app.schemas.invoices import (
     PurchaseInvoiceIn,
     PurchaseInvoiceOut,
     PurchaseSummaryOut,
+    ReceiptPaymentContextOut,
     WarehouseReceiptIn,
     WarehouseReceiptOut,
     WarehouseIssueIn,
@@ -44,14 +45,21 @@ from app.services.sales_invoices import (
 from decimal import Decimal
 
 from app.services.pdf_invoice import render_invoice_pdf
-from app.services.printing import fa_number, render_invoice
+from app.services.printing import fa_number, render_invoice, render_warehouse_document
 from app.services.voiding import void_purchase_invoice, void_sales_invoice
 from app.services.warehouse_receipts import (
     create_warehouse_receipt,
+    receipt_payment_context,
+    receipt_print_projection,
     received_by_line,
     void_warehouse_receipt,
 )
-from app.services.warehouse_issues import create_warehouse_issue, void_warehouse_issue
+from app.services.warehouse_issues import (
+    attach_issue_accounts,
+    create_warehouse_issue,
+    post_sales_invoice_from_issue,
+    void_warehouse_issue,
+)
 
 router = APIRouter(tags=["invoices"])
 
@@ -301,9 +309,17 @@ def create_sales_invoice(
         user,
         operation="create_sales_invoice",
         payload=data,
-        run=lambda: post_sales_invoice(
-            db, data, user, enforce_credit=not x_cubita_offline_replay,
-            move_inventory=immediate, issue_accounting=immediate,
+        #: فاکتوری که از خروجِ ثبت‌شده ساخته می‌شود هیچ‌وقت خودش موجودی کم نمی‌کند —
+        #: حتی در سیاستِ «خودکار» (§۱۵). سندِ درآمد و طلب اما همان سیاست را دارد.
+        run=lambda: (
+            post_sales_invoice_from_issue(
+                db, data, user, enforce_credit=not x_cubita_offline_replay, issue_accounting=immediate,
+            )
+            if data.source_warehouse_issue_id
+            else post_sales_invoice(
+                db, data, user, enforce_credit=not x_cubita_offline_replay,
+                move_inventory=immediate, issue_accounting=immediate,
+            )
         ),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
@@ -339,6 +355,11 @@ def create_immediate_sales_invoice(
     """فروش یک‌کلیکی POS؛ تراکنش واحد، اما با فاکتور/سند/خروج مستقل."""
     if data.warehouse_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبار فروش فوری الزامی است")
+    if data.source_warehouse_issue_id:
+        #: فروشِ فوری خودش خروج می‌سازد؛ فاکتور از روی خروجِ موجود مسیرِ عادی را دارد.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "فاکتورِ ساخته‌شده از خروج انبار از مسیرِ فروشِ فوری ثبت نمی‌شود"
+        )
 
     def run() -> SalesInvoice:
         invoice = post_sales_invoice(
@@ -371,11 +392,14 @@ def list_warehouse_issues(
 ):
     if db.get(SalesInvoice, invoice_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
-    return (
+    issues = (
         db.query(WarehouseIssue).options(selectinload(WarehouseIssue.lines))
         .filter(WarehouseIssue.sales_invoice_id == invoice_id)
         .order_by(WarehouseIssue.issue_date.desc(), WarehouseIssue.number.desc()).all()
     )
+    #: همان «حساب معین»ی که فهرستِ خروج‌ها نشان می‌دهد — دو مسیر، یک جواب.
+    attach_issue_accounts(db, issues)
+    return issues
 
 
 @router.post(
@@ -528,6 +552,7 @@ def issue_warehouse_receipt(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "create")),
 ):
+    """رسید از دلِ یک فاکتورِ خرید — گردشِ قدیمی، دست‌نخورده."""
     return idempotent(
         db,
         request,
@@ -535,6 +560,61 @@ def issue_warehouse_receipt(
         operation=f"create_warehouse_receipt:{invoice_id}",
         payload=data,
         run=lambda: create_warehouse_receipt(db, invoice_id, data, user),
+        replay=lambda rid: db.get(WarehouseReceipt, rid),
+    )
+
+
+@router.get("/api/warehouse-receipts", response_model=Page[WarehouseReceiptOut])
+def list_all_warehouse_receipts(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    receipt_type: str | None = None,
+    warehouse_id: UUID | None = None,
+    contact_id: UUID | None = None,
+    _=Depends(require_permission("invoices", "view")),
+):
+    """فهرستِ همه‌ی رسیدهای انبار (§۴۳).
+
+    تا امروز رسید فقط از دلِ فاکتورش دیده می‌شد؛ رسیدِ مستقیم اصلاً فاکتوری
+    ندارد که زیرش پیدا شود. پس رسید باید موجودیتِ قابلِ جست‌وجوی خودش باشد، نه
+    یک حرکتِ ناشناس در دفترِ انبار.
+    """
+    query = db.query(WarehouseReceipt).options(selectinload(WarehouseReceipt.lines))
+    if receipt_type:
+        query = query.filter(WarehouseReceipt.receipt_type == receipt_type)
+    if warehouse_id:
+        query = query.filter(WarehouseReceipt.warehouse_id == warehouse_id)
+    if contact_id:
+        query = query.filter(WarehouseReceipt.contact_id == contact_id)
+    items, next_cursor = paginate(
+        query, [WarehouseReceipt.receipt_date, WarehouseReceipt.id], params
+    )
+    return Page(items=items, next_cursor=next_cursor)
+
+
+@router.post("/api/warehouse-receipts", response_model=WarehouseReceiptOut, status_code=201)
+def create_direct_warehouse_receipt(
+    data: WarehouseReceiptIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    """رسیدِ مستقل — با یا بدونِ فاکتورِ خرید (§۹).
+
+    **بدونِ فاکتور یک سناریوی واقعی است، نه یک حالتِ خطا:** خریدی که فاکتورش
+    بعداً می‌آید یا اصلاً نمی‌آید. چنین رسیدی خودش سندِ حسابداری می‌زند، چون
+    هیچ سندِ دیگری این خرید را نمی‌شناسد.
+
+    **idempotent، چون سند و حرکتِ انبار می‌سازد.** تکرارِ شبکه‌ای نباید رسیدِ دوم،
+    ورودِ دوباره‌ی کالا و سندِ حسابداریِ دوم بسازد.
+    """
+    return idempotent(
+        db,
+        request,
+        user,
+        operation="create_direct_warehouse_receipt",
+        payload=data,
+        run=lambda: create_warehouse_receipt(db, None, data, user),
         replay=lambda rid: db.get(WarehouseReceipt, rid),
     )
 
@@ -570,8 +650,12 @@ def void_sales(
     #: ساخته؛ کاربر سندی نمی‌بیند که بخواهد آگاهانه باطلش کند، و این گارد فقط
     #: یک بن‌بست می‌شود — همان بن‌بستی که فصلِ «فاکتور برگشتی» یکی‌اش را بست.
     #: `void_sales_invoice` خودش خروج‌های فعال را آبشاری باطل می‌کند.
+    #: فقط خروجی که از خودِ فاکتور ساخته شده. خروجِ **مستقلی** که بعداً فاکتور
+    #: گرفته با ابطالِ فاکتور جدا می‌شود، نه باطل — کالا واقعاً رفته است.
     if not sales_posting.posts_immediately(db) and db.query(WarehouseIssue.id).filter(
-        WarehouseIssue.sales_invoice_id == invoice_id, WarehouseIssue.voided_at.is_(None)
+        WarehouseIssue.sales_invoice_id == invoice_id,
+        WarehouseIssue.voided_at.is_(None),
+        WarehouseIssue.origin == "invoice",
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "این فاکتور خروج انبار فعال دارد؛ ابتدا خروج را باطل کنید")
     if db.query(Receipt.id).join(
@@ -819,3 +903,36 @@ def pdf_purchase_invoice(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور یافت نشد")
     pdf_bytes = render_invoice_pdf(**_purchase_render_kwargs(db, principal, invoice))
     return _pdf_response(pdf_bytes, f"purchase-invoice-{invoice.number}.pdf")
+
+
+@router.get("/api/warehouse-receipts/{receipt_id}/print", response_class=HTMLResponse)
+def print_warehouse_receipt(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """برگه‌ی چاپیِ رسید انبار — Projectionِ همان سند، نه مدلِ مالیِ دوم (§۴۲)."""
+    receipt = db.get(WarehouseReceipt, receipt_id)
+    if receipt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")
+    return _print_response(
+        render_warehouse_document(
+            business_name=principal.membership.tenant.name, **receipt_print_projection(db, receipt)
+        )
+    )
+
+
+@router.get(
+    "/api/warehouse-receipts/{receipt_id}/payment-context", response_model=ReceiptPaymentContextOut
+)
+def warehouse_receipt_payment_context(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """زمینه‌ی «اعلامیه پرداخت» از روی رسید — فقط خواندنی؛ پرداخت همچنان سندِ خزانه است (§۳۹)."""
+    receipt = db.get(WarehouseReceipt, receipt_id)
+    if receipt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")
+    return receipt_payment_context(db, receipt)

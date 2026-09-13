@@ -4,14 +4,16 @@ import {
   fetchEmployees,
   fetchFixedAssets,
   fetchInstallmentPlans,
+  fetchIssueReturnLedger,
   fetchItemsLive,
   fetchLeads,
   fetchProductionOrders,
   fetchPurchaseInvoices,
+  fetchAllWarehouseReceipts,
   fetchPurchaseReturns,
   fetchStockAdjustments,
   fetchStockCounts,
-  fetchStockTransfers,
+  fetchWarehouseIssueLedger,
 } from '../api'
 import {
   Activity,
@@ -436,6 +438,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       subtitle: day(r.invoice_date),
       meta: fa(r.total_amount),
     })),
+    receipts: def('رسیدهای انبار', (t) => fetchAllWarehouseReceipts(t), (r) => ({
+      id: r.id,
+      title: `رسید ${faNum(r.number)}`,
+      subtitle: day(r.receipt_date),
+      meta: fa(r.net_amount),
+    })),
     returns: def('برگشت از خرید', fetchPurchaseReturns, (r) => ({
       id: r.id,
       title: `برگشتی ${faNum(r.number)}`,
@@ -456,11 +464,24 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       subtitle: day(r.adjustment_date),
       meta: faNum(r.qty_diff),
     })),
-    transfer: def('انتقال‌های بین انبار', fetchStockTransfers, (r) => ({
+    issues: def('خروج‌های انبار', (t) => fetchWarehouseIssueLedger(t), (r) => ({
+      id: r.id,
+      title: `${r.type_label} ${faNum(r.number)}`,
+      subtitle: day(r.doc_date),
+      meta: r.kind === 'transfer' ? `به ${r.destination_warehouse_name}` : r.receiver_name || `${faNum(r.line_count)} قلم`,
+    })),
+    'issue-returns': def('برگشت‌های خروج انبار', (t) => fetchIssueReturnLedger(t), (r) => ({
+      id: r.id,
+      title: `برگشت ${r.type_label} ${faNum(r.number)}`,
+      subtitle: day(r.return_date),
+      meta: r.deliverer_name || `${faNum(r.line_count)} قلم`,
+    })),
+    //: همان دفترِ خروج‌ها با نوعِ انتقال — نه فراخوانیِ جداگانه‌ی حواله‌ها.
+    transfer: def('انتقال‌های بین انبار', (t) => fetchWarehouseIssueLedger(t, { issue_type: 'transfer' }), (r) => ({
       id: r.id,
       title: `انتقال ${faNum(r.number)}`,
-      subtitle: r.description || day(r.transfer_date),
-      meta: `${faNum(r.lines?.length ?? 0)} قلم`,
+      subtitle: r.description || day(r.doc_date),
+      meta: `${faNum(r.line_count)} قلم`,
     })),
     count: def('انبارگردانی‌ها', fetchStockCounts, (r) => ({
       id: r.id,
