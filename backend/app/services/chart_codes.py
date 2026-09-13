@@ -28,6 +28,20 @@ PAYROLL_EXPENSE = "payroll_expense"
 #: قسط‌به‌قسط از حقوقش برمی‌گردد. حسابِ نقش‌دارِ تازه است، پس با
 #: `get_or_create_account` ساخته می‌شود تا چارتِ مشتریانِ موجود هم نشکند.
 EMPLOYEE_LOAN = "employee_loan"
+#: اختلافِ گِرد کردنِ خالصِ پرداختیِ حقوق — هم‌خانواده‌ی `SALES_ROUNDING`.
+#:
+#: **چرا حسابِ جدا و نه ریختنش داخلِ هزینه‌ی حقوق.** اگر تفاوتِ رند در
+#: `PAYROLL_EXPENSE` گم شود، هزینه‌ی حقوقِ دفتر دیگر با جمعِ فیش‌ها نمی‌خواند و
+#: هیچ‌کس نمی‌تواند بپرسد «چقدرش رند بود؟» — همان دلیلی که `SALES_ROUNDING` را
+#: از «فروش» جدا کرد.
+PAYROLL_ROUNDING = "payroll_rounding"
+#: کسورِ اختیاریِ حقوق که از کارمند نگه داشته می‌شود و به شخصِ ثالث بدهکاریم
+#: (بیمه‌ی تکمیلی، صندوق، اقساطِ غیرِ وام…).
+#:
+#: **این حساب یک باگِ توازن را می‌بندد.** ردیف‌های کسوراتِ قرارداد خالص را کم
+#: می‌کردند ولی هیچ ردیفِ بستانکاری در سند نداشتند، پس سندِ حقوقِ هر قراردادی که
+#: کسور داشت دقیقاً به همان اندازه نامتوازن ثبت می‌شد.
+PAYROLL_DEDUCTIONS_PAYABLE = "payroll_deductions_payable"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
 VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
@@ -133,6 +147,8 @@ DEFAULT_CODE_BY_ROLE = {
     COGS: "5101",
     PAYROLL_EXPENSE: "5102",
     EMPLOYEE_LOAN: "1111",
+    PAYROLL_ROUNDING: "5118",
+    PAYROLL_DEDUCTIONS_PAYABLE: "2109",
     INVENTORY_ADJUSTMENT: "5105",
     DEPRECIATION_EXPENSE: "5106",
     FX_GAIN: "4106",

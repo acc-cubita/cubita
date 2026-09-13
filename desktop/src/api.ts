@@ -928,15 +928,28 @@ export interface EmployeeRecord {
 
 export const fetchEmployees = (token: string) => authedGet<EmployeeRecord[]>(token, '/api/employees')
 
+/**
+ * استخدام = فعال‌کردنِ نقشِ کارمند روی یک طرف حساب.
+ *
+ * دو شکل کار می‌کند و **هیچ‌کدام هویتِ بی‌طرف‌حساب نمی‌سازد**:
+ *
+ *  • `contact_id` بدهید → نقش روی همان طرف حساب فعال می‌شود.
+ *  • نام و کدِ ملی بدهید → سرور اول دنبالِ طرف‌حسابی با همان کدِ ملی می‌گردد؛
+ *    اگر باشد همان را برمی‌دارد (نه رکوردِ تکراری)، وگرنه می‌سازدش.
+ *
+ * نام و کدِ ملی از این پس روی **طرف حساب** حقیقت دارند: اصلاحشان همان‌جا انجام
+ * می‌شود و به فایلِ بانک و اظهارنامه‌ی مالیات و لیستِ بیمه می‌رسد.
+ */
 export const createEmployee = (
   token: string,
   data: {
-    first_name: string
-    last_name: string
-    national_id: string
-    phone: string
-    email: string
-    bank_account_number: string
+    contact_id?: string
+    first_name?: string
+    last_name?: string
+    national_id?: string
+    phone?: string
+    email?: string
+    bank_account_number?: string
     hire_date: string
   },
 ) => authedSend<EmployeeRecord>(token, 'POST', '/api/employees', data)
@@ -1060,7 +1073,59 @@ export interface TaxBracket {
   rate: string // نرخ بین ۰ و ۱
 }
 
-export interface PayrollSettingsRecord {
+/**
+ * پارامترهای قانونی‌ای که تا مهاجرتِ ۰۱۳۸ داخلِ سورس‌کدِ سرور ثابت بودند.
+ *
+ * پیش‌فرضِ هر کدام **همان ثابتی است که جایش را گرفته**، پس فرمی که این‌ها را
+ * نفرستد دقیقاً رفتارِ قبلی را می‌گیرد.
+ */
+export interface PayrollStatutoryParams {
+  /** سقفِ روزانه‌ی دستمزدِ مشمولِ بیمه. صفر = بی‌سقف. */
+  insurance_daily_ceiling: string
+  /** بیمه‌ی بیکاری — سهمِ کارفرما، به نرخِ کارفرما اضافه می‌شود. */
+  unemployment_rate: string
+  /** نرخِ مشاغل سخت: ذخیره و نمایش داده می‌شود، ولی **اعمال نمی‌شود** —
+   *  شمولش به کارمند وابسته است و کوبیتا هنوز آن پرچم را ندارد. */
+  hard_job_rate: string
+  eidi_base_multiplier: string
+  severance_days_per_year: number
+  monthly_work_days: string
+  standard_monthly_hours: string
+  overtime_multiplier: string
+  /** چه کسری از هر بیمه از مبنای مالیات کم می‌شود. */
+  tax_exempt_coef_social: string
+  tax_exempt_coef_supplementary: string
+  tax_exempt_coef_medical: string
+  /** کدام عاملِ موجود نقشِ بیمه‌ی تکمیلی/درمان را دارد. */
+  supplementary_employee_factor_id: string | null
+  supplementary_employer_factor_id: string | null
+  medical_factor_id: string | null
+  allow_negative_tax: boolean
+  /** خالص تا این تعداد رقم گِرد می‌شود (۳ = تا هزار ریال). صفر = بدونِ رند. */
+  payment_rounding_digits: number
+}
+
+/** همان پارامترها هنگامِ **نوشتن** — عدد، نه رشته (خروجیِ سرور `Decimal` است). */
+export interface PayrollStatutoryParamsIn {
+  insurance_daily_ceiling: number
+  unemployment_rate: number
+  hard_job_rate: number
+  eidi_base_multiplier: number
+  severance_days_per_year: number
+  monthly_work_days: number
+  standard_monthly_hours: number
+  overtime_multiplier: number
+  tax_exempt_coef_social: number
+  tax_exempt_coef_supplementary: number
+  tax_exempt_coef_medical: number
+  supplementary_employee_factor_id: string | null
+  supplementary_employer_factor_id: string | null
+  medical_factor_id: string | null
+  allow_negative_tax: boolean
+  payment_rounding_digits: number
+}
+
+export interface PayrollSettingsRecord extends PayrollStatutoryParams {
   id: string
   year: number
   insurance_employee_rate: string
@@ -1086,7 +1151,7 @@ export const upsertPayrollSettings = (
     min_base_wage: number
     annual_leave_days: number
     notes: string
-  },
+  } & Partial<PayrollStatutoryParamsIn>,
 ) => authedSend<PayrollSettingsRecord>(token, 'PUT', '/api/payroll-settings', data)
 
 export interface ItemRecord {
@@ -6522,6 +6587,14 @@ export const TAX_GROUP_KIND_LABELS: Record<string, string> = {
 export const BRANCH_KIND_LABELS: Record<string, string> = {
   insurance: 'شعبه بیمه',
   tax: 'حوزه مالیاتی',
+  supplementary: 'بیمه تکمیلی',
+}
+
+/** «نحوه محاسبه مالیات» — فقط برای حوزه مالیاتی؛ سرور هم همین را می‌سنجد. */
+export const TAX_CALC_METHOD_LABELS: Record<string, string> = {
+  monthly: 'تعدیل ماهانه',
+  annual: 'تعدیل سالانه',
+  none: 'بدون تعدیل',
 }
 
 export interface ServiceLocationRecord {
@@ -6552,6 +6625,19 @@ export interface PayrollFactorRecord {
   /** خالی = عاملِ ساخته‌ی کاربر؛ کلیددار = عاملی که موتورِ فیش می‌شناسدش. */
   system_key: string
   is_active: boolean
+  /** ترتیبِ ردیف‌های فیش. **فقط نمایشی** — هیچ محاسبه‌ای از آن نمی‌خوانَد، و
+   *  فیشِ صادرشده را هم تکان نمی‌دهد چون شماره‌ی ردیفش منجمد است. */
+  display_priority: number
+  /** پروفایلِ حسابداریِ عامل. خالی = حسابِ عمومیِ حقوق، یعنی رفتارِ امروز. */
+  expense_account_id: string | null
+  expense_detail_class: string
+  payable_account_id: string | null
+  payable_detail_class: string
+  /** در حکمی یا فیشی نشسته؟ طبقه‌ی عاملِ در استفاده قفل است. */
+  in_use: boolean
+  /** ضریبِ **مؤثرِ** شرکت در هر مبنا — با پیش‌فرض‌ها حل‌شده، همان چیزی که موتور
+   *  استفاده می‌کند. رابط قاعده‌ی پیش‌فرض را دوباره پیاده نمی‌کند. */
+  participation: Record<string, string>
 }
 
 export interface PayrollTaxGroupRecord {
@@ -6568,6 +6654,27 @@ export interface InsuranceTaxBranchRecord {
   name: string
   kind: string
   is_active: boolean
+  /** طرف‌حسابِ سازمان — بدهیِ بیمه/مالیات رویش می‌نشیند. خالی = هنوز وصل نشده. */
+  contact_id: string | null
+  /** خوانده‌شده از خودِ طرف حساب، نه کپی‌شده. */
+  contact_name: string
+  analytic_code: string
+
+  /** «کد شرکت / شماره پرونده» — پرونده مالیاتی یا کد کارگاه، بسته به نوع. */
+  registration_code: string
+  workplace_name: string
+  workplace_address: string
+  employer_name: string
+  /** قرارداد کارفرما با مرجع قانونی — نه قرارداد استخدامی کارمند. */
+  agreement_number: string
+  /** عدد سرصفحه ثبت کارگاه؛ نمی‌گوید کدام کارمندان معاف‌اند. */
+  insurance_exempt_count: number
+  cost_center_id: string | null
+  cost_center_name: string
+  /** فقط برای `kind === 'tax'`. */
+  tax_calculation_method: string
+  /** روی حکمی نشسته؟ اگر بله، نوعش دیگر عوض نمی‌شود. */
+  in_use: boolean
 }
 
 /** طرف‌حسابی که تیکِ «کارمند» دارد — ورودیِ فهرستِ «نام کارمند»ِ فرمِ قرارداد. */
@@ -8417,3 +8524,107 @@ export interface NotePrefill {
   /** اگر از «اصلاح» آمده: شماره‌ی اعلامیه‌ای که همین حالا باطل شد. */
   corrects?: number | null
 }
+/** ویرایشِ شعبه — تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند (مهاجرت ۰۱۳۶). */
+export const updateInsuranceTaxBranch = (
+  token: string,
+  id: string,
+  body: Partial<InsuranceTaxBranchRecord>,
+) => authedSend<InsuranceTaxBranchRecord>(token, 'PATCH', `/api/insurance-tax-branches/${id}`, body)
+
+// ── جدول مالیات ─────────────────────────────────────────────────────────────
+
+export interface TaxBracketRow {
+  seq: number
+  /** مرزِ پایینِ پله — مشتق از سقفِ پله‌ی قبل، نه ستونِ ذخیره‌شده. */
+  from_amount: string
+  /** `null` = سقفِ نامحدود. */
+  up_to: string | null
+  /** کسر، نه درصد: ۰٫۰۷۵ یعنی ۷٫۵٪. */
+  rate: string
+}
+
+export interface TaxTableRecord {
+  id: string
+  title: string
+  title2: string
+  effective_from: string
+  tax_group_id: string | null
+  tax_group_name: string
+  calculation_type: string
+  brackets: TaxBracketRow[]
+  /** فیشی به این جدول استناد کرده؟ */
+  in_use: boolean
+}
+
+export interface TaxBreakdownStep {
+  seq: number
+  from_amount: string
+  up_to: string | null
+  rate: string
+  consumed: string
+  tax: string
+  cumulative: string
+}
+
+export interface TaxBreakdown {
+  payslip_id: string
+  tax_amount: string
+  annual_taxable: string
+  annual_exemption: string
+  tax_table_id: string | null
+  tax_table_title: string
+  tax_group_name: string
+  steps: TaxBreakdownStep[]
+}
+
+export const TAX_CALC_PURPOSE_LABELS: Record<string, string> = {
+  salary: 'حقوق',
+  eidi: 'عیدی',
+}
+
+export const fetchTaxTables = (token: string, calculationType?: string) =>
+  authedGet<TaxTableRecord[]>(
+    token,
+    calculationType ? `/api/tax-tables?calculation_type=${calculationType}` : '/api/tax-tables',
+  )
+export const createTaxTable = (token: string, body: unknown) =>
+  authedSend<TaxTableRecord>(token, 'POST', '/api/tax-tables', body)
+export const updateTaxTable = (token: string, id: string, body: unknown) =>
+  authedSend<TaxTableRecord>(token, 'PATCH', `/api/tax-tables/${id}`, body)
+export const deleteTaxTable = (token: string, id: string) =>
+  authedDelete(token, `/api/tax-tables/${id}`)
+export const fetchTaxBreakdown = (token: string, payslipId: string) =>
+  authedGet<TaxBreakdown>(token, `/api/payslips/${payslipId}/tax-breakdown`)
+
+/** مبناهایی که یک عاملِ حقوق می‌تواند در آن‌ها شرکت کند. */
+export const FACTOR_PURPOSE_LABELS: Record<string, string> = {
+  insurance_base: 'مبنای بیمه',
+  tax_base: 'مبنای مالیات',
+  eidi_base: 'مبنای عیدی',
+  severance_base: 'مبنای سنوات',
+  leave_base: 'مبنای بازخرید مرخصی',
+}
+
+/** ضریبِ شرکتِ یک عامل در مبناها. ردیفِ برابرِ پیش‌فرض روی سرور پاک می‌شود. */
+export const setFactorParticipation = (
+  token: string,
+  factorId: string,
+  participation: Record<string, number>,
+) =>
+  authedSend<PayrollFactorRecord>(token, 'PUT', `/api/payroll-factors/${factorId}/participation`, {
+    participation,
+  })
+
+/** بُعدِ تفصیلیِ ردیفِ سندی که یک عاملِ حقوق می‌سازد. */
+export const FACTOR_DETAIL_CLASS_LABELS: Record<string, string> = {
+  '': 'بدون تفصیلی',
+  cost_center: 'مرکز هزینه',
+  counterparty: 'طرف مقابل',
+}
+
+/** ویرایشِ عامل — شاملِ فعال/غیرفعال‌کردن. طبقه‌ی عاملِ در استفاده قفل است. */
+export const updatePayrollFactor = (
+  token: string,
+  factorId: string,
+  body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
+) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)

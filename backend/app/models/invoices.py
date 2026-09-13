@@ -576,7 +576,7 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
 
     __table_args__ = (
         #: هر نوع سریِ شماره‌ی خودش را دارد، پس «فاکتور ۱» کالا و «فاکتور ۱» خدمات
-        #: هم‌زمان معتبرند (مهاجرت ۰۱۳۵).
+        #: هم‌زمان معتبرند (مهاجرت ۰۱۴۱).
         UniqueConstraint("tenant_id", "kind", "number", name="uq_purchase_invoices_tenant_kind_number"),
         CheckConstraint(f"kind IN {PURCHASE_INVOICE_KINDS}", name="ck_purchase_invoices_kind"),
     )
@@ -684,7 +684,7 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     #: پیش از این روی ردیف نبود و برگشت از خرید حساب را از نگاشتِ *امروزِ* خدمت
     #: می‌گرفت: اگر معینِ هزینه‌ی خدمت عوض می‌شد، برگشت حسابی را بستانکار می‌کرد
     #: که فاکتور هرگز بدهکارش نکرده بود. برای کالا `NULL` است — بهای کالا به موجودیِ
-    #: همان انبار می‌نشیند، نه به حسابِ هزینه. ردیف‌های پیش از ۰۱۳۵ هم `NULL`اند و
+    #: همان انبار می‌نشیند، نه به حسابِ هزینه. ردیف‌های پیش از ۰۱۴۱ هم `NULL`اند و
     #: به نگاشتِ امروز برمی‌گردند.
     expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True

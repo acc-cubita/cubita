@@ -2,10 +2,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
+from app.services.payroll_contracts import activate_employee_role, resolve_employee_contact
 from app.services.idempotency import idempotent
 from app.models.inventory import Contact
 from app.models.payroll import (
@@ -18,12 +20,16 @@ from app.models.payroll import (
     LoanType,
     PayrollDeploymentInfo,
     PayrollFactor,
+    PayrollFactorParticipation,
     PayrollPeriod,
     PayrollSettings,
     PayrollSettlement,
     PayrollTaxGroup,
     Payslip,
+    PayslipLine,
     SalaryContract,
+    SalaryContractLine,
+    TaxTable,
     ServiceLocation,
 )
 from app.models.user import User
@@ -38,6 +44,7 @@ from app.schemas.payroll import (
     EmployeeLoanIn,
     EmployeeLoanOut,
     EmployeeOut,
+    FactorParticipationIn,
     InsuranceTaxBranchIn,
     InsuranceTaxBranchOut,
     JobTitleIn,
@@ -46,9 +53,11 @@ from app.schemas.payroll import (
     LoanTypeOut,
     PayrollFactorIn,
     PayrollFactorOut,
+    PayrollFactorPatch,
     PayrollPeriodIn,
     PayrollPeriodOut,
     PayrollSettingsIn,
+    PayrollStatutoryParams,
     PayrollSettingsOut,
     PayrollSettlementIn,
     PayrollSettlementOut,
@@ -57,10 +66,22 @@ from app.schemas.payroll import (
     PayslipOut,
     SalaryContractIn,
     SalaryContractOut,
+    TaxBreakdownOut,
+    TaxTableIn,
+    TaxTableOut,
     ServiceLocationIn,
     ServiceLocationOut,
 )
-from app.services import payroll_contracts, payroll_loans
+from app.services import factor_participation, payroll_contracts, payroll_loans
+from app.services import chart_codes as cc
+from app.services.common import assert_postable_account
+from app.services.tax_tables import (
+    assert_scope_free,
+    build_tax_breakdown,
+    mirror_default_tax_table,
+    replace_brackets,
+    table_is_used,
+)
 from app.services.payroll import (
     generate_insurance_list_csv,
     generate_payment_list_csv,
@@ -80,11 +101,23 @@ def list_employees(db: Session = Depends(get_db), _=Depends(require_permission("
 def create_employee(
     data: EmployeeIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
 ):
-    employee = Employee(**data.model_dump())
-    db.add(employee)
-    db.flush()
-    db.refresh(employee)
-    return employee
+    """نقشِ کارمند را روی یک طرف حسابِ موجود فعال می‌کند.
+
+    **هویتِ تازه‌ای ساخته نمی‌شود.** تا امروز این اندپوینت نام و کدِ ملی می‌گرفت
+    و کارمندی می‌ساخت که به هیچ طرف حسابی وصل نبود — همان آدم دو رکورد داشت و
+    اصلاحِ یکی به دیگری نمی‌رسید. همان دری که معماریِ «یک آدم، یک رکورد» را از
+    پشت دور می‌زد.
+    """
+    contact = resolve_employee_contact(
+        db,
+        contact_id=data.contact_id,
+        first_name=data.first_name or "",
+        last_name=data.last_name or "",
+        national_id=data.national_id or "",
+        phone=data.phone,
+        email=data.email,
+    )
+    return activate_employee_role(db, contact, data.hire_date, data.bank_account_number)
 
 
 @router.get("/api/salary-contracts", response_model=list[SalaryContractOut])
@@ -275,30 +308,166 @@ def upsert_payroll_settings(
     # brackets صریحاً به dict قابل‌سریالایز JSON تبدیل می‌شوند (Decimal به‌صورت خام قابل ذخیره در JSONB نیست)
     brackets = [{"up_to": str(b.up_to) if b.up_to is not None else None, "rate": str(b.rate)} for b in data.tax_brackets]
 
+    #: **یک فهرست، نه دو.** پیش از این هر ستون دو بار نوشته می‌شد (یک‌بار در
+    #: سازنده، یک‌بار در شاخه‌ی ویرایش) و هر ستونِ تازه‌ای می‌توانست یکی از دو جا
+    #: را جا بیندازد — همان باگی که سکوت می‌کند تا ماه‌ها بعد.
+    fields = {
+        "insurance_employee_rate": data.insurance_employee_rate,
+        "insurance_employer_rate": data.insurance_employer_rate,
+        "tax_exemption_annual": data.tax_exemption_annual,
+        "tax_brackets": brackets,
+        "min_base_wage": data.min_base_wage,
+        "annual_leave_days": data.annual_leave_days,
+        "notes": data.notes,
+        **{name: getattr(data, name) for name in PayrollStatutoryParams.model_fields},
+    }
+
     settings = db.query(PayrollSettings).filter(PayrollSettings.year == data.year).first()
     if settings is None:
-        settings = PayrollSettings(
-            year=data.year,
-            insurance_employee_rate=data.insurance_employee_rate,
-            insurance_employer_rate=data.insurance_employer_rate,
-            tax_exemption_annual=data.tax_exemption_annual,
-            tax_brackets=brackets,
-            min_base_wage=data.min_base_wage,
-            annual_leave_days=data.annual_leave_days,
-            notes=data.notes,
-        )
+        settings = PayrollSettings(year=data.year, **fields)
         db.add(settings)
     else:
-        settings.insurance_employee_rate = data.insurance_employee_rate
-        settings.insurance_employer_rate = data.insurance_employer_rate
-        settings.tax_exemption_annual = data.tax_exemption_annual
-        settings.tax_brackets = brackets
-        settings.min_base_wage = data.min_base_wage
-        settings.annual_leave_days = data.annual_leave_days
-        settings.notes = data.notes
+        for name, value in fields.items():
+            setattr(settings, name, value)
     db.flush()
+
+    mirror_default_tax_table(db, year=data.year, brackets=data.tax_brackets)
     db.refresh(settings)
     return settings
+
+
+# ── جدولِ مالیات ──────────────────────────────────────────────────────────────
+
+
+def _tax_table_out(db: Session, table: TaxTable) -> TaxTableOut:
+    return TaxTableOut.of(table, in_use=table_is_used(db, table.id))
+
+
+def _check_tax_table(db: Session, data: TaxTableIn, *, table_id=None) -> None:
+    """گروه و دامنه را می‌سنجد — **پیش از اینکه شیئی به جلسه اضافه شود**.
+
+    ترتیب اتفاقی نیست: هر کوئری روی جلسه‌ای که یک `TaxTable`ِ نیمه‌ساخته دارد،
+    autoflush را راه می‌اندازد و همان جدولِ خالی قیدِ `NOT NULL` را می‌شکند.
+    """
+    if data.tax_group_id is not None and db.get(PayrollTaxGroup, data.tax_group_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "گروه مالیاتی یافت نشد")
+    assert_scope_free(
+        db,
+        table_id=table_id,
+        effective_from=data.effective_from,
+        calculation_type=data.calculation_type,
+        tax_group_id=data.tax_group_id,
+    )
+
+
+def _apply_tax_table(db: Session, table: TaxTable, data: TaxTableIn) -> None:
+    """سرصفحه را می‌نشاند، **بعد** flush، **بعد** پله‌ها.
+
+    پله‌ها `table.id` می‌خواهند، پس جدول باید پیش از آن‌ها flush شده باشد.
+    """
+    table.title = data.title.strip()
+    table.title2 = data.title2.strip()
+    table.effective_from = data.effective_from
+    table.tax_group_id = data.tax_group_id
+    table.calculation_type = data.calculation_type
+    db.flush()
+    replace_brackets(db, table, [(b.up_to, b.rate) for b in data.brackets])
+
+
+@router.get("/api/tax-tables", response_model=list[TaxTableOut])
+def list_tax_tables(
+    calculation_type: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "view")),
+):
+    """فهرستِ جدول‌های مالیات — همه‌ی سال‌ها، همه‌ی گروه‌ها، کنارِ هم.
+
+    جدولِ سالِ گذشته **پاک نمی‌شود**؛ تاریخچه سرِ جایش می‌ماند تا محاسبه‌ی گذشته
+    بازتولیدپذیر بماند.
+    """
+    query = db.query(TaxTable)
+    if calculation_type:
+        query = query.filter(TaxTable.calculation_type == calculation_type)
+    rows = query.order_by(TaxTable.effective_from.desc(), TaxTable.title).all()
+    used = {
+        payslip_table_id
+        for (payslip_table_id,) in db.query(Payslip.tax_table_id).filter(Payslip.tax_table_id.isnot(None)).distinct()
+    }
+    return [TaxTableOut.of(row, in_use=row.id in used) for row in rows]
+
+
+@router.post("/api/tax-tables", response_model=TaxTableOut, status_code=201)
+def create_tax_table(
+    data: TaxTableIn, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "create"))
+):
+    _check_tax_table(db, data)
+    table = TaxTable(
+        title=data.title.strip(),
+        title2=data.title2.strip(),
+        effective_from=data.effective_from,
+        tax_group_id=data.tax_group_id,
+        calculation_type=data.calculation_type,
+    )
+    db.add(table)
+    _apply_tax_table(db, table, data)
+    db.refresh(table)
+    return _tax_table_out(db, table)
+
+
+@router.patch("/api/tax-tables/{table_id}", response_model=TaxTableOut)
+def update_tax_table(
+    table_id: UUID,
+    data: TaxTableIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ویرایشِ جدول.
+
+    **فیش‌های صادرشده تکان نمی‌خورند** — عددشان از لحظه‌ی صدور عکس است. ولی
+    محاسبه‌های *بعدی* از این پس با اعدادِ تازه انجام می‌شوند، پس رابط باید
+    بگوید جدول در استفاده بوده.
+    """
+    table = db.get(TaxTable, table_id)
+    if table is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جدول مالیات یافت نشد")
+    _check_tax_table(db, data, table_id=table.id)
+    _apply_tax_table(db, table, data)
+    db.refresh(table)
+    return _tax_table_out(db, table)
+
+
+@router.delete("/api/tax-tables/{table_id}", status_code=204)
+def delete_tax_table(
+    table_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "update"))
+):
+    """حذفِ جدولی که هیچ فیشی به آن استناد نکرده.
+
+    جدولِ استفاده‌شده حذف نمی‌شود: فیشِ پارسال باید بتواند بگوید مالیاتش از کدام
+    قاعده آمد، و جدولِ حذف‌شده آن جواب را برای همیشه می‌برد.
+    """
+    table = db.get(TaxTable, table_id)
+    if table is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "جدول مالیات یافت نشد")
+    if table_is_used(db, table_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "فیش‌هایی به این جدول استناد کرده‌اند و حذفش توضیحِ مالیاتشان را از بین می‌برد. "
+            "برای سال یا گروه تازه، جدول تازه بسازید.",
+        )
+    db.delete(table)
+    return Response(status_code=204)
+
+
+@router.get("/api/payslips/{payslip_id}/tax-breakdown", response_model=TaxBreakdownOut)
+def payslip_tax_breakdown(
+    payslip_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    """«این مالیات از کجا آمد؟» — پله‌به‌پله.
+
+    هیچ‌چیز ذخیره نمی‌شود: از جدولِ ثبت‌شده‌ی همان فیش و مبنایش **بازسازی**
+    می‌شود، پس نمی‌تواند با آن‌ها ناسازگار شود.
+    """
+    return build_tax_breakdown(db, payslip_id)
 
 
 # ── جدول‌های مرجعِ حقوق و دستمزد ───────────────────────────────────────────────
@@ -387,11 +556,23 @@ def update_job_title(
 def list_payroll_factors(
     db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
 ):
-    return (
+    rules = factor_participation.participation_map(db)
+    rows = (
         db.query(PayrollFactor)
-        .order_by(PayrollFactor.category, PayrollFactor.system_key.desc(), PayrollFactor.name)
+        #: **ترتیب از «اولویتِ نمایش» می‌آید، بعد نام.** با اولویتِ یکسان
+        #: (پیش‌فرضِ صفر برای همه) ترتیب دقیقاً همان الفباییِ قبلی می‌ماند.
+        .order_by(
+            PayrollFactor.category,
+            PayrollFactor.display_priority,
+            PayrollFactor.system_key.desc(),
+            PayrollFactor.name,
+        )
         .all()
     )
+    #: «در استفاده» با **دو** پرس‌وجوی جمعی درمی‌آید، نه دوتا به‌ازای هر عامل.
+    used = {row[0] for row in db.query(SalaryContractLine.factor_id).distinct()}
+    used |= {row[0] for row in db.query(PayslipLine.factor_id).distinct()}
+    return [PayrollFactorOut.of(row, rules, in_use=row.id in used) for row in rows]
 
 
 @router.post("/api/payroll-factors/defaults", response_model=list[PayrollFactorOut])
@@ -406,32 +587,133 @@ def create_default_factors(
     return payroll_contracts.ensure_default_factors(db)
 
 
+def _factor_in_use(db: Session, factor_id: UUID) -> bool:
+    """آیا این عامل در حکمی یا فیشی نشسته؟
+
+    یک پرس‌وجوی `EXISTS` روی هرکدام. فیش هم شمرده می‌شود چون `PayslipLine`
+    `factor_id` را نگه می‌دارد و همان چیزی است که «چرا این مبلغ؟» را جواب می‌دهد.
+    """
+    used_in_contract = db.query(SalaryContractLine.id).filter(SalaryContractLine.factor_id == factor_id).first()
+    if used_in_contract is not None:
+        return True
+    return db.query(PayslipLine.id).filter(PayslipLine.factor_id == factor_id).first() is not None
+
+
+def _assert_factor_accounts(db: Session, fields: dict, row=None) -> None:
+    """حسابِ عامل باید واقعاً سند بپذیرد، و سمتش با طبقه‌اش بخواند.
+
+    **مزایا سمتِ هزینه دارد، کسور سمتِ پرداختنی.** یک عاملِ مزایا حسابِ
+    *پرداختنیِ* اختصاصی نمی‌گیرد چون مبلغش در خالصِ پرداختنی به کارکنان جمع
+    می‌شود و جداکردنش معنیِ «خالصِ بدهی به کارکنان» را می‌شکند؛ و یک عاملِ کسور
+    هزینه‌ی کارفرما نیست.
+    """
+    category = fields.get("category", getattr(row, "category", "benefit"))
+    pairs = (
+        ("expense_account_id", "expense_detail_class", "benefit", "مزایا", "هزینه", cc.PAYROLL_EXPENSE),
+        (
+            "payable_account_id", "payable_detail_class", "deduction", "کسورات", "پرداختنی",
+            cc.PAYROLL_DEDUCTIONS_PAYABLE,
+        ),
+    )
+    for account_field, detail_field, allowed, label, side, own_role in pairs:
+        account_id = fields.get(account_field, getattr(row, account_field, None))
+        if account_id is None:
+            if fields.get(detail_field) or (row is None and fields.get(detail_field)):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"طبقه‌ی تفصیلیِ {side} بدون انتخابِ حساب معنی ندارد"
+                )
+            continue
+        if category != allowed:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"حسابِ {side} فقط برای عاملِ «{label}» معنی دارد",
+            )
+        #: انتخابِ صریحِ حسابِ *پیش‌فرضِ همان سمت* مجاز است — همان چیزی که
+        #: خالی‌گذاشتن هم می‌دهد، پس تعارضی نمی‌سازد.
+        assert_postable_account(db, account_id, allow_role=own_role, subject=f"حسابِ {side}ِ عامل")
+
+
 @router.post("/api/payroll-factors", response_model=PayrollFactorOut, status_code=201)
 def create_payroll_factor(
     data: PayrollFactorIn,
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "create")),
 ):
-    row = PayrollFactor(**data.model_dump())
+    fields = data.model_dump()
+    _assert_factor_accounts(db, fields)
+    row = PayrollFactor(**fields)
     db.add(row)
     db.flush()
     db.refresh(row)
-    return row
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
 
 
 @router.patch("/api/payroll-factors/{row_id}", response_model=PayrollFactorOut)
 def update_payroll_factor(
     row_id: UUID,
-    data: PayrollFactorIn,
+    data: PayrollFactorPatch,
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "update")),
 ):
     row = _fetch(db, PayrollFactor, row_id, "عامل")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+
+    #: **طبقه‌ی عاملِ استفاده‌شده قفل است.** بردنِ یک عامل از «مزایا» به «کسورات»
+    #: علامتِ مبلغش را برمی‌گرداند؛ روی عاملی که در حکم یا فیش نشسته یعنی معنیِ
+    #: داده‌ی گذشته بی‌صدا عوض شود. همان گاردی که «نوعِ شعبه» دارد.
+    if "category" in fields and fields["category"] != row.category and _factor_in_use(db, row_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این عامل در حکم یا فیش استفاده شده و طبقه‌اش قفل است؛ "
+            "برای معنیِ تازه عاملِ تازه بسازید و این را غیرفعال کنید.",
+        )
+    _assert_factor_accounts(db, fields, row)
+
+    for field, value in fields.items():
         setattr(row, field, value)
     db.flush()
     db.refresh(row)
-    return row
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db), in_use=_factor_in_use(db, row_id))
+
+
+@router.put("/api/payroll-factors/{row_id}/participation", response_model=PayrollFactorOut)
+def set_factor_participation(
+    row_id: UUID,
+    data: FactorParticipationIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ضریبِ شرکتِ یک عامل در مبناها را می‌گذارد.
+
+    **ردیفی که با پیش‌فرض یکی است پاک می‌شود، نه ذخیره.** جدول فقط استثناها را
+    نگه می‌دارد؛ اگر هر ردیفِ «مثلِ پیش‌فرض» هم ذخیره می‌شد، دو نمایشِ یک حقیقت
+    پیدا می‌کردیم و تغییرِ بعدیِ پیش‌فرض به ردیف‌های ذخیره‌شده نمی‌رسید.
+
+    فقط هدف‌هایی که فرستاده شده‌اند لمس می‌شوند؛ بقیه دست نمی‌خورند.
+    """
+    row = _fetch(db, PayrollFactor, row_id, "عامل")
+    existing = {
+        p.purpose: p
+        for p in db.query(PayrollFactorParticipation).filter(PayrollFactorParticipation.factor_id == row_id).all()
+    }
+    for purpose, value in data.participation.items():
+        default = factor_participation.coefficient(row, purpose, None)
+        current = existing.get(purpose)
+        if value == default:
+            if current is not None:
+                db.delete(current)
+            continue
+        if current is None:
+            db.add(
+                PayrollFactorParticipation(
+                    factor_id=row_id, purpose=purpose, included=value > 0, coefficient=value
+                )
+            )
+        else:
+            current.included = value > 0
+            current.coefficient = value
+    db.flush()
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
 
 
 @router.get("/api/payroll-tax-groups", response_model=list[PayrollTaxGroupOut])
@@ -454,6 +736,36 @@ def create_payroll_tax_group(
     return row
 
 
+def _assert_branch_refs(db: Session, data: InsuranceTaxBranchIn) -> None:
+    """طرف حساب و مرکز هزینه‌ی شعبه باید واقعاً وجود داشته باشند.
+
+    بی این گارد، شناسه‌ی اشتباه فقط با خطای کلیدِ خارجیِ پایگاه داده گرفته می‌شد
+    — پیامی که می‌گوید چیزی خراب شده، نه اینکه کاربر چه کند.
+    """
+    if data.contact_id is not None and db.get(Contact, data.contact_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب یافت نشد")
+    if data.cost_center_id is not None:
+        from app.models.cost_center import CostCenter
+
+        if db.get(CostCenter, data.cost_center_id) is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرکز هزینه یافت نشد")
+
+
+def _branch_in_use(db: Session, branch_id: UUID) -> bool:
+    """آیا این شعبه روی حکمی نشسته است؟"""
+    return (
+        db.query(SalaryContract.id)
+        .filter(
+            or_(
+                SalaryContract.insurance_branch_id == branch_id,
+                SalaryContract.tax_branch_id == branch_id,
+            )
+        )
+        .first()
+        is not None
+    )
+
+
 @router.get("/api/insurance-tax-branches", response_model=list[InsuranceTaxBranchOut])
 def list_insurance_tax_branches(
     kind: str | None = None,
@@ -462,8 +774,18 @@ def list_insurance_tax_branches(
 ):
     query = db.query(InsuranceTaxBranch)
     if kind:
+        #: فیلترِ ساخت‌یافته روی خودِ ستون — نه جست‌وجوی متن در نام. فهرست هر سه
+        #: نوع را کنارِ هم نگه می‌دارد، پس تفکیکشان باید قطعی باشد.
         query = query.filter(InsuranceTaxBranch.kind == kind)
-    return query.order_by(InsuranceTaxBranch.name).all()
+    rows = query.order_by(InsuranceTaxBranch.name).all()
+    #: «در استفاده؟» با **یک** کوئری برای همه، نه یکی به‌ازای هر ردیف.
+    used = {
+        branch_id
+        for row in db.query(SalaryContract.insurance_branch_id, SalaryContract.tax_branch_id).all()
+        for branch_id in row
+        if branch_id is not None
+    }
+    return [InsuranceTaxBranchOut.of(row, in_use=row.id in used) for row in rows]
 
 
 @router.post("/api/insurance-tax-branches", response_model=InsuranceTaxBranchOut, status_code=201)
@@ -472,11 +794,53 @@ def create_insurance_tax_branch(
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "create")),
 ):
+    _assert_branch_refs(db, data)
     row = InsuranceTaxBranch(**data.model_dump())
     db.add(row)
     db.flush()
     db.refresh(row)
-    return row
+    return InsuranceTaxBranchOut.of(row)
+
+
+@router.patch("/api/insurance-tax-branches/{branch_id}", response_model=InsuranceTaxBranchOut)
+def update_insurance_tax_branch(
+    branch_id: UUID,
+    data: InsuranceTaxBranchIn,
+    db: Session = Depends(get_db),
+    #: `update` و نه `edit` — `edit` اصلاً در `ACTIONS_BY_MODULE["payroll"]` نیست
+    #: و `sanitize` بی‌صدا دورش می‌ریزد، پس مسیر برای همه ۴۰۳ می‌شد.
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ویرایشِ شعبه — و تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند.
+
+    بی این مسیر، `contact_id` ستونی می‌شد که فقط شعبه‌های *تازه* می‌توانستند
+    پرش کنند، و هر شعبه‌ای که امروز روی قراردادها نشسته تا ابد بی‌هویت می‌ماند.
+
+    حذف عمداً نیست: شعبه روی قراردادهای گذشته نشسته و `is_active = false`
+    همان کار را بدونِ از دست دادنِ تاریخ می‌کند («هرگز حذف نکن»).
+    """
+    row = db.get(InsuranceTaxBranch, branch_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "شعبه یافت نشد")
+    _assert_branch_refs(db, data)
+
+    in_use = _branch_in_use(db, branch_id)
+    #: **نوع، هویت است.** شعبه‌ای که با کارگاه و شماره‌ی پیمان و زمینه‌ی بیمه‌ای
+    #: ثبت شده نباید یک‌شبه حوزه‌ی مالیاتی شود: حکم‌هایی که به آن وصل‌اند معنایشان
+    #: زیرِ پا عوض می‌شود، بی‌آنکه چیزی در آن حکم‌ها تغییر کرده باشد. تا وقتی
+    #: هیچ حکمی به آن وصل نیست آزاد است.
+    if in_use and data.kind != row.kind:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این شعبه روی حکم‌های حقوقی استفاده شده و نوعش دیگر عوض نمی‌شود. "
+            "اگر نوعش اشتباه بوده، شعبه‌ی درست را بسازید و حکم‌ها را به آن ببرید.",
+        )
+
+    for field, value in data.model_dump().items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return InsuranceTaxBranchOut.of(row, in_use=in_use)
 
 
 # ── فرمِ قرارداد ──────────────────────────────────────────────────────────────
