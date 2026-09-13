@@ -38,9 +38,12 @@ LINES = "credit_debit_note_lines"
 
 def upgrade() -> None:
     op.add_column(NOTES, sa.Column("base_amount", sa.Numeric(18, 0), server_default="0", nullable=False))
-    op.add_column(
-        NOTES, sa.Column("voided_by_id", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
-    )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), (NOTES, "users")):
+        op.add_column(
+            NOTES, sa.Column("voided_by_id", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
+        )
     op.add_column(NOTES, sa.Column("void_reason", sa.Text(), server_default="", nullable=False))
     op.add_column(LINES, sa.Column("base_amount", sa.Numeric(18, 0), nullable=True))
 

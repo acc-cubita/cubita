@@ -54,10 +54,13 @@ def upgrade() -> None:
     op.create_unique_constraint(
         "uq_purchase_invoices_tenant_kind_number", "purchase_invoices", ["tenant_id", "kind", "number"]
     )
-    op.add_column(
-        "purchase_invoice_lines",
-        sa.Column("expense_account_id", UUID(as_uuid=True), sa.ForeignKey("accounts.id"), nullable=True),
-    )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), ("purchase_invoice_lines", "accounts")):
+        op.add_column(
+            "purchase_invoice_lines",
+            sa.Column("expense_account_id", UUID(as_uuid=True), sa.ForeignKey("accounts.id"), nullable=True),
+        )
 
     op.create_table(
         "purchase_deduction_types",
