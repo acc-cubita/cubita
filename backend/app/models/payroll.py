@@ -57,6 +57,17 @@ FACTOR_CATEGORIES = ("benefit", "deduction")
 FACTOR_CATEGORY_LABELS = {"benefit": "مزایا", "deduction": "کسورات"}
 FACTOR_KINDS = ("fixed", "variable")
 FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "متغیر"}
+#: بُعدِ تفصیلیِ ردیفِ سندی که این عامل می‌سازد. خالی = بی‌بُعد (رفتارِ امروز).
+#:
+#: **فهرست عمداً همان دو بُعدی است که کوبیتا دارد** — `cost_center` و
+#: `analytic`. بُعدِ سومی که زیرساخت ندارد یعنی تنظیمی که هیچ ردیفی را برچسب
+#: نمی‌زند.
+FACTOR_DETAIL_CLASSES = ("", "cost_center", "counterparty")
+FACTOR_DETAIL_CLASS_LABELS = {
+    "": "بدون تفصیلی",
+    "cost_center": "مرکز هزینه",
+    "counterparty": "طرف مقابل",
+}
 
 #: کلیدِ سیستمیِ عامل — پلِ عاملِ کاربر به ستون‌های موتورِ فیشِ حقوقی. خالی یعنی
 #: عاملِ ساخته‌ی کاربر که در «سایر مزایا» جمع می‌شود.
@@ -589,6 +600,20 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
             "system_key IN ('', 'base', 'housing', 'food', 'child')",
             name="ck_payroll_factors_system_key",
         ),
+        CheckConstraint(
+            f"expense_detail_class IN {FACTOR_DETAIL_CLASSES}",
+            name="ck_payroll_factors_expense_detail_class",
+        ),
+        CheckConstraint(
+            f"payable_detail_class IN {FACTOR_DETAIL_CLASSES}",
+            name="ck_payroll_factors_payable_detail_class",
+        ),
+        #: بُعد بی‌حساب بی‌معنی است: ردیفِ سندی نیست که بُعد بگیرد.
+        CheckConstraint(
+            "(expense_detail_class = '' OR expense_account_id IS NOT NULL) "
+            "AND (payable_detail_class = '' OR payable_account_id IS NOT NULL)",
+            name="ck_payroll_factors_detail_needs_account",
+        ),
         #: هر کلیدِ سیستمی حداکثر یک عامل، وگرنه «حقوق پایه» دوتا می‌شود و ستونِ
         #: `base_salary` نمی‌داند از کدام ساخته شود.
         Index(
@@ -603,7 +628,34 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(20), default="fixed", server_default="fixed")
     is_extraordinary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     system_key: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    #: **از مهاجرتِ ۰۱۴۰ واقعاً خوانده می‌شود.** پیش از آن نوشته می‌شد و هیچ‌کس
+    #: نمی‌خوانْدَش، پس عاملِ «غیرفعال» همچنان به قراردادِ تازه اضافه می‌شد.
+    #: حالا غیرفعال یعنی «دیگر انتخاب نشو» — نه «از گذشته پاک شو»: ردیف‌های
+    #: موجودِ قرارداد و فیش‌های صادرشده دست نمی‌خورند.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    #: ترتیبِ ردیف‌های فیش. **فقط نمایشی** — هیچ محاسبه‌ای از آن نمی‌خوانَد، و
+    #: چون `PayslipLine.seq` لحظه‌ی صدور منجمد می‌شود، تغییرش فیشِ گذشته را تکان
+    #: نمی‌دهد. صفر برای همه = ترتیبِ الفباییِ امروز.
+    display_priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # ── پروفایلِ حسابداریِ عامل ────────────────────────────────────────────────
+    #
+    #: **تقدم صریح است:** عاملی که حساب دارد سهمش به همان می‌رود، عاملِ بی‌حساب
+    #: به حسابِ عمومیِ `payroll_expense`/`payroll_deductions_payable`. پس تا وقتی
+    #: هیچ عاملی حسابی نگیرد، سند بایت‌به‌بایت همان می‌ماند.
+    #:
+    #: دو سمت مستقل‌اند و عمداً در یک ستون خلاصه نشدند: مزایا سمتِ **هزینه** دارد
+    #: و کسور سمتِ **پرداختنی** (بیمه‌گرِ تکمیلی، صندوق…). یک ستونِ مشترک یعنی
+    #: نشود گفت کدام‌یک منظور است.
+    expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    expense_detail_class: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    payable_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    payable_detail_class: Mapped[str] = mapped_column(String(20), default="", server_default="")
 
 
 class PayrollFactorParticipation(TenantMixin, UUIDPKMixin, Base):

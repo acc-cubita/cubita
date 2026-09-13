@@ -269,6 +269,18 @@ def amounts_from_lines(db: Session, lines) -> dict[str, Decimal]:
         factor = db.get(PayrollFactor, line.factor_id)
         if factor is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "عاملِ انتخاب‌شده یافت نشد")
+        #: **«غیرفعال» تا مهاجرتِ ۰۱۴۰ هیچ اثری نداشت.** کاربر عاملی را غیرفعال
+        #: می‌کرد و همان عامل به قراردادِ بعدی اضافه می‌شد و در فیش می‌آمد.
+        #:
+        #: گارد فقط روی **قراردادِ تازه** است، نه روی گذشته: ردیف‌های موجود و
+        #: فیش‌های صادرشده دست نمی‌خورند، وگرنه غیرفعال‌کردن تاریخ را بازنویسی
+        #: می‌کرد.
+        if not factor.is_active:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"عاملِ «{factor.name}» غیرفعال است و به حکمِ تازه اضافه نمی‌شود؛ "
+                "اول از فهرستِ عوامل فعالش کنید.",
+            )
         if factor.category != "benefit":
             continue
         column = _SYSTEM_KEY_COLUMN.get(factor.system_key, "other_allowance")

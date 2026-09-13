@@ -6585,6 +6585,16 @@ export interface PayrollFactorRecord {
   /** خالی = عاملِ ساخته‌ی کاربر؛ کلیددار = عاملی که موتورِ فیش می‌شناسدش. */
   system_key: string
   is_active: boolean
+  /** ترتیبِ ردیف‌های فیش. **فقط نمایشی** — هیچ محاسبه‌ای از آن نمی‌خوانَد، و
+   *  فیشِ صادرشده را هم تکان نمی‌دهد چون شماره‌ی ردیفش منجمد است. */
+  display_priority: number
+  /** پروفایلِ حسابداریِ عامل. خالی = حسابِ عمومیِ حقوق، یعنی رفتارِ امروز. */
+  expense_account_id: string | null
+  expense_detail_class: string
+  payable_account_id: string | null
+  payable_detail_class: string
+  /** در حکمی یا فیشی نشسته؟ طبقه‌ی عاملِ در استفاده قفل است. */
+  in_use: boolean
   /** ضریبِ **مؤثرِ** شرکت در هر مبنا — با پیش‌فرض‌ها حل‌شده، همان چیزی که موتور
    *  استفاده می‌کند. رابط قاعده‌ی پیش‌فرض را دوباره پیاده نمی‌کند. */
   participation: Record<string, string>
@@ -8405,3 +8415,17 @@ export const setFactorParticipation = (
   authedSend<PayrollFactorRecord>(token, 'PUT', `/api/payroll-factors/${factorId}/participation`, {
     participation,
   })
+
+/** بُعدِ تفصیلیِ ردیفِ سندی که یک عاملِ حقوق می‌سازد. */
+export const FACTOR_DETAIL_CLASS_LABELS: Record<string, string> = {
+  '': 'بدون تفصیلی',
+  cost_center: 'مرکز هزینه',
+  counterparty: 'طرف مقابل',
+}
+
+/** ویرایشِ عامل — شاملِ فعال/غیرفعال‌کردن. طبقه‌ی عاملِ در استفاده قفل است. */
+export const updatePayrollFactor = (
+  token: string,
+  factorId: string,
+  body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
+) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)

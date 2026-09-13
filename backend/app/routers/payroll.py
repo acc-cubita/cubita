@@ -26,7 +26,9 @@ from app.models.payroll import (
     PayrollSettlement,
     PayrollTaxGroup,
     Payslip,
+    PayslipLine,
     SalaryContract,
+    SalaryContractLine,
     TaxTable,
     ServiceLocation,
 )
@@ -51,6 +53,7 @@ from app.schemas.payroll import (
     LoanTypeOut,
     PayrollFactorIn,
     PayrollFactorOut,
+    PayrollFactorPatch,
     PayrollPeriodIn,
     PayrollPeriodOut,
     PayrollSettingsIn,
@@ -70,6 +73,8 @@ from app.schemas.payroll import (
     ServiceLocationOut,
 )
 from app.services import factor_participation, payroll_contracts, payroll_loans
+from app.services import chart_codes as cc
+from app.services.common import assert_postable_account
 from app.services.tax_tables import (
     assert_scope_free,
     build_tax_breakdown,
@@ -554,10 +559,20 @@ def list_payroll_factors(
     rules = factor_participation.participation_map(db)
     rows = (
         db.query(PayrollFactor)
-        .order_by(PayrollFactor.category, PayrollFactor.system_key.desc(), PayrollFactor.name)
+        #: **ترتیب از «اولویتِ نمایش» می‌آید، بعد نام.** با اولویتِ یکسان
+        #: (پیش‌فرضِ صفر برای همه) ترتیب دقیقاً همان الفباییِ قبلی می‌ماند.
+        .order_by(
+            PayrollFactor.category,
+            PayrollFactor.display_priority,
+            PayrollFactor.system_key.desc(),
+            PayrollFactor.name,
+        )
         .all()
     )
-    return [PayrollFactorOut.of(row, rules) for row in rows]
+    #: «در استفاده» با **دو** پرس‌وجوی جمعی درمی‌آید، نه دوتا به‌ازای هر عامل.
+    used = {row[0] for row in db.query(SalaryContractLine.factor_id).distinct()}
+    used |= {row[0] for row in db.query(PayslipLine.factor_id).distinct()}
+    return [PayrollFactorOut.of(row, rules, in_use=row.id in used) for row in rows]
 
 
 @router.post("/api/payroll-factors/defaults", response_model=list[PayrollFactorOut])
@@ -572,32 +587,93 @@ def create_default_factors(
     return payroll_contracts.ensure_default_factors(db)
 
 
+def _factor_in_use(db: Session, factor_id: UUID) -> bool:
+    """آیا این عامل در حکمی یا فیشی نشسته؟
+
+    یک پرس‌وجوی `EXISTS` روی هرکدام. فیش هم شمرده می‌شود چون `PayslipLine`
+    `factor_id` را نگه می‌دارد و همان چیزی است که «چرا این مبلغ؟» را جواب می‌دهد.
+    """
+    used_in_contract = db.query(SalaryContractLine.id).filter(SalaryContractLine.factor_id == factor_id).first()
+    if used_in_contract is not None:
+        return True
+    return db.query(PayslipLine.id).filter(PayslipLine.factor_id == factor_id).first() is not None
+
+
+def _assert_factor_accounts(db: Session, fields: dict, row=None) -> None:
+    """حسابِ عامل باید واقعاً سند بپذیرد، و سمتش با طبقه‌اش بخواند.
+
+    **مزایا سمتِ هزینه دارد، کسور سمتِ پرداختنی.** یک عاملِ مزایا حسابِ
+    *پرداختنیِ* اختصاصی نمی‌گیرد چون مبلغش در خالصِ پرداختنی به کارکنان جمع
+    می‌شود و جداکردنش معنیِ «خالصِ بدهی به کارکنان» را می‌شکند؛ و یک عاملِ کسور
+    هزینه‌ی کارفرما نیست.
+    """
+    category = fields.get("category", getattr(row, "category", "benefit"))
+    pairs = (
+        ("expense_account_id", "expense_detail_class", "benefit", "مزایا", "هزینه", cc.PAYROLL_EXPENSE),
+        (
+            "payable_account_id", "payable_detail_class", "deduction", "کسورات", "پرداختنی",
+            cc.PAYROLL_DEDUCTIONS_PAYABLE,
+        ),
+    )
+    for account_field, detail_field, allowed, label, side, own_role in pairs:
+        account_id = fields.get(account_field, getattr(row, account_field, None))
+        if account_id is None:
+            if fields.get(detail_field) or (row is None and fields.get(detail_field)):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"طبقه‌ی تفصیلیِ {side} بدون انتخابِ حساب معنی ندارد"
+                )
+            continue
+        if category != allowed:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"حسابِ {side} فقط برای عاملِ «{label}» معنی دارد",
+            )
+        #: انتخابِ صریحِ حسابِ *پیش‌فرضِ همان سمت* مجاز است — همان چیزی که
+        #: خالی‌گذاشتن هم می‌دهد، پس تعارضی نمی‌سازد.
+        assert_postable_account(db, account_id, allow_role=own_role, subject=f"حسابِ {side}ِ عامل")
+
+
 @router.post("/api/payroll-factors", response_model=PayrollFactorOut, status_code=201)
 def create_payroll_factor(
     data: PayrollFactorIn,
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "create")),
 ):
-    row = PayrollFactor(**data.model_dump())
+    fields = data.model_dump()
+    _assert_factor_accounts(db, fields)
+    row = PayrollFactor(**fields)
     db.add(row)
     db.flush()
     db.refresh(row)
-    return row
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
 
 
 @router.patch("/api/payroll-factors/{row_id}", response_model=PayrollFactorOut)
 def update_payroll_factor(
     row_id: UUID,
-    data: PayrollFactorIn,
+    data: PayrollFactorPatch,
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "update")),
 ):
     row = _fetch(db, PayrollFactor, row_id, "عامل")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+
+    #: **طبقه‌ی عاملِ استفاده‌شده قفل است.** بردنِ یک عامل از «مزایا» به «کسورات»
+    #: علامتِ مبلغش را برمی‌گرداند؛ روی عاملی که در حکم یا فیش نشسته یعنی معنیِ
+    #: داده‌ی گذشته بی‌صدا عوض شود. همان گاردی که «نوعِ شعبه» دارد.
+    if "category" in fields and fields["category"] != row.category and _factor_in_use(db, row_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "این عامل در حکم یا فیش استفاده شده و طبقه‌اش قفل است؛ "
+            "برای معنیِ تازه عاملِ تازه بسازید و این را غیرفعال کنید.",
+        )
+    _assert_factor_accounts(db, fields, row)
+
+    for field, value in fields.items():
         setattr(row, field, value)
     db.flush()
     db.refresh(row)
-    return PayrollFactorOut.of(row, factor_participation.participation_map(db))
+    return PayrollFactorOut.of(row, factor_participation.participation_map(db), in_use=_factor_in_use(db, row_id))
 
 
 @router.put("/api/payroll-factors/{row_id}/participation", response_model=PayrollFactorOut)
