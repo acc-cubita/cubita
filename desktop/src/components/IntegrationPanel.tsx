@@ -258,6 +258,13 @@ export function IntegrationPanel({ token }: { token: string }) {
             <input type="text" className="integration-search" placeholder="جستجوی کالا…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
+          {visibleItems.length === 0 ? (
+            <p className="muted">
+              {search.trim() || mapFilter !== 'all'
+                ? 'هیچ کالایی با این فیلتر و جست‌وجو پیدا نشد.'
+                : 'هنوز کالایی برای نگاشت نیست — اول در «انبار ← کالاها» کالا تعریف کنید.'}
+            </p>
+          ) : (
           <div className="entity-table-wrap">
             <div className="table-scroll">
               <table className="entity-table integration-table cards-on-mobile">
@@ -310,6 +317,7 @@ export function IntegrationPanel({ token }: { token: string }) {
               </table>
             </div>
           </div>
+          )}
 
           {syncResult && (syncResult.orders_skipped.length > 0 || syncResult.items_push_failed.length > 0) && (
             <div>
