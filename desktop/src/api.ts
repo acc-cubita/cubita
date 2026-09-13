@@ -6541,6 +6541,11 @@ export interface InsuranceTaxBranchRecord {
   name: string
   kind: string
   is_active: boolean
+  /** طرف‌حسابِ سازمان — بدهیِ بیمه/مالیات رویش می‌نشیند. خالی = هنوز وصل نشده. */
+  contact_id: string | null
+  /** خوانده‌شده از خودِ طرف حساب، نه کپی‌شده. */
+  contact_name: string
+  analytic_code: string
 }
 
 /** طرف‌حسابی که تیکِ «کارمند» دارد — ورودیِ فهرستِ «نام کارمند»ِ فرمِ قرارداد. */
@@ -8230,3 +8235,10 @@ export interface IssueReturnBasis {
 
 export const fetchIssueReturnBasisDetail = (token: string, kind: string, docId: string) =>
   authedGet<IssueReturnBasis>(token, `/api/warehouse-issue-returns/basis/${kind}/${docId}`)
+
+/** ویرایشِ شعبه — تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند (مهاجرت ۰۱۳۶). */
+export const updateInsuranceTaxBranch = (
+  token: string,
+  id: string,
+  body: Partial<InsuranceTaxBranchRecord>,
+) => authedSend<InsuranceTaxBranchRecord>(token, 'PATCH', `/api/insurance-tax-branches/${id}`, body)

@@ -89,6 +89,7 @@ def audited_models() -> dict[type, str]:
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
     from app.models.payroll import (
+        InsuranceTaxBranch,
         PayrollFactor,
         PayrollSettings,
         PayrollTaxGroup,
@@ -124,6 +125,11 @@ def audited_models() -> dict[type, str]:
         PayrollFactor: "عامل حقوق",
         #: درصدِ مالیاتِ گروه — می‌تواند مالیاتِ یک دسته از کارکنان را صفر کند.
         PayrollTaxGroup: "گروه مالیاتی حقوق",
+        #: شعبه‌ی بیمه/حوزه‌ی مالیاتی: مقصدِ فایلِ قانونی و — از مهاجرت ۰۱۳۶ —
+        #: طرف حسابی که بدهیِ سازمان رویش می‌نشیند. عوض‌کردنِ طرف حسابِ یک شعبه
+        #: یعنی بدهیِ ده‌ها قرارداد جای دیگری برود؛ مثلِ تسویه، هیچ سندی این
+        #: تغییر را نشان نمی‌دهد و دقیقاً به همین دلیل حسابرسی‌اش واجب‌تر است.
+        InsuranceTaxBranch: "شعبه بیمه / حوزه مالیاتی",
         #: حکمِ حقوقی. حقوقِ پایه و مزایای هر کارمند از این‌جا می‌آید، و تغییرش
         #: بدونِ ردِ حسابرسی یعنی «چرا حقوقِ من عوض شد؟» جوابی ندارد.
         SalaryContract: "حکم حقوقی",

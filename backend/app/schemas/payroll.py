@@ -205,6 +205,10 @@ class InsuranceTaxBranchIn(BaseModel):
     code: str = ""
     kind: str = "insurance"
     is_active: bool = True
+    #: طرف حسابِ سازمان — سازمانِ تأمین اجتماعی یا امورِ مالیاتی. اختیاری، چون
+    #: شعبه‌های ثبت‌شده‌ی امروز ندارندش و حدس‌زدنش از روی نام اتصالِ اشتباه
+    #: می‌سازد. با این پیوند، بدهیِ حقوق به سازمان تفصیلی و مانده پیدا می‌کند.
+    contact_id: UUID | None = None
 
     @model_validator(mode="after")
     def _valid(self) -> "InsuranceTaxBranchIn":
@@ -221,8 +225,28 @@ class InsuranceTaxBranchOut(BaseModel):
     name: str
     kind: str
     is_active: bool
+    contact_id: UUID | None = None
+    #: نامِ طرف حساب و کدِ تفصیلی‌اش — خوانده‌شده از خودِ طرف حساب، نه کپی‌شده.
+    #: اگر کاربر نامِ سازمان را اصلاح کند، این‌جا هم اصلاح‌شده دیده می‌شود.
+    contact_name: str = ""
+    analytic_code: str = ""
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def of(cls, row) -> "InsuranceTaxBranchOut":
+        contact = getattr(row, "contact", None)
+        analytic = getattr(contact, "analytic", None) if contact is not None else None
+        return cls(
+            id=row.id,
+            code=row.code,
+            name=row.name,
+            kind=row.kind,
+            is_active=row.is_active,
+            contact_id=row.contact_id,
+            contact_name=(getattr(contact, "name", "") or "") if contact is not None else "",
+            analytic_code=(getattr(analytic, "code", "") or "") if analytic is not None else "",
+        )
 
 
 # ── قرارداد ───────────────────────────────────────────────────────────────────

@@ -467,6 +467,18 @@ def create_payroll_tax_group(
     return row
 
 
+def _assert_branch_contact(db: Session, contact_id) -> None:
+    """طرف حسابِ شعبه باید واقعاً وجود داشته باشد.
+
+    بی این گارد، یک `contact_id`ِ اشتباه فقط با خطای کلیدِ خارجیِ پایگاه داده
+    گرفته می‌شد — پیامی که به کاربر می‌گوید چیزی خراب شده، نه اینکه چه کند.
+    """
+    if contact_id is None:
+        return
+    if db.get(Contact, contact_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب یافت نشد")
+
+
 @router.get("/api/insurance-tax-branches", response_model=list[InsuranceTaxBranchOut])
 def list_insurance_tax_branches(
     kind: str | None = None,
@@ -476,7 +488,7 @@ def list_insurance_tax_branches(
     query = db.query(InsuranceTaxBranch)
     if kind:
         query = query.filter(InsuranceTaxBranch.kind == kind)
-    return query.order_by(InsuranceTaxBranch.name).all()
+    return [InsuranceTaxBranchOut.of(row) for row in query.order_by(InsuranceTaxBranch.name).all()]
 
 
 @router.post("/api/insurance-tax-branches", response_model=InsuranceTaxBranchOut, status_code=201)
@@ -485,11 +497,40 @@ def create_insurance_tax_branch(
     db: Session = Depends(get_db),
     _=Depends(require_permission("payroll", "create")),
 ):
+    _assert_branch_contact(db, data.contact_id)
     row = InsuranceTaxBranch(**data.model_dump())
     db.add(row)
     db.flush()
     db.refresh(row)
-    return row
+    return InsuranceTaxBranchOut.of(row)
+
+
+@router.patch("/api/insurance-tax-branches/{branch_id}", response_model=InsuranceTaxBranchOut)
+def update_insurance_tax_branch(
+    branch_id: UUID,
+    data: InsuranceTaxBranchIn,
+    db: Session = Depends(get_db),
+    #: `update` و نه `edit` — `edit` اصلاً در `ACTIONS_BY_MODULE["payroll"]` نیست
+    #: و `sanitize` بی‌صدا دورش می‌ریزد، پس مسیر برای همه ۴۰۳ می‌شد.
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ویرایشِ شعبه — و تنها راهی که شعبه‌های موجود طرف حساب می‌گیرند.
+
+    بی این مسیر، `contact_id` ستونی می‌شد که فقط شعبه‌های *تازه* می‌توانستند
+    پرش کنند، و هر شعبه‌ای که امروز روی قراردادها نشسته تا ابد بی‌هویت می‌ماند.
+
+    حذف عمداً نیست: شعبه روی قراردادهای گذشته نشسته و `is_active = false`
+    همان کار را بدونِ از دست دادنِ تاریخ می‌کند («هرگز حذف نکن»).
+    """
+    row = db.get(InsuranceTaxBranch, branch_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "شعبه یافت نشد")
+    _assert_branch_contact(db, data.contact_id)
+    for field, value in data.model_dump().items():
+        setattr(row, field, value)
+    db.flush()
+    db.refresh(row)
+    return InsuranceTaxBranchOut.of(row)
 
 
 # ── فرمِ قرارداد ──────────────────────────────────────────────────────────────

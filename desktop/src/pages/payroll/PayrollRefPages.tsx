@@ -12,11 +12,14 @@ import {
   createPayrollFactor,
   createPayrollTaxGroup,
   createServiceLocation,
+  fetchContacts,
   fetchInsuranceTaxBranches,
   fetchJobTitles,
   fetchPayrollFactors,
   fetchPayrollTaxGroups,
   fetchServiceLocations,
+  updateInsuranceTaxBranch,
+  type ContactRecord,
   type InsuranceTaxBranchRecord,
   type JobTitleRecord,
   type PayrollFactorRecord,
@@ -396,19 +399,42 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
   const [branchName, setBranchName] = useState('')
   const [branchCode, setBranchCode] = useState('')
   const [branchKind, setBranchKind] = useState('insurance')
+  const [branchContact, setBranchContact] = useState('')
+  //: خالی = «شعبه‌ی تازه». پر = همان شعبه دارد ویرایش می‌شود.
+  const [editingBranch, setEditingBranch] = useState<InsuranceTaxBranchRecord | null>(null)
+  const [contacts, setContacts] = useState<ContactRecord[]>([])
 
   async function refresh() {
     try {
-      const [groups, allBranches] = await Promise.all([
+      const [groups, allBranches, allContacts] = await Promise.all([
         fetchPayrollTaxGroups(token),
         fetchInsuranceTaxBranches(token),
+        fetchContacts(token),
       ])
       setRows(groups)
       setBranches(allBranches)
+      setContacts(allContacts.filter((c) => c.is_active))
       setError(null)
     } catch (err) {
       setError(errText(err))
     }
+  }
+
+  function editBranch(branch: InsuranceTaxBranchRecord) {
+    setEditingBranch(branch)
+    setBranchName(branch.name)
+    setBranchCode(branch.code)
+    setBranchKind(branch.kind)
+    setBranchContact(branch.contact_id ?? '')
+    setMsg(null)
+  }
+
+  function clearBranchForm() {
+    setEditingBranch(null)
+    setBranchName('')
+    setBranchCode('')
+    setBranchContact('')
+    setMsg(null)
   }
 
   useEffect(() => {
@@ -441,14 +467,23 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
     setBusy(true)
     setMsg(null)
     try {
-      await createInsuranceTaxBranch(token, {
+      const body = {
         name: branchName.trim(),
         code: branchCode.trim(),
         kind: branchKind,
-      })
-      setMsg({ text: `«${branchName.trim()}» ساخته شد.`, kind: 'ok' })
+        contact_id: branchContact || null,
+      }
+      if (editingBranch) {
+        await updateInsuranceTaxBranch(token, editingBranch.id, body)
+        setMsg({ text: `«${body.name}» به‌روز شد.`, kind: 'ok' })
+      } else {
+        await createInsuranceTaxBranch(token, body)
+        setMsg({ text: `«${body.name}» ساخته شد.`, kind: 'ok' })
+      }
+      setEditingBranch(null)
       setBranchName('')
       setBranchCode('')
+      setBranchContact('')
       await refresh()
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -494,7 +529,10 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
         </form>
       </SectionCard>
 
-      <SectionCard icon={Landmark} title="شعبه بیمه یا حوزه مالیاتی جدید">
+      <SectionCard
+        icon={Landmark}
+        title={editingBranch ? `ویرایش «${editingBranch.name}»` : 'شعبه بیمه یا حوزه مالیاتی جدید'}
+      >
         <form className="cmp-form" onSubmit={submitBranch}>
           <label>
             <span>نوع</span>
@@ -512,10 +550,28 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
             <span>کد</span>
             <input dir="ltr" value={branchCode} onChange={(e) => setBranchCode(e.target.value)} maxLength={20} />
           </label>
+          <label>
+            <span>طرف حساب سازمان</span>
+            <select value={branchContact} onChange={(e) => setBranchContact(e.target.value)}>
+              <option value="">— وصل نشده —</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <span className="field-hint">
+              بدهیِ بیمه و مالیاتِ حقوق به همین سازمان پرداخت می‌شود؛ با این پیوند، مانده و
+              تفصیلی‌اش در دفتر پیدا می‌شود. خالی گذاشتنش چیزی را خراب نمی‌کند.
+            </span>
+          </label>
           <div className="invoice-form-footer">
             <button type="submit" className="btn-primary" disabled={busy || !branchName.trim()}>
-              <Save size={13} /> ثبت شعبه
+              <Save size={13} /> {editingBranch ? 'ذخیره تغییرات' : 'ثبت شعبه'}
             </button>
+            {editingBranch ? (
+              <button type="button" onClick={clearBranchForm} disabled={busy}>
+                انصراف
+              </button>
+            ) : null}
           </div>
           <Note msg={msg} />
         </form>
@@ -536,8 +592,17 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
           rows={branches}
           error={error}
           emptyText="هنوز شعبه‌ای ثبت نشده."
-          head={['عنوان', 'نوع', 'کد']}
-          render={(r) => [r.name, BRANCH_KIND_LABELS[r.kind] ?? r.kind, r.code || '—']}
+          head={['عنوان', 'نوع', 'کد', 'طرف حساب سازمان', 'کد تفصیلی', '']}
+          render={(r) => [
+            r.name,
+            BRANCH_KIND_LABELS[r.kind] ?? r.kind,
+            r.code || '—',
+            r.contact_name || '—',
+            r.analytic_code ? <span key="analytic" dir="ltr">{r.analytic_code}</span> : '—',
+            <button key="edit" type="button" onClick={() => editBranch(r)}>
+              ویرایش
+            </button>,
+          ]}
         />
       </SectionCard>
     </OpsPage>
@@ -556,8 +621,9 @@ function RefTable<T extends { id: string }>({
   rows: T[] | null
   error: string | null
   emptyText: string
+  //: سرستونِ خالی یعنی ستونِ کنش — در نمای کارتیِ موبایل برچسب نمی‌خواهد.
   head: string[]
-  render: (row: T) => (string | number)[]
+  render: (row: T) => React.ReactNode[]
 }) {
   return (
     <AsyncBlock loading={rows == null} error={error} empty={rows != null && rows.length === 0} emptyText={emptyText}>
@@ -567,7 +633,7 @@ function RefTable<T extends { id: string }>({
         <div className="table-scroll">
           <table className="cards-on-mobile">
             <thead>
-              <tr>{head.map((h) => <th key={h}>{h}</th>)}</tr>
+              <tr>{head.map((h, i) => <th key={h || `col-${i}`}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((row) => {
@@ -575,7 +641,11 @@ function RefTable<T extends { id: string }>({
                 return (
                   <tr key={row.id}>
                     {cells.map((cell, i) => (
-                      <td key={head[i]} className={i === 0 ? 'card-title' : undefined} data-label={head[i]}>
+                      <td
+                        key={head[i] || `col-${i}`}
+                        className={i === 0 ? 'card-title' : head[i] ? undefined : 'card-actions'}
+                        data-label={head[i] || undefined}
+                      >
                         {cell}
                       </td>
                     ))}

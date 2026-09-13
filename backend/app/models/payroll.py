@@ -475,6 +475,20 @@ class InsuranceTaxBranch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(20), default="insurance", server_default="insurance")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
+    #: **هویتِ حسابداریِ شعبه** (مهاجرت ۰۱۳۶).
+    #:
+    #: شعبه تا امروز فقط یک نام بود، در حالی که بدهیِ بیمه و مالیاتِ تکلیفی
+    #: واقعاً **به همان سازمان پرداخت می‌شود** — و پرداخت طرفِ حساب می‌خواهد.
+    #: پیوند به `Contact` است نه به تفصیلی: طرف حساب از قبل `analytic_id` دارد،
+    #: و شناسه‌اش پایدار می‌ماند حتی وقتی کد و عنوانِ تفصیلی عوض شوند.
+    #:
+    #: `NULL` یعنی «هنوز وصل نشده» — شعبه‌های پیش از ۰۱۳۶ همه همین‌اند و دقیقاً
+    #: مثلِ قبل کار می‌کنند.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact: Mapped["Contact | None"] = relationship(lazy="joined")  # noqa: F821
+
 
 class SalaryContractLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک ردیفِ «حقوق و مزایای ثابت» یا «سایر مبالغ» روی یک قرارداد."""
