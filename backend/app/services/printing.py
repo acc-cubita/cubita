@@ -895,6 +895,154 @@ def _warehouse_rows(lines: list[dict]) -> str:
     return "\n".join(out)
 
 
+#: قالبِ A5 (§۳۵) — همان برگه در کاغذِ کوچک‌تر، نه سندِ دیگری. فقط اندازه و
+#: فشردگی عوض می‌شود؛ داده همان Projection است.
+_A5_STYLE = """
+@page { size: A5; margin: 8mm; }
+.sheet { max-width: 132mm; padding: 3mm 4mm; }
+body { font-size: 10.5px; }
+.title { font-size: 17px; }
+.parties { flex-direction: column; gap: 8px; }
+thead th, tbody td { padding: 5px 4px; font-size: 10px; }
+.signs { margin-top: 22px; }
+"""
+
+PRINT_TEMPLATES = ("standard", "a5")
+
+
+def render_issue_permit(
+    *,
+    title: str,
+    business_name: str,
+    number,
+    doc_date: date | None,
+    type_label: str,
+    warehouse_code: str,
+    warehouse_name: str,
+    party_label: str,
+    party_name: str,
+    party_detail: str,
+    lines: list[dict],
+    total_qty: Decimal,
+    references: list[tuple[str, str]] | tuple = (),
+    description: str = "",
+    sign_labels: tuple[str, str] = ("صادرکننده", "تحویل‌گیرنده"),
+    voided_at=None,
+    void_reason: str = "",
+    template: str = "standard",
+) -> str:
+    """«مجوز خروج انبار» — برگه‌ی فیزیکیِ بیرون‌رفتنِ کالا (§۳۳ §۳۴).
+
+    **بی‌مبلغ، عمداً.** مجوزِ خروج فاکتور نیست؛ نگهبانِ درِ انبار باید بداند چه
+    کالایی و چند تا بیرون می‌رود، نه به چه قیمتی فروخته شده. ستون‌ها همان‌هایی‌اند
+    که فصل نام می‌برد: مقدار و واحدِ اصلی، مقدار و واحدِ فرعی، توضیحات، و جمع.
+    """
+    banner = ""
+    if voided_at is not None:
+        reason = f" — {escape(void_reason)}" if void_reason else ""
+        banner = f"<div class='voided'>این سند باطل شده است{reason}</div>"
+
+    rows = []
+    for i, line in enumerate(lines, start=1):
+        secondary = line.get("secondary_qty")
+        rows.append(
+            "<tr>"
+            f"<td class='num'>{fa_number(line.get('seq') or i)}</td>"
+            f"<td class='num'>{escape(line.get('code') or '')}</td>"
+            f"<td>{escape(line.get('name') or '')}</td>"
+            f"<td class='num'>{fa_number(line['qty'])}</td>"
+            f"<td class='num'>{escape(line.get('unit') or '')}</td>"
+            f"<td class='num'>{fa_number(secondary) if secondary is not None else '—'}</td>"
+            f"<td class='num'>{escape(line.get('secondary_unit') or '') or '—'}</td>"
+            f"<td>{escape(line.get('description') or '')}</td>"
+            "</tr>"
+        )
+    reference_chips = "".join(
+        f"<div class='chip'><span>{escape(label)}</span> &nbsp;<strong>{fa_number(value)}</strong></div>"
+        for label, value in references
+    )
+    note = (description or "").strip()
+    notes_block = (
+        f"<div class='notes'><span class='lbl'>توضیحات</span><div class='txt'>{escape(note)}</div></div>"
+        if note
+        else ""
+    )
+    warehouse_line = " — ".join(filter(None, [warehouse_code, warehouse_name]))
+    style = _STYLE + (_A5_STYLE if template == "a5" else "")
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{escape(title)} شماره {fa_number(number)}</title>
+<style>{style}</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  {banner}
+  <div class="head">
+    <div class="brand-block">
+      <div>
+        <h1 class="title">{escape(title)}</h1>
+        <div class="biz">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="chip"><span>شماره</span> &nbsp;<strong>{fa_number(number)}</strong></div>
+      <div class="chip"><span>تاریخ</span> &nbsp;<strong>{format_jalali(doc_date)}</strong></div>
+      {reference_chips}
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h2>انبار</h2>
+      <div class="big">{escape(warehouse_line)}</div>
+      <div class="sub">نوع: {escape(type_label)}</div>
+    </div>
+    <div class="party">
+      <h2>{escape(party_label)}</h2>
+      <div class="big">{escape(party_name)}</div>
+      <div class="sub">{escape(party_detail)}</div>
+    </div>
+  </div>
+
+  <table class="table-plain">
+    <thead>
+      <tr>
+        <th class="num" style="width:6%">ردیف</th>
+        <th class="num" style="width:11%">کد کالا</th>
+        <th style="width:25%">عنوان کالا</th>
+        <th class="num" style="width:10%">مقدار اصلی</th>
+        <th class="num" style="width:9%">واحد اصلی</th>
+        <th class="num" style="width:10%">مقدار فرعی</th>
+        <th class="num" style="width:9%">واحد فرعی</th>
+        <th style="width:20%">توضیحات</th>
+      </tr>
+    </thead>
+    <tbody>
+{"".join(rows)}
+    </tbody>
+    <tfoot>
+      <tr class="grand"><td colspan="3">جمع</td><td class="num">{fa_number(total_qty)}</td><td colspan="4"></td></tr>
+    </tfoot>
+  </table>
+
+  {notes_block}
+
+  <div class="signs">
+    <div class="sign">{escape(sign_labels[0])}</div>
+    <div class="sign">{escape(sign_labels[1])}</div>
+  </div>
+
+  <div class="footer">قدرت‌گرفته از حسابداریِ کوبیتا · cubita.ir</div>
+</div>
+</body>
+</html>"""
+
+
 def render_warehouse_document(
     *,
     title: str,

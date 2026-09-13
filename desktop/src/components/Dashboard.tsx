@@ -609,9 +609,15 @@ export function Dashboard({
           {page === 'inventory' && (
             <InventoryPage
               token={token}
+              me={me}
               warehouses={warehouses}
               items={items}
               onChanged={() => void refreshFromLocalCache()}
+              onCreateInvoiceFromIssue={(context) => {
+                //: فقط زمینه منتقل می‌شود؛ فاکتور همان سندِ مستقلِ فروش است (§۱۶ §۱۷).
+                sessionStorage.setItem('cubita.sales.issuePrefill', JSON.stringify(context))
+                navigate('salesinvoice')
+              }}
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}

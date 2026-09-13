@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../../electron.d'
-import type { SalesInvoiceRecord } from '../../api'
+import type { IssueInvoiceContext, SalesInvoiceRecord } from '../../api'
 import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../../lib/salesInvoiceDraft'
 import { NumberInput } from '../NumberInput'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
 import { PriceRuleHint } from '../PriceRuleHint'
 import { CardPaymentButton } from '../CardPaymentDialog'
-import { CreditBanner } from '../SalesInvoiceForm'
+import { CreditBanner, SourceIssueBanner } from '../SalesInvoiceForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { BlacklistBanner } from '../BlacklistBanner'
 
@@ -26,6 +26,8 @@ export function SalesInvoiceWizard({
   onQueued,
   prefill,
   onPrefillConsumed,
+  issuePrefill,
+  onIssuePrefillConsumed,
 }: {
   token: string
   warehouses: WarehouseCache[]
@@ -33,8 +35,12 @@ export function SalesInvoiceWizard({
   onQueued: () => void
   prefill?: SalesInvoiceRecord | null
   onPrefillConsumed?: () => void
+  issuePrefill?: IssueInvoiceContext | null
+  onIssuePrefillConsumed?: () => void
 }) {
-  const d = useSalesInvoiceDraft({ token, warehouses, items, onQueued, prefill, onPrefillConsumed })
+  const d = useSalesInvoiceDraft({
+    token, warehouses, items, onQueued, prefill, onPrefillConsumed, issuePrefill, onIssuePrefillConsumed,
+  })
   const [resetTick, setResetTick] = useState(0)
 
   if (warehouses.length === 0 || items.length === 0) {
@@ -103,9 +109,14 @@ export function SalesInvoiceWizard({
 function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: WarehouseCache[] }) {
   return (
     <div className="invoice-form">
+      <SourceIssueBanner d={d} />
       <label>
         انبار پیشنهادی (اختیاری)
-        <select value={d.effectiveWarehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+        <select
+          value={d.effectiveWarehouseId}
+          disabled={!!d.sourceIssue}
+          onChange={(e) => d.setWarehouseId(e.target.value)}
+        >
           <option value="">— خروج انبار بعداً تعیین می‌شود —</option>
           {warehouses.map((w) => (
             <option key={w.id} value={w.id}>

@@ -123,6 +123,12 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
         .all()
     }
 
+    from app.services.warehouse_issues import issued_unit_cost_by_line
+
+    #: **بهای برگشت = بهایی که خروج واقعاً سند زد**، نه میانگینِ لحظه‌ی صدورِ فاکتور.
+    #: در سیاستِ دومرحله‌ای، خریدی بینِ فاکتور و خروج میانگین را عوض می‌کند و
+    #: برگشتِ کامل دیگر COGS را صفر نمی‌کرد. ردیفی که خروج ندارد همان عددِ قبلی را دارد.
+    issued_cost = issued_unit_cost_by_line(db, invoice_id)
     rows: list[_SourceLine] = []
     for line in lines:
         sold = Decimal(line.qty)
@@ -136,7 +142,7 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
                 line=line,
                 sold=sold,
                 unit_price=net / sold if sold else Decimal(0),
-                unit_cost=Decimal(line.unit_cost or 0),
+                unit_cost=issued_cost.get(line.id, Decimal(line.unit_cost or 0)),
                 tax_rate=Decimal(line.tax_rate_snapshot or 0),
                 returned=returned,
                 remaining=max(sold - returned, Decimal(0)),

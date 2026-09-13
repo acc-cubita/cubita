@@ -974,7 +974,7 @@ STOCK_SOURCE_LABELS = {
     "purchase_invoice": "فاکتور خرید",
     "sales_invoice": "فاکتور فروش",
     "warehouse_receipt": "رسید انبار خرید",
-    "warehouse_issue": "خروج انبار فروش",
+    "warehouse_issue": "خروج انبار",
     "purchase_return": "برگشت از خرید",
     "sales_return": "برگشت از فروش",
     "adjustment": "تعدیل انبار",

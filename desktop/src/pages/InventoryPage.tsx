@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler } from 'lucide-react'
+import { PackageSearch, Package, PackageMinus, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler } from 'lucide-react'
+import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
@@ -17,7 +18,14 @@ import { UnitsPanel } from '../components/UnitsPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
 import { KardexPanel } from '../components/KardexPanel'
-import { fetchStockLevels, fetchLowStock, type StockLevel, type LowStockRow } from '../api'
+import {
+  fetchStockLevels,
+  fetchLowStock,
+  type IssueInvoiceContext,
+  type LowStockRow,
+  type MeResponse,
+  type StockLevel,
+} from '../api'
 import { SectionCard } from '../components/SectionCard'
 import { Pager, usePagination } from '../components/Pager'
 import { StatCard } from '../components/StatCard'
@@ -33,16 +41,22 @@ type KardexTarget = { id: string; name: string; sku: string }
 
 export function InventoryPage({
   token,
+  me,
   warehouses,
   items,
   onChanged,
+  onCreateInvoiceFromIssue,
 }: {
   token: string
+  me: MeResponse
   warehouses: WarehouseCache[]
   items: ItemCache[]
   /** بعد از ثبت/ویرایشِ کالا صدا زده می‌شود تا کشِ سراسریِ کالاها هم تازه شود. */
   onChanged?: () => void
+  /** «صدور فاکتور فروش» از روی خروج — فقط زمینه را به فرمِ فاکتور می‌برد (§۱۶). */
+  onCreateInvoiceFromIssue: (context: IssueInvoiceContext) => void
 }) {
+  const [transferKey, setTransferKey] = useState(0)
   const [stock, setStock] = useState<StockLevel[]>([])
   const stockPg = usePagination(stock, 10)
   const [lowStock, setLowStock] = useState<LowStockRow[]>([])
@@ -279,13 +293,53 @@ export function InventoryPage({
             ),
           },
           {
+            //: خروجِ فروش، مصرف و سایر — و فهرستی که انتقال‌ها را هم کنارشان دارد.
+            key: 'issues',
+            label: 'خروج انبار',
+            icon: PackageMinus,
+            content: (
+              <WarehouseIssuesTab
+                token={token}
+                me={me}
+                warehouses={warehouses}
+                items={items}
+                onChanged={() => void refreshStock()}
+                onCreateInvoice={onCreateInvoiceFromIssue}
+              />
+            ),
+          },
+          {
             key: 'transfer',
             label: 'انتقال بین انبار',
             icon: ArrowLeftRight,
-            content: guided ? (
-              <TransferWizard token={token} warehouses={warehouses} items={items} />
-            ) : (
-              <TransferForm token={token} warehouses={warehouses} items={items} />
+            content: (
+              <>
+                {guided ? (
+                  <TransferWizard
+                    token={token}
+                    warehouses={warehouses}
+                    items={items}
+                    onCreated={() => setTransferKey((k) => k + 1)}
+                  />
+                ) : (
+                  <TransferForm
+                    token={token}
+                    warehouses={warehouses}
+                    items={items}
+                    onCreated={() => setTransferKey((k) => k + 1)}
+                  />
+                )}
+                {/* همان فهرستِ خروج‌ها با نوعِ انتقال — نه نمای دومی از حواله‌ها. */}
+                <WarehouseIssueLedger
+                  token={token}
+                  me={me}
+                  warehouses={warehouses}
+                  presetType="transfer"
+                  reloadKey={transferKey}
+                  onCreateInvoice={onCreateInvoiceFromIssue}
+                  onChanged={() => void refreshStock()}
+                />
+              </>
             ),
           },
           {

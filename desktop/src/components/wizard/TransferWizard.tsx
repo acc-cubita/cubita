@@ -1,22 +1,24 @@
 import { useState } from 'react'
-import { RefreshCw, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../../electron.d'
 import { useTransferDraft, type TransferDraft } from '../../lib/transferDraft'
 import { JalaliDatePicker } from '../JalaliDatePicker'
-import { TransferLinesTable, TransfersList } from '../TransferForm'
+import { TransferLinesTable } from '../TransferForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 
-/** ویزاردِ «انتقال بین انبار» — دو مرحله + پیش‌نمایشِ زنده؛ فهرستِ حواله‌ها زیرِ ویزارد. */
+/** ویزاردِ «انتقال بین انبار» — دو مرحله + پیش‌نمایشِ زنده. فهرست را صفحه زیرِ ویزارد می‌گذارد. */
 export function TransferWizard({
   token,
   warehouses,
   items,
+  onCreated,
 }: {
   token: string
   warehouses: WarehouseCache[]
   items: ItemCache[]
+  onCreated?: () => void
 }) {
-  const d = useTransferDraft({ token, warehouses, items })
+  const d = useTransferDraft({ token, warehouses, items, onCreated })
   const [resetTick, setResetTick] = useState(0)
 
   if (warehouses.length < 2 || d.goodsItems.length === 0) {
@@ -82,33 +84,20 @@ export function TransferWizard({
   ]
 
   return (
-    <>
-      <TaskFlow
-        title="حواله انتقال بین انبارها"
-        steps={steps}
-        submitLabel="ثبت حواله"
-        submitting={d.submitting}
-        message={d.message}
-        resetKey={resetTick}
-        preview={<LivePreview d={d} warehouses={warehouses} />}
-        onSubmit={() => {
-          void d.submit().then((ok) => {
-            if (ok) setResetTick((t) => t + 1)
-          })
-        }}
-      />
-      <section>
-        <div className="section-card-header">
-          <div className="section-card-heading"><div><h2>حواله‌های ثبت‌شده</h2></div></div>
-          <div className="header-actions">
-            <button onClick={() => void d.refresh()}>
-              <RefreshCw size={13} /> به‌روزرسانی
-            </button>
-          </div>
-        </div>
-        <TransfersList d={d} />
-      </section>
-    </>
+    <TaskFlow
+      title="حواله انتقال بین انبارها"
+      steps={steps}
+      submitLabel="ثبت حواله"
+      submitting={d.submitting}
+      message={d.message}
+      resetKey={resetTick}
+      preview={<LivePreview d={d} warehouses={warehouses} />}
+      onSubmit={() => {
+        void d.submit().then((ok) => {
+          if (ok) setResetTick((t) => t + 1)
+        })
+      }}
+    />
   )
 }
 

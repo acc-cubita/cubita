@@ -27,6 +27,7 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.models.counters import DOC_JOURNAL_ENTRY
 from app.models.inventory import Item, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
+from app.models.transfers import StockTransfer
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
 from app.services.common import number_lines
@@ -108,6 +109,11 @@ def _voided_sources(db: Session) -> set:
         #: هم باید حذف شود، همان چیزی که docstringِ `recompute_average_cost`
         #: می‌گوید: «میانگین باید همانی باشد که اگر آن سند اصلاً ثبت نشده بود».
         (WarehouseIssue, "warehouse_issue"),
+        #: انتقال از مهاجرتِ ۰۱۳۳ ابطال‌پذیر است. دو حرکتش جمعِ صفر دارند، ولی
+        #: ورودِ مقصد در بازپخش با بهای *همان روز* میانگین را جابه‌جا می‌کند؛ پس
+        #: انتقالِ باطل‌شده باید انگار هرگز نبوده باشد، مثلِ هر سندِ دیگری.
+        (StockTransfer, "transfer_out"),
+        (StockTransfer, "transfer_in"),
     ):
         for (doc_id,) in db.query(model.id).filter(model.voided_at.isnot(None)).all():
             voided.add((source_type, doc_id))
@@ -350,6 +356,10 @@ def void_sales_invoice(
     invoice = db.get(SalesInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
+    from app.services.warehouse_issues import detach_direct_issues
+
+    #: خروجِ مستقلی که فاکتور گرفته جدا می‌شود، نه باطل — پیش از آبشارِ پایین.
+    detach_direct_issues(db, invoice)
     if invoice.journal_entry_id is None:
         _guard_not_already_voided(invoice)
         _guard_no_active_returns(db, invoice, "sales_invoice")
@@ -372,6 +382,8 @@ def void_sales_invoice(
             void_warehouse_issue(
                 db, issue.id, reason=reason, user=user,
                 void_date=void_date or invoice.invoice_date,
+                #: گاردِ برگشتِ خودِ فاکتور در `_apply_void` می‌آید؛ پیامِ همان بماند.
+                guard_returns=False,
             )
     return _apply_void(
         db,

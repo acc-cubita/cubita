@@ -218,18 +218,65 @@ RECEIPT_TYPE_LABELS = {
     "opening": "موجودی اول دوره",
 }
 
+#: **چهار نوعِ خروجِ فصل، سه‌تا در این جدول.** «انتقال بین انبار» سندِ خودش را
+#: دارد (`StockTransfer`) — خروج از مبدأ و ورود به مقصد در *یک* سند و یک تراکنش —
+#: و فهرستِ خروج‌ها آن را کنارِ این سه نشان می‌دهد. ساختنِ نسخه‌ی دومی از انتقال
+#: این‌جا یعنی دو موتور که هرکدام نیمی از یک جابه‌جایی را بدانند (§۲۸ §۲۹).
+ISSUE_TYPES = ("sale", "consumption", "other")
+ISSUE_TYPE_LABELS = {
+    "sale": "فروش",
+    "consumption": "مصرف",
+    "other": "سایر",
+    "transfer": "انتقال بین انبار",
+}
+#: **منشأِ خروج، برای روزِ ابطالِ فاکتور.** خروجی که «ثبت فاکتور» خودش ساخته با
+#: همان فاکتور باطل می‌شود. ولی خروجی که کاربر مستقل ثبت کرده و *بعد* از رویش
+#: فاکتور صادر کرده، با ابطالِ فاکتور فقط جدا می‌شود: کالا واقعاً از انبار رفته و
+#: ابطالِ یک سندِ تجاری آن را به قفسه برنمی‌گرداند.
+ISSUE_ORIGINS = ("invoice", "direct")
+
+
 class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
-    """خروج فیزیکی مستقل فروش؛ مالک کاهش موجودی و COGS."""
+    """خروجِ واقعیِ کالا از یک انبار — مالکِ کاهشِ موجودی و سندِ بهای آن.
+
+    **خروج ≠ فاکتور فروش ≠ ویرایشِ موجودی.** خروج می‌گوید چه کالایی، چند تا، از
+    کدام انبار و به دستِ چه کسی رفت؛ فاکتور می‌گوید به چه قیمت فروخته شد. تا
+    مهاجرتِ ۰۱۳۳ خروج فقط زیرِ ردیفِ فاکتور ساخته می‌شد، پس «مصرف» و «سایر» هیچ
+    راهی جز تعدیلِ دستیِ موجودی نداشتند و فروشی که کالایش پیش از فاکتور تحویل
+    می‌شد، ثبت‌شدنی نبود.
+
+    **بها همان لحظه معلوم است.** کوبیتا میانگینِ موزونِ دائمی دارد و گردشِ
+    «قیمت‌گذاری اسناد انبار» ندارد؛ پس وضعیتِ «در انتظارِ قیمت‌گذاری» ساخته نشد —
+    وضعیتی که هیچ فرایندی تمامش نکند دروغ است (§۲۰ §۴۴).
+    """
 
     __tablename__ = "warehouse_issues"
-    __table_args__ = (UniqueConstraint("tenant_id", "number", name="uq_warehouse_issues_tenant_number"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_warehouse_issues_tenant_number"),
+        CheckConstraint(f"issue_type IN {ISSUE_TYPES}", name="ck_warehouse_issues_type"),
+        CheckConstraint(f"origin IN {ISSUE_ORIGINS}", name="ck_warehouse_issues_origin"),
+    )
 
     number: Mapped[int] = mapped_column(nullable=False, index=True)
     issue_date: Mapped[date_] = mapped_column(Date, default=date_.today)
-    sales_invoice_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sales_invoices.id"), index=True
+    issue_type: Mapped[str] = mapped_column(String(20), default="sale", server_default="sale")
+    origin: Mapped[str] = mapped_column(String(10), default="invoice", server_default="invoice")
+    #: خالی یعنی خروجی که هنوز فاکتور ندارد (§۴۰) — یا اصلاً نخواهد داشت (مصرف).
+    sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoices.id"), nullable=True, index=True
     )
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
+    #: **تحویل‌گیرنده**، مقصدِ فیزیکیِ کالا — عمداً جدا از مشتریِ فاکتور (§۵).
+    receiver_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    #: مرجعِ پیش‌فاکتور — اختیاری؛ خروجِ فروشِ مستقیم هم معتبر است (§۷).
+    source_quotation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_quotations.id"), nullable=True, index=True
+    )
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -238,8 +285,19 @@ class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     lines: Mapped[list["WarehouseIssueLine"]] = relationship(
-        back_populates="issue", cascade="all, delete-orphan", order_by="WarehouseIssueLine.id"
+        back_populates="issue",
+        cascade="all, delete-orphan",
+        order_by="(WarehouseIssueLine.seq, WarehouseIssueLine.id)",
     )
+
+    @property
+    def total_qty(self) -> Decimal:
+        return sum((Decimal(line.qty) for line in self.lines), Decimal(0))
+
+    @property
+    def total_cost(self) -> Decimal:
+        """جمعِ بهای ردیف‌ها — همان عددی که سندِ حسابداری زده، نه بازمحاسبه‌ی امروز."""
+        return sum((line.amount for line in self.lines), Decimal(0))
 
 
 class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
@@ -249,12 +307,27 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
     issue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_issues.id", ondelete="CASCADE"), index=True
     )
-    sales_invoice_line_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), index=True
+    #: شماره‌ی ردیف در همین خروج (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۳» —
+    #: همان درسِ رسید: شناسه‌ی UUID ترتیبِ ورود را نگه نمی‌دارد.
+    seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sales_invoice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
+    #: مقدار **به واحدِ اصلی** — تنها مقداری که دفترِ انبار می‌شناسد.
     qty: Mapped[float] = mapped_column(Numeric(18, 3))
-    unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: هم‌دقتِ `stock_ledger.unit_cost` (مهاجرتِ ۰۱۳۱)؛ دو گِردکردنِ متفاوتِ یک عدد
+    #: همان واگراییِ دفتر و کاردکس را می‌سازد.
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 4))
+    #: معینِ طرفِ بدهکار: بهای تمام‌شده برای فروش، حسابِ انتخابیِ کاربر برای مصرف
+    #: و سایر (§۲۲ §۲۵). حسابی که واقعاً سند خورده — نه حسابِ امروزِ آن نقش.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    #: مقدارِ فرعی **برای نمایش و چاپ** (§۱۱)، از نسبتِ ثابتِ همان کالا در لحظه‌ی
+    #: ثبت. نسبتِ متغیر عدد ندارد و خالی می‌ماند — حدس‌زدنش بدتر از نبودنش است.
+    secondary_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    secondary_unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
     unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
@@ -262,6 +335,11 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
 
     issue: Mapped["WarehouseIssue"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
+
+    @property
+    def amount(self) -> Decimal:
+        """بهای ریالیِ ردیف — به ریالِ صحیح، چون سندِ حسابداری کسرِ ریال نمی‌پذیرد."""
+        return (Decimal(self.qty) * Decimal(self.unit_cost or 0)).quantize(Decimal(1))
 
 
 class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):

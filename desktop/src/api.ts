@@ -1732,6 +1732,9 @@ export interface StockTransferRecord {
   from_warehouse_id: string
   to_warehouse_id: string
   description: string
+  journal_entry_id?: string | null
+  voided_at?: string | null
+  void_reason?: string
   lines: { id: string; item_id: string; qty: string }[]
 }
 
@@ -1746,7 +1749,9 @@ export const createStockTransfer = (
     description: string
     lines: { item_id: string; qty: number }[]
   },
-) => authedSend<StockTransferRecord>(token, 'POST', '/api/stock-transfers', data)
+  //: تکرارِ شبکه‌ای نباید دو انتقال بسازد — کلید به همین حواله گره می‌خورد.
+  idempotencyKey?: string,
+) => authedSend<StockTransferRecord>(token, 'POST', '/api/stock-transfers', data, idempotencyKey)
 
 export interface StockLevel {
   item_id: string
@@ -7335,6 +7340,8 @@ export interface SalesInvoiceCommercialInput {
   exchange_rate?: number
   invoice_discount?: number
   rounding?: number
+  /** فاکتوری که از خروجِ ثبت‌شده ساخته می‌شود — موجودی را دوباره کم نمی‌کند. */
+  source_warehouse_issue_id?: string | null
   lines: Array<{
     item_id: string
     qty: number
@@ -7343,6 +7350,7 @@ export interface SalesInvoiceCommercialInput {
     addition?: number
     duty_amount?: number
     description?: string
+    source_issue_line_id?: string | null
   }>
 }
 
@@ -7362,20 +7370,36 @@ export interface WarehouseIssueRecord {
   id: string
   number: number
   issue_date: string
-  sales_invoice_id: string
+  /** `sale` | `consumption` | `other` — انتقال سندِ خودش را دارد. */
+  issue_type: string
+  /** `invoice`: «ثبت فاکتور» ساختش · `direct`: مستقل ثبت شد و شاید بعد فاکتور گرفت. */
+  origin: string
+  sales_invoice_id: string | null
   warehouse_id: string
+  receiver_id: string | null
+  source_quotation_id: string | null
+  cost_center_id: string | null
   status: string
   description: string
   journal_entry_id: string | null
   voided_at: string | null
   void_reason: string
   created_by_id: string
+  total_qty: string
+  total_cost: string
   lines: Array<{
     id: string
-    sales_invoice_line_id: string
+    seq: number
+    sales_invoice_line_id: string | null
     item_id: string
     qty: string
     unit_cost: string
+    amount: string
+    secondary_qty: string | null
+    secondary_unit_snapshot: string
+    account_id: string | null
+    account_code: string
+    account_name: string
     item_code_snapshot: string
     item_name_snapshot: string
     unit_snapshot: string
@@ -7896,3 +7920,109 @@ export const fetchSalesReviewLines = (token: string, scope: SalesReviewScope = {
 
 export const fetchPreinvoiceProgress = (token: string, scope: SalesReviewScope = {}) =>
   authedGet<PreinvoiceProgress[]>(token, `/api/reports/sales-review/preinvoices${salesReviewQuery(scope)}`)
+
+// ═══════════════════ خروج انبار (مهاجرت ۰۱۳۳) ═══════════════════
+
+/** نوعِ خروج — «انتقال بین انبار» سندِ خودش را دارد ولی در همین فهرست می‌آید. */
+export const WAREHOUSE_ISSUE_TYPE_LABELS: Record<string, string> = {
+  sale: 'فروش',
+  consumption: 'مصرف',
+  other: 'سایر',
+  transfer: 'انتقال بین انبار',
+}
+
+/** ردیفِ فهرستِ خروج‌ها — خروج یا انتقال، با ستون‌هایی که به نوع بسته‌اند. */
+export interface WarehouseIssueRow {
+  kind: 'issue' | 'transfer'
+  id: string
+  number: number | null
+  doc_date: string
+  issue_type: string
+  type_label: string
+  origin: string
+  warehouse_id: string
+  warehouse_code: string
+  warehouse_name: string
+  receiver_id: string | null
+  receiver_name: string
+  destination_warehouse_id: string | null
+  destination_warehouse_code: string
+  destination_warehouse_name: string
+  sales_invoice_id: string | null
+  sales_invoice_number: number | null
+  source_quotation_id: string | null
+  quotation_number: number | null
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  created_by_name: string
+  line_count: number
+  total_qty: string
+  total_cost: string
+  description: string
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface WarehouseIssueLedgerFilters {
+  issue_type?: string
+  warehouse_id?: string
+  receiver_id?: string
+  date_from?: string
+  date_to?: string
+  state?: string
+}
+
+/** فیلتر سمتِ سرور است؛ صفحه‌ها با کرسر خوانده می‌شوند (سقفِ ۲۰۰). */
+export const fetchWarehouseIssueLedger = (token: string, filters: WarehouseIssueLedgerFilters = {}) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGetAll<WarehouseIssueRow>(token, `/api/warehouse-issues${query ? `?${query}` : ''}`)
+}
+
+export const fetchWarehouseIssue = (token: string, issueId: string) =>
+  authedGet<WarehouseIssueRecord>(token, `/api/warehouse-issues/${issueId}`)
+
+export interface DirectWarehouseIssueIn {
+  issue_date: string
+  issue_type: 'sale' | 'consumption' | 'other'
+  warehouse_id: string
+  receiver_id?: string | null
+  source_quotation_id?: string | null
+  cost_center_id?: string | null
+  account_id?: string | null
+  description?: string
+  lines: { item_id: string; qty: number; unit_id?: string | null; account_id?: string | null; description?: string }[]
+}
+
+export const createDirectWarehouseIssue = (token: string, data: DirectWarehouseIssueIn, idempotencyKey: string) =>
+  authedSend<WarehouseIssueRecord>(token, 'POST', '/api/warehouse-issues', data, idempotencyKey)
+
+/** قالبِ استاندارد یا A5 — همان سند، کاغذِ دیگر. */
+export const printWarehouseIssue = (token: string, issueId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/warehouse-issues/${issueId}/print?template=${template}`)
+
+export const printStockTransfer = (token: string, transferId: string, template: 'standard' | 'a5' = 'standard') =>
+  openInvoicePrintView(token, `/api/stock-transfers/${transferId}/print?template=${template}`)
+
+export const voidStockTransfer = (token: string, transferId: string, reason: string) =>
+  authedSend<StockTransferRecord>(token, 'POST', `/api/stock-transfers/${transferId}/void`, { reason })
+
+export interface IssueInvoiceContext {
+  issue_id: string
+  issue_number: number
+  warehouse_id: string
+  receiver_id: string | null
+  receiver_name: string
+  lines: {
+    issue_line_id: string
+    item_id: string
+    item_name: string
+    qty: string
+    unit: string
+    suggested_unit_price: string
+  }[]
+}
+
+export const fetchIssueInvoiceContext = (token: string, issueId: string) =>
+  authedGet<IssueInvoiceContext>(token, `/api/warehouse-issues/${issueId}/invoice-context`)

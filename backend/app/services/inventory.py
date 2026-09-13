@@ -889,6 +889,12 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "خدمت موجودی ندارد که تعدیل شود")
     items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
 
+    #: قفل پیش از خواندنِ موجودی — همان قاعده‌ی فروش و خروج. بدونش دو تعدیلِ
+    #: کسریِ هم‌زمان هر دو موجودیِ ۱۰ را می‌دیدند و موجودی منفی می‌شد. کالا بعد از
+    #: قفل دوباره خوانده می‌شود تا بها مالِ پس از تراکنشِ هم‌زمان باشد.
+    lock_items(db, [data.item_id])
+    item = db.query(Item).filter(Item.id == data.item_id).populate_existing().one()
+
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)
         if available < abs(data.qty_diff):

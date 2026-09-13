@@ -16,6 +16,9 @@ class SalesInvoiceLineIn(BaseModel):
     duty_amount: Decimal = Decimal(0)
     description: str = ""
     source_quotation_line_id: UUID | None = None
+    #: ردیفِ خروجی که این ردیفِ فاکتور از آن ساخته شده (§۱۵ §۱۶). فقط همراهِ
+    #: `source_warehouse_issue_id`ِ سربرگ معنا دارد.
+    source_issue_line_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_positive(self) -> "SalesInvoiceLineIn":
@@ -69,6 +72,9 @@ class SalesInvoiceIn(BaseModel):
     rounding: Decimal = Decimal(0)
     source_order_id: int | None = None  # فقط برای فاکتورهای وارداتی از سایت فروشگاهی پر می‌شود
     source_quotation_id: UUID | None = None
+    #: **فاکتوری که از خروجِ ثبت‌شده ساخته می‌شود.** کالا از قبل از انبار رفته، پس
+    #: این فاکتور هیچ حرکتِ انباری نمی‌سازد و ردیف‌هایش به همان خروج وصل می‌شوند.
+    source_warehouse_issue_id: UUID | None = None
     #: ارز فاکتور (مثل USD). None/خالی = پایه (ریال). مبالغِ سطرها همیشه پایه‌اند —
     #: کلاینت پیش از ارسال با نرخ تبدیل می‌کند؛ این‌ها فقط برای نمایش ذخیره می‌شوند.
     currency_code: str | None = None
@@ -504,18 +510,30 @@ class WarehouseReceiptOut(BaseModel):
 
 
 class WarehouseIssueLineIn(BaseModel):
-    sales_invoice_line_id: UUID
+    """ردیفِ خروج — یا به ردیفِ فاکتور اشاره می‌کند، یا خودش کالا را نام می‌برد."""
+
+    sales_invoice_line_id: UUID | None = None
+    item_id: UUID | None = None
     qty: Decimal
+    #: واحدی که مقدار با آن وارد شده؛ خالی یعنی واحدِ اصلی. تبدیل فقط در
+    #: `units.to_primary` — همان تبدیلِ خرید، رسید و فروش (§۱۱).
+    unit_id: UUID | None = None
+    #: معینِ طرفِ بدهکار برای «مصرف» و «سایر». خالی = حسابِ سربرگ.
+    account_id: UUID | None = None
     description: str = ""
 
     @model_validator(mode="after")
     def validate_qty(self) -> "WarehouseIssueLineIn":
         if self.qty <= 0:
             raise ValueError("مقدار خروج باید بزرگ‌تر از صفر باشد")
+        if self.sales_invoice_line_id is None and self.item_id is None:
+            raise ValueError("کالای ردیفِ خروج مشخص نیست")
         return self
 
 
 class WarehouseIssueIn(BaseModel):
+    """خروج از روی **ردیف‌های یک فاکتور** — قراردادِ پیشین، دست‌نخورده."""
+
     issue_date: date
     warehouse_id: UUID
     description: str = ""
@@ -525,17 +543,70 @@ class WarehouseIssueIn(BaseModel):
     def validate_lines(self) -> "WarehouseIssueIn":
         if not self.lines:
             raise ValueError("خروج انبار باید حداقل یک ردیف داشته باشد")
+        if any(line.sales_invoice_line_id is None for line in self.lines):
+            raise ValueError("ردیفِ خروجِ فاکتور باید به ردیفِ همان فاکتور اشاره کند")
         if len({line.sales_invoice_line_id for line in self.lines}) != len(self.lines):
             raise ValueError("هر ردیف فاکتور در خروج فقط یک‌بار مجاز است")
         return self
 
 
+#: نوع‌هایی که از این مسیر ثبت می‌شوند. «انتقال بین انبار» مسیرِ خودش را دارد.
+DIRECT_ISSUE_TYPES = ("sale", "consumption", "other")
+
+
+class DirectWarehouseIssueIn(BaseModel):
+    """خروجِ مستقل — بدونِ فاکتور (§۱ §۳ §۲۴ §۲۶)."""
+
+    issue_date: date
+    issue_type: str = "sale"
+    warehouse_id: UUID
+    receiver_id: UUID | None = None
+    source_quotation_id: UUID | None = None
+    cost_center_id: UUID | None = None
+    #: معینِ پیش‌فرضِ ردیف‌های «مصرف» و «سایر»؛ هر ردیف می‌تواند حسابِ خودش را بدهد.
+    account_id: UUID | None = None
+    description: str = ""
+    lines: list[WarehouseIssueLineIn]
+
+    @model_validator(mode="after")
+    def validate_issue(self) -> "DirectWarehouseIssueIn":
+        if self.issue_type == "transfer":
+            raise ValueError("«انتقال بین انبار» از مسیرِ انتقال ثبت می‌شود، نه خروجِ مستقل")
+        if self.issue_type not in DIRECT_ISSUE_TYPES:
+            raise ValueError("نوعِ خروج نامعتبر است")
+        if not self.lines:
+            raise ValueError("خروج انبار باید حداقل یک ردیف داشته باشد")
+        if any(line.item_id is None or line.sales_invoice_line_id is not None for line in self.lines):
+            raise ValueError("ردیفِ خروجِ مستقل کالا را مستقیم نام می‌برد، نه ردیفِ فاکتور")
+        if self.issue_type == "sale":
+            #: §۳ — در خروجِ فروش «تحویل‌گیرنده» اجباری است.
+            if self.receiver_id is None:
+                raise ValueError("برای خروجِ فروش، تحویل‌گیرنده را مشخص کنید")
+            if self.account_id is not None or any(line.account_id for line in self.lines):
+                raise ValueError(
+                    "طرفِ بدهکارِ خروجِ فروش بهای تمام‌شده‌ی کالای فروش‌رفته است و انتخاب نمی‌شود"
+                )
+        else:
+            if self.source_quotation_id is not None:
+                raise ValueError("پیش‌فاکتور فقط به خروجِ فروش مربوط است")
+            if any(line.account_id is None for line in self.lines) and self.account_id is None:
+                raise ValueError("برای خروجِ «مصرف» و «سایر» معینِ طرفِ بدهکار را مشخص کنید")
+        return self
+
+
 class WarehouseIssueLineOut(BaseModel):
     id: UUID
-    sales_invoice_line_id: UUID
+    seq: int = 0
+    sales_invoice_line_id: UUID | None = None
     item_id: UUID
     qty: Decimal
     unit_cost: Decimal
+    amount: Decimal = Decimal(0)
+    secondary_qty: Decimal | None = None
+    secondary_unit_snapshot: str = ""
+    account_id: UUID | None = None
+    account_code: str = ""
+    account_name: str = ""
     item_code_snapshot: str = ""
     item_name_snapshot: str = ""
     unit_snapshot: str = ""
@@ -548,17 +619,81 @@ class WarehouseIssueOut(BaseModel):
     id: UUID
     number: int
     issue_date: date
-    sales_invoice_id: UUID
+    issue_type: str = "sale"
+    origin: str = "invoice"
+    sales_invoice_id: UUID | None = None
     warehouse_id: UUID
+    receiver_id: UUID | None = None
+    source_quotation_id: UUID | None = None
+    cost_center_id: UUID | None = None
     status: str
     description: str = ""
     journal_entry_id: UUID | None = None
     voided_at: datetime | None = None
     void_reason: str = ""
     created_by_id: UUID
+    total_qty: Decimal = Decimal(0)
+    total_cost: Decimal = Decimal(0)
     lines: list[WarehouseIssueLineOut]
 
     model_config = {"from_attributes": True}
+
+
+class WarehouseIssueRowOut(BaseModel):
+    """ردیفِ فهرستِ خروج‌ها (§۳۶ §۳۷) — خروج یا انتقال، با ستون‌هایی که به نوع بسته‌اند.
+
+    Projection است نه جدولِ دوم: هر ردیف از سندِ خودش خوانده می‌شود.
+    """
+
+    kind: str  # issue | transfer
+    id: UUID
+    number: int | None = None
+    doc_date: date
+    issue_type: str
+    type_label: str
+    origin: str = ""
+    warehouse_id: UUID
+    warehouse_code: str = ""
+    warehouse_name: str = ""
+    receiver_id: UUID | None = None
+    receiver_name: str = ""
+    destination_warehouse_id: UUID | None = None
+    destination_warehouse_code: str = ""
+    destination_warehouse_name: str = ""
+    sales_invoice_id: UUID | None = None
+    sales_invoice_number: int | None = None
+    source_quotation_id: UUID | None = None
+    quotation_number: int | None = None
+    journal_entry_id: UUID | None = None
+    journal_entry_number: int | None = None
+    created_by_name: str = ""
+    line_count: int = 0
+    total_qty: Decimal = Decimal(0)
+    total_cost: Decimal = Decimal(0)
+    description: str = ""
+    voided_at: datetime | None = None
+    void_reason: str = ""
+
+
+class IssueInvoiceLineOut(BaseModel):
+    issue_line_id: UUID
+    item_id: UUID
+    item_name: str
+    qty: Decimal
+    unit: str = ""
+    #: قیمتِ فروشِ **پیشنهادی** از کارتِ کالا — قیمت مالِ فاکتور است (§۱۷)، نه خروج.
+    suggested_unit_price: Decimal = Decimal(0)
+
+
+class IssueInvoiceContextOut(BaseModel):
+    """آنچه فرمِ فاکتور از خروج می‌گیرد تا کاربر اقلام را دوباره تایپ نکند (§۱۶)."""
+
+    issue_id: UUID
+    issue_number: int
+    warehouse_id: UUID
+    receiver_id: UUID | None = None
+    receiver_name: str = ""
+    lines: list[IssueInvoiceLineOut]
 
 
 class ReceiptPaymentContextOut(BaseModel):

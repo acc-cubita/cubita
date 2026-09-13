@@ -54,7 +54,12 @@ from app.services.warehouse_receipts import (
     received_by_line,
     void_warehouse_receipt,
 )
-from app.services.warehouse_issues import create_warehouse_issue, void_warehouse_issue
+from app.services.warehouse_issues import (
+    attach_issue_accounts,
+    create_warehouse_issue,
+    post_sales_invoice_from_issue,
+    void_warehouse_issue,
+)
 
 router = APIRouter(tags=["invoices"])
 
@@ -304,9 +309,17 @@ def create_sales_invoice(
         user,
         operation="create_sales_invoice",
         payload=data,
-        run=lambda: post_sales_invoice(
-            db, data, user, enforce_credit=not x_cubita_offline_replay,
-            move_inventory=immediate, issue_accounting=immediate,
+        #: فاکتوری که از خروجِ ثبت‌شده ساخته می‌شود هیچ‌وقت خودش موجودی کم نمی‌کند —
+        #: حتی در سیاستِ «خودکار» (§۱۵). سندِ درآمد و طلب اما همان سیاست را دارد.
+        run=lambda: (
+            post_sales_invoice_from_issue(
+                db, data, user, enforce_credit=not x_cubita_offline_replay, issue_accounting=immediate,
+            )
+            if data.source_warehouse_issue_id
+            else post_sales_invoice(
+                db, data, user, enforce_credit=not x_cubita_offline_replay,
+                move_inventory=immediate, issue_accounting=immediate,
+            )
         ),
         replay=lambda rid: db.get(SalesInvoice, rid),
     )
@@ -342,6 +355,11 @@ def create_immediate_sales_invoice(
     """فروش یک‌کلیکی POS؛ تراکنش واحد، اما با فاکتور/سند/خروج مستقل."""
     if data.warehouse_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "انبار فروش فوری الزامی است")
+    if data.source_warehouse_issue_id:
+        #: فروشِ فوری خودش خروج می‌سازد؛ فاکتور از روی خروجِ موجود مسیرِ عادی را دارد.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "فاکتورِ ساخته‌شده از خروج انبار از مسیرِ فروشِ فوری ثبت نمی‌شود"
+        )
 
     def run() -> SalesInvoice:
         invoice = post_sales_invoice(
@@ -374,11 +392,14 @@ def list_warehouse_issues(
 ):
     if db.get(SalesInvoice, invoice_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
-    return (
+    issues = (
         db.query(WarehouseIssue).options(selectinload(WarehouseIssue.lines))
         .filter(WarehouseIssue.sales_invoice_id == invoice_id)
         .order_by(WarehouseIssue.issue_date.desc(), WarehouseIssue.number.desc()).all()
     )
+    #: همان «حساب معین»ی که فهرستِ خروج‌ها نشان می‌دهد — دو مسیر، یک جواب.
+    attach_issue_accounts(db, issues)
+    return issues
 
 
 @router.post(
@@ -629,8 +650,12 @@ def void_sales(
     #: ساخته؛ کاربر سندی نمی‌بیند که بخواهد آگاهانه باطلش کند، و این گارد فقط
     #: یک بن‌بست می‌شود — همان بن‌بستی که فصلِ «فاکتور برگشتی» یکی‌اش را بست.
     #: `void_sales_invoice` خودش خروج‌های فعال را آبشاری باطل می‌کند.
+    #: فقط خروجی که از خودِ فاکتور ساخته شده. خروجِ **مستقلی** که بعداً فاکتور
+    #: گرفته با ابطالِ فاکتور جدا می‌شود، نه باطل — کالا واقعاً رفته است.
     if not sales_posting.posts_immediately(db) and db.query(WarehouseIssue.id).filter(
-        WarehouseIssue.sales_invoice_id == invoice_id, WarehouseIssue.voided_at.is_(None)
+        WarehouseIssue.sales_invoice_id == invoice_id,
+        WarehouseIssue.voided_at.is_(None),
+        WarehouseIssue.origin == "invoice",
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "این فاکتور خروج انبار فعال دارد؛ ابتدا خروج را باطل کنید")
     if db.query(Receipt.id).join(

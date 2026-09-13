@@ -40,7 +40,8 @@ export function Note({ msg }: { msg: Msg }) {
 export const SOURCE_LABELS: Record<string, string> = {
   manual: 'دستی',
   sales_invoice: 'فاکتور فروش',
-  warehouse_issue: 'خروج انبار فروش',
+  warehouse_issue: 'خروج انبار',
+  stock_transfer: 'انتقال بین انبار',
   purchase_invoice: 'فاکتور خرید',
   sales_return: 'برگشت از فروش',
   purchase_return: 'برگشت از خرید',
