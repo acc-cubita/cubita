@@ -1535,7 +1535,8 @@ export interface PurchaseInvoiceRecord {
   final_amount: string
   transaction_final_amount: string
   received_total_qty: string
-  inventory_status: 'not_received' | 'partially_received' | 'fully_received'
+  /** `not_applicable` = فاکتوری که کالایی برای تحویل ندارد (فقط خدمت). */
+  inventory_status: 'not_received' | 'partially_received' | 'fully_received' | 'not_applicable'
   settled_amount: string
   remaining_amount: string
   financial_status: 'unsettled' | 'partially_settled' | 'fully_settled'
@@ -1554,10 +1555,14 @@ export interface PurchaseInvoiceRecord {
     unit_snapshot: string
     received_qty: string
     remaining_qty: string
+    /** معینِ هزینه‌ای که ردیفِ خدمت خورد (Snapshot). برای کالا خالی. */
+    expense_account_id?: string | null
+    expense_account_code?: string
+    expense_account_name?: string
   })[]
 }
 
-export const fetchPurchaseInvoices = (token: string) => authedGetAll<PurchaseInvoiceRecord>(token, '/api/purchase-invoices')
+export const fetchPurchaseInvoices =(token: string) => authedGetAll<PurchaseInvoiceRecord>(token, '/api/purchase-invoices')
 
 export interface WarehouseReceiptRecord {
   id: string
@@ -7245,6 +7250,7 @@ export interface PurchaseInvoiceDuplicateDraft {
     addition: string | number
     duty_amount: string | number
     description: string
+    expense_account_id?: string | null
   }>
   cleared_fields: string[]
 }
@@ -8217,3 +8223,129 @@ export interface IssueReturnBasis {
 
 export const fetchIssueReturnBasisDetail = (token: string, kind: string, docId: string) =>
   authedGet<IssueReturnBasis>(token, `/api/warehouse-issue-returns/basis/${kind}/${docId}`)
+
+// ── فاکتور خرید خدمات و کسورات (مالیات تکلیفی، بیمه) ──
+// فیلدهای تازه‌ی خروجیِ فاکتور خرید با declaration merging این‌جا می‌نشینند.
+
+export type PurchaseInvoiceKind = 'goods' | 'service'
+export type PurchaseDeductionNature = 'withholding_tax' | 'insurance'
+export type PurchaseDeductionBasis = 'net_before_tax' | 'gross'
+
+export const PURCHASE_DEDUCTION_NATURE_LABELS: Record<PurchaseDeductionNature, string> = {
+  withholding_tax: 'مالیات تکلیفی',
+  insurance: 'بیمه',
+}
+
+export const PURCHASE_DEDUCTION_BASIS_LABELS: Record<PurchaseDeductionBasis, string> = {
+  net_before_tax: 'خالص پیش از مالیات و عوارض',
+  gross: 'ناخالص (مقدار × فی)',
+}
+
+export interface PurchaseInvoiceDeductionRecord {
+  id: string
+  deduction_type_id: string | null
+  nature: PurchaseDeductionNature
+  name_snapshot: string
+  basis: PurchaseDeductionBasis
+  basis_amount: string
+  rate: string
+  amount: string
+  account_id: string
+  account_code: string
+  account_name: string
+}
+
+export interface PurchaseInvoiceRecord {
+  kind: PurchaseInvoiceKind
+  /** جمعِ کسورات — از جمعِ فاکتور کم نمی‌شود، فقط از بدهی به تأمین‌کننده. */
+  total_deductions: string
+  /** بدهیِ مستقیم به تأمین‌کننده = جمعِ فاکتور − کسورات. `remaining_amount` از همین است. */
+  payable_amount: string
+  withholding_total: string
+  insurance_total: string
+  deductions: PurchaseInvoiceDeductionRecord[]
+  journal_entry_number: number | null
+  journal_entry_date: string | null
+}
+
+export const fetchPurchaseInvoicesOfKind = (token: string, kind: PurchaseInvoiceKind) =>
+  authedGetAll<PurchaseInvoiceRecord>(token, `/api/purchase-invoices?kind=${kind}`)
+
+export interface PurchaseDeductionType {
+  id: string
+  code: string
+  name: string
+  nature: PurchaseDeductionNature
+  nature_label: string
+  basis: PurchaseDeductionBasis
+  basis_label: string
+  rate: string
+  account_id: string | null
+  account_code: string
+  account_name: string
+  account_is_default: boolean
+  is_active: boolean
+  description: string
+  /** در فاکتوری خورده — حذف نمی‌شود و ماهیتش عوض نمی‌شود. */
+  in_use: boolean
+}
+
+export interface PurchaseDeductionTypeInput {
+  code: string
+  name: string
+  nature: PurchaseDeductionNature
+  basis: PurchaseDeductionBasis
+  rate: number
+  account_id: string | null
+  is_active: boolean
+  description: string
+}
+
+export const fetchPurchaseDeductionTypes = (token: string, includeInactive = true) =>
+  authedGet<PurchaseDeductionType[]>(token, `/api/purchase-deduction-types?include_inactive=${includeInactive}`)
+
+export const createPurchaseDeductionType = (token: string, data: PurchaseDeductionTypeInput) =>
+  authedSend<PurchaseDeductionType>(token, 'POST', '/api/purchase-deduction-types', data)
+
+export const updatePurchaseDeductionType = (token: string, id: string, data: PurchaseDeductionTypeInput) =>
+  authedSend<PurchaseDeductionType>(token, 'PATCH', `/api/purchase-deduction-types/${id}`, data)
+
+export const deletePurchaseDeductionType = (token: string, id: string) =>
+  authedDelete(token, `/api/purchase-deduction-types/${id}`)
+
+export interface ServicePurchaseInvoiceInput {
+  kind: 'service'
+  invoice_date: string
+  contact_id: string
+  supplier_invoice_number: string
+  cost_center_id: string | null
+  description: string
+  description2: string
+  tax_rate: number
+  currency_code: string | null
+  exchange_rate: number
+  invoice_discount: number
+  invoice_addition: number
+  duty_amount: number
+  lines: {
+    item_id: string
+    /** خالی = معینِ خودِ خدمت. */
+    expense_account_id: string | null
+    qty: number
+    unit_cost: number
+    discount: number
+    addition: number
+    duty_amount: number
+    description: string
+  }[]
+  /** `rate`/`amount` خالی = از نوعِ کسر حساب کن. */
+  deductions: { deduction_type_id: string; rate: number | null; amount: number | null }[]
+}
+
+export const createServicePurchaseInvoice = (token: string, data: ServicePurchaseInvoiceInput, idempotencyKey: string) =>
+  authedSend<PurchaseInvoiceRecord>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
+
+export interface PurchaseInvoiceDuplicateDraft {
+  kind: PurchaseInvoiceKind
+  deductions: { deduction_type_id: string | null; rate: string | number }[]
+}

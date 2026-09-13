@@ -60,6 +60,7 @@ from app.routers import (
     transfers,
     warehouse_issues,
     issue_returns,
+    purchase_deductions,
     receipts,
     treasury,
     sales_ops,
@@ -129,6 +130,7 @@ app.include_router(returns.router)
 app.include_router(transfers.router)
 app.include_router(warehouse_issues.router)
 app.include_router(issue_returns.router)
+app.include_router(purchase_deductions.router)
 app.include_router(reports.router)
 app.include_router(banking.router)
 app.include_router(check_ops.router)

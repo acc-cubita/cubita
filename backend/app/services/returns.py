@@ -876,9 +876,24 @@ def _resolve_return_source(
             status.HTTP_400_BAD_REQUEST, "برگشت باید به فاکتور خرید یا رسید انبار گره بخورد"
         )
 
+    if invoice is not None and Decimal(invoice.total_deductions or 0) > 0:
+        #: **کسورات در برگشتِ جزئی قاعده‌ی تسهیم می‌خواهند که تعریف نشده.** برگشتِ
+        #: نیمی از خدمت یعنی چه مقدار از مالیات تکلیفی و بیمه برگردد؟ متناسب با مبنا؟
+        #: کاملاً تا مبلغِ باقی؟ فصل نگفته، و حدسش یعنی بدهیِ مالیاتی یا بیمه‌ای که
+        #: بی‌صدا غلط می‌شود. اصلاحِ کنترل‌شده همین است: ابطال و ثبتِ دوباره.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این فاکتور خرید خدمات کسورات (مالیات تکلیفی/بیمه) دارد و برگشتِ آن هنوز قاعده‌ی "
+            "تسهیمِ کسورات ندارد. برای اصلاح، فاکتور را باطل و دوباره ثبت کنید.",
+        )
+
     warehouse_id = receipt.warehouse_id if receipt is not None else (
         invoice.warehouse_id if invoice is not None else None
     )
+    if warehouse_id is None and receipt is None and invoice is not None and invoice.kind == "service":
+        #: فاکتور خرید خدمات هرگز انبار ندارد و رسیدی هم نمی‌آوردش؛ برگشتش فقط
+        #: حسابِ هزینه و بدهی را برمی‌گرداند و موجودی‌ای نمی‌جوید.
+        return invoice, None, None
     if warehouse_id is None:
         #: **پیامِ صادق به‌جای «موجودی کافی نیست (موجود: ۰)».**
         #:
@@ -954,6 +969,22 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         tax_amount += line_tax
         tax_weight += line_goods * row.tax_rate
         account_id = items_svc.purchase_account_id(db, item, inventory_account_id=inventory_account_id)
+        if item.is_service:
+            #: **حسابی که فاکتور واقعاً بدهکار کرد، نه نگاشتِ امروزِ خدمت.** اگر معینِ
+            #: هزینه‌ی خدمت بعد از فاکتور عوض شده باشد، نگاشتِ امروز حسابی را بستانکار
+            #: می‌کرد که هرگز بدهکار نشده بود. ردیف‌های پیش از ۰۱۳۵ این ستون را ندارند
+            #: و همان رفتارِ قبلی را می‌گیرند.
+            source_line = (
+                row.line
+                if receipt is None
+                else (
+                    db.get(PurchaseInvoiceLine, row.line.purchase_invoice_line_id)
+                    if row.line.purchase_invoice_line_id
+                    else None
+                )
+            )
+            if source_line is not None and source_line.expense_account_id is not None:
+                account_id = source_line.expense_account_id
         credit_by_account[account_id] = credit_by_account.get(account_id, Decimal(0)) + line_landed
 
         #: **مبلغ مرجوعی توافقی — جدا، ولی پیش‌فرضش ارزشِ دفتری است.**

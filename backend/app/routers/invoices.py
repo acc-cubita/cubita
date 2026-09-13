@@ -8,7 +8,8 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
-from app.models.inventory import Contact, StockLedger
+from app.models.accounting import Account, JournalEntry
+from app.models.inventory import Contact, Item, StockLedger
 from app.models.payment import Payment, PaymentRelatedDocument
 from app.models.receipt import Receipt, ReceiptRelatedDocument
 from app.models.sales_ops import SaleType
@@ -34,6 +35,8 @@ from app.schemas.invoices import (
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services import sales_posting
 from app.services.idempotency import idempotent
+from app.services.open_items import settled_amounts
+from app.services.purchase_deductions import totals_by_nature
 from app.services.inventory import duplicate_purchase_invoice_draft, post_purchase_invoice, post_sales_invoice
 from app.services.reports import get_purchase_summary, get_sales_summary
 from app.services.sales_invoices import (
@@ -65,10 +68,47 @@ router = APIRouter(tags=["invoices"])
 
 
 def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None:
-    """تحویل را مشتق می‌کند؛ تسویه تا ساخته‌شدن موتور Allocation باز می‌ماند."""
+    """تحویل، تسویه، کسورات و سندِ هر فاکتورِ خرید — همه مشتق، هیچ‌کدام ذخیره‌شده نه.
+
+    **مانده از بدهیِ واقعی به تأمین‌کننده است، نه از جمعِ فاکتور.** در فاکتور خرید
+    خدمات بخشی از مبلغ کسرِ مالیات تکلیفی و بیمه است و به تأمین‌کننده داده نمی‌شود.
+    تا امروز مانده همیشه «جمعِ فاکتور» بود و میان‌برِ «اعلامیه پرداخت» همان را
+    پیشنهاد می‌داد — یعنی پرداختِ کسورات به فروشنده.
+
+    **تسویه‌شده** جمعِ تخصیص‌های باطل‌نشده‌ی موتورِ تسویه است (از ۰۱۱۴). اعلامیه‌ی
+    پرداخت فقط مرجع است و مبلغی را «تسویه‌شده» اعلام نمی‌کند.
+
+    **تحویل فقط کالا را می‌شمارد.** ردیفِ خدمت رسید انبار ندارد؛ شمردنش فاکتوری را
+    که فقط خدمت دارد برای همیشه «تحویل‌نشده» نشان می‌داد.
+    """
     if not invoices:
         return
     ids = [invoice.id for invoice in invoices]
+    item_ids = {line.item_id for invoice in invoices for line in invoice.lines}
+    service_items = {
+        item_id
+        for (item_id,) in db.query(Item.id).filter(Item.id.in_(item_ids), Item.is_service.is_(True)).all()
+    } if item_ids else set()
+    account_ids = {
+        line.expense_account_id for invoice in invoices for line in invoice.lines if line.expense_account_id
+    } | {row.account_id for invoice in invoices for row in invoice.deductions}
+    accounts = (
+        {account.id: account for account in db.query(Account).filter(Account.id.in_(account_ids)).all()}
+        if account_ids
+        else {}
+    )
+    journal_ids = {invoice.journal_entry_id for invoice in invoices if invoice.journal_entry_id}
+    entries = (
+        {
+            entry_id: (number, entry_date)
+            for entry_id, number, entry_date in db.query(
+                JournalEntry.id, JournalEntry.number, JournalEntry.entry_date
+            ).filter(JournalEntry.id.in_(journal_ids))
+        }
+        if journal_ids
+        else {}
+    )
+    settled_by_invoice = settled_amounts(db, [("purchase_invoice", invoice_id) for invoice_id in ids])
     related_payment_counts = dict(
         db.query(PaymentRelatedDocument.document_id, func.count(func.distinct(Payment.id)))
         .join(Payment, Payment.id == PaymentRelatedDocument.payment_id)
@@ -92,6 +132,13 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
         received_total = Decimal(0)
         ordered_total = Decimal(0)
         for line in invoice.lines:
+            account = accounts.get(line.expense_account_id) if line.expense_account_id else None
+            line.expense_account_code = account.code if account else ""
+            line.expense_account_name = account.name if account else ""
+            if line.item_id in service_items:
+                line.received_qty = Decimal(0)
+                line.remaining_qty = Decimal(0)
+                continue
             ordered = Decimal(line.qty)
             got = received.get(line.id, ordered if invoice.id in legacy_ids else Decimal(0))
             line.received_qty = got
@@ -100,15 +147,30 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
             ordered_total += ordered
         invoice.received_total_qty = received_total
         invoice.inventory_status = (
-            "not_received" if received_total <= 0 else "fully_received" if received_total >= ordered_total else "partially_received"
+            "not_applicable" if ordered_total <= 0
+            else "not_received" if received_total <= 0
+            else "fully_received" if received_total >= ordered_total
+            else "partially_received"
         )
         final = Decimal(invoice.total_amount) + Decimal(invoice.tax_amount)
         invoice.final_amount = final
-        # PaymentRelatedDocument فقط Reference است. وضعیت مالی وقتی قابل محاسبه
-        # می‌شود که موتور Settlement/Allocation با سیاست‌های بازِ §۲۰ ساخته شود.
-        invoice.settled_amount = Decimal(0)
-        invoice.remaining_amount = final
-        invoice.financial_status = "unsettled"
+        payable = invoice.payable_amount
+        settled = settled_by_invoice.get(("purchase_invoice", invoice.id), Decimal(0))
+        invoice.settled_amount = settled
+        invoice.remaining_amount = max(payable - settled, Decimal(0))
+        invoice.financial_status = (
+            "unsettled" if settled <= 0 else "fully_settled" if settled >= payable else "partially_settled"
+        )
+        totals = totals_by_nature(invoice.deductions)
+        invoice.withholding_total = totals["withholding_tax"]
+        invoice.insurance_total = totals["insurance"]
+        for row in invoice.deductions:
+            account = accounts.get(row.account_id)
+            row.account_code = account.code if account else ""
+            row.account_name = account.name if account else ""
+        invoice.journal_entry_number, invoice.journal_entry_date = entries.get(
+            invoice.journal_entry_id, (None, None)
+        )
         # شمارش برای Trace است، نه مبنای تسویه؛ مبلغ همچنان فقط کارِ موتور Allocation است.
         invoice.related_payment_count = related_payment_counts.get(invoice.id, 0)
         rate = Decimal(invoice.exchange_rate or 1)
@@ -428,13 +490,24 @@ def void_sales_warehouse_issue(
 
 @router.get("/api/purchase-invoices", response_model=Page[PurchaseInvoiceOut])
 def list_purchase_invoices(
+    kind: str | None = None,
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
     _=Depends(require_permission("invoices", "view")),
 ):
+    """`kind`: `goods` (فاکتور خرید) یا `service` (فاکتور خرید خدمات)؛ خالی = هر دو."""
+    query = db.query(PurchaseInvoice).options(
+        selectinload(PurchaseInvoice.lines), selectinload(PurchaseInvoice.deductions)
+    )
+    if kind is not None:
+        if kind not in ("goods", "service"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "نوعِ فاکتور خرید نامعتبر است")
+        query = query.filter(PurchaseInvoice.kind == kind)
+    #: `id` کلیدِ سوم است چون از ۰۱۳۵ هر نوع سریِ شماره‌ی خودش را دارد: «فاکتور ۵» کالا
+    #: و «فاکتور ۵» خدمات در یک روز، با کرسرِ (تاریخ، شماره) یکی از دو صفحه گم می‌شد.
     items, next_cursor = paginate(
-        db.query(PurchaseInvoice).options(selectinload(PurchaseInvoice.lines)),
-        [PurchaseInvoice.invoice_date, PurchaseInvoice.number],
+        query,
+        [PurchaseInvoice.invoice_date, PurchaseInvoice.number, PurchaseInvoice.id],
         params,
     )
     _attach_creators(db, items)
@@ -803,8 +876,9 @@ def _purchase_render_kwargs(db: Session, principal: Principal, invoice: Purchase
         invoice.buyer_snapshot or {},
         (principal.membership.tenant.name, ""),
     )
+    service = invoice.kind == "service"
     return dict(
-        kind="فاکتور خرید",
+        kind="فاکتور خرید خدمات" if service else "فاکتور خرید",
         business_name=buyer_name,
         business_detail=buyer_detail,
         business_party_label="خریدار",
@@ -818,9 +892,17 @@ def _purchase_render_kwargs(db: Session, principal: Principal, invoice: Purchase
             invoice.description,
             invoice.description2,
         ])),
+        #: کسورات از همان Snapshotِ ذخیره‌شده می‌آیند، نه از نرخِ امروزِ نوعِ کسر —
+        #: چاپ منبعِ مالیِ تازه‌ای نیست.
+        deductions=[(row.name_snapshot, Decimal(row.amount)) for row in invoice.deductions],
         lines=[
             {
-                "name": line.item_name_snapshot or line.item.name,
+                #: برگه‌ی خدمات «کد خدمت» را هم نشان می‌دهد.
+                "name": (
+                    f"{line.item_code_snapshot} — {line.item_name_snapshot or line.item.name}"
+                    if service and line.item_code_snapshot
+                    else line.item_name_snapshot or line.item.name
+                ),
                 "description": line.description,
                 "qty": line.qty,
                 "unit": line.unit_snapshot or line.item.unit,

@@ -10,6 +10,7 @@ import {
   fetchWarehouseIssues,
   fetchWarehouseReceipts,
   fetchPurchaseInvoices,
+  fetchPurchaseInvoicesOfKind,
   fetchSalesInvoices,
   newIdempotencyKey,
   printPurchaseInvoice,
@@ -21,6 +22,7 @@ import {
   voidWarehouseIssue,
   type ContactRecord,
   type MeResponse,
+  type PurchaseInvoiceKind,
   type PurchaseInvoiceRecord,
   type SalesInvoiceRecord,
   type WarehouseReceiptRecord,
@@ -55,6 +57,7 @@ export function InvoiceList({
   onDuplicate,
   warehouses = [],
   onCreatePayment,
+  purchaseKind,
 }: {
   token: string
   me: MeResponse
@@ -64,8 +67,12 @@ export function InvoiceList({
   onDuplicate?: (invoice: AnyInvoice) => void
   warehouses?: WarehouseCache[]
   onCreatePayment?: (invoice: PurchaseInvoiceRecord) => void
+  /** فقط برای خرید: `goods` = فاکتور خرید، `service` = فاکتور خرید خدمات. خالی = هر دو. */
+  purchaseKind?: PurchaseInvoiceKind
 }) {
   const isSales = kind === 'sales'
+  const isService = !isSales && purchaseKind === 'service'
+  const docLabel = isSales ? 'فاکتور فروش' : isService ? 'فاکتور خرید خدمات' : 'فاکتور خرید'
   const [rows, setRows] = useState<AnyInvoice[] | null>(null)
   const [contactNames, setContactNames] = useState<Map<string, string>>(new Map())
   const [message, setMessage] = useState<string | null>(null)
@@ -78,13 +85,19 @@ export function InvoiceList({
   const canIssueSalesJournal = can(me, 'accounting', 'create')
   const canCreateWarehouseIssue = can(me, 'inventory', 'create')
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? id
-  const columnCount = isSales ? 8 : 7
+  //: فاکتور خرید خدمات چهار ستونِ بیشتر دارد — مالیات تکلیفی، بیمه، خالصِ پرداختنی و
+  //: سند؛ فصل می‌گوید کسورات در فهرست هم باید دیده و جمع شوند، نه فقط در جزئیات.
+  const columnCount = isSales ? 8 : isService ? 11 : 7
   // صفحه‌بندیِ فهرستِ فاکتورها (۱۰ در هر صفحه)؛ با تعویضِ نوع (فروش/خرید) به اولِ فهرست برمی‌گردد.
   const pg = usePagination(rows ?? [], 10, kind)
 
   async function refresh() {
     try {
-      const data = isSales ? await fetchSalesInvoices(token) : await fetchPurchaseInvoices(token)
+      const data = isSales
+        ? await fetchSalesInvoices(token)
+        : purchaseKind
+          ? await fetchPurchaseInvoicesOfKind(token, purchaseKind)
+          : await fetchPurchaseInvoices(token)
       setRows(data)
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -96,7 +109,7 @@ export function InvoiceList({
     fetchContacts(token)
       .then((rows: ContactRecord[]) => setContactNames(new Map(rows.map((c) => [c.id, c.name]))))
       .catch(() => setContactNames(new Map()))
-  }, [token, kind])
+  }, [token, kind, purchaseKind])
 
   function partyLabel(row: AnyInvoice): string {
     if (!row.contact_id) return isSales ? 'مشتری نقدی' : 'تأمین‌کننده نقدی'
@@ -142,7 +155,7 @@ export function InvoiceList({
     // دلیل اجباری است و سرور هم آن را الزام می‌کند؛ اینجا فقط زودتر پرسیده می‌شود
     // تا کاربر بعد از یک رفت‌وبرگشت شبکه پیام خطا نگیرد.
     const reason = window.prompt(
-      `ابطال ${isSales ? 'فاکتور فروش' : 'فاکتور خرید'} شماره ${row.number}؟\n\n` +
+      `ابطال ${docLabel} شماره ${row.number}؟\n\n` +
         'فاکتور پاک نمی‌شود؛ یک سند معکوس ثبت می‌شود و اثر مالی و انباری‌اش برمی‌گردد.\n' +
         'دلیل ابطال:',
     )
@@ -172,8 +185,12 @@ export function InvoiceList({
   return (
     <SectionCard
       icon={FileText}
-      title={isSales ? 'فاکتورهای فروش' : 'فاکتورهای خرید'}
-      description="روی هر ردیف بزنید تا اقلام و جزئیات باز شود. برای اصلاح اشتباه، فاکتور را باطل کنید — حذف نمی‌شود و سند معکوسش ثبت می‌گردد."
+      title={isSales ? 'فاکتورهای فروش' : isService ? 'فاکتورهای خرید خدمات' : 'فاکتورهای خرید'}
+      description={
+        isService
+          ? 'مبلغ = جمعِ فاکتور؛ «خالص پرداختنی» پس از کسرِ مالیات تکلیفی و بیمه است و مانده و اعلامیه‌ی پرداخت از همان حساب می‌شوند. برای اصلاح، فاکتور را باطل کنید.'
+          : 'روی هر ردیف بزنید تا اقلام و جزئیات باز شود. برای اصلاح اشتباه، فاکتور را باطل کنید — حذف نمی‌شود و سند معکوسش ثبت می‌گردد.'
+      }
     >
       {message && <div className="hint">{message}</div>}
 
@@ -192,6 +209,10 @@ export function InvoiceList({
               <th>طرف حساب</th>
               <th>مبلغ</th>
               {isSales && <th>سود ناخالص</th>}
+              {isService && <th>مالیات تکلیفی</th>}
+              {isService && <th>بیمه</th>}
+              {isService && <th>خالص پرداختنی</th>}
+              {isService && <th>سند حسابداری</th>}
               <th>وضعیت</th>
               <th>عملیات</th>
             </tr>
@@ -234,6 +255,26 @@ export function InvoiceList({
                     <span className="unit-suffix"> ({margin.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪)</span>
                   </td>
                 )}
+                {isService && (
+                  <td className="num" data-label="مالیات تکلیفی">
+                    {Number((row as PurchaseInvoiceRecord).withholding_total) ? fa(Number((row as PurchaseInvoiceRecord).withholding_total)) : '—'}
+                  </td>
+                )}
+                {isService && (
+                  <td className="num" data-label="بیمه">
+                    {Number((row as PurchaseInvoiceRecord).insurance_total) ? fa(Number((row as PurchaseInvoiceRecord).insurance_total)) : '—'}
+                  </td>
+                )}
+                {isService && (
+                  <td className="num" data-label="خالص پرداختنی">{fa(Number((row as PurchaseInvoiceRecord).payable_amount))}</td>
+                )}
+                {isService && (
+                  <td data-label="سند حسابداری">
+                    {(row as PurchaseInvoiceRecord).journal_entry_number
+                      ? `${(row as PurchaseInvoiceRecord).journal_entry_number!.toLocaleString('fa-IR')}${(row as PurchaseInvoiceRecord).journal_entry_date ? ` — ${formatJalali((row as PurchaseInvoiceRecord).journal_entry_date!)}` : ''}`
+                      : '—'}
+                  </td>
+                )}
                 <td data-label="وضعیت">
                   {row.voided_at ? <span title={row.void_reason}>باطل شده</span> : isSales ? (
                     <span>
@@ -245,8 +286,13 @@ export function InvoiceList({
                     </span>
                   ) : (
                     <span>
-                      {({ not_received: 'تحویل‌نشده', partially_received: 'تحویل جزئی', fully_received: 'تحویل کامل' } as const)[(row as PurchaseInvoiceRecord).inventory_status]}
-                      {' / '}
+                      {/* فاکتوری که کالایی برای تحویل ندارد (فقط خدمت) وضعیتِ تحویل ندارد. */}
+                      {(row as PurchaseInvoiceRecord).inventory_status !== 'not_applicable' && (
+                        <>
+                          {({ not_received: 'تحویل‌نشده', partially_received: 'تحویل جزئی', fully_received: 'تحویل کامل', not_applicable: '' } as const)[(row as PurchaseInvoiceRecord).inventory_status]}
+                          {' / '}
+                        </>
+                      )}
                       {({ unsettled: 'تسویه‌نشده', partially_settled: 'تسویه جزئی', fully_settled: 'تسویه کامل' } as const)[(row as PurchaseInvoiceRecord).financial_status]}
                     </span>
                   )}
@@ -399,6 +445,7 @@ function InvoiceDetail({
           <thead>
             <tr>
               <th>کالا</th>
+              {!isSales && <th>معین هزینه</th>}
               <th>تعداد</th>
               <th>{isSales ? 'قیمت واحد' : 'بهای واحد'}</th>
               <th>تخفیف</th>
@@ -417,9 +464,18 @@ function InvoiceDetail({
               const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
               const lineCost = qty * unitCost
               const lineProfit = lineNet - lineCost
+              const purchaseLine = line as PurchaseInvoiceRecord['lines'][number]
               return (
                 <tr key={line.id}>
                   <td className="entity-name" data-label="کالا">{itemName(line.item_id)}</td>
+                  {!isSales && (
+                    <td data-label="معین هزینه">
+                      {/* Snapshotِ لحظه‌ی ثبت؛ برای کالا خالی است چون بهایش به موجودی نشسته. */}
+                      {purchaseLine.expense_account_name
+                        ? `${purchaseLine.expense_account_code} — ${purchaseLine.expense_account_name}`
+                        : '—'}
+                    </td>
+                  )}
                   <td data-label="تعداد">{qty.toLocaleString('fa-IR')}</td>
                   <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}</td>
                   <td data-label="تخفیف">{lineDiscount ? fa(lineDiscount) : '—'}</td>
@@ -441,7 +497,29 @@ function InvoiceDetail({
         {duties > 0 && <span>عوارض: {fa(duties)}</span>}
         {tax > 0 && <span>مالیات: {fa(tax)}</span>}
         {rounding !== 0 && <span>گِرد کردن: {fa(rounding)}</span>}
-        <span>قابل پرداخت: <strong>{fa(net + additions + duties + tax + rounding)}</strong></span>
+        {!isSales && (row as PurchaseInvoiceRecord).deductions?.length > 0 ? (
+          <>
+            {/* با کسورات، جمعِ فاکتور و بدهی به تأمین‌کننده دو عددند (فصلِ خرید خدمات §۲۷). */}
+            <span>جمع فاکتور: {fa(Number((row as PurchaseInvoiceRecord).final_amount))}</span>
+            {(row as PurchaseInvoiceRecord).deductions.map((d) => (
+              <span key={d.id} title={`${d.account_code} — ${d.account_name}`}>
+                {d.name_snapshot} ({Number(d.rate).toLocaleString('fa-IR', { maximumFractionDigits: 3 })}٪ از {fa(Number(d.basis_amount))}) (−): {fa(Number(d.amount))}
+              </span>
+            ))}
+            <span>قابل پرداخت به تأمین‌کننده: <strong>{fa(Number((row as PurchaseInvoiceRecord).payable_amount))}</strong></span>
+          </>
+        ) : (
+          <span>قابل پرداخت: <strong>{fa(net + additions + duties + tax + rounding)}</strong></span>
+        )}
+        {!isSales && Number((row as PurchaseInvoiceRecord).settled_amount) > 0 && (
+          <span>تسویه‌شده: {fa(Number((row as PurchaseInvoiceRecord).settled_amount))} — مانده: {fa(Number((row as PurchaseInvoiceRecord).remaining_amount))}</span>
+        )}
+        {!isSales && (row as PurchaseInvoiceRecord).journal_entry_number && (
+          <span>
+            سند حسابداری: {(row as PurchaseInvoiceRecord).journal_entry_number!.toLocaleString('fa-IR')}
+            {(row as PurchaseInvoiceRecord).journal_entry_date && ` — ${formatJalali((row as PurchaseInvoiceRecord).journal_entry_date!)}`}
+          </span>
+        )}
         {isSales && <span>بهای تمام‌شده: {fa(cost)}</span>}
         {isSales && (
           <span className={profit >= 0 ? 'stock-ok' : 'stock-over'}>
@@ -449,7 +527,8 @@ function InvoiceDetail({
           </span>
         )}
       </div>
-      {!isSales && !row.voided_at && (
+      {/* خدمت رسید انبار ندارد: فاکتوری که کالایی برای تحویل ندارد ویرایشگرِ رسید هم ندارد. */}
+      {!isSales && !row.voided_at && (row as PurchaseInvoiceRecord).inventory_status !== 'not_applicable' && (
         <WarehouseReceiptEditor
           token={token}
           invoice={row as PurchaseInvoiceRecord}

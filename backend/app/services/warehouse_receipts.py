@@ -105,6 +105,12 @@ def _resolve_invoice(db: Session, invoice_id: UUID | None) -> PurchaseInvoice | 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
     if invoice.is_voided:
         raise HTTPException(status.HTTP_409_CONFLICT, "برای فاکتور باطل‌شده نمی‌توان رسید انبار ساخت")
+    if invoice.kind == "service":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "فاکتور خرید خدمات رسید انبار ندارد: خدمت وارد انبار نمی‌شود و هزینه‌اش همان لحظه‌ی "
+            "ثبتِ فاکتور شناسایی شده است.",
+        )
     return invoice
 
 
@@ -130,6 +136,14 @@ def _invoice_backed_lines(
     already = received_by_line(db, invoice.id)
     rows = []
     for line in purchase_lines:
+        if line.item.is_service:
+            #: خدمتِ یک فاکتور خرید کالا همان لحظه‌ی فاکتور هزینه شده. رسیدش هیچ
+            #: حرکتی نمی‌ساخت و فقط «تحویل» را دروغ می‌کرد.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"«{line.item_name_snapshot or line.item.name}» خدمت است و رسید انبار نمی‌خواهد؛ "
+                "هزینه‌اش با خودِ فاکتور ثبت شده است.",
+            )
         remaining = Decimal(line.qty) - already.get(line.id, Decimal(0))
         if requested[line.id] > remaining:
             raise HTTPException(

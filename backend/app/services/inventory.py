@@ -5,7 +5,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PURCHASE_INVOICE, DOC_SALES_INVOICE
+from app.models.counters import (
+    DOC_JOURNAL_ENTRY,
+    DOC_PURCHASE_INVOICE,
+    DOC_SALES_INVOICE,
+    DOC_SERVICE_PURCHASE_INVOICE,
+)
+from app.services import purchase_deductions as deductions_svc
 from app.services import tafsili
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalEntry, JournalLine
@@ -547,7 +553,31 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     # محاسبه‌ی دیگری را بازنویسی می‌کند و بهای تمام‌شده برای همیشه غلط می‌ماند.
     lock_items(db, [line.item_id for line in data.lines])
 
-    number = next_document_number(db, DOC_PURCHASE_INVOICE)
+    #: **فاکتور خرید خدمات فقط خدمت می‌پذیرد.** کالا باید با فاکتور خرید و رسید انبار
+    #: بیاید؛ اگر این‌جا پذیرفته می‌شد، کالایی بی‌رسید و بی‌کاردکس هزینه یا «در راه» می‌شد
+    #: که هیچ رسیدی قرار نبود از آن‌جا برش دارد.
+    service_kind = data.kind == "service"
+    if service_kind:
+        goods = [items_by_id[line.item_id].name for line in data.lines if not items_by_id[line.item_id].is_service]
+        if goods:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"فاکتور خرید خدمات فقط خدمت می‌پذیرد؛ «{'»، «'.join(goods)}» کالاست و باید با "
+                "فاکتور خرید و رسید انبار ثبت شود.",
+            )
+    for line in data.lines:
+        if line.expense_account_id is None:
+            continue
+        if not items_by_id[line.item_id].is_service:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"«{items_by_id[line.item_id].name}» کالاست؛ معینِ هزینه فقط برای ردیفِ خدمت انتخاب می‌شود.",
+            )
+        items_svc.assert_expense_account(db, line.expense_account_id)
+
+    number = next_document_number(
+        db, DOC_SERVICE_PURCHASE_INVOICE if service_kind else DOC_PURCHASE_INVOICE
+    )
 
     #: §۲۹ — کالا فقط به انبارهای مرتبطش وارد می‌شود.
     for line in data.lines:
@@ -631,6 +661,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 item_code_snapshot=item.sku,
                 item_name_snapshot=item.name,
                 unit_snapshot=item.unit,
+                #: معینِ هزینه‌ی ردیفِ خدمت همین حالا حل و قفل می‌شود (فصلِ خرید خدمات
+                #: §۱۳ §۴۹): انتخابِ صریحِ کاربر، وگرنه معینِ خودِ خدمت، وگرنه پیش‌فرضِ نقش.
+                #: کالا `NULL` می‌ماند — بهایش به موجودیِ انبار می‌نشیند.
+                expense_account_id=(
+                    line.expense_account_id
+                    or items_svc.purchase_account_id(db, item, inventory_account_id=None)
+                )
+                if item.is_service
+                else None,
                 #: نرخِ **مؤثرِ همین ردیف** قفل می‌شود، نه نرخِ سرِ فاکتور: ردیفِ
                 #: معاف صفر می‌گیرد و کالای نرخ‌دار نرخِ خودش را (§۱۴).
                 tax_rate_snapshot=items_svc.effective_tax_rate(
@@ -708,13 +747,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     inventory_account_id = warehouses.inventory_account_id(db, data.warehouse_id)
     transit_account_id = goods_in_transit_account(db).id if goods_pending else None
     debit_by_account: dict[UUID, Decimal] = {}
-    for line, line_net in zip(data.lines, line_nets, strict=True):
-        item = items_by_id[line.item_id]
-        account_id = items_svc.purchase_account_id(
-            db, item, inventory_account_id=inventory_account_id
-        )
-        if goods_pending and not item.is_service:
+    for line_obj, line_net in zip(invoice_lines, line_nets, strict=True):
+        item = items_by_id[line_obj.item_id]
+        if item.is_service:
+            #: همان حسابی که روی ردیف قفل شد — نه دوباره از نگاشتِ خدمت.
+            account_id = line_obj.expense_account_id
+        elif goods_pending:
             account_id = transit_account_id
+        else:
+            account_id = inventory_account_id
         debit_by_account[account_id] = debit_by_account.get(account_id, Decimal(0)) + line_net
 
     journal_lines = [
@@ -739,14 +780,40 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 description="مالیات بر ارزش افزوده خرید (اعتبار مالیاتی)",
             )
         )
-    journal_lines.append(
-        JournalLine(
-            account_id=payable_or_cash.id,
-            debit=0,
-            credit=total_amount + tax_amount,  # به تأمین‌کننده خالص + مالیات پرداخت می‌شود
-            description="بابت خرید کالا",
-        )
+
+    #: **کسورات بدهی را تقسیم می‌کنند، هزینه را نه (فصلِ خرید خدمات §۲۷–§۳۰).**
+    #:
+    #: هزینه همان کلِ مبلغِ خدمت می‌ماند. هر کسر یک ردیفِ بستانکارِ مستقل روی حسابِ
+    #: بدهیِ خودش می‌شود، و تأمین‌کننده فقط مابقی را طلبکار است. مدلِ غلط — کلِ مبلغ
+    #: بستانکارِ تأمین‌کننده و کسورات فقط اطلاعاتِ نمایشی — ماندهٔ تأمین‌کننده، تسویه
+    #: و پرداخت را هم‌زمان غلط می‌کرد.
+    #:
+    #: **مبنای «خالص پیش از مالیات و عوارض»** جمعِ ردیف‌ها پس از تخفیف و اضافات است؛
+    #: عوارض و ارزش افزوده پولِ دولت‌اند نه بهای خدمت.
+    deduction_rows = deductions_svc.build_deductions(
+        db,
+        data.deductions,
+        gross=sum((line.qty * line.unit_cost for line in data.lines), Decimal(0)),
+        net_before_tax=total_amount - total_duties,
+        ceiling=total_amount + tax_amount,
     )
+    total_deductions = sum((Decimal(row.amount) for row in deduction_rows), Decimal(0))
+    for row in deduction_rows:
+        journal_lines.append(
+            JournalLine(account_id=row.account_id, debit=0, credit=row.amount, description=row.name_snapshot)
+        )
+
+    supplier_payable = total_amount + tax_amount - total_deductions
+    if supplier_payable > 0:
+        journal_lines.append(
+            JournalLine(
+                account_id=payable_or_cash.id,
+                debit=0,
+                #: خالص + مالیات − کسورات: همان مبلغی که واقعاً به تأمین‌کننده می‌رسد.
+                credit=supplier_payable,
+                description="بابت خرید خدمات" if service_kind else "بابت خرید کالا",
+            )
+        )
 
     if cost_center_id is not None:
         for line in journal_lines:
@@ -756,7 +823,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     journal_entry = JournalEntry(
         number=entry_number,
         entry_date=data.invoice_date,
-        description=f"فاکتور خرید شماره {number}",
+        description=f"{'فاکتور خرید خدمات' if service_kind else 'فاکتور خرید'} شماره {number}",
         source_type="purchase_invoice",
         created_by_id=user.id,
         lines=number_lines(journal_lines),
@@ -766,11 +833,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     db.flush()
 
     invoice = PurchaseInvoice(
+        kind=data.kind,
         number=number,
         invoice_date=data.invoice_date,
         #: سیاستِ ثبتِ همین سند، قفل‌شده در لحظه. رسیدِ انبار به آن نگاه می‌کند
-        #: تا بداند باید طبقه‌بندیِ دوباره بزند یا نه.
-        goods_in_transit=goods_pending,
+        #: تا بداند باید طبقه‌بندیِ دوباره بزند یا نه. فاکتور خرید خدمات هیچ‌وقت
+        #: کالایی در راه ندارد.
+        goods_in_transit=goods_pending and not service_kind,
+        total_deductions=total_deductions,
+        deductions=deduction_rows,
         contact_id=data.contact_id,
         supplier_invoice_number=data.supplier_invoice_number.strip(),
         supplier_snapshot=supplier_snapshot,
@@ -844,6 +915,14 @@ def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
 
     return {
         "source_invoice_number": invoice.number,
+        "kind": invoice.kind,
+        #: نوع و نرخِ کسر کپی می‌شود، مبلغ نه: رونوشت فاکتورِ تازه است و مبلغ باید از
+        #: مبنای تازه حساب شود. نوعِ کسری که حالا غیرفعال است را فرم خودش کنار می‌گذارد.
+        "deductions": [
+            {"deduction_type_id": row.deduction_type_id, "rate": Decimal(row.rate)}
+            for row in invoice.deductions
+            if row.deduction_type_id is not None
+        ],
         "contact_id": invoice.contact_id,
         "cost_center_id": invoice.cost_center_id,
         "description": invoice.description,
@@ -863,6 +942,7 @@ def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
                 "addition": transaction_amount(line.addition),
                 "duty_amount": transaction_amount(line.duty_amount),
                 "description": line.description,
+                "expense_account_id": line.expense_account_id,
             }
             for line in invoice.lines
         ],

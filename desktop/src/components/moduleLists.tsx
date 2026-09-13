@@ -8,7 +8,8 @@ import {
   fetchItemsLive,
   fetchLeads,
   fetchProductionOrders,
-  fetchPurchaseInvoices,
+  fetchPurchaseInvoicesOfKind,
+  fetchPurchaseDeductionTypes,
   fetchAllWarehouseReceipts,
   fetchPurchaseReturns,
   fetchStockAdjustments,
@@ -432,11 +433,23 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
   //: «فروش» اینجا نیست: دیگر ماژولِ تب‌دار نیست و دفترهایش صفحه‌ی مستقل دارند
   //: (LIST_MENUS['فروش']). گذاشتنش اینجا یعنی نمای دومِ همان داده.
   purchases: {
-    invoices: def('فاکتورهای خرید', fetchPurchaseInvoices, (r) => ({
+    invoices: def('فاکتورهای خرید', (t) => fetchPurchaseInvoicesOfKind(t, 'goods'), (r) => ({
       id: r.id,
       title: `فاکتور ${faNum(r.number)}`,
       subtitle: day(r.invoice_date),
       meta: fa(r.total_amount),
+    })),
+    services: def('فاکتورهای خرید خدمات', (t) => fetchPurchaseInvoicesOfKind(t, 'service'), (r) => ({
+      id: r.id,
+      title: `خدمات ${faNum(r.number)}`,
+      subtitle: day(r.invoice_date),
+      meta: fa(r.payable_amount),
+    })),
+    deductions: def('انواع کسورات', (t) => fetchPurchaseDeductionTypes(t), (r) => ({
+      id: r.id,
+      title: r.name,
+      subtitle: r.nature_label,
+      meta: `${faNum(r.rate)}٪`,
     })),
     receipts: def('رسیدهای انبار', (t) => fetchAllWarehouseReceipts(t), (r) => ({
       id: r.id,

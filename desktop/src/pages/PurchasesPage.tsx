@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Inbox, PackagePlus, PackageCheck, Undo2, FileText, TrendingDown, CalendarRange, Receipt } from 'lucide-react'
+import { Inbox, PackagePlus, PackageCheck, Undo2, FileText, TrendingDown, CalendarRange, Receipt, Briefcase, Percent } from 'lucide-react'
 import {
   fetchPurchaseInvoiceDuplicate,
   fetchPurchaseSummary,
@@ -18,6 +18,8 @@ import { useTheme } from '../lib/theme'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
 import { WarehouseReceiptsTab } from '../components/WarehouseReceiptsTab'
+import { ServicePurchaseTab } from '../components/ServicePurchaseTab'
+import { PurchaseDeductionTypesPanel } from '../components/PurchaseDeductionTypesPanel'
 import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
@@ -76,7 +78,7 @@ export function PurchasesPage({
       <PageHeader
         icon={PackagePlus}
         title="خرید"
-        description="فاکتور، بدهی خرید را ثبت می‌کند؛ موجودی فقط با رسید انبار مستقل افزایش می‌یابد و تحویل جزئی نیز پشتیبانی می‌شود."
+        description="فاکتور خرید بدهی را ثبت می‌کند و کالا با رسید انبار وارد می‌شود؛ خرید خدمت هزینه و کسوراتش را همان لحظه ثبت می‌کند."
       />
 
       <div className="stat-grid">
@@ -116,7 +118,7 @@ export function PurchasesPage({
                     />
                   )}
                 </div>
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" items={items} warehouses={warehouses} onDuplicate={(invoice) => void handleDuplicate(invoice)} onCreatePayment={onCreatePayment} />
+                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" purchaseKind="goods" items={items} warehouses={warehouses} onDuplicate={(invoice) => void handleDuplicate(invoice)} onCreatePayment={onCreatePayment} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -127,6 +129,22 @@ export function PurchasesPage({
                   </SectionCard>
                 )}
               </>
+            ),
+          },
+          {
+            //: فاکتور خرید خدمات سندِ مستقل است (سریِ شماره، چاپ و دفترِ خودش) ولی
+            //: موتورش همان فاکتور خرید است؛ فرم و دفترش هر دو داخلِ همین تب‌اند.
+            key: 'services',
+            label: 'فاکتور خرید خدمات',
+            icon: Briefcase,
+            content: (
+              <ServicePurchaseTab
+                token={token}
+                me={me}
+                items={items}
+                onChanged={handleQueued}
+                onCreatePayment={onCreatePayment}
+              />
             ),
           },
           {
@@ -152,6 +170,12 @@ export function PurchasesPage({
             label: 'برگشت از خرید',
             icon: Undo2,
             content: guided ? <PurchaseReturnWizard token={token} /> : <PurchaseReturnForm token={token} />,
+          },
+          {
+            key: 'deductions',
+            label: 'انواع کسورات',
+            icon: Percent,
+            content: <PurchaseDeductionTypesPanel token={token} me={me} />,
           },
         ]}
       />

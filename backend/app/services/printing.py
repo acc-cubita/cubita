@@ -237,8 +237,14 @@ def render_invoice(
     business_detail: str = "",
     party_label: str = "طرف حساب",
     business_party_label: str = "",
+    deductions: list[tuple[str, Decimal]] | None = None,
 ) -> str:
-    """HTML کامل و مستقل — بدون هیچ منبع بیرونی، تا آفلاین و در چاپ هم درست باشد."""
+    """HTML کامل و مستقل — بدون هیچ منبع بیرونی، تا آفلاین و در چاپ هم درست باشد.
+
+    `deductions` کسوراتِ فاکتور خرید خدمات است (مالیات تکلیفی، بیمه). از «جمع فاکتور»
+    کم نمی‌شوند؛ بعد از آن می‌آیند و «خالص فاکتور» را می‌سازند — مبلغی که واقعاً به
+    فروشنده پرداخت می‌شود.
+    """
     banner = ""
     if voided_at is not None:
         reason = f" — {escape(void_reason)}" if void_reason else ""
@@ -254,6 +260,12 @@ def render_invoice(
     duties = Decimal(str(total_duties or 0))
     rnd = Decimal(str(rounding or 0))
     grand_total = subtotal + tax + rnd
+    deduction_rows = [
+        (label, Decimal(str(amount))) for label, amount in (deductions or []) if Decimal(str(amount))
+    ]
+    payable = grand_total - sum((amount for _, amount in deduction_rows), Decimal(0))
+    #: با کسورات، «قابل پرداخت» دیگر جمعِ فاکتور نیست — آن عدد پایین‌تر می‌آید.
+    total_row_class = "" if deduction_rows else " class='grand'"
 
     rows = []
     if discount > 0:
@@ -271,9 +283,14 @@ def render_invoice(
             rows.append(f"<tr><td colspan='7'>مالیات بر ارزش افزوده (ریال)</td><td class='num'>{fa_number(tax)}</td></tr>")
         if rnd != 0:
             rows.append(f"<tr><td colspan='7'>گِرد کردن (ریال)</td><td class='num'>{fa_number(rnd)}</td></tr>")
-        rows.append(f"<tr class='grand'><td colspan='7'>مبلغ قابل پرداخت (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
+        total_label = "جمع فاکتور" if deduction_rows else "مبلغ قابل پرداخت"
+        rows.append(f"<tr{total_row_class}><td colspan='7'>{total_label} (ریال)</td><td class='num'>{fa_number(grand_total)}</td></tr>")
     else:
-        rows.append(f"<tr class='grand'><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
+        rows.append(f"<tr{total_row_class}><td colspan='7'>جمع کل (ریال)</td><td class='num'>{fa_number(subtotal)}</td></tr>")
+    for label, amount in deduction_rows:
+        rows.append(f"<tr><td colspan='7'>{escape(label)} (−) (ریال)</td><td class='num'>{fa_number(amount)}</td></tr>")
+    if deduction_rows:
+        rows.append(f"<tr class='grand'><td colspan='7'>خالص فاکتور (ریال)</td><td class='num'>{fa_number(payable)}</td></tr>")
     totals_rows = "".join(rows)
 
     # نشانِ برندِ برداری (برگه/فاکتور) — جای‌گزینِ حرفِ اول، هم‌ظاهر با خروجیِ PDF.
@@ -360,7 +377,7 @@ def render_invoice(
     </tfoot>
   </table>
 
-  <div class="words">مبلغ به حروف: <strong>{amount_in_words(grand_total)}</strong> ریال</div>
+  <div class="words">مبلغ به حروف: <strong>{amount_in_words(payable)}</strong> ریال</div>
 
   {notes_block}
 
