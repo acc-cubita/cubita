@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `services/payroll.py` · `services/payroll_contracts.py` · `routers/payroll.py` · `schemas/payroll.py` · `services/benefits.py` | فصلِ «تعریف کارمند»: یک حقیقت برای یک آدم — هویت از طرف حسابِ متصل خوانده شود، و درِ پشتیِ ساختِ کارمندِ یتیم بسته شود. **بدونِ مهاجرت.** | ۱۴۰۵/۰۶/۲۲ |
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد

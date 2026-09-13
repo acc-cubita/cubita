@@ -18,13 +18,43 @@ from app.models.payroll import (
 
 
 class EmployeeIn(BaseModel):
-    first_name: str
-    last_name: str
-    national_id: str
+    """استخدام = فعال‌کردنِ نقشِ کارمند روی یک طرف حساب.
+
+    تا امروز این ورودی نام و کدِ ملی می‌گرفت و کارمندی می‌ساخت که به **هیچ طرف
+    حسابی** وصل نبود — هویتِ دومی از همان آدم، بیرونِ مِسترِ مشترک، که اصلاحش
+    هیچ‌وقت به آن یکی نمی‌رسید.
+
+    **هر دو شکل پذیرفته می‌شوند و هیچ‌کدام هویتِ یتیم نمی‌سازد:**
+
+    * `contact_id` بدهید → نقش روی همان طرف حساب فعال می‌شود.
+    * نام و کدِ ملی بدهید → اول دنبالِ طرف‌حسابی با همان کدِ ملی می‌گردد؛ اگر
+      باشد همان استفاده می‌شود (نه رکوردِ تکراری)، اگر نباشد ساخته می‌شود.
+
+    شکلِ دوم برای این مانده که فرمِ «کارمند جدید» سال‌هاست همین را می‌فرستد؛
+    شکستنش یعنی رابطِ مستقر تا رسیدنِ باندلِ تازه کار نکند، بی‌آنکه چیزی به
+    درستیِ داده اضافه شود.
+    """
+
+    contact_id: UUID | None = None
+    hire_date: date
+    bank_account_number: str = ""
+
+    #: مسیرِ دوم — فقط وقتی `contact_id` نیامده باشد.
+    first_name: str | None = None
+    last_name: str | None = None
+    national_id: str | None = None
     phone: str | None = None
     email: str | None = None
-    bank_account_number: str = ""
-    hire_date: date
+
+    @model_validator(mode="after")
+    def _needs_an_identity(self) -> "EmployeeIn":
+        if self.contact_id is not None:
+            return self
+        if not (self.first_name or "").strip() or not (self.national_id or "").strip():
+            raise ValueError(
+                "یا طرف حساب را انتخاب کنید، یا نام و کد ملی را بدهید تا طرف حسابش ساخته شود"
+            )
+        return self
 
 
 class EmployeeOut(BaseModel):

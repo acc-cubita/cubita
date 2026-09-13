@@ -107,25 +107,110 @@ def resolve_employee(db: Session, data: SalaryContractIn) -> Employee:
             "این طرف حساب کارمند نیست؛ اول در فرمِ طرف حساب تیکِ «کارمند» را بزنید.",
         )
 
-    if contact.employee_id is not None:
-        employee = db.get(Employee, contact.employee_id)
-        if employee is not None:
-            return employee
-
+    #: **همان درِ ورودی که فرمِ «کارمند جدید» از آن می‌آید.** تا امروز این‌جا
+    #: کپیِ دومی از همان منطق بود و گاردهایش با آن یکی یکی نبود.
     hire_date = data.hire_date or data.effective_from
-    #: کدِ ملی روی کارمند یکتاست. طرف‌حسابِ بی‌کدِ ملی نباید جلوی استخدام را بگیرد،
-    #: پس رشته‌ی خالی می‌رود و کاربر بعداً در پرونده‌ی کارمند کاملش می‌کند.
+    return activate_employee_role(db, contact, hire_date)
+
+
+
+def resolve_employee_contact(
+    db: Session,
+    *,
+    contact_id: UUID | None,
+    first_name: str = "",
+    last_name: str = "",
+    national_id: str = "",
+    phone: str | None = None,
+    email: str | None = None,
+) -> Contact:
+    """طرف حسابِ این آدم را پیدا یا می‌سازد — **هرگز رکوردِ تکراری**.
+
+    وقتی `contact_id` نیامده، اول با **کدِ ملی** دنبالِ طرف‌حسابِ موجود می‌گردد.
+    این مهم است: همان آدم ممکن است سال‌ها مشتری بوده باشد، و ساختنِ رکوردِ دوم
+    یعنی دو هویت از یک نفر — دقیقاً چیزی که مِسترِ مشترک برای جلوگیری از آن هست.
+
+    جست‌وجو با **نام** انجام نمی‌شود: دو «محمد رضایی» یک نفر نیستند، و ادغامِ
+    اشتباه بدتر از رکوردِ تکراری است.
+    """
+    if contact_id is not None:
+        contact = db.get(Contact, contact_id)
+        if contact is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب یافت نشد")
+        return contact
+
+    national_id = (national_id or "").strip()
+    if national_id:
+        existing = db.query(Contact).filter(Contact.national_id == national_id).first()
+        if existing is not None:
+            return existing
+
+    first_name = (first_name or "").strip()
+    last_name = (last_name or "").strip()
+    full = f"{first_name} {last_name}".strip()
+    contact = Contact(
+        name=full,
+        first_name=first_name,
+        last_name=last_name,
+        national_id=national_id or None,
+        phone=phone,
+        email=email,
+        #: مشتری پیش‌فرضِ `type` است و نقشِ *معاملاتی* را می‌گوید؛ کارمندبودن
+        #: پرچمِ مستقلی است که پایین‌تر روشن می‌شود.
+        type="customer",
+        is_employee=True,
+    )
+    db.add(contact)
+    db.flush()
+    return contact
+
+
+def activate_employee_role(
+    db: Session,
+    contact: Contact,
+    hire_date,
+    bank_account_number: str = "",
+) -> Employee:
+    """نقشِ کارمند را روی یک طرف حساب فعال می‌کند و پرونده‌اش را می‌سازد.
+
+    **تنها درِ ورود.** هم فرمِ «کارمند جدید» از این‌جا می‌آید هم استخدامِ ضمنیِ
+    هنگامِ ثبتِ حکم؛ دو مسیرِ موازی یعنی دو رفتار، و یکی‌شان دیر یا زود گاردِ
+    دیگری را ندارد.
+
+    تکرارش بی‌خطر است: طرف حسابی که از قبل پرونده دارد همان را پس می‌گیرد، نه
+    پرونده‌ی دوم.
+    """
+
+    if contact.employee_id is not None:
+        existing = db.get(Employee, contact.employee_id)
+        if existing is not None:
+            #: شماره‌حساب اگر تازه آمده به‌روز می‌شود — استخدامِ دوباره نیست،
+            #: تکمیلِ همان پرونده است.
+            if bank_account_number:
+                existing.bank_account_number = bank_account_number
+            contact.is_employee = True
+            db.flush()
+            return existing
+
     employee = Employee(
-        first_name=(contact.first_name or contact.name).strip(),
+        #: **کپیِ پشتیبان، نه حقیقتِ دوم.** خروجی‌های قانونی هویت را از طرف حساب
+        #: می‌خوانند؛ این ستون‌ها فقط برای کارمندانِ میراثیِ بی‌طرف‌حساب مانده‌اند.
+        first_name=(contact.first_name or contact.name or "").strip(),
         last_name=(contact.last_name or "").strip(),
         national_id=(contact.national_id or "").strip(),
         phone=contact.phone,
         email=contact.email,
+        bank_account_number=bank_account_number,
         hire_date=hire_date,
     )
     db.add(employee)
     db.flush()
     contact.employee_id = employee.id
+    #: تیک و پیوند با هم ست می‌شوند. تا امروز فرمِ کارمندِ جدید هیچ‌کدام را
+    #: نمی‌زد، پس طرف حساب در فهرست «کارمند» نشان داده نمی‌شد.
+    contact.is_employee = True
+    db.flush()
+    db.refresh(employee)
     return employee
 
 

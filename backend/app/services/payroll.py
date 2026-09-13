@@ -1,5 +1,6 @@
 import csv
 import io
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.counters import DOC_PAYSLIP
 from app.services.numbering import next_document_number
 from app.models.accounting import JournalLine
+from app.models.inventory import Contact
 from app.models.payroll import (
     Attendance,
     Employee,
@@ -607,6 +609,84 @@ def _period_payslips(db: Session, period_id: UUID) -> tuple[list, PayrollPeriod]
     return rows, period
 
 
+
+# ─────────────────────── هویتِ کارمند: یک آدم، یک حقیقت ───────────────────────
+
+
+@dataclass(frozen=True)
+class EmployeeIdentity:
+    """نام و شناسه‌ی کارمند، از **طرف حسابِ متصل**.
+
+    `Employee` هنگامِ استخدام نام و کدِ ملی و تلفن را از طرف حساب کپی می‌کرد و
+    بعد هرگز همگام نمی‌شد. نتیجه دو حقیقت از یک آدم بود — و چون هر سه خروجیِ
+    قانونی (مالیات، بیمه، دیسکتِ پرداخت) از همان کپی می‌خواندند، **اصلاحِ نام یا
+    کدِ ملی هیچ‌وقت به فایلِ بانک و اظهارنامه نمی‌رسید**.
+
+    حالا یک جا حل می‌شود: اگر طرف حسابی به این کارمند وصل باشد، هویت از آن‌جا
+    می‌آید. ستون‌های خودِ `Employee` **پشتیبان** می‌مانند، نه حقیقتِ دوم — برای
+    کارمندانِ میراثی که هنوز طرف حساب ندارند.
+
+    **این‌جا چیزی ذخیره نمی‌شود.** فیشِ صادرشده اعدادش را snapshot دارد و آن
+    درست است؛ ولی نامِ روی فایلِ بانکِ *این ماه* باید نامِ امروزِ آن آدم باشد، نه
+    نامی که سالِ پیش موقعِ استخدام کپی شده.
+    """
+
+    first_name: str
+    last_name: str
+    national_id: str
+    phone: str
+    #: `True` یعنی هویت از طرف حساب آمد. `False` یعنی کارمندِ بی‌طرف‌حساب — که
+    #: از این پس ساخته نمی‌شود ولی ممکن است از قبل مانده باشد.
+    from_contact: bool
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+def employee_identities(db: Session, employee_ids: list[UUID]) -> dict[UUID, EmployeeIdentity]:
+    """هویتِ چند کارمند با **یک** کوئری — نه یکی به‌ازای هر ردیفِ فایل."""
+    if not employee_ids:
+        return {}
+    employees = {e.id: e for e in db.query(Employee).filter(Employee.id.in_(employee_ids)).all()}
+    contacts = {
+        c.employee_id: c
+        for c in db.query(Contact).filter(Contact.employee_id.in_(employee_ids)).all()
+    }
+    out: dict[UUID, EmployeeIdentity] = {}
+    for employee_id in employee_ids:
+        employee = employees.get(employee_id)
+        contact = contacts.get(employee_id)
+        if contact is not None:
+            #: نامِ تفکیک‌شده ترجیح دارد؛ طرف‌حسابِ یک‌تکه (شرکت) `name` دارد و
+            #: `first_name` ندارد، پس آن‌جا کلِ نام در نامِ کوچک می‌نشیند.
+            first = (contact.first_name or contact.name or "").strip()
+            last = (contact.last_name or "").strip()
+            out[employee_id] = EmployeeIdentity(
+                first_name=first,
+                last_name=last,
+                #: کدِ ملیِ خالیِ طرف حساب به کپیِ کارمند برنمی‌گردد — اگر کاربر
+                #: پاکش کرده، فایل هم باید خالی باشد تا دیده شود، نه اینکه
+                #: مقدارِ کهنه را بی‌صدا جا بزند.
+                national_id=(contact.national_id or "").strip(),
+                phone=(contact.phone or "").strip(),
+                from_contact=True,
+            )
+        elif employee is not None:
+            out[employee_id] = EmployeeIdentity(
+                first_name=(employee.first_name or "").strip(),
+                last_name=(employee.last_name or "").strip(),
+                national_id=(employee.national_id or "").strip(),
+                phone=(employee.phone or "").strip(),
+                from_contact=False,
+            )
+    return out
+
+
+def employee_identity(db: Session, employee_id: UUID) -> EmployeeIdentity | None:
+    return employee_identities(db, [employee_id]).get(employee_id)
+
+
 def _csv_text(header: list[str], body: list[list[str]], footer: list[str] | None = None) -> str:
     """CSVِ فارسی‌خوان برای اکسل.
 
@@ -634,17 +714,20 @@ def generate_tax_list_csv(db: Session, period_id: UUID) -> tuple[str, PayrollPer
     """
     rows, period = _period_payslips(db, period_id)
 
+    who = employee_identities(db, [employee.id for _, employee in rows])
+
     body = []
     total_taxable = Decimal(0)
     total_tax = Decimal(0)
     for payslip, employee in rows:
         taxable = Decimal(payslip.taxable_pay)
         tax = Decimal(payslip.tax_amount)
+        person = who[employee.id]
         body.append(
             [
-                employee.national_id,
-                employee.first_name,
-                employee.last_name,
+                person.national_id,
+                person.first_name,
+                person.last_name,
                 str(payslip.gross_pay),
                 str(taxable),
                 str(tax),
@@ -670,15 +753,20 @@ def generate_payment_list_csv(db: Session, period_id: UUID) -> tuple[str, Payrol
     """
     rows, period = _period_payslips(db, period_id)
 
+    who = employee_identities(db, [employee.id for _, employee in rows])
+
     body = []
     total = Decimal(0)
     for payslip, employee in rows:
         net = Decimal(payslip.net_pay)
+        person = who[employee.id]
         body.append(
             [
+                #: شماره‌حساب همچنان روی خودِ کارمند است — مقصدِ پرداخت واقعیتِ
+                #: *استخدام* است نه هویتِ شخص، و طرف حساب ستونش را ندارد.
                 employee.bank_account_number or "",
-                f"{employee.first_name} {employee.last_name}".strip(),
-                employee.national_id,
+                person.full_name,
+                person.national_id,
                 str(net),
             ]
         )
@@ -715,16 +803,19 @@ def generate_insurance_list_csv(db: Session, period_id: UUID) -> tuple[str, Payr
         ["کد ملی", "نام", "نام خانوادگی", "حقوق مشمول بیمه", "سهم بیمه کارمند", "سهم بیمه کارفرما", "جمع بیمه"]
     )
 
+    who = employee_identities(db, [employee.id for _, employee in rows])
+
     total_employee = Decimal(0)
     total_employer = Decimal(0)
     for payslip, employee in rows:
         employee_share = Decimal(payslip.insurance_employee_share)
         employer_share = Decimal(payslip.insurance_employer_share)
+        person = who[employee.id]
         writer.writerow(
             [
-                employee.national_id,
-                employee.first_name,
-                employee.last_name,
+                person.national_id,
+                person.first_name,
+                person.last_name,
                 str(payslip.gross_pay),
                 str(employee_share),
                 str(employer_share),

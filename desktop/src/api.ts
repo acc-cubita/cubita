@@ -928,15 +928,28 @@ export interface EmployeeRecord {
 
 export const fetchEmployees = (token: string) => authedGet<EmployeeRecord[]>(token, '/api/employees')
 
+/**
+ * استخدام = فعال‌کردنِ نقشِ کارمند روی یک طرف حساب.
+ *
+ * دو شکل کار می‌کند و **هیچ‌کدام هویتِ بی‌طرف‌حساب نمی‌سازد**:
+ *
+ *  • `contact_id` بدهید → نقش روی همان طرف حساب فعال می‌شود.
+ *  • نام و کدِ ملی بدهید → سرور اول دنبالِ طرف‌حسابی با همان کدِ ملی می‌گردد؛
+ *    اگر باشد همان را برمی‌دارد (نه رکوردِ تکراری)، وگرنه می‌سازدش.
+ *
+ * نام و کدِ ملی از این پس روی **طرف حساب** حقیقت دارند: اصلاحشان همان‌جا انجام
+ * می‌شود و به فایلِ بانک و اظهارنامه‌ی مالیات و لیستِ بیمه می‌رسد.
+ */
 export const createEmployee = (
   token: string,
   data: {
-    first_name: string
-    last_name: string
-    national_id: string
-    phone: string
-    email: string
-    bank_account_number: string
+    contact_id?: string
+    first_name?: string
+    last_name?: string
+    national_id?: string
+    phone?: string
+    email?: string
+    bank_account_number?: string
     hire_date: string
   },
 ) => authedSend<EmployeeRecord>(token, 'POST', '/api/employees', data)
