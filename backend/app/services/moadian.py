@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.models.inventory import Contact
 from app.models.invoices import SalesInvoice
+from app.secrets_at_rest import SecretUnreadable
 from app.models.moadian import (
     BUILTIN_UNIT_CODES,
     MoadianSettings,
@@ -873,7 +874,7 @@ def readiness(db: Session) -> dict:
 
     # حضورِ کلید کافی نیست؛ خوانده‌شدنش هم سنجیده می‌شود تا PEMِ خراب پیش از
     # مصرفِ سریال معلوم شود، نه وسطِ ارسال.
-    if not (settings.private_key_pem or "").strip() or not (settings.certificate_pem or "").strip():
+    if not (settings.private_key_stored or "").strip() or not (settings.certificate_pem or "").strip():
         signing_ok, signing_detail = False, "کلید خصوصی و گواهیِ امضا هر دو لازم‌اند."
     else:
         try:
@@ -882,6 +883,11 @@ def readiness(db: Session) -> dict:
             signing_ok, signing_detail = True, "کلید و گواهی ثبت و خوانده شدند."
         except HTTPException as err:
             signing_ok, signing_detail = False, str(err.detail)
+        #: کلیدِ رمزشده‌ای که با `SECRETS_KEY`ِ فعلی باز نمی‌شود. این‌جا به‌جای
+        #: ۵۰۰ یک تشخیصِ روشن می‌دهد — همان چیزی که صفحه‌ی «بررسی پیکربندی»
+        #: برایش هست.
+        except SecretUnreadable as err:
+            signing_ok, signing_detail = False, str(err)
     checks.append({"key": "signing", "ok": signing_ok, "title": "کلید و گواهیِ امضا", "detail": signing_detail})
 
     #: واحدهای در حالِ استفاده‌ای که هنوز کدِ سامانه ندارند. یک‌جا فهرست می‌شوند تا

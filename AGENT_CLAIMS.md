@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `alembic/versions/0148_*`, `config.py`, `secrets_at_rest.py`, `models/moadian.py`, `routers/moadian.py`, `services/moadian.py`, `audit.py` | کلیدِ امضای مؤدیان در حالتِ سکون رمز شود + حسابرسی | ۱۴۰۵/۰۶/۲۳ |
 
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
