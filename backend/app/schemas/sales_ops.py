@@ -22,26 +22,77 @@ class _Named(BaseModel):
 # ─────────────────────────── نوعِ فروش ───────────────────────────
 
 
-class SaleTypeIn(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-    due_days: int = Field(default=0, ge=0, le=3650)
-    default_tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
+#: هفت اسلاتِ حسابِ نوعِ فروش. یک‌جا نگه داشته می‌شوند چون هر سه تایپِ زیر
+#: دقیقاً همین مجموعه را می‌خواهند و پراکندنشان یعنی روزی یکی از قلم بیفتد —
+#: همان‌طور که تایپِ سمتِ رابط پنج‌تایشان را از قلم انداخته بود.
+SALE_TYPE_ACCOUNT_FIELDS = (
+    "goods_revenue_account_id",
+    "service_revenue_account_id",
+    "goods_return_account_id",
+    "service_return_account_id",
+    "goods_discount_account_id",
+    "service_discount_account_id",
+    "addition_account_id",
+)
+
+
+class _SaleTypeAccounts(BaseModel):
     goods_revenue_account_id: UUID | None = None
     service_revenue_account_id: UUID | None = None
+    #: حسابِ برگشت جدا از حسابِ درآمد است — ثبتِ معکوس روی خودِ درآمد،
+    #: «چقدر فروختیم و چقدر برگشت خورد؟» را پاک می‌کند.
+    goods_return_account_id: UUID | None = None
+    service_return_account_id: UUID | None = None
     goods_discount_account_id: UUID | None = None
     service_discount_account_id: UUID | None = None
     addition_account_id: UUID | None = None
+
+
+class SaleTypeIn(_SaleTypeAccounts):
+    name: str = Field(min_length=1, max_length=80)
+    code: str | None = Field(default=None, max_length=20)
+    title2: str = Field(default="", max_length=80)
+    due_days: int = Field(default=0, ge=0, le=3650)
+    default_tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
     description: str = ""
     is_active: bool = True
+
+
+class SaleTypePatch(BaseModel):
+    """ویرایشِ **جزئی** — فقط آنچه فرستاده شده نوشته می‌شود.
+
+    این تایپ یک باگِ خفته را می‌بندد: مسیرِ قبلی همه‌ی فیلدها را می‌نوشت، پس یک
+    `PATCH` از رابطی که فیلدهای حساب را نمی‌شناخت، ۲۰۰ برمی‌گرداند و **هر هفت
+    حساب را `NULL`** می‌کرد. همان شکلِ باگِ `clear()`ِ لیستِ قیمت.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    code: str | None = Field(default=None, max_length=20)
+    title2: str | None = Field(default=None, max_length=80)
+    due_days: int | None = Field(default=None, ge=0, le=3650)
+    default_tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    goods_revenue_account_id: UUID | None = None
+    service_revenue_account_id: UUID | None = None
+    goods_return_account_id: UUID | None = None
+    service_return_account_id: UUID | None = None
+    goods_discount_account_id: UUID | None = None
+    service_discount_account_id: UUID | None = None
+    addition_account_id: UUID | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 class SaleTypeOut(_Named):
     id: UUID
     name: str
+    code: str | None
+    title2: str
     due_days: int
     default_tax_rate: Decimal | None
     goods_revenue_account_id: UUID | None
     service_revenue_account_id: UUID | None
+    goods_return_account_id: UUID | None
+    service_return_account_id: UUID | None
     goods_discount_account_id: UUID | None
     service_discount_account_id: UUID | None
     addition_account_id: UUID | None

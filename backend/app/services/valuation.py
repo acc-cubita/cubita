@@ -356,8 +356,12 @@ def item_moves(
     return replay(_rows(db, item_ids=[item_id], until=until), voided, active, sources)
 
 
-def recompute(db: Session, item: Item, *, ctx: tuple | None = None) -> None:
+def recompute(db: Session, item: Item, *, ctx: tuple | None = None, voided: set | None = None) -> None:
     """میانگینِ کالا را از بازپخش می‌سازد — تنها جایی که میانگین از صفر ساخته می‌شود."""
+    if ctx is None and voided is not None:
+        #: فراخوانی که فهرستِ اسنادِ باطل را خودش یک بار ساخته (مثلِ قیمت‌گذاریِ ورودی‌های
+        #: بی‌فی برای چند کالا) — بهای فعال و مبدأِ برگشت‌ها همچنان باید خوانده شوند.
+        ctx = (voided, active_costs(db, [item.id]), issue_return_sources(db, [item.id]))
     moves = item_moves(db, item.id, ctx=ctx)
     item.average_cost = moves[-1].average if moves else Decimal(0)
 

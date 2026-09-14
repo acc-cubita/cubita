@@ -209,6 +209,43 @@ class PayrollFactorPatch(BaseModel):
         return self
 
 
+class FactorInputRow(BaseModel):
+    """یک ردیفِ ورودیِ دوره. `amount = 0` یعنی «این ردیف را بردار»."""
+
+    employee_id: UUID
+    factor_id: UUID
+    amount: Decimal = Decimal(0)
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def _valid(self) -> "FactorInputRow":
+        if self.amount < 0:
+            raise ValueError("مبلغ نمی‌تواند منفی باشد؛ جهتِ عدد از طبقه‌ی عامل می‌آید")
+        return self
+
+
+class FactorInputsIn(BaseModel):
+    """ذخیره‌ی دسته‌ایِ ورودی‌های یک دوره.
+
+    **جایگزینیِ کامل نیست.** فقط ردیف‌های نام‌برده نوشته می‌شوند و بقیه دست
+    نمی‌خورند — وگرنه دو کاربر که هم‌زمان دو کارمند را وارد می‌کنند، کارِ
+    همدیگر را پاک می‌کردند. همان درسی که `PUT /price-lists/{id}/items` داد.
+    """
+
+    rows: list[FactorInputRow] = []
+
+
+class FactorInputOut(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_name: str = ""
+    factor_id: UUID
+    factor_name: str = ""
+    factor_category: str = ""
+    amount: Decimal
+    notes: str = ""
+
+
 class PayrollFactorOut(BaseModel):
     id: UUID
     name: str

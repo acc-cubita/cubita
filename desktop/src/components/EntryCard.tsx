@@ -57,6 +57,8 @@ export function EntryCard({
               <th>بستانکار</th>
             </tr>
           </thead>
+          {/* audit-r9-exempt: سندِ ثبت‌شده همیشه دستِ‌کم دو ردیف دارد (دوطرفه
+              بودن)؛ جدولِ خالی این‌جا حالتِ ممکنی نیست. */}
           <tbody>
             {entry.lines.map((l) => (
               <tr key={l.id}>

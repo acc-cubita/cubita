@@ -81,17 +81,26 @@ def _scope_items(db: Session, warehouse_id: UUID | None, item_id: UUID | None) -
 
 
 def ledger_token(db: Session, item_ids: list[UUID]) -> str:
-    seq = 0
+    """وضعیتِ دفتر برای کالاهای دامنه — هر چیزی که پیش‌نمایش را عوض می‌کند.
+
+    `seq` ثبت و ابطالِ اسناد را می‌گیرد؛ **جمعِ ارزش** قیمت‌گذاریِ ورودی‌های بی‌فی را
+    (`production_pricing` فیِ همان ردیفِ دفتر را پر می‌کند و ردیفِ تازه نمی‌سازد، پس `seq`
+    تکان نمی‌خورد)؛ و شمارِ اجراها اجرای ثبت‌شده یا باطل‌شده‌ی دیگر را.
+    """
+    seq, value = 0, 0
     if item_ids:
-        seq = (
-            db.query(func.coalesce(func.max(StockLedger.seq), 0))
+        seq, value = (
+            db.query(
+                func.coalesce(func.max(StockLedger.seq), 0),
+                func.coalesce(func.sum(StockLedger.qty * StockLedger.unit_cost), 0),
+            )
             .filter(StockLedger.item_id.in_(item_ids))
-            .scalar()
+            .one()
         )
     total, voided = db.query(
         func.count(InventoryValuationRun.id), func.count(InventoryValuationRun.voided_at)
     ).one()
-    return f"{seq}.{total}.{voided}"
+    return f"{seq}.{Decimal(value).normalize():f}.{total}.{voided}"
 
 
 def _line_counters(db: Session, item_ids: list[UUID]) -> dict[UUID, tuple[UUID | None, UUID | None]]:

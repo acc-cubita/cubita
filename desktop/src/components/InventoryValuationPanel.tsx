@@ -198,6 +198,7 @@ export function InventoryValuationPanel({
         </div>
         <p className="hint">
           انبار فقط کالاها را انتخاب می‌کند؛ میانگین مالِ کلِ شرکت است و حرکاتِ همان کالا در همه‌ی انبارها اصلاح می‌شوند.
+          ورودی‌ای که هنوز فی ندارد در تبِ «قیمت‌گذاری ورودی‌ها» قیمت می‌خورد؛ پس از آن، بهای خروج‌های بعدش همین‌جا اصلاح می‌شود.
         </p>
         {error && <div className="error">{error}</div>}
         {notice && <p className="vr-notice">{notice}</p>}

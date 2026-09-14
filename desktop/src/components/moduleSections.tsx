@@ -1,4 +1,6 @@
 import {
+  BadgeDollarSign,
+  ScanSearch,
   AlertTriangle,
   ArrowLeftRight,
   Briefcase,
@@ -79,8 +81,10 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'issue-returns', label: 'برگشت خروج انبار', icon: PackagePlus },
     { key: 'transfer', label: 'انتقال بین انبار', icon: ArrowLeftRight },
     { key: 'valuation', label: 'قیمت‌گذاری اسناد', icon: Calculator },
+    { key: 'unpriced', label: 'قیمت‌گذاری ورودی‌ها', icon: BadgeDollarSign },
     { key: 'pricelists', label: 'لیست قیمت', icon: Tags },
     { key: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
+    { key: 'serials', label: 'جستجوی سریال', icon: ScanSearch },
     { key: 'import', label: 'ورود گروهی کالا', icon: FileUp },
   ],
   distributor: [

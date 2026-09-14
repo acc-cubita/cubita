@@ -455,6 +455,10 @@ export function PayrollFactorPage({ token }: { token: string }) {
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
+            <span className="field-hint">
+              «قراردادی» مبلغش روی حکمِ حقوقی نوشته می‌شود. «متغیر» مبلغش هر دوره جدا وارد
+              می‌شود (کارکرد و صدور فیش ← ورودیِ عوامل) و روی حکم نمی‌نشیند.
+            </span>
           </label>
           <label>
             <span>اولویت نمایش</span>
@@ -474,6 +478,13 @@ export function PayrollFactorPage({ token }: { token: string }) {
               <input type="checkbox" checked={extraordinary} onChange={(e) => setExtraordinary(e.target.checked)} />
               فوق‌العاده است
             </label>
+            {/* صادق باشیم: این پرچم امروز هیچ عددی را عوض نمی‌کند. گذاشتنش
+                بدونِ این توضیح یعنی کاربر فکر کند مالیات یا بیمه را تکان
+                می‌دهد — همان‌طور که «اولویت نمایش» هم توضیحِ خودش را دارد. */}
+            <span className="field-hint">
+              فقط برای دسته‌بندی و گزارش. هیچ محاسبه‌ای — نه مالیات، نه بیمه، نه اضافه‌کار —
+              از این گزینه نمی‌خوانَد.
+            </span>
           </div>
 
           {category === 'benefit' ? (

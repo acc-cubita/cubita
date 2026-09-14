@@ -109,6 +109,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.migration_utils import rls_disabled
+
 revision: str = "0136"
 down_revision: Union[str, None] = "0134"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -154,14 +156,17 @@ def upgrade() -> None:
         "insurance_tax_branches",
         sa.Column("contact_id", UUID(as_uuid=True), nullable=True),
     )
-    op.create_foreign_key(
-        "fk_insurance_tax_branches_contact",
-        "insurance_tax_branches",
-        "contacts",
-        ["contact_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), ("insurance_tax_branches", "contacts")):
+        op.create_foreign_key(
+            "fk_insurance_tax_branches_contact",
+            "insurance_tax_branches",
+            "contacts",
+            ["contact_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     #: ایندکس چون پرسشِ طبیعیِ این ستون وارونه است: «کدام شعبه به این طرف حساب
     #: وصل است؟» — از سمتِ صورت‌حسابِ سازمان، نه از سمتِ شعبه.
     op.create_index(
@@ -192,14 +197,17 @@ def upgrade() -> None:
         "insurance_tax_branches",
         sa.Column("cost_center_id", UUID(as_uuid=True), nullable=True),
     )
-    op.create_foreign_key(
-        "fk_insurance_tax_branches_cost_center",
-        "insurance_tax_branches",
-        "cost_centers",
-        ["cost_center_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), ("insurance_tax_branches", "cost_centers")):
+        op.create_foreign_key(
+            "fk_insurance_tax_branches_cost_center",
+            "insurance_tax_branches",
+            "cost_centers",
+            ["cost_center_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     op.create_index(
         "ix_insurance_tax_branches_cost_center_id",
         "insurance_tax_branches",
@@ -226,15 +234,18 @@ def upgrade() -> None:
     # ── عکسِ شعبه روی فیش ──────────────────────────────────────────────────────
     for name, type_ in _SNAPSHOT_COLUMNS:
         op.add_column("payslips", sa.Column(name, type_, nullable=True))
-    for column in ("insurance_branch_id", "tax_branch_id"):
-        op.create_foreign_key(
-            f"fk_payslips_{column}",
-            "payslips",
-            "insurance_tax_branches",
-            [column],
-            ["id"],
-            ondelete="SET NULL",
-        )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی PG 14 با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — `app/migration_utils.py`.
+    with rls_disabled(op.get_bind(), ("payslips", "insurance_tax_branches")):
+        for column in ("insurance_branch_id", "tax_branch_id"):
+            op.create_foreign_key(
+                f"fk_payslips_{column}",
+                "payslips",
+                "insurance_tax_branches",
+                [column],
+                ["id"],
+                ondelete="SET NULL",
+            )
 
 
 def downgrade() -> None:

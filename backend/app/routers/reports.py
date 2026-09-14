@@ -1,13 +1,14 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.schemas.cost_center import CostCenterReportOut
 from app.schemas.reports import (
+    InventoryBreakdownOut,
     PreinvoiceProgressOut,
     SalesByCustomerOut,
     SalesByItemOut,
@@ -35,6 +36,7 @@ from app.schemas.reports import (
     VatReportOut,
 )
 from app.services import counterparty as counterparty_service
+from app.services import inventory_analytics
 from app.services import sales_review as sales_review_service
 from app.services import cost_centers as cost_centers_service
 from app.services import integrity as integrity_service
@@ -235,15 +237,60 @@ def sales_dashboard(
     return reports_service.get_sales_dashboard(db, months)
 
 
+#: **مقدار و مبلغ دو مجوزِ متفاوت‌اند.**
+#:
+#: تا امروز هر گزارشِ انبار `accounting.view` می‌خواست و نتیجه‌اش در **هر دو
+#: جهت** غلط بود: انباردار — که مجوزِ `inventory` دارد و نه `accounting` — اصلاً
+#: موجودیِ انبارش را نمی‌دید، و هر کسی که می‌دید بهای تمام‌شده را هم می‌دید.
+#:
+#: راهِ درست دو اندپوینت نیست (همان داده، دو نما)؛ یک اندپوینت است با مبالغِ
+#: **پوشیده** برای کسی که مجوزِ بها ندارد.
+MONEY_MODULE, MONEY_ACTION = "accounting", "view"
+
+#: نامِ فیلدهایی که «بها» حساب می‌شوند و بی مجوزِ حسابداری `None` می‌شوند.
+#: دقیقاً همان نام‌هایی که در `schemas/reports.py` تهی‌پذیر شده‌اند. اگر نامی
+#: این‌جا باشد و آن‌جا نه، پاسخ در اعتبارسنجی می‌شکند — که بهتر از لو رفتنِ بهاست.
+_MONEY_FIELDS = frozenset({
+    "opening_value", "in_value", "out_value", "book_value", "unit_cost", "stock_value",
+    "recorded_unit_cost", "value_in", "value_out", "balance_value", "average_cost",
+    "closing_value", "total_value", "total_value_in", "total_value_out",
+    "total_opening_value", "total_in_value", "total_out_value", "total_book_value",
+    "net_value",
+})
+
+
+def _redact_money(payload, allowed: bool):
+    """مبالغ را `None` می‌کند وقتی کاربر مجوزِ بها ندارد.
+
+    `None` است نه صفر — صفر یک عددِ واقعی است و «اجازه نداری ببینی» نیست. همان
+    تمایزی که گزارشِ مبلغی بینِ «بی‌بها» و «بهای صفر» می‌گذارد.
+    """
+    if allowed:
+        return payload
+    if isinstance(payload, dict):
+        return {
+            key: (None if key in _MONEY_FIELDS else _redact_money(value, allowed))
+            for key, value in payload.items()
+        }
+    if isinstance(payload, list):
+        return [_redact_money(row, allowed) for row in payload]
+    return payload
+
+
 @router.get("/inventory", response_model=InventoryReportOut)
 def inventory_report(
     warehouse_id: UUID | None = Query(None),
     as_of: date | None = Query(None),
     date_from: date | None = Query(None),
     db: Session = Depends(get_db),
-    _=Depends(require_permission("accounting", "view")),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("inventory", "view")),
 ):
-    return reports_service.get_inventory_report(db, warehouse_id, as_of, date_from)
+    """مرورِ موجودی — مقدار برای انباردار، مبلغ فقط با مجوزِ حسابداری."""
+    return _redact_money(
+        reports_service.get_inventory_report(db, warehouse_id, as_of, date_from),
+        principal.has_permission(MONEY_MODULE, MONEY_ACTION),
+    )
 
 
 @router.get("/kardex/{item_id}", response_model=KardexReportOut)
@@ -253,9 +300,45 @@ def kardex(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     db: Session = Depends(get_db),
-    _=Depends(require_permission("accounting", "view")),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("inventory", "view")),
 ):
-    return reports_service.get_kardex(db, item_id, warehouse_id, date_from, date_to)
+    return _redact_money(
+        reports_service.get_kardex(db, item_id, warehouse_id, date_from, date_to),
+        principal.has_permission(MONEY_MODULE, MONEY_ACTION),
+    )
+
+
+@router.get("/inventory-breakdown", response_model=InventoryBreakdownOut)
+def inventory_breakdown(
+    dimension: str = Query(..., description="supplier | customer | purpose"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """گردشِ انبار از زاویه‌ی تأمین‌کننده، مشتری یا هدفِ حرکت.
+
+    دفترِ دومی در کار نیست: همان `valuation.replay`ِ کاردکس، فقط با کلیدِ
+    جمع‌زدنِ دیگر. پس عددها با کاردکس می‌خوانند یا هر دو باگ دارند.
+    """
+    if dimension not in inventory_analytics.DIMENSIONS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"بُعدِ گزارش باید یکی از {', '.join(inventory_analytics.DIMENSIONS)} باشد",
+        )
+    return _redact_money(
+        inventory_analytics.breakdown(
+            db,
+            dimension=dimension,
+            date_from=date_from,
+            date_to=date_to,
+            warehouse_id=warehouse_id,
+        ),
+        principal.has_permission(MONEY_MODULE, MONEY_ACTION),
+    )
 
 
 @router.get("/contact-statement/{contact_id}", response_model=ContactStatementOut)

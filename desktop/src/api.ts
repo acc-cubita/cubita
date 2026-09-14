@@ -993,7 +993,9 @@ export interface PayslipLineRecord {
   factor_id: string | null
   factor_name: string
   direction: 'earning' | 'deduction'
-  /** `contract` | `attendance` | `settings` | `loan` — کجا باید عوضش کرد. */
+  /** `contract` | `attendance` | `settings` | `loan` | `input` — کجا باید عوضش کرد.
+   *
+   * `input` یعنی «ورودیِ عواملِ همین دوره»، نه حکمِ حقوقی. */
   origin: string
   amount: string
   note: string
@@ -4415,6 +4417,7 @@ export type StockCountStatus = 'open' | 'posted' | 'cancelled'
 
 export interface StockCountSummary {
   id: string
+  number: number
   warehouse_id: string
   warehouse_name: string
   count_date: string
@@ -4423,6 +4426,7 @@ export interface StockCountSummary {
   posted_at: string | null
   created_at: string | null
   line_count: number
+  counted_line_count: number
 }
 
 export interface StockCountLine {
@@ -4432,14 +4436,17 @@ export interface StockCountLine {
   item_sku: string
   unit: string
   system_qty: string
-  counted_qty: string
+  /** `null` = هنوز شمرده نشده. با «صفر شمردم» یکی نیست و نباید یکی نمایش داده شود. */
+  counted_qty: string | null
   unit_cost: string
-  variance: string
-  variance_value: string
+  counted_at: string | null
+  variance: string | null
+  variance_value: string | null
 }
 
 export interface StockCountSession {
   id: string
+  number: number
   warehouse_id: string
   warehouse_name: string
   count_date: string
@@ -4449,6 +4456,7 @@ export interface StockCountSession {
   posted_at: string | null
   created_at: string | null
   line_count: number
+  counted_line_count: number
   variance_line_count: number
   total_variance_value: string
   lines: StockCountLine[]
@@ -4460,16 +4468,34 @@ export const fetchStockCounts = (token: string) =>
 export const fetchStockCount = (token: string, id: string) =>
   authedGet<StockCountSession>(token, `/api/stock-counts/${id}`)
 
+/** `item_ids` خالی = هر کالایی که در همین انبار سابقه‌ی حرکت دارد (نه کلِ کاتالوگ). */
 export const createStockCount = (
   token: string,
-  data: { warehouse_id: string; count_date: string; notes: string },
+  data: { warehouse_id: string; count_date: string; notes: string; item_ids?: string[] },
 ) => authedSend<StockCountSession>(token, 'POST', '/api/stock-counts', data)
 
+/** `counted_qty: null` یعنی «شمارش را پس بگیر» — ردیف به حالتِ نشمرده برمی‌گردد. */
 export const setStockCounts = (
   token: string,
   id: string,
-  lines: { line_id: string; counted_qty: number }[],
+  lines: { line_id: string; counted_qty: number | null }[],
 ) => authedSend<StockCountSession>(token, 'PUT', `/api/stock-counts/${id}/counts`, { lines })
+
+/** کالاهایی که **پس از** ثبتِ شمارششان حرکت کرده‌اند — گزارش، نه گارد. */
+export interface CountDrift {
+  item_id: string
+  item_name: string
+  system_qty_at_count: string
+  system_qty_now: string
+  counted_at: string | null
+}
+
+export const fetchStockCountDrift = (token: string, id: string) =>
+  authedGet<CountDrift[]>(token, `/api/stock-counts/${id}/drift`)
+
+/** برگه‌های شمارش را باز می‌کند — عمداً بدونِ موجودیِ سیستمی (شمارشِ کور). */
+export const printCountTags = (token: string, id: string) =>
+  openInvoicePrintView(token, `/api/stock-counts/${id}/tags`)
 
 export const postStockCount = (token: string, id: string) =>
   authedSend<StockCountSession>(token, 'POST', `/api/stock-counts/${id}/post`, {})
@@ -6251,9 +6277,28 @@ export const voidContactSettlement = (token: string, id: string, reason: string)
 // عاملِ افزاینده *یک* موجودیت‌اند (`PricingFactor` با `kind`)، چون شکلشان یکی است و
 // تنها فرقشان جهتِ اثر است.
 
-export interface SaleType {
+/**
+ * هفت اسلاتِ حسابِ نوعِ فروش.
+ *
+ * این تایپ **پنج‌تایشان را نداشت** و برای همین کلِ پروفایلِ حسابداریِ نوعِ فروش
+ * مرده بود: موتورِ ثبت از ابتدا کالا و خدمت را تفکیک می‌کرد، ولی هیچ صفحه‌ای
+ * نمی‌توانست حسابی به آن بدهد، پس هر هفت ستون تا ابد `null` می‌ماندند.
+ */
+export interface SaleTypeAccounts {
+  goods_revenue_account_id: string | null
+  service_revenue_account_id: string | null
+  goods_return_account_id: string | null
+  service_return_account_id: string | null
+  goods_discount_account_id: string | null
+  service_discount_account_id: string | null
+  addition_account_id: string | null
+}
+
+export interface SaleType extends SaleTypeAccounts {
   id: string
   name: string
+  code: string | null
+  title2: string
   due_days: number
   default_tax_rate: string | null
   description: string
@@ -6263,7 +6308,11 @@ export const fetchSaleTypes = (token: string) =>
   authedGet<SaleType[]>(token, '/api/sales-ops/sale-types')
 export const createSaleType = (token: string, data: Omit<SaleType, 'id'>) =>
   authedSend<SaleType>(token, 'POST', '/api/sales-ops/sale-types', data)
-export const updateSaleType = (token: string, id: string, data: Omit<SaleType, 'id'>) =>
+/**
+ * ویرایشِ **جزئی**. سرور فقط کلیدهای فرستاده‌شده را می‌نویسد؛ پیش از این همه را
+ * می‌نوشت و یک بدنه‌ی ناقص هر هفت حساب را `null` می‌کرد.
+ */
+export const updateSaleType = (token: string, id: string, data: Partial<Omit<SaleType, 'id'>>) =>
   authedSend<SaleType>(token, 'PATCH', `/api/sales-ops/sale-types/${id}`, data)
 
 export interface DiscountGroup {
@@ -8676,7 +8725,7 @@ export const updatePayrollFactor = (
   body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
 ) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)
 
-// ── قیمت‌گذاری اسناد انبار — پیش‌نمایش، اجرا و ابطال (مهاجرتِ ۰۱۴۳) ──────────────
+// ── قیمت‌گذاری اسناد انبار — پیش‌نمایش، اجرا و ابطال (مهاجرتِ ۰۱۴۹) ──────────────
 // محاسبه چیزی نمی‌نویسد؛ ثبت با توکنِ همان پیش‌نمایش است و روی دفترِ عوض‌شده ۴۰۹ می‌گیرد.
 
 export interface ValuationScope {
@@ -8823,3 +8872,190 @@ export const fetchValuationRunList = (token: string) =>
 
 export const voidValuationRun = (token: string, runId: string, reason: string) =>
   authedSend<ValuationRun>(token, 'POST', `/api/inventory-valuation/runs/${runId}/void`, { reason })
+// ── گزارش‌های انبار: ابعاد و ردیابیِ سریال ────────────────────────────────────
+//
+// مبالغ می‌توانند `null` باشند — یعنی کاربر مجوزِ بها ندارد. `null` است نه صفر،
+// چون صفر عددِ واقعی است. رابط باید خط تیره نشان دهد، نه «۰ ریال».
+
+export type InventoryDimension = 'supplier' | 'customer' | 'purpose'
+
+export const INVENTORY_DIMENSION_LABELS: Record<InventoryDimension, string> = {
+  supplier: 'تأمین‌کننده',
+  customer: 'مشتری',
+  purpose: 'هدف حرکت',
+}
+
+export interface InventoryBreakdownRow {
+  key: string
+  label: string
+  item_count: number
+  in_qty: string
+  out_qty: string
+  net_qty: string
+  in_value: string | null
+  out_value: string | null
+  net_value: string | null
+  /** چند حرکتِ این ردیف ارزش‌گذاریِ منقضی دارد — «این مبلغ هنوز بازمحاسبه نشده». */
+  stale_count: number
+}
+
+export interface InventoryBreakdown {
+  dimension: InventoryDimension
+  dimension_label: string
+  date_from: string | null
+  date_to: string | null
+  warehouse_id: string | null
+  rows: InventoryBreakdownRow[]
+  total_in_qty: string
+  total_out_qty: string
+  total_in_value: string | null
+  total_out_value: string | null
+  stale_count: number
+}
+
+export const fetchInventoryBreakdown = (
+  token: string,
+  params: { dimension: InventoryDimension; date_from?: string; date_to?: string; warehouse_id?: string },
+) =>
+  authedGet<InventoryBreakdown>(
+    token,
+    `/api/reports/inventory-breakdown?${new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v) as [string, string][],
+    ).toString()}`,
+  )
+
+export interface SerialEventRow {
+  event_type: string
+  event_label: string
+  entry_date: string
+  source_type: string
+  source_label: string
+  source_id: string | null
+  source_number: number | null
+  counterparty: string
+  notes: string
+}
+
+/** یک سریال با **کلِ تاریخچه‌اش** — `in_stock` مشتق است، نه ذخیره‌شده. */
+export interface SerialTrace {
+  serial_id: string
+  serial: string
+  status: string
+  item_id: string | null
+  item_sku: string
+  item_name: string
+  batch_number: string
+  in_stock: boolean
+  last_event_type: string | null
+  last_event_label: string
+  last_source_type: string | null
+  last_source_id: string | null
+  last_entry_date: string | null
+  events: SerialEventRow[]
+}
+
+export const searchSerials = (
+  token: string,
+  params: { serial?: string; item_id?: string; source_type?: string; date_from?: string; date_to?: string },
+) =>
+  authedGet<SerialTrace[]>(
+    token,
+    `/api/serials/search?${new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v) as [string, string][],
+    ).toString()}`,
+  )
+
+/** چسباندنِ سریال‌ها به یک سند. گامِ جداست: فاکتور نمی‌داند کدام سه تا از پنج تا رفت. */
+export const assignSerials = (
+  token: string,
+  body: {
+    item_id: string
+    serials: string[]
+    source_type: string
+    source_id: string
+    entry_date: string
+    event_type?: string
+  },
+) => authedSend<{ assigned: number; created: number; replayed: number }>(
+  token, 'POST', '/api/serials/assign', body,
+)
+
+// ── قیمت‌گذاریِ ورودی‌های بی‌فی ───────────────────────────────────────────────
+//
+// رسیدِ انبارِ مستقیم می‌تواند بی فی ثبت شود — کالایی که خارج از سیستم تهیه شده و
+// بهایش هنوز معلوم نیست (تولیدِ کارگاهی، خریدی که سندش نرسیده). تا وقتی فی
+// نخورَد، آن کالا در انبار هست و ارزشش صفر است.
+//
+// گرید **کالا‌محور** است، نه ردیف‌محور: یک فی برای یک کالا، و `receipts` می‌گوید
+// آن فی روی کدام اسناد می‌نشیند.
+
+export type UnpricedReceiptRef = {
+  number: number
+  receipt_date: string
+  type_label: string
+}
+
+export type UnpricedOutput = {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  qty: string
+  receipts: UnpricedReceiptRef[]
+}
+
+export type ApplyPricesResult = { receipts: number; lines: number; value: string }
+
+export const fetchUnpricedOutputs = (
+  token: string,
+  scope: { warehouse_id: string; date_from: string; date_to: string },
+) =>
+  authedGet<UnpricedOutput[]>(
+    token,
+    `/api/warehouse-receipts/unpriced?${new URLSearchParams(scope).toString()}`,
+  )
+
+/** فی را روی ردیف‌های بی‌فیِ دامنه می‌نشاند. حرکتِ انبارِ تازه‌ای ساخته نمی‌شود. */
+export const applyReceiptPrices = (
+  token: string,
+  body: {
+    warehouse_id: string
+    date_from: string
+    date_to: string
+    prices: { item_id: string; unit_cost: number }[]
+  },
+) => authedSend<ApplyPricesResult>(token, 'POST', '/api/warehouse-receipts/apply-prices', body)
+
+// ═════════════════ ورودیِ عواملِ متغیر در یک دوره ═════════════════
+//
+// لایه‌ای که نبود. تا مهاجرتِ ۰۱۴۷ عاملِ «متغیر» دقیقاً مثلِ «قراردادی» رفتار
+// می‌کرد — مبلغش از حکم می‌آمد — پس مأموریت و پاداش نمی‌توانستند ماه‌به‌ماه فرق
+// کنند. حالا مبلغِ عاملِ متغیر برای هر دوره جدا وارد می‌شود.
+
+export interface FactorInputRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  factor_id: string
+  factor_name: string
+  /** `benefit` یا `deduction` — جهتِ عدد از این می‌آید، نه از علامتش. */
+  factor_category: string
+  amount: string
+  notes: string
+}
+
+export const fetchFactorInputs = (token: string, periodId: string) =>
+  authedGet<FactorInputRecord[]>(token, `/api/payroll-periods/${periodId}/factor-inputs`)
+
+/** فقط ردیف‌های نام‌برده نوشته می‌شوند؛ بقیه دست نمی‌خورند. `amount = 0` حذف است. */
+export const saveFactorInputs = (
+  token: string,
+  periodId: string,
+  rows: { employee_id: string; factor_id: string; amount: number; notes?: string }[],
+) =>
+  authedSend<FactorInputRecord[]>(
+    token,
+    'PUT',
+    `/api/payroll-periods/${periodId}/factor-inputs`,
+    { rows },
+  )

@@ -17,8 +17,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.migration_utils import rls_disabled
 from app.tenancy import policy_name
 
-revision: str = "0143"
-down_revision: Union[str, None] = "0142"
+revision: str = "0149"
+down_revision: Union[str, None] = "0148"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

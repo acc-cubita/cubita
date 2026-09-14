@@ -21,8 +21,11 @@ from app.services.idempotency import idempotent
 
 router = APIRouter(tags=["inventory-valuation"])
 
-#: دیدن و محاسبه برای انباردار و حسابدار؛ ثبت و ابطالِ سندِ اصلاحی فقط حسابداری.
-_view = require_permission(("inventory", "accounting"), "view")
+#: **هر چه این مسیر نشان می‌دهد بهاست** — بهای قبل و بعد، اثرِ ریالی، سندِ اصلاحی. پس دیدنش
+#: همان مجوزِ بهای گزارش‌های انبار را می‌خواهد (`routers/reports.MONEY_MODULE`: حسابداری/دیدن)،
+#: نه مجوزِ انبار؛ وگرنه انبارداری که کاردکسش بی‌مبلغ است، بها را از این‌جا می‌دید.
+#: ثبت و ابطالِ سندِ اصلاحی فقط حسابداری.
+_view = require_permission("accounting", "view")
 
 
 @router.get("/api/inventory-valuation/preview", response_model=ValuationPreviewOut)

@@ -29,7 +29,11 @@ def _settings_out(settings) -> dict:
         "memory_id": settings.memory_id,
         "economic_code": settings.economic_code,
         "national_id": settings.national_id,
-        "has_private_key": bool((settings.private_key_pem or "").strip()),
+        #: **مقدارِ ذخیره‌شده سنجیده می‌شود، نه بازشده.** رمزگشایی برای یک
+        #: پرسشِ بله/خیر یعنی اگر `SECRETS_KEY` گم شود، خودِ صفحه‌ی تنظیمات هم
+        #: ۵۰۰ بدهد — یعنی کاربر نتواند کلیدِ تازه آپلود کند، دقیقاً وقتی که
+        #: بیش از همیشه لازمش دارد.
+        "has_private_key": bool((settings.private_key_stored or "").strip()),
         "has_certificate": bool((settings.certificate_pem or "").strip()),
         "default_stuff_id": settings.default_stuff_id or "",
         "is_sandbox": settings.is_sandbox,

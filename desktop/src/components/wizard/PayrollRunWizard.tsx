@@ -1,6 +1,6 @@
 import type { EmployeeRecord } from '../../api'
 import type { PayrollRunDraft } from '../../lib/payrollRunDraft'
-import { PeriodPicker, AttendanceTable, PayslipResults } from '../PayrollPanel'
+import { PeriodPicker, AttendanceTable, FactorInputsTable, PayslipResults } from '../PayrollPanel'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 
 /**
@@ -21,12 +21,16 @@ export function PayrollRunWizard({ d, employees }: { d: PayrollRunDraft; employe
     {
       key: 'attendance',
       title: 'کارکرد',
-      subtitle: 'روزِ کارکرد و ساعتِ اضافه‌کارِ هر پرسنل را وارد و ذخیره کنید.',
+      subtitle: 'روزِ کارکرد، اضافه‌کار، و مبلغِ عواملِ متغیرِ همین دوره را وارد و ذخیره کنید.',
       body:
         employees.length === 0 ? (
           <p className="hint">پرسنلی ثبت نشده — ابتدا از تبِ «پرسنل و احکام» کارمند اضافه کنید.</p>
         ) : (
-          <AttendanceTable d={d} employees={employees} />
+          <>
+            <AttendanceTable d={d} employees={employees} />
+            <h3 style={{ marginTop: 16 }}>ورودیِ عوامل این دوره</h3>
+            <FactorInputsTable d={d} employees={employees} />
+          </>
         ),
     },
     {

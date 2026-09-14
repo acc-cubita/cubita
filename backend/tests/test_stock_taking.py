@@ -54,7 +54,10 @@ def test_create_snapshots_system_qty_and_excludes_services(db, user):
     session = create_session(db, wh.id, TODAY, user)
     line = _line_for(session, item.id)
     assert line.system_qty == Decimal(10)
-    assert line.counted_qty == Decimal(10)  # پیش‌فرض = سیستمی
+    #: **شمارشِ کور:** عدد از شمارنده می‌آید، نه از سیستم. پیش‌فرضِ قدیمی
+    #: (`counted_qty = system_qty`) شمارنده را با عددِ سیستم سوگیر می‌کرد و
+    #: «نشمرده» را از «شمردم و برابر بود» غیرقابلِ تشخیص می‌ساخت.
+    assert line.counted_qty is None
     assert line.unit_cost == Decimal(1000)
     assert all(l.item_id != service.id for l in session.lines)  # خدمت نمی‌آید
 
@@ -65,7 +68,7 @@ def test_shortage_books_debit_adjustment_credit_inventory(db, user):
     _stock_in(db, user, item, wh, 10, 1000)
 
     session = create_session(db, wh.id, TODAY, user)
-    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 7)])  # کسری ۳
+    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 7)], user)  # کسری ۳
     posted = post_session(db, session.id, user)
 
     assert posted.status == "posted"
@@ -92,7 +95,7 @@ def test_overage_books_reverse(db, user):
     _stock_in(db, user, item, wh, 10, 1000)
 
     session = create_session(db, wh.id, TODAY, user)
-    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 13)])  # اضافی ۳
+    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 13)], user)  # اضافی ۳
     posted = post_session(db, session.id, user)
 
     assert get_stock_qty(db, item.id, wh.id) == Decimal(13)
@@ -105,16 +108,34 @@ def test_overage_books_reverse(db, user):
 
 
 def test_no_variance_posts_without_journal(db, user):
+    """شمارشی که با سیستم می‌خواند سند نمی‌سازد — ولی باید *شمرده* شده باشد."""
     wh = main_warehouse(db)
     item = make_item(db)
     _stock_in(db, user, item, wh, 10, 1000)
 
     session = create_session(db, wh.id, TODAY, user)
-    posted = post_session(db, session.id, user)  # هیچ شمارشی عوض نشد
+    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 10)], user)
+    posted = post_session(db, session.id, user)
 
     assert posted.status == "posted"
     assert posted.journal_entry_id is None
     assert db.query(StockLedger).filter(StockLedger.source_type == "stock_count").count() == 0
+
+
+def test_posting_without_any_count_is_refused(db, user):
+    """جلسه‌ای که هیچ ردیفش شمرده نشده چیزی برای تطبیق ندارد.
+
+    پیش از این چنین جلسه‌ای «بدونِ مغایرت» ثبت می‌شد — چون شمارش از پیش با
+    عددِ سیستم پر بود و هیچ‌کس نمی‌فهمید اصلاً کسی سراغِ انبار نرفته.
+    """
+    wh = main_warehouse(db)
+    item = make_item(db)
+    _stock_in(db, user, item, wh, 10, 1000)
+    session = create_session(db, wh.id, TODAY, user)
+
+    with pytest.raises(HTTPException) as exc:
+        post_session(db, session.id, user)
+    assert exc.value.status_code == 400
 
 
 def test_net_zero_value_still_moves_each_item(db, user):
@@ -130,6 +151,7 @@ def test_net_zero_value_still_moves_each_item(db, user):
         db,
         session.id,
         [_upd(_line_for(session, a.id).id, 12), _upd(_line_for(session, b.id).id, 8)],  # +۲ و -۲، ارزش خالص صفر
+        user,
     )
     posted = post_session(db, session.id, user)
 
@@ -144,7 +166,7 @@ def test_serialize_totals(db, user):
     item = make_item(db)
     _stock_in(db, user, item, wh, 10, 1000)
     session = create_session(db, wh.id, TODAY, user)
-    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 7)])
+    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 7)], user)
 
     data = serialize_session(session)
     assert data["variance_line_count"] == 1
@@ -168,13 +190,14 @@ def test_edit_and_post_after_post_rejected(db, user):
     item = make_item(db)
     _stock_in(db, user, item, wh, 10, 1000)
     session = create_session(db, wh.id, TODAY, user)
+    set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 10)], user)
     post_session(db, session.id, user)
 
     with pytest.raises(HTTPException) as exc1:
         post_session(db, session.id, user)
     assert exc1.value.status_code == 400
     with pytest.raises(HTTPException) as exc2:
-        set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 5)])
+        set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 5)], user)
     assert exc2.value.status_code == 400
 
 
@@ -186,7 +209,7 @@ def test_cancel_blocks_further_edits(db, user):
     cancelled = cancel_session(db, session.id)
     assert cancelled.status == "cancelled"
     with pytest.raises(HTTPException):
-        set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 5)])
+        set_counts(db, session.id, [_upd(_line_for(session, item.id).id, 5)], user)
 
 
 def test_unknown_session_404(db, user):

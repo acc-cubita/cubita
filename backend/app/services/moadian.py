@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.models.inventory import Contact
 from app.models.invoices import SalesInvoice
+from app.secrets_at_rest import SecretUnreadable
 from app.models.moadian import (
     BUILTIN_UNIT_CODES,
     MoadianSettings,
@@ -264,6 +265,41 @@ def _buyer_type(contact: Contact | None) -> int:
     return 1
 
 
+#: نگاشتِ روشِ تسویه‌ی کوبیتا به کدِ `setm`ِ سامانه‌ی مؤدیان.
+#:
+#: **این سه عدد کدِ قانونی‌اند و باید برابرِ مستنداتِ رسمیِ سامانه تأیید شوند.**
+#: `۱=نقدی` از قبل در همین فایل ادعا شده بود و دست‌نخورده مانده؛ دو تای دیگر از
+#: همان ترتیب می‌آیند. سامانه کدِ نامعتبر را با خطای `012802` («روش تسویه
+#: نامعتبر») رد می‌کند — یعنی اشتباه بودنشان **بی‌صدا** نیست، که تنها دلیلی است
+#: که این نگاشت بدونِ سندِ رسمی هم قابلِ دفاع است.
+SETTLEMENT_METHOD_CODES = {
+    "cash": 1,    # نقدی
+    "credit": 2,  # نسیه
+    "mixed": 3,   # نقدی/نسیه
+}
+
+#: وقتی مقدارِ ستون خارج از سه‌گانه باشد. قیدِ `ck_sales_invoices_settlement_terms`
+#: جلویش را می‌گیرد، ولی این تابع نباید به قیدِ جدولِ دیگری تکیه کند.
+_DEFAULT_SETTLEMENT_CODE = SETTLEMENT_METHOD_CODES["credit"]
+
+
+def _settlement_method(invoice) -> int:
+    """روشِ تسویه‌ی **همین فاکتور**، نه یک ثابت.
+
+    **باگی که این می‌بندد.** `setm` ثابتِ `1` بود، پس هر فروشِ نسیه‌ای هم به
+    سازمان امور مالیاتی «نقدی» اظهار می‌شد. داده‌اش از روزِ اول موجود بود:
+    `SalesInvoice.settlement_terms` سه مقدارِ `cash`/`credit`/`mixed` دارد، در
+    فرمِ فاکتور انتخاب می‌شود و در `InvoiceList` هم نمایش داده می‌شود — فقط این
+    یک نقطه نادیده‌اش می‌گرفت.
+
+    پیش‌فرض **نسیه** است، نه نقدی: همان پیش‌فرضِ خودِ ستون
+    (`server_default="credit"`)، و محافظه‌کارانه‌تر هم هست — اظهارِ نادرستِ
+    «نقدی» یعنی ادعای دریافتِ وجهی که نشده.
+    """
+    terms = (getattr(invoice, "settlement_terms", "") or "").strip().lower()
+    return SETTLEMENT_METHOD_CODES.get(terms, _DEFAULT_SETTLEMENT_CODE)
+
+
 # شناسه‌ی کالا/خدمتِ مالیاتی (sstid) باید دقیقاً ۱۳ رقم باشد — الگوی رسمیِ سامانه.
 _STUFF_ID_RE = re.compile(r"\d{13}")
 
@@ -452,7 +488,7 @@ def build_invoice_packet(
         "tvam": tax_total,  # جمع مالیات بر ارزش افزوده
         "todam": 0,  # جمع سایر مالیات، عوارض و وجوه قانونی
         "tbill": net_total + tax_total,  # مجموع صورتحساب
-        "setm": 1,  # روش تسویه: ۱=نقدی
+        "setm": _settlement_method(invoice),  # روش تسویه: از خودِ فاکتور
     }
     if has_economic:
         header["bid"] = (contact.national_id or "").strip()  # شناسه/شماره ملی خریدار
@@ -873,7 +909,7 @@ def readiness(db: Session) -> dict:
 
     # حضورِ کلید کافی نیست؛ خوانده‌شدنش هم سنجیده می‌شود تا PEMِ خراب پیش از
     # مصرفِ سریال معلوم شود، نه وسطِ ارسال.
-    if not (settings.private_key_pem or "").strip() or not (settings.certificate_pem or "").strip():
+    if not (settings.private_key_stored or "").strip() or not (settings.certificate_pem or "").strip():
         signing_ok, signing_detail = False, "کلید خصوصی و گواهیِ امضا هر دو لازم‌اند."
     else:
         try:
@@ -882,6 +918,11 @@ def readiness(db: Session) -> dict:
             signing_ok, signing_detail = True, "کلید و گواهی ثبت و خوانده شدند."
         except HTTPException as err:
             signing_ok, signing_detail = False, str(err.detail)
+        #: کلیدِ رمزشده‌ای که با `SECRETS_KEY`ِ فعلی باز نمی‌شود. این‌جا به‌جای
+        #: ۵۰۰ یک تشخیصِ روشن می‌دهد — همان چیزی که صفحه‌ی «بررسی پیکربندی»
+        #: برایش هست.
+        except SecretUnreadable as err:
+            signing_ok, signing_detail = False, str(err)
     checks.append({"key": "signing", "ok": signing_ok, "title": "کلید و گواهیِ امضا", "detail": signing_detail})
 
     #: واحدهای در حالِ استفاده‌ای که هنوز کدِ سامانه ندارند. یک‌جا فهرست می‌شوند تا

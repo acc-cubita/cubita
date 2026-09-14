@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PackageSearch, Package, PackageMinus, PackagePlus, RefreshCw, Warehouse, ClipboardList, ClipboardCheck, ArrowLeftRight, Boxes, PackageX, Tags, CalendarClock, Coins, History, AlertTriangle, FileUp, Ruler, Calculator } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
 import { InventoryValuationPanel } from '../components/InventoryValuationPanel'
 import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
 import { IssueReturnsTab } from '../components/IssueReturnsTab'
@@ -34,6 +34,8 @@ import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
+import { SerialSearchTab } from '../components/SerialSearchTab'
+import { UnpricedOutputsTab } from '../components/UnpricedOutputsTab'
 import { isElectron } from '../platform'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
@@ -354,6 +356,20 @@ export function InventoryPage({
             ),
           },
           {
+            //: کالایی که وارد انبار شده ولی بهایش هنوز معلوم نیست — تا فی نخورَد
+            //: ارزشش صفر است و بهای فروش‌رفته‌اش هم صفر درمی‌آید.
+            key: 'unpriced',
+            label: 'قیمت‌گذاری ورودی‌ها',
+            icon: BadgeDollarSign,
+            content: (
+              <UnpricedOutputsTab
+                token={token}
+                warehouses={warehouses}
+                onChanged={() => void refreshStock()}
+              />
+            ),
+          },
+          {
             //: اصلاحِ بهای حرکاتِ منقضی با یک سندِ اصلاحی — فصلِ «قیمت‌گذاری اسناد انبار».
             key: 'valuation',
             label: 'قیمت‌گذاری اسناد',
@@ -365,6 +381,13 @@ export function InventoryPage({
             label: 'لیست قیمت',
             icon: Tags,
             content: <PriceListsPanel token={token} />,
+          },
+          {
+            //: ردیابیِ میان‌سندیِ سریال — «کجاست و به چه کسی رفت؟»
+            key: 'serials',
+            label: 'جستجوی سریال',
+            icon: ScanSearch,
+            content: <SerialSearchTab token={token} />,
           },
           {
             key: 'batches',

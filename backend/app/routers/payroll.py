@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -21,6 +22,7 @@ from app.models.payroll import (
     PayrollDeploymentInfo,
     PayrollFactor,
     PayrollFactorParticipation,
+    PayrollFactorInput,
     PayrollPeriod,
     PayrollSettings,
     PayrollSettlement,
@@ -39,6 +41,8 @@ from app.schemas.payroll import (
     AttendanceOut,
     DeploymentInfoIn,
     DeploymentInfoOut,
+    FactorInputOut,
+    FactorInputsIn,
     EmployeeCandidateOut,
     EmployeeIn,
     EmployeeLoanIn,
@@ -456,6 +460,120 @@ def delete_tax_table(
         )
     db.delete(table)
     return Response(status_code=204)
+
+
+# ─────────────────── ورودیِ عواملِ متغیر در یک دوره ───────────────────
+#
+# لایه‌ای که نبود. تا مهاجرتِ ۰۱۴۷ عاملِ «متغیر» دقیقاً مثلِ «قراردادی» رفتار
+# می‌کرد، پس مأموریت و پاداش نمی‌توانستند ماه‌به‌ماه فرق کنند.
+
+
+def _period_or_404(db: Session, period_id: UUID) -> PayrollPeriod:
+    period = db.get(PayrollPeriod, period_id)
+    if period is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "دوره حقوقی یافت نشد")
+    return period
+
+
+def _input_out(row: PayrollFactorInput, employees: dict) -> FactorInputOut:
+    employee = employees.get(row.employee_id)
+    return FactorInputOut(
+        id=row.id,
+        employee_id=row.employee_id,
+        employee_name=f"{employee.first_name} {employee.last_name}".strip() if employee else "",
+        factor_id=row.factor_id,
+        factor_name=row.factor.name if row.factor else "",
+        factor_category=row.factor.category if row.factor else "",
+        amount=Decimal(str(row.amount)),
+        notes=row.notes,
+    )
+
+
+@router.get("/api/payroll-periods/{period_id}/factor-inputs", response_model=list[FactorInputOut])
+def list_factor_inputs(
+    period_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("payroll", "view"))
+):
+    _period_or_404(db, period_id)
+    rows = (
+        db.query(PayrollFactorInput)
+        .filter(PayrollFactorInput.period_id == period_id)
+        .all()
+    )
+    employees = {e.id: e for e in db.query(Employee).all()}
+    return [_input_out(row, employees) for row in rows]
+
+
+@router.put("/api/payroll-periods/{period_id}/factor-inputs", response_model=list[FactorInputOut])
+def save_factor_inputs(
+    period_id: UUID,
+    data: FactorInputsIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("payroll", "update")),
+):
+    """ورودی‌های نام‌برده را می‌نویسد. `amount = 0` ردیف را برمی‌دارد.
+
+    **دوره‌ی فیش‌دار قفل است.** عوض‌کردنِ ورودی پس از صدور یعنی فیشِ صادرشده با
+    عددی حساب شده که دیگر در سیستم نیست — همان «هرگز گذشته را بازنویسی نکن».
+    برای اصلاح باید فیش‌های دوره باطل و دوباره صادر شوند.
+    """
+    period = _period_or_404(db, period_id)
+    if period.status == "finalized":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این دوره نهایی شده و ورودی‌هایش قفل است")
+    if db.query(Payslip.id).filter(Payslip.period_id == period_id).first() is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "برای این دوره فیش صادر شده است. تغییرِ ورودی‌ها عددِ فیشِ صادرشده را "
+            "توضیح‌ناپذیر می‌کند؛ اول فیش‌های دوره را باطل کنید.",
+        )
+
+    for row in data.rows:
+        employee = db.get(Employee, row.employee_id)
+        if employee is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "کارمندِ انتخاب‌شده یافت نشد")
+        factor = db.get(PayrollFactor, row.factor_id)
+        if factor is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "عاملِ انتخاب‌شده یافت نشد")
+        #: **فقط عاملِ متغیر.** عاملِ قراردادی مبلغش روی حکم است؛ ورودیِ دوره
+        #: برایش یعنی دو حقیقت برای یک عدد.
+        if factor.kind != "variable":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"عاملِ «{factor.name}» قراردادی است و مبلغش روی حکم نوشته می‌شود، "
+                "نه در ورودیِ دوره.",
+            )
+        if not factor.is_active:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"عاملِ «{factor.name}» غیرفعال است"
+            )
+        existing = (
+            db.query(PayrollFactorInput)
+            .filter(
+                PayrollFactorInput.employee_id == row.employee_id,
+                PayrollFactorInput.period_id == period_id,
+                PayrollFactorInput.factor_id == row.factor_id,
+            )
+            .one_or_none()
+        )
+        if row.amount <= 0:
+            if existing is not None:
+                db.delete(existing)
+            continue
+        if existing is None:
+            db.add(
+                PayrollFactorInput(
+                    employee_id=row.employee_id,
+                    period_id=period_id,
+                    factor_id=row.factor_id,
+                    amount=row.amount,
+                    notes=row.notes,
+                    created_by_id=user.id,
+                )
+            )
+        else:
+            existing.amount = row.amount
+            existing.notes = row.notes
+    db.flush()
+    return list_factor_inputs(period_id, db=db, _=None)  # noqa: S106 — همان نمایش، یک منبع
 
 
 @router.get("/api/payslips/{payslip_id}/tax-breakdown", response_model=TaxBreakdownOut)

@@ -42,6 +42,15 @@ PAYROLL_ROUNDING = "payroll_rounding"
 #: می‌کردند ولی هیچ ردیفِ بستانکاری در سند نداشتند، پس سندِ حقوقِ هر قراردادی که
 #: کسور داشت دقیقاً به همان اندازه نامتوازن ثبت می‌شد.
 PAYROLL_DEDUCTIONS_PAYABLE = "payroll_deductions_payable"
+#: کالای در جریان ساخت — مبدأِ کالایی که **ساخته** شده، نه خریده.
+#:
+#: **چرا لازم شد.** رسیدِ انبارِ نوعِ «تولید» تا امروز از همان قاعده‌ی خرید رد
+#: می‌شد («تحویل‌دهنده داری؟ بدهی؛ نداری؟ نقد»)، پس تولیدِ ۲٬۴۰۰٬۰۰۰ ریال کالا
+#: صندوق را ۲٬۴۰۰٬۰۰۰ ریال **کم** می‌کرد — پولی که هرگز پرداخت نشده بود. طرفِ
+#: بستانکارِ درستِ ورودِ محصولِ ساخته‌شده، خروجِ همان ارزش از جریانِ ساخت است.
+#:
+#: با `get_or_create_account` تنبل ساخته می‌شود تا چارتِ مشتریانِ موجود نشکند.
+WORK_IN_PROCESS = "work_in_process"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
 VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
@@ -49,7 +58,18 @@ VAT_RECEIVABLE = "vat_receivable"  # مالیات بر ارزش افزوده‌�
 FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌های ثابت (دارایی)
 ACCUMULATED_DEPRECIATION = "accumulated_depreciation"  # استهلاک انباشته (کاهنده‌ی دارایی)
 DEPRECIATION_EXPENSE = "depreciation_expense"  # هزینه‌ی استهلاک دوره (هزینه)
-SALES_ROUNDING = "sales_rounding"  # تعدیلِ گِرد کردنِ مبلغِ فاکتور فروش (کاهنده/افزاینده‌ی درآمد)
+#: تعدیلِ گِرد کردنِ مبلغِ فاکتور فروش (کاهنده/افزاینده‌ی درآمد).
+#:
+#: **چرا ۴۱۰۸ و نه ۴۱۰۲:** تا پیش از این، این نقش روی ۴۱۰۲ می‌نشست — و ۴۱۰۲ در
+#: `seed.py` «فروش کالا - آنلاین» است، یعنی درآمدِ واقعیِ یک کانالِ فروش. نتیجه‌اش
+#: این بود که هر اختلافِ گِردکردن مستقیم داخلِ درآمدِ فروشِ آنلاین می‌نشست و دیگر
+#: نمی‌شد پرسید «چقدر آنلاین فروختیم؟» — همان استدلالی که `SALES_RETURN` را از
+#: «فروش» جدا کرد، ولی این‌جا نقض شده بود.
+#:
+#: ۴۱۰۸ در `seed.py`، در `chart_templates.json` و در همه‌ی مهاجرت‌ها آزاد است، پس
+#: هیچ مشتری‌ای کدِ `V`دار نمی‌گیرد. مهاجرتِ `0143` نقش را برای چارت‌های موجود
+#: جابه‌جا می‌کند؛ ردیف‌های سندِ گذشته دست نمی‌خورند.
+SALES_ROUNDING = "sales_rounding"
 #: برگشت از فروش — حسابِ **کاهنده‌ی درآمد**، هم‌خانواده‌ی `SALES_ROUNDING`.
 #:
 #: **چرا حسابِ جدا و نه بدهکارکردنِ خودِ درآمد:** فروشِ ناخالص و برگشتی دو حقیقتِ
@@ -140,7 +160,7 @@ DEFAULT_CODE_BY_ROLE = {
     ACCUMULATED_DEPRECIATION: "1202",
     RETAINED_EARNINGS: "3102",
     SALES_REVENUE: "4101",
-    SALES_ROUNDING: "4102",
+    SALES_ROUNDING: "4108",
     SALES_RETURN: "4107",
     SALES_ADDITIONS: "4198",
     SALES_DISCOUNT: "4199",
@@ -149,6 +169,7 @@ DEFAULT_CODE_BY_ROLE = {
     EMPLOYEE_LOAN: "1111",
     PAYROLL_ROUNDING: "5118",
     PAYROLL_DEDUCTIONS_PAYABLE: "2109",
+    WORK_IN_PROCESS: "1115",
     INVENTORY_ADJUSTMENT: "5105",
     DEPRECIATION_EXPENSE: "5106",
     FX_GAIN: "4106",

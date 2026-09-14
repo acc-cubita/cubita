@@ -88,7 +88,7 @@ SOURCE_MODELS: dict[str, type] = {
     "period_close": FiscalPeriodClose,
     #: از سندِ تسویه به خودِ تسویه — و از آنجا به دستگاه، رسیدها و بانک (§۲۹).
     "pos_settlement": PosSettlement,
-    #: سندِ اصلاحیِ بها به اجرای «قیمت‌گذاری اسناد انبار» برمی‌گردد (مهاجرتِ ۰۱۴۳).
+    #: سندِ اصلاحیِ بها به اجرای «قیمت‌گذاری اسناد انبار» برمی‌گردد (مهاجرتِ ۰۱۴۹).
     "inventory_valuation": InventoryValuationRun,
 }
 

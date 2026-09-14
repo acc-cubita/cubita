@@ -8,6 +8,7 @@ import {
   Layers,
   ListChecks,
   Lock,
+  Pencil,
   Percent,
   PlusCircle,
   Route,
@@ -18,9 +19,14 @@ import {
   Undo2,
   Users,
   Wallet,
+  X,
 } from 'lucide-react'
 import {
   closeInvoices,
+  fetchChartAccounts,
+  updateSaleType,
+  type ChartAccount,
+  type SaleTypeAccounts,
   createBundle,
   createCommissionRule,
   createCommissionRun,
@@ -82,6 +88,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import {
+  ActiveChip,
   AsyncBlock,
   Metric,
   Note,
@@ -786,23 +793,101 @@ export function CreditDebitNotePage({ token, onNavigate }: { token: string; onNa
 
 // ═════════════════════ ۱۰) نوع فروش ═════════════════════
 
+/**
+ * هفت اسلاتِ حسابِ نوعِ فروش، به ترتیبی که در فرم دیده می‌شوند.
+ *
+ * **چرا اصلاً وجود دارند:** موتورِ ثبتِ فاکتور از ابتدا کالا و خدمت را تفکیک
+ * می‌کرد و این حساب‌ها را می‌خواند — ولی هیچ صفحه‌ای نمی‌توانست مقداری به آن‌ها
+ * بدهد، پس هر هفت ستون در هر کسب‌وکاری تا ابد `null` می‌ماندند و کلِ قابلیت
+ * مرده بود. این فرم همان دَرِ نبوده است.
+ */
+const SALE_TYPE_ACCOUNT_SLOTS = [
+  { key: 'goods_revenue_account_id', label: 'فروش کالا' },
+  { key: 'service_revenue_account_id', label: 'فروش خدمات' },
+  { key: 'goods_return_account_id', label: 'برگشت فروش کالا' },
+  { key: 'service_return_account_id', label: 'برگشت فروش خدمات' },
+  { key: 'goods_discount_account_id', label: 'تخفیف فروش کالا' },
+  { key: 'service_discount_account_id', label: 'تخفیف فروش خدمات' },
+  { key: 'addition_account_id', label: 'اضافات' },
+] as const satisfies readonly { key: keyof SaleTypeAccounts; label: string }[]
+
+const EMPTY_ACCOUNTS: SaleTypeAccounts = {
+  goods_revenue_account_id: null,
+  service_revenue_account_id: null,
+  goods_return_account_id: null,
+  service_return_account_id: null,
+  goods_discount_account_id: null,
+  service_discount_account_id: null,
+  addition_account_id: null,
+}
+
+/** هفت انتخابگرِ حساب — یک‌جا، چون فرمِ ساخت و فرمِ ویرایش دقیقاً همین را می‌خواهند. */
+function SaleTypeAccountFields({
+  accounts,
+  value,
+  onChange,
+}: {
+  accounts: ChartAccount[]
+  value: SaleTypeAccounts
+  onChange: (next: SaleTypeAccounts) => void
+}) {
+  return (
+    <>
+      {SALE_TYPE_ACCOUNT_SLOTS.map(({ key, label }) => (
+        <label key={key}>
+          {label}
+          <select
+            value={value[key] ?? ''}
+            onChange={(e) => onChange({ ...value, [key]: e.target.value || null })}
+          >
+            <option value="">پیش‌فرضِ چارتِ حساب‌ها</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      <p className="field-hint">
+        خالی یعنی حسابِ پیش‌فرضِ چارتِ حساب‌ها استفاده شود. تغییرِ این حساب‌ها فقط روی
+        فروش‌های <strong>بعدی</strong> اثر دارد؛ سندِ صادرشده هرگز بازنویسی نمی‌شود.
+      </p>
+    </>
+  )
+}
+
 export function SaleTypePage({ token }: { token: string }) {
-  const { msg, submitting, run } = useSubmit()
+  const { msg, submitting, reloadKey, run } = useSubmit()
   const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [title2, setTitle2] = useState('')
   const [dueDays, setDueDays] = useState('0')
   const [taxRate, setTaxRate] = useState('')
   const [description, setDescription] = useState('')
+  const [accountIds, setAccountIds] = useState<SaleTypeAccounts>(EMPTY_ACCOUNTS)
+  const [accounts, setAccounts] = useState<ChartAccount[]>([])
+  const [editing, setEditing] = useState<SaleType | null>(null)
+
+  useEffect(() => {
+    fetchChartAccounts(token)
+      .then((list) => setAccounts(list.filter((a) => !a.is_group && a.is_active)))
+      .catch(() => setAccounts([]))
+  }, [token])
+
+  const list = useAsync(() => fetchSaleTypes(token), [token, reloadKey])
+  const rows = list.data ?? []
 
   return (
     <OpsPage
       icon={Tags}
       title="نوع فروش"
-      description="نقدی، اعتباری، امانی، صادراتی… هر نوع مهلتِ تسویه و نرخِ مالیاتِ پیش‌فرضِ خودش را دارد."
+      description="نقدی، اعتباری، عمده، صادراتی… هر نوع حساب‌های فروشِ خودش را دارد و سرِ فاکتور انتخاب می‌شود."
     >
       <FormCard
         icon={Tags}
         title="تعریفِ نوعِ فروش"
-        description="این‌ها هنگامِ انتخابِ نوع در فاکتور، خودکار پیشنهاد می‌شوند."
+        description="حساب‌ها هنگامِ صدورِ سندِ فاکتور استفاده می‌شوند — کالا و خدمت هرکدام حسابِ خودش."
         msg={msg}
         submitting={submitting}
         disabled={!name.trim()}
@@ -810,21 +895,36 @@ export function SaleTypePage({ token }: { token: string }) {
           void run(async () => {
             await createSaleType(token, {
               name: name.trim(),
+              code: code.trim() || null,
+              title2: title2.trim(),
               due_days: Number(dueDays) || 0,
               default_tax_rate: taxRate ? taxRate : null,
               description,
               is_active: true,
+              ...accountIds,
             })
             setName('')
+            setCode('')
+            setTitle2('')
             setDueDays('0')
             setTaxRate('')
             setDescription('')
+            setAccountIds(EMPTY_ACCOUNTS)
           }, 'نوعِ فروش ثبت شد.')
         }
       >
         <label>
           نام
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+        </label>
+        <label>
+          کد
+          <input type="text" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />
+          <span className="field-hint">اختیاری. کدِ خودِ نوعِ فروش است، نه شماره‌ی فاکتور.</span>
+        </label>
+        <label>
+          عنوانِ دوم
+          <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={80} />
         </label>
         <label>
           مهلتِ تسویه (روز)
@@ -840,8 +940,202 @@ export function SaleTypePage({ token }: { token: string }) {
           توضیح
           <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
+        <SaleTypeAccountFields accounts={accounts} value={accountIds} onChange={setAccountIds} />
       </FormCard>
+
+      <SectionCard
+        icon={Tags}
+        title="نوع‌های تعریف‌شده"
+        description="برای تغییرِ حساب‌ها یا بایگانی‌کردن، ویرایش کنید."
+      >
+        <AsyncBlock
+          loading={list.loading}
+          error={list.error}
+          empty={rows.length === 0}
+          emptyText="هنوز نوعِ فروشی تعریف نشده. از فرمِ بالا بسازید."
+        >
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>کد</th>
+                  <th>حساب‌های تنظیم‌شده</th>
+                  <th>وضعیت</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const configured = SALE_TYPE_ACCOUNT_SLOTS.filter((slot) => r[slot.key]).length
+                  return (
+                    <tr key={r.id}>
+                      <td className="card-title" data-label="نام">
+                        {r.name}
+                        {r.title2 ? <div className="entity-sub">{r.title2}</div> : null}
+                      </td>
+                      <td data-label="کد">{r.code || '—'}</td>
+                      <td className="num" data-label="حساب‌های تنظیم‌شده">
+                        {configured === 0 ? (
+                          <span className="muted">پیش‌فرض</span>
+                        ) : (
+                          `${faInt(configured)} از ${faInt(SALE_TYPE_ACCOUNT_SLOTS.length)}`
+                        )}
+                      </td>
+                      <td data-label="وضعیت">
+                        <ActiveChip active={r.is_active} />
+                      </td>
+                      <td className="card-actions">
+                        <button type="button" onClick={() => setEditing(r)}>
+                          <Pencil size={13} /> ویرایش
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </AsyncBlock>
+      </SectionCard>
+
+      {editing && (
+        <SaleTypeEditDrawer
+          token={token}
+          accounts={accounts}
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            void run(async () => {}, 'نوعِ فروش به‌روزرسانی شد.')
+          }}
+        />
+      )}
     </OpsPage>
+  )
+}
+
+/**
+ * ویرایشِ نوعِ فروش — **فقط فیلدهای فرستاده‌شده نوشته می‌شوند.**
+ *
+ * پیش از این مسیرِ `PATCH` همه‌ی فیلدها را می‌نوشت و یک بدنه‌ی ناقص، بی‌صدا و با
+ * ۲۰۰، هر هفت حساب را پاک می‌کرد. حالا سرور جزئی می‌نویسد.
+ */
+function SaleTypeEditDrawer({
+  token,
+  accounts,
+  row,
+  onClose,
+  onSaved,
+}: {
+  token: string
+  accounts: ChartAccount[]
+  row: SaleType
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(row.name)
+  const [code, setCode] = useState(row.code ?? '')
+  const [title2, setTitle2] = useState(row.title2)
+  const [isActive, setIsActive] = useState(row.is_active)
+  const [accountIds, setAccountIds] = useState<SaleTypeAccounts>(() => ({
+    goods_revenue_account_id: row.goods_revenue_account_id,
+    service_revenue_account_id: row.service_revenue_account_id,
+    goods_return_account_id: row.goods_return_account_id,
+    service_return_account_id: row.service_return_account_id,
+    goods_discount_account_id: row.goods_discount_account_id,
+    service_discount_account_id: row.service_discount_account_id,
+    addition_account_id: row.addition_account_id,
+  }))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      await updateSaleType(token, row.id, {
+        name: name.trim(),
+        code: code.trim() || null,
+        title2: title2.trim(),
+        is_active: isActive,
+        ...accountIds,
+      })
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="drawer-head">
+          <div className="drawer-title">
+            <div>
+              <div className="drawer-title-main">ویرایشِ نوعِ فروش: {row.name}</div>
+              <div className="drawer-title-sub">{row.code || 'بدونِ کد'}</div>
+            </div>
+          </div>
+          <button type="button" className="drawer-close" onClick={onClose} aria-label="بستن">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="drawer-body">
+          <form
+            className="invoice-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void save()
+            }}
+          >
+        <label>
+          نام
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+        </label>
+        <label>
+          کد
+          <input type="text" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />
+        </label>
+        <label>
+          عنوانِ دوم
+          <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={80} />
+        </label>
+        <label>
+          وضعیت
+          <select value={isActive ? '1' : '0'} onChange={(e) => setIsActive(e.target.value === '1')}>
+            <option value="1">فعال</option>
+            <option value="0">غیرفعال (بایگانی)</option>
+          </select>
+          <span className="field-hint">
+            نوعِ غیرفعال در فاکتورِ تازه انتخاب نمی‌شود، ولی روی فاکتورهای گذشته سرِ جایش
+            می‌ماند. نوعِ فروش حذف نمی‌شود.
+          </span>
+        </label>
+        <SaleTypeAccountFields accounts={accounts} value={accountIds} onChange={setAccountIds} />
+            {error && <p className="hint acc-note acc-note--err">{error}</p>}
+            <div className="invoice-form-footer">
+              <button type="button" onClick={onClose}>
+                انصراف
+              </button>
+              <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
+                {busy ? 'در حال ذخیره…' : 'ذخیرهٔ تغییرات'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   )
 }
 

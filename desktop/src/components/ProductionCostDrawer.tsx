@@ -57,6 +57,8 @@ export function ProductionCostDrawer({
                 <thead>
                   <tr><th>جزء (ماده اولیه)</th><th>مقدار</th><th>بهای واحد</th><th>جمع</th></tr>
                 </thead>
+                {/* audit-r9-exempt: ردیفِ جمع همیشه رندر می‌شود، پس جدول هرگز
+                    خالی دیده نمی‌شود حتی اگر سفارش جزئی نداشته باشد. */}
                 <tbody>
                   {order.lines.map((l, i) => (
                     <tr key={i}>

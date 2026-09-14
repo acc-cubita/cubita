@@ -216,3 +216,71 @@ class StockBatchSerial(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     batch: Mapped["StockBatch"] = relationship(back_populates="serials")
+    events: Mapped[list["SerialEvent"]] = relationship(
+        back_populates="serial_row",
+        cascade="all, delete-orphan",
+        order_by="SerialEvent.entry_date, SerialEvent.created_at",
+    )
+
+
+#: رویدادهایی که یک سریال می‌تواند بگیرد.
+SERIAL_EVENT_TYPES = ("receipt", "issue", "return_in", "return_out", "adjust")
+SERIAL_EVENT_LABELS = {
+    "receipt": "ورود",
+    "issue": "خروج",
+    "return_in": "برگشت به انبار",
+    "return_out": "برگشت از انبار",
+    "adjust": "تعدیل",
+}
+#: رویدادهایی که سریال را از انبار بیرون می‌برند — مبنای «الان کجاست؟».
+SERIAL_OUTBOUND_EVENTS = frozenset({"issue", "return_out"})
+
+
+class SerialEvent(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک اتفاق در زندگیِ یک سریال — ورود، خروج، برگشت.
+
+    **دفتر است، نه موقعیت.** تا پیش از مهاجرتِ ۰۱۴۵ سریال فقط به بچِ ورودش وصل
+    بود و فروش هیچ‌وقت لمسش نمی‌کرد؛ پرسشِ «SN-1 به چه کسی فروخته شد؟» جوابی
+    نداشت و جوابِ سیستم تا ابد «در همان بچِ اول» می‌ماند.
+
+    راهِ ساده‌تر یک ستونِ `current_document_id` بود — و غلط: با هر حرکت بازنویسی
+    می‌شد و تاریخچه را می‌بلعید. همان دلیلی که موجودیِ کوبیتا از دفتر مشتق
+    می‌شود و در یک ستون ذخیره نمی‌شود. **موقعیتِ فعلی از آخرین رویداد مشتق
+    می‌شود.**
+    """
+
+    __tablename__ = "serial_events"
+
+    __table_args__ = (
+        CheckConstraint(f"event_type IN {SERIAL_EVENT_TYPES}", name="ck_serial_events_type"),
+        #: **یک سریال روی یک سند بیش از یک رویداد نمی‌گیرد.** بی این، تلاشِ
+        #: دوباره‌ی شبکه دو رویدادِ اقتصادی می‌ساخت و «کجاست؟» دو جواب پیدا
+        #: می‌کرد. جزئی است چون رویدادِ بی‌سند (تعدیلِ دستی) می‌تواند تکرار شود.
+        Index(
+            "uq_serial_events_serial_source",
+            "tenant_id",
+            "serial_id",
+            "source_type",
+            "source_id",
+            unique=True,
+            postgresql_where=text("source_id IS NOT NULL"),
+        ),
+    )
+
+    serial_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batch_serials.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(20))
+    #: سندی که این رویداد را ساخت — همان واژگانِ `valuation.SOURCE_LABELS`، تا
+    #: ردیابی از سریال به سند همان مسیرِ کاردکس باشد، نه یک نگاشتِ دوم.
+    source_type: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    #: تاریخِ **مؤثرِ** سند، نه تاریخِ ثبت. سندِ پیش‌تاریخ سرِ جای زمانی‌اش
+    #: می‌نشیند — همان قاعده‌ای که کاردکس دارد.
+    entry_date: Mapped[date_] = mapped_column(Date)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    serial_row: Mapped["StockBatchSerial"] = relationship(back_populates="events")

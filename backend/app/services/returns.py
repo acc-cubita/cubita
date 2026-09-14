@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.counters import DOC_PURCHASE_RETURN, DOC_SALES_RETURN
 from app.services.numbering import next_document_number
-from app.models.accounting import JournalLine
+from app.models.accounting import Account, JournalLine
 from app.models.inventory import Contact, Item, StockLedger, Warehouse
 from app.models.advanced_inventory import StockBatch
 from app.models.invoices import (
@@ -29,6 +29,7 @@ from app.models.returns import (
     SalesReturnLine,
     SalesReturnReason,
 )
+from app.models.sales_ops import SaleType
 from app.models.user import User
 from app.schemas.returns import PurchaseReturnIn, SalesReturnIn
 from app.services import chart_codes as cc
@@ -292,6 +293,66 @@ def sales_return_account(db: Session):
 
 
 
+def _return_settlement_account(db: Session, invoice) -> Account:
+    """حسابی که پولِ برگشتی از آن بازمی‌گردد — همانی که فاکتور بدهکارش کرده بود."""
+    if not invoice.contact_id:
+        return get_account(db, cc.CASH)
+    account_id = getattr(invoice, "receivable_account_id", None)
+    if account_id is not None:
+        account = db.get(Account, account_id)
+        if account is not None and not account.is_group and account.is_active:
+            return account
+    return get_account(db, cc.ACCOUNTS_RECEIVABLE)
+
+
+def _return_revenue_split(
+    db: Session, invoice, net_by_nature: dict[bool, Decimal]
+) -> list[tuple[Account, Decimal, str]]:
+    """(حساب، مبلغ، برچسب) برای هر جزءِ برگشت — کالا و خدمت جدا اگر تنظیم شده باشد.
+
+    **نوعِ فروشِ خودِ فاکتور خوانده می‌شود، نه انتخابِ امروز** (§۷۷ §۷۸): برگشت به
+    فروشی برمی‌گردد که قبلاً اتفاق افتاده، پس زمینه‌ی حسابداری‌اش هم مالِ همان
+    فاکتور است. نگاشتِ جاریِ آن نوعِ فروش استفاده می‌شود، نه یک نسخه‌ی منجمد —
+    همان سیاستی که خودِ ثبتِ فاکتور دارد، نه یک سیاستِ دوم.
+
+    اگر نوعِ فروش حسابِ برگشت نداده باشد، **همان حسابِ سراسریِ دیروز** برمی‌گردد؛
+    پیش‌فرض رفتارِ دیروز است.
+    """
+    sale_type = (
+        db.get(SaleType, invoice.sale_type_id)
+        if getattr(invoice, "sale_type_id", None)
+        else None
+    )
+    fallback = sales_return_account(db)
+    buckets: dict[UUID, tuple[Account, Decimal, str]] = {}
+    for is_service, amount in net_by_nature.items():
+        if not amount:
+            continue
+        configured = None
+        if sale_type is not None:
+            configured = (
+                sale_type.service_return_account_id
+                if is_service
+                else sale_type.goods_return_account_id
+            )
+        account = fallback
+        if configured is not None:
+            found = db.get(Account, configured)
+            #: حسابِ غیرفعال یا گروه جلوی **ثبتِ برگشت** را نمی‌گیرد؛ سندِ
+            #: برگشت نباید به‌خاطرِ یک پیکربندیِ کهنه از ثبت بماند. به حسابِ
+            #: سراسری می‌افتد، همان‌جا که پیش از این می‌رفت.
+            if found is not None and not found.is_group and found.is_active:
+                account = found
+        label = (" — خدمات" if is_service else " — کالا") if account is not fallback else ""
+        prev = buckets.get(account.id)
+        buckets[account.id] = (
+            (account, prev[1] + amount, prev[2]) if prev else (account, amount, label)
+        )
+    if not buckets:
+        return [(fallback, Decimal(0), "")]
+    return list(buckets.values())
+
+
 def _issued_by_warehouse(db: Session, invoice_line_id: UUID) -> list[tuple[UUID, Decimal]]:
     """انبارهایی که این ردیفِ فاکتور واقعاً از آن‌ها خارج شده، با مقدارِ هرکدام.
 
@@ -447,6 +508,10 @@ def post_sales_return(
     total_cost = Decimal(0)
     tax_amount = Decimal(0)
     tax_weight = Decimal(0)
+    #: برگشتِ کالا و برگشتِ خدمت دو جزءِ حسابداریِ جدا هستند و نوعِ فروش برای هر
+    #: کدام حسابِ خودش را دارد. تا امروز هر دو در یک عددِ واحد جمع می‌شدند و به
+    #: یک حسابِ سراسری می‌رفتند، پس تفکیکشان اصلاً پرسیدنی نبود.
+    net_by_nature: dict[bool, Decimal] = {False: Decimal(0), True: Decimal(0)}
     return_lines: list[SalesReturnLine] = []
     stock_moves: list[StockLedger] = []
 
@@ -454,6 +519,7 @@ def post_sales_return(
         item = items_by_id[row.line.item_id]
         line_net = qty * row.unit_price
         total_amount += line_net
+        net_by_nature[bool(item.is_service)] += line_net
         total_cost += qty * row.unit_cost
         #: مالیات با نرخِ **همان ردیفِ فاکتورِ اصلی** برمی‌گردد، نه نرخِ سرِ فاکتور.
         tax_amount += compute_tax(line_net, row.tax_rate)
@@ -519,13 +585,19 @@ def post_sales_return(
     # داشته و هم معاف، نرخِ سربرگ برای هیچ‌کدام درست نیست.
     tax_rate = (tax_weight / total_amount) if total_amount else Decimal(0)
 
+    #: **کاهنده‌ی درآمد، نه بدهکارکردنِ درآمد** (§۴۵ §۹۴): فروشِ ناخالص و
+    #: برگشتی باید هر دو قابلِ گزارش بمانند، وگرنه «چقدر فروختیم و چقدر برگشت
+    #: خورد؟» — مبنای نرخِ برگشت — دیگر پرسیدنی نیست.
+    #:
+    #: حساب از **نوعِ فروشِ خودِ فاکتورِ اصلی** می‌آید، نه از نوعِ فروشِ امروز:
+    #: برگشت به فروشی برمی‌گردد که قبلاً اتفاق افتاده. اگر نوعِ فروش حسابِ
+    #: برگشت نداده باشد، همان حسابِ سراسریِ دیروز می‌ماند.
     journal_lines = [
         JournalLine(
-            #: **کاهنده‌ی درآمد، نه بدهکارکردنِ درآمد** (§۴۵ §۹۴): فروشِ ناخالص و
-            #: برگشتی باید هر دو قابلِ گزارش بمانند، وگرنه «چقدر فروختیم و چقدر
-            #: برگشت خورد؟» — مبنای نرخِ برگشت — دیگر پرسیدنی نیست.
-            account_id=sales_return_account(db).id, debit=total_amount, credit=0, description="برگشت از فروش"
-        ),
+            account_id=account.id, debit=amount, credit=0,
+            description="برگشت از فروش" + label,
+        )
+        for account, amount, label in _return_revenue_split(db, invoice, net_by_nature)
     ]
     if tax_amount > 0:
         journal_lines.append(
@@ -538,7 +610,11 @@ def post_sales_return(
         )
     journal_lines.append(
         JournalLine(
-            account_id=(get_account(db, cc.ACCOUNTS_RECEIVABLE) if invoice.contact_id else get_account(db, cc.CASH)).id,
+            #: **همان حسابی که فاکتور بدهکارش کرده بود.** پیش از این برگشت
+            #: همیشه دریافتنیِ سراسری را بستانکار می‌کرد؛ اگر فاکتور حسابِ
+            #: دریافتنیِ دیگری داشت، ماندهٔ او تا ابد بازنشده می‌ماند و روی
+            #: حسابِ سراسری یک بستانکارِ شبح می‌نشست.
+            account_id=_return_settlement_account(db, invoice).id,
             debit=0,
             credit=total_amount + tax_amount,  # کلِ مبلغی که به مشتری برمی‌گردد
             description="برگشت از فروش",

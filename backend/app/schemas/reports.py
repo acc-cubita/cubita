@@ -138,17 +138,17 @@ class KardexLineOut(BaseModel):
     qty_in: Decimal
     qty_out: Decimal
     #: بهای ارزش‌گذاری (بازپخشِ زمانی)؛ `recorded_unit_cost` همانی است که سند نوشته.
-    unit_cost: Decimal
-    recorded_unit_cost: Decimal
+    unit_cost: Decimal | None
+    recorded_unit_cost: Decimal | None
     #: بهای ثبت‌شده با میانگینِ همان تاریخ نمی‌خواند — ارزش‌گذاریِ منقضی.
     stale: bool = False
     #: بهای این حرکت در «قیمت‌گذاری اسناد انبار» اصلاح شده؛ `recorded_unit_cost` بهای پس از اصلاح است.
     adjusted: bool = False
-    value_in: Decimal
-    value_out: Decimal
-    balance_value: Decimal
+    value_in: Decimal | None
+    value_out: Decimal | None
+    balance_value: Decimal | None
     #: میانگینِ کلِ شرکت پس از این حرکت.
-    average_cost: Decimal
+    average_cost: Decimal | None
     balance_qty: Decimal  # موجودی در حال اجرا پس از این حرکت
 
 
@@ -163,15 +163,15 @@ class KardexReportOut(BaseModel):
     date_from: date | None
     date_to: date | None
     opening_qty: Decimal
-    opening_value: Decimal
+    opening_value: Decimal | None
     lines: list[KardexLineOut]
     total_in: Decimal
     total_out: Decimal
-    total_value_in: Decimal
-    total_value_out: Decimal
+    total_value_in: Decimal | None
+    total_value_out: Decimal | None
     closing_qty: Decimal
-    closing_value: Decimal
-    average_cost: Decimal
+    closing_value: Decimal | None
+    average_cost: Decimal | None
     stale_count: int
 
 
@@ -212,17 +212,17 @@ class InventoryRowOut(BaseModel):
     category: str
     #: مانده‌ی اول، ورود، خروج — به مقدار و ریال. `qty_on_hand`/`stock_value` مانده‌ی پایان‌اند.
     opening_qty: Decimal = Decimal(0)
-    opening_value: Decimal = Decimal(0)
+    opening_value: Decimal | None = Decimal(0)
     in_qty: Decimal = Decimal(0)
-    in_value: Decimal = Decimal(0)
+    in_value: Decimal | None = Decimal(0)
     out_qty: Decimal = Decimal(0)
-    out_value: Decimal = Decimal(0)
+    out_value: Decimal | None = Decimal(0)
     #: جمعِ «مقدار × بهای ثبت‌شده». اختلافش با `stock_value` ارزش‌گذاریِ منقضی است.
-    book_value: Decimal = Decimal(0)
+    book_value: Decimal | None = Decimal(0)
     stale_from: date | None = None
     qty_on_hand: Decimal
-    unit_cost: Decimal  # بهای تمام‌شده‌ی میانگین موزون
-    stock_value: Decimal  # qty_on_hand × unit_cost
+    unit_cost: Decimal | None  # بهای تمام‌شده‌ی میانگین موزون
+    stock_value: Decimal | None  # qty_on_hand × unit_cost
 
 
 class InventoryReportOut(BaseModel):
@@ -232,11 +232,11 @@ class InventoryReportOut(BaseModel):
     date_from: date | None = None
     warehouse_id: UUID | None = None
     rows: list[InventoryRowOut]
-    total_value: Decimal
-    total_opening_value: Decimal = Decimal(0)
-    total_in_value: Decimal = Decimal(0)
-    total_out_value: Decimal = Decimal(0)
-    total_book_value: Decimal = Decimal(0)
+    total_value: Decimal | None
+    total_opening_value: Decimal | None = Decimal(0)
+    total_in_value: Decimal | None = Decimal(0)
+    total_out_value: Decimal | None = Decimal(0)
+    total_book_value: Decimal | None = Decimal(0)
     stale_item_count: int = 0
     item_count: int
 
@@ -692,3 +692,34 @@ class PreinvoiceProgressOut(BaseModel):
     invoice_line_count: int
     remaining_invoiceable: Decimal
     remaining_issueable: Decimal
+
+
+class InventoryBreakdownRowOut(BaseModel):
+    """یک ردیفِ گردشِ انبار روی یک بُعد — تأمین‌کننده، مشتری یا هدفِ حرکت."""
+
+    key: str
+    label: str
+    item_count: int
+    in_qty: Decimal
+    out_qty: Decimal
+    net_qty: Decimal
+    #: مبالغ بی مجوزِ حسابداری `None` می‌شوند — نه صفر، چون صفر عددِ واقعی است.
+    in_value: Decimal | None
+    out_value: Decimal | None
+    net_value: Decimal | None
+    #: چند حرکتِ این ردیف ارزش‌گذاریِ منقضی دارد — «این مبلغ هنوز بازمحاسبه نشده».
+    stale_count: int
+
+
+class InventoryBreakdownOut(BaseModel):
+    dimension: str
+    dimension_label: str
+    date_from: date | None
+    date_to: date | None
+    warehouse_id: UUID | None
+    rows: list[InventoryBreakdownRowOut]
+    total_in_qty: Decimal
+    total_out_qty: Decimal
+    total_in_value: Decimal | None
+    total_out_value: Decimal | None
+    stale_count: int

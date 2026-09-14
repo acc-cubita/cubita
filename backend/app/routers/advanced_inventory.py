@@ -12,6 +12,9 @@ from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, 
 from app.models.inventory import Contact, StockAdjustment
 from app.models.user import User
 from app.schemas.advanced_inventory import (
+    SerialAssignIn,
+    SerialAssignOut,
+    SerialTraceOut,
     BatchAdjustIn,
     BatchSerialAddIn,
     BatchSerialOut,
@@ -25,6 +28,7 @@ from app.schemas.advanced_inventory import (
     StockBatchOut,
 )
 from app.schemas.inventory import StockAdjustmentIn
+from app.services import serials as serials_svc
 from app.services.inventory import post_stock_adjustment
 
 # نگاشتِ نوعِ تعدیلِ بار به متنِ فارسی (برای reasonِ سندِ حسابداری/تعدیل).
@@ -319,14 +323,14 @@ def add_batch_serials(
     batch_id: UUID,
     data: BatchSerialAddIn,
     db: Session = Depends(get_db),
-    _=Depends(require_permission("inventory", "update")),
+    user: User = Depends(require_permission("inventory", "update")),
 ):
     """سریالِ کارتن به یک بار اضافه می‌کند — فهرستِ دستی یا تولیدِ توالیِ خودکار.
 
     تکراری‌ها (چه در ورودی، چه با سریال‌های موجودِ همین بار) بی‌صدا رد می‌شوند تا
     اپراتور بتواند چند بار «افزودن» بزند بدونِ خطا.
     """
-    _get_batch_or_404(db, batch_id)
+    batch = _get_batch_or_404(db, batch_id)
 
     wanted: list[str] = list(data.serials)
     # تولیدِ توالیِ خودکار وقتی سریال‌ها مرتب‌اند.
@@ -347,12 +351,28 @@ def add_batch_serials(
     try:
         # SAVEPOINT: اگر قیدِ یکتا (همزمانیِ نادر) شکست، فقط این بلوک برمی‌گردد نه زمینه‌ی RLS.
         with db.begin_nested():
+            added: list[StockBatchSerial] = []
             for serial in wanted:
                 if serial in existing or serial in seen:
                     continue
                 seen.add(serial)
-                db.add(StockBatchSerial(batch_id=batch_id, serial=serial))
+                row = StockBatchSerial(batch_id=batch_id, serial=serial)
+                db.add(row)
+                added.append(row)
             db.flush()
+            #: **رویدادِ ورود همین‌جا ثبت می‌شود.** سریال بی رویداد یک بن‌بست
+            #: است: می‌دانیم هست، نمی‌دانیم از کجا آمده. سندِ مبدأ را خودِ بچ
+            #: می‌داند، پس حدسی در کار نیست.
+            for row in added:
+                serials_svc.record(
+                    db,
+                    row,
+                    event_type="receipt",
+                    source_type=batch.source_type or "",
+                    source_id=batch.source_id,
+                    entry_date=batch.received_date or date.today(),
+                    user=user,
+                )
     except IntegrityError:
         raise HTTPException(status.HTTP_409_CONFLICT, "برخی سریال‌ها تکراری بودند؛ دوباره تلاش کنید")
     return db.query(StockBatchSerial).filter(StockBatchSerial.batch_id == batch_id).order_by(StockBatchSerial.serial).all()
@@ -421,3 +441,56 @@ def adjust_batch(
     db.flush()
     db.refresh(batch)
     return _decorate_batches(db, [batch])[0]
+
+
+@router.get("/serials/search", response_model=list[SerialTraceOut])
+def search_serials(
+    serial: str | None = Query(None),
+    item_id: UUID | None = Query(None),
+    source_type: str | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """جست‌وجوی سریال — هر نتیجه با **کلِ تاریخچه‌اش**.
+
+    پیش از این چنین چیزی ممکن نبود: سریال فقط به بچِ ورودش وصل بود و فروش
+    لمسش نمی‌کرد، پس «به چه کسی فروخته شد؟» جوابی نداشت.
+
+    فیلترها روی رویداد اعمال می‌شوند ولی تاریخچه‌ی برگردانده‌شده کامل است —
+    وگرنه باز یک بن‌بستِ تازه ساخته‌ایم.
+    """
+    return serials_svc.search(
+        db,
+        serial=serial,
+        item_id=item_id,
+        source_type=source_type,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+
+
+@router.post("/serials/assign", response_model=SerialAssignOut)
+def assign_serials(
+    data: SerialAssignIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """سریال‌های نام‌برده را به یک سند می‌چسباند.
+
+    یکتاسازی از شکلِ داده می‌آید (ایندکسِ یکتای سریال+سند)، پس تلاشِ دوباره‌ی
+    شبکه رویدادِ دوم نمی‌سازد و در `replayed` گزارش می‌شود.
+    """
+    return serials_svc.assign(
+        db,
+        serials=data.serials,
+        item_id=data.item_id,
+        source_type=data.source_type,
+        source_id=data.source_id,
+        entry_date=data.entry_date,
+        event_type=data.event_type,
+        user=user,
+    )

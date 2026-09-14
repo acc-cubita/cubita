@@ -44,6 +44,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.migration_utils import rls_disabled
 from app.tenancy import policy_name
 
 revision = "0139"
@@ -114,16 +115,20 @@ def upgrade() -> None:
     )
     _enable_rls("payroll_factor_participations")
 
-    for name in _FACTOR_REFS:
-        op.add_column(
-            "payroll_settings",
-            sa.Column(
-                name,
-                UUID(as_uuid=True),
-                sa.ForeignKey("payroll_factors.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
-        )
+    #: اعتبارسنجیِ کلیدِ خارجی مشمولِ RLS است و روی تولید (PG 14) با
+    #: `invalid input syntax for type uuid: ""` می‌ترکد — توضیحِ کامل در
+    #: `app/migration_utils.py`. هر دو جدولِ طرفِ قید باید داخلِ این بلوک باشند.
+    with rls_disabled(op.get_bind(), ("payroll_settings", "payroll_factors")):
+        for name in _FACTOR_REFS:
+            op.add_column(
+                "payroll_settings",
+                sa.Column(
+                    name,
+                    UUID(as_uuid=True),
+                    sa.ForeignKey("payroll_factors.id", ondelete="SET NULL"),
+                    nullable=True,
+                ),
+            )
     for name, check in _COEFFICIENTS:
         op.add_column(
             "payroll_settings",

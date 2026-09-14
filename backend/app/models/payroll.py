@@ -55,8 +55,14 @@ CONTRACT_TYPE_LABELS = {"hire": "استخدام", "amend": "اصلاح قرار�
 
 FACTOR_CATEGORIES = ("benefit", "deduction")
 FACTOR_CATEGORY_LABELS = {"benefit": "مزایا", "deduction": "کسورات"}
+#: **از مهاجرتِ ۰۱۴۷ واقعاً خوانده می‌شود.** پیش از آن نوشته می‌شد و هیچ‌کس
+#: نمی‌خوانْدَش: عاملِ «متغیر» دقیقاً مثلِ «قراردادی» رفتار می‌کرد — مبلغش از حکم
+#: می‌آمد و در نسبتِ کارکرد ضرب می‌شد، پس دو ماهِ پیاپی یک عدد می‌داد.
+#:
+#:     fixed     → مبلغ روی **حکم** می‌نشیند؛ شرطِ ماندگارِ استخدام است
+#:     variable  → مبلغ برای **هر دوره جدا** وارد می‌شود (`PayrollFactorInput`)
 FACTOR_KINDS = ("fixed", "variable")
-FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "متغیر"}
+FACTOR_KIND_LABELS = {"fixed": "قراردادی (ثابت)", "variable": "متغیر (ورودیِ دوره)"}
 #: بُعدِ تفصیلیِ ردیفِ سندی که این عامل می‌سازد. خالی = بی‌بُعد (رفتارِ امروز).
 #:
 #: **فهرست عمداً همان دو بُعدی است که کوبیتا دارد** — `cost_center` و
@@ -144,7 +150,10 @@ TAX_CALC_METHOD_LABELS = {
 PAYSLIP_LINE_DIRECTIONS = ("earning", "deduction")
 
 #: از کجا آمده — تا کاربر بداند برای عوض‌کردنش کجا باید برود.
-PAYSLIP_LINE_ORIGINS = ("contract", "attendance", "settings", "loan")
+#: `input` از مهاجرتِ ۰۱۴۷ — «این عدد از ورودیِ دوره آمد، نه از حکم». بی آن،
+#: مبلغِ مأموریتِ این ماه با برچسبِ `contract` ثبت می‌شد و کاربر را به ویرایشِ
+#: حکمِ حقوقی می‌فرستاد.
+PAYSLIP_LINE_ORIGINS = ("contract", "attendance", "settings", "loan", "input")
 
 
 class Employee(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -626,6 +635,13 @@ class PayrollFactor(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     name2: Mapped[str] = mapped_column(String(150), default="", server_default="")
     category: Mapped[str] = mapped_column(String(20), default="benefit", server_default="benefit")
     kind: Mapped[str] = mapped_column(String(20), default="fixed", server_default="fixed")
+    #: **طبقه‌بندیِ محض — هیچ محاسبه‌ای از آن نمی‌خوانَد.**
+    #:
+    #: فصلِ مرجع صریح است که معنای «عادی/فوق‌العاده» هنوز معلوم نیست و نباید به
+    #: مالیات، بیمه یا اضافه‌کار گره بخورد. پس این‌جا فقط یک بُعدِ گزارش است و
+    #: `is_extraordinary` هیچ عددی را تکان نمی‌دهد — همان‌طور که `display_priority`
+    #: فقط ترتیبِ نمایش است. اگر روزی معنایش اثبات شد، همان‌وقت مصرف‌کننده
+    #: می‌گیرد؛ تا آن روز پرچمی که وعده بدهد و کاری نکند بدتر از نبودنش است.
     is_extraordinary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     system_key: Mapped[str] = mapped_column(String(20), default="", server_default="")
     #: **از مهاجرتِ ۰۱۴۰ واقعاً خوانده می‌شود.** پیش از آن نوشته می‌شد و هیچ‌کس
@@ -692,6 +708,65 @@ class PayrollFactorParticipation(TenantMixin, UUIDPKMixin, Base):
     purpose: Mapped[str] = mapped_column(String(30))
     included: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     coefficient: Mapped[float] = mapped_column(Numeric(6, 4), default=1, server_default="1")
+
+    factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
+
+
+class PayrollFactorInput(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """مبلغِ یک عاملِ **متغیر** برای یک کارمند در یک دوره.
+
+    **لایه‌ای که نبود.** کوبیتا پنج لایه از شش لایه‌ی عامل را داشت — تعریف،
+    فعال‌سازی، مشارکت، مبلغِ حکم، و نتیجه — ولی ورودیِ دوره‌ای نداشت. تنها
+    ورودیِ دوره‌ای `Attendance` بود با سه ستونِ ثابت، پس مأموریت و پاداش و
+    کارانه نمی‌توانستند ماه‌به‌ماه فرق کنند: برای عوض‌کردنِ یک ماه باید **حکمِ
+    حقوقی** ویرایش می‌شد.
+
+    ## چرا عاملِ متغیر روی حکم نمی‌نشیند
+
+    اگر یک عامل هم مبلغِ حکم داشته باشد و هم ورودیِ دوره، ناخالص دو بار
+    می‌شمردش. راهِ سرراست تفریقِ ردیفِ حکم بود؛ ولی آن یعنی `other_allowance` و
+    مبنای بیمه و مبنای مالیات هر سه باید وارونه حساب شوند — سه جای اشتباه.
+
+    پس قاعده از شکلِ داده می‌آید: حکم شرایطِ **ماندگار** را می‌گوید و مبلغِ
+    متغیر شرطِ ماندگار نیست. گارد در `payroll_contracts` است و فقط روی ذخیره‌ی
+    تازه — مثلِ گاردِ `is_active` — پس حکم‌های موجود دست نمی‌خورند.
+
+    ## به نسبتِ کارکرد **کوچک نمی‌شود**
+
+    مبلغِ حکم ماهانه است، پس نصفِ ماه یعنی نصفِ مبلغ. ولی ورودیِ دوره عددِ
+    **همین ماه** است: «این ماه سه میلیون مأموریت» یعنی سه میلیون، نه سه میلیون
+    ضربدرِ نسبتِ کارکرد. این تفاوت عمدی است و در تفکیکِ فیش هم دیده می‌شود
+    (`origin = "input"`).
+    """
+
+    __tablename__ = "payroll_factor_inputs"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_payroll_factor_inputs_amount"),
+        #: یک عامل در یک دوره برای یک کارمند **یک** عدد دارد، نه دو.
+        Index(
+            "uq_payroll_factor_inputs_row",
+            "tenant_id", "employee_id", "period_id", "factor_id",
+            unique=True,
+        ),
+        Index("ix_payroll_factor_inputs_period_id", "period_id"),
+    )
+
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), index=True
+    )
+    period_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_periods.id", ondelete="CASCADE")
+    )
+    #: `RESTRICT` — حذفِ عامل نباید مبلغِ واردشده را بی‌صدا ببرد.
+    factor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payroll_factors.id", ondelete="RESTRICT")
+    )
+    #: جهت از **طبقه‌ی عامل** می‌آید (مزایا یا کسور)، نه از علامتِ این عدد.
+    amount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     factor: Mapped["PayrollFactor"] = relationship(lazy="joined")
 
