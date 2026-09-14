@@ -25,6 +25,15 @@ export const faAmount = (v: string | number | null | undefined) =>
 
 export type Msg = { text: string; kind: 'ok' | 'err' } | null
 
+/** نشانِ فعال/غیرفعالِ مِسترها. مِسترِ کوبیتا حذف نمی‌شود، بایگانی می‌شود. */
+export function ActiveChip({ active }: { active: boolean }) {
+  return (
+    <span className={`status-badge ${active ? 'tone-success' : 'tone-default'}`}>
+      {active ? 'فعال' : 'غیرفعال'}
+    </span>
+  )
+}
+
 export function Note({ msg }: { msg: Msg }) {
   if (!msg) return null
   return (

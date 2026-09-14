@@ -6273,9 +6273,28 @@ export const voidContactSettlement = (token: string, id: string, reason: string)
 // عاملِ افزاینده *یک* موجودیت‌اند (`PricingFactor` با `kind`)، چون شکلشان یکی است و
 // تنها فرقشان جهتِ اثر است.
 
-export interface SaleType {
+/**
+ * هفت اسلاتِ حسابِ نوعِ فروش.
+ *
+ * این تایپ **پنج‌تایشان را نداشت** و برای همین کلِ پروفایلِ حسابداریِ نوعِ فروش
+ * مرده بود: موتورِ ثبت از ابتدا کالا و خدمت را تفکیک می‌کرد، ولی هیچ صفحه‌ای
+ * نمی‌توانست حسابی به آن بدهد، پس هر هفت ستون تا ابد `null` می‌ماندند.
+ */
+export interface SaleTypeAccounts {
+  goods_revenue_account_id: string | null
+  service_revenue_account_id: string | null
+  goods_return_account_id: string | null
+  service_return_account_id: string | null
+  goods_discount_account_id: string | null
+  service_discount_account_id: string | null
+  addition_account_id: string | null
+}
+
+export interface SaleType extends SaleTypeAccounts {
   id: string
   name: string
+  code: string | null
+  title2: string
   due_days: number
   default_tax_rate: string | null
   description: string
@@ -6285,7 +6304,11 @@ export const fetchSaleTypes = (token: string) =>
   authedGet<SaleType[]>(token, '/api/sales-ops/sale-types')
 export const createSaleType = (token: string, data: Omit<SaleType, 'id'>) =>
   authedSend<SaleType>(token, 'POST', '/api/sales-ops/sale-types', data)
-export const updateSaleType = (token: string, id: string, data: Omit<SaleType, 'id'>) =>
+/**
+ * ویرایشِ **جزئی**. سرور فقط کلیدهای فرستاده‌شده را می‌نویسد؛ پیش از این همه را
+ * می‌نوشت و یک بدنه‌ی ناقص هر هفت حساب را `null` می‌کرد.
+ */
+export const updateSaleType = (token: string, id: string, data: Partial<Omit<SaleType, 'id'>>) =>
   authedSend<SaleType>(token, 'PATCH', `/api/sales-ops/sale-types/${id}`, data)
 
 export interface DiscountGroup {

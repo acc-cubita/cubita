@@ -47,6 +47,7 @@ import {
   type CreditDebitNote,
   type IssueReturnPrefill,
   type NotePrefill,
+  type SaleTypeAccounts,
   type SalesReturnRecord,
 } from '../../api'
 import type { PageKey } from '../../lib/navModel'
@@ -66,6 +67,7 @@ const RETURN_STATUS_LABELS: Record<string, string> = {
   voided: 'باطل‌شده',
 }
 import {
+  ActiveChip,
   AsyncBlock,
   Metric,
   Note,
@@ -92,13 +94,16 @@ import {
 
 // ═══════════════════════ کمکی‌های مشترک ═══════════════════════
 
-function ActiveChip({ active }: { active: boolean }) {
-  return (
-    <span className={`status-badge ${active ? 'tone-success' : 'tone-default'}`}>
-      {active ? 'فعال' : 'غیرفعال'}
-    </span>
-  )
-}
+/** هفت اسلاتِ حسابِ نوعِ فروش — این‌جا فقط شمرده می‌شوند؛ تنظیمشان در صفحه‌ی عملیات است. */
+const SALE_TYPE_ACCOUNT_KEYS = [
+  'goods_revenue_account_id',
+  'service_revenue_account_id',
+  'goods_return_account_id',
+  'service_return_account_id',
+  'goods_discount_account_id',
+  'service_discount_account_id',
+  'addition_account_id',
+] as const satisfies readonly (keyof SaleTypeAccounts)[]
 
 function inRange(day: string, from?: string, to?: string): boolean {
   if (from && day < from) return false
@@ -422,8 +427,10 @@ export function SaleTypeListPage({ token }: { token: string }) {
               <thead>
                 <tr>
                   <th>نام</th>
+                  <th>کد</th>
                   <th>مهلتِ تسویه</th>
                   <th>نرخِ مالیات</th>
+                  <th>حساب‌ها</th>
                   <th>توضیح</th>
                   <th>وضعیت</th>
                 </tr>
@@ -433,12 +440,23 @@ export function SaleTypeListPage({ token }: { token: string }) {
                   <tr key={r.id}>
                     <td className="card-title" data-label="نام">
                       {r.name}
+                      {r.title2 ? <div className="entity-sub">{r.title2}</div> : null}
                     </td>
+                    <td data-label="کد">{r.code || '—'}</td>
                     <td className="num" data-label="مهلتِ تسویه">
                       {r.due_days === 0 ? 'نقدی' : `${faInt(r.due_days)} روز`}
                     </td>
                     <td className="num" data-label="نرخِ مالیات">
                       {r.default_tax_rate == null ? '—' : `${fa(r.default_tax_rate)}٪`}
+                    </td>
+                    <td className="num" data-label="حساب‌ها">
+                      {SALE_TYPE_ACCOUNT_KEYS.filter((k) => r[k]).length === 0 ? (
+                        <span className="muted">پیش‌فرض</span>
+                      ) : (
+                        `${faInt(SALE_TYPE_ACCOUNT_KEYS.filter((k) => r[k]).length)} از ${faInt(
+                          SALE_TYPE_ACCOUNT_KEYS.length,
+                        )}`
+                      )}
                     </td>
                     <td className="card-wide" data-label="توضیح">
                       {r.description || '—'}

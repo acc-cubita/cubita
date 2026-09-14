@@ -19,11 +19,13 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -70,9 +72,23 @@ class SaleType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "sale_types"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_sale_types_tenant_name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_sale_types_tenant_name"),
+        #: جزئی، وگرنه ردیف‌های بی‌کد همدیگر را مسدود می‌کردند (§۴۸).
+        Index(
+            "uq_sale_types_tenant_code",
+            "tenant_id",
+            "code",
+            unique=True,
+            postgresql_where=text("code IS NOT NULL"),
+        ),
+    )
 
     name: Mapped[str] = mapped_column(String(80))
+    #: کدِ مِستر — هویتِ نوعِ فروش است، نه شماره‌ی فاکتور (§۴۷).
+    code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: عنوانِ دوم — همان الگوی `SalesReturnReason.title2`.
+    title2: Mapped[str] = mapped_column(String(80), default="", server_default="")
     #: مهلتِ تسویه به روز. ۰ = نقدی.
     due_days: Mapped[int] = mapped_column(default=0, server_default="0")
     #: نرخِ پیش‌فرضِ مالیات بر ارزش افزوده. NULL = از تنظیماتِ عمومی بیاید.
@@ -90,6 +106,15 @@ class SaleType(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
     )
     addition_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    #: حسابِ برگشت **جدا از حسابِ درآمد** است: برگشت از فروش قرار نیست همان حسابِ
+    #: درآمد را با علامتِ معکوس بزند، وگرنه «چقدر فروختیم و چقدر برگشت خورد؟»
+    #: — مبنای نرخِ برگشت — دیگر پرسیدنی نیست.
+    goods_return_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    service_return_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
     )
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
