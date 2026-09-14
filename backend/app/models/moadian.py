@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Int
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app import secrets_at_rest
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
@@ -41,8 +42,25 @@ class MoadianSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     economic_code: Mapped[str] = mapped_column(String(20), default="")
     #: شناسه ملی/کد ملی مؤدی (فیلد tins در بسته‌ی صورتحساب)
     national_id: Mapped[str] = mapped_column(String(20), default="")
-    #: کلید خصوصیِ PEM برای امضای بسته — راز؛ هرگز در پاسخ API برنمی‌گردد.
-    private_key_pem: Mapped[str] = mapped_column(Text, default="")
+    #: **متنِ رمزشده** (`enc:v1:…`) از مهاجرتِ ۰۱۴۸ به بعد. مستقیم نخوانیدش —
+    #: `private_key` را بخوانید که خودش باز می‌کند. نامش عمداً `_stored` است تا
+    #: هر مصرف‌کننده‌ی قدیمی که ستون را مستقیم می‌خواند، در کامپایل پیدا شود.
+    private_key_stored: Mapped[str] = mapped_column(
+        "private_key_pem", Text, default="", server_default=""
+    )
+
+    @property
+    def private_key_pem(self) -> str:
+        """کلیدِ خصوصیِ باز — همان چیزی که امضا لازم دارد.
+
+        رمزگشایی این‌جا می‌نشیند نه در سرویس، تا هیچ مسیری نتواند فراموشش کند.
+        مقدارِ بی‌پیشوند (داده‌ی پیش از ۰۱۴۸) دست‌نخورده برمی‌گردد.
+        """
+        return secrets_at_rest.decrypt(self.private_key_stored)
+
+    @private_key_pem.setter
+    def private_key_pem(self, value: str) -> None:
+        self.private_key_stored = secrets_at_rest.encrypt(value)
     #: گواهیِ امضای X.509 (PEM) که در هدرِ `x5c` بسته‌های JWS/توکن قرار می‌گیرد.
     #: پروتکل v2 هم کلید خصوصی و هم گواهیِ متناظر را لازم دارد.
     certificate_pem: Mapped[str] = mapped_column(Text, default="", server_default="")

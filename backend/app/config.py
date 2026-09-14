@@ -14,6 +14,18 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
 
+    # کلیدِ رمزگذاریِ رازها در حالتِ سکون — امروز فقط کلیدِ امضای سامانه‌ی مؤدیان.
+    #
+    # **هرگز کامیت نمی‌شود، و هرگز کنارِ نسخه‌ی پشتیبانِ دیتابیس نگه داشته نمی‌شود.**
+    # اگر کنارِ داده بنشیند رمزگذاری نمایشی است: تهدیدی که می‌بندیم دقیقاً
+    # «دیتابیسِ دزدیده‌شده» است.
+    #
+    # خالی = رمزگذاری خاموش (رفتارِ امروز). گاردِ production پایین‌تر با اعتبارنامه‌ی
+    # واقعی جلویش را می‌گیرد.
+    #
+    # تولید: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    secrets_key: str = ""
+
     allowed_origins: str = "http://localhost:5173"
 
     # ادمین پلتفرم (کنترل‌پنل فروش خودِ کوبیتا) — عمداً از RBAC مستأجر جداست، چون آن سیستم
@@ -108,6 +120,8 @@ class Settings(BaseSettings):
 KNOWN_ENVS = ("development", "staging", "production")
 WEAK_JWT_SECRETS = ("changeme", "", "secret", "changeit", "test")
 MIN_JWT_SECRET_LENGTH = 32
+#: همان معیارِ JWT — کلیدی که راز را باز می‌کند از آن ضعیف‌تر نباشد.
+MIN_SECRETS_KEY_LENGTH = 32
 
 
 def _validate(settings: Settings) -> None:
@@ -137,6 +151,21 @@ def _validate(settings: Settings) -> None:
             raise RuntimeError(
                 f"JWT_SECRET کوتاه است ({len(settings.jwt_secret)} کاراکتر)؛ "
                 f"حداقل {MIN_JWT_SECRET_LENGTH} کاراکتر لازم است. "
+                'تولید: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        #: **گاردِ کلیدِ رازها از جنسِ دیگری است و عمداً بوت را نمی‌شکند.**
+        #:
+        #: نبودِ `SECRETS_KEY` یعنی کلیدِ امضا خام ذخیره می‌شود — بد، ولی همان
+        #: رفتاری که تا امروز داشتیم. شکستنِ بوت به‌خاطرش یعنی اولین استقرارِ
+        #: بعد از این مهاجرت، کلِ سامانه را پایین بیاورد. پس هشدار، نه مرگ:
+        #: شرطِ سخت جایی گذاشته می‌شود که واقعاً راز در خطر است — لحظه‌ی
+        #: **مهاجرتِ داده‌ی موجود** (مهاجرتِ ۰۱۴۸).
+        if len(settings.secrets_key.strip()) < MIN_SECRETS_KEY_LENGTH:
+            import logging
+
+            logging.getLogger("cubita.security").warning(
+                "SECRETS_KEY تنظیم نیست یا کوتاه است؛ کلیدِ امضای سامانه‌ی مؤدیان "
+                "خام در دیتابیس می‌نشیند و یک نسخه‌ی پشتیبان آن را لو می‌دهد. "
                 'تولید: python -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
 
