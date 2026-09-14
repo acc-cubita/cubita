@@ -955,6 +955,30 @@ export const createEmployee = (
 ) => authedSend<EmployeeRecord>(token, 'POST', '/api/employees', data)
 
 /**
+ * ویرایشِ پرونده‌ی کارمند — **جزئی**؛ فیلدی که نفرستی دست نمی‌خورد.
+ *
+ * `is_active` مهم‌ترینشان است: تنها گاردِ صدورِ فیشِ حقوقی همین ستون است، و تا
+ * پیش از این هیچ مسیری نمی‌نوشتش — یعنی کارمندی که رفته بود هر دوره فیشِ کامل
+ * می‌گرفت، با سند و بیمه و مالیاتش.
+ *
+ * **نام و کدِ ملی عمداً این‌جا نیستند.** آن‌ها واقعیتِ شخص‌اند و روی طرف‌حساب
+ * حقیقت دارند؛ `updateContact` اصلاحشان می‌کند و همان به فایلِ بانک و اظهارنامه
+ * می‌رسد. دو مسیر برای یک داده یعنی دو حقیقت.
+ */
+export const updateEmployee = (
+  token: string,
+  employeeId: string,
+  data: Partial<{
+    hire_date: string
+    termination_date: string | null
+    bank_account_number: string
+    phone: string | null
+    email: string | null
+    is_active: boolean
+  }>,
+) => authedSend<EmployeeRecord>(token, 'PATCH', `/api/employees/${employeeId}`, data)
+
+/**
  * قراردادِ حقوقی. تعریفِ کاملش — با ردیف‌های عوامل، اطلاعات استخدامی و بیمه —
  * پایین‌تر در بخشِ «حقوق و دستمزد» است؛ این‌جا فقط ارجاع می‌دهیم تا دو نسخه‌ی
  * ناهمگون از یک درخواست نداشته باشیم.
