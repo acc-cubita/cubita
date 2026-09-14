@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── لیستِ قیمت ──────────────────────────────────────────
@@ -238,3 +238,58 @@ class BatchAdjustIn(BaseModel):
         if v not in ("shortage", "defect", "wastage"):
             raise ValueError("نوع باید shortage یا defect یا wastage باشد")
         return v
+
+
+class SerialAssignIn(BaseModel):
+    """چسباندنِ چند سریال به یک سند.
+
+    سریال با **نامش** می‌آید چون کاربر همان را از روی جعبه می‌خوانَد. گامِ جداست
+    و نه بخشی از ثبتِ فاکتور: فاکتور مقدار می‌داند و نمی‌داند کدام سه تا از پنج
+    تا رفت — آن را انسان با اسکنر می‌گوید.
+    """
+
+    item_id: UUID
+    serials: list[str] = Field(min_length=1)
+    source_type: str
+    source_id: UUID
+    entry_date: date
+    #: receipt | issue | return_in | return_out | adjust
+    event_type: str = "issue"
+
+
+class SerialAssignOut(BaseModel):
+    assigned: int
+    created: int
+    #: تلاشِ دوباره‌ی همان تخصیص — رویدادِ تازه‌ای نساخت.
+    replayed: int
+
+
+class SerialEventOut(BaseModel):
+    event_type: str
+    event_label: str
+    entry_date: date
+    source_type: str
+    source_label: str
+    source_id: UUID | None
+    source_number: int | None
+    counterparty: str
+    notes: str
+
+
+class SerialTraceOut(BaseModel):
+    """یک سریال با **کلِ تاریخچه‌اش** — موقعیتِ فعلی مشتق است، نه ذخیره‌شده."""
+
+    serial_id: UUID
+    serial: str
+    status: str
+    item_id: UUID | None
+    item_sku: str
+    item_name: str
+    batch_number: str
+    in_stock: bool
+    last_event_type: str | None
+    last_event_label: str
+    last_source_type: str | None
+    last_source_id: UUID | None
+    last_entry_date: date | None
+    events: list[SerialEventOut]
