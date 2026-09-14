@@ -92,6 +92,7 @@ def audited_models() -> dict[type, str]:
     from app.models.payroll import (
         InsuranceTaxBranch,
         PayrollFactor,
+        PayrollFactorInput,
         PayrollSettings,
         PayrollTaxGroup,
         Payslip,
@@ -131,6 +132,10 @@ def audited_models() -> dict[type, str]:
         #: عوض‌کردنِ نرخِ بیمه، سهمِ همه را. تا امروز هیچ‌کدام ردی نمی‌گذاشتند —
         #: همان شکلِ باگی که «اعلامیه قیمت» داشت.
         PayrollSettings: "تنظیمات حقوق",
+        #: ورودیِ دوره مستقیماً به ناخالصِ فیش اضافه می‌شود — یعنی پول. کسی که
+        #: پاداشِ یک نفر را عوض می‌کند باید ردی بگذارد، درست مثلِ کسی که مبلغِ
+        #: حکم را عوض می‌کند.
+        PayrollFactorInput: "ورودی عامل دوره",
         #: **نوعِ فروش طبقه‌بندیِ حسابداریِ هر فروشِ بعدی را تعیین می‌کند.** عوض‌کردنِ
         #: یک حسابِ درآمد یعنی از فردا درآمد جای دیگری می‌نشیند — همان استدلالی که
         #: `PriceList` و `PayrollSettings` را به این فهرست آورد. تا امروز هیچ ردی

@@ -265,6 +265,74 @@ export function AttendanceTable({ d, employees }: { d: PayrollRunDraft; employee
   )
 }
 
+/**
+ * ورودیِ عواملِ **متغیر** در یک دوره — مأموریت، پاداش، کارانه، مساعده.
+ *
+ * **لایه‌ای که نبود.** تا مهاجرتِ ۰۱۴۷ عاملِ «متغیر» دقیقاً مثلِ «قراردادی»
+ * رفتار می‌کرد: مبلغش از حکم می‌آمد، پس دو ماهِ پیاپی یک عدد می‌داد. برای
+ * عوض‌کردنِ پاداشِ یک ماه باید حکمِ حقوقیِ کارمند ویرایش می‌شد.
+ *
+ * کنارِ جدولِ کارکرد نشسته چون هر دو یک جنس‌اند: **دادهٔ همین دوره**، نه شرطِ
+ * ماندگارِ استخدام.
+ */
+export function FactorInputsTable({ d, employees }: { d: PayrollRunDraft; employees: EmployeeRecord[] }) {
+  if (d.variableFactors.length === 0) {
+    return (
+      <p className="hint">
+        عاملِ متغیری تعریف نشده. از «عوامل حقوق و مزایا» عاملی با نوعِ «متغیر» بسازید تا
+        مبلغش را هر دوره جدا وارد کنید — مثلِ مأموریت، پاداش یا مساعده.
+      </p>
+    )
+  }
+  return (
+    <div className="entity-table-wrap">
+      <p className="hint">
+        این مبالغ <strong>فقط همین دوره</strong> را تغییر می‌دهند و به نسبتِ کارکرد کوچک
+        نمی‌شوند. خالی یا صفر یعنی این ماه ندارد.
+      </p>
+      {d.inputError && <div className="error">{d.inputError}</div>}
+      <div className="table-scroll">
+        <table className="entity-table cards-on-mobile">
+          <thead>
+            <tr>
+              <th>کارمند</th>
+              {d.variableFactors.map((f) => (
+                <th key={f.id}>
+                  {f.name}
+                  {f.category === 'deduction' ? ' (کسر)' : ''}
+                </th>
+              ))}
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map((emp) => (
+              <tr key={emp.id}>
+                <td className="card-title" data-label="کارمند">
+                  {emp.first_name} {emp.last_name}
+                </td>
+                {d.variableFactors.map((f) => (
+                  <td key={f.id} data-label={f.name}>
+                    <NumberInput
+                      value={d.factorInputs[`${emp.id}|${f.id}`] ?? ''}
+                      onChange={(v) => d.setFactorInput(emp.id, f.id, v)}
+                    />
+                  </td>
+                ))}
+                <td className="card-actions">
+                  <button type="button" onClick={() => void d.saveFactorInput(emp.id)}>
+                    <Save size={13} /> ذخیره
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /** نتیجه‌ی صدور فیش (دکمه‌ی صدور اختیاری + لیستِ بیمه + جدولِ فیش‌ها + کشوی چاپ) — مشترک. */
 export function PayslipResults({ d, showGenerate = true }: { d: PayrollRunDraft; showGenerate?: boolean }) {
   const pg = usePagination(d.payslips, 10)
@@ -364,6 +432,8 @@ function ClassicRun({ d, employees }: { d: PayrollRunDraft; employees: EmployeeR
         <div className="invoice-form">
           <h3>کارکرد و صدور فیش برای دوره‌ی انتخاب‌شده</h3>
           <AttendanceTable d={d} employees={employees} />
+          <h3 style={{ marginTop: 16 }}>ورودیِ عوامل این دوره</h3>
+          <FactorInputsTable d={d} employees={employees} />
           <PayslipResults d={d} />
         </div>
       ) : (

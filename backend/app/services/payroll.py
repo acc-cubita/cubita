@@ -16,6 +16,7 @@ from app.models.payroll import (
     Attendance,
     Employee,
     PayrollFactor,
+    PayrollFactorInput,
     PayrollPeriod,
     PayrollSettings,
     Payslip,
@@ -438,6 +439,27 @@ def contract_deductions(contract: SalaryContract) -> Decimal:
     return total
 
 
+def _input_pairs(factor_inputs) -> list:
+    """`(عامل، مبلغ)` از ردیف‌های ورودیِ دوره — با همان گاردهای ردیفِ حکم.
+
+    عاملِ گم‌شده یا **غیرفعال** رد می‌شود: غیرفعال‌کردنِ یک عامل نباید فیشِ
+    صادرشده را بازنویسی کند، ولی باید جلوی فیشِ **بعدی** را بگیرد — همان
+    عدمِ‌تقارنی که گاردِ حکم از مهاجرتِ ۰۱۴۰ دارد.
+
+    مبلغِ صفر هم رد می‌شود: ردیفِ صفر یک ردیفِ بی‌اثر در فیش می‌ساخت.
+    """
+    pairs = []
+    for row in factor_inputs or []:
+        factor = getattr(row, "factor", None)
+        amount = Decimal(str(getattr(row, "amount", 0) or 0))
+        if factor is None or not factor.is_active or amount == 0:
+            continue
+        pairs.append((factor, amount))
+    #: همان ترتیبِ ردیف‌های حکم، تا فیش یک‌دست بماند.
+    pairs.sort(key=lambda pair: (int(pair[0].display_priority or 0), pair[0].name or ""))
+    return pairs
+
+
 def _by_display_priority(contract) -> list:
     """ردیف‌های قرارداد به ترتیبِ «اولویتِ نمایش»ِ عاملشان، بعد نام.
 
@@ -465,6 +487,7 @@ def payslip_breakdown(
     *,
     proration: Decimal,
     overtime_hours: Decimal,
+    factor_inputs: list | None = None,
 ) -> list[dict]:
     """تفکیکِ عامل‌به‌عاملِ یک فیش — «این عدد از چه ساخته شد؟».
 
@@ -530,6 +553,19 @@ def payslip_breakdown(
     residual = Decimal(amounts["allowances_total"]) - benefit_total
     add("سایر مزایا", "earning", "contract", residual, note="بدونِ عاملِ تفکیک‌شده")
 
+    #: **ورودی‌های دوره.** `origin = "input"` یعنی «برای عوض‌کردنش سراغِ ورودیِ
+    #: همین دوره برو، نه حکمِ حقوقی» — تفاوتی که پیش از مهاجرتِ ۰۱۴۷ گفتنی نبود
+    #: چون این مبالغ اصلاً وجود نداشتند.
+    #:
+    #: بی‌`proration` می‌آیند، دقیقاً همان‌طور که در `compute_payslip_amounts`
+    #: به ناخالص اضافه شدند. اگر این دو از هم بیفتند، `assert_breakdown_matches`
+    #: همان لحظه می‌گیردش.
+    input_pairs = _input_pairs(factor_inputs)
+    for factor, amount in input_pairs:
+        if factor.category != "benefit":
+            continue
+        add(factor.name, "earning", "input", amount, factor_id=factor.id)
+
     add(
         "اضافه‌کار",
         "earning",
@@ -551,7 +587,16 @@ def payslip_breakdown(
         deduction_total += amount
         add(factor.name, "deduction", "contract", amount, factor_id=factor.id)
 
-    residual_deduction = Decimal(amounts["other_deductions"]) - deduction_total
+    input_deduction_total = Decimal(0)
+    for factor, amount in input_pairs:
+        if factor.category != "deduction":
+            continue
+        input_deduction_total += amount
+        add(factor.name, "deduction", "input", amount, factor_id=factor.id)
+
+    residual_deduction = (
+        Decimal(amounts["other_deductions"]) - deduction_total - input_deduction_total
+    )
     add("سایر کسورات", "deduction", "contract", residual_deduction, note="بدونِ عاملِ تفکیک‌شده")
 
     add("قسط وام", "deduction", "loan", amounts["loan_deduction"])
@@ -597,6 +642,7 @@ def compute_payslip_amounts(
     tax_percent: Decimal | None = None,
     brackets: list[dict] | None = None,
     participation: dict | None = None,
+    factor_inputs: list | None = None,
 ) -> dict:
     """اعدادِ یک فیش.
 
@@ -621,7 +667,21 @@ def compute_payslip_amounts(
         multiplier=policy_value(settings, "overtime_multiplier", OVERTIME_MULTIPLIER),
     )
 
-    gross_pay = base_salary + allowances_total + overtime_pay
+    #: **ورودی‌های دوره** — مأموریت، پاداش، کارانه: عاملِ متغیری که مبلغش مالِ
+    #: همین ماه است. تا مهاجرتِ ۰۱۴۷ اصلاً وجود نداشتند و `kind = 'variable'`
+    #: یک وعده‌ی توخالی بود.
+    #:
+    #: **ضربِ نسبتِ کارکرد ندارند**: مبلغِ حکم ماهانه است پس نصفِ ماه نصفش
+    #: می‌شود، ولی «این ماه سه میلیون مأموریت» یعنی سه میلیون.
+    input_pairs = _input_pairs(factor_inputs)
+    input_earnings = sum(
+        (amount for factor, amount in input_pairs if factor.category == "benefit"), Decimal(0)
+    )
+    input_deductions = sum(
+        (amount for factor, amount in input_pairs if factor.category == "deduction"), Decimal(0)
+    )
+
+    gross_pay = base_salary + allowances_total + overtime_pay + input_earnings
     #: سقفِ **ماهانه** = سقفِ روزانه × روزهای ماه، و به نسبتِ کارکرد کوچک می‌شود:
     #: کسی که نصفِ ماه کار کرده نصفِ سقف را دارد، وگرنه سقف برای او بی‌اثر می‌شد.
     daily_ceiling = policy_value(settings, "insurance_daily_ceiling", Decimal(0))
@@ -631,6 +691,7 @@ def compute_payslip_amounts(
     #: خالی یعنی مبنا همان ناخالص است — دقیقاً رفتارِ پیش از مهاجرتِ ۰۱۳۹.
     insurance_base = gross_pay - _round(
         factor_participation.excluded_from_wage_base(contract, "insurance_base", proration, participation)
+        + factor_participation.excluded_from_inputs(input_pairs, "insurance_base", participation)
     )
     insurance_employee_share, insurance_employer_share = calc_insurance_shares(
         max(Decimal(0), insurance_base),
@@ -643,6 +704,7 @@ def compute_payslip_amounts(
     #: ثابتِ ۱ بود و دو ضریبِ دیگر اصلاً وجود نداشتند.
     tax_base = gross_pay - _round(
         factor_participation.excluded_from_wage_base(contract, "tax_base", proration, participation)
+        + factor_participation.excluded_from_inputs(input_pairs, "tax_base", participation)
     )
     exempt = _round(insurance_employee_share * policy_value(settings, "tax_exempt_coef_social", Decimal(1)))
     exempt += _round(
@@ -675,7 +737,7 @@ def compute_payslip_amounts(
     #: کسوراتِ قرارداد بعد از مالیات کم می‌شوند — مبنای بیمه و مالیات را تکان
     #: نمی‌دهند. قسطِ وام در `generate_payslips_for_period` جدا اضافه می‌شود، چون
     #: به دوره وابسته است نه به قرارداد.
-    other_deductions = _round(contract_deductions(contract) * proration)
+    other_deductions = _round(contract_deductions(contract) * proration) + input_deductions
     net_pay = gross_pay - insurance_employee_share - tax_amount - other_deductions
 
     return {
@@ -788,6 +850,13 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
     attendance_by_employee = {
         a.employee_id: a for a in db.query(Attendance).filter(Attendance.period_id == period_id).all()
     }
+    #: ورودی‌های دوره یک‌بار خوانده می‌شوند و برای کلِ اجرا همان می‌مانند — همان
+    #: دلیلی که تنظیمات و جدولِ مشارکت یک‌بار خوانده می‌شوند: یک دوره باید با یک
+    #: نسخه‌ی منسجم حساب شود، نه اینکه ویرایشِ وسطِ اجرا نیمی از کارکنان را
+    #: جابه‌جا کند.
+    inputs_by_employee: dict = {}
+    for row in db.query(PayrollFactorInput).filter(PayrollFactorInput.period_id == period_id).all():
+        inputs_by_employee.setdefault(row.employee_id, []).append(row)
 
     payslips: list[Payslip] = []
     total_gross = Decimal(0)
@@ -837,6 +906,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             #: ضربِ دوباره یعنی «مناطق محروم» ۲۵٪ بگیرد به‌جای ۵۰٪.
             tax_percent=Decimal(100) if table is not None else _tax_percent(db, contract),
             participation=participation,
+            factor_inputs=inputs_by_employee.get(employee.id),
         )
 
         #: اقساطِ سررسیدشده‌ی وام از **خالص** کم می‌شوند، نه از ناخالص: بازپرداختِ
@@ -868,6 +938,7 @@ def generate_payslips_for_period(db: Session, period_id: UUID, user: User) -> li
             amounts,
             proration=min(Decimal(1), worked / Decimal(30)),
             overtime_hours=Decimal(attendance_row.overtime_hours) if attendance_row else Decimal(0),
+            factor_inputs=inputs_by_employee.get(employee.id),
         )
         assert_breakdown_matches(amounts, breakdown)
         _accumulate_factor_splits(db, factor_splits, breakdown, contract, employee, analytic_cache)

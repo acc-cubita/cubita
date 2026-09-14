@@ -87,6 +87,27 @@ def benefit_base(contract, purpose: str, rules: ParticipationMap | None = None) 
     return total
 
 
+def excluded_from_inputs(inputs, purpose: str, rules: ParticipationMap | None = None) -> Decimal:
+    """چقدر از **ورودی‌های دوره** به این مبنا نمی‌آید.
+
+    همان قاعده‌ی `excluded_from_wage_base` است روی ورودی‌های دوره به‌جای ردیف‌های
+    حکم — و عمداً همان `coefficient` را صدا می‌زند، نه یک قاعده‌ی دوم: پاداشی که
+    از مبنای بیمه مستثنا شده باید چه از حکم بیاید چه از ورودیِ ماه، یکسان
+    مستثنا بماند.
+
+    **ضربِ نسبتِ کارکرد ندارد** — برخلافِ مبلغِ حکم. ورودیِ دوره عددِ همین ماه
+    است، پس آنچه از آن مستثناست هم عددِ همین ماه است.
+    """
+    total = Decimal(0)
+    for factor, amount in inputs or []:
+        if factor is not None and factor.category != "benefit":
+            continue
+        share = Decimal(1) - coefficient(factor, purpose, rules)
+        if share > 0:
+            total += Decimal(str(amount)) * share
+    return total
+
+
 def excluded_from_wage_base(contract, purpose: str, proration: Decimal, rules: ParticipationMap | None = None) -> Decimal:
     """چقدر از ناخالص **به این مبنا نمی‌آید** — برای بیمه و مالیات.
 
