@@ -14,7 +14,8 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "publish-update": "node scripts/publish-update.mjs",
-    "verify-update-channel": "electron scripts/verify-update-channel.cjs"
+    "verify-update-channel": "electron scripts/verify-update-channel.cjs",
+    "verify-pages": "node scripts/verify-pages.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
@@ -35,6 +36,7 @@
     "electron-builder": "^26.15.3",
     "js-yaml": "^5.2.1",
     "oxlint": "^1.71.0",
+    "playwright": "^1.63.0",
     "semver": "^7.8.5",
     "typescript": "~6.0.2",
     "vite": "^7.3.6",
