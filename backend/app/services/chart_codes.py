@@ -42,6 +42,15 @@ PAYROLL_ROUNDING = "payroll_rounding"
 #: می‌کردند ولی هیچ ردیفِ بستانکاری در سند نداشتند، پس سندِ حقوقِ هر قراردادی که
 #: کسور داشت دقیقاً به همان اندازه نامتوازن ثبت می‌شد.
 PAYROLL_DEDUCTIONS_PAYABLE = "payroll_deductions_payable"
+#: کالای در جریان ساخت — مبدأِ کالایی که **ساخته** شده، نه خریده.
+#:
+#: **چرا لازم شد.** رسیدِ انبارِ نوعِ «تولید» تا امروز از همان قاعده‌ی خرید رد
+#: می‌شد («تحویل‌دهنده داری؟ بدهی؛ نداری؟ نقد»)، پس تولیدِ ۲٬۴۰۰٬۰۰۰ ریال کالا
+#: صندوق را ۲٬۴۰۰٬۰۰۰ ریال **کم** می‌کرد — پولی که هرگز پرداخت نشده بود. طرفِ
+#: بستانکارِ درستِ ورودِ محصولِ ساخته‌شده، خروجِ همان ارزش از جریانِ ساخت است.
+#:
+#: با `get_or_create_account` تنبل ساخته می‌شود تا چارتِ مشتریانِ موجود نشکند.
+WORK_IN_PROCESS = "work_in_process"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
 VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
@@ -160,6 +169,7 @@ DEFAULT_CODE_BY_ROLE = {
     EMPLOYEE_LOAN: "1111",
     PAYROLL_ROUNDING: "5118",
     PAYROLL_DEDUCTIONS_PAYABLE: "2109",
+    WORK_IN_PROCESS: "1115",
     INVENTORY_ADJUSTMENT: "5105",
     DEPRECIATION_EXPENSE: "5106",
     FX_GAIN: "4106",

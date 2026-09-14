@@ -1,4 +1,5 @@
-from uuid import UUID
+from datetime import date
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
@@ -20,6 +21,8 @@ from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.invoices import (
+    ApplyProductionPricesIn,
+    ApplyProductionPricesOut,
     PurchaseInvoiceIn,
     PurchaseInvoiceOut,
     PurchaseSummaryOut,
@@ -31,9 +34,10 @@ from app.schemas.invoices import (
     SalesInvoiceIn,
     SalesInvoiceOut,
     SalesSummaryOut,
+    UnpricedOutputOut,
 )
 from app.schemas.voiding import VoidIn, VoidOut
-from app.services import sales_posting
+from app.services import production_pricing, sales_posting
 from app.services.idempotency import idempotent
 from app.services.open_items import settled_amounts
 from app.services.purchase_deductions import totals_by_nature
@@ -696,6 +700,61 @@ def create_direct_warehouse_receipt(
         payload=data,
         run=lambda: create_warehouse_receipt(db, None, data, user),
         replay=lambda rid: db.get(WarehouseReceipt, rid),
+    )
+
+
+@router.get("/api/warehouse-receipts/unpriced", response_model=list[UnpricedOutputOut])
+def list_unpriced_outputs(
+    warehouse_id: UUID,
+    date_from: date,
+    date_to: date,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "view")),
+):
+    """ورودی‌های بی‌فیِ یک انبار در یک بازه.
+
+    رسیدِ مستقیم می‌تواند بی فی ثبت شود — کالایی که خارج از سیستم تهیه شده و
+    بهایش هنوز معلوم نیست. تا وقتی فی نخورَد، آن کالا در انبار هست و ارزشش صفر
+    است؛ این فهرست همان‌ها را نشان می‌دهد.
+    """
+    return production_pricing.unpriced_outputs(
+        db, warehouse_id=warehouse_id, date_from=date_from, date_to=date_to
+    )
+
+
+@router.post(
+    "/api/warehouse-receipts/apply-prices", response_model=ApplyProductionPricesOut
+)
+def apply_unpriced_prices(
+    data: ApplyProductionPricesIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("invoices", "create")),
+):
+    """فی را روی ردیف‌های بی‌فیِ دامنه می‌نشاند و سندِ نخورده را می‌زند.
+
+    **حرکتِ انبارِ تازه‌ای ساخته نمی‌شود** — مقدار سرِ رسید وارد شده و این‌جا فقط
+    بهای همان حرکت پر می‌شود.
+
+    idempotent است، ولی محافظتِ اصلی از خودِ داده می‌آید: فقط ردیفِ **بی‌فی**
+    قیمت می‌گیرد، پس اجرای دوباره چیزی برای انجام‌دادن پیدا نمی‌کند.
+    """
+    return idempotent(
+        db,
+        request,
+        user,
+        operation="apply_receipt_prices",
+        payload=data,
+        run=lambda: production_pricing.apply_prices(
+            db,
+            warehouse_id=data.warehouse_id,
+            date_from=data.date_from,
+            date_to=data.date_to,
+            prices={row.item_id: row.unit_cost for row in data.prices},
+            user=user,
+        ),
+        replay=lambda _rid: {"receipts": 0, "lines": 0, "value": Decimal(0)},
+        resource_id=lambda _result: uuid4(),
     )
 
 
