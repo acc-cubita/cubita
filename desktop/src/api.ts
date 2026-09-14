@@ -8698,6 +8698,114 @@ export const updatePayrollFactor = (
   body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
 ) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)
 
+// ── گزارش‌های انبار: ابعاد و ردیابیِ سریال ────────────────────────────────────
+//
+// مبالغ می‌توانند `null` باشند — یعنی کاربر مجوزِ بها ندارد. `null` است نه صفر،
+// چون صفر عددِ واقعی است. رابط باید خط تیره نشان دهد، نه «۰ ریال».
+
+export type InventoryDimension = 'supplier' | 'customer' | 'purpose'
+
+export const INVENTORY_DIMENSION_LABELS: Record<InventoryDimension, string> = {
+  supplier: 'تأمین‌کننده',
+  customer: 'مشتری',
+  purpose: 'هدف حرکت',
+}
+
+export interface InventoryBreakdownRow {
+  key: string
+  label: string
+  item_count: number
+  in_qty: string
+  out_qty: string
+  net_qty: string
+  in_value: string | null
+  out_value: string | null
+  net_value: string | null
+  /** چند حرکتِ این ردیف ارزش‌گذاریِ منقضی دارد — «این مبلغ هنوز بازمحاسبه نشده». */
+  stale_count: number
+}
+
+export interface InventoryBreakdown {
+  dimension: InventoryDimension
+  dimension_label: string
+  date_from: string | null
+  date_to: string | null
+  warehouse_id: string | null
+  rows: InventoryBreakdownRow[]
+  total_in_qty: string
+  total_out_qty: string
+  total_in_value: string | null
+  total_out_value: string | null
+  stale_count: number
+}
+
+export const fetchInventoryBreakdown = (
+  token: string,
+  params: { dimension: InventoryDimension; date_from?: string; date_to?: string; warehouse_id?: string },
+) =>
+  authedGet<InventoryBreakdown>(
+    token,
+    `/api/reports/inventory-breakdown?${new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v) as [string, string][],
+    ).toString()}`,
+  )
+
+export interface SerialEventRow {
+  event_type: string
+  event_label: string
+  entry_date: string
+  source_type: string
+  source_label: string
+  source_id: string | null
+  source_number: number | null
+  counterparty: string
+  notes: string
+}
+
+/** یک سریال با **کلِ تاریخچه‌اش** — `in_stock` مشتق است، نه ذخیره‌شده. */
+export interface SerialTrace {
+  serial_id: string
+  serial: string
+  status: string
+  item_id: string | null
+  item_sku: string
+  item_name: string
+  batch_number: string
+  in_stock: boolean
+  last_event_type: string | null
+  last_event_label: string
+  last_source_type: string | null
+  last_source_id: string | null
+  last_entry_date: string | null
+  events: SerialEventRow[]
+}
+
+export const searchSerials = (
+  token: string,
+  params: { serial?: string; item_id?: string; source_type?: string; date_from?: string; date_to?: string },
+) =>
+  authedGet<SerialTrace[]>(
+    token,
+    `/api/serials/search?${new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v) as [string, string][],
+    ).toString()}`,
+  )
+
+/** چسباندنِ سریال‌ها به یک سند. گامِ جداست: فاکتور نمی‌داند کدام سه تا از پنج تا رفت. */
+export const assignSerials = (
+  token: string,
+  body: {
+    item_id: string
+    serials: string[]
+    source_type: string
+    source_id: string
+    entry_date: string
+    event_type?: string
+  },
+) => authedSend<{ assigned: number; created: number; replayed: number }>(
+  token, 'POST', '/api/serials/assign', body,
+)
+
 // ── قیمت‌گذاریِ ورودی‌های بی‌فی ───────────────────────────────────────────────
 //
 // رسیدِ انبارِ مستقیم می‌تواند بی فی ثبت شود — کالایی که خارج از سیستم تهیه شده و
