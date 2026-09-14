@@ -77,6 +77,22 @@ def sales_rounding_account(db: Session):
     )
 
 
+def work_in_process_account(db: Session):
+    """«کالای در جریان ساخت» — طرفِ بستانکارِ ورودِ محصولِ ساخته‌شده به انبار.
+
+    on-demand مثلِ حساب‌های مالیات، تا چارتِ کسب‌وکارهای موجود هم بی‌دستکاری
+    این حساب را بگیرد.
+    """
+    return get_or_create_account(
+        db,
+        cc.WORK_IN_PROCESS,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.WORK_IN_PROCESS],
+        name="کالای در جریان ساخت",
+        acc_type="asset",
+        parent_code="11",
+    )
+
+
 def _allocate_discount(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
     """تسهیمِ یک تخفیفِ کل میان ردیف‌ها به‌نسبتِ خالصِ هر ردیف.
 
