@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { navTargets } from './lib/navTargets.mjs'
 import { deadFiles } from './find-dead-code.mjs'
 import { fileURLToPath } from 'node:url'
 
@@ -293,8 +294,9 @@ const RULES = [
 
       const navBody = nav.slice(nav.indexOf('export const NAV_GROUPS'), nav.indexOf('const PAGE_MODULE_KEY'))
       const found = []
-      for (const m of navBody.matchAll(/key: '([a-zA-Z]+)', label: '([^']+)'/g)) {
-        const [, key, label] = m
+      //: همان پارسر که `verify-pages.mjs` هم از آن می‌خواند — یک منبع، نه دو
+      //: تا که دیر یا زود واگرا شوند.
+      for (const { key, label } of navTargets()) {
         if (!mapped.has(key)) {
           found.push({ line: 1, msg: `منوی «${label}» (${key}) در OPS_LIST_MAP ردیف ندارد` })
           continue

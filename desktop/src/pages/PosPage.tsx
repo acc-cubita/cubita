@@ -83,6 +83,16 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
     setTimeout(() => window.print(), 60)
   }
 
+  //: ⚠️ **این تابع را در زمانِ رندر صدا نزنید.**
+  //:
+  //: هفت مقداری که می‌خواند (`subtotal`, `taxRateNum`, `discountAmount`, `tax`,
+  //: `roundAdjust`, `total`, `change`) پایین‌تر در همین کامپوننت تعریف شده‌اند.
+  //: خودِ تابع hoist می‌شود، ولی آن `const`ها نه — پس صدازدنش بالاتر از تعریفشان
+  //: `ReferenceError: Cannot access ... before initialization` می‌دهد و صفحه‌ی
+  //: صندوق را آنی سفید می‌کند.
+  //:
+  //: امروز امن است چون هر دو صدازدن داخلِ هندلرهای پرداخت‌اند (پایین‌تر از همه).
+  //: همین شکل یک بار در `BalanceReportPage` واقعاً اتفاق افتاد و `tsc` نگرفتش.
   function buildReceipt(
     num: number | null | undefined,
     cashier: string | null | undefined,
