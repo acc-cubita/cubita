@@ -99,6 +99,7 @@ def audited_models() -> dict[type, str]:
         TaxTable,
     )
     from app.models.period_close import FiscalPeriodClose
+    from app.models.stock_count import StockCountSession
     from app.models.payment import Payment
     from app.models.receipt import Receipt
     from app.models.returns import PurchaseReturn, SalesReturn
@@ -121,6 +122,9 @@ def audited_models() -> dict[type, str]:
         #: بهای فروش‌رفته می‌رود — بی هیچ ردی. سفارشِ تولید هم سندِ بهاست.
         Bom: "فرمول ساخت",
         ProductionOrder: "سفارش تولید",
+        #: انبارگردانی ارزشِ موجودی را جابه‌جا می‌کند و تا امروز هیچ ردی
+        #: نمی‌گذاشت — نه اینکه چه کسی شمرد، نه اینکه عددی عوض شد.
+        StockCountSession: "انبارگردانی",
         Payslip: "فیش حقوقی",
         #: **تنظیماتِ حقوق حساس‌ترین پیکربندیِ کوبیتا بعد از چارتِ حساب‌هاست.**
         #: عوض‌کردنِ یک پله‌ی مالیات، مالیاتِ *همه‌ی* کارکنان را عوض می‌کند؛

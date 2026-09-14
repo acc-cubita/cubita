@@ -1,7 +1,7 @@
 import uuid
 from datetime import date as date_, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,13 @@ class StockCountSession(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "stock_count_sessions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "number", name="uq_stock_count_sessions_tenant_number"),
+    )
 
+    #: سریِ شماره‌ی خودش. سندِ کسری/اضافی سندِ دیگری است و شماره‌ی دیگری دارد —
+    #: بی این، برگه‌ی شمارشِ کاغذی به هیچ جلسه‌ای وصل نمی‌شود.
+    number: Mapped[int] = mapped_column(nullable=False, index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     count_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
@@ -44,9 +50,21 @@ class StockCountSession(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 class StockCountLine(TenantMixin, UUIDPKMixin, Base):
     """یک کالا در یک جلسه‌ی انبارگردانی.
 
-    `system_qty` و `unit_cost` هنگام ایجادِ جلسه عکس‌برداری می‌شوند (نه هنگام ثبت) تا
-    مغایرت همان چیزی باشد که شمارنده در آن لحظه دید. `counted_qty` با همان مقدارِ
-    سیستمی مقداردهی می‌شود تا کاربر فقط کالاهای دارای اختلاف را دست بزند.
+    **`system_qty` عکسِ لحظه‌ی *شمارش* است، نه لحظه‌ی بازکردنِ جلسه.** تا پیش از
+    مهاجرتِ ۰۱۴۴ سرِ ایجادِ جلسه گرفته می‌شد و شمارش ساعت‌ها بعد انجام می‌شد؛ هر
+    حرکتی که بینشان می‌افتاد **دو بار** شمرده می‌شد — یک‌بار خودش، یک‌بار داخلِ
+    اختلاف. حالا `set_counts` همان لحظه از دفتر بازش می‌خواند، پس مبنای مقایسه
+    همان چیزی است که سیستم *وقتی شمارنده عدد را داد* باور داشت.
+
+    **`counted_qty` تهی‌پذیر است و این عمدی‌ترین بخشِ این مدل است:**
+
+    * `NULL` → هنوز شمرده نشده. از اختلاف‌گیری **کنار گذاشته می‌شود**.
+    * `0` → شمرده شد و هیچ نبود. کسریِ کامل، و واقعی.
+
+    یکی‌گرفتنِ این دو یعنی جلسه‌ای که نیمه‌کاره ثبت شود موجودیِ صدها کالای
+    دست‌نخورده را از انبار بیرون بریزد. و پیش‌فرضِ قدیمی (`counted_qty =
+    system_qty`) خطای متقابل را داشت: شمارنده عددِ سیستم را از پیش نوشته
+    می‌دید — نقضِ صریحِ «شمارشِ کور».
     """
 
     __tablename__ = "stock_count_lines"
@@ -56,8 +74,16 @@ class StockCountLine(TenantMixin, UUIDPKMixin, Base):
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
     system_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
-    counted_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    counted_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: کِی این شمارش وارد شد — لنگرِ «عکس در لحظه‌ی شمارش» و پاسخِ «چه‌قدرش را
+    #: واقعاً شمردیم؟». `NULL` یعنی هنوز هیچ.
+    counted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: چه کسی واردش کرد. شمارنده، سرپرست و واردکننده‌ی داده می‌توانند سه نفر
+    #: باشند؛ این ستون فقط سومی را ادعا می‌کند.
+    counted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     session: Mapped["StockCountSession"] = relationship("StockCountSession", back_populates="lines")
     item: Mapped["object"] = relationship("Item")
