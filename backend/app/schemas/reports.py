@@ -142,6 +142,8 @@ class KardexLineOut(BaseModel):
     recorded_unit_cost: Decimal
     #: بهای ثبت‌شده با میانگینِ همان تاریخ نمی‌خواند — ارزش‌گذاریِ منقضی.
     stale: bool = False
+    #: بهای این حرکت در «قیمت‌گذاری اسناد انبار» اصلاح شده؛ `recorded_unit_cost` بهای پس از اصلاح است.
+    adjusted: bool = False
     value_in: Decimal
     value_out: Decimal
     balance_value: Decimal

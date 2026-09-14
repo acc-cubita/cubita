@@ -442,6 +442,9 @@ def void_warehouse_issue(
         StockLedger.source_type == "warehouse_issue", StockLedger.source_id == issue.id
     ).all()
     lock_items(db, [move.item_id for move in moves])
+    #: خروجِ برداشته‌شده گذشته را منفی نمی‌کند، ولی اگر بهایش در اجرای قیمت‌گذاری اصلاح شده
+    #: باشد، ابطالش سندِ اصلاحی را بی‌پشتوانه می‌گذارد — همان گاردِ مشترکِ ابطال‌ها.
+    valuation.guard_void(db, ("warehouse_issue",), issue.id)
     for move in moves:
         db.add(StockLedger(
             item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),

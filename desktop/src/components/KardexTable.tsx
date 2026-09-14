@@ -90,6 +90,7 @@ export function KardexTable({ data, className = 'kardex-table' }: { data: Kardex
                     {l.stale && (
                       <span className="status-badge tone-warning">منقضی · سند {faMoney(l.recorded_unit_cost)}</span>
                     )}
+                    {!l.stale && l.adjusted && <span className="status-badge tone-muted">اصلاح‌شده</span>}
                   </td>
                   <td data-label="مبلغ" className="money-cell">{Number(amount) ? faMoney(amount) : '—'}</td>
                   <td data-label="مانده" className="money-cell"><strong>{faQty(l.balance_qty)}</strong></td>
