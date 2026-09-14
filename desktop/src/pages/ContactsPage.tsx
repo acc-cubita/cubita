@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Ban,
   Building2,
   CalendarClock,
   FileText,
@@ -7,14 +8,17 @@ import {
   HandCoins,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   TrendingDown,
+  Trash2,
   UserRound,
   UsersRound,
   X,
 } from 'lucide-react'
 import {
   createContact,
+  deleteContact,
   fetchAging,
   fetchContacts,
   fetchPriceLists,
@@ -54,6 +58,10 @@ export function ContactsPage({ token }: { token: string }) {
   const [payMap, setPayMap] = useState<Map<string, number>>(new Map())
   const [agingTotals, setAgingTotals] = useState<{ recv: number; pay: number }>({ recv: 0, pay: 0 })
   const [filterType, setFilterType] = useState<'all' | 'customer' | 'supplier'>('all')
+  //: پیش‌فرض «همه» — عمداً. پنهان‌کردنِ خودکارِ غیرفعال‌ها یعنی کاربری که تازه
+  //: یکی را غیرفعال کرده فکر کند پاکش کرده. غیرفعال یعنی «دیگر پیشنهادش نکن»،
+  //: نه «ناپدید شو».
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [statementContact, setStatementContact] = useState<{ id: string; name: string } | null>(null)
@@ -93,10 +101,11 @@ export function ContactsPage({ token }: { token: string }) {
     () =>
       contacts.filter((c) => {
         if (filterType !== 'all' && c.type !== filterType && c.type !== 'both') return false
+        if (filterActive !== 'all' && c.is_active !== (filterActive === 'active')) return false
         if (search && !c.name.includes(search) && !(c.phone ?? '').includes(search)) return false
         return true
       }),
-    [contacts, filterType, search],
+    [contacts, filterType, filterActive, search],
   )
   const contactsPg = usePagination(filteredContacts, 10, `${filterType}|${search}`)
 
@@ -156,6 +165,45 @@ export function ContactsPage({ token }: { token: string }) {
       postal_code: c.postal_code ?? '',
     })
     setFormMessage(null)
+  }
+
+  /** فعال/غیرفعال — **فقط همین یک فیلد فرستاده می‌شود.**
+   *
+   * سرور `PATCH` را جزئی می‌گیرد، پس این درخواست هیچ‌چیزِ دیگری را دست نمی‌زند.
+   * اگر به‌جایش کلِ فرم فرستاده می‌شد، غیرفعال‌کردنِ یک طرف‌حساب از روی جدول
+   * مقدارهای فرمِ باز (یا خالی) را هم رویش می‌نشاند.
+   */
+  async function handleToggleActive(c: ContactRecord) {
+    const next = !c.is_active
+    if (!next && !window.confirm(`«${c.name}» غیرفعال شود؟ در فهرست‌های انتخاب پیشنهاد نمی‌شود، ولی تاریخچه و اسنادش دست‌نخورده می‌مانند.`)) return
+    setError(null)
+    try {
+      await updateContact(token, c.id, { is_active: next })
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
+  /** حذف — و ۴۰۹ این‌جا **خطا نیست، جواب است.**
+   *
+   * طرف‌حسابی که در فاکتور یا سند استفاده شده پاک نمی‌شود و سرور همان‌جا
+   * می‌گوید به‌جایش غیرفعالش کنید. پیامِ سرور عیناً نشان داده می‌شود چون
+   * دلیلِ دقیق را می‌داند (سیستمی؟ مانده‌ی اول دوره؟ ارجاع؟) و ما نمی‌دانیم.
+   */
+  async function handleDelete(c: ContactRecord) {
+    if (!window.confirm(`«${c.name}» برای همیشه حذف شود؟ اگر در سندی استفاده شده باشد حذف نمی‌شود.`)) return
+    setError(null)
+    try {
+      await deleteContact(token, c.id)
+      if (editingId === c.id) {
+        setEditingId(null)
+        setForm(EMPTY_FORM)
+      }
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
   }
 
   const contactsTab = (
@@ -275,6 +323,11 @@ export function ContactsPage({ token }: { token: string }) {
               <option value="customer">مشتریان</option>
               <option value="supplier">تأمین‌کنندگان</option>
             </select>
+            <select value={filterActive} onChange={(e) => setFilterActive(e.target.value as typeof filterActive)}>
+              <option value="all">فعال و غیرفعال</option>
+              <option value="active">فقط فعال</option>
+              <option value="inactive">فقط غیرفعال</option>
+            </select>
             <input type="text" placeholder="جستجو نام یا تلفن..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         }
@@ -300,7 +353,7 @@ export function ContactsPage({ token }: { token: string }) {
                     const limit = Number(c.credit_limit) || 0
                     const overLimit = limit > 0 && (recvMap.get(c.id) ?? 0) > limit
                     return (
-                    <tr key={c.id}>
+                    <tr key={c.id} className={c.is_active ? undefined : 'row-inactive'}>
                       <td data-label="نام">
                         <div className="entity-cell">
                           <div className={`entity-avatar tone-${c.type}`}>{c.name.trim().charAt(0) || '؟'}</div>
@@ -317,6 +370,9 @@ export function ContactsPage({ token }: { token: string }) {
                             ناپیدا می‌ماند و کاربر گمان می‌کند پاک شده. */}
                         {c.is_broker && <> <span className="status-badge">واسطه</span></>}
                         {c.is_shareholder && <> <span className="status-badge">سهامدار</span></>}
+                        {/* بی این نشان، طرف‌حسابِ غیرفعال از فعال جدا نبود و کاربر
+                            نمی‌فهمید چرا در فهرست‌های انتخاب پیدایش نمی‌کند. */}
+                        {!c.is_active && <> <span className="status-badge tone-muted">غیرفعال</span></>}
                       </td>
                       <td data-label="مانده" className="money-cell">
                         {bal === 0 ? '۰' : (
@@ -336,6 +392,10 @@ export function ContactsPage({ token }: { token: string }) {
                       <td className="check-actions card-actions">
                         <button type="button" onClick={() => setStatementContact({ id: c.id, name: c.name })}><FileText size={13} /> صورت‌حساب</button>
                         <button type="button" onClick={() => startEdit(c)}><Pencil size={13} /> ویرایش</button>
+                        <button type="button" onClick={() => void handleToggleActive(c)}>
+                          {c.is_active ? <><Ban size={13} /> غیرفعال</> : <><RotateCcw size={13} /> فعال</>}
+                        </button>
+                        <button type="button" className="icon-btn-danger" aria-label="حذف" onClick={() => void handleDelete(c)}><Trash2 size={13} /> حذف</button>
                       </td>
                     </tr>
                     )

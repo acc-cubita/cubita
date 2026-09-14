@@ -6204,6 +6204,8 @@ tr.kardex-voided td { color: var(--text-muted); }
 /* دکمهٔ کم‌رنگ (تعویضِ فعال/غیرفعالِ فرمول در حالتِ غیرفعال) */
 .btn-muted { opacity: 0.6; }
 .bom-row-inactive { opacity: 0.62; }
+/* ردیفِ غیرفعال در هر جدولی — همان کم‌رنگیِ بالا، بی‌نامِ ماژول. */
+.row-inactive { opacity: 0.62; }
 .bom-components { font-size: var(--fs-sm); color: var(--text-muted); max-width: 260px; }
 
 /* برگهٔ بهای تمام‌شده — ردیف‌های جمع و بهای واحد */

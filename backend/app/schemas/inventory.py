@@ -87,6 +87,14 @@ ENTITY_TYPES = ("real", "legal")
 class ContactIn(BaseModel):
     name: str
     type: str = "customer"
+    #: **تا امروز این فیلد این‌جا نبود، پس ستونش مرده بود.** `Contact.is_active`
+    #: در ساخت `True` می‌شد و هیچ مسیری عوضش نمی‌کرد — نه API، نه رابط. در حالی
+    #: که `ContactOut` نمایشش می‌داد، یعنی کاربر یک وضعیت می‌دید که نمی‌توانست
+    #: تغییرش دهد.
+    #:
+    #: بدونِ این، پیامِ «به‌جای حذف غیرفعالش کنید» در `delete_contact` به مسیری
+    #: اشاره می‌کرد که وجود نداشت.
+    is_active: bool = True
     phone: str | None = None
     email: str | None = None
     address: str = ""
@@ -235,6 +243,30 @@ class ContactIn(BaseModel):
     def _check_credit_limit(self) -> "ContactIn":
         if self.credit_limit < 0:
             raise ValueError("سقف اعتبار نمی‌تواند منفی باشد")
+        return self
+
+
+class ContactPatch(ContactIn):
+    """ویرایشِ جزئیِ طرف حساب — همان فیلدها، ولی `name` هم اجباری نیست.
+
+    **چرا جدا شد.** `ContactIn` ورودیِ *ساخت* است و آن‌جا نام واقعاً اجباری است.
+    ولی مسیرِ `PATCH` معنایش «همین‌ها را عوض کن» است و با `exclude_unset` دقیقاً
+    همین را پیاده کرده — پس اجباری‌بودنِ `name` قولِ خودِ مسیر را نقض می‌کرد:
+    برای عوض‌کردنِ یک شماره‌تلفن باید نام هم دوباره فرستاده می‌شد، وگرنه ۴۲۲.
+
+    **نفرستادن با `null`ِ صریح فرق دارد.** `_compose_name` که از `ContactIn` به
+    ارث می‌رسد، اگر نام و نام‌خانوادگی بیایند `name` را می‌سازد و همان هم
+    «set‌شده» حساب می‌شود — پس ویرایشِ تفکیک‌شده هنوز نام را به‌روز می‌کند. ولی
+    `{"name": null}` هم «set‌شده» است و بدونِ گاردِ زیر تا قیدِ NOT NULL می‌رفت و
+    کاربر به‌جای پیامِ روشن یک ۵۰۰ می‌دید.
+    """
+
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def _name_not_blanked(self) -> "ContactPatch":
+        if "name" in self.model_fields_set and not (self.name or "").strip():
+            raise ValueError("نامِ طرف حساب نمی‌تواند خالی باشد")
         return self
 
 
