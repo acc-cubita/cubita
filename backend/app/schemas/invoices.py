@@ -789,3 +789,47 @@ class ReceiptPaymentContextOut(BaseModel):
     suggested_amount: Decimal
     currency_code: str = "IRR"
     exchange_rate: Decimal = Decimal(1)
+
+
+class UnpricedReceiptRefOut(BaseModel):
+    """رسیدی که ردیفِ بی‌فی دارد — تا کاربر بداند فی روی چه چیزی می‌نشیند."""
+
+    number: int
+    receipt_date: date
+    type_label: str
+
+
+class UnpricedOutputOut(BaseModel):
+    """یک کالای بی‌فی در دامنه‌ی انتخاب‌شده، با جمعِ مقدارش.
+
+    **کالا‌محور است، نه ردیف‌محور:** یک کالا ممکن است در چند رسید آمده باشد و
+    کاربر یک فی برایش می‌گذارد. ردیف‌ها همچنان قابلِ ردیابی‌اند — `receipts`
+    می‌گوید آن فی روی کدام اسناد خواهد نشست.
+    """
+
+    item_id: UUID
+    sku: str = ""
+    name: str
+    unit: str = ""
+    qty: Decimal
+    receipts: list[UnpricedReceiptRefOut]
+
+
+class ProductionPriceIn(BaseModel):
+    item_id: UUID
+    unit_cost: Decimal = Field(gt=0)
+
+
+class ApplyProductionPricesIn(BaseModel):
+    """دامنه + فی‌ها. دامنه همان سه‌تایی فرمِ مرجع است: انبار، از تاریخ، تا تاریخ."""
+
+    warehouse_id: UUID
+    date_from: date
+    date_to: date
+    prices: list[ProductionPriceIn] = Field(min_length=1)
+
+
+class ApplyProductionPricesOut(BaseModel):
+    receipts: int
+    lines: int
+    value: Decimal

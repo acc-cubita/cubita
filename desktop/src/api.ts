@@ -8697,3 +8697,49 @@ export const updatePayrollFactor = (
   factorId: string,
   body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
 ) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)
+
+// ── قیمت‌گذاریِ ورودی‌های بی‌فی ───────────────────────────────────────────────
+//
+// رسیدِ انبارِ مستقیم می‌تواند بی فی ثبت شود — کالایی که خارج از سیستم تهیه شده و
+// بهایش هنوز معلوم نیست (تولیدِ کارگاهی، خریدی که سندش نرسیده). تا وقتی فی
+// نخورَد، آن کالا در انبار هست و ارزشش صفر است.
+//
+// گرید **کالا‌محور** است، نه ردیف‌محور: یک فی برای یک کالا، و `receipts` می‌گوید
+// آن فی روی کدام اسناد می‌نشیند.
+
+export type UnpricedReceiptRef = {
+  number: number
+  receipt_date: string
+  type_label: string
+}
+
+export type UnpricedOutput = {
+  item_id: string
+  sku: string
+  name: string
+  unit: string
+  qty: string
+  receipts: UnpricedReceiptRef[]
+}
+
+export type ApplyPricesResult = { receipts: number; lines: number; value: string }
+
+export const fetchUnpricedOutputs = (
+  token: string,
+  scope: { warehouse_id: string; date_from: string; date_to: string },
+) =>
+  authedGet<UnpricedOutput[]>(
+    token,
+    `/api/warehouse-receipts/unpriced?${new URLSearchParams(scope).toString()}`,
+  )
+
+/** فی را روی ردیف‌های بی‌فیِ دامنه می‌نشاند. حرکتِ انبارِ تازه‌ای ساخته نمی‌شود. */
+export const applyReceiptPrices = (
+  token: string,
+  body: {
+    warehouse_id: string
+    date_from: string
+    date_to: string
+    prices: { item_id: string; unit_cost: number }[]
+  },
+) => authedSend<ApplyPricesResult>(token, 'POST', '/api/warehouse-receipts/apply-prices', body)
