@@ -84,7 +84,7 @@ def audited_models() -> dict[type, str]:
     """
     from app.models.accounting import JournalEntry
     from app.models.advanced_inventory import PriceList
-    from app.models.sales_ops import CreditDebitNote
+    from app.models.sales_ops import CreditDebitNote, SaleType
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
@@ -131,6 +131,11 @@ def audited_models() -> dict[type, str]:
         #: عوض‌کردنِ نرخِ بیمه، سهمِ همه را. تا امروز هیچ‌کدام ردی نمی‌گذاشتند —
         #: همان شکلِ باگی که «اعلامیه قیمت» داشت.
         PayrollSettings: "تنظیمات حقوق",
+        #: **نوعِ فروش طبقه‌بندیِ حسابداریِ هر فروشِ بعدی را تعیین می‌کند.** عوض‌کردنِ
+        #: یک حسابِ درآمد یعنی از فردا درآمد جای دیگری می‌نشیند — همان استدلالی که
+        #: `PriceList` و `PayrollSettings` را به این فهرست آورد. تا امروز هیچ ردی
+        #: نمی‌گذاشت: نه چه کسی، نه کدام حساب، نه از چه به چه.
+        SaleType: "نوع فروش",
         #: عامل تعیین می‌کند چه چیزی مزایاست و چه چیزی کسور، و کدام مبنای بیمه و
         #: مالیات است. تغییرش روی هر فیشِ بعدی می‌نشیند.
         PayrollFactor: "عامل حقوق",

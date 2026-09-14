@@ -58,8 +58,10 @@ from app.schemas.sales_ops import (
     PricingSuggestionOut,
     ProductBundleIn,
     ProductBundleOut,
+    SALE_TYPE_ACCOUNT_FIELDS,
     SaleTypeIn,
     SaleTypeOut,
+    SaleTypePatch,
     VoidNoteIn,
 )
 from app.pagination import Page, PageParams, paginate
@@ -103,10 +105,51 @@ def list_sale_types(db: Session = Depends(get_db), _=Depends(_view)):
     return db.query(SaleType).order_by(SaleType.name).all()
 
 
+def _assert_code_free(db: Session, code: str | None, *, skip_id: UUID | None = None) -> None:
+    """کدِ تکراری ۴۰۹ بدهد، نه خطای خامِ قید. کدِ خالی یعنی «کد ندارد»، نه یک کد."""
+    if not (code or "").strip():
+        return
+    q = db.query(SaleType).filter(SaleType.code == code.strip())
+    if skip_id is not None:
+        q = q.filter(SaleType.id != skip_id)
+    if q.first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "نوعِ فروش با این کد از قبل هست")
+
+
+def _assert_accounts_postable(db: Session, values: dict) -> None:
+    """حساب‌های نوعِ فروش **هنگامِ تنظیم** اعتبارسنجی می‌شوند، نه هنگامِ ثبتِ سند.
+
+    بی این، کاربر یک حسابِ گروه انتخاب می‌کرد و شش ماه بعد اولین فاکتورش ۴۰۹
+    می‌گرفت — غافلگیری در بدترین لحظه (§۶۸). قاعده همان قاعده‌ی
+    `_configured_account` است، نه یک قاعده‌ی دوم.
+    """
+    for field in SALE_TYPE_ACCOUNT_FIELDS:
+        account_id = values.get(field)
+        if account_id is None:
+            continue
+        account = db.get(Account, account_id)
+        if account is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حسابِ انتخاب‌شده پیدا نشد")
+        if account.is_group:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"حسابِ «{account.name}» گروه است و سند روی آن ثبت نمی‌شود؛ "
+                "یکی از حساب‌های زیرمجموعه‌اش را انتخاب کنید.",
+            )
+        if not account.is_active:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"حسابِ «{account.name}» غیرفعال است"
+            )
+
+
 @router.post("/sale-types", response_model=SaleTypeOut, status_code=201)
 def create_sale_type(data: SaleTypeIn, db: Session = Depends(get_db), _=Depends(_create)):
     _assert_name_free(db, SaleType, data.name, "نوعِ فروش")
-    row = SaleType(**data.model_dump())
+    values = data.model_dump()
+    _assert_code_free(db, values.get("code"))
+    _assert_accounts_postable(db, values)
+    values["code"] = (values.get("code") or "").strip() or None
+    row = SaleType(**values)
     db.add(row)
     db.flush()
     db.refresh(row)
@@ -115,11 +158,23 @@ def create_sale_type(data: SaleTypeIn, db: Session = Depends(get_db), _=Depends(
 
 @router.patch("/sale-types/{type_id}", response_model=SaleTypeOut)
 def update_sale_type(
-    type_id: UUID, data: SaleTypeIn, db: Session = Depends(get_db), _=Depends(_update)
+    type_id: UUID, data: SaleTypePatch, db: Session = Depends(get_db), _=Depends(_update)
 ):
+    """**فقط آنچه فرستاده شده نوشته می‌شود.**
+
+    مسیرِ قبلی همه‌ی فیلدها را می‌نوشت، پس یک `PATCH` از هر کلاینتی که فیلدهای
+    حساب را نمی‌شناخت ۲۰۰ می‌گرفت و هر هفت حساب را `NULL` می‌کرد — بی‌صدا،
+    بی‌خطا. `exclude_unset` همان در را می‌بندد.
+    """
     row = _get_or_404(db, SaleType, type_id, "نوعِ فروش")
-    _assert_name_free(db, SaleType, data.name, "نوعِ فروش", skip_id=type_id)
-    for k, v in data.model_dump().items():
+    values = data.model_dump(exclude_unset=True)
+    if "name" in values:
+        _assert_name_free(db, SaleType, values["name"], "نوعِ فروش", skip_id=type_id)
+    if "code" in values:
+        _assert_code_free(db, values["code"], skip_id=type_id)
+        values["code"] = (values["code"] or "").strip() or None
+    _assert_accounts_postable(db, values)
+    for k, v in values.items():
         setattr(row, k, v)
     db.flush()
     db.refresh(row)
