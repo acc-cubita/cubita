@@ -1,15 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  BellRing,
-  CheckCircle2,
-  Banknote,
-  Clock,
-  CreditCard,
-  Repeat,
-  CalendarClock,
-  PackageX,
-  Coins,
-} from 'lucide-react'
+import { Banknote, Bell, BellRing, CalendarClock, CheckCircle2, Clock, Coins, CreditCard, PackageX, Repeat } from 'lucide-react'
 import { fetchAlerts, type AlertCategory, type AlertItem, type Alerts } from '../api'
 import { formatJalali, toFaDigits } from '../lib/jalali'
 import { Pager, usePagination } from './Pager'
@@ -69,7 +59,12 @@ export function AlertsPanel({ token }: { token: string }) {
       </div>
       <ul className="alerts-list">
         {pageItems.map((it: AlertItem, i) => {
-          const Icon = CAT_ICON[it.category]
+          //: **پس‌افتِ اجباری.** `Record` ایندکسِ کنترل‌نشده دارد، پس دسته‌ی
+          //: تازه‌ای که بک‌اند اضافه کند این‌جا `undefined` می‌شود و
+          //: `<Icon />` با «Element type is invalid» می‌افتد. این پنل روی
+          //: **صفحه‌ی ورود** رندر می‌شود، یعنی کلِ برنامه سفید می‌شد.
+          //: همان الگوی `ActivityFeed`: `?? یک پیش‌فرض`.
+          const Icon = CAT_ICON[it.category] ?? Bell
           return (
             <li key={i} className={`alert-row sev-${it.severity}`}>
               <span className="alert-dot" />

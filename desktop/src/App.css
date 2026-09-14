@@ -8038,6 +8038,26 @@ button.mp-item:focus-visible {
   margin-bottom: 0;
 }
 
+/* متنِ فنیِ خطا در مرزِ خطا (ErrorBoundary).
+   `dir="ltr"` روی خودِ عنصر است چون محتوا همیشه لاتین است؛ این‌جا فقط ظرف را
+   می‌سازیم. `overflow-x: auto` اجباری است — پیامِ خطا می‌تواند یک خطِ بلندِ
+   بی‌فاصله باشد و بدونِ آن کلِ صفحه را افقی می‌کشد. */
+.error-detail {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* پیشنهادِ بازه — یک کلیک تا پرشدنِ فرم. */
 .fy-suggest {
   display: flex;

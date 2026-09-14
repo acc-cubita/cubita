@@ -197,9 +197,6 @@ export function BalanceReportPage({ token }: { token: string }) {
       .sort((a, b) => a.account_code.localeCompare(b.account_code))
   }, [accounts.data, balances.data, level])
 
-  const sum = (key: keyof BalanceRow) => visible.reduce((s, r) => s + Number(r[key] as string), 0)
-  const periodDebit = sum('period_debit')
-  const periodCredit = sum('period_credit')
 
   function exportCsv() {
     const headers = ['کد', 'نام حساب', 'نوع']
@@ -238,6 +235,21 @@ export function BalanceReportPage({ token }: { token: string }) {
       return net < 0
     })
   }, [rows, balanceFilter])
+
+  //: **این سه خط باید زیرِ `visible` بمانند.**
+  //:
+  //: `sum` روی `visible` بسته می‌شود و بلافاصله صدا زده می‌شود، پس اگر بالای
+  //: تعریفِ `visible` بنشیند در Temporal Dead Zone می‌افتد:
+  //: `ReferenceError: Cannot access 'visible' before initialization` — و چون
+  //: هیچ ErrorBoundaryای بالادست نبود، کلِ برنامه سفید می‌شد.
+  //:
+  //: این یک بار واقعاً اتفاق افتاد: نسخه‌ی اولیه `rows.reduce` بود (و `rows`
+  //: بالاتر تعریف شده)، و بازآراییِ فیلترها آن را به `visible` عوض کرد بی‌آنکه
+  //: جای تعریف را عوض کند. `tsc` نمی‌گیردش چون استفاده *داخلِ* یک تابع است و
+  //: تایپ‌چکر فرض می‌کند شاید بعداً صدا زده شود.
+  const sum = (key: keyof BalanceRow) => visible.reduce((s, r) => s + Number(r[key] as string), 0)
+  const periodDebit = sum('period_debit')
+  const periodCredit = sum('period_credit')
 
   const pg = usePagination(visible, 25)
 

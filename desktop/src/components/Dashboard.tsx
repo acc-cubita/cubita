@@ -150,6 +150,7 @@ import {
   PosTerminalsPage,
 } from '../pages/treasury/BankOpsPages'
 import { HelpPage } from '../pages/HelpPage'
+import { ErrorBoundary } from './ErrorBoundary'
 import { TeamPage } from '../pages/TeamPage'
 import { ModulesPage } from '../pages/ModulesPage'
 import { ProfilePage } from '../pages/ProfilePage'
@@ -498,8 +499,14 @@ export function Dashboard({
   const { theme } = useTheme()
 
   // محتوای صفحه مستقل از نوعِ چیدمان است؛ فقط کرومِ اطراف (نوارِ کناری یا افقی) عوض می‌شود.
+  //: **مرزِ خطا دورِ کلِ ناحیه‌ی صفحه.**
+  //:
+  //: بدونِ این، یک خطای رندر در هر صفحه‌ای کلِ درختِ React را unmount می‌کرد و
+  //: کاربر صفحه‌ی سفید می‌دید — بی ناوبری و بی راهِ برگشت. `key={page}` اجباری
+  //: است: مرز پس از خطا در حالتِ خراب می‌ماند، و بدونِ کلید کاربر تا ری‌استارتِ
+  //: برنامه در همان حالت گیر می‌کرد.
   const pageContent = (
-    <>
+    <ErrorBoundary key={page}>
           {page === 'overview' &&
             (theme.content === 'guided' ? (
               <GuidedDashboard
@@ -841,7 +848,7 @@ export function Dashboard({
           )}
           {page === 'theme' && <ThemeGallery />}
           {page === 'help' && <HelpPage />}
-    </>
+    </ErrorBoundary>
   )
 
   // همان مدلِ ناوبریِ نوار/سایدبار — کارتِ «عملیات» هم صفحه‌های هم‌گروه را از این‌جا

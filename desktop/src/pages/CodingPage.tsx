@@ -44,6 +44,9 @@ const fa = (n: number) => n.toLocaleString('fa-IR')
 
 /** پیش‌فرضِ سرویس — همان ساختارِ چارتِ کاشته‌شده. */
 const DEFAULT_WIDTHS = [1, 1, 2, 2]
+//: آینه‌ی `MIN_WIDTH, MAX_WIDTH = 1, 6` در `services/account_coding.py`.
+const MIN_WIDTH = 1
+const MAX_WIDTH = 6
 
 type Msg = { text: string; kind: 'ok' | 'err' }
 
@@ -134,7 +137,15 @@ function CodingRuleCard({ token, onMessage }: { token: string; onMessage: (m: Ms
               value={w}
               onChange={(e) => {
                 const next = [...widths]
-                next[i] = Number(e.target.value)
+                //: **محدودکردن اجباری است، نه آرایشی.** `min`/`max`ِ HTML فقط
+                //: راهنمای‌اند و مرورگر هر عددی را می‌پذیرد (تایپ یا paste). خطِ
+                //: پیش‌نمایشِ بالا `'1'.padStart(w, '0')` می‌زند، پس عددِ نُه‌رقمی
+                //: یعنی رشته‌ای بزرگ‌تر از سقفِ V8 (۵۳۶٬۸۷۰٬۸۸۹) و
+                //: `RangeError: Invalid string length` در بدنه‌ی کامپوننت — یعنی
+                //: صفحه‌ی سفید. حتی زیرِ آن سقف هم هر رندر صدها مگابایت می‌گیرد.
+                //: همان بازه‌ی `MIN_WIDTH/MAX_WIDTH`ِ بک‌اند
+                //: (`services/account_coding.py`) این‌جا تکرار می‌شود.
+                next[i] = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.trunc(Number(e.target.value)) || MIN_WIDTH))
                 setDraft(next)
               }}
             />

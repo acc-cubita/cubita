@@ -37,7 +37,13 @@ export function Tabs({
     if (controlled) nav!.setSection(key)
     else setLocalActive(key)
   }
+  //: `tabs[0]` امنیتِ کاذب می‌دهد: چون `noUncheckedIndexedAccess` خاموش است،
+  //: تایپش `TabDef` است نه `TabDef | undefined`. با فهرستِ خالی (که اولین
+  //: `.filter()` یا گیتِ دسترسی می‌سازد) `activeTab.key` می‌افتد و صفحه سفید
+  //: می‌شود. امروز همه‌ی یازده مصرف‌کننده فهرستِ ثابت می‌دهند — این گارد برای
+  //: دوازدهمی است.
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0]
+  if (!activeTab) return null
 
   return (
     <div className="tabs">
