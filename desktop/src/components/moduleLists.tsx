@@ -14,6 +14,7 @@ import {
   fetchPurchaseReturns,
   fetchStockAdjustments,
   fetchStockCounts,
+  fetchValuationRunList,
   fetchWarehouseIssueLedger,
 } from '../api'
 import {
@@ -502,6 +503,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       title: `انبارگردانی ${faNum(r.number ?? '')}`.trim(),
       subtitle: r.status ?? '—',
       meta: day(r.count_date ?? r.created_at),
+    })),
+    valuation: def('اجراهای قیمت‌گذاری', fetchValuationRunList, (r) => ({
+      id: r.id,
+      title: `قیمت‌گذاری ${faNum(r.number)}`,
+      subtitle: r.voided_at ? 'باطل' : day(r.date_to),
+      meta: fa(r.total_delta),
     })),
   },
   contacts: {

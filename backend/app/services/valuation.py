@@ -47,8 +47,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.inventory import Item, StockLedger, Warehouse
-from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
-from app.models.issue_returns import WarehouseIssueReturn
+from app.models.inventory_valuation import InventoryValuationAdjustment, InventoryValuationRun
+from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseIssueLine, WarehouseReceipt
+from app.models.issue_returns import WarehouseIssueReturn, WarehouseIssueReturnLine
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.transfers import StockTransfer
 
@@ -83,6 +84,10 @@ AVERAGE_INFLOWS = frozenset({"transfer_in", "adjustment", "stock_count"})
 #: خروج‌هایی که با بهای خودشان بیرون می‌روند و ارزش را کم می‌کنند.
 COST_OUTFLOWS = frozenset({"purchase_return"})
 TRANSFER_SOURCES = frozenset({"transfer_in", "transfer_out"})
+#: ورودی که بهایش از **حرکتِ مبدأ** می‌آید، نه از عددِ ثبت‌شده‌ی خودش: برگشتِ خروج با بهای
+#: همان خروج برمی‌گردد. اگر بهای خروج اصلاح شود و برگشت نه، کالای برگشتی با بهای کهنه در
+#: میانگین می‌نشست و «بهای تمام‌شده‌ی» همان واحدهای برگشتی در سود و زیان می‌ماند.
+SOURCE_FOLLOWING = frozenset({"warehouse_issue_return"})
 
 #: همان دقتِ `Item.average_cost`. بازپخش هر بار گِرد می‌کند چون ثبتِ لحظه‌ای هم از
 #: عددِ ذخیره‌شده‌ی چهاررقمی ادامه می‌دهد؛ بی‌گِردکردن، بازپخش در حرکتِ هزارم چند
@@ -164,6 +169,10 @@ def _rows(
     return db.execute(stmt).all()
 
 
+#: نامِ عمومیِ همان کوئری — برای اجرای قیمت‌گذاری که خودش بازپخش می‌کند.
+ledger_rows = _rows
+
+
 @dataclass
 class Valued:
     """یک حرکت، پس از ارزش‌گذاری.
@@ -181,6 +190,8 @@ class Valued:
     #: میانگینِ کالا در کلِ شرکت، پس از این حرکت.
     average: Decimal
     stale: bool
+    #: بهایی که دفتر برای این حرکت می‌شناسد: آخرین اصلاحِ باطل‌نشده، وگرنه بهای خودِ سند.
+    booked: Decimal = Decimal(0)
 
     @property
     def qty(self) -> Decimal:
@@ -188,46 +199,170 @@ class Valued:
 
     @property
     def recorded_cost(self) -> Decimal:
+        return self.booked
+
+    @property
+    def document_cost(self) -> Decimal:
         return Decimal(self.row.unit_cost)
 
+    @property
+    def adjusted(self) -> bool:
+        return self.booked != self.document_cost
 
-def replay(rows: Iterable, voided: set) -> list[Valued]:
+
+def replay(
+    rows: Iterable, voided: set, active: dict | None = None, sources: dict | None = None
+) -> list[Valued]:
     """حرکاتِ **یک** کالا را، به ترتیبِ (تاریخ، seq)، ارزش‌گذاری می‌کند."""
     qty = Decimal(0)
     average = Decimal(0)
+    costs: dict = {}
     out: list[Valued] = []
     for row in rows:
         move_qty = Decimal(row.qty)
-        recorded = Decimal(row.unit_cost)
+        recorded = active.get(row.id, Decimal(row.unit_cost)) if active else Decimal(row.unit_cost)
         rule = rule_of(row.source_type, move_qty)
         if row.source_type == VOID_SOURCE or (row.source_type, row.source_id) in voided:
-            out.append(Valued(row, rule, True, recorded, move_qty * recorded, average, False))
+            out.append(Valued(row, rule, True, recorded, move_qty * recorded, average, False, recorded))
             continue
+        follows = False
         if rule in (IN_COST, OUT_COST):
             cost = recorded
+            source = sources.get(row.id) if sources else None
+            if source is not None and source in costs:
+                cost, follows = costs[source], True
             new_qty = qty + move_qty
             if new_qty > 0:
-                average = (((qty * average) + (move_qty * recorded)) / new_qty).quantize(
+                average = (((qty * average) + (move_qty * cost)) / new_qty).quantize(
                     _AVERAGE_PLACES, rounding=ROUND_HALF_UP
                 )
             qty = new_qty
         else:
             cost = average
             qty += move_qty
-        stale = rule in (IN_AVERAGE, OUT_AVERAGE) and abs(recorded - cost) > STALE_TOLERANCE
-        out.append(Valued(row, rule, False, cost, move_qty * cost, average, stale))
+        costs[row.id] = cost
+        stale = (follows or rule in (IN_AVERAGE, OUT_AVERAGE)) and abs(recorded - cost) > STALE_TOLERANCE
+        out.append(Valued(row, rule, False, cost, move_qty * cost, average, stale, recorded))
     return out
 
 
+def active_costs(db: Session, item_ids: Iterable[UUID] | None = None) -> dict[UUID, Decimal]:
+    """بهای فعالِ حرکاتِ اصلاح‌شده — از اجراهای باطل‌نشده، آخرین اجرا برنده.
+
+    فقط آخرین اجرای باطل‌نشده ابطال‌پذیر است، پس «آخرین» همیشه همانی است که سندِ
+    اصلاحی‌اش در دفتر مانده.
+    """
+    query = (
+        db.query(InventoryValuationAdjustment.stock_ledger_id, InventoryValuationAdjustment.new_cost)
+        .join(InventoryValuationRun, InventoryValuationRun.id == InventoryValuationAdjustment.run_id)
+        .filter(InventoryValuationRun.voided_at.is_(None))
+    )
+    if item_ids is not None:
+        query = query.filter(InventoryValuationAdjustment.item_id.in_(list(item_ids)))
+    return {move_id: Decimal(cost) for move_id, cost in query.order_by(InventoryValuationRun.number).all()}
+
+
+def moves_by_line(
+    db: Session, *, source_type: str, line_model, parent_column, item_ids: Iterable[UUID] | None = None
+) -> dict[UUID, UUID]:
+    """ردیفِ سند ← حرکتِ دفترِ موجودی‌اش.
+
+    حرکت شناسه‌ی ردیف را ندارد، فقط شناسه‌ی سند را؛ ولی هر ردیف دقیقاً یک حرکت ساخته و
+    هر دو به ترتیبِ ثبت‌اند. پس ردیف‌های یک (سند، کالا) به ترتیبِ `seq` با حرکاتِ همان
+    (سند، کالا) به ترتیبِ `seq` جفت می‌شوند.
+    """
+    ids = None if item_ids is None else list(item_ids)
+    moves = db.query(StockLedger.id, StockLedger.source_id, StockLedger.item_id).filter(
+        StockLedger.source_type == source_type
+    )
+    lines = db.query(line_model.id, parent_column, line_model.item_id)
+    if ids is not None:
+        moves = moves.filter(StockLedger.item_id.in_(ids))
+        lines = lines.filter(line_model.item_id.in_(ids))
+    by_doc: dict[tuple, list[UUID]] = defaultdict(list)
+    for move_id, doc_id, item_id in moves.order_by(StockLedger.seq).all():
+        by_doc[(doc_id, item_id)].append(move_id)
+    grouped: dict[tuple, list[UUID]] = defaultdict(list)
+    for line_id, doc_id, item_id in lines.order_by(parent_column, line_model.seq, line_model.id).all():
+        grouped[(doc_id, item_id)].append(line_id)
+    out: dict[UUID, UUID] = {}
+    for key, line_ids in grouped.items():
+        for line_id, move_id in zip(line_ids, by_doc.get(key, ())):
+            out[line_id] = move_id
+    return out
+
+
+def issue_return_sources(db: Session, item_ids: Iterable[UUID] | None = None) -> dict[UUID, UUID]:
+    """حرکتِ برگشتِ خروج ← حرکتِ خروجی که برمی‌گرداند."""
+    ids = None if item_ids is None else list(item_ids)
+    links = db.query(WarehouseIssueReturnLine.id, WarehouseIssueReturnLine.warehouse_issue_line_id)
+    if ids is not None:
+        links = links.filter(WarehouseIssueReturnLine.item_id.in_(ids))
+    links = links.all()
+    if not links:
+        return {}
+    issue_moves = moves_by_line(
+        db, source_type="warehouse_issue", line_model=WarehouseIssueLine,
+        parent_column=WarehouseIssueLine.issue_id, item_ids=ids,
+    )
+    return_moves = moves_by_line(
+        db, source_type="warehouse_issue_return", line_model=WarehouseIssueReturnLine,
+        parent_column=WarehouseIssueReturnLine.return_id, item_ids=ids,
+    )
+    out: dict[UUID, UUID] = {}
+    for return_line_id, issue_line_id in links:
+        return_move, issue_move = return_moves.get(return_line_id), issue_moves.get(issue_line_id)
+        if return_move is not None and issue_move is not None:
+            out[return_move] = issue_move
+    return out
+
+
+def context(db: Session, item_ids: Iterable[UUID] | None = None) -> tuple[set, dict, dict]:
+    """سه چیزی که بازپخش لازم دارد: اسنادِ باطل، بهای فعال، مبدأِ برگشت‌ها."""
+    ids = None if item_ids is None else list(item_ids)
+    return voided_sources(db), active_costs(db, ids), issue_return_sources(db, ids)
+
+
+def assert_not_adjusted(db: Session, source_types: Iterable[str], source_id: UUID) -> None:
+    """سندی که بهایش در اجرای باطل‌نشده‌ای اصلاح شده، پیش از آن اجرا باطل نمی‌شود.
+
+    ابطالِ سند سندِ **اصلی**اش را معکوس می‌کند، ولی سندِ اصلاحیِ اجرا در دفتر می‌ماند:
+    اختلافی می‌ساخت که هیچ اجرای تازه‌ای نمی‌توانست پاکش کند، چون حرکتِ باطل دیگر منقضی
+    نیست. همان الگوی «اول برگشت را باطل کن، بعد فاکتور».
+    """
+    found = (
+        db.query(InventoryValuationRun.number)
+        .join(InventoryValuationAdjustment, InventoryValuationAdjustment.run_id == InventoryValuationRun.id)
+        .filter(
+            InventoryValuationRun.voided_at.is_(None),
+            InventoryValuationAdjustment.source_id == source_id,
+            InventoryValuationAdjustment.source_type.in_(tuple(source_types)),
+        )
+        .order_by(InventoryValuationRun.number.desc())
+        .first()
+    )
+    if found is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"بهای این سند در «قیمت‌گذاری اسناد انبار» شماره {found.number} اصلاح شده است؛ ابطالش سندِ "
+            "اصلاحی را بی‌پشتوانه می‌گذارد. اول آن اجرا (و اجراهای بعد از آن) را باطل کنید، سپس این سند را.",
+        )
+
+
 def item_moves(
-    db: Session, item_id: UUID, *, until: date | None = None, voided: set | None = None
+    db: Session, item_id: UUID, *, until: date | None = None, ctx: tuple | None = None
 ) -> list[Valued]:
-    return replay(_rows(db, item_ids=[item_id], until=until), voided_sources(db) if voided is None else voided)
+    voided, active, sources = ctx if ctx is not None else context(db, [item_id])
+    return replay(_rows(db, item_ids=[item_id], until=until), voided, active, sources)
 
 
-def recompute(db: Session, item: Item, *, voided: set | None = None) -> None:
+def recompute(db: Session, item: Item, *, ctx: tuple | None = None, voided: set | None = None) -> None:
     """میانگینِ کالا را از بازپخش می‌سازد — تنها جایی که میانگین از صفر ساخته می‌شود."""
-    moves = item_moves(db, item.id, voided=voided)
+    if ctx is None and voided is not None:
+        #: فراخوانی که فهرستِ اسنادِ باطل را خودش یک بار ساخته (مثلِ قیمت‌گذاریِ ورودی‌های
+        #: بی‌فی برای چند کالا) — بهای فعال و مبدأِ برگشت‌ها همچنان باید خوانده شوند.
+        ctx = (voided, active_costs(db, [item.id]), issue_return_sources(db, [item.id]))
+    moves = item_moves(db, item.id, ctx=ctx)
     item.average_cost = moves[-1].average if moves else Decimal(0)
 
 
@@ -389,7 +524,7 @@ def settle_posting(db: Session, moves: Sequence[StockLedger]) -> None:
                 )
         item = db.get(Item, item_id)
         if item is not None:
-            valued = replay(rows, voided)
+            valued = replay(rows, voided, active_costs(db, [item_id]), issue_return_sources(db, [item_id]))
             item.average_cost = valued[-1].average if valued else Decimal(0)
     db.flush()
 
@@ -403,6 +538,7 @@ def guard_void(db: Session, source_types: Iterable[str], source_id: UUID) -> Non
     نمی‌سازد، پس فقط ورودها سنجیده می‌شوند.
     """
     types = tuple(source_types)
+    assert_not_adjusted(db, types, source_id)
     doc_rows = db.execute(
         select(*_COLUMNS).where(StockLedger.source_id == source_id, StockLedger.source_type.in_(types))
     ).all()
@@ -437,11 +573,10 @@ def settle_void(db: Session, item_ids: Iterable[UUID]) -> None:
     بازمحاسبه نمی‌کرد.
     """
     db.flush()
-    voided = voided_sources(db)
     for item_id in sorted(set(item_ids), key=str):
         item = db.get(Item, item_id)
         if item is not None:
-            recompute(db, item, voided=voided)
+            recompute(db, item)
     db.flush()
 
 
@@ -491,13 +626,14 @@ def positions(
     **انتقالِ درونی** در گزارشِ کلِ شرکت ورود و خروج نیست — مقدار و ارزشش صفر است
     و فقط ستون‌ها را باد می‌کرد. در گزارشِ یک انبار، واقعاً ورود یا خروجِ همان انبار است.
     """
-    voided = voided_sources(db)
+    ids = None if item_ids is None else list(item_ids)
+    voided, active, sources = context(db, ids)
     result: dict[UUID, Position] = {}
-    for item_id, group in groupby(_rows(db, item_ids=item_ids, until=date_to), key=lambda row: row.item_id):
+    for item_id, group in groupby(_rows(db, item_ids=ids, until=date_to), key=lambda row: row.item_id):
         rows = list(group)
         origin = _origin_types(rows)
         position = Position(item_id=item_id)
-        for valued in replay(rows, voided):
+        for valued in replay(rows, voided, active, sources):
             row = valued.row
             position.average = valued.average
             if warehouse_id is not None and row.warehouse_id != warehouse_id:
@@ -544,10 +680,10 @@ def kardex_lines(
     date_to: date | None,
 ) -> dict:
     """ردیف‌های کاردکس با ارزش — به ترتیبِ زمان، نه ترتیبِ ثبت."""
-    voided = voided_sources(db)
+    voided, active, sources = context(db, [item_id])
     rows = _rows(db, item_ids=[item_id], until=date_to)
     origin = _origin_types(rows)
-    valued = replay(rows, voided)
+    valued = replay(rows, voided, active, sources)
     numbers = document_numbers(
         db,
         {
@@ -599,6 +735,7 @@ def kardex_lines(
                 "qty_out": line_out,
                 "unit_cost": move.cost,
                 "recorded_unit_cost": move.recorded_cost,
+                "adjusted": move.adjusted,
                 "stale": move.stale,
                 "value_in": rial(move.value) if qty > 0 else Decimal(0),
                 "value_out": rial(-move.value) if qty < 0 else Decimal(0),
@@ -631,11 +768,11 @@ def stale_items(db: Session, *, until: date | None = None) -> list[dict]:
     نبود، بهای خودِ `S` از روزِ ثبت با میانگینِ آن روز نمی‌خوانده — دفتری که پیش
     از ترتیبِ تاریخی ثبت شده، یا انبارگردانی‌ای که بهایش را روزِ بازکردنِ جلسه گرفته.
     """
-    voided = voided_sources(db)
+    voided, active, sources = context(db)
     found = []
     for item_id, group in groupby(_rows(db, until=until), key=lambda row: row.item_id):
         rows = list(group)
-        valued = replay(rows, voided)
+        valued = replay(rows, voided, active, sources)
         stale = [move for move in valued if move.stale]
         if not stale:
             continue

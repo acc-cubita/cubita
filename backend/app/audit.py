@@ -102,6 +102,7 @@ def audited_models() -> dict[type, str]:
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
+    from app.models.inventory_valuation import InventoryValuationRun
     from app.models.manufacturing import Bom, ProductionOrder
     from app.models.payroll import (
         InsuranceTaxBranch,
@@ -132,6 +133,7 @@ def audited_models() -> dict[type, str]:
         SalesReturn: "برگشت از فروش",
         PurchaseReturn: "برگشت از خرید",
         StockTransfer: "انتقال انبار",
+        InventoryValuationRun: "قیمت‌گذاری اسناد انبار",
         #: **فرمولِ ساخت پیکربندیِ پرنفوذی است، نه یک رکوردِ ساده.** عوض‌کردنِ یک
         #: جزء، بهای تمام‌شده‌ی *همه‌ی* تولیدهای بعدی را عوض می‌کند و اثرش تا
         #: بهای فروش‌رفته می‌رود — بی هیچ ردی. سفارشِ تولید هم سندِ بهاست.

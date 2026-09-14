@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
+import { InventoryValuationPanel } from '../components/InventoryValuationPanel'
 import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
 import { IssueReturnsTab } from '../components/IssueReturnsTab'
 import type { ItemCache, WarehouseCache } from '../electron.d'
@@ -367,6 +368,13 @@ export function InventoryPage({
                 onChanged={() => void refreshStock()}
               />
             ),
+          },
+          {
+            //: اصلاحِ بهای حرکاتِ منقضی با یک سندِ اصلاحی — فصلِ «قیمت‌گذاری اسناد انبار».
+            key: 'valuation',
+            label: 'قیمت‌گذاری اسناد',
+            icon: Calculator,
+            content: <InventoryValuationPanel token={token} warehouses={warehouses} items={items} />,
           },
           {
             key: 'pricelists',

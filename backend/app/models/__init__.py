@@ -51,6 +51,7 @@ from app.models.invoices import (
     SalesInvoiceLine,
 )
 from app.models.issue_returns import WarehouseIssueReturn, WarehouseIssueReturnLine
+from app.models.inventory_valuation import InventoryValuationAdjustment, InventoryValuationRun
 from app.models.purchase_deductions import PurchaseDeductionType, PurchaseInvoiceDeduction
 from app.models.marketplace import (
     MarketplaceConnection,
@@ -198,6 +199,8 @@ __all__ = [
     "WarehouseIssueLine",
     "WarehouseIssueReturn",
     "WarehouseIssueReturnLine",
+    "InventoryValuationRun",
+    "InventoryValuationAdjustment",
     "PurchaseDeductionType",
     "PurchaseInvoiceDeduction",
     "SalesInvoice",

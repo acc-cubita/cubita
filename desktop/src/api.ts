@@ -4021,6 +4021,8 @@ export interface KardexLine {
   recorded_unit_cost: string
   /** بهای سند با میانگینِ همان تاریخ نمی‌خواند. */
   stale: boolean
+  /** بها در «قیمت‌گذاری اسناد انبار» اصلاح شده؛ `recorded_unit_cost` بهای پس از اصلاح است. */
+  adjusted: boolean
   value_in: string
   value_out: string
   balance_qty: string
@@ -8723,6 +8725,153 @@ export const updatePayrollFactor = (
   body: Partial<Omit<PayrollFactorRecord, 'id' | 'participation' | 'in_use'>>,
 ) => authedSend<PayrollFactorRecord>(token, 'PATCH', `/api/payroll-factors/${factorId}`, body)
 
+// ── قیمت‌گذاری اسناد انبار — پیش‌نمایش، اجرا و ابطال (مهاجرتِ ۰۱۴۹) ──────────────
+// محاسبه چیزی نمی‌نویسد؛ ثبت با توکنِ همان پیش‌نمایش است و روی دفترِ عوض‌شده ۴۰۹ می‌گیرد.
+
+export interface ValuationScope {
+  /** تاریخِ پایانِ دامنه — و تاریخِ سندِ اصلاحی. */
+  dateTo: string
+  dateFrom?: string
+  /** فقط کالاها را انتخاب می‌کند؛ میانگین مالِ کلِ شرکت است. */
+  warehouseId?: string
+  itemId?: string
+}
+
+export interface ValuationSource {
+  source_type: string
+  source_label: string
+  source_number: number | null
+}
+
+export interface ValuationNegative extends ValuationSource {
+  item_id: string
+  item_name: string
+  warehouse_name: string
+  entry_date: string
+  qty: string
+}
+
+export interface ValuationItem {
+  item_id: string
+  sku: string
+  name: string
+  move_count: number
+  value_delta: string
+  from_date: string
+}
+
+export interface ValuationMove extends ValuationSource {
+  stock_ledger_id: string
+  item_id: string
+  item_name: string
+  entry_date: string
+  warehouse_name: string
+  qty: string
+  previous_cost: string
+  new_cost: string
+  /** اثرِ علامت‌دار بر ارزشِ موجودی (ریال). */
+  value_delta: string
+  counter_account_name: string
+}
+
+export interface ValuationAccount {
+  account_id: string
+  code: string
+  name: string
+  debit: string
+  credit: string
+}
+
+export interface ValuationSkipped extends ValuationSource {
+  item_name: string
+  entry_date: string
+  qty: string
+  reason: string
+}
+
+export interface ValuationPreview {
+  date_from: string | null
+  date_to: string
+  warehouse_id: string | null
+  item_id: string | null
+  token: string
+  /** موجودیِ منفی در خطِ زمان — ثبت ممکن نیست. */
+  blocked: boolean
+  negatives: ValuationNegative[]
+  items: ValuationItem[]
+  moves: ValuationMove[]
+  moves_truncated: boolean
+  /** سندِ اصلاحی‌ای که ثبت خواهد شد. */
+  accounts: ValuationAccount[]
+  skipped: ValuationSkipped[]
+  move_count: number
+  item_count: number
+  total_delta: string
+}
+
+export interface ValuationRun {
+  id: string
+  number: number
+  date_from: string | null
+  date_to: string
+  warehouse_id: string | null
+  warehouse_name: string
+  item_id: string | null
+  item_name: string
+  description: string
+  move_count: number
+  item_count: number
+  total_delta: string
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  created_at: string
+  created_by_name: string
+  voided_at: string | null
+  voided_by_name: string
+  void_reason: string
+  void_entry_number: number | null
+  /** فقط آخرین اجرای باطل‌نشده. */
+  voidable: boolean
+}
+
+const valuationQs = (scope: ValuationScope) => {
+  const qs = new URLSearchParams({ date_to: scope.dateTo })
+  if (scope.dateFrom) qs.set('date_from', scope.dateFrom)
+  if (scope.warehouseId) qs.set('warehouse_id', scope.warehouseId)
+  if (scope.itemId) qs.set('item_id', scope.itemId)
+  return qs.toString()
+}
+
+export const fetchValuationPreview = (token: string, scope: ValuationScope) =>
+  authedGet<ValuationPreview>(token, `/api/inventory-valuation/preview?${valuationQs(scope)}`)
+
+export const createValuationRun = (
+  token: string,
+  scope: ValuationScope,
+  previewToken: string,
+  description: string,
+  idempotencyKey: string,
+) =>
+  authedSend<ValuationRun>(
+    token,
+    'POST',
+    '/api/inventory-valuation/runs',
+    {
+      date_from: scope.dateFrom ?? null,
+      date_to: scope.dateTo,
+      warehouse_id: scope.warehouseId ?? null,
+      item_id: scope.itemId ?? null,
+      token: previewToken,
+      description,
+    },
+    idempotencyKey,
+  )
+
+export const fetchValuationRunList = (token: string) =>
+  authedGetAll<ValuationRun>(token, '/api/inventory-valuation/runs')
+
+export const voidValuationRun = (token: string, runId: string, reason: string) =>
+  authedSend<ValuationRun>(token, 'POST', `/api/inventory-valuation/runs/${runId}/void`, { reason })
 // ── گزارش‌های انبار: ابعاد و ردیابیِ سریال ────────────────────────────────────
 //
 // مبالغ می‌توانند `null` باشند — یعنی کاربر مجوزِ بها ندارد. `null` است نه صفر،

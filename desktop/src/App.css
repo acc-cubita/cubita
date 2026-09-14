@@ -5365,6 +5365,37 @@ button:disabled {
 .kardex-table .status-badge, .rep-kardex-table .status-badge, .rep-inv-table .status-badge { margin-inline-start: 6px; }
 tr.kardex-voided td { color: var(--text-muted); }
 
+/* قیمت‌گذاری اسناد انبار — دامنه، پیش‌نمایش، ثبت و ابطالِ اجرا */
+.vr-scope {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.vr-scope > * { min-width: 0; }
+.vr-scope label, .vr-commit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  min-width: 0;
+}
+.vr-scope label.vr-check { flex-direction: row; align-items: center; gap: 6px; }
+.vr-actions, .vr-commit, .vr-void { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.vr-preview { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.vr-preview > * { min-width: 0; }
+.vr-heading { margin: 6px 0 0; font-size: 14px; color: var(--text-h); }
+.vr-commit { justify-content: flex-end; margin-top: 6px; }
+.vr-commit label { flex: 1 1 240px; }
+.vr-notice { color: var(--success); margin: 8px 0 0; }
+.vr-void input { flex: 1 1 200px; min-width: 0; }
+@media (max-width: 760px) {
+  .vr-scope { grid-template-columns: 1fr; }
+  .vr-actions, .vr-commit { justify-content: stretch; }
+  .vr-actions > button, .vr-commit > button { flex: 1 1 auto; }
+}
+
 /* ── موبایل (≤۷۶۰px): جدول‌های تازه‌ی انبار به کارتِ برچسب‌دار تبدیل می‌شوند ── */
 @media (max-width: 760px) {
   .inv-stock-table, .inv-stock-table tbody,

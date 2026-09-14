@@ -60,6 +60,8 @@ DOC_WAREHOUSE_ISSUE_RETURN = "warehouse_issue_return"
 #: فاکتور خرید خدمات — سریِ شماره‌ی خودش را دارد، جدا از فاکتور خرید کالا. هر دو
 #: در یک جدول‌اند و ستونِ `kind` جدایشان می‌کند.
 DOC_SERVICE_PURCHASE_INVOICE = "service_purchase_invoice"
+#: اجرای «قیمت‌گذاری اسناد انبار» — سندِ اصلاحیِ بها، با شماره‌ی خودش (مهاجرتِ ۰۱۴۹).
+DOC_INVENTORY_VALUATION = "inventory_valuation"
 #: انبارگردانی سریِ شماره‌ی خودش را دارد — سندِ کسری/اضافی سندِ دیگری است (§۹۰).
 DOC_STOCK_COUNT = "stock_count"
 
@@ -85,6 +87,7 @@ DOC_TYPES = (
     DOC_WAREHOUSE_ISSUE,
     DOC_WAREHOUSE_ISSUE_RETURN,
     DOC_SERVICE_PURCHASE_INVOICE,
+    DOC_INVENTORY_VALUATION,
     DOC_STOCK_COUNT,
 )
 

@@ -32,6 +32,7 @@ from app.routers import (
     devices,
     installments,
     integration,
+    inventory_valuation,
     manufacturing,
     inventory,
     invoices,
@@ -130,6 +131,7 @@ app.include_router(returns.router)
 app.include_router(transfers.router)
 app.include_router(warehouse_issues.router)
 app.include_router(issue_returns.router)
+app.include_router(inventory_valuation.router)
 app.include_router(purchase_deductions.router)
 app.include_router(reports.router)
 app.include_router(banking.router)
