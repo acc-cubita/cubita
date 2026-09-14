@@ -75,6 +75,19 @@ def append_only_statements(table: str = "audit_log", trigger: str | None = None)
 #: ستون‌هایی که تغییرشان رویداد حسابرسی نیست.
 NOISE_FIELDS = frozenset({"updated_at", "created_at"})
 
+#: ستون‌هایی که **تغییرشان ثبت می‌شود ولی مقدارشان نه**.
+#:
+#: بدونِ این، افزودنِ `MoadianSettings` به حسابرسی اوضاع را **بدتر** می‌کرد نه
+#: بهتر: `_changed_fields` مقدارِ قبل و بعدِ هر ستون را در `audit_log` می‌نویسد،
+#: پس کلیدِ امضا — همان رازی که داریم رمزش می‌کنیم — به شکلِ JSON در جدولی دیگر
+#: لو می‌رفت. حالا فقط «عوض شد» ثبت می‌شود.
+#: نامِ **خاصیتِ ORM** است نه ستونِ دیتابیس — `_changed_fields` روی
+#: `mapper.column_attrs` می‌چرخد. کلیدِ مؤدیان ستونش `private_key_pem` است ولی
+#: خاصیتش `private_key_stored`؛ نوشتنِ نامِ ستون این‌جا یعنی گارد بی‌صدا رد شود.
+SECRET_FIELDS = frozenset({"private_key_stored", "certificate_pem"})
+#: آنچه به‌جای مقدار نوشته می‌شود.
+REDACTED = "•••"
+
 
 def audited_models() -> dict[type, str]:
     """مدل‌های تحت حسابرسی و برچسب فارسی‌شان.
@@ -84,6 +97,7 @@ def audited_models() -> dict[type, str]:
     """
     from app.models.accounting import JournalEntry
     from app.models.advanced_inventory import PriceList
+    from app.models.moadian import MoadianSettings
     from app.models.sales_ops import CreditDebitNote, SaleType
     from app.models.banking import Check
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
@@ -136,6 +150,10 @@ def audited_models() -> dict[type, str]:
         #: پاداشِ یک نفر را عوض می‌کند باید ردی بگذارد، درست مثلِ کسی که مبلغِ
         #: حکم را عوض می‌کند.
         PayrollFactorInput: "ورودی عامل دوره",
+        #: **حساس‌ترین اعتبارنامه‌ی کوبیتا.** کلیدِ امضا یعنی توانِ فرستادنِ
+        #: صورتحسابِ رسمی به نامِ این کسب‌وکار. تا امروز عوض‌کردنش هیچ ردی
+        #: نمی‌گذاشت. مقدارِ کلید ثبت **نمی‌شود** — `SECRET_FIELDS`.
+        MoadianSettings: "تنظیمات سامانه مؤدیان",
         #: **نوعِ فروش طبقه‌بندیِ حسابداریِ هر فروشِ بعدی را تعیین می‌کند.** عوض‌کردنِ
         #: یک حسابِ درآمد یعنی از فردا درآمد جای دیگری می‌نشیند — همان استدلالی که
         #: `PriceList` و `PayrollSettings` را به این فهرست آورد. تا امروز هیچ ردی
@@ -232,6 +250,13 @@ def _changed_fields(obj) -> dict:
             continue
         before = history.deleted[0] if history.deleted else None
         after = history.added[0] if history.added else None
+        if attr.key in SECRET_FIELDS:
+            #: «چه کسی و کِی کلید را عوض کرد» ثبت می‌شود؛ «کلید چه بود» هرگز.
+            changes[attr.key] = {
+                "from": REDACTED if before else None,
+                "to": REDACTED if after else None,
+            }
+            continue
         changes[attr.key] = {"from": _jsonable(before), "to": _jsonable(after)}
     return changes
 
