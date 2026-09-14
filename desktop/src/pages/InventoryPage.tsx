@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
 import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
 import { IssueReturnsTab } from '../components/IssueReturnsTab'
 import type { ItemCache, WarehouseCache } from '../electron.d'
@@ -34,6 +34,7 @@ import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { SerialSearchTab } from '../components/SerialSearchTab'
+import { UnpricedOutputsTab } from '../components/UnpricedOutputsTab'
 import { isElectron } from '../platform'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
@@ -351,6 +352,20 @@ export function InventoryPage({
                   onChanged={() => void refreshStock()}
                 />
               </>
+            ),
+          },
+          {
+            //: کالایی که وارد انبار شده ولی بهایش هنوز معلوم نیست — تا فی نخورَد
+            //: ارزشش صفر است و بهای فروش‌رفته‌اش هم صفر درمی‌آید.
+            key: 'unpriced',
+            label: 'قیمت‌گذاری ورودی‌ها',
+            icon: BadgeDollarSign,
+            content: (
+              <UnpricedOutputsTab
+                token={token}
+                warehouses={warehouses}
+                onChanged={() => void refreshStock()}
+              />
             ),
           },
           {
