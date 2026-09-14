@@ -4413,6 +4413,7 @@ export type StockCountStatus = 'open' | 'posted' | 'cancelled'
 
 export interface StockCountSummary {
   id: string
+  number: number
   warehouse_id: string
   warehouse_name: string
   count_date: string
@@ -4421,6 +4422,7 @@ export interface StockCountSummary {
   posted_at: string | null
   created_at: string | null
   line_count: number
+  counted_line_count: number
 }
 
 export interface StockCountLine {
@@ -4430,14 +4432,17 @@ export interface StockCountLine {
   item_sku: string
   unit: string
   system_qty: string
-  counted_qty: string
+  /** `null` = هنوز شمرده نشده. با «صفر شمردم» یکی نیست و نباید یکی نمایش داده شود. */
+  counted_qty: string | null
   unit_cost: string
-  variance: string
-  variance_value: string
+  counted_at: string | null
+  variance: string | null
+  variance_value: string | null
 }
 
 export interface StockCountSession {
   id: string
+  number: number
   warehouse_id: string
   warehouse_name: string
   count_date: string
@@ -4447,6 +4452,7 @@ export interface StockCountSession {
   posted_at: string | null
   created_at: string | null
   line_count: number
+  counted_line_count: number
   variance_line_count: number
   total_variance_value: string
   lines: StockCountLine[]
@@ -4458,16 +4464,34 @@ export const fetchStockCounts = (token: string) =>
 export const fetchStockCount = (token: string, id: string) =>
   authedGet<StockCountSession>(token, `/api/stock-counts/${id}`)
 
+/** `item_ids` خالی = هر کالایی که در همین انبار سابقه‌ی حرکت دارد (نه کلِ کاتالوگ). */
 export const createStockCount = (
   token: string,
-  data: { warehouse_id: string; count_date: string; notes: string },
+  data: { warehouse_id: string; count_date: string; notes: string; item_ids?: string[] },
 ) => authedSend<StockCountSession>(token, 'POST', '/api/stock-counts', data)
 
+/** `counted_qty: null` یعنی «شمارش را پس بگیر» — ردیف به حالتِ نشمرده برمی‌گردد. */
 export const setStockCounts = (
   token: string,
   id: string,
-  lines: { line_id: string; counted_qty: number }[],
+  lines: { line_id: string; counted_qty: number | null }[],
 ) => authedSend<StockCountSession>(token, 'PUT', `/api/stock-counts/${id}/counts`, { lines })
+
+/** کالاهایی که **پس از** ثبتِ شمارششان حرکت کرده‌اند — گزارش، نه گارد. */
+export interface CountDrift {
+  item_id: string
+  item_name: string
+  system_qty_at_count: string
+  system_qty_now: string
+  counted_at: string | null
+}
+
+export const fetchStockCountDrift = (token: string, id: string) =>
+  authedGet<CountDrift[]>(token, `/api/stock-counts/${id}/drift`)
+
+/** برگه‌های شمارش را باز می‌کند — عمداً بدونِ موجودیِ سیستمی (شمارشِ کور). */
+export const printCountTags = (token: string, id: string) =>
+  openInvoicePrintView(token, `/api/stock-counts/${id}/tags`)
 
 export const postStockCount = (token: string, id: string) =>
   authedSend<StockCountSession>(token, 'POST', `/api/stock-counts/${id}/post`, {})

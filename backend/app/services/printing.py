@@ -1216,3 +1216,84 @@ def render_warehouse_document(
 </div>
 </body>
 </html>"""
+
+
+def render_count_tags(
+    *,
+    business_name: str,
+    session_number,
+    count_date: date | None,
+    warehouse_code: str,
+    warehouse_name: str,
+    responsible: str,
+    lines: list[dict],
+) -> str:
+    """برگه‌های شمارشِ انبارگردانی — یک تگ برای هر کالا.
+
+    **عمداً «کور» است: موجودیِ سیستمی روی برگه چاپ نمی‌شود.** اگر شمارنده ببیند
+    سیستم می‌گوید ۱۰۰، ناخودآگاه به ۱۰۰ می‌رسد و شمارش دیگر یک شاهدِ مستقل
+    نیست — تمامِ ارزشِ انبارگردانی همین استقلال است. جای عدد خالی می‌ماند تا با
+    دست پر شود، و امضا زیرش می‌نشیند.
+
+    مقایسه‌ی «انتظار در برابر شمارش» جای خودش را دارد: صفحه‌ی تطبیق، بعد از
+    ورودِ عددها. آن دو نما عمداً یکی نیستند.
+    """
+    head_line = " — ".join(filter(None, [warehouse_code, warehouse_name]))
+    tags = []
+    for line in lines:
+        tags.append(
+            f"""<div class="tag">
+  <div class="tag-head">
+    <span class="tag-no">تگ {fa_number(line.get('tag_no'))}</span>
+    <span class="tag-doc">انبارگردانی {fa_number(session_number)}</span>
+  </div>
+  <div class="tag-body">
+    <div class="tag-row"><span>کد کالا</span><b>{escape(str(line.get('sku') or '—'))}</b></div>
+    <div class="tag-row"><span>کالا</span><b>{escape(str(line.get('name') or ''))}</b></div>
+    <div class="tag-row"><span>واحد</span><b>{escape(str(line.get('unit') or '—'))}</b></div>
+    <div class="tag-count"><span>مقدار شمارش‌شده</span><div class="blank"></div></div>
+    <div class="tag-sign"><span>امضای شمارنده</span><div class="blank"></div></div>
+  </div>
+</div>"""
+        )
+
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>برگه‌های شمارش — انبارگردانی {fa_number(session_number)}</title>
+<style>{_STYLE}
+.tags {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }}
+@media (max-width: 700px) {{ .tags {{ grid-template-columns: 1fr; }} }}
+.tag {{ border: 1px solid #999; border-radius: 6px; padding: 8px 10px; break-inside: avoid; }}
+.tag-head {{ display: flex; justify-content: space-between; border-bottom: 1px solid #ccc;
+             padding-bottom: 4px; margin-bottom: 6px; font-weight: 700; }}
+.tag-row {{ display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }}
+.tag-row span {{ color: #555; }}
+.tag-count, .tag-sign {{ margin-top: 8px; }}
+.tag-count span, .tag-sign span {{ display: block; color: #555; margin-bottom: 3px; }}
+.blank {{ border: 1px dashed #888; height: 30px; border-radius: 4px; }}
+</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<div class="sheet">
+  <div class="head">
+    <div class="brand-block">
+      <div>
+        <h1 class="title">برگه‌های شمارش انبارگردانی</h1>
+        <div class="sub">{escape(business_name)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div><span>شماره</span><b>{fa_number(session_number)}</b></div>
+      <div><span>تاریخ</span><b>{format_jalali(count_date)}</b></div>
+      <div><span>انبار</span><b>{escape(head_line)}</b></div>
+      <div><span>مسئول</span><b>{escape(responsible or '—')}</b></div>
+    </div>
+  </div>
+  <div class="tags">{''.join(tags)}</div>
+</div>
+</body>
+</html>"""
