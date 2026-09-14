@@ -130,6 +130,12 @@ jobs:
       - name: نصب
         working-directory: desktop
         run: npm ci
+        env:
+          # playwright فقط برای `verify-pages.mjs` است و آن اسکریپت بک‌اندِ زنده
+          # و اعتبارنامه می‌خواهد، پس در CI اجرا نمی‌شود. بدونِ این متغیر،
+          # postinstallِ playwright سه مرورگر (~۴۰۰ مگابایت) را در **هر** اجرا
+          # دانلود می‌کند — هزینه‌ای که هیچ قدمی این‌جا مصرفش نمی‌کند.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       - name: بررسی نوع‌ها
         working-directory: desktop

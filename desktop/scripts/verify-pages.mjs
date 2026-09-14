@@ -18,6 +18,25 @@
  */
 import { chromium } from 'playwright'
 
+//: **نبودِ مرورگر باید مثلِ نبودِ اعتبارنامه پیام بدهد، نه stack trace.**
+//:
+//: `playwright` حالا در `package.json` اعلام شده، ولی `npm ci` فقط بسته‌ی npm را
+//: می‌آورد — باینریِ مرورگر قدمِ جداگانه‌ای است. تا پیش از این، اجرای اسکریپت
+//: روی ماشینی که آن قدم را نزده بود یک خطای خامِ داخلیِ playwright می‌داد و
+//: خواننده حدس می‌زد اسکریپت خراب است.
+async function launch() {
+  try {
+    return await chromium.launch()
+  } catch (err) {
+    if (/Executable doesn't exist|please run|browserType.launch/i.test(String(err?.message))) {
+      console.error('مرورگرِ chromium نصب نیست. یک‌بار اجرا کنید:')
+      console.error('  npx playwright install chromium')
+      process.exit(2)
+    }
+    throw err
+  }
+}
+
 const args = process.argv.slice(2)
 const flag = (name) => {
   const i = args.indexOf(`--${name}`)
@@ -98,7 +117,7 @@ const only = flag('page')
 let failed = 0
 
 for (const width of widths) {
-  const browser = await chromium.launch()
+  const browser = await launch()
   const page = await browser.newPage({ viewport: { width, height: 900 } })
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
