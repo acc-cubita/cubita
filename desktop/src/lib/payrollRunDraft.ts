@@ -4,11 +4,15 @@ import {
   downloadPayrollCsv,
   type PayrollExportKind,
   fetchAttendance,
+  fetchFactorInputs,
+  fetchPayrollFactors,
   fetchPayrollPeriods,
   fetchPayslips,
   generatePayslips,
+  saveFactorInputs,
   upsertAttendance,
   type EmployeeRecord,
+  type PayrollFactorRecord,
   type PayrollPeriodRecord,
   type PayslipRecord,
 } from '../api'
@@ -33,6 +37,11 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
   const [periodError, setPeriodError] = useState<string | null>(null)
 
   const [attendance, setAttendance] = useState<Record<string, AttendanceEntry>>({})
+  //: `${employee_id}|${factor_id}` → مبلغِ تایپ‌شده. کلیدِ مرکب چون یک کارمند
+  //: می‌تواند چند عاملِ متغیر داشته باشد و یک عامل چند کارمند.
+  const [factorInputs, setFactorInputs] = useState<Record<string, string>>({})
+  const [variableFactors, setVariableFactors] = useState<PayrollFactorRecord[]>([])
+  const [inputError, setInputError] = useState<string | null>(null)
   const [payslips, setPayslips] = useState<PayslipRecord[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [openPayslip, setOpenPayslip] = useState<PayslipRecord | null>(null)
@@ -52,6 +61,15 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     void refreshPeriods()
   }, [refreshPeriods])
 
+  //: فقط عاملِ **متغیرِ فعال** ورودیِ دوره می‌گیرد. عاملِ قراردادی مبلغش روی
+  //: حکم است و سرور هم همین را گارد می‌کند؛ نشان‌دادنش این‌جا فقط کاربر را به
+  //: خطای ۴۰۰ می‌رساند.
+  useEffect(() => {
+    fetchPayrollFactors(token)
+      .then((rows) => setVariableFactors(rows.filter((f) => f.kind === 'variable' && f.is_active)))
+      .catch(() => setVariableFactors([]))
+  }, [token])
+
   // با تغییرِ دوره‌ی انتخابی، کارکرد و فیش‌های همان دوره خوانده می‌شوند.
   useEffect(() => {
     if (!selectedPeriodId) {
@@ -67,6 +85,11 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
         const map: Record<string, AttendanceEntry> = {}
         for (const a of existing) map[a.employee_id] = { worked: a.worked_days, overtime: a.overtime_hours }
         setAttendance(map)
+        const rows = await fetchFactorInputs(token, selectedPeriodId)
+        if (cancelled) return
+        const inputMap: Record<string, string> = {}
+        for (const r of rows) inputMap[`${r.employee_id}|${r.factor_id}`] = r.amount
+        setFactorInputs(inputMap)
         setPayslips(await fetchPayslips(token, selectedPeriodId))
       } catch {
         /* خطای بارگذاری نادیده — دوره‌ی خالی */
@@ -76,6 +99,30 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
       cancelled = true
     }
   }, [token, selectedPeriodId])
+
+  function setFactorInput(employeeId: string, factorId: string, value: string) {
+    setFactorInputs((prev) => ({ ...prev, [`${employeeId}|${factorId}`]: value }))
+  }
+
+  /** مبلغِ یک کارمند را ذخیره می‌کند. **فقط همان ردیف** می‌رود، نه کلِ جدول —
+   *  وگرنه دو کاربر که هم‌زمان دو نفر را وارد می‌کنند کارِ هم را پاک می‌کردند. */
+  async function saveFactorInput(employeeId: string): Promise<boolean> {
+    if (!selectedPeriodId) return false
+    setInputError(null)
+    const rows = variableFactors.map((f) => ({
+      employee_id: employeeId,
+      factor_id: f.id,
+      amount: Number(factorInputs[`${employeeId}|${f.id}`] || 0) || 0,
+    }))
+    try {
+      await saveFactorInputs(token, selectedPeriodId, rows)
+      setMessage('ورودیِ عوامل ذخیره شد.')
+      return true
+    } catch (e) {
+      setInputError(e instanceof Error ? e.message : 'خطای ناشناخته')
+      return false
+    }
+  }
 
   async function createPeriod(): Promise<boolean> {
     setPeriodError(null)
@@ -151,6 +198,11 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     attendance,
     setAttendanceField,
     saveAttendance,
+    variableFactors,
+    factorInputs,
+    inputError,
+    setFactorInput,
+    saveFactorInput,
     payslips,
     generate,
     downloadCsv,

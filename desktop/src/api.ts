@@ -993,7 +993,9 @@ export interface PayslipLineRecord {
   factor_id: string | null
   factor_name: string
   direction: 'earning' | 'deduction'
-  /** `contract` | `attendance` | `settings` | `loan` — کجا باید عوضش کرد. */
+  /** `contract` | `attendance` | `settings` | `loan` | `input` — کجا باید عوضش کرد.
+   *
+   * `input` یعنی «ورودیِ عواملِ همین دوره»، نه حکمِ حقوقی. */
   origin: string
   amount: string
   note: string
@@ -8874,3 +8876,37 @@ export const applyReceiptPrices = (
     prices: { item_id: string; unit_cost: number }[]
   },
 ) => authedSend<ApplyPricesResult>(token, 'POST', '/api/warehouse-receipts/apply-prices', body)
+
+// ═════════════════ ورودیِ عواملِ متغیر در یک دوره ═════════════════
+//
+// لایه‌ای که نبود. تا مهاجرتِ ۰۱۴۷ عاملِ «متغیر» دقیقاً مثلِ «قراردادی» رفتار
+// می‌کرد — مبلغش از حکم می‌آمد — پس مأموریت و پاداش نمی‌توانستند ماه‌به‌ماه فرق
+// کنند. حالا مبلغِ عاملِ متغیر برای هر دوره جدا وارد می‌شود.
+
+export interface FactorInputRecord {
+  id: string
+  employee_id: string
+  employee_name: string
+  factor_id: string
+  factor_name: string
+  /** `benefit` یا `deduction` — جهتِ عدد از این می‌آید، نه از علامتش. */
+  factor_category: string
+  amount: string
+  notes: string
+}
+
+export const fetchFactorInputs = (token: string, periodId: string) =>
+  authedGet<FactorInputRecord[]>(token, `/api/payroll-periods/${periodId}/factor-inputs`)
+
+/** فقط ردیف‌های نام‌برده نوشته می‌شوند؛ بقیه دست نمی‌خورند. `amount = 0` حذف است. */
+export const saveFactorInputs = (
+  token: string,
+  periodId: string,
+  rows: { employee_id: string; factor_id: string; amount: number; notes?: string }[],
+) =>
+  authedSend<FactorInputRecord[]>(
+    token,
+    'PUT',
+    `/api/payroll-periods/${periodId}/factor-inputs`,
+    { rows },
+  )
