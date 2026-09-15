@@ -67,6 +67,8 @@ DOC_STOCK_COUNT = "stock_count"
 #: پیمان — سریِ شماره‌ی داخلیِ خودش، جدا از شماره‌ی قراردادِ خودِ کارفرما
 #: (`Contract.external_reference`، متنِ آزاد).
 DOC_CONTRACT = "contract"
+#: متممِ پیمان — سریِ شماره‌ی مستقل، جدا از شماره‌ی پیمانِ مبنا.
+DOC_CONTRACT_AMENDMENT = "contract_amendment"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -93,6 +95,7 @@ DOC_TYPES = (
     DOC_INVENTORY_VALUATION,
     DOC_STOCK_COUNT,
     DOC_CONTRACT,
+    DOC_CONTRACT_AMENDMENT,
 )
 
 

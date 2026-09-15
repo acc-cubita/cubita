@@ -70,3 +70,33 @@ class ContractOut(BaseModel):
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+class ContractAmendmentIn(BaseModel):
+    contract_id: UUID
+    date: date
+    description: str
+    amount_delta: Decimal = Decimal(0)
+    new_end_date: date | None = None
+    notes: str = ""
+
+    @field_validator("description")
+    @classmethod
+    def description_required(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("موضوعِ متمم را بنویسید")
+        return v
+
+
+class ContractAmendmentOut(BaseModel):
+    id: UUID
+    number: int
+    contract_id: UUID
+    contract_number: int | None
+    date: date
+    description: str
+    amount_delta: Decimal
+    new_end_date: date | None
+    notes: str
+
+    model_config = {"from_attributes": True}
