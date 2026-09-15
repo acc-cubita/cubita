@@ -34,6 +34,10 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude Code | `routers/inventory.py`, `schemas/inventory.py`, `ContactsPage.tsx`, `api.ts` | حذف و غیرفعال‌سازیِ طرف حساب | ۱۴۰۵/۰۶/۲۴ |
+| Claude Code | `routers/payroll.py`, `schemas/payroll.py`, `services/payroll_contracts.py` | ویرایش و غیرفعال‌سازیِ کارمند | ۱۴۰۵/۰۶/۲۴ |
+| Claude Code | `models/inventory.py`, `services/inventory.py`, `alembic/versions/0150_*` | ابطالِ تعدیلِ انبار (**مهاجرتِ ۰۱۵۰ — شماره را نگیرید**) | ۱۴۰۵/۰۶/۲۴ |
+| Claude Code | `services/reports.py`, `routers/reports.py` | صورت تغییرات در حقوق صاحبان سهام | ۱۴۰۵/۰۶/۲۴ |
 
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >

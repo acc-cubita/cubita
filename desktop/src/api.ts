@@ -2719,6 +2719,11 @@ export const fetchContactTafsiliRequirement = (token: string) =>
 export interface ContactIn {
   name: string
   type: string
+  /** غیرفعال = «دیگر پیشنهادش نکن»، نه «ناپدید شو». تاریخچه دست‌نخورده می‌ماند.
+   *
+   * سرور `PATCH` را جزئی می‌گیرد، پس **نفرستادنش یعنی دست نزن**. فرم‌هایی که این
+   * فیلد را ندارند نباید نگرانِ فعال‌کردنِ دوباره‌ی یک طرف‌حسابِ غیرفعال باشند. */
+  is_active?: boolean
   phone: string | null
   email: string | null
   address: string
@@ -2998,8 +3003,21 @@ export const fetchContacts = (token: string) => authedGetAll<ContactRecord>(toke
 export const createContact = (token: string, data: ContactIn) =>
   authedSend<ContactRecord>(token, 'POST', '/api/contacts', data)
 
-export const updateContact = (token: string, contactId: string, data: ContactIn) =>
+/** ویرایشِ **جزئی** — فقط همان فیلدهایی که می‌فرستی عوض می‌شوند.
+ *
+ * `Partial` این‌جا تعارف نیست: سرور `ContactPatch` می‌گیرد و با `exclude_unset`
+ * کار می‌کند، پس فیلدی که نیاید یعنی «دست نزن» نه «پیش‌فرضش کن». همین اجازه
+ * می‌دهد یک دکمه‌ی «غیرفعال» تنها `{ is_active: false }` بفرستد بی‌آنکه بقیه‌ی
+ * پرونده‌ی طرف‌حساب را با مقدارهای فرمِ باز بازنویسی کند. */
+export const updateContact = (token: string, contactId: string, data: Partial<ContactIn>) =>
   authedSend<ContactRecord>(token, 'PATCH', `/api/contacts/${contactId}`, data)
+
+/** حذفِ طرف حساب — فقط اگر هیچ‌جا استفاده نشده باشد؛ وگرنه ۴۰۹ با پیامِ روشن.
+ *
+ * طرف‌حسابی که فاکتور یا سند دارد پاک نمی‌شود، چون دفتر به نامش ارجاع می‌دهد.
+ * راهِ درستش «غیرفعال» است — همان چیزی که پیامِ خطای سرور پیشنهاد می‌دهد. */
+export const deleteContact = (token: string, contactId: string) =>
+  authedDelete(token, `/api/contacts/${contactId}`)
 
 export interface CreditStatus {
   contact_id: string

@@ -21,7 +21,7 @@ from app.models.inventory import (
 from app.models.user import User
 from decimal import Decimal
 
-from app.models.company import ContactAddress, ContactChannel
+from app.models.company import ContactAddress, ContactChannel, RelatedPerson
 from app.services import tafsili
 from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
@@ -34,6 +34,7 @@ from app.schemas.inventory import (
     ContactChannelIn,
     ContactChannelOut,
     ContactIn,
+    ContactPatch,
     ContactOut,
     CreditStatusOut,
     ItemAttributeIn,
@@ -151,11 +152,23 @@ def warehouse_stock_positions(
 def list_contacts(
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
+    active: bool | None = Query(
+        None,
+        description="فقط فعال‌ها (true) یا فقط غیرفعال‌ها (false). نیامده یعنی هر دو.",
+    ),
     _=Depends(require_permission("invoices", "view")),
 ):
     # نام یکتا نیست، پس id تساوی را می‌شکند. طرف‌حساب‌های سیستمی (مثلِ «فروشِ کارتیِ
     # گذری») از فهرستِ کاربر پنهان می‌مانند.
     query = db.query(Contact).filter(Contact.is_system.is_(False))
+    #: **اختیاری، و پیش‌فرض «هر دو» — عمداً.**
+    #:
+    #: پنهان‌کردنِ خودکارِ غیرفعال‌ها رفتارِ امروز را عوض می‌کرد و صفحه‌ای که
+    #: فاکتورِ قدیمی را باز می‌کند طرف‌حسابش را گم می‌کرد. غیرفعال یعنی «در
+    #: انتخابگرهای تازه پیشنهاد نشو»، نه «ناپدید شو» — همان معنایی که برای حساب
+    #: هم برقرار است.
+    if active is not None:
+        query = query.filter(Contact.is_active.is_(active))
     items, next_cursor = paginate(query, [Contact.name, Contact.id], params, descending=False)
     return Page(items=items, next_cursor=next_cursor)
 
@@ -301,7 +314,7 @@ def create_contact(
 @router.patch("/api/contacts/{contact_id}", response_model=ContactOut)
 def update_contact(
     contact_id: UUID,
-    data: ContactIn,
+    data: ContactPatch,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("invoices", "update")),
 ):
@@ -325,7 +338,7 @@ def update_contact(
         #: نامِ طرف‌حساب فقط وقتی جایگزینِ عنوانِ تفصیلی می‌شود که کاربر خودِ عنوان را
         #: فرستاده و خالی گذاشته باشد. وگرنه عنوانی که دستی انتخاب شده بود با هر
         #: ویرایشِ ساده‌ی نام بازنویسی می‌شد.
-        fallback_title=data.name if "tafsili_title" in given else "",
+        fallback_title=(data.name or "") if "tafsili_title" in given else "",
         existing_id=contact.analytic_id,
     )
     for field, value in fields.items():
@@ -337,6 +350,66 @@ def update_contact(
     db.flush()
     db.refresh(contact)
     return _contact_out(contact)
+
+
+@router.delete("/api/contacts/{contact_id}", status_code=204)
+def delete_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("invoices", "delete")),
+):
+    """حذفِ طرف حساب — فقط اگر هیچ‌جا استفاده نشده باشد.
+
+    **همان الگوی حذفِ حساب**، و به همان دلیل: طرف‌حسابی که فاکتور یا سند دارد
+    نباید پاک شود، چون دفتر به نامش ارجاع می‌دهد. به‌جایش «غیرفعال» می‌شود —
+    که از فهرست‌های انتخاب پنهانش می‌کند و تاریخچه را دست‌نخورده می‌گذارد.
+
+    **قیدهای کلیدِ خارجی مرجعِ حقیقت‌اند، نه فهرستی در پایتون.** بیش از بیست
+    جدول به `contacts.id` ارجاع می‌دهند و شمردنشان این‌جا یعنی فهرستی که با
+    اولین جدولِ تازه از واقعیت عقب می‌افتد. پس تلاشِ حذف داخلِ SAVEPOINT انجام
+    می‌شود و اگر هر ارجاعی مانع شد، فقط همان savepoint برمی‌گردد نه کلِ
+    تراکنش/زمینه‌ی RLS.
+
+    دو گارد **پیش از** آن لازم‌اند چون کلیدِ خارجی نیستند و قید نمی‌گیردشان:
+    طرف‌حسابِ سیستمی، و مانده‌ی اول دوره که عددی روی خودِ ردیف است.
+
+    **تفصیلیِ طرف‌حساب با او حذف نمی‌شود.** ممکن است در سند استفاده شده باشد و
+    حذفش دفتر را می‌شکند؛ اگر بلااستفاده باشد از مسیرِ خودش حذف می‌شود.
+    """
+    contact = db.get(Contact, contact_id)
+    if contact is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "طرف حساب یافت نشد")
+    if contact.is_system:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "طرف‌حسابِ سیستمی قابلِ حذف نیست؛ آن را «غیرفعال» کنید",
+        )
+    if contact.opening_ar_amount or contact.opening_ap_amount:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این طرف حساب مانده‌ی اول دوره دارد و قابلِ حذف نیست؛ "
+            "اول مانده را صفر کنید یا به‌جای حذف، آن را «غیرفعال» کنید",
+        )
+
+    try:
+        with db.begin_nested():
+            #: نشانی‌ها، کانال‌ها و وابستگان **مالِ** خودِ طرف‌حساب‌اند، نه
+            #: موجودیتِ مستقل، پس با او می‌روند. داخلِ savepoint، وگرنه اگر حذفِ
+            #: خودِ طرف‌حساب رد شود نشانی‌هایش رفته‌اند و او مانده — خرابیِ
+            #: بی‌صدایی که از خودِ خطا بدتر است.
+            for child in (ContactAddress, ContactChannel, RelatedPerson):
+                db.query(child).filter(child.contact_id == contact_id).delete(
+                    synchronize_session=False
+                )
+            db.delete(contact)
+            db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "این طرف حساب در فاکتور، سند یا عملیاتِ دیگری استفاده شده و قابلِ "
+            "حذف نیست؛ به‌جای حذف، آن را «غیرفعال» کنید",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/contacts/{contact_id}/channels", response_model=list[ContactChannelOut])
