@@ -1,21 +1,26 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_module, require_permission
 from app.models.inventory import Item
-from app.models.manufacturing import Bom, BomLine, ProductionOrder
+from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionPlan
 from app.models.user import User
+from app.pagination import Page, PageParams, paginate
 from app.schemas.manufacturing import (
     BomIn,
     BomOut,
     BomUpdateIn,
     ProductionOrderIn,
     ProductionOrderOut,
+    ProductionPlanIn,
+    ProductionPlanOut,
+    ProductionPlanStatusIn,
 )
 from app.services import manufacturing as service
+from app.services.idempotency import idempotent
 
 router = APIRouter(
     prefix="/api",
@@ -101,16 +106,68 @@ def delete_bom(
     db.delete(bom)
 
 
-# ── سفارشِ تولید ────────────────────────────────────────
-@router.get("/production-orders", response_model=list[ProductionOrderOut])
-def list_production_orders(db: Session = Depends(get_db), _=Depends(require_permission("manufacturing", "view"))):
-    return db.query(ProductionOrder).order_by(ProductionOrder.created_at.desc()).all()
+# ── سفارشِ تولید (برنامه) ────────────────────────────────
+@router.get("/production-plans", response_model=Page[ProductionPlanOut])
+def list_production_plans(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    status_: str | None = Query(None, alias="status"),
+    _=Depends(require_permission("manufacturing", "view")),
+):
+    query = db.query(ProductionPlan)
+    if status_:
+        query = query.filter(ProductionPlan.status == status_)
+    rows, next_cursor = paginate(query, [ProductionPlan.created_at, ProductionPlan.number], params)
+    return Page(items=rows, next_cursor=next_cursor)
+
+
+@router.post("/production-plans", response_model=ProductionPlanOut, status_code=201)
+def create_production_plan(
+    data: ProductionPlanIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("manufacturing", "create")),
+):
+    """**idempotent** — دوکلیک نباید دو سفارش با یک شماره بسازد."""
+    return idempotent(
+        db, request, user, operation="create_production_plan", payload=data,
+        run=lambda: service.create_production_plan(db, data, user),
+        replay=lambda pid: db.get(ProductionPlan, pid),
+    )
+
+
+@router.patch("/production-plans/{plan_id}/status", response_model=ProductionPlanOut)
+def change_production_plan_status(
+    plan_id: UUID,
+    data: ProductionPlanStatusIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("manufacturing", "update")),
+):
+    return service.change_production_plan_status(db, plan_id, data.status, user)
+
+
+# ── سندِ تولید (اجرا) ────────────────────────────────────
+@router.get("/production-orders", response_model=Page[ProductionOrderOut])
+def list_production_orders(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("manufacturing", "view")),
+):
+    query = db.query(ProductionOrder)
+    rows, next_cursor = paginate(query, [ProductionOrder.created_at, ProductionOrder.number], params)
+    return Page(items=rows, next_cursor=next_cursor)
 
 
 @router.post("/production-orders", response_model=ProductionOrderOut, status_code=201)
 def create_production_order(
     data: ProductionOrderIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("manufacturing", "create")),
 ):
-    return service.post_production_order(db, data, user)
+    """**idempotent** — دوکلیک نباید مواد را دوبار مصرف کند."""
+    return idempotent(
+        db, request, user, operation="create_production_order", payload=data,
+        run=lambda: service.post_production_order(db, data, user),
+        replay=lambda oid: db.get(ProductionOrder, oid),
+    )

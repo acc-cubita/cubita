@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers, Pencil, X, Power, ReceiptText } from 'lucide-react'
+import { ClipboardList, Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers, Pencil, X, Power, ReceiptText } from 'lucide-react'
 import {
+  changeProductionPlanStatus,
   createBom,
   createProductionOrder,
+  createProductionPlan,
   deleteBom,
   updateBom,
   fetchBoms,
   fetchItemsLive,
   fetchProductionOrders,
+  fetchProductionPlans,
   fetchWarehousesLive,
   type BomRecord,
   type ItemRecord,
   type ProductionOrderRecord,
+  type ProductionPlanRecord,
+  type ProductionPlanStatus,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { NumberInput } from '../components/NumberInput'
@@ -23,6 +28,25 @@ import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { Pager, usePagination } from '../components/Pager'
 import { ProductionCostDrawer } from '../components/ProductionCostDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
+
+const PLAN_STATUS_LABELS: Record<ProductionPlanStatus, string> = {
+  draft: 'پیش‌نویس',
+  started: 'شروع‌شده',
+  in_progress: 'در حالِ اجرا',
+  stopped: 'متوقف‌شده',
+  finished: 'تمام‌شده',
+  cancelled: 'لغوشده',
+}
+
+//: عیناً همان گذارِ سرور (`services/manufacturing.py`).
+const PLAN_TRANSITIONS: Record<ProductionPlanStatus, ProductionPlanStatus[]> = {
+  draft: ['started', 'cancelled'],
+  started: ['in_progress', 'stopped'],
+  in_progress: ['stopped', 'finished'],
+  stopped: ['in_progress', 'finished'],
+  finished: [],
+  cancelled: [],
+}
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -41,21 +65,24 @@ export function ManufacturingPage({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
   const [boms, setBoms] = useState<BomRecord[]>([])
+  const [plans, setPlans] = useState<ProductionPlanRecord[]>([])
   const [orders, setOrders] = useState<ProductionOrderRecord[]>([])
   const [error, setError] = useState<string | null>(null)
 
   async function refresh() {
     setError(null)
     try {
-      const [its, ws, bs, os] = await Promise.all([
+      const [its, ws, bs, ps, os] = await Promise.all([
         fetchItemsLive(token),
         fetchWarehousesLive(token),
         fetchBoms(token),
+        fetchProductionPlans(token),
         fetchProductionOrders(token),
       ])
       setItems(its)
       setWarehouses(ws)
       setBoms(bs)
+      setPlans(ps)
       setOrders(os)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -72,15 +99,15 @@ export function ManufacturingPage({ token }: { token: string }) {
   const kpis = useMemo(() => {
     const active = boms.filter((b) => b.is_active).length
     const producedValue = orders.reduce((s, o) => s + Number(o.qty_produced) * Number(o.unit_cost), 0)
-    return { boms: boms.length, active, orders: orders.length, producedValue }
-  }, [boms, orders])
+    return { boms: boms.length, active, plans: plans.length, orders: orders.length, producedValue }
+  }, [boms, plans, orders])
 
   return (
     <div className="page panels">
       <PageHeader
         icon={Factory}
         title="تولید و بهای تمام‌شده"
-        description="فرمولِ ساختِ محصولات را تعریف کنید و با ثبتِ سفارشِ تولید، مواد اولیه به محصول تبدیل و بهای تمام‌شده خودکار محاسبه می‌شود."
+        description="فرمولِ ساختِ محصولات را تعریف کنید، با سفارشِ تولید برنامه‌ریزی کنید و با سندِ تولید مواد اولیه را به محصول تبدیل کنید — بهای تمام‌شده خودکار محاسبه می‌شود."
       />
 
       {error && <div className="error">{error}</div>}
@@ -88,7 +115,8 @@ export function ManufacturingPage({ token }: { token: string }) {
       <div className="stat-grid">
         <StatCard icon={<FlaskConical size={18} />} label="فرمول‌های ساخت" value={fa(kpis.boms)} />
         <StatCard icon={<Layers size={18} />} label="فرمول‌های فعال" value={fa(kpis.active)} tone="success" />
-        <StatCard icon={<Hammer size={18} />} label="سفارش‌های تولید" value={fa(kpis.orders)} />
+        <StatCard icon={<ClipboardList size={18} />} label="سفارش‌های تولید" value={fa(kpis.plans)} />
+        <StatCard icon={<Hammer size={18} />} label="اسنادِ تولید" value={fa(kpis.orders)} />
         <StatCard icon={<Package size={18} />} label="ارزش تولیدشده" value={fa(kpis.producedValue)} hint="ریال" />
       </div>
 
@@ -96,9 +124,190 @@ export function ManufacturingPage({ token }: { token: string }) {
         syncPage="manufacturing"
         tabs={[
           { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical, content: <BomsTab token={token} boms={boms} goodsItems={goodsItems} itemById={itemById} onChanged={refresh} /> },
-          { key: 'produce', label: 'تولید', icon: Hammer, content: <ProduceTab token={token} boms={boms} orders={orders} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
+          { key: 'orders', label: 'سفارش تولید', icon: ClipboardList, content: <OrdersTab token={token} boms={boms} plans={plans} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
+          { key: 'documents', label: 'سند تولید', icon: Hammer, content: <DocumentsTab token={token} boms={boms} plans={plans} orders={orders} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
         ]}
       />
+    </div>
+  )
+}
+
+// ── تبِ سفارشِ تولید (برنامه) ──────────────────────────
+function OrdersTab({
+  token,
+  boms,
+  plans,
+  warehouses,
+  itemById,
+  onChanged,
+}: {
+  token: string
+  boms: BomRecord[]
+  plans: ProductionPlanRecord[]
+  warehouses: { id: string; name: string }[]
+  itemById: Map<string, ItemRecord>
+  onChanged: () => Promise<void>
+}) {
+  const [bomId, setBomId] = useState('')
+  const [warehouseId, setWarehouseId] = useState('')
+  const [qty, setQty] = useState('')
+  const [date, setDate] = useState(todayIso())
+  const [notes, setNotes] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!warehouseId && warehouses[0]) setWarehouseId(warehouses[0].id)
+  }, [warehouses, warehouseId])
+
+  const activeBoms = boms.filter((b) => b.is_active)
+  const plansPg = usePagination(plans, 10)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (!bomId) {
+      setMsg('فرمولِ ساخت را انتخاب کنید.')
+      return
+    }
+    if (!warehouseId) {
+      setMsg('انبار را انتخاب کنید.')
+      return
+    }
+    if (!(Number(qty) > 0)) {
+      setMsg('تعدادِ برنامه باید بزرگ‌تر از صفر باشد.')
+      return
+    }
+    setBusy(true)
+    try {
+      const p = await createProductionPlan(
+        token,
+        { bom_id: bomId, warehouse_id: warehouseId, planned_date: date, qty_planned: Number(qty), notes },
+        `production-plan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
+      setQty('')
+      setNotes('')
+      setMsg(`سفارش ثبت شد ✓ شماره ${p.number.toLocaleString('fa-IR')}`)
+      await onChanged()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function changeStatus(p: ProductionPlanRecord, next: ProductionPlanStatus) {
+    await changeProductionPlanStatus(token, p.id, next)
+    await onChanged()
+  }
+
+  return (
+    <div className="workspace-split">
+      <SectionCard icon={ClipboardList} title="ثبتِ سفارشِ تولید" description="فقط برنامه‌ریزی — مواد مصرف نمی‌شود و بهایی محاسبه نمی‌شود.">
+        {activeBoms.length === 0 ? (
+          <p className="hint">ابتدا از تبِ «فرمول‌های ساخت» یک فرمول تعریف کنید.</p>
+        ) : (
+          <form className="invoice-form form-full" onSubmit={submit}>
+            <label>
+              فرمولِ ساخت (محصول)
+              <select value={bomId} onChange={(e) => setBomId(e.target.value)} required>
+                <option value="">— انتخاب —</option>
+                {activeBoms.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {itemById.get(b.finished_item_id)?.name ?? '—'}{b.name ? ` — ${b.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="field-row">
+              <label>
+                انبار
+                <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                تاریخِ برنامه
+                <JalaliDatePicker value={date} onChange={setDate} />
+              </label>
+            </div>
+            <label>
+              تعدادِ برنامه
+              <NumberInput allowDecimal value={qty} onChange={setQty} required />
+            </label>
+            <label className="form-full">
+              توضیحات
+              <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
+            </label>
+
+            <div className="invoice-form-footer">
+              <button type="submit" className="btn-primary" disabled={busy}><ClipboardList size={14} /> {busy ? 'در حال ثبت…' : 'ثبتِ سفارش'}</button>
+            </div>
+            {msg && <div className="hint">{msg}</div>}
+          </form>
+        )}
+      </SectionCard>
+
+      <SectionCard icon={ClipboardList} title="سفارش‌های تولید" description={`${fa(plans.length)} سفارش`}>
+        {plans.length === 0 ? (
+          <EmptyState icon={ClipboardList} text="هنوز سفارشی ثبت نشده." />
+        ) : (
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>محصول</th>
+                    <th>مقدارِ برنامه</th>
+                    <th>مقدارِ اجراشده</th>
+                    <th>تاریخ</th>
+                    <th>وضعیت</th>
+                    <th>اقدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plansPg.pageItems.map((p) => {
+                    const options = PLAN_TRANSITIONS[p.status]
+                    return (
+                      <tr key={p.id}>
+                        <td className="card-title" data-label="شماره">{fa(p.number)}</td>
+                        <td data-label="محصول">{itemById.get(p.finished_item_id)?.name ?? '—'}</td>
+                        <td data-label="مقدارِ برنامه">{Number(p.qty_planned).toLocaleString('fa-IR')}</td>
+                        <td data-label="مقدارِ اجراشده">{Number(p.qty_produced).toLocaleString('fa-IR')}</td>
+                        <td data-label="تاریخ">{formatJalali(p.planned_date)}</td>
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${p.status === 'finished' ? 'tone-success' : p.status === 'cancelled' ? 'tone-danger' : ''}`}>
+                            {PLAN_STATUS_LABELS[p.status]}
+                          </span>
+                        </td>
+                        <td className="card-actions" data-label="اقدام">
+                          {options.length > 0 && (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) void changeStatus(p, e.target.value as ProductionPlanStatus)
+                              }}
+                            >
+                              <option value="">— تغییرِ وضعیت —</option>
+                              {options.map((s) => (
+                                <option key={s} value={s}>{PLAN_STATUS_LABELS[s]}</option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={plansPg.page} pageCount={plansPg.pageCount} onChange={plansPg.setPage} />
+          </div>
+        )}
+      </SectionCard>
     </div>
   )
 }
@@ -353,10 +562,11 @@ function BomsTab({
   )
 }
 
-// ── تبِ تولید ──────────────────────────────────────────
-function ProduceTab({
+// ── تبِ سندِ تولید (اجرا) ──────────────────────────────
+function DocumentsTab({
   token,
   boms,
+  plans,
   orders,
   warehouses,
   itemById,
@@ -364,17 +574,20 @@ function ProduceTab({
 }: {
   token: string
   boms: BomRecord[]
+  plans: ProductionPlanRecord[]
   orders: ProductionOrderRecord[]
   warehouses: { id: string; name: string }[]
   itemById: Map<string, ItemRecord>
   onChanged: () => Promise<void>
 }) {
+  const [planId, setPlanId] = useState('')
   const [bomId, setBomId] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
   const [qty, setQty] = useState('')
   const [overhead, setOverhead] = useState('')
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [openOrder, setOpenOrder] = useState<ProductionOrderRecord | null>(null)
 
   useEffect(() => {
@@ -383,8 +596,21 @@ function ProduceTab({
 
   const activeBoms = boms.filter((b) => b.is_active)
   const selectedBom = boms.find((b) => b.id === bomId)
-  // صفحه‌بندیِ سفارش‌های تولید (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
+  //: سفارش‌هایی که هنوز اجرا نشده‌اند (تمام/لغوشده حذف)
+  const openPlans = plans.filter((p) => p.status !== 'finished' && p.status !== 'cancelled')
+  // صفحه‌بندیِ اسنادِ تولید (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
   const ordersPg = usePagination(orders, 10)
+
+  //: انتخابِ سفارش، BOM/انبار/مقدارِ باقیمانده را پر می‌کند — کاربر می‌تواند دستی عوضشان کند.
+  function pickPlan(id: string) {
+    setPlanId(id)
+    const p = plans.find((x) => x.id === id)
+    if (!p) return
+    setBomId(p.bom_id)
+    setWarehouseId(p.warehouse_id)
+    const remaining = Number(p.qty_planned) - Number(p.qty_produced)
+    if (remaining > 0) setQty(String(remaining))
+  }
 
   // پیش‌نمایشِ بهای تمام‌شده از میانگینِ موزونِ اجزا (سمتِ کلاینت)
   const preview = useMemo(() => {
@@ -414,30 +640,52 @@ function ProduceTab({
       setMsg('تعدادِ تولید باید بزرگ‌تر از صفر باشد.')
       return
     }
+    setBusy(true)
     try {
-      const o = await createProductionOrder(token, {
-        bom_id: bomId,
-        warehouse_id: warehouseId,
-        production_date: date,
-        qty_produced: Number(qty),
-        overhead_cost: Number(overhead) || 0,
-      })
+      const o = await createProductionOrder(
+        token,
+        {
+          bom_id: bomId,
+          warehouse_id: warehouseId,
+          production_date: date,
+          qty_produced: Number(qty),
+          overhead_cost: Number(overhead) || 0,
+          production_plan_id: planId || null,
+        },
+        `production-order-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
       setQty('')
       setOverhead('')
-      setMsg(`تولید ثبت شد ✓ سفارش شماره ${o.number ?? '—'} — بهای هر واحد: ${fa(Number(o.unit_cost))} ریال`)
+      setPlanId('')
+      setMsg(`سندِ تولید ثبت شد ✓ شماره ${o.number ?? '—'} — بهای هر واحد: ${fa(Number(o.unit_cost))} ریال`)
       await onChanged()
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
     <div className="workspace-split">
-      <SectionCard icon={Hammer} title="ثبتِ سفارشِ تولید" description="مواد اولیه مصرف و محصول تولید می‌شود؛ بهای تمام‌شده خودکار محاسبه می‌شود.">
+      <SectionCard icon={Hammer} title="ثبتِ سندِ تولید" description="مواد اولیه مصرف و محصول تولید می‌شود؛ بهای تمام‌شده خودکار محاسبه می‌شود.">
         {activeBoms.length === 0 ? (
           <p className="hint">ابتدا از تبِ «فرمول‌های ساخت» یک فرمول تعریف کنید.</p>
         ) : (
           <form className="invoice-form form-full" onSubmit={submit}>
+            {openPlans.length > 0 && (
+              <label>
+                سفارشِ تولیدِ مرتبط (اختیاری)
+                <select value={planId} onChange={(e) => pickPlan(e.target.value)}>
+                  <option value="">— بدونِ سفارش —</option>
+                  {openPlans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (باقی‌مانده: {(Number(p.qty_planned) - Number(p.qty_produced)).toLocaleString('fa-IR')})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               فرمولِ ساخت (محصول)
               <select value={bomId} onChange={(e) => setBomId(e.target.value)} required>
@@ -483,14 +731,14 @@ function ProduceTab({
             )}
 
             <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary"><Hammer size={14} /> ثبتِ تولید</button>
+              <button type="submit" className="btn-primary" disabled={busy}><Hammer size={14} /> {busy ? 'در حال ثبت…' : 'ثبتِ سندِ تولید'}</button>
             </div>
             {msg && <div className="hint">{msg}</div>}
           </form>
         )}
       </SectionCard>
 
-      <SectionCard icon={Factory} title="سفارش‌های تولید" description={`${fa(orders.length)} سفارش — روی «برگهٔ بها» بزنید تا ریزِ بهای تمام‌شده را ببینید`}>
+      <SectionCard icon={Factory} title="اسنادِ تولید" description={`${fa(orders.length)} سند — روی «برگهٔ بها» بزنید تا ریزِ بهای تمام‌شده را ببینید`}>
         {orders.length === 0 ? (
           <EmptyState icon={Hammer} text="هنوز تولیدی ثبت نشده." />
         ) : (

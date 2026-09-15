@@ -142,7 +142,7 @@ SOURCE_LABELS: dict[str, str] = {
     "payroll": "حقوق و دستمزد",
     "payroll_benefit": "مزایا",
     "depreciation": "استهلاک",
-    "production_order": "سفارش تولید",
+    "production_order": "سند تولید",
     "stock_adjustment": "تعدیل انبار",
     "stock_count": "انبارگردانی",
     "credit_debit_note": "اعلامیه بدهکار/بستانکار",

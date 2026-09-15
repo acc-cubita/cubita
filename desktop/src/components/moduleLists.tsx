@@ -8,6 +8,7 @@ import {
   fetchItemsLive,
   fetchLeads,
   fetchProductionOrders,
+  fetchProductionPlans,
   fetchPurchaseInvoicesOfKind,
   fetchPurchaseDeductionTypes,
   fetchAllWarehouseReceipts,
@@ -551,9 +552,15 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
     })),
   },
   manufacturing: {
-    produce: def('سفارش‌های تولید', fetchProductionOrders, (r) => ({
+    orders: def('سفارش‌های تولید', fetchProductionPlans, (r) => ({
       id: r.id,
-      title: `تولید ${faNum(r.number)}`,
+      title: `سفارش ${faNum(r.number)}`,
+      subtitle: day(r.planned_date),
+      meta: faNum(r.qty_planned),
+    })),
+    documents: def('اسناد تولید', fetchProductionOrders, (r) => ({
+      id: r.id,
+      title: `سند ${faNum(r.number)}`,
       subtitle: day(r.production_date),
       meta: faNum(r.qty_produced),
     })),

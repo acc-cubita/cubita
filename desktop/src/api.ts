@@ -4993,12 +4993,36 @@ export interface ProductionOrderRecord {
   bom_id: string
   finished_item_id: string
   warehouse_id: string
+  production_plan_id: string | null
   production_date: string
   qty_produced: string
   component_cost: string
   overhead_cost: string
   unit_cost: string
   lines: ProductionOrderLineRecord[]
+}
+
+export type ProductionPlanStatus = 'draft' | 'started' | 'in_progress' | 'stopped' | 'finished' | 'cancelled'
+
+export interface ProductionPlanRecord {
+  id: string
+  number: number
+  bom_id: string
+  finished_item_id: string
+  warehouse_id: string
+  planned_date: string
+  qty_planned: string
+  qty_produced: string
+  status: ProductionPlanStatus
+  notes: string
+}
+
+export interface ProductionPlanIn {
+  bom_id: string
+  warehouse_id: string
+  planned_date: string
+  qty_planned: number
+  notes?: string
 }
 
 export interface BomInput {
@@ -5015,11 +5039,30 @@ export const updateBom = (token: string, id: string, patch: Partial<BomInput> & 
   authedSend<BomRecord>(token, 'PATCH', `/api/boms/${id}`, patch)
 export const deleteBom = (token: string, id: string) => authedDelete(token, `/api/boms/${id}`)
 
-export const fetchProductionOrders = (token: string) => authedGet<ProductionOrderRecord[]>(token, '/api/production-orders')
+export const fetchProductionPlans = (token: string, query?: { status?: string }) => {
+  const qs = new URLSearchParams()
+  if (query?.status) qs.set('status', query.status)
+  const suffix = qs.toString()
+  return authedGetAll<ProductionPlanRecord>(token, `/api/production-plans${suffix ? `?${suffix}` : ''}`)
+}
+export const createProductionPlan = (token: string, data: ProductionPlanIn, idempotencyKey?: string) =>
+  authedSend<ProductionPlanRecord>(token, 'POST', '/api/production-plans', data, idempotencyKey)
+export const changeProductionPlanStatus = (token: string, planId: string, status: ProductionPlanStatus) =>
+  authedSend<ProductionPlanRecord>(token, 'PATCH', `/api/production-plans/${planId}/status`, { status })
+
+export const fetchProductionOrders = (token: string) => authedGetAll<ProductionOrderRecord>(token, '/api/production-orders')
 export const createProductionOrder = (
   token: string,
-  data: { bom_id: string; warehouse_id: string; production_date: string; qty_produced: number; overhead_cost?: number },
-) => authedSend<ProductionOrderRecord>(token, 'POST', '/api/production-orders', data)
+  data: {
+    bom_id: string
+    warehouse_id: string
+    production_date: string
+    qty_produced: number
+    overhead_cost?: number
+    production_plan_id?: string | null
+  },
+  idempotencyKey?: string,
+) => authedSend<ProductionOrderRecord>(token, 'POST', '/api/production-orders', data, idempotencyKey)
 
 // ── انبار پیشرفته: لیستِ قیمت و بچ/انقضا ─────────────────────────────
 export interface PriceListRecord {

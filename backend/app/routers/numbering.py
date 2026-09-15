@@ -29,7 +29,10 @@ DOC_LABELS: dict[str, str] = {
     "sales_return": "برگشت از فروش",
     "purchase_return": "برگشت از خرید",
     "stock_transfer": "انتقال بین انبار",
-    "production_order": "سفارش تولید",
+    #: نامِ نمایشی «سند تولید» شد چون این نوعِ سند حالا اجراست، نه برنامه —
+    #: «سفارش تولید» به `production_plan` منتقل شد.
+    "production_order": "سند تولید",
+    "production_plan": "سفارش تولید",
     "installment_plan": "قرارداد اقساطی",
     "credit_debit_note": "اعلامیه بدهکار/بستانکار",
     "pos_settlement": "تسویه کارت‌خوان",

@@ -115,7 +115,8 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   ],
   manufacturing: [
     { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical },
-    { key: 'produce', label: 'تولید', icon: Hammer },
+    { key: 'orders', label: 'سفارش تولید', icon: ClipboardList },
+    { key: 'documents', label: 'سند تولید', icon: Hammer },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },
