@@ -69,6 +69,11 @@ DOC_STOCK_COUNT = "stock_count"
 DOC_CONTRACT = "contract"
 #: متممِ پیمان — سریِ شماره‌ی مستقل، جدا از شماره‌ی پیمانِ مبنا.
 DOC_CONTRACT_AMENDMENT = "contract_amendment"
+#: صورت‌وضعیتِ دریافتی — سریِ شماره‌ی مستقل خودش.
+DOC_CONTRACT_STATEMENT = "contract_statement"
+#: تسویه‌حسابِ نهاییِ پیمان — سریِ شماره‌ی مستقل خودش؛ تنها سندِ این ماژول که
+#: حسابداری واقعی دارد.
+DOC_CONTRACT_SETTLEMENT = "contract_settlement"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -96,6 +101,8 @@ DOC_TYPES = (
     DOC_STOCK_COUNT,
     DOC_CONTRACT,
     DOC_CONTRACT_AMENDMENT,
+    DOC_CONTRACT_STATEMENT,
+    DOC_CONTRACT_SETTLEMENT,
 )
 
 

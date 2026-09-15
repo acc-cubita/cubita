@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FilePenLine, FileSignature, RefreshCcw } from 'lucide-react'
+import { FilePenLine, FileSignature, HandCoins, Receipt, RefreshCcw } from 'lucide-react'
 import {
   changeContractStatus,
   createContract,
   createContractAmendment,
+  createContractSettlement,
+  createContractStatement,
   fetchContacts,
   fetchContractAmendments,
   fetchContracts,
+  fetchContractSettlements,
+  fetchContractStatements,
   fetchCostCenters,
   type ContactRecord,
   type ContractAmendmentRecord,
   type ContractRecord,
+  type ContractSettlementRecord,
+  type ContractStatementRecord,
   type ContractStatus,
   type CostCenterRecord,
 } from '../../api'
@@ -478,6 +484,367 @@ export function ContractAmendmentPage({ token }: { token: string }) {
                       <td data-label="پیمان">{a.contract_number != null ? fa(a.contract_number) : '—'}</td>
                       <td className="num" data-label="تغییرِ مبلغ">{fa(Number(a.amount_delta))}</td>
                       <td data-label="تاریخ">{formatJalali(a.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    </OpsPage>
+  )
+}
+
+const EMPTY_STATEMENT_FORM = {
+  contractId: '',
+  date: todayIso(),
+  grossAmount: '',
+  otherDeductions: '',
+  notes: '',
+}
+
+export function ContractStatementPage({ token }: { token: string }) {
+  const [contracts, setContracts] = useState<ContractRecord[]>([])
+  const [recent, setRecent] = useState<ContractStatementRecord[]>([])
+  const [form, setForm] = useState({ ...EMPTY_STATEMENT_FORM })
+  const [msg, setMsg] = useState<Msg>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractStatements(token)])
+    setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
+    setRecent(rs.slice(0, 8))
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [token])
+
+  const set = (patch: Partial<typeof EMPTY_STATEMENT_FORM>) => setForm({ ...form, ...patch })
+  const selected = useMemo(() => contracts.find((c) => c.id === form.contractId) ?? null, [contracts, form.contractId])
+
+  //: پیش‌نمایشِ سمتِ کلاینت — عددِ رسمی را سرور در پاسخ برمی‌گرداند.
+  const preview = useMemo(() => {
+    if (!selected) return null
+    const gross = Number(form.grossAmount) || 0
+    const retentionAmount = Math.round((gross * Number(selected.retention_percent)) / 100)
+    const advanceDeduction = Math.round((gross * Number(selected.advance_percent)) / 100)
+    const other = Number(form.otherDeductions) || 0
+    return { retentionAmount, advanceDeduction, net: gross - retentionAmount - advanceDeduction - other }
+  }, [selected, form.grossAmount, form.otherDeductions])
+
+  async function submit() {
+    setMsg(null)
+    if (!form.contractId) {
+      setMsg({ kind: 'err', text: 'پیمان را انتخاب کنید.' })
+      return
+    }
+    if (!(Number(form.grossAmount) > 0)) {
+      setMsg({ kind: 'err', text: 'مبلغِ ناخالصِ کارکرد باید بزرگ‌تر از صفر باشد.' })
+      return
+    }
+    setBusy(true)
+    try {
+      await createContractStatement(
+        token,
+        {
+          contract_id: form.contractId,
+          date: form.date,
+          gross_amount: Number(form.grossAmount),
+          other_deductions: Number(form.otherDeductions) || 0,
+          notes: form.notes,
+        },
+        `contract-statement-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
+      setMsg({ kind: 'ok', text: 'صورت‌وضعیت ثبت شد.' })
+      setForm({ ...EMPTY_STATEMENT_FORM })
+      void refresh()
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <OpsPage icon={Receipt} title="صورت وضعیت دریافتی" description="ثبتِ کارکردِ یک دوره و کسوراتش — بدونِ سندِ حسابداری.">
+      <div className="workspace-split">
+        <SectionCard icon={Receipt} title="صورت‌وضعیتِ تازه">
+          <form
+            className="invoice-form form-full"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submit()
+            }}
+          >
+            <label>
+              پیمان
+              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+                <option value="">— انتخابِ پیمان —</option>
+                {contracts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {fa(c.number)} — {c.contact_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selected && (
+              <p className="hint">
+                سپرده: {fa(Number(selected.retention_percent))}٪ · پیش‌پرداخت: {fa(Number(selected.advance_percent))}٪
+              </p>
+            )}
+            <label>
+              تاریخِ صورت‌وضعیت
+              <JalaliDatePicker value={form.date} onChange={(iso) => set({ date: iso })} />
+            </label>
+            <label>
+              مبلغِ ناخالصِ کارکرد
+              <NumberInput value={form.grossAmount} onChange={(v) => set({ grossAmount: v })} required />
+            </label>
+            <label>
+              سایرِ کسورات
+              <NumberInput value={form.otherDeductions} onChange={(v) => set({ otherDeductions: v })} placeholder="۰" />
+            </label>
+            {preview && (
+              <p className="hint form-full">
+                کسرِ سپرده: {fa(preview.retentionAmount)} · کسرِ پیش‌پرداخت: {fa(preview.advanceDeduction)} · مبلغِ خالصِ قابلِ‌پرداخت: {fa(preview.net)}
+              </p>
+            )}
+            <label className="form-full">
+              توضیحات
+              <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} rows={2} />
+            </label>
+            <div className="form-full">
+              <button type="submit" disabled={busy}>
+                {busy ? 'در حال ثبت…' : 'ثبتِ صورت‌وضعیت'}
+              </button>
+            </div>
+          </form>
+          <Note msg={msg} />
+        </SectionCard>
+
+        <SectionCard icon={Receipt} title="صورت‌وضعیت‌های اخیر">
+          {recent.length === 0 ? (
+            <EmptyState icon={Receipt} text="هنوز صورت‌وضعیتی ثبت نشده." />
+          ) : (
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>ناخالص</th>
+                    <th>خالص</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((s) => (
+                    <tr key={s.id}>
+                      <td className="card-title" data-label="شماره">{fa(s.number)}</td>
+                      <td data-label="پیمان">{s.contract_number != null ? fa(s.contract_number) : '—'}</td>
+                      <td className="num" data-label="ناخالص">{fa(Number(s.gross_amount))}</td>
+                      <td className="num" data-label="خالص">{fa(Number(s.net_amount))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    </OpsPage>
+  )
+}
+
+const EMPTY_SETTLEMENT_FORM = {
+  contractId: '',
+  date: todayIso(),
+  notes: '',
+}
+
+export function ContractSettlementPage({ token }: { token: string }) {
+  const [contracts, setContracts] = useState<ContractRecord[]>([])
+  const [settlements, setSettlements] = useState<ContractSettlementRecord[]>([])
+  const [recent, setRecent] = useState<ContractSettlementRecord[]>([])
+  const [previewStatements, setPreviewStatements] = useState<ContractStatementRecord[]>([])
+  const [form, setForm] = useState({ ...EMPTY_SETTLEMENT_FORM })
+  const [msg, setMsg] = useState<Msg>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    const [cs, ss] = await Promise.all([fetchContracts(token), fetchContractSettlements(token)])
+    setContracts(cs)
+    setSettlements(ss)
+    setRecent(ss.slice(0, 8))
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [token])
+
+  const set = (patch: Partial<typeof EMPTY_SETTLEMENT_FORM>) => setForm({ ...form, ...patch })
+
+  //: پیمانی که تسویه‌ی فعال دارد دوباره تسویه نمی‌پذیرد (سرور هم همین را رد می‌کند).
+  const settledContractIds = useMemo(
+    () => new Set(settlements.filter((s) => !s.voided_at).map((s) => s.contract_id)),
+    [settlements],
+  )
+  const selectable = useMemo(
+    () => contracts.filter((c) => !settledContractIds.has(c.id)),
+    [contracts, settledContractIds],
+  )
+  const selected = useMemo(() => contracts.find((c) => c.id === form.contractId) ?? null, [contracts, form.contractId])
+
+  useEffect(() => {
+    if (!form.contractId) {
+      setPreviewStatements([])
+      return
+    }
+    void fetchContractStatements(token, { contract_id: form.contractId }).then(setPreviewStatements)
+  }, [token, form.contractId])
+
+  //: پیش‌نمایشِ سمتِ کلاینت — عددِ رسمی را سرور در پاسخ برمی‌گرداند.
+  const preview = useMemo(() => {
+    if (previewStatements.length === 0) return null
+    const sum = (pick: (s: ContractStatementRecord) => string) =>
+      previewStatements.reduce((total, s) => total + Number(pick(s) || 0), 0)
+    return {
+      gross: sum((s) => s.gross_amount),
+      retention: sum((s) => s.retention_amount),
+      advance: sum((s) => s.advance_deduction),
+      other: sum((s) => s.other_deductions),
+      net: sum((s) => s.net_amount),
+    }
+  }, [previewStatements])
+
+  async function submit() {
+    setMsg(null)
+    if (!form.contractId) {
+      setMsg({ kind: 'err', text: 'پیمان را انتخاب کنید.' })
+      return
+    }
+    if (!preview) {
+      setMsg({ kind: 'err', text: 'این پیمان هنوز صورت‌وضعیتی ندارد — چیزی برای تسویه نیست.' })
+      return
+    }
+    setBusy(true)
+    try {
+      await createContractSettlement(
+        token,
+        { contract_id: form.contractId, date: form.date, notes: form.notes },
+        `contract-settlement-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
+      setMsg({ kind: 'ok', text: 'تسویه‌حساب ثبت شد.' })
+      setForm({ ...EMPTY_SETTLEMENT_FORM })
+      void refresh()
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <OpsPage
+      icon={HandCoins}
+      title="تسویه حساب پیمان"
+      description="ثبتِ تسویه‌ی نهاییِ پیمان — تنها عملیاتِ این ماژول که سندِ حسابداری می‌زند."
+    >
+      <div className="workspace-split">
+        <SectionCard icon={HandCoins} title="تسویه‌حسابِ تازه">
+          <form
+            className="invoice-form form-full"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submit()
+            }}
+          >
+            <label>
+              پیمان
+              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+                <option value="">— انتخابِ پیمان —</option>
+                {selectable.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {fa(c.number)} — {c.contact_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selected && (
+              <p className="hint">
+                مبلغِ قراردادی: {fa(Number(selected.total_amount))} ریال
+              </p>
+            )}
+            <label>
+              تاریخِ تسویه
+              <JalaliDatePicker value={form.date} onChange={(iso) => set({ date: iso })} />
+            </label>
+            {form.contractId && !preview && (
+              <p className="hint form-full">این پیمان هنوز صورت‌وضعیتی ندارد — چیزی برای تسویه نیست.</p>
+            )}
+            {preview && (
+              <div className="form-full">
+                <table className="cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>ناخالص</th>
+                      <th>سپرده</th>
+                      <th>پیش‌پرداخت</th>
+                      <th>سایرِ کسورات</th>
+                      <th>خالص</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="card-title num" data-label="ناخالص">{fa(preview.gross)}</td>
+                      <td className="num" data-label="سپرده">{fa(preview.retention)}</td>
+                      <td className="num" data-label="پیش‌پرداخت">{fa(preview.advance)}</td>
+                      <td className="num" data-label="سایرِ کسورات">{fa(preview.other)}</td>
+                      <td className="num" data-label="خالص">{fa(preview.net)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <label className="form-full">
+              توضیحات
+              <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} rows={2} />
+            </label>
+            <div className="form-full">
+              <button type="submit" disabled={busy || !preview}>
+                {busy ? 'در حال ثبت…' : 'ثبتِ تسویه‌حساب'}
+              </button>
+            </div>
+          </form>
+          <Note msg={msg} />
+        </SectionCard>
+
+        <SectionCard icon={HandCoins} title="تسویه‌حساب‌های اخیر">
+          {recent.length === 0 ? (
+            <EmptyState icon={HandCoins} text="هنوز تسویه‌حسابی ثبت نشده." />
+          ) : (
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>خالص</th>
+                    <th>وضعیت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((s) => (
+                    <tr key={s.id}>
+                      <td className="card-title" data-label="شماره">{fa(s.number)}</td>
+                      <td data-label="پیمان">{s.contract_number != null ? fa(s.contract_number) : '—'}</td>
+                      <td className="num" data-label="خالص">{fa(Number(s.net_amount))}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${s.voided_at ? 'tone-danger' : 'tone-success'}`}>
+                          {s.voided_at ? 'باطل‌شده' : 'ثبت‌شده'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

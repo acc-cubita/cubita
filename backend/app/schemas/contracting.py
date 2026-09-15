@@ -100,3 +100,89 @@ class ContractAmendmentOut(BaseModel):
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+class ContractStatementIn(BaseModel):
+    contract_id: UUID
+    date: date
+    gross_amount: Decimal
+    other_deductions: Decimal = Decimal(0)
+    notes: str = ""
+
+    @field_validator("gross_amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مبلغِ ناخالصِ کارکرد باید بزرگ‌تر از صفر باشد")
+        return v
+
+    @field_validator("other_deductions")
+    @classmethod
+    def deductions_non_negative(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("سایرِ کسورات نمی‌تواند منفی باشد")
+        return v
+
+
+class ContractStatementOut(BaseModel):
+    id: UUID
+    number: int
+    contract_id: UUID
+    contract_number: int | None
+    date: date
+    gross_amount: Decimal
+    retention_percent: Decimal
+    advance_percent: Decimal
+    retention_amount: Decimal
+    advance_deduction: Decimal
+    other_deductions: Decimal
+    net_amount: Decimal
+    notes: str
+
+    model_config = {"from_attributes": True}
+
+
+class ContractSettlementIn(BaseModel):
+    """همه‌ی مبالغ از جمعِ صورت‌وضعیت‌های پیمان محاسبه می‌شود — کاربر فقط پیمان،
+    تاریخ و توضیحاتِ تسویه را می‌دهد."""
+
+    contract_id: UUID
+    date: date
+    notes: str = ""
+
+
+class ContractSettlementOut(BaseModel):
+    id: UUID
+    number: int
+    contract_id: UUID
+    contract_number: int | None
+    date: date
+    gross_amount: Decimal
+    retention_amount: Decimal
+    advance_amount: Decimal
+    other_deductions: Decimal
+    net_amount: Decimal
+    contract_value_at_settlement: Decimal
+    notes: str
+    journal_entry_id: UUID | None
+    voided_at: str | None = None
+    void_reason: str
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("voided_at", mode="before")
+    @classmethod
+    def _stringify_voided_at(cls, v):
+        return v.isoformat() if v is not None else None
+
+
+class VoidContractSettlementIn(BaseModel):
+    reason: str
+    void_date: date | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def reason_required(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("دلیلِ ابطال را بنویسید")
+        return v

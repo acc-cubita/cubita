@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, FilePenLine, FileSignature, ListChecks } from 'lucide-react'
+import { Ban, BarChart3, FilePenLine, FileSignature, HandCoins, ListChecks, Receipt } from 'lucide-react'
 import {
   fetchContractAmendments,
   fetchContracts,
+  fetchContractSettlements,
+  fetchContractStatements,
+  voidContractSettlement,
   type ContractAmendmentRecord,
   type ContractRecord,
+  type ContractSettlementRecord,
+  type ContractStatementRecord,
   type ContractStatus,
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
@@ -178,6 +183,188 @@ export function ContractAmendmentListPage({ token }: { token: string }) {
                       <td className="num" data-label="تغییرِ مبلغ">{money(a.amount_delta)}</td>
                       <td data-label="تاریخ">{formatJalali(a.date)}</td>
                       <td data-label="پایانِ تازه">{a.new_end_date ? formatJalali(a.new_end_date) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+export function ContractStatementListPage({ token }: { token: string }) {
+  const [statements, setStatements] = useState<ContractStatementRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchContractStatements(token)
+      .then(setStatements)
+      .catch((err) => setError(errText(err)))
+  }, [token])
+
+  const pg = usePagination(statements ?? [], 10)
+  const totals = useMemo(() => {
+    const rows = statements ?? []
+    return {
+      count: rows.length,
+      gross: rows.reduce((sum, s) => sum + Number(s.gross_amount || 0), 0),
+      net: rows.reduce((sum, s) => sum + Number(s.net_amount || 0), 0),
+    }
+  }, [statements])
+
+  return (
+    <div className="page panels">
+      <PageHeader
+        icon={Receipt}
+        title="صورت وضعیت‌های دریافتی"
+        description="فهرستِ صورت‌وضعیت‌های ثبت‌شده. برای ثبتِ تازه به «پیمانکاری ← صورت وضعیت دریافتی» بروید."
+      />
+      {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard label="کلِ صورت‌وضعیت‌ها" value={fa(totals.count)} icon={<Receipt size={16} />} />
+        <StatCard label="جمعِ ناخالص" value={money(totals.gross)} hint="ریال" icon={<BarChart3 size={16} />} />
+        <StatCard label="جمعِ خالصِ قابلِ‌پرداخت" value={money(totals.net)} hint="ریال" icon={<BarChart3 size={16} />} />
+      </div>
+
+      <SectionCard icon={Receipt} title="صورت‌وضعیت‌ها">
+        {statements == null ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : statements.length === 0 ? (
+          <EmptyState icon={Receipt} text="هنوز صورت‌وضعیتی ثبت نشده — از «پیمانکاری ← صورت وضعیت دریافتی» اولین را بسازید." />
+        ) : (
+          <>
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>تاریخ</th>
+                    <th>ناخالص</th>
+                    <th>کسرِ سپرده</th>
+                    <th>کسرِ پیش‌پرداخت</th>
+                    <th>سایرِ کسورات</th>
+                    <th>خالص</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((s) => (
+                    <tr key={s.id}>
+                      <td className="card-title" data-label="شماره">{fa(s.number)}</td>
+                      <td data-label="پیمان">{s.contract_number != null ? fa(s.contract_number) : '—'}</td>
+                      <td data-label="تاریخ">{formatJalali(s.date)}</td>
+                      <td className="num" data-label="ناخالص">{money(s.gross_amount)}</td>
+                      <td className="num" data-label="کسرِ سپرده">{money(s.retention_amount)}</td>
+                      <td className="num" data-label="کسرِ پیش‌پرداخت">{money(s.advance_deduction)}</td>
+                      <td className="num" data-label="سایرِ کسورات">{money(s.other_deductions)}</td>
+                      <td className="num" data-label="خالص">{money(s.net_amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+export function ContractSettlementListPage({ token }: { token: string }) {
+  const [settlements, setSettlements] = useState<ContractSettlementRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function refresh() {
+    return fetchContractSettlements(token)
+      .then(setSettlements)
+      .catch((err) => setError(errText(err)))
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [token])
+
+  const pg = usePagination(settlements ?? [], 10)
+  const totals = useMemo(() => {
+    const rows = (settlements ?? []).filter((s) => !s.voided_at)
+    return {
+      count: rows.length,
+      net: rows.reduce((sum, s) => sum + Number(s.net_amount || 0), 0),
+    }
+  }, [settlements])
+
+  return (
+    <div className="page panels">
+      <PageHeader
+        icon={HandCoins}
+        title="تسویه‌حساب‌های پیمان"
+        description="فهرستِ تسویه‌حساب‌های نهاییِ پیمان‌ها. برای ثبتِ تازه به «پیمانکاری ← تسویه حساب پیمان» بروید."
+      />
+      {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard label="کلِ تسویه‌حساب‌های فعال" value={fa(totals.count)} icon={<HandCoins size={16} />} />
+        <StatCard label="جمعِ خالص" value={money(totals.net)} hint="ریال" icon={<BarChart3 size={16} />} />
+      </div>
+
+      <SectionCard icon={HandCoins} title="تسویه‌حساب‌ها">
+        {settlements == null ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : settlements.length === 0 ? (
+          <EmptyState icon={HandCoins} text="هنوز تسویه‌حسابی ثبت نشده — از «پیمانکاری ← تسویه حساب پیمان» اولین را بسازید." />
+        ) : (
+          <>
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>تاریخ</th>
+                    <th>ناخالص</th>
+                    <th>خالص</th>
+                    <th>وضعیت</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((s) => (
+                    <tr key={s.id}>
+                      <td className="card-title" data-label="شماره">{fa(s.number)}</td>
+                      <td data-label="پیمان">{s.contract_number != null ? fa(s.contract_number) : '—'}</td>
+                      <td data-label="تاریخ">{formatJalali(s.date)}</td>
+                      <td className="num" data-label="ناخالص">{money(s.gross_amount)}</td>
+                      <td className="num" data-label="خالص">{money(s.net_amount)}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${s.voided_at ? 'tone-danger' : 'tone-success'}`}>
+                          {s.voided_at ? 'باطل‌شده' : 'ثبت‌شده'}
+                        </span>
+                      </td>
+                      <td className="card-actions">
+                        {!s.voided_at && (
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => {
+                              const reason = window.prompt('دلیلِ ابطالِ این تسویه‌حساب؟')
+                              if (reason === null) return
+                              void voidContractSettlement(token, s.id, reason).then(
+                                () => refresh(),
+                                (err: unknown) =>
+                                  window.alert(err instanceof Error ? err.message : 'خطای ناشناخته'),
+                              )
+                            }}
+                          >
+                            <Ban size={13} /> ابطال
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
