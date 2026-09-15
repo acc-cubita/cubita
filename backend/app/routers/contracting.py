@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.contracting import Contract, ContractAmendment
+from app.models.contracting import Contract, ContractAmendment, ContractStatement
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.contracting import (
@@ -13,6 +13,8 @@ from app.schemas.contracting import (
     ContractAmendmentOut,
     ContractIn,
     ContractOut,
+    ContractStatementIn,
+    ContractStatementOut,
     ContractStatusIn,
 )
 from app.services import contracting as service
@@ -89,4 +91,33 @@ def create_contract_amendment(
         db, request, user, operation="create_contract_amendment", payload=data,
         run=lambda: service.create_contract_amendment(db, data, user),
         replay=lambda aid: db.get(ContractAmendment, aid),
+    )
+
+
+@router.get("/statements", response_model=Page[ContractStatementOut])
+def list_contract_statements(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    contract_id: UUID | None = None,
+    _=Depends(require_permission("contracting", "view")),
+):
+    query = db.query(ContractStatement)
+    if contract_id:
+        query = query.filter(ContractStatement.contract_id == contract_id)
+    rows, next_cursor = paginate(query, [ContractStatement.created_at, ContractStatement.number], params)
+    return Page(items=rows, next_cursor=next_cursor)
+
+
+@router.post("/statements", response_model=ContractStatementOut, status_code=201)
+def create_contract_statement(
+    data: ContractStatementIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("contracting", "create")),
+):
+    """**idempotent** — دوکلیک نباید دو صورت‌وضعیت با یک شماره بسازد."""
+    return idempotent(
+        db, request, user, operation="create_contract_statement", payload=data,
+        run=lambda: service.create_contract_statement(db, data, user),
+        replay=lambda sid: db.get(ContractStatement, sid),
     )

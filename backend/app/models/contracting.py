@@ -1,4 +1,4 @@
-"""پیمانکاری — پیمان (فازِ ۱) و متممِ پیمان (فازِ ۲).
+"""پیمانکاری — پیمان (فازِ ۱)، متممِ پیمان (فازِ ۲) و صورت‌وضعیتِ دریافتی (فازِ ۳).
 
 `contracting_contracts`: ثبتِ یک پیمان و مفادش. رکوردِ اصلی است، نه سندِ حسابداری —
 ثبتش هیچ سندی نمی‌زند (مثلِ `CostCenter`/`Bom`، نه مثلِ فاکتور)، پس `VoidableMixin`
@@ -12,8 +12,14 @@
 وضعیتِ خودش را ندارد — فقط رکوردِ الحاقی است؛ اگر روزی لازم شد لغوِ یک متمم، آن هم
 یک متممِ اصلاحی با `amount_delta` وارونه است.
 
-فازهای بعد (صورت‌وضعیت، تسویه‌حساب) جدول‌های خودشان را می‌گیرند و به همین جدول با
-`contract_id` ارجاع می‌دهند.
+`contracting_statements`: صورت‌وضعیتِ دریافتی — ثبتِ کارکردِ دوره و کسوراتش، **بدونِ
+سندِ حسابداری** (تصمیمِ کاربر): مثلِ پیمان/متمم فقط رکورد است؛ وصولِ واقعی و اثرِ
+مالی به فازِ تسویه‌حساب (فازِ ۴) موکول شده. درصدِ سپرده/پیش‌پرداخت از پیمان در لحظه‌ی
+ثبت **کپی** می‌شود — تغییرِ بعدیِ این درصدها روی پیمان صورت‌وضعیت‌های قبلی را عوض
+نمی‌کند (همان الگوی Snapshot که در فاکتورهای دیگرِ سامانه هست).
+
+فازِ بعد (تسویه‌حساب) جدولِ خودش را می‌گیرد و به همین جدول با `contract_id` ارجاع
+می‌دهد.
 """
 import uuid
 from datetime import date as date_
@@ -81,6 +87,34 @@ class ContractAmendment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     amount_delta: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: اگر داده شود، `Contract.end_date` را جایگزین می‌کند.
     new_end_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    contract: Mapped["Contract | None"] = relationship("Contract", viewonly=True)
+
+    @property
+    def contract_number(self) -> int | None:
+        return self.contract.number if self.contract else None
+
+
+class ContractStatement(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """صورت‌وضعیتِ دریافتی — کارکردِ یک دوره و کسوراتش، بدونِ سندِ حسابداری."""
+
+    __tablename__ = "contracting_statements"
+
+    number: Mapped[int] = mapped_column(index=True)
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contracting_contracts.id"), index=True
+    )
+    date: Mapped[date_] = mapped_column(Date)
+    gross_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: کپی‌شده از پیمان در لحظه‌ی ثبت — نه ارجاعِ زنده.
+    retention_percent: Mapped[float] = mapped_column(Numeric(5, 2))
+    advance_percent: Mapped[float] = mapped_column(Numeric(5, 2))
+    retention_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    advance_deduction: Mapped[float] = mapped_column(Numeric(18, 0))
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    net_amount: Mapped[float] = mapped_column(Numeric(18, 0))
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
