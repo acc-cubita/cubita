@@ -254,11 +254,59 @@ class ReconciliationSummaryOut(BaseModel):
     unreconciled_system_transactions: list[BankTransactionOut]
 
 
+class PettyCashFundIn(BaseModel):
+    name: str
+    #: تنخواه‌دار **طرف حساب** است نه کاربر — ممکن است حسابِ ورود نداشته باشد.
+    custodian_contact_id: UUID | None = None
+    location: str = ""
+    #: ۰ = بی‌سقف. هشدار است نه گارد.
+    spending_limit: Decimal = Decimal(0)
+    is_active: bool = True
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def _valid(self) -> "PettyCashFundIn":
+        if not self.name.strip():
+            raise ValueError("نامِ صندوق تنخواه الزامی است")
+        if self.spending_limit < 0:
+            raise ValueError("سقفِ هزینه نمی‌تواند منفی باشد")
+        return self
+
+
+class PettyCashFundPatch(PettyCashFundIn):
+    """ویرایشِ جزئی — تعویضِ تنخواه‌دار نباید بقیه‌ی پرونده را بازنویسی کند."""
+
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def _valid(self) -> "PettyCashFundPatch":
+        if "name" in self.model_fields_set and not (self.name or "").strip():
+            raise ValueError("نامِ صندوق تنخواه نمی‌تواند خالی باشد")
+        if self.spending_limit < 0:
+            raise ValueError("سقفِ هزینه نمی‌تواند منفی باشد")
+        return self
+
+
+class PettyCashFundOut(BaseModel):
+    id: UUID
+    name: str
+    custodian_contact_id: UUID | None
+    location: str
+    spending_limit: Decimal
+    is_active: bool
+    notes: str
+
+    model_config = {"from_attributes": True}
+
+
 class PettyCashChargeIn(BaseModel):
     transaction_date: date
     amount: Decimal
     source_account_id: UUID
     description: str = ""
+    #: کدام صندوق. تهی = صندوقِ پیش‌فرض (تنها صندوقِ فعال)، تا رابطِ مستقر نشکند.
+    fund_id: UUID | None = None
+    evidence_ref: str = ""
 
     @model_validator(mode="after")
     def validate_positive(self) -> "PettyCashChargeIn":
@@ -272,9 +320,33 @@ class PettyCashExpenseIn(BaseModel):
     amount: Decimal
     expense_account_id: UUID
     description: str = ""
+    fund_id: UUID | None = None
+    evidence_ref: str = ""
 
     @model_validator(mode="after")
     def validate_positive(self) -> "PettyCashExpenseIn":
+        if self.amount <= 0:
+            raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class PettyCashReturnIn(BaseModel):
+    """استردادِ ماندهٔ تنخواه — مسیری که تا امروز وجود نداشت.
+
+    `destination_account_id` جایی است که پول برمی‌گردد (صندوق یا بانک). این
+    **بازگشتِ وجه** است نه هزینه؛ تا امروز تنها راهش ثبتِ یک «هزینه»ی جعلی بود
+    که دفتر آن را هزینه می‌دید.
+    """
+
+    transaction_date: date
+    amount: Decimal
+    destination_account_id: UUID
+    description: str = ""
+    fund_id: UUID | None = None
+    evidence_ref: str = ""
+
+    @model_validator(mode="after")
+    def validate_positive(self) -> "PettyCashReturnIn":
         if self.amount <= 0:
             raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد")
         return self
@@ -287,6 +359,8 @@ class PettyCashTransactionOut(BaseModel):
     amount: Decimal
     description: str
     counter_account_id: UUID
+    fund_id: UUID | None
+    evidence_ref: str
 
     model_config = {"from_attributes": True}
 
