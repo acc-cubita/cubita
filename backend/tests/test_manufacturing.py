@@ -116,3 +116,125 @@ def test_bom_requires_lines(client):
     fin = _item(client, "NOLINES", "محصول")
     r = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": []})
     assert r.status_code == 422
+
+
+# ────────────────────────── سفارشِ تولید (برنامه) ──────────────────────────
+
+
+def test_production_plan_gets_a_number_and_draft_status(client):
+    wh = _wh(client)
+    a = _item(client, "PL-A", "جزء")
+    fin = _item(client, "PL-FIN", "محصول")
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+
+    plan = client.post(
+        "/api/production-plans",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 20},
+        headers={"Idempotency-Key": "plan-1"},
+    )
+    assert plan.status_code == 201, plan.text
+    d = plan.json()
+    assert d["status"] == "draft"
+    assert d["number"] == 1
+    assert float(d["qty_planned"]) == 20
+    assert float(d["qty_produced"]) == 0
+
+
+def test_production_plan_does_not_touch_stock(client):
+    wh = _wh(client)
+    a = _item(client, "PLS-A", "جزء")
+    fin = _item(client, "PLS-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+
+    client.post(
+        "/api/production-plans",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 20},
+        headers={"Idempotency-Key": "plan-2"},
+    )
+    # سفارش (برنامه) هیچ اثری روی موجودی ندارد
+    assert _stock(client).get(a) == 100
+
+
+def test_production_plan_status_transition_rejects_illegal_jump(client):
+    wh = _wh(client)
+    a = _item(client, "PLT-A", "جزء")
+    fin = _item(client, "PLT-FIN", "محصول")
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = client.post(
+        "/api/production-plans",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 5},
+        headers={"Idempotency-Key": "plan-3"},
+    ).json()
+
+    bad = client.patch(f"/api/production-plans/{plan['id']}/status", json={"status": "finished"})
+    assert bad.status_code == 409
+
+    ok = client.patch(f"/api/production-plans/{plan['id']}/status", json={"status": "started"})
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["status"] == "started"
+
+
+def test_production_document_linked_to_a_plan_updates_its_produced_qty(client):
+    wh = _wh(client)
+    a = _item(client, "LNK-A", "جزء")
+    fin = _item(client, "LNK-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = client.post(
+        "/api/production-plans",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 20},
+        headers={"Idempotency-Key": "plan-4"},
+    ).json()
+
+    doc = client.post(
+        "/api/production-orders",
+        json={
+            "bom_id": bom["id"], "warehouse_id": wh, "production_date": TODAY,
+            "qty_produced": 7, "production_plan_id": plan["id"],
+        },
+        headers={"Idempotency-Key": "doc-1"},
+    )
+    assert doc.status_code == 201, doc.text
+    assert doc.json()["production_plan_id"] == plan["id"]
+
+    updated_plan = client.get("/api/production-plans", params={"limit": 200}).json()["items"]
+    mine = [p for p in updated_plan if p["id"] == plan["id"]][0]
+    assert float(mine["qty_produced"]) == 7
+
+
+def test_production_document_without_a_plan_still_works(client):
+    """تولیدِ بی‌برنامه هم باید کار کند — سفارش اختیاری است."""
+    wh = _wh(client)
+    a = _item(client, "NOPL-A", "جزء")
+    fin = _item(client, "NOPL-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+
+    doc = client.post(
+        "/api/production-orders",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "production_date": TODAY, "qty_produced": 3},
+        headers={"Idempotency-Key": "doc-2"},
+    )
+    assert doc.status_code == 201, doc.text
+    assert doc.json()["production_plan_id"] is None
+
+
+def test_the_api_creates_and_lists_plans_filtered_by_status(client):
+    wh = _wh(client)
+    a = _item(client, "FLT-A", "جزء")
+    fin = _item(client, "FLT-FIN", "محصول")
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+
+    body = {"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 5}
+    headers = {"Idempotency-Key": "plan-5"}
+    first = client.post("/api/production-plans", json=body, headers=headers)
+    second = client.post("/api/production-plans", json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    assert second.json()["id"] == first.json()["id"]
+
+    drafts = client.get("/api/production-plans", params={"status": "draft", "limit": 200}).json()["items"]
+    assert first.json()["id"] in {row["id"] for row in drafts}
+
+    started = client.get("/api/production-plans", params={"status": "started", "limit": 200}).json()["items"]
+    assert first.json()["id"] not in {row["id"] for row in started}

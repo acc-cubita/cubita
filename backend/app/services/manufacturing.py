@@ -15,11 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalEntry, JournalLine
 from app.services import tafsili
-from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PRODUCTION_ORDER
+from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PRODUCTION_ORDER, DOC_PRODUCTION_PLAN
 from app.models.inventory import Item, StockLedger
-from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine
+from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine, ProductionPlan
 from app.models.user import User
-from app.schemas.manufacturing import ProductionOrderIn
+from app.schemas.manufacturing import ProductionOrderIn, ProductionPlanIn
 from app.services import chart_codes as cc
 from app.services.common import get_account, number_lines
 from app.services.inventory import get_stock_qty, get_total_stock_qty, lock_items
@@ -27,9 +27,59 @@ from app.services import valuation
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 
+#: گذارِ مجازِ وضعیتِ سفارش (برنامه). همان الگوی پیمانکاری.
+_PLAN_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "draft": ("started", "cancelled"),
+    "started": ("in_progress", "stopped"),
+    "in_progress": ("stopped", "finished"),
+    "stopped": ("in_progress", "finished"),
+    "finished": (),
+    "cancelled": (),
+}
+
 
 def _whole(v: Decimal) -> Decimal:
     return Decimal(v).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def create_production_plan(db: Session, data: ProductionPlanIn, user: User) -> ProductionPlan:
+    bom = db.get(Bom, data.bom_id)
+    if bom is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فرمولِ ساخت یافت نشد")
+
+    plan = ProductionPlan(
+        number=next_document_number(db, DOC_PRODUCTION_PLAN),
+        bom_id=bom.id,
+        finished_item_id=bom.finished_item_id,
+        warehouse_id=data.warehouse_id,
+        planned_date=data.planned_date,
+        qty_planned=data.qty_planned,
+        notes=data.notes,
+        status="draft",
+        created_by_id=user.id,
+    )
+    db.add(plan)
+    db.flush()
+    db.refresh(plan)
+    return plan
+
+
+def change_production_plan_status(db: Session, plan_id: UUID, new_status: str, user: User) -> ProductionPlan:
+    plan = db.get(ProductionPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارشِ تولید یافت نشد")
+
+    allowed = _PLAN_TRANSITIONS.get(plan.status, ())
+    if new_status not in allowed:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"گذار از «{plan.status}» به «{new_status}» مجاز نیست",
+        )
+
+    plan.status = new_status
+    db.flush()
+    db.refresh(plan)
+    return plan
 
 
 def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> ProductionOrder:
@@ -40,6 +90,12 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فرمولِ ساخت یافت نشد")
     if not bom.lines:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این فرمول هیچ جزئی ندارد")
+
+    plan = None
+    if data.production_plan_id is not None:
+        plan = db.get(ProductionPlan, data.production_plan_id)
+        if plan is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارشِ تولید یافت نشد")
 
     finished = db.get(Item, bom.finished_item_id)
     if finished is None:
@@ -142,6 +198,7 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
         bom_id=bom.id,
         finished_item_id=finished.id,
         warehouse_id=data.warehouse_id,
+        production_plan_id=plan.id if plan else None,
         production_date=data.production_date,
         qty_produced=qty_produced,
         component_cost=_whole(component_cost),
@@ -156,4 +213,7 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
         db.add(move)
     valuation.settle_posting(db, stock_moves)
     db.refresh(order)
+    if plan is not None:
+        plan.qty_produced = Decimal(plan.qty_produced) + qty_produced
+        db.flush()
     return order

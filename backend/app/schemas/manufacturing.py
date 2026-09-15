@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
+from app.models.manufacturing import PRODUCTION_PLAN_STATUSES
+
 
 # ── فرمولِ ساخت (BOM) ───────────────────────────────────
 class BomLineIn(BaseModel):
@@ -76,13 +78,57 @@ class BomOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── سفارشِ تولید ────────────────────────────────────────
+# ── سفارشِ تولید (برنامه) ────────────────────────────────
+class ProductionPlanIn(BaseModel):
+    bom_id: UUID
+    warehouse_id: UUID
+    planned_date: date
+    qty_planned: Decimal
+    notes: str = ""
+
+    @field_validator("qty_planned")
+    @classmethod
+    def qty_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("تعدادِ برنامه باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class ProductionPlanStatusIn(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def status_known(cls, v: str) -> str:
+        if v not in PRODUCTION_PLAN_STATUSES:
+            raise ValueError("وضعیتِ نامعتبر")
+        return v
+
+
+class ProductionPlanOut(BaseModel):
+    id: UUID
+    number: int
+    bom_id: UUID
+    finished_item_id: UUID
+    warehouse_id: UUID
+    planned_date: date
+    qty_planned: Decimal
+    qty_produced: Decimal
+    status: str
+    notes: str
+
+    model_config = {"from_attributes": True}
+
+
+# ── سندِ تولید (اجرا) ────────────────────────────────────
 class ProductionOrderIn(BaseModel):
     bom_id: UUID
     warehouse_id: UUID
     production_date: date
     qty_produced: Decimal
     overhead_cost: Decimal = Decimal(0)
+    #: اگر این سند از رویِ یک سفارش (برنامه) اجرا می‌شود — اختیاری.
+    production_plan_id: UUID | None = None
 
     @field_validator("qty_produced")
     @classmethod
@@ -113,6 +159,7 @@ class ProductionOrderOut(BaseModel):
     bom_id: UUID
     finished_item_id: UUID
     warehouse_id: UUID
+    production_plan_id: UUID | None
     production_date: date
     qty_produced: Decimal
     component_cost: Decimal

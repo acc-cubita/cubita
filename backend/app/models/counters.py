@@ -37,6 +37,8 @@ DOC_SALES_RETURN = "sales_return"
 DOC_PURCHASE_RETURN = "purchase_return"
 DOC_STOCK_TRANSFER = "stock_transfer"
 DOC_PRODUCTION_ORDER = "production_order"
+#: سفارشِ تولید — برنامه، جدا از شماره‌ی سندِ تولید (اجرا).
+DOC_PRODUCTION_PLAN = "production_plan"
 DOC_INSTALLMENT_PLAN = "installment_plan"
 #: اعلامیه‌ی بدهکار/بستانکار — شماره‌ی رسمی می‌گیرد چون سند حسابداری می‌زند.
 DOC_CREDIT_DEBIT_NOTE = "credit_debit_note"
@@ -86,6 +88,7 @@ DOC_TYPES = (
     DOC_PURCHASE_RETURN,
     DOC_STOCK_TRANSFER,
     DOC_PRODUCTION_ORDER,
+    DOC_PRODUCTION_PLAN,
     DOC_INSTALLMENT_PLAN,
     DOC_CREDIT_DEBIT_NOTE,
     DOC_POS_SETTLEMENT,
