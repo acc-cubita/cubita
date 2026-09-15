@@ -1044,6 +1044,9 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         created_by_id=user.id,
     )
     db.add(adjustment)
+    #: شناسه لازم است چون حرکت به آن گره می‌خورد — تعدیل تنها سندِ انباری بود که
+    #: `source_id` نمی‌نوشت، و بی آن ابطال حتی نمی‌توانست حرکتِ خودش را پیدا کند.
+    db.flush()
     move = StockLedger(
         item_id=data.item_id,
         warehouse_id=data.warehouse_id,
@@ -1051,6 +1054,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         unit_cost=unit_cost,
         entry_date=data.adjustment_date,
         source_type="adjustment",
+        source_id=adjustment.id,
     )
     db.add(move)
     valuation.settle_posting(db, [move])

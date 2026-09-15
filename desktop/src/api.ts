@@ -1488,10 +1488,17 @@ export interface StockAdjustmentRecord {
   unit_cost: string
   reason: string
   adjustment_date: string
+  journal_entry_id: string | null
+  /** پر بودنش یعنی این تعدیل باطل شده و در هیچ موجودی‌ای نباید شمرده شود. */
+  voided_at: string | null
+  void_reason: string
 }
 
 export const fetchStockAdjustments = (token: string) =>
   authedGetAll<StockAdjustmentRecord>(token, '/api/stock-adjustments')
+
+export const voidStockAdjustment = (token: string, id: string, reason: string) =>
+  authedSend<StockAdjustmentRecord>(token, 'POST', `/api/stock-adjustments/${id}/void`, { reason })
 
 export const createStockAdjustment = (
   token: string,

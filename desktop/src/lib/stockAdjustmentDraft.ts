@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { createStockAdjustment, fetchStockAdjustments, type StockAdjustmentRecord } from '../api'
+import {
+  createStockAdjustment,
+  fetchStockAdjustments,
+  voidStockAdjustment,
+  type StockAdjustmentRecord,
+} from '../api'
 import { todayIso } from './jalali'
 
 /** منطقِ مشترکِ «تعدیل دستیِ موجودی» — یک رکورد (کالا/انبار/جهت/مقدار/دلیل/تاریخ) + تاریخچه. */
@@ -60,6 +65,25 @@ export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; 
     }
   }
 
+  /** ابطالِ یک تعدیلِ ثبت‌شده. تعدیل سندی است که کارش اصلاحِ خطاست؛ تا پیش از این،
+   *  تنها راهِ اصلاحِ خودش ثبتِ یک تعدیلِ معکوسِ دوم بود که تاریخچه را دروغ می‌گفت. */
+  async function voidOne(id: string, why: string): Promise<boolean> {
+    setMessage(null)
+    setSubmitting(true)
+    try {
+      await voidStockAdjustment(token, id, why.trim())
+      await refresh()
+      onAdjusted?.()
+      setMessage('تعدیل باطل شد و سندش معکوس گردید.')
+      return true
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      return false
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return {
     itemId,
     setItemId,
@@ -81,6 +105,7 @@ export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; 
     targetValid,
     valid,
     submit,
+    voidOne,
   }
 }
 

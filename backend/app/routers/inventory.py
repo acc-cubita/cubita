@@ -60,8 +60,10 @@ from app.schemas.inventory import (
     WarehouseStockPositionOut,
     WarehouseUpdateIn,
 )
+from app.schemas.voiding import VoidIn
 from app.services.credit import get_credit_status
 from app.services.inventory import post_stock_adjustment
+from app.services.voiding import void_stock_adjustment
 
 router = APIRouter(tags=["inventory"])
 
@@ -1009,6 +1011,23 @@ def create_stock_adjustment(
     user: User = Depends(require_permission("inventory", "update")),
 ):
     return post_stock_adjustment(db, data, user)
+
+
+@router.post("/api/stock-adjustments/{adjustment_id}/void", response_model=StockAdjustmentOut)
+def void_adjustment(
+    adjustment_id: UUID,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "delete")),
+):
+    """ابطالِ کنترل‌شده، نه حذف — سندی که کارش اصلاح است باید خودش هم اصلاح شود.
+
+    مجوزش `accounting.delete` است، نه `inventory.update`: ثبتِ تعدیل کارِ انبار
+    است، ولی برگرداندنِ سندِ حسابداریِ صادرشده کارِ حسابداری — همان مرزی که ابطالِ
+    انتقال بینِ انبار دارد.
+    """
+    void_stock_adjustment(db, adjustment_id, reason=data.reason, user=user, void_date=data.void_date)
+    return db.get(StockAdjustment, adjustment_id)
 
 
 @router.get("/api/stock", response_model=list[StockLevelOut])
