@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileSignature, BarChart3, ListChecks } from 'lucide-react'
-import { fetchContracts, type ContractRecord, type ContractStatus } from '../../api'
+import { BarChart3, FilePenLine, FileSignature, ListChecks } from 'lucide-react'
+import {
+  fetchContractAmendments,
+  fetchContracts,
+  type ContractAmendmentRecord,
+  type ContractRecord,
+  type ContractStatus,
+} from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import { EmptyState } from '../../components/EmptyState'
@@ -98,6 +104,80 @@ export function ContractingListPage({ token }: { token: string }) {
                       <td data-label="وضعیت">
                         <span className={`badge ${STATUS_TONE[c.status]}`}>{STATUS_LABELS[c.status]}</span>
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+export function ContractAmendmentListPage({ token }: { token: string }) {
+  const [amendments, setAmendments] = useState<ContractAmendmentRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchContractAmendments(token)
+      .then(setAmendments)
+      .catch((err) => setError(errText(err)))
+  }, [token])
+
+  const pg = usePagination(amendments ?? [], 10)
+  const totals = useMemo(() => {
+    const rows = amendments ?? []
+    return {
+      count: rows.length,
+      netDelta: rows.reduce((sum, a) => sum + Number(a.amount_delta || 0), 0),
+    }
+  }, [amendments])
+
+  return (
+    <div className="page panels">
+      <PageHeader
+        icon={FilePenLine}
+        title="متمم‌های پیمان"
+        description="فهرستِ متمم‌های ثبت‌شده روی پیمان‌ها. برای ثبتِ متممِ تازه به «پیمانکاری ← متمم پیمان» بروید."
+      />
+      {error && <div className="error">{error}</div>}
+
+      <div className="stat-grid">
+        <StatCard label="کلِ متمم‌ها" value={fa(totals.count)} icon={<FilePenLine size={16} />} />
+        <StatCard label="خالصِ تغییرِ مبلغ" value={money(totals.netDelta)} hint="ریال" icon={<BarChart3 size={16} />} />
+      </div>
+
+      <SectionCard icon={FilePenLine} title="متمم‌ها">
+        {amendments == null ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : amendments.length === 0 ? (
+          <EmptyState icon={FilePenLine} text="هنوز متممی ثبت نشده — از «پیمانکاری ← متمم پیمان» اولین متمم را بسازید." />
+        ) : (
+          <>
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>موضوع</th>
+                    <th>تغییرِ مبلغ</th>
+                    <th>تاریخ</th>
+                    <th>پایانِ تازه</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((a) => (
+                    <tr key={a.id}>
+                      <td className="card-title" data-label="شماره">{fa(a.number)}</td>
+                      <td data-label="پیمان">{a.contract_number != null ? fa(a.contract_number) : '—'}</td>
+                      <td className="card-wide" data-label="موضوع">{a.description || '—'}</td>
+                      <td className="num" data-label="تغییرِ مبلغ">{money(a.amount_delta)}</td>
+                      <td data-label="تاریخ">{formatJalali(a.date)}</td>
+                      <td data-label="پایانِ تازه">{a.new_end_date ? formatJalali(a.new_end_date) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

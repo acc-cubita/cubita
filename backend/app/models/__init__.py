@@ -11,7 +11,7 @@ from app.models.budgeting import BudgetLine
 from app.models.calendar import CalendarEvent
 from app.models.company import ContactGroup, GeoLocation, RelatedPerson, SavedReport
 from app.models.cashbox import Cashbox
-from app.models.contracting import Contract
+from app.models.contracting import Contract, ContractAmendment
 from app.models.cost_center import CostCenter
 from app.models.counters import DocumentCounter
 from app.models.device_token import DeviceToken
@@ -249,6 +249,7 @@ __all__ = [
     "CalendarEvent",
     "Cashbox",
     "Contract",
+    "ContractAmendment",
     "CostCenter",
     "MoadianSettings",
     "MoadianSubmission",

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileSignature, RefreshCcw } from 'lucide-react'
+import { FilePenLine, FileSignature, RefreshCcw } from 'lucide-react'
 import {
   changeContractStatus,
   createContract,
+  createContractAmendment,
   fetchContacts,
+  fetchContractAmendments,
   fetchContracts,
   fetchCostCenters,
   type ContactRecord,
+  type ContractAmendmentRecord,
   type ContractRecord,
   type ContractStatus,
   type CostCenterRecord,
@@ -326,6 +329,163 @@ export function ContractStatusPage({ token }: { token: string }) {
         </form>
         <Note msg={msg} />
       </SectionCard>
+    </OpsPage>
+  )
+}
+
+//: پیمانی که به وضعیتِ پایانی رسیده متممِ تازه نمی‌پذیرد (سرور هم همین را رد می‌کند) —
+//: پس از انتخاب حذفش می‌کنیم تا کاربر خطای بی‌فایده نبیند.
+const CLOSED_STATUSES: ContractStatus[] = ['terminated', 'completed', 'cancelled']
+
+const EMPTY_AMENDMENT_FORM = {
+  contractId: '',
+  date: todayIso(),
+  description: '',
+  amountDelta: '',
+  newEndDate: '',
+  notes: '',
+}
+
+export function ContractAmendmentPage({ token }: { token: string }) {
+  const [contracts, setContracts] = useState<ContractRecord[]>([])
+  const [recent, setRecent] = useState<ContractAmendmentRecord[]>([])
+  const [form, setForm] = useState({ ...EMPTY_AMENDMENT_FORM })
+  const [msg, setMsg] = useState<Msg>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractAmendments(token)])
+    setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
+    setRecent(rs.slice(0, 8))
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [token])
+
+  const set = (patch: Partial<typeof EMPTY_AMENDMENT_FORM>) => setForm({ ...form, ...patch })
+  const selected = useMemo(() => contracts.find((c) => c.id === form.contractId) ?? null, [contracts, form.contractId])
+
+  async function submit() {
+    setMsg(null)
+    if (!form.contractId) {
+      setMsg({ kind: 'err', text: 'پیمان را انتخاب کنید.' })
+      return
+    }
+    if (!form.description.trim()) {
+      setMsg({ kind: 'err', text: 'موضوعِ متمم را بنویسید.' })
+      return
+    }
+    setBusy(true)
+    try {
+      await createContractAmendment(
+        token,
+        {
+          contract_id: form.contractId,
+          date: form.date,
+          description: form.description,
+          amount_delta: Number(form.amountDelta) || 0,
+          new_end_date: form.newEndDate || null,
+          notes: form.notes,
+        },
+        `contract-amendment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
+      setMsg({ kind: 'ok', text: 'متمم ثبت شد.' })
+      setForm({ ...EMPTY_AMENDMENT_FORM })
+      void refresh()
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <OpsPage icon={FilePenLine} title="متمم پیمان" description="افزودنِ تغییرِ مبلغ و/یا تاریخِ پایانِ یک پیمانِ ثبت‌شده.">
+      <div className="workspace-split">
+        <SectionCard icon={FilePenLine} title="متممِ تازه">
+          <form
+            className="invoice-form form-full"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submit()
+            }}
+          >
+            <label>
+              پیمان
+              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+                <option value="">— انتخابِ پیمان —</option>
+                {contracts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {fa(c.number)} — {c.contact_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selected && (
+              <p className="hint">
+                مبلغِ اولیه: {fa(Number(selected.total_amount))} ریال
+                {selected.end_date ? ` · پایانِ فعلی: ${formatJalali(selected.end_date)}` : ''}
+              </p>
+            )}
+            <label>
+              تاریخِ متمم
+              <JalaliDatePicker value={form.date} onChange={(iso) => set({ date: iso })} />
+            </label>
+            <label className="form-full">
+              موضوعِ متمم
+              <input value={form.description} onChange={(e) => set({ description: e.target.value })} placeholder="مثلاً افزایشِ محدوده‌ی کار" required />
+            </label>
+            <label>
+              تغییرِ مبلغ
+              <NumberInput value={form.amountDelta} onChange={(v) => set({ amountDelta: v })} allowNegative placeholder="۰" />
+            </label>
+            <label>
+              تاریخِ پایانِ تازه
+              <JalaliDatePicker value={form.newEndDate} onChange={(iso) => set({ newEndDate: iso })} placeholder="اختیاری — بدونِ تغییر" />
+            </label>
+            <label className="form-full">
+              توضیحات
+              <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} rows={2} />
+            </label>
+            <div className="form-full">
+              <button type="submit" disabled={busy}>
+                {busy ? 'در حال ثبت…' : 'ثبتِ متمم'}
+              </button>
+            </div>
+          </form>
+          <Note msg={msg} />
+        </SectionCard>
+
+        <SectionCard icon={FilePenLine} title="متمم‌های اخیر">
+          {recent.length === 0 ? (
+            <EmptyState icon={FilePenLine} text="هنوز متممی ثبت نشده." />
+          ) : (
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>پیمان</th>
+                    <th>تغییرِ مبلغ</th>
+                    <th>تاریخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((a) => (
+                    <tr key={a.id}>
+                      <td className="card-title" data-label="شماره">{fa(a.number)}</td>
+                      <td data-label="پیمان">{a.contract_number != null ? fa(a.contract_number) : '—'}</td>
+                      <td className="num" data-label="تغییرِ مبلغ">{fa(Number(a.amount_delta))}</td>
+                      <td data-label="تاریخ">{formatJalali(a.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+      </div>
     </OpsPage>
   )
 }
