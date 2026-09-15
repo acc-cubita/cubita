@@ -112,7 +112,17 @@ def test_purpose_dimension_separates_sale_from_purchase(db, user):
     #: خروجِ فروش در دفترِ موجودی `warehouse_issue` است نه `sales_invoice` —
     #: کوبیتا برای هر فروش سندِ خروجِ انبار می‌زند و **همان** حرکت را می‌سازد.
     #: بُعد از منشأِ واقعیِ حرکت می‌آید، نه از نامِ سندِ تجاری.
-    assert _row_for(report, "warehouse_issue")["out_qty"] == Decimal(4)
+    #:
+    #: **و کلید از آن هم ریزتر شد.** `warehouse_issue` به‌تنهایی نمی‌گفت این خروج
+    #: فروش بود یا مصرفِ داخلی — هر دو یک ردیف می‌شدند، در حالی که خودِ سند
+    #: `issue_type` را با قیدِ `CHECK` نگه می‌دارد. حالا دلیلِ ثبت‌شده به کلید
+    #: می‌چسبد: `warehouse_issue:sale`.
+    row = _row_for(report, "warehouse_issue:sale")
+    assert row["out_qty"] == Decimal(4)
+    assert "فروش" in row["label"]
+    assert _row_for(report, "warehouse_issue") is None, (
+        "*** کلیدِ درشتِ قدیمی برگشت و مصرف با فروش یکی شد ***"
+    )
 
 
 def test_breakdown_agrees_with_the_kardex(db, user):

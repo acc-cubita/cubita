@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
-from app.models.banking import BankAccount, BankStatementLine, BankTransaction, PettyCashTransaction
+from app.models.banking import (
+    BankAccount,
+    BankStatementLine,
+    BankTransaction,
+    PettyCashFund,
+    PettyCashTransaction,
+)
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
@@ -24,6 +30,10 @@ from app.schemas.banking import (
     MatchStatementLineIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
+    PettyCashFundIn,
+    PettyCashFundOut,
+    PettyCashFundPatch,
+    PettyCashReturnIn,
     PettyCashTransactionOut,
     ReconciliationSummaryOut,
 )
@@ -202,6 +212,78 @@ def petty_cash_expense(
     user: User = Depends(require_permission("checks_bank", "create")),
 ):
     return banking_service.create_petty_cash_expense(db, data, user)
+
+
+@router.post("/api/petty-cash/return", response_model=PettyCashTransactionOut, status_code=201)
+def petty_cash_return(
+    data: PettyCashReturnIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("checks_bank", "create")),
+):
+    """استردادِ ماندهٔ تنخواه — مسیری که تا امروز وجود نداشت.
+
+    **بازگشتِ وجه است، نه هزینه.** تنها راهِ قبلی ثبتِ یک «هزینه»ی جعلی بود که
+    هم سود و زیان را غلط می‌کرد و هم گزارشِ تنخواه را.
+    """
+    return banking_service.create_petty_cash_return(db, data, user)
+
+
+# ── صندوق‌های تنخواه ─────────────────────────────────────────────────────────
+
+
+@router.get("/api/petty-cash-funds", response_model=list[PettyCashFundOut])
+def list_petty_cash_funds(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    return db.query(PettyCashFund).order_by(PettyCashFund.name).all()
+
+
+@router.post("/api/petty-cash-funds", response_model=PettyCashFundOut, status_code=201)
+def create_petty_cash_fund(
+    data: PettyCashFundIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "create")),
+):
+    fund = PettyCashFund(**data.model_dump())
+    db.add(fund)
+    db.flush()
+    db.refresh(fund)
+    return fund
+
+
+@router.patch("/api/petty-cash-funds/{fund_id}", response_model=PettyCashFundOut)
+def update_petty_cash_fund(
+    fund_id: UUID,
+    data: PettyCashFundPatch,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "update")),
+):
+    """ویرایشِ صندوق — **و تعویضِ تنخواه‌دار هویتِ صندوق را عوض نمی‌کند.**
+
+    همان صندوق می‌ماند و تاریخچه‌ی تراکنش‌هایش دست‌نخورده. تا پیش از این، صندوقی
+    به‌عنوان موجودیت وجود نداشت و تنخواه‌دار اصلاً جایی ثبت نمی‌شد.
+    """
+    fund = db.get(PettyCashFund, fund_id)
+    if fund is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "صندوق تنخواه یافت نشد")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(fund, field, value)
+    db.flush()
+    db.refresh(fund)
+    return fund
+
+
+@router.get("/api/petty-cash-funds/{fund_id}/balance")
+def petty_cash_fund_balance(
+    fund_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("checks_bank", "view")),
+):
+    """ماندهٔ یک صندوق — **مشتق از رویدادها، نه ستونی ذخیره‌شده** (قاعده ۶۷)."""
+    if db.get(PettyCashFund, fund_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "صندوق تنخواه یافت نشد")
+    return {"balance": banking_service.get_petty_cash_balance(db, fund_id)}
 
 
 # ── دسته چک ──────────────────────────────────────────────────────────────────
