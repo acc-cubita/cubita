@@ -44,6 +44,7 @@ DOC_LABELS: dict[str, str] = {
     "inventory_valuation": "قیمت‌گذاری اسناد انبار",
     "stock_count": "انبارگردانی",
     "contract": "پیمان",
+    "contract_amendment": "متمم پیمان",
 }
 
 

@@ -103,7 +103,7 @@ def audited_models() -> dict[type, str]:
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
     from app.models.inventory_valuation import InventoryValuationRun
-    from app.models.contracting import Contract
+    from app.models.contracting import Contract, ContractAmendment
     from app.models.manufacturing import Bom, ProductionOrder
     from app.models.payroll import (
         InsuranceTaxBranch,
@@ -143,6 +143,7 @@ def audited_models() -> dict[type, str]:
         #: مبلغ و بازه‌ی پیمان مبنای حسابداریِ فازهای بعدی (متمم، صورت‌وضعیت،
         #: تسویه‌حساب) خواهند بود؛ تغییرشان باید ردی بگذارد.
         Contract: "پیمان",
+        ContractAmendment: "متمم پیمان",
         #: انبارگردانی ارزشِ موجودی را جابه‌جا می‌کند و تا امروز هیچ ردی
         #: نمی‌گذاشت — نه اینکه چه کسی شمرد، نه اینکه عددی عوض شد.
         StockCountSession: "انبارگردانی",
