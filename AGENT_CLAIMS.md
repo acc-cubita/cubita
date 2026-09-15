@@ -36,9 +36,17 @@
 |---|---|---|---|
 | Claude Code | `routers/inventory.py`, `schemas/inventory.py`, `ContactsPage.tsx`, `api.ts` | حذف و غیرفعال‌سازیِ طرف حساب | ۱۴۰۵/۰۶/۲۴ |
 | Claude Code | `routers/payroll.py`, `schemas/payroll.py`, `services/payroll_contracts.py` | ویرایش و غیرفعال‌سازیِ کارمند | ۱۴۰۵/۰۶/۲۴ |
-| Claude Code | `models/inventory.py`, `services/inventory.py`, `alembic/versions/0150_*` | ابطالِ تعدیلِ انبار (**مهاجرتِ ۰۱۵۰ — شماره را نگیرید**) | ۱۴۰۵/۰۶/۲۴ |
+| Claude Code | `models/inventory.py`, `services/inventory.py`, `alembic/versions/0150_*` | ابطالِ تعدیلِ انبار (**مهاجرتِ ۰۱۵۰ — شماره را نگیرید**، ولی ⚠️ زیر را بخوان) | ۱۴۰۵/۰۶/۲۴ |
 | Claude Code | `services/reports.py`, `routers/reports.py` | صورت تغییرات در حقوق صاحبان سهام | ۱۴۰۵/۰۶/۲۴ |
 
+> **⚠️ هشدارِ تازه (۱۴۰۵/۰۶/۲۴): ادعای `0150` بالا دیگر درست نیست.** #76 («تنخواه
+> صندوق شد») هم زمان `0150` گرفت و روی master مرج شد؛ پیمانکاریِ فازِ ۱ هم `0151`
+> گرفته بود و مرج شد — یعنی `alembic heads` دو سر داد. رفعش شد: زنجیره‌ی
+> پیمانکاری (فازهای ۱ تا ۴) پشتِ `0150` به `0152`–`0155` شماره‌گذاریِ مجدد شد
+> (`fix/contracting-migration-renumber`). اگر «ابطالِ تعدیلِ انبار» هنوز `0150`
+> است، باید پشتِ `0155` بیاید (یا هرچه سرِ فعلیِ master بود — `alembic heads` را
+> دوباره بسنج).
+>
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
@@ -108,7 +116,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
-| Claude Sonnet 5 | مهاجرت `0151` (پشتِ `0149`؛ `0150` مالِ ادعای دیگری بود، دست نخورد)، `models/contracting.py` (تازه)، `schemas/contracting.py` (تازه)، `services/contracting.py` (تازه)، `routers/contracting.py` (تازه)، `models/counters.py`، `services/permissions.py`، `services/modules.py`، `main.py`، `audit.py`، `routers/numbering.py`، `desktop/src/pages/contracting/ContractingOpsPages.tsx` و `ContractingListPages.tsx` (تازه)، حذفِ `ContractingPage.tsx`، `navModel.tsx`، `moduleLists.tsx`، `Dashboard.tsx`، `HelpPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و schemaِ probeِ `cubita_probe` (حذف شد) | پیمانکاری، فازِ ۱ (شاخه‌ی `feat/contracting`، از صفر): ثبتِ پیمان بدونِ سندِ حسابداری، گذارِ محدودِ وضعیت، فهرستِ پیمان‌ها — الگوی «فروش» به‌جای تب‌دار، چون پنج عملیاتِ این ماژول پنج نوعِ رکوردِ متفاوت‌اند | ۱۴۰۵/۰۶/۲۳ |
+| Claude Sonnet 5 | مهاجرت `0151`→`0152` (پشتِ `0149`؛ `0150` مالِ ادعای دیگری بود، دست نخورد؛ **۱۴۰۵/۰۶/۲۴: بعداً دوباره شماره‌گذاری شد به `0152` پشتِ `0150`، چون #76 هم `0150` گرفت و هر دو روی master مرج شدند — `fix/contracting-migration-renumber`**)، `models/contracting.py` (تازه)، `schemas/contracting.py` (تازه)، `services/contracting.py` (تازه)، `routers/contracting.py` (تازه)، `models/counters.py`، `services/permissions.py`، `services/modules.py`، `main.py`، `audit.py`، `routers/numbering.py`، `desktop/src/pages/contracting/ContractingOpsPages.tsx` و `ContractingListPages.tsx` (تازه)، حذفِ `ContractingPage.tsx`، `navModel.tsx`، `moduleLists.tsx`، `Dashboard.tsx`، `HelpPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و schemaِ probeِ `cubita_probe` (حذف شد) | پیمانکاری، فازِ ۱ (شاخه‌ی `feat/contracting`، از صفر): ثبتِ پیمان بدونِ سندِ حسابداری، گذارِ محدودِ وضعیت، فهرستِ پیمان‌ها — الگوی «فروش» به‌جای تب‌دار، چون پنج عملیاتِ این ماژول پنج نوعِ رکوردِ متفاوت‌اند | ۱۴۰۵/۰۶/۲۳ |
 | Claude Opus 5 | مهاجرت `0143` → `0149` پس از ادغامِ master (شاخه‌ی `feat/inventory-valuation-run`، پشتِ `0148`)؛ جابه‌جاییِ `0135`→`0141` و `0136`→`0142` با ادغامِ master در #47/#52/#54؛ `models/inventory_valuation.py`، `models/counters.py`، `models/__init__.py`، `services/valuation.py`، `services/valuation_runs.py`، `schemas/inventory_valuation.py`، `routers/inventory_valuation.py`، `routers/numbering.py`، `main.py`، `services/warehouse_issues.py`، `services/integrity.py`، `services/entry_source.py`، `audit.py`، `schemas/reports.py`، `InventoryValuationPanel.tsx` (تازه)، `InventoryPage.tsx`، `KardexTable.tsx`، `moduleSections.tsx`، `moduleLists.tsx`، `kit.tsx`، `HelpPage.tsx`، `App.css`، انتهای `api.ts`؛ آزادسازی `pytest`، schemaِ یک‌بارمصرفِ `cubita_probe` (حذف شد)؛ پایگاه دادهٔ توسعه روی `0134` ماند | فصلِ «قیمت‌گذاری اسناد انبار»، نوبتِ دوم: پیش‌نمایشِ بی‌نوشتن، سندِ اصلاحی با طرفِ مقابلِ حرکتِ اصلی، بهای برگشتِ خروج از خروجِ مبدأ، ابطالِ فقط-آخرین و قفلِ ابطالِ سندِ اصلاح‌شده، تبِ «قیمت‌گذاری اسناد» | ۱۴۰۵/۰۶/۲۳ |
 | Claude Opus 5 | مهاجرت `0145`، `services/serials.py` (تازه)، `services/inventory_analytics.py` (تازه)، `models/advanced_inventory.py`، `routers/advanced_inventory.py`، `routers/reports.py`، `schemas/reports.py`، `schemas/advanced_inventory.py`، `SerialSearchTab.tsx` (تازه)، `api.ts` | فصلِ گزارش‌های انبار: ردیابیِ سریال از بن‌بست درآمد (دفترِ رویداد + جست‌وجو)، مجوزِ مقدار از مجوزِ بها جدا شد، و ابعادِ تأمین‌کننده/مشتری/هدف اضافه شدند | ۱۴۰۵/۰۶/۲۲ |
 | Claude Opus 5 | مهاجرت `0144`، `models/stock_count.py`، `models/counters.py`، `schemas/stock_count.py`، `services/stock_taking.py`، `services/printing.py`، `routers/stock_taking.py`، `routers/numbering.py`، `audit.py`، `StockCountPanel.tsx`، `api.ts` | فصلِ انبارگردانی: عکسِ سیستمی به لحظه‌ی شمارش رفت (حرکتِ وسطِ شمارش دو بار شمرده می‌شد)، شمارشِ کور با «نشمرده ≠ صفر»، دامنه‌ی انتخابی، برگه‌ی شمارشِ چاپی، گزارشِ حرکتِ پس از شمارش، شماره‌ی سند و حسابرسی | ۱۴۰۵/۰۶/۲۲ |
