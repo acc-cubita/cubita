@@ -26,6 +26,7 @@ from app.routers import (
     calendar,
     client_errors,
     company,
+    contracting,
     cost_centers,
     crm,
     currencies,
@@ -161,6 +162,7 @@ app.include_router(alerts.router)
 app.include_router(currencies.router)
 app.include_router(crm.router)
 app.include_router(manufacturing.router)
+app.include_router(contracting.router)
 app.include_router(advanced_inventory.router)
 app.include_router(onboarding.router)
 app.include_router(installments.router)

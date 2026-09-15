@@ -46,6 +46,7 @@ import {
   PiggyBank,
   PlayCircle,
   Receipt,
+  RefreshCcw,
   Route,
   Scale,
   ScanLine,
@@ -92,7 +93,8 @@ export type PageKey =
   | 'accounting'
   | 'banking'
   | 'fixedassets'
-  | 'contracting'
+  | 'contractingnew'
+  | 'contractingstatus'
   | 'moadian'
   | 'distributor'
   | 'marketplace'
@@ -150,6 +152,7 @@ export type PageKey =
   | 'installmentplans'
   | 'allinstallments'
   | 'costcenterlist'
+  | 'contractinglist'
   //: فهرستِ «سامانه مؤدیان» — از کارتِ «فهرست» باز می‌شود، نه از منوی عملیات.
   | 'moadianhistory'
   //: ماژولِ «دریافت و پرداخت» — هجده عملیات. کلیدِ گیت‌کننده‌شان `banking` است
@@ -407,9 +410,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    //: فازِ ۱ — «پیمان» و تغییرِ وضعیتش. متمم/صورت‌وضعیت/تسویه‌حساب فازهای بعدند؛
+    //: عمداً استابِ خالی برایشان گذاشته نشد (PROJECT_OVERVIEW §۱۰).
     heading: 'پیمانکاری',
     icon: <HardHat size={17} />,
-    items: [{ key: 'contracting', label: 'پیمانکاری', icon: <HardHat size={18} /> }],
+    items: [
+      { key: 'contractingnew', label: 'پیمان', icon: <FileSignature size={18} /> },
+      { key: 'contractingstatus', label: 'تغییر وضعیت پیمان', icon: <RefreshCcw size={18} /> },
+    ],
   },
   {
     heading: 'سامانه مؤدیان',
@@ -503,6 +511,12 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
 //: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
 PAGE_MODULE_KEY.analyticlist = 'accounting'
+
+//: «پیمانکاری» — کلیدِ ماژولِ مجازی، دقیقاً مثلِ `sales`: خودِ `contracting`
+//: هیچ‌کدام از این سه PageKey نیست، فقط نگاشتشان می‌کند.
+for (const key of ['contractingnew', 'contractingstatus', 'contractinglist'] as PageKey[]) {
+  PAGE_MODULE_KEY[key] = 'contracting'
+}
 
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'pos', 'installments', 'crm', 'purchases', 'inventory',

@@ -75,6 +75,12 @@ PERMISSION_MODULES: list[dict] = [
         "actions": ["view", "create", "update", "delete"],
     },
     {
+        "key": "contracting",
+        "label": "پیمانکاری",
+        "hint": "پیمان‌ها، متمم‌ها و صورت‌وضعیت‌ها",
+        "actions": ["view", "create", "update"],
+    },
+    {
         "key": "moadian",
         "label": "سامانه مؤدیان",
         "hint": "ارسال صورتحساب الکترونیکی. «ویرایش» یعنی دسترسی به کلید و اعتبارنامه.",

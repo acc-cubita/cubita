@@ -178,6 +178,11 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'سامانه مؤدیان': [
     { key: 'moadianhistory', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
   ],
+  //: «پیمانکاری» — فازِ ۱ فقط «پیمان‌ها» دارد؛ فهرستِ متمم/صورت‌وضعیت/تسویه‌حساب
+  //: با فازهای بعدشان اضافه می‌شوند.
+  'پیمانکاری': [
+    { key: 'contractinglist', label: 'پیمان‌ها', icon: FileSignature },
+  ],
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
   'شرکت': [
@@ -234,6 +239,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   contractlist: 'حقوق و دستمزد',
   payslipledger: 'حقوق و دستمزد',
   moadianhistory: 'سامانه مؤدیان',
+  contractinglist: 'پیمانکاری',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
   recurringlist: 'حسابداری',
@@ -409,7 +415,10 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   settlement: 'view',
   deploymentinfo: 'view',
   integration: 'none',
-  contracting: 'view',
+  //: پیمانکاری — الگوی «فروش»: هر عملیات فهرستِ نظیرِ خودش. متمم/صورت‌وضعیت/
+  //: تسویه‌حساب با فازهای بعدشان می‌آیند.
+  contractingnew: 'contractinglist',
+  contractingstatus: 'state',
   distributor: 'view',
   marketplace: 'view',
   overview: 'view',

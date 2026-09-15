@@ -64,6 +64,9 @@ DOC_SERVICE_PURCHASE_INVOICE = "service_purchase_invoice"
 DOC_INVENTORY_VALUATION = "inventory_valuation"
 #: انبارگردانی سریِ شماره‌ی خودش را دارد — سندِ کسری/اضافی سندِ دیگری است (§۹۰).
 DOC_STOCK_COUNT = "stock_count"
+#: پیمان — سریِ شماره‌ی داخلیِ خودش، جدا از شماره‌ی قراردادِ خودِ کارفرما
+#: (`Contract.external_reference`، متنِ آزاد).
+DOC_CONTRACT = "contract"
 
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
@@ -89,6 +92,7 @@ DOC_TYPES = (
     DOC_SERVICE_PURCHASE_INVOICE,
     DOC_INVENTORY_VALUATION,
     DOC_STOCK_COUNT,
+    DOC_CONTRACT,
 )
 
 

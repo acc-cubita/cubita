@@ -33,6 +33,7 @@ OPTIONAL_MODULES: tuple[str, ...] = (
     "purchases",
     "inventory",
     "manufacturing",
+    "contracting",
     "accounting",
     "banking",
     "fixedassets",
@@ -59,7 +60,7 @@ INDUSTRY_TEMPLATES: dict[str, tuple[str, ...]] = {
     # عمومی: همه‌ی اختیاری‌ها جز محدودها (تولید با گرنتِ سوپرادمین می‌آید).
     "general": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
-        "accounting", "banking", "fixedassets", "payroll",
+        "contracting", "accounting", "banking", "fixedassets", "payroll",
         "calendar",
     ),
     # تولیدی: خط تولید فعال، بدونِ صندوق/باشگاه/اقساط.

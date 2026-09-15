@@ -33,7 +33,8 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
-import { ContractingPage } from '../pages/ContractingPage'
+import { ContractPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
+import { ContractingListPage } from '../pages/contracting/ContractingListPages'
 import { MoadianHistoryPage, MoadianModulePage } from '../pages/moadian/MoadianModulePage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
@@ -294,7 +295,9 @@ const PAGE_TITLES: Record<PageKey, string> = {
   calendarlist: 'رویدادهای تقویم',
   numberinglist: 'روش‌های شماره‌گذاری',
   fixedassets: 'دارایی ثابت',
-  contracting: 'پیمانکاری',
+  contractingnew: 'پیمان',
+  contractingstatus: 'تغییر وضعیت پیمان',
+  contractinglist: 'پیمان‌ها',
   moadian: 'سامانه مؤدیان',
   moadianhistory: 'تاریخچه ارسال‌ها',
   distributor: 'پخشِ من',
@@ -807,7 +810,9 @@ export function Dashboard({
               <Reports token={token} />
             </div>
           )}
-          {page === 'contracting' && <ContractingPage />}
+          {page === 'contractingnew' && <ContractPage token={token} />}
+          {page === 'contractingstatus' && <ContractStatusPage token={token} />}
+          {page === 'contractinglist' && <ContractingListPage token={token} />}
           {page === 'moadian' && <MoadianModulePage token={token} me={me} onNavigate={navigate} />}
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
