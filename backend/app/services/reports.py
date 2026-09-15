@@ -34,6 +34,9 @@ CREDIT_NORMAL_TYPES = ("liability", "equity", "income")
 CASH_ROLES = (cc.CASH, cc.BANK, cc.PETTY_CASH)
 #: حساب‌های دارایی ثابت — طبقه‌بندیِ «سرمایه‌گذاری» حتی اگر مشتری کدشان را عوض کرده باشد.
 FIXED_ASSET_ROLES = (cc.FIXED_ASSETS, cc.ACCUMULATED_DEPRECIATION)
+#: بدهی‌هایی که «تأمین مالی»اند نه «عملیاتی». امروز یکی است؛ تاپل می‌ماند تا
+#: افزودنِ بعدی (اوراق، اجاره‌ی سرمایه‌ای) یک خط باشد نه بازنویسی.
+FINANCING_LIABILITY_ROLES = (cc.LONG_TERM_LIABILITY,)
 
 
 def get_sales_summary(db: Session) -> dict:
@@ -867,14 +870,24 @@ def _cash_flow_category(account: Account) -> str:
     """طرفِ غیرنقدِ یک سند را به یکی از سه فعالیتِ صورت جریان وجوه نقد نسبت می‌دهد.
 
     - سرمایه‌گذاری: دارایی‌های غیرجاری (گروه ۱۲) و دارایی ثابت — خرید/فروشِ دارایی.
-    - تأمین مالی: حقوق صاحبان سرمایه (آورده/برداشتِ مالک) و بدهی‌های بلندمدت (گروه ۲۲،
-      اگر مشتری تعریف کند).
+    - تأمین مالی: حقوق صاحبان سرمایه (آورده/برداشتِ مالک) و بدهی‌های بلندمدت.
+
+    **چرا دو شرط برای بدهی.** مرجع `system_role` است — همان قاعده‌ای که کلِ
+    `chart_codes` رویش بنا شده: «کد حساب متعلق به مشتری است، نه به ما». تا امروز
+    فقط `code.startswith("22")` بود، پس مشتری‌ای که چارتش را بازشماره‌گذاری می‌کرد
+    وامِ بلندمدتش بی‌صدا «عملیاتی» می‌شد و صورت جریان وجوه نقد غلط درمی‌آمد.
+
+    شرطِ کد **حذف نشد** چون کسب‌وکارهای موجود حسابِ نقش‌دار ندارند: چارتِ پایه تا
+    امروز اصلاً گروهِ ۲۲ نداشت. حذفش یعنی تغییرِ بی‌اعلامِ گزارشِ آن‌ها. پیش‌فرض
+    رفتارِ دیروز می‌ماند و نقش، وقتی باشد، حرفِ آخر را می‌زند.
     - عملیاتی: بقیه — درآمد، هزینه، و اقلامِ سرمایه در گردش (دریافتنی/پرداختنی، موجودی،
       مالیات و ...).
     """
     code = account.code or ""
     if account.system_role in FIXED_ASSET_ROLES or (account.type == "asset" and code.startswith("12")):
         return "investing"
+    if account.system_role in FINANCING_LIABILITY_ROLES:
+        return "financing"
     if account.type == "equity" or (account.type == "liability" and code.startswith("22")):
         return "financing"
     return "operating"

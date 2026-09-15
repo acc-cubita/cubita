@@ -145,7 +145,13 @@ class LoyaltySettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("tenant_id", name="uq_loyalty_settings_tenant"),)
 
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    #: چند تومان خرید = ۱ امتیاز (مثلاً ۱۰۰۰۰ یعنی هر ۱۰هزار تومان یک امتیاز)
+    #: چند **ریال** خرید = ۱ امتیاز (مثلاً ۱۰۰۰۰۰ یعنی هر ۱۰۰هزار ریال یک امتیاز).
+    #:
+    #: **این کامنت تا امروز «تومان» می‌گفت و غلط بود.** سرویس مبلغِ ریالیِ فاکتور
+    #: را بر همین عدد تقسیم می‌کند و برچسبِ فرم هم «به‌ازای هر چند ریال خرید» است؛
+    #: پس کد و رابط درست بودند و فقط این خط گمراه می‌کرد. هر کس به آن اعتماد
+    #: می‌کرد و ضریب را «اصلاح» می‌کرد، امتیازِ همه‌ی مشتری‌ها را ۱۰ برابر می‌کرد —
+    #: و امتیاز یک بدهی است، نه یک عددِ نمایشی.
     amount_per_point: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: مبنای سطحِ باشگاه: "points" (امتیازِ فعال) یا "spend" (خریدِ ۱۲ ماهِ اخیر).
     tier_basis: Mapped[str] = mapped_column(String(10), default="points", server_default="points")

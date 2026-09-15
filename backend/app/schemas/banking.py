@@ -215,6 +215,10 @@ class BankStatementLineIn(BaseModel):
     line_date: date
     amount: Decimal
     description: str = ""
+    #: شماره‌ی مرجع/پیگیریِ بانک، اگر فایل داشته باشد. با آمدنش وارداتِ دوباره
+    #: واقعاً بی‌اثر می‌شود؛ بی آن، تشخیصِ تکرار به شمارشِ ردیف‌های هم‌شکل
+    #: برمی‌گردد که ضعیف‌تر است ولی از هیچ بهتر.
+    external_ref: str | None = None
 
 
 class BankStatementImportIn(BaseModel):
@@ -233,6 +237,7 @@ class BankStatementLineOut(BaseModel):
     line_date: date
     amount: Decimal
     description: str
+    external_ref: str | None
     matched_transaction_id: UUID | None
 
     model_config = {"from_attributes": True}
