@@ -12,6 +12,7 @@ from app.models.banking import (
     BankAccount,
     BankStatementLine,
     BankTransaction,
+    PettyCashFund,
     PettyCashTransaction,
 )
 from app.models.user import User
@@ -20,6 +21,7 @@ from app.schemas.banking import (
     BankStatementLineIn,
     PettyCashChargeIn,
     PettyCashExpenseIn,
+    PettyCashReturnIn,
 )
 from app.services import chart_codes as cc
 from app.services.common import (
@@ -75,8 +77,34 @@ def create_bank_transaction(db: Session, data: BankDepositWithdrawIn, user: User
     return txn
 
 
+def _resolve_fund(db: Session, fund_id) -> PettyCashFund | None:
+    """کدام صندوق — و اگر نگفته‌اند، کدام پیش‌فرض.
+
+    **تهی مجاز است و این عمدی است.** رابطِ مستقر `fund_id` نمی‌فرستد؛ اجباری‌کردنش
+    یعنی هر مشتری تا رسیدنِ باندلِ تازه نتواند تنخواه ثبت کند. پس اگر دقیقاً یک
+    صندوقِ فعال باشد همان برداشته می‌شود، و اگر چند تا بود کاربر باید انتخاب کند
+    — چون حدس‌زدن یعنی پول از صندوقِ اشتباه کم شود.
+    """
+    if fund_id is not None:
+        fund = db.get(PettyCashFund, fund_id)
+        if fund is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "صندوق تنخواه یافت نشد")
+        if not fund.is_active:
+            raise HTTPException(status.HTTP_409_CONFLICT, "این صندوق تنخواه غیرفعال است")
+        return fund
+
+    active = db.query(PettyCashFund).filter(PettyCashFund.is_active.is_(True)).all()
+    if len(active) > 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "چند صندوق تنخواه فعال است؛ مشخص کنید این تراکنش برای کدام صندوق است",
+        )
+    return active[0] if active else None
+
+
 def create_petty_cash_charge(db: Session, data: PettyCashChargeIn, user: User) -> PettyCashTransaction:
     assert_period_open(db, data.transaction_date)
+    fund = _resolve_fund(db, data.fund_id)
 
     lines = [
         JournalLine(account_id=get_account(db, cc.PETTY_CASH).id, debit=data.amount, credit=0),
@@ -91,6 +119,8 @@ def create_petty_cash_charge(db: Session, data: PettyCashChargeIn, user: User) -
         counter_account_id=data.source_account_id,
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
+        fund_id=fund.id if fund else None,
+        evidence_ref=data.evidence_ref.strip(),
     )
     db.add(txn)
     db.flush()
@@ -100,6 +130,7 @@ def create_petty_cash_charge(db: Session, data: PettyCashChargeIn, user: User) -
 
 def create_petty_cash_expense(db: Session, data: PettyCashExpenseIn, user: User) -> PettyCashTransaction:
     assert_period_open(db, data.transaction_date)
+    fund = _resolve_fund(db, data.fund_id)
 
     lines = [
         JournalLine(account_id=data.expense_account_id, debit=data.amount, credit=0),
@@ -116,6 +147,53 @@ def create_petty_cash_expense(db: Session, data: PettyCashExpenseIn, user: User)
         counter_account_id=data.expense_account_id,
         journal_entry_id=journal_entry.id,
         created_by_id=user.id,
+        fund_id=fund.id if fund else None,
+        evidence_ref=data.evidence_ref.strip(),
+    )
+    db.add(txn)
+    db.flush()
+    db.refresh(txn)
+    return txn
+
+
+def create_petty_cash_return(db: Session, data: PettyCashReturnIn, user: User) -> PettyCashTransaction:
+    """استردادِ ماندهٔ تنخواه — **بازگشتِ وجه، نه هزینه**.
+
+    تا امروز هیچ مسیری نداشت. تنخواه‌داری که می‌رفت یا وجهی که خرج نشده بود
+    برمی‌گشت، فقط با ثبتِ یک «هزینه»ی جعلی قابلِ ثبت بود — و دفتر آن را هزینه
+    می‌دید، پس هم سود و زیان غلط می‌شد و هم گزارشِ تنخواه.
+
+    سند دقیقاً معکوسِ شارژ است: مقصد بدهکار، تنخواه بستانکار.
+    """
+    assert_period_open(db, data.transaction_date)
+    fund = _resolve_fund(db, data.fund_id)
+
+    #: **گاردِ مانده.** استردادِ بیش از ماندهٔ تنخواه یعنی حسابِ تنخواه بستانکار
+    #: می‌شود — دارایی‌ای با ماندهٔ منفی، که هیچ معنای حسابداری ندارد.
+    balance = get_petty_cash_balance(db)
+    if data.amount > balance:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"ماندهٔ تنخواه برای این استرداد کافی نیست (مانده: {balance:,.0f} ریال)",
+        )
+
+    lines = [
+        JournalLine(account_id=data.destination_account_id, debit=data.amount, credit=0),
+        JournalLine(account_id=get_account(db, cc.PETTY_CASH).id, debit=0, credit=data.amount),
+    ]
+    journal_entry = _make_journal_entry(
+        db, data.transaction_date, data.description or "استرداد ماندهٔ تنخواه", "petty_cash", user, lines
+    )
+    txn = PettyCashTransaction(
+        type="return_balance",
+        transaction_date=data.transaction_date,
+        amount=data.amount,
+        description=data.description,
+        counter_account_id=data.destination_account_id,
+        journal_entry_id=journal_entry.id,
+        created_by_id=user.id,
+        fund_id=fund.id if fund else None,
+        evidence_ref=data.evidence_ref.strip(),
     )
     db.add(txn)
     db.flush()
@@ -296,9 +374,21 @@ def get_reconciliation_summary(db: Session, bank_account_id: UUID) -> dict:
     }
 
 
-def get_petty_cash_balance(db: Session) -> Decimal:
-    charges = db.query(PettyCashTransaction).filter(PettyCashTransaction.type == "charge").all()
-    expenses = db.query(PettyCashTransaction).filter(PettyCashTransaction.type == "expense").all()
-    total_charge = sum((Decimal(t.amount) for t in charges), Decimal(0))
-    total_expense = sum((Decimal(t.amount) for t in expenses), Decimal(0))
-    return total_charge - total_expense
+#: علامتِ هر نوع در ماندهٔ تنخواه. **فهرست، نه شرطِ پراکنده:** تا امروز مانده با
+#: دو کوئریِ جدا حساب می‌شد و افزودنِ نوعِ سوم (`return_balance`) بی‌صدا از قلم
+#: می‌افتاد — یعنی پولی که برگشته بود همچنان در تنخواه شمرده می‌شد.
+_PETTY_CASH_SIGN = {"charge": Decimal(1), "expense": Decimal(-1), "return_balance": Decimal(-1)}
+
+
+def get_petty_cash_balance(db: Session, fund_id: UUID | None = None) -> Decimal:
+    """ماندهٔ تنخواه — مشتق از رویدادها، نه ستونی ذخیره‌شده (قاعده ۶۷).
+
+    `fund_id` تهی یعنی همه‌ی صندوق‌ها؛ رفتارِ پیش از چندصندوقی‌شدن.
+    """
+    query = db.query(PettyCashTransaction)
+    if fund_id is not None:
+        query = query.filter(PettyCashTransaction.fund_id == fund_id)
+    return sum(
+        (_PETTY_CASH_SIGN.get(t.type, Decimal(0)) * Decimal(t.amount) for t in query.all()),
+        Decimal(0),
+    )
