@@ -34,19 +34,21 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code | `routers/inventory.py`, `schemas/inventory.py`, `ContactsPage.tsx`, `api.ts` | حذف و غیرفعال‌سازیِ طرف حساب | ۱۴۰۵/۰۶/۲۴ |
-| Claude Code | `routers/payroll.py`, `schemas/payroll.py`, `services/payroll_contracts.py` | ویرایش و غیرفعال‌سازیِ کارمند | ۱۴۰۵/۰۶/۲۴ |
-| Claude Code | `models/inventory.py`, `services/inventory.py`, `alembic/versions/0150_*` | ابطالِ تعدیلِ انبار (**مهاجرتِ ۰۱۵۰ — شماره را نگیرید**، ولی ⚠️ زیر را بخوان) | ۱۴۰۵/۰۶/۲۴ |
-| Claude Code | `services/reports.py`, `routers/reports.py` | صورت تغییرات در حقوق صاحبان سهام | ۱۴۰۵/۰۶/۲۴ |
+| — | — | **هیچ ادعای فعالی نیست.** | — |
 
-> **⚠️ هشدارِ تازه (۱۴۰۵/۰۶/۲۴): ادعای `0150` بالا دیگر درست نیست.** #76 («تنخواه
-> صندوق شد») هم زمان `0150` گرفت و روی master مرج شد؛ پیمانکاریِ فازِ ۱ هم `0151`
-> گرفته بود و مرج شد — یعنی `alembic heads` دو سر داد. رفعش شد: زنجیره‌ی
-> پیمانکاری (فازهای ۱ تا ۴) پشتِ `0150` به `0152`–`0155` شماره‌گذاریِ مجدد شد
-> (`fix/contracting-migration-renumber`). اگر «ابطالِ تعدیلِ انبار» هنوز `0150`
-> است، باید پشتِ `0155` بیاید (یا هرچه سرِ فعلیِ master بود — `alembic heads` را
-> دوباره بسنج).
+> **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
+> تنخواه `0151` گرفت و پیمانکاری هم `0152` را پشتِ `0150` گذاشت: **دو سر روی یک
+> ریشه.** اصلاحش (#81) تاریخچه را بازنویسی کرد و merge‌ی PR #76 را انداخت — پس
+> صندوقِ تنخواه و «هدف حرکت» از `master` غایب شدند بی‌آنکه کسی متوجه شود، چون
+> GitHub همچنان «merged» نشانشان می‌داد. با PR #87 و شماره‌ی `0157` برگشتند و
+> تولید روی `0157` مستقر شد.
+>
+> **درسِ عملی:** پیش از هر مهاجرت، شماره را از **سرِ فعلیِ `master`** بگیر
+> (`alembic heads` یا پیمودنِ زنجیره)، نه از آخرین چیزی که خودت دیده‌ای. و اگر
+> اصلاحی تاریخچه را بازنویسی کرد، **بسنج کدام merge‌ها افتاده‌اند** — «merged»
+> بودن در GitHub تضمین نمی‌کند کامیت روی `master` است.
+
 > **دو هشدار برای هر که بعد از من می‌آید:**
 >
 > ۱. شاخه‌ی محلیِ **`feat/sales-invoice-completion`** شش کامیتِ **push‌نشده** دارد
@@ -116,6 +118,8 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Opus 5 | مهاجرت `0157` (پشتِ `0156`؛ اول `0151` بود)، `models/banking.py` (`PettyCashFund`)، `schemas/banking.py`، `services/banking.py`، `routers/banking.py`، `services/inventory_analytics.py`، `tests/test_inventory_reporting.py` | بازگردانیِ کارِ گم‌شده‌ی PR #76 + صندوقِ تنخواه با تنخواه‌دار/سقف/مدرک و استردادِ مانده + «هدف حرکت» که تولید را از خرید و مصرف را از فروش جدا می‌کند (از `receipt_type`/`issue_type`ِ خودِ سند، بی ستونِ تازه). یک FK بی‌پوششِ `rls_disabled` پیش از استقرار گرفته شد | ۱۴۰۵/۰۶/۲۴ |
+| Claude Opus 5 | مهاجرت `0150`، `services/banking.py`، `models/banking.py`، `services/reports.py`، `services/chart_codes.py`، `seed.py`، `models/crm.py`، `ReconciliationPanel.tsx`، `ACCOUNTING_KB_AUDIT.md` (تازه)، `GAPS.md` | مقابله‌ی کد با پایگاه دانشِ حسابداری (۱۴۷ قسمت): کنترلِ تکرارِ وارداتِ صورت‌حسابِ بانکی · صورت جریان وجوه نقد روی **نقش** به‌جای متنِ کد + گروهِ ۲۲ که در چارتِ پایه نبود · تصحیحِ کامنتِ تومان/ریالِ امتیازِ باشگاه. دو ادعای `GAPS.md` در آزمون رد شدند و ثبت شدند | ۱۴۰۵/۰۶/۲۴ |
 | Claude Sonnet 5 | مهاجرت `0156` (پشتِ `0155`)، `models/manufacturing.py` (`ProductionPlan` تازه، `production_plan_id` روی `ProductionOrder`)، `schemas/manufacturing.py`، `services/manufacturing.py`، `routers/manufacturing.py`، `models/counters.py`، `routers/numbering.py`، `audit.py`، `services/entry_source.py`، `desktop/src/pages/ManufacturingPage.tsx`، `moduleSections.tsx`، `moduleLists.tsx`، `HelpPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پنج schemaِ probeِ یک‌بارمصرف (`cubita_probe6`–`10`، حذف شدند) | تولید، فازِ ۱ (شاخه‌ی `feat/manufacturing-plan-document-split`): تفکیکِ سفارش (برنامه، بدونِ اثرِ انبار) از سند (اجرا، دست‌نخورده) — موتورِ ثبتِ سند عمداً به WarehouseIssue/WarehouseReceipt سیم‌کشی نشد (ریسکِ بازآراییِ موتورِ تست‌شده زیرِ فشارِ زمان)؛ سناریوی بحرانیِ افزودنِ FK روی جدولِ دارای ردیفِ واقعی جداگانه تست شد | ۱۴۰۵/۰۶/۲۴ |
 | Claude Sonnet 5 | مهاجرت `0154`→`0155` (پشتِ `0153`؛ **۱۴۰۵/۰۶/۲۴: بعداً دوباره شماره‌گذاری شد به `0155` پشتِ `0154`، همراهِ رفعِ دوسرِ مهاجرت — `fix/contracting-migration-renumber`**)، `models/contracting.py` (`ContractSettlement`)، `schemas/contracting.py`، `services/contracting.py`، `routers/contracting.py`، `models/counters.py`، `routers/numbering.py`، `audit.py`، `services/chart_codes.py` (چهار نقشِ تازه: درآمدِ پیمانکاری، سپرده‌ی حسن انجامِ کار، پیش‌دریافتِ پیمان، سایرِ کسورات)، `seed.py CHART_OF_ACCOUNTS` (همان چهار کد: ۱۱۱۶/۲۱۱۴/۴۱۰۹/۵۱۱۹)، `services/entry_source.py` (ثبتِ `contract_settlement` در `SOURCE_MODELS`)، `desktop/src/pages/contracting/ContractingOpsPages.tsx` و `ContractingListPages.tsx`، `navModel.tsx`، `moduleLists.tsx`، `Dashboard.tsx`، `HelpPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پنج schemaِ probeِ یک‌بارمصرف (`cubita_probe2`–`6`، حذف شدند) | پیمانکاری، فازِ ۴ — آخرین فاز (شاخه‌ی `feat/contracting-settlement`، پشتِ `feat/contracting-statement`): تسویه‌حسابِ پیمان — تنها سندِ ماژول که حسابداریِ واقعی و `VoidableMixin` دارد؛ مبالغ از جمعِ صورت‌وضعیت‌ها خودکار، ابطال از مسیرِ مشترکِ `voiding.py`؛ ماژولِ پیمانکاری کامل شد | ۱۴۰۵/۰۶/۲۴ |
 | Claude Sonnet 5 | مهاجرت `0153`→`0154` (پشتِ `0152`؛ **۱۴۰۵/۰۶/۲۴: بعداً دوباره شماره‌گذاری شد به `0154` پشتِ `0153`، همراهِ رفعِ دوسرِ مهاجرت — `fix/contracting-migration-renumber`**)، `models/contracting.py` (`ContractStatement`)، `schemas/contracting.py`، `services/contracting.py`، `routers/contracting.py`، `models/counters.py`، `routers/numbering.py`، `audit.py`، `desktop/src/pages/contracting/ContractingOpsPages.tsx` و `ContractingListPages.tsx`، `navModel.tsx`، `moduleLists.tsx`، `Dashboard.tsx`، `HelpPage.tsx`، انتهای `api.ts`؛ آزادسازی `pytest` و پنج schemaِ probeِ یک‌بارمصرف (`cubita_probe2`–`5`، حذف شدند) | پیمانکاری، فازِ ۳ (شاخه‌ی `feat/contracting-statement`، پشتِ `feat/contracting-amendment`): صورت‌وضعیتِ دریافتی — بدونِ سند (تصمیمِ کاربر)، کسرِ سپرده/پیش‌پرداخت خودکار و Snapshot‌شده از پیمان؛ یک باگِ Decimal/float در محاسبه پیدا و رفع شد | ۱۴۰۵/۰۶/۲۴ |
