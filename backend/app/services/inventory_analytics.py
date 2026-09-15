@@ -39,6 +39,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.inventory import Contact
+from app.models.invoices import (
+    ISSUE_TYPE_LABELS,
+    RECEIPT_TYPE_LABELS,
+    WarehouseIssue,
+    WarehouseReceipt,
+)
 from app.services import valuation
 
 #: بُعدهایی که این گزارش می‌شناسد. `purpose` از `source_type` مشتق می‌شود و دو
@@ -59,6 +65,51 @@ CUSTOMER_SOURCES = frozenset({"sales_invoice", "warehouse_issue", "sales_return"
 
 #: هدفِ هر منشأ — همان برچسب‌های موتورِ ارزش‌گذاری، بی بازتعریف.
 PURPOSE_LABELS = dict(valuation.SOURCE_LABELS)
+
+#: **دو سندی که نوعِ سند با هدفِ حرکت یکی نیست.**
+#:
+#: docstringِ بالای همین فایل «مصرف» و «تولید» را جزوِ هدف‌ها نام می‌برد، ولی
+#: `source_type` نمی‌توانست بگویدشان: رسیدِ انبار چه بابتِ خرید باشد چه تولید،
+#: `warehouse_receipt` نوشته می‌شود؛ خروجِ انبار چه فروش باشد چه مصرفِ داخلی،
+#: `warehouse_issue`. پس رسیدِ تولیدی و رسیدِ خرید در گزارش یک ردیف بودند.
+#:
+#: **و ستونِ تازه‌ای لازم نبود** — خودِ سند از قبل `receipt_type`/`issue_type` را
+#: با قیدِ `CHECK` نگه می‌دارد. کپی‌کردنش روی حرکت یعنی دو حقیقت، همان چیزی که
+#: همین ماژول برای طرف حساب از آن پرهیز کرده.
+_REASON_SOURCES: dict[str, tuple] = {
+    "warehouse_receipt": (WarehouseReceipt, WarehouseReceipt.receipt_type, RECEIPT_TYPE_LABELS),
+    "warehouse_issue": (WarehouseIssue, WarehouseIssue.issue_type, ISSUE_TYPE_LABELS),
+}
+
+
+def _reason_by_source(db: Session, keys: set[tuple[str, UUID]]) -> dict[tuple[str, UUID], str]:
+    """دلیلِ ثبت‌شده‌ی هر سند — یک کوئری به‌ازای نوعِ سند، نه به‌ازای هر ردیف."""
+    by_type: dict[str, set[UUID]] = defaultdict(set)
+    for source_type, source_id in keys:
+        if source_id is not None and source_type in _REASON_SOURCES:
+            by_type[source_type].add(source_id)
+
+    out: dict[tuple[str, UUID], str] = {}
+    for source_type, ids in by_type.items():
+        model, column, _ = _REASON_SOURCES[source_type]
+        for doc_id, reason in db.query(model.id, column).filter(model.id.in_(ids)).all():
+            if reason:
+                out[(source_type, doc_id)] = reason
+    return out
+
+
+def _purpose_of(kind: str, source_id, reasons: dict) -> tuple[str, str]:
+    """کلید و برچسبِ «هدف حرکت».
+
+    برای سندهای بی‌دلیل همان رفتارِ دیروز است؛ برای رسید و خروج، دلیلِ ثبت‌شده
+    به کلید اضافه می‌شود تا تولید از خرید و مصرف از فروش جدا شوند.
+    """
+    base = PURPOSE_LABELS.get(kind, kind)
+    reason = reasons.get((kind, source_id)) if source_id is not None else None
+    if reason is None:
+        return kind, base
+    _, _, labels = _REASON_SOURCES[kind]
+    return f"{kind}:{reason}", f"{base} — {labels.get(reason, reason)}"
 
 
 @dataclass
@@ -200,6 +251,10 @@ def breakdown(
         )
         relevant.append((move, kind))
 
+    reasons: dict[tuple[str, UUID], str] = {}
+    if dimension == "purpose":
+        reasons = _reason_by_source(db, {(k, m.row.source_id) for m, k in relevant})
+
     contacts: dict[tuple[str, UUID], UUID] = {}
     names: dict[UUID, str] = {}
     if dimension in ("supplier", "customer"):
@@ -217,7 +272,7 @@ def breakdown(
     for move, kind in relevant:
         row = move.row
         if dimension == "purpose":
-            key, label = kind, PURPOSE_LABELS.get(kind, kind)
+            key, label = _purpose_of(kind, row.source_id, reasons)
         else:
             wanted = SUPPLIER_SOURCES if dimension == "supplier" else CUSTOMER_SOURCES
             if kind not in wanted:

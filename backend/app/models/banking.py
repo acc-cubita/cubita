@@ -47,7 +47,12 @@ CHECK_STATUSES = (
     "returned",
     "cashed",
 )
-PETTY_CASH_TYPES = ("charge", "expense")
+#: **سه نوع، و سومی تا امروز نبود.**
+#:
+#: `return_balance` = استردادِ ماندهٔ تنخواه. بدونِ آن، تنخواه‌داری که می‌رفت پولِ
+#: دستش را فقط با یک «هزینه»ی جعلی می‌توانست برگرداند — و دفتر آن را هزینه
+#: می‌دید، نه بازگشتِ وجه.
+PETTY_CASH_TYPES = ("charge", "expense", "return_balance")
 
 
 class BankAccount(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -276,13 +281,53 @@ class BankStatementLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
+class PettyCashFund(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """یک صندوقِ تنخواه — **موجودیتی جدا از تنخواه‌دارش**.
+
+    تا امروز صندوقی وجود نداشت: `PettyCashTransaction` یک جدولِ تخت بود و
+    docstringش می‌گفت «یک صندوق تنخواه واحد». پیامدش این بود که تنخواه‌دار جایی
+    ثبت نمی‌شد و عوض‌شدنش هیچ ردی نداشت.
+
+    **چرا تنخواه‌دار طرف حساب است نه کاربر:** تنخواه‌دار لزوماً حسابِ ورود به
+    نرم‌افزار ندارد؛ ممکن است فقط کارمندی باشد که پول دستش است. و چون نقشِ
+    کارمند هم روی همان طرف حساب می‌نشیند، این پیوند هویتِ دومی نمی‌سازد.
+
+    **عوض‌کردنِ تنخواه‌دار هویتِ صندوق را عوض نمی‌کند** — همان صندوق می‌ماند و
+    تاریخچه‌ی تراکنش‌هایش دست‌نخورده. این دقیقاً چیزی است که مدلِ قبلی نمی‌توانست.
+    """
+
+    __tablename__ = "petty_cash_funds"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_petty_cash_funds_tenant_name"),
+    )
+
+    name: Mapped[str] = mapped_column(String(120))
+    custodian_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+    location: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    #: ۰ = بی‌سقف. **هشدار است نه گارد** — همان «گزارش، نه گارد»ی که لیستِ سیاه
+    #: هم دارد: بستنِ ثبت یعنی کاربر سقف را بالا می‌برد و نشانه از بین می‌رود.
+    spending_limit: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
 class PettyCashTransaction(TenantMixin, UUIDPKMixin, Base):
-    """شارژ/هزینه‌کرد تنخواه‌گردان (یک صندوق تنخواه واحد در فاز ۳؛ چندصندوقی می‌تواند فاز بعد باشد)."""
+    """یک رویدادِ تنخواه: شارژ، هزینه‌کرد، یا استردادِ مانده."""
 
     __tablename__ = "petty_cash_transactions"
     __table_args__ = (CheckConstraint(f"type IN {PETTY_CASH_TYPES}", name="ck_petty_cash_type"),)
 
     type: Mapped[str] = mapped_column(String(20))
+    #: تهی‌پذیر برای ردیف‌های پیش از مهاجرتِ ۰۱۵۱ که backfill نشده‌اند. اجباری‌کردنش
+    #: یعنی یک backfillِ ناقص کلِ مهاجرت را می‌انداخت.
+    fund_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("petty_cash_funds.id"), nullable=True, index=True
+    )
+    #: شماره‌ی مدرکِ پشتوانه (فاکتور، رسید). خالی یعنی مدرکی ثبت نشده — که خودش
+    #: گزارش‌شدنی است، برخلافِ امروز که اصلاً جایی برای ثبتش نبود.
+    evidence_ref: Mapped[str] = mapped_column(String(120), default="", server_default="")
     transaction_date: Mapped[date_] = mapped_column(Date, default=date_.today)
     amount: Mapped[float] = mapped_column(Numeric(18, 0))
     description: Mapped[str] = mapped_column(Text, default="")
