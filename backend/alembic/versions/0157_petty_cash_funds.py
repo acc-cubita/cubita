@@ -80,10 +80,21 @@ def upgrade() -> None:
     )
     _enable_rls(_TABLE)
 
-    op.add_column(
-        "petty_cash_transactions",
-        sa.Column("fund_id", UUID(as_uuid=True), sa.ForeignKey(f"{_TABLE}.id"), nullable=True),
-    )
+    conn = op.get_bind()
+
+    #: **`petty_cash_transactions` ردیفِ واقعی دارد.** افزودنِ ستونی با FKِ
+    #: درون‌خطی باید زیرِ `rls_disabled` برود — روی **هر دو سر** — وگرنه
+    #: اعتبارسنجیِ خودکارِ Postgres روی PG14 به سیاستِ RLS می‌خورد و با
+    #: `invalid input syntax for type uuid: ""` می‌شکند.
+    #:
+    #: استدلالِ «ستون همه‌اش NULL است پس چیزی برای اعتبارسنجی نیست» این‌جا کافی
+    #: نیست: مهاجرتِ ۰۱۵۶ همین حالت را روی `production_orders` داشت و کامنتش
+    #: همان خطا را نام می‌برد. شاهدِ تجربیِ خودِ پروژه بر استدلال می‌چربد.
+    with rls_disabled(conn, [_TABLE, "petty_cash_transactions"]):
+        op.add_column(
+            "petty_cash_transactions",
+            sa.Column("fund_id", UUID(as_uuid=True), sa.ForeignKey(f"{_TABLE}.id"), nullable=True),
+        )
     op.create_index("ix_petty_cash_transactions_fund_id", "petty_cash_transactions", ["fund_id"])
     op.add_column(
         "petty_cash_transactions",
@@ -99,7 +110,6 @@ def upgrade() -> None:
         "type IN ('charge', 'expense', 'return_balance')",
     )
 
-    conn = op.get_bind()
     #: **هر دو جدول لازم‌اند:** خواندنِ تراکنش‌ها برای یافتنِ مستأجرها، و نوشتنِ
     #: صندوق. بدونِ `petty_cash_funds` در این فهرست، `INSERT` با سیاستِ
     #: `WITH CHECK` رد می‌شد چون زمینه‌ی مستأجری وجود ندارد.
