@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Save, CalendarPlus, Download, FileSignature, FileText, Gift, Settings } from 'lucide-react'
+import { Users, Save, Ban, CalendarPlus, Download, FileSignature, FileText, Gift, RotateCcw, Settings } from 'lucide-react'
 import { Tabs } from './Tabs'
 import { BenefitsPanel } from './BenefitsPanel'
 import { Pager, usePagination } from './Pager'
@@ -10,7 +10,7 @@ import { PayrollSettingsPanel } from './PayrollSettingsPanel'
 import { PayslipDrawer } from './PayslipDrawer'
 import { formatJalali, JALALI_MONTH_NAMES } from '../lib/jalali'
 import type { PageKey } from '../lib/navModel'
-import { fetchEmployees, type EmployeeRecord } from '../api'
+import { fetchEmployees, updateEmployee, type EmployeeRecord } from '../api'
 import { useTheme } from '../lib/theme'
 import { useEmployeeDraft } from '../lib/employeeDraft'
 import { usePayrollRunDraft, type PayrollRunDraft } from '../lib/payrollRunDraft'
@@ -54,7 +54,7 @@ export function PayrollPanel({
               ) : (
                 <EmployeeFormClassic token={token} onCreated={refreshEmployees} />
               )}
-              <EmployeeList employees={employees} />
+              <EmployeeList employees={employees} token={token} onChanged={refreshEmployees} />
               <ContractPointer onNavigate={onNavigate} />
             </>
           ),
@@ -123,8 +123,48 @@ function EmployeeFormClassic({ token, onCreated }: { token: string; onCreated: (
   )
 }
 
-export function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
+export function EmployeeList({
+  employees,
+  token,
+  onChanged,
+}: {
+  employees: EmployeeRecord[]
+  token: string
+  onChanged: () => void | Promise<void>
+}) {
   const pg = usePagination(employees, 10)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  /** **این ستون وضعیتی نشان می‌داد که کاربر نمی‌توانست عوضش کند.**
+   *
+   * و آن وضعیت تزئینی نبود: `is_active` تنها گاردِ صدورِ فیش است. پس تا امروز
+   * کارمندی که رفته بود هر دوره فیشِ کامل می‌گرفت و هیچ راهی در رابط نبود که
+   * جلویش را بگیرد.
+   *
+   * فقط همین یک فیلد فرستاده می‌شود — تاریخ استخدام و شماره‌حساب دست نمی‌خورند.
+   */
+  async function toggle(e: EmployeeRecord) {
+    const next = !e.is_active
+    const name = `${e.first_name} ${e.last_name}`.trim()
+    if (
+      !next &&
+      !window.confirm(
+        `«${name}» غیرفعال شود؟ از دوره‌های بعدی فیش نمی‌گیرد. فیش‌ها، حکم‌ها و سندهای گذشته‌اش دست‌نخورده می‌مانند.
+
+` +
+          'توجه: این کار «تاریخ پایان خدمت» را تغییر نمی‌دهد — آن روی حکم ثبت می‌شود و محاسبه‌ی سنوات به آن تکیه دارد.',
+      )
+    )
+      return
+    setMsg(null)
+    try {
+      await updateEmployee(token, e.id, { is_active: next })
+      await onChanged()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    }
+  }
+
   if (employees.length === 0) return <EmptyState icon={Users} text="پرسنلی ثبت نشده." />
   return (
     <div className="entity-table-wrap">
@@ -136,6 +176,7 @@ export function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
               <th>کد ملی</th>
               <th>تاریخ استخدام</th>
               <th>وضعیت</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -151,12 +192,18 @@ export function EmployeeList({ employees }: { employees: EmployeeRecord[] }) {
                     {e.is_active ? 'فعال' : 'غیرفعال'}
                   </span>
                 </td>
+                <td className="card-actions">
+                  <button type="button" onClick={() => void toggle(e)}>
+                    {e.is_active ? <><Ban size={13} /> پایانِ همکاری</> : <><RotateCcw size={13} /> بازگشت به کار</>}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+      {msg && <div className="error">{msg}</div>}
     </div>
   )
 }

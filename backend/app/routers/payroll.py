@@ -45,6 +45,7 @@ from app.schemas.payroll import (
     FactorInputsIn,
     EmployeeCandidateOut,
     EmployeeIn,
+    EmployeePatch,
     EmployeeLoanIn,
     EmployeeLoanOut,
     EmployeeOut,
@@ -122,6 +123,53 @@ def create_employee(
         email=data.email,
     )
     return activate_employee_role(db, contact, data.hire_date, data.bank_account_number)
+
+
+@router.patch("/api/employees/{employee_id}", response_model=EmployeeOut)
+def update_employee(
+    employee_id: UUID,
+    data: EmployeePatch,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("payroll", "update")),
+):
+    """ویرایشِ پرونده‌ی کارمند — و **درِ خروجِ** کسی که رفته.
+
+    تا امروز این روتر فقط `GET` و `POST` داشت، یعنی پرونده‌ی کارمند پس از ثبت
+    تغییرناپذیر بود. مهم‌ترین پیامدش هم نه یک غلطِ املایی، که این بود:
+    `Employee.is_active` **تنها گاردِ صدورِ فیشِ حقوقی** است
+    (`generate_payslips_for_period`) و هیچ مسیری نمی‌نوشتش — پس کارمندی که رفته
+    بود هر دوره فیشِ کامل می‌گرفت، با سند و بیمه و مالیاتش.
+
+    **نام و کدِ ملی این‌جا نیستند** و این عمدی است: آن‌ها روی طرف‌حساب می‌نشینند
+    و `PATCH /api/contacts/{id}` اصلاحشان می‌کند. دو مسیر برای یک داده یعنی دو
+    حقیقت.
+
+    **غیرفعال‌کردن پاک‌کردن نیست.** فیش‌ها، حکم‌ها و سندهای گذشته دست‌نخورده
+    می‌مانند؛ فقط دوره‌های *بعدی* او را نمی‌بینند.
+    """
+    employee = db.get(Employee, employee_id)
+    if employee is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کارمند یافت نشد")
+
+    fields = data.model_dump(exclude_unset=True)
+
+    #: تاریخ‌ها با مقدارِ **مؤثر** سنجیده می‌شوند، نه فقط آنچه در همین درخواست
+    #: آمده: ویرایشی که تنها `termination_date` را می‌فرستد باید با
+    #: `hire_date`ِ ذخیره‌شده مقایسه شود، وگرنه گارد فقط وقتی کار می‌کند که هر
+    #: دو با هم بیایند.
+    hire = fields.get("hire_date", employee.hire_date)
+    termination = fields.get("termination_date", employee.termination_date)
+    if hire is not None and termination is not None and termination < hire:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "تاریخ پایان کار نمی‌تواند پیش از تاریخ استخدام باشد",
+        )
+
+    for field, value in fields.items():
+        setattr(employee, field, value)
+    db.flush()
+    db.refresh(employee)
+    return employee
 
 
 @router.get("/api/salary-contracts", response_model=list[SalaryContractOut])
