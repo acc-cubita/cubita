@@ -149,6 +149,19 @@ CONTRACT_INSURANCE_PAYABLE = "contract_insurance_payable"
 #:
 #: هیچ ثبتِ خودکاری به این حساب نمی‌رود؛ فقط طبقه‌بندی است.
 LONG_TERM_LIABILITY = "long_term_liability"
+#: درآمدِ پیمانکاری — جدا از «فروش» چون منشأش فروشِ کالا/خدمتِ متعارف نیست؛ قاطی‌کردنشان
+#: یعنی دیگر نمی‌شود پرسید «چقدر از پیمان درآمد داشتیم؟».
+CONTRACT_REVENUE = "contract_revenue"
+#: سپرده‌ی حسن انجامِ کار، نزدِ کارفرما — دارایی. تا لحظه‌ی تسویه‌حسابِ نهایی هیچ‌جا
+#: ثبت نمی‌شد (صورت‌وضعیت فقط رکورد است، سند نمی‌زند)؛ تسویه‌حساب اولین‌جایی است که
+#: «این پول قابلِ‌وصول شد» را در دفتر می‌نویسد.
+CONTRACT_RETENTION_RECEIVABLE = "contract_retention_receivable"
+#: پیش‌دریافتِ پیمان — بدهی. کسرِ پیش‌پرداخت روی هر صورت‌وضعیت یعنی بخشی از این
+#: بدهی با کارکردِ واقعی جبران شده؛ تسویه‌حساب همان کاهش را یک‌جا ثبت می‌کند.
+CONTRACT_ADVANCE_RECEIVED = "contract_advance_received"
+#: سایرِ کسوراتِ صورت‌وضعیت (بیمه/جریمه/مالیاتِ واردشده‌ی دستی) — حسابِ جدا از
+#: `SERVICE_EXPENSE` چون آن برای خریدِ خدمت است، نه کسرِ دریافتی از فروش.
+CONTRACT_OTHER_DEDUCTIONS = "contract_other_deductions"
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -195,6 +208,12 @@ DEFAULT_CODE_BY_ROLE = {
     WITHHOLDING_TAX_PAYABLE: "2112",
     CONTRACT_INSURANCE_PAYABLE: "2113",
     LONG_TERM_LIABILITY: "2201",
+    #: ۱۱۵۰–۱۱۵۲ و ۴۱۳۰ را قالبِ صنفیِ «پیمانکاری» گرفته (کارِ در جریانِ پیمان،
+    #: صورت‌وضعیتِ تأییدنشده، سپرده‌ی حسن انجام کار، درآمدِ پیمان) — همان دلیلِ بالا.
+    CONTRACT_ADVANCE_RECEIVED: "2114",
+    CONTRACT_RETENTION_RECEIVABLE: "1116",
+    CONTRACT_REVENUE: "4109",
+    CONTRACT_OTHER_DEDUCTIONS: "5119",
 }
 
 ROLE_BY_DEFAULT_CODE = {code: role for role, code in DEFAULT_CODE_BY_ROLE.items()}

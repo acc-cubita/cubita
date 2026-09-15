@@ -1,4 +1,5 @@
-"""پیمانکاری — پیمان (فازِ ۱)، متممِ پیمان (فازِ ۲) و صورت‌وضعیتِ دریافتی (فازِ ۳).
+"""پیمانکاری — پیمان (فازِ ۱)، متممِ پیمان (فازِ ۲)، صورت‌وضعیتِ دریافتی (فازِ ۳) و
+تسویه‌حسابِ پیمان (فازِ ۴).
 
 `contracting_contracts`: ثبتِ یک پیمان و مفادش. رکوردِ اصلی است، نه سندِ حسابداری —
 ثبتش هیچ سندی نمی‌زند (مثلِ `CostCenter`/`Bom`، نه مثلِ فاکتور)، پس `VoidableMixin`
@@ -18,8 +19,14 @@
 ثبت **کپی** می‌شود — تغییرِ بعدیِ این درصدها روی پیمان صورت‌وضعیت‌های قبلی را عوض
 نمی‌کند (همان الگوی Snapshot که در فاکتورهای دیگرِ سامانه هست).
 
-فازِ بعد (تسویه‌حساب) جدولِ خودش را می‌گیرد و به همین جدول با `contract_id` ارجاع
-می‌دهد.
+`contracting_settlements`: تسویه‌حسابِ نهاییِ پیمان — تنها سندِ این ماژول که **سندِ
+حسابداریِ واقعی می‌زند** (تصمیمِ کاربر، برخلافِ سه فازِ قبل). جمعِ همه‌ی
+`ContractStatement`های پیمان تا لحظه‌ی تسویه را Snapshot می‌کند و یک ثبتِ متوازن
+می‌سازد: ناخالصِ کارکرد → درآمد؛ سپرده → دارایی (آزاد/قابلِ‌وصول شد)؛ پیش‌پرداخت →
+کاهشِ بدهی؛ سایرِ کسورات → هزینه؛ خالص → حساب‌های دریافتنی. برخلافِ Contract/
+Amendment/Statement، `VoidableMixin` **دارد** — سندی که سندِ حسابداری می‌زند باید
+مسیرِ ابطالِ مشترک (`app/services/voiding.py`) را داشته باشد، همان الگوی
+`CreditDebitNote`/`void_note`.
 """
 import uuid
 from datetime import date as date_
@@ -30,7 +37,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 if TYPE_CHECKING:
@@ -88,6 +95,38 @@ class ContractAmendment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: اگر داده شود، `Contract.end_date` را جایگزین می‌کند.
     new_end_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    contract: Mapped["Contract | None"] = relationship("Contract", viewonly=True)
+
+    @property
+    def contract_number(self) -> int | None:
+        return self.contract.number if self.contract else None
+
+
+class ContractSettlement(VoidableMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تسویه‌حسابِ نهاییِ یک پیمان — Snapshotِ جمعِ صورت‌وضعیت‌ها + سندِ حسابداری."""
+
+    __tablename__ = "contracting_settlements"
+
+    number: Mapped[int] = mapped_column(index=True)
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contracting_contracts.id"), index=True
+    )
+    date: Mapped[date_] = mapped_column(Date)
+    #: جمعِ صورت‌وضعیت‌های پیمان تا لحظه‌ی تسویه — Snapshot، نه ارجاعِ زنده.
+    gross_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    retention_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    advance_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    other_deductions: Mapped[float] = mapped_column(Numeric(18, 0))
+    net_amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: مبلغِ قراردادی در لحظه‌ی تسویه (پیمان + جمعِ متمم‌ها) — فقط مقایسه‌ای، در
+    #: سندِ حسابداری اثری ندارد.
+    contract_value_at_settlement: Mapped[float] = mapped_column(Numeric(18, 0))
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     contract: Mapped["Contract | None"] = relationship("Contract", viewonly=True)

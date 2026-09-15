@@ -29,6 +29,7 @@ from app.models.accounting import JournalEntry
 from app.models.assets import DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
 from app.models.check_event import CheckEvent
+from app.models.contracting import ContractSettlement
 from app.models.inventory import StockAdjustment
 from app.models.invoices import (
     PurchaseInvoice,
@@ -90,6 +91,8 @@ SOURCE_MODELS: dict[str, type] = {
     "pos_settlement": PosSettlement,
     #: سندِ اصلاحیِ بها به اجرای «قیمت‌گذاری اسناد انبار» برمی‌گردد (مهاجرتِ ۰۱۴۹).
     "inventory_valuation": InventoryValuationRun,
+    #: تنها سندِ ماژولِ پیمانکاری که حسابداریِ واقعی دارد (مهاجرتِ ۰۱۵۴).
+    "contract_settlement": ContractSettlement,
 }
 
 #: مدل‌هایی که ستونِ `journal_entry_id` دارند ولی هیچ سندی به آن‌ها نمی‌رسد، پس در
