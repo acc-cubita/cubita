@@ -43,6 +43,7 @@ DOC_LABELS: dict[str, str] = {
     "service_purchase_invoice": "فاکتور خرید خدمات",
     "inventory_valuation": "قیمت‌گذاری اسناد انبار",
     "stock_count": "انبارگردانی",
+    "contract": "پیمان",
 }
 
 

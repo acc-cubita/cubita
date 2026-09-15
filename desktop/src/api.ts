@@ -9110,3 +9110,51 @@ export const saveFactorInputs = (
     `/api/payroll-periods/${periodId}/factor-inputs`,
     { rows },
   )
+
+// ═════════════════ پیمانکاری — پیمان (فازِ ۱) ═════════════════
+
+export type ContractStatus = 'draft' | 'active' | 'suspended' | 'terminated' | 'completed' | 'cancelled'
+
+export interface ContractRecord {
+  id: string
+  number: number
+  external_reference: string
+  contact_id: string
+  contact_name: string
+  subject: string
+  total_amount: string
+  start_date: string
+  end_date: string | null
+  retention_percent: string
+  advance_percent: string
+  status: ContractStatus
+  cost_center_id: string | null
+  notes: string
+}
+
+export interface ContractIn {
+  contact_id: string
+  external_reference?: string
+  subject?: string
+  total_amount: number
+  start_date: string
+  end_date?: string | null
+  retention_percent?: number
+  advance_percent?: number
+  cost_center_id?: string | null
+  notes?: string
+}
+
+export const fetchContracts = (token: string, query?: { status?: string; contact_id?: string }) => {
+  const qs = new URLSearchParams()
+  if (query?.status) qs.set('status', query.status)
+  if (query?.contact_id) qs.set('contact_id', query.contact_id)
+  const suffix = qs.toString()
+  return authedGetAll<ContractRecord>(token, `/api/contracting/contracts${suffix ? `?${suffix}` : ''}`)
+}
+
+export const createContract = (token: string, data: ContractIn, idempotencyKey?: string) =>
+  authedSend<ContractRecord>(token, 'POST', '/api/contracting/contracts', data, idempotencyKey)
+
+export const changeContractStatus = (token: string, contractId: string, status: ContractStatus) =>
+  authedSend<ContractRecord>(token, 'PATCH', `/api/contracting/contracts/${contractId}/status`, { status })
