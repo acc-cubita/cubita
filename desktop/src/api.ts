@@ -9218,3 +9218,45 @@ export const fetchContractStatements = (token: string, query?: { contract_id?: s
 
 export const createContractStatement = (token: string, data: ContractStatementIn, idempotencyKey?: string) =>
   authedSend<ContractStatementRecord>(token, 'POST', '/api/contracting/statements', data, idempotencyKey)
+
+// ═════════════════ پیمانکاری — تسویه‌حسابِ پیمان (فازِ ۴) ═════════════════
+
+export interface ContractSettlementRecord {
+  id: string
+  number: number
+  contract_id: string
+  contract_number: number | null
+  date: string
+  gross_amount: string
+  retention_amount: string
+  advance_amount: string
+  other_deductions: string
+  net_amount: string
+  contract_value_at_settlement: string
+  notes: string
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface ContractSettlementIn {
+  contract_id: string
+  date: string
+  notes?: string
+}
+
+export const fetchContractSettlements = (token: string, query?: { contract_id?: string }) => {
+  const qs = new URLSearchParams()
+  if (query?.contract_id) qs.set('contract_id', query.contract_id)
+  const suffix = qs.toString()
+  return authedGetAll<ContractSettlementRecord>(token, `/api/contracting/settlements${suffix ? `?${suffix}` : ''}`)
+}
+
+export const createContractSettlement = (token: string, data: ContractSettlementIn, idempotencyKey?: string) =>
+  authedSend<ContractSettlementRecord>(token, 'POST', '/api/contracting/settlements', data, idempotencyKey)
+
+export const voidContractSettlement = (token: string, id: string, reason: string, voidDate?: string) =>
+  authedSend<ContractSettlementRecord>(token, 'POST', `/api/contracting/settlements/${id}/void`, {
+    reason,
+    void_date: voidDate || null,
+  })

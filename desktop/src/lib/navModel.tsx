@@ -98,6 +98,7 @@ export type PageKey =
   | 'contractingstatus'
   | 'contractingamendment'
   | 'contractingstatement'
+  | 'contractingsettlement'
   | 'moadian'
   | 'distributor'
   | 'marketplace'
@@ -158,6 +159,7 @@ export type PageKey =
   | 'contractinglist'
   | 'contractingamendmentlist'
   | 'contractingstatementlist'
+  | 'contractingsettlementlist'
   //: فهرستِ «سامانه مؤدیان» — از کارتِ «فهرست» باز می‌شود، نه از منوی عملیات.
   | 'moadianhistory'
   //: ماژولِ «دریافت و پرداخت» — هجده عملیات. کلیدِ گیت‌کننده‌شان `banking` است
@@ -415,14 +417,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    //: فازِ ۱+۲+۳ — «پیمان»، متممش، صورت‌وضعیتِ دریافتی، و تغییرِ وضعیت. تسویه‌حساب
-    //: فازِ بعدی است؛ عمداً استابِ خالی برایش گذاشته نشد (PROJECT_OVERVIEW §۱۰).
+    //: فازِ ۱+۲+۳+۴ — چهار عملیاتِ محتوایی و تغییرِ وضعیت. هر پنج فازِ این ماژول
+    //: تمام شد (PROJECT_OVERVIEW §۱۰) — تسویه‌حساب تنها سندی است که حسابداریِ
+    //: واقعی دارد.
     heading: 'پیمانکاری',
     icon: <HardHat size={17} />,
     items: [
       { key: 'contractingnew', label: 'پیمان', icon: <FileSignature size={18} /> },
       { key: 'contractingamendment', label: 'متمم پیمان', icon: <FilePenLine size={18} /> },
       { key: 'contractingstatement', label: 'صورت وضعیت دریافتی', icon: <Receipt size={18} /> },
+      { key: 'contractingsettlement', label: 'تسویه حساب پیمان', icon: <HandCoins size={18} /> },
       { key: 'contractingstatus', label: 'تغییر وضعیت پیمان', icon: <RefreshCcw size={18} /> },
     ],
   },
@@ -526,9 +530,11 @@ for (const key of [
   'contractingstatus',
   'contractingamendment',
   'contractingstatement',
+  'contractingsettlement',
   'contractinglist',
   'contractingamendmentlist',
   'contractingstatementlist',
+  'contractingsettlementlist',
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'contracting'
 }

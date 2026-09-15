@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_permission
-from app.models.contracting import Contract, ContractAmendment, ContractStatement
+from app.models.contracting import Contract, ContractAmendment, ContractSettlement, ContractStatement
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
 from app.schemas.contracting import (
@@ -13,9 +13,12 @@ from app.schemas.contracting import (
     ContractAmendmentOut,
     ContractIn,
     ContractOut,
+    ContractSettlementIn,
+    ContractSettlementOut,
     ContractStatementIn,
     ContractStatementOut,
     ContractStatusIn,
+    VoidContractSettlementIn,
 )
 from app.services import contracting as service
 from app.services.idempotency import idempotent
@@ -121,3 +124,42 @@ def create_contract_statement(
         run=lambda: service.create_contract_statement(db, data, user),
         replay=lambda sid: db.get(ContractStatement, sid),
     )
+
+
+@router.get("/settlements", response_model=Page[ContractSettlementOut])
+def list_contract_settlements(
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    contract_id: UUID | None = None,
+    _=Depends(require_permission("contracting", "view")),
+):
+    query = db.query(ContractSettlement)
+    if contract_id:
+        query = query.filter(ContractSettlement.contract_id == contract_id)
+    rows, next_cursor = paginate(query, [ContractSettlement.created_at, ContractSettlement.number], params)
+    return Page(items=rows, next_cursor=next_cursor)
+
+
+@router.post("/settlements", response_model=ContractSettlementOut, status_code=201)
+def create_contract_settlement(
+    data: ContractSettlementIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("contracting", "create")),
+):
+    """**idempotent** — دوکلیک نباید دو سندِ تسویه بسازد."""
+    return idempotent(
+        db, request, user, operation="create_contract_settlement", payload=data,
+        run=lambda: service.create_contract_settlement(db, data, user),
+        replay=lambda sid: db.get(ContractSettlement, sid),
+    )
+
+
+@router.post("/settlements/{settlement_id}/void", response_model=ContractSettlementOut)
+def void_contract_settlement(
+    settlement_id: UUID,
+    data: VoidContractSettlementIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("contracting", "update")),
+):
+    return service.void_contract_settlement(db, user, settlement_id, data.reason, data.void_date)
