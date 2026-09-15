@@ -247,8 +247,25 @@ class BankStatementLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک ردیف واردشده از صورت‌حساب رسمی بانک؛ برای تطبیق با BankTransaction ثبت‌شده در سیستم."""
 
     __tablename__ = "bank_statement_lines"
+    __table_args__ = (
+        #: **جزئی، و همین جزئی‌بودن نکته‌اش است.** همه‌ی صورت‌حساب‌ها شماره‌ی مرجع
+        #: نمی‌دهند؛ قیدِ کامل، ردیف‌های بی‌مرجع را با `NULL`های تکراری مسدود
+        #: می‌کرد. (همان الگوی `uq_sale_types_tenant_code`.)
+        Index(
+            "uq_bank_statement_lines_external_ref",
+            "tenant_id",
+            "bank_account_id",
+            "external_ref",
+            unique=True,
+            postgresql_where=text("external_ref IS NOT NULL"),
+        ),
+    )
 
     bank_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bank_accounts.id"))
+    #: شناسه‌ی خودِ بانک برای این تراکنش — شماره‌ی پیگیری/مرجع. تهی‌پذیر، چون
+    #: فایل‌های صورت‌حساب همیشه ندارندش. وقتی باشد، **تنها** تکیه‌گاهِ مطمئنِ
+    #: «این ردیف را قبلاً وارد کرده‌ایم» است.
+    external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
     line_date: Mapped[date_] = mapped_column(Date)
     amount: Mapped[float] = mapped_column(Numeric(18, 0))  # مثبت = واریز، منفی = برداشت (مطابق صورت‌حساب بانک)
     description: Mapped[str] = mapped_column(Text, default="")

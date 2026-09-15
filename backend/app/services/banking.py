@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date as date_, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -122,20 +123,93 @@ def create_petty_cash_expense(db: Session, data: PettyCashExpenseIn, user: User)
     return txn
 
 
+def _line_fingerprint(line_date, amount, description: str) -> tuple:
+    """اثرِ محتوایی برای ردیفِ **بی‌مرجع**.
+
+    شرح عمداً نرمال می‌شود: فایل‌های بانک همان تراکنش را با فاصله‌گذاریِ متفاوت
+    صادر می‌کنند و بدونِ نرمال‌سازی، وارداتِ دوباره «تازه» به‌نظر می‌رسید.
+    """
+    return (line_date, Decimal(str(amount)), " ".join((description or "").split()))
+
+
 def import_statement_lines(db: Session, bank_account_id: UUID, lines: list[BankStatementLineIn]) -> list[BankStatementLine]:
+    """وارداتِ ردیف‌های صورت‌حساب — **بی‌اثر در تکرار**.
+
+    تا امروز این تابع یک `add_all`ِ خام بود و جدول هیچ قیدِ یکتایی نداشت، پس وارد
+    کردنِ دوباره‌ی یک فایل کلِ ردیف‌ها را **دوبرابر** می‌کرد. و چون
+    `auto_match_statement` با «مبلغِ برابر و تاریخِ ±۳ روز» جفت می‌کند، نسخه‌های
+    تکراری به تراکنش‌های دیگری می‌چسبیدند و مغایرت‌گیری را وارونه می‌کردند.
+
+    **دو سطحِ تشخیص، چون همه‌ی بانک‌ها مرجع نمی‌دهند:**
+
+    * `external_ref` دارد → کلیدِ قطعی. ردیفی که مرجعش قبلاً آمده رد می‌شود، و
+      ایندکسِ یکتای جزئی در دیتابیس هم پشتش ایستاده.
+    * مرجع ندارد → **شمارشِ ردیف‌های هم‌شکل**، نه حذفِ ساده. اگر فایل دو ردیفِ
+      یکسان دارد و دوتا از قبل هست، هیچ‌کدام اضافه نمی‌شود؛ اگر سه‌تا دارد و دوتا
+      هست، یکی اضافه می‌شود. پس دو تراکنشِ واقعاً یکسانِ یک روز قربانیِ گاردِ
+      تکرار نمی‌شوند.
+
+    **جهتِ خطا عمدی است:** واردنکردنِ یک ردیف دیده می‌شود (کاربر می‌بیند کمتر از
+    آنچه فرستاده برگشته)، ولی واردکردنِ دوباره بی‌صدا دفتر را خراب می‌کند.
+
+    خروجی فقط ردیف‌های **ساخته‌شده** است؛ تفاوتِ تعدادِ ارسالی و برگشتی یعنی
+    چند ردیف تکراری بوده.
+    """
     bank_account = db.get(BankAccount, bank_account_id)
     if bank_account is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "حساب بانکی یافت نشد")
 
-    statement_lines = [
-        BankStatementLine(bank_account_id=bank_account_id, line_date=line.line_date, amount=line.amount, description=line.description)
-        for line in lines
-    ]
-    db.add_all(statement_lines)
+    #: فقط بازه‌ی خودِ فایل خوانده می‌شود، نه کلِ تاریخچه — صورت‌حسابِ چندساله
+    #: وگرنه هر واردات را به یک پویشِ کامل تبدیل می‌کرد.
+    span = [line.line_date for line in lines]
+    existing = (
+        db.query(BankStatementLine)
+        .filter(
+            BankStatementLine.bank_account_id == bank_account_id,
+            BankStatementLine.line_date >= min(span),
+            BankStatementLine.line_date <= max(span),
+        )
+        .all()
+    )
+    seen_refs = {row.external_ref for row in existing if row.external_ref}
+    existing_shapes: Counter = Counter(
+        _line_fingerprint(row.line_date, row.amount, row.description)
+        for row in existing
+        if not row.external_ref
+    )
+
+    created: list[BankStatementLine] = []
+    batch_refs: set[str] = set()
+    incoming_shapes: Counter = Counter()
+    for line in lines:
+        ref = (line.external_ref or "").strip() or None
+        if ref is not None:
+            #: `batch_refs` هم لازم است: یک فایل می‌تواند خودش ردیفِ تکراری داشته
+            #: باشد و بدونِ این، ایندکسِ یکتا با IntegrityError کلِ واردات را
+            #: می‌انداخت به‌جای اینکه تکراری را رد کند.
+            if ref in seen_refs or ref in batch_refs:
+                continue
+            batch_refs.add(ref)
+        else:
+            shape = _line_fingerprint(line.line_date, line.amount, line.description)
+            incoming_shapes[shape] += 1
+            if incoming_shapes[shape] <= existing_shapes.get(shape, 0):
+                continue
+        created.append(
+            BankStatementLine(
+                bank_account_id=bank_account_id,
+                line_date=line.line_date,
+                amount=line.amount,
+                description=line.description,
+                external_ref=ref,
+            )
+        )
+
+    db.add_all(created)
     db.flush()
-    for line in statement_lines:
-        db.refresh(line)
-    return statement_lines
+    for row in created:
+        db.refresh(row)
+    return created
 
 
 def auto_match_statement(db: Session, bank_account_id: UUID) -> int:

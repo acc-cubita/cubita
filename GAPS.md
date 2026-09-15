@@ -78,7 +78,19 @@ TypeScript **کامل**‌اند و فقط **مصرف‌کننده** غایب ا
 | ۱ | `Contact.discount_rate` | [`models/inventory.py:231`](backend/app/models/inventory.py#L231) — **صفر** ارجاع در `services/`+`routers/`، و **صفر** در `salesInvoiceDraft.ts` | کاربر تخفیفِ اختصاصیِ مشتری را می‌گذارد؛ فاکتور با نرخِ کامل صادر می‌شود | تأییدشده |
 | ۲ | `PayrollDeploymentInfo.prior_service_days` و `.leave_balance_days` | [`models/payroll.py:1194-1195`](backend/app/models/payroll.py#L1194) — `calc_severance` و `calc_leave` در [`services/benefits.py`](backend/app/services/benefits.py) نمی‌خوانندشان | کارمندِ ده‌ساله‌ای که مهاجرت داده شده، **سنواتش کمتر از واقع** حساب می‌شود — بی‌صدا | تأییدشده |
 | ۳ | `SalesInvoice.broker_commission` | [`models/invoices.py:123`](backend/app/models/invoices.py#L123) — فقط دو ارجاع، هر دو **نوشتن** | کارمزد محاسبه و نمایش داده می‌شود، هیچ بدهی‌ای به واسطه در دفتر ساخته نمی‌شود | تأییدشده |
-| ۴ | `FixedAsset.method` | [`services/assets.py:72`](backend/app/services/assets.py#L72) تنها ارجاع است و فقط پس‌دادنِ مقدار؛ [`monthly_depreciation`](backend/app/services/assets.py#L54) بی‌قید و شرط خطِ مستقیم | کاربر روشِ استهلاک را انتخاب می‌کند و هر سه گزینه یک عدد می‌دهند | تأییدشده |
+| ۴ | ~~`FixedAsset.method`~~ | — | **این ادعا رد شد.** پایین‌تر | ‏**رد‌شده** |
+
+> ### ادعای رد‌شده — `FixedAsset.method` (۱۴۰۵/۰۶/۲۴)
+>
+> نسخه‌ی اول نوشته بود «کاربر روشِ استهلاک را انتخاب می‌کند و هر سه گزینه یک عدد
+> می‌دهند». **غلط بود.**
+> [`DEPRECIATION_METHODS = ("straight_line",)`](backend/app/models/assets.py#L14)
+> — فقط **یک** روش مجاز است، با قیدِ `CHECK` روی جدول، و رابط هیچ انتخابگری ندارد.
+> `monthly_depreciation` دقیقاً همان خطِ مستقیم را پیاده می‌کند. ستون فیلدِ دروغین
+> نیست؛ enumِ تک‌مقداری است برای روزی که روشِ دوم اضافه شود.
+>
+> این دومین ادعای این گزارش است که در آزمون رد شد (اولی نامِ کارمند بود، بخشِ ۴).
+> هر دو در [`ACCOUNTING_KB_AUDIT.md`](ACCOUNTING_KB_AUDIT.md) §۶ هم ثبت‌اند.
 
 > **مورد ۱ نمونه‌ی کاملِ این الگوست:** `discount_rate` و `commission_rate` در
 > **همان** `model_validator` با هم اعتبارسنجی می‌شوند

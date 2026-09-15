@@ -15,21 +15,57 @@ import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
 
-function parseStatementCsv(text: string): { line_date: string; amount: number; description: string }[] {
+type ParsedStatementLine = {
+  line_date: string
+  amount: number
+  description: string
+  external_ref?: string
+}
+
+/** سرستونی که یعنی «شماره‌ی مرجع/پیگیریِ بانک». */
+const REF_HEADER = /^(مرجع|شماره مرجع|شماره پیگیری|پیگیری|ref|reference|trace|tracking)$/i
+
+/**
+ * خواندنِ CSVِ صورت‌حساب — `تاریخ, مبلغ, شرح…`
+ *
+ * **ستونِ مرجع فقط با سرستون شناخته می‌شود، و این عمدی است.** تا امروز هر ستونی
+ * بعد از مبلغ به «شرح» می‌چسبید، چون شرحِ بانک خودش ویرگول دارد. اگر مرجع را در
+ * جای ثابتی فرض می‌کردیم، هر فایلِ موجودی که شرحش ویرگول داشت **بی‌صدا** معنا عوض
+ * می‌کرد — بخشی از شرح مرجع خوانده می‌شد و گاردِ تکرار روی داده‌ی غلط می‌نشست.
+ *
+ * پس فایلِ بی‌سرستون دقیقاً مثل دیروز خوانده می‌شود، و فایلی که سرستونِ مرجع دارد
+ * از آن استفاده می‌کند. مرجع، وقتی باشد، کلیدِ قطعیِ «این ردیف را قبلاً وارد
+ * کرده‌ایم» است؛ بی آن، سرور به شمارشِ ردیف‌های هم‌شکل برمی‌گردد.
+ */
+function parseStatementCsv(text: string): ParsedStatementLine[] {
+  const split = (row: string) => row.split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+  const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v)
+
   const rows = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
 
-  const result: { line_date: string; amount: number; description: string }[] = []
+  // سرستون همان ردیفِ اول است، اگر تاریخ نباشد. نبودش یعنی رفتارِ دیروز.
+  let refIndex = -1
+  const head = split(rows[0] ?? '')
+  if (head.length > 0 && !isDate(head[0] ?? '')) {
+    refIndex = head.findIndex((c) => REF_HEADER.test(c))
+  }
+
+  const result: ParsedStatementLine[] = []
   for (const row of rows) {
-    const cols = row.split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+    const cols = split(row)
     if (cols.length < 2) continue
-    const [dateRaw, amountRaw, ...descParts] = cols
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) continue // ردیف هدر یا نامعتبر را رد کن
-    const amount = Number(amountRaw)
+    const dateRaw = cols[0] ?? ''
+    if (!isDate(dateRaw)) continue // ردیف هدر یا نامعتبر را رد کن
+    const amount = Number(cols[1] ?? '')
     if (!Number.isFinite(amount) || amount === 0) continue
-    result.push({ line_date: dateRaw, amount, description: descParts.join(',') })
+
+    // مرجع فقط از ستونِ سوم به بعد معنا دارد؛ تاریخ و مبلغ جای خودشان را دارند.
+    const ref = refIndex >= 2 ? (cols[refIndex] ?? '').trim() : ''
+    const description = cols.slice(2).filter((_, i) => i + 2 !== refIndex).join(',')
+    result.push({ line_date: dateRaw, amount, description, ...(ref ? { external_ref: ref } : {}) })
   }
   return result
 }
@@ -76,8 +112,17 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
         setMessage('هیچ ردیف معتبری در فایل پیدا نشد. فرمت مورد انتظار: تاریخ (YYYY-MM-DD)، مبلغ، شرح')
         return
       }
-      await importStatementLines(token, effectiveBankAccountId, lines)
-      setMessage(`${lines.length.toLocaleString('fa-IR')} ردیف از صورت‌حساب وارد شد.`)
+      // **تعدادِ ساخته‌شده گفته می‌شود، نه تعدادِ ارسالی.** سرور حالا ردیفِ تکراری
+      // را رد می‌کند، پس این دو عدد می‌توانند فرق کنند. پیامِ قبلی همیشه تعدادِ
+      // فرستاده‌شده را می‌گفت، پس کسی که یک فایل را دوبار وارد می‌کرد «۱۰ ردیف
+      // وارد شد» می‌دید در حالی که صفر ردیف ساخته شده بود.
+      const created = await importStatementLines(token, effectiveBankAccountId, lines)
+      const skipped = lines.length - created.length
+      setMessage(
+        skipped > 0
+          ? `${created.length.toLocaleString('fa-IR')} ردیف وارد شد؛ ${skipped.toLocaleString('fa-IR')} ردیف تکراری بود و رد شد.`
+          : `${created.length.toLocaleString('fa-IR')} ردیف از صورت‌حساب وارد شد.`,
+      )
       await refresh()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')

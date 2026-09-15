@@ -795,16 +795,25 @@ export interface BankStatementLineRecord {
   line_date: string
   amount: string
   description: string
+  /** شماره‌ی مرجع/پیگیریِ بانک، اگر فایل داشته باشد — کلیدِ قطعیِ ضدِتکرار. */
+  external_ref: string | null
   matched_transaction_id: string | null
 }
 
 export const fetchStatementLines = (token: string, bankAccountId: string) =>
   authedGet<BankStatementLineRecord[]>(token, `/api/bank-accounts/${bankAccountId}/statement-lines`)
 
+/**
+ * وارداتِ ردیف‌های صورت‌حساب — **بی‌اثر در تکرار**.
+ *
+ * خروجی فقط ردیف‌های **ساخته‌شده** است، نه هرچه فرستاده‌ای: سرور ردیفی را که
+ * قبلاً وارد شده رد می‌کند. پس تفاوتِ تعدادِ ارسالی و برگشتی یعنی چند ردیف
+ * تکراری بوده — و فراخواننده باید همین را به کاربر بگوید، نه تعدادِ ارسالی.
+ */
 export const importStatementLines = (
   token: string,
   bankAccountId: string,
-  lines: { line_date: string; amount: number; description: string }[],
+  lines: { line_date: string; amount: number; description: string; external_ref?: string }[],
 ) => authedSend<BankStatementLineRecord[]>(token, 'POST', `/api/bank-accounts/${bankAccountId}/statement-lines`, { lines })
 
 export const autoMatchStatement = (token: string, bankAccountId: string) =>

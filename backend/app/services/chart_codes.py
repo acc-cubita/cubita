@@ -140,6 +140,15 @@ WITHHOLDING_TAX_PAYABLE = "withholding_tax_payable"
 #: حق بیمه‌ی پرداختنیِ اشخاص ثالث — کسرِ بیمه‌ی قراردادِ خدمت، به همان دلیلِ بالا
 #: جدا از بیمه‌ی کارکنان.
 CONTRACT_INSURANCE_PAYABLE = "contract_insurance_payable"
+#: بدهیِ بلندمدت — **نقش، چون گزارش لازمش دارد و تا امروز از روی کد حدس می‌زد.**
+#:
+#: صورت جریان وجوه نقد باید بداند یک بدهی «تأمین مالی» است یا «عملیاتی». تا امروز
+#: این را با `code.startswith("22")` تشخیص می‌داد — دقیقاً همان چیزی که docstringِ
+#: بالای همین فایل می‌گوید نباید: کدِ حساب مالِ مشتری است و بازشماره‌گذاری‌اش
+#: گزارش را بی‌صدا غلط می‌کرد.
+#:
+#: هیچ ثبتِ خودکاری به این حساب نمی‌رود؛ فقط طبقه‌بندی است.
+LONG_TERM_LIABILITY = "long_term_liability"
 
 #: نگاشت نقش به کد پیش‌فرض چارت. فقط هنگام provisioning و backfill مهاجرت استفاده
 #: می‌شود؛ منطق ثبت هرگز از این عبور نمی‌کند.
@@ -185,6 +194,7 @@ DEFAULT_CODE_BY_ROLE = {
     #: پیش‌دریافتِ پیمان، سپرده‌ی حسن انجام کار).
     WITHHOLDING_TAX_PAYABLE: "2112",
     CONTRACT_INSURANCE_PAYABLE: "2113",
+    LONG_TERM_LIABILITY: "2201",
 }
 
 ROLE_BY_DEFAULT_CODE = {code: role for role, code in DEFAULT_CODE_BY_ROLE.items()}
