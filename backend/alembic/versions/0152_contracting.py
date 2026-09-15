@@ -5,6 +5,13 @@
 * شمارنده‌ی `contract` برای همه‌ی مستأجرها، زیرِ `rls_disabled` (الگوی `0149`).
 
 هیچ `UPDATE`ی روی داده‌ی موجود ندارد.
+
+**شماره‌گذاریِ مجدد:** این مهاجرت اول `0151` بود، پشتِ `0149`. هم‌زمان شاخه‌ی
+دیگری (#76، «تنخواه صندوق شد») هم از `0149` منشعب شد و `0150` گرفت؛ هر دو روی
+master مرج شدند و `alembic heads` دو سر داد. چون هیچ‌کدام روی production اجرا
+نشده بود، به‌جای مهاجرتِ ادغامِ خالی، زنجیره‌ی پیمانکاری (این + فازهای ۲ تا ۴)
+پشتِ `0150` شماره‌گذاریِ مجدد شد — همان رویه‌ای که پروژه همیشه برای این فورک‌ها
+دارد (نگاه کنید به `AGENT_CLAIMS.md`، «تاریخچه‌ی ادعاهای بسته‌شده»).
 """
 
 from typing import Sequence, Union
@@ -16,8 +23,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.migration_utils import rls_disabled
 from app.tenancy import policy_name
 
-revision: str = "0151"
-down_revision: Union[str, None] = "0149"
+revision: str = "0152"
+down_revision: Union[str, None] = "0150"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
