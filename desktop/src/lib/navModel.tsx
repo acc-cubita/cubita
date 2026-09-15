@@ -10,6 +10,7 @@ import {
   BookOpenCheck,
   Boxes,
   Building,
+  FilePenLine,
   FileSignature,
   Briefcase,
   Building2,
@@ -95,6 +96,7 @@ export type PageKey =
   | 'fixedassets'
   | 'contractingnew'
   | 'contractingstatus'
+  | 'contractingamendment'
   | 'moadian'
   | 'distributor'
   | 'marketplace'
@@ -153,6 +155,7 @@ export type PageKey =
   | 'allinstallments'
   | 'costcenterlist'
   | 'contractinglist'
+  | 'contractingamendmentlist'
   //: فهرستِ «سامانه مؤدیان» — از کارتِ «فهرست» باز می‌شود، نه از منوی عملیات.
   | 'moadianhistory'
   //: ماژولِ «دریافت و پرداخت» — هجده عملیات. کلیدِ گیت‌کننده‌شان `banking` است
@@ -410,12 +413,13 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    //: فازِ ۱ — «پیمان» و تغییرِ وضعیتش. متمم/صورت‌وضعیت/تسویه‌حساب فازهای بعدند؛
+    //: فازِ ۱+۲ — «پیمان»، تغییرِ وضعیتش، و متممش. صورت‌وضعیت/تسویه‌حساب فازهای بعدند؛
     //: عمداً استابِ خالی برایشان گذاشته نشد (PROJECT_OVERVIEW §۱۰).
     heading: 'پیمانکاری',
     icon: <HardHat size={17} />,
     items: [
       { key: 'contractingnew', label: 'پیمان', icon: <FileSignature size={18} /> },
+      { key: 'contractingamendment', label: 'متمم پیمان', icon: <FilePenLine size={18} /> },
       { key: 'contractingstatus', label: 'تغییر وضعیت پیمان', icon: <RefreshCcw size={18} /> },
     ],
   },
@@ -513,8 +517,14 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 PAGE_MODULE_KEY.analyticlist = 'accounting'
 
 //: «پیمانکاری» — کلیدِ ماژولِ مجازی، دقیقاً مثلِ `sales`: خودِ `contracting`
-//: هیچ‌کدام از این سه PageKey نیست، فقط نگاشتشان می‌کند.
-for (const key of ['contractingnew', 'contractingstatus', 'contractinglist'] as PageKey[]) {
+//: هیچ‌کدام از این PageKeyها نیست، فقط نگاشتشان می‌کند.
+for (const key of [
+  'contractingnew',
+  'contractingstatus',
+  'contractingamendment',
+  'contractinglist',
+  'contractingamendmentlist',
+] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'contracting'
 }
 

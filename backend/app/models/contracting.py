@@ -1,11 +1,19 @@
-"""پیمانکاری — پیمان (فازِ ۱).
+"""پیمانکاری — پیمان (فازِ ۱) و متممِ پیمان (فازِ ۲).
 
 `contracting_contracts`: ثبتِ یک پیمان و مفادش. رکوردِ اصلی است، نه سندِ حسابداری —
 ثبتش هیچ سندی نمی‌زند (مثلِ `CostCenter`/`Bom`، نه مثلِ فاکتور)، پس `VoidableMixin`
 ندارد؛ لغو از راهِ `status="cancelled"` انجام می‌شود، نه ابطال.
 
-فازهای بعد (متمم، صورت‌وضعیت، تسویه‌حساب) جدول‌های خودشان را می‌گیرند و به همین
-جدول با `contract_id` ارجاع می‌دهند.
+`contracting_amendments`: متممِ پیمان — رکوردِ افزایشی/الحاقی، نه بازنویسیِ پیمان.
+`Contract.total_amount` **ثابت** می‌ماند (مبلغِ اولیه)؛ مبلغِ روزِ پیمان از جمعِ
+`total_amount` + همه‌ی `amount_delta`های متمم‌هایش مشتق می‌شود (تصمیمِ بازِ #۲ در
+پلن، این‌طور بسته شد — چون پیمانِ اصلی و تاریخچه‌ی تغییراتش هر دو باید قابلِ‌رجوع
+بمانند، نه اینکه متمم مقدارِ قبلی را پاک کند). به همین دلیل متمم ابطال/تغییرِ
+وضعیتِ خودش را ندارد — فقط رکوردِ الحاقی است؛ اگر روزی لازم شد لغوِ یک متمم، آن هم
+یک متممِ اصلاحی با `amount_delta` وارونه است.
+
+فازهای بعد (صورت‌وضعیت، تسویه‌حساب) جدول‌های خودشان را می‌گیرند و به همین جدول با
+`contract_id` ارجاع می‌دهند.
 """
 import uuid
 from datetime import date as date_
@@ -56,3 +64,28 @@ class Contract(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     @property
     def contact_name(self) -> str:
         return self.contact.name if self.contact else ""
+
+
+class ContractAmendment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """متممِ یک پیمان — تغییرِ مبلغ و/یا تاریخِ پایان، به‌صورتِ رکوردِ الحاقی."""
+
+    __tablename__ = "contracting_amendments"
+
+    number: Mapped[int] = mapped_column(index=True)
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contracting_contracts.id"), index=True
+    )
+    date: Mapped[date_] = mapped_column(Date)
+    description: Mapped[str] = mapped_column(String(300))
+    #: می‌تواند منفی باشد (کاهشِ مبلغ). صفر مجاز است — متممی که فقط تاریخ را تغییر می‌دهد.
+    amount_delta: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: اگر داده شود، `Contract.end_date` را جایگزین می‌کند.
+    new_end_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    contract: Mapped["Contract | None"] = relationship("Contract", viewonly=True)
+
+    @property
+    def contract_number(self) -> int | None:
+        return self.contract.number if self.contract else None

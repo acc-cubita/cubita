@@ -9158,3 +9158,36 @@ export const createContract = (token: string, data: ContractIn, idempotencyKey?:
 
 export const changeContractStatus = (token: string, contractId: string, status: ContractStatus) =>
   authedSend<ContractRecord>(token, 'PATCH', `/api/contracting/contracts/${contractId}/status`, { status })
+
+// ═════════════════ پیمانکاری — متممِ پیمان (فازِ ۲) ═════════════════
+
+export interface ContractAmendmentRecord {
+  id: string
+  number: number
+  contract_id: string
+  contract_number: number | null
+  date: string
+  description: string
+  amount_delta: string
+  new_end_date: string | null
+  notes: string
+}
+
+export interface ContractAmendmentIn {
+  contract_id: string
+  date: string
+  description: string
+  amount_delta?: number
+  new_end_date?: string | null
+  notes?: string
+}
+
+export const fetchContractAmendments = (token: string, query?: { contract_id?: string }) => {
+  const qs = new URLSearchParams()
+  if (query?.contract_id) qs.set('contract_id', query.contract_id)
+  const suffix = qs.toString()
+  return authedGetAll<ContractAmendmentRecord>(token, `/api/contracting/amendments${suffix ? `?${suffix}` : ''}`)
+}
+
+export const createContractAmendment = (token: string, data: ContractAmendmentIn, idempotencyKey?: string) =>
+  authedSend<ContractAmendmentRecord>(token, 'POST', '/api/contracting/amendments', data, idempotencyKey)
