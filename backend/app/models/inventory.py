@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import TimestampMixin, UUIDPKMixin
+from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 CONTACT_TYPES = ("customer", "supplier", "both")
@@ -610,8 +610,14 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockAdjustment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """انبارگردانی/تعدیل موجودی دستی (کسری یا اضافی) با سند حسابداری خودکار متناظر."""
+class StockAdjustment(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+    """انبارگردانی/تعدیل موجودی دستی (کسری یا اضافی) با سند حسابداری خودکار متناظر.
+
+    **ابطال‌پذیر است، و دیرتر از بقیه شد.** تعدیلِ انبار سندی است که کارش اصلاحِ
+    خطاست؛ تا امروز خودش تنها سندِ انباری بود که اصلاح نمی‌شد. تنها راه، ثبتِ یک
+    تعدیلِ معکوسِ دوم بود — که دو ردیفِ *ظاهراً واقعی* در تاریخچه‌ی کالا می‌گذاشت و
+    هیچ‌جا نمی‌گفت دومی اشتباهِ اولی را می‌پوشاند.
+    """
 
     __tablename__ = "stock_adjustments"
 

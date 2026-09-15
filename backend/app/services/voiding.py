@@ -24,8 +24,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalEntry, JournalLine
+from app.models.advanced_inventory import StockBatch
 from app.models.counters import DOC_JOURNAL_ENTRY
-from app.models.inventory import Item, StockLedger
+from app.models.inventory import Item, StockAdjustment, StockLedger
 from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.user import User
@@ -450,4 +451,88 @@ def void_journal_entry(
     entry.voided_by_id = user.id
     entry.void_reason = reason.strip()
     db.flush()
+    return reversal
+
+
+def void_stock_adjustment(
+    db: Session, adjustment_id: UUID, *, reason: str, user: User, void_date: date_ | None = None
+) -> JournalEntry | None:
+    """ابطالِ تعدیلِ انبار — سندی که کارش اصلاح است و تا امروز خودش اصلاح نمی‌شد.
+
+    تنها راهِ پیشین، ثبتِ یک تعدیلِ معکوسِ دوم بود. آن کار عدد را درست می‌کرد ولی
+    **تاریخچه را دروغ می‌گفت**: کاردکسِ کالا دو تعدیلِ واقعی نشان می‌داد، بی هیچ
+    نشانه‌ای که دومی اشتباهِ اولی را می‌پوشاند. ابطال هر دو را اعتراف می‌کند.
+
+    سه تفاوت با `_apply_void` که این تابع را جدا نگه داشت:
+
+    * تعدیل **شماره ندارد** و تاریخش `adjustment_date` است، نه `invoice_date`.
+    * تعدیلی که بهای واحدش صفر بوده سندِ حسابداری **ندارد** — و این حالتِ درستی
+      است، نه نقص. `_apply_void` آن را ۴۰۹ می‌کند؛ این‌جا فقط حرکتِ انبار برمی‌گردد.
+    * تعدیلِ گره‌خورده به یک بار، `stock_batches.qty` را کم کرده؛ ابطال باید همان
+      را برگرداند وگرنه باقی‌مانده‌ی بار برای همیشه کم می‌ماند.
+    """
+    adjustment = (
+        db.query(StockAdjustment)
+        .filter(StockAdjustment.id == adjustment_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if adjustment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "تعدیل موجودی یافت نشد")
+    _guard_not_already_voided(adjustment)
+
+    effective_date = void_date or adjustment.adjustment_date
+    assert_period_open(db, effective_date)
+
+    moves = _compensating_moves(db, "adjustment", adjustment.id, effective_date)
+    if not moves:
+        #: حرکتِ انبارِ این تعدیل پیدا نشد. پیش از مهاجرتِ ۰۱۵۸ حرکت‌ها `source_id`
+        #: نداشتند؛ اگر پُرکردنِ آن مهاجرت ردیفی را جا گذاشته باشد، ابطال باید
+        #: **بایستد**، نه اینکه سندِ حسابداری را برگرداند و دفترِ انبار را دست‌نخورده
+        #: بگذارد — آن حالت، مغایرتِ خاموشِ موجودی و حسابداری است.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "حرکتِ انبارِ این تعدیل در دفتر پیدا نشد؛ ابطالش دفترِ انبار و حسابداری را "
+            "از هم جدا می‌کرد. لطفاً گزارش کنید.",
+        )
+
+    affected_items = sorted({move.item_id for move in moves})
+    lock_items(db, affected_items)
+    _guard_stock_stays_valid(db, moves)
+    #: ابطالِ تعدیلِ *اضافی* موجودی را برمی‌دارد؛ خروجی که به پشتوانه‌ی آن رفته
+    #: نباید بی‌پشتوانه شود. (تعدیلِ کسری همیشه بی‌خطر است — برگشتش فقط اضافه می‌کند.)
+    valuation.guard_void(db, ("adjustment",), adjustment.id)
+
+    reversal = None
+    entry = db.get(JournalEntry, adjustment.journal_entry_id) if adjustment.journal_entry_id else None
+    if entry is not None:
+        item = db.get(Item, adjustment.item_id)
+        reversal = reverse_journal_entry(
+            db,
+            entry,
+            void_date=effective_date,
+            user=user,
+            description=f"ابطال تعدیل موجودی «{item.name if item else ''}»".strip()
+            + (f" — {reason.strip()}" if reason.strip() else ""),
+        )
+
+    for move in moves:
+        db.add(move)
+
+    if adjustment.batch_id is not None:
+        batch = db.get(StockBatch, adjustment.batch_id)
+        if batch is not None:
+            #: تعدیلِ بار همیشه کسری است (`qty_diff` منفی)، پس برگرداندنش یعنی
+            #: افزودنِ همان قدرمطلق به باقی‌مانده‌ی بار.
+            batch.qty = Decimal(batch.qty or 0) + abs(Decimal(adjustment.qty_diff))
+
+    #: علامتِ ابطال پیش از بازمحاسبه — همان ترتیبِ `_apply_void`: بازپخشِ میانگین
+    #: حرکاتِ سندِ باطل را کنار می‌گذارد و اگر علامت هنوز ننشسته باشد، همین سند در
+    #: محاسبه می‌ماند و میانگین آلوده بیرون می‌آید.
+    adjustment.voided_at = datetime.now(timezone.utc)
+    adjustment.voided_by_id = user.id
+    adjustment.void_reason = reason.strip()
+    db.flush()
+
+    valuation.settle_void(db, affected_items)
     return reversal

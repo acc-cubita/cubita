@@ -116,6 +116,7 @@ def audited_models() -> dict[type, str]:
         TaxTable,
     )
     from app.models.period_close import FiscalPeriodClose
+    from app.models.inventory import StockAdjustment
     from app.models.stock_count import StockCountSession
     from app.models.payment import Payment
     from app.models.receipt import Receipt
@@ -149,6 +150,10 @@ def audited_models() -> dict[type, str]:
         #: انبارگردانی ارزشِ موجودی را جابه‌جا می‌کند و تا امروز هیچ ردی
         #: نمی‌گذاشت — نه اینکه چه کسی شمرد، نه اینکه عددی عوض شد.
         StockCountSession: "انبارگردانی",
+        #: تعدیلِ انبار از مهاجرتِ ۰۱۵۸ ابطال‌پذیر شد، و هر سندِ ابطال‌پذیر باید
+        #: حسابرسی شود (`test_every_voidable_document_is_audited`). دلیلش هم روشن
+        #: است: این سند موجودی را بی هیچ فاکتوری کم و زیاد می‌کند.
+        StockAdjustment: "تعدیل انبار",
         Payslip: "فیش حقوقی",
         #: **تنظیماتِ حقوق حساس‌ترین پیکربندیِ کوبیتا بعد از چارتِ حساب‌هاست.**
         #: عوض‌کردنِ یک پله‌ی مالیات، مالیاتِ *همه‌ی* کارکنان را عوض می‌کند؛

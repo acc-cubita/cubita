@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Warehouse, Save } from 'lucide-react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
+import type { StockAdjustmentRecord } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
@@ -75,25 +77,108 @@ export function StockAdjustmentForm({
   )
 }
 
-/** تاریخچه‌ی تعدیل‌ها — مشترکِ فرم و ویزارد. */
+/** تاریخچه‌ی تعدیل‌ها — مشترکِ فرم و ویزارد.
+ *
+ *  ستونِ «وضعیت» و دکمه‌ی ابطال از این‌جا می‌آیند. تعدیل سندی است که کارش اصلاحِ
+ *  خطاست و تا امروز خودش اصلاح نمی‌شد: تنها راه، ثبتِ یک تعدیلِ معکوسِ دوم بود که
+ *  در همین جدول **دو ردیفِ ظاهراً واقعی** می‌گذاشت، بی هیچ نشانه‌ای که دومی
+ *  اشتباهِ اولی را می‌پوشاند. ابطال هر دو را اعتراف می‌کند و ردیفِ اصلی سرِ جایش
+ *  می‌ماند — «هرگز حذف نکن». */
 export function StockAdjustmentHistory({ d }: { d: StockAdjustmentDraft }) {
+  const [voidingId, setVoidingId] = useState<string | null>(null)
+  const [why, setWhy] = useState('')
+
   if (d.history.length === 0) return null
   return (
     <div className="table-scroll">
       <table className="cards-on-mobile">
         <thead>
-          <tr><th>تاریخ</th><th>مقدار</th><th>دلیل</th></tr>
+          <tr><th>تاریخ</th><th>مقدار</th><th>دلیل</th><th>وضعیت</th><th /></tr>
         </thead>
         <tbody>
           {d.history.map((h) => (
-            <tr key={h.id}>
-              <td data-label="تاریخ">{formatJalali(h.adjustment_date)}</td>
-              <td data-label="مقدار">{Number(h.qty_diff) > 0 ? '+' : ''}{Number(h.qty_diff).toLocaleString('fa-IR')}</td>
-              <td data-label="دلیل">{h.reason}</td>
-            </tr>
+            <AdjustmentRow
+              key={h.id}
+              row={h}
+              busy={d.submitting}
+              voiding={voidingId === h.id}
+              why={why}
+              onWhy={setWhy}
+              onStart={() => {
+                setVoidingId(h.id)
+                setWhy('')
+              }}
+              onCancel={() => setVoidingId(null)}
+              onConfirm={() => {
+                void d.voidOne(h.id, why).then((ok) => {
+                  if (ok) setVoidingId(null)
+                })
+              }}
+            />
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+function AdjustmentRow({
+  row,
+  busy,
+  voiding,
+  why,
+  onWhy,
+  onStart,
+  onCancel,
+  onConfirm,
+}: {
+  row: StockAdjustmentRecord
+  busy: boolean
+  voiding: boolean
+  why: string
+  onWhy: (v: string) => void
+  onStart: () => void
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const qty = Number(row.qty_diff)
+  return (
+    <>
+      <tr>
+        <td data-label="تاریخ">{formatJalali(row.adjustment_date)}</td>
+        <td data-label="مقدار" className="num">{qty > 0 ? '+' : ''}{qty.toLocaleString('fa-IR')}</td>
+        <td data-label="دلیل" className="card-wide">{row.reason}</td>
+        <td data-label="وضعیت">
+          {row.voided_at ? (
+            <span className="status-badge tone-danger" title={row.void_reason}>باطل</span>
+          ) : (
+            <span className="status-badge tone-success">ثبت‌شده</span>
+          )}
+        </td>
+        <td className="card-actions">
+          {!row.voided_at && !voiding && (
+            <button type="button" onClick={onStart}>ابطال</button>
+          )}
+        </td>
+      </tr>
+      {voiding && (
+        <tr>
+          <td className="card-full" colSpan={5}>
+            <div className="vr-void">
+              <input value={why} onChange={(e) => onWhy(e.target.value)} placeholder="علتِ ابطال" />
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={busy || why.trim().length < 3}
+                onClick={onConfirm}
+              >
+                ابطالِ تعدیل
+              </button>
+              <button type="button" onClick={onCancel}>انصراف</button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }

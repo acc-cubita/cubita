@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -899,5 +899,8 @@ class StockAdjustmentOut(BaseModel):
     reason: str
     adjustment_date: date
     journal_entry_id: UUID | None
+    #: بدونِ این دو، فهرست یک تعدیلِ باطل را دقیقاً مثلِ تعدیلِ معتبر نشان می‌داد.
+    voided_at: datetime | None = None
+    void_reason: str = ""
 
     model_config = {"from_attributes": True}

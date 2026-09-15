@@ -46,7 +46,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.inventory import Item, StockLedger, Warehouse
+from app.models.inventory import Item, StockAdjustment, StockLedger, Warehouse
 from app.models.inventory_valuation import InventoryValuationAdjustment, InventoryValuationRun
 from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseIssueLine, WarehouseReceipt
 from app.models.issue_returns import WarehouseIssueReturn, WarehouseIssueReturnLine
@@ -118,6 +118,9 @@ _VOIDABLE = (
     (WarehouseIssue, ("warehouse_issue",)),
     (StockTransfer, ("transfer_out", "transfer_in")),
     (WarehouseIssueReturn, ("warehouse_issue_return",)),
+    #: تعدیلِ انبار از مهاجرتِ ۰۱۵۸ ابطال‌پذیر شد. تا پیش از آن حرکتش `source_id`
+    #: هم نداشت، پس حتی اگر این‌جا بود به هیچ ردیفی نمی‌خورد.
+    (StockAdjustment, ("adjustment",)),
 )
 
 _SOURCE_MODELS = {source: model for model, sources in _VOIDABLE for source in sources}
