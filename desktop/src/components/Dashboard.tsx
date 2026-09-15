@@ -33,8 +33,8 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
-import { ContractAmendmentPage, ContractPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
-import { ContractAmendmentListPage, ContractingListPage } from '../pages/contracting/ContractingListPages'
+import { ContractAmendmentPage, ContractPage, ContractStatementPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
+import { ContractAmendmentListPage, ContractingListPage, ContractStatementListPage } from '../pages/contracting/ContractingListPages'
 import { MoadianHistoryPage, MoadianModulePage } from '../pages/moadian/MoadianModulePage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
@@ -298,8 +298,10 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contractingnew: 'پیمان',
   contractingstatus: 'تغییر وضعیت پیمان',
   contractingamendment: 'متمم پیمان',
+  contractingstatement: 'صورت وضعیت دریافتی',
   contractinglist: 'پیمان‌ها',
   contractingamendmentlist: 'متمم‌های پیمان',
+  contractingstatementlist: 'صورت وضعیت‌های دریافتی',
   moadian: 'سامانه مؤدیان',
   moadianhistory: 'تاریخچه ارسال‌ها',
   distributor: 'پخشِ من',
@@ -815,8 +817,10 @@ export function Dashboard({
           {page === 'contractingnew' && <ContractPage token={token} />}
           {page === 'contractingstatus' && <ContractStatusPage token={token} />}
           {page === 'contractingamendment' && <ContractAmendmentPage token={token} />}
+          {page === 'contractingstatement' && <ContractStatementPage token={token} />}
           {page === 'contractinglist' && <ContractingListPage token={token} />}
           {page === 'contractingamendmentlist' && <ContractAmendmentListPage token={token} />}
+          {page === 'contractingstatementlist' && <ContractStatementListPage token={token} />}
           {page === 'moadian' && <MoadianModulePage token={token} me={me} onNavigate={navigate} />}
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}

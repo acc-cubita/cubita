@@ -179,11 +179,12 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'سامانه مؤدیان': [
     { key: 'moadianhistory', label: 'تاریخچه ارسال‌ها', icon: FileCheck2 },
   ],
-  //: «پیمانکاری» — فازِ ۱+۲ «پیمان‌ها» و «متمم‌های پیمان» دارد؛ فهرستِ
-  //: صورت‌وضعیت/تسویه‌حساب با فازهای بعدشان اضافه می‌شوند.
+  //: «پیمانکاری» — فازِ ۱+۲+۳ «پیمان‌ها»، «متمم‌های پیمان» و «صورت وضعیت‌های
+  //: دریافتی» دارد؛ فهرستِ تسویه‌حساب با فازِ بعدش اضافه می‌شود.
   'پیمانکاری': [
     { key: 'contractinglist', label: 'پیمان‌ها', icon: FileSignature },
     { key: 'contractingamendmentlist', label: 'متمم‌های پیمان', icon: FilePenLine },
+    { key: 'contractingstatementlist', label: 'صورت وضعیت‌های دریافتی', icon: Receipt },
   ],
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
@@ -243,6 +244,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   moadianhistory: 'سامانه مؤدیان',
   contractinglist: 'پیمانکاری',
   contractingamendmentlist: 'پیمانکاری',
+  contractingstatementlist: 'پیمانکاری',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
   recurringlist: 'حسابداری',
@@ -418,10 +420,11 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   settlement: 'view',
   deploymentinfo: 'view',
   integration: 'none',
-  //: پیمانکاری — الگوی «فروش»: هر عملیات فهرستِ نظیرِ خودش. صورت‌وضعیت/
-  //: تسویه‌حساب با فازهای بعدشان می‌آیند.
+  //: پیمانکاری — الگوی «فروش»: هر عملیات فهرستِ نظیرِ خودش. تسویه‌حساب با
+  //: فازِ بعدش می‌آید.
   contractingnew: 'contractinglist',
   contractingamendment: 'contractingamendmentlist',
+  contractingstatement: 'contractingstatementlist',
   contractingstatus: 'state',
   distributor: 'view',
   marketplace: 'view',

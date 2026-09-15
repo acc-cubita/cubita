@@ -100,3 +100,43 @@ class ContractAmendmentOut(BaseModel):
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+class ContractStatementIn(BaseModel):
+    contract_id: UUID
+    date: date
+    gross_amount: Decimal
+    other_deductions: Decimal = Decimal(0)
+    notes: str = ""
+
+    @field_validator("gross_amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مبلغِ ناخالصِ کارکرد باید بزرگ‌تر از صفر باشد")
+        return v
+
+    @field_validator("other_deductions")
+    @classmethod
+    def deductions_non_negative(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("سایرِ کسورات نمی‌تواند منفی باشد")
+        return v
+
+
+class ContractStatementOut(BaseModel):
+    id: UUID
+    number: int
+    contract_id: UUID
+    contract_number: int | None
+    date: date
+    gross_amount: Decimal
+    retention_percent: Decimal
+    advance_percent: Decimal
+    retention_amount: Decimal
+    advance_deduction: Decimal
+    other_deductions: Decimal
+    net_amount: Decimal
+    notes: str
+
+    model_config = {"from_attributes": True}
