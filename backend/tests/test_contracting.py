@@ -1,9 +1,9 @@
-"""پیمانکاری — پیمان (فازِ ۱) و متممِ پیمان (فازِ ۲)."""
+"""پیمانکاری — پیمان (فازِ ۱)، متممِ پیمان (فازِ ۲) و صورت‌وضعیتِ دریافتی (فازِ ۳)."""
 import uuid
 from datetime import date
 
 from app.models.contracting import Contract
-from app.schemas.contracting import ContractAmendmentIn, ContractIn
+from app.schemas.contracting import ContractAmendmentIn, ContractIn, ContractStatementIn
 from app.services import contracting as service
 from tests.factories import make_contact
 
@@ -259,5 +259,130 @@ def test_the_api_creates_and_lists_amendments_filtered_by_contract(client, db):
 
     filtered = client.get(
         "/api/contracting/amendments", params={"contract_id": contract["id"], "limit": 200},
+    ).json()["items"]
+    assert {row["id"] for row in filtered} == {first.json()["id"]}
+
+
+# ────────────────────────── صورت‌وضعیتِ دریافتی (فازِ ۳) ──────────────────────────
+
+
+def _statement_payload(contract_id, **extra) -> ContractStatementIn:
+    data = dict(
+        contract_id=contract_id,
+        date=TODAY,
+        gross_amount=1_000_000,
+    )
+    data.update(extra)
+    return ContractStatementIn(**data)
+
+
+def test_statement_computes_deductions_from_contract_percents(db, user):
+    contact = make_contact(db)
+    contract = service.create_contract(db, _payload(contact.id, retention_percent=10, advance_percent=20), user)
+
+    statement = service.create_contract_statement(db, _statement_payload(contract.id), user)
+    assert statement.number == 1
+    assert statement.retention_amount == 100_000
+    assert statement.advance_deduction == 200_000
+    assert statement.net_amount == 700_000
+    assert statement.contract_number == contract.number
+
+
+def test_statement_other_deductions_reduce_net_amount(db, user):
+    contact = make_contact(db)
+    contract = service.create_contract(db, _payload(contact.id, retention_percent=10, advance_percent=20), user)
+
+    statement = service.create_contract_statement(
+        db, _statement_payload(contract.id, other_deductions=50_000), user,
+    )
+    assert statement.net_amount == 650_000
+
+
+def test_statement_snapshots_contract_percents_at_creation_time(db, user):
+    contact = make_contact(db)
+    contract = service.create_contract(db, _payload(contact.id, retention_percent=10, advance_percent=20), user)
+
+    first = service.create_contract_statement(db, _statement_payload(contract.id), user)
+
+    # شبیه‌سازیِ تغییرِ بعدیِ درصدهای پیمان (امروز راهِ رسمی ندارد؛ اینجا مستقیم می‌زنیم)
+    contract.retention_percent = 5
+    db.flush()
+
+    second = service.create_contract_statement(db, _statement_payload(contract.id), user)
+
+    db.refresh(first)
+    assert first.retention_percent == 10
+    assert second.retention_percent == 5
+
+
+def test_statement_requires_positive_gross_amount():
+    try:
+        ContractStatementIn(contract_id=uuid.uuid4(), date=TODAY, gross_amount=0)
+        assert False, "باید رد می‌شد"
+    except ValueError:
+        pass
+
+
+def test_statement_rejects_negative_other_deductions():
+    try:
+        ContractStatementIn(contract_id=uuid.uuid4(), date=TODAY, gross_amount=1000, other_deductions=-1)
+        assert False, "باید رد می‌شد"
+    except ValueError:
+        pass
+
+
+def test_statement_on_a_closed_contract_is_rejected(db, user):
+    contact = make_contact(db)
+    contract = service.create_contract(db, _payload(contact.id), user)
+    service.change_contract_status(db, contract.id, "cancelled", user)
+
+    try:
+        service.create_contract_statement(db, _statement_payload(contract.id), user)
+        assert False, "پیمانِ لغوشده نباید صورت‌وضعیت بپذیرد"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 409
+
+
+def test_the_api_creates_and_lists_statements_filtered_by_contract(client, db):
+    contact = make_contact(db)
+    contract = client.post(
+        "/api/contracting/contracts",
+        json={
+            "contact_id": str(contact.id),
+            "total_amount": 300_000_000,
+            "start_date": TODAY.isoformat(),
+            "retention_percent": 10,
+            "advance_percent": 20,
+        },
+    ).json()
+    other_contract = client.post(
+        "/api/contracting/contracts",
+        json={
+            "contact_id": str(contact.id),
+            "total_amount": 100_000_000,
+            "start_date": TODAY.isoformat(),
+        },
+    ).json()
+
+    body = {
+        "contract_id": contract["id"],
+        "date": TODAY.isoformat(),
+        "gross_amount": 1_000_000,
+    }
+    headers = {"Idempotency-Key": f"statement-{uuid.uuid4()}"}
+    first = client.post("/api/contracting/statements", json=body, headers=headers)
+    second = client.post("/api/contracting/statements", json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["net_amount"] == "700000"
+
+    client.post(
+        "/api/contracting/statements",
+        json={**body, "contract_id": other_contract["id"]},
+        headers={"Idempotency-Key": f"statement-{uuid.uuid4()}"},
+    )
+
+    filtered = client.get(
+        "/api/contracting/statements", params={"contract_id": contract["id"], "limit": 200},
     ).json()["items"]
     assert {row["id"] for row in filtered} == {first.json()["id"]}
