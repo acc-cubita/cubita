@@ -44,7 +44,7 @@ from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
 from app.services.cost_centers import resolve_cost_center_id
-from app.services.inventory import get_stock_qty, lock_items, post_sales_invoice
+from app.services.inventory import get_stock_qty, lock_items, post_sales_invoice, work_in_process_account
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 from app.services.voiding import reverse_journal_entry
@@ -80,6 +80,7 @@ _FORBIDDEN_DEBIT_ROLES = frozenset(
 _JOURNAL_TEXT = {
     "sale": ("بهای تمام‌شده فروش", "کسر موجودی بابت خروج فروش"),
     "consumption": ("مصرفِ کالا", "کسر موجودی بابت مصرف"),
+    "production": ("تحویلِ موادِ اولیه به تولید", "کسر موجودی بابت تحویل به تولید"),
     "other": ("خروجِ کالا (سایر)", "کسر موجودی بابت خروجِ سایر"),
 }
 
@@ -358,8 +359,14 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
         for item in db.query(Item).filter(Item.id.in_([line.item_id for line in data.lines])).all()
     }
     sale = data.issue_type == "sale"
-    cogs = get_account(db, cc.COGS).id if sale else None
-    inventory_ids = set() if sale else _inventory_account_ids(db)
+    auto_account = sale or data.issue_type == "production"
+    if sale:
+        auto_account_id = get_account(db, cc.COGS).id
+    elif data.issue_type == "production":
+        auto_account_id = work_in_process_account(db).id
+    else:
+        auto_account_id = None
+    inventory_ids = set() if auto_account else _inventory_account_ids(db)
     checked: dict[UUID, UUID] = {}
 
     rows: list[_Row] = []
@@ -371,8 +378,8 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و خروجِ انبار ندارد")
         items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
         qty = units.to_primary(db, item, Decimal(line.qty), line.unit_id)
-        if sale:
-            account_id = cogs
+        if auto_account:
+            account_id = auto_account_id
         else:
             wanted = line.account_id or data.account_id
             if wanted not in checked:
@@ -387,6 +394,7 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
         issue_date=data.issue_date, issue_type=data.issue_type, origin="direct",
         warehouse_id=data.warehouse_id, receiver_id=data.receiver_id,
         source_quotation_id=data.source_quotation_id if sale else None,
+        production_plan_id=data.production_plan_id,
         cost_center_id=cost_center_id, description=data.description.strip(), created_by_id=user.id,
     )
     _post_issue(db, issue, rows, user)
@@ -684,7 +692,7 @@ def ledger_page(
     «انبار» یعنی انبارِ **مبدأ**: انتقالی که *به* این انبار آمده، برای آن ورود است.
     """
     selects = []
-    if issue_type in (None, "", "sale", "consumption", "other"):
+    if issue_type in (None, "", "sale", "consumption", "production", "other"):
         q = select(
             literal_column("'issue'").label("kind"),
             WarehouseIssue.id.label("id"),

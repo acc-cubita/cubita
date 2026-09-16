@@ -6,18 +6,23 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import require_module, require_permission
 from app.models.inventory import Item
+from app.models.invoices import WarehouseIssue, WarehouseReceipt
 from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionPlan
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
+from app.schemas.invoices import WarehouseIssueOut, WarehouseReceiptOut
 from app.schemas.manufacturing import (
     BomIn,
     BomOut,
     BomUpdateIn,
+    ProductionCostCalcIn,
+    ProductionMaterialIssueIn,
     ProductionOrderIn,
     ProductionOrderOut,
     ProductionPlanIn,
     ProductionPlanOut,
     ProductionPlanStatusIn,
+    ProductionReceiptIn,
 )
 from app.services import manufacturing as service
 from app.services.idempotency import idempotent
@@ -144,6 +149,55 @@ def change_production_plan_status(
     user: User = Depends(require_permission("manufacturing", "update")),
 ):
     return service.change_production_plan_status(db, plan_id, data.status, user)
+
+
+# ── تحویلِ مواد به تولید / رسیدِ محصول از تولید ──────────
+@router.post("/production-plans/{plan_id}/issue-materials", response_model=WarehouseIssueOut, status_code=201)
+def issue_materials_to_production(
+    plan_id: UUID,
+    data: ProductionMaterialIssueIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("manufacturing", "create")),
+):
+    """**idempotent** — دوکلیک نباید مواد را دوبار تحویل بدهد."""
+    return idempotent(
+        db, request, user, operation="issue_materials_to_production", payload=data,
+        run=lambda: service.issue_materials_to_production(db, plan_id, data, user),
+        replay=lambda iid: db.get(WarehouseIssue, iid),
+    )
+
+
+@router.post("/production-plans/{plan_id}/receive-output", response_model=WarehouseReceiptOut, status_code=201)
+def receive_production_output(
+    plan_id: UUID,
+    data: ProductionReceiptIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("manufacturing", "create")),
+):
+    """**idempotent** — دوکلیک نباید محصول را دوبار وارد انبار کند."""
+    return idempotent(
+        db, request, user, operation="receive_production_output", payload=data,
+        run=lambda: service.receive_production_output(db, plan_id, data, user),
+        replay=lambda rid: db.get(WarehouseReceipt, rid),
+    )
+
+
+@router.post("/production-plans/{plan_id}/calculate-cost", response_model=ProductionPlanOut, status_code=201)
+def calculate_production_cost(
+    plan_id: UUID,
+    data: ProductionCostCalcIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("manufacturing", "create")),
+):
+    """**idempotent** — دوکلیک نباید دستمزد/سربار را دوبار روی بها بنشاند."""
+    return idempotent(
+        db, request, user, operation="calculate_production_cost", payload=data,
+        run=lambda: service.calculate_production_cost(db, plan_id, data, user),
+        replay=lambda pid: db.get(ProductionPlan, pid),
+    )
 
 
 # ── سندِ تولید (اجرا) ────────────────────────────────────

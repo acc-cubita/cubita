@@ -222,10 +222,14 @@ RECEIPT_TYPE_LABELS = {
 #: دارد (`StockTransfer`) — خروج از مبدأ و ورود به مقصد در *یک* سند و یک تراکنش —
 #: و فهرستِ خروج‌ها آن را کنارِ این سه نشان می‌دهد. ساختنِ نسخه‌ی دومی از انتقال
 #: این‌جا یعنی دو موتور که هرکدام نیمی از یک جابه‌جایی را بدانند (§۲۸ §۲۹).
-ISSUE_TYPES = ("sale", "consumption", "other")
+#: `production` تحویلِ موادِ اولیه به خطِ تولید است — طرفِ بدهکارش مثلِ «فروش»
+#: خودکار است («کالای در جریان ساخت»، نه انتخابِ کاربر)، چون منشأش
+#: `services/manufacturing.py` است نه فرمِ آزاد.
+ISSUE_TYPES = ("sale", "consumption", "production", "other")
 ISSUE_TYPE_LABELS = {
     "sale": "فروش",
     "consumption": "مصرف",
+    "production": "تحویل به تولید",
     "other": "سایر",
     "transfer": "انتقال بین انبار",
 }
@@ -276,6 +280,11 @@ class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
     )
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
+    #: خالی مگر خروجی که `manufacturing.issue_materials_to_production` ساخته —
+    #: پیوندِ رفت‌وبرگشتی برایِ «کاردکسِ تولید» و «انحرافِ مصرفِ مواد».
+    production_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("production_plans.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
@@ -433,6 +442,11 @@ class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, 
     #: نماینده‌ی هر دو باشد. این ستون دومی را می‌گوید و `status` اولی را.
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+    #: خالی مگر رسیدی که `manufacturing.receive_production_output` ساخته —
+    #: همان پیوندِ طرفِ خروج، برایِ کاردکس و گزارش‌های تولید.
+    production_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("production_plans.id"), nullable=True, index=True
     )
 
     status: Mapped[str] = mapped_column(String(20), default="posted", server_default="posted")

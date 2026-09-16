@@ -17,15 +17,34 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.services import tafsili
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PRODUCTION_ORDER, DOC_PRODUCTION_PLAN
 from app.models.inventory import Item, StockLedger
+from app.models.invoices import WarehouseIssue, WarehouseReceipt
 from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine, ProductionPlan
 from app.models.user import User
-from app.schemas.manufacturing import ProductionOrderIn, ProductionPlanIn
+from app.schemas.invoices import (
+    DirectWarehouseIssueIn,
+    WarehouseIssueLineIn,
+    WarehouseReceiptIn,
+    WarehouseReceiptLineIn,
+)
+from app.schemas.manufacturing import (
+    ProductionCostCalcIn,
+    ProductionMaterialIssueIn,
+    ProductionOrderIn,
+    ProductionPlanIn,
+    ProductionReceiptIn,
+)
 from app.services import chart_codes as cc
+from app.services import warehouse_issues as warehouse_issues_svc
+from app.services import warehouse_receipts as warehouse_receipts_svc
 from app.services.common import get_account, number_lines
 from app.services.inventory import get_stock_qty, get_total_stock_qty, lock_items
 from app.services import valuation
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
+
+#: وضعیت‌هایی که سفارش هنوز روی آن‌ها «باز» است — تحویلِ مواد/دریافتِ محصول
+#: فقط رویشان مجاز است. پیش‌نویس هنوز قطعی نشده، تمام/لغوشده دیگر چیزی نمی‌خواهد.
+_OPEN_PLAN_STATUSES = ("started", "in_progress", "stopped")
 
 #: گذارِ مجازِ وضعیتِ سفارش (برنامه). همان الگوی پیمانکاری.
 _PLAN_TRANSITIONS: dict[str, tuple[str, ...]] = {
@@ -217,3 +236,150 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
         plan.qty_produced = Decimal(plan.qty_produced) + qty_produced
         db.flush()
     return order
+
+
+# ── تحویلِ مواد به تولید / رسیدِ محصول از تولید (سفارش↔سند، جدا) ──────────
+
+
+def issue_materials_to_production(
+    db: Session, plan_id: UUID, data: ProductionMaterialIssueIn, user: User
+) -> WarehouseIssue:
+    """حواله‌ی خروجِ واقعیِ موادِ اولیه از انبار به خطِ تولید — طرفِ بدهکارش
+    «کالای در جریان ساخت» است، نه یک ارجاعِ نازکِ داخلی."""
+    plan = db.get(ProductionPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارشِ تولید یافت نشد")
+    if plan.status not in _OPEN_PLAN_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"سفارش در وضعیتِ «{plan.status}» تحویلِ مواد نمی‌پذیرد",
+        )
+    bom = db.get(Bom, plan.bom_id)
+    if bom is None or not bom.lines:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "فرمولِ ساختِ این سفارش یافت نشد")
+
+    remaining = Decimal(plan.qty_planned) - Decimal(plan.qty_produced)
+    qty = Decimal(data.qty) if data.qty is not None else remaining
+    if qty <= 0 or qty > remaining:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"مقدار باید بین صفر و باقی‌مانده‌ی سفارش باشد (باقی‌مانده: {remaining})",
+        )
+    batches = qty / Decimal(bom.yield_qty)
+
+    needs: dict[UUID, Decimal] = {}
+    for line in bom.lines:
+        needs[line.component_item_id] = (
+            needs.get(line.component_item_id, Decimal(0)) + Decimal(line.qty) * batches
+        )
+
+    issue_data = DirectWarehouseIssueIn(
+        issue_date=data.issue_date,
+        issue_type="production",
+        warehouse_id=plan.warehouse_id,
+        production_plan_id=plan.id,
+        lines=[WarehouseIssueLineIn(item_id=cid, qty=need) for cid, need in needs.items()],
+        description=f"تحویلِ مواد برای سفارشِ تولیدِ شماره‌ی {plan.number}",
+    )
+    issue = warehouse_issues_svc.create_direct_warehouse_issue(db, issue_data, user)
+    plan.material_cost_issued = Decimal(plan.material_cost_issued) + issue.total_cost
+    db.flush()
+    return issue
+
+
+def receive_production_output(
+    db: Session, plan_id: UUID, data: ProductionReceiptIn, user: User
+) -> WarehouseReceipt:
+    """رسیدِ واقعیِ محصولِ ساخته‌شده به انبار. بهای واحد از موادِ تحویل‌شده‌ی
+    همین سفارش مشتق می‌شود؛ دستمزد/سربار در «محاسبه قیمت تمام‌شده» اضافه
+    می‌شوند، نه این‌جا — درست مثلِ ورودِ یک قطعه‌ی نیم‌ساخته که هزینه‌ی نهایی‌اش
+    بعداً معلوم می‌شود."""
+    plan = db.get(ProductionPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارشِ تولید یافت نشد")
+    if plan.status not in _OPEN_PLAN_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"سفارش در وضعیتِ «{plan.status}» رسیدِ محصول نمی‌پذیرد",
+        )
+    remaining = Decimal(plan.qty_planned) - Decimal(plan.qty_produced)
+    qty = Decimal(data.qty)
+    if qty <= 0 or qty > remaining:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"مقدار باید بین صفر و باقی‌مانده‌ی سفارش باشد (باقی‌مانده: {remaining})",
+        )
+    finished = db.get(Item, plan.finished_item_id)
+    if finished is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی یافت نشد")
+
+    #: نرخِ موادِ هر واحد = کلِ موادِ تحویل‌شده به این سفارش ÷ تعدادِ برنامه —
+    #: یکسان روی هر رسیدِ همین سفارش، حتی اگر رسید چندبار جزئی انجام شود.
+    unit_cost = (
+        (Decimal(plan.material_cost_issued) / Decimal(plan.qty_planned)).quantize(Decimal(1))
+        if plan.qty_planned
+        else Decimal(0)
+    )
+
+    receipt_data = WarehouseReceiptIn(
+        receipt_date=data.receipt_date,
+        warehouse_id=plan.warehouse_id,
+        receipt_type="production",
+        production_plan_id=plan.id,
+        lines=[WarehouseReceiptLineIn(item_id=finished.id, qty=qty, unit_cost=unit_cost)],
+        description=f"رسیدِ محصول از سفارشِ تولیدِ شماره‌ی {plan.number}",
+    )
+    receipt = warehouse_receipts_svc.create_warehouse_receipt(db, None, receipt_data, user)
+    plan.qty_produced = Decimal(plan.qty_produced) + qty
+    db.flush()
+    return receipt
+
+
+def calculate_production_cost(
+    db: Session, plan_id: UUID, data: ProductionCostCalcIn, user: User
+) -> ProductionPlan:
+    """توزیعِ دستمزد و سربار روی محصولی که تا امروز از این سفارش دریافت شده —
+    همان الگوی «سربار» در سندِ تولیدِ پیشین، حالا یک گامِ مستقل و قابلِ‌تکرار.
+
+    بهای واحدِ محصول را در **میانگینِ موزونِ فعلی**اش افزایش می‌دهد، نه بازنویسی
+    می‌کند — چون بخشی از موجودیِ دریافت‌شده ممکن است تا امروز فروخته/مصرف شده
+    باشد؛ میانگینِ موزون همان چیزی است که موجودیِ باقی‌مانده را درست
+    ارزش‌گذاری می‌کند.
+    """
+    plan = db.get(ProductionPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارشِ تولید یافت نشد")
+    if Decimal(plan.qty_produced) <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "هنوز محصولی از این سفارش دریافت نشده")
+
+    added = Decimal(data.labor_cost or 0) + Decimal(data.overhead_cost or 0)
+    if added <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "دستمزد یا سربار را وارد کنید")
+
+    finished = db.get(Item, plan.finished_item_id)
+    if finished is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی یافت نشد")
+
+    lock_items(db, {finished.id})
+    existing_qty = get_total_stock_qty(db, finished.id)
+    if existing_qty > 0:
+        additional_unit = added / Decimal(plan.qty_produced)
+        finished.average_cost = Decimal(finished.average_cost) + additional_unit
+
+    entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
+    journal_entry = JournalEntry(
+        number=entry_number,
+        entry_date=data.calc_date,
+        description=f"دستمزد و سربارِ تولیدِ سفارشِ شماره‌ی {plan.number}",
+        source_type="production_plan",
+        created_by_id=user.id,
+        lines=number_lines([
+            JournalLine(account_id=get_account(db, cc.INVENTORY).id, debit=added, credit=0, description="دستمزد و سربارِ تولید (سرمایه‌ای در بهای کالا)"),
+            JournalLine(account_id=get_account(db, cc.CASH).id, debit=0, credit=added, description="پرداختِ دستمزد و سربارِ تولید"),
+        ]),
+    )
+    tafsili.assert_entry_has_tafsili(db, journal_entry)
+    db.add(journal_entry)
+    db.flush()
+    db.refresh(plan)
+    return plan

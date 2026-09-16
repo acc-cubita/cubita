@@ -15,7 +15,6 @@ import {
   FileUp,
   FlaskConical,
   Gift,
-  Hammer,
   History,
   Landmark,
   Link2,
@@ -116,7 +115,9 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   manufacturing: [
     { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical },
     { key: 'orders', label: 'سفارش تولید', icon: ClipboardList },
-    { key: 'documents', label: 'سند تولید', icon: Hammer },
+    { key: 'materials', label: 'تحویل مواد', icon: PackageMinus },
+    { key: 'receipts', label: 'رسید محصول', icon: PackageCheck },
+    { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },
