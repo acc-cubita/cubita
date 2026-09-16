@@ -416,6 +416,15 @@ export function Dashboard({
   const navigate = (p: PageKey, s: string | null = null) => {
     setPage(p)
     setSection(s)
+    setEditContactId(null)
+  }
+  //: شناسه‌ی طرف‌حسابی که در دستِ ویرایش است. `navigate` پاکش می‌کند تا رفتنِ
+  //: بعدی به «طرف حساب جدید» واقعاً *جدید* باشد، نه ویرایشِ دوباره‌ی قبلی.
+  const [editContactId, setEditContactId] = useState<string | null>(null)
+  const editContact = (id: string) => {
+    setEditContactId(id)
+    setPage('contactnew')
+    setSection(null)
   }
   const [navOpen, setNavOpen] = useState(false)
   // شمارِ پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشانِ آن روی منوی «بازارِ خرید»/«پخشِ من».
@@ -572,7 +581,7 @@ export function Dashboard({
           {page === 'markup' && <MarkupPage token={token} />}
           {page === 'salesbrowse' && <SalesBrowsePage token={token} />}
           {page === 'contactoverview' && <ContactOverviewPage token={token} />}
-          {page === 'saleslist' && <SalesInvoiceListPage token={token} />}
+          {page === 'saleslist' && <SalesInvoiceListPage token={token} me={me} warehouses={warehouses} items={items} />}
           {page === 'quotationlist' && (
             <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
           )}
@@ -636,7 +645,7 @@ export function Dashboard({
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
-          {page === 'contacts' && <ContactsPage token={token} />}
+          {page === 'contacts' && <ContactsPage token={token} onNavigate={navigate} onEditContact={editContact} />}
           {page === 'crm' && <CrmPage token={token} />}
           {page === 'inventory' && (
             <InventoryPage
@@ -847,7 +856,7 @@ export function Dashboard({
           {page === 'fiscalyearlist' && <FiscalYearListPage token={token} />}
 
           {/* ── ماژولِ «شرکت» ── */}
-          {page === 'contactnew' && <ContactNewPage token={token} onNavigate={navigate} />}
+          {page === 'contactnew' && <ContactNewPage token={token} onNavigate={navigate} contactId={editContactId ?? undefined} />}
           {page === 'contactgroup' && <ContactGroupPage token={token} />}
           {page === 'geo' && <GeoLocationsPage token={token} />}
           {page === 'costcenter' && <CostCenterPage token={token} accounts={accounts} />}
@@ -861,7 +870,7 @@ export function Dashboard({
           {page === 'dayactivity' && <DayActivityPage token={token} />}
           {page === 'mgmtreports' && <ManagementReportsPage token={token} />}
           {page === 'usagereport' && <UsageReportPage token={token} />}
-          {page === 'contactlist' && <ContactListPage token={token} onNavigate={navigate} />}
+          {page === 'contactlist' && <ContactListPage token={token} onNavigate={navigate} onEditContact={editContact} />}
           {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}
           {page === 'installmentplans' && <InstallmentPlansPage token={token} />}
           {page === 'allinstallments' && <AllInstallmentsPage token={token} />}

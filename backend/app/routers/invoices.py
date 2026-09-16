@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -248,12 +248,32 @@ def _attach_sales_meta(db: Session, invoices: list) -> None:
 
 @router.get("/api/sales-invoices", response_model=Page[SalesInvoiceOut])
 def list_sales_invoices(
+    contact_id: UUID | None = Query(None, description="فقط فاکتورهای این طرف حساب"),
+    date_from: date | None = Query(None, description="از این تاریخ (شامل خودش)"),
+    date_to: date | None = Query(None, description="تا این تاریخ (شامل خودش)"),
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
     _=Depends(require_permission("invoices", "view")),
 ):
+    """دفترِ فاکتورهای فروش، با فیلترِ **سمتِ سرور**.
+
+    تا امروز این اندپوینت فقط `limit` و `cursor` می‌گرفت، پس هر صفحه‌ای که
+    می‌خواست فاکتورهای یک مشتری یا یک بازه را نشان دهد **کلِ دفتر را دانلود
+    می‌کرد** و در مرورگر فیلتر می‌کرد — همان چیزی که قراردادِ صفحه‌های کوبیتا
+    صریحاً منع می‌کند، و با اولین کسب‌وکارِ چندساله از کار می‌افتد.
+
+    هر سه پارامتر اختیاری‌اند و **نبودشان یعنی رفتارِ دیروز**: پاسخِ بی‌فیلتر
+    دقیقاً همان است که بود، پس هیچ فراخوانِ موجودی نمی‌شکند.
+    """
+    query = db.query(SalesInvoice).options(selectinload(SalesInvoice.lines))
+    if contact_id is not None:
+        query = query.filter(SalesInvoice.contact_id == contact_id)
+    if date_from is not None:
+        query = query.filter(SalesInvoice.invoice_date >= date_from)
+    if date_to is not None:
+        query = query.filter(SalesInvoice.invoice_date <= date_to)
     items, next_cursor = paginate(
-        db.query(SalesInvoice).options(selectinload(SalesInvoice.lines)),
+        query,
         [SalesInvoice.invoice_date, SalesInvoice.number],
         params,
     )

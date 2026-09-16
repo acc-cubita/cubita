@@ -2764,8 +2764,9 @@ function PreinvoiceProgressView({ token, scope, cacheKey }: ViewProps) {
 
 // ═════════ ۸ و ۱۷) صورت‌حساب و مرورِ جامعِ طرف حساب ═════════
 
-/** هر دو صفحه یک طرف‌حساب را می‌خواهند؛ انتخاب‌گرِ مشترک. */
-function ContactPicker({
+/** انتخاب‌گرِ مشترکِ طرف حساب — «صورت‌حساب»، «مرور جامع»، «مرور فروش» و
+ *  «فاکتورهای فروش» همه همین را می‌خواهند. صادر شده تا نسخه‌ی دومی ساخته نشود. */
+export function ContactPicker({
   contacts,
   value,
   onChange,

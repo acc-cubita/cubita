@@ -10612,3 +10612,44 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .cdn-void { grid-template-columns: 1fr; }
   .cdn-links { justify-content: stretch; }
 }
+
+/* ── مرتب‌سازیِ فهرست‌ها ──────────────────────────────────────────────────
+   سرستونِ کلیک‌شدنی برای دسکتاپ، و نوارِ انتخاب برای موبایل. زیرِ ۷۶۰px
+   `thead` پنهان می‌شود (قاعده‌ی نمای کارتی)، پس بدونِ آن نوار، مرتب‌سازی در
+   موبایل هیچ راهی نداشت. */
+.sort-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.sort-th:hover { color: var(--accent); }
+.sort-th.is-active { color: var(--accent); font-weight: 600; }
+/* نشانِ خنثی کم‌رنگ است تا ستونِ فعال در یک نگاه پیدا شود. */
+.sort-th-idle { opacity: 0.35; }
+.sort-th:hover .sort-th-idle { opacity: 0.7; }
+
+/* نوارِ موبایل: فقط جایی که سرستون نیست. */
+.sort-bar { display: none; }
+@media (max-width: 760px) {
+  .sort-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px;
+    margin-block-end: 10px;
+  }
+  .sort-bar > label { flex: 1 1 160px; min-width: 0; }
+  .sort-bar > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}

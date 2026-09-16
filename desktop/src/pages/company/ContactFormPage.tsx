@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Layers, Save, UserPlus } from 'lucide-react'
 import {
   ADDRESS_TYPE_LABELS,
@@ -12,11 +12,20 @@ import {
   checkTafsiliTitleTaken,
   createContact,
   createRelatedPerson,
+  fetchContactAddresses,
+  fetchContactChannels,
   fetchContactGroups,
   fetchContactTafsiliRequirement,
+  fetchContacts,
+  fetchRelatedPersons,
+  deleteContactAddress,
+  deleteContactChannel,
+  deleteRelatedPerson,
   fetchEmployees,
   fetchGeoLocations,
+  updateContact,
   type ContactGroupRecord,
+  type ContactRecord,
   type EmployeeRecord,
   type GeoLocationRecord,
   type TafsiliRequirement,
@@ -49,9 +58,11 @@ import type { PageKey } from '../../lib/navModel'
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 /** یک ردیفِ در حالِ ساخت — تا پیش از ثبتِ طرف‌حساب شناسه‌ای برای چسبیدن ندارد. */
-type DraftAddress = { address_type: string; title: string; address: string; postal_code: string; route_code: string; is_primary: boolean }
-type DraftPhone = { channel_type: string; label: string; value: string; is_primary: boolean }
-type DraftPerson = { name: string; role: string; name2: string; role2: string; phone: string; email: string; is_primary: boolean }
+//: `id` فقط روی ردیف‌هایی هست که از سرور آمده‌اند. نبودنش یعنی «تازه است» —
+//: همین یک فیلد، تفاضلِ حالتِ ویرایش را ممکن می‌کند (تازه‌ها POST، رفته‌ها DELETE).
+type DraftAddress = { id?: string; address_type: string; title: string; address: string; postal_code: string; route_code: string; is_primary: boolean }
+type DraftPhone = { id?: string; channel_type: string; label: string; value: string; is_primary: boolean }
+type DraftPerson = { id?: string; name: string; role: string; name2: string; role2: string; phone: string; email: string; is_primary: boolean }
 
 type Msg = { text: string; kind: 'ok' | 'err' } | null
 
@@ -60,10 +71,24 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطا�
 export function ContactNewPage({
   token,
   onNavigate,
+  contactId,
 }: {
   token: string
   onNavigate: (page: PageKey) => void
+  /** پر بودنش یعنی **حالتِ ویرایش** — همین فرم، با رکوردِ موجود.
+   *
+   *  تا امروز این فرم فقط می‌ساخت. یعنی هر چیزی که فقط این‌جا پرسیده می‌شود —
+   *  نقشِ سهامدار و درصدِ سهم، واسطه و پورسانت، گروه، محلِ جغرافیایی، کدِ
+   *  تفصیلی، نرخِ تخفیف — پس از ساخت **برای همیشه** قفل می‌شد. */
+  contactId?: string
 }) {
+  const isEdit = !!contactId
+  const [loading, setLoading] = useState(false)
+  //: عکسِ ردیف‌های فرزند در لحظه‌ی بارگذاری. هرچه در این باشد و در فرم نباشد،
+  //: کاربر حذفش کرده — و باید واقعاً از سرور برود.
+  const loadedChildIds = useRef<{ addresses: string[]; phones: string[]; people: string[] }>({
+    addresses: [], phones: [], people: [],
+  })
   const [groups, setGroups] = useState<ContactGroupRecord[]>([])
   const [locations, setLocations] = useState<GeoLocationRecord[]>([])
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
@@ -139,13 +164,134 @@ export function ContactNewPage({
   const [phones, setPhones] = useState<DraftPhone[]>([])
   const [people, setPeople] = useState<DraftPerson[]>([])
 
+  //: **بارگذاریِ حالتِ ویرایش.** طرف‌حساب از همان فهرست می‌آید (اندپوینتِ تکی
+  //: ندارد) و ردیف‌های فرزند هرکدام از اندپوینتِ خودشان. `loadTafsili` در این
+  //: حالت صدا زده نمی‌شود، وگرنه کدِ تفصیلیِ ذخیره‌شده با کدِ بعدیِ سرور
+  //: بازنویسی می‌شد.
+  useEffect(() => {
+    if (!contactId) return
+    let alive = true
+    setLoading(true)
+    void (async () => {
+      try {
+        const [all, addrs, chans, persons] = await Promise.all([
+          fetchContacts(token),
+          fetchContactAddresses(token, contactId).catch(() => []),
+          fetchContactChannels(token, contactId).catch(() => []),
+          fetchRelatedPersons(token, contactId).catch(() => []),
+        ])
+        const c = all.find((x) => x.id === contactId)
+        if (!alive) return
+        if (!c) {
+          setMsg({ text: 'این طرف حساب پیدا نشد.', kind: 'err' })
+          return
+        }
+        fillFrom(c)
+        setAddresses(addrs.map((a): DraftAddress => ({
+          id: a.id,
+          address_type: a.address_type ?? '',
+          title: a.title ?? '',
+          address: a.address ?? '',
+          postal_code: a.postal_code ?? '',
+          route_code: a.route_code ?? '',
+          is_primary: !!a.is_primary,
+        })))
+        setPhones(chans.filter((ch) => ch.kind === 'phone').map((ch): DraftPhone => ({
+          id: ch.id,
+          channel_type: ch.channel_type ?? '',
+          label: ch.label ?? '',
+          value: ch.value,
+          is_primary: !!ch.is_primary,
+        })))
+        loadedChildIds.current = {
+          addresses: addrs.map((a) => a.id),
+          phones: chans.filter((ch) => ch.kind === 'phone').map((ch) => ch.id),
+          people: persons.map((pr) => pr.id),
+        }
+        setPeople(persons.map((pr): DraftPerson => ({
+          id: pr.id,
+          name: pr.name,
+          role: pr.role ?? '',
+          name2: pr.name2 ?? '',
+          role2: pr.role2 ?? '',
+          phone: pr.phone ?? '',
+          email: pr.email ?? '',
+          is_primary: !!pr.is_primary,
+        })))
+      } catch (err) {
+        if (alive) setMsg({ text: errText(err), kind: 'err' })
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [token, contactId])
+
   useEffect(() => {
     void fetchContactGroups(token).then((g) => setGroups(g.filter((x) => x.is_active))).catch(() => {})
     void fetchGeoLocations(token).then((l) => setLocations(l.filter((x) => x.is_active))).catch(() => {})
     void fetchEmployees(token).then((e) => setEmployees(e.filter((x) => x.is_active))).catch(() => {})
-    void loadTafsili()
+    //: در ویرایش، کدِ تفصیلیِ خودِ رکورد مبناست؛ کدِ پیشنهادیِ سرور آن را
+    //: بازمی‌نوشت و کاربر بی‌خبر کدِ طرف‌حسابش را عوض می‌کرد.
+    if (!contactId) void loadTafsili()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [token, contactId])
+
+  /** پر کردنِ فرم از رکوردِ موجود — هر فیلدی که فرم می‌فرستد، این‌جا برمی‌گردد.
+   *
+   *  اگر فیلدی این‌جا جا بیفتد، ویرایش آن را **صفر می‌کند**: فرم مقدارِ خالی را
+   *  می‌فرستد و `PATCH` آن را می‌نویسد. پس این تابع باید آینه‌ی کاملِ `submit` بماند. */
+  function fillFrom(c: ContactRecord) {
+    setFirstName(c.first_name ?? '')
+    setLastName(c.last_name ?? '')
+    setFirstName2(c.first_name2 ?? '')
+    setLastName2(c.last_name2 ?? '')
+    //: نامِ شرکت در رکورد همان `name` است؛ برای شخصِ حقیقی از نام و نام خانوادگی
+    //: ساخته می‌شود، پس فقط برای حقوقی برمی‌گردد.
+    setCompanyName(c.entity_type === 'legal' ? c.name : '')
+    setEntityType((c.entity_type ?? 'real') as typeof entityType)
+    setIsCustomer(c.type === 'customer' || c.type === 'both')
+    setIsSupplier(c.type === 'supplier' || c.type === 'both')
+    setSubType(c.sub_type ?? '')
+    setIsActive(c.is_active)
+    setIsBlacklisted(!!c.is_blacklisted)
+    setPhone(c.phone ?? '')
+    setEmail(c.email ?? '')
+    setWebsite(c.website ?? '')
+    setAddress(c.address ?? '')
+    setNationalId(c.national_id ?? '')
+    setEconomicCode(c.economic_code ?? '')
+    setPostalCode(c.postal_code ?? '')
+    setRegistrationNo(c.registration_no ?? '')
+    setPassportNo(c.passport_no ?? '')
+    setBirthday(c.birthday ?? '')
+    setMarriageDate(c.marriage_date ?? '')
+    setGroupId(c.group_id ?? '')
+    setGeoId(c.geo_location_id ?? '')
+    setCreditLimit(String(Number(c.credit_limit) || ''))
+    setCreditAction((c.credit_action ?? 'warn') as typeof creditAction)
+    setDiscountRate(String(Number(c.discount_rate) || ''))
+    setTaxClass((c.tax_ministry_class ?? '') as typeof taxClass)
+    setIsBroker(!!c.is_broker)
+    setCommissionRate(String(Number(c.commission_rate) || ''))
+    setIsShareholder(!!c.is_shareholder)
+    setSharePercent(String(Number(c.share_percent) || ''))
+    setIsEmployee(!!c.is_employee)
+    setEmployeeId(c.employee_id ?? '')
+    setGender(c.gender ?? '')
+    setMaritalStatus(c.marital_status ?? '')
+    setMaritalDate(c.marital_status_date ?? '')
+    setChildrenCount(String(Number(c.children_count) || ''))
+    setDependentsCount(String(Number(c.dependents_count) || ''))
+    setEducationLevel(c.education_level ?? '')
+    setEducationField(c.education_field ?? '')
+    setTafsiliCode(c.tafsili_code ?? '')
+    setTafsiliTitle(c.tafsili_title ?? '')
+    setTafsiliTitle2(c.tafsili_title2 ?? '')
+    setTitleTouched(true)
+    //: **ماندهٔ اول دوره عمداً برنمی‌گردد.** آن سندِ افتتاحیه را می‌زند و یک‌بار
+    //: ثبت می‌شود؛ برگرداندنش در فرمِ ویرایش یعنی هر ذخیره، سند را دوباره بزند.
+  }
 
   function loadTafsili() {
     return fetchContactTafsiliRequirement(token)
@@ -230,7 +376,7 @@ export function ContactNewPage({
     setBusy(true)
     setMsg(null)
     try {
-      const created = await createContact(token, {
+      const payload = {
         name: displayName,
         type: contactType,
         first_name: entityType === 'real' ? firstName.trim() : '',
@@ -282,7 +428,56 @@ export function ContactNewPage({
         tafsili_code: tafsiliCode.trim() || null,
         tafsili_title: tafsiliTitle.trim() || null,
         tafsili_title2: tafsiliTitle2.trim(),
-      })
+      }
+
+      //: **در ویرایش ماندهٔ اول دوره فرستاده نمی‌شود.** آن سندِ افتتاحیه را
+      //: می‌زند و یک‌بار ثبت می‌شود؛ فرستادنش در هر ذخیره یعنی سندِ تکراری.
+      if (isEdit) {
+        const { opening_ar_amount, opening_ar_side, opening_ap_amount, opening_ap_side, ...editable } = payload
+        void opening_ar_amount; void opening_ar_side; void opening_ap_amount; void opening_ap_side
+        await updateContact(token, contactId!, editable)
+
+        //: **ردیف‌های فرزند هم باید بروند.** تا پیش از این، `submit` در ویرایش
+        //: همین‌جا برمی‌گشت: کاربر نشانی اضافه می‌کرد، پیامِ «به‌روز شد»
+        //: می‌گرفت، و ردیفش **بی‌صدا دور ریخته می‌شد**. اندپوینت‌ها فقط
+        //: POST/DELETE دارند (نه PATCH) و تب‌ها ویرایشِ درجا ندارند، پس تفاضلِ
+        //: شناسه کافی است: بی‌شناسه‌ها تازه‌اند، شناسه‌های غایب حذف شده‌اند.
+        const failed: string[] = []
+        const kept = {
+          addresses: new Set(addresses.map((a) => a.id).filter(Boolean) as string[]),
+          phones: new Set(phones.map((x) => x.id).filter(Boolean) as string[]),
+          people: new Set(people.map((x) => x.id).filter(Boolean) as string[]),
+        }
+        for (const id of loadedChildIds.current.addresses.filter((i) => !kept.addresses.has(i))) {
+          try { await deleteContactAddress(token, contactId!, id) } catch { failed.push('حذفِ نشانی') }
+        }
+        for (const id of loadedChildIds.current.phones.filter((i) => !kept.phones.has(i))) {
+          try { await deleteContactChannel(token, contactId!, id) } catch { failed.push('حذفِ تلفن') }
+        }
+        for (const id of loadedChildIds.current.people.filter((i) => !kept.people.has(i))) {
+          try { await deleteRelatedPerson(token, id) } catch { failed.push('حذفِ فردِ مرتبط') }
+        }
+        for (const a of addresses.filter((x) => !x.id)) {
+          try { await addContactAddress(token, contactId!, a) } catch { failed.push(a.address || a.title) }
+        }
+        for (const x of phones.filter((y) => !y.id)) {
+          try { await addContactChannel(token, contactId!, { kind: 'phone', ...x }) } catch { failed.push(x.value) }
+        }
+        for (const x of people.filter((y) => !y.id)) {
+          try { await createRelatedPerson(token, { contact_id: contactId!, ...x }) } catch { failed.push(x.name) }
+        }
+
+        setMsg({
+          text: failed.length
+            ? `طرف‌حساب «${displayName}» به‌روز شد، ولی این ردیف‌ها ثبت/حذف نشدند: ${failed.join('، ')}`
+            : `طرف‌حساب «${displayName}» به‌روز شد.`,
+          kind: failed.length ? 'err' : 'ok',
+        })
+        setBusy(false)
+        return
+      }
+
+      const created = await createContact(token, payload)
 
       //: ردیف‌های فرزند به شناسه نیاز دارند، پس پس از ساختِ طرف‌حساب می‌روند.
       //: شکستِ یکی نباید ثبتِ خودِ طرف‌حساب را باطل جلوه دهد، پس جدا گزارش می‌شود.
@@ -317,9 +512,11 @@ export function ContactNewPage({
     <div className="page panels">
       <PageHeader
         icon={UserPlus}
-        title="طرف حساب جدید"
+        title={isEdit ? 'ویرایش طرف حساب' : 'طرف حساب جدید'}
         description="شناسنامه‌ی مشتری، تأمین‌کننده، واسطه یا سهامدار — با نشانی‌های ارسال، تلفن‌ها، افرادِ مرتبط و کدِ تفصیلی."
       />
+
+      {loading && <p className="muted">در حال بارگذاری…</p>}
 
       {msg && (
         <section className={`fy-note ${msg.kind === 'ok' ? 'fy-note--ok' : 'fy-note--err'}`}>
@@ -515,8 +712,8 @@ export function ContactNewPage({
 
         <div className="invoice-form-footer">
           <button type="button" onClick={() => onNavigate('contactlist')}>فهرستِ طرف‌حساب‌ها</button>
-          <button type="submit" className="btn-primary" disabled={busy || !displayName}>
-            <Save size={13} /> ثبتِ طرف حساب
+          <button type="submit" className="btn-primary" disabled={busy || loading || !displayName}>
+            <Save size={13} /> {isEdit ? 'ذخیره‌ی تغییرات' : 'ثبتِ طرف حساب'}
           </button>
         </div>
       </form>
