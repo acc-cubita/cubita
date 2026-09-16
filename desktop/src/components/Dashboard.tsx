@@ -572,7 +572,7 @@ export function Dashboard({
           {page === 'markup' && <MarkupPage token={token} />}
           {page === 'salesbrowse' && <SalesBrowsePage token={token} />}
           {page === 'contactoverview' && <ContactOverviewPage token={token} />}
-          {page === 'saleslist' && <SalesInvoiceListPage token={token} />}
+          {page === 'saleslist' && <SalesInvoiceListPage token={token} me={me} warehouses={warehouses} items={items} />}
           {page === 'quotationlist' && (
             <QuotationListPage token={token} onQueued={() => void refreshFromLocalCache()} />
           )}

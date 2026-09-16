@@ -360,7 +360,13 @@ export function InvoiceList({
   )
 }
 
-function InvoiceDetail({
+/** جزئیاتِ یک فاکتور — اقلام، جمع‌ها، و کنش‌های چاپ/PDF/سند/ابطال/خروجِ انبار.
+ *
+ *  **صادر شده تا `SalesInvoiceListPage` هم بتواند صدایش بزند.** آن صفحه فیلتر
+ *  دارد و جزئیات نداشت؛ این کامپوننت جزئیات داشت و فیلتر نه — و شاخه‌ی
+ *  `isSales`ش سال‌ها نوشته بود و هرگز اجرا نشد، چون هر دو فراخوانِ
+ *  `InvoiceList` خرید بودند. نسخه‌ی دومی از این نشانه‌گذاری ساخته نشد. */
+export function InvoiceDetail({
   row,
   isSales,
   itemName,

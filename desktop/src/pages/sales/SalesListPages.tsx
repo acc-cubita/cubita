@@ -49,7 +49,12 @@ import {
   type NotePrefill,
   type SaleTypeAccounts,
   type SalesReturnRecord,
+  can,
+  type MeResponse,
 } from '../../api'
+import type { ItemCache, WarehouseCache } from '../../electron.d'
+import { InvoiceDetail } from '../../components/InvoiceList'
+import { ContactPicker } from './SalesOpsPages'
 import type { PageKey } from '../../lib/navModel'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
@@ -113,12 +118,37 @@ function inRange(day: string, from?: string, to?: string): boolean {
 
 // ═════════════════ دفترِ فاکتورهای فروش ═════════════════
 
-export function SalesInvoiceListPage({ token }: { token: string }) {
+export function SalesInvoiceListPage({
+  token,
+  me,
+  warehouses = [],
+  items = [],
+}: {
+  token: string
+  me: MeResponse
+  warehouses?: WarehouseCache[]
+  items?: ItemCache[]
+}) {
   const range = useRange('month')
   const [status, setStatus] = useState<'' | 'open' | 'closed' | 'void'>('')
   const [search, setSearch] = useState('')
-  const list = useAsync(() => fetchSalesInvoices(token), [token])
+  const [contactId, setContactId] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
+  //: **بازه و طرف‌حساب سمتِ سرور فیلتر می‌شوند.** تا امروز کلِ دفتر دانلود
+  //: می‌شد و در مرورگر فیلتر — همان چیزی که قراردادِ صفحه (§۷) منع می‌کند.
+  //: وضعیت و جست‌وجوی متنی سمتِ مرورگر می‌مانند، ولی حالا روی همین صفحه.
+  const list = useAsync(
+    () => fetchSalesInvoices(token, {
+      contact_id: contactId || undefined,
+      date_from: range.from || undefined,
+      date_to: range.to || undefined,
+    }),
+    [token, contactId, range.from, range.to],
+  )
   const contacts = useAsync(() => fetchContacts(token), [token])
+  //: انبارها و کالاها از کشِ داشبورد می‌آیند — همان چیزی که `PurchasesPage`
+  //: به `InvoiceList` می‌دهد. درخواستِ دوباره‌شان فقط یک کپیِ دیگر می‌ساخت.
+  const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? '—'
   const names = useMemo(
     () => new Map((contacts.data ?? []).map((c) => [c.id, c.name])),
     [contacts.data],
@@ -127,7 +157,6 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
   const rows = useMemo(() => {
     const t = search.trim()
     return (list.data ?? [])
-      .filter((i) => inRange(i.invoice_date, range.from, range.to))
       .filter((i) =>
         status === 'open'
           ? !i.closed_at && !i.voided_at
@@ -144,9 +173,9 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
           (names.get(i.contact_id ?? '') ?? '').includes(t),
       )
       .sort((a, b) => b.invoice_date.localeCompare(a.invoice_date))
-  }, [list.data, range.from, range.to, status, search, names])
+  }, [list.data, status, search, names])
 
-  const pg = usePagination(rows, 20, `${range.from}${range.to}${status}${search}`)
+  const pg = usePagination(rows, 20, `${range.from}${range.to}${contactId}${status}${search}`)
   const net = rows.filter((i) => !i.voided_at).reduce((s, i) => s + Number(i.total_amount || 0), 0)
 
   return (
@@ -159,15 +188,22 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
           <RangeBar
             range={range}
             extra={
-              <label className="acc-inline-field">
-                وضعیت
-                <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-                  <option value="">همه</option>
-                  <option value="open">باز</option>
-                  <option value="closed">بسته</option>
-                  <option value="void">باطل</option>
-                </select>
-              </label>
+              <>
+                <ContactPicker
+                  contacts={contacts.data ?? []}
+                  value={contactId}
+                  onChange={setContactId}
+                />
+                <label className="acc-inline-field">
+                  وضعیت
+                  <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                    <option value="">همه</option>
+                    <option value="open">باز</option>
+                    <option value="closed">بسته</option>
+                    <option value="void">باطل</option>
+                  </select>
+                </label>
+              </>
             }
           />
           <div className="cc-summary">
@@ -205,11 +241,13 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
                   <th>خالص</th>
                   <th>مالیات</th>
                   <th>وضعیت</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {pg.pageItems.map((i) => (
-                  <tr key={i.id} className={i.voided_at ? 'acc-row--void' : ''}>
+                  <Fragment key={i.id}>
+                  <tr className={i.voided_at ? 'acc-row--void' : ''}>
                     <td className="card-title" data-label="شماره">
                       {fa(i.number ?? 0)}
                     </td>
@@ -230,7 +268,31 @@ export function SalesInvoiceListPage({ token }: { token: string }) {
                         {i.voided_at ? 'باطل' : i.closed_at ? 'بسته' : 'باز'}
                       </span>
                     </td>
+                    <td className="card-actions">
+                      <button type="button" onClick={() => setOpenId(openId === i.id ? null : i.id)}>
+                        {openId === i.id ? 'بستن' : 'جزئیات'}
+                      </button>
+                    </td>
                   </tr>
+                  {openId === i.id && (
+                    <tr>
+                      <td className="card-full" colSpan={7}>
+                        <InvoiceDetail
+                          row={i}
+                          isSales
+                          itemName={itemName}
+                          token={token}
+                          warehouses={warehouses}
+                          canVoidWarehouseReceipt={can(me, 'accounting', 'delete')}
+                          canCreateWarehouseIssue={can(me, 'inventory', 'create')}
+                          onChanged={async () => {
+                            list.reload()
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

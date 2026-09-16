@@ -1602,7 +1602,19 @@ export interface SalesInvoiceRecord {
   lines: (InvoiceLineRecord & { unit_price: string; unit_cost: string })[]
 }
 
-export const fetchSalesInvoices = (token: string) => authedGetAll<SalesInvoiceRecord>(token, '/api/sales-invoices')
+/** دفترِ فاکتورهای فروش. **فیلترها سمتِ سرورند** — تا این پارامترها نبودند،
+ *  هر صفحه‌ای کلِ دفتر را می‌کشید و در مرورگر فیلتر می‌کرد. */
+export const fetchSalesInvoices = (
+  token: string,
+  query?: { contact_id?: string; date_from?: string; date_to?: string },
+) => {
+  const qs = new URLSearchParams()
+  if (query?.contact_id) qs.set('contact_id', query.contact_id)
+  if (query?.date_from) qs.set('date_from', query.date_from)
+  if (query?.date_to) qs.set('date_to', query.date_to)
+  const suffix = qs.toString()
+  return authedGetAll<SalesInvoiceRecord>(token, `/api/sales-invoices${suffix ? `?${suffix}` : ''}`)
+}
 
 export interface SalesSummary {
   invoice_count: number
