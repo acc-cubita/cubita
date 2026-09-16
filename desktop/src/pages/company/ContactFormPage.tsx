@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Layers, Save, UserPlus } from 'lucide-react'
 import {
   ADDRESS_TYPE_LABELS,
@@ -18,6 +18,9 @@ import {
   fetchContactTafsiliRequirement,
   fetchContacts,
   fetchRelatedPersons,
+  deleteContactAddress,
+  deleteContactChannel,
+  deleteRelatedPerson,
   fetchEmployees,
   fetchGeoLocations,
   updateContact,
@@ -55,9 +58,11 @@ import type { PageKey } from '../../lib/navModel'
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 /** یک ردیفِ در حالِ ساخت — تا پیش از ثبتِ طرف‌حساب شناسه‌ای برای چسبیدن ندارد. */
-type DraftAddress = { address_type: string; title: string; address: string; postal_code: string; route_code: string; is_primary: boolean }
-type DraftPhone = { channel_type: string; label: string; value: string; is_primary: boolean }
-type DraftPerson = { name: string; role: string; name2: string; role2: string; phone: string; email: string; is_primary: boolean }
+//: `id` فقط روی ردیف‌هایی هست که از سرور آمده‌اند. نبودنش یعنی «تازه است» —
+//: همین یک فیلد، تفاضلِ حالتِ ویرایش را ممکن می‌کند (تازه‌ها POST، رفته‌ها DELETE).
+type DraftAddress = { id?: string; address_type: string; title: string; address: string; postal_code: string; route_code: string; is_primary: boolean }
+type DraftPhone = { id?: string; channel_type: string; label: string; value: string; is_primary: boolean }
+type DraftPerson = { id?: string; name: string; role: string; name2: string; role2: string; phone: string; email: string; is_primary: boolean }
 
 type Msg = { text: string; kind: 'ok' | 'err' } | null
 
@@ -79,6 +84,11 @@ export function ContactNewPage({
 }) {
   const isEdit = !!contactId
   const [loading, setLoading] = useState(false)
+  //: عکسِ ردیف‌های فرزند در لحظه‌ی بارگذاری. هرچه در این باشد و در فرم نباشد،
+  //: کاربر حذفش کرده — و باید واقعاً از سرور برود.
+  const loadedChildIds = useRef<{ addresses: string[]; phones: string[]; people: string[] }>({
+    addresses: [], phones: [], people: [],
+  })
   const [groups, setGroups] = useState<ContactGroupRecord[]>([])
   const [locations, setLocations] = useState<GeoLocationRecord[]>([])
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
@@ -178,6 +188,7 @@ export function ContactNewPage({
         }
         fillFrom(c)
         setAddresses(addrs.map((a): DraftAddress => ({
+          id: a.id,
           address_type: a.address_type ?? '',
           title: a.title ?? '',
           address: a.address ?? '',
@@ -186,12 +197,19 @@ export function ContactNewPage({
           is_primary: !!a.is_primary,
         })))
         setPhones(chans.filter((ch) => ch.kind === 'phone').map((ch): DraftPhone => ({
+          id: ch.id,
           channel_type: ch.channel_type ?? '',
           label: ch.label ?? '',
           value: ch.value,
           is_primary: !!ch.is_primary,
         })))
+        loadedChildIds.current = {
+          addresses: addrs.map((a) => a.id),
+          phones: chans.filter((ch) => ch.kind === 'phone').map((ch) => ch.id),
+          people: persons.map((pr) => pr.id),
+        }
         setPeople(persons.map((pr): DraftPerson => ({
+          id: pr.id,
           name: pr.name,
           role: pr.role ?? '',
           name2: pr.name2 ?? '',
@@ -418,7 +436,43 @@ export function ContactNewPage({
         const { opening_ar_amount, opening_ar_side, opening_ap_amount, opening_ap_side, ...editable } = payload
         void opening_ar_amount; void opening_ar_side; void opening_ap_amount; void opening_ap_side
         await updateContact(token, contactId!, editable)
-        setMsg({ text: `طرف‌حساب «${displayName}» به‌روز شد.`, kind: 'ok' })
+
+        //: **ردیف‌های فرزند هم باید بروند.** تا پیش از این، `submit` در ویرایش
+        //: همین‌جا برمی‌گشت: کاربر نشانی اضافه می‌کرد، پیامِ «به‌روز شد»
+        //: می‌گرفت، و ردیفش **بی‌صدا دور ریخته می‌شد**. اندپوینت‌ها فقط
+        //: POST/DELETE دارند (نه PATCH) و تب‌ها ویرایشِ درجا ندارند، پس تفاضلِ
+        //: شناسه کافی است: بی‌شناسه‌ها تازه‌اند، شناسه‌های غایب حذف شده‌اند.
+        const failed: string[] = []
+        const kept = {
+          addresses: new Set(addresses.map((a) => a.id).filter(Boolean) as string[]),
+          phones: new Set(phones.map((x) => x.id).filter(Boolean) as string[]),
+          people: new Set(people.map((x) => x.id).filter(Boolean) as string[]),
+        }
+        for (const id of loadedChildIds.current.addresses.filter((i) => !kept.addresses.has(i))) {
+          try { await deleteContactAddress(token, contactId!, id) } catch { failed.push('حذفِ نشانی') }
+        }
+        for (const id of loadedChildIds.current.phones.filter((i) => !kept.phones.has(i))) {
+          try { await deleteContactChannel(token, contactId!, id) } catch { failed.push('حذفِ تلفن') }
+        }
+        for (const id of loadedChildIds.current.people.filter((i) => !kept.people.has(i))) {
+          try { await deleteRelatedPerson(token, id) } catch { failed.push('حذفِ فردِ مرتبط') }
+        }
+        for (const a of addresses.filter((x) => !x.id)) {
+          try { await addContactAddress(token, contactId!, a) } catch { failed.push(a.address || a.title) }
+        }
+        for (const x of phones.filter((y) => !y.id)) {
+          try { await addContactChannel(token, contactId!, { kind: 'phone', ...x }) } catch { failed.push(x.value) }
+        }
+        for (const x of people.filter((y) => !y.id)) {
+          try { await createRelatedPerson(token, { contact_id: contactId!, ...x }) } catch { failed.push(x.name) }
+        }
+
+        setMsg({
+          text: failed.length
+            ? `طرف‌حساب «${displayName}» به‌روز شد، ولی این ردیف‌ها ثبت/حذف نشدند: ${failed.join('، ')}`
+            : `طرف‌حساب «${displayName}» به‌روز شد.`,
+          kind: failed.length ? 'err' : 'ok',
+        })
         setBusy(false)
         return
       }
