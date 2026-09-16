@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ClipboardList, Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers, Pencil, X, Power, ReceiptText } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Factory, FlaskConical, Plus, Save, Trash2, Hammer, Package, Layers, Pencil, X, Power, ReceiptText } from 'lucide-react'
 import {
   changeProductionPlanStatus,
   createBom,
@@ -11,12 +11,14 @@ import {
   fetchItemsLive,
   fetchProductionOrders,
   fetchProductionPlans,
+  fetchStockLevels,
   fetchWarehousesLive,
   type BomRecord,
   type ItemRecord,
   type ProductionOrderRecord,
   type ProductionPlanRecord,
   type ProductionPlanStatus,
+  type StockLevel,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { NumberInput } from '../components/NumberInput'
@@ -50,6 +52,10 @@ const PLAN_TRANSITIONS: Record<ProductionPlanStatus, ProductionPlanStatus[]> = {
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
+//: فقط سفارش‌هایی که واقعاً «باز و در جریان»اند مواد رزرو می‌کنند — پیش‌نویس هنوز
+//: قطعی نشده، تمام/لغوشده دیگر چیزی نمی‌خواهد.
+const RESERVING_PLAN_STATUSES = new Set<ProductionPlanStatus>(['started', 'in_progress', 'stopped'])
+
 // بهای تمام‌شده‌ی هر واحدِ محصول از میانگینِ موزونِ اجزا (÷ بازده)
 function bomUnitCost(bom: BomRecord, itemById: Map<string, ItemRecord>): number {
   const yieldQty = Number(bom.yield_qty) || 1
@@ -67,23 +73,26 @@ export function ManufacturingPage({ token }: { token: string }) {
   const [boms, setBoms] = useState<BomRecord[]>([])
   const [plans, setPlans] = useState<ProductionPlanRecord[]>([])
   const [orders, setOrders] = useState<ProductionOrderRecord[]>([])
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
   const [error, setError] = useState<string | null>(null)
 
   async function refresh() {
     setError(null)
     try {
-      const [its, ws, bs, ps, os] = await Promise.all([
+      const [its, ws, bs, ps, os, sl] = await Promise.all([
         fetchItemsLive(token),
         fetchWarehousesLive(token),
         fetchBoms(token),
         fetchProductionPlans(token),
         fetchProductionOrders(token),
+        fetchStockLevels(token),
       ])
       setItems(its)
       setWarehouses(ws)
       setBoms(bs)
       setPlans(ps)
       setOrders(os)
+      setStockLevels(sl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -125,7 +134,7 @@ export function ManufacturingPage({ token }: { token: string }) {
         tabs={[
           { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical, content: <BomsTab token={token} boms={boms} goodsItems={goodsItems} itemById={itemById} onChanged={refresh} /> },
           { key: 'orders', label: 'سفارش تولید', icon: ClipboardList, content: <OrdersTab token={token} boms={boms} plans={plans} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
-          { key: 'documents', label: 'سند تولید', icon: Hammer, content: <DocumentsTab token={token} boms={boms} plans={plans} orders={orders} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
+          { key: 'documents', label: 'سند تولید', icon: Hammer, content: <DocumentsTab token={token} boms={boms} plans={plans} orders={orders} warehouses={warehouses} itemById={itemById} stockLevels={stockLevels} onChanged={refresh} /> },
         ]}
       />
     </div>
@@ -570,6 +579,7 @@ function DocumentsTab({
   orders,
   warehouses,
   itemById,
+  stockLevels,
   onChanged,
 }: {
   token: string
@@ -578,6 +588,7 @@ function DocumentsTab({
   orders: ProductionOrderRecord[]
   warehouses: { id: string; name: string }[]
   itemById: Map<string, ItemRecord>
+  stockLevels: StockLevel[]
   onChanged: () => Promise<void>
 }) {
   const [planId, setPlanId] = useState('')
@@ -624,6 +635,47 @@ function DocumentsTab({
     const total = componentCost + (Number(overhead) || 0)
     return { componentCost, total, unit: total / Number(qty) }
   }, [selectedBom, qty, overhead, itemById])
+
+  //: چقدر از هر جزء را سفارش‌های بازِ *دیگر* (نه خودِ این سند) در همین انبار لازم
+  //: دارند — مبنای هشدارِ «جلوگیری از خروجِ مواد».
+  const reservedByOtherPlans = useMemo(() => {
+    const reserved = new Map<string, number>()
+    if (!warehouseId) return reserved
+    for (const p of plans) {
+      if (p.id === planId) continue
+      if (p.warehouse_id !== warehouseId) continue
+      if (!RESERVING_PLAN_STATUSES.has(p.status)) continue
+      const remaining = Number(p.qty_planned) - Number(p.qty_produced)
+      if (remaining <= 0) continue
+      const b = boms.find((x) => x.id === p.bom_id)
+      if (!b) continue
+      const batches = remaining / (Number(b.yield_qty) || 1)
+      for (const l of b.lines) {
+        reserved.set(l.component_item_id, (reserved.get(l.component_item_id) ?? 0) + Number(l.qty) * batches)
+      }
+    }
+    return reserved
+  }, [plans, boms, warehouseId, planId])
+
+  //: هشدار (نه قفل): بعدِ این سند برای این جزء چیزی نمی‌ماند که سفارش‌های بازِ
+  //: دیگر رویش حساب کرده‌اند — کاربر می‌تواند آگاهانه ادامه دهد.
+  const materialWarnings = useMemo(() => {
+    if (!selectedBom || !(Number(qty) > 0) || !warehouseId) return []
+    const batches = Number(qty) / (Number(selectedBom.yield_qty) || 1)
+    const rows: { name: string; remaining: number; reserved: number }[] = []
+    for (const l of selectedBom.lines) {
+      const reserved = reservedByOtherPlans.get(l.component_item_id) ?? 0
+      if (reserved <= 0) continue
+      const need = Number(l.qty) * batches
+      const stock = stockLevels.find((s) => s.item_id === l.component_item_id && s.warehouse_id === warehouseId)
+      const available = stock ? Number(stock.qty) : 0
+      const remainingAfter = available - need
+      if (remainingAfter < reserved) {
+        rows.push({ name: itemById.get(l.component_item_id)?.name ?? '؟', remaining: remainingAfter, reserved })
+      }
+    }
+    return rows
+  }, [selectedBom, qty, warehouseId, stockLevels, reservedByOtherPlans, itemById])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -727,6 +779,16 @@ function DocumentsTab({
                 <div className="pos-row"><span>بهای مواد اولیه</span><strong>{fa(preview.componentCost)}</strong></div>
                 {Number(overhead) > 0 && <div className="pos-row"><span>سربار</span><strong>{fa(Number(overhead))}</strong></div>}
                 <div className="pos-row pos-total"><span>بهای هر واحدِ محصول</span><strong>{fa(preview.unit)}</strong></div>
+              </div>
+            )}
+
+            {materialWarnings.length > 0 && (
+              <div className="credit-banner credit-banner--warn">
+                <AlertTriangle size={15} />
+                <span>این مواد رزروِ سفارش‌های بازِ دیگر است و بعدِ این سند کم می‌آید:</span>
+                <span className="credit-banner-alert">
+                  {materialWarnings.map((w) => `${w.name} (باقی می‌ماند: ${fa(w.remaining)}، رزروِ بقیه: ${fa(w.reserved)})`).join('؛ ')}
+                </span>
               </div>
             )}
 
