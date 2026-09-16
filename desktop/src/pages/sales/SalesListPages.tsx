@@ -51,6 +51,7 @@ import {
   type SalesReturnRecord,
   can,
   type MeResponse,
+  type SalesInvoiceRecord,
 } from '../../api'
 import type { ItemCache, WarehouseCache } from '../../electron.d'
 import { InvoiceDetail } from '../../components/InvoiceList'
@@ -60,6 +61,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { PriceRuleTable } from '../../components/PriceRuleTable'
 import { Pager, usePagination } from '../../components/Pager'
+import { SortBar, SortTh, useSort } from '../../components/SortControls'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { formatJalali, toFaDigits } from '../../lib/jalali'
 
@@ -175,7 +177,19 @@ export function SalesInvoiceListPage({
       .sort((a, b) => b.invoice_date.localeCompare(a.invoice_date))
   }, [list.data, status, search, names])
 
-  const pg = usePagination(rows, 20, `${range.from}${range.to}${contactId}${status}${search}`)
+  const sort = useSort<SalesInvoiceRecord>(
+    {
+      number: { label: 'شماره', get: (i) => i.number ?? 0, kind: 'number' },
+      date: { label: 'تاریخ', get: (i) => i.invoice_date },
+      contact: { label: 'طرف حساب', get: (i) => names.get(i.contact_id ?? '') ?? '' },
+      net: { label: 'خالص', get: (i) => Number(i.total_amount) || 0, kind: 'number' },
+      tax: { label: 'مالیات', get: (i) => Number(i.tax_amount) || 0, kind: 'number' },
+    },
+    'date',
+    'desc',
+  )
+  const sorted = useMemo(() => sort.apply(rows), [sort, rows])
+  const pg = usePagination(sorted, 20, `${range.from}${range.to}${contactId}${status}${search}${sort.resetKey}`)
   const net = rows.filter((i) => !i.voided_at).reduce((s, i) => s + Number(i.total_amount || 0), 0)
 
   return (
@@ -231,15 +245,16 @@ export function SalesInvoiceListPage({
           empty={rows.length === 0}
           emptyText="فاکتوری با این شرایط پیدا نشد."
         >
+          <SortBar sort={sort} />
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">
               <thead>
                 <tr>
-                  <th>شماره</th>
-                  <th>تاریخ</th>
-                  <th>طرف حساب</th>
-                  <th>خالص</th>
-                  <th>مالیات</th>
+                  <SortTh sort={sort} k="number">شماره</SortTh>
+                  <SortTh sort={sort} k="date">تاریخ</SortTh>
+                  <SortTh sort={sort} k="contact">طرف حساب</SortTh>
+                  <SortTh sort={sort} k="net">خالص</SortTh>
+                  <SortTh sort={sort} k="tax">مالیات</SortTh>
                   <th>وضعیت</th>
                   <th />
                 </tr>

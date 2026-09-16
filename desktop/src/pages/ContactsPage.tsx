@@ -31,6 +31,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { BulkImportPanel } from '../components/BulkImportPanel'
 import { Pager, usePagination } from '../components/Pager'
+import { SortBar, SortTh, useSort } from '../components/SortControls'
 import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
@@ -107,7 +108,20 @@ export function ContactsPage({ token }: { token: string }) {
       }),
     [contacts, filterType, filterActive, search],
   )
-  const contactsPg = usePagination(filteredContacts, 10, `${filterType}|${search}`)
+  //: `balanceOf` و `credit_limit` هر دو عددند ولی از دو جای متفاوت می‌آیند —
+  //: مانده مشتق از دو گزارشِ سنی است و سقف روی خودِ رکورد. مرتب‌سازی هر دو را
+  //: `number` می‌گیرد تا «۱۰۰» بعد از «۹» نیفتد.
+  const sort = useSort<ContactRecord>(
+    {
+      name: { label: 'نام', get: (c) => c.name },
+      type: { label: 'نوع', get: (c) => TYPE_LABELS[c.type] ?? c.type },
+      balance: { label: 'مانده', get: (c) => balanceOf(c.id), kind: 'number' },
+      credit: { label: 'سقف اعتبار', get: (c) => Number(c.credit_limit) || 0, kind: 'number' },
+    },
+    'name',
+  )
+  const sortedContacts = useMemo(() => sort.apply(filteredContacts), [sort, filteredContacts])
+  const contactsPg = usePagination(sortedContacts, 10, `${filterType}|${search}|${sort.resetKey}`)
 
   // شاخص‌های بالای صفحه — از همان داده‌ی موجود محاسبه می‌شوند
   const kpis = useMemo(() => {
@@ -335,15 +349,19 @@ export function ContactsPage({ token }: { token: string }) {
         {filteredContacts.length === 0 ? (
           <EmptyState icon={UsersRound} text="طرف حسابی ثبت نشده." />
         ) : (
+          <>
+          {/* زیرِ ۷۶۰px سرستون‌ها پنهان می‌شوند؛ بدونِ این نوار مرتب‌سازی در
+              موبایل هیچ راهی نداشت. همان حالت را می‌خورد، پس دو کنترل نیست. */}
+          <SortBar sort={sort} />
           <div className="entity-table-wrap">
             <div className="table-scroll">
               <table className="entity-table contacts-table cards-on-mobile">
                 <thead>
                   <tr>
-                    <th>نام</th>
-                    <th>نوع</th>
-                    <th>مانده</th>
-                    <th>سقف اعتبار</th>
+                    <SortTh sort={sort} k="name">نام</SortTh>
+                    <SortTh sort={sort} k="type">نوع</SortTh>
+                    <SortTh sort={sort} k="balance">مانده</SortTh>
+                    <SortTh sort={sort} k="credit">سقف اعتبار</SortTh>
                     <th></th>
                   </tr>
                 </thead>
@@ -405,6 +423,7 @@ export function ContactsPage({ token }: { token: string }) {
             </div>
             <Pager page={contactsPg.page} pageCount={contactsPg.pageCount} onChange={contactsPg.setPage} />
           </div>
+          </>
         )}
       </SectionCard>
     </div>
