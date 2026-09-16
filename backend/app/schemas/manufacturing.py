@@ -114,10 +114,56 @@ class ProductionPlanOut(BaseModel):
     planned_date: date
     qty_planned: Decimal
     qty_produced: Decimal
+    material_cost_issued: Decimal
     status: str
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+# ── تحویلِ مواد به تولید / رسیدِ محصول از تولید ──────────
+class ProductionMaterialIssueIn(BaseModel):
+    """تحویلِ موادِ اولیه‌ی یک سفارش (برنامه) به خطِ تولید.
+
+    مقدار پیش‌فرض باقی‌ماندهٔ برنامه است؛ `qty` فقط برای تحویلِ جزئی داده می‌شود.
+    """
+
+    issue_date: date
+    qty: Decimal | None = None
+
+    @field_validator("qty")
+    @classmethod
+    def qty_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("مقدار باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class ProductionReceiptIn(BaseModel):
+    receipt_date: date
+    qty: Decimal
+
+    @field_validator("qty")
+    @classmethod
+    def qty_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مقدار باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class ProductionCostCalcIn(BaseModel):
+    """محاسبه‌ی قیمتِ تمام‌شده — توزیعِ دستمزد و سربار روی محصولِ دریافت‌شده."""
+
+    calc_date: date
+    labor_cost: Decimal = Decimal(0)
+    overhead_cost: Decimal = Decimal(0)
+
+    @field_validator("labor_cost", "overhead_cost")
+    @classmethod
+    def nonneg(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("مبلغ نمی‌تواند منفی باشد")
+        return v
 
 
 # ── سندِ تولید (اجرا) ────────────────────────────────────

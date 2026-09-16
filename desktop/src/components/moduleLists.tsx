@@ -7,7 +7,6 @@ import {
   fetchIssueReturnLedger,
   fetchItemsLive,
   fetchLeads,
-  fetchProductionOrders,
   fetchProductionPlans,
   fetchPurchaseInvoicesOfKind,
   fetchPurchaseDeductionTypes,
@@ -561,11 +560,17 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       subtitle: day(r.planned_date),
       meta: faNum(r.qty_planned),
     })),
-    documents: def('اسناد تولید', fetchProductionOrders, (r) => ({
+    materials: def('حواله‌های موادِ تولید', (t) => fetchWarehouseIssueLedger(t, { issue_type: 'production' }), (r) => ({
       id: r.id,
-      title: `سند ${faNum(r.number)}`,
-      subtitle: day(r.production_date),
-      meta: faNum(r.qty_produced),
+      title: `حواله ${faNum(r.number ?? 0)}`,
+      subtitle: day(r.doc_date),
+      meta: faNum(r.total_qty),
+    })),
+    receipts: def('رسیدهای محصولِ تولید', (t) => fetchAllWarehouseReceipts(t, { receipt_type: 'production' }), (r) => ({
+      id: r.id,
+      title: `رسید ${faNum(r.number)}`,
+      subtitle: day(r.receipt_date),
+      meta: faNum(r.lines?.[0]?.qty ?? 0),
     })),
   },
   installments: {

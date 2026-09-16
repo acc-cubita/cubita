@@ -584,6 +584,7 @@ def create_warehouse_receipt(
         purchase_invoice_id=invoice.id if invoice is not None else None,
         warehouse_id=data.warehouse_id,
         receipt_type=data.receipt_type,
+        production_plan_id=data.production_plan_id,
         contact_id=data.contact_id if invoice is None else (data.contact_id or invoice.contact_id),
         carrier_id=data.carrier_id,
         freight_agent_id=data.freight_agent_id,

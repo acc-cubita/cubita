@@ -5076,6 +5076,8 @@ export interface ProductionPlanRecord {
   planned_date: string
   qty_planned: string
   qty_produced: string
+  /** جمعِ بهای حواله‌های موادِ متصل — مبنای بهای رسیدِ محصول. */
+  material_cost_issued: string
   status: ProductionPlanStatus
   notes: string
 }
@@ -5112,6 +5114,28 @@ export const createProductionPlan = (token: string, data: ProductionPlanIn, idem
   authedSend<ProductionPlanRecord>(token, 'POST', '/api/production-plans', data, idempotencyKey)
 export const changeProductionPlanStatus = (token: string, planId: string, status: ProductionPlanStatus) =>
   authedSend<ProductionPlanRecord>(token, 'PATCH', `/api/production-plans/${planId}/status`, { status })
+
+// ── تحویلِ مواد به تولید / رسیدِ محصول از تولید / محاسبه قیمت تمام‌شده ──
+export const issueMaterialsToProduction = (
+  token: string,
+  planId: string,
+  data: { issue_date: string; qty?: number | null },
+  idempotencyKey?: string,
+) => authedSend<WarehouseIssueRecord>(token, 'POST', `/api/production-plans/${planId}/issue-materials`, data, idempotencyKey)
+
+export const receiveProductionOutput = (
+  token: string,
+  planId: string,
+  data: { receipt_date: string; qty: number },
+  idempotencyKey?: string,
+) => authedSend<WarehouseReceiptFull>(token, 'POST', `/api/production-plans/${planId}/receive-output`, data, idempotencyKey)
+
+export const calculateProductionCost = (
+  token: string,
+  planId: string,
+  data: { calc_date: string; labor_cost?: number; overhead_cost?: number },
+  idempotencyKey?: string,
+) => authedSend<ProductionPlanRecord>(token, 'POST', `/api/production-plans/${planId}/calculate-cost`, data, idempotencyKey)
 
 export const fetchProductionOrders = (token: string) => authedGetAll<ProductionOrderRecord>(token, '/api/production-orders')
 export const createProductionOrder = (
@@ -7786,6 +7810,7 @@ export interface WarehouseIssueRecord {
   receiver_id: string | null
   source_quotation_id: string | null
   cost_center_id: string | null
+  production_plan_id: string | null
   status: string
   description: string
   journal_entry_id: string | null
@@ -7906,6 +7931,7 @@ export interface WarehouseReceiptFull {
   duty_amount: string
   net_amount: string
   journal_entry_id: string | null
+  production_plan_id: string | null
   status: string
   description: string
   description2: string
@@ -8334,6 +8360,7 @@ export const fetchPreinvoiceProgress = (token: string, scope: SalesReviewScope =
 export const WAREHOUSE_ISSUE_TYPE_LABELS: Record<string, string> = {
   sale: 'فروش',
   consumption: 'مصرف',
+  production: 'تحویل به تولید',
   other: 'سایر',
   transfer: 'انتقال بین انبار',
 }

@@ -238,3 +238,209 @@ def test_the_api_creates_and_lists_plans_filtered_by_status(client):
 
     started = client.get("/api/production-plans", params={"status": "started", "limit": 200}).json()["items"]
     assert first.json()["id"] not in {row["id"] for row in started}
+
+
+# ─────────────────── تحویلِ مواد / رسیدِ محصول / محاسبه‌ی بها ───────────────────
+
+
+def _started_plan(client, key, wh, bom_id, qty=10):
+    plan = client.post(
+        "/api/production-plans",
+        json={"bom_id": bom_id, "warehouse_id": wh, "planned_date": TODAY, "qty_planned": qty},
+        headers={"Idempotency-Key": key},
+    ).json()
+    r = client.patch(f"/api/production-plans/{plan['id']}/status", json={"status": "started"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_issuing_materials_makes_a_real_warehouse_issue_and_debits_wip(client):
+    wh = _wh(client)
+    a = _item(client, "MI-A", "جزء الف")
+    fin = _item(client, "MI-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 2}]}).json()
+    plan = _started_plan(client, "mi-plan-1", wh, bom["id"], qty=10)
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/issue-materials",
+        json={"issue_date": TODAY},
+        headers={"Idempotency-Key": "mi-issue-1"},
+    )
+    assert r.status_code == 201, r.text
+    d = r.json()
+    assert d["issue_type"] == "production"
+    assert d["production_plan_id"] == plan["id"]
+    assert float(d["total_qty"]) == 20  # ۲×۱۰ (کلِ باقی‌مانده، چون qty داده نشده)
+    assert float(d["total_cost"]) == 20000  # ۲۰×۱۰۰۰
+
+    #: حواله در فهرستِ عمومیِ خروج‌ها هم دیده می‌شود — یک موتور، نه دو.
+    issues = client.get("/api/warehouse-issues", params={"issue_type": "production", "limit": 200}).json()
+    rows = issues["items"] if isinstance(issues, dict) else issues
+    assert any(row["id"] == d["id"] for row in rows)
+
+    #: موجودیِ جزء کم شده؛ محصول هنوز وارد نشده (رسید جدا است).
+    assert _stock(client).get(a) == 80  # ۱۰۰ − ۲۰
+    assert _stock(client).get(fin) is None
+
+    updated_plan = [p for p in client.get("/api/production-plans", params={"limit": 200}).json()["items"] if p["id"] == plan["id"]][0]
+    assert float(updated_plan["material_cost_issued"]) == 20000
+
+
+def test_issuing_materials_rejects_qty_beyond_remaining(client):
+    wh = _wh(client)
+    a = _item(client, "MIQ-A", "جزء")
+    fin = _item(client, "MIQ-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = _started_plan(client, "miq-plan-1", wh, bom["id"], qty=5)
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/issue-materials",
+        json={"issue_date": TODAY, "qty": 6},
+        headers={"Idempotency-Key": "miq-issue-1"},
+    )
+    assert r.status_code == 400
+
+
+def test_issuing_materials_rejects_a_draft_plan(client):
+    wh = _wh(client)
+    a = _item(client, "MID-A", "جزء")
+    fin = _item(client, "MID-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = client.post(
+        "/api/production-plans",
+        json={"bom_id": bom["id"], "warehouse_id": wh, "planned_date": TODAY, "qty_planned": 5},
+        headers={"Idempotency-Key": "mid-plan-1"},
+    ).json()
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/issue-materials",
+        json={"issue_date": TODAY},
+        headers={"Idempotency-Key": "mid-issue-1"},
+    )
+    assert r.status_code == 409
+
+
+def test_receiving_output_makes_a_real_warehouse_receipt_priced_from_issued_material(client):
+    wh = _wh(client)
+    a = _item(client, "MR-A", "جزء")
+    fin = _item(client, "MR-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 2}]}).json()
+    plan = _started_plan(client, "mr-plan-1", wh, bom["id"], qty=10)
+
+    client.post(
+        f"/api/production-plans/{plan['id']}/issue-materials",
+        json={"issue_date": TODAY},
+        headers={"Idempotency-Key": "mr-issue-1"},
+    )
+
+    #: رسیدِ جزئی: نیمی از برنامه.
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/receive-output",
+        json={"receipt_date": TODAY, "qty": 4},
+        headers={"Idempotency-Key": "mr-receipt-1"},
+    )
+    assert r.status_code == 201, r.text
+    d = r.json()
+    assert d["receipt_type"] == "production"
+    assert d["production_plan_id"] == plan["id"]
+    #: نرخِ واحد = کلِ موادِ تحویل‌شده (۲۰۰۰۰) ÷ تعدادِ برنامه (۱۰) = ۲۰۰۰
+    assert float(d["lines"][0]["unit_cost"]) == 2000
+
+    assert _avg_cost(client, fin) == 2000
+    assert _stock(client).get(fin) == 4
+
+    updated_plan = [p for p in client.get("/api/production-plans", params={"limit": 200}).json()["items"] if p["id"] == plan["id"]][0]
+    assert float(updated_plan["qty_produced"]) == 4
+
+    #: رسیدِ دوم برای باقی‌ماندهٔ برنامه، همان نرخ.
+    r2 = client.post(
+        f"/api/production-plans/{plan['id']}/receive-output",
+        json={"receipt_date": TODAY, "qty": 6},
+        headers={"Idempotency-Key": "mr-receipt-2"},
+    )
+    assert r2.status_code == 201, r2.text
+    assert float(r2.json()["lines"][0]["unit_cost"]) == 2000
+    assert _stock(client).get(fin) == 10
+
+
+def test_receiving_output_rejects_qty_beyond_remaining(client):
+    wh = _wh(client)
+    a = _item(client, "MRQ-A", "جزء")
+    fin = _item(client, "MRQ-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = _started_plan(client, "mrq-plan-1", wh, bom["id"], qty=5)
+    client.post(f"/api/production-plans/{plan['id']}/issue-materials", json={"issue_date": TODAY}, headers={"Idempotency-Key": "mrq-issue-1"})
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/receive-output",
+        json={"receipt_date": TODAY, "qty": 6},
+        headers={"Idempotency-Key": "mrq-receipt-1"},
+    )
+    assert r.status_code == 400
+
+
+def test_calculating_cost_distributes_labor_and_overhead_onto_average_cost(client):
+    wh = _wh(client)
+    a = _item(client, "MC-A", "جزء")
+    fin = _item(client, "MC-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = _started_plan(client, "mc-plan-1", wh, bom["id"], qty=10)
+    client.post(f"/api/production-plans/{plan['id']}/issue-materials", json={"issue_date": TODAY}, headers={"Idempotency-Key": "mc-issue-1"})
+    client.post(
+        f"/api/production-plans/{plan['id']}/receive-output",
+        json={"receipt_date": TODAY, "qty": 10},
+        headers={"Idempotency-Key": "mc-receipt-1"},
+    )
+    assert _avg_cost(client, fin) == 1000  # فقط بهای مواد تا این‌جا
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/calculate-cost",
+        json={"calc_date": TODAY, "labor_cost": 3000, "overhead_cost": 2000},
+        headers={"Idempotency-Key": "mc-calc-1"},
+    )
+    assert r.status_code == 201, r.text
+    #: (۳۰۰۰+۲۰۰۰)/۱۰ = ۵۰۰ روی هر واحد اضافه می‌شود
+    assert _avg_cost(client, fin) == 1500
+
+
+def test_calculating_cost_rejects_when_nothing_received_yet(client):
+    wh = _wh(client)
+    a = _item(client, "MCN-A", "جزء")
+    fin = _item(client, "MCN-FIN", "محصول")
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = _started_plan(client, "mcn-plan-1", wh, bom["id"], qty=5)
+
+    r = client.post(
+        f"/api/production-plans/{plan['id']}/calculate-cost",
+        json={"calc_date": TODAY, "labor_cost": 1000},
+        headers={"Idempotency-Key": "mcn-calc-1"},
+    )
+    assert r.status_code == 400
+
+
+def test_calculating_cost_double_submit_is_idempotent(client):
+    wh = _wh(client)
+    a = _item(client, "MCI-A", "جزء")
+    fin = _item(client, "MCI-FIN", "محصول")
+    _buy(client, wh, a, 100, 1000)
+    bom = client.post("/api/boms", json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": 1}]}).json()
+    plan = _started_plan(client, "mci-plan-1", wh, bom["id"], qty=10)
+    client.post(f"/api/production-plans/{plan['id']}/issue-materials", json={"issue_date": TODAY}, headers={"Idempotency-Key": "mci-issue-1"})
+    client.post(
+        f"/api/production-plans/{plan['id']}/receive-output",
+        json={"receipt_date": TODAY, "qty": 10},
+        headers={"Idempotency-Key": "mci-receipt-1"},
+    )
+
+    body = {"calc_date": TODAY, "labor_cost": 1000}
+    headers = {"Idempotency-Key": "mci-calc-1"}
+    client.post(f"/api/production-plans/{plan['id']}/calculate-cost", json=body, headers=headers)
+    client.post(f"/api/production-plans/{plan['id']}/calculate-cost", json=body, headers=headers)
+    #: دوبار کلیک نباید دستمزد را دوبار روی بها بنشاند.
+    assert _avg_cost(client, fin) == 1100  # ۱۰۰۰ + ۱۰۰۰/۱۰

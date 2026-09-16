@@ -469,6 +469,9 @@ class WarehouseReceiptIn(BaseModel):
     #: گرفته می‌شود؛ آن مالیات را فاکتور شناخته است (§۳۷).
     tax_rate: Decimal = Decimal(0)
 
+    #: فقط رسیدِ «تولید» که `manufacturing.receive_production_output` می‌سازد.
+    production_plan_id: UUID | None = None
+
     description: str = ""
     description2: str = ""
     lines: list[WarehouseReceiptLineIn]
@@ -570,6 +573,8 @@ class WarehouseReceiptOut(BaseModel):
     #: §۴۴ — «اثرِ حسابداری» جدا از «اثرِ انباری». `None` یعنی این رسید سند
     #: نزده، چون فاکتورش بدهی را شناخته است.
     journal_entry_id: UUID | None = None
+    #: خالی مگر رسیدِ «رسیدِ محصول از تولید».
+    production_plan_id: UUID | None = None
     status: str
     description: str = ""
     description2: str = ""
@@ -623,7 +628,10 @@ class WarehouseIssueIn(BaseModel):
 
 
 #: نوع‌هایی که از این مسیر ثبت می‌شوند. «انتقال بین انبار» مسیرِ خودش را دارد.
-DIRECT_ISSUE_TYPES = ("sale", "consumption", "other")
+DIRECT_ISSUE_TYPES = ("sale", "consumption", "production", "other")
+#: طرفِ بدهکارِ این دو نوع همیشه خودکار است، نه انتخابِ کاربر — «فروش» بهای
+#: تمام‌شده و «تحویل به تولید» کالای در جریان ساخت.
+_AUTO_ACCOUNT_ISSUE_TYPES = ("sale", "production")
 
 
 class DirectWarehouseIssueIn(BaseModel):
@@ -637,6 +645,8 @@ class DirectWarehouseIssueIn(BaseModel):
     cost_center_id: UUID | None = None
     #: معینِ پیش‌فرضِ ردیف‌های «مصرف» و «سایر»؛ هر ردیف می‌تواند حسابِ خودش را بدهد.
     account_id: UUID | None = None
+    #: فقط خروجِ «تحویل به تولید» که `manufacturing.issue_materials_to_production` می‌سازد.
+    production_plan_id: UUID | None = None
     description: str = ""
     lines: list[WarehouseIssueLineIn]
 
@@ -654,9 +664,10 @@ class DirectWarehouseIssueIn(BaseModel):
             #: §۳ — در خروجِ فروش «تحویل‌گیرنده» اجباری است.
             if self.receiver_id is None:
                 raise ValueError("برای خروجِ فروش، تحویل‌گیرنده را مشخص کنید")
+        if self.issue_type in _AUTO_ACCOUNT_ISSUE_TYPES:
             if self.account_id is not None or any(line.account_id for line in self.lines):
                 raise ValueError(
-                    "طرفِ بدهکارِ خروجِ فروش بهای تمام‌شده‌ی کالای فروش‌رفته است و انتخاب نمی‌شود"
+                    "طرفِ بدهکارِ این نوع خروج خودکار تعیین می‌شود و انتخاب نمی‌شود"
                 )
         else:
             if self.source_quotation_id is not None:
@@ -698,6 +709,8 @@ class WarehouseIssueOut(BaseModel):
     receiver_id: UUID | None = None
     source_quotation_id: UUID | None = None
     cost_center_id: UUID | None = None
+    #: خالی مگر خروجِ «تحویل به تولید».
+    production_plan_id: UUID | None = None
     status: str
     description: str = ""
     journal_entry_id: UUID | None = None

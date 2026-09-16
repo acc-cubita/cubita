@@ -27,7 +27,7 @@ from app.services.printing import PRINT_TEMPLATES, render_issue_permit
 
 router = APIRouter(tags=["warehouse-issues"])
 
-_LIST_TYPES = ("sale", "consumption", "other", "transfer")
+_LIST_TYPES = ("sale", "consumption", "production", "other", "transfer")
 
 
 def _get_issue(db: Session, issue_id: UUID) -> WarehouseIssue:
