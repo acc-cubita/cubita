@@ -34,6 +34,8 @@ import {
   Target,
   Ticket,
   Undo2,
+  UserCheck,
+  TrendingDown,
   Users,
   UsersRound,
   Warehouse,
@@ -121,6 +123,13 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle },
     { key: 'kardex', label: 'کاردکس تولید', icon: History },
     { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart },
+  ],
+  fixedassets: [
+    { key: 'assets', label: 'کارت دارایی', icon: Landmark },
+    { key: 'placement', label: 'تحویل و استقرار', icon: UserCheck },
+    { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight },
+    { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History },
+    { key: 'depreciation', label: 'استهلاک دوره', icon: TrendingDown },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },

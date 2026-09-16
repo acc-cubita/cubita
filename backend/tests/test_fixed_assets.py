@@ -92,3 +92,94 @@ def test_acquisition_without_funding_posts_no_entry(db, user):
     """بدونِ حسابِ تأمین (دارایی از قبل در دفاتر/آورده)، سندی زده نمی‌شود — رفتارِ قبلی حفظ می‌شود."""
     _make_asset(db, user, cost=1_200_000)
     assert db.query(JournalEntry).filter(JournalEntry.source_type == "asset_acquisition").count() == 0
+
+
+# ─────────────────── تحویل/استقرار و جابه‌جایی ───────────────────
+
+
+def _assign_in(**kw):
+    from app.schemas.assets import AssetAssignmentIn
+
+    kw.setdefault("assignment_date", date(2026, 2, 1))
+    return AssetAssignmentIn(**kw)
+
+
+def test_placement_records_the_custodian_on_the_asset(db, user):
+    from tests.factories import make_contact
+
+    asset = _make_asset(db, user)
+    ali = make_contact(db, name="علی")
+
+    out = svc.place_asset(db, asset["id"], _assign_in(to_custodian_id=ali.id, to_location="دفتر مرکزی"), user)
+    assert out["custodian_id"] == ali.id
+    assert out["custodian_name"] == "علی"
+    assert out["location"] == "دفتر مرکزی"
+
+    history = svc.list_assignments(db, asset_id=asset["id"])
+    assert len(history) == 1
+    assert history[0]["kind"] == "placement"
+    assert history[0]["from_custodian_id"] is None  # اولین استقرار مبدأ ندارد
+
+
+def test_transfer_keeps_both_ends_of_the_move(db, user):
+    """«از چه کسی به چه کسی» باید روی خودِ ردیف باشد، نه حدس از ردیفِ قبلی."""
+    from tests.factories import make_contact
+
+    asset = _make_asset(db, user)
+    ali, reza = make_contact(db, name="علی"), make_contact(db, name="رضا")
+
+    svc.place_asset(db, asset["id"], _assign_in(to_custodian_id=ali.id, to_location="انبار"), user)
+    out = svc.transfer_asset(
+        db, asset["id"], _assign_in(assignment_date=date(2026, 3, 1), to_custodian_id=reza.id, to_location="کارگاه"), user
+    )
+    assert out["custodian_name"] == "رضا"
+    assert out["location"] == "کارگاه"
+
+    history = svc.list_assignments(db, asset_id=asset["id"])
+    move = next(h for h in history if h["kind"] == "transfer")
+    assert move["from_custodian_name"] == "علی"
+    assert move["from_location"] == "انبار"
+    assert move["to_custodian_name"] == "رضا"
+    assert move["to_location"] == "کارگاه"
+
+
+def test_a_location_only_move_does_not_clear_the_custodian(db, user):
+    """جابه‌جاییِ محل نباید جمعدار را پاک کند — فیلدِ خالی یعنی «دست نزن»."""
+    from tests.factories import make_contact
+
+    asset = _make_asset(db, user)
+    ali = make_contact(db, name="علی")
+    svc.place_asset(db, asset["id"], _assign_in(to_custodian_id=ali.id, to_location="انبار"), user)
+
+    out = svc.transfer_asset(db, asset["id"], _assign_in(assignment_date=date(2026, 3, 1), to_location="کارگاه"), user)
+    assert out["location"] == "کارگاه"
+    assert out["custodian_id"] == ali.id
+
+
+def test_a_disposed_asset_cannot_be_moved(db, user):
+    from tests.factories import make_contact
+
+    asset = _make_asset(db, user)
+    svc.dispose_asset(db, asset["id"], date(2026, 6, 1))
+    ali = make_contact(db, name="علی")
+
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as err:
+        svc.transfer_asset(db, asset["id"], _assign_in(assignment_date=date(2026, 7, 1), to_custodian_id=ali.id), user)
+    assert err.value.status_code == 409
+
+
+def test_an_assignment_before_acquisition_is_rejected(db, user):
+    from tests.factories import make_contact
+
+    asset = _make_asset(db, user, acquired=date(2026, 5, 1))
+    ali = make_contact(db, name="علی")
+
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as err:
+        svc.place_asset(db, asset["id"], _assign_in(assignment_date=date(2026, 4, 1), to_custodian_id=ali.id), user)
+    assert err.value.status_code == 400

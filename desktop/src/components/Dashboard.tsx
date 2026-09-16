@@ -24,7 +24,6 @@ import { StorefrontGallery } from './StorefrontGallery'
 import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
 import { FixedAssetsPanel } from './FixedAssetsPanel'
-import { FixedAssetWizard } from './wizard/FixedAssetWizard'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
 import { GuidedDashboard } from './GuidedDashboard'
@@ -671,7 +670,7 @@ export function Dashboard({
                 title="دارایی ثابت"
                 description="اموال و دارایی‌های سرمایه‌ای را ثبت کنید؛ استهلاکِ دوره‌ای و اسنادِ مرتبط خودکار محاسبه و صادر می‌شود."
               />
-              {theme.content === 'guided' ? <FixedAssetWizard token={token} /> : <FixedAssetsPanel token={token} />}
+              <FixedAssetsPanel token={token} guided={theme.content === 'guided'} />
             </div>
           )}
           {/* ── ماژولِ «حسابداری» — هجده عملیات و شش فهرست ── */}

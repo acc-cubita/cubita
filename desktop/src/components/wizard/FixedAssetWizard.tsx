@@ -1,15 +1,15 @@
-import { useFixedAssetDraft, type FixedAssetDraft } from '../../lib/fixedAssetDraft'
-import { FixedAssetFields, FixedAssetsList, DepreciationRun } from '../FixedAssetsPanel'
-import { SectionCard } from '../SectionCard'
-import { Landmark } from 'lucide-react'
+import { type FixedAssetDraft } from '../../lib/fixedAssetDraft'
+import { FixedAssetFields } from '../FixedAssetsPanel'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
-/** ویزاردِ «دارایی ثابت» — مشخصات ← بها و استهلاک + پیش‌نمایشِ زنده؛ فهرست و اجرای استهلاک زیرِ ویزارد. */
-export function FixedAssetWizard({ token }: { token: string }) {
-  const d = useFixedAssetDraft({ token })
-
+/** فرمِ گام‌به‌گامِ «دارایی ثابت» — مشخصات ← بها و استهلاک، با پیش‌نمایشِ زنده.
+ *
+ *  **درفت را از بیرون می‌گیرد، نه اینکه خودش بسازد.** تبِ «کارت دارایی» در
+ *  پوسته‌ی راهنما همین را به‌جای فرمِ کلاسیک نشان می‌دهد؛ اگر درفتِ خودش را
+ *  می‌ساخت، فهرست و تاریخچه‌ی همان صفحه با ثبتِ تازه به‌روز نمی‌شد. */
+export function FixedAssetWizardFlow({ d }: { d: FixedAssetDraft }) {
   const steps: WizardStep[] = [
     {
       key: 'identity',
@@ -38,22 +38,16 @@ export function FixedAssetWizard({ token }: { token: string }) {
   ]
 
   return (
-    <>
-      <TaskFlow
-        title={d.editingId ? 'ویرایشِ دارایی ثابت' : 'ثبتِ داراییِ ثابتِ جدید'}
-        steps={steps}
-        submitLabel={d.editingId ? 'ذخیره' : 'ثبت دارایی'}
-        submitting={d.submitting}
-        message={d.formMsg}
-        resetKey={d.formVersion}
-        preview={<LivePreview d={d} />}
-        onSubmit={() => void d.submit()}
-      />
-      <SectionCard icon={Landmark} title="فهرست دارایی‌ها" description={`${fa(d.assets.length)} قلم دارایی`}>
-        <FixedAssetsList d={d} />
-      </SectionCard>
-      <DepreciationRun d={d} />
-    </>
+    <TaskFlow
+      title={d.editingId ? 'ویرایشِ دارایی ثابت' : 'ثبتِ داراییِ ثابتِ جدید'}
+      steps={steps}
+      submitLabel={d.editingId ? 'ذخیره' : 'ثبت دارایی'}
+      submitting={d.submitting}
+      message={d.formMsg}
+      resetKey={d.formVersion}
+      preview={<LivePreview d={d} />}
+      onSubmit={() => void d.submit()}
+    />
   )
 }
 
