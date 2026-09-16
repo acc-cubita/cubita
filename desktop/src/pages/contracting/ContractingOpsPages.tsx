@@ -29,6 +29,10 @@ import { formatJalali, todayIso } from '../../lib/jalali'
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR')
 
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : 'خطای ناشناخته'
+}
+
 const STATUS_LABELS: Record<ContractStatus, string> = {
   draft: 'پیش‌نویس',
   active: 'جاری',
@@ -68,17 +72,27 @@ export function ContractPage({ token }: { token: string }) {
   const [recent, setRecent] = useState<ContractRecord[]>([])
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [msg, setMsg] = useState<Msg>(null)
+  //: جدا از `msg` عمداً: `submit` بعد از پیامِ موفقیت `refresh` را صدا می‌زند، و
+  //: اگر خطای بارگذاری در همان جا بنشیند «ثبت شد» را پاک می‌کند — کاربر فکر
+  //: می‌کند ثبت نشده و دوباره می‌فرستد. کلیدِ یکتاسازی هر بار تازه ساخته
+  //: می‌شود، پس ارسالِ دوم رکوردِ دوم می‌سازد.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const [cs, ccs, rs] = await Promise.all([
-      fetchContacts(token),
-      fetchCostCenters(token),
-      fetchContracts(token),
-    ])
-    setContacts(cs)
-    setCostCenters(ccs)
-    setRecent(rs.slice(0, 8))
+    setLoadError(null)
+    try {
+      const [cs, ccs, rs] = await Promise.all([
+        fetchContacts(token),
+        fetchCostCenters(token),
+        fetchContracts(token),
+      ])
+      setContacts(cs)
+      setCostCenters(ccs)
+      setRecent(rs.slice(0, 8))
+    } catch (err) {
+      setLoadError(`${errText(err)} — فهرست‌های این صفحه پر نشد؛ صفحه را دوباره باز کنید.`)
+    }
   }
 
   useEffect(() => {
@@ -119,7 +133,7 @@ export function ContractPage({ token }: { token: string }) {
       setForm({ ...EMPTY_FORM })
       void refresh()
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+      setMsg({ kind: 'err', text: errText(err) })
     } finally {
       setBusy(false)
     }
@@ -200,6 +214,7 @@ export function ContractPage({ token }: { token: string }) {
               </button>
             </div>
           </form>
+          <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
           <Note msg={msg} />
         </SectionCard>
 
@@ -243,11 +258,21 @@ export function ContractStatusPage({ token }: { token: string }) {
   const [selectedId, setSelectedId] = useState('')
   const [newStatus, setNewStatus] = useState<ContractStatus | ''>('')
   const [msg, setMsg] = useState<Msg>(null)
+  //: جدا از `msg` عمداً: `submit` بعد از پیامِ موفقیت `refresh` را صدا می‌زند، و
+  //: اگر خطای بارگذاری در همان جا بنشیند «ثبت شد» را پاک می‌کند — کاربر فکر
+  //: می‌کند ثبت نشده و دوباره می‌فرستد. کلیدِ یکتاسازی هر بار تازه ساخته
+  //: می‌شود، پس ارسالِ دوم رکوردِ دوم می‌سازد.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const rows = await fetchContracts(token)
-    setContracts(rows)
+    setLoadError(null)
+    try {
+      const rows = await fetchContracts(token)
+      setContracts(rows)
+    } catch (err) {
+      setLoadError(`${errText(err)} — فهرست‌های این صفحه پر نشد؛ صفحه را دوباره باز کنید.`)
+    }
   }
 
   useEffect(() => {
@@ -267,7 +292,7 @@ export function ContractStatusPage({ token }: { token: string }) {
       setNewStatus('')
       void refresh()
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+      setMsg({ kind: 'err', text: errText(err) })
     } finally {
       setBusy(false)
     }
@@ -333,7 +358,8 @@ export function ContractStatusPage({ token }: { token: string }) {
             </button>
           </div>
         </form>
-        <Note msg={msg} />
+        <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
+          <Note msg={msg} />
       </SectionCard>
     </OpsPage>
   )
@@ -357,12 +383,22 @@ export function ContractAmendmentPage({ token }: { token: string }) {
   const [recent, setRecent] = useState<ContractAmendmentRecord[]>([])
   const [form, setForm] = useState({ ...EMPTY_AMENDMENT_FORM })
   const [msg, setMsg] = useState<Msg>(null)
+  //: جدا از `msg` عمداً: `submit` بعد از پیامِ موفقیت `refresh` را صدا می‌زند، و
+  //: اگر خطای بارگذاری در همان جا بنشیند «ثبت شد» را پاک می‌کند — کاربر فکر
+  //: می‌کند ثبت نشده و دوباره می‌فرستد. کلیدِ یکتاسازی هر بار تازه ساخته
+  //: می‌شود، پس ارسالِ دوم رکوردِ دوم می‌سازد.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractAmendments(token)])
-    setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
-    setRecent(rs.slice(0, 8))
+    setLoadError(null)
+    try {
+      const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractAmendments(token)])
+      setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
+      setRecent(rs.slice(0, 8))
+    } catch (err) {
+      setLoadError(`${errText(err)} — فهرست‌های این صفحه پر نشد؛ صفحه را دوباره باز کنید.`)
+    }
   }
 
   useEffect(() => {
@@ -400,7 +436,7 @@ export function ContractAmendmentPage({ token }: { token: string }) {
       setForm({ ...EMPTY_AMENDMENT_FORM })
       void refresh()
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+      setMsg({ kind: 'err', text: errText(err) })
     } finally {
       setBusy(false)
     }
@@ -460,6 +496,7 @@ export function ContractAmendmentPage({ token }: { token: string }) {
               </button>
             </div>
           </form>
+          <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
           <Note msg={msg} />
         </SectionCard>
 
@@ -509,12 +546,22 @@ export function ContractStatementPage({ token }: { token: string }) {
   const [recent, setRecent] = useState<ContractStatementRecord[]>([])
   const [form, setForm] = useState({ ...EMPTY_STATEMENT_FORM })
   const [msg, setMsg] = useState<Msg>(null)
+  //: جدا از `msg` عمداً: `submit` بعد از پیامِ موفقیت `refresh` را صدا می‌زند، و
+  //: اگر خطای بارگذاری در همان جا بنشیند «ثبت شد» را پاک می‌کند — کاربر فکر
+  //: می‌کند ثبت نشده و دوباره می‌فرستد. کلیدِ یکتاسازی هر بار تازه ساخته
+  //: می‌شود، پس ارسالِ دوم رکوردِ دوم می‌سازد.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractStatements(token)])
-    setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
-    setRecent(rs.slice(0, 8))
+    setLoadError(null)
+    try {
+      const [cs, rs] = await Promise.all([fetchContracts(token), fetchContractStatements(token)])
+      setContracts(cs.filter((c) => !CLOSED_STATUSES.includes(c.status)))
+      setRecent(rs.slice(0, 8))
+    } catch (err) {
+      setLoadError(`${errText(err)} — فهرست‌های این صفحه پر نشد؛ صفحه را دوباره باز کنید.`)
+    }
   }
 
   useEffect(() => {
@@ -561,7 +608,7 @@ export function ContractStatementPage({ token }: { token: string }) {
       setForm({ ...EMPTY_STATEMENT_FORM })
       void refresh()
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+      setMsg({ kind: 'err', text: errText(err) })
     } finally {
       setBusy(false)
     }
@@ -621,6 +668,7 @@ export function ContractStatementPage({ token }: { token: string }) {
               </button>
             </div>
           </form>
+          <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
           <Note msg={msg} />
         </SectionCard>
 
@@ -670,13 +718,23 @@ export function ContractSettlementPage({ token }: { token: string }) {
   const [previewStatements, setPreviewStatements] = useState<ContractStatementRecord[]>([])
   const [form, setForm] = useState({ ...EMPTY_SETTLEMENT_FORM })
   const [msg, setMsg] = useState<Msg>(null)
+  //: جدا از `msg` عمداً: `submit` بعد از پیامِ موفقیت `refresh` را صدا می‌زند، و
+  //: اگر خطای بارگذاری در همان جا بنشیند «ثبت شد» را پاک می‌کند — کاربر فکر
+  //: می‌کند ثبت نشده و دوباره می‌فرستد. کلیدِ یکتاسازی هر بار تازه ساخته
+  //: می‌شود، پس ارسالِ دوم رکوردِ دوم می‌سازد.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const [cs, ss] = await Promise.all([fetchContracts(token), fetchContractSettlements(token)])
-    setContracts(cs)
-    setSettlements(ss)
-    setRecent(ss.slice(0, 8))
+    setLoadError(null)
+    try {
+      const [cs, ss] = await Promise.all([fetchContracts(token), fetchContractSettlements(token)])
+      setContracts(cs)
+      setSettlements(ss)
+      setRecent(ss.slice(0, 8))
+    } catch (err) {
+      setLoadError(`${errText(err)} — فهرست‌های این صفحه پر نشد؛ صفحه را دوباره باز کنید.`)
+    }
   }
 
   useEffect(() => {
@@ -739,7 +797,7 @@ export function ContractSettlementPage({ token }: { token: string }) {
       setForm({ ...EMPTY_SETTLEMENT_FORM })
       void refresh()
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'خطای ناشناخته' })
+      setMsg({ kind: 'err', text: errText(err) })
     } finally {
       setBusy(false)
     }
@@ -817,6 +875,7 @@ export function ContractSettlementPage({ token }: { token: string }) {
               </button>
             </div>
           </form>
+          <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
           <Note msg={msg} />
         </SectionCard>
 
