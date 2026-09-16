@@ -6,9 +6,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalLine
-from app.models.assets import DepreciationEntry, FixedAsset
+from app.models.assets import AssetAssignment, DepreciationEntry, FixedAsset
+from app.models.cost_center import CostCenter
+from app.models.inventory import Contact
 from app.models.user import User
-from app.schemas.assets import FixedAssetIn
+from app.schemas.assets import AssetAssignmentIn, FixedAssetIn
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
@@ -58,9 +60,18 @@ def monthly_depreciation(asset: FixedAsset) -> Decimal:
     return (_depreciable_base(asset) / Decimal(asset.useful_life_months)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
 
-def to_out(asset: FixedAsset) -> dict:
+def _name_maps(db: Session) -> tuple[dict[UUID, str], dict[UUID, str]]:
+    """نامِ طرف‌حساب‌ها و مراکزِ هزینه، یک‌بار — تا `to_out` در فهرست N+1 نزند."""
+    contacts = {c.id: c.name for c in db.query(Contact.id, Contact.name).all()}
+    centers = {c.id: c.name for c in db.query(CostCenter.id, CostCenter.name).all()}
+    return contacts, centers
+
+
+def to_out(asset: FixedAsset, contacts: dict | None = None, centers: dict | None = None) -> dict:
     base = _depreciable_base(asset)
     accumulated = Decimal(asset.accumulated_depreciation)
+    contacts = contacts or {}
+    centers = centers or {}
     return {
         "id": asset.id,
         "name": asset.name,
@@ -77,7 +88,17 @@ def to_out(asset: FixedAsset) -> dict:
         "book_value": Decimal(asset.cost) - accumulated,
         "monthly_depreciation": monthly_depreciation(asset),
         "fully_depreciated": accumulated >= base,
+        "custodian_id": asset.custodian_id,
+        "custodian_name": contacts.get(asset.custodian_id, ""),
+        "location": asset.location,
+        "cost_center_id": asset.cost_center_id,
+        "cost_center_name": centers.get(asset.cost_center_id, ""),
     }
+
+
+def _out_with_names(db: Session, asset: FixedAsset) -> dict:
+    contacts, centers = _name_maps(db)
+    return to_out(asset, contacts, centers)
 
 
 def list_assets(db: Session, *, include_disposed: bool = True) -> list[dict]:
@@ -85,7 +106,8 @@ def list_assets(db: Session, *, include_disposed: bool = True) -> list[dict]:
     if not include_disposed:
         q = q.filter(FixedAsset.is_disposed.is_(False))
     assets = q.order_by(FixedAsset.acquired_date.desc(), FixedAsset.created_at.desc()).all()
-    return [to_out(a) for a in assets]
+    contacts, centers = _name_maps(db)
+    return [to_out(a, contacts, centers) for a in assets]
 
 
 def get_asset(db: Session, asset_id: UUID) -> FixedAsset:
@@ -132,7 +154,7 @@ def create_asset(db: Session, data: FixedAssetIn, user: User) -> dict:
 
     db.commit()
     db.refresh(asset)
-    return to_out(asset)
+    return _out_with_names(db, asset)
 
 
 def update_asset(db: Session, asset_id: UUID, data: FixedAssetIn) -> dict:
@@ -153,7 +175,7 @@ def update_asset(db: Session, asset_id: UUID, data: FixedAssetIn) -> dict:
     asset.notes = data.notes
     db.commit()
     db.refresh(asset)
-    return to_out(asset)
+    return _out_with_names(db, asset)
 
 
 def dispose_asset(db: Session, asset_id: UUID, disposed_date: date) -> dict:
@@ -162,7 +184,100 @@ def dispose_asset(db: Session, asset_id: UUID, disposed_date: date) -> dict:
     asset.disposed_date = disposed_date
     db.commit()
     db.refresh(asset)
-    return to_out(asset)
+    return _out_with_names(db, asset)
+
+
+# ── تحویل/استقرار و جابه‌جایی ───────────────────────────
+
+
+def _assign(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User, *, kind: str) -> dict:
+    """هسته‌ی مشترکِ «تحویل» و «جابه‌جایی» — فقط `kind` فرق می‌کند.
+
+    مبدأ از وضعیتِ *فعلیِ* دارایی برداشته می‌شود، نه از ورودیِ کاربر: تنها منبعِ
+    درستِ «از کجا» همان چیزی است که تا این لحظه در سیستم نشسته.
+    """
+    asset = get_asset(db, asset_id)
+    if asset.is_disposed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی واگذار شده و جابه‌جا نمی‌شود")
+    if data.to_custodian_id is not None and db.get(Contact, data.to_custodian_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تحویل‌گیرنده یافت نشد")
+    if data.to_cost_center_id is not None and db.get(CostCenter, data.to_cost_center_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرکزِ هزینه یافت نشد")
+    if data.assignment_date < asset.acquired_date:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "تاریخِ تحویل نمی‌تواند پیش از تاریخِ تحصیلِ دارایی باشد",
+        )
+
+    row = AssetAssignment(
+        asset_id=asset.id,
+        kind=kind,
+        assignment_date=data.assignment_date,
+        to_custodian_id=data.to_custodian_id,
+        to_location=data.to_location.strip(),
+        to_cost_center_id=data.to_cost_center_id,
+        from_custodian_id=asset.custodian_id,
+        from_location=asset.location,
+        from_cost_center_id=asset.cost_center_id,
+        notes=data.notes.strip(),
+        created_by_id=user.id,
+    )
+    db.add(row)
+
+    #: وضعیتِ امروزِ دارایی آینه‌ی همین ردیف می‌شود. فیلدی که خالی آمده دست‌نخورده
+    #: می‌ماند — «جابه‌جاییِ محل» نباید جمعدار را پاک کند.
+    if data.to_custodian_id is not None:
+        asset.custodian_id = data.to_custodian_id
+    if data.to_location.strip():
+        asset.location = data.to_location.strip()
+    if data.to_cost_center_id is not None:
+        asset.cost_center_id = data.to_cost_center_id
+
+    db.commit()
+    db.refresh(asset)
+    return _out_with_names(db, asset)
+
+
+def place_asset(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User) -> dict:
+    """تحویل/استقرارِ اولیه — ورودِ دارایی به مجموعه و تخصیصش به شخص/محل."""
+    return _assign(db, asset_id, data, user, kind="placement")
+
+
+def transfer_asset(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User) -> dict:
+    """جابه‌جایی — انتقالِ دارایی بینِ جمعداران، محل‌ها یا مراکزِ هزینه."""
+    return _assign(db, asset_id, data, user, kind="transfer")
+
+
+def list_assignments(db: Session, *, asset_id: UUID | None = None) -> list[dict]:
+    query = db.query(AssetAssignment)
+    if asset_id is not None:
+        query = query.filter(AssetAssignment.asset_id == asset_id)
+    rows = query.order_by(
+        AssetAssignment.assignment_date.desc(), AssetAssignment.created_at.desc()
+    ).all()
+    contacts, centers = _name_maps(db)
+    assets = {a.id: a.name for a in db.query(FixedAsset.id, FixedAsset.name).all()}
+    return [
+        {
+            "id": r.id,
+            "asset_id": r.asset_id,
+            "asset_name": assets.get(r.asset_id, ""),
+            "kind": r.kind,
+            "assignment_date": r.assignment_date,
+            "to_custodian_id": r.to_custodian_id,
+            "to_custodian_name": contacts.get(r.to_custodian_id, ""),
+            "to_location": r.to_location,
+            "to_cost_center_id": r.to_cost_center_id,
+            "to_cost_center_name": centers.get(r.to_cost_center_id, ""),
+            "from_custodian_id": r.from_custodian_id,
+            "from_custodian_name": contacts.get(r.from_custodian_id, ""),
+            "from_location": r.from_location,
+            "from_cost_center_id": r.from_cost_center_id,
+            "from_cost_center_name": centers.get(r.from_cost_center_id, ""),
+            "notes": r.notes,
+        }
+        for r in rows
+    ]
 
 
 def delete_asset(db: Session, asset_id: UUID) -> None:

@@ -3386,6 +3386,12 @@ export interface FixedAssetRecord {
   book_value: string
   monthly_depreciation: string
   fully_depreciated: boolean
+  /** وضعیتِ استقرارِ امروز — آینه‌ی آخرین ردیفِ تاریخچه‌ی تحویل/جابه‌جایی. */
+  custodian_id: string | null
+  custodian_name: string
+  location: string
+  cost_center_id: string | null
+  cost_center_name: string
 }
 
 export interface FixedAssetIn {
@@ -3412,6 +3418,44 @@ export const disposeFixedAsset = (token: string, id: string, disposedDate: strin
   authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${id}/dispose`, { disposed_date: disposedDate })
 
 export const deleteFixedAsset = (token: string, id: string) => authedDelete(token, `/api/fixed-assets/${id}`)
+
+// ── تحویل/استقرار و جابه‌جاییِ دارایی ───────────────────
+export interface AssetAssignmentIn {
+  assignment_date: string
+  to_custodian_id?: string | null
+  to_location?: string
+  to_cost_center_id?: string | null
+  notes?: string
+}
+
+/** یک تحویل یا جابه‌جایی — مبدأ و مقصد هر دو روی خودِ ردیف. */
+export interface AssetAssignmentRecord {
+  id: string
+  asset_id: string
+  asset_name: string
+  kind: 'placement' | 'transfer'
+  assignment_date: string
+  to_custodian_id: string | null
+  to_custodian_name: string
+  to_location: string
+  to_cost_center_id: string | null
+  to_cost_center_name: string
+  from_custodian_id: string | null
+  from_custodian_name: string
+  from_location: string
+  from_cost_center_id: string | null
+  from_cost_center_name: string
+  notes: string
+}
+
+export const placeFixedAsset = (token: string, assetId: string, data: AssetAssignmentIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${assetId}/placement`, data)
+
+export const transferFixedAsset = (token: string, assetId: string, data: AssetAssignmentIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${assetId}/transfer`, data)
+
+export const fetchAssetAssignments = (token: string, assetId?: string) =>
+  authedGet<AssetAssignmentRecord[]>(token, `/api/asset-assignments${assetId ? `?asset_id=${assetId}` : ''}`)
 
 export interface DepreciationRunResult {
   period_date: string

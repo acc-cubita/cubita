@@ -44,6 +44,12 @@ class FixedAssetOut(BaseModel):
     is_disposed: bool
     disposed_date: date | None
     notes: str
+    #: وضعیتِ استقرارِ امروز — آینه‌ی آخرین ردیفِ تاریخچه‌ی تحویل/جابه‌جایی.
+    custodian_id: UUID | None = None
+    custodian_name: str = ""
+    location: str = ""
+    cost_center_id: UUID | None = None
+    cost_center_name: str = ""
     #: محاسبه‌شده در سرویس — ارزش دفتری = cost − accumulated_depreciation
     book_value: Decimal
     #: استهلاکِ ماهانه‌ی خط مستقیم = (cost − salvage) / life
@@ -74,5 +80,45 @@ class DepreciationEntryOut(BaseModel):
     period_date: date
     amount: Decimal
     journal_entry_id: UUID | None
+
+    model_config = {"from_attributes": True}
+
+
+# ── تحویل/استقرار و جابه‌جایی ───────────────────────────
+class AssetAssignmentIn(BaseModel):
+    """مقصدِ تحویل یا جابه‌جایی. مبدأ از وضعیتِ فعلیِ دارایی خوانده می‌شود، نه از کاربر."""
+
+    assignment_date: date
+    to_custodian_id: UUID | None = None
+    to_location: str = ""
+    to_cost_center_id: UUID | None = None
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def validate(self) -> "AssetAssignmentIn":
+        #: بدونِ این، «جابه‌جایی» می‌تواند یک ردیفِ خالی بسازد که هیچ‌چیز را عوض
+        #: نمی‌کند و فقط تاریخچه را شلوغ می‌کند.
+        if self.to_custodian_id is None and not self.to_location.strip() and self.to_cost_center_id is None:
+            raise ValueError("حداقل یکی از تحویل‌گیرنده، محلِ استقرار یا مرکزِ هزینه را مشخص کنید")
+        return self
+
+
+class AssetAssignmentOut(BaseModel):
+    id: UUID
+    asset_id: UUID
+    asset_name: str = ""
+    kind: str
+    assignment_date: date
+    to_custodian_id: UUID | None
+    to_custodian_name: str = ""
+    to_location: str
+    to_cost_center_id: UUID | None
+    to_cost_center_name: str = ""
+    from_custodian_id: UUID | None
+    from_custodian_name: str = ""
+    from_location: str
+    from_cost_center_id: UUID | None
+    from_cost_center_name: str = ""
+    notes: str
 
     model_config = {"from_attributes": True}

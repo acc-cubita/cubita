@@ -16,6 +16,11 @@ DEPRECIATION_METHODS = ("straight_line",)
 # (`('straight_line',)`) که در SQL خطای نحوی است.
 _METHODS_IN_SQL = ", ".join(f"'{m}'" for m in DEPRECIATION_METHODS)
 
+#: `placement` اولین استقرارِ دارایی است و `transfer` هر جابه‌جاییِ بعدی. جدا
+#: نگه داشته می‌شوند چون در «فهرست جابه‌جایی‌ها و تحویل‌ها» دو معنای متفاوت‌اند:
+#: یکی ورودِ دارایی به مجموعه، دیگری تغییرِ دستِ آن.
+ASSIGNMENT_KINDS = ("placement", "transfer")
+
 
 class FixedAsset(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک قلم دارایی ثابت (خودرو، تجهیزات، ...) که در طول عمر مفیدش مستهلک می‌شود.
@@ -48,7 +53,21 @@ class FixedAsset(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
+    #: **وضعیتِ استقرارِ امروز** — همیشه برابرِ آخرین ردیفِ `assignments` است.
+    #: روی خودِ دارایی هم نگه داشته می‌شود تا «الان دستِ کیست؟» یک خواندن باشد نه
+    #: یک زیرپرس‌وجوی مرتب‌شده روی تاریخچه؛ تاریخچه جای خودش محفوظ است.
+    custodian_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    location: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
+
     depreciation_entries: Mapped[list["DepreciationEntry"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    assignments: Mapped[list["AssetAssignment"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
     )
 
@@ -75,3 +94,47 @@ class DepreciationEntry(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     asset: Mapped["FixedAsset"] = relationship(back_populates="depreciation_entries")
+
+
+class AssetAssignment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تحویل/استقرارِ دارایی و هر جابه‌جاییِ بعدی‌اش — دفترِ «الان دستِ کیست».
+
+    **مبدأ هم ذخیره می‌شود، نه فقط مقصد.** بدونِ `from_*` تاریخچه فقط زنجیره‌ای از
+    مقصدهاست و «از چه کسی به چه کسی» را باید از ردیفِ قبلی حدس زد — که با
+    حذف/ابطالِ یک ردیف یا ثبتِ خارج از ترتیبِ تاریخ، غلط از آب درمی‌آید.
+
+    هیچ اثرِ حسابداری ندارد: جابه‌جاییِ دارایی بینِ جمعداران مالکیت را عوض
+    نمی‌کند، پس سندی هم نمی‌خورد.
+    """
+
+    __tablename__ = "asset_assignments"
+    __table_args__ = (
+        CheckConstraint(f"kind IN {ASSIGNMENT_KINDS}", name="ck_asset_assignments_kind"),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fixed_assets.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20), default="placement", server_default="placement")
+    assignment_date: Mapped[date_] = mapped_column(Date, index=True)
+
+    to_custodian_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+    to_location: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    to_cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
+
+    from_custodian_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+    from_location: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    from_cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
+    )
+
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    asset: Mapped["FixedAsset"] = relationship(back_populates="assignments")
