@@ -3857,6 +3857,62 @@ export interface CashboxInput {
   is_active?: boolean
 }
 
+export interface OwnerTransactionRecord {
+  id: string
+  type: string
+  type_label: string
+  transaction_date: string
+  contact_id: string
+  contact_name: string
+  amount: string
+  method: string
+  bank_account_id: string | null
+  cashbox_id: string | null
+  description: string
+  evidence_ref: string
+  journal_entry_id: string | null
+  voided_at: string | null
+  void_reason: string
+}
+
+export interface OwnerTransactionIn {
+  type: string
+  transaction_date: string
+  contact_id: string
+  amount: number
+  method: string
+  bank_account_id?: string | null
+  cashbox_id?: string | null
+  description?: string
+  evidence_ref?: string
+}
+
+/** ماندهٔ «جاری شرکا». مثبت = شرکت به او بدهکار؛ منفی = او به شرکت. سرمایه در
+ *  این عدد نیست — آورده بدهیِ شرکت به شریک نمی‌سازد. */
+export interface PartnerBalanceRecord {
+  contact_id: string
+  contact_name: string
+  share_percent: string
+  balance: string
+}
+
+export const fetchOwnerTransactions = (
+  token: string,
+  query?: { contact_id?: string; type?: string },
+) => {
+  const qs = new URLSearchParams()
+  if (query?.contact_id) qs.set('contact_id', query.contact_id)
+  if (query?.type) qs.set('type', query.type)
+  const suffix = qs.toString()
+  return authedGetAll<OwnerTransactionRecord>(token, `/api/owner-transactions${suffix ? `?${suffix}` : ''}`)
+}
+
+export const createOwnerTransaction = (token: string, data: OwnerTransactionIn, idempotencyKey?: string) =>
+  authedSend<OwnerTransactionRecord>(token, 'POST', '/api/owner-transactions', data, idempotencyKey)
+
+export const fetchPartnerBalances = (token: string) =>
+  authedGet<PartnerBalanceRecord[]>(token, '/api/owner-transactions/partner-balances')
+
 export const fetchCashboxes = (token: string, includeInactive = true) =>
   authedGet<CashboxRecord[]>(token, `/api/cashboxes?include_inactive=${includeInactive}`)
 
