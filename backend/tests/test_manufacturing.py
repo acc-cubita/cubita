@@ -444,3 +444,118 @@ def test_calculating_cost_double_submit_is_idempotent(client):
     client.post(f"/api/production-plans/{plan['id']}/calculate-cost", json=body, headers=headers)
     #: دوبار کلیک نباید دستمزد را دوبار روی بها بنشاند.
     assert _avg_cost(client, fin) == 1100  # ۱۰۰۰ + ۱۰۰۰/۱۰
+
+
+# ───────────────────────────── گزارش‌های تولید ─────────────────────────────
+
+
+def _full_run(client, prefix, *, planned=10, issued=None, received=10, labor=0, overhead=0, bom_qty=2):
+    """یک گردشِ کاملِ تولید تا هر جایی که تست می‌خواهد — برمی‌گرداند (plan, item ids)."""
+    wh = _wh(client)
+    a = _item(client, f"{prefix}-A", "جزء")
+    fin = _item(client, f"{prefix}-FIN", "محصول")
+    _buy(client, wh, a, 1000, 1000)
+    bom = client.post(
+        "/api/boms",
+        json={"finished_item_id": fin, "yield_qty": 1, "lines": [{"component_item_id": a, "qty": bom_qty}]},
+    ).json()
+    plan = _started_plan(client, f"{prefix}-plan", wh, bom["id"], qty=planned)
+
+    issue_body = {"issue_date": TODAY}
+    if issued is not None:
+        issue_body["qty"] = issued
+    client.post(f"/api/production-plans/{plan['id']}/issue-materials", json=issue_body, headers={"Idempotency-Key": f"{prefix}-issue"})
+    if received:
+        client.post(
+            f"/api/production-plans/{plan['id']}/receive-output",
+            json={"receipt_date": TODAY, "qty": received},
+            headers={"Idempotency-Key": f"{prefix}-receipt"},
+        )
+    if labor or overhead:
+        client.post(
+            f"/api/production-plans/{plan['id']}/calculate-cost",
+            json={"calc_date": TODAY, "labor_cost": labor, "overhead_cost": overhead},
+            headers={"Idempotency-Key": f"{prefix}-calc"},
+        )
+    return plan, a, fin
+
+
+def test_material_variance_is_zero_when_consumption_matches_the_formula(client):
+    plan, comp, _ = _full_run(client, "VAR1", planned=10, received=10, bom_qty=2)
+
+    rows = client.get("/api/production-reports/material-variance", params={"plan_id": plan["id"]}).json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["component_item_id"] == comp
+    assert float(row["standard_qty"]) == 20  # ۲ × ۱۰ تولیدشده
+    assert float(row["actual_qty"]) == 20
+    assert float(row["variance_qty"]) == 0
+
+
+def test_material_variance_shows_the_gap_when_production_lags_the_issue(client):
+    """موادِ تحویل‌شده برای ۱۰ واحد ولی فقط ۴ واحد تولید شد — ۱۲ واحد هنوز روی خط است."""
+    plan, _, _ = _full_run(client, "VAR2", planned=10, received=4, bom_qty=2)
+
+    row = client.get("/api/production-reports/material-variance", params={"plan_id": plan["id"]}).json()[0]
+    assert float(row["qty_produced"]) == 4
+    assert float(row["standard_qty"]) == 8    # ۲ × ۴
+    assert float(row["actual_qty"]) == 20     # کلِ باقی‌مانده تحویل شده بود
+    assert float(row["variance_qty"]) == 12
+
+
+def test_the_kardex_shows_material_in_and_product_out(client):
+    plan, comp, fin = _full_run(client, "KDX1", planned=5, received=5, bom_qty=3)
+
+    rows = client.get("/api/production-reports/kardex", params={"plan_id": plan["id"]}).json()
+    assert len(rows) == 2
+
+    material = next(r for r in rows if r["item_id"] == comp)
+    assert material["kind"] == "issue"
+    assert float(material["qty_in"]) == 15   # ۳ × ۵ واردِ خط
+    assert float(material["qty_out"]) == 0
+
+    product = next(r for r in rows if r["item_id"] == fin)
+    assert product["kind"] == "receipt"
+    assert float(product["qty_in"]) == 0
+    assert float(product["qty_out"]) == 5    # خروجِ خط به انبار
+
+
+def test_the_kardex_filters_by_item(client):
+    plan, comp, fin = _full_run(client, "KDX2", planned=5, received=5)
+
+    only_material = client.get("/api/production-reports/kardex", params={"plan_id": plan["id"], "item_id": comp}).json()
+    assert len(only_material) == 1
+    assert only_material[0]["item_id"] == comp
+
+    only_product = client.get("/api/production-reports/kardex", params={"plan_id": plan["id"], "item_id": fin}).json()
+    assert len(only_product) == 1
+    assert only_product[0]["item_id"] == fin
+
+
+def test_the_cost_report_splits_material_labor_and_overhead(client):
+    #: ۱۰ واحد، هرکدام ۲ جزءِ ۱۰۰۰ ریالی = موادِ ۲۰٬۰۰۰ · دستمزد ۵٬۰۰۰ · سربار ۵٬۰۰۰
+    plan, _, _ = _full_run(client, "CST1", planned=10, received=10, labor=5000, overhead=5000, bom_qty=2)
+
+    row = client.get("/api/production-reports/cost", params={"plan_id": plan["id"]}).json()[0]
+    assert float(row["material_cost"]) == 20000
+    assert float(row["labor_cost"]) == 5000
+    assert float(row["overhead_cost"]) == 5000
+    assert float(row["total_cost"]) == 30000
+    assert float(row["unit_cost"]) == 3000  # ۳۰٬۰۰۰ ÷ ۱۰
+
+
+def test_a_voided_material_issue_leaves_the_reports(client):
+    """ابطال یعنی آن حرکت هرگز نبوده — انحرافی که از حواله‌ی باطل ساخته شود دروغ است."""
+    plan, _, _ = _full_run(client, "VOID1", planned=6, received=6, bom_qty=2)
+
+    issues = client.get("/api/warehouse-issues", params={"issue_type": "production", "limit": 200}).json()["items"]
+    mine = [r for r in issues if r["kind"] == "issue"][0]
+    voided = client.post(f"/api/warehouse-issues/{mine['id']}/void", json={"reason": "آزمون"})
+    assert voided.status_code == 200, voided.text
+
+    row = client.get("/api/production-reports/material-variance", params={"plan_id": plan["id"]}).json()[0]
+    assert float(row["actual_qty"]) == 0        # حواله‌ی باطل شمرده نمی‌شود
+    assert float(row["standard_qty"]) == 12     # استاندارد سرِ جایش است
+
+    kardex = client.get("/api/production-reports/kardex", params={"plan_id": plan["id"]}).json()
+    assert all(r["kind"] != "issue" for r in kardex)

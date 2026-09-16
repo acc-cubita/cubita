@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -15,7 +16,10 @@ from app.schemas.manufacturing import (
     BomIn,
     BomOut,
     BomUpdateIn,
+    MaterialVarianceRow,
     ProductionCostCalcIn,
+    ProductionCostRow,
+    ProductionKardexRow,
     ProductionMaterialIssueIn,
     ProductionOrderIn,
     ProductionOrderOut,
@@ -25,6 +29,7 @@ from app.schemas.manufacturing import (
     ProductionReceiptIn,
 )
 from app.services import manufacturing as service
+from app.services import production_reports as reports
 from app.services.idempotency import idempotent
 
 router = APIRouter(
@@ -225,3 +230,37 @@ def create_production_order(
         run=lambda: service.post_production_order(db, data, user),
         replay=lambda oid: db.get(ProductionOrder, oid),
     )
+
+
+# ── گزارش‌های تولید ─────────────────────────────────────
+@router.get("/production-reports/material-variance", response_model=list[MaterialVarianceRow])
+def production_material_variance(
+    plan_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("manufacturing", "view")),
+):
+    """انحرافِ مصرفِ مواد — استاندارد (از فرمول، برای مقدارِ تولیدشده) در برابرِ واقعی."""
+    return reports.material_variance(db, plan_id=plan_id)
+
+
+@router.get("/production-reports/kardex", response_model=list[ProductionKardexRow])
+def production_kardex(
+    plan_id: UUID | None = Query(None),
+    item_id: UUID | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("manufacturing", "view")),
+):
+    """کاردکسِ خطِ تولید — ورودِ مواد و خروجِ محصول، از اسنادِ واقعیِ انبار."""
+    return reports.production_kardex(db, plan_id=plan_id, item_id=item_id, date_from=date_from, date_to=date_to)
+
+
+@router.get("/production-reports/cost", response_model=list[ProductionCostRow])
+def production_cost_report(
+    plan_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("manufacturing", "view")),
+):
+    """گزارشِ قیمتِ تمام‌شده — مواد، دستمزد و سربارِ هر سفارش، تفکیک‌شده."""
+    return reports.cost_breakdown(db, plan_id=plan_id)

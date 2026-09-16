@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Calculator, ClipboardList, Factory, FlaskConical, Plus, Save, Trash2, Layers, PackageCheck, PackageMinus, Pencil, X, Power } from 'lucide-react'
+import { AlertTriangle, Calculator, ClipboardList, Factory, FlaskConical, History, PieChart, Plus, Save, Trash2, Layers, PackageCheck, PackageMinus, Pencil, X, Power } from 'lucide-react'
 import {
   calculateProductionCost,
   changeProductionPlanStatus,
@@ -10,6 +10,9 @@ import {
   fetchAllWarehouseReceipts,
   fetchBoms,
   fetchItemsLive,
+  fetchMaterialVariance,
+  fetchProductionCostReport,
+  fetchProductionKardex,
   fetchProductionPlans,
   fetchStockLevels,
   fetchWarehouseIssueLedger,
@@ -18,6 +21,9 @@ import {
   receiveProductionOutput,
   type BomRecord,
   type ItemRecord,
+  type MaterialVarianceRow,
+  type ProductionCostRow,
+  type ProductionKardexRow,
   type ProductionPlanRecord,
   type ProductionPlanStatus,
   type StockLevel,
@@ -148,6 +154,9 @@ export function ManufacturingPage({ token }: { token: string }) {
           { key: 'materials', label: 'تحویل مواد', icon: PackageMinus, content: <MaterialIssueTab token={token} boms={boms} plans={plans} itemById={itemById} stockLevels={stockLevels} materialIssues={materialIssues} onChanged={refresh} /> },
           { key: 'receipts', label: 'رسید محصول', icon: PackageCheck, content: <ProductReceiptTab token={token} plans={plans} itemById={itemById} productReceipts={productReceipts} onChanged={refresh} /> },
           { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator, content: <CostCalcTab token={token} plans={plans} itemById={itemById} onChanged={refresh} /> },
+          { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle, content: <VarianceTab token={token} plans={plans} itemById={itemById} /> },
+          { key: 'kardex', label: 'کاردکس تولید', icon: History, content: <KardexTab token={token} plans={plans} items={items} itemById={itemById} /> },
+          { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart, content: <CostReportTab token={token} plans={plans} itemById={itemById} /> },
         ]}
       />
     </div>
@@ -1062,6 +1071,329 @@ function CostCalcTab({
               </table>
             </div>
             <Pager page={rowsPg.page} pageCount={rowsPg.pageCount} onChange={rowsPg.setPage} />
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+// ── گزارشِ انحرافِ مصرفِ مواد ───────────────────────────
+function VarianceTab({
+  token,
+  plans,
+  itemById,
+}: {
+  token: string
+  plans: ProductionPlanRecord[]
+  itemById: Map<string, ItemRecord>
+}) {
+  const [planFilter, setPlanFilter] = useState('')
+  const [rows, setRows] = useState<MaterialVarianceRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(null)
+    fetchMaterialVariance(token, planFilter || undefined)
+      .then((r) => { if (alive) setRows(r) })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'خطای ناشناخته') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [token, planFilter])
+
+  const pg = usePagination(rows, 12, planFilter)
+
+  return (
+    <div className="page-block">
+      <SectionCard
+        icon={AlertTriangle}
+        title="انحرافِ مصرفِ مواد"
+        description="«چقدر باید مصرف می‌شد» (از فرمول، برای مقدارِ تولیدشده) در برابرِ «چقدر واقعاً رفت». سفارشی که مواد گرفته ولی هنوز محصول نداده، طبیعتاً انحرافِ مثبت دارد — آن مواد هنوز روی خط است."
+      >
+        <div className="invoice-form">
+          <label>
+            سفارشِ تولید
+            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+              <option value="">همه‌ی سفارش‌ها</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {error && <div className="error">{error}</div>}
+        {loading ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={AlertTriangle} text="هنوز مصرفی برای مقایسه نیست — اول از تبِ «تحویل مواد» حواله بزنید." />
+        ) : (
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>سفارش</th>
+                    <th>محصول</th>
+                    <th>جزء</th>
+                    <th>تولیدشده</th>
+                    <th>مصرفِ استاندارد</th>
+                    <th>مصرفِ واقعی</th>
+                    <th>انحراف</th>
+                    <th>بهای مصرف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((r) => {
+                    const variance = Number(r.variance_qty)
+                    return (
+                      <tr key={`${r.plan_id}-${r.component_item_id}`}>
+                        <td className="card-title" data-label="سفارش">{fa(r.plan_number)}</td>
+                        <td data-label="محصول">{r.finished_item_name}</td>
+                        <td data-label="جزء">{r.component_item_name}</td>
+                        <td data-label="تولیدشده">{Number(r.qty_produced).toLocaleString('fa-IR')}</td>
+                        <td data-label="مصرفِ استاندارد">{Number(r.standard_qty).toLocaleString('fa-IR')}</td>
+                        <td data-label="مصرفِ واقعی">{Number(r.actual_qty).toLocaleString('fa-IR')}</td>
+                        <td data-label="انحراف">
+                          <span className={`status-badge ${variance > 0 ? 'tone-danger' : variance < 0 ? 'tone-success' : ''}`}>
+                            {variance.toLocaleString('fa-IR')}
+                          </span>
+                        </td>
+                        <td data-label="بهای مصرف" className="money-cell">{fa(Number(r.actual_cost))}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+// ── کاردکسِ خطِ تولید ──────────────────────────────────
+function KardexTab({
+  token,
+  plans,
+  items,
+  itemById,
+}: {
+  token: string
+  plans: ProductionPlanRecord[]
+  items: ItemRecord[]
+  itemById: Map<string, ItemRecord>
+}) {
+  const [planFilter, setPlanFilter] = useState('')
+  const [itemFilter, setItemFilter] = useState('')
+  const [rows, setRows] = useState<ProductionKardexRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(null)
+    fetchProductionKardex(token, { plan_id: planFilter || undefined, item_id: itemFilter || undefined })
+      .then((r) => { if (alive) setRows(r) })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'خطای ناشناخته') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [token, planFilter, itemFilter])
+
+  const pg = usePagination(rows, 12, `${planFilter}|${itemFilter}`)
+  const totals = useMemo(() => ({
+    into: rows.reduce((s, r) => s + Number(r.qty_in), 0),
+    out: rows.reduce((s, r) => s + Number(r.qty_out), 0),
+  }), [rows])
+
+  return (
+    <div className="page-block">
+      <SectionCard
+        icon={History}
+        title="کاردکسِ خطِ تولید"
+        description={`گردشِ مواد و محصول روی خط: حواله‌ها وارد می‌کنند، رسیدها خارج. ورودِ خط ${fa(totals.into)} · خروجِ خط ${fa(totals.out)}`}
+      >
+        <div className="invoice-form">
+          <label>
+            سفارشِ تولید
+            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+              <option value="">همه‌ی سفارش‌ها</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            کالا
+            <select value={itemFilter} onChange={(e) => setItemFilter(e.target.value)}>
+              <option value="">همه‌ی کالاها</option>
+              {items.map((i) => (
+                <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {error && <div className="error">{error}</div>}
+        {loading ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={History} text="هنوز حرکتی روی خطِ تولید ثبت نشده." />
+        ) : (
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>تاریخ</th>
+                    <th>سند</th>
+                    <th>سفارش</th>
+                    <th>کالا</th>
+                    <th>واردِ خط</th>
+                    <th>خروجِ خط</th>
+                    <th>بهای واحد</th>
+                    <th>مبلغ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((r, i) => (
+                    <tr key={`${r.kind}-${r.plan_id}-${r.item_id}-${i}`}>
+                      <td className="card-title" data-label="تاریخ">{formatJalali(r.doc_date)}</td>
+                      <td data-label="سند">
+                        <span className={`status-badge ${r.kind === 'issue' ? '' : 'tone-success'}`}>
+                          {r.kind === 'issue' ? 'حواله' : 'رسید'} {r.doc_number != null ? fa(r.doc_number) : '—'}
+                        </span>
+                      </td>
+                      <td data-label="سفارش">{fa(r.plan_number)}</td>
+                      <td data-label="کالا">{r.item_name}</td>
+                      <td data-label="واردِ خط">{Number(r.qty_in) > 0 ? Number(r.qty_in).toLocaleString('fa-IR') : '—'}</td>
+                      <td data-label="خروجِ خط">{Number(r.qty_out) > 0 ? Number(r.qty_out).toLocaleString('fa-IR') : '—'}</td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(Number(r.unit_cost))}</td>
+                      <td data-label="مبلغ" className="money-cell">{fa(Number(r.amount))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+// ── گزارشِ قیمتِ تمام‌شده ───────────────────────────────
+function CostReportTab({
+  token,
+  plans,
+  itemById,
+}: {
+  token: string
+  plans: ProductionPlanRecord[]
+  itemById: Map<string, ItemRecord>
+}) {
+  const [planFilter, setPlanFilter] = useState('')
+  const [rows, setRows] = useState<ProductionCostRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(null)
+    fetchProductionCostReport(token, planFilter || undefined)
+      .then((r) => { if (alive) setRows(r) })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'خطای ناشناخته') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [token, planFilter])
+
+  const pg = usePagination(rows, 12, planFilter)
+  const totals = useMemo(() => ({
+    material: rows.reduce((s, r) => s + Number(r.material_cost), 0),
+    labor: rows.reduce((s, r) => s + Number(r.labor_cost), 0),
+    overhead: rows.reduce((s, r) => s + Number(r.overhead_cost), 0),
+  }), [rows])
+
+  return (
+    <div className="page-block">
+      <SectionCard
+        icon={PieChart}
+        title="گزارشِ قیمتِ تمام‌شده"
+        description="بهای هر سفارش، تفکیک‌شده به مواد، دستمزد و سربار — همان اعدادی که واقعاً ثبت شده‌اند، نه بازمحاسبه با نرخِ امروز."
+      >
+        <div className="invoice-form">
+          <label>
+            سفارشِ تولید
+            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+              <option value="">همه‌ی سفارش‌ها</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {rows.length > 0 && (
+          <div className="pos-summary" style={{ marginTop: 4 }}>
+            <div className="pos-row"><span>جمعِ مواد</span><strong>{fa(totals.material)}</strong></div>
+            <div className="pos-row"><span>جمعِ دستمزد</span><strong>{fa(totals.labor)}</strong></div>
+            <div className="pos-row"><span>جمعِ سربار</span><strong>{fa(totals.overhead)}</strong></div>
+            <div className="pos-row pos-total"><span>جمعِ کل</span><strong>{fa(totals.material + totals.labor + totals.overhead)}</strong></div>
+          </div>
+        )}
+
+        {error && <div className="error">{error}</div>}
+        {loading ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={PieChart} text="هنوز سفارشی با بهای ثبت‌شده نیست." />
+        ) : (
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>سفارش</th>
+                    <th>محصول</th>
+                    <th>تولیدشده</th>
+                    <th>مواد</th>
+                    <th>دستمزد</th>
+                    <th>سربار</th>
+                    <th>جمع</th>
+                    <th>بهای واحد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.pageItems.map((r) => (
+                    <tr key={r.plan_id}>
+                      <td className="card-title" data-label="سفارش">{fa(r.plan_number)}</td>
+                      <td data-label="محصول">{r.finished_item_name}</td>
+                      <td data-label="تولیدشده">{Number(r.qty_produced).toLocaleString('fa-IR')}</td>
+                      <td data-label="مواد" className="money-cell">{fa(Number(r.material_cost))}</td>
+                      <td data-label="دستمزد" className="money-cell">{fa(Number(r.labor_cost))}</td>
+                      <td data-label="سربار" className="money-cell">{fa(Number(r.overhead_cost))}</td>
+                      <td data-label="جمع" className="money-cell"><strong>{fa(Number(r.total_cost))}</strong></td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(Number(r.unit_cost))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
         )}
       </SectionCard>

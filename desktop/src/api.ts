@@ -5137,6 +5137,69 @@ export const calculateProductionCost = (
   idempotencyKey?: string,
 ) => authedSend<ProductionPlanRecord>(token, 'POST', `/api/production-plans/${planId}/calculate-cost`, data, idempotencyKey)
 
+// ── گزارش‌های تولید ────────────────────────────────────
+/** یک جزء از یک سفارش: چقدر باید مصرف می‌شد، چقدر واقعاً رفت. */
+export interface MaterialVarianceRow {
+  plan_id: string
+  plan_number: number
+  plan_status: ProductionPlanStatus
+  finished_item_id: string
+  finished_item_name: string
+  component_item_id: string
+  component_item_name: string
+  qty_produced: string
+  standard_qty: string
+  actual_qty: string
+  variance_qty: string
+  actual_cost: string
+}
+
+/** یک حرکت روی خطِ تولید — `issue` وردِ خط، `receipt` خروجِ خط. */
+export interface ProductionKardexRow {
+  kind: 'issue' | 'receipt'
+  doc_date: string
+  doc_number: number | null
+  plan_id: string
+  plan_number: number
+  item_id: string
+  item_name: string
+  qty_in: string
+  qty_out: string
+  unit_cost: string
+  amount: string
+}
+
+export interface ProductionCostRow {
+  plan_id: string
+  plan_number: number
+  plan_status: ProductionPlanStatus
+  finished_item_id: string
+  finished_item_name: string
+  qty_planned: string
+  qty_produced: string
+  material_cost: string
+  labor_cost: string
+  overhead_cost: string
+  total_cost: string
+  unit_cost: string
+}
+
+export const fetchMaterialVariance = (token: string, planId?: string) =>
+  authedGet<MaterialVarianceRow[]>(token, `/api/production-reports/material-variance${planId ? `?plan_id=${planId}` : ''}`)
+
+export const fetchProductionKardex = (
+  token: string,
+  filters: { plan_id?: string; item_id?: string; date_from?: string; date_to?: string } = {},
+) => {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value)
+  const query = qs.toString()
+  return authedGet<ProductionKardexRow[]>(token, `/api/production-reports/kardex${query ? `?${query}` : ''}`)
+}
+
+export const fetchProductionCostReport = (token: string, planId?: string) =>
+  authedGet<ProductionCostRow[]>(token, `/api/production-reports/cost${planId ? `?plan_id=${planId}` : ''}`)
+
 export const fetchProductionOrders = (token: string) => authedGetAll<ProductionOrderRecord>(token, '/api/production-orders')
 export const createProductionOrder = (
   token: string,
