@@ -87,6 +87,11 @@ class ProductionPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: جمعِ بهای همه‌ی حواله‌های موادِ متصل به این برنامه — مبنای بهای رسیدِ
     #: محصول (`material_cost_issued ÷ qty_planned`)، پیش از افزودنِ دستمزد/سربار.
     material_cost_issued: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: جمعِ دستمزد و سربارِ نشسته روی این سفارش — هر بار که «محاسبه قیمت
+    #: تمام‌شده» اجرا شود بالا می‌رود. جدا نگه داشته می‌شوند چون گزارشِ بهای
+    #: تمام‌شده باید سه جزء را از هم تفکیک کند، نه یک جمعِ مبهم.
+    labor_cost_applied: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    overhead_cost_applied: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     status: Mapped[str] = mapped_column(String(20), default="draft", server_default="draft")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

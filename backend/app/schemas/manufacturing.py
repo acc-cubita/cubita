@@ -115,6 +115,8 @@ class ProductionPlanOut(BaseModel):
     qty_planned: Decimal
     qty_produced: Decimal
     material_cost_issued: Decimal
+    labor_cost_applied: Decimal
+    overhead_cost_applied: Decimal
     status: str
     notes: str
 
@@ -164,6 +166,57 @@ class ProductionCostCalcIn(BaseModel):
         if v < 0:
             raise ValueError("مبلغ نمی‌تواند منفی باشد")
         return v
+
+
+# ── گزارش‌های تولید ─────────────────────────────────────
+class MaterialVarianceRow(BaseModel):
+    """یک جزء از یک سفارش: چقدر باید مصرف می‌شد، چقدر واقعاً رفت."""
+
+    plan_id: UUID
+    plan_number: int
+    plan_status: str
+    finished_item_id: UUID
+    finished_item_name: str
+    component_item_id: UUID
+    component_item_name: str
+    qty_produced: Decimal
+    standard_qty: Decimal
+    actual_qty: Decimal
+    variance_qty: Decimal
+    actual_cost: Decimal
+
+
+class ProductionKardexRow(BaseModel):
+    """یک حرکت روی خطِ تولید — `issue` وردِ خط، `receipt` خروجِ خط."""
+
+    kind: str
+    doc_date: date
+    doc_number: int | None
+    plan_id: UUID
+    plan_number: int
+    item_id: UUID
+    item_name: str
+    qty_in: Decimal
+    qty_out: Decimal
+    unit_cost: Decimal
+    amount: Decimal
+
+
+class ProductionCostRow(BaseModel):
+    """بهای تمام‌شده‌ی یک سفارش، تفکیک‌شده به مواد/دستمزد/سربار."""
+
+    plan_id: UUID
+    plan_number: int
+    plan_status: str
+    finished_item_id: UUID
+    finished_item_name: str
+    qty_planned: Decimal
+    qty_produced: Decimal
+    material_cost: Decimal
+    labor_cost: Decimal
+    overhead_cost: Decimal
+    total_cost: Decimal
+    unit_cost: Decimal
 
 
 # ── سندِ تولید (اجرا) ────────────────────────────────────

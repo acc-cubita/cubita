@@ -118,6 +118,9 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'materials', label: 'تحویل مواد', icon: PackageMinus },
     { key: 'receipts', label: 'رسید محصول', icon: PackageCheck },
     { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator },
+    { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle },
+    { key: 'kardex', label: 'کاردکس تولید', icon: History },
+    { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },

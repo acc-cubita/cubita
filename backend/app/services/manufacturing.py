@@ -366,6 +366,10 @@ def calculate_production_cost(
         additional_unit = added / Decimal(plan.qty_produced)
         finished.average_cost = Decimal(finished.average_cost) + additional_unit
 
+    #: جدا نگه داشته می‌شوند تا گزارشِ بهای تمام‌شده سه جزء را تفکیک کند.
+    plan.labor_cost_applied = Decimal(plan.labor_cost_applied) + Decimal(data.labor_cost or 0)
+    plan.overhead_cost_applied = Decimal(plan.overhead_cost_applied) + Decimal(data.overhead_cost or 0)
+
     entry_number = next_document_number(db, DOC_JOURNAL_ENTRY)
     journal_entry = JournalEntry(
         number=entry_number,
