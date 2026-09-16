@@ -59,6 +59,7 @@ from app.routers import (
     stock_taking,
     storefront,
     subscription,
+    owner_transactions,
     transfers,
     warehouse_issues,
     issue_returns,
@@ -129,6 +130,7 @@ app.include_router(inventory.router)
 app.include_router(invoices.router)
 app.include_router(quotations.router)
 app.include_router(returns.router)
+app.include_router(owner_transactions.router)
 app.include_router(transfers.router)
 app.include_router(warehouse_issues.router)
 app.include_router(issue_returns.router)

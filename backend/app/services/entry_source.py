@@ -47,6 +47,7 @@ from app.models.payment import Payment
 from app.models.receipt import Receipt
 from app.models.returns import PurchaseReturn, SalesReturn
 from app.models.sales_ops import CreditDebitNote
+from app.models.owner_transactions import OwnerTransaction
 from app.models.stock_count import StockCountSession
 from app.models.transfers import StockTransfer
 from app.models.treasury import TreasuryTransaction
@@ -79,6 +80,8 @@ SOURCE_MODELS: dict[str, type] = {
     "depreciation": DepreciationEntry,
     "production_order": ProductionOrder,
     "stock_adjustment": StockAdjustment,
+    #: آورده/برداشت/وامِ شریک — مهاجرتِ ۰۱۵۹.
+    "owner_transaction": OwnerTransaction,
     #: انتقال فقط میانِ دو انبار با دو معینِ متفاوت سند می‌زند (مهاجرتِ ۰۱۳۳).
     "stock_transfer": StockTransfer,
     #: رسیدِ **مستقیم** (بی‌فاکتور) خودش منشأِ مالی است و سند می‌زند؛ رسیدِ
@@ -144,6 +147,7 @@ SOURCE_LABELS: dict[str, str] = {
     "depreciation": "استهلاک",
     "production_order": "سند تولید",
     "stock_adjustment": "تعدیل انبار",
+    "owner_transaction": "تراکنش شریک",
     "stock_count": "انبارگردانی",
     "credit_debit_note": "اعلامیه بدهکار/بستانکار",
     "inventory_valuation": "قیمت‌گذاری اسناد انبار",

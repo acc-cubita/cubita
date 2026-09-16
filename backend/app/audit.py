@@ -117,6 +117,7 @@ def audited_models() -> dict[type, str]:
     )
     from app.models.period_close import FiscalPeriodClose
     from app.models.inventory import StockAdjustment
+    from app.models.owner_transactions import OwnerTransaction
     from app.models.stock_count import StockCountSession
     from app.models.payment import Payment
     from app.models.receipt import Receipt
@@ -154,6 +155,9 @@ def audited_models() -> dict[type, str]:
         #: حسابرسی شود (`test_every_voidable_document_is_audited`). دلیلش هم روشن
         #: است: این سند موجودی را بی هیچ فاکتوری کم و زیاد می‌کند.
         StockAdjustment: "تعدیل انبار",
+        #: آورده و برداشتِ مالک مستقیم روی حقوق صاحبان سهام می‌نشیند و مبنای
+        #: «صورت تغییرات در حقوق صاحبان سهام» است — تغییرش باید ردی بگذارد.
+        OwnerTransaction: "تراکنش شریک",
         Payslip: "فیش حقوقی",
         #: **تنظیماتِ حقوق حساس‌ترین پیکربندیِ کوبیتا بعد از چارتِ حساب‌هاست.**
         #: عوض‌کردنِ یک پله‌ی مالیات، مالیاتِ *همه‌ی* کارکنان را عوض می‌کند؛
