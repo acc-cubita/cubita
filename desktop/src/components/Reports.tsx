@@ -6,6 +6,7 @@ import {
   fetchBalanceSheet,
   fetchBudgetReport,
   fetchCashFlow,
+  fetchEquityStatement,
   fetchContacts,
   fetchContactStatement,
   costCenterKindLabel,
@@ -19,6 +20,7 @@ import {
   type BalanceSheet,
   type BudgetReport,
   type CashFlow,
+  type EquityStatement,
   type ContactRecord,
   type ContactStatement,
   type CostCenterReport,
@@ -65,6 +67,7 @@ type ReportKind =
   | 'balance-sheet'
   | 'budget'
   | 'cash-flow'
+  | 'equity-statement'
   | 'cost-center'
   | 'receivable-aging'
   | 'payable-aging'
@@ -135,6 +138,7 @@ export function Reports({ token }: { token: string }) {
   const [seasonalYear, setSeasonalYear] = useState(() => isoToJalali(todayIso()).jy)
   const [seasonalQuarter, setSeasonalQuarter] = useState(0)
   const [seasonal, setSeasonal] = useState<SeasonalReport | null>(null)
+  const [equity, setEquity] = useState<EquityStatement | null>(null)
   const [loading, setLoading] = useState(false)
   //: فیلترِ «فقط ناقص‌ها» سمتِ مرورگر است و این‌جا درست است: گزارشِ فصلی
   //: تجمیعِ محدود به تعدادِ طرف‌حساب است نه کلِ دفتر، و از قبل یک‌جا آمده؛
@@ -157,6 +161,7 @@ export function Reports({ token }: { token: string }) {
         case 'balance-sheet': setBalanceSheet(await fetchBalanceSheet(token, asOf)); break
         case 'budget': setBudgetReport(await fetchBudgetReport(token, from, to)); break
         case 'cash-flow': setCashFlow(await fetchCashFlow(token, from, to)); break
+        case 'equity-statement': setEquity(await fetchEquityStatement(token, asOf || todayIso(), from)); break
         case 'cost-center': setCostCenterReport(await fetchCostCenterReport(token, from, to)); break
         case 'receivable-aging': setAging(await fetchAging(token, 'receivable', asOf)); break
         case 'payable-aging': setAging(await fetchAging(token, 'payable', asOf)); break
@@ -232,6 +237,19 @@ export function Reports({ token }: { token: string }) {
           name: 'بودجه-در-برابر-عملکرد',
           headers: ['کد', 'حساب', 'بودجه', 'عملکرد', 'انحراف', 'درصد', 'وضعیت'],
           rows: budgetReport.rows.map((r) => [r.account_code, r.account_name, r.budget, r.actual, r.variance, r.variance_pct ?? '', r.favorable ? 'مطلوب' : 'نامطلوب']),
+        }
+      case 'equity-statement':
+        return equity && {
+          name: 'تغییرات-حقوق-صاحبان-سهام',
+          headers: ['ردیف', 'مبلغ'],
+          rows: [
+            ['ماندهٔ اول دوره', equity.opening_equity],
+            ['آورده‌ی سرمایه', equity.contributions],
+            ['کاهشِ سرمایه', equity.withdrawals],
+            ['سایر تغییرات', equity.other_changes],
+            ['ماندهٔ پایان دوره', equity.closing_equity],
+            ['سود/زیانِ دوره (هنوز منتقل نشده)', equity.net_profit],
+          ] as (string | number)[][],
         }
       case 'cash-flow':
         return cashFlow && {
@@ -318,6 +336,7 @@ export function Reports({ token }: { token: string }) {
     { key: 'balance-sheet', label: 'ترازنامه' },
     { key: 'budget', label: 'بودجه در برابر عملکرد' },
     { key: 'cash-flow', label: 'جریان وجوه نقد' },
+    { key: 'equity-statement', label: 'تغییرات حقوق صاحبان سهام' },
     { key: 'cost-center', label: 'سود پروژه/مرکز هزینه' },
     { key: 'receivable-aging', label: 'سنی مطالبات' },
     { key: 'payable-aging', label: 'سنی بدهی‌ها' },
@@ -651,6 +670,101 @@ export function Reports({ token }: { token: string }) {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {active === 'equity-statement' && equity && (
+        <div>
+          <p className="hint">
+            تغییرِ سرمایه‌ی مالکان در دوره. <strong>سود/زیانِ دوره بیرونِ این تساوی است</strong> — تا سندِ اختتامیه
+            زده نشود، در هیچ حسابِ حقوق صاحبان سهامی ننشسته.
+          </p>
+          <div className="report-kpis">
+            <div className="report-kpi"><span>ماندهٔ اول دوره</span><strong>{fa(equity.opening_equity)}</strong></div>
+            <div className="report-kpi tone-ok"><span>آورده‌ی سرمایه</span><strong>{fa(equity.contributions)}</strong></div>
+            <div className="report-kpi tone-warn"><span>کاهشِ سرمایه</span><strong>{fa(equity.withdrawals)}</strong></div>
+            <div className="report-kpi"><span>ماندهٔ پایان دوره</span><strong>{fa(equity.closing_equity)}</strong></div>
+          </div>
+
+          <h3>گردشِ دوره</h3>
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table rep-2col-table cards-on-mobile">
+                <tbody>
+                  <tr><td className="card-title">ماندهٔ اول دوره</td><td className="money-cell" data-label="مبلغ">{fa(equity.opening_equity)}</td></tr>
+                  <tr><td className="card-title">آورده‌ی سرمایه</td><td className="money-cell pos-in" data-label="مبلغ">{fa(equity.contributions)}</td></tr>
+                  <tr><td className="card-title">کاهشِ سرمایه</td><td className="money-cell pos-out" data-label="مبلغ">{fa(equity.withdrawals)}</td></tr>
+                  <tr>
+                    <td className="card-title">
+                      سایر تغییرات
+                      <span className="field-hint">اسنادی که تراکنشِ شریکِ نظیر ندارند: سندِ دستی، اختتامیه، افتتاحیه.</span>
+                    </td>
+                    <td className="money-cell" data-label="مبلغ">{fa(equity.other_changes)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="invoice-total">ماندهٔ پایان دوره: {fa(equity.closing_equity)}</p>
+          <p className="hint">سود/زیانِ دوره (هنوز به حقوق صاحبان سهام منتقل نشده): {fa(equity.net_profit)}</p>
+
+          <h3>اجزای حقوق صاحبان سهام</h3>
+          {equity.components.length === 0 ? (
+            <p className="hint">هیچ حسابِ حقوق صاحبان سهامی در این بازه حرکتی نداشت.</p>
+          ) : (
+            <div className="entity-table-wrap">
+              <div className="table-scroll">
+                <table className="entity-table cards-on-mobile">
+                  <thead>
+                    <tr><th>حساب</th><th>اول دوره</th><th>تغییر</th><th>پایان دوره</th></tr>
+                  </thead>
+                  <tbody>
+                    {equity.components.map((c) => (
+                      <tr key={c.account_id}>
+                        <td className="card-title">{c.account_code} — {c.account_name}</td>
+                        <td className="money-cell" data-label="اول دوره">{fa(c.opening)}</td>
+                        <td className="money-cell" data-label="تغییر">{fa(c.change)}</td>
+                        <td className="money-cell" data-label="پایان دوره">{fa(c.closing)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <h3>به تفکیکِ شریک</h3>
+          {equity.partner_rows.length === 0 ? (
+            <p className="hint">
+              آورده یا برداشتی از مسیرِ «تراکنش شریک» ثبت نشده. آورده‌ای که با سندِ دستی ثبت شده در جمع‌های بالا
+              هست ولی نامِ شریکش در دفتر نیامده، پس این‌جا دیده نمی‌شود.
+            </p>
+          ) : (
+            <div className="entity-table-wrap">
+              <div className="table-scroll">
+                <table className="entity-table cards-on-mobile">
+                  <thead>
+                    <tr><th>شریک</th><th>آورده</th><th>برداشت</th></tr>
+                  </thead>
+                  <tbody>
+                    {equity.partner_rows.map((r) => (
+                      <tr key={r.contact_id}>
+                        <td className="card-title">{r.contact_name}</td>
+                        <td className="money-cell pos-in" data-label="آورده">{fa(r.contributed)}</td>
+                        <td className="money-cell pos-out" data-label="برداشت">{fa(r.withdrawn)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {!equity.reconciled && (
+            <p className="error">
+              تساویِ «اول دوره + تغییرات = پایان دوره» برقرار نیست. این گزارش را مبنا نگیرید و گزارش کنید.
+            </p>
           )}
         </div>
       )}

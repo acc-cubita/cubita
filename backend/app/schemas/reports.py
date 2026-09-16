@@ -317,6 +317,56 @@ class CashFlowOut(BaseModel):
     closing_cash: Decimal  # = opening_cash + net_change
 
 
+class EquityComponentOut(BaseModel):
+    """یک جزءِ حقوق صاحبان سهام (سرمایه، سود انباشته، …) با مانده‌ی اول و پایان."""
+
+    account_id: UUID
+    account_code: str
+    account_name: str
+    opening: Decimal
+    change: Decimal
+    closing: Decimal
+
+
+class EquityPartnerRowOut(BaseModel):
+    """سهمِ هر شریک از آورده و برداشتِ دوره.
+
+    از جدولِ تراکنش‌ها می‌آید نه از دفتر، چون سندِ حسابداری نامِ شریک را ندارد —
+    پس آورده‌ای که با سندِ دستی ثبت شده در این تفکیک دیده نمی‌شود، هرچند در
+    جمع‌های بالا هست.
+    """
+
+    contact_id: UUID
+    contact_name: str
+    contributed: Decimal
+    withdrawn: Decimal
+
+
+class EquityStatementOut(BaseModel):
+    """صورت تغییرات در حقوق صاحبان سهام.
+
+    تساویِ پایه: `opening + contributions − withdrawals + other_changes = closing`.
+
+    `net_profit` عمداً **بیرونِ** این تساوی است: تا سندِ اختتامیه زده نشود سودِ
+    دوره در هیچ حسابِ حقوق صاحبان سهامی ننشسته — همان کاری که ترازنامه با
+    `current_period_profit` می‌کند.
+    """
+
+    date_from: date | None
+    date_to: date
+    opening_equity: Decimal
+    contributions: Decimal  # آورده‌ی سرمایه در دوره
+    withdrawals: Decimal  # کاهشِ سرمایه در دوره
+    #: هر حرکتِ حقوق صاحبان سهام که تراکنشِ نوع‌دار ندارد — سندِ دستی، اختتامیه،
+    #: افتتاحیه. باقی‌مانده است، پس تساوی همیشه برقرار می‌ماند.
+    other_changes: Decimal
+    closing_equity: Decimal
+    net_profit: Decimal
+    components: list[EquityComponentOut]
+    partner_rows: list[EquityPartnerRowOut]
+    reconciled: bool
+
+
 class SeasonalPartyRowOut(BaseModel):
     """یک طرف حساب در یک نوعِ معامله (خرید یا فروش) در یک فصل — تجمیعِ فاکتورها."""
 

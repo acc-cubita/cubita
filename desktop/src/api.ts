@@ -419,6 +419,47 @@ export const fetchCashFlow = (token: string, dateFrom?: string, dateTo?: string)
   return authedGet<CashFlow>(token, `/api/reports/cash-flow${suffix}`)
 }
 
+export interface EquityComponent {
+  account_id: string
+  account_code: string
+  account_name: string
+  opening: string
+  change: string
+  closing: string
+}
+
+export interface EquityPartnerRow {
+  contact_id: string
+  contact_name: string
+  contributed: string
+  withdrawn: string
+}
+
+/** صورت تغییرات در حقوق صاحبان سهام.
+ *
+ *  تساویِ پایه: `opening + contributions − withdrawals + other_changes = closing`.
+ *  `net_profit` عمداً بیرونِ این تساوی است — تا سندِ اختتامیه زده نشود، سودِ دوره
+ *  در هیچ حسابِ حقوق صاحبان سهامی ننشسته. */
+export interface EquityStatement {
+  date_from: string | null
+  date_to: string
+  opening_equity: string
+  contributions: string
+  withdrawals: string
+  other_changes: string
+  closing_equity: string
+  net_profit: string
+  components: EquityComponent[]
+  partner_rows: EquityPartnerRow[]
+  reconciled: boolean
+}
+
+export const fetchEquityStatement = (token: string, dateTo: string, dateFrom?: string) => {
+  const qs = new URLSearchParams({ date_to: dateTo })
+  if (dateFrom) qs.set('date_from', dateFrom)
+  return authedGet<EquityStatement>(token, `/api/reports/equity-statement?${qs}`)
+}
+
 export interface GeneralLedgerLine {
   line_id: string
   entry_id: string
