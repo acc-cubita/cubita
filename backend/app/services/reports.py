@@ -36,7 +36,7 @@ CASH_ROLES = (cc.CASH, cc.BANK, cc.PETTY_CASH)
 FIXED_ASSET_ROLES = (cc.FIXED_ASSETS, cc.ACCUMULATED_DEPRECIATION)
 #: بدهی‌هایی که «تأمین مالی»اند نه «عملیاتی». امروز یکی است؛ تاپل می‌ماند تا
 #: افزودنِ بعدی (اوراق، اجاره‌ی سرمایه‌ای) یک خط باشد نه بازنویسی.
-FINANCING_LIABILITY_ROLES = (cc.LONG_TERM_LIABILITY,)
+FINANCING_LIABILITY_ROLES = (cc.LONG_TERM_LIABILITY, cc.PARTNER_CURRENT)
 
 
 def get_sales_summary(db: Session) -> dict:

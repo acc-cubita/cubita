@@ -53,6 +53,15 @@ PAYROLL_DEDUCTIONS_PAYABLE = "payroll_deductions_payable"
 WORK_IN_PROCESS = "work_in_process"
 INVENTORY_ADJUSTMENT = "inventory_adjustment"
 RETAINED_EARNINGS = "retained_earnings"
+#: سرمایه‌ی آورده‌ی مالکان. حسابش (۳۱۰۱) از روزِ اول در چارت بود ولی **نقش نداشت**،
+#: پس هیچ سندِ خودکاری نمی‌توانست پیدایش کند و آورده‌ی مالک فقط با سندِ دستی ثبت
+#: می‌شد — قاعده‌ی پایدارِ ۲ («آورده ≠ درآمد») هیچ گاردِ نرم‌افزاری نداشت.
+OWNER_CAPITAL = "owner_capital"
+#: جاری شرکا — رابطه‌ی **وام** است نه مالکیت، پس بدهی است نه حقوق صاحبان سهام.
+#: طبقِ قاعده‌ی ۵۲ بسته به رویداد بدهکار یا بستانکار می‌شود؛ تنها حسابِ دوطرفه‌ی
+#: چارت. جداکردنش از سرمایه همان چیزی است که «صورت تغییرات در حقوق صاحبان سهام»
+#: را تمیز نگه می‌دارد: وامِ شریک تغییرِ سرمایه نیست.
+PARTNER_CURRENT = "partner_current"
 VAT_PAYABLE = "vat_payable"  # مالیات بر ارزش افزوده‌ی فروش (بدهی — به دارایی پرداختنی)
 VAT_RECEIVABLE = "vat_receivable"  # مالیات بر ارزش افزوده‌ی خرید (اعتبار مالیاتی — دارایی)
 FIXED_ASSETS = "fixed_assets"  # بهای تمام‌شده‌ی دارایی‌های ثابت (دارایی)
@@ -181,6 +190,8 @@ DEFAULT_CODE_BY_ROLE = {
     FIXED_ASSETS: "1201",
     ACCUMULATED_DEPRECIATION: "1202",
     RETAINED_EARNINGS: "3102",
+    OWNER_CAPITAL: "3101",
+    PARTNER_CURRENT: "2115",
     SALES_REVENUE: "4101",
     SALES_ROUNDING: "4108",
     SALES_RETURN: "4107",
