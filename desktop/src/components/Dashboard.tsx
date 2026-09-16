@@ -34,6 +34,8 @@ import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { ContractAmendmentPage, ContractPage, ContractSettlementPage, ContractStatementPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
+import { OwnerTransactionPage } from '../pages/company/OwnerTransactionPages'
+import { OwnerTransactionListPage } from '../pages/company/OwnerTransactionListPage'
 import { ContractAmendmentListPage, ContractingListPage, ContractSettlementListPage, ContractStatementListPage } from '../pages/contracting/ContractingListPages'
 import { MoadianHistoryPage, MoadianModulePage } from '../pages/moadian/MoadianModulePage'
 import { FiscalYearPage } from '../pages/FiscalYearPage'
@@ -300,6 +302,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contractingamendment: 'متمم پیمان',
   contractingstatement: 'صورت وضعیت دریافتی',
   contractingsettlement: 'تسویه حساب پیمان',
+  ownertxn: 'تراکنش شریک',
+  ownertxnlist: 'تراکنش‌های شریک',
   contractinglist: 'پیمان‌ها',
   contractingamendmentlist: 'متمم‌های پیمان',
   contractingstatementlist: 'صورت وضعیت‌های دریافتی',
@@ -821,6 +825,8 @@ export function Dashboard({
           {page === 'contractingamendment' && <ContractAmendmentPage token={token} />}
           {page === 'contractingstatement' && <ContractStatementPage token={token} />}
           {page === 'contractingsettlement' && <ContractSettlementPage token={token} />}
+          {page === 'ownertxn' && <OwnerTransactionPage token={token} />}
+          {page === 'ownertxnlist' && <OwnerTransactionListPage token={token} />}
           {page === 'contractinglist' && <ContractingListPage token={token} />}
           {page === 'contractingamendmentlist' && <ContractAmendmentListPage token={token} />}
           {page === 'contractingstatementlist' && <ContractStatementListPage token={token} />}

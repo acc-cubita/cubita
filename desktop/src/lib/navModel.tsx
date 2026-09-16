@@ -104,6 +104,7 @@ export type PageKey =
   | 'marketplace'
   | 'payroll'
   | 'contractnew'
+  | 'ownertxn'
   | 'contractlist'
   | 'payslipledger'
   | 'servicelocation'
@@ -157,6 +158,7 @@ export type PageKey =
   | 'allinstallments'
   | 'costcenterlist'
   | 'contractinglist'
+  | 'ownertxnlist'
   | 'contractingamendmentlist'
   | 'contractingstatementlist'
   | 'contractingsettlementlist'
@@ -442,6 +444,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <Building size={17} />,
     items: [
       { key: 'contactnew', label: 'طرف حساب جدید', icon: <UserPlus size={18} /> },
+      { key: 'ownertxn', label: 'تراکنش شریک', icon: <HandCoins size={18} /> },
       { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
       { key: 'costcenter', label: 'مرکز هزینه', icon: <Target size={18} /> },
       { key: 'geo', label: 'محل‌های جغرافیایی', icon: <MapPin size={18} /> },

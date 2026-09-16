@@ -198,6 +198,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: BarChart3 },
     { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: Gauge },
     { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound },
+    { key: 'ownertxnlist', label: 'تراکنش‌های شریک', icon: HandCoins },
     { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2 },
     { key: 'installmentplans', label: 'قراردادهای اقساطی', icon: CalendarClock },
     { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks },
@@ -237,6 +238,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   pettylist: 'دریافت و پرداخت',
   analyticlist: 'حسابداری',
   geolist: 'شرکت',
+  ownertxnlist: 'شرکت',
   contactgrouplist: 'شرکت',
   calendarlist: 'شرکت',
   numberinglist: 'تنظیمات',
@@ -292,6 +294,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
 export type OpsListTarget = PageKey | 'state' | 'view' | 'none'
 
 export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
+  ownertxn: 'ownertxnlist', //: ثبت ↔ دفتر — الگوی «فروش اقساطی»
   // ── دریافت و پرداخت ──
   payflow: 'none', //: راهنمای مسیر
   receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
