@@ -9,35 +9,29 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Save,
   TrendingDown,
   Trash2,
   UserRound,
   UsersRound,
-  X,
 } from 'lucide-react'
 import {
-  createContact,
   deleteContact,
   fetchAging,
   fetchContacts,
-  fetchPriceLists,
   updateContact,
-  type ContactIn,
   type ContactRecord,
-  type PriceListRecord,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { BulkImportPanel } from '../components/BulkImportPanel'
 import { Pager, usePagination } from '../components/Pager'
 import { SortBar, SortTh, useSort } from '../components/SortControls'
-import { NumberInput } from '../components/NumberInput'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { AgingPanel } from '../components/AgingPanel'
 import { ContactStatementDrawer } from '../components/ContactStatementDrawer'
+import type { PageKey } from '../lib/navModel'
 
 const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   customer: 'مشتری',
@@ -45,16 +39,20 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   both: 'مشتری و تأمین‌کننده',
 }
 
-const EMPTY_FORM: ContactIn = {
-  name: '', type: 'customer', phone: '', email: '', address: '', tax_id: '', credit_limit: 0,
-  default_price_list_id: null, entity_type: 'real', national_id: '', economic_code: '', postal_code: '',
-}
-
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
-export function ContactsPage({ token }: { token: string }) {
+export function ContactsPage({
+  token,
+  onNavigate,
+  onEditContact,
+}: {
+  token: string
+  onNavigate: (page: PageKey) => void
+  /** ویرایش در **فرمِ کامل** انجام می‌شود، نه این‌جا — وگرنه نیمی از فیلدها
+   *  بی‌صدا از دسترس خارج می‌مانند. */
+  onEditContact: (id: string) => void
+}) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
-  const [priceLists, setPriceLists] = useState<PriceListRecord[]>([])
   const [recvMap, setRecvMap] = useState<Map<string, number>>(new Map())
   const [payMap, setPayMap] = useState<Map<string, number>>(new Map())
   const [agingTotals, setAgingTotals] = useState<{ recv: number; pay: number }>({ recv: 0, pay: 0 })
@@ -67,22 +65,16 @@ export function ContactsPage({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [statementContact, setStatementContact] = useState<{ id: string; name: string } | null>(null)
 
-  // فرم ایجاد/ویرایش طرف حساب
-  const [form, setForm] = useState<ContactIn>(EMPTY_FORM)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [formMessage, setFormMessage] = useState<string | null>(null)
 
   async function refresh() {
     setError(null)
     try {
-      const [cs, pls, recvAging, payAging] = await Promise.all([
+      const [cs, recvAging, payAging] = await Promise.all([
         fetchContacts(token),
-        fetchPriceLists(token).catch(() => []),
         fetchAging(token, 'receivable').catch(() => null),
         fetchAging(token, 'payable').catch(() => null),
       ])
       setContacts(cs)
-      setPriceLists(pls.filter((p) => p.is_active))
       setRecvMap(new Map((recvAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
       setPayMap(new Map((payAging?.rows ?? []).map((r) => [r.contact_id, Number(r.total)])))
       setAgingTotals({ recv: Number(recvAging?.grand_total ?? 0), pay: Number(payAging?.grand_total ?? 0) })
@@ -130,57 +122,6 @@ export function ContactsPage({ token }: { token: string }) {
     return { total: contacts.length, customers, suppliers }
   }, [contacts])
 
-  async function handleSaveContact(e: React.FormEvent) {
-    e.preventDefault()
-    setFormMessage(null)
-    if (!form.name.trim()) {
-      setFormMessage('نام طرف حساب الزامی است.')
-      return
-    }
-    const payload: ContactIn = {
-      ...form,
-      phone: form.phone || null,
-      email: form.email || null,
-      tax_id: form.tax_id || null,
-      national_id: form.national_id || null,
-      economic_code: form.economic_code || null,
-      postal_code: form.postal_code || null,
-    }
-    try {
-      if (editingId) {
-        await updateContact(token, editingId, payload)
-        setFormMessage('طرف حساب ویرایش شد.')
-      } else {
-        await createContact(token, payload)
-        setFormMessage('طرف حساب جدید ثبت شد.')
-      }
-      setForm(EMPTY_FORM)
-      setEditingId(null)
-      await refresh()
-    } catch (err) {
-      setFormMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
-
-  function startEdit(c: ContactRecord) {
-    setEditingId(c.id)
-    setForm({
-      name: c.name,
-      type: c.type,
-      phone: c.phone ?? '',
-      email: c.email ?? '',
-      address: c.address,
-      tax_id: c.tax_id ?? '',
-      credit_limit: Number(c.credit_limit) || 0,
-      default_price_list_id: c.default_price_list_id ?? null,
-      entity_type: c.entity_type ?? 'real',
-      national_id: c.national_id ?? '',
-      economic_code: c.economic_code ?? '',
-      postal_code: c.postal_code ?? '',
-    })
-    setFormMessage(null)
-  }
-
   /** فعال/غیرفعال — **فقط همین یک فیلد فرستاده می‌شود.**
    *
    * سرور `PATCH` را جزئی می‌گیرد، پس این درخواست هیچ‌چیزِ دیگری را دست نمی‌زند.
@@ -210,10 +151,6 @@ export function ContactsPage({ token }: { token: string }) {
     setError(null)
     try {
       await deleteContact(token, c.id)
-      if (editingId === c.id) {
-        setEditingId(null)
-        setForm(EMPTY_FORM)
-      }
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -222,108 +159,27 @@ export function ContactsPage({ token }: { token: string }) {
 
   const contactsTab = (
     <div className="workspace-split">
+      {/* **فرمِ ساخت/ویرایش از این‌جا برداشته شد.**
+          دو مسیرِ ساختِ طرف‌حساب وجود داشت و این یکی ناقص بود: نقشِ سهامدار و
+          درصدِ سهم، واسطه و پورسانت، گروه، محلِ جغرافیایی، نرخِ تخفیف، کدِ
+          تفصیلی، ماندهٔ اول دوره، نشانی‌ها، تلفن‌ها و افرادِ مرتبط هیچ‌کدام
+          این‌جا پرسیده نمی‌شدند — و چون فرمِ کامل فقط می‌ساخت، رکوردی که از
+          این‌جا ساخته می‌شد **برای همیشه** ناقص می‌مانْد.
+          «هرگز دو نمای یک داده نساز». */}
       <SectionCard
-        icon={editingId ? Pencil : Plus}
-        title={editingId ? 'ویرایش طرف حساب' : 'طرف حساب جدید'}
-        description={editingId ? 'اطلاعات این طرف حساب را به‌روزرسانی کنید.' : 'مشتری یا تأمین‌کننده‌ی تازه را ثبت کنید.'}
-        actions={
-          editingId ? (
-            <button
-              onClick={() => {
-                setEditingId(null)
-                setForm(EMPTY_FORM)
-                setFormMessage(null)
-              }}
-            >
-              <X size={13} /> انصراف
-            </button>
-          ) : undefined
-        }
+        icon={Plus}
+        title="ثبت و ویرایشِ طرف حساب"
+        description="فرمِ کاملِ طرف حساب — با نقش‌ها، نشانی‌ها، تلفن‌ها، افرادِ مرتبط و کدِ تفصیلی."
       >
-        <form className="invoice-form form-full" onSubmit={handleSaveContact}>
-          <label>
-            نام
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="نام شخص یا شرکت" required />
-          </label>
-          <label>
-            نوع
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option value="customer">مشتری</option>
-              <option value="supplier">تأمین‌کننده</option>
-              <option value="both">مشتری و تأمین‌کننده</option>
-            </select>
-          </label>
-          <div className="field-row">
-            <label>
-              تلفن
-              <input type="text" value={form.phone ?? ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            </label>
-            <label>
-              ایمیل
-              <input type="text" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </label>
-          </div>
-          <div className="field-row">
-            <label>
-              نوعِ شخص
-              <select value={form.entity_type ?? 'real'} onChange={(e) => setForm({ ...form, entity_type: e.target.value as 'real' | 'legal' })}>
-                <option value="real">حقیقی</option>
-                <option value="legal">حقوقی</option>
-              </select>
-            </label>
-            <label>
-              {form.entity_type === 'legal' ? 'شناسه ملی' : 'کد ملی'}
-              <input
-                type="text"
-                value={form.national_id ?? ''}
-                onChange={(e) => setForm({ ...form, national_id: e.target.value })}
-                placeholder={form.entity_type === 'legal' ? '۱۱ رقم' : '۱۰ رقم'}
-              />
-            </label>
-          </div>
-          <div className="field-row">
-            <label>
-              کد اقتصادی
-              <input type="text" value={form.economic_code ?? ''} onChange={(e) => setForm({ ...form, economic_code: e.target.value })} />
-            </label>
-            <label>
-              کد پستی
-              <input type="text" value={form.postal_code ?? ''} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} placeholder="۱۰ رقم" />
-            </label>
-          </div>
-          <label>
-            سقف اعتبار (ریال)
-            <NumberInput
-              value={form.credit_limit || ''}
-              onChange={(v) => setForm({ ...form, credit_limit: Number(v) || 0 })}
-              placeholder="۰ = بدون سقف"
-            />
-          </label>
-          {priceLists.length > 0 && (
-            <label>
-              لیستِ قیمتِ پیش‌فرض
-              <select
-                value={form.default_price_list_id ?? ''}
-                onChange={(e) => setForm({ ...form, default_price_list_id: e.target.value || null })}
-              >
-                <option value="">— قیمتِ پایه —</option>
-                {priceLists.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label>
-            نشانی
-            <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Save size={14} /> {editingId ? 'ذخیره تغییرات' : 'ثبت طرف حساب'}
-            </button>
-          </div>
-          {formMessage && <div className="hint">{formMessage}</div>}
-        </form>
+        <p className="hint">
+          ساخت و ویرایشِ طرف حساب از فرمِ کامل انجام می‌شود تا همه‌ی اطلاعات — از جمله
+          نقشِ «سهامدار» و ماندهٔ اول دوره — یک‌جا ثبت شوند.
+        </p>
+        <div className="invoice-form-footer">
+          <button type="button" className="btn-primary" onClick={() => onNavigate('contactnew')}>
+            <Plus size={14} /> طرف حساب جدید
+          </button>
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -409,7 +265,7 @@ export function ContactsPage({ token }: { token: string }) {
                       </td>
                       <td className="check-actions card-actions">
                         <button type="button" onClick={() => setStatementContact({ id: c.id, name: c.name })}><FileText size={13} /> صورت‌حساب</button>
-                        <button type="button" onClick={() => startEdit(c)}><Pencil size={13} /> ویرایش</button>
+                        <button type="button" onClick={() => onEditContact(c.id)}><Pencil size={13} /> ویرایش</button>
                         <button type="button" onClick={() => void handleToggleActive(c)}>
                           {c.is_active ? <><Ban size={13} /> غیرفعال</> : <><RotateCcw size={13} /> فعال</>}
                         </button>

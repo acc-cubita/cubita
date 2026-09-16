@@ -355,8 +355,11 @@ const ROLE_FILTERS: Record<string, (r: ContactRecord) => boolean> = {
 export function ContactListPage({
   token,
   onNavigate,
+  onEditContact,
 }: {
   token: string
+  /** ویرایش در فرمِ کامل — تا امروز ردیف‌های این جدول هیچ کنشی نداشتند. */
+  onEditContact?: (id: string) => void
   onNavigate?: (page: PageKey) => void
 }) {
   const [rows, setRows] = useState<ContactRecord[] | null>(null)
@@ -454,6 +457,7 @@ export function ContactListPage({
                     <th>محل</th>
                     <th>تلفن</th>
                     <th>وضعیت</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -470,6 +474,11 @@ export function ContactListPage({
                         <span className={`badge ${r.is_active ? 'success' : ''}`}>
                           {r.is_active ? 'فعال' : 'غیرفعال'}
                         </span>
+                      </td>
+                      <td className="card-actions">
+                        {onEditContact && (
+                          <button type="button" onClick={() => onEditContact(r.id)}>ویرایش</button>
+                        )}
                       </td>
                     </tr>
                   ))}
