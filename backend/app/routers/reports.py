@@ -22,6 +22,7 @@ from app.schemas.reports import (
     AgingReportOut,
     BalanceSheetOut,
     CashFlowOut,
+    EquityStatementOut,
     ContactStatementOut,
     GeneralLedgerOut,
     IncomeStatementOut,
@@ -206,6 +207,21 @@ def cash_flow(
     _=Depends(require_permission("accounting", "view")),
 ):
     return reports_service.get_cash_flow(db, date_from, date_to)
+
+
+@router.get("/equity-statement", response_model=EquityStatementOut)
+def equity_statement(
+    date_to: date = Query(...),
+    date_from: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """صورت تغییرات در حقوق صاحبان سهام — چهارمین صورتِ الزامی.
+
+    `date_to` اجباری است چون «مانده‌ی پایان دوره» بی تاریخِ پایان معنا ندارد.
+    `date_from` خالی یعنی از ابتدای دفتر.
+    """
+    return reports_service.get_equity_statement(db, date_from, date_to)
 
 
 @router.get("/cost-center", response_model=CostCenterReportOut)

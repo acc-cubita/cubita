@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.banking import BankAccount, Check
 from app.models.inventory import Contact, Item, StockLedger
+from app.models.owner_transactions import OwnerTransaction
 from app.models.invoices import (
     PurchaseInvoice,
     PurchaseInvoiceLine,
@@ -979,6 +980,169 @@ def get_cash_flow(db: Session, date_from: date | None, date_to: date | None) -> 
         "net_financing": net_financing,
         "net_change": net_change,
         "closing_cash": opening_cash + net_change,
+    }
+
+
+def get_equity_statement(db: Session, date_from: date | None, date_to: date) -> dict:
+    """صورت تغییرات در حقوق صاحبان سهام — چهارمین صورتِ الزامی.
+
+    **چرا تا امروز ممکن نبود.** ورودی‌اش وجود نداشت: آورده و برداشتِ مالک فقط
+    سندِ دستی بودند و هیچ داده‌ای نمی‌گفت کدام سند کدام است. مهاجرتِ ۰۱۵۹ آن را
+    ساخت؛ این گزارش مصرفش می‌کند.
+
+    **مرجع، دفتر است — نه جدولِ تراکنش‌ها.** وسوسه‌ی طبیعی این بود که ردیف‌ها را
+    از `owner_transactions` بسازیم. آن کار گزارش را **غلط** می‌کرد: روی تولید یک
+    آورده‌ی ۲۰۰ میلیونی به‌صورتِ سندِ دستی ثبت شده که هیچ `OwnerTransaction`ی
+    ندارد. اگر فقط جدولِ تراکنش‌ها خوانده می‌شد، آن مبلغ از گزارش می‌افتاد و
+    «ماندهٔ پایان دوره» با ترازنامه نمی‌خواند.
+
+    پس: **حرکت‌ها از دفتر می‌آیند و طبقه‌بندی از تراکنش‌ها.** سندی که تراکنشِ
+    نظیر دارد برچسبِ درستش را می‌گیرد؛ بقیه در «سایر تغییرات» جمع می‌شوند. همان
+    الگوی `_cash_flow_category`: نقش وقتی هست حرفِ آخر را می‌زند، و نبودنش
+    گزارش را خراب نمی‌کند.
+
+    **سود و زیانِ دوره ردیفِ جداست، نه بخشی از مانده‌ها.** تا سندِ اختتامیه زده
+    نشود، سودِ دوره در هیچ حسابِ حقوق صاحبان سهامی ننشسته — دقیقاً همان کاری که
+    `get_balance_sheet` با `current_period_profit` می‌کند. یکی‌کردنشان یعنی
+    دوبار شمردنِ سود در سالی که بسته شده.
+    """
+    equity_accounts = (
+        db.query(Account)
+        .filter(Account.type == "equity", Account.is_group.is_(False))
+        .all()
+    )
+    equity_ids = {a.id for a in equity_accounts}
+    if not equity_ids:
+        return {
+            "date_from": date_from, "date_to": date_to,
+            "opening_equity": Decimal(0), "contributions": Decimal(0), "withdrawals": Decimal(0),
+            "other_changes": Decimal(0), "closing_equity": Decimal(0), "net_profit": Decimal(0),
+            "components": [], "partner_rows": [], "reconciled": True,
+        }
+
+    def _balance(before: date | None, upto: date | None) -> dict[UUID, Decimal]:
+        query = (
+            db.query(
+                JournalLine.account_id,
+                func.coalesce(func.sum(JournalLine.debit), 0),
+                func.coalesce(func.sum(JournalLine.credit), 0),
+            )
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .filter(JournalLine.account_id.in_(equity_ids))
+        )
+        if before is not None:
+            query = query.filter(JournalEntry.entry_date >= before)
+        if upto is not None:
+            query = query.filter(JournalEntry.entry_date <= upto)
+        return {
+            aid: Decimal(credit) - Decimal(debit)
+            for aid, debit, credit in query.group_by(JournalLine.account_id).all()
+        }
+
+    #: ماندهٔ اول دوره = هرچه **پیش از** `date_from` در دفتر نشسته.
+    opening_by_account = _balance(None, date_from - timedelta(days=1)) if date_from else {}
+    period_by_account = _balance(date_from, date_to)
+
+    #: نقشه‌ی سندِ حسابداری → نوعِ تراکنشِ شریک. فقط همین دو نوع روی حقوق صاحبان
+    #: سهام می‌نشینند؛ وام و بازپرداخت جاری شرکا را تکان می‌دهند که بدهی است.
+    owner_types: dict[UUID, str] = {
+        entry_id: kind
+        for entry_id, kind in db.query(OwnerTransaction.journal_entry_id, OwnerTransaction.type)
+        .filter(
+            OwnerTransaction.journal_entry_id.isnot(None),
+            OwnerTransaction.voided_at.is_(None),
+        )
+        .all()
+    }
+
+    contributions = Decimal(0)
+    withdrawals = Decimal(0)
+    partner_totals: dict[UUID, dict] = {}
+
+    line_query = (
+        db.query(JournalLine, JournalEntry.id)
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .filter(JournalLine.account_id.in_(equity_ids))
+        .filter(JournalEntry.entry_date <= date_to)
+    )
+    if date_from is not None:
+        line_query = line_query.filter(JournalEntry.entry_date >= date_from)
+
+    typed_entry_ids = set()
+    for line, entry_id in line_query.all():
+        kind = owner_types.get(entry_id)
+        if kind is None:
+            continue
+        typed_entry_ids.add(entry_id)
+        signed = Decimal(line.credit) - Decimal(line.debit)
+        if kind == "capital_contribution":
+            contributions += signed
+        elif kind == "capital_withdrawal":
+            withdrawals += -signed
+
+    #: تفکیکِ آورده/برداشت به شریک — از خودِ تراکنش‌ها، چون سند نامِ شریک را ندارد.
+    partner_query = (
+        db.query(OwnerTransaction, Contact.name)
+        .join(Contact, Contact.id == OwnerTransaction.contact_id)
+        .filter(
+            OwnerTransaction.voided_at.is_(None),
+            OwnerTransaction.type.in_(("capital_contribution", "capital_withdrawal")),
+            OwnerTransaction.transaction_date <= date_to,
+        )
+    )
+    if date_from is not None:
+        partner_query = partner_query.filter(OwnerTransaction.transaction_date >= date_from)
+    for txn, name in partner_query.all():
+        row = partner_totals.setdefault(
+            txn.contact_id,
+            {"contact_id": txn.contact_id, "contact_name": name, "contributed": Decimal(0), "withdrawn": Decimal(0)},
+        )
+        if txn.type == "capital_contribution":
+            row["contributed"] += Decimal(txn.amount)
+        else:
+            row["withdrawn"] += Decimal(txn.amount)
+
+    opening_equity = sum(opening_by_account.values(), Decimal(0))
+    period_change = sum(period_by_account.values(), Decimal(0))
+    #: **باقی‌مانده، نه جمعِ مستقل.** هرچه از حرکتِ دوره به تراکنشِ نوع‌دار نچسبد
+    #: این‌جا می‌نشیند — سندِ دستی، اختتامیه، افتتاحیه. با این تعریف، تساویِ
+    #: «اول دوره + تغییرات = پایان دوره» **همیشه** برقرار است و گزارش نمی‌تواند
+    #: بی‌صدا چیزی را جا بیندازد.
+    other_changes = period_change - contributions + withdrawals
+
+    components = sorted(
+        (
+            {
+                "account_id": acc.id,
+                "account_code": acc.code,
+                "account_name": acc.name,
+                "opening": opening_by_account.get(acc.id, Decimal(0)),
+                "change": period_by_account.get(acc.id, Decimal(0)),
+                "closing": opening_by_account.get(acc.id, Decimal(0)) + period_by_account.get(acc.id, Decimal(0)),
+            }
+            for acc in equity_accounts
+        ),
+        key=lambda r: r["account_code"],
+    )
+
+    closing_equity = opening_equity + period_change
+    net_profit = get_income_statement(db, date_from, date_to)["net_profit"]
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "opening_equity": opening_equity,
+        "contributions": contributions,
+        "withdrawals": withdrawals,
+        "other_changes": other_changes,
+        "closing_equity": closing_equity,
+        "net_profit": net_profit,
+        "components": [c for c in components if c["opening"] or c["change"]],
+        "partner_rows": sorted(partner_totals.values(), key=lambda r: r["contact_name"]),
+        #: قاعده‌ی ۱۶۲ — صورت‌ها باید cross-reconcile شوند. این‌جا با ساخت برقرار
+        #: است؛ ماندنش در خروجی یعنی اگر روزی تعریفِ `other_changes` عوض شد،
+        #: کلاینت و تست بی‌صدا رد نمی‌شوند.
+        "reconciled": opening_equity + contributions - withdrawals + other_changes == closing_equity,
     }
 
 
