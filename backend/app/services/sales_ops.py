@@ -403,8 +403,14 @@ def default_account_for(db: Session, contact: Contact) -> Account:
     **پیش‌فرض، قفل نیست.** طرف‌حسابی که هر دو نقش را دارد از دریافتنی شروع
     می‌کند و کاربر می‌تواند پرداختنی را بردارد؛ شاهدی در دست نداریم که این حساب
     تغییرناپذیر باشد، و حدس‌زدنش یعنی بستنِ کاری که کسب‌وکار لازم دارد.
+
+    **واسطه/سهامدار/کارمندِ خالص هم پرداختنی می‌گیرند.** تا پیش از مهاجرتِ ۰۱۶۴
+    این به‌طورِ اتفاقی درست کار می‌کرد، چون فرم آن‌ها را «تأمین‌کننده» ثبت می‌کرد.
+    حالا نقششان درست ثبت می‌شود، پس این‌جا باید صریح باشد وگرنه پورسانتِ واسطه
+    روی حساب‌های **دریافتنی** می‌نشیند — طلبی که وجود ندارد.
     """
-    role = cc.ACCOUNTS_PAYABLE if contact.type == "supplier" else cc.ACCOUNTS_RECEIVABLE
+    role = cc.ACCOUNTS_RECEIVABLE if contact.is_receivable_party else (
+        cc.ACCOUNTS_PAYABLE if contact.is_payable_party else cc.ACCOUNTS_RECEIVABLE)
     return get_account(db, role)
 
 
@@ -418,12 +424,13 @@ def _assert_role_matches(db: Session, contact: Contact, account: Account, side: 
     payable = get_account(db, cc.ACCOUNTS_PAYABLE)
     receivable = get_account(db, cc.ACCOUNTS_RECEIVABLE)
     label = "بدهکار" if side == "debit" else "بستانکار"
-    if account.id == payable.id and contact.type not in ("supplier", "both"):
+    if account.id == payable.id and not contact.is_payable_party:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"سمتِ {label}: «{contact.name}» تأمین‌کننده نیست، پس روی حساب‌های پرداختنی نمی‌نشیند.",
+            f"سمتِ {label}: «{contact.name}» نه تأمین‌کننده است نه واسطه/سهامدار/کارمند، "
+            "پس روی حساب‌های پرداختنی نمی‌نشیند.",
         )
-    if account.id == receivable.id and contact.type not in ("customer", "both"):
+    if account.id == receivable.id and not contact.is_receivable_party:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"سمتِ {label}: «{contact.name}» مشتری نیست، پس روی حساب‌های دریافتنی نمی‌نشیند.",

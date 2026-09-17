@@ -512,7 +512,7 @@ export function InstallmentSalesPage({
         fetchInstallmentSummary(token),
       ])
       setPlans(ps)
-      setContacts(cs.filter((c) => c.type !== 'supplier'))
+      setContacts(cs.filter((c) => c.is_customer))
       setSummary(sm)
     } catch (err) {
       setError(errText(err))

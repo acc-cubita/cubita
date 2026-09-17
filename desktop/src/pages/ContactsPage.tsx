@@ -37,6 +37,9 @@ const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   customer: 'مشتری',
   supplier: 'تأمین‌کننده',
   both: 'مشتری و تأمین‌کننده',
+  //: نقشِ معاملاتی ندارد — واسطه، سهامدار یا کارمندِ خالص. تا مهاجرتِ ۰۱۶۴ چنین
+  //: کسی به‌زور «تأمین‌کننده» برچسب می‌خورد.
+  none: 'بدونِ نقشِ معاملاتی',
 }
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
@@ -117,8 +120,8 @@ export function ContactsPage({
 
   // شاخص‌های بالای صفحه — از همان داده‌ی موجود محاسبه می‌شوند
   const kpis = useMemo(() => {
-    const customers = contacts.filter((c) => c.type === 'customer' || c.type === 'both').length
-    const suppliers = contacts.filter((c) => c.type === 'supplier' || c.type === 'both').length
+    const customers = contacts.filter((c) => c.is_customer).length
+    const suppliers = contacts.filter((c) => c.is_supplier).length
     return { total: contacts.length, customers, suppliers }
   }, [contacts])
 

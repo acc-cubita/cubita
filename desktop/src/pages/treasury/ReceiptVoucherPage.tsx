@@ -114,8 +114,8 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
 
   const contacts = useMemo(() => {
     const all: ContactRecord[] = data.data?.contacts ?? []
-    if (receiptType === 'customer') return all.filter((c) => c.type === 'customer' || c.type === 'both')
-    if (receiptType === 'supplier') return all.filter((c) => c.type === 'supplier' || c.type === 'both')
+    if (receiptType === 'customer') return all.filter((c) => c.is_customer)
+    if (receiptType === 'supplier') return all.filter((c) => c.is_supplier)
     return all
   }, [data.data, receiptType])
 

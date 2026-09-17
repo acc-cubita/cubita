@@ -82,7 +82,7 @@ export function WarehouseReceiptsTab({
   useEffect(() => {
     void fetchContacts(token).then(setContacts).catch(() => {})
   }, [token])
-  const suppliers = useMemo(() => contacts.filter((c) => c.type === 'supplier' || c.type === 'both'), [contacts])
+  const suppliers = useMemo(() => contacts.filter((c) => c.is_supplier), [contacts])
   const contactName = useMemo(() => new Map(contacts.map((c) => [c.id, c.name])), [contacts])
   const warehouseName = useMemo(() => new Map(warehouses.map((w) => [w.id, w.name])), [warehouses])
 

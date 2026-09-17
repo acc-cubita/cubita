@@ -250,8 +250,8 @@ export function ContactNewPage({
     //: ساخته می‌شود، پس فقط برای حقوقی برمی‌گردد.
     setCompanyName(c.entity_type === 'legal' ? c.name : '')
     setEntityType((c.entity_type ?? 'real') as typeof entityType)
-    setIsCustomer(c.type === 'customer' || c.type === 'both')
-    setIsSupplier(c.type === 'supplier' || c.type === 'both')
+    setIsCustomer(!!c.is_customer)
+    setIsSupplier(!!c.is_supplier)
     setSubType(c.sub_type ?? '')
     setIsActive(c.is_active)
     setIsBlacklisted(!!c.is_blacklisted)
@@ -316,12 +316,18 @@ export function ContactNewPage({
    * شاخص‌های موجود روی همان تکیه دارند؛ واسطه، سهامدار و کارمند پرچمِ جداگانه‌اند.
    * پس نقش‌ها مستقل تیک می‌خورند و این‌جا به آن ستون نگاشته می‌شوند.
    *
-   * طرف‌حسابی که هیچ‌یک از دو نقشِ معاملاتی را ندارد (فقط واسطه، سهامدار یا
-   * کارمند) **تأمین‌کننده** ثبت می‌شود، چون
-   * جریانِ پول از ما به اوست: پورسانت یا سودِ سهام. این را زیرِ تیک‌ها هم نوشته‌ایم
-   * تا نگاشت پنهان نباشد.
+   * **تا مهاجرتِ ۰۱۶۴ این‌جا یک نگاشتِ پنهان بود.** طرف‌حسابی که هیچ‌یک از دو
+   * نقشِ معاملاتی را نداشت (فقط واسطه، سهامدار یا کارمند) به‌زور «تأمین‌کننده»
+   * ثبت می‌شد، چون ستونِ `type` حالتِ چهارمی نداشت. کاربر واسطه می‌ساخت و در
+   * فهرست «تأمین‌کننده، واسطه» می‌دید — و در انتخابگرِ تأمین‌کننده‌ی رسیدِ انبار
+   * هم ظاهر می‌شد.
+   *
+   * حالا فرم **خودِ پرچم‌ها را می‌فرستد** و هیچ نگاشتی در کار نیست. `type` فقط
+   * برای فراخوان‌های قدیمیِ سرور مشتق می‌شود؛ روتر وقتی پرچم‌ها بیایند کنارش
+   * می‌گذارد.
    */
-  const contactType = isCustomer && isSupplier ? 'both' : isCustomer ? 'customer' : 'supplier'
+  const contactType = isCustomer && isSupplier ? 'both' : isCustomer ? 'customer'
+    : isSupplier ? 'supplier' : 'none'
   const hasAnyRole = isCustomer || isSupplier || isBroker || isShareholder || isEmployee
 
   //: عنوانِ تفصیلی از نام پیشنهاد می‌شود تا کاربر همان را دوباره تایپ نکند — ولی
@@ -379,6 +385,8 @@ export function ContactNewPage({
       const payload = {
         name: displayName,
         type: contactType,
+        is_customer: isCustomer,
+        is_supplier: isSupplier,
         first_name: entityType === 'real' ? firstName.trim() : '',
         last_name: entityType === 'real' ? lastName.trim() : '',
         first_name2: firstName2.trim(),
@@ -842,7 +850,7 @@ function RolesTab(p: {
         واسطه کسی است که معامله را واسطه‌گری می‌کند و پورسانت می‌گیرد — و می‌تواند
         هم‌زمان مشتری یا تأمین‌کننده هم باشد.
         {!p.isCustomer && !p.isSupplier && (p.isBroker || p.isShareholder || p.isEmployee)
-          ? ' چون نه مشتری تیک خورده نه تأمین‌کننده، در فهرست‌ها تأمین‌کننده دیده می‌شود: جریانِ پول از ما به اوست (پورسانت، سودِ سهام یا حقوق).'
+          ? ' نقشِ معاملاتی لازم نیست: این طرف‌حساب نه مشتری ثبت می‌شود نه تأمین‌کننده. پرداخت به او (پورسانت، سودِ سهام یا حقوق) همچنان ممکن است.'
           : ''}
       </p>
       {p.isBroker && (

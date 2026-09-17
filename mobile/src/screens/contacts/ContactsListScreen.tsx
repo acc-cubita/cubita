@@ -14,7 +14,12 @@ import type { ContactsStackParams } from '../../navigation/types'
 
 type Nav = NativeStackNavigationProp<ContactsStackParams, 'ContactsList'>
 
-const TYPE_LABEL: Record<string, string> = { customer: 'مشتری', supplier: 'تأمین‌کننده', both: 'مشتری/تأمین‌کننده' }
+//: `none` از مهاجرتِ ۰۱۶۴ ممکن شد — واسطه/سهامدار/کارمندِ خالص. بدونِ این
+//: برچسب، صفحه رشته‌ی خامِ «none» را نشان می‌داد.
+const TYPE_LABEL: Record<string, string> = {
+  customer: 'مشتری', supplier: 'تأمین‌کننده', both: 'مشتری/تأمین‌کننده',
+  none: 'بدونِ نقشِ معاملاتی',
+}
 
 export function ContactsListScreen() {
   const nav = useNavigation<Nav>()

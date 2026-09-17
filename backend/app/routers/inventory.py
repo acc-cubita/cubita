@@ -194,6 +194,24 @@ def _assert_company_refs(db: Session, data: ContactIn) -> None:
 _TAFSILI_INPUT = ("tafsili_code", "tafsili_title", "tafsili_title2")
 
 
+def _resolve_role_fields(fields: dict) -> None:
+    """وقتی هم `type` آمده و هم پرچم‌ها، **پرچم‌ها برنده‌اند** — و `type` کنار می‌رود.
+
+    بدونِ این، نتیجه به *ترتیبِ کلیدهای دیکشنری* بند بود: `Contact(**fields)` هر
+    دو را `setattr` می‌کند و آخری برنده می‌شود. یعنی یک باگ که فقط گاهی و بسته به
+    ترتیبِ فیلدهای اسکیما خودش را نشان می‌دهد.
+
+    `None` یعنی «نفرستادم» و پاک می‌شود؛ وگرنه `PATCH`ِ جزئی نقشی را که کاربر
+    دست نزده بود صفر می‌کرد.
+    """
+    flags = [k for k in ("is_customer", "is_supplier") if fields.get(k) is not None]
+    for key in ("is_customer", "is_supplier"):
+        if key in fields and fields[key] is None:
+            fields.pop(key)
+    if flags:
+        fields.pop("type", None)
+
+
 def _contact_out(contact: Contact) -> dict:
     """طرف‌حساب + کد و عنوانِ تفصیلی‌اش، خوانده از خودِ تفصیلی.
 
@@ -202,6 +220,9 @@ def _contact_out(contact: Contact) -> dict:
     دیده شود. دو نمای یک داده نمی‌سازیم.
     """
     row = {c.name: getattr(contact, c.name) for c in Contact.__table__.columns}
+    #: `type` از مهاجرتِ ۰۱۶۴ ستون نیست، `hybrid_property` است — پس در حلقه‌ی
+    #: بالا نمی‌آید و بدونِ این خط هر پاسخِ طرف‌حساب با خطای اعتبارسنجی می‌افتد.
+    row["type"] = contact.type
     analytic = contact.analytic
     row["tafsili_code"] = analytic.code if analytic else None
     row["tafsili_title"] = analytic.name if analytic else None
@@ -298,6 +319,7 @@ def create_contact(
     _assert_company_refs(db, data)
     _assert_opening_unlocked(db, data)
     fields = data.model_dump()
+    _resolve_role_fields(fields)
     analytic = tafsili.resolve_contact_analytic(
         db,
         user,
@@ -329,6 +351,7 @@ def update_contact(
     #: به پیش‌فرضِ اسکیما برمی‌گشت — نقشِ واسطه و سهامدار پاک، مانده‌ی اول دوره صفر،
     #: مشخصاتِ شخصی خالی. PATCH یعنی «همین‌ها را عوض کن»، نه «بقیه را دور بریز».
     fields = data.model_dump(exclude_unset=True)
+    _resolve_role_fields(fields)
     given = set(fields)
     _assert_opening_unlocked(db, data, contact, given=given)
     analytic = tafsili.resolve_contact_analytic(

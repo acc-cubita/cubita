@@ -57,7 +57,7 @@ def _terminal(db, bank=None, **kw) -> PosTerminal:
 def _contact(db, user):
     from app.models.inventory import Contact
 
-    row = Contact(name=f"مشتری {next(_SEQ)}")
+    row = Contact(name=f"مشتری {next(_SEQ)}", type="customer")
     db.add(row)
     db.flush()
     return row

@@ -84,12 +84,20 @@ def _counterparty_account(db: Session, data: PaymentIn) -> Account:
 
 
 def _validate_contact(contact: Contact, payment_type: str) -> None:
-    expected = "supplier" if payment_type == "supplier" else "customer" if payment_type == "customer" else None
-    if expected and contact.type not in (expected, "both"):
-        label = "تأمین‌کننده" if expected == "supplier" else "مشتری"
+    #: «تأمین‌کننده» این‌جا یعنی *هر کسی که پولی از ما می‌گیرد* — تأمین‌کننده،
+    #: واسطه، سهامدار یا کارمند. پیش از مهاجرتِ ۰۱۶۴ هر چهارتا `type="supplier"`
+    #: ثبت می‌شدند و این گارد بی‌آنکه بداند همه را می‌پذیرفت؛ حالا صریح است.
+    if payment_type == "supplier" and not contact.is_payable_party:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"طرف حساب «{contact.name}» نقشِ {label} ندارد؛ نقش طرف حساب را اصلاح کنید یا نوع پرداخت را تغییر دهید",
+            f"طرف حساب «{contact.name}» نه تأمین‌کننده است نه واسطه/سهامدار/کارمند؛ "
+            "نقش طرف حساب را اصلاح کنید یا نوع پرداخت را تغییر دهید",
+        )
+    if payment_type == "customer" and not contact.is_receivable_party:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"طرف حساب «{contact.name}» نقشِ مشتری ندارد؛ "
+            "نقش طرف حساب را اصلاح کنید یا نوع پرداخت را تغییر دهید",
         )
 
 
