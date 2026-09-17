@@ -21,9 +21,10 @@ export default defineConfig({
               entry: 'electron/main.ts',
               vite: {
                 build: {
-                  // better-sqlite3 یک native addon است؛ باندل‌کردنش داخل main.js باعث می‌شود require دینامیک فایل
-                  // .node را در زمان اجرا پیدا نکند، پس باید بیرون از باندل بماند و از node_modules عادی require شود.
-                  rollupOptions: { external: ['better-sqlite3'] },
+                  // better-sqlite3 و serialport هر دو native addon اند؛ باندل‌کردنشان داخل main.js باعث می‌شود
+                  // require دینامیک فایل .node را در زمان اجرا پیدا نکند، پس باید بیرون از باندل بمانند و از
+                  // node_modules عادی require شوند. (هر دو در asarUnpack هم هستند.)
+                  rollupOptions: { external: ['better-sqlite3', 'serialport'] },
                 },
               },
             },
