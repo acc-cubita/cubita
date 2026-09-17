@@ -18,6 +18,7 @@ import {
   Gift,
   History,
   Landmark,
+  Layers,
   Link2,
   ListChecks,
   Medal,
@@ -130,15 +131,18 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'rewards', label: 'جوایز', icon: Ticket },
     { key: 'birthdays', label: 'تولدها', icon: Cake },
   ],
+  //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   manufacturing: [
     { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical },
     { key: 'orders', label: 'سفارش تولید', icon: ClipboardList },
     { key: 'materials', label: 'تحویل مواد', icon: PackageMinus },
     { key: 'receipts', label: 'رسید محصول', icon: PackageCheck },
     { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator },
-    { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle },
-    { key: 'kardex', label: 'کاردکس تولید', icon: History },
-    { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart },
+    { key: 'bom-list', label: 'فهرست فرمول‌های ساخته‌شده', icon: Layers, kind: 'list' },
+    { key: 'order-list', label: 'سفارشات تولید', icon: ListChecks, kind: 'list' },
+    { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle, kind: 'list' },
+    { key: 'kardex', label: 'کاردکس تولید', icon: History, kind: 'list' },
+    { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart, kind: 'list' },
   ],
   //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   fixedassets: [
