@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Menu,
   X,
@@ -8,10 +8,16 @@ import {
   LogOut,
   Building2,
   Download,
+  User,
 } from 'lucide-react'
 import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
 import { LIST_MENUS } from './moduleLists'
+import { MODULE_SECTIONS } from './moduleSections'
+import { useNavSection } from './navContext'
 import { isElectron } from '../platform'
+
+/** نامِ گروهِ آیتم‌های حسابِ کاربری در کشوی موبایل. */
+const ACCOUNT_GROUP = 'حساب کاربری'
 
 /** لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپ (روی هر انتشار همین می‌ماند؛ فایلِ سرور به‌روز می‌شود). */
 export const DESKTOP_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
@@ -80,6 +86,10 @@ export function TopNav({
   //: چند صفحه اسکرول می‌کرد تا ماژولی را پیدا کند. حالا فقط سرتیترها دیده می‌شوند
   //: و کلِ منو در یک نگاه جا می‌شود.
   const [openGroup, setOpenGroup] = useState<string | null>(null)
+  //: سطحِ سومِ کشو: ماژولِ تب‌داری که بخش‌هایش باز است (فقط یکی هم‌زمان).
+  const [openModule, setOpenModule] = useState<PageKey | null>(null)
+  //: تبِ فعالِ صفحه — تا بخشِ انتخاب‌شده در کشو هایلایت شود.
+  const navSection = useNavSection()
   const [query, setQuery] = useState('')
   const barRef = useRef<HTMLElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
@@ -191,8 +201,8 @@ export function TopNav({
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  function go(page: PageKey) {
-    onNavigate(page)
+  function go(page: PageKey, section?: string) {
+    onNavigate(page, section)
     setOpen(null)
     setMobileOpen(false)
     setQuery('')
@@ -207,8 +217,11 @@ export function TopNav({
         (LIST_MENUS[g.heading] ?? []).some((i) => i.key === active),
     )?.heading ?? null
   useEffect(() => {
-    if (mobileOpen) setOpenGroup(activeGroupHeading)
-  }, [mobileOpen, activeGroupHeading])
+    if (!mobileOpen) return
+    setOpenGroup(activeGroupHeading)
+    //: ماژولِ فعالِ تب‌دار هم باز می‌شود تا بخشِ انتخاب‌شده بدونِ ضربه‌ی اضافه دیده شود.
+    setOpenModule(MODULE_SECTIONS[active] ? active : null)
+  }, [mobileOpen, activeGroupHeading, active])
 
   // جست‌وجوی سریعِ ماژول‌ها: همه‌ی آیتم‌ها را تخت می‌کند و با متنِ ورودی فیلتر می‌کند.
   const allItems = useMemo(
@@ -352,7 +365,7 @@ export function TopNav({
         </div>
       </div>
 
-      {/* کشوی موبایل — فهرستِ عمودیِ همه‌ی ماژول‌ها */}
+      {/* کشوی موبایل — سه سطح: گروه ← ماژول ← بخش‌های ماژول */}
       {mobileOpen && (
         <>
           <div className="topnav-mobile-overlay" onClick={() => setMobileOpen(false)} aria-hidden="true" />
@@ -380,47 +393,86 @@ export function TopNav({
                   group.items.some((i) => i.key === active) || lists.some((i) => i.key === active)
                 return (
                   <div className={`topnav-mobile-group${isOpen ? ' open' : ''}`} key={group.heading}>
-                    <button
-                      type="button"
-                      className={`topnav-mobile-heading${hasActive ? ' has-active' : ''}`}
-                      aria-expanded={isOpen}
+                    <MobileRow
+                      level="group"
+                      icon={group.icon}
+                      label={group.heading}
+                      expanded={isOpen}
+                      marked={hasActive && !isOpen}
                       onClick={() => setOpenGroup((h) => (h === group.heading ? null : group.heading))}
-                    >
-                      <span className="mob-heading-label">{group.heading}</span>
-                      {/* گروهِ بسته‌ای که صفحه‌ی فعال را در خود دارد نشانه می‌گیرد،
-                          وگرنه با بسته‌بودن هیچ ردی از «کجا هستم» نمی‌ماند. */}
-                      {hasActive && !isOpen && <span className="mob-dot" aria-hidden="true" />}
-                      <ChevronDown className="mob-chev" size={16} />
-                    </button>
-
+                    />
                     <div className="topnav-mobile-panel">
                       <div className="mob-inner">
-                        {group.items.map((item) => (
-                          <button
-                            key={item.key}
-                            type="button"
-                            className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
-                            onClick={() => go(item.key)}
-                          >
-                            <span className="topnav-dd-ico">{item.icon}</span>
-                            <span className="mob-item-label">{item.label}</span>
-                            {navBadge(item.key)}
-                          </button>
-                        ))}
+                        {/* تیترِ «عملیات»/«فهرست» فقط وقتی معنا دارد که گروه هر دو را داشته
+                            باشد؛ گروهی که فقط عملیات دارد با یک تیترِ تنها شلوغ‌تر می‌شد. */}
+                        {lists.length > 0 && <div className="mob-section-label">عملیات</div>}
+                        {group.items.map((item) => {
+                          const sections = MODULE_SECTIONS[item.key]
+                          if (!sections) {
+                            return (
+                              <MobileRow
+                                key={item.key}
+                                level="item"
+                                icon={item.icon}
+                                label={item.label}
+                                active={active === item.key}
+                                trailing={navBadge(item.key)}
+                                onClick={() => go(item.key)}
+                              />
+                            )
+                          }
+                          // ماژولِ تب‌دار: ضربه روی ردیف **باز/بسته** می‌کند، نه رفتن.
+                          // پیش از این «تولید» فقط لینک بود و بخش‌هایش هیچ‌جای کشو نبودند —
+                          // روی موبایل تنها راهِ رسیدن به «سفارش تولید» نوارِ تبِ داخلِ صفحه بود.
+                          const modOpen = openModule === item.key
+                          const current = active === item.key
+                          const activeSection = current ? (navSection?.section ?? sections[0]?.key) : null
+                          return (
+                            <div className={`topnav-mobile-mod${modOpen ? ' open' : ''}`} key={item.key}>
+                              <MobileRow
+                                level="item"
+                                icon={item.icon}
+                                label={item.label}
+                                expanded={modOpen}
+                                parent={current}
+                                marked={current && !modOpen}
+                                trailing={navBadge(item.key)}
+                                onClick={() => setOpenModule((m) => (m === item.key ? null : item.key))}
+                              />
+                              <div className="topnav-mobile-panel">
+                                <div className="mob-inner mob-inner--sections">
+                                  {sections.map((sec) => {
+                                    const Icon = sec.icon
+                                    return (
+                                      <MobileRow
+                                        key={sec.key}
+                                        level="section"
+                                        icon={<Icon size={16} />}
+                                        label={sec.label}
+                                        active={activeSection === sec.key}
+                                        onClick={() => go(item.key, sec.key)}
+                                      />
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
                         {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
                             بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
+                        {lists.length > 0 && <div className="mob-section-label">فهرست</div>}
                         {lists.map((item) => {
                           const Icon = item.icon
                           return (
-                            <button
+                            <MobileRow
                               key={item.key}
-                              type="button"
-                              className={`topnav-mobile-item topnav-mobile-item--list${active === item.key ? ' active' : ''}`}
+                              level="item"
+                              icon={<Icon size={16} />}
+                              label={item.label}
+                              active={active === item.key}
                               onClick={() => go(item.key)}
-                            >
-                              <span className="topnav-dd-ico"><Icon size={16} /></span>
-                              <span className="mob-item-label">{item.label}</span>
-                            </button>
+                            />
                           )
                         })}
                       </div>
@@ -429,31 +481,26 @@ export function TopNav({
                 )
               })}
 
-              <div className={`topnav-mobile-group${openGroup === 'حساب کاربری' ? ' open' : ''}`}>
-                <button
-                  type="button"
-                  className={`topnav-mobile-heading${secondary.some((i) => i.key === active) ? ' has-active' : ''}`}
-                  aria-expanded={openGroup === 'حساب کاربری'}
-                  onClick={() => setOpenGroup((h) => (h === 'حساب کاربری' ? null : 'حساب کاربری'))}
-                >
-                  <span className="mob-heading-label">حساب کاربری</span>
-                  {secondary.some((i) => i.key === active) && openGroup !== 'حساب کاربری' && (
-                    <span className="mob-dot" aria-hidden="true" />
-                  )}
-                  <ChevronDown className="mob-chev" size={16} />
-                </button>
+              <div className={`topnav-mobile-group${openGroup === ACCOUNT_GROUP ? ' open' : ''}`}>
+                <MobileRow
+                  level="group"
+                  icon={<User size={17} />}
+                  label={ACCOUNT_GROUP}
+                  expanded={openGroup === ACCOUNT_GROUP}
+                  marked={secondary.some((i) => i.key === active) && openGroup !== ACCOUNT_GROUP}
+                  onClick={() => setOpenGroup((h) => (h === ACCOUNT_GROUP ? null : ACCOUNT_GROUP))}
+                />
                 <div className="topnav-mobile-panel">
                   <div className="mob-inner">
                     {secondary.map((item) => (
-                      <button
+                      <MobileRow
                         key={item.key}
-                        type="button"
-                        className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
+                        level="item"
+                        icon={item.icon}
+                        label={item.label}
+                        active={active === item.key}
                         onClick={() => go(item.key)}
-                      >
-                        <span className="topnav-dd-ico">{item.icon}</span>
-                        <span className="mob-item-label">{item.label}</span>
-                      </button>
+                      />
                     ))}
                   </div>
                 </div>
@@ -463,14 +510,83 @@ export function TopNav({
             {/* «خروج» از آکاردئون بیرون کشیده شد: با آکاردئون، دو ضربه لازم داشت و
                 کاری که همیشه باید یک ضربه باشد را پشتِ یک گروهِ بسته می‌برد. */}
             <div className="topnav-mobile-foot">
-              <button type="button" className="topnav-mobile-item topnav-dd-danger" onClick={onLogout}>
-                <span className="topnav-dd-ico"><LogOut size={16} /></span>
-                <span className="mob-item-label">خروج</span>
-              </button>
+              <MobileRow level="item" icon={<LogOut size={17} />} label="خروج" danger onClick={onLogout} />
             </div>
           </div>
         </>
       )}
     </header>
+  )
+}
+
+/**
+ * یک ردیفِ کشوی موبایل — **همه‌ی سطح‌ها از همین می‌سازند**: گروه، ماژول، بخش، فهرست.
+ *
+ * پیش از این هر سطح markupِ خودش را داشت و هرکدام آیکون، فاصله و فلش را جور دیگری
+ * می‌چید؛ نتیجه ستونی بود که آیکون‌هایش زیرِ هم نمی‌نشستند. حالا چیدمان یکی است:
+ * آیکون و متن در سمتِ راست (`mob-row-main`)، فلش یا نشان در سمتِ چپ
+ * (`mob-row-end`)، با `justify-content: space-between` میانشان. فرقِ سطح‌ها فقط در
+ * اندازه، وزن و تورفتگی است — نه در ساختار.
+ */
+function MobileRow({
+  level,
+  icon,
+  label,
+  onClick,
+  expanded,
+  active = false,
+  parent = false,
+  marked = false,
+  danger = false,
+  trailing,
+}: {
+  level: 'group' | 'item' | 'section'
+  icon?: ReactNode
+  label: string
+  onClick: () => void
+  /** undefined یعنی ردیف آکاردئون نیست و فلش ندارد. */
+  expanded?: boolean
+  /** صفحه/بخشی که کاربر همین حالا رویش است. */
+  active?: boolean
+  /** ماژولِ جاری که بخش‌هایش زیرش است — برجسته، ولی نه مثلِ بخشِ فعال. */
+  parent?: boolean
+  /** نقطه‌ی «صفحه‌ی فعال داخلِ این شاخه‌ی بسته است». */
+  marked?: boolean
+  danger?: boolean
+  trailing?: ReactNode
+}) {
+  const isAccordion = expanded !== undefined
+  const cls = [
+    'mob-row',
+    `mob-row--${level}`,
+    active && 'is-active',
+    parent && 'is-parent',
+    expanded && 'is-open',
+    danger && 'is-danger',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  return (
+    <button
+      type="button"
+      className={cls}
+      onClick={onClick}
+      aria-expanded={isAccordion ? expanded : undefined}
+      aria-current={active ? 'page' : undefined}
+    >
+      <span className="mob-row-main">
+        {/* ستونِ آیکون همیشه جا دارد، حتی خالی: گروهی بی‌آیکون (مثلِ «میزکار») وگرنه
+            متنش را به جای آیکون می‌چسباند و از بقیه‌ی هم‌سطح‌ها بیرون می‌زد. */}
+        <span className="mob-row-ico" aria-hidden="true">{icon}</span>
+        <span className="mob-row-label">{label}</span>
+      </span>
+      {(trailing || marked || isAccordion) && (
+        <span className="mob-row-end">
+          {trailing}
+          {marked && <span className="mob-dot" aria-hidden="true" />}
+          {isAccordion && <ChevronDown className="mob-chev" size={16} aria-hidden="true" />}
+        </span>
+      )}
+    </button>
   )
 }

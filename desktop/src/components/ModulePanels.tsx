@@ -95,6 +95,16 @@ export function ModulePanels({
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
   const listMenu = group ? LIST_MENUS[group.heading] : undefined
+  //: ماژولِ تک‌صفحه‌ایِ تب‌دار (تولید، دارایی ثابت، مؤدیان، اتصال فروشگاه) ردیفِ
+  //: خودش را به‌عنوانِ ریشه می‌گیرد و بخش‌هایش زیرش تورفته می‌نشینند.
+  //:
+  //: **چرا:** پیش از این بخش‌ها تخت و بی‌ریشه در سطحِ اول بودند — هیچ عنوانی در
+  //: کارت نبود که «فرمول‌های ساخت» نسبت به آن تورفتگی داشته باشد، و نمای این
+  //: چهار ماژول با ماژول‌های چندصفحه‌ای (که ردیفِ صفحه + بخش‌های تودرتو دارند)
+  //: یکی نبود. قاعده‌ی «ردیفِ هم‌نامِ گروه تکراری است» فقط برای گروهِ چندصفحه‌ای
+  //: معنا دارد، جایی که صاف‌کردن بخش‌ها را کنارِ صفحه‌های هم‌گروه می‌نشاند؛ اینجا
+  //: هم‌گروهی نیست که کنارش بنشیند.
+  const root = pages.length === 0 && sections.length > 0 ? siblings.find((i) => i.key === page) : undefined
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -135,6 +145,7 @@ export function ModulePanels({
                           key={s.key}
                           type="button"
                           className={`mod-op${on ? ' active' : ''}`}
+                          aria-current={on ? 'page' : undefined}
                           onClick={() =>
                             it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key)
                           }
@@ -147,23 +158,38 @@ export function ModulePanels({
                   </Fragment>
                 )
               }
+              const current = it.key === page
+              const expanded = current && own.length > 0
               return (
                 <Fragment key={it.key}>
                   <button
                     type="button"
-                    className={`mod-op${it.key === page ? ' active' : ''}`}
+                    //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
+                    //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
+                    //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
+                    className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
+                    aria-current={current && !expanded ? 'page' : undefined}
                     onClick={() => onNavigate(it.key)}
                   >
                     {it.icon}
                     <span>{it.label}</span>
                   </button>
-                  {it.key === page && own.length > 0 && (
+                  {expanded && (
                     <div className="mod-sub">{sectionButtons(own, activeSection, onSelectSection)}</div>
                   )}
                 </Fragment>
               )
             })}
-            {pages.length === 0 && sectionButtons(sections, activeSection, onSelectSection)}
+            {root && (
+              <>
+                <button type="button" className="mod-op mod-op--parent" onClick={() => onNavigate(page)}>
+                  {root.icon}
+                  <span>{root.label}</span>
+                </button>
+                <div className="mod-sub">{sectionButtons(sections, activeSection, onSelectSection)}</div>
+              </>
+            )}
+            {pages.length === 0 && !root && sectionButtons(sections, activeSection, onSelectSection)}
           </div>
         </section>
       )}
@@ -220,6 +246,7 @@ function sectionButtons(
         key={s.key}
         type="button"
         className={`mod-op${activeSection === s.key ? ' active' : ''}`}
+        aria-current={activeSection === s.key ? 'page' : undefined}
         onClick={() => onSelectSection(s.key)}
       >
         <Icon size={16} />
