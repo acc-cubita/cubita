@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Building2, Calculator, FileText, ListChecks, Plus, Pencil, SlidersHorizontal, Wrench, X, Save, Trash2, PackageX, Landmark, Receipt, TrendingDown, TrendingUp, UserCheck, Wallet, Play, History } from 'lucide-react'
+import { ArrowLeftRight, Building2, Calculator, ClipboardList, FileText, ListChecks, Plus, Pencil, SlidersHorizontal, Wrench, X, Save, Trash2, PackageX, Landmark, Receipt, TrendingDown, TrendingUp, UserCheck, Wallet, Play, History } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
@@ -59,6 +59,12 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
     setDisposeTarget(a.id)
     nav?.setSection('disposal')
   }
+  //: فرمِ ویرایش در «کارت دارایی» است و جدول در «فهرست دارایی‌ها»؛ دکمه‌ی ویرایشِ ردیف
+  //: درفت را پر می‌کند و کاربر را به همان فرم می‌برد.
+  function goEdit(a: FixedAssetRecord) {
+    d.startEdit(a)
+    nav?.setSection('assets')
+  }
 
   return (
     <>
@@ -72,13 +78,12 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
       <Tabs
         syncPage="fixedassets"
         tabs={[
-          { key: 'assets', label: 'کارت دارایی', icon: Landmark, content: <AssetsTab token={token} d={d} guided={guided} onDispose={goDispose} /> },
+          { key: 'assets', label: 'کارت دارایی', icon: Landmark, content: <AssetsTab d={d} guided={guided} /> },
           { key: 'placement', label: 'تحویل و استقرار', icon: UserCheck, content: <AssignmentTab token={token} d={d} kind="placement" onDone={bumpAssignments} /> },
-          { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight, content: <AssignmentTab token={token} d={d} kind="transfer" onDone={bumpAssignments} /> },
-          { key: 'improvement', label: 'تعمیرات اساسی', icon: Wrench, content: <ImprovementTab token={token} d={d} /> },
-          { key: 'estimate', label: 'تغییر روش یا عمر مفید', icon: SlidersHorizontal, content: <EstimateChangeTab token={token} d={d} /> },
           { key: 'depreciation-calc', label: 'محاسبه استهلاک', icon: Calculator, content: <DepreciationCalcTab token={token} d={d} /> },
           { key: 'depreciation-post', label: 'صدور سند استهلاک', icon: Play, content: <DepreciationPostTab d={d} /> },
+          { key: 'estimate', label: 'تغییر روش یا عمر مفید', icon: SlidersHorizontal, content: <EstimateChangeTab token={token} d={d} /> },
+          { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight, content: <AssignmentTab token={token} d={d} kind="transfer" onDone={bumpAssignments} /> },
           {
             key: 'disposal',
             label: 'خروج دارایی',
@@ -92,9 +97,11 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
               />
             ),
           },
-          { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History, content: <AssignmentsListTab token={token} assets={d.assets} refreshKey={assignRefresh} /> },
+          { key: 'improvement', label: 'تعمیرات اساسی', icon: Wrench, content: <ImprovementTab token={token} d={d} /> },
+          { key: 'registry', label: 'فهرست دارایی‌ها', icon: ClipboardList, content: <AssetRegistryTab token={token} d={d} onEdit={goEdit} onDispose={goDispose} /> },
           { key: 'depreciation-list', label: 'فهرست محاسبات استهلاک', icon: ListChecks, content: <DepreciationEntriesTab token={token} assets={d.assets} refreshKey={d.entriesVersion} /> },
           { key: 'depreciation-docs', label: 'گزارش اسناد استهلاک', icon: FileText, content: <DepreciationDocsTab token={token} refreshKey={d.entriesVersion} /> },
+          { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History, content: <AssignmentsListTab token={token} assets={d.assets} refreshKey={assignRefresh} /> },
           { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt, content: <DisposalsReportTab token={token} refreshKey={disposalRefresh} /> },
         ]}
       />
@@ -102,63 +109,60 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
   )
 }
 
-/** تبِ ثبت/ویرایشِ دارایی + کارتِ دارایی‌ها.
- *  در پوسته‌ی «راهنما» فرمِ گام‌به‌گام می‌آید، در بقیه فرمِ کلاسیک — همان درفت،
- *  پس فهرست در هر دو حالت بعدِ ثبت به‌روز می‌شود. */
-function AssetsTab({
+/** تبِ ثبت/ویرایشِ دارایی (عملیات).
+ *  در پوسته‌ی «راهنما» فرمِ گام‌به‌گام می‌آید، در بقیه فرمِ کلاسیک — همان درفت.
+ *  جدولِ دارایی‌ها به تبِ «فهرست دارایی‌ها» رفت: دفتر است، نه بخشی از کارِ ثبت. */
+function AssetsTab({ d, guided }: { d: FixedAssetDraft; guided: boolean }) {
+  if (guided) return <FixedAssetWizardFlow d={d} />
+  return (
+    <SectionCard
+      icon={d.editingId ? Pencil : Plus}
+      title={d.editingId ? 'ویرایش دارایی' : 'دارایی ثابت جدید'}
+      description="خودرو، تجهیزات، ساختمان و ... — استهلاک بر پایه‌ی عمر مفید."
+      actions={d.editingId ? <button onClick={d.resetForm}><X size={13} /> انصراف</button> : undefined}
+    >
+      <form
+        className="invoice-form form-full"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void d.submit()
+        }}
+      >
+        <FixedAssetFields d={d} />
+        <div className="invoice-form-footer">
+          <button type="submit" className="btn-primary" disabled={d.submitting}><Save size={14} /> {d.editingId ? 'ذخیره' : 'ثبت دارایی'}</button>
+        </div>
+        {d.formMsg && <div className="hint">{d.formMsg}</div>}
+      </form>
+    </SectionCard>
+  )
+}
+
+/** «فهرست دارایی‌ها» — همان جدولی که پیش‌تر کنارِ فرمِ «کارت دارایی» بود. */
+function AssetRegistryTab({
   token,
   d,
-  guided,
+  onEdit,
   onDispose,
 }: {
   token: string
   d: FixedAssetDraft
-  guided: boolean
+  onEdit: (a: FixedAssetRecord) => void
   onDispose: (a: FixedAssetRecord) => void
 }) {
   //: کشوی «کارتِ داراییِ کامل» — برشِ یک دارایی از پنج دفترِ ماژول.
   const [cardOf, setCardOf] = useState<FixedAssetRecord | null>(null)
-  const drawer = cardOf && (
-    <AssetCardDrawer token={token} asset={cardOf} onClose={() => setCardOf(null)} />
-  )
-  const list = <FixedAssetsList d={d} onDispose={onDispose} onOpenCard={setCardOf} />
-  const listDescription = `${fa(d.assets.length)} قلم دارایی — روی نامِ هر ردیف بزنید تا کارتِ کاملش باز شود`
-
-  if (guided) {
-    return (
-      <>
-        <FixedAssetWizardFlow d={d} />
-        <SectionCard icon={Landmark} title="کارتِ دارایی‌ها" description={listDescription}>{list}</SectionCard>
-        {drawer}
-      </>
-    )
-  }
   return (
-    <div className="workspace-split">
+    <>
       <SectionCard
-        icon={d.editingId ? Pencil : Plus}
-        title={d.editingId ? 'ویرایش دارایی' : 'دارایی ثابت جدید'}
-        description="خودرو، تجهیزات، ساختمان و ... — استهلاک بر پایه‌ی عمر مفید."
-        actions={d.editingId ? <button onClick={d.resetForm}><X size={13} /> انصراف</button> : undefined}
+        icon={ClipboardList}
+        title="فهرستِ دارایی‌ها"
+        description={`${fa(d.assets.length)} قلم دارایی — روی نامِ هر ردیف بزنید تا کارتِ کاملش باز شود`}
       >
-        <form
-          className="invoice-form form-full"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void d.submit()
-          }}
-        >
-          <FixedAssetFields d={d} />
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={d.submitting}><Save size={14} /> {d.editingId ? 'ذخیره' : 'ثبت دارایی'}</button>
-          </div>
-          {d.formMsg && <div className="hint">{d.formMsg}</div>}
-        </form>
+        <FixedAssetsList d={d} onEdit={onEdit} onDispose={onDispose} onOpenCard={setCardOf} />
       </SectionCard>
-
-      <SectionCard icon={Landmark} title="کارتِ دارایی‌ها" description={listDescription}>{list}</SectionCard>
-      {drawer}
-    </div>
+      {cardOf && <AssetCardDrawer token={token} asset={cardOf} onClose={() => setCardOf(null)} />}
+    </>
   )
 }
 
@@ -1356,10 +1360,12 @@ export function FixedAssetFields({ d, splitStep }: { d: FixedAssetDraft; splitSt
 /** جدولِ فهرستِ دارایی‌ها با اکشن‌ها — مشترکِ فرم و ویزارد. */
 export function FixedAssetsList({
   d,
+  onEdit,
   onDispose,
   onOpenCard,
 }: {
   d: FixedAssetDraft
+  onEdit?: (a: FixedAssetRecord) => void
   onDispose?: (a: FixedAssetRecord) => void
   onOpenCard?: (a: FixedAssetRecord) => void
 }) {
@@ -1408,7 +1414,7 @@ export function FixedAssetsList({
               </td>
               <td className="card-actions" data-label="عملیات">
                 <div className="check-actions">
-                  <button type="button" onClick={() => d.startEdit(a)} aria-label="ویرایش"><Pencil size={13} /></button>
+                  <button type="button" onClick={() => (onEdit ?? d.startEdit)(a)} aria-label="ویرایش"><Pencil size={13} /></button>
                   {!a.is_disposed && onDispose && (
                     <button type="button" onClick={() => onDispose(a)} aria-label="خروج دارایی" title="خروج دارایی (فروش/اسقاط/اهدا)"><PackageX size={13} /></button>
                   )}
