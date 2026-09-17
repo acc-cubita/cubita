@@ -2595,7 +2595,19 @@ export const updateModules = (token: string, enabled: string[]) =>
 export interface ContactRecord {
   id: string
   name: string
-  type: 'customer' | 'supplier' | 'both'
+  /**
+   * نقشِ معاملاتی، **مشتق** از دو پرچمِ بعدی — نه ذخیره‌شده.
+   *
+   * `'none'` از مهاجرتِ ۰۱۶۴ ممکن شد: طرف‌حسابی که فقط واسطه یا سهامدار یا
+   * کارمند است. پیش از آن چنین کسی ناچار «تأمین‌کننده» ثبت می‌شد و در
+   * انتخابگرِ تأمین‌کننده‌ی رسیدِ انبار ظاهر می‌گشت.
+   *
+   * **برای فیلترکردن `is_customer`/`is_supplier` را بخوان، نه این را.** شرطِ
+   * منفیِ `type !== 'supplier'` حالا واسطه‌ی خالص را هم می‌گیرد.
+   */
+  type: 'customer' | 'supplier' | 'both' | 'none'
+  is_customer: boolean
+  is_supplier: boolean
   phone: string | null
   email: string | null
   address: string
@@ -2809,9 +2821,29 @@ export interface TafsiliRequirement {
 export const fetchContactTafsiliRequirement = (token: string) =>
   authedGet<TafsiliRequirement>(token, '/api/contacts/tafsili-requirement')
 
+/**
+ * کدام سمتِ دفتر — آینه‌ی `Contact.is_payable_party` در بک‌اند.
+ *
+ * واسطه پورسانت می‌گیرد، سهامدار سودِ سهام، کارمند حقوق. جریانِ پول از ما به
+ * آن‌هاست، پس هر سه — مثلِ تأمین‌کننده — طرفِ **پرداختنی**‌اند.
+ *
+ * **این‌جا بودنش مهم است.** اگر رابط این را نداند، انتخابگرِ «پرداخت به
+ * تأمین‌کننده» واسطه را نشان نمی‌دهد و پورسانتش **اصلاً قابلِ پرداخت نیست** —
+ * هرچند بک‌اند اجازه‌اش را می‌دهد.
+ */
+export const isPayableParty = (c: ContactRecord): boolean =>
+  !!(c.is_supplier || c.is_broker || c.is_shareholder || c.is_employee)
+
+/** در سمتِ دریافتنی گشایشی نیست: فقط مشتری به ما بدهکار می‌شود. */
+export const isReceivableParty = (c: ContactRecord): boolean => !!c.is_customer
+
 export interface ContactIn {
   name: string
+  /** برای فراخوان‌های قدیمی نگه داشته شده؛ اگر پرچم‌ها بیایند **آن‌ها برنده‌اند**. */
   type: string
+  /** `undefined` یعنی «نفرستادم» — در `PATCH` نقش را دست‌نخورده می‌گذارد. */
+  is_customer?: boolean
+  is_supplier?: boolean
   /** غیرفعال = «دیگر پیشنهادش نکن»، نه «ناپدید شو». تاریخچه دست‌نخورده می‌ماند.
    *
    * سرور `PATCH` را جزئی می‌گیرد، پس **نفرستادنش یعنی دست نزن**. فرم‌هایی که این

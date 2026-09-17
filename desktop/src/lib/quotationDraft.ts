@@ -63,7 +63,7 @@ export function useQuotationDraft({
 
   useEffect(() => {
     fetchContacts(token)
-      .then((rows) => setContacts(rows.filter((c) => c.type !== 'supplier')))
+      .then((rows) => setContacts(rows.filter((c) => c.is_customer)))
       .catch(() => setContacts([]))
   }, [token])
 

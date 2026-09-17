@@ -175,7 +175,10 @@ function IssueForm({
 
   const goods = useMemo(() => items.filter((i) => !i.is_service), [items])
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
-  const receivers = useMemo(() => contacts.filter((c) => c.type !== 'supplier'), [contacts])
+  //: «هرکه تأمین‌کننده نیست» — عیناً رفتارِ پیش از مهاجرتِ ۰۱۶۴، فقط بدونِ
+  //: خواندنِ رشته‌ی مشتق. خروجِ انبار لزوماً به مشتری نمی‌رود (مصرفِ داخلی هم
+  //: هست)، پس این‌جا عمداً تنگ‌تر نشد.
+  const receivers = useMemo(() => contacts.filter((c) => !c.is_supplier), [contacts])
   const receiverQuotations = useMemo(
     () => quotations.filter((q) => !receiverId || !q.contact_id || q.contact_id === receiverId),
     [quotations, receiverId],

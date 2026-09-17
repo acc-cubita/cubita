@@ -338,16 +338,16 @@ function UsageTable({
  */
 function contactRoles(r: ContactRecord): string[] {
   const roles: string[] = []
-  if (r.type === 'customer' || r.type === 'both') roles.push('مشتری')
-  if (r.type === 'supplier' || r.type === 'both') roles.push('تأمین‌کننده')
+  if (r.is_customer) roles.push('مشتری')
+  if (r.is_supplier) roles.push('تأمین‌کننده')
   if (r.is_broker) roles.push('واسطه')
   if (r.is_shareholder) roles.push('سهامدار')
   return roles
 }
 
 const ROLE_FILTERS: Record<string, (r: ContactRecord) => boolean> = {
-  customer: (r) => r.type === 'customer' || r.type === 'both',
-  supplier: (r) => r.type === 'supplier' || r.type === 'both',
+  customer: (r) => r.is_customer,
+  supplier: (r) => r.is_supplier,
   broker: (r) => r.is_broker,
   shareholder: (r) => r.is_shareholder,
 }

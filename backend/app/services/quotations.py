@@ -23,7 +23,7 @@ def _customer(db: Session, data: SalesQuotationIn) -> tuple[Contact | None, dict
     contact = db.get(Contact, data.contact_id) if data.contact_id else None
     if data.contact_id and contact is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "مشتری انتخاب‌شده یافت نشد")
-    if contact is not None and contact.type not in ("customer", "both"):
+    if contact is not None and not contact.is_customer:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب انتخاب‌شده مشتری نیست")
     if contact is None:
         return None, {"name": data.customer_name or "", "name2": data.customer_name2}

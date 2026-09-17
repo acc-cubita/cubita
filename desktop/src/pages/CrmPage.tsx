@@ -93,7 +93,7 @@ export function CrmPage({ token }: { token: string }) {
       setLeads(ls)
       setActivities(acts)
       setBalances(bals)
-      setContacts(cs.filter((c) => c.type !== 'supplier'))
+      setContacts(cs.filter((c) => c.is_customer))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }

@@ -23,7 +23,9 @@ from app.services.common import get_account, make_journal_entry
 from app.services.inventory import get_total_stock_qty
 from app.services.period_close import assert_period_open
 
-CONTACT_TYPES = ("customer", "supplier", "both")
+#: عمداً `none` ندارد، برخلافِ `CONTACT_TYPES`ِ مدل. فایلِ ورودیِ گروهی فقط
+#: نقشِ معاملاتی می‌دهد؛ طرف‌حسابِ بی‌نقش از راهِ فرم ساخته می‌شود، نه اکسل.
+IMPORTABLE_CONTACT_TYPES = ("customer", "supplier", "both")
 
 
 # ── ورودِ گروهی ────────────────────────────────────────
@@ -70,7 +72,7 @@ def import_contacts(db: Session, data: ImportContactsIn, user: User) -> dict:
         if not name:
             errors.append({"row": i, "message": "نام الزامی است"})
             continue
-        if row.type not in CONTACT_TYPES:
+        if row.type not in IMPORTABLE_CONTACT_TYPES:
             errors.append({"row": i, "message": "نوع باید مشتری/تأمین‌کننده/هردو باشد"})
             continue
         if row.entity_type not in ENTITY_TYPES:

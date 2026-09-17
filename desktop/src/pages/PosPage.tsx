@@ -129,7 +129,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
         if (ws[0]) setWarehouseId(ws[0].id)
       })
       .catch(() => {})
-    fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.type !== 'supplier'))).catch(() => {})
+    fetchContacts(token).then((cs) => setContacts(cs.filter((c) => c.is_customer))).catch(() => {})
     fetchSaleTypes(token).then((ts) => setSaleTypes(ts.filter((t) => t.is_active))).catch(() => {})
     fetchStockLevels(token).then(setStockLevels).catch(() => setStockLevels([]))
     scanRef.current?.focus()

@@ -78,6 +78,8 @@ import {
   type SalesReviewDocument,
   type SalesReviewScope,
   type UnitRecord,
+  isPayableParty,
+  isReceivableParty,
 } from '../../api'
 import type { PageKey } from '../../lib/navModel'
 import { SectionCard } from '../../components/SectionCard'
@@ -460,7 +462,11 @@ function NoticeSide({
   const roleDefault = party ? partyAccounts.find((a) => a.system_role === ROLE_OF_SIDE[side.type as 'customer']) : undefined
   const effective = pool.find((a) => a.id === side.accountId) ?? roleDefault
   const contact = contacts.find((c) => c.id === side.contactId)
-  const options = party ? contacts.filter((c) => c.type === side.type || c.type === 'both') : []
+  //: همان قاعده‌ای که `_assert_role_matches` سمتِ سرور اعمال می‌کند — سمتِ
+  //: دریافتنی فقط مشتری، سمتِ پرداختنی هرکه پولی از ما می‌گیرد.
+  const options = party
+    ? contacts.filter((c) => (side.type === 'customer' ? isReceivableParty(c) : isPayableParty(c)))
+    : []
 
   return (
     <div className="cdn-side">

@@ -19,6 +19,8 @@ import {
   type PaymentBankWithdrawalIn,
   type PaymentCashIn,
   type PaymentPayableChequeIn,
+  isPayableParty,
+  isReceivableParty,
 } from '../../api'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { NumberInput } from '../../components/NumberInput'
@@ -117,7 +119,12 @@ export function PaymentVoucherDocumentPage({ token }: { token: string }) {
   const contacts = useMemo(() => {
     const all: ContactRecord[] = data.data?.contacts ?? []
     if (paymentType === 'other') return all
-    return all.filter((contact) => contact.type === paymentType || contact.type === 'both')
+    //: «تأمین‌کننده» این‌جا یعنی *هرکه پولی از ما می‌گیرد* — تأمین‌کننده، واسطه،
+    //: سهامدار یا کارمند. تا پیش از مهاجرتِ ۰۱۶۴ هر چهارتا `type='supplier'`
+    //: بودند و این فیلتر اتفاقی درست کار می‌کرد؛ حالا صریح است. **بدونِ این،
+    //: بک‌اند پرداخت به واسطه را می‌پذیرد ولی رابط اجازه‌ی انتخابش را نمی‌دهد.**
+    if (paymentType === 'supplier') return all.filter(isPayableParty)
+    return all.filter(isReceivableParty)
   }, [data.data, paymentType])
   const accounts = (data.data?.accounts ?? []).filter((account) => !account.is_group)
   const books = (data.data?.books ?? []).filter((book) => book.is_active && book.remaining_count > 0)

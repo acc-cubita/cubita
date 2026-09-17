@@ -543,7 +543,12 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
       id: r.id,
       title: r.name,
       subtitle: r.phone || '—',
-      meta: r.type === 'customer' ? 'مشتری' : r.type === 'supplier' ? 'تأمین‌کننده' : 'هر دو',
+      //: از پرچم‌ها ساخته می‌شود نه از رشته‌ی مشتق: با `type === 'none'` شاخه‌ی
+      //: آخر «هر دو» می‌گفت — دقیقاً وارونه‌ی حقیقت.
+      meta: [
+        r.is_customer && 'مشتری', r.is_supplier && 'تأمین‌کننده',
+        r.is_broker && 'واسطه', r.is_shareholder && 'سهامدار',
+      ].filter(Boolean).join('، ') || 'بی‌نقش',
     })),
   },
   crm: {

@@ -200,7 +200,7 @@ export function useSalesInvoiceDraft({
   // مشتری‌ها هم زنده خوانده می‌شوند (همان الگوی مراکز هزینه). تأمین‌کننده‌ها کنار می‌روند.
   useEffect(() => {
     fetchContacts(token)
-      .then((rows) => setContacts(rows.filter((c) => c.type !== 'supplier')))
+      .then((rows) => setContacts(rows.filter((c) => c.is_customer)))
       .catch(() => setContacts([]))
   }, [token])
 

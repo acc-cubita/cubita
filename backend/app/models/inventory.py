@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    case,
     ForeignKey,
     Integer,
     Index,
@@ -17,13 +18,18 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
-CONTACT_TYPES = ("customer", "supplier", "both")
+#: نقشِ معاملاتیِ مشتق‌شده از `is_customer`/`is_supplier`. **مقدارِ چهارم عمدی
+#: است:** طرف‌حسابی که فقط واسطه یا سهامدار یا کارمند است هیچ‌کدام از دو نقشِ
+#: معاملاتی را ندارد، و تا پیش از مهاجرتِ ۰۱۶۴ چاره‌ای جز ثبتش به‌عنوان
+#: «تأمین‌کننده» نبود.
+CONTACT_TYPES = ("customer", "supplier", "both", "none")
 
 #: وضعیتِ مالیات بر ارزش افزوده. «معاف» عمداً از «نرخِ صفر» جداست — نرخِ صفر
 #: نمی‌گوید کالا معاف بوده یا فقط آن فاکتور بی‌مالیات صادر شده.
@@ -138,16 +144,19 @@ class UnitOfMeasure(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 
 class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
-    """طرف حساب: مشتری، تأمین‌کننده، واسطه یا سهامدار — و هر ترکیبی از این چهار.
+    """طرف حساب: مشتری، تأمین‌کننده، واسطه یا سهامدار — و هر ترکیبی از این چهار،
+    **از جمله هیچ‌کدام از دو تای اول**.
 
-    `type` فقط دو نقشِ *معاملاتی* را نگه می‌دارد (مشتری/تأمین‌کننده/هردو) چون فیلترها
-    و گزارش‌های موجود روی همان تکیه دارند. واسطه و سهامدار پرچمِ مستقل‌اند، پس هر
-    چهار نقش هم‌زمان ممکن‌اند بی‌آنکه چیزی از قبل بشکند.
+    هر چهار نقش یک پرچمِ بولیِ مستقل‌اند. تا مهاجرتِ ۰۱۶۴ این‌طور نبود: دو نقشِ
+    معاملاتی در ستونِ رشته‌ایِ `type` با سه مقدار چپانده شده بودند، و چون آن ستون
+    «هیچ‌کدام» را بیان نمی‌کرد، واسطه‌ی خالص ناچار **تأمین‌کننده** ثبت می‌شد و در
+    انتخابگرِ تأمین‌کننده‌ی رسیدِ انبار ظاهر می‌گشت.
+
+    `type` هنوز خوانده می‌شود، ولی حالا مشتق است نه ذخیره‌شده — پایینِ همین کلاس.
     """
 
     __tablename__ = "contacts"
     __table_args__ = (
-        CheckConstraint(f"type IN {CONTACT_TYPES}", name="ck_contacts_type"),
         CheckConstraint(f"credit_action IN {CREDIT_ACTIONS}", name="ck_contacts_credit_action"),
         CheckConstraint(
             "discount_rate >= 0 AND discount_rate <= 100 "
@@ -170,7 +179,17 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
     name: Mapped[str] = mapped_column(String(200))
-    type: Mapped[str] = mapped_column(String(20), default="customer")
+    # ── دو نقشِ معاملاتی ──────────────────────────────────────────────────────
+    #: پیش از مهاجرتِ ۰۱۶۴ این دو، یک ستونِ رشته‌ایِ سه‌حالته بودند. پرچمِ مستقل
+    #: شدند تا با `is_broker`/`is_shareholder` متقارن باشند و — مهم‌تر — تا
+    #: «هیچ‌کدام» بیان‌شدنی باشد.
+    #: **هر دو `False`، و این عمدی است.** ستونِ قدیمی `default="customer"` داشت، پس
+    #: وسوسه‌ی طبیعی این بود که `is_customer` پیش‌فرض `True` شود. ولی آن‌وقت
+    #: `Contact(name=…, is_supplier=True)` بی‌صدا «هردو» می‌شد — نقشِ مشتری را
+    #: می‌گرفت بی‌آنکه کسی خواسته باشد. پیش‌فرضِ کاربر جای دیگری حفظ شده:
+    #: `ContactIn.type` هنوز `customer` است.
+    is_customer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_supplier: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(150), nullable=True)
     address: Mapped[str] = mapped_column(Text, default="")
@@ -241,9 +260,8 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     credit_action: Mapped[str] = mapped_column(String(10), default="none", server_default="none")
 
     # ── نقشِ سوم ──────────────────────────────────────────────────────────────
-    #: واسطه. پرچمِ مستقل است نه مقدارِ تازه‌ی `type`: ده‌ها فیلتر و گزارش روی
-    #: (customer, supplier, both) تکیه دارند و افزودنِ مقدار به آن یعنی بازبینیِ
-    #: همه‌شان. این‌طور، فرم همان سه تیکِ مستقل را می‌دهد بی‌آنکه چیزی بشکند.
+    #: واسطه — سومین نقش. از مهاجرتِ ۰۱۶۴ هر چهار نقش هم‌شکل‌اند؛ پیش از آن این
+    #: پرچم استثنا بود و دو نقشِ دیگر در یک رشته می‌نشستند.
     is_broker: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     commission_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
 
@@ -291,9 +309,70 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: و هنوز رکوردِ حقوق و دستمزدش را نساخته باشد.
     is_employee: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
-    #: نقشِ چهارم، مثلِ `is_broker` پرچمِ مستقل و نه مقدارِ تازه‌ی `type`.
+    #: نقشِ چهارم.
     is_shareholder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     share_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+
+    # ── `type`: نامِ دیروز، منبعِ امروز ────────────────────────────────────────
+    #: ستونِ `contacts.type` در مهاجرتِ ۰۱۶۴ حذف شد، ولی **نامش این‌جا زنده ماند**
+    #: و از دو پرچمِ بالا مشتق می‌شود. دلیلش صرفهٔ تغییر نیست، درستی است: ده‌ها
+    #: جای خواندن و ۴۴ ارجاعِ تست روی این نام تکیه دارند، و بازنویسیِ یک‌بارهٔ
+    #: همه‌شان یعنی یک دیفِ بزرگ که در آن یک اشتباهِ حسابداری گم می‌شود.
+    #:
+    #: **و این «دو نمای یک داده» نیست.** آن قاعده درباره‌ی دو چیزِ نوشتنی است که
+    #: می‌توانند واگرا شوند؛ این‌جا ستونی وجود ندارد که کهنه بماند — `type` هر بار
+    #: از پرچم‌ها ساخته می‌شود، چه در پایتون چه در SQL.
+    @hybrid_property
+    def type(self) -> str:
+        if self.is_customer and self.is_supplier:
+            return "both"
+        if self.is_customer:
+            return "customer"
+        if self.is_supplier:
+            return "supplier"
+        return "none"
+
+    #: setter هست تا `Contact(type="supplier")` همان کاری را بکند که همیشه می‌کرد.
+    #: مقدارِ ناشناخته هر دو پرچم را false می‌کند — یعنی «none» — نه اینکه خطا
+    #: بدهد؛ اعتبارسنجیِ ورودی کارِ اسکیماست نه مدل.
+    @type.inplace.setter
+    def _type_setter(self, value: str) -> None:
+        self.is_customer = value in ("customer", "both")
+        self.is_supplier = value in ("supplier", "both")
+
+    #: نسخه‌ی SQL — بدونِ این، `Contact.type != "supplier"` در کوئری‌ها می‌شکند.
+    @type.inplace.expression
+    @classmethod
+    def _type_expression(cls):
+        return case(
+            (cls.is_customer & cls.is_supplier, "both"),
+            (cls.is_customer, "customer"),
+            (cls.is_supplier, "supplier"),
+            else_="none",
+        )
+
+    # ── کدام سمتِ دفتر ────────────────────────────────────────────────────────
+    #: **این دو، گرهِ اصلیِ مهاجرتِ ۰۱۶۴ را باز می‌کنند.** تا دیروز واسطه‌ی خالص
+    #: «تأمین‌کننده» ثبت می‌شد، و همان برچسبِ غلط بود که اجازه می‌داد پورسانتش را
+    #: پرداخت کنی: سه گاردِ حسابداری `type == "supplier"` را می‌خواندند. حالا که
+    #: نقش درست ثبت می‌شود، آن سه گارد باید نقشِ *واقعی* را بشناسند وگرنه
+    #: پرداختِ پورسانت می‌شکند — یعنی این مهاجرت یک باگ را با باگِ بدتری عوض
+    #: می‌کرد.
+    #:
+    #: واسطه پورسانت می‌گیرد، سهامدار سودِ سهام، کارمند حقوق. جریانِ پول از ما به
+    #: آن‌هاست، پس هر سه — مثلِ تأمین‌کننده — طرفِ **پرداختنی**‌اند.
+    #: `bool(...)` لازم است و نه آرایش: پیش از `flush` پرچمی که کسی ندادهٔ است
+    #: `None` است نه `False` (پیش‌فرض سمتِ دیتابیس اعمال می‌شود)، و
+    #: `False or None` می‌شود `None`. در `if` فرقی نمی‌کند، ولی این خاصیت به
+    #: پاسخِ API هم می‌رود.
+    @property
+    def is_payable_party(self) -> bool:
+        return bool(self.is_supplier or self.is_broker or self.is_shareholder or self.is_employee)
+
+    #: در سمتِ دریافتنی چنین گشایشی نیست: فقط مشتری به ما بدهکار می‌شود.
+    @property
+    def is_receivable_party(self) -> bool:
+        return bool(self.is_customer)
 
     #: کد و عنوانِ تفصیلی از همین رابطه خوانده می‌شوند، نه از ستونی روی طرف‌حساب.
     analytic: Mapped["AnalyticAccount | None"] = relationship(lazy="joined")  # noqa: F821

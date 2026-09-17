@@ -543,7 +543,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     if data.contact_id is not None and supplier is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "تأمین‌کننده انتخاب‌شده یافت نشد")
     if data.warehouse_id is None and supplier is not None:
-        if supplier.type not in ("supplier", "both"):
+        if not supplier.is_supplier:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "طرف حساب انتخاب‌شده تأمین‌کننده نیست")
 
     supplier_snapshot = {

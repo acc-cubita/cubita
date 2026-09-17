@@ -383,7 +383,11 @@ def upcoming_birthdays(db: Session, days: int = 30, today: date | None = None) -
     contacts = (
         db.query(Contact)
         .filter(Contact.birthday.isnot(None))
-        .filter(Contact.type != "supplier")
+        #: **مثبت، نه منفی.** تا دیروز این شرط «هرکه تأمین‌کننده نیست» بود و
+        #: اتفاقی درست کار می‌کرد، چون هر طرف‌حسابی ناچار یکی از دو نقش را داشت.
+        #: از مهاجرتِ ۰۱۶۴ «هیچ‌کدام» هم ممکن است، و آن‌وقت واسطه‌ی خالص در
+        #: فهرستِ تولدِ *مشتریان* می‌نشست.
+        .filter(Contact.is_customer)
         .all()
     )
     out = []

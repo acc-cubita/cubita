@@ -48,7 +48,7 @@ _SEQ = itertools.count(1)
 
 
 def _contact(db) -> Contact:
-    row = Contact(name=f"مشتریِ آزمون {next(_SEQ)}")
+    row = Contact(name=f"مشتریِ آزمون {next(_SEQ)}", type="customer")
     db.add(row)
     db.flush()
     return row
