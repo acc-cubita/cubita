@@ -2,7 +2,14 @@ import {
   fetchContacts,
   fetchCrmActivities,
   fetchEmployees,
+  fetchAssetDisposals,
+  fetchDepreciationDocuments,
+  fetchDepreciationEntries,
   fetchFixedAssets,
+  DISPOSAL_TYPE_LABELS,
+  type AssetDisposalRecord,
+  type DepreciationDocumentRecord,
+  type DepreciationEntryRecord,
   fetchInstallmentPlans,
   fetchIssueReturnLedger,
   fetchItemsLive,
@@ -583,11 +590,32 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
     })),
   },
   fixedassets: {
+    //: `purchase_date`/`purchase_cost` هیچ‌وقت روی `FixedAssetRecord` نبودند — نامِ
+    //: واقعیِ فیلدها `acquired_date`/`cost` است، پس این کارت تا امروز تاریخ و مبلغِ
+    //: خالی نشان می‌داد.
     __default: def('دارایی‌های ثابت', fetchFixedAssets, (r) => ({
       id: r.id,
       title: r.name,
-      subtitle: day(r.purchase_date),
-      meta: fa(r.purchase_cost),
+      subtitle: day(r.acquired_date),
+      meta: fa(r.cost),
+    })),
+    disposals: def('خروج و فروش دارایی', (t: string) => fetchAssetDisposals(t), (r: AssetDisposalRecord) => ({
+      id: r.id,
+      title: r.asset_name,
+      subtitle: `${DISPOSAL_TYPE_LABELS[r.disposal_type]} · ${day(r.disposal_date)}`,
+      meta: Number(r.gain_loss) === 0 ? '—' : `${Number(r.gain_loss) > 0 ? 'سود' : 'زیان'} ${fa(Math.abs(Number(r.gain_loss)))}`,
+    })),
+    'depreciation-list': def('محاسبات استهلاک', (t: string) => fetchDepreciationEntries(t), (r: DepreciationEntryRecord) => ({
+      id: r.id,
+      title: r.asset_name,
+      subtitle: day(r.period_date),
+      meta: fa(r.amount),
+    })),
+    'depreciation-docs': def('اسناد استهلاک', (t: string) => fetchDepreciationDocuments(t), (r: DepreciationDocumentRecord) => ({
+      id: `${r.journal_entry_id ?? 'x'}-${r.period_date}`,
+      title: r.journal_entry_number != null ? `سند ${faNum(r.journal_entry_number)}` : 'بدونِ سند',
+      subtitle: `${day(r.period_date)} · ${faNum(r.asset_count)} دارایی`,
+      meta: fa(r.total_amount),
     })),
   },
   payroll: {

@@ -3,14 +3,28 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.accounting import Account, JournalLine
-from app.models.assets import AssetAssignment, DepreciationEntry, FixedAsset
+from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.assets import (
+    AssetAssignment,
+    AssetDisposal,
+    AssetEstimateChange,
+    AssetImprovement,
+    DepreciationEntry,
+    FixedAsset,
+)
 from app.models.cost_center import CostCenter
 from app.models.inventory import Contact
 from app.models.user import User
-from app.schemas.assets import AssetAssignmentIn, FixedAssetIn
+from app.schemas.assets import (
+    AssetAssignmentIn,
+    AssetDisposalIn,
+    AssetEstimateChangeIn,
+    AssetImprovementIn,
+    FixedAssetIn,
+)
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
@@ -38,6 +52,28 @@ def _fixed_assets_account(db: Session):
     )
 
 
+def _disposal_gain_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.ASSET_DISPOSAL_GAIN,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.ASSET_DISPOSAL_GAIN],
+        name="سودِ خروجِ دارایی ثابت",
+        acc_type="income",
+        parent_code="4",
+    )
+
+
+def _disposal_loss_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.ASSET_DISPOSAL_LOSS,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.ASSET_DISPOSAL_LOSS],
+        name="زیانِ خروجِ دارایی ثابت",
+        acc_type="expense",
+        parent_code="5",
+    )
+
+
 def _depreciation_expense_account(db: Session):
     return get_or_create_account(
         db,
@@ -53,11 +89,48 @@ def _depreciable_base(asset: FixedAsset) -> Decimal:
     return Decimal(asset.cost) - Decimal(asset.salvage_value)
 
 
-def monthly_depreciation(asset: FixedAsset) -> Decimal:
-    """استهلاک ماهانه‌ی خط مستقیم، گردشده به عددِ صحیح (ROUND_HALF_UP)."""
-    if asset.useful_life_months <= 0:
+def _period_counts(db: Session) -> dict[UUID, int]:
+    """چند دوره برای هر دارایی استهلاک ثبت شده — یک پرس‌وجو، نه یکی به‌ازای دارایی.
+
+    منبعِ حقیقت خودِ `depreciation_entries` است، نه یک شمارنده روی دارایی؛ شمارنده
+    دومین جای ذخیره‌ی همان عدد بود و می‌توانست از آن جدا بیفتد.
+    """
+    rows = (
+        db.query(DepreciationEntry.asset_id, func.count(DepreciationEntry.id))
+        .group_by(DepreciationEntry.asset_id)
+        .all()
+    )
+    return {asset_id: count for asset_id, count in rows}
+
+
+def monthly_depreciation(asset: FixedAsset, periods_done: int = 0) -> Decimal:
+    """استهلاکِ یک دوره — **آینده‌نگر**: ماندهٔ استهلاک‌پذیر ÷ ماه‌های باقیمانده.
+
+    **چرا آینده‌نگر و نه «مبنا ÷ عمرِ اولیه»:** عمرِ مفید و ارزشِ اسقاط برآوردند و
+    عوض می‌شوند (تبِ «تغییر روش یا عمر مفید»)، و تعمیراتِ اساسی بهای تمام‌شده را
+    بالا می‌برد. با فرمولِ ثابت، تمدیدِ عمر از ۱۲ به ۲۴ ماه پس از ۶ دوره مبلغِ
+    ماهانه را غلط می‌داد و دارایی سرِ جایِ بی‌ربطی تمام می‌شد. آینده‌نگر یعنی
+    گذشته دست نمی‌خورد و فقط دوره‌های بعد با برآوردِ تازه محاسبه می‌شوند — همان
+    برخوردی که استاندارد برای «تغییر در برآوردِ حسابداری» می‌خواهد.
+
+    برای داراییِ دست‌نخورده (بدونِ دوره‌ی ثبت‌شده و بدونِ استهلاکِ انباشته) نتیجه
+    دقیقاً همان فرمولِ قدیمی است.
+    """
+    remaining_months = asset.useful_life_months - periods_done
+    if remaining_months <= 0:
         return Decimal(0)
-    return (_depreciable_base(asset) / Decimal(asset.useful_life_months)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    remaining_base = _depreciable_base(asset) - Decimal(asset.accumulated_depreciation)
+    if remaining_base <= 0:
+        return Decimal(0)
+    if asset.method == "declining_balance":
+        #: نرخِ مضاعف روی **ماندهٔ دفتری**، نه روی مبنا — همین است که این روش را
+        #: نزولی می‌کند. سقفِ `remaining_base` جلوی عبور از ارزشِ اسقاط را می‌گیرد،
+        #: چون نرخِ نزولی به‌تنهایی هرگز دقیقاً روی آن نمی‌ایستد.
+        book = Decimal(asset.cost) - Decimal(asset.accumulated_depreciation)
+        rate = Decimal(2) / Decimal(asset.useful_life_months)
+        amount = (book * rate).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+        return min(amount, remaining_base)
+    return (remaining_base / Decimal(remaining_months)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
 
 def _name_maps(db: Session) -> tuple[dict[UUID, str], dict[UUID, str]]:
@@ -67,7 +140,12 @@ def _name_maps(db: Session) -> tuple[dict[UUID, str], dict[UUID, str]]:
     return contacts, centers
 
 
-def to_out(asset: FixedAsset, contacts: dict | None = None, centers: dict | None = None) -> dict:
+def to_out(
+    asset: FixedAsset,
+    contacts: dict | None = None,
+    centers: dict | None = None,
+    periods_done: int = 0,
+) -> dict:
     base = _depreciable_base(asset)
     accumulated = Decimal(asset.accumulated_depreciation)
     contacts = contacts or {}
@@ -86,8 +164,10 @@ def to_out(asset: FixedAsset, contacts: dict | None = None, centers: dict | None
         "disposed_date": asset.disposed_date,
         "notes": asset.notes,
         "book_value": Decimal(asset.cost) - accumulated,
-        "monthly_depreciation": monthly_depreciation(asset),
+        "monthly_depreciation": monthly_depreciation(asset, periods_done),
         "fully_depreciated": accumulated >= base,
+        "periods_depreciated": periods_done,
+        "remaining_months": max(0, asset.useful_life_months - periods_done),
         "custodian_id": asset.custodian_id,
         "custodian_name": contacts.get(asset.custodian_id, ""),
         "location": asset.location,
@@ -98,7 +178,7 @@ def to_out(asset: FixedAsset, contacts: dict | None = None, centers: dict | None
 
 def _out_with_names(db: Session, asset: FixedAsset) -> dict:
     contacts, centers = _name_maps(db)
-    return to_out(asset, contacts, centers)
+    return to_out(asset, contacts, centers, _period_counts(db).get(asset.id, 0))
 
 
 def list_assets(db: Session, *, include_disposed: bool = True) -> list[dict]:
@@ -107,7 +187,8 @@ def list_assets(db: Session, *, include_disposed: bool = True) -> list[dict]:
         q = q.filter(FixedAsset.is_disposed.is_(False))
     assets = q.order_by(FixedAsset.acquired_date.desc(), FixedAsset.created_at.desc()).all()
     contacts, centers = _name_maps(db)
-    return [to_out(a, contacts, centers) for a in assets]
+    periods = _period_counts(db)
+    return [to_out(a, contacts, centers, periods.get(a.id, 0)) for a in assets]
 
 
 def get_asset(db: Session, asset_id: UUID) -> FixedAsset:
@@ -178,13 +259,188 @@ def update_asset(db: Session, asset_id: UUID, data: FixedAssetIn) -> dict:
     return _out_with_names(db, asset)
 
 
-def dispose_asset(db: Session, asset_id: UUID, disposed_date: date) -> dict:
+DISPOSAL_TYPE_LABELS = {"sale": "فروش", "scrap": "اسقاط/داغی", "donation": "اهدا"}
+
+
+def dispose_asset(db: Session, asset_id: UUID, data: AssetDisposalIn, user: User) -> dict:
+    """خروجِ دارایی از دفاتر — با سندِ واقعی، نه فقط یک پرچم.
+
+    تا پیش از این، «واگذاری» فقط `is_disposed` را روشن می‌کرد: دارایی از چرخه‌ی
+    استهلاک بیرون می‌آمد ولی **بهای تمام‌شده‌اش تا ابد در ترازنامه می‌ماند** و
+    استهلاکِ انباشته‌اش هم کنارش. یعنی ترازنامه دارایی‌ای را نشان می‌داد که دیگر
+    وجود نداشت. سند این را درست می‌کند:
+
+        بدهکار: استهلاک انباشته      (پاک‌کردنِ کاهنده‌ی دارایی)
+        بدهکار: حسابِ دریافتِ وجه     (مبلغِ فروش، اگر باشد)
+        بستانکار: دارایی ثابت         (بهای تمام‌شده — دارایی از دفتر خارج می‌شود)
+        و مابه‌التفاوت: بستانکارِ «سودِ خروج» یا بدهکارِ «زیانِ خروج»
+
+    اسقاط و اهدا حالتِ خاص نیستند؛ فقط مبلغِ دریافتی‌شان صفر است، پس کلِ ارزشِ
+    دفتری زیان می‌شود.
+    """
     asset = get_asset(db, asset_id)
+    if asset.is_disposed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی قبلاً خارج شده است")
+    if data.disposal_date < asset.acquired_date:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "تاریخِ خروج نمی‌تواند پیش از تاریخِ تحصیلِ دارایی باشد",
+        )
+
+    proceeds = Decimal(data.proceeds)
+    settlement = None
+    if proceeds > 0:
+        settlement = db.get(Account, data.settlement_account_id)
+        if settlement is None or settlement.is_group:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حسابِ دریافتِ وجه نامعتبر است")
+    if data.buyer_id is not None and db.get(Contact, data.buyer_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "خریدار یافت نشد")
+
+    cost = Decimal(asset.cost)
+    accumulated = Decimal(asset.accumulated_depreciation)
+    book_value = cost - accumulated
+    gain_loss = proceeds - book_value
+
+    lines: list[JournalLine] = []
+    if accumulated > 0:
+        lines.append(
+            JournalLine(
+                account_id=_accumulated_depreciation_account(db).id,
+                debit=accumulated,
+                credit=0,
+                description="حذفِ استهلاکِ انباشته‌ی دارایی خارج‌شده",
+            )
+        )
+    if proceeds > 0 and settlement is not None:
+        lines.append(
+            JournalLine(
+                account_id=settlement.id,
+                debit=proceeds,
+                credit=0,
+                description=f"دریافتِ بابتِ {DISPOSAL_TYPE_LABELS[data.disposal_type]}ِ {asset.name}",
+            )
+        )
+    if cost > 0:
+        lines.append(
+            JournalLine(
+                account_id=_fixed_assets_account(db).id,
+                debit=0,
+                credit=cost,
+                description=f"خروجِ داراییِ ثابت: {asset.name}",
+            )
+        )
+    if gain_loss > 0:
+        lines.append(
+            JournalLine(
+                account_id=_disposal_gain_account(db).id,
+                debit=0,
+                credit=gain_loss,
+                description=f"سودِ خروجِ {asset.name}",
+            )
+        )
+    elif gain_loss < 0:
+        lines.append(
+            JournalLine(
+                account_id=_disposal_loss_account(db).id,
+                debit=-gain_loss,
+                credit=0,
+                description=f"زیانِ خروجِ {asset.name}",
+            )
+        )
+
+    #: داراییِ بها-صفر و بی‌استهلاک و بی‌عوض سندی ندارد — سندِ بی‌ردیف نمی‌سازیم.
+    #: رکوردِ خروج همچنان ثبت می‌شود تا در گزارش دیده شود.
+    entry = None
+    if lines:
+        assert_period_open(db, data.disposal_date)
+        entry = make_journal_entry(
+            db,
+            data.disposal_date,
+            f"خروجِ داراییِ ثابت ({DISPOSAL_TYPE_LABELS[data.disposal_type]}): {asset.name}",
+            "asset_disposal",
+            user,
+            lines,
+        )
+
+    db.add(
+        AssetDisposal(
+            asset_id=asset.id,
+            disposal_type=data.disposal_type,
+            disposal_date=data.disposal_date,
+            proceeds=proceeds,
+            settlement_account_id=settlement.id if settlement is not None else None,
+            buyer_id=data.buyer_id,
+            cost_at_disposal=cost,
+            accumulated_at_disposal=accumulated,
+            book_value=book_value,
+            gain_loss=gain_loss,
+            journal_entry_id=entry.id if entry is not None else None,
+            notes=data.notes.strip(),
+            created_by_id=user.id,
+        )
+    )
     asset.is_disposed = True
-    asset.disposed_date = disposed_date
+    asset.disposed_date = data.disposal_date
     db.commit()
     db.refresh(asset)
     return _out_with_names(db, asset)
+
+
+def list_disposals(
+    db: Session,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    disposal_type: str | None = None,
+) -> list[dict]:
+    """گزارشِ خروج و فروشِ دارایی — هر ردیف با ارزشِ دفتری و سود/زیانِ همان لحظه."""
+    query = db.query(AssetDisposal)
+    if date_from is not None:
+        query = query.filter(AssetDisposal.disposal_date >= date_from)
+    if date_to is not None:
+        query = query.filter(AssetDisposal.disposal_date <= date_to)
+    if disposal_type:
+        query = query.filter(AssetDisposal.disposal_type == disposal_type)
+    rows = query.order_by(AssetDisposal.disposal_date.desc(), AssetDisposal.created_at.desc()).all()
+
+    contacts, _ = _name_maps(db)
+    assets = {a.id: (a.name, a.category) for a in db.query(FixedAsset.id, FixedAsset.name, FixedAsset.category).all()}
+    account_ids = {r.settlement_account_id for r in rows if r.settlement_account_id}
+    accounts = (
+        {a.id: a.name for a in db.query(Account.id, Account.name).filter(Account.id.in_(account_ids)).all()}
+        if account_ids
+        else {}
+    )
+    entry_ids = {r.journal_entry_id for r in rows if r.journal_entry_id}
+    numbers = (
+        {e.id: e.number for e in db.query(JournalEntry.id, JournalEntry.number).filter(JournalEntry.id.in_(entry_ids)).all()}
+        if entry_ids
+        else {}
+    )
+
+    return [
+        {
+            "id": r.id,
+            "asset_id": r.asset_id,
+            "asset_name": assets.get(r.asset_id, ("", ""))[0],
+            "asset_category": assets.get(r.asset_id, ("", ""))[1],
+            "disposal_type": r.disposal_type,
+            "disposal_date": r.disposal_date,
+            "proceeds": Decimal(r.proceeds),
+            "settlement_account_id": r.settlement_account_id,
+            "settlement_account_name": accounts.get(r.settlement_account_id, ""),
+            "buyer_id": r.buyer_id,
+            "buyer_name": contacts.get(r.buyer_id, ""),
+            "cost_at_disposal": Decimal(r.cost_at_disposal),
+            "accumulated_at_disposal": Decimal(r.accumulated_at_disposal),
+            "book_value": Decimal(r.book_value),
+            "gain_loss": Decimal(r.gain_loss),
+            "journal_entry_id": r.journal_entry_id,
+            "journal_entry_number": numbers.get(r.journal_entry_id),
+            "notes": r.notes,
+        }
+        for r in rows
+    ]
 
 
 # ── تحویل/استقرار و جابه‌جایی ───────────────────────────
@@ -291,13 +547,15 @@ def delete_asset(db: Session, asset_id: UUID) -> None:
     db.commit()
 
 
-def run_depreciation(db: Session, period_date: date, user: User) -> dict:
-    """استهلاکِ همه‌ی دارایی‌های واجدِ شرایط را برای این دوره ثبت می‌کند.
+def _pending_depreciation(db: Session, period_date: date) -> list[tuple[FixedAsset, Decimal]]:
+    """دارایی‌هایی که این دوره مستهلک می‌شوند و مبلغِ هرکدام — بدونِ هیچ نوشتنی.
 
-    قاعده‌ها: دارایی واگذارشده مستهلک نمی‌شود؛ داراییِ کاملاً مستهلک‌شده نه؛ دارایی‌ای
-    که هنوز خریداری نشده (acquired_date بعد از دوره) نه؛ و دوره‌ای که قبلاً برای یک
-    دارایی ثبت شده دوباره ثبت نمی‌شود (قیدِ یکتا). همه‌ی استهلاکِ دوره در یک سند
-    واحد جمع می‌شود: بدهکارِ «هزینه استهلاک»، بستانکارِ «استهلاک انباشته».
+    هسته‌ی مشترکِ «محاسبه» (پیش‌نمایش) و «صدورِ سند». جدا بودنش یعنی آن‌چه کاربر در
+    پیش‌نمایش می‌بیند دقیقاً همان چیزی است که ثبت می‌شود، نه یک تخمینِ موازی.
+
+    قاعده‌ها: داراییِ واگذارشده مستهلک نمی‌شود؛ داراییِ کاملاً مستهلک‌شده نه؛ دارایی‌ای
+    که هنوز تحصیل نشده (acquired_date بعد از دوره) نه؛ و دوره‌ای که قبلاً برای یک
+    دارایی ثبت شده دوباره ثبت نمی‌شود.
     """
     assets = (
         db.query(FixedAsset)
@@ -308,20 +566,58 @@ def run_depreciation(db: Session, period_date: date, user: User) -> dict:
         e.asset_id
         for e in db.query(DepreciationEntry.asset_id).filter(DepreciationEntry.period_date == period_date).all()
     }
+    periods = _period_counts(db)
 
     pending: list[tuple[FixedAsset, Decimal]] = []
     for asset in assets:
         if asset.id in already:
             continue
-        base = _depreciable_base(asset)
-        accumulated = Decimal(asset.accumulated_depreciation)
-        remaining = base - accumulated
+        remaining = _depreciable_base(asset) - Decimal(asset.accumulated_depreciation)
         if remaining <= 0:
             continue
-        amount = min(monthly_depreciation(asset), remaining)  # دوره‌ی آخر ممکن است کمتر باشد
+        amount = min(monthly_depreciation(asset, periods.get(asset.id, 0)), remaining)  # دوره‌ی آخر کمتر است
         if amount <= 0:
             continue
         pending.append((asset, amount))
+    return pending
+
+
+def preview_depreciation(db: Session, period_date: date) -> dict:
+    """محاسبه‌ی استهلاکِ دوره **بدونِ ثبت** — تا کاربر پیش از صدورِ سند ببیندش.
+
+    تا امروز «اجرای استهلاک» یک دکمه بود که هم‌زمان محاسبه و ثبت می‌کرد؛ اشتباهِ
+    تاریخ یعنی سندی که باید ابطال شود. حالا محاسبه و صدور دو کارِ جدا هستند.
+    """
+    pending = _pending_depreciation(db, period_date)
+    periods = _period_counts(db)
+    return {
+        "period_date": period_date,
+        "asset_count": len(pending),
+        "total_amount": sum((amt for _, amt in pending), Decimal(0)),
+        "lines": [
+            {
+                "asset_id": a.id,
+                "asset_name": a.name,
+                "category": a.category,
+                "method": a.method,
+                "cost": Decimal(a.cost),
+                "accumulated_before": Decimal(a.accumulated_depreciation),
+                "amount": amt,
+                "book_value_after": Decimal(a.cost) - Decimal(a.accumulated_depreciation) - amt,
+                "remaining_months": max(0, a.useful_life_months - periods.get(a.id, 0)),
+            }
+            for a, amt in pending
+        ],
+    }
+
+
+def run_depreciation(db: Session, period_date: date, user: User) -> dict:
+    """سندِ استهلاکِ دوره را صادر می‌کند — همان چیزی که «محاسبه» نشان داده بود.
+
+    همه‌ی استهلاکِ دوره در یک سندِ واحد جمع می‌شود: بدهکارِ «هزینه استهلاک»،
+    بستانکارِ «استهلاک انباشته».
+    """
+    pending = _pending_depreciation(db, period_date)
 
     if not pending:
         return {
@@ -366,20 +662,285 @@ def run_depreciation(db: Session, period_date: date, user: User) -> dict:
     }
 
 
-def list_depreciation_entries(db: Session) -> list[dict]:
-    rows = (
-        db.query(DepreciationEntry)
-        .order_by(DepreciationEntry.period_date.desc(), DepreciationEntry.created_at.desc())
-        .all()
-    )
+def _entry_numbers(db: Session, entry_ids: set) -> dict:
+    ids = {i for i in entry_ids if i}
+    if not ids:
+        return {}
+    return {
+        e.id: e.number
+        for e in db.query(JournalEntry.id, JournalEntry.number).filter(JournalEntry.id.in_(ids)).all()
+    }
+
+
+def list_depreciation_entries(
+    db: Session,
+    *,
+    asset_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> list[dict]:
+    """فهرستِ محاسباتِ استهلاک — ردیف‌به‌ردیفِ دارایی‌ها."""
+    query = db.query(DepreciationEntry)
+    if asset_id is not None:
+        query = query.filter(DepreciationEntry.asset_id == asset_id)
+    if date_from is not None:
+        query = query.filter(DepreciationEntry.period_date >= date_from)
+    if date_to is not None:
+        query = query.filter(DepreciationEntry.period_date <= date_to)
+    rows = query.order_by(DepreciationEntry.period_date.desc(), DepreciationEntry.created_at.desc()).all()
+
+    names = {a.id: a.name for a in db.query(FixedAsset.id, FixedAsset.name).all()}
+    numbers = _entry_numbers(db, {e.journal_entry_id for e in rows})
     return [
         {
             "id": e.id,
             "asset_id": e.asset_id,
-            "asset_name": e.asset.name,
+            "asset_name": names.get(e.asset_id, ""),
             "period_date": e.period_date,
             "amount": Decimal(e.amount),
             "journal_entry_id": e.journal_entry_id,
+            "journal_entry_number": numbers.get(e.journal_entry_id),
         }
         for e in rows
     ]
+
+
+def list_depreciation_documents(
+    db: Session, *, date_from: date | None = None, date_to: date | None = None
+) -> list[dict]:
+    """گزارشِ اسنادِ استهلاک — یک ردیف به‌ازای هر سند، نه هر دارایی.
+
+    جمع‌بندی در خودِ پایگاه‌داده انجام می‌شود، نه با کشیدنِ همه‌ی ردیف‌ها و جمع‌زدن
+    در پایتون؛ با چند سالِ دادهٔ استهلاکِ ماهانه فرقش دیده می‌شود.
+    """
+    query = db.query(
+        DepreciationEntry.journal_entry_id,
+        DepreciationEntry.period_date,
+        func.count(DepreciationEntry.id).label("asset_count"),
+        func.sum(DepreciationEntry.amount).label("total_amount"),
+    )
+    if date_from is not None:
+        query = query.filter(DepreciationEntry.period_date >= date_from)
+    if date_to is not None:
+        query = query.filter(DepreciationEntry.period_date <= date_to)
+    rows = (
+        query.group_by(DepreciationEntry.journal_entry_id, DepreciationEntry.period_date)
+        .order_by(DepreciationEntry.period_date.desc())
+        .all()
+    )
+    numbers = _entry_numbers(db, {r.journal_entry_id for r in rows})
+    return [
+        {
+            "journal_entry_id": r.journal_entry_id,
+            "journal_entry_number": numbers.get(r.journal_entry_id),
+            "period_date": r.period_date,
+            "asset_count": r.asset_count,
+            "total_amount": Decimal(r.total_amount or 0),
+        }
+        for r in rows
+    ]
+
+
+# ── تعمیراتِ اساسی (مخارجِ پس از تحصیل) ───────────────────────────
+
+
+def add_improvement(db: Session, asset_id: UUID, data: AssetImprovementIn, user: User) -> dict:
+    """مخارجِ سرمایه‌ایِ پس از تحصیل را به بهای تمام‌شده اضافه می‌کند.
+
+    سند (اگر حسابِ تأمین داده شود): بدهکارِ «داراییِ ثابت»، بستانکارِ همان حساب —
+    دقیقاً مثلِ خودِ خرید، چون از نظرِ حسابداری همان اتفاق است: پول به دارایی تبدیل
+    شد، نه به هزینه.
+
+    استهلاکِ ثبت‌شده‌ی گذشته دست نمی‌خورد؛ چون محاسبه آینده‌نگر است، ماندهٔ تازه
+    خودبه‌خود روی ماه‌های باقیمانده پخش می‌شود.
+    """
+    asset = get_asset(db, asset_id)
+    if asset.is_disposed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی خارج شده و مخارجِ تازه نمی‌پذیرد")
+    if data.improvement_date < asset.acquired_date:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "تاریخِ مخارج نمی‌تواند پیش از تاریخِ تحصیلِ دارایی باشد"
+        )
+
+    funding = None
+    if data.funding_account_id is not None:
+        funding = db.get(Account, data.funding_account_id)
+        if funding is None or funding.is_group:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حسابِ تأمینِ مالی نامعتبر است")
+
+    entry = None
+    if funding is not None:
+        assert_period_open(db, data.improvement_date)
+        entry = make_journal_entry(
+            db,
+            data.improvement_date,
+            f"تعمیراتِ اساسی (سرمایه‌ای): {asset.name}",
+            "asset_improvement",
+            user,
+            [
+                JournalLine(
+                    account_id=_fixed_assets_account(db).id,
+                    debit=data.amount,
+                    credit=0,
+                    description=f"مخارجِ سرمایه‌ایِ {asset.name}",
+                ),
+                JournalLine(
+                    account_id=funding.id,
+                    debit=0,
+                    credit=data.amount,
+                    description=f"بابتِ تعمیراتِ اساسیِ {asset.name}",
+                ),
+            ],
+        )
+
+    db.add(
+        AssetImprovement(
+            asset_id=asset.id,
+            improvement_date=data.improvement_date,
+            amount=data.amount,
+            funding_account_id=funding.id if funding is not None else None,
+            extra_life_months=data.extra_life_months,
+            description=data.description.strip(),
+            journal_entry_id=entry.id if entry is not None else None,
+            created_by_id=user.id,
+        )
+    )
+    asset.cost = Decimal(asset.cost) + Decimal(data.amount)
+    asset.useful_life_months += data.extra_life_months
+    db.commit()
+    db.refresh(asset)
+    return _out_with_names(db, asset)
+
+
+def list_improvements(db: Session, *, asset_id: UUID | None = None) -> list[dict]:
+    query = db.query(AssetImprovement)
+    if asset_id is not None:
+        query = query.filter(AssetImprovement.asset_id == asset_id)
+    rows = query.order_by(
+        AssetImprovement.improvement_date.desc(), AssetImprovement.created_at.desc()
+    ).all()
+
+    names = {a.id: a.name for a in db.query(FixedAsset.id, FixedAsset.name).all()}
+    account_ids = {r.funding_account_id for r in rows if r.funding_account_id}
+    accounts = (
+        {a.id: a.name for a in db.query(Account.id, Account.name).filter(Account.id.in_(account_ids)).all()}
+        if account_ids
+        else {}
+    )
+    numbers = _entry_numbers(db, {r.journal_entry_id for r in rows})
+    return [
+        {
+            "id": r.id,
+            "asset_id": r.asset_id,
+            "asset_name": names.get(r.asset_id, ""),
+            "improvement_date": r.improvement_date,
+            "amount": Decimal(r.amount),
+            "funding_account_id": r.funding_account_id,
+            "funding_account_name": accounts.get(r.funding_account_id, ""),
+            "extra_life_months": r.extra_life_months,
+            "description": r.description,
+            "journal_entry_id": r.journal_entry_id,
+            "journal_entry_number": numbers.get(r.journal_entry_id),
+        }
+        for r in rows
+    ]
+
+
+# ── تغییرِ روش یا عمرِ مفید ───────────────────────────
+
+
+def change_estimate(db: Session, asset_id: UUID, data: AssetEstimateChangeIn, user: User) -> dict:
+    """روشِ استهلاک، عمرِ مفید یا ارزشِ اسقاط را عوض می‌کند — **آینده‌نگر، بی‌سند**.
+
+    گذشته دست نمی‌خورد: دوره‌های ثبت‌شده همان‌اند که بودند و فقط دوره‌های بعد با
+    برآوردِ تازه محاسبه می‌شوند. سندِ اصلاحیِ گذشته زدن، دفترِ سال‌های بسته‌شده را
+    خراب می‌کند و استاندارد هم همین را می‌خواهد.
+    """
+    asset = get_asset(db, asset_id)
+    if asset.is_disposed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی خارج شده و برآوردش عوض نمی‌شود")
+    if data.change_date < asset.acquired_date:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "تاریخِ تغییر نمی‌تواند پیش از تاریخِ تحصیلِ دارایی باشد"
+        )
+    if Decimal(data.salvage_value) > Decimal(asset.cost):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "ارزشِ اسقاط نمی‌تواند از بهای تمام‌شده بیشتر باشد"
+        )
+    #: مبنای تازه باید دستِ‌کم به‌اندازه‌ی استهلاکی که تا حالا ثبت شده باشد، وگرنه
+    #: ماندهٔ استهلاک‌پذیر منفی می‌شود و ارزشِ دفتری بی‌معنا.
+    if Decimal(asset.cost) - Decimal(data.salvage_value) < Decimal(asset.accumulated_depreciation):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "با این ارزشِ اسقاط، مبنای استهلاک از استهلاکِ انباشته‌ی ثبت‌شده کمتر می‌شود.",
+        )
+    periods_done = _period_counts(db).get(asset.id, 0)
+    if data.useful_life_months < periods_done:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"عمرِ مفیدِ تازه از {periods_done} دوره‌ی استهلاکِ ثبت‌شده کمتر است؛ عددِ بزرگ‌تری بگذارید.",
+        )
+
+    db.add(
+        AssetEstimateChange(
+            asset_id=asset.id,
+            change_date=data.change_date,
+            from_method=asset.method,
+            to_method=data.method,
+            from_useful_life_months=asset.useful_life_months,
+            to_useful_life_months=data.useful_life_months,
+            from_salvage_value=Decimal(asset.salvage_value),
+            to_salvage_value=Decimal(data.salvage_value),
+            reason=data.reason.strip(),
+            created_by_id=user.id,
+        )
+    )
+    asset.method = data.method
+    asset.useful_life_months = data.useful_life_months
+    asset.salvage_value = data.salvage_value
+    db.commit()
+    db.refresh(asset)
+    return _out_with_names(db, asset)
+
+
+def list_estimate_changes(db: Session, *, asset_id: UUID | None = None) -> list[dict]:
+    query = db.query(AssetEstimateChange)
+    if asset_id is not None:
+        query = query.filter(AssetEstimateChange.asset_id == asset_id)
+    rows = query.order_by(
+        AssetEstimateChange.change_date.desc(), AssetEstimateChange.created_at.desc()
+    ).all()
+    names = {a.id: a.name for a in db.query(FixedAsset.id, FixedAsset.name).all()}
+    return [
+        {
+            "id": r.id,
+            "asset_id": r.asset_id,
+            "asset_name": names.get(r.asset_id, ""),
+            "change_date": r.change_date,
+            "from_method": r.from_method,
+            "to_method": r.to_method,
+            "from_useful_life_months": r.from_useful_life_months,
+            "to_useful_life_months": r.to_useful_life_months,
+            "from_salvage_value": Decimal(r.from_salvage_value),
+            "to_salvage_value": Decimal(r.to_salvage_value),
+            "reason": r.reason,
+        }
+        for r in rows
+    ]
+
+
+# ── کارتِ داراییِ کامل ───────────────────────────
+
+
+def asset_card(db: Session, asset_id: UUID) -> dict:
+    """همه‌ی زندگیِ یک دارایی در یک پاسخ — برای کشوی «کارتِ دارایی»."""
+    asset = get_asset(db, asset_id)
+    disposals = list_disposals(db)
+    return {
+        "asset": _out_with_names(db, asset),
+        "depreciation_entries": list_depreciation_entries(db, asset_id=asset_id),
+        "assignments": list_assignments(db, asset_id=asset_id),
+        "improvements": list_improvements(db, asset_id=asset_id),
+        "estimate_changes": list_estimate_changes(db, asset_id=asset_id),
+        "disposal": next((d for d in disposals if d["asset_id"] == asset_id), None),
+    }
