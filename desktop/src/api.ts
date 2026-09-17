@@ -4,6 +4,32 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? 'https://acc.cubita.ir' : 'http://localhost:8000')
 
+/** یکی از کسب‌وکارهایی که کاربر به آن دسترسی دارد. */
+export interface TenantMembership {
+  tenant_id: string
+  tenant_name: string
+  tenant_slug: string
+  role_key: string
+  role_name: string
+  is_current: boolean
+}
+
+/** کسب‌وکارهای کاربر — پایه‌ی انتخابگرِ «تعویضِ کسب‌وکار». */
+export const fetchMyTenants = (token: string) =>
+  authedGet<TenantMembership[]>(token, '/api/auth/tenants')
+
+/**
+ * تعویضِ کسب‌وکار — **توکنِ تازه برمی‌گردد و توکنِ قبلی باید دور ریخته شود**.
+ *
+ * سرور عضویت را دوباره تأیید می‌کند، پس این مسیر با دستکاریِ کلاینت دور
+ * نمی‌خورد. ولی کشِ محلی همچنان مالِ کسب‌وکارِ قبلی است — پاک‌کردنش کارِ
+ * فراخواننده است.
+ */
+export const switchTenant = (token: string, tenantId: string) =>
+  authedSend<{ access_token: string; token_type: string }>(
+    token, 'POST', '/api/auth/switch-tenant', { tenant_id: tenantId },
+  )
+
 export interface MeResponse {
   id: string
   name: string

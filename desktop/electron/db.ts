@@ -87,6 +87,31 @@ function ensureColumn(
   database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
+/** مجموعِ رکوردهای همگام‌نشده در همه‌ی صف‌ها. */
+export function pendingOutboxCount(): number {
+  const database = getLocalDb()
+  let total = 0
+  for (const table of OUTBOX_TABLES) {
+    const row = database.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE synced = 0`).get() as { n: number }
+    total += row.n
+  }
+  return total
+}
+
+/**
+ * کشِ مرجع را خالی می‌کند — **و به صف دست نمی‌زند**.
+ *
+ * موقعِ تعویضِ کسب‌وکار لازم است: این جدول‌ها ستونِ مستأجر ندارند، پس داده‌ی
+ * کسب‌وکارِ قبلی زیرِ نامِ جدید دیده می‌شد. صف عمداً دست‌نخورده می‌ماند چون
+ * **داده است نه کش**؛ گاردِ تعویض اصلاً نمی‌گذارد با صفِ پر جابه‌جا شوی.
+ */
+export function clearReferenceCaches(): void {
+  const database = getLocalDb()
+  for (const table of ['accounts_cache', 'warehouses_cache', 'items_cache', 'bank_accounts_cache']) {
+    database.exec(`DELETE FROM ${table}`)
+  }
+}
+
 export function getLocalDb(): Database.Database {
   if (!db) throw new Error('دیتابیس محلی هنوز مقداردهی نشده؛ initLocalDb باید اول اجرا شود')
   return db

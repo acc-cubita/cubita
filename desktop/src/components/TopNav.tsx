@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+
+import { TenantSwitcher } from './TenantSwitcher'
 import {
   Menu,
   X,
@@ -30,6 +32,8 @@ export function TopNav({
   userName,
   roleName,
   businessName,
+  token,
+  currentTenantId,
   isPlatformAdmin,
   isSuperAdmin,
   tenantKind,
@@ -47,6 +51,8 @@ export function TopNav({
   userName: string
   roleName: string
   businessName: string
+  token?: string
+  currentTenantId?: string
   isPlatformAdmin: boolean
   isSuperAdmin: boolean
   tenantKind: string
@@ -302,12 +308,15 @@ export function TopNav({
             )}
           </div>
 
-          {businessName && (
+          {businessName && token && currentTenantId ? (
+            <TenantSwitcher token={token} currentTenantId={currentTenantId} businessName={businessName} />
+          ) : businessName ? (
+            //: بدونِ توکن یا شناسه‌ی مستأجر، همان چیپِ خواندنیِ قبلی می‌ماند.
             <span className="topnav-org" title="کسب‌وکار">
               <Building2 size={15} />
               <span className="topnav-org-name">{businessName}</span>
             </span>
-          )}
+          ) : null}
 
           {!isElectron && (
             <a

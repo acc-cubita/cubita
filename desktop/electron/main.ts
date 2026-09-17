@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { initLocalDb, getLocalDb } from './db.js'
+import { clearReferenceCaches, getLocalDb, initLocalDb, pendingOutboxCount } from './db.js'
 
 const DEBUG_LOG = path.join(app.getPath('userData'), 'startup-debug.log')
 function debugLog(msg: string) {
@@ -272,6 +272,27 @@ ipcMain.handle(
 
 //: فهرستِ درگاه‌های سریال برای انتخابگرِ رابط. تایپ‌کردنِ دستیِ «COM3» یعنی
 //: حدس‌زدن؛ و درگاهی که وجود ندارد خطایی می‌دهد که کاربر نمی‌داند از کجاست.
+//: تعویضِ کسب‌وکار به این دو نیاز دارد: شمردنِ صف برای گارد، و پاک‌کردنِ کش
+//: پس از تعویض. کش ستونِ مستأجر ندارد، پس داده‌ی کسب‌وکارِ قبلی باید برود.
+ipcMain.handle('tenant:pendingOutbox', (): number => {
+  try {
+    return pendingOutboxCount()
+  } catch {
+    //: اگر شمارش ممکن نشد، **محافظه‌کارانه** عددی برمی‌گردد که گارد را ببندد؛
+    //: بازگرداندنِ صفر یعنی اجازه‌ی تعویض با صفی که نمی‌دانیم خالی است یا نه.
+    return -1
+  }
+})
+
+ipcMain.handle('tenant:clearCaches', (): boolean => {
+  try {
+    clearReferenceCaches()
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('pos:serial-ports', async (): Promise<{ path: string; label: string }[]> => {
   try {
     return await listSerialPorts()
