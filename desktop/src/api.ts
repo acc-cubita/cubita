@@ -190,8 +190,10 @@ export async function authedGetPage<T>(
 const MAX_PAGES = 200
 
 /** بیشترین ردیفی که سرور در یک درخواستِ صفحه‌بندی‌شده می‌دهد (`MAX_LIMIT` سمتِ بک‌اند).
- *  عددِ بزرگ‌تر ۴۲۲ می‌گیرد، نه پاسخِ کوتاه‌ترِ بی‌خطر. */
-const SERVER_PAGE_MAX = 200
+ *  عددِ بزرگ‌تر ۴۲۲ می‌گیرد، نه پاسخِ کوتاه‌ترِ بی‌خطر.
+ *
+ *  صادر شده تا تست بتواند بسنجد هیچ درخواستی از آن فراتر نمی‌رود. */
+export const SERVER_PAGE_MAX = 200
 
 /** همه‌ی صفحه‌ها را دنبال می‌کند و آرایه‌ی مسطح برمی‌گرداند.
  *
@@ -204,7 +206,7 @@ async function authedGetAll<T>(token: string, path: string): Promise<T[]> {
   const all: T[] = []
   let cursor: string | null = null
   for (let i = 0; i < MAX_PAGES; i++) {
-    const page: Page<T> = await authedGetPage<T>(token, path, { limit: 200, cursor })
+    const page: Page<T> = await authedGetPage<T>(token, path, { limit: SERVER_PAGE_MAX, cursor })
     all.push(...page.items)
     if (!page.next_cursor) return all
     cursor = page.next_cursor
