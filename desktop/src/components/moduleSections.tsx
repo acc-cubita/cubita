@@ -50,7 +50,18 @@ import type { PageKey } from './Sidebar'
 
 /** یک تبِ درون‌ماژولی — کلید و برچسب و آیکنش باید دقیقاً با تعریفِ `<Tabs>` همان
  *  صفحه یکی باشد، چون سایدبار با همین کلید تبِ صفحه را کنترل می‌کند. */
-export type SectionDef = { key: string; label: string; icon: LucideIcon }
+export type SectionDef = {
+  key: string
+  label: string
+  icon: LucideIcon
+  /** بخشی که دفترِ داده‌ی ذخیره‌شده است نه کاری که کاربر انجام می‌دهد. در ستونِ
+   *  «فهرست» می‌نشیند نه «عملیات» — هرچند مثلِ بقیه یک تبِ همان صفحه است. */
+  kind?: 'list'
+}
+
+/** بخش‌های «عملیات» و «فهرست»ِ یک ماژولِ تب‌دار، با همان ترتیبِ تعریف. */
+export const opsSections = (sections: SectionDef[]) => sections.filter((s) => s.kind !== 'list')
+export const listSections = (sections: SectionDef[]) => sections.filter((s) => s.kind === 'list')
 
 /**
  * فهرستِ تب‌های هر ماژولِ تب‌دار — منبعِ زیرمنوی سطح‌سومِ سایدبار.
@@ -129,19 +140,21 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'kardex', label: 'کاردکس تولید', icon: History },
     { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart },
   ],
+  //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   fixedassets: [
     { key: 'assets', label: 'کارت دارایی', icon: Landmark },
     { key: 'placement', label: 'تحویل و استقرار', icon: UserCheck },
-    { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight },
-    { key: 'improvement', label: 'تعمیرات اساسی', icon: Wrench },
-    { key: 'estimate', label: 'تغییر روش یا عمر مفید', icon: SlidersHorizontal },
     { key: 'depreciation-calc', label: 'محاسبه استهلاک', icon: Calculator },
     { key: 'depreciation-post', label: 'صدور سند استهلاک', icon: TrendingDown },
+    { key: 'estimate', label: 'تغییر روش یا عمر مفید', icon: SlidersHorizontal },
+    { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight },
     { key: 'disposal', label: 'خروج دارایی', icon: PackageX },
-    { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History },
-    { key: 'depreciation-list', label: 'فهرست محاسبات استهلاک', icon: ListChecks },
-    { key: 'depreciation-docs', label: 'گزارش اسناد استهلاک', icon: FileText },
-    { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt },
+    { key: 'improvement', label: 'تعمیرات اساسی', icon: Wrench },
+    { key: 'registry', label: 'فهرست دارایی‌ها', icon: ClipboardList, kind: 'list' },
+    { key: 'depreciation-list', label: 'فهرست محاسبات استهلاک', icon: ListChecks, kind: 'list' },
+    { key: 'depreciation-docs', label: 'گزارش اسناد استهلاک', icon: FileText, kind: 'list' },
+    { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History, kind: 'list' },
+    { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt, kind: 'list' },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },
