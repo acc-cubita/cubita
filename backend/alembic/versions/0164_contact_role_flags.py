@@ -46,7 +46,20 @@ from alembic import op
 from app.migration_utils import rls_disabled
 
 revision: str = "0164"
-down_revision: Union[str, None] = "0163"
+
+#: **۰۱۶۶، نه ۰۱۶۳ — و شماره‌اش هم عمداً ۰۱۶۴ مانده.**
+#:
+#: این مهاجرت وقتی نوشته شد که سرِ زنجیره ۰۱۶۳ بود. هم‌زمان شاخه‌ی دیگری ۰۱۶۵ و
+#: ۰۱۶۶ را ساخت و زودتر ادغام شد. اگر `down_revision` روی ۰۱۶۳ می‌ماند، زنجیره
+#: **دو سر** پیدا می‌کرد (۰۱۶۴ و ۰۱۶۶ هر دو فرزندِ ۰۱۶۳) و
+#: `alembic upgrade head` روی تولید با «Multiple head revisions» می‌شکست.
+#:
+#: شماره‌ی ۰۱۶۴ عوض نشد چون بیست‌ودو جای کد (مدل، اسکیما، سرویس، رابط، موبایل)
+#: به «مهاجرتِ ۰۱۶۴» ارجاع می‌دهند و بازنویسیِ همه‌شان فقط برای زیباییِ ترتیب،
+#: ریسکِ جاافتادن دارد. پس **ترتیبِ اجرا با ترتیبِ شماره یکی نیست**:
+#: ۰۱۶۳ → ۰۱۶۵ → ۰۱۶۶ → ۰۱۶۴. برای دیدنِ سرِ واقعی `alembic heads` بزن، نه
+#: `ls versions | tail -1`.
+down_revision: Union[str, None] = "0166"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
