@@ -79,6 +79,11 @@ export function useSalesInvoiceDraft({
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.salesInvoice.costCenterId', '', persistOff)
   const [contacts, setContacts] = useState<ContactRecord[]>([])
+  //: **عمداً ref، نه وابستگیِ افکت.** اگر `contacts` در deps می‌نشست، هر بار که
+  //: فهرست دوباره بارگذاری می‌شد افکت اجرا می‌شد و تخفیفی که کاربر دستی عوض
+  //: کرده بود روی پیش‌فرض برمی‌گشت. همان الگوی `priceInfoRef` پایین‌تر.
+  const contactsRef = useRef<ContactRecord[]>([])
+  contactsRef.current = contacts
   const [contactId, setContactId] = usePersistentState('cubita.draft.salesInvoice.contactId', '', persistOff)
   const [customerName2, setCustomerName2] = usePersistentState('cubita.draft.salesInvoice.customerName2', '', persistOff)
   const [deliveryLocation, setDeliveryLocation] = usePersistentState('cubita.draft.salesInvoice.deliveryLocation', '', persistOff)
@@ -94,7 +99,9 @@ export function useSalesInvoiceDraft({
   const [credit, setCredit] = useState<CreditStatus | null>(null)
   // تخفیفِ خودکارِ سطحِ باشگاه (اگر در تنظیماتِ باشگاه فعال باشد).
   const [tierAuto, setTierAuto] = useState(false)
-  const [autoTier, setAutoTier] = useState<{ name: string; pct: number } | null>(null)
+  //: `source` یعنی این درصد از کجا آمد — تا پیامِ زیرِ انتخابگر دروغ نگوید.
+  //: تا امروز تنها منبع «سطحِ باشگاه» بود؛ حالا `Contact.discount_rate` هم هست.
+  const [autoTier, setAutoTier] = useState<{ name: string; pct: number; source: 'tier' | 'contact' } | null>(null)
   const autoTierActiveRef = useRef(false)
   const suppressTierRef = useRef(false)
   const [currencies, setCurrencies] = useState<Currency[]>([])
@@ -248,19 +255,32 @@ export function useSalesInvoiceDraft({
       .catch(() => {})
   }, [token])
 
-  function applyAutoTier(v: { name: string; pct: number } | null) {
+  function applyAutoTier(v: { name: string; pct: number; source: 'tier' | 'contact' } | null) {
     setAutoTier(v)
     autoTierActiveRef.current = v != null
   }
 
-  // با انتخابِ مشتری، تخفیفِ سطحش را (اگر داشته باشد) روی تخفیفِ کلِ فاکتور می‌نشانیم؛
-  // با عوض/برداشتنِ مشتری هم اگر تخفیف از سطح آمده بود پاکش می‌کنیم. (روی رونوشت نه.)
+  // با انتخابِ مشتری، تخفیفِ پیش‌فرضش را روی تخفیفِ کلِ فاکتور می‌نشانیم؛ با
+  // عوض/برداشتنِ مشتری هم اگر تخفیف از همین‌جا آمده بود پاکش می‌کنیم. (روی رونوشت نه.)
+  //
+  // **دو منبع، و بیشترین برنده است.** تا امروز تنها منبع «سطحِ باشگاه» بود و
+  // `Contact.discount_rate` — نرخی که کاربر روی فرمِ طرف‌حساب می‌گذاشت —
+  // **هیچ‌جا خوانده نمی‌شد**: ذخیره می‌شد، موقعِ ویرایش نشان داده می‌شد، و هر
+  // فاکتور نادیده‌اش می‌گرفت. یک وعده که عمل نمی‌شد (GAPS §۱۰ موردِ ۷).
+  //
+  // قاعده‌ی انتخاب‌شده به نفعِ مشتری است: `max(نرخِ طرف‌حساب، درصدِ سطح)`. پس
+  // سطحِ باشگاه یک کفِ تضمین‌شده می‌شود که نرخِ اختصاصی از آن کم نمی‌کند.
+  //
+  // **گیتِ `tierAuto` فقط روی سمتِ سطح است، نه نرخِ طرف‌حساب.** آن تنظیم
+  // (`tier_discount_auto`) درباره‌ی پیشنهادِ خودکارِ *باشگاه* است؛ نرخی که کاربر
+  // دستی روی یک طرف‌حساب گذاشته، داده‌ی عمدیِ خودِ اوست و به آن سوییچ ربطی ندارد.
+  //
+  // پیش‌فرض است نه قفل: عدد پُر می‌شود و کاربر می‌تواند عوضش کند.
   useEffect(() => {
     if (suppressTierRef.current) {
       suppressTierRef.current = false
       return
     }
-    if (!tierAuto) return
     if (!contactId) {
       if (autoTierActiveRef.current) {
         setInvoiceDiscount('')
@@ -269,20 +289,33 @@ export function useSalesInvoiceDraft({
       return
     }
     let cancelled = false
-    fetchContactTier(token, contactId)
-      .then((t) => {
-        if (cancelled) return
-        const pct = Number(t.discount_percent) || 0
-        if (t.tier_name && pct > 0) {
-          setInvoiceDiscountMode('percent')
-          setInvoiceDiscount(String(pct))
-          applyAutoTier({ name: t.tier_name, pct })
-        } else if (autoTierActiveRef.current) {
-          setInvoiceDiscount('')
-          applyAutoTier(null)
-        }
-      })
-      .catch(() => {})
+    const contact = contactsRef.current.find((c) => c.id === contactId)
+    const ownPct = Number(contact?.discount_rate) || 0
+
+    //: وقتی پیشنهادِ خودکارِ سطح خاموش است اصلاً درخواستی نمی‌رود — ولی نرخِ
+    //: طرف‌حساب همچنان اعمال می‌شود، پس افکت زودتر `return` نمی‌کند.
+    const tierPromise = tierAuto
+      ? fetchContactTier(token, contactId).catch(() => null)
+      : Promise.resolve(null)
+
+    tierPromise.then((t) => {
+      if (cancelled) return
+      const tierPct = Number(t?.discount_percent) || 0
+      const tierName = t?.tier_name || ''
+      const pct = Math.max(ownPct, tierPct)
+      if (pct > 0) {
+        //: مساوی که باشند، سطح برنده است — نامِ سطح پیامِ گویاتری می‌دهد.
+        const fromTier = !!tierName && tierPct >= ownPct
+        setInvoiceDiscountMode('percent')
+        setInvoiceDiscount(String(pct))
+        applyAutoTier(fromTier
+          ? { name: tierName, pct, source: 'tier' }
+          : { name: contact?.name || '', pct, source: 'contact' })
+      } else if (autoTierActiveRef.current) {
+        setInvoiceDiscount('')
+        applyAutoTier(null)
+      }
+    })
     return () => {
       cancelled = true
     }

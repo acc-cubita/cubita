@@ -155,7 +155,9 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
           </select>
           {d.autoTier && (
             <span className="tier-discount-hint">
-              🎖️ سطحِ {d.autoTier.name} — تخفیفِ {d.autoTier.pct.toLocaleString('fa-IR')}٪ اعمال شد
+              {d.autoTier.source === 'tier'
+                ? `🎖️ سطحِ ${d.autoTier.name} — تخفیفِ ${d.autoTier.pct.toLocaleString('fa-IR')}٪ اعمال شد`
+                : `🏷️ نرخِ تخفیفِ طرف‌حساب — ${d.autoTier.pct.toLocaleString('fa-IR')}٪ اعمال شد`}
             </span>
           )}
         </label>
