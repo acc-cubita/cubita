@@ -1,5 +1,6 @@
 import net from 'node:net'
 
+import { buildPnaMessage, parsePnaResponse } from './pna.js'
 import type { PayResult, PosStatus, PosTerminalDriver, PosTerminalProfile } from './types.js'
 
 function nowIso(): string {
@@ -86,6 +87,122 @@ function networkTcpDriver(profile: PosTerminalProfile): PosTerminalDriver {
   }
 }
 
+// ── پرداخت نوین آرین (PNA) ────────────────────────────────────────────────────────
+// قالبِ پیام از خروجیِ ابزارِ رسمیِ خودِ PNA استخراج شد و `scripts/verify-pna.mjs`
+// نگهبانش است. جزئیات در `pna.ts`.
+//
+// **این درایور عمداً تراکنش را «تأییدشده» اعلام نمی‌کند** — قالبِ پاسخ هنوز دیده
+// نشده. دلیلش در `parsePnaResponse` نوشته شده و خلاصه‌اش این است: گفتنِ «رد شد»
+// به تراکنشی که شاید تأیید شده، کاربر را به کشیدنِ دوباره‌ی کارت می‌کشانَد.
+
+//: `psp` روی فرم متنِ آزاد است، پس تطبیق مقاوم انجام می‌شود. وقتی PSP دوم اضافه
+//: شد، این باید فهرستِ صریح شود نه تطبیقِ متنی.
+const PNA_MARKERS = ['pna', 'پرداخت نوین', 'نوین آرین', 'fanap', 'فناپ']
+
+export function isPna(psp: string | undefined): boolean {
+  const v = (psp || '').trim().toLowerCase()
+  return v !== '' && PNA_MARKERS.some((m) => v.includes(m.toLowerCase()))
+}
+
+function tcpRoundTrip(host: string, port: number, payload: string, timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket()
+    let out = ''
+    let settled = false
+    const done = (err: Error | null) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      err ? reject(err) : resolve(out)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => socket.write(payload))
+    socket.on('data', (chunk) => {
+      out += chunk.toString('utf8')
+      //: کشیدنِ کارت طول می‌کشد؛ دستگاه ممکن است پاسخ را تکه‌تکه بفرستد. تا
+      //: بسته‌شدنِ اتصال یا مهلت صبر می‌کنیم، نه تا اولین تکه.
+    })
+    socket.once('timeout', () => done(out ? null : new Error('مهلتِ پاسخِ دستگاه تمام شد')))
+    socket.once('error', (e) => done(new Error(`ارتباط با دستگاه برقرار نشد: ${e.message}`)))
+    socket.once('close', () => done(null))
+    socket.connect(port, host)
+  })
+}
+
+function pnaDriver(profile: PosTerminalProfile): PosTerminalDriver {
+  const host = profile.host || ''
+  const port = profile.port || 0
+
+  return {
+    async pay(amountRial, refId): Promise<PayResult> {
+      if (!host || !port) {
+        return { approved: false, message: 'آدرس یا پورتِ دستگاه تنظیم نشده است', psp: 'pna', datetime: nowIso() }
+      }
+      let message: string
+      try {
+        //: `refId` کلیدِ یکتاییِ ماست نه شماره‌ی قبض؛ در «داده‌ی اضافی» می‌رود تا
+        //: اگر روی رسیدِ دستگاه چاپ شد، تطبیقِ دستی ممکن باشد.
+        message = buildPnaMessage({
+          amount: String(Math.round(amountRial)),
+          additionalData: refId.slice(0, 99),
+        })
+      } catch (e) {
+        return {
+          approved: false,
+          message: e instanceof Error ? e.message : 'ساختِ پیامِ کارتخوان ممکن نشد',
+          psp: 'pna',
+          datetime: nowIso(),
+        }
+      }
+
+      let raw: string
+      try {
+        //: مهلت بلند است چون کاربر باید کارت بکشد و رمز بزند.
+        raw = await tcpRoundTrip(host, port, message, 120000)
+      } catch (e) {
+        return {
+          approved: false,
+          message: e instanceof Error ? e.message : 'خطا در ارتباط با کارتخوان',
+          psp: 'pna',
+          datetime: nowIso(),
+          raw: { sent: message },
+        }
+      }
+
+      const parsed = parsePnaResponse(raw)
+      return {
+        approved: parsed.outcome === 'approved',
+        message: parsed.message,
+        psp: 'pna',
+        datetime: nowIso(),
+        raw: { sent: message, received: parsed.raw, fields: parsed.fields },
+      }
+    },
+
+    status(): Promise<PosStatus> {
+      return new Promise((resolve) => {
+        if (!host || !port) {
+          resolve({ online: false, message: 'آدرس یا پورتِ دستگاه تنظیم نشده است' })
+          return
+        }
+        const socket = new net.Socket()
+        let settled = false
+        const done = (s: PosStatus) => {
+          if (settled) return
+          settled = true
+          socket.destroy()
+          resolve(s)
+        }
+        socket.setTimeout(4000)
+        socket.once('connect', () => done({ online: true, message: `اتصال به ${host}:${port} برقرار شد` }))
+        socket.once('timeout', () => done({ online: false, message: 'مهلتِ اتصال تمام شد' }))
+        socket.once('error', (err) => done({ online: false, message: `اتصال ناموفق: ${err.message}` }))
+        socket.connect(port, host)
+      })
+    },
+  }
+}
+
 // ── استاب‌های سریال و SDK: تا زمانِ مشخص‌شدنِ دستگاه ─────────────────────────────
 function unimplementedDriver(kind: string): PosTerminalDriver {
   const message = `اتصالِ «${kind}» هنوز پیاده‌سازی نشده است؛ فعلاً از «شبیه‌ساز» یا «تحت‌شبکه» استفاده کنید.`
@@ -104,7 +221,9 @@ export function driverFor(profile: PosTerminalProfile): PosTerminalDriver {
     case 'simulator':
       return simulatorDriver(profile)
     case 'network':
-      return networkTcpDriver(profile)
+      //: PSPِ شناخته‌شده درایورِ خودش را می‌گیرد؛ بقیه به اسکلتِ عمومی می‌افتند
+      //: که صادقانه رد می‌کند. پیش‌فرض = رفتارِ دیروز.
+      return isPna(profile.psp) ? pnaDriver(profile) : networkTcpDriver(profile)
     case 'serial':
       return unimplementedDriver('سریال/USB')
     case 'sdk':
