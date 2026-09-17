@@ -4222,6 +4222,16 @@ button:disabled {
   margin-inline-start: 14px;
   padding-inline-start: 8px;
   border-inline-start: 1px solid var(--topnav-line);
+  /* **`visibility` لازم است، `overflow: hidden` کافی نیست.** با ارتفاعِ صفر، دکمه‌های
+     گروهِ بسته فقط *دیده* نمی‌شوند ولی همچنان در ترتیبِ Tab و دسترسِ صفحه‌خوان
+     می‌مانند — یعنی کاربرِ کیبورد در فضای نامرئی گیر می‌کند. `visibility: hidden`
+     آن‌ها را از هر دو بیرون می‌برد و چون زمان‌دار است، هنگامِ بستن تا پایانِ
+     انیمیشن دیده می‌شوند و پرش ندارد. */
+  visibility: hidden;
+  transition: visibility 0.22s;
+}
+.topnav-mobile-group.open > .topnav-mobile-panel > .mob-inner {
+  visibility: visible;
 }
 
 .topnav-mobile-item {
