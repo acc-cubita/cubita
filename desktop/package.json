@@ -9,6 +9,8 @@
     "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "rebuild-native": "node scripts/rebuild-native.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "oxlint",
     "preview": "vite preview",
     "pack": "npm run build && electron-builder --dir",
@@ -41,7 +43,8 @@
     "semver": "^7.8.5",
     "typescript": "~6.0.2",
     "vite": "^7.3.6",
-    "vite-plugin-electron": "^0.29.1"
+    "vite-plugin-electron": "^0.29.1",
+    "vitest": "^5.0.1"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,
