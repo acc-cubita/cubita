@@ -1,5 +1,7 @@
 import net from 'node:net'
 
+import { SerialPort } from 'serialport'
+
 import { buildPnaMessage, parsePnaResponse } from './pna.js'
 import type { PayResult, PosStatus, PosTerminalDriver, PosTerminalProfile } from './types.js'
 
@@ -203,6 +205,130 @@ function pnaDriver(profile: PosTerminalProfile): PosTerminalDriver {
   }
 }
 
+// ── سریال / USB ───────────────────────────────────────────────────────────────────
+// کارتخوانی که با کابلِ USB به رایانه وصل می‌شود، خودش را یک **درگاهِ سریالِ
+// مجازی** نشان می‌دهد؛ پروتکل همان چیزی است که روی TCP می‌رود، فقط حامل فرق
+// می‌کند. برای همین `pna.ts` مشترک است و این‌جا دوباره نوشته نمی‌شود.
+//
+// **`serialport` ماژولِ بومی است، ولی N-API** — یعنی برخلافِ `better-sqlite3`
+// به ABIِ الکترون گره نخورده و `rebuild-native` لازم ندارد. این آزموده شده، نه
+// فرض‌شده: ماژول زیرِ الکترونِ ۴۲ بارگذاری شد.
+
+const DEFAULT_BAUD = 9600
+
+/** درگاه‌های سریالِ موجود — برای انتخابگرِ رابط. */
+export async function listSerialPorts(): Promise<{ path: string; label: string }[]> {
+  try {
+    const ports = await SerialPort.list()
+    return ports.map((p) => ({
+      path: p.path,
+      //: سازنده و شناسه‌ی USB کنارِ نامِ پورت می‌آید، چون `COM3` به‌تنهایی به
+      //: کاربر نمی‌گوید کدام دستگاه است وقتی چند تا وصل باشد.
+      label: [p.path, p.manufacturer, p.vendorId && p.productId ? `${p.vendorId}:${p.productId}` : '']
+        .filter(Boolean).join(' — '),
+    }))
+  } catch {
+    return []
+  }
+}
+
+function serialRoundTrip(
+  path: string, baudRate: number, payload: string, timeoutMs: number,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let port: SerialPort
+    try {
+      port = new SerialPort({ path, baudRate, autoOpen: false })
+    } catch (e) {
+      reject(new Error(`درگاهِ «${path}» باز نشد: ${e instanceof Error ? e.message : String(e)}`))
+      return
+    }
+    let out = ''
+    let settled = false
+    const done = (err: Error | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try { port.close(() => undefined) } catch { /* بسته‌شدن مهم نیست وقتی داریم بیرون می‌رویم */ }
+      err ? reject(err) : resolve(out)
+    }
+    //: مهلت روی خودِ ما است نه روی درگاه: `serialport` وقتی دستگاه ساکت بماند
+    //: هیچ رویدادی نمی‌دهد، پس بدونِ این تایمر برای همیشه منتظر می‌ماند.
+    const timer = setTimeout(
+      () => done(out ? null : new Error('مهلتِ پاسخِ دستگاه تمام شد')),
+      timeoutMs,
+    )
+    port.on('data', (chunk: Buffer) => { out += chunk.toString('utf8') })
+    port.on('error', (e: Error) => done(new Error(`خطای درگاهِ سریال: ${e.message}`)))
+    port.open((err) => {
+      if (err) { done(new Error(`درگاهِ «${path}» باز نشد: ${err.message}`)); return }
+      port.write(payload, (werr) => {
+        if (werr) done(new Error(`نوشتن روی درگاه ناموفق بود: ${werr.message}`))
+      })
+    })
+  })
+}
+
+function pnaSerialDriver(profile: PosTerminalProfile): PosTerminalDriver {
+  const path = profile.comPort || ''
+  const baud = profile.baudRate || DEFAULT_BAUD
+
+  return {
+    async pay(amountRial, refId): Promise<PayResult> {
+      if (!path) {
+        return { approved: false, message: 'درگاهِ COM دستگاه تنظیم نشده است', psp: 'pna', datetime: nowIso() }
+      }
+      let message: string
+      try {
+        message = buildPnaMessage({
+          amount: String(Math.round(amountRial)),
+          additionalData: refId.slice(0, 99),
+        })
+      } catch (e) {
+        return {
+          approved: false,
+          message: e instanceof Error ? e.message : 'ساختِ پیامِ کارتخوان ممکن نشد',
+          psp: 'pna', datetime: nowIso(),
+        }
+      }
+
+      let raw: string
+      try {
+        raw = await serialRoundTrip(path, baud, message, 120000)
+      } catch (e) {
+        return {
+          approved: false,
+          message: e instanceof Error ? e.message : 'خطا در ارتباط با کارتخوان',
+          psp: 'pna', datetime: nowIso(), raw: { sent: message },
+        }
+      }
+
+      const parsed = parsePnaResponse(raw)
+      return {
+        approved: parsed.outcome === 'approved',
+        message: parsed.message,
+        psp: 'pna', datetime: nowIso(),
+        raw: { sent: message, received: parsed.raw, fields: parsed.fields },
+      }
+    },
+
+    async status(): Promise<PosStatus> {
+      if (!path) return { online: false, message: 'درگاهِ COM دستگاه تنظیم نشده است' }
+      //: «هست یا نه» از فهرستِ درگاه‌ها خوانده می‌شود نه از بازکردنِ آن. بازکردنِ
+      //: درگاهی که نرم‌افزارِ دیگری در دست دارد، کارِ آن را هم خراب می‌کند.
+      const ports = await listSerialPorts()
+      const found = ports.some((p) => p.path.toLowerCase() === path.toLowerCase())
+      if (found) return { online: true, message: `درگاهِ ${path} موجود است` }
+      return {
+        online: false,
+        message: ports.length
+          ? `درگاهِ ${path} پیدا نشد. موجود: ${ports.map((p) => p.path).join('، ')}`
+          : 'هیچ درگاهِ سریالی روی این رایانه نیست — درایورِ دستگاه نصب شده است؟',
+      }
+    },
+  }
+}
+
 // ── استاب‌های سریال و SDK: تا زمانِ مشخص‌شدنِ دستگاه ─────────────────────────────
 function unimplementedDriver(kind: string): PosTerminalDriver {
   const message = `اتصالِ «${kind}» هنوز پیاده‌سازی نشده است؛ فعلاً از «شبیه‌ساز» یا «تحت‌شبکه» استفاده کنید.`
@@ -225,7 +351,9 @@ export function driverFor(profile: PosTerminalProfile): PosTerminalDriver {
       //: که صادقانه رد می‌کند. پیش‌فرض = رفتارِ دیروز.
       return isPna(profile.psp) ? pnaDriver(profile) : networkTcpDriver(profile)
     case 'serial':
-      return unimplementedDriver('سریال/USB')
+      //: مثلِ شاخه‌ی شبکه: PSPِ شناخته‌شده درایورِ خودش را می‌گیرد، بقیه صادقانه
+      //: رد می‌کنند. پیش‌فرض = رفتارِ دیروز.
+      return isPna(profile.psp) ? pnaSerialDriver(profile) : unimplementedDriver('سریال/USB')
     case 'sdk':
       return unimplementedDriver('SDK اختصاصی')
     default:

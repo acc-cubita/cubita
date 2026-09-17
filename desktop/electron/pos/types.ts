@@ -9,6 +9,12 @@ export interface PosTerminalProfile {
   host?: string
   port?: number
   comPort?: string
+  /**
+   * نرخِ باودِ درگاهِ سریال. **پیش‌فرض ۹۶۰۰ است و تأییدنشده** — مستنداتِ PSP
+   * در دست نبود و دستگاهِ آزمایشی هنوز درگاهِ سریال نمی‌سازد. اگر دستگاه
+   * چیزِ دیگری بخواهد، همین‌جا عوض می‌شود.
+   */
+  baudRate?: number
   psp?: string
   // گزینه‌های شبیه‌ساز (فقط وقتی transport === 'simulator')
   simulateOutcome?: 'approve' | 'decline'

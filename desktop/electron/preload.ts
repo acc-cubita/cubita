@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('cubita', {
     pay: (profile: unknown, amountRial: number, refId: string) =>
       ipcRenderer.invoke('pos:pay', profile, amountRial, refId),
     status: (profile: unknown) => ipcRenderer.invoke('pos:status', profile),
+    serialPorts: () => ipcRenderer.invoke('pos:serial-ports'),
   },
 })
 

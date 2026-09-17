@@ -72,6 +72,8 @@ export interface PosStatusResult {
 export interface PosTerminalBridge {
   pay: (profile: PosTerminalProfileClient, amountRial: number, refId: string) => Promise<CardPayResult>
   status: (profile: PosTerminalProfileClient) => Promise<PosStatusResult>
+  /** درگاه‌های سریالِ موجود — برای انتخابگرِ «پورتِ COM». */
+  serialPorts?: () => Promise<{ path: string; label: string }[]>
 }
 
 export interface CubitaBridge {
