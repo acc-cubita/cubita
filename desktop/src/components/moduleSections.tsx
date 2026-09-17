@@ -12,11 +12,13 @@ import {
   CalendarPlus,
   ClipboardCheck,
   ClipboardList,
+  FileText,
   FileUp,
   FlaskConical,
   Gift,
   History,
   Landmark,
+  Layers,
   Link2,
   ListChecks,
   Medal,
@@ -25,9 +27,13 @@ import {
   PackageMinus,
   PackagePlus,
   PackageSearch,
+  PackageX,
   Percent,
   PieChart,
+  Receipt,
   Send,
+  SlidersHorizontal,
+  Wrench,
   Settings,
   Store,
   Tags,
@@ -45,7 +51,18 @@ import type { PageKey } from './Sidebar'
 
 /** یک تبِ درون‌ماژولی — کلید و برچسب و آیکنش باید دقیقاً با تعریفِ `<Tabs>` همان
  *  صفحه یکی باشد، چون سایدبار با همین کلید تبِ صفحه را کنترل می‌کند. */
-export type SectionDef = { key: string; label: string; icon: LucideIcon }
+export type SectionDef = {
+  key: string
+  label: string
+  icon: LucideIcon
+  /** بخشی که دفترِ داده‌ی ذخیره‌شده است نه کاری که کاربر انجام می‌دهد. در ستونِ
+   *  «فهرست» می‌نشیند نه «عملیات» — هرچند مثلِ بقیه یک تبِ همان صفحه است. */
+  kind?: 'list'
+}
+
+/** بخش‌های «عملیات» و «فهرست»ِ یک ماژولِ تب‌دار، با همان ترتیبِ تعریف. */
+export const opsSections = (sections: SectionDef[]) => sections.filter((s) => s.kind !== 'list')
+export const listSections = (sections: SectionDef[]) => sections.filter((s) => s.kind === 'list')
 
 /**
  * فهرستِ تب‌های هر ماژولِ تب‌دار — منبعِ زیرمنوی سطح‌سومِ سایدبار.
@@ -114,22 +131,34 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'rewards', label: 'جوایز', icon: Ticket },
     { key: 'birthdays', label: 'تولدها', icon: Cake },
   ],
+  //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   manufacturing: [
     { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical },
     { key: 'orders', label: 'سفارش تولید', icon: ClipboardList },
     { key: 'materials', label: 'تحویل مواد', icon: PackageMinus },
     { key: 'receipts', label: 'رسید محصول', icon: PackageCheck },
     { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator },
-    { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle },
-    { key: 'kardex', label: 'کاردکس تولید', icon: History },
-    { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart },
+    { key: 'bom-list', label: 'فهرست فرمول‌های ساخته‌شده', icon: Layers, kind: 'list' },
+    { key: 'order-list', label: 'سفارشات تولید', icon: ListChecks, kind: 'list' },
+    { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle, kind: 'list' },
+    { key: 'kardex', label: 'کاردکس تولید', icon: History, kind: 'list' },
+    { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart, kind: 'list' },
   ],
+  //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   fixedassets: [
     { key: 'assets', label: 'کارت دارایی', icon: Landmark },
     { key: 'placement', label: 'تحویل و استقرار', icon: UserCheck },
+    { key: 'depreciation-calc', label: 'محاسبه استهلاک', icon: Calculator },
+    { key: 'depreciation-post', label: 'صدور سند استهلاک', icon: TrendingDown },
+    { key: 'estimate', label: 'تغییر روش یا عمر مفید', icon: SlidersHorizontal },
     { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight },
-    { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History },
-    { key: 'depreciation', label: 'استهلاک دوره', icon: TrendingDown },
+    { key: 'disposal', label: 'خروج دارایی', icon: PackageX },
+    { key: 'improvement', label: 'تعمیرات اساسی', icon: Wrench },
+    { key: 'registry', label: 'فهرست دارایی‌ها', icon: ClipboardList, kind: 'list' },
+    { key: 'depreciation-list', label: 'فهرست محاسبات استهلاک', icon: ListChecks, kind: 'list' },
+    { key: 'depreciation-docs', label: 'گزارش اسناد استهلاک', icon: FileText, kind: 'list' },
+    { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History, kind: 'list' },
+    { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt, kind: 'list' },
   ],
   payroll: [
     { key: 'staff', label: 'پرسنل و احکام', icon: Users },

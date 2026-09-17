@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Calculator, ClipboardList, Factory, FlaskConical, History, PieChart, Plus, Save, Trash2, Layers, PackageCheck, PackageMinus, Pencil, X, Power } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, Calculator, ClipboardList, Factory, FlaskConical, History, ListChecks, PieChart, Plus, Save, Trash2, Layers, PackageCheck, PackageMinus, Pencil, X, Power } from 'lucide-react'
 import {
   calculateProductionCost,
   changeProductionPlanStatus,
@@ -38,6 +38,7 @@ import { Tabs } from '../components/Tabs'
 import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { Pager, usePagination } from '../components/Pager'
+import { useNavSection } from '../components/navContext'
 import { formatJalali, todayIso } from '../lib/jalali'
 
 const PLAN_STATUS_LABELS: Record<ProductionPlanStatus, string> = {
@@ -89,6 +90,16 @@ export function ManufacturingPage({ token }: { token: string }) {
   const [materialIssues, setMaterialIssues] = useState<WarehouseIssueRow[]>([])
   const [productReceipts, setProductReceipts] = useState<WarehouseReceiptFull[]>([])
   const [error, setError] = useState<string | null>(null)
+  //: فرمِ فرمول در «فرمول‌های ساخت» است و جدولش در «فهرست فرمول‌های ساخته‌شده»؛
+  //: دکمه‌ی ویرایشِ ردیف فرمول را این‌جا می‌گذارد و کاربر را به فرم می‌برد.
+  const [bomToEdit, setBomToEdit] = useState<BomRecord | null>(null)
+  const nav = useNavSection()
+
+  function editBom(b: BomRecord) {
+    setBomToEdit(b)
+    nav?.setSection('boms')
+  }
+  const clearBomToEdit = useCallback(() => setBomToEdit(null), [])
 
   async function refresh() {
     setError(null)
@@ -149,11 +160,13 @@ export function ManufacturingPage({ token }: { token: string }) {
       <Tabs
         syncPage="manufacturing"
         tabs={[
-          { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical, content: <BomsTab token={token} boms={boms} goodsItems={goodsItems} itemById={itemById} onChanged={refresh} /> },
-          { key: 'orders', label: 'سفارش تولید', icon: ClipboardList, content: <OrdersTab token={token} boms={boms} plans={plans} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
+          { key: 'boms', label: 'فرمول‌های ساخت', icon: FlaskConical, content: <BomsTab token={token} goodsItems={goodsItems} itemById={itemById} editTarget={bomToEdit} onEditTaken={clearBomToEdit} onChanged={refresh} /> },
+          { key: 'orders', label: 'سفارش تولید', icon: ClipboardList, content: <OrdersTab token={token} boms={boms} warehouses={warehouses} itemById={itemById} onChanged={refresh} /> },
           { key: 'materials', label: 'تحویل مواد', icon: PackageMinus, content: <MaterialIssueTab token={token} boms={boms} plans={plans} itemById={itemById} stockLevels={stockLevels} materialIssues={materialIssues} onChanged={refresh} /> },
           { key: 'receipts', label: 'رسید محصول', icon: PackageCheck, content: <ProductReceiptTab token={token} plans={plans} itemById={itemById} productReceipts={productReceipts} onChanged={refresh} /> },
           { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator, content: <CostCalcTab token={token} plans={plans} itemById={itemById} onChanged={refresh} /> },
+          { key: 'bom-list', label: 'فهرست فرمول‌های ساخته‌شده', icon: Layers, content: <BomListTab token={token} boms={boms} itemById={itemById} onEdit={editBom} onChanged={refresh} /> },
+          { key: 'order-list', label: 'سفارشات تولید', icon: ListChecks, content: <OrderListTab token={token} plans={plans} itemById={itemById} onChanged={refresh} /> },
           { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle, content: <VarianceTab token={token} plans={plans} itemById={itemById} /> },
           { key: 'kardex', label: 'کاردکس تولید', icon: History, content: <KardexTab token={token} plans={plans} items={items} itemById={itemById} /> },
           { key: 'cost-report', label: 'گزارش قیمت تمام‌شده', icon: PieChart, content: <CostReportTab token={token} plans={plans} itemById={itemById} /> },
@@ -167,14 +180,12 @@ export function ManufacturingPage({ token }: { token: string }) {
 function OrdersTab({
   token,
   boms,
-  plans,
   warehouses,
   itemById,
   onChanged,
 }: {
   token: string
   boms: BomRecord[]
-  plans: ProductionPlanRecord[]
   warehouses: { id: string; name: string }[]
   itemById: Map<string, ItemRecord>
   onChanged: () => Promise<void>
@@ -192,7 +203,6 @@ function OrdersTab({
   }, [warehouses, warehouseId])
 
   const activeBoms = boms.filter((b) => b.is_active)
-  const plansPg = usePagination(plans, 10)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -227,134 +237,153 @@ function OrdersTab({
     }
   }
 
+  return (
+    <SectionCard icon={ClipboardList} title="ثبتِ سفارشِ تولید" description="فقط برنامه‌ریزی — مواد مصرف نمی‌شود و بهایی محاسبه نمی‌شود.">
+      {activeBoms.length === 0 ? (
+        <p className="hint">ابتدا از تبِ «فرمول‌های ساخت» یک فرمول تعریف کنید.</p>
+      ) : (
+        <form className="invoice-form form-full" onSubmit={submit}>
+          <label>
+            فرمولِ ساخت (محصول)
+            <select value={bomId} onChange={(e) => setBomId(e.target.value)} required>
+              <option value="">— انتخاب —</option>
+              {activeBoms.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {itemById.get(b.finished_item_id)?.name ?? '—'}{b.name ? ` — ${b.name}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="field-row">
+            <label>
+              انبار
+              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              تاریخِ برنامه
+              <JalaliDatePicker value={date} onChange={setDate} />
+            </label>
+          </div>
+          <label>
+            تعدادِ برنامه
+            <NumberInput allowDecimal value={qty} onChange={setQty} required />
+          </label>
+          <label className="form-full">
+            توضیحات
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
+          </label>
+
+          <div className="invoice-form-footer">
+            <button type="submit" className="btn-primary" disabled={busy}><ClipboardList size={14} /> {busy ? 'در حال ثبت…' : 'ثبتِ سفارش'}</button>
+          </div>
+          {msg && <div className="hint">{msg}</div>}
+        </form>
+      )}
+    </SectionCard>
+  )
+}
+
+// ── فهرستِ سفارشاتِ تولید ────────────────────────────
+//: همان جدولی که پیش‌تر کنارِ فرمِ «سفارش تولید» بود، با کنشِ تغییرِ وضعیتش.
+function OrderListTab({
+  token,
+  plans,
+  itemById,
+  onChanged,
+}: {
+  token: string
+  plans: ProductionPlanRecord[]
+  itemById: Map<string, ItemRecord>
+  onChanged: () => Promise<void>
+}) {
+  const plansPg = usePagination(plans, 10)
+
   async function changeStatus(p: ProductionPlanRecord, next: ProductionPlanStatus) {
     await changeProductionPlanStatus(token, p.id, next)
     await onChanged()
   }
 
   return (
-    <div className="workspace-split">
-      <SectionCard icon={ClipboardList} title="ثبتِ سفارشِ تولید" description="فقط برنامه‌ریزی — مواد مصرف نمی‌شود و بهایی محاسبه نمی‌شود.">
-        {activeBoms.length === 0 ? (
-          <p className="hint">ابتدا از تبِ «فرمول‌های ساخت» یک فرمول تعریف کنید.</p>
-        ) : (
-          <form className="invoice-form form-full" onSubmit={submit}>
-            <label>
-              فرمولِ ساخت (محصول)
-              <select value={bomId} onChange={(e) => setBomId(e.target.value)} required>
-                <option value="">— انتخاب —</option>
-                {activeBoms.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {itemById.get(b.finished_item_id)?.name ?? '—'}{b.name ? ` — ${b.name}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="field-row">
-              <label>
-                انبار
-                <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                تاریخِ برنامه
-                <JalaliDatePicker value={date} onChange={setDate} />
-              </label>
-            </div>
-            <label>
-              تعدادِ برنامه
-              <NumberInput allowDecimal value={qty} onChange={setQty} required />
-            </label>
-            <label className="form-full">
-              توضیحات
-              <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
-            </label>
-
-            <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary" disabled={busy}><ClipboardList size={14} /> {busy ? 'در حال ثبت…' : 'ثبتِ سفارش'}</button>
-            </div>
-            {msg && <div className="hint">{msg}</div>}
-          </form>
-        )}
-      </SectionCard>
-
-      <SectionCard icon={ClipboardList} title="سفارش‌های تولید" description={`${fa(plans.length)} سفارش`}>
-        {plans.length === 0 ? (
-          <EmptyState icon={ClipboardList} text="هنوز سفارشی ثبت نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>شماره</th>
-                    <th>محصول</th>
-                    <th>مقدارِ برنامه</th>
-                    <th>مقدارِ اجراشده</th>
-                    <th>تاریخ</th>
-                    <th>وضعیت</th>
-                    <th>اقدام</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plansPg.pageItems.map((p) => {
-                    const options = PLAN_TRANSITIONS[p.status]
-                    return (
-                      <tr key={p.id}>
-                        <td className="card-title" data-label="شماره">{fa(p.number)}</td>
-                        <td data-label="محصول">{itemById.get(p.finished_item_id)?.name ?? '—'}</td>
-                        <td data-label="مقدارِ برنامه">{Number(p.qty_planned).toLocaleString('fa-IR')}</td>
-                        <td data-label="مقدارِ اجراشده">{Number(p.qty_produced).toLocaleString('fa-IR')}</td>
-                        <td data-label="تاریخ">{formatJalali(p.planned_date)}</td>
-                        <td data-label="وضعیت">
-                          <span className={`status-badge ${p.status === 'finished' ? 'tone-success' : p.status === 'cancelled' ? 'tone-danger' : ''}`}>
-                            {PLAN_STATUS_LABELS[p.status]}
-                          </span>
-                        </td>
-                        <td className="card-actions" data-label="اقدام">
-                          {options.length > 0 && (
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) void changeStatus(p, e.target.value as ProductionPlanStatus)
-                              }}
-                            >
-                              <option value="">— تغییرِ وضعیت —</option>
-                              {options.map((s) => (
-                                <option key={s} value={s}>{PLAN_STATUS_LABELS[s]}</option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <Pager page={plansPg.page} pageCount={plansPg.pageCount} onChange={plansPg.setPage} />
+    <SectionCard icon={ClipboardList} title="سفارشات تولید" description={`${fa(plans.length)} سفارش`}>
+      {plans.length === 0 ? (
+        <EmptyState icon={ClipboardList} text="هنوز سفارشی ثبت نشده." />
+      ) : (
+        <div className="entity-table-wrap">
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>شماره</th>
+                  <th>محصول</th>
+                  <th>مقدارِ برنامه</th>
+                  <th>مقدارِ اجراشده</th>
+                  <th>تاریخ</th>
+                  <th>وضعیت</th>
+                  <th>اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plansPg.pageItems.map((p) => {
+                  const options = PLAN_TRANSITIONS[p.status]
+                  return (
+                    <tr key={p.id}>
+                      <td className="card-title" data-label="شماره">{fa(p.number)}</td>
+                      <td data-label="محصول">{itemById.get(p.finished_item_id)?.name ?? '—'}</td>
+                      <td data-label="مقدارِ برنامه">{Number(p.qty_planned).toLocaleString('fa-IR')}</td>
+                      <td data-label="مقدارِ اجراشده">{Number(p.qty_produced).toLocaleString('fa-IR')}</td>
+                      <td data-label="تاریخ">{formatJalali(p.planned_date)}</td>
+                      <td data-label="وضعیت">
+                        <span className={`status-badge ${p.status === 'finished' ? 'tone-success' : p.status === 'cancelled' ? 'tone-danger' : ''}`}>
+                          {PLAN_STATUS_LABELS[p.status]}
+                        </span>
+                      </td>
+                      <td className="card-actions" data-label="اقدام">
+                        {options.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) void changeStatus(p, e.target.value as ProductionPlanStatus)
+                            }}
+                          >
+                            <option value="">— تغییرِ وضعیت —</option>
+                            {options.map((s) => (
+                              <option key={s} value={s}>{PLAN_STATUS_LABELS[s]}</option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
-      </SectionCard>
-    </div>
+          <Pager page={plansPg.page} pageCount={plansPg.pageCount} onChange={plansPg.setPage} />
+        </div>
+      )}
+    </SectionCard>
   )
 }
 
 // ── تبِ فرمول‌های ساخت ─────────────────────────────────
 function BomsTab({
   token,
-  boms,
   goodsItems,
   itemById,
+  editTarget,
+  onEditTaken,
   onChanged,
 }: {
   token: string
-  boms: BomRecord[]
   goodsItems: ItemRecord[]
   itemById: Map<string, ItemRecord>
+  /** فرمولی که از «فهرست فرمول‌های ساخته‌شده» برای ویرایش فرستاده شده. */
+  editTarget: BomRecord | null
+  onEditTaken: () => void
   onChanged: () => Promise<void>
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -393,6 +422,13 @@ function BomsTab({
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  useEffect(() => {
+    if (!editTarget) return
+    startEdit(editTarget)
+    onEditTaken()
+    // فقط با رسیدنِ فرمولِ تازه؛ startEdit در هر رندر تازه ساخته می‌شود.
+  }, [editTarget, onEditTaken])
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
@@ -430,10 +466,101 @@ function BomsTab({
     }
   }
 
+  const editingFinishedName = editingId ? itemById.get(finishedId)?.name ?? '—' : ''
+
+  return (
+    <SectionCard
+      icon={editingId ? Pencil : FlaskConical}
+      title={editingId ? 'ویرایشِ فرمولِ ساخت' : 'فرمولِ ساختِ جدید'}
+      description={editingId ? `محصول: ${editingFinishedName}` : 'محصول و اجزای سازنده‌اش را تعریف کنید.'}
+      actions={editingId ? <button type="button" onClick={resetForm}><X size={13} /> انصراف</button> : undefined}
+    >
+      <form className="invoice-form form-full" onSubmit={submit}>
+        <label>
+          محصولِ نهایی
+          <select value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
+            <option value="">— انتخاب —</option>
+            {goodsItems.map((i) => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </select>
+          {editingId && <span className="field-hint">محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.</span>}
+        </label>
+        <div className="field-row">
+          <label>
+            نامِ فرمول (اختیاری)
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً فرمولِ استاندارد" />
+          </label>
+          <label>
+            بازده (چند واحد در هر اجرا)
+            <NumberInput allowDecimal value={yieldQty} onChange={setYieldQty} />
+          </label>
+        </div>
+
+        <div className="entity-table-wrap">
+          <div className="table-scroll">
+            <table className="invoice-lines cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>جزء (ماده اولیه)</th>
+                  <th>مقدار</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <tr key={i}>
+                    <td data-label="جزء">
+                      <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
+                        <option value="">— انتخاب کالا —</option>
+                        {goodsItems.map((it) => (
+                          <option key={it.id} value={it.id}>{it.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td data-label="مقدار">
+                      <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
+                    </td>
+                    <td className="card-actions">
+                      <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="invoice-form-footer">
+          <button type="button" onClick={addLine}><Plus size={14} /> افزودن جزء</button>
+          <button type="submit" className="btn-primary"><Save size={14} /> {editingId ? 'ذخیرهٔ تغییرات' : 'ثبت فرمول'}</button>
+        </div>
+        {msg && <div className="hint">{msg}</div>}
+      </form>
+    </SectionCard>
+  )
+}
+
+// ── فهرستِ فرمول‌های ساخته‌شده ───────────────────────
+//: همان جدولی که پیش‌تر کنارِ فرمِ «فرمول‌های ساخت» بود. ویرایش به فرم برمی‌گردد.
+function BomListTab({
+  token,
+  boms,
+  itemById,
+  onEdit,
+  onChanged,
+}: {
+  token: string
+  boms: BomRecord[]
+  itemById: Map<string, ItemRecord>
+  onEdit: (b: BomRecord) => void
+  onChanged: () => Promise<void>
+}) {
   async function remove(id: string) {
     if (!window.confirm('این فرمولِ ساخت حذف شود؟')) return
     await deleteBom(token, id)
-    if (editingId === id) resetForm()
     await onChanged()
   }
 
@@ -442,154 +569,79 @@ function BomsTab({
     await onChanged()
   }
 
-  const editingFinishedName = editingId ? itemById.get(finishedId)?.name ?? '—' : ''
   // صفحه‌بندیِ فرمول‌های ساخت (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
   const bomsPg = usePagination(boms, 10)
 
   return (
-    <div className="workspace-split">
-      <SectionCard
-        icon={editingId ? Pencil : FlaskConical}
-        title={editingId ? 'ویرایشِ فرمولِ ساخت' : 'فرمولِ ساختِ جدید'}
-        description={editingId ? `محصول: ${editingFinishedName}` : 'محصول و اجزای سازنده‌اش را تعریف کنید.'}
-        actions={editingId ? <button type="button" onClick={resetForm}><X size={13} /> انصراف</button> : undefined}
-      >
-        <form className="invoice-form form-full" onSubmit={submit}>
-          <label>
-            محصولِ نهایی
-            <select value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
-              <option value="">— انتخاب —</option>
-              {goodsItems.map((i) => (
-                <option key={i.id} value={i.id}>{i.name}</option>
-              ))}
-            </select>
-            {editingId && <span className="field-hint">محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.</span>}
-          </label>
-          <div className="field-row">
-            <label>
-              نامِ فرمول (اختیاری)
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً فرمولِ استاندارد" />
-            </label>
-            <label>
-              بازده (چند واحد در هر اجرا)
-              <NumberInput allowDecimal value={yieldQty} onChange={setYieldQty} />
-            </label>
-          </div>
-
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="invoice-lines cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>جزء (ماده اولیه)</th>
-                    <th>مقدار</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l, i) => (
-                    <tr key={i}>
-                      <td data-label="جزء">
-                        <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
-                          <option value="">— انتخاب کالا —</option>
-                          {goodsItems.map((it) => (
-                            <option key={it.id} value={it.id}>{it.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td data-label="مقدار">
-                        <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
-                      </td>
-                      <td className="card-actions">
-                        <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="invoice-form-footer">
-            <button type="button" onClick={addLine}><Plus size={14} /> افزودن جزء</button>
-            <button type="submit" className="btn-primary"><Save size={14} /> {editingId ? 'ذخیرهٔ تغییرات' : 'ثبت فرمول'}</button>
-          </div>
-          {msg && <div className="hint">{msg}</div>}
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={Layers} title="فرمول‌های ساخت" description={`${fa(boms.length)} فرمول — بهای تمام‌شده و حاشیهٔ سود از میانگینِ موزونِ اجزا`}>
-        {boms.length === 0 ? (
-          <EmptyState icon={FlaskConical} text="فرمولی ثبت نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table bom-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>محصول</th>
-                    <th>اجزا</th>
-                    <th>بهای واحد</th>
-                    <th>حاشیهٔ سود</th>
-                    <th>اقدام</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bomsPg.pageItems.map((b) => {
-                    const finished = itemById.get(b.finished_item_id)
-                    const cost = bomUnitCost(b, itemById)
-                    const salePrice = Number(finished?.sales_price ?? 0)
-                    const margin = salePrice - cost
-                    const pct = salePrice > 0 ? (margin / salePrice) * 100 : null
-                    return (
-                      <tr key={b.id} className={b.is_active ? '' : 'bom-row-inactive'}>
-                        <td className="entity-name" data-label="محصول">
-                          <div className="entity-cell">
-                            <div className="entity-avatar">{(finished?.name ?? '؟').trim().charAt(0)}</div>
-                            <div>
-                              <div className="entity-name">{finished?.name ?? '—'}</div>
-                              <div className="entity-sub">
-                                {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
-                                {!b.is_active && ' · غیرفعال'}
-                              </div>
+    <SectionCard icon={Layers} title="فرمول‌های ساخته‌شده" description={`${fa(boms.length)} فرمول — بهای تمام‌شده و حاشیهٔ سود از میانگینِ موزونِ اجزا`}>
+      {boms.length === 0 ? (
+        <EmptyState icon={FlaskConical} text="فرمولی ثبت نشده." />
+      ) : (
+        <div className="entity-table-wrap">
+          <div className="table-scroll">
+            <table className="entity-table bom-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>محصول</th>
+                  <th>اجزا</th>
+                  <th>بهای واحد</th>
+                  <th>حاشیهٔ سود</th>
+                  <th>اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bomsPg.pageItems.map((b) => {
+                  const finished = itemById.get(b.finished_item_id)
+                  const cost = bomUnitCost(b, itemById)
+                  const salePrice = Number(finished?.sales_price ?? 0)
+                  const margin = salePrice - cost
+                  const pct = salePrice > 0 ? (margin / salePrice) * 100 : null
+                  return (
+                    <tr key={b.id} className={b.is_active ? '' : 'bom-row-inactive'}>
+                      <td className="entity-name" data-label="محصول">
+                        <div className="entity-cell">
+                          <div className="entity-avatar">{(finished?.name ?? '؟').trim().charAt(0)}</div>
+                          <div>
+                            <div className="entity-name">{finished?.name ?? '—'}</div>
+                            <div className="entity-sub">
+                              {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
+                              {!b.is_active && ' · غیرفعال'}
                             </div>
                           </div>
-                        </td>
-                        <td data-label="اجزا" className="bom-components">
-                          {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
-                        </td>
-                        <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
-                        <td data-label="حاشیهٔ سود">
-                          {salePrice <= 0 ? (
-                            <span className="field-hint">قیمت فروش ثبت نشده</span>
-                          ) : (
-                            <span className={`status-badge ${margin >= 0 ? 'tone-success' : 'tone-danger'}`} title={`قیمت فروش: ${fa(salePrice)} — بهای تمام‌شده: ${fa(cost)}`}>
-                              {fa(margin)}{pct != null ? ` (${Math.round(pct)}٪)` : ''}
-                            </span>
-                          )}
-                        </td>
-                        <td className="bom-actions" data-label="اقدام">
-                          <div className="row-actions">
-                            <button type="button" onClick={() => startEdit(b)}><Pencil size={13} /> ویرایش</button>
-                            <button type="button" className={b.is_active ? '' : 'btn-muted'} onClick={() => void toggleActive(b)} title={b.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}>
-                              <Power size={13} /> {b.is_active ? 'فعال' : 'غیرفعال'}
-                            </button>
-                            <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <Pager page={bomsPg.page} pageCount={bomsPg.pageCount} onChange={bomsPg.setPage} />
+                        </div>
+                      </td>
+                      <td data-label="اجزا" className="bom-components">
+                        {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
+                      </td>
+                      <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
+                      <td data-label="حاشیهٔ سود">
+                        {salePrice <= 0 ? (
+                          <span className="field-hint">قیمت فروش ثبت نشده</span>
+                        ) : (
+                          <span className={`status-badge ${margin >= 0 ? 'tone-success' : 'tone-danger'}`} title={`قیمت فروش: ${fa(salePrice)} — بهای تمام‌شده: ${fa(cost)}`}>
+                            {fa(margin)}{pct != null ? ` (${Math.round(pct)}٪)` : ''}
+                          </span>
+                        )}
+                      </td>
+                      <td className="bom-actions" data-label="اقدام">
+                        <div className="row-actions">
+                          <button type="button" onClick={() => onEdit(b)}><Pencil size={13} /> ویرایش</button>
+                          <button type="button" className={b.is_active ? '' : 'btn-muted'} onClick={() => void toggleActive(b)} title={b.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}>
+                            <Power size={13} /> {b.is_active ? 'فعال' : 'غیرفعال'}
+                          </button>
+                          <button type="button" className="icon-btn-danger" onClick={() => void remove(b.id)} aria-label="حذف"><Trash2 size={13} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
-      </SectionCard>
-    </div>
+          <Pager page={bomsPg.page} pageCount={bomsPg.pageCount} onChange={bomsPg.setPage} />
+        </div>
+      )}
+    </SectionCard>
   )
 }
 

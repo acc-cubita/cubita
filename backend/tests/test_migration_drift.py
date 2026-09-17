@@ -32,6 +32,29 @@ from tests.conftest import TEST_SCHEMA
 MIGRATED_SCHEMA = "cubita_migrated"
 
 
+def test_migrations_have_exactly_one_head():
+    """زنجیره‌ی مهاجرت‌ها باید یک سر داشته باشد، نه دو.
+
+    **این تست از یک شکستِ استقرار جلوگیری می‌کند، نه یک باگِ منطقی.** وقتی دو
+    توسعه‌دهنده هم‌زمان مهاجرت بسازند، هر دو `down_revision` را روی سرِ وقتِ خودشان
+    می‌گذارند و بعد از merge دو شاخه‌ی موازی می‌ماند. آن‌وقت `alembic upgrade head`
+    روی production با «Multiple head revisions are present» می‌ایستد — یعنی استقرار
+    وسطِ کار می‌شکند، نه در بازبینی.
+
+    CLAUDE.md همین را هشدار داده بود («قبل از ساختِ مهاجرت بگو، یا `alembic heads`
+    را چک کن») ولی هیچ گاردِ خودکاری نداشت و به یادِ آدم‌ها بند بود. حالا هرکس
+    دومین شاخه را merge کند، این تست قرمز می‌شود و فقط باید `down_revision` را
+    روی سرِ تازه بگذارد.
+    """
+    from alembic.script import ScriptDirectory
+
+    heads = ScriptDirectory.from_config(Config("alembic.ini")).get_heads()
+    assert len(heads) == 1, (
+        f"زنجیره‌ی مهاجرت {len(heads)} سر دارد: {', '.join(sorted(heads))}. "
+        "مهاجرتِ تازه‌تر را روی سرِ دیگری سوار کنید (down_revision را عوض کنید)."
+    )
+
+
 @pytest.fixture(scope="module")
 def migrated_schema():
     """یک schema که واقعاً از صفر مهاجرت کرده — همان چیزی که production است."""

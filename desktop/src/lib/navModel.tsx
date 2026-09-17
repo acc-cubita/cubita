@@ -330,8 +330,11 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    heading: 'سفارش کار',
-    icon: <ClipboardList size={17} />,
+    //: سرتیترِ گروه همان نامِ ماژول است («سفارش کار» حذف شد، به خواستِ کاربر). گروهِ
+    //: تک‌ماژولیِ هم‌نام در کشوی موبایل ردیفِ تکراری نمی‌گیرد و بخش‌های «تولید» مستقیم
+    //: زیرِ سرتیتر می‌آیند.
+    heading: 'تولید',
+    icon: <Factory size={17} />,
     items: [{ key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> }],
   },
   {

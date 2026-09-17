@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   createFixedAsset,
   deleteFixedAsset,
-  disposeFixedAsset,
   fetchChartAccounts,
   fetchDepreciationEntries,
   fetchFixedAssets,
@@ -42,6 +41,9 @@ export function useFixedAssetDraft({ token }: { token: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [periodDate, setPeriodDate] = useState(todayIso())
   const [runMsg, setRunMsg] = useState<string | null>(null)
+  //: با هر صدورِ سند زیاد می‌شود تا تب‌های «فهرست محاسبات» و «گزارش اسناد» — که
+  //: دادهٔ خودشان را جدا می‌گیرند — بدانند باید دوباره بخوانند.
+  const [entriesVersion, setEntriesVersion] = useState(0)
   // با هر ریست/شروعِ ویرایش/ثبتِ موفق زیاد می‌شود تا ویزارد به مرحله‌ی اول برگردد.
   const [formVersion, setFormVersion] = useState(0)
 
@@ -130,15 +132,9 @@ export function useFixedAssetDraft({ token }: { token: string }) {
     }
   }
 
-  async function handleDispose(a: FixedAssetRecord) {
-    if (!window.confirm(`دارایی «${a.name}» واگذارشده علامت بخورد؟ (دیگر مستهلک نمی‌شود)`)) return
-    try {
-      await disposeFixedAsset(token, a.id, todayIso())
-      await refresh()
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+  //: «واگذاری» دیگر یک کلیکِ تکی نیست. خروجِ دارایی سند می‌زند و برای سند باید نوعِ
+  //: خروج، مبلغِ دریافتی و حسابِ دریافت معلوم باشد — چیزی که در یک `confirm()` جا
+  //: نمی‌شود. دکمه‌ی ردیف حالا به تبِ «خروج دارایی» می‌برد با همان دارایی انتخاب‌شده.
 
   async function handleDelete(a: FixedAssetRecord) {
     if (!window.confirm(`دارایی «${a.name}» حذف شود؟`)) return
@@ -160,6 +156,7 @@ export function useFixedAssetDraft({ token }: { token: string }) {
           : `استهلاک ${fa(res.asset_count)} دارایی ثبت شد؛ جمع ${fa(res.total_amount)} — سند شماره ${res.journal_entry_number != null ? fa(res.journal_entry_number) : '—'}.`,
       )
       await refresh()
+      setEntriesVersion((v) => v + 1)
     } catch (err) {
       setRunMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -191,12 +188,12 @@ export function useFixedAssetDraft({ token }: { token: string }) {
     setPeriodDate,
     runMsg,
     formVersion,
+    entriesVersion,
     refresh,
     resetForm,
     startEdit,
     identityValid,
     submit,
-    handleDispose,
     handleDelete,
     handleRun,
     active,

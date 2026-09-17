@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
-import { MODULE_SECTIONS, type SectionDef } from './moduleSections'
+import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
 import { LIST_MENUS, LIST_PAGE_GROUP, MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
 import type { NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
@@ -86,6 +86,10 @@ export function ModulePanels({
 
   const sections = MODULE_SECTIONS[page] ?? []
   const activeSection = section ?? sections[0]?.key ?? null
+  //: بخش‌های دفتری (فهرست دارایی‌ها، گزارش اسناد استهلاک، …) تبِ همین صفحه‌اند ولی
+  //: جایشان ستونِ «فهرست» است — کنارِ کارهایی که کاربر *انجام می‌دهد* نمی‌نشینند.
+  const ops = opsSections(sections)
+  const sectionLists = listSections(sections)
   // صفحه‌های هم‌گروه فقط وقتی فهرست می‌شوند که بیش از یکی باشند؛ گروهِ تک‌صفحه‌ای
   // در نوارِ بالا هم با نامِ خودش دیده می‌شود، پس تکرارش در کارت بی‌فایده است.
   //
@@ -102,7 +106,7 @@ export function ModulePanels({
 
   return (
     <div className="mod-panels">
-      {(sections.length > 0 || pages.length > 0) && (
+      {(ops.length > 0 || pages.length > 0) && (
         <section className={`mod-panel${collapsed.ops ? ' collapsed' : ''}`}>
           <button
             type="button"
@@ -123,7 +127,7 @@ export function ModulePanels({
               // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
               // مستقیم در سطحِ اول می‌نشینند.
               const redundant = it.label === group?.heading
-              const own = MODULE_SECTIONS[it.key] ?? []
+              const own = opsSections(MODULE_SECTIONS[it.key] ?? [])
               if (redundant && own.length > 0) {
                 return (
                   <Fragment key={it.key}>
@@ -135,6 +139,7 @@ export function ModulePanels({
                           key={s.key}
                           type="button"
                           className={`mod-op${on ? ' active' : ''}`}
+                          aria-current={on ? 'page' : undefined}
                           onClick={() =>
                             it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key)
                           }
@@ -147,23 +152,31 @@ export function ModulePanels({
                   </Fragment>
                 )
               }
+              const current = it.key === page
+              const expanded = current && own.length > 0
               return (
                 <Fragment key={it.key}>
                   <button
                     type="button"
-                    className={`mod-op${it.key === page ? ' active' : ''}`}
+                    //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
+                    //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
+                    //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
+                    className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
+                    aria-current={current && !expanded ? 'page' : undefined}
                     onClick={() => onNavigate(it.key)}
                   >
                     {it.icon}
                     <span>{it.label}</span>
                   </button>
-                  {it.key === page && own.length > 0 && (
+                  {expanded && (
                     <div className="mod-sub">{sectionButtons(own, activeSection, onSelectSection)}</div>
                   )}
                 </Fragment>
               )
             })}
-            {pages.length === 0 && sectionButtons(sections, activeSection, onSelectSection)}
+            {/* ماژولِ تک‌صفحه‌ای (تولید، دارایی ثابت، …) ردیفی با نامِ خودش نمی‌گیرد: نامش
+                همین حالا در نوارِ بالا هست و تکرارش در «عملیات» یک زیرمنوی بی‌معناست. */}
+            {pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection)}
           </div>
         </section>
       )}
@@ -198,6 +211,9 @@ export function ModulePanels({
                 </button>
               )
             })
+          ) : sectionLists.length > 0 ? (
+            // ماژولِ تب‌داری که دفترهایش خودشان تب‌اند: منوی همان تب‌ها.
+            sectionButtons(sectionLists, activeSection, onSelectSection)
           ) : (
             <ListPanel token={token} page={page} section={activeSection} />
           )}
@@ -220,6 +236,7 @@ function sectionButtons(
         key={s.key}
         type="button"
         className={`mod-op${activeSection === s.key ? ' active' : ''}`}
+        aria-current={activeSection === s.key ? 'page' : undefined}
         onClick={() => onSelectSection(s.key)}
       >
         <Icon size={16} />
