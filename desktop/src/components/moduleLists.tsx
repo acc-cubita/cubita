@@ -2,7 +2,10 @@ import {
   fetchContacts,
   fetchCrmActivities,
   fetchEmployees,
+  fetchAssetDisposals,
   fetchFixedAssets,
+  DISPOSAL_TYPE_LABELS,
+  type AssetDisposalRecord,
   fetchInstallmentPlans,
   fetchIssueReturnLedger,
   fetchItemsLive,
@@ -583,11 +586,20 @@ export const MODULE_LISTS: Partial<Record<PageKey, Record<string, ListDef>>> = {
     })),
   },
   fixedassets: {
+    //: `purchase_date`/`purchase_cost` هیچ‌وقت روی `FixedAssetRecord` نبودند — نامِ
+    //: واقعیِ فیلدها `acquired_date`/`cost` است، پس این کارت تا امروز تاریخ و مبلغِ
+    //: خالی نشان می‌داد.
     __default: def('دارایی‌های ثابت', fetchFixedAssets, (r) => ({
       id: r.id,
       title: r.name,
-      subtitle: day(r.purchase_date),
-      meta: fa(r.purchase_cost),
+      subtitle: day(r.acquired_date),
+      meta: fa(r.cost),
+    })),
+    disposals: def('خروج و فروش دارایی', (t: string) => fetchAssetDisposals(t), (r: AssetDisposalRecord) => ({
+      id: r.id,
+      title: r.asset_name,
+      subtitle: `${DISPOSAL_TYPE_LABELS[r.disposal_type]} · ${day(r.disposal_date)}`,
+      meta: Number(r.gain_loss) === 0 ? '—' : `${Number(r.gain_loss) > 0 ? 'سود' : 'زیان'} ${fa(Math.abs(Number(r.gain_loss)))}`,
     })),
   },
   payroll: {

@@ -160,7 +160,7 @@ def test_a_disposed_asset_cannot_be_moved(db, user):
     from tests.factories import make_contact
 
     asset = _make_asset(db, user)
-    svc.dispose_asset(db, asset["id"], date(2026, 6, 1))
+    svc.dispose_asset(db, asset["id"], _disposal_in(disposal_date=date(2026, 6, 1), disposal_type="scrap"), user)
     ali = make_contact(db, name="علی")
 
     import pytest
@@ -183,3 +183,141 @@ def test_an_assignment_before_acquisition_is_rejected(db, user):
     with pytest.raises(HTTPException) as err:
         svc.place_asset(db, asset["id"], _assign_in(assignment_date=date(2026, 4, 1), to_custodian_id=ali.id), user)
     assert err.value.status_code == 400
+
+
+# ─────────────────── خروجِ دارایی (فروش/اسقاط/اهدا) ───────────────────
+
+
+def _disposal_in(**kw):
+    from app.schemas.assets import AssetDisposalIn
+
+    kw.setdefault("disposal_date", date(2026, 6, 1))
+    return AssetDisposalIn(**kw)
+
+
+def _acc(db, role):
+    return db.query(Account).filter(Account.system_role == role).first()
+
+
+def test_disposal_removes_cost_and_accumulated_from_the_books(db, user):
+    """باگی که این فاز می‌بندد: تا پیش از این، دارایی خارج‌شده با بهای کامل در ترازنامه می‌ماند.
+
+    بهای ۱٫۲م، سه ماه استهلاک (۳۰۰ هزار) → ارزشِ دفتری ۹۰۰ هزار؛ فروش به ۹۰۰ هزار
+    یعنی سود و زیانِ صفر و سندی که دقیقاً همان دو عدد را از دفتر بیرون می‌برد.
+    """
+    cash = _acc(db, cc.CASH)
+    asset = _make_asset(db, user, cost=1_200_000, life=12)
+    for m in (1, 2, 3):
+        svc.run_depreciation(db, date(2026, m, 28), user)
+
+    svc.dispose_asset(
+        db, asset["id"],
+        _disposal_in(disposal_type="sale", proceeds=Decimal(900_000), settlement_account_id=cash.id),
+        user,
+    )
+
+    entry = db.query(JournalEntry).filter(JournalEntry.source_type == "asset_disposal").one()
+    assert sum(l.debit for l in entry.lines) == sum(l.credit for l in entry.lines) == Decimal(1_200_000)
+    assert any(l.account_id == _acc(db, cc.ACCUMULATED_DEPRECIATION).id and l.debit == Decimal(300_000) for l in entry.lines)
+    assert any(l.account_id == cash.id and l.debit == Decimal(900_000) for l in entry.lines)
+    assert any(l.account_id == _acc(db, cc.FIXED_ASSETS).id and l.credit == Decimal(1_200_000) for l in entry.lines)
+    #: سود و زیانِ صفر یعنی هیچ ردیفِ سود/زیانی زده نشده
+    assert len(entry.lines) == 3
+
+
+def test_sale_above_book_value_books_a_gain(db, user):
+    cash = _acc(db, cc.CASH)
+    asset = _make_asset(db, user, cost=1_200_000, life=12)
+    svc.run_depreciation(db, date(2026, 1, 31), user)  # انباشته ۱۰۰ هزار → دفتری ۱٫۱م
+
+    svc.dispose_asset(
+        db, asset["id"],
+        _disposal_in(disposal_type="sale", proceeds=Decimal(1_500_000), settlement_account_id=cash.id),
+        user,
+    )
+    rows = svc.list_disposals(db)
+    assert len(rows) == 1
+    assert rows[0]["book_value"] == Decimal(1_100_000)
+    assert rows[0]["gain_loss"] == Decimal(400_000)
+
+    entry = db.query(JournalEntry).filter(JournalEntry.source_type == "asset_disposal").one()
+    assert any(l.account_id == _acc(db, cc.ASSET_DISPOSAL_GAIN).id and l.credit == Decimal(400_000) for l in entry.lines)
+    assert sum(l.debit for l in entry.lines) == sum(l.credit for l in entry.lines)
+
+
+def test_scrapping_writes_the_whole_book_value_off_as_a_loss(db, user):
+    """اسقاط عوضی ندارد، پس کلِ ارزشِ دفتری زیان است — همان چیزی که قبلاً هیچ‌جا ثبت نمی‌شد."""
+    asset = _make_asset(db, user, cost=1_200_000, life=12)
+    svc.run_depreciation(db, date(2026, 1, 31), user)
+
+    svc.dispose_asset(db, asset["id"], _disposal_in(disposal_type="scrap"), user)
+
+    row = svc.list_disposals(db)[0]
+    assert row["proceeds"] == Decimal(0)
+    assert row["gain_loss"] == Decimal(-1_100_000)
+    entry = db.query(JournalEntry).filter(JournalEntry.source_type == "asset_disposal").one()
+    assert any(l.account_id == _acc(db, cc.ASSET_DISPOSAL_LOSS).id and l.debit == Decimal(1_100_000) for l in entry.lines)
+    assert sum(l.debit for l in entry.lines) == sum(l.credit for l in entry.lines) == Decimal(1_200_000)
+
+
+def test_disposal_snapshot_survives_a_later_edit_of_the_asset(db, user):
+    """گزارشِ خروج نباید با ویرایشِ بعدیِ دارایی عوض شود — اعداد لحظه‌ی خروج عکس‌برداری‌اند."""
+    from app.schemas.assets import FixedAssetIn
+
+    asset = _make_asset(db, user, cost=1_200_000, life=12)
+    svc.dispose_asset(db, asset["id"], _disposal_in(disposal_type="donation"), user)
+    before = svc.list_disposals(db)[0]["cost_at_disposal"]
+
+    svc.update_asset(
+        db, asset["id"],
+        FixedAssetIn(name="خودرو", category="وسیله نقلیه", acquired_date=date(2026, 1, 1),
+                     cost=Decimal(5_000_000), useful_life_months=12),
+    )
+    assert svc.list_disposals(db)[0]["cost_at_disposal"] == before == Decimal(1_200_000)
+
+
+def test_an_asset_cannot_be_disposed_twice(db, user):
+    import pytest
+    from fastapi import HTTPException
+
+    asset = _make_asset(db, user)
+    svc.dispose_asset(db, asset["id"], _disposal_in(disposal_type="scrap"), user)
+    with pytest.raises(HTTPException) as err:
+        svc.dispose_asset(db, asset["id"], _disposal_in(disposal_type="scrap"), user)
+    assert err.value.status_code == 409
+
+
+def test_scrap_with_proceeds_is_rejected(db, user):
+    """مبلغِ دریافتی زیرِ عنوانِ «اسقاط» یعنی سودِ فروش گم می‌شود."""
+    import pytest
+    from pydantic import ValidationError
+
+    cash = _acc(db, cc.CASH)
+    with pytest.raises(ValidationError):
+        _disposal_in(disposal_type="scrap", proceeds=Decimal(500), settlement_account_id=cash.id)
+
+
+def test_sale_without_a_settlement_account_is_rejected(db, user):
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _disposal_in(disposal_type="sale", proceeds=Decimal(500))
+
+
+def test_a_disposed_asset_is_skipped_by_depreciation(db, user):
+    asset = _make_asset(db, user, cost=1_200_000, life=12)
+    svc.dispose_asset(db, asset["id"], _disposal_in(disposal_date=date(2026, 1, 5), disposal_type="scrap"), user)
+    assert svc.run_depreciation(db, date(2026, 1, 31), user)["asset_count"] == 0
+
+
+def test_disposal_report_filters_by_type_and_range(db, user):
+    a1 = _make_asset(db, user, cost=100, life=12)
+    a2 = _make_asset(db, user, cost=200, life=12)
+    svc.dispose_asset(db, a1["id"], _disposal_in(disposal_date=date(2026, 3, 1), disposal_type="scrap"), user)
+    svc.dispose_asset(db, a2["id"], _disposal_in(disposal_date=date(2026, 8, 1), disposal_type="donation"), user)
+
+    assert len(svc.list_disposals(db)) == 2
+    assert len(svc.list_disposals(db, disposal_type="scrap")) == 1
+    assert len(svc.list_disposals(db, date_from=date(2026, 6, 1))) == 1
+    assert len(svc.list_disposals(db, date_to=date(2026, 1, 1))) == 0

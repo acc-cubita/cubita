@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,6 +10,8 @@ from app.models.user import User
 from app.schemas.assets import (
     AssetAssignmentIn,
     AssetAssignmentOut,
+    AssetDisposalIn,
+    AssetDisposalOut,
     DepreciationEntryOut,
     DepreciationRunIn,
     DepreciationRunOut,
@@ -52,11 +54,26 @@ def update_asset(
 @router.post("/api/fixed-assets/{asset_id}/dispose", response_model=FixedAssetOut)
 def dispose_asset(
     asset_id: UUID,
-    disposed_date: date = Body(..., embed=True),
+    data: AssetDisposalIn,
     db: Session = Depends(get_db),
-    _=Depends(require_permission("assets", "update")),
+    user: User = Depends(require_permission("assets", "approve")),
 ):
-    return assets_service.dispose_asset(db, asset_id, disposed_date)
+    """خروجِ دارایی (فروش/اسقاط/اهدا) — مجوزِ «approve» چون سندِ مالی می‌سازد."""
+    return assets_service.dispose_asset(db, asset_id, data, user)
+
+
+@router.get("/api/asset-disposals", response_model=list[AssetDisposalOut])
+def list_disposals(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    disposal_type: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    """گزارشِ خروج و فروشِ دارایی — ارزشِ دفتری، مبلغِ دریافتی و سود/زیانِ هر واگذاری."""
+    return assets_service.list_disposals(
+        db, date_from=date_from, date_to=date_to, disposal_type=disposal_type
+    )
 
 
 @router.delete("/api/fixed-assets/{asset_id}", status_code=204)

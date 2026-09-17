@@ -21,6 +21,14 @@ _METHODS_IN_SQL = ", ".join(f"'{m}'" for m in DEPRECIATION_METHODS)
 #: یکی ورودِ دارایی به مجموعه، دیگری تغییرِ دستِ آن.
 ASSIGNMENT_KINDS = ("placement", "transfer")
 
+#: سه راهِ خروجِ دارایی از مجموعه. حسابداری‌شان یکی است (بهای تمام‌شده و استهلاکِ
+#: انباشته از دفتر خارج می‌شوند و مابه‌التفاوت سود/زیان می‌شود)؛ فرقشان در مبلغِ
+#: دریافتی است: `sale` معمولاً دارد، `scrap` (اسقاط/داغی) و `donation` (اهدا) صفر.
+#: جدا نگه‌داشتنشان یعنی «چقدر دارایی فروختیم» و «چقدر اسقاط کردیم» دو عددِ
+#: متفاوت می‌مانند — همان تفکیکی که گزارشِ خروج بر پایه‌اش ساخته می‌شود.
+DISPOSAL_TYPES = ("sale", "scrap", "donation")
+_DISPOSAL_IN_SQL = ", ".join(f"'{t}'" for t in DISPOSAL_TYPES)
+
 
 class FixedAsset(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک قلم دارایی ثابت (خودرو، تجهیزات، ...) که در طول عمر مفیدش مستهلک می‌شود.
@@ -68,6 +76,9 @@ class FixedAsset(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         back_populates="asset", cascade="all, delete-orphan"
     )
     assignments: Mapped[list["AssetAssignment"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    disposals: Mapped[list["AssetDisposal"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
     )
 
@@ -138,3 +149,59 @@ class AssetAssignment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     asset: Mapped["FixedAsset"] = relationship(back_populates="assignments")
+
+
+class AssetDisposal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """خروجِ دارایی از دفاتر — فروش، اسقاط یا اهدا، همراه با سندش.
+
+    **چرا اعدادِ لحظه‌ی خروج اینجا عکس‌برداری می‌شوند** (`cost_at_disposal`،
+    `accumulated_at_disposal`، `book_value`): بعد از خروج، بهای تمام‌شده و استهلاکِ
+    انباشته‌ی دارایی دیگر معنای «الان» ندارند و خودِ دارایی هم ممکن است بعداً ویرایش
+    شود. بدونِ عکس، گزارشِ خروج با هر ویرایشِ بعدی بی‌صدا عوض می‌شد و سودِ گزارش‌شده
+    دیگر با سندی که واقعاً خورده نمی‌خواند. `gain_loss` هم مشتق‌نشدنی نگه داشته
+    می‌شود چون همان عددی است که در سند نشسته.
+
+    `gain_loss` مثبت یعنی سود (مبلغِ دریافتی > ارزشِ دفتری)، منفی یعنی زیان.
+    اسقاط و اهدا تقریباً همیشه منفی‌اند — و این همان چیزی است که تا پیش از این
+    هیچ‌جا ثبت نمی‌شد: دارایی فقط یک پرچم می‌خورد و بهای کاملش تا ابد در ترازنامه
+    می‌ماند.
+    """
+
+    __tablename__ = "asset_disposals"
+    __table_args__ = (
+        CheckConstraint(f"disposal_type IN ({_DISPOSAL_IN_SQL})", name="ck_asset_disposals_type"),
+        CheckConstraint("proceeds >= 0", name="ck_asset_disposals_proceeds_nonneg"),
+        #: یک دارایی دو بار خارج نمی‌شود. `is_disposed` هم همین را می‌گوید، ولی آن
+        #: یک پرچمِ قابلِ‌ویرایش است و این یک قیدِ پایگاه‌داده.
+        UniqueConstraint("tenant_id", "asset_id", name="uq_asset_disposal_once"),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fixed_assets.id", ondelete="CASCADE"), index=True
+    )
+    disposal_type: Mapped[str] = mapped_column(String(20), default="sale", server_default="sale")
+    disposal_date: Mapped[date_] = mapped_column(Date, index=True)
+    #: مبلغِ دریافتی بابتِ واگذاری. برای اسقاط/اهدا صفر است.
+    proceeds: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: حسابی که مبلغِ دریافتی رویش می‌نشیند (صندوق/بانک/دریافتنی). فقط وقتی
+    #: `proceeds > 0` باشد لازم است.
+    settlement_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    #: خریدار — اختیاری و فقط اطلاعاتی؛ اگر مبلغ به «دریافتنی» برود، تفصیلی هم می‌شود.
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True, index=True
+    )
+
+    cost_at_disposal: Mapped[float] = mapped_column(Numeric(18, 0))
+    accumulated_at_disposal: Mapped[float] = mapped_column(Numeric(18, 0))
+    book_value: Mapped[float] = mapped_column(Numeric(18, 0))
+    gain_loss: Mapped[float] = mapped_column(Numeric(18, 0))
+
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    asset: Mapped["FixedAsset"] = relationship(back_populates="disposals")

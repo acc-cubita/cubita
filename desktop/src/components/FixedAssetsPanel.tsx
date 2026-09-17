@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Building2, Plus, Pencil, X, Save, Trash2, PackageX, Landmark, TrendingDown, UserCheck, Wallet, Play, History } from 'lucide-react'
+import { ArrowLeftRight, Building2, Plus, Pencil, X, Save, Trash2, PackageX, Landmark, Receipt, TrendingDown, TrendingUp, UserCheck, Wallet, Play, History } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
@@ -10,13 +10,19 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { useFixedAssetDraft, type FixedAssetDraft } from '../lib/fixedAssetDraft'
 import { FixedAssetWizardFlow } from './wizard/FixedAssetWizard'
+import { useNavSection } from './navContext'
 import {
+  DISPOSAL_TYPE_LABELS,
+  disposeFixedAsset,
   fetchAssetAssignments,
+  fetchAssetDisposals,
   fetchContacts,
   fetchCostCenters,
   placeFixedAsset,
   transferFixedAsset,
   type AssetAssignmentRecord,
+  type AssetDisposalRecord,
+  type DisposalType,
   type FixedAssetRecord,
 } from '../api'
 
@@ -28,7 +34,16 @@ const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 export function FixedAssetsPanel({ token, guided = false }: { token: string; guided?: boolean }) {
   const d = useFixedAssetDraft({ token })
   const [assignRefresh, setAssignRefresh] = useState(0)
+  const [disposalRefresh, setDisposalRefresh] = useState(0)
+  //: داراییِ پیش‌انتخاب‌شده وقتی کاربر از دکمه‌ی ردیفِ «کارت دارایی» به تبِ خروج می‌آید.
+  const [disposeTarget, setDisposeTarget] = useState('')
+  const nav = useNavSection()
   const bumpAssignments = () => setAssignRefresh((n) => n + 1)
+
+  function goDispose(a: FixedAssetRecord) {
+    setDisposeTarget(a.id)
+    nav?.setSection('disposal')
+  }
 
   return (
     <>
@@ -42,11 +57,25 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
       <Tabs
         syncPage="fixedassets"
         tabs={[
-          { key: 'assets', label: 'کارت دارایی', icon: Landmark, content: <AssetsTab d={d} guided={guided} /> },
+          { key: 'assets', label: 'کارت دارایی', icon: Landmark, content: <AssetsTab d={d} guided={guided} onDispose={goDispose} /> },
           { key: 'placement', label: 'تحویل و استقرار', icon: UserCheck, content: <AssignmentTab token={token} d={d} kind="placement" onDone={bumpAssignments} /> },
           { key: 'transfer', label: 'جابه‌جایی دارایی', icon: ArrowLeftRight, content: <AssignmentTab token={token} d={d} kind="transfer" onDone={bumpAssignments} /> },
           { key: 'assignments', label: 'جابه‌جایی‌ها و تحویل‌ها', icon: History, content: <AssignmentsListTab token={token} assets={d.assets} refreshKey={assignRefresh} /> },
           { key: 'depreciation', label: 'استهلاک دوره', icon: Play, content: <DepreciationRun d={d} /> },
+          {
+            key: 'disposal',
+            label: 'خروج دارایی',
+            icon: PackageX,
+            content: (
+              <DisposalTab
+                token={token}
+                d={d}
+                preselect={disposeTarget}
+                onDone={() => { setDisposeTarget(''); setDisposalRefresh((n) => n + 1) }}
+              />
+            ),
+          },
+          { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt, content: <DisposalsReportTab token={token} refreshKey={disposalRefresh} /> },
         ]}
       />
     </>
@@ -56,13 +85,13 @@ export function FixedAssetsPanel({ token, guided = false }: { token: string; gui
 /** تبِ ثبت/ویرایشِ دارایی + کارتِ دارایی‌ها.
  *  در پوسته‌ی «راهنما» فرمِ گام‌به‌گام می‌آید، در بقیه فرمِ کلاسیک — همان درفت،
  *  پس فهرست در هر دو حالت بعدِ ثبت به‌روز می‌شود. */
-function AssetsTab({ d, guided }: { d: FixedAssetDraft; guided: boolean }) {
+function AssetsTab({ d, guided, onDispose }: { d: FixedAssetDraft; guided: boolean; onDispose: (a: FixedAssetRecord) => void }) {
   if (guided) {
     return (
       <>
         <FixedAssetWizardFlow d={d} />
         <SectionCard icon={Landmark} title="کارتِ دارایی‌ها" description={`${fa(d.assets.length)} قلم دارایی — شناسه، ارزشِ دفتری و محلِ استقرار`}>
-          <FixedAssetsList d={d} />
+          <FixedAssetsList d={d} onDispose={onDispose} />
         </SectionCard>
       </>
     )
@@ -91,7 +120,7 @@ function AssetsTab({ d, guided }: { d: FixedAssetDraft; guided: boolean }) {
       </SectionCard>
 
       <SectionCard icon={Landmark} title="کارتِ دارایی‌ها" description={`${fa(d.assets.length)} قلم دارایی — شناسه، ارزشِ دفتری و محلِ استقرار`}>
-        <FixedAssetsList d={d} />
+        <FixedAssetsList d={d} onDispose={onDispose} />
       </SectionCard>
     </div>
   )
@@ -356,6 +385,287 @@ function AssignmentsListTab({
   )
 }
 
+/** خروجِ دارایی — فروش، اسقاط یا اهدا. سند همین‌جا زده می‌شود.
+ *
+ *  پیش‌نمایشِ سود/زیان عمداً پیش از ثبت نشان داده می‌شود: کاربر باید بداند این
+ *  واگذاری چه اثری روی سود و زیان می‌گذارد، نه اینکه بعد از ثبت در دفتر کشفش کند. */
+function DisposalTab({
+  token,
+  d,
+  preselect,
+  onDone,
+}: {
+  token: string
+  d: FixedAssetDraft
+  preselect: string
+  onDone: () => void
+}) {
+  const [assetId, setAssetId] = useState(preselect)
+  const [date, setDate] = useState(todayIso())
+  const [type, setType] = useState<DisposalType>('sale')
+  const [proceeds, setProceeds] = useState('')
+  const [accountId, setAccountId] = useState('')
+  const [buyerId, setBuyerId] = useState('')
+  const [notes, setNotes] = useState('')
+  const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { if (preselect) setAssetId(preselect) }, [preselect])
+  useEffect(() => {
+    void fetchContacts(token).then((rows) => setContacts(rows.map((c) => ({ id: c.id, name: c.name })))).catch(() => {})
+  }, [token])
+
+  const sale = type === 'sale'
+  const available = d.assets.filter((a) => !a.is_disposed)
+  const asset = available.find((a) => a.id === assetId)
+  const bookValue = asset ? Number(asset.book_value) : 0
+  const gainLoss = (sale ? Number(proceeds) || 0 : 0) - bookValue
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (!assetId) return setMsg('دارایی را انتخاب کنید.')
+    if (sale && Number(proceeds) > 0 && !accountId) return setMsg('حسابِ دریافتِ وجه را مشخص کنید.')
+    if (!window.confirm(
+      `دارایی «${asset?.name}» با ${DISPOSAL_TYPE_LABELS[type]} از دفاتر خارج شود؟ سندِ خروج همین حالا ثبت می‌شود.`,
+    )) return
+    setBusy(true)
+    try {
+      await disposeFixedAsset(token, assetId, {
+        disposal_date: date,
+        disposal_type: type,
+        proceeds: sale ? Number(proceeds) || 0 : 0,
+        settlement_account_id: sale && Number(proceeds) > 0 ? accountId : null,
+        buyer_id: buyerId || null,
+        notes,
+      })
+      setAssetId('')
+      setProceeds('')
+      setBuyerId('')
+      setNotes('')
+      setMsg(
+        gainLoss === 0
+          ? 'خروجِ دارایی ثبت شد ✓ بدونِ سود و زیان.'
+          : `خروجِ دارایی ثبت شد ✓ ${gainLoss > 0 ? 'سود' : 'زیان'}ِ ${fa(Math.abs(gainLoss))} ریال در سند نشست.`,
+      )
+      await d.refresh()
+      onDone()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="workspace-split">
+      <SectionCard
+        icon={PackageX}
+        title="خروجِ دارایی"
+        description="فروش، اسقاط/داغی یا اهدا. بهای تمام‌شده و استهلاکِ انباشته از دفاتر خارج می‌شوند و مابه‌التفاوت سود یا زیان می‌شود."
+      >
+        {available.length === 0 ? (
+          <p className="hint">داراییِ فعالی برای خروج نیست.</p>
+        ) : (
+          <form className="invoice-form form-full" onSubmit={submit}>
+            <label>
+              دارایی
+              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
+                <option value="">— انتخاب —</option>
+                {available.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+              </select>
+            </label>
+            <div className="field-row">
+              <label>
+                نوعِ خروج
+                <select value={type} onChange={(e) => setType(e.target.value as DisposalType)}>
+                  {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
+                    <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+                {!sale && <span className="field-hint">اسقاط و اهدا مبلغِ دریافتی ندارند؛ کلِ ارزشِ دفتری زیان می‌شود.</span>}
+              </label>
+              <label>
+                تاریخِ خروج
+                <JalaliDatePicker value={date} onChange={setDate} />
+              </label>
+            </div>
+            {sale && (
+              <div className="field-row">
+                <label>
+                  مبلغِ دریافتی
+                  <NumberInput value={proceeds} onChange={setProceeds} />
+                </label>
+                <label>
+                  دریافت در حساب
+                  <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                    <option value="">— انتخاب —</option>
+                    {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+                  </select>
+                </label>
+              </div>
+            )}
+            <div className="field-row">
+              <label>
+                {sale ? 'خریدار' : 'طرفِ مقابل'}
+                <select value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+                  <option value="">— بدونِ طرف‌حساب —</option>
+                  {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                </select>
+              </label>
+              <label>
+                توضیحات
+                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
+              </label>
+            </div>
+
+            <div className="invoice-form-footer">
+              <button type="submit" className="btn-primary" disabled={busy}>
+                <PackageX size={14} /> {busy ? 'در حال ثبت…' : 'ثبتِ خروج و صدورِ سند'}
+              </button>
+            </div>
+            {msg && <div className="hint">{msg}</div>}
+          </form>
+        )}
+      </SectionCard>
+
+      <SectionCard icon={Wallet} title="اثرِ این خروج" description="پیش از ثبت ببینید سود می‌دهد یا زیان">
+        {!asset ? (
+          <EmptyState icon={Wallet} text="یک دارایی انتخاب کنید تا محاسبه نشان داده شود." />
+        ) : (
+          <div className="live-preview">
+            <div className="live-preview-row"><span>بهای تمام‌شده</span><strong>{fa(asset.cost)}</strong></div>
+            <div className="live-preview-row"><span>استهلاکِ انباشته</span><strong>{fa(asset.accumulated_depreciation)}</strong></div>
+            <div className="live-preview-row"><span>ارزشِ دفتری</span><strong>{fa(bookValue)}</strong></div>
+            <div className="live-preview-row"><span>مبلغِ دریافتی</span><strong>{fa(sale ? Number(proceeds) || 0 : 0)}</strong></div>
+            <div className="live-preview-divider" />
+            <div className="live-preview-row live-preview-total">
+              <span>{gainLoss >= 0 ? 'سودِ خروج' : 'زیانِ خروج'}</span>
+              <strong>{fa(Math.abs(gainLoss))}</strong>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  )
+}
+
+/** گزارشِ خروج و فروشِ دارایی — دفترِ همه‌ی واگذاری‌ها با سود/زیانِ هرکدام. */
+function DisposalsReportTab({ token, refreshKey }: { token: string; refreshKey: number }) {
+  const [typeFilter, setTypeFilter] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [rows, setRows] = useState<AssetDisposalRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(null)
+    fetchAssetDisposals(token, { disposal_type: typeFilter, date_from: from, date_to: to })
+      .then((r) => { if (alive) setRows(r) })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'خطای ناشناخته') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [token, typeFilter, from, to, refreshKey])
+
+  const pg = usePagination(rows, 12, `${typeFilter}|${from}|${to}`)
+  const totalProceeds = rows.reduce((s, r) => s + Number(r.proceeds), 0)
+  const totalGain = rows.reduce((s, r) => s + Math.max(0, Number(r.gain_loss)), 0)
+  const totalLoss = rows.reduce((s, r) => s + Math.max(0, -Number(r.gain_loss)), 0)
+
+  return (
+    <SectionCard
+      icon={Receipt}
+      title="گزارشِ خروج و فروشِ دارایی"
+      description="هر واگذاری با ارزشِ دفتریِ همان لحظه، مبلغِ دریافتی و سود یا زیانی که در سند نشست."
+    >
+      <div className="invoice-form">
+        <label>
+          نوعِ خروج
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="">همه</option>
+            {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
+              <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          از تاریخ
+          <JalaliDatePicker value={from} onChange={setFrom} />
+        </label>
+        <label>
+          تا تاریخ
+          <JalaliDatePicker value={to} onChange={setTo} />
+        </label>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="stat-grid">
+          <StatCard icon={<Receipt size={18} />} label="تعداد خروج" value={fa(rows.length)} />
+          <StatCard icon={<Wallet size={18} />} label="جمعِ دریافتی" value={fa(totalProceeds)} tone="default" />
+          <StatCard icon={<TrendingUp size={18} />} label="جمعِ سود" value={fa(totalGain)} tone="success" />
+          <StatCard icon={<TrendingDown size={18} />} label="جمعِ زیان" value={fa(totalLoss)} tone="warning" />
+        </div>
+      )}
+
+      {error && <div className="error">{error}</div>}
+      {loading ? (
+        <p className="muted">در حال بارگذاری…</p>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={Receipt} text="هنوز داراییِ خارج‌شده‌ای در این بازه نیست." />
+      ) : (
+        <div className="table-scroll">
+          <table className="cards-on-mobile">
+            <thead>
+              <tr>
+                <th>تاریخ</th>
+                <th>دارایی</th>
+                <th>نوع</th>
+                <th>بهای تمام‌شده</th>
+                <th>استهلاک انباشته</th>
+                <th>ارزش دفتری</th>
+                <th>دریافتی</th>
+                <th>سود/زیان</th>
+                <th>سند</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pg.pageItems.map((r) => {
+                const gl = Number(r.gain_loss)
+                return (
+                  <tr key={r.id}>
+                    <td data-label="تاریخ">{formatJalali(r.disposal_date)}</td>
+                    <td className="card-title" data-label="دارایی">{r.asset_name}</td>
+                    <td data-label="نوع">
+                      <span className={`status-badge ${r.disposal_type === 'sale' ? 'tone-success' : 'tone-warning'}`}>
+                        {DISPOSAL_TYPE_LABELS[r.disposal_type]}
+                      </span>
+                    </td>
+                    <td className="num" data-label="بهای تمام‌شده">{fa(r.cost_at_disposal)}</td>
+                    <td className="num" data-label="استهلاک انباشته">{fa(r.accumulated_at_disposal)}</td>
+                    <td className="num" data-label="ارزش دفتری">{fa(r.book_value)}</td>
+                    <td className="num" data-label="دریافتی">{Number(r.proceeds) === 0 ? '—' : fa(r.proceeds)}</td>
+                    <td className="num" data-label="سود/زیان">
+                      <span className={`status-badge ${gl > 0 ? 'tone-success' : gl < 0 ? 'tone-danger' : ''}`}>
+                        {gl === 0 ? '—' : `${gl > 0 ? 'سود' : 'زیان'} ${fa(Math.abs(gl))}`}
+                      </span>
+                    </td>
+                    <td data-label="سند">{r.journal_entry_number != null ? fa(r.journal_entry_number) : '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
 /** فیلدهای فرمِ دارایی (بدون فوتر) — مشترکِ فرمِ کلاسیک و ویزارد. */
 export function FixedAssetFields({ d, splitStep }: { d: FixedAssetDraft; splitStep?: 'identity' | 'valuation' }) {
   const showIdentity = splitStep !== 'valuation'
@@ -412,7 +722,7 @@ export function FixedAssetFields({ d, splitStep }: { d: FixedAssetDraft; splitSt
 }
 
 /** جدولِ فهرستِ دارایی‌ها با اکشن‌ها — مشترکِ فرم و ویزارد. */
-export function FixedAssetsList({ d }: { d: FixedAssetDraft }) {
+export function FixedAssetsList({ d, onDispose }: { d: FixedAssetDraft; onDispose?: (a: FixedAssetRecord) => void }) {
   const pg = usePagination(d.assets, 10)
   if (d.assets.length === 0) {
     return <EmptyState icon={Landmark} text="هنوز دارایی ثابتی ثبت نشده." />
@@ -451,8 +761,8 @@ export function FixedAssetsList({ d }: { d: FixedAssetDraft }) {
               <td className="card-actions" data-label="عملیات">
                 <div className="check-actions">
                   <button type="button" onClick={() => d.startEdit(a)} aria-label="ویرایش"><Pencil size={13} /></button>
-                  {!a.is_disposed && (
-                    <button type="button" onClick={() => void d.handleDispose(a)} aria-label="واگذاری"><PackageX size={13} /></button>
+                  {!a.is_disposed && onDispose && (
+                    <button type="button" onClick={() => onDispose(a)} aria-label="خروج دارایی" title="خروج دارایی (فروش/اسقاط/اهدا)"><PackageX size={13} /></button>
                   )}
                   <button type="button" className="icon-btn-danger" onClick={() => void d.handleDelete(a)} aria-label="حذف"><Trash2 size={13} /></button>
                 </div>

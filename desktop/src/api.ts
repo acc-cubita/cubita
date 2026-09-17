@@ -3467,8 +3467,58 @@ export const createFixedAsset = (token: string, data: FixedAssetIn) =>
 export const updateFixedAsset = (token: string, id: string, data: FixedAssetIn) =>
   authedSend<FixedAssetRecord>(token, 'PUT', `/api/fixed-assets/${id}`, data)
 
-export const disposeFixedAsset = (token: string, id: string, disposedDate: string) =>
-  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${id}/dispose`, { disposed_date: disposedDate })
+// ── خروجِ دارایی (فروش/اسقاط/اهدا) ───────────────────
+export type DisposalType = 'sale' | 'scrap' | 'donation'
+
+export const DISPOSAL_TYPE_LABELS: Record<DisposalType, string> = {
+  sale: 'فروش',
+  scrap: 'اسقاط/داغی',
+  donation: 'اهدا',
+}
+
+export interface AssetDisposalIn {
+  disposal_date: string
+  disposal_type: DisposalType
+  proceeds?: number
+  settlement_account_id?: string | null
+  buyer_id?: string | null
+  notes?: string
+}
+
+/** یک خروجِ دارایی — اعدادِ بها/استهلاک/ارزشِ دفتری عکسِ همان لحظه‌اند، نه وضعیتِ امروز. */
+export interface AssetDisposalRecord {
+  id: string
+  asset_id: string
+  asset_name: string
+  asset_category: string
+  disposal_type: DisposalType
+  disposal_date: string
+  proceeds: string
+  settlement_account_id: string | null
+  settlement_account_name: string
+  buyer_id: string | null
+  buyer_name: string
+  cost_at_disposal: string
+  accumulated_at_disposal: string
+  book_value: string
+  gain_loss: string
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  notes: string
+}
+
+export const disposeFixedAsset = (token: string, id: string, data: AssetDisposalIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${id}/dispose`, data)
+
+export const fetchAssetDisposals = (
+  token: string,
+  filters: { date_from?: string; date_to?: string; disposal_type?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) if (v) q.set(k, v)
+  const qs = q.toString()
+  return authedGet<AssetDisposalRecord[]>(token, `/api/asset-disposals${qs ? `?${qs}` : ''}`)
+}
 
 export const deleteFixedAsset = (token: string, id: string) => authedDelete(token, `/api/fixed-assets/${id}`)
 

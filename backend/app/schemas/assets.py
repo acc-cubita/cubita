@@ -103,6 +103,55 @@ class AssetAssignmentIn(BaseModel):
         return self
 
 
+class AssetDisposalIn(BaseModel):
+    """خروجِ دارایی — فروش، اسقاط یا اهدا."""
+
+    disposal_date: date
+    disposal_type: str = "sale"
+    proceeds: Decimal = Decimal(0)
+    #: حسابِ دریافتِ وجه. اگر مبلغ صفر نباشد الزامی است — سرویس هم دوباره می‌سنجد.
+    settlement_account_id: UUID | None = None
+    buyer_id: UUID | None = None
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def validate(self) -> "AssetDisposalIn":
+        if self.disposal_type not in ("sale", "scrap", "donation"):
+            raise ValueError("نوعِ خروج نامعتبر است")
+        if self.proceeds < 0:
+            raise ValueError("مبلغِ دریافتی نمی‌تواند منفی باشد")
+        #: اسقاط و اهدا به تعریف بی‌عوض‌اند. اگر مبلغی دریافت شده، آن واگذاری
+        #: «فروش» است — وگرنه سودِ فروش زیرِ عنوانِ اسقاط گم می‌شود.
+        if self.disposal_type != "sale" and self.proceeds > 0:
+            raise ValueError("اسقاط و اهدا مبلغِ دریافتی ندارند؛ برای واگذاری با عوض «فروش» را انتخاب کنید")
+        if self.proceeds > 0 and self.settlement_account_id is None:
+            raise ValueError("حسابِ دریافتِ وجه را برای مبلغِ فروش مشخص کنید")
+        return self
+
+
+class AssetDisposalOut(BaseModel):
+    id: UUID
+    asset_id: UUID
+    asset_name: str = ""
+    asset_category: str = ""
+    disposal_type: str
+    disposal_date: date
+    proceeds: Decimal
+    settlement_account_id: UUID | None
+    settlement_account_name: str = ""
+    buyer_id: UUID | None
+    buyer_name: str = ""
+    cost_at_disposal: Decimal
+    accumulated_at_disposal: Decimal
+    book_value: Decimal
+    gain_loss: Decimal
+    journal_entry_id: UUID | None
+    journal_entry_number: int | None = None
+    notes: str
+
+    model_config = {"from_attributes": True}
+
+
 class AssetAssignmentOut(BaseModel):
     id: UUID
     asset_id: UUID

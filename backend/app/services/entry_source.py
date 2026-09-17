@@ -26,7 +26,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.accounting import JournalEntry
-from app.models.assets import DepreciationEntry
+from app.models.assets import AssetDisposal, DepreciationEntry
 from app.models.banking import BankTransaction, PettyCashTransaction
 from app.models.check_event import CheckEvent
 from app.models.contracting import ContractSettlement
@@ -78,6 +78,7 @@ SOURCE_MODELS: dict[str, type] = {
     "payroll": Payslip,
     "payroll_benefit": BenefitRun,
     "depreciation": DepreciationEntry,
+    "asset_disposal": AssetDisposal,
     "production_order": ProductionOrder,
     "stock_adjustment": StockAdjustment,
     #: آورده/برداشت/وامِ شریک — مهاجرتِ ۰۱۵۹.

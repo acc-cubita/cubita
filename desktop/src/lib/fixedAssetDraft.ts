@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   createFixedAsset,
   deleteFixedAsset,
-  disposeFixedAsset,
   fetchChartAccounts,
   fetchDepreciationEntries,
   fetchFixedAssets,
@@ -130,15 +129,9 @@ export function useFixedAssetDraft({ token }: { token: string }) {
     }
   }
 
-  async function handleDispose(a: FixedAssetRecord) {
-    if (!window.confirm(`دارایی «${a.name}» واگذارشده علامت بخورد؟ (دیگر مستهلک نمی‌شود)`)) return
-    try {
-      await disposeFixedAsset(token, a.id, todayIso())
-      await refresh()
-    } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+  //: «واگذاری» دیگر یک کلیکِ تکی نیست. خروجِ دارایی سند می‌زند و برای سند باید نوعِ
+  //: خروج، مبلغِ دریافتی و حسابِ دریافت معلوم باشد — چیزی که در یک `confirm()` جا
+  //: نمی‌شود. دکمه‌ی ردیف حالا به تبِ «خروج دارایی» می‌برد با همان دارایی انتخاب‌شده.
 
   async function handleDelete(a: FixedAssetRecord) {
     if (!window.confirm(`دارایی «${a.name}» حذف شود؟`)) return
@@ -196,7 +189,6 @@ export function useFixedAssetDraft({ token }: { token: string }) {
     startEdit,
     identityValid,
     submit,
-    handleDispose,
     handleDelete,
     handleRun,
     active,

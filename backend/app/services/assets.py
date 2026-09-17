@@ -5,12 +5,12 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.accounting import Account, JournalLine
-from app.models.assets import AssetAssignment, DepreciationEntry, FixedAsset
+from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.assets import AssetAssignment, AssetDisposal, DepreciationEntry, FixedAsset
 from app.models.cost_center import CostCenter
 from app.models.inventory import Contact
 from app.models.user import User
-from app.schemas.assets import AssetAssignmentIn, FixedAssetIn
+from app.schemas.assets import AssetAssignmentIn, AssetDisposalIn, FixedAssetIn
 from app.services import chart_codes as cc
 from app.services.common import get_or_create_account, make_journal_entry
 from app.services.period_close import assert_period_open
@@ -35,6 +35,28 @@ def _fixed_assets_account(db: Session):
         name="دارایی‌های ثابت (بهای تمام‌شده)",
         acc_type="asset",
         parent_code="12",
+    )
+
+
+def _disposal_gain_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.ASSET_DISPOSAL_GAIN,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.ASSET_DISPOSAL_GAIN],
+        name="سودِ خروجِ دارایی ثابت",
+        acc_type="income",
+        parent_code="4",
+    )
+
+
+def _disposal_loss_account(db: Session):
+    return get_or_create_account(
+        db,
+        cc.ASSET_DISPOSAL_LOSS,
+        code=cc.DEFAULT_CODE_BY_ROLE[cc.ASSET_DISPOSAL_LOSS],
+        name="زیانِ خروجِ دارایی ثابت",
+        acc_type="expense",
+        parent_code="5",
     )
 
 
@@ -178,13 +200,188 @@ def update_asset(db: Session, asset_id: UUID, data: FixedAssetIn) -> dict:
     return _out_with_names(db, asset)
 
 
-def dispose_asset(db: Session, asset_id: UUID, disposed_date: date) -> dict:
+DISPOSAL_TYPE_LABELS = {"sale": "فروش", "scrap": "اسقاط/داغی", "donation": "اهدا"}
+
+
+def dispose_asset(db: Session, asset_id: UUID, data: AssetDisposalIn, user: User) -> dict:
+    """خروجِ دارایی از دفاتر — با سندِ واقعی، نه فقط یک پرچم.
+
+    تا پیش از این، «واگذاری» فقط `is_disposed` را روشن می‌کرد: دارایی از چرخه‌ی
+    استهلاک بیرون می‌آمد ولی **بهای تمام‌شده‌اش تا ابد در ترازنامه می‌ماند** و
+    استهلاکِ انباشته‌اش هم کنارش. یعنی ترازنامه دارایی‌ای را نشان می‌داد که دیگر
+    وجود نداشت. سند این را درست می‌کند:
+
+        بدهکار: استهلاک انباشته      (پاک‌کردنِ کاهنده‌ی دارایی)
+        بدهکار: حسابِ دریافتِ وجه     (مبلغِ فروش، اگر باشد)
+        بستانکار: دارایی ثابت         (بهای تمام‌شده — دارایی از دفتر خارج می‌شود)
+        و مابه‌التفاوت: بستانکارِ «سودِ خروج» یا بدهکارِ «زیانِ خروج»
+
+    اسقاط و اهدا حالتِ خاص نیستند؛ فقط مبلغِ دریافتی‌شان صفر است، پس کلِ ارزشِ
+    دفتری زیان می‌شود.
+    """
     asset = get_asset(db, asset_id)
+    if asset.is_disposed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی قبلاً خارج شده است")
+    if data.disposal_date < asset.acquired_date:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "تاریخِ خروج نمی‌تواند پیش از تاریخِ تحصیلِ دارایی باشد",
+        )
+
+    proceeds = Decimal(data.proceeds)
+    settlement = None
+    if proceeds > 0:
+        settlement = db.get(Account, data.settlement_account_id)
+        if settlement is None or settlement.is_group:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "حسابِ دریافتِ وجه نامعتبر است")
+    if data.buyer_id is not None and db.get(Contact, data.buyer_id) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "خریدار یافت نشد")
+
+    cost = Decimal(asset.cost)
+    accumulated = Decimal(asset.accumulated_depreciation)
+    book_value = cost - accumulated
+    gain_loss = proceeds - book_value
+
+    lines: list[JournalLine] = []
+    if accumulated > 0:
+        lines.append(
+            JournalLine(
+                account_id=_accumulated_depreciation_account(db).id,
+                debit=accumulated,
+                credit=0,
+                description="حذفِ استهلاکِ انباشته‌ی دارایی خارج‌شده",
+            )
+        )
+    if proceeds > 0 and settlement is not None:
+        lines.append(
+            JournalLine(
+                account_id=settlement.id,
+                debit=proceeds,
+                credit=0,
+                description=f"دریافتِ بابتِ {DISPOSAL_TYPE_LABELS[data.disposal_type]}ِ {asset.name}",
+            )
+        )
+    if cost > 0:
+        lines.append(
+            JournalLine(
+                account_id=_fixed_assets_account(db).id,
+                debit=0,
+                credit=cost,
+                description=f"خروجِ داراییِ ثابت: {asset.name}",
+            )
+        )
+    if gain_loss > 0:
+        lines.append(
+            JournalLine(
+                account_id=_disposal_gain_account(db).id,
+                debit=0,
+                credit=gain_loss,
+                description=f"سودِ خروجِ {asset.name}",
+            )
+        )
+    elif gain_loss < 0:
+        lines.append(
+            JournalLine(
+                account_id=_disposal_loss_account(db).id,
+                debit=-gain_loss,
+                credit=0,
+                description=f"زیانِ خروجِ {asset.name}",
+            )
+        )
+
+    #: داراییِ بها-صفر و بی‌استهلاک و بی‌عوض سندی ندارد — سندِ بی‌ردیف نمی‌سازیم.
+    #: رکوردِ خروج همچنان ثبت می‌شود تا در گزارش دیده شود.
+    entry = None
+    if lines:
+        assert_period_open(db, data.disposal_date)
+        entry = make_journal_entry(
+            db,
+            data.disposal_date,
+            f"خروجِ داراییِ ثابت ({DISPOSAL_TYPE_LABELS[data.disposal_type]}): {asset.name}",
+            "asset_disposal",
+            user,
+            lines,
+        )
+
+    db.add(
+        AssetDisposal(
+            asset_id=asset.id,
+            disposal_type=data.disposal_type,
+            disposal_date=data.disposal_date,
+            proceeds=proceeds,
+            settlement_account_id=settlement.id if settlement is not None else None,
+            buyer_id=data.buyer_id,
+            cost_at_disposal=cost,
+            accumulated_at_disposal=accumulated,
+            book_value=book_value,
+            gain_loss=gain_loss,
+            journal_entry_id=entry.id if entry is not None else None,
+            notes=data.notes.strip(),
+            created_by_id=user.id,
+        )
+    )
     asset.is_disposed = True
-    asset.disposed_date = disposed_date
+    asset.disposed_date = data.disposal_date
     db.commit()
     db.refresh(asset)
     return _out_with_names(db, asset)
+
+
+def list_disposals(
+    db: Session,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    disposal_type: str | None = None,
+) -> list[dict]:
+    """گزارشِ خروج و فروشِ دارایی — هر ردیف با ارزشِ دفتری و سود/زیانِ همان لحظه."""
+    query = db.query(AssetDisposal)
+    if date_from is not None:
+        query = query.filter(AssetDisposal.disposal_date >= date_from)
+    if date_to is not None:
+        query = query.filter(AssetDisposal.disposal_date <= date_to)
+    if disposal_type:
+        query = query.filter(AssetDisposal.disposal_type == disposal_type)
+    rows = query.order_by(AssetDisposal.disposal_date.desc(), AssetDisposal.created_at.desc()).all()
+
+    contacts, _ = _name_maps(db)
+    assets = {a.id: (a.name, a.category) for a in db.query(FixedAsset.id, FixedAsset.name, FixedAsset.category).all()}
+    account_ids = {r.settlement_account_id for r in rows if r.settlement_account_id}
+    accounts = (
+        {a.id: a.name for a in db.query(Account.id, Account.name).filter(Account.id.in_(account_ids)).all()}
+        if account_ids
+        else {}
+    )
+    entry_ids = {r.journal_entry_id for r in rows if r.journal_entry_id}
+    numbers = (
+        {e.id: e.number for e in db.query(JournalEntry.id, JournalEntry.number).filter(JournalEntry.id.in_(entry_ids)).all()}
+        if entry_ids
+        else {}
+    )
+
+    return [
+        {
+            "id": r.id,
+            "asset_id": r.asset_id,
+            "asset_name": assets.get(r.asset_id, ("", ""))[0],
+            "asset_category": assets.get(r.asset_id, ("", ""))[1],
+            "disposal_type": r.disposal_type,
+            "disposal_date": r.disposal_date,
+            "proceeds": Decimal(r.proceeds),
+            "settlement_account_id": r.settlement_account_id,
+            "settlement_account_name": accounts.get(r.settlement_account_id, ""),
+            "buyer_id": r.buyer_id,
+            "buyer_name": contacts.get(r.buyer_id, ""),
+            "cost_at_disposal": Decimal(r.cost_at_disposal),
+            "accumulated_at_disposal": Decimal(r.accumulated_at_disposal),
+            "book_value": Decimal(r.book_value),
+            "gain_loss": Decimal(r.gain_loss),
+            "journal_entry_id": r.journal_entry_id,
+            "journal_entry_number": numbers.get(r.journal_entry_id),
+            "notes": r.notes,
+        }
+        for r in rows
+    ]
 
 
 # ── تحویل/استقرار و جابه‌جایی ───────────────────────────
