@@ -40,7 +40,7 @@ import {
   type BackupSettings,
 } from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
-import { driverFor } from './pos/drivers.js'
+import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
 // acc.cubita.ir و acc.ipnetcity.ir به یک بک‌اند می‌روند، ولی رندرر روی
@@ -269,6 +269,16 @@ ipcMain.handle(
     }
   },
 )
+
+//: فهرستِ درگاه‌های سریال برای انتخابگرِ رابط. تایپ‌کردنِ دستیِ «COM3» یعنی
+//: حدس‌زدن؛ و درگاهی که وجود ندارد خطایی می‌دهد که کاربر نمی‌داند از کجاست.
+ipcMain.handle('pos:serial-ports', async (): Promise<{ path: string; label: string }[]> => {
+  try {
+    return await listSerialPorts()
+  } catch {
+    return []
+  }
+})
 
 ipcMain.handle('pos:status', async (_evt, profile: PosTerminalProfile): Promise<PosStatus> => {
   try {

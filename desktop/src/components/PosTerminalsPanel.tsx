@@ -73,6 +73,9 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
   const [saving, setSaving] = useState(false)
   const [testMsg, setTestMsg] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
+  //: `null` یعنی «این‌جا دسکتاپ نیست» و همان ورودیِ متنی می‌ماند؛ آرایه‌ی خالی
+  //: یعنی دسکتاپ هست ولی هیچ درگاهی پیدا نشد — دو چیزِ متفاوت با دو پیامِ متفاوت.
+  const [serialPorts, setSerialPorts] = useState<{ path: string; label: string }[] | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -90,6 +93,14 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  //: فهرست یک بار موقعِ باز شدن گرفته می‌شود. کاربری که وسطِ کار کابل را می‌زند،
+  //: با دکمه‌ی «تستِ اتصال» می‌فهمد درگاهش نیست — پیامش همان را می‌گوید.
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.cubita?.posTerminal : undefined
+    if (!bridge?.serialPorts) return
+    bridge.serialPorts().then(setSerialPorts).catch(() => setSerialPorts([]))
+  }, [])
 
   // صفحه‌بندیِ کارتخوان‌ها (۱۰ در هر صفحه) — مثلِ چارتِ حساب‌ها.
   const pg = usePagination(terminals ?? [], 10)
@@ -278,12 +289,37 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             {form.transport === 'serial' && (
               <label>
                 پورتِ COM
-                <input
-                  value={form.com_port}
-                  onChange={(e) => setForm({ ...form, com_port: e.target.value })}
-                  className="ltr-cell"
-                  placeholder="COM3"
-                />
+                {/* فهرست از خودِ سیستم می‌آید و نه تایپِ دستی: «COM3» را حدس‌زدن یعنی
+                    خطایی که کاربر نمی‌فهمد از کجاست. در وب این پل وجود ندارد، پس
+                    همان ورودیِ متنی می‌ماند. */}
+                {serialPorts === null ? (
+                  <input
+                    value={form.com_port}
+                    onChange={(e) => setForm({ ...form, com_port: e.target.value })}
+                    className="ltr-cell"
+                    placeholder="COM3"
+                  />
+                ) : (
+                  <select
+                    value={form.com_port}
+                    onChange={(e) => setForm({ ...form, com_port: e.target.value })}
+                    className="ltr-cell"
+                  >
+                    <option value="">— انتخاب کنید —</option>
+                    {serialPorts.map((p) => (
+                      <option key={p.path} value={p.path}>{p.label}</option>
+                    ))}
+                    {/* پورتی که قبلاً ذخیره شده ولی الان وصل نیست، نباید بی‌صدا پاک شود. */}
+                    {form.com_port && !serialPorts.some((p) => p.path === form.com_port) && (
+                      <option value={form.com_port}>{form.com_port} (وصل نیست)</option>
+                    )}
+                  </select>
+                )}
+                <span className="field-hint">
+                  {serialPorts !== null && serialPorts.length === 0
+                    ? 'هیچ درگاهِ سریالی پیدا نشد — درایورِ کارتخوان روی این رایانه نصب شده است؟'
+                    : 'درگاهی که کارتخوان با آن دیده می‌شود.'}
+                </span>
               </label>
             )}
 
