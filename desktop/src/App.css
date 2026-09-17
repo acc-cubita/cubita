@@ -3833,12 +3833,8 @@ button:disabled {
 .topnav-dd-item .nav-badge,
 .topnav-mobile-item .nav-badge { margin-inline-start: auto; }
 
-/* ورودی‌های «فهرست» زیرِ همان گروه، ولی یک پله تودار و کم‌رنگ‌تر — تا از عملیاتِ
-   خودِ ماژول جدا دیده شوند، همان‌طور که در کارتِ کناریِ دسکتاپ جدا هستند. */
-.topnav-mobile-item--list {
-  padding-inline-start: 26px;
-  color: var(--text-muted);
-}
+/* (استایلِ `.topnav-mobile-item--list` پایین‌تر، کنارِ بقیه‌ی کشوی موبایل است — دو
+   تعریفِ جدا در یک فایل یعنی یکی بی‌صدا دیگری را بازنویسی می‌کند.) */
 
 /* دکمه‌ی «دانلودِ دسکتاپ» روی نوارِ بالا (فقط نسخه‌ی وب) — چیپِ رنگِ برند، هم‌رنگِ هر تم. */
 .topnav-download {
@@ -4078,77 +4074,251 @@ button:disabled {
   background: rgba(0, 0, 0, 0.5);
   z-index: 70;
 }
+/* ---------- کشوی موبایل ---------- */
+/* سه ناحیه‌ی مستقل: سربرگِ ثابت، بدنه‌ی لغزان، فوترِ ثابت. پیش از این کلِ کشو یک
+   ظرفِ `overflow-y: auto` بود و سربرگ — که `flex-shrink` پیش‌فرضِ ۱ دارد — با
+   فهرستِ بلند فشرده می‌شد تا دکمه‌ی بستن روی نامِ برند بنشیند. */
 .topnav-mobile {
   position: fixed;
   inset-block: 0;
   inset-inline-start: 0;
-  width: min(300px, 86vw);
+  width: min(320px, 88vw);
   background: var(--topnav-bg);
   color: var(--topnav-text);
   z-index: 71;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   box-shadow: var(--shadow-md);
 }
 .topnav-mobile-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-weight: 700;
+  gap: 12px;
+  /* بالای صفحه‌ی گوشیِ ناچ‌دار زیرِ نوارِ وضعیت نرود */
+  padding: 12px 8px 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--topnav-line);
 }
-.topnav-mobile-head button {
+.topnav-mobile-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--topnav-text);
+  /* نام هرگز زیرِ دکمه نمی‌رود: دکمه سهمِ خودش را دارد و این بقیه را می‌گیرد. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* هدفِ لمسیِ استانداردِ ۴۴px — پیش از این فقط خودِ آیکونِ ۱۸px قابلِ زدن بود. */
+.topnav-mobile-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   border: none;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--topnav-text);
   cursor: pointer;
+  transition: background 0.15s;
 }
+.topnav-mobile .topnav-mobile-close:hover,
+.topnav-mobile .topnav-mobile-close:focus-visible {
+  background: var(--topnav-hover);
+}
+
 .topnav-mobile-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
 }
+.topnav-mobile-foot {
+  flex: 0 0 auto;
+  padding: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--topnav-line);
+}
+
 .topnav-mobile-group {
-  padding: 6px 0;
+  padding: 2px 0;
 }
 .topnav-mobile-group + .topnav-mobile-group {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--topnav-line-soft);
+  margin-top: 4px;
+  padding-top: 6px;
 }
+
+/* سرتیترِ گروه = دکمه‌ی آکاردئون. بزرگ‌تر و پررنگ‌تر از آیتم‌ها تا سلسله‌مراتب از
+   روی وزن و اندازه خوانده شود، نه فقط از روی تورفتگی. */
 .topnav-mobile-heading {
-  padding: 6px 10px;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--topnav-muted);
-}
-.topnav-mobile-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 12px 12px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--topnav-text);
   font: inherit;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
   text-align: start;
   cursor: pointer;
+  transition: background 0.15s;
 }
-.topnav-mobile-item:hover {
+.topnav-mobile .topnav-mobile-heading:hover,
+.topnav-mobile .topnav-mobile-heading:focus-visible {
   background: var(--topnav-hover);
 }
-.topnav-mobile-item.active {
+.mob-heading-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* نشانِ «صفحه‌ی فعال داخلِ این گروهِ بسته است» */
+.mob-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--topnav-active-text);
+  flex-shrink: 0;
+}
+.mob-chev {
+  flex-shrink: 0;
+  color: var(--topnav-muted);
+  transition: transform 0.2s ease;
+}
+.topnav-mobile-group.open > .topnav-mobile-heading .mob-chev {
+  transform: rotate(180deg);
+}
+.topnav-mobile .topnav-mobile-group.open > .topnav-mobile-heading,
+.topnav-mobile .topnav-mobile-heading.has-active {
+  color: var(--topnav-active-text);
+}
+
+/* بازوبسته‌شدنِ نرم با `grid-template-rows` — همان تکنیکِ آکاردئونِ نوارِ کناری،
+   که برخلافِ `max-height` به ارتفاعِ حدسی نیاز ندارد. */
+.topnav-mobile-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+.topnav-mobile-group.open > .topnav-mobile-panel {
+  grid-template-rows: 1fr;
+}
+.topnav-mobile-panel > .mob-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* تورفتگیِ زیرمنوها + خطِّ راهنمای عمودی، تا وابستگی‌شان به گروه دیده شود. */
+  margin-inline-start: 14px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--topnav-line);
+  /* **`visibility` لازم است، `overflow: hidden` کافی نیست.** با ارتفاعِ صفر، دکمه‌های
+     گروهِ بسته فقط *دیده* نمی‌شوند ولی همچنان در ترتیبِ Tab و دسترسِ صفحه‌خوان
+     می‌مانند — یعنی کاربرِ کیبورد در فضای نامرئی گیر می‌کند. `visibility: hidden`
+     آن‌ها را از هر دو بیرون می‌برد و چون زمان‌دار است، هنگامِ بستن تا پایانِ
+     انیمیشن دیده می‌شوند و پرش ندارد. */
+  visibility: hidden;
+  transition: visibility 0.22s;
+}
+.topnav-mobile-group.open > .topnav-mobile-panel > .mob-inner {
+  visibility: visible;
+}
+
+.topnav-mobile-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  /* کنتراستِ بالاتر از قبل: متنِ غیرفعال دیگر خاکستریِ کم‌جان نیست. */
+  color: var(--topnav-text);
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.6;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mob-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* حالت‌های تعاملیِ کشو زیرِ `.topnav-mobile` تودار شده‌اند تا از قاعده‌ی سراسریِ
+   `button:hover:not(:disabled)` (ویژگیِ ۰،۲،۱) که رنگِ متن را accent می‌کند بالاتر
+   بمانند. بدونِ این، hover دقیقاً هم‌رنگِ گزینه‌ی فعال می‌شد — همان چیزی که قرار
+   بود از بین برود. */
+.topnav-mobile .topnav-mobile-item:hover,
+.topnav-mobile .topnav-mobile-item:focus-visible {
   background: var(--topnav-hover);
-  color: var(--topnav-active);
+  color: var(--topnav-text);
+}
+/* حالتِ فعال باید از hover **جدا** دیده شود. پیش از این هر دو دقیقاً
+   `--topnav-hover` بودند، یعنی انگشتِ روی یک آیتم همان‌قدر برجسته می‌شد که صفحه‌ی
+   بازِ فعلی — و کاربر نمی‌فهمید کجاست. حالا فعال ته‌رنگِ accent می‌گیرد. */
+.topnav-mobile .topnav-mobile-item.active {
+  background: color-mix(in srgb, var(--topnav-active) 18%, transparent);
+  color: var(--topnav-active-text);
   font-weight: 700;
 }
-.topnav-mobile-item .topnav-dd-ico {
-  color: inherit;
-  opacity: 0.85;
+/* نشانگرِ عمودیِ سمتِ راست (ابتدای خطِ RTL) برای آیتمِ فعال */
+.topnav-mobile .topnav-mobile-item.active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--topnav-active-text);
 }
-.topnav-mobile-item.topnav-dd-danger {
+.topnav-mobile-item .topnav-dd-ico {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.9;
+}
+.topnav-mobile-item.active .topnav-dd-ico {
+  opacity: 1;
+}
+/* ردیفِ «فهرست» یک پله تودارتر و کم‌رنگ‌تر از ردیفِ عملیات، تا دو نوعِ منو در یک
+   گروه قاطی نشوند — همان تفکیکی که در کارتِ کناریِ دسکتاپ هست. */
+.topnav-mobile-item--list {
+  padding-inline-start: 24px;
+  font-weight: 400;
+  /* مشتق از رنگِ متن، نه `--topnav-muted`: آن در پوسته‌ی روشن ۴٫۲۸:۱ می‌داد که
+     زیرِ آستانه است. این یک پله کم‌رنگ‌تر می‌ماند ولی در هر سه پوسته بالای ۴٫۵ است. */
+  color: color-mix(in srgb, var(--topnav-text) 75%, transparent);
+}
+.topnav-mobile .topnav-mobile-item--list:hover {
+  color: var(--topnav-text);
+}
+.topnav-mobile .topnav-mobile-item--list.active {
+  color: var(--topnav-active-text);
+}
+.topnav-mobile .topnav-mobile-item.topnav-dd-danger {
   color: var(--danger);
+}
+
+/* کاربرانی که حرکت را کم کرده‌اند، آکاردئون بی‌انیمیشن باز شود */
+@media (prefers-reduced-motion: reduce) {
+  .topnav-mobile-panel,
+  .mob-chev {
+    transition: none;
+  }
 }
 /* عرض‌های میانی (سایزِ پیش‌فرضِ پنجره ۱۲۸۰): نامِ کسب‌وکار پنهان می‌شود و خودِ منوها
    کوچک‌تر (فونت/فاصله/چِوران ریزتر) تا همه‌ی گروه‌ها — حتی برای پخش‌کننده/فروشگاه که

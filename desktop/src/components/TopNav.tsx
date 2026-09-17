@@ -73,6 +73,13 @@ export function TopNav({
   // یک منوی بازِ هم‌زمان: نامِ گروه، یا '__user__'، یا null. + کشوی موبایل جدا.
   const [open, setOpen] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  //: آکاردئونِ کشوی موبایل — فقط یک گروه هم‌زمان باز است.
+  //:
+  //: **چرا لازم شد:** کشو همه‌ی گروه‌ها را باز و تخت نشان می‌داد. با احتسابِ منوهای
+  //: «فهرست»ِ هر گروه، این یعنی نزدیکِ صد ردیف روی یک صفحه‌ی ۳۹۰px — کاربر باید
+  //: چند صفحه اسکرول می‌کرد تا ماژولی را پیدا کند. حالا فقط سرتیترها دیده می‌شوند
+  //: و کلِ منو در یک نگاه جا می‌شود.
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const barRef = useRef<HTMLElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
@@ -190,6 +197,18 @@ export function TopNav({
     setMobileOpen(false)
     setQuery('')
   }
+
+  //: با هر بار باز شدنِ کشو، گروهی که صفحه‌ی فعال در آن است باز می‌شود. بدونِ این،
+  //: آکاردئونِ تماماً بسته کاربر را گم می‌کند: «الان کجای منو هستم؟» جوابی ندارد.
+  const activeGroupHeading =
+    groups.find(
+      (g) =>
+        g.items.some((i) => i.key === active) ||
+        (LIST_MENUS[g.heading] ?? []).some((i) => i.key === active),
+    )?.heading ?? null
+  useEffect(() => {
+    if (mobileOpen) setOpenGroup(activeGroupHeading)
+  }, [mobileOpen, activeGroupHeading])
 
   // جست‌وجوی سریعِ ماژول‌ها: همه‌ی آیتم‌ها را تخت می‌کند و با متنِ ورودی فیلتر می‌کند.
   const allItems = useMemo(
@@ -337,63 +356,117 @@ export function TopNav({
       {mobileOpen && (
         <>
           <div className="topnav-mobile-overlay" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <div className="topnav-mobile">
+          <div className="topnav-mobile" role="dialog" aria-modal="true" aria-label="منوی اصلی">
+            {/* سربرگ از بدنه جداست و `flex-shrink: 0` دارد: پیش از این کلِ کشو یک
+                ظرفِ اسکرول‌دار بود و سربرگ با فهرستِ بلند فشرده می‌شد، تا جایی که
+                دکمه‌ی بستن روی نامِ برند می‌نشست. حالا بدنه می‌لغزد و سربرگ سرِ جا می‌ماند. */}
             <div className="topnav-mobile-head">
-              <span className="topnav-brand-name">کوبیتا</span>
-              <button type="button" onClick={() => setMobileOpen(false)} aria-label="بستن"><X size={18} /></button>
+              <span className="topnav-mobile-title">کوبیتا</span>
+              <button
+                type="button"
+                className="topnav-mobile-close"
+                onClick={() => setMobileOpen(false)}
+                aria-label="بستنِ منو"
+              >
+                <X size={20} />
+              </button>
             </div>
+
             <div className="topnav-mobile-body">
-              {groups.map((group) => (
-                <div className="topnav-mobile-group" key={group.heading}>
-                  <div className="topnav-mobile-heading">{group.heading}</div>
-                  {group.items.map((item) => (
+              {groups.map((group) => {
+                const lists = LIST_MENUS[group.heading] ?? []
+                const isOpen = openGroup === group.heading
+                const hasActive =
+                  group.items.some((i) => i.key === active) || lists.some((i) => i.key === active)
+                return (
+                  <div className={`topnav-mobile-group${isOpen ? ' open' : ''}`} key={group.heading}>
                     <button
-                      key={item.key}
                       type="button"
-                      className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
-                      onClick={() => go(item.key)}
+                      className={`topnav-mobile-heading${hasActive ? ' has-active' : ''}`}
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenGroup((h) => (h === group.heading ? null : group.heading))}
                     >
-                      <span className="topnav-dd-ico">{item.icon}</span>
-                      <span>{item.label}</span>
-                      {navBadge(item.key)}
+                      <span className="mob-heading-label">{group.heading}</span>
+                      {/* گروهِ بسته‌ای که صفحه‌ی فعال را در خود دارد نشانه می‌گیرد،
+                          وگرنه با بسته‌بودن هیچ ردی از «کجا هستم» نمی‌ماند. */}
+                      {hasActive && !isOpen && <span className="mob-dot" aria-hidden="true" />}
+                      <ChevronDown className="mob-chev" size={16} />
                     </button>
-                  ))}
-                  {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
-                      بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
-                  {(LIST_MENUS[group.heading] ?? []).map((item) => {
-                    const Icon = item.icon
-                    return (
+
+                    <div className="topnav-mobile-panel">
+                      <div className="mob-inner">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
+                            onClick={() => go(item.key)}
+                          >
+                            <span className="topnav-dd-ico">{item.icon}</span>
+                            <span className="mob-item-label">{item.label}</span>
+                            {navBadge(item.key)}
+                          </button>
+                        ))}
+                        {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
+                            بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
+                        {lists.map((item) => {
+                          const Icon = item.icon
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              className={`topnav-mobile-item topnav-mobile-item--list${active === item.key ? ' active' : ''}`}
+                              onClick={() => go(item.key)}
+                            >
+                              <span className="topnav-dd-ico"><Icon size={16} /></span>
+                              <span className="mob-item-label">{item.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <div className={`topnav-mobile-group${openGroup === 'حساب کاربری' ? ' open' : ''}`}>
+                <button
+                  type="button"
+                  className={`topnav-mobile-heading${secondary.some((i) => i.key === active) ? ' has-active' : ''}`}
+                  aria-expanded={openGroup === 'حساب کاربری'}
+                  onClick={() => setOpenGroup((h) => (h === 'حساب کاربری' ? null : 'حساب کاربری'))}
+                >
+                  <span className="mob-heading-label">حساب کاربری</span>
+                  {secondary.some((i) => i.key === active) && openGroup !== 'حساب کاربری' && (
+                    <span className="mob-dot" aria-hidden="true" />
+                  )}
+                  <ChevronDown className="mob-chev" size={16} />
+                </button>
+                <div className="topnav-mobile-panel">
+                  <div className="mob-inner">
+                    {secondary.map((item) => (
                       <button
                         key={item.key}
                         type="button"
-                        className={`topnav-mobile-item topnav-mobile-item--list${active === item.key ? ' active' : ''}`}
+                        className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
                         onClick={() => go(item.key)}
                       >
-                        <span className="topnav-dd-ico"><Icon size={16} /></span>
-                        <span>{item.label}</span>
+                        <span className="topnav-dd-ico">{item.icon}</span>
+                        <span className="mob-item-label">{item.label}</span>
                       </button>
-                    )
-                  })}
+                    ))}
+                  </div>
                 </div>
-              ))}
-              <div className="topnav-mobile-group">
-                <div className="topnav-mobile-heading">حساب کاربری</div>
-                {secondary.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={`topnav-mobile-item${active === item.key ? ' active' : ''}`}
-                    onClick={() => go(item.key)}
-                  >
-                    <span className="topnav-dd-ico">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-                <button type="button" className="topnav-mobile-item topnav-dd-danger" onClick={onLogout}>
-                  <span className="topnav-dd-ico"><LogOut size={16} /></span>
-                  <span>خروج</span>
-                </button>
               </div>
+            </div>
+
+            {/* «خروج» از آکاردئون بیرون کشیده شد: با آکاردئون، دو ضربه لازم داشت و
+                کاری که همیشه باید یک ضربه باشد را پشتِ یک گروهِ بسته می‌برد. */}
+            <div className="topnav-mobile-foot">
+              <button type="button" className="topnav-mobile-item topnav-dd-danger" onClick={onLogout}>
+                <span className="topnav-dd-ico"><LogOut size={16} /></span>
+                <span className="mob-item-label">خروج</span>
+              </button>
             </div>
           </div>
         </>

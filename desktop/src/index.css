@@ -82,6 +82,16 @@
   --topnav-muted: var(--text-muted);
   --topnav-active: var(--accent);
   --topnav-hover: var(--surface-hover);
+  /* خطوطِ جداکننده‌ی داخلِ نوار/کشو. از رنگِ **متن** مشتق می‌شوند نه از سفیدِ ثابت،
+     چون پوسته‌ی روشن نوارِ روشن دارد (`--sidebar-bg: #f8f8f8`) و آنجا هر
+     `rgba(255,255,255,…)` نامرئی می‌شود. */
+  --topnav-line: color-mix(in srgb, var(--topnav-text) 16%, transparent);
+  --topnav-line-soft: color-mix(in srgb, var(--topnav-text) 9%, transparent);
+  /* رنگِ متنِ گزینه‌ی فعالِ منو. `--accent` (#0078d4) روی زمینه‌ی #۱۸۱۸۱۸ فقط
+     ۳٫۹۲:۱ می‌دهد — زیرِ آستانه‌ی ۴٫۵ برای متن. این توکن همان تأکید را روشن‌تر
+     می‌کند (۶٫۹:۱) بی‌آنکه `--topnav-active` و نوارِ بالای دسکتاپ عوض شوند.
+     پوسته‌هایی که تأکیدشان از قبل خواناست، همان را نگه می‌دارند. */
+  --topnav-active-text: #4ea6e8;
 
   --shadow-sm: rgba(0, 0, 0, 0.36) 0 1px 2px;
   --shadow-md: rgba(0, 0, 0, 0.44) 0 4px 14px -3px, rgba(0, 0, 0, 0.3) 0 1px 4px -1px;
@@ -174,6 +184,10 @@
   --sidebar-active-text: #1f1f1f;
   --sidebar-text: #3b3b3b;
 
+  /* نوارِ روشن: تأکیدِ آبیِ تیره روی #f8f8f8 از قبل ۵٫۹:۱ است — روشن‌کردنش
+     (کاری که پوسته‌ی تیره لازم دارد) اینجا دقیقاً برعکس عمل می‌کرد. */
+  --topnav-active-text: var(--topnav-active);
+
   --shadow-sm: rgba(0, 0, 0, 0.08) 0 1px 2px;
   --shadow-md: rgba(0, 0, 0, 0.12) 0 4px 14px -3px, rgba(0, 0, 0, 0.07) 0 1px 4px -1px;
 }
@@ -233,6 +247,8 @@
   --topnav-muted: #9fb0c9;
   --topnav-active: #ffc72c;
   --topnav-hover: rgba(255, 255, 255, 0.08);
+  /* طلایی روی سرمه‌ای از قبل ۱۰:۱ است؛ روشن‌ترش نمی‌کنیم. */
+  --topnav-active-text: var(--topnav-active);
 
   --shadow-sm: rgba(16, 24, 40, 0.06) 0 1px 2px;
   --shadow-md: rgba(16, 24, 40, 0.1) 0 6px 20px -4px, rgba(16, 24, 40, 0.06) 0 2px 6px -2px;
