@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld('cubita', {
   backupRestoreFromLocal: (file: string) => ipcRenderer.invoke('backup:restoreFromLocal', file),
   // پلِ کارتخوان — فقط در دسکتاپ تعریف می‌شود؛ در نسخه‌ی وب window.cubita وجود ندارد،
   // پس رابط کاربری با feature-detect دکمه را «فقط دسکتاپ» نشان می‌دهد.
+  //: تعویضِ کسب‌وکار — شمارشِ صف برای گارد، و پاک‌کردنِ کشِ مرجع پس از تعویض.
+  tenantPendingOutbox: () => ipcRenderer.invoke('tenant:pendingOutbox'),
+  tenantClearCaches: () => ipcRenderer.invoke('tenant:clearCaches'),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>
       ipcRenderer.invoke('pos:pay', profile, amountRial, refId),

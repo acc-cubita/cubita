@@ -4010,6 +4010,73 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ── انتخابگرِ کسب‌وکار ─────────────────────────────────────────────────────
+   چیپ حالا دکمه است. `position: relative` روی پوشش لازم است تا منو به همین
+   چیپ بچسبد نه به نوارِ بالا — وگرنه در عرض‌های مختلف جابه‌جا می‌شود. */
+.topnav-org-wrap {
+  position: relative;
+  display: inline-flex;
+}
+button.topnav-org {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+button.topnav-org:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.topnav-org-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 230px;
+  max-width: 320px;
+  z-index: 60;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.18));
+}
+.topnav-org-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  text-align: start;
+}
+.topnav-org-item:hover:not(:disabled) { background: var(--surface-2, rgba(0, 0, 0, 0.04)); }
+.topnav-org-item:disabled { opacity: 0.6; cursor: default; }
+.topnav-org-item.is-current { font-weight: 700; }
+.topnav-org-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topnav-org-item-role {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.topnav-org-hint,
+.topnav-org-err {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.topnav-org-err { color: var(--danger, #c0392b); }
+
 .topnav-sync {
   display: inline-flex;
   align-items: center;

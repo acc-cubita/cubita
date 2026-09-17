@@ -105,6 +105,10 @@ export interface CubitaBridge {
   backupResetDir: () => Promise<BackupSettings>
   backupDeleteLocal: (file: string) => Promise<{ deleted: boolean }>
   backupRestoreFromLocal: (file: string) => Promise<{ restored: boolean; message: string }>
+  /** شمارشِ صفِ همگام‌نشده — گاردِ تعویضِ کسب‌وکار. `-1` یعنی نامعلوم. */
+  tenantPendingOutbox?: () => Promise<number>
+  /** پاک‌کردنِ کشِ مرجع پس از تعویضِ کسب‌وکار (صف دست‌نخورده می‌ماند). */
+  tenantClearCaches?: () => Promise<boolean>
   posTerminal?: PosTerminalBridge
 }
 

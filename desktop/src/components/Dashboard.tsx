@@ -910,6 +910,8 @@ export function Dashboard({
             userName={me.name}
             roleName={me.role_name}
             businessName={me.tenant_name}
+            token={token}
+            currentTenantId={me.tenant_id}
             isPlatformAdmin={me.is_platform_admin}
             isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
