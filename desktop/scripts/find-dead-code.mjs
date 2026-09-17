@@ -81,7 +81,12 @@ while (queue.length) {
   for (const dep of graph.get(f) ?? []) queue.push(dep)
 }
 
-const orphans = files.filter((f) => !reached.has(f) && !f.endsWith('.d.ts'))
+//: `.test.ts` هم مثلِ `.d.ts` نقطه‌ی ورودِ خودش است — vitest مستقیم اجرایش
+//: می‌کند و هیچ فایلی importش نمی‌کند. بدونِ این استثنا، هر تستِ تازه یک
+//: «کدِ مرده»ی کاذب می‌سازد و قاعده را بی‌اعتبار می‌کند.
+const orphans = files.filter(
+  (f) => !reached.has(f) && !f.endsWith('.d.ts') && !/\.test\.tsx?$/.test(f),
+)
 
 // ── ۲) نام‌های صادرشده‌ی بی‌مصرف در فایل‌های زنده ─────────────────────────
 const EXPORT_NAME_RE =

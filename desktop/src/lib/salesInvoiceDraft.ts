@@ -26,6 +26,7 @@ import {
 } from '../api'
 import { isElectron } from '../platform'
 import { todayIso } from './jalali'
+import { pickAutoDiscount } from './autoDiscount'
 import { usePersistentState } from './usePersistentState'
 
 export interface DraftLine {
@@ -300,17 +301,22 @@ export function useSalesInvoiceDraft({
 
     tierPromise.then((t) => {
       if (cancelled) return
-      const tierPct = Number(t?.discount_percent) || 0
       const tierName = t?.tier_name || ''
-      const pct = Math.max(ownPct, tierPct)
+      //: خودِ قاعده در `autoDiscount.ts` است و تست دارد — این‌جا فقط اعمالش می‌شود.
+      const { pct, source } = pickAutoDiscount({
+        ownPct,
+        tierPct: Number(t?.discount_percent) || 0,
+        tierName,
+        tierAuto,
+      })
       if (pct > 0) {
-        //: مساوی که باشند، سطح برنده است — نامِ سطح پیامِ گویاتری می‌دهد.
-        const fromTier = !!tierName && tierPct >= ownPct
         setInvoiceDiscountMode('percent')
         setInvoiceDiscount(String(pct))
-        applyAutoTier(fromTier
-          ? { name: tierName, pct, source: 'tier' }
-          : { name: contact?.name || '', pct, source: 'contact' })
+        applyAutoTier({
+          name: source === 'tier' ? tierName : contact?.name || '',
+          pct,
+          source: source ?? 'contact',
+        })
       } else if (autoTierActiveRef.current) {
         setInvoiceDiscount('')
         applyAutoTier(null)
