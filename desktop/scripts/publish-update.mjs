@@ -190,6 +190,16 @@ try {
   console.log('  آپلود latest.yml …')
   scpWithRetry(path.join(RELEASE, 'latest.yml'), `${REMOTE}/latest.yml`)
 
+  // **نسخه‌ی بی‌شماره — همان فایلی که دکمه‌ی «دانلود دسکتاپ» به آن اشاره می‌کند**
+  // (`TopNav.tsx` و صفحه‌ی فرود سایت). تا امروز این‌جا نبود و دستی کپی می‌شد، پس
+  // بینِ ۱.۲.۸ و ۱.۳.۰ چهارده روز نسخه‌ی کهنه را به کاربرِ تازه می‌داد: کانالِ
+  // به‌روزرسانی درست بود و لینکِ دانلود غلط.
+  //
+  // کپیِ سمتِ سرور است نه آپلودِ دوباره: فایل همین الان آن‌جاست، پس نه ۱۱۶
+  // مگابایت دوباره می‌رود و نه شبکه فرصتِ خراب‌کردنش را دارد.
+  console.log('  به‌روزرسانی Cubita-Setup.exe (لینکِ دانلود) …')
+  ssh(`cp "${REMOTE}/${installer}" "${REMOTE}/Cubita-Setup.exe"`)
+
   ssh(`chown -R hesabdari:hesabdari ${REMOTE} && ls -la ${REMOTE}`)
 } finally {
   stopControlMaster()
@@ -208,7 +218,7 @@ function headStatus(url) {
   return new Promise((resolve, reject) => {
     const req = httpsRequest(url, { method: 'HEAD' }, (res) => {
       res.resume()
-      resolve(res.statusCode)
+      resolve({ status: res.statusCode, length: Number(res.headers['content-length'] ?? 0) })
     })
     req.on('error', reject)
     req.end()
@@ -216,13 +226,25 @@ function headStatus(url) {
 }
 
 const base = 'https://acc.cubita.ir/updates'
-const [ymlCode, exeCode] = await Promise.all([
+const [yml, exe, plain] = await Promise.all([
   headStatus(`${base}/latest.yml`),
   headStatus(`${base}/${installer}`),
+  headStatus(`${base}/Cubita-Setup.exe`),
 ])
-console.log(`\nراستی‌آزمایی:  latest.yml → ${ymlCode}   نصب‌کننده → ${exeCode}`)
-if (ymlCode !== 200 || exeCode !== 200) {
+console.log(`\nراستی‌آزمایی:  latest.yml → ${yml.status}   نصب‌کننده → ${exe.status}   لینکِ دانلود → ${plain.status}`)
+if (yml.status !== 200 || exe.status !== 200 || plain.status !== 200) {
   console.error('انتشار ناقص است: فایل‌ها از بیرون در دسترس نیستند.')
+  process.exit(1)
+}
+
+// **اندازه سنجیده می‌شود نه فقط وضعیت.** یک `Cubita-Setup.exe`ِ کهنه هم ۲۰۰ می‌دهد —
+// همان حالتی که بینِ ۱.۲.۸ و ۱.۳.۰ چهارده روز برقرار بود و کسی ندید. تنها چیزی که
+// از بیرون لوش می‌دهد این است که طولش با نصب‌کننده‌ی همین نسخه نخواند.
+if (plain.length !== exe.length) {
+  console.error(
+    `لینکِ دانلود نسخه‌ی دیگری می‌دهد: ${plain.length} بایت در برابرِ ${exe.length}.\n` +
+    '  Cubita-Setup.exe به‌روز نشده — کاربرِ تازه نسخه‌ی قدیمی می‌گیرد.',
+  )
   process.exit(1)
 }
 
