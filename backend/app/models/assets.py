@@ -9,11 +9,14 @@ from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
-# روش استهلاک — فعلاً فقط خط مستقیم. tuple نگه‌داشتنش یعنی schema و CheckConstraint
-# از یک منبع می‌خوانند و از هم جدا نمی‌افتند.
-DEPRECIATION_METHODS = ("straight_line",)
-# ساختِ دستیِ فهرستِ IN — چون f-string روی tupleِ تک‌عضوی کامای انتهایی می‌گذارد
-# (`('straight_line',)`) که در SQL خطای نحوی است.
+# روشِ استهلاک. tuple نگه‌داشتنش یعنی schema و CheckConstraint از یک منبع می‌خوانند
+# و از هم جدا نمی‌افتند.
+#
+# `declining_balance` (ماندهٔ نزولی) با نرخِ مضاعف کار می‌کند: هر دوره
+# «ماندهٔ استهلاک‌پذیر × (۲ ÷ عمرِ مفید)». چرا دو برابر و نه یک برابر: نرخِ ساده روی
+# مانده هیچ‌وقت به ارزشِ اسقاط نمی‌رسد و دارایی تا ابد مستهلک می‌ماند؛ نرخِ مضاعف
+# متعارف‌ترین شکلِ این روش است و با سقفِ `run_depreciation` دقیقاً روی مبنا می‌ایستد.
+DEPRECIATION_METHODS = ("straight_line", "declining_balance")
 _METHODS_IN_SQL = ", ".join(f"'{m}'" for m in DEPRECIATION_METHODS)
 
 #: `placement` اولین استقرارِ دارایی است و `transfer` هر جابه‌جاییِ بعدی. جدا
@@ -79,6 +82,12 @@ class FixedAsset(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         back_populates="asset", cascade="all, delete-orphan"
     )
     disposals: Mapped[list["AssetDisposal"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    improvements: Mapped[list["AssetImprovement"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    estimate_changes: Mapped[list["AssetEstimateChange"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
     )
 
@@ -205,3 +214,80 @@ class AssetDisposal(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     asset: Mapped["FixedAsset"] = relationship(back_populates="disposals")
+
+
+class AssetImprovement(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تعمیراتِ اساسی / مخارجِ پس از تحصیل — مخارجی که **سرمایه‌ای** می‌شوند.
+
+    مرزِ این جدول با «هزینه‌ی تعمیرات» همان مرزِ استانداردِ حسابداری است: تعمیرِ
+    نگه‌دارنده (تعویضِ روغن، رنگ) هزینه‌ی دوره است و اصلاً به این جدول نمی‌آید؛
+    مخارجی که ظرفیت، کیفیت یا عمرِ دارایی را **بالا می‌برد** سرمایه‌ای است و به
+    بهای تمام‌شده اضافه می‌شود. ثبتِ نوعِ دوم به‌عنوانِ هزینه، سودِ امسال را الکی
+    کم می‌کند و ترازنامه را کم‌ارزش نشان می‌دهد.
+
+    `extra_life_months` اختیاری است چون همه‌ی مخارجِ سرمایه‌ای عمر را زیاد نمی‌کنند؛
+    بعضی فقط ظرفیت را بالا می‌برند. صفر یعنی «عمر دست‌نخورده».
+    """
+
+    __tablename__ = "asset_improvements"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_asset_improvements_amount_positive"),
+        CheckConstraint("extra_life_months >= 0", name="ck_asset_improvements_extra_life_nonneg"),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fixed_assets.id", ondelete="CASCADE"), index=True
+    )
+    improvement_date: Mapped[date_] = mapped_column(Date, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(18, 0))
+    #: حسابِ تأمینِ مالی (صندوق/بانک/پرداختنی). اگر داده شود سندِ سرمایه‌ای‌کردن زده
+    #: می‌شود؛ اگر نه، فقط بهای تمام‌شده بالا می‌رود — برای مخارجی که سندشان جدا
+    #: (مثلاً با فاکتورِ خرید) قبلاً ثبت شده.
+    funding_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
+    )
+    extra_life_months: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True, index=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    asset: Mapped["FixedAsset"] = relationship(back_populates="improvements")
+
+
+class AssetEstimateChange(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """تغییرِ روشِ استهلاک، عمرِ مفید یا ارزشِ اسقاط — ردِ حسابرسیِ یک تغییرِ برآورد.
+
+    **هیچ سندی نمی‌خورد، و این عمدی است.** تغییرِ عمرِ مفید «تغییر در برآوردِ
+    حسابداری» است نه اصلاحِ اشتباه: طبقِ استاندارد **آینده‌نگر** اعمال می‌شود، یعنی
+    استهلاکِ ثبت‌شده‌ی گذشته دست نمی‌خورد و فقط دوره‌های بعد با برآوردِ تازه محاسبه
+    می‌شوند. سندِ اصلاحیِ گذشته زدن، دفترِ سال‌های بسته‌شده را خراب می‌کند.
+
+    همین است که `monthly_depreciation` را آینده‌نگر می‌کند: «ماندهٔ استهلاک‌پذیر ÷
+    ماه‌های باقیمانده»، نه «مبنا ÷ عمرِ اولیه». بدونِ آن، تمدیدِ عمر از ۱۲ به ۲۴ ماه
+    بعد از ۶ دوره، مبلغِ ماهانه را غلط می‌داد و دارایی سرِ جایِ بی‌ربطی تمام می‌شد.
+    """
+
+    __tablename__ = "asset_estimate_changes"
+    __table_args__ = (
+        CheckConstraint(f"to_method IN ({_METHODS_IN_SQL})", name="ck_asset_estimate_changes_method"),
+        CheckConstraint("to_useful_life_months > 0", name="ck_asset_estimate_changes_life_positive"),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fixed_assets.id", ondelete="CASCADE"), index=True
+    )
+    change_date: Mapped[date_] = mapped_column(Date, index=True)
+
+    from_method: Mapped[str] = mapped_column(String(20))
+    to_method: Mapped[str] = mapped_column(String(20))
+    from_useful_life_months: Mapped[int] = mapped_column(Integer)
+    to_useful_life_months: Mapped[int] = mapped_column(Integer)
+    from_salvage_value: Mapped[float] = mapped_column(Numeric(18, 0))
+    to_salvage_value: Mapped[float] = mapped_column(Numeric(18, 0))
+
+    reason: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    asset: Mapped["FixedAsset"] = relationship(back_populates="estimate_changes")

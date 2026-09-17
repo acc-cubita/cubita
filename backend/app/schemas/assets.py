@@ -52,9 +52,12 @@ class FixedAssetOut(BaseModel):
     cost_center_name: str = ""
     #: محاسبه‌شده در سرویس — ارزش دفتری = cost − accumulated_depreciation
     book_value: Decimal
-    #: استهلاکِ ماهانه‌ی خط مستقیم = (cost − salvage) / life
+    #: استهلاکِ دوره‌ی بعد — آینده‌نگر: ماندهٔ استهلاک‌پذیر ÷ ماه‌های باقیمانده.
     monthly_depreciation: Decimal
     fully_depreciated: bool
+    #: چند دوره تا امروز استهلاک خورده و چند ماه مانده — مبنای همان محاسبه‌ی آینده‌نگر.
+    periods_depreciated: int = 0
+    remaining_months: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -73,6 +76,27 @@ class DepreciationRunOut(BaseModel):
     journal_entry_number: int | None
 
 
+class DepreciationPreviewLine(BaseModel):
+    """یک ردیفِ «محاسبه‌ی استهلاک» — پیش از صدورِ سند."""
+
+    asset_id: UUID
+    asset_name: str
+    category: str
+    method: str
+    cost: Decimal
+    accumulated_before: Decimal
+    amount: Decimal
+    book_value_after: Decimal
+    remaining_months: int
+
+
+class DepreciationPreviewOut(BaseModel):
+    period_date: date
+    asset_count: int
+    total_amount: Decimal
+    lines: list[DepreciationPreviewLine]
+
+
 class DepreciationEntryOut(BaseModel):
     id: UUID
     asset_id: UUID
@@ -80,6 +104,90 @@ class DepreciationEntryOut(BaseModel):
     period_date: date
     amount: Decimal
     journal_entry_id: UUID | None
+    journal_entry_number: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DepreciationDocumentOut(BaseModel):
+    """یک سندِ استهلاک — سطحِ سند، نه سطحِ ردیف.
+
+    «فهرست محاسبات» ردیف‌به‌ردیفِ دارایی‌هاست و این یکی سندهایی که واقعاً در دفتر
+    نشسته‌اند؛ دو دانه‌بندیِ متفاوت از یک رویداد، نه دو نمای یک جدول.
+    """
+
+    journal_entry_id: UUID | None
+    journal_entry_number: int | None
+    period_date: date
+    asset_count: int
+    total_amount: Decimal
+
+
+# ── تعمیراتِ اساسی (مخارجِ پس از تحصیل) ───────────────────────────
+class AssetImprovementIn(BaseModel):
+    improvement_date: date
+    amount: Decimal
+    #: حسابِ تأمینِ مالی. خالی یعنی سندی زده نمی‌شود (مخارجی که جای دیگر ثبت شده).
+    funding_account_id: UUID | None = None
+    extra_life_months: int = 0
+    description: str = ""
+
+    @model_validator(mode="after")
+    def validate(self) -> "AssetImprovementIn":
+        if self.amount <= 0:
+            raise ValueError("مبلغِ مخارجِ سرمایه‌ای باید بزرگ‌تر از صفر باشد")
+        if self.extra_life_months < 0:
+            raise ValueError("افزایشِ عمرِ مفید نمی‌تواند منفی باشد")
+        return self
+
+
+class AssetImprovementOut(BaseModel):
+    id: UUID
+    asset_id: UUID
+    asset_name: str = ""
+    improvement_date: date
+    amount: Decimal
+    funding_account_id: UUID | None
+    funding_account_name: str = ""
+    extra_life_months: int
+    description: str
+    journal_entry_id: UUID | None
+    journal_entry_number: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── تغییرِ روش یا عمرِ مفید ───────────────────────────
+class AssetEstimateChangeIn(BaseModel):
+    change_date: date
+    method: str
+    useful_life_months: int
+    salvage_value: Decimal
+    reason: str = ""
+
+    @model_validator(mode="after")
+    def validate(self) -> "AssetEstimateChangeIn":
+        if self.method not in ("straight_line", "declining_balance"):
+            raise ValueError("روشِ استهلاک نامعتبر است")
+        if self.useful_life_months <= 0:
+            raise ValueError("عمر مفید باید بزرگ‌تر از صفر (ماه) باشد")
+        if self.salvage_value < 0:
+            raise ValueError("ارزشِ اسقاط نمی‌تواند منفی باشد")
+        return self
+
+
+class AssetEstimateChangeOut(BaseModel):
+    id: UUID
+    asset_id: UUID
+    asset_name: str = ""
+    change_date: date
+    from_method: str
+    to_method: str
+    from_useful_life_months: int
+    to_useful_life_months: int
+    from_salvage_value: Decimal
+    to_salvage_value: Decimal
+    reason: str
 
     model_config = {"from_attributes": True}
 
@@ -171,3 +279,19 @@ class AssetAssignmentOut(BaseModel):
     notes: str
 
     model_config = {"from_attributes": True}
+
+
+class AssetCardOut(BaseModel):
+    """کارتِ داراییِ کامل — همه‌ی زندگیِ یک دارایی در یک پاسخ.
+
+    پنج دفترِ جدا (استهلاک، تحویل/جابه‌جایی، تعمیراتِ اساسی، تغییرِ برآورد، خروج) هر
+    کدام صفحه‌ی خودشان را دارند؛ این‌جا همان‌ها **برای یک دارایی** کنارِ هم می‌آیند تا
+    «این قلم از اول تا حالا چه شد» یک نگاه باشد، نه پنج جست‌وجو.
+    """
+
+    asset: FixedAssetOut
+    depreciation_entries: list[DepreciationEntryOut]
+    assignments: list[AssetAssignmentOut]
+    improvements: list[AssetImprovementOut]
+    estimate_changes: list[AssetEstimateChangeOut]
+    disposal: AssetDisposalOut | None = None

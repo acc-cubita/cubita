@@ -3437,8 +3437,11 @@ export interface FixedAssetRecord {
   disposed_date: string | null
   notes: string
   book_value: string
+  /** استهلاکِ دوره‌ی بعد — آینده‌نگر: ماندهٔ استهلاک‌پذیر ÷ ماه‌های باقیمانده. */
   monthly_depreciation: string
   fully_depreciated: boolean
+  periods_depreciated: number
+  remaining_months: number
   /** وضعیتِ استقرارِ امروز — آینه‌ی آخرین ردیفِ تاریخچه‌ی تحویل/جابه‌جایی. */
   custodian_id: string | null
   custodian_name: string
@@ -3522,6 +3525,124 @@ export const fetchAssetDisposals = (
 
 export const deleteFixedAsset = (token: string, id: string) => authedDelete(token, `/api/fixed-assets/${id}`)
 
+// ── تعمیراتِ اساسی و تغییرِ برآورد ───────────────────
+export type DepreciationMethod = 'straight_line' | 'declining_balance'
+
+export const DEPRECIATION_METHOD_LABELS: Record<DepreciationMethod, string> = {
+  straight_line: 'خط مستقیم',
+  declining_balance: 'ماندهٔ نزولی',
+}
+
+export interface AssetImprovementIn {
+  improvement_date: string
+  amount: number
+  funding_account_id?: string | null
+  extra_life_months?: number
+  description?: string
+}
+
+export interface AssetImprovementRecord {
+  id: string
+  asset_id: string
+  asset_name: string
+  improvement_date: string
+  amount: string
+  funding_account_id: string | null
+  funding_account_name: string
+  extra_life_months: number
+  description: string
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+}
+
+export interface AssetEstimateChangeIn {
+  change_date: string
+  method: DepreciationMethod
+  useful_life_months: number
+  salvage_value: number
+  reason?: string
+}
+
+export interface AssetEstimateChangeRecord {
+  id: string
+  asset_id: string
+  asset_name: string
+  change_date: string
+  from_method: DepreciationMethod
+  to_method: DepreciationMethod
+  from_useful_life_months: number
+  to_useful_life_months: number
+  from_salvage_value: string
+  to_salvage_value: string
+  reason: string
+}
+
+export const addAssetImprovement = (token: string, assetId: string, data: AssetImprovementIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${assetId}/improvements`, data)
+
+export const fetchAssetImprovements = (token: string, assetId?: string) =>
+  authedGet<AssetImprovementRecord[]>(token, `/api/asset-improvements${assetId ? `?asset_id=${assetId}` : ''}`)
+
+export const changeAssetEstimate = (token: string, assetId: string, data: AssetEstimateChangeIn) =>
+  authedSend<FixedAssetRecord>(token, 'POST', `/api/fixed-assets/${assetId}/estimate`, data)
+
+export const fetchAssetEstimateChanges = (token: string, assetId?: string) =>
+  authedGet<AssetEstimateChangeRecord[]>(token, `/api/asset-estimate-changes${assetId ? `?asset_id=${assetId}` : ''}`)
+
+// ── محاسبه و صدورِ سندِ استهلاک ───────────────────
+export interface DepreciationPreviewLine {
+  asset_id: string
+  asset_name: string
+  category: string
+  method: DepreciationMethod
+  cost: string
+  accumulated_before: string
+  amount: string
+  book_value_after: string
+  remaining_months: number
+}
+
+export interface DepreciationPreview {
+  period_date: string
+  asset_count: number
+  total_amount: string
+  lines: DepreciationPreviewLine[]
+}
+
+export const previewDepreciation = (token: string, periodDate: string) =>
+  authedSend<DepreciationPreview>(token, 'POST', '/api/depreciation/preview', { period_date: periodDate })
+
+export interface DepreciationDocumentRecord {
+  journal_entry_id: string | null
+  journal_entry_number: number | null
+  period_date: string
+  asset_count: number
+  total_amount: string
+}
+
+export const fetchDepreciationDocuments = (
+  token: string,
+  filters: { date_from?: string; date_to?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) if (v) q.set(k, v)
+  const qs = q.toString()
+  return authedGet<DepreciationDocumentRecord[]>(token, `/api/depreciation/documents${qs ? `?${qs}` : ''}`)
+}
+
+// ── کارتِ داراییِ کامل ───────────────────
+export interface AssetCard {
+  asset: FixedAssetRecord
+  depreciation_entries: DepreciationEntryRecord[]
+  assignments: AssetAssignmentRecord[]
+  improvements: AssetImprovementRecord[]
+  estimate_changes: AssetEstimateChangeRecord[]
+  disposal: AssetDisposalRecord | null
+}
+
+export const fetchAssetCard = (token: string, assetId: string) =>
+  authedGet<AssetCard>(token, `/api/fixed-assets/${assetId}/card`)
+
 // ── تحویل/استقرار و جابه‌جاییِ دارایی ───────────────────
 export interface AssetAssignmentIn {
   assignment_date: string
@@ -3578,10 +3699,18 @@ export interface DepreciationEntryRecord {
   period_date: string
   amount: string
   journal_entry_id: string | null
+  journal_entry_number: number | null
 }
 
-export const fetchDepreciationEntries = (token: string) =>
-  authedGet<DepreciationEntryRecord[]>(token, '/api/depreciation')
+export const fetchDepreciationEntries = (
+  token: string,
+  filters: { asset_id?: string; date_from?: string; date_to?: string } = {},
+) => {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) if (v) q.set(k, v)
+  const qs = q.toString()
+  return authedGet<DepreciationEntryRecord[]>(token, `/api/depreciation${qs ? `?${qs}` : ''}`)
+}
 
 // --- بودجه‌بندی -------------------------------------------------------------------
 

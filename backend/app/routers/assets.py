@@ -10,9 +10,16 @@ from app.models.user import User
 from app.schemas.assets import (
     AssetAssignmentIn,
     AssetAssignmentOut,
+    AssetCardOut,
     AssetDisposalIn,
     AssetDisposalOut,
+    AssetEstimateChangeIn,
+    AssetEstimateChangeOut,
+    AssetImprovementIn,
+    AssetImprovementOut,
+    DepreciationDocumentOut,
     DepreciationEntryOut,
+    DepreciationPreviewOut,
     DepreciationRunIn,
     DepreciationRunOut,
     FixedAssetIn,
@@ -95,12 +102,90 @@ def run_depreciation(
     return assets_service.run_depreciation(db, data.period_date, user)
 
 
-@router.get("/api/depreciation", response_model=list[DepreciationEntryOut])
-def list_depreciation(
+@router.post("/api/depreciation/preview", response_model=DepreciationPreviewOut)
+def preview_depreciation(
+    data: DepreciationRunIn,
     db: Session = Depends(get_db),
     _=Depends(require_permission("assets", "view")),
 ):
-    return assets_service.list_depreciation_entries(db)
+    """محاسبه‌ی استهلاکِ دوره **بدونِ ثبت** — مجوزِ «view» چون چیزی نمی‌نویسد."""
+    return assets_service.preview_depreciation(db, data.period_date)
+
+
+@router.get("/api/depreciation", response_model=list[DepreciationEntryOut])
+def list_depreciation(
+    asset_id: UUID | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    """فهرستِ محاسباتِ استهلاک — ردیف‌به‌ردیفِ دارایی‌ها."""
+    return assets_service.list_depreciation_entries(
+        db, asset_id=asset_id, date_from=date_from, date_to=date_to
+    )
+
+
+@router.get("/api/depreciation/documents", response_model=list[DepreciationDocumentOut])
+def list_depreciation_documents(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    """گزارشِ اسنادِ استهلاک — یک ردیف به‌ازای هر سند، نه هر دارایی."""
+    return assets_service.list_depreciation_documents(db, date_from=date_from, date_to=date_to)
+
+
+# ── تعمیراتِ اساسی و تغییرِ برآورد ───────────────────────────
+@router.post("/api/fixed-assets/{asset_id}/improvements", response_model=FixedAssetOut, status_code=201)
+def add_improvement(
+    asset_id: UUID,
+    data: AssetImprovementIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("assets", "approve")),
+):
+    """تعمیراتِ اساسی (مخارجِ پس از تحصیل) — مجوزِ «approve» چون سندِ مالی می‌سازد."""
+    return assets_service.add_improvement(db, asset_id, data, user)
+
+
+@router.get("/api/asset-improvements", response_model=list[AssetImprovementOut])
+def list_improvements(
+    asset_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    return assets_service.list_improvements(db, asset_id=asset_id)
+
+
+@router.post("/api/fixed-assets/{asset_id}/estimate", response_model=FixedAssetOut, status_code=201)
+def change_estimate(
+    asset_id: UUID,
+    data: AssetEstimateChangeIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("assets", "update")),
+):
+    """تغییرِ روشِ استهلاک، عمرِ مفید یا ارزشِ اسقاط — آینده‌نگر و بی‌سند."""
+    return assets_service.change_estimate(db, asset_id, data, user)
+
+
+@router.get("/api/asset-estimate-changes", response_model=list[AssetEstimateChangeOut])
+def list_estimate_changes(
+    asset_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    return assets_service.list_estimate_changes(db, asset_id=asset_id)
+
+
+@router.get("/api/fixed-assets/{asset_id}/card", response_model=AssetCardOut)
+def asset_card(
+    asset_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("assets", "view")),
+):
+    """کارتِ داراییِ کامل — استهلاک‌ها، تحویل‌ها، مخارج، تغییرِ برآورد و خروج."""
+    return assets_service.asset_card(db, asset_id)
 
 
 # ── تحویل/استقرار و جابه‌جایی ───────────────────────────
