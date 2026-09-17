@@ -97,17 +97,14 @@ for (const width of widths) {
       if (mobile) {
         await page.locator('.topnav-hamburger').first().click()
         await page.waitForTimeout(450)
-        // کشوی موبایل آکاردئونی است: آیتم‌های گروهِ بسته `visibility: hidden` دارند،
+        // کشوی موبایل آکاردئونی است: ردیف‌های شاخه‌ی بسته `visibility: hidden` دارند،
         // پس اول باید گروه باز شود. گروهی که صفحه‌ی فعال در آن است از قبل باز است.
         const head = page
-          .locator('.topnav-mobile-heading')
-          .filter({ has: page.locator('.mob-heading-label', { hasText: group }) })
+          .locator('.mob-row--group')
+          .filter({ has: page.locator('.mob-row-label', { hasText: group }) })
           .first()
         if (await head.isVisible().catch(() => false)) {
-          const alreadyOpen = await head
-            .evaluate((el) => el.closest('.topnav-mobile-group')?.classList.contains('open') ?? false)
-            .catch(() => false)
-          if (!alreadyOpen) {
+          if ((await head.getAttribute('aria-expanded')) !== 'true') {
             await head.click()
             await page.waitForTimeout(350)
           }
@@ -115,16 +112,34 @@ for (const width of widths) {
         // عقب‌گرد: اگر نامِ گروه با سرتیترِ کشو یکی نبود (مثلِ آیتم‌های «حساب
         // کاربری» که در مدلِ ناوبری سرگروهِ دیگری دارند)، گروه‌ها را یکی‌یکی باز
         // کن تا آیتم پیدا شود — وگرنه کلیکِ بعدی روی عنصرِ نامرئی تایم‌اوت می‌شود.
-        const item = page.locator('.topnav-mobile-item', { hasText: label }).first()
+        const item = page
+          .locator('.mob-row--item')
+          .filter({ has: page.locator('.mob-row-label', { hasText: label }) })
+          .first()
         if (!(await item.isVisible().catch(() => false))) {
-          const heads = page.locator('.topnav-mobile-heading')
+          const heads = page.locator('.mob-row--group')
           for (let i = 0; i < (await heads.count()); i++) {
-            await heads.nth(i).click()
+            if ((await heads.nth(i).getAttribute('aria-expanded')) !== 'true') await heads.nth(i).click()
             await page.waitForTimeout(280)
             if (await item.isVisible().catch(() => false)) break
           }
         }
-        await item.click()
+        // ماژولِ تب‌دار (تولید، دارایی ثابت، …) با ضربه **باز** می‌شود، نه ناوبری؛
+        // صفحه‌اش از بخشِ اولش باز می‌شود — همان کاری که کاربر می‌کند.
+        const accordion = (await item.getAttribute('aria-expanded')) !== null
+        if (accordion) {
+          if ((await item.getAttribute('aria-expanded')) !== 'true') {
+            await item.click()
+            await page.waitForTimeout(350)
+          }
+          await item
+            .locator('xpath=following-sibling::div[contains(@class,"topnav-mobile-panel")]')
+            .locator('.mob-row--section')
+            .first()
+            .click()
+        } else {
+          await item.click()
+        }
       } else {
         let navigated = false
         let item = page.locator('.mod-op', { hasText: label }).first()
