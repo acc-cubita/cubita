@@ -37,8 +37,8 @@ export function BrandMark({ id = 'm' }: { id?: string }) {
       <circle cx="22.5" cy="6.4" r="2.4" fill="#fff" fillOpacity="0.9" />
       <defs>
         <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1FC274" />
-          <stop offset="1" stopColor="#00874B" />
+          <stop stopColor="#6366F1" />
+          <stop offset="1" stopColor="#4338CA" />
         </linearGradient>
       </defs>
     </svg>

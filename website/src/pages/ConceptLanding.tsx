@@ -136,7 +136,7 @@ function HomeBanner() {
           </h2>
           <p>یک حساب برای هر سه نسخه، با داده‌ی همیشه هم‌گام. همین امروز ثبت‌نام کنید و اولین فاکتور را صادر کنید.</p>
           <div className="cc-banner-cta">
-            <a className="cc-btn cc-btn-light" href={TRIAL_URL}>
+            <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
               شروعِ رایگان <ArrowLeft size={16} />
             </a>
             <a className="cc-btn cc-btn-on-dark" href="#cc-platforms">
@@ -151,7 +151,7 @@ function HomeBanner() {
             <rect x="62" y="124" width="26" height="54" rx="13" fill="#fff" fillOpacity="0.55" />
             <rect x="107" y="96" width="26" height="82" rx="13" fill="#fff" fillOpacity="0.75" />
             <rect x="152" y="70" width="26" height="108" rx="13" fill="#fff" />
-            <circle cx="165" cy="44" r="12" fill="#fff" fillOpacity="0.85" />
+            <circle cx="165" cy="44" r="12" fill="#06B6D4" />
           </svg>
         </div>
       </div>
@@ -370,7 +370,7 @@ function FinalCta() {
           <p>۱۴ روز کاملِ رایگان. اگر پسندیدید، همه‌ی اطلاعاتتان حفظ می‌شود.</p>
         </div>
         <div className="cc-final-cta-btns">
-          <a className="cc-btn cc-btn-light" href={TRIAL_URL}>
+          <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
             شروعِ ۱۴ روز رایگان
           </a>
           <a className="cc-btn cc-btn-on-dark" href={DOWNLOAD_URL} download>

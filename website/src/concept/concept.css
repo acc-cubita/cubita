@@ -1,4 +1,4 @@
-/* ===== سایتِ کوبیتا — طراحیِ اداری و کارت‌محور (روشن، سبزِ سازمانی) =====
+/* ===== سایتِ کوبیتا — طراحیِ اداری و کارت‌محور (روشن، آبیِ نیلیِ برند) =====
  *
  * همه‌ی رنگ‌ها و اندازه‌ها از توکن‌های `.cc-root` می‌آیند. قلم فعلاً «وزیرمتن» است؛
  * IRANSansX تجاری است و بدونِ مجوزِ وب نمی‌شود منتشرش کرد. با رسیدنِ فایل‌های
@@ -6,36 +6,42 @@
  * با 'IRANSansX' شروع کنید — مقیاسِ تایپوگرافی همین می‌ماند.
  */
 .cc-root {
-  --cc-primary: #00a859;
-  --cc-primary-hover: #00914d;
-  /* سبزِ متن روی سفید (کنتراستِ AA برای متنِ ریز) */
-  --cc-primary-strong: #00854a;
-  --cc-primary-soft: #e7f6ee;
-  --cc-primary-line: #bfe7d1;
-  --cc-banner-from: #007c43;
+  /* رنگِ برند: آبیِ نیلی. دکمه‌های اصلی، هایلایت‌ها و آیکون‌های فعال. */
+  --cc-primary: #4f46e5;
+  --cc-primary-hover: #4338ca;
+  /* نیلیِ متن روی سفید (لینک‌ها و متنِ ریزِ رنگی) */
+  --cc-primary-strong: #4338ca;
+  --cc-primary-soft: #eef2ff;
+  --cc-primary-line: #c7d2fe;
+  /* لهجه‌ی دوم (فیروزه‌ای): فقط نشان‌ها و برچسب‌های ثانویه. */
+  --cc-accent: #06b6d4;
+  --cc-accent-soft: #ecfeff;
+  --cc-accent-ink: #0e7490;
+  /* زمینه‌ی تیره‌ی بنر و دعوتِ پایانی */
+  --cc-hero: #1e1b4b;
+  --cc-hero-2: #312e81;
 
-  --cc-ink: #1b2733;
-  --cc-text: #3d4a57;
-  --cc-muted: #5f6b78;
+  --cc-ink: #0f172a;
+  --cc-text: #334155;
+  --cc-muted: #64748b;
   --cc-bg: #ffffff;
-  --cc-bg-alt: #f8f9fa;
-  --cc-border: #e3e7eb;
-  --cc-border-strong: #cfd6dd;
+  --cc-bg-alt: #f8fafc;
+  --cc-border: #e2e8f0;
+  --cc-border-strong: #cbd5e1;
 
-  --cc-footer: #16212b;
-  --cc-footer-text: #aeb9c4;
-  --cc-footer-muted: #8793a0;
+  --cc-footer: #0f172a;
+  --cc-footer-text: #a7b1c2;
+  --cc-footer-muted: #7b879b;
 
   --cc-radius-sm: 8px;
   --cc-radius: 12px;
-  --cc-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --cc-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 8px 20px rgba(16, 24, 40, 0.06);
-  --cc-shadow-hover: 0 2px 6px rgba(16, 24, 40, 0.06), 0 14px 30px rgba(16, 24, 40, 0.09);
+  --cc-shadow-card: 0 10px 30px rgba(15, 23, 42, 0.05);
+  --cc-shadow-hover: 0 14px 34px rgba(15, 23, 42, 0.1);
 
   --cc-font: 'Vazirmatn UI', Tahoma, 'Segoe UI', sans-serif;
   --cc-container: 1200px;
   --cc-gutter: 24px;
-  --cc-header-h: 72px;
+  --cc-header-h: 70px;
   /* فاصله‌ی افقیِ بخش‌های تمام‌عرض: پس‌زمینه تا لبه می‌رود، محتوا در ۱۲۰۰px می‌ماند. */
   --cc-inline: max(var(--cc-gutter), calc((100% - var(--cc-container)) / 2));
 
@@ -69,7 +75,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 .cc-root p { margin: 0; }
 /* :where تا اختصاصیتِ این قاعده‌ی پایه صفر بماند و رنگِ دکمه‌های لینکی (.cc-btn-*) را نپوشاند. */
 :where(.cc-root) a { color: inherit; text-decoration: none; }
-.cc-root :focus-visible { outline: 3px solid rgba(0, 168, 89, 0.4); outline-offset: 2px; border-radius: 4px; }
+.cc-root :focus-visible { outline: 3px solid rgba(79, 70, 229, 0.4); outline-offset: 2px; border-radius: 4px; }
 
 .cc-eyebrow { display: block; color: var(--cc-primary-strong); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .cc-accent-text { color: var(--cc-primary); }
@@ -80,26 +86,26 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 20px;
+  padding: 12px 28px;
   border: 1px solid transparent;
   border-radius: var(--cc-radius-sm);
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  line-height: 1;
+  /* ۱٫۵ نه ۱: جعبه‌ی متنِ وزیرمتن با line-height:1 از گلیف‌ها کوچک‌تر است و متن نسبت
+     به آیکون جابه‌جا می‌نشست. */
+  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.cc-btn-sm { min-height: 38px; padding: 0 14px; font-size: 13px; }
+.cc-btn svg { display: block; flex: 0 0 auto; }
+.cc-btn-sm { padding: 8px 16px; font-size: 13px; }
 .cc-btn-primary { background: var(--cc-primary); color: #fff; }
 .cc-btn-primary:hover { background: var(--cc-primary-hover); }
 .cc-btn-outline { background: #fff; color: var(--cc-ink); border-color: var(--cc-border-strong); }
 .cc-btn-outline:hover { border-color: var(--cc-primary); color: var(--cc-primary-strong); }
-/* روی زمینه‌ی سبز (بنر و دعوتِ پایانی) */
-.cc-btn-light { background: #fff; color: var(--cc-primary-strong); }
-.cc-btn-light:hover { background: #effaf4; }
+/* روی زمینه‌ی تیره‌ی نیلی (بنر و دعوتِ پایانی) */
 .cc-btn-on-dark { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.6); }
 .cc-btn-on-dark:hover { background: rgba(255, 255, 255, 0.12); border-color: #fff; }
 .cc-banner :focus-visible,
@@ -118,9 +124,9 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 .cc-header-raised { box-shadow: 0 2px 14px rgba(16, 24, 40, 0.07); }
 .cc-header-in {
   max-width: var(--cc-container);
-  height: var(--cc-header-h);
   margin: 0 auto;
-  padding: 0 var(--cc-gutter);
+  /* ۱۶px بالا و پایین، به خواستِ کاربر؛ ارتفاع از محتوا و همین فاصله درمی‌آید. */
+  padding: 16px var(--cc-gutter);
   display: flex;
   align-items: center;
   gap: 32px;
@@ -158,7 +164,9 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   padding: 0;
   color: #fff;
   /* سمتِ راست (محلِ متن در RTL) تیره‌تر است تا متنِ سفید کنتراستِ کافی داشته باشد. */
-  background: linear-gradient(to left, var(--cc-banner-from), var(--cc-primary));
+  background:
+    radial-gradient(55% 120% at 10% 50%, rgba(79, 70, 229, 0.38), transparent 62%),
+    linear-gradient(to left, var(--cc-hero), var(--cc-hero-2));
 }
 .cc-banner-in {
   max-width: var(--cc-container);
@@ -174,7 +182,9 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   margin-bottom: 14px;
   padding: 4px 12px;
   border-radius: var(--cc-radius-sm);
-  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.14);
+  color: #67e8f9;
   font-size: 13px;
   font-weight: 600;
 }
@@ -187,25 +197,26 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 .cc-hero { padding: 64px var(--cc-inline); background: var(--cc-bg); }
 .cc-hero-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: 56px;
 }
-.cc-hero-sub { max-width: 36em; margin-top: 14px; font-size: 15px; }
+.cc-root .cc-hero-title { margin: 16px 0; font-weight: 800; }
+.cc-hero-sub { max-width: 36em; font-size: 15px; }
 .cc-hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .cc-hero-trust { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 24px 0 0; padding: 0; list-style: none; color: var(--cc-muted); font-size: 13px; }
 .cc-hero-trust li { display: inline-flex; align-items: center; gap: 6px; }
 .cc-hero-trust svg { color: var(--cc-primary); flex: 0 0 auto; }
 
-.cc-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cc-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
 .cc-fact {
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
-  box-shadow: var(--cc-shadow);
+  box-shadow: var(--cc-shadow-card);
 }
 .cc-fact b { margin-top: 14px; color: var(--cc-ink); font-size: 16px; font-weight: 700; }
 .cc-fact > span:last-child { margin-top: 2px; color: var(--cc-muted); font-size: 13px; line-height: 1.7; }
@@ -237,7 +248,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
-  box-shadow: var(--cc-shadow-sm);
+  box-shadow: var(--cc-shadow-card);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .cc-card:hover { border-color: var(--cc-primary-line); box-shadow: var(--cc-shadow-hover); }
@@ -258,6 +269,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
+  box-shadow: var(--cc-shadow-card);
   color: var(--cc-ink);
   font-weight: 600;
 }
@@ -309,7 +321,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 }
 .cc-billing-opt:hover { background: var(--cc-bg-alt); color: var(--cc-ink); }
 .cc-billing-opt.is-active { background: var(--cc-primary); color: #fff; }
-.cc-billing-save { padding: 1px 8px; border-radius: 6px; background: var(--cc-primary-soft); color: var(--cc-primary-strong); font-size: 11px; font-weight: 700; }
+.cc-billing-save { padding: 1px 8px; border-radius: 6px; background: var(--cc-accent-soft); color: var(--cc-accent-ink); font-size: 11px; font-weight: 700; }
 .cc-billing-opt.is-active .cc-billing-save { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
 .cc-pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
@@ -317,13 +329,13 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 28px 24px;
+  padding: 24px;
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
-  box-shadow: var(--cc-shadow-sm);
+  box-shadow: var(--cc-shadow-card);
 }
-.cc-plan-hot { border-color: var(--cc-primary); box-shadow: 0 0 0 1px var(--cc-primary), var(--cc-shadow); }
+.cc-plan-hot { border-color: var(--cc-primary); box-shadow: 0 0 0 1px var(--cc-primary), var(--cc-shadow-card); }
 .cc-plan-badge {
   position: absolute;
   top: -12px;
@@ -346,7 +358,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 .cc-plan-period { margin: 4px 0 8px; color: var(--cc-muted); font-size: 13px; }
 .cc-plan-save { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .cc-plan-old { color: var(--cc-muted); font-size: 13px; text-decoration: line-through; }
-.cc-plan-save-badge { padding: 1px 8px; border-radius: 6px; background: var(--cc-primary-soft); color: var(--cc-primary-strong); font-size: 12px; font-weight: 700; }
+.cc-plan-save-badge { padding: 1px 8px; border-radius: 6px; background: var(--cc-accent-soft); color: var(--cc-accent-ink); font-size: 12px; font-weight: 700; }
 .cc-plan-permonth { margin-bottom: 4px; color: var(--cc-muted); font-size: 12px; }
 .cc-plan-feats {
   flex: 1;
@@ -404,7 +416,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   font-family: inherit;
   font-size: 14px;
 }
-.cc-field input:focus { outline: none; border-color: var(--cc-primary); box-shadow: 0 0 0 3px rgba(0, 168, 89, 0.15); }
+.cc-field input:focus { outline: none; border-color: var(--cc-primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15); }
 .cc-modal-actions { display: flex; gap: 10px; margin-top: 6px; }
 .cc-modal-actions .cc-btn { flex: 1; }
 .cc-modal-legal { margin-top: 14px; color: var(--cc-muted); font-size: 12px; text-align: center; }
@@ -412,7 +424,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 
 /* --- سوالات --- */
 .cc-faq-list { display: grid; gap: 12px; max-width: 820px; margin: 0 auto; }
-.cc-faq { overflow: hidden; border: 1px solid var(--cc-border); border-radius: var(--cc-radius); background: #fff; }
+.cc-faq { overflow: hidden; border: 1px solid var(--cc-border); border-radius: var(--cc-radius); background: #fff; box-shadow: var(--cc-shadow-card); }
 .cc-faq-open { border-color: var(--cc-primary-line); }
 .cc-faq-q {
   display: flex;
@@ -437,7 +449,8 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
 .cc-faq-a { padding: 0 20px 18px; line-height: 1.9; }
 
 /* --- دعوتِ پایانی --- */
-.cc-final-cta { padding: 48px var(--cc-inline); background: linear-gradient(to left, var(--cc-banner-from), var(--cc-primary)); color: #fff; }
+/* تیره‌ترین سمت چپ است، جایی که دکمه‌های نیلی می‌نشینند، تا از زمینه جدا بمانند. */
+.cc-final-cta { padding: 48px var(--cc-inline); background: linear-gradient(to right, var(--cc-hero), var(--cc-hero-2)); color: #fff; }
 .cc-final-cta-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
 .cc-root .cc-final-cta h2 { color: #fff; }
 .cc-final-cta p { margin-top: 6px; color: rgba(255, 255, 255, 0.9); font-size: 15px; }
@@ -471,7 +484,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
-  box-shadow: var(--cc-shadow-sm);
+  box-shadow: var(--cc-shadow-card);
 }
 .cc-legal-updated { margin: 6px 0 28px; color: var(--cc-muted); font-size: 13px; }
 /* سرفصل‌های سند زیربخش‌اند، نه بخشِ صفحه — اندازه‌ی H3 می‌گیرند. */
@@ -488,7 +501,7 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   background: #fff;
-  box-shadow: var(--cc-shadow);
+  box-shadow: var(--cc-shadow-card);
   text-align: center;
 }
 .cc-result-card p { margin: 10px 0 24px; }
