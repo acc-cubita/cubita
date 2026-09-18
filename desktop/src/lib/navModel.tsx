@@ -12,6 +12,7 @@ import {
   Boxes,
   Building,
   FilePenLine,
+  FileUp,
   FileSignature,
   Briefcase,
   Building2,
@@ -139,6 +140,7 @@ export type PageKey =
   | 'numbering'
   | 'coding'
   | 'personalization'
+  | 'contactimport'
   //: ماژولِ «شرکت» — عملیاتِ سطحِ شرکت.
   | 'contactnew'
   | 'contactgroup'
@@ -487,6 +489,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'coding', label: 'کدینگ', icon: <ListTree size={18} /> },
       { key: 'personalization', label: 'شخصی‌سازی', icon: <Settings2 size={18} /> },
       { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
+      { key: 'contactimport', label: 'ورود گروهی اشخاص', icon: <FileUp size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
       { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
       { key: 'backup', label: 'پشتیبان‌گیری خودکار', icon: <DatabaseBackup size={18} /> },
@@ -549,6 +552,10 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
 //: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
 PAGE_MODULE_KEY.analyticlist = 'accounting'
+
+//: «ورود گروهی اشخاص» در گروهِ «تنظیمات» می‌نشیند ولی داده‌اش طرف‌حساب است؛ پس
+//: کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
+PAGE_MODULE_KEY.contactimport = 'contacts'
 
 //: «پیمانکاری» — کلیدِ ماژولِ مجازی، دقیقاً مثلِ `sales`: خودِ `contracting`
 //: هیچ‌کدام از این PageKeyها نیست، فقط نگاشتشان می‌کند.
@@ -674,4 +681,24 @@ export function buildNav({
   }
 
   return { groups, secondary: [...SECONDARY_NAV_ITEMS] }
+}
+
+//: صفحه‌هایی که خودشان ردیفِ منوی اصلی دارند، برای هر نوعِ کسب‌وکار. صفحه‌های
+//: فهرست (saleslist، …) این‌جا نیستند؛ فقط از منوی گروه باز می‌شوند.
+const MENU_PAGE_KEYS = new Set<PageKey>([
+  ...NAV_GROUPS.flatMap((g) => g.items.map((i) => i.key)),
+  'distributor',
+  'marketplace',
+])
+
+/**
+ * آیا ورودیِ منوی گروه (`LIST_MENUS`/`OPS_MENUS`) برای این کسب‌وکار دیده شود؟
+ *
+ * این منوها ثابت‌اند، ولی صفحه‌ای که به آن اشاره می‌کنند شاید این‌جا نباشد: ماژولش
+ * خاموش است، یا مالِ نوعِ دیگری از کسب‌وکار است («سفارش‌های پخش» فقط برای پخش‌کننده).
+ * چنین ورودی‌ای صفحه‌ی خالی باز می‌کرد، پس پنهان می‌شود. صفحه‌ای که اصلاً ردیفِ منو
+ * ندارد (صفحه‌ی فهرست) دست نمی‌خورد.
+ */
+export function menuEntryVisible(key: PageKey, groups: NavGroup[]): boolean {
+  return !MENU_PAGE_KEYS.has(key) || groups.some((g) => g.items.some((i) => i.key === key))
 }

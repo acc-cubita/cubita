@@ -12,7 +12,7 @@ import {
   type ListMenuItem,
   type ListRow,
 } from './moduleLists'
-import type { NavGroup } from '../lib/navModel'
+import { menuEntryVisible, type NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
 /**
@@ -120,11 +120,13 @@ export function ModulePanels({
   lastGroup.current = group?.heading ?? null
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
+  //: ورودی‌ای که صفحه‌اش برای این کسب‌وکار نیست (ماژولِ خاموش، نوعِ دیگرِ کسب‌وکار) نمی‌آید.
+  const reachable = <T extends { key: PageKey }>(menu: T[]) => menu.filter((e) => menuEntryVisible(e.key, groups))
   //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
-  const opsMenu = group ? OPS_MENUS[group.heading] : undefined
+  const opsMenu = group && OPS_MENUS[group.heading] ? reachable(OPS_MENUS[group.heading]) : undefined
   //: کارتِ «فهرست» به گزینه‌ی فعال گره می‌خورد، نه به گروه. پیش‌تر منوی گروه را
   //: می‌داد و کاربر بیست ردیفِ بی‌ربط می‌دید؛ همان چیزی که رد شد.
-  const scopedLists = listsForOps(page, activeSection)
+  const scopedLists = reachable(listsForOps(page, activeSection))
   //: عملیاتی که نه دفترِ نظیر دارد و نه رکوردِ زنده («واحدها»، «تنظیمات»، …) کارتِ
   //: خالی نمی‌گیرد؛ کارتِ همیشه‌خالی فقط عرض می‌گیرد و چیزی نمی‌گوید.
   const hasList = scopedLists.length > 0 || listDefFor(page, activeSection) !== null

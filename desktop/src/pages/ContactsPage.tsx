@@ -4,7 +4,6 @@ import {
   Building2,
   CalendarClock,
   FileText,
-  FileUp,
   HandCoins,
   Pencil,
   Plus,
@@ -23,7 +22,6 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
-import { BulkImportPanel } from '../components/BulkImportPanel'
 import { Pager, usePagination } from '../components/Pager'
 import { SortBar, SortTh, useSort } from '../components/SortControls'
 import { StatCard } from '../components/StatCard'
@@ -311,7 +309,6 @@ export function ContactsPage({
         tabs={[
           { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
           { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, content: <AgingPanel token={token} onStatement={setStatementContact} /> },
-          { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp, content: <BulkImportPanel token={token} kind="contacts" /> },
         ]}
       />
 

@@ -61,6 +61,7 @@ import {
 import { TaxTablesPage } from '../pages/payroll/TaxTablesPage'
 import { ContactNewPage } from '../pages/company/ContactFormPage'
 import { NumberingPage } from '../pages/NumberingPage'
+import { ContactImportPage } from '../pages/ContactImportPage'
 import { BackupListPage } from '../pages/BackupListPage'
 import { UserListPage } from '../pages/UserListPage'
 import { FiscalYearListPage } from '../pages/FiscalYearListPage'
@@ -369,6 +370,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   coding: 'کدینگ',
   personalization: 'شخصی‌سازی',
   numbering: 'روش‌های شماره‌گذاری',
+  contactimport: 'ورود گروهی اشخاص',
   backuplist: 'نسخه‌های پشتیبانی و بازیابی',
   userlist: 'کاربران',
   fiscalyearlist: 'سال‌های مالی',
@@ -857,6 +859,7 @@ export function Dashboard({
           {page === 'coding' && <CodingPage token={token} />}
           {page === 'personalization' && <PersonalizationPage token={token} />}
           {page === 'numbering' && <NumberingPage token={token} />}
+          {page === 'contactimport' && <ContactImportPage token={token} />}
           {page === 'backuplist' && <BackupListPage token={token} me={me} />}
           {page === 'userlist' && <UserListPage token={token} />}
           {page === 'fiscalyearlist' && <FiscalYearListPage token={token} />}

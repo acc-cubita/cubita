@@ -12,7 +12,7 @@ import {
   Download,
   User,
 } from 'lucide-react'
-import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
+import { buildNav, menuEntryVisible, uniqueNavItems, type PageKey } from '../lib/navModel'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { useNavSection } from './navContext'
@@ -280,7 +280,7 @@ export function TopNav({
                 onClick={() => {
                   if (hasActive) return go(active)
                   //: گروهی با منوی کار‌به‌کار روی اولین کارش باز می‌شود، نه اولین صفحه.
-                  const landing = OPS_MENUS[group.heading]?.[0]
+                  const landing = OPS_MENUS[group.heading]?.find((e) => menuEntryVisible(e.key, groups))
                   go(landing?.key ?? first.key, landing?.section)
                 }}
               >
@@ -401,8 +401,8 @@ export function TopNav({
 
             <div className="topnav-mobile-body">
               {groups.map((group) => {
-                const lists = LIST_MENUS[group.heading] ?? []
-                const opsMenu = OPS_MENUS[group.heading]
+                const lists = (LIST_MENUS[group.heading] ?? []).filter((e) => menuEntryVisible(e.key, groups))
+                const opsMenu = OPS_MENUS[group.heading]?.filter((e) => menuEntryVisible(e.key, groups))
                 //: تبِ فعالِ صفحه‌ی جاری — ورودی‌های منو که به یک تب اشاره می‌کنند با آن فعال‌اند.
                 const curSection = navSection?.section ?? MODULE_SECTIONS[active]?.[0]?.key ?? null
                 const isOpen = openGroup === group.heading
