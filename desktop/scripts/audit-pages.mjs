@@ -332,6 +332,75 @@ const RULES = [
       }))
     },
   },
+  {
+    id: 'R13',
+    level: 'error',
+    title: 'تبِ بی‌راه',
+    why:
+      'گروهی که `LIST_MENUS` یا `OPS_MENUS` دارد، منوی گروه را نشان می‌دهد و ' +
+      '`sectionLists`/`ops`ِ خودِ صفحه اصلاً رندر نمی‌شوند (`ModulePanels`). بالای ' +
+      '۱۰۲۴px نوارِ تبِ درون‌صفحه و کشوی موبایل هم پنهان‌اند — پس تبی که در منوی ' +
+      'گروه ردیف ندارد **هیچ راهِ ورودی ندارد**. سه تبِ «طرف حساب‌ها»، «سنین ' +
+      'مطالبات» و «بخش‌بندی» دقیقاً همین‌طور گم شدند: نه tsc دیدشان (کلیدها رشته‌اند) ' +
+      'و نه ممیز، چون خودشان درست اعلام شده بودند.',
+    scope: 'nav',
+    check() {
+      const lists = fs.readFileSync(path.join(SRC, 'components', 'moduleLists.tsx'), 'utf8')
+      const secSrc = fs.readFileSync(path.join(SRC, 'components', 'moduleSections.tsx'), 'utf8')
+
+      /** ورودی‌های `{ key, section }`ِ یک نگاشتِ گروهی، به تفکیکِ گروه. */
+      const menusOf = (name) => {
+        const start = lists.indexOf(`export const ${name}`)
+        if (start === -1) return {}
+        const body = lists.slice(start, lists.indexOf('\n}\n', start))
+        const out = {}
+        let heading = null
+        for (const m of body.matchAll(
+          /^\s{2}'([^']+)': \[|key: '([a-zA-Z]+)'(?:, section: '([a-z0-9-]+)')?, label:/gm,
+        )) {
+          if (m[1] !== undefined) out[(heading = m[1])] = new Set()
+          else if (heading) out[heading].add(`${m[2]}:${m[3] ?? ''}`)
+        }
+        return out
+      }
+      const listMenus = menusOf('LIST_MENUS')
+      const opsMenus = menusOf('OPS_MENUS')
+
+      //: بخش‌های هر صفحه، با همان تفکیکِ عملیات/فهرست که `ModulePanels` می‌کند.
+      const secBody = secSrc.slice(secSrc.indexOf('export const MODULE_SECTIONS'))
+      const sections = {}
+      for (const m of secBody.matchAll(/\n {2}([a-zA-Z]+): \[([\s\S]*?)\n {2}\]/g)) {
+        sections[m[1]] = [...m[2].matchAll(/key: '([a-z0-9-]+)', label: '([^']+)'([^\n]*)/g)].map((x) => ({
+          key: x[1],
+          label: x[2],
+          isList: /kind: 'list'/.test(x[3]),
+        }))
+      }
+
+      const groupOf = Object.fromEntries(navTargets().map((t) => [t.key, t.heading]))
+      const found = []
+      for (const [page, secs] of Object.entries(sections)) {
+        const heading = groupOf[page]
+        if (!heading) continue
+        //: منوی گروه فقط همان ستون را می‌بلعد که خودش می‌سازد.
+        for (const [menu, kind, want] of [
+          [listMenus[heading], 'فهرست', true],
+          [opsMenus[heading], 'عملیات', false],
+        ]) {
+          if (!menu) continue
+          for (const s of secs.filter((x) => x.isList === want)) {
+            if (!menu.has(`${page}:${s.key}`)) {
+              found.push({
+                line: 1,
+                msg: `تبِ «${s.label}» (${page}/${s.key}) در منوی «${kind}»ِ گروهِ «${heading}» ردیف ندارد — بالای ۱۰۲۴px باز نمی‌شود`,
+              })
+            }
+          }
+        }
+      }
+      return found
+    },
+  },
 ]
 
 /** پایانِ یک تگِ باز — با احترام به `{}`، `()` و رشته‌ها، چون attributeهای JSX

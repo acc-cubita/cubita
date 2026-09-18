@@ -21,6 +21,7 @@ import {
   Layers,
   Link2,
   ListChecks,
+  MapPin,
   Medal,
   Package,
   PackageCheck,
@@ -123,15 +124,18 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   ],
   distributor: [
     { key: 'catalog', label: 'کاتالوگ', icon: Package },
-    { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList },
     { key: 'connections', label: 'اتصال‌ها', icon: Link2 },
-    { key: 'commission', label: 'کمیسیون', icon: Percent },
+    { key: 'zones', label: 'زون‌ها', icon: MapPin },
     { key: 'settings', label: 'تنظیمات', icon: Settings },
+    { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, kind: 'list' },
+    { key: 'returns', label: 'مرجوعی‌ها', icon: Undo2, kind: 'list' },
+    { key: 'commission', label: 'کمیسیون', icon: Percent, kind: 'list' },
   ],
   marketplace: [
     { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store },
     { key: 'catalog', label: 'کاتالوگ', icon: Package },
-    { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList },
+    { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList, kind: 'list' },
+    { key: 'returns', label: 'مرجوعی', icon: Undo2, kind: 'list' },
   ],
   contacts: [
     { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, kind: 'list' },
@@ -139,13 +143,13 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp },
   ],
   crm: [
-    { key: 'leads', label: 'سرنخ‌ها', icon: Target },
-    { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock },
+    { key: 'leads', label: 'سرنخ‌ها', icon: Target, kind: 'list' },
+    { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock, kind: 'list' },
     { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift },
     { key: 'segments', label: 'بخش‌بندی', icon: PieChart, kind: 'list' },
-    { key: 'tiers', label: 'سطوح باشگاه', icon: Medal },
-    { key: 'rewards', label: 'جوایز', icon: Ticket },
-    { key: 'birthdays', label: 'تولدها', icon: Cake },
+    { key: 'tiers', label: 'سطوح باشگاه', icon: Medal, kind: 'list' },
+    { key: 'rewards', label: 'جوایز', icon: Ticket, kind: 'list' },
+    { key: 'birthdays', label: 'تولدها', icon: Cake, kind: 'list' },
   ],
   //: ترتیب همان است که کاربر خواست. پنج بخشِ آخر دفترند و در ستونِ «فهرست» می‌آیند.
   manufacturing: [
@@ -177,9 +181,9 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'disposals', label: 'خروج و فروش دارایی', icon: Receipt, kind: 'list' },
   ],
   payroll: [
-    { key: 'staff', label: 'پرسنل و احکام', icon: Users },
+    { key: 'staff', label: 'پرسنل و احکام', icon: Users, kind: 'list' },
     { key: 'run', label: 'کارکرد و صدور فیش', icon: CalendarPlus },
-    { key: 'benefits', label: 'مزایا', icon: Gift },
+    { key: 'benefits', label: 'مزایا', icon: Gift, kind: 'list' },
     { key: 'settings', label: 'تنظیماتِ حقوق', icon: Settings },
   ],
   integration: [
