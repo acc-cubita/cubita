@@ -356,11 +356,15 @@ export function ContactListPage({
   token,
   onNavigate,
   onEditContact,
+  presetRole = '',
 }: {
   token: string
   /** ویرایش در فرمِ کامل — تا امروز ردیف‌های این جدول هیچ کنشی نداشتند. */
   onEditContact?: (id: string) => void
   onNavigate?: (page: PageKey) => void
+  /** نقشِ ازپیش‌انتخاب‌شده — «فهرست تامین‌کنندگان»ِ گروهِ انبار همین صفحه است با
+   *  `supplier`، نه جدولِ دومی از طرف‌حساب‌ها. */
+  presetRole?: string
 }) {
   const [rows, setRows] = useState<ContactRecord[] | null>(null)
   const [groups, setGroups] = useState<ContactGroupRecord[]>([])
@@ -368,7 +372,7 @@ export function ContactListPage({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [groupFilter, setGroupFilter] = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
+  const [roleFilter, setRoleFilter] = useState(presetRole)
 
   useEffect(() => {
     void fetchContacts(token)
@@ -397,8 +401,12 @@ export function ContactListPage({
     <div className="page panels">
       <PageHeader
         icon={UsersRound}
-        title="طرف حساب‌ها"
-        description="همه‌ی مشتریان، تأمین‌کنندگان، واسطه‌ها و سهامداران — با گروه و محلِ جغرافیایی‌شان."
+        title={presetRole === 'supplier' ? 'تأمین‌کنندگان' : 'طرف حساب‌ها'}
+        description={
+          presetRole === 'supplier'
+            ? 'طرف‌حساب‌هایی که نقشِ تأمین‌کننده دارند — همان فهرستِ طرف‌حساب‌ها، با فیلترِ نقش.'
+            : 'همه‌ی مشتریان، تأمین‌کنندگان، واسطه‌ها و سهامداران — با گروه و محلِ جغرافیایی‌شان.'
+        }
       />
       {error && <div className="error">{error}</div>}
 

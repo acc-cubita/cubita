@@ -1,7 +1,16 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
 import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
-import { LIST_MENUS, LIST_PAGE_GROUP, MODULE_LISTS, listDefFor, type ListRow } from './moduleLists'
+import {
+  LIST_MENUS,
+  LIST_PAGE_GROUP,
+  MODULE_LISTS,
+  OPS_MENUS,
+  listDefFor,
+  menuEntryActive,
+  type ListMenuItem,
+  type ListRow,
+} from './moduleLists'
 import type { NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
@@ -19,8 +28,19 @@ import type { PageKey } from './Sidebar'
 
 const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
 
-/** گروهِ ناوبری‌ای که این صفحه داخلش است (صفحه‌های حسابِ کاربری در هیچ گروهی نیستند). */
-const groupOf = (groups: NavGroup[], page: PageKey) =>
+/** آیا این صفحه جایی از منوهای این گروه هست — صفحه‌ی گروه، فهرستش، یا ورودیِ عملیاتش؟ */
+const groupHas = (g: NavGroup, page: PageKey) =>
+  g.items.some((i) => i.key === page) ||
+  (LIST_MENUS[g.heading] ?? []).some((i) => i.key === page) ||
+  (OPS_MENUS[g.heading] ?? []).some((i) => i.key === page)
+
+/** گروهِ ناوبری‌ای که این صفحه داخلش است (صفحه‌های حسابِ کاربری در هیچ گروهی نیستند).
+ *
+ *  `preferred` گروهی است که کاربر همین حالا در آن بود. صفحه‌ی مشترکِ دو گروه
+ *  («اعلامیه بدهکار بستانکار» در فروش و در انبار) با آن در همان گروه می‌ماند؛ بدونِ
+ *  این، کلیک رویش از منوی انبار ستون‌ها را یک‌باره به منوی فروش عوض می‌کرد. */
+const groupOf = (groups: NavGroup[], page: PageKey, preferred: string | null = null) =>
+  groups.find((g) => g.heading === preferred && groupHas(g, page)) ??
   groups.find((g) => g.items.some((i) => i.key === page)) ??
   // صفحه‌ی فهرست خودش در منو نیست؛ گروهش را از نگاشتِ صریح می‌گیرد.
   groups.find((g) => g.heading === LIST_PAGE_GROUP[page]) ??
@@ -95,10 +115,14 @@ export function ModulePanels({
   //
   // استثنا: صفحه‌ی *فهرستِ* یک گروهِ تک‌صفحه‌ای. آن‌جا نه بخشِ خودی هست و نه هم‌گروهی،
   // پس کارتِ «عملیات» اصلاً ساخته نمی‌شد و کاربر بدونِ راهِ برگشت به ماژول می‌ماند.
-  const group = groupOf(groups, page)
+  const lastGroup = useRef<string | null>(null)
+  const group = groupOf(groups, page, lastGroup.current)
+  lastGroup.current = group?.heading ?? null
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
   const listMenu = group ? LIST_MENUS[group.heading] : undefined
+  //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
+  const opsMenu = group ? OPS_MENUS[group.heading] : undefined
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -106,7 +130,7 @@ export function ModulePanels({
 
   return (
     <div className="mod-panels">
-      {(ops.length > 0 || pages.length > 0) && (
+      {(opsMenu || ops.length > 0 || pages.length > 0) && (
         <section className={`mod-panel${collapsed.ops ? ' collapsed' : ''}`}>
           <button
             type="button"
@@ -120,9 +144,10 @@ export function ModulePanels({
             <ChevronRight size={15} className="mod-panel-chev" />
           </button>
           <div className="mod-panel-body">
+            {opsMenu && menuButtons(opsMenu, page, activeSection, onSelectSection, onNavigate)}
             {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
                 پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
-            {pages.map((it) => {
+            {!opsMenu && pages.map((it) => {
               // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
               // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
               // مستقیم در سطحِ اول می‌نشینند.
@@ -176,7 +201,7 @@ export function ModulePanels({
             })}
             {/* ماژولِ تک‌صفحه‌ای (تولید، دارایی ثابت، …) ردیفی با نامِ خودش نمی‌گیرد: نامش
                 همین حالا در نوارِ بالا هست و تکرارش در «عملیات» یک زیرمنوی بی‌معناست. */}
-            {pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection)}
+            {!opsMenu && pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection)}
           </div>
         </section>
       )}
@@ -196,21 +221,8 @@ export function ModulePanels({
         <div className="mod-panel-body">
           {listMenu ? (
             // ماژولی که چند فهرستِ بی‌ربط دارد، به‌جای ردیف‌های داده منو می‌گیرد؛
-            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند.
-            listMenu.map((item) => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={`mod-op${item.key === page ? ' active' : ''}`}
-                  onClick={() => onNavigate(item.key)}
-                >
-                  <Icon size={16} />
-                  <span>{item.label}</span>
-                </button>
-              )
-            })
+            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
+            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate)
           ) : sectionLists.length > 0 ? (
             // ماژولِ تب‌داری که دفترهایش خودشان تب‌اند: منوی همان تب‌ها.
             sectionButtons(sectionLists, activeSection, onSelectSection)
@@ -221,6 +233,33 @@ export function ModulePanels({
       </section>
     </div>
   )
+}
+
+/** ورودی‌های منوی گروه — صفحه یا تبی از یک صفحه. تبِ همین صفحه فقط تب را عوض
+ *  می‌کند؛ بقیه به صفحه‌ی خودشان (و تبشان) می‌روند. */
+function menuButtons(
+  entries: ListMenuItem[],
+  page: PageKey,
+  activeSection: string | null,
+  onSelectSection: (key: string) => void,
+  onNavigate: (page: PageKey, section?: string | null) => void,
+) {
+  return entries.map((e) => {
+    const Icon = e.icon
+    const on = menuEntryActive(e, page, activeSection)
+    return (
+      <button
+        key={`${e.key}:${e.section ?? ''}`}
+        type="button"
+        className={`mod-op${on ? ' active' : ''}`}
+        aria-current={on ? 'page' : undefined}
+        onClick={() => (e.key === page && e.section ? onSelectSection(e.section) : onNavigate(e.key, e.section ?? null))}
+      >
+        <Icon size={16} />
+        <span>{e.label}</span>
+      </button>
+    )
+  })
 }
 
 /** دکمه‌های بخشِ صفحه‌ی فعال — چه تنها باشند چه تودرتو زیرِ نامِ صفحه. */

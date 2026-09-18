@@ -70,6 +70,22 @@ import {
   Boxes,
   Percent,
   Layers,
+  AlertTriangle,
+  ArrowLeftRight,
+  BadgeDollarSign,
+  Briefcase,
+  ClipboardCheck,
+  FileUp,
+  FolderTree,
+  Package,
+  PackageCheck,
+  PackageMinus,
+  PackagePlus,
+  PackageSearch,
+  RotateCcw,
+  Ruler,
+  ScanSearch,
+  Warehouse,
 } from 'lucide-react'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
@@ -105,6 +121,52 @@ export interface ListMenuItem {
   key: PageKey
   label: string
   icon: LucideIcon
+  /** تبِ مشخصی از همان صفحه. منوی گروهی که بخش‌هایش تبِ صفحه‌اند نه صفحه‌ی جدا
+   *  («تامین‌کنندگان و انبار») با این به تبِ درست می‌رود. */
+  section?: string
+}
+
+/**
+ * منوی «عملیات»ِ گروهی که با فهرستِ صفحه‌هایش (`NAV_GROUPS`) ساخته نمی‌شود.
+ *
+ * **چرا:** «تامین‌کنندگان و انبار» دو صفحه‌ی تب‌دار است («خرید» و «انبار»). کاربر
+ * منوی کار را بر اساسِ کار می‌خواهد نه صفحه: «رسید انبار» تبِ صفحه‌ی خرید است و
+ * «حواله انبار» تبِ صفحه‌ی انبار، ولی هر دو کنارِ هم در «عملیات». `NAV_GROUPS`
+ * دست نمی‌خورد، چون ماژول‌ها، مجوزها، جست‌وجو و «شخصی‌سازیِ پنل» با صفحه کار
+ * می‌کنند؛ این نگاشت فقط ستونِ «عملیات» و کشوی موبایل را می‌سازد.
+ */
+export const OPS_MENUS: Record<string, ListMenuItem[]> = {
+  //: ترتیب: شش کارِ اصلیِ انبار که کاربر خواست، بعد کارهای منوهای قدیمیِ «خرید»،
+  //: «انبار» و «اعلامیه بدهکار بستانکار». تعریف‌ها (کالا، انبار، واحد، …) فرم و
+  //: جدولشان یک کار است و در همین ستون می‌مانند.
+  'تامین‌کنندگان و انبار': [
+    { key: 'purchases', section: 'receipts', label: 'رسید انبار', icon: PackageCheck },
+    { key: 'inventory', section: 'issues', label: 'حواله انبار', icon: PackageMinus },
+    { key: 'inventory', section: 'transfer', label: 'رسید/حواله انتقال بین انبارها', icon: ArrowLeftRight },
+    { key: 'inventory', section: 'count-tags', label: 'تگ انبارگردانی', icon: Tag },
+    { key: 'inventory', section: 'count', label: 'ثبت مغایرت انبارگردانی', icon: ClipboardCheck },
+    { key: 'inventory', section: 'valuation', label: 'قیمت‌گذاری اسناد انبار', icon: Calculator },
+    { key: 'purchases', section: 'invoices', label: 'فاکتور خرید', icon: PackagePlus },
+    { key: 'purchases', section: 'services', label: 'فاکتور خرید خدمات', icon: Briefcase },
+    { key: 'purchases', section: 'returns', label: 'برگشت از خرید', icon: Undo2 },
+    { key: 'inventory', section: 'issue-returns', label: 'برگشت خروج انبار', icon: RotateCcw },
+    { key: 'inventory', section: 'adjust', label: 'تعدیل دستی', icon: ClipboardList },
+    { key: 'inventory', section: 'unpriced', label: 'قیمت‌گذاری ورودی‌ها', icon: BadgeDollarSign },
+    { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: FileSpreadsheet },
+    { key: 'inventory', section: 'products', label: 'کالاها', icon: Package },
+    { key: 'inventory', section: 'warehouses', label: 'انبارها', icon: Warehouse },
+    { key: 'inventory', section: 'units', label: 'واحدها', icon: Ruler },
+    { key: 'inventory', section: 'taxonomy', label: 'گروه و مشخصات', icon: FolderTree },
+    { key: 'inventory', section: 'pricelists', label: 'لیست قیمت', icon: Tags },
+    { key: 'purchases', section: 'deductions', label: 'انواع کسورات', icon: Percent },
+    { key: 'inventory', section: 'import', label: 'ورود گروهی کالا', icon: FileUp },
+  ],
+}
+
+/** آیا این ورودیِ منو همان جایی است که کاربر ایستاده؟ ورودیِ بی‌تب با خودِ صفحه
+ *  فعال است؛ ورودیِ تب‌دار فقط وقتی همان تب باز است. */
+export function menuEntryActive(e: ListMenuItem, page: PageKey, section: string | null): boolean {
+  return e.key === page && (e.section === undefined || e.section === section)
 }
 
 /**
@@ -126,6 +188,23 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: دوازده صفحه‌ی فهرستِ فروش — از فاکتورهای فروش تا اعلامیه‌های قیمت — از
   //: هیچ عرضی قابلِ باز کردن نبودند. نه تایپ‌اسکریپت می‌دیدش (کلید `string` است)
   //: و نه ممیزِ ایستا، چون ثبتشان در `OPS_LIST_MAP` درست بود.
+  //: «تامین‌کنندگان و انبار» — شش دفتری که کاربر خواست، بعد دفترهای منوهای قدیمی.
+  //: بیشترشان تبِ صفحه‌ی «انبار»/«خرید»اند (`section`)؛ «فهرست تامین‌کنندگان» همان
+  //: صفحه‌ی طرف‌حساب‌هاست با نقشِ تأمین‌کننده.
+  'تامین‌کنندگان و انبار': [
+    { key: 'inventory', section: 'documents', label: 'فهرست رسیدها و حواله‌های انبار', icon: FileStack },
+    { key: 'inventory', section: 'kardex', label: 'کاردکس کالا', icon: History },
+    { key: 'inventory', section: 'stock', label: 'مرور انبار / موجودی کالا', icon: PackageSearch },
+    { key: 'supplierlist', label: 'فهرست تامین‌کنندگان', icon: UsersRound },
+    { key: 'inventory', section: 'low', label: 'گزارش نقطه سفارش', icon: AlertTriangle },
+    { key: 'inventory', section: 'count-list', label: 'فهرست انبارگردانی‌ها', icon: ListChecks },
+    { key: 'purchases', section: 'invoice-list', label: 'فاکتورهای خرید', icon: ClipboardList },
+    { key: 'purchases', section: 'service-list', label: 'فاکتورهای خرید خدمات', icon: FileText },
+    { key: 'inventory', section: 'issue-return-list', label: 'برگشت‌های خروج انبار', icon: RotateCcw },
+    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet },
+    { key: 'inventory', section: 'serials', label: 'جستجوی سریال', icon: ScanSearch },
+    { key: 'inventory', section: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
+  ],
   'مشتریان و فروش': [
     { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList },
     { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText },
@@ -272,6 +351,8 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   mgmtreports: 'شرکت',
   usagereport: 'شرکت',
   contactlist: 'شرکت',
+  //: همان صفحه‌ی طرف‌حساب‌ها با نقشِ تأمین‌کننده — فهرستِ گروهِ انبار، نه نمای دوم.
+  supplierlist: 'تامین‌کنندگان و انبار',
   relatedpeople: 'شرکت',
   installmentplans: 'شرکت',
   allinstallments: 'شرکت',

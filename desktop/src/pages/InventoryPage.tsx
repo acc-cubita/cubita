@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileUp, History, Package, PackageMinus, PackagePlus, PackageSearch, PackageX, RefreshCw, Ruler, ScanSearch, Tags, Warehouse } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileStack, FileUp, FolderTree, History, ListChecks, Package, PackageMinus, PackageSearch, PackageX, RefreshCw, RotateCcw, Ruler, ScanSearch, Tag, Tags, Warehouse } from 'lucide-react'
 import { InventoryValuationPanel } from '../components/InventoryValuationPanel'
-import { WarehouseIssueLedger, WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
+import { WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
+import { WarehouseReceiptsTab } from '../components/WarehouseReceiptsTab'
+import { useNavSection } from '../components/navContext'
 import { IssueReturnsTab } from '../components/IssueReturnsTab'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
@@ -26,6 +28,7 @@ import {
   type IssueInvoiceContext,
   type LowStockRow,
   type MeResponse,
+  type ReceiptPaymentContext,
   type StockLevel,
 } from '../api'
 import { SectionCard } from '../components/SectionCard'
@@ -50,6 +53,7 @@ export function InventoryPage({
   items,
   onChanged,
   onCreateInvoiceFromIssue,
+  onCreateReceiptPayment,
 }: {
   token: string
   me: MeResponse
@@ -59,8 +63,16 @@ export function InventoryPage({
   onChanged?: () => void
   /** «صدور فاکتور فروش» از روی خروج — فقط زمینه را به فرمِ فاکتور می‌برد (§۱۶). */
   onCreateInvoiceFromIssue: (context: IssueInvoiceContext) => void
+  /** میان‌برِ «اعلامیه پرداخت» از ردیفِ رسید — دفترِ رسیدها حالا این‌جا هم هست. */
+  onCreateReceiptPayment: (context: ReceiptPaymentContext) => void
 }) {
-  const [transferKey, setTransferKey] = useState(0)
+  const nav = useNavSection()
+  //: جلسه‌ای که از «تگ انبارگردانی» یا «فهرست انبارگردانی‌ها» برای شمارش باز شده.
+  const [countSession, setCountSession] = useState<string | null>(null)
+  const openCountSession = (id: string) => {
+    setCountSession(id)
+    nav?.setSection('count')
+  }
   const [stock, setStock] = useState<StockLevel[]>([])
   const stockPg = usePagination(stock, 10)
   const [lowStock, setLowStock] = useState<LowStockRow[]>([])
@@ -133,7 +145,7 @@ export function InventoryPage({
           },
           {
             key: 'stock',
-            label: 'موجودی',
+            label: 'مرور انبار / موجودی کالا',
             icon: PackageSearch,
             content: (
               <div className="split-2col">
@@ -247,13 +259,13 @@ export function InventoryPage({
           },
           {
             key: 'kardex',
-            label: 'کاردکس',
+            label: 'کاردکس کالا',
             icon: History,
             content: <KardexPanel token={token} items={items} />,
           },
           {
             key: 'low',
-            label: 'نیازمندِ سفارش',
+            label: 'گزارش نقطه سفارش',
             icon: AlertTriangle,
             content: (
               <div className="split-2col">
@@ -277,14 +289,21 @@ export function InventoryPage({
           {
             key: 'taxonomy',
             label: 'گروه و مشخصات',
-            icon: Tags,
+            icon: FolderTree,
             content: <ItemTaxonomyPanel token={token} onChanged={onChanged} />,
           },
           {
+            key: 'count-tags',
+            label: 'تگ انبارگردانی',
+            icon: Tag,
+            content: <StockCountPanel token={token} warehouses={warehouses} mode="tags" onOpenSession={openCountSession} />,
+          },
+          {
+            //: کلید `count` ماند تا پیوندهای قبلی («انبارگردانی» از داشبوردِ شرکت) همین‌جا بیایند.
             key: 'count',
-            label: 'انبارگردانی',
+            label: 'ثبت مغایرت انبارگردانی',
             icon: ClipboardCheck,
-            content: <StockCountPanel token={token} warehouses={warehouses} />,
+            content: <StockCountPanel token={token} warehouses={warehouses} mode="variance" sessionId={countSession} />,
           },
           {
             key: 'adjust',
@@ -299,7 +318,7 @@ export function InventoryPage({
           {
             //: خروجِ فروش، مصرف و سایر — و فهرستی که انتقال‌ها را هم کنارشان دارد.
             key: 'issues',
-            label: 'خروج انبار',
+            label: 'حواله انبار',
             icon: PackageMinus,
             content: (
               <WarehouseIssuesTab
@@ -309,6 +328,7 @@ export function InventoryPage({
                 items={items}
                 onChanged={() => void refreshStock()}
                 onCreateInvoice={onCreateInvoiceFromIssue}
+                view="form"
               />
             ),
           },
@@ -316,43 +336,21 @@ export function InventoryPage({
             //: کالایی که با یک خروج رفته و برمی‌گردد — فرمِ «مبنا» و دفترِ برگشت‌ها.
             key: 'issue-returns',
             label: 'برگشت خروج انبار',
-            icon: PackagePlus,
+            icon: RotateCcw,
             content: (
-              <IssueReturnsTab token={token} me={me} warehouses={warehouses} onChanged={() => void refreshStock()} />
+              <IssueReturnsTab token={token} me={me} warehouses={warehouses} onChanged={() => void refreshStock()} view="form" />
             ),
           },
           {
+            //: فقط فرم. انتقال‌های ثبت‌شده همان حواله‌های نوعِ «انتقال»اند و در «فهرست
+            //: رسیدها و حواله‌های انبار» با فیلترِ نوع دیده می‌شوند — نه نمای دومی از حواله‌ها.
             key: 'transfer',
-            label: 'انتقال بین انبار',
+            label: 'رسید/حواله انتقال بین انبارها',
             icon: ArrowLeftRight,
-            content: (
-              <>
-                {guided ? (
-                  <TransferWizard
-                    token={token}
-                    warehouses={warehouses}
-                    items={items}
-                    onCreated={() => setTransferKey((k) => k + 1)}
-                  />
-                ) : (
-                  <TransferForm
-                    token={token}
-                    warehouses={warehouses}
-                    items={items}
-                    onCreated={() => setTransferKey((k) => k + 1)}
-                  />
-                )}
-                {/* همان فهرستِ خروج‌ها با نوعِ انتقال — نه نمای دومی از حواله‌ها. */}
-                <WarehouseIssueLedger
-                  token={token}
-                  me={me}
-                  warehouses={warehouses}
-                  presetType="transfer"
-                  reloadKey={transferKey}
-                  onCreateInvoice={onCreateInvoiceFromIssue}
-                  onChanged={() => void refreshStock()}
-                />
-              </>
+            content: guided ? (
+              <TransferWizard token={token} warehouses={warehouses} items={items} onCreated={() => void refreshStock()} />
+            ) : (
+              <TransferForm token={token} warehouses={warehouses} items={items} onCreated={() => void refreshStock()} />
             ),
           },
           {
@@ -372,7 +370,7 @@ export function InventoryPage({
           {
             //: اصلاحِ بهای حرکاتِ منقضی با یک سندِ اصلاحی — فصلِ «قیمت‌گذاری اسناد انبار».
             key: 'valuation',
-            label: 'قیمت‌گذاری اسناد',
+            label: 'قیمت‌گذاری اسناد انبار',
             icon: Calculator,
             content: <InventoryValuationPanel token={token} warehouses={warehouses} items={items} />,
           },
@@ -400,6 +398,49 @@ export function InventoryPage({
             label: 'ورود گروهی کالا',
             icon: FileUp,
             content: <BulkImportPanel token={token} kind="items" />,
+          },
+          {
+            //: دفترِ مشترکِ رسیدها و حواله‌ها — همان دو دفتری که پیش‌تر زیرِ فرمِ «رسید انبار»
+            //: (صفحه‌ی خرید) و «خروج انبار» بودند، حالا یک‌جا در «فهرست».
+            key: 'documents',
+            label: 'فهرست رسیدها و حواله‌های انبار',
+            icon: FileStack,
+            content: (
+              <>
+                <WarehouseReceiptsTab
+                  token={token}
+                  me={me}
+                  warehouses={warehouses}
+                  items={items}
+                  onChanged={() => void refreshStock()}
+                  onCreatePayment={onCreateReceiptPayment}
+                  view="ledger"
+                />
+                <WarehouseIssuesTab
+                  token={token}
+                  me={me}
+                  warehouses={warehouses}
+                  items={items}
+                  onChanged={() => void refreshStock()}
+                  onCreateInvoice={onCreateInvoiceFromIssue}
+                  view="ledger"
+                />
+              </>
+            ),
+          },
+          {
+            key: 'count-list',
+            label: 'فهرست انبارگردانی‌ها',
+            icon: ListChecks,
+            content: <StockCountPanel token={token} warehouses={warehouses} mode="list" onOpenSession={openCountSession} />,
+          },
+          {
+            key: 'issue-return-list',
+            label: 'برگشت‌های خروج انبار',
+            icon: RotateCcw,
+            content: (
+              <IssueReturnsTab token={token} me={me} warehouses={warehouses} onChanged={() => void refreshStock()} view="ledger" />
+            ),
           },
         ]}
       />

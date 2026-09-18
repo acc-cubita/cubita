@@ -69,14 +69,19 @@ export function IssueReturnsTab({
   me,
   warehouses,
   onChanged,
+  view,
 }: {
   token: string
   me: MeResponse
   warehouses: WarehouseCache[]
   onChanged: () => void
+  /** «فرم» یا «دفتر» یا هر دو (پیش‌فرض). منوی «تامین‌کنندگان و انبار» فرم را در
+   *  «عملیات» و دفتر را در «فهرست» می‌گذارد؛ هر دو همین کامپوننت‌اند، نه نسخه‌ی دوم. */
+  view?: 'form' | 'ledger'
 }) {
   //: «ثبت برگشت به انبار» از دفترِ فاکتورهای برگشتی — یک بار خوانده و مصرف می‌شود.
-  const [prefill] = useState(readPrefill)
+  //: فقط فرم مصرفش می‌کند؛ نمای دفتر نباید پیش‌پرِ فرم را پاک کند.
+  const [prefill] = useState(() => (view === 'ledger' ? null : readPrefill()))
   useEffect(() => {
     if (prefill) sessionStorage.removeItem(ISSUE_RETURN_PREFILL_KEY)
   }, [prefill])
@@ -92,10 +97,15 @@ export function IssueReturnsTab({
 
   return (
     <>
-      {can(me, 'inventory', 'create') && (
+      {view === 'form' && !can(me, 'inventory', 'create') && (
+        <p className="hint">مجوزِ ثبتِ برگشت ندارید؛ برگشت‌های ثبت‌شده در «برگشت‌های خروج انبار» هستند.</p>
+      )}
+      {view !== 'ledger' && can(me, 'inventory', 'create') && (
         <ReturnForm token={token} warehouses={warehouses} contacts={contacts} initial={prefill} onCreated={reload} />
       )}
-      <IssueReturnLedger token={token} me={me} warehouses={warehouses} reloadKey={reloadKey} onChanged={reload} />
+      {view !== 'form' && (
+        <IssueReturnLedger token={token} me={me} warehouses={warehouses} reloadKey={reloadKey} onChanged={reload} />
+      )}
     </>
   )
 }

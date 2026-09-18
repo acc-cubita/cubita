@@ -37,3 +37,34 @@ export function navTargets() {
   }
   return out
 }
+
+/**
+ * ورودی‌های منوی گروه‌هایی که «عملیات»شان کار‌به‌کار است نه صفحه‌به‌صفحه (`OPS_MENUS`)
+ * — به‌همراهِ همه‌ی ورودی‌های «فهرست»ِ همان گروه‌ها (`LIST_MENUS`).
+ *
+ * **چرا:** در این گروه‌ها («تامین‌کنندگان و انبار») ردیفی با نامِ صفحه («انبار») در
+ * منو نیست؛ هر ردیف تبی از یک صفحه است. بدونِ این فهرست، `verify-pages` صفحه‌ی «انبار»
+ * را با زیررشته‌ی «رسید انبار» باز می‌کرد — که تبِ صفحه‌ی خرید است — و خودِ انبار
+ * هرگز سنجیده نمی‌شد.
+ *
+ * @returns {{ key: string, section: string | null, label: string, heading: string }[]}
+ */
+export function groupMenuTargets() {
+  const lists = fs.readFileSync(path.join(SRC, 'components', 'moduleLists.tsx'), 'utf8')
+  const block = (name) => {
+    const start = lists.indexOf(`export const ${name}`)
+    return start === -1 ? '' : lists.slice(start, lists.indexOf('\n}\n', start))
+  }
+  const parse = (body) => {
+    const out = []
+    let heading = ''
+    for (const m of body.matchAll(/^\s{2}'([^']+)': \[|key: '([a-zA-Z]+)'(?:, section: '([a-z-]+)')?, label: '([^']+)'/gm)) {
+      if (m[1] !== undefined) heading = m[1]
+      else out.push({ key: m[2], section: m[3] ?? null, label: m[4], heading })
+    }
+    return out
+  }
+  const ops = parse(block('OPS_MENUS'))
+  const headings = new Set(ops.map((t) => t.heading))
+  return [...ops, ...parse(block('LIST_MENUS')).filter((t) => headings.has(t.heading))]
+}

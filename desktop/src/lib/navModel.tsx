@@ -153,6 +153,7 @@ export type PageKey =
   | 'mgmtreports'
   | 'usagereport'
   | 'contactlist'
+  | 'supplierlist'
   | 'relatedpeople'
   | 'installmentplans'
   | 'allinstallments'

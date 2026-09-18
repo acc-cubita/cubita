@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Inbox, PackagePlus, PackageCheck, Undo2, FileText, TrendingDown, CalendarRange, Receipt, Briefcase, Percent } from 'lucide-react'
+import { ClipboardList, Inbox, PackagePlus, PackageCheck, Undo2, FileText, TrendingDown, CalendarRange, Receipt, Briefcase, Percent } from 'lucide-react'
 import {
   fetchPurchaseInvoiceDuplicate,
   fetchPurchaseSummary,
@@ -24,6 +24,7 @@ import { OutboxList } from '../components/OutboxList'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
+import { useNavSection } from '../components/navContext'
 import { isElectron } from '../platform'
 
 export function PurchasesPage({
@@ -51,6 +52,11 @@ export function PurchasesPage({
   const [reloadKey, setReloadKey] = useState(0)
   const [prefill, setPrefill] = useState<PurchaseInvoiceDuplicateDraft | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
+  //: فرم و دفترِ فاکتورها حالا دو تب‌اند (عملیات/فهرست). «رونوشت» از دفتر پیش‌نویس را
+  //: می‌گذارد و کاربر را به تبِ فرم می‌برد؛ فرم با mount شدن مصرفش می‌کند.
+  const nav = useNavSection()
+  const [serviceDup, setServiceDup] = useState<AnyInvoice | null>(null)
+  const clearServiceDup = useCallback(() => setServiceDup(null), [])
   const refresh = useCallback(() => {
     void fetchPurchaseSummary(token).then(setSummary).catch(() => {})
     setReloadKey((k) => k + 1)
@@ -65,11 +71,12 @@ export function PurchasesPage({
   const handleDuplicate = useCallback(async (inv: AnyInvoice) => {
     try {
       setPrefill(await fetchPurchaseInvoiceDuplicate(token, inv.id))
+      nav?.setSection('invoices')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'پیش‌نویس رونوشت فاکتور خرید بارگذاری نشد.')
     }
-  }, [token])
+  }, [token, nav])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
   const guided = useTheme().theme.content === 'guided'
 
@@ -118,7 +125,6 @@ export function PurchasesPage({
                     />
                   )}
                 </div>
-                <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" purchaseKind="goods" items={items} warehouses={warehouses} onDuplicate={(invoice) => void handleDuplicate(invoice)} onCreatePayment={onCreatePayment} />
                 {isElectron && (
                   <SectionCard
                     icon={Inbox}
@@ -144,6 +150,9 @@ export function PurchasesPage({
                 items={items}
                 onChanged={handleQueued}
                 onCreatePayment={onCreatePayment}
+                view="form"
+                duplicateOf={serviceDup}
+                onDuplicateTaken={clearServiceDup}
               />
             ),
           },
@@ -162,6 +171,7 @@ export function PurchasesPage({
                 items={items}
                 onChanged={handleQueued}
                 onCreatePayment={onCreateReceiptPayment}
+                view="form"
               />
             ),
           },
@@ -176,6 +186,34 @@ export function PurchasesPage({
             label: 'انواع کسورات',
             icon: Percent,
             content: <PurchaseDeductionTypesPanel token={token} me={me} />,
+          },
+          {
+            //: دفترِ فاکتورهای خرید — پیش‌تر زیرِ فرمِ «فاکتور خرید» بود.
+            key: 'invoice-list',
+            label: 'فاکتورهای خرید',
+            icon: ClipboardList,
+            content: (
+              <InvoiceList key={reloadKey} token={token} me={me} kind="purchase" purchaseKind="goods" items={items} warehouses={warehouses} onDuplicate={(invoice) => void handleDuplicate(invoice)} onCreatePayment={onCreatePayment} />
+            ),
+          },
+          {
+            key: 'service-list',
+            label: 'فاکتورهای خرید خدمات',
+            icon: FileText,
+            content: (
+              <ServicePurchaseTab
+                token={token}
+                me={me}
+                items={items}
+                onChanged={handleQueued}
+                onCreatePayment={onCreatePayment}
+                view="ledger"
+                onDuplicate={(invoice) => {
+                  setServiceDup(invoice)
+                  nav?.setSection('services')
+                }}
+              />
+            ),
           },
         ]}
       />

@@ -7,6 +7,7 @@ import {
   fetchMpUnread,
   fetchWarehousesLive,
   type MeResponse,
+  type ReceiptPaymentContext,
 } from '../api'
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
@@ -388,6 +389,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   mgmtreports: 'گزارش‌ها و نمودارهای مدیریتی',
   usagereport: 'گزارش استفاده از نرم‌افزار',
   contactlist: 'طرف حساب‌ها',
+  supplierlist: 'تأمین‌کنندگان',
   relatedpeople: 'افراد مرتبط',
   installmentplans: 'قراردادهای اقساطی',
   allinstallments: 'همه اقساط',
@@ -420,6 +422,26 @@ export function Dashboard({
   //: شناسه‌ی طرف‌حسابی که در دستِ ویرایش است. `navigate` پاکش می‌کند تا رفتنِ
   //: بعدی به «طرف حساب جدید» واقعاً *جدید* باشد، نه ویرایشِ دوباره‌ی قبلی.
   const [editContactId, setEditContactId] = useState<string | null>(null)
+  //: «اعلامیه پرداخت» از ردیفِ رسیدِ انبار — دفترِ رسیدها هم در صفحه‌ی خرید است و هم
+  //: در «فهرست رسیدها و حواله‌های انبار»ِ صفحه‌ی انبار؛ یک مسیر برای هر دو.
+  //: همان مسیرِ پیش‌پرکردنِ فاکتور — اعلامیه سندِ مستقلِ خزانه می‌ماند (§۳۹)
+  //: و مبلغ فقط پیشنهاد است، نه قید (§۴۰).
+  const createReceiptPayment = (context: ReceiptPaymentContext) => {
+    sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
+      contactId: context.contact_id,
+      documentId: context.document_id,
+      documentType: context.document_type,
+      description: context.description,
+      amount: context.suggested_amount,
+      referenceTotal: context.receipt_net_amount,
+      referenceLabel: 'جمع مبلغ رسید انبار',
+      currency: context.currency_code || 'IRR',
+      rate: context.exchange_rate || '1',
+      number: context.receipt_number,
+    }))
+    navigate('paymentvoucher')
+  }
+
   const editContact = (id: string) => {
     setEditContactId(id)
     setPage('contactnew')
@@ -624,23 +646,7 @@ export function Dashboard({
                 }))
                 navigate('paymentvoucher')
               }}
-              onCreateReceiptPayment={(context) => {
-                //: همان مسیرِ پیش‌پرکردنِ فاکتور — اعلامیه سندِ مستقلِ خزانه می‌ماند (§۳۹)
-                //: و مبلغ فقط پیشنهاد است، نه قید (§۴۰).
-                sessionStorage.setItem('cubita.payment.prefill', JSON.stringify({
-                  contactId: context.contact_id,
-                  documentId: context.document_id,
-                  documentType: context.document_type,
-                  description: context.description,
-                  amount: context.suggested_amount,
-                  referenceTotal: context.receipt_net_amount,
-                  referenceLabel: 'جمع مبلغ رسید انبار',
-                  currency: context.currency_code || 'IRR',
-                  rate: context.exchange_rate || '1',
-                  number: context.receipt_number,
-                }))
-                navigate('paymentvoucher')
-              }}
+              onCreateReceiptPayment={createReceiptPayment}
             />
           )}
           {page === 'installments' && <InstallmentSalesPage token={token} bankAccounts={bankAccounts} />}
@@ -658,6 +664,7 @@ export function Dashboard({
                 sessionStorage.setItem('cubita.sales.issuePrefill', JSON.stringify(context))
                 navigate('salesinvoice')
               }}
+              onCreateReceiptPayment={createReceiptPayment}
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
@@ -870,6 +877,7 @@ export function Dashboard({
           {page === 'mgmtreports' && <ManagementReportsPage token={token} />}
           {page === 'usagereport' && <UsageReportPage token={token} />}
           {page === 'contactlist' && <ContactListPage token={token} onNavigate={navigate} onEditContact={editContact} />}
+          {page === 'supplierlist' && <ContactListPage token={token} onNavigate={navigate} onEditContact={editContact} presetRole="supplier" />}
           {page === 'relatedpeople' && <RelatedPeoplePage token={token} />}
           {page === 'installmentplans' && <InstallmentPlansPage token={token} />}
           {page === 'allinstallments' && <AllInstallmentsPage token={token} />}
