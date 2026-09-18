@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { Header } from '../components/Header'
-import { Footer } from '../components/Footer'
+import { SiteFooter, SiteHeader } from '../concept/SiteChrome'
+import '../concept/concept.css'
 
 export function PrivacyPage() {
   useEffect(() => {
@@ -8,12 +8,12 @@ export function PrivacyPage() {
   }, [])
 
   return (
-    <>
-      <Header />
-      <div className="legal-page">
-        <div className="container legal-container">
+    <div className="cc-root" dir="rtl">
+      <SiteHeader />
+      <main className="cc-legal">
+        <article className="cc-legal-card">
           <h1>حریم خصوصی</h1>
-          <p className="legal-updated">آخرین به‌روزرسانی: مرداد ۱۴۰۵</p>
+          <p className="cc-legal-updated">آخرین به‌روزرسانی: مرداد ۱۴۰۵</p>
 
           <p>
             این صفحه توضیح می‌دهد کوبیتا چه اطلاعاتی از شما جمع‌آوری می‌کند، چرا، و چطور از آن‌ها محافظت
@@ -105,9 +105,9 @@ export function PrivacyPage() {
             برای هر سؤالی درباره‌ی حریم خصوصی، از طریق{' '}
             <a href="mailto:ipnetcity@gmail.com">ipnetcity@gmail.com</a> با ما در ارتباط باشید.
           </p>
-        </div>
-      </div>
-      <Footer />
-    </>
+        </article>
+      </main>
+      <SiteFooter />
+    </div>
   )
 }

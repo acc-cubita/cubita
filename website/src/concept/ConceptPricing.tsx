@@ -118,7 +118,7 @@ function PurchaseModal({
             <input id="cc-pm-business" value={business} onChange={(e) => setBusiness(e.target.value)} />
           </div>
           <div className="cc-modal-actions">
-            <button type="button" className="cc-btn cc-btn-ghost" onClick={onClose}>
+            <button type="button" className="cc-btn cc-btn-outline" onClick={onClose}>
               انصراف
             </button>
             <button type="submit" className="cc-btn cc-btn-primary" disabled={loading}>
@@ -159,15 +159,15 @@ export function ConceptPricing() {
   const meta = periodMeta(period)
 
   return (
-    <section className="cc-section" id="cc-pricing">
+    <section className="cc-section cc-section-alt" id="cc-pricing">
       <motion.div
         className="cc-section-head"
-        initial={{ opacity: 0, y: 30 }}
+        initial={{ opacity: 0, y: 14 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-80px' }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.45 }}
       >
-        <span className="cc-eyebrow cc-eyebrow-center">قیمت‌گذاری</span>
+        <span className="cc-eyebrow">پلن‌ها و قیمت</span>
         <h2>یک پلن به اندازه‌ی کسب‌وکارت</h2>
         <p>هر پلن با ۱۴ روز آزمایشِ رایگان شروع می‌شود؛ دوره را انتخاب کن — شش‌ماهه ۱۰٪ و سالانه ۲۰٪ ارزان‌تر است.</p>
       </motion.div>
@@ -191,7 +191,7 @@ export function ConceptPricing() {
       {loadError && (
         <div className="cc-form-error cc-center" role="alert">
           <span>{loadError}</span>
-          <button type="button" className="cc-btn cc-btn-ghost cc-retry-btn" onClick={load}>
+          <button type="button" className="cc-btn cc-btn-outline cc-retry-btn" onClick={load}>
             تلاش دوباره
           </button>
         </div>
@@ -211,7 +211,7 @@ export function ConceptPricing() {
               className={`cc-plan${plan.highlighted ? ' cc-plan-hot' : ''}`}
               // انیمیشنِ ورود روی mount (نه whileInView): کارت‌ها بعد از fetch رندر می‌شوند و
               // روی موبایل، تشخیصِ in-view گاهی دیر/غلط بود و کارت‌ها روی opacity:0 گیر می‌کردند.
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
             >
@@ -248,7 +248,7 @@ export function ConceptPricing() {
               </ul>
               <button
                 type="button"
-                className={`cc-btn ${plan.highlighted ? 'cc-btn-primary' : 'cc-btn-ghost'} cc-plan-btn`}
+                className={`cc-btn ${plan.highlighted ? 'cc-btn-primary' : 'cc-btn-outline'} cc-plan-btn`}
                 onClick={() => setSelected(plan)}
               >
                 خرید این پلن

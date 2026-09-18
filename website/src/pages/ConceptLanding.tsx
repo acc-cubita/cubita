@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { useState } from 'react'
+import { MotionConfig, motion } from 'framer-motion'
 import {
   BarChart3,
   ReceiptText,
@@ -7,13 +7,10 @@ import {
   CreditCard,
   Landmark,
   BookOpen,
-  Sparkles,
   ArrowLeft,
   ShieldCheck,
   Zap,
   Layers,
-  Menu,
-  X,
   Globe,
   MonitorSmartphone,
   Store,
@@ -33,53 +30,42 @@ import {
   Wallet,
   Users,
   Download,
+  Check,
 } from 'lucide-react'
-import { HeroCluster } from '../components/HeroCluster'
 import { ConceptPricing } from '../concept/ConceptPricing'
+import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, SiteFooter, SiteHeader, TRIAL_URL } from '../concept/SiteChrome'
 import '../concept/concept.css'
 
-// ورودِ ترایال روی prod متمرکز است: acc.cubita.ir با ?signup مستقیم روی صفحه‌ی ثبت‌نام
-// باز می‌شود. (قبلاً به demo.cubita.ir می‌رفت که دیتابیسِ جدا داشت و ورود را خراب می‌کرد.)
-const TRIAL_URL = 'https://acc.cubita.ir/?signup'
-const APP_URL = 'https://acc.cubita.ir'
-// لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپِ ویندوز (فایلِ سرور روی هر انتشار به‌روز می‌شود).
-const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
-// همان الگو برای اپ اندروید: cubita-latest.apk روی هر انتشار به آخرین نسخه اشاره می‌کند.
-const ANDROID_APK_URL = 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
-
-const NAV = [
-  { href: '#cc-features', label: 'امکانات' },
-  { href: '#cc-industries', label: 'صنایع' },
-  { href: '#cc-pricing', label: 'پلن‌ها' },
-  { href: '#cc-faq', label: 'سوالات' },
-]
-
-const STATS = [
-  { icon: DatabaseZap, value: 'ایزوله', label: 'داده‌ی هر کسب‌وکار در دیتابیسِ جدا' },
-  { icon: MonitorSmartphone, value: 'وب + دسکتاپ', label: 'یک حساب، دو نسخه‌ی هم‌گام' },
-  { icon: Wallet, value: 'زرین‌پال', label: 'پرداختِ امن و آنی' },
-  { icon: Users, value: 'چندکاربره', label: 'نقش‌های مدیر، حسابدار، فروشنده…' },
+//: چهار واقعیتِ پایه‌ای که کنارِ متنِ هیرو می‌نشینند — جایگزینِ خوشه‌ی کارت‌های شناور، به
+//: خواستِ کاربر («سایت ساده، اداری و شیک باشد»).
+const FACTS = [
+  { icon: DatabaseZap, value: 'داده‌ی ایزوله', label: 'اطلاعاتِ هر کسب‌وکار در پایگاه‌داده‌ی جدا' },
+  { icon: MonitorSmartphone, value: 'وب، ویندوز، اندروید', label: 'یک حساب، سه نسخه‌ی هم‌گام' },
+  { icon: Wallet, value: 'پرداختِ زرین‌پال', label: 'خریدِ پلن امن و آنی' },
+  { icon: Users, value: 'چندکاربره', label: 'نقش‌های مدیر، حسابدار، فروشنده، انباردار' },
 ]
 
 const PLATFORMS = [
   {
     icon: Globe,
     title: 'نسخه‌ی وب',
-    desc: 'بدونِ نصب، از هر مرورگری وارد شو و کار کن — همه‌چیز روی ابر و همیشه به‌روز.',
+    desc: 'بدونِ نصب، از هر مرورگری وارد شوید و کار کنید — همه‌چیز روی ابر و همیشه به‌روز.',
     points: ['بدونِ نصب و نگهداری', 'دسترسی از هر دستگاه', 'پشتیبان‌گیریِ خودکار'],
+    action: { href: APP_URL, label: 'ورود به نسخه‌ی وب', external: true },
   },
   {
     icon: MonitorSmartphone,
-    title: 'اپِ دسکتاپِ آفلاین',
-    desc: 'اینترنت قطع شد؟ اپِ دسکتاپ آفلاین کار می‌کند و با اتصالِ مجدد خودکار هم‌گام می‌شود.',
+    title: 'نسخه‌ی ویندوز',
+    desc: 'اینترنت قطع شد؟ نسخه‌ی دسکتاپ آفلاین کار می‌کند و با اتصالِ دوباره خودکار هم‌گام می‌شود.',
     points: ['کارِ کاملاً آفلاین', 'هم‌گام‌سازیِ خودکار', 'سرعتِ بالای محلی'],
+    action: { href: DOWNLOAD_URL, label: 'دانلود برای ویندوز', download: true },
   },
   {
     icon: Smartphone,
-    title: 'اپِ اندروید',
-    desc: 'نبضِ کسب‌وکار در جیبِ تو: داشبورد و گزارش، ثبتِ فاکتور و دریافت/پرداخت، و هشدارها به‌صورتِ اعلانِ زنده.',
+    title: 'اپ اندروید',
+    desc: 'داشبورد و گزارش، ثبتِ فاکتور و دریافت و پرداخت، و هشدارها به‌صورتِ اعلانِ زنده.',
     points: ['ثبتِ فاکتور و دریافت در حرکت', 'اعلانِ زنده‌ی هشدارها', 'به‌روزرسانیِ خودکار'],
-    download: ANDROID_APK_URL,
+    action: { href: ANDROID_APK_URL, label: 'دانلودِ اپ اندروید' },
   },
 ]
 
@@ -96,212 +82,142 @@ const INDUSTRIES = [
 ]
 
 const FEATURES = [
-  { icon: ReceiptText, title: 'فروش و فاکتور', desc: 'صدور فاکتور، پیش‌فاکتور و رسید در چند ثانیه — با ثبتِ خودکارِ سند حسابداری.' },
-  { icon: BarChart3, title: 'گزارش‌های زنده', desc: 'ترازنامه، سود و زیان و دفتر کل، همیشه به‌روز و مستقیم از دل دفاتر.' },
-  { icon: Calculator, title: 'حسابداری دوطرفه', desc: 'دفتر کل، سند دستی و خودکار، و بستنِ دوره — دقیق و استاندارد.' },
-  { icon: CreditCard, title: 'صندوق و پرداخت', desc: 'صندوق فروشگاهی، کارت‌خوان و مدیریتِ دریافت و پرداختِ روزانه.' },
+  { icon: ReceiptText, title: 'فروش و فاکتور', desc: 'صدورِ فاکتور، پیش‌فاکتور و رسید در چند ثانیه — با ثبتِ خودکارِ سندِ حسابداری.' },
+  { icon: BarChart3, title: 'گزارش‌های زنده', desc: 'ترازنامه، سود و زیان و دفترِ کل، همیشه به‌روز و مستقیم از دلِ دفاتر.' },
+  { icon: Calculator, title: 'حسابداریِ دوطرفه', desc: 'دفترِ کل، سندِ دستی و خودکار، و بستنِ دوره — دقیق و استاندارد.' },
+  { icon: CreditCard, title: 'صندوق و پرداخت', desc: 'صندوقِ فروشگاهی، کارت‌خوان و مدیریتِ دریافت و پرداختِ روزانه.' },
   { icon: Landmark, title: 'چک و بانک', desc: 'دفترِ چک، مغایرت‌گیریِ بانکی و سررسیدها — بدونِ دفترچه و اکسل.' },
-  { icon: BookOpen, title: 'انبار و کاردکس', desc: 'کاردکس، قیمت تمام‌شده و موجودیِ لحظه‌ای، گره‌خورده با حسابداری.' },
+  { icon: BookOpen, title: 'انبار و کاردکس', desc: 'کاردکس، قیمتِ تمام‌شده و موجودیِ لحظه‌ای، گره‌خورده با حسابداری.' },
 ]
 
 const STEPS = [
-  { icon: MousePointerClick, title: 'پلن مناسب را انتخاب کن', desc: 'بر اساس تعداد کاربران و نیازت، یکی از پلن‌های پایه، حرفه‌ای یا سازمانی را بردار.' },
-  { icon: CreditCard, title: 'پرداختِ امن با زرین‌پال', desc: 'مبلغِ پلن را از درگاهِ معتبرِ زرین‌پال پرداخت کن — کاملاً امن و آنی.' },
-  { icon: Settings2, title: 'نسخه‌ات همان لحظه ساخته می‌شود', desc: 'بعد از تأییدِ پرداخت، نسخه‌ی اختصاصی و ایزوله‌ات ساخته و لینکِ رمز به ایمیلت می‌رسد.' },
-  { icon: Rocket, title: 'شروع به کار', desc: 'رمزت را تعیین کن، وارد اپِ دسکتاپ یا وب شو و اولین فاکتور را ثبت کن.' },
+  { icon: MousePointerClick, title: 'انتخابِ پلن', desc: 'بر اساسِ تعدادِ کاربران و نیازتان، یکی از پلن‌های پایه، حرفه‌ای یا سازمانی را انتخاب کنید.' },
+  { icon: CreditCard, title: 'پرداختِ امن', desc: 'مبلغِ پلن را از درگاهِ معتبرِ زرین‌پال پرداخت کنید — امن و آنی.' },
+  { icon: Settings2, title: 'ساختِ نسخه‌ی اختصاصی', desc: 'بعد از تأییدِ پرداخت، نسخه‌ی ایزوله‌ی شما ساخته و لینکِ تعیینِ رمز به ایمیلتان ارسال می‌شود.' },
+  { icon: Rocket, title: 'شروعِ کار', desc: 'رمز را تعیین کنید، وارد نسخه‌ی وب یا ویندوز شوید و اولین فاکتور را ثبت کنید.' },
 ]
 
 const WHY = [
-  { icon: Zap, title: 'راه‌اندازیِ چنددقیقه‌ای', desc: 'ثبت‌نام کن و همان لحظه شروع کن؛ بدونِ نصب و بدونِ پیچیدگی.' },
-  { icon: Layers, title: 'دسکتاپ و آنلاین', desc: 'یک حساب، هم روی مرورگر هم اپِ آفلاینِ دسکتاپ — همیشه هم‌گام.' },
+  { icon: Zap, title: 'راه‌اندازیِ چنددقیقه‌ای', desc: 'ثبت‌نام کنید و همان لحظه شروع کنید؛ بدونِ نصب و بدونِ پیچیدگی.' },
+  { icon: Layers, title: 'آنلاین و آفلاین', desc: 'یک حساب، هم روی مرورگر و هم روی نسخه‌ی آفلاینِ ویندوز — همیشه هم‌گام.' },
   { icon: ShieldCheck, title: 'داده‌ی ایزوله و امن', desc: 'اطلاعاتِ هر کسب‌وکار در سطحِ پایگاه‌داده جدا و محافظت‌شده است.' },
 ]
 
 const FAQS = [
   { q: 'آیا داده‌های کسب‌وکار من امن است؟', a: 'بله. هر مشتری روی یک نسخه‌ی کاملاً ایزوله (دیتابیس، سرویس و آدرس اختصاصی) اجرا می‌شود؛ داده‌ی هیچ کسب‌وکاری با دیگری در یک دیتابیس مشترک نیست. اتصال هم همیشه از طریق HTTPS رمزنگاری‌شده است.' },
-  { q: 'نسخه‌ی آزمایشیِ رایگان چطور کار می‌کند؟', a: 'ثبت‌نام می‌کنی و ۱۴ روز کاملِ رایگان همه‌ی امکاناتِ اصلی را داری. اگر پیش از پایانِ دوره پلن بخری، همه‌ی اطلاعاتت حفظ می‌شود.' },
-  { q: 'اگر اینترنت قطع شود چه اتفاقی می‌افتد؟', a: 'نسخه‌ی دسکتاپ کاملاً آفلاین کار می‌کند: فاکتور، سند حسابداری و بقیه‌ی عملیات محلی ذخیره می‌شوند و با اتصالِ مجدد، خودکار با سرور مرکزی هم‌گام می‌شوند.' },
-  { q: 'چند نفر می‌توانند هم‌زمان استفاده کنند؟', a: 'بسته به پلن، از یک تا چند کاربرِ هم‌زمان — هرکدام با نقشِ مشخص (مدیر، حسابدار، فروشنده، انباردار، مسئول حقوق) و دسترسیِ محدود به همان بخش.' },
-  { q: 'بعد از پرداخت، چقدر طول می‌کشد؟', a: 'بلافاصله. بعد از پرداختِ موفق، نسخه‌ی اختصاصی و ایزوله‌ات همان لحظه ساخته می‌شود و لینکِ تعیینِ رمز عبور به ایمیلت می‌رسد.' },
-  { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله، در پلنِ سازمانی. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امور مالیاتی ارسال می‌شوند.' },
+  { q: 'نسخه‌ی آزمایشیِ رایگان چطور کار می‌کند؟', a: 'ثبت‌نام می‌کنید و ۱۴ روز کاملِ رایگان همه‌ی امکاناتِ اصلی را دارید. اگر پیش از پایانِ دوره پلن بخرید، همه‌ی اطلاعاتتان حفظ می‌شود.' },
+  { q: 'اگر اینترنت قطع شود چه اتفاقی می‌افتد؟', a: 'نسخه‌ی ویندوز کاملاً آفلاین کار می‌کند: فاکتور، سندِ حسابداری و بقیه‌ی عملیات محلی ذخیره می‌شوند و با اتصالِ دوباره، خودکار با سرورِ مرکزی هم‌گام می‌شوند.' },
+  { q: 'چند نفر می‌توانند هم‌زمان استفاده کنند؟', a: 'بسته به پلن، از یک تا چند کاربرِ هم‌زمان — هرکدام با نقشِ مشخص (مدیر، حسابدار، فروشنده، انباردار، مسئولِ حقوق) و دسترسیِ محدود به همان بخش.' },
+  { q: 'بعد از پرداخت، چقدر طول می‌کشد؟', a: 'بلافاصله. بعد از پرداختِ موفق، نسخه‌ی اختصاصی و ایزوله‌ی شما همان لحظه ساخته می‌شود و لینکِ تعیینِ رمزِ عبور به ایمیلتان می‌رسد.' },
+  { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله، در پلنِ سازمانی. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امورِ مالیاتی ارسال می‌شوند.' },
 ]
 
-function BrandMark({ id = 'm' }: { id?: string }) {
-  const g = `cc-brandgrad-${id}`
+//: ورودِ آرام و کوتاه — سایتِ اداری جای حرکتِ نمایشی نیست. `MotionConfig` بالای صفحه
+//: همین را برای کاربری که «کاهشِ حرکت» را روشن کرده کاملاً خاموش می‌کند.
+const reveal = {
+  initial: { opacity: 0, y: 14 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-60px' },
+  transition: { duration: 0.45, ease: 'easeOut' },
+} as const
+
+/**
+ * بنرِ تمام‌عرضِ زیرِ منو — به خواستِ کاربر. پیامِ کوتاهِ دعوت است، نه تکرارِ هیرو: هیرو
+ * می‌گوید کوبیتا چیست، بنر می‌گوید از کجا و چطور شروع کنید.
+ */
+function HomeBanner() {
   return (
-    <svg className="cc-brand-svg" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill={`url(#${g})`} />
-      <rect x="7.5" y="17" width="4" height="7.5" rx="2" fill="#fff" fillOpacity="0.82" />
-      <rect x="14" y="13" width="4" height="11.5" rx="2" fill="#fff" fillOpacity="0.92" />
-      <rect x="20.5" y="9.5" width="4" height="15" rx="2" fill="#fff" />
-      <circle cx="22.5" cy="6.4" r="2.6" fill="#a78bfa" />
-      <defs>
-        <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#ffe6a6" />
-          <stop offset="1" stopColor="#ef9f10" />
-        </linearGradient>
-      </defs>
-    </svg>
-  )
-}
-
-function Header() {
-  const [open, setOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  return (
-    <header className={`cc-header${scrolled ? ' cc-header-solid' : ''}`}>
-      <div className="cc-header-in">
-        <a href="#" className="cc-brand">
-          <BrandMark id="hdr" /> کوبیتا
-        </a>
-        <nav className="cc-nav" aria-label="منوی اصلی">
-          {NAV.map((l) => (
-            <a href={l.href} key={l.href}>
-              {l.label}
+    <section className="cc-banner" aria-labelledby="cc-banner-title">
+      <div className="cc-banner-in">
+        <div className="cc-banner-copy">
+          <span className="cc-banner-tag">۱۴ روز رایگان، با همه‌ی امکاناتِ اصلی</span>
+          <h2 id="cc-banner-title" className="cc-banner-title">
+            کوبیتا؛ حسابداریِ کسب‌وکار روی وب، ویندوز و اندروید
+          </h2>
+          <p>یک حساب برای هر سه نسخه، با داده‌ی همیشه هم‌گام. همین امروز ثبت‌نام کنید و اولین فاکتور را صادر کنید.</p>
+          <div className="cc-banner-cta">
+            <a className="cc-btn cc-btn-light" href={TRIAL_URL}>
+              شروعِ رایگان <ArrowLeft size={16} />
             </a>
-          ))}
-        </nav>
-        <div className="cc-header-actions">
-          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-accent cc-btn-sm">
-            ورود به برنامه
-          </a>
-          <a href={TRIAL_URL} className="cc-btn cc-btn-primary cc-btn-sm">
-            ۱۴ روز رایگان
-          </a>
+            <a className="cc-btn cc-btn-on-dark" href="#cc-platforms">
+              <Download size={16} /> دانلودِ نسخه‌ها
+            </a>
+          </div>
         </div>
-        <button
-          type="button"
-          className="cc-nav-toggle"
-          aria-label={open ? 'بستن منو' : 'باز کردن منو'}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <div className="cc-banner-art" aria-hidden="true">
+          <svg viewBox="0 0 240 240" fill="none">
+            <circle cx="120" cy="120" r="118" stroke="#fff" strokeOpacity="0.16" strokeWidth="2" />
+            <circle cx="120" cy="120" r="86" stroke="#fff" strokeOpacity="0.12" strokeWidth="2" />
+            <rect x="62" y="124" width="26" height="54" rx="13" fill="#fff" fillOpacity="0.55" />
+            <rect x="107" y="96" width="26" height="82" rx="13" fill="#fff" fillOpacity="0.75" />
+            <rect x="152" y="70" width="26" height="108" rx="13" fill="#fff" />
+            <circle cx="165" cy="44" r="12" fill="#fff" fillOpacity="0.85" />
+          </svg>
+        </div>
       </div>
-      {open && (
-        <nav className="cc-nav-mobile" aria-label="منوی موبایل" onClick={() => setOpen(false)}>
-          {NAV.map((l) => (
-            <a href={l.href} key={l.href}>
-              {l.label}
-            </a>
-          ))}
-          <a href={APP_URL} target="_blank" rel="noreferrer" className="cc-btn cc-btn-accent">
-            ورود به برنامه
-          </a>
-          <a href={TRIAL_URL} className="cc-btn cc-btn-primary">
-            شروعِ ۱۴ روز رایگان
-          </a>
-        </nav>
-      )}
-    </header>
+    </section>
   )
 }
 
 function Hero() {
   return (
     <section className="cc-hero">
-      <div className="cc-hero-bg" aria-hidden="true" />
       <div className="cc-hero-inner">
         <motion.div
           className="cc-hero-copy"
-          initial={{ opacity: 0, y: 28 }}
+          initial={reveal.initial}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
+          transition={reveal.transition}
         >
-          <span className="cc-eyebrow">
-            <Sparkles size={15} /> سامانه‌ی یکپارچه‌ی مالی و بازار عمده‌فروشی
-          </span>
+          <span className="cc-eyebrow">نرم‌افزارِ حسابداریِ ابری و آفلاین</span>
           <h1 className="cc-hero-title">
-            <span className="cc-grad">حسابداریِ ساخته‌شده برای کسب‌وکار،</span>
-            <br />
-            بدونِ پیچیدگی
+            حسابداریِ کسب‌وکار، <span className="cc-accent-text">ساده و دقیق</span>
           </h1>
           <p className="cc-hero-sub">
-            کوبیتا عملیاتِ مالیِ کسب‌وکارتان را به یک مزیتِ رقابتی تبدیل می‌کند — فروش، خرید و انبار،
-            حسابداریِ دوطرفه، چک و خزانه و بازارِ عمده‌فروشی، همه در یک سامانه‌ی متصل؛ روی وب، دسکتاپ و
-            موبایل، حتی بدونِ اینترنت.
+            فروش، خرید و انبار، حسابداریِ دوطرفه، چک و بانک و حقوق و دستمزد — همه در یک سامانه‌ی یکپارچه که سندِ
+            هر عملیات را خودش ثبت می‌کند؛ روی وب، ویندوز و موبایل، حتی بدونِ اینترنت.
           </p>
           <div className="cc-hero-cta">
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
-              <Sparkles size={17} /> شروعِ ۱۴ روز رایگان
+              شروعِ ۱۴ روز رایگان
             </a>
-            <a className="cc-btn cc-btn-ghost" href={DOWNLOAD_URL} download>
-              <Download size={16} /> دانلودِ نرم‌افزار (ویندوز)
-            </a>
-            <a className="cc-btn cc-btn-ghost" href={ANDROID_APK_URL}>
-              <Smartphone size={16} /> اپِ اندروید
+            <a className="cc-btn cc-btn-outline" href="#cc-pricing">
+              مشاهده‌ی پلن‌ها
             </a>
           </div>
-          <div className="cc-hero-feats">
-            <a href="#cc-features" className="cc-feat cc-feat--emerald">
-              <div className="cc-feat-h">
-                <Layers size={17} /> اتوماسیونِ فروش و انبار
-                <ArrowLeft size={15} className="cc-feat-arrow" />
-              </div>
-              <p>فاکتور، موجودی و خزانه را در یک گردشِ خودکار و یکپارچه به هم وصل کنید.</p>
-            </a>
-            <a href="#cc-industries" className="cc-feat cc-feat--violet">
-              <div className="cc-feat-h">
-                <Store size={17} /> بازارِ عمده‌فروشی B2B
-                <ArrowLeft size={15} className="cc-feat-arrow" />
-              </div>
-              <p>خرید و فروشِ عمده بین کسب‌وکارها، با تسویه و کمیسیونِ خودکار.</p>
-            </a>
-          </div>
+          <ul className="cc-hero-trust">
+            <li>
+              <Check size={15} /> بدونِ نصب روی نسخه‌ی وب
+            </li>
+            <li>
+              <Check size={15} /> کارِ آفلاین روی ویندوز
+            </li>
+            <li>
+              <Check size={15} /> ارسال به سامانه‌ی مؤدیان
+            </li>
+          </ul>
         </motion.div>
 
-        <motion.div
-          className="cc-hero-visual"
-          initial={{ opacity: 0, scale: 0.94 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }}
-        >
-          <HeroCluster />
-        </motion.div>
+        <div className="cc-facts">
+          {FACTS.map((f, i) => (
+            <motion.div className="cc-fact" key={f.value} {...reveal} transition={{ ...reveal.transition, delay: i * 0.05 }}>
+              <span className="cc-icon">
+                <f.icon size={20} />
+              </span>
+              <b>{f.value}</b>
+              <span>{f.label}</span>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   )
 }
 
-function StatsStrip() {
-  return (
-    <div className="cc-stats">
-      <div className="cc-stats-in">
-        {STATS.map((s) => (
-          <div className="cc-stat" key={s.value}>
-            <span className="cc-stat-ico">
-              <s.icon size={20} />
-            </span>
-            <div>
-              <b>{s.value}</b>
-              <span>{s.label}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: string }) {
   return (
-    <motion.div
-      className="cc-section-head"
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.6 }}
-    >
-      <span className="cc-eyebrow cc-eyebrow-center">{eyebrow}</span>
+    <motion.div className="cc-section-head" {...reveal}>
+      <span className="cc-eyebrow">{eyebrow}</span>
       <h2>{title}</h2>
       {sub && <p>{sub}</p>}
     </motion.div>
@@ -310,58 +226,31 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
 
 function Platforms() {
   return (
-    <section className="cc-section" id="cc-platforms">
-      <SectionHead eyebrow="همه‌جا در دسترس" title="یک حساب، روی وب، دسکتاپ و موبایل" sub="هرجا راحت‌تری کار کن؛ داده‌ات همیشه بینِ هر سه نسخه هم‌گام است." />
-      <div className="cc-platforms">
-        {PLATFORMS.map((p, i) => (
-          <motion.div
-            key={p.title}
-            className="cc-platform"
-            initial={{ opacity: 0, y: 36 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: i * 0.1 }}
-          >
-            <span className="cc-platform-ico">
-              <p.icon size={26} />
+    <section className="cc-section cc-section-alt" id="cc-platforms">
+      <SectionHead eyebrow="نسخه‌ها" title="یک حساب، روی وب، ویندوز و اندروید" sub="هرجا راحت‌ترید کار کنید؛ داده‌ی شما همیشه بینِ هر سه نسخه هم‌گام است." />
+      <div className="cc-grid cc-grid-3">
+        {PLATFORMS.map((p) => (
+          <motion.div key={p.title} className="cc-card cc-platform" {...reveal}>
+            <span className="cc-icon cc-icon-lg">
+              <p.icon size={24} />
             </span>
             <h3>{p.title}</h3>
             <p>{p.desc}</p>
-            <ul className="cc-platform-points">
+            <ul className="cc-checklist">
               {p.points.map((pt) => (
-                <li key={pt}>{pt}</li>
+                <li key={pt}>
+                  <Check size={15} /> {pt}
+                </li>
               ))}
             </ul>
-            {'download' in p && p.download ? (
-              <a className="cc-btn cc-btn-ghost cc-platform-dl" href={p.download}>
-                <Download size={16} /> دانلودِ اپ اندروید
-              </a>
-            ) : null}
-          </motion.div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function Industries() {
-  return (
-    <section className="cc-section" id="cc-industries">
-      <SectionHead eyebrow="مناسبِ کسب‌وکارِ تو" title="از یک مغازه تا یک شرکتِ پخش" sub="کوبیتا با نیازِ کسب‌وکارهای مختلف جور می‌شود؛ رشته‌ی کارت را پیدا کن." />
-      <div className="cc-ind-grid">
-        {INDUSTRIES.map((it, i) => (
-          <motion.div
-            key={it.label}
-            className="cc-ind"
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-40px' }}
-            transition={{ duration: 0.4, delay: (i % 3) * 0.06 }}
-          >
-            <span className="cc-ind-ico">
-              <it.icon size={19} />
-            </span>
-            <span>{it.label}</span>
+            <a
+              className="cc-btn cc-btn-outline cc-card-action"
+              href={p.action.href}
+              {...('external' in p.action ? { target: '_blank', rel: 'noreferrer' } : {})}
+              {...('download' in p.action ? { download: true } : {})}
+            >
+              {p.action.label}
+            </a>
           </motion.div>
         ))}
       </div>
@@ -372,22 +261,33 @@ function Industries() {
 function Features() {
   return (
     <section className="cc-section" id="cc-features">
-      <SectionHead eyebrow="همه‌چیز، یک‌جا" title="همه‌ی ابزارِ حسابداری، در یک نرم‌افزار" sub="از فروش و انبار تا چک و بانک و گزارش‌ها — هر بخش با بخش‌های دیگر یکپارچه است و سند خودش را خودکار می‌زند." />
-      <div className="cc-grid">
-        {FEATURES.map((f, i) => (
-          <motion.div
-            key={f.title}
-            className="cc-card"
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: (i % 3) * 0.08 }}
-          >
-            <div className="cc-card-icon">
-              <f.icon size={26} />
-            </div>
+      <SectionHead eyebrow="امکانات" title="همه‌ی ابزارِ حسابداری، در یک نرم‌افزار" sub="از فروش و انبار تا چک و بانک و گزارش‌ها — هر بخش با بخش‌های دیگر یکپارچه است و سندِ خودش را خودکار ثبت می‌کند." />
+      <div className="cc-grid cc-grid-3">
+        {FEATURES.map((f) => (
+          <motion.div key={f.title} className="cc-card" {...reveal}>
+            <span className="cc-icon cc-icon-lg">
+              <f.icon size={24} />
+            </span>
             <h3>{f.title}</h3>
             <p>{f.desc}</p>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Industries() {
+  return (
+    <section className="cc-section cc-section-alt" id="cc-industries">
+      <SectionHead eyebrow="صنایع" title="از یک فروشگاه تا یک شرکتِ پخش" sub="کوبیتا با نیازِ کسب‌وکارهای مختلف هماهنگ می‌شود." />
+      <div className="cc-grid cc-grid-3 cc-ind-grid">
+        {INDUSTRIES.map((it) => (
+          <motion.div key={it.label} className="cc-ind" {...reveal}>
+            <span className="cc-icon">
+              <it.icon size={19} />
+            </span>
+            <span>{it.label}</span>
           </motion.div>
         ))}
       </div>
@@ -398,52 +298,30 @@ function Features() {
 function HowItWorks() {
   return (
     <section className="cc-section" id="cc-how">
-      <SectionHead eyebrow="شروعِ کار" title="در چهار قدمِ ساده شروع کن" sub="از انتخابِ پلن تا ثبتِ اولین فاکتور، چند دقیقه بیشتر طول نمی‌کشد." />
-      <div className="cc-steps">
+      <SectionHead eyebrow="شروعِ کار" title="در چهار قدم شروع کنید" sub="از انتخابِ پلن تا ثبتِ اولین فاکتور، چند دقیقه بیشتر طول نمی‌کشد." />
+      <ol className="cc-grid cc-grid-4 cc-steps">
         {STEPS.map((s, i) => (
-          <motion.div
-            key={s.title}
-            className="cc-step"
-            initial={{ opacity: 0, y: 36 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: i * 0.08 }}
-          >
-            <span className="cc-step-no">{String(i + 1).padStart(2, '0')}</span>
-            <span className="cc-step-ico">
-              <s.icon size={20} />
-            </span>
+          <motion.li key={s.title} className="cc-card cc-step" {...reveal}>
+            <span className="cc-step-no">{(i + 1).toLocaleString('fa-IR')}</span>
             <h3>{s.title}</h3>
             <p>{s.desc}</p>
-          </motion.div>
+          </motion.li>
         ))}
-      </div>
+      </ol>
     </section>
   )
 }
 
 function WhySection() {
-  const ref = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
-  const y = useTransform(scrollYProgress, [0, 1], [60, -60])
-
   return (
-    <section className="cc-section cc-why" ref={ref}>
-      <motion.div className="cc-why-glow" style={{ y }} aria-hidden="true" />
-      <SectionHead eyebrow="چرا کوبیتا" title="ساخته‌شده برای کسب‌وکارهای ایرانی" sub="فارسی، ابری و آفلاین، با پشتیبانی و قیمتِ داخلی — بی‌دردسر و بدونِ پیچیدگیِ نرم‌افزارهای بزرگ." />
-      <div className="cc-why-grid">
-        {WHY.map((w, i) => (
-          <motion.div
-            key={w.title}
-            className="cc-why-item"
-            initial={{ opacity: 0, y: 36 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: i * 0.1 }}
-          >
-            <div className="cc-why-icon">
-              <w.icon size={24} />
-            </div>
+    <section className="cc-section" id="cc-why">
+      <SectionHead eyebrow="چرا کوبیتا" title="ساخته‌شده برای کسب‌وکارهای ایرانی" sub="فارسی، ابری و آفلاین، با پشتیبانی و قیمتِ داخلی — بدونِ پیچیدگیِ نرم‌افزارهای بزرگ." />
+      <div className="cc-grid cc-grid-3">
+        {WHY.map((w) => (
+          <motion.div key={w.title} className="cc-card cc-why-item" {...reveal}>
+            <span className="cc-icon">
+              <w.icon size={20} />
+            </span>
             <div>
               <h3>{w.title}</h3>
               <p>{w.desc}</p>
@@ -458,8 +336,8 @@ function WhySection() {
 function FaqSection() {
   const [open, setOpen] = useState<number | null>(0)
   return (
-    <section className="cc-section cc-faq-sec" id="cc-faq">
-      <SectionHead eyebrow="سوالاتِ متداول" title="هرچه لازم است بدانی" />
+    <section className="cc-section cc-section-alt" id="cc-faq">
+      <SectionHead eyebrow="سوالاتِ متداول" title="پاسخِ پرسش‌های رایج" />
       <div className="cc-faq-list">
         {FAQS.map((item, idx) => {
           const isOpen = open === idx
@@ -485,96 +363,44 @@ function FaqSection() {
 
 function FinalCta() {
   return (
-    <section className="cc-section">
-      <motion.div
-        className="cc-final-cta"
-        initial={{ opacity: 0, scale: 0.96 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true, margin: '-60px' }}
-        transition={{ duration: 0.6 }}
-      >
-        <h2>همین امروز، رایگان شروع کن</h2>
-        <p>۱۴ روز کاملِ رایگان. اگر پسندیدی، همه‌ی اطلاعاتت حفظ می‌شود.</p>
+    <section className="cc-final-cta">
+      <div className="cc-final-cta-in">
+        <div>
+          <h2>همین امروز، رایگان شروع کنید</h2>
+          <p>۱۴ روز کاملِ رایگان. اگر پسندیدید، همه‌ی اطلاعاتتان حفظ می‌شود.</p>
+        </div>
         <div className="cc-final-cta-btns">
-          <a className="cc-btn cc-btn-primary cc-btn-lg" href={TRIAL_URL}>
-            <Sparkles size={18} /> شروعِ ۱۴ روز رایگان
+          <a className="cc-btn cc-btn-light" href={TRIAL_URL}>
+            شروعِ ۱۴ روز رایگان
           </a>
-          <a className="cc-btn cc-btn-ghost cc-btn-lg" href={DOWNLOAD_URL} download>
-            <Download size={17} /> دانلودِ نرم‌افزار (ویندوز)
-          </a>
-          <a className="cc-btn cc-btn-ghost cc-btn-lg" href={ANDROID_APK_URL}>
-            <Smartphone size={17} /> اپِ اندروید
+          <a className="cc-btn cc-btn-on-dark" href={DOWNLOAD_URL} download>
+            <Download size={16} /> دانلود برای ویندوز
           </a>
         </div>
-      </motion.div>
+      </div>
     </section>
-  )
-}
-
-function Footer() {
-  return (
-    <footer className="cc-site-footer">
-      <div className="cc-footer-grid">
-        <div className="cc-footer-brand">
-          <a href="#" className="cc-brand">
-            <BrandMark id="ftr" /> کوبیتا
-          </a>
-          <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی.</p>
-          <a
-            className="cc-enamad"
-            referrerPolicy="origin"
-            target="_blank"
-            rel="noopener"
-            href="https://trustseal.enamad.ir/?id=623640&Code=tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR"
-          >
-            <img
-              referrerPolicy="origin"
-              src="https://trustseal.enamad.ir/logo.aspx?id=623640&Code=tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR"
-              alt="نماد اعتماد الکترونیکی"
-              {...({ code: 'tfCgeyzE0htaTRGDcOopEIvMsEIdYuOR' } as Record<string, string>)}
-            />
-          </a>
-        </div>
-        <div className="cc-footer-col">
-          <h4>محصول</h4>
-          <a href="#cc-features">امکانات</a>
-          <a href="#cc-how">شروعِ کار</a>
-          <a href="#cc-pricing">پلن‌ها و قیمت‌ها</a>
-          <a href={TRIAL_URL}>شروعِ رایگان</a>
-        </div>
-        <div className="cc-footer-col">
-          <h4>پشتیبانی</h4>
-          <a href="#cc-faq">سوالاتِ متداول</a>
-          <a href="mailto:acc.cubita@gmail.com">acc.cubita@gmail.com</a>
-        </div>
-        <div className="cc-footer-col">
-          <h4>قانونی</h4>
-          <a href="/terms">شرایطِ استفاده از خدمات</a>
-          <a href="/privacy">حریمِ خصوصی</a>
-        </div>
-      </div>
-      <div className="cc-footer-bottom">
-        © {new Intl.DateTimeFormat('fa-IR', { year: 'numeric' }).format(new Date())} کوبیتا — تمامِ حقوق محفوظ است.
-      </div>
-    </footer>
   )
 }
 
 export function ConceptLanding() {
   return (
-    <div className="cc-root" dir="rtl">
-      <Header />
-      <Hero />
-      <StatsStrip />
-      <Platforms />
-      <Industries />
-      <Features />
-      <HowItWorks />
-      <ConceptPricing />
-      <WhySection />
-      <FaqSection />
-      <FinalCta />
-      <Footer />
-    </div>
+    <MotionConfig reducedMotion="user">
+      <div className="cc-root" dir="rtl">
+        <SiteHeader />
+        <main>
+          <HomeBanner />
+          <Hero />
+          <Platforms />
+          <Features />
+          <Industries />
+          <HowItWorks />
+          <ConceptPricing />
+          <WhySection />
+          <FaqSection />
+          <FinalCta />
+        </main>
+        <SiteFooter />
+      </div>
+    </MotionConfig>
   )
 }
