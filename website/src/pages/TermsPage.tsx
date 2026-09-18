@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
-import { SoftBackground } from '../components/SoftBackground'
-import { Header } from '../components/Header'
-import { Footer } from '../components/Footer'
+import { SiteFooter, SiteHeader } from '../concept/SiteChrome'
+import '../concept/concept.css'
 
 export function TermsPage() {
   useEffect(() => {
@@ -9,13 +8,12 @@ export function TermsPage() {
   }, [])
 
   return (
-    <>
-      <SoftBackground />
-      <Header />
-      <div className="legal-page">
-        <div className="container legal-container">
+    <div className="cc-root" dir="rtl">
+      <SiteHeader />
+      <main className="cc-legal">
+        <article className="cc-legal-card">
           <h1>شرایط استفاده از خدمات کوبیتا</h1>
-          <p className="legal-updated">آخرین به‌روزرسانی: مرداد ۱۴۰۵</p>
+          <p className="cc-legal-updated">آخرین به‌روزرسانی: مرداد ۱۴۰۵</p>
 
           <p>
             استفاده از نرم‌افزار حسابداری کوبیتا (وب، دسکتاپ، و هر بخش دیگر این سرویس) به‌معنای پذیرش شرایط زیر
@@ -82,9 +80,9 @@ export function TermsPage() {
             برای هر سؤالی درباره‌ی این شرایط، از طریق{' '}
             <a href="mailto:ipnetcity@gmail.com">ipnetcity@gmail.com</a> با ما در ارتباط باشید.
           </p>
-        </div>
-      </div>
-      <Footer />
-    </>
+        </article>
+      </main>
+      <SiteFooter />
+    </div>
   )
 }

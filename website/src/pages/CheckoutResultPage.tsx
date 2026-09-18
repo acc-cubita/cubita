@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
-import { Header } from '../components/Header'
-import { Footer } from '../components/Footer'
+import { SiteFooter, SiteHeader } from '../concept/SiteChrome'
+import '../concept/concept.css'
 
 export function CheckoutResultPage() {
   const params = new URLSearchParams(window.location.search)
@@ -20,13 +20,13 @@ export function CheckoutResultPage() {
   }, [success])
 
   return (
-    <>
-      <Header />
-      <div className="result-page">
-        <div className="result-card">
+    <div className="cc-root" dir="rtl">
+      <SiteHeader />
+      <main className="cc-result">
+        <div className="cc-result-card">
           {success ? (
             <>
-              <div className="result-icon success">
+              <div className="cc-result-icon is-success">
                 <CheckCircle2 size={32} />
               </div>
               <h2>پرداخت با موفقیت انجام شد</h2>
@@ -37,19 +37,19 @@ export function CheckoutResultPage() {
             </>
           ) : (
             <>
-              <div className="result-icon failed">
+              <div className="cc-result-icon is-failed">
                 <XCircle size={32} />
               </div>
               <h2>پرداخت ناموفق بود</h2>
               <p>تراکنش تکمیل نشد یا لغو شد. مبلغی از حساب شما کسر نشده است؛ می‌توانید دوباره تلاش کنید.</p>
             </>
           )}
-          <a href="/" className="btn btn-primary">
+          <a href="/" className="cc-btn cc-btn-primary">
             بازگشت به صفحه‌ی اصلی
           </a>
         </div>
-      </div>
-      <Footer />
-    </>
+      </main>
+      <SiteFooter />
+    </div>
   )
 }
