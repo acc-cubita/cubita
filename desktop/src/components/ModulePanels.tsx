@@ -1,13 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
-import { MODULE_SECTIONS, opsSections, type SectionDef } from './moduleSections'
+import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
 import {
   LIST_MENUS,
   LIST_PAGE_GROUP,
   MODULE_LISTS,
   OPS_MENUS,
   listDefFor,
-  listsForOps,
   menuEntryActive,
   type ListMenuItem,
   type ListRow,
@@ -124,12 +123,16 @@ export function ModulePanels({
   const reachable = <T extends { key: PageKey }>(menu: T[]) => menu.filter((e) => menuEntryVisible(e.key, groups))
   //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
   const opsMenu = group && OPS_MENUS[group.heading] ? reachable(OPS_MENUS[group.heading]) : undefined
-  //: کارتِ «فهرست» به گزینه‌ی فعال گره می‌خورد، نه به گروه. پیش‌تر منوی گروه را
-  //: می‌داد و کاربر بیست ردیفِ بی‌ربط می‌دید؛ همان چیزی که رد شد.
-  const scopedLists = reachable(listsForOps(page, activeSection))
-  //: عملیاتی که نه دفترِ نظیر دارد و نه رکوردِ زنده («واحدها»، «تنظیمات»، …) کارتِ
-  //: خالی نمی‌گیرد؛ کارتِ همیشه‌خالی فقط عرض می‌گیرد و چیزی نمی‌گوید.
-  const hasList = scopedLists.length > 0 || listDefFor(page, activeSection) !== null
+  //: کارتِ «فهرست» منوی کاملِ فهرستِ همان ماژول است — همان ردیف‌هایی که کاربر برای هر
+  //: ماژول تعریف کرد (دارایی ثابت پنج‌تا، تولید پنج‌تا، تامین‌کنندگان و انبار دوازده‌تا).
+  //: #۱۲۴ آن را به یکی‌دوتا ردیفِ «مالِ همین عملیات» محدود کرده بود؛ کاربر گفت
+  //: «تمام زیرمنوهای فهرست که تعریف کرده بودیم حذف شده» و برگشت.
+  const listMenu = group && LIST_MENUS[group.heading] ? reachable(LIST_MENUS[group.heading]) : undefined
+  //: ماژولِ تب‌داری که منوی گروهی ندارد: دفترهایش خودشان تب‌اند (`kind: 'list'`).
+  const sectionLists = listSections(sections)
+  //: کارتِ همیشه‌خالی فقط عرض می‌گیرد و چیزی نمی‌گوید؛ فقط وقتی نه منو هست، نه تبِ
+  //: دفتری، نه رکوردِ زنده، کارت نمی‌آید.
+  const hasList = Boolean(listMenu?.length) || sectionLists.length > 0 || listDefFor(page, activeSection) !== null
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -227,9 +230,11 @@ export function ModulePanels({
           <ChevronRight size={15} className="mod-panel-chev" />
         </button>
         <div className="mod-panel-body">
-          {scopedLists.length > 0 ? (
-            // فهرست‌های همان گزینه‌ای که در «عملیات» فعال است — نه منوی کلِ گروه.
-            menuButtons(scopedLists, page, activeSection, onSelectSection, onNavigate)
+          {listMenu?.length ? (
+            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
+            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate)
+          ) : sectionLists.length > 0 ? (
+            sectionButtons(sectionLists, activeSection, onSelectSection)
           ) : (
             // دفترِ جدا ندارد: چند رکوردِ آخرِ همین عملیات، زنده.
             <ListPanel token={token} page={page} section={activeSection} />
