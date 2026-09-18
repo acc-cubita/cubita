@@ -478,6 +478,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   numbering: 'numberinglist',
   team: 'userlist',
   backup: 'backuplist',
+  contactimport: 'contactlist', //: اشخاصِ واردشده همان طرف‌حساب‌ها هستند
   password: 'none',
   theme: 'none',
   help: 'none',

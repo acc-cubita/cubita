@@ -140,7 +140,6 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   contacts: [
     { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, kind: 'list' },
     { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, kind: 'list' },
-    { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp },
   ],
   crm: [
     { key: 'leads', label: 'سرنخ‌ها', icon: Target, kind: 'list' },
