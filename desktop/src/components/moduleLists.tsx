@@ -86,6 +86,11 @@ import {
   Ruler,
   ScanSearch,
   Warehouse,
+  Cake,
+  Gift,
+  Medal,
+  PieChart,
+  Ticket,
 } from 'lucide-react'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
@@ -205,7 +210,19 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'inventory', section: 'serials', label: 'جستجوی سریال', icon: ScanSearch },
     { key: 'inventory', section: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
   ],
+  //: هشت ردیفِ اول تبِ صفحه‌اند نه صفحه‌ی جدا. بدونِ این‌ها، تبی که `kind: 'list'`
+  //: می‌گیرد از کارتِ «عملیات» بیرون می‌رود و در «فهرست» هم نمی‌آید — چون این گروه
+  //: `LIST_MENUS` دارد و منوی گروه بر `sectionLists` مقدم است. سه تبِ «طرف حساب‌ها»،
+  //: «سنین مطالبات» و «بخش‌بندی» دقیقاً به همین شکل بالای ۱۰۲۴px بی‌راه شدند.
   'مشتریان و فروش': [
+    { key: 'contacts', section: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound },
+    { key: 'contacts', section: 'aging', label: 'سنین مطالبات', icon: CalendarClock },
+    { key: 'crm', section: 'leads', label: 'سرنخ‌ها', icon: Target },
+    { key: 'crm', section: 'activities', label: 'پیگیری‌ها', icon: CalendarClock },
+    { key: 'crm', section: 'segments', label: 'بخش‌بندی', icon: PieChart },
+    { key: 'crm', section: 'tiers', label: 'سطوح باشگاه', icon: Medal },
+    { key: 'crm', section: 'rewards', label: 'جوایز', icon: Ticket },
+    { key: 'crm', section: 'birthdays', label: 'تولدها', icon: Cake },
     { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList },
     { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText },
     { key: 'returnlist', label: 'فاکتورهای برگشتی', icon: Undo2 },
@@ -220,6 +237,11 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'discountgrouplist', label: 'گروه‌های کالای تخفیف', icon: Layers },
   ],
   'تنظیمات': [
+    { key: 'distributor', section: 'orders', label: 'سفارش‌های پخش', icon: ClipboardList },
+    { key: 'distributor', section: 'returns', label: 'مرجوعی‌های پخش', icon: Undo2 },
+    { key: 'distributor', section: 'commission', label: 'کمیسیون پخش', icon: Percent },
+    { key: 'marketplace', section: 'orders', label: 'سفارش‌های من', icon: ClipboardList },
+    { key: 'marketplace', section: 'returns', label: 'مرجوعی‌های من', icon: Undo2 },
     { key: 'backuplist', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
@@ -259,6 +281,8 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: «حقوق و دستمزد» — دفترِ نظیرِ «قرارداد جدید». بقیه‌ی منوهای این ماژول
   //: خودشان فهرستِ خودشان را دارند (نگاهی به OPS_LIST_MAP).
   'حقوق و دستمزد': [
+    { key: 'payroll', section: 'staff', label: 'پرسنل و احکام', icon: UsersRound },
+    { key: 'payroll', section: 'benefits', label: 'مزایا', icon: Gift },
     { key: 'contractlist', label: 'قراردادها', icon: FileSignature },
     { key: 'payslipledger', label: 'مرور حقوق', icon: Receipt },
   ],
