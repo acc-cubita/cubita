@@ -11,7 +11,7 @@ import {
   type ListMenuItem,
   type ListRow,
 } from './moduleLists'
-import type { NavGroup } from '../lib/navModel'
+import { menuEntryVisible, type NavGroup } from '../lib/navModel'
 import type { PageKey } from './Sidebar'
 
 /**
@@ -120,9 +120,12 @@ export function ModulePanels({
   lastGroup.current = group?.heading ?? null
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
-  const listMenu = group ? LIST_MENUS[group.heading] : undefined
+  //: ورودی‌ای که صفحه‌اش برای این کسب‌وکار نیست (ماژولِ خاموش، نوعِ دیگرِ کسب‌وکار) نمی‌آید.
+  const reachable = <T extends { key: PageKey }>(menu: T[] | undefined) =>
+    menu?.filter((e) => menuEntryVisible(e.key, groups))
+  const listMenu = group ? reachable(LIST_MENUS[group.heading]) : undefined
   //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
-  const opsMenu = group ? OPS_MENUS[group.heading] : undefined
+  const opsMenu = group ? reachable(OPS_MENUS[group.heading]) : undefined
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.

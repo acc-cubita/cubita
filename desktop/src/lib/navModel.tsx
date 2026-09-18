@@ -662,3 +662,23 @@ export function buildNav({
 
   return { groups, secondary: [...SECONDARY_NAV_ITEMS] }
 }
+
+//: صفحه‌هایی که خودشان ردیفِ منوی اصلی دارند، برای هر نوعِ کسب‌وکار. صفحه‌های
+//: فهرست (saleslist، …) این‌جا نیستند؛ فقط از منوی گروه باز می‌شوند.
+const MENU_PAGE_KEYS = new Set<PageKey>([
+  ...NAV_GROUPS.flatMap((g) => g.items.map((i) => i.key)),
+  'distributor',
+  'marketplace',
+])
+
+/**
+ * آیا ورودیِ منوی گروه (`LIST_MENUS`/`OPS_MENUS`) برای این کسب‌وکار دیده شود؟
+ *
+ * این منوها ثابت‌اند، ولی صفحه‌ای که به آن اشاره می‌کنند شاید این‌جا نباشد: ماژولش
+ * خاموش است، یا مالِ نوعِ دیگری از کسب‌وکار است («سفارش‌های پخش» فقط برای پخش‌کننده).
+ * چنین ورودی‌ای صفحه‌ی خالی باز می‌کرد، پس پنهان می‌شود. صفحه‌ای که اصلاً ردیفِ منو
+ * ندارد (صفحه‌ی فهرست) دست نمی‌خورد.
+ */
+export function menuEntryVisible(key: PageKey, groups: NavGroup[]): boolean {
+  return !MENU_PAGE_KEYS.has(key) || groups.some((g) => g.items.some((i) => i.key === key))
+}
