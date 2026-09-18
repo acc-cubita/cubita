@@ -3,6 +3,7 @@ import {
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowUpFromLine,
+  Activity,
   BarChart3,
   BellRing,
   BookMarked,
@@ -21,6 +22,11 @@ import {
   ClipboardCheck,
   ClipboardList,
   Coins,
+  Download,
+  Gauge,
+  Repeat,
+  Upload,
+  Wrench,
   Combine,
   CreditCard,
   DatabaseBackup,
@@ -398,6 +404,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} /> },
       { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} /> },
       { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} /> },
+      //: این سه پنلِ سازنده‌ی خودشان را در همان صفحه دارند (RecurringEntriesPanel،
+      //: BudgetPanel، CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
+      { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: <Repeat size={18} /> },
+      { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} /> },
+      { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} /> },
       { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} /> },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
     ],
@@ -457,6 +468,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'yearendops', label: 'عملیات پایان سال', icon: <Archive size={18} /> },
       { key: 'yearendreminder', label: 'یادآوری عملیات پایان سال', icon: <BellRing size={18} /> },
       { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
+      //: شش ابزارِ زیر تا امروز فقط در کارتِ «فهرست» بودند، ولی دفترِ هیچ عملیاتی
+      //: نیستند — خودشان کاری‌اند که اجرا می‌شود. با دامنه‌دارشدنِ کارتِ فهرست،
+      //: جایشان این‌جاست وگرنه از هیچ‌جا باز نمی‌شدند.
+      { key: 'dataexport', label: 'ارسال اطلاعات', icon: <Upload size={18} /> },
+      { key: 'dataimport', label: 'دریافت اطلاعات', icon: <Download size={18} /> },
+      { key: 'reportbuilder', label: 'گزارش‌ساز', icon: <Wrench size={18} /> },
+      { key: 'dayactivity', label: 'فعالیت‌های روز', icon: <Activity size={18} /> },
+      { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: <BarChart3 size={18} /> },
+      { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: <Gauge size={18} /> },
     ],
   },
   {
