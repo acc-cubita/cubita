@@ -70,6 +70,7 @@ export function WarehouseReceiptsTab({
   items,
   onChanged,
   onCreatePayment,
+  view,
 }: {
   token: string
   me: MeResponse
@@ -77,6 +78,9 @@ export function WarehouseReceiptsTab({
   items: ItemCache[]
   onChanged: () => void
   onCreatePayment: (context: ReceiptPaymentContext) => void
+  /** «فرم» یا «دفتر» یا هر دو (پیش‌فرض). منوی «تامین‌کنندگان و انبار» فرم را در
+   *  «عملیات» و دفتر را در «فهرست» می‌گذارد؛ هر دو همین کامپوننت‌اند، نه نسخه‌ی دوم. */
+  view?: 'form' | 'ledger'
 }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   useEffect(() => {
@@ -93,9 +97,15 @@ export function WarehouseReceiptsTab({
   }, [onChanged])
   const [returning, setReturning] = useState<WarehouseReceiptFull | null>(null)
 
+  const showForm = view !== 'ledger'
+  const showLedger = view !== 'form'
+
   return (
     <>
-      {can(me, 'invoices', 'create') && (
+      {showForm && !can(me, 'invoices', 'create') && view === 'form' && (
+        <p className="hint">مجوزِ ثبتِ رسید ندارید؛ رسیدهای ثبت‌شده در «فهرست رسیدها و حواله‌های انبار» هستند.</p>
+      )}
+      {showForm && can(me, 'invoices', 'create') && (
         <DirectReceiptForm
           token={token}
           warehouses={warehouses}
@@ -105,18 +115,20 @@ export function WarehouseReceiptsTab({
           onCreated={reload}
         />
       )}
-      <ReceiptLedger
-        token={token}
-        me={me}
-        warehouses={warehouses}
-        warehouseName={warehouseName}
-        contactName={contactName}
-        reloadKey={reloadKey}
-        onReturn={setReturning}
-        onCreatePayment={onCreatePayment}
-        onChanged={reload}
-      />
-      {returning && (
+      {showLedger && (
+        <ReceiptLedger
+          token={token}
+          me={me}
+          warehouses={warehouses}
+          warehouseName={warehouseName}
+          contactName={contactName}
+          reloadKey={reloadKey}
+          onReturn={setReturning}
+          onCreatePayment={onCreatePayment}
+          onChanged={reload}
+        />
+      )}
+      {showLedger && returning && (
         <ReceiptReturnPanel
           key={returning.id}
           token={token}

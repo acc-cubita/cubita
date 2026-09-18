@@ -70,12 +70,24 @@ export function ServicePurchaseTab({
   items,
   onChanged,
   onCreatePayment,
+  view,
+  duplicateOf = null,
+  onDuplicate,
+  onDuplicateTaken,
 }: {
   token: string
   me: MeResponse
   items: ItemCache[]
   onChanged: () => void
   onCreatePayment: (invoice: PurchaseInvoiceRecord) => void
+  /** «فرم» یا «دفتر» یا هر دو (پیش‌فرض). منوی «تامین‌کنندگان و انبار» فرم را در
+   *  «عملیات» و دفتر را در «فهرست» می‌گذارد؛ هر دو همین کامپوننت‌اند، نه نسخه‌ی دوم. */
+  view?: 'form' | 'ledger'
+  /** فاکتوری که «رونوشت» از دفتر (تبِ دیگر) خواسته — فرم با رسیدنش پر می‌شود. */
+  duplicateOf?: AnyInvoice | null
+  /** نمای دفتر: رونوشت را به فرم (تبِ دیگر) بفرست، نه به فرمِ نامرئیِ همین نسخه. */
+  onDuplicate?: (invoice: AnyInvoice) => void
+  onDuplicateTaken?: () => void
 }) {
   const [invoiceDate, setInvoiceDate] = useState(todayIso())
   const [contactId, setContactId] = useState('')
@@ -97,6 +109,9 @@ export function ServicePurchaseTab({
   const [expenseAccounts, setExpenseAccounts] = useState<{ id: string; code: string; name: string }[]>([])
   const [liveServices, setLiveServices] = useState<ItemRecord[] | null>(null)
   const [types, setTypes] = useState<PurchaseDeductionType[]>([])
+  //: رونوشت کسرهای غیرفعال را با `typeById` کنار می‌گذارد؛ تا انواع نرسیده‌اند
+  //: اجرایش همه‌ی کسرها را می‌انداخت.
+  const [typesLoaded, setTypesLoaded] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -118,7 +133,10 @@ export function ServicePurchaseTab({
   }, [token])
 
   useEffect(() => {
-    fetchPurchaseDeductionTypes(token, false).then(setTypes).catch(() => setTypes([]))
+    fetchPurchaseDeductionTypes(token, false)
+      .then(setTypes)
+      .catch(() => setTypes([]))
+      .finally(() => setTypesLoaded(true))
   }, [token, reloadKey])
 
   useEffect(() => {
@@ -320,294 +338,304 @@ export function ServicePurchaseTab({
     [token, typeById],
   )
 
+  useEffect(() => {
+    if (!duplicateOf || !typesLoaded) return
+    void handleDuplicate(duplicateOf)
+    onDuplicateTaken?.()
+  }, [duplicateOf, typesLoaded, handleDuplicate, onDuplicateTaken])
+
   return (
     <>
-      <div ref={formRef}>
-        <SectionCard
-          icon={Briefcase}
-          title="ثبت فاکتور خرید خدمات"
-          description="خدمت وارد انبار نمی‌شود: هزینه همان لحظه ثبت می‌شود و مالیات تکلیفی و بیمه از بدهی به تأمین‌کننده کسر و به بدهیِ جدا منتقل می‌شوند."
-        >
-          <form
-            className="invoice-form"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void submit()
-            }}
+      {view !== 'ledger' && (
+        <div ref={formRef}>
+          <SectionCard
+            icon={Briefcase}
+            title="ثبت فاکتور خرید خدمات"
+            description="خدمت وارد انبار نمی‌شود: هزینه همان لحظه ثبت می‌شود و مالیات تکلیفی و بیمه از بدهی به تأمین‌کننده کسر و به بدهیِ جدا منتقل می‌شوند."
           >
-            <div className="field-row">
-              <label>
-                تأمین‌کننده
-                <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
-                  <option value="">— انتخاب تأمین‌کننده —</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                شماره فاکتور تأمین‌کننده
-                <input value={supplierInvoiceNumber} onChange={(e) => setSupplierInvoiceNumber(e.target.value)} />
-              </label>
-              <label>
-                تاریخ
-                <JalaliDatePicker value={invoiceDate} onChange={setInvoiceDate} />
-              </label>
-            </div>
-            {blacklisted && <BlacklistBanner name={contacts.find((c) => c.id === contactId)?.name} />}
-            <div className="field-row">
-              <label>
-                مرکز هزینه
-                <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
-                  <option value="">— بدون مرکز —</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                نرخ مالیات بر ارزش افزوده (٪)
-                <NumberInput allowDecimal value={taxRate} onChange={setTaxRate} />
-              </label>
-              {currencies.length > 0 && (
+            <form
+              className="invoice-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void submit()
+              }}
+            >
+              <div className="field-row">
                 <label>
-                  ارز فاکتور
-                  <select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
-                    <option value="">ریال (پایه)</option>
-                    {currencies.map((c) => (
-                      <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
+                  تأمین‌کننده
+                  <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+                    <option value="">— انتخاب تأمین‌کننده —</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </label>
-              )}
-              {currencyCode && (
                 <label>
-                  نرخ برابری (۱ {currencyCode} = ؟ ریال)
-                  <NumberInput allowDecimal value={exchangeRate} onChange={setExchangeRate} />
+                  شماره فاکتور تأمین‌کننده
+                  <input value={supplierInvoiceNumber} onChange={(e) => setSupplierInvoiceNumber(e.target.value)} />
                 </label>
-              )}
-            </div>
-            <div className="field-row">
-              <label>
-                شرح
-                <input value={description} onChange={(e) => setDescription(e.target.value)} />
-              </label>
-              <label>
-                شرح دوم
-                <input value={description2} onChange={(e) => setDescription2(e.target.value)} />
-              </label>
-            </div>
-
-            <div className="table-scroll">
-              <table className="invoice-lines cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>خدمت</th>
-                    <th>معین هزینه</th>
-                    <th>مقدار</th>
-                    <th>فی</th>
-                    <th>تخفیف</th>
-                    <th>اضافات</th>
-                    <th>عوارض</th>
-                    <th>شرح</th>
-                    <th>مبلغ</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((line, i) => {
-                    const service = serviceById.get(line.itemId)
-                    const defaultLabel = service?.expense_account_name
-                      ? `پیش‌فرضِ خدمت: ${service.expense_account_code} — ${service.expense_account_name}`
-                      : 'معینِ پیش‌فرضِ خدمت'
-                    const amount = num(line.qty) * num(line.unitCost) - num(line.discount) + num(line.addition) + num(line.dutyAmount)
-                    return (
-                      <tr key={i}>
-                        <td data-label="خدمت">
-                          <ItemPicker
-                            items={serviceOptions}
-                            value={line.itemId}
-                            placeholder="— انتخاب خدمت —"
-                            onChange={(id) => updateLine(i, { itemId: id, accountId: '' })}
-                          />
-                        </td>
-                        <td data-label="معین هزینه">
-                          <select
-                            className="line-account"
-                            title={line.accountId ? undefined : defaultLabel}
-                            value={line.accountId}
-                            onChange={(e) => updateLine(i, { accountId: e.target.value })}
-                          >
-                            <option value="">{defaultLabel}</option>
-                            {expenseAccounts.map((a) => (
-                              <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td data-label="مقدار">
-                          <div className="qty-with-unit">
-                            <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(i, { qty: v })} />
-                            {unitOf(line.itemId) && <span className="unit-suffix">{unitOf(line.itemId)}</span>}
-                          </div>
-                        </td>
-                        <td data-label="فی">
-                          <NumberInput value={line.unitCost} onChange={(v) => updateLine(i, { unitCost: v })} />
-                        </td>
-                        <td data-label="تخفیف">
-                          <NumberInput value={line.discount} onChange={(v) => updateLine(i, { discount: v })} placeholder="۰" />
-                        </td>
-                        <td data-label="اضافات">
-                          <NumberInput value={line.addition} onChange={(v) => updateLine(i, { addition: v })} placeholder="۰" />
-                        </td>
-                        <td data-label="عوارض">
-                          <NumberInput value={line.dutyAmount} onChange={(v) => updateLine(i, { dutyAmount: v })} placeholder="۰" />
-                        </td>
-                        <td data-label="شرح">
-                          <input value={line.description} onChange={(e) => updateLine(i, { description: e.target.value })} />
-                        </td>
-                        <td className="num" data-label="مبلغ">{line.itemId ? fa(Math.max(amount, 0)) : '—'}</td>
-                        <td className="card-actions">
-                          <button
-                            type="button"
-                            className="icon-btn-danger"
-                            aria-label="حذف ردیف"
-                            disabled={lines.length === 1}
-                            onClick={() => setLines((prev) => prev.filter((_, index) => index !== i))}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="invoice-adjustments">
-              <button type="button" onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE }])}>
-                <Plus size={14} /> افزودن ردیف
-              </button>
-              <label className="adj-field">تخفیف کل<NumberInput value={invoiceDiscount} onChange={setInvoiceDiscount} placeholder="۰" /></label>
-              <label className="adj-field">اضافات کل<NumberInput value={invoiceAddition} onChange={setInvoiceAddition} placeholder="۰" /></label>
-              <label className="adj-field">عوارض کل<NumberInput value={invoiceDuty} onChange={setInvoiceDuty} placeholder="۰" /></label>
-            </div>
-
-            <div className="invoice-deductions">
-              <h4><Percent size={14} /> کسورات</h4>
-              {types.length === 0 ? (
-                <p className="hint">
-                  هنوز نوعِ کسرِ فعالی تعریف نشده. برای مالیات تکلیفی یا بیمه، در تبِ «انواع کسورات» یک نوع بسازید.
-                </p>
-              ) : (
-                <>
-                  {deductions.length > 0 && (
-                    <div className="table-scroll">
-                      <table className="cards-on-mobile">
-                        <thead>
-                          <tr>
-                            <th>نوع کسر</th>
-                            <th>ماهیت</th>
-                            <th>مبنا</th>
-                            <th>مبلغ مبنا</th>
-                            <th>نرخ (٪)</th>
-                            <th>مبلغ کسر</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {computedDeductions.map(({ row, type, basis, amount }, i) => (
-                            <tr key={`${row.typeId}-${i}`}>
-                              <td className="card-title" data-label="نوع کسر">
-                                <select
-                                  value={row.typeId}
-                                  onChange={(e) => {
-                                    const next = typeById.get(e.target.value)
-                                    updateDeduction(i, { typeId: e.target.value, rate: next ? String(Number(next.rate)) : row.rate, manual: false, amount: '' })
-                                  }}
-                                >
-                                  {types
-                                    .filter((t) => t.id === row.typeId || !deductions.some((d) => d.typeId === t.id))
-                                    .map((t) => (
-                                      <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                              </td>
-                              <td data-label="ماهیت">{type ? PURCHASE_DEDUCTION_NATURE_LABELS[type.nature] : '—'}</td>
-                              <td data-label="مبنا">{type ? PURCHASE_DEDUCTION_BASIS_LABELS[type.basis] : '—'}</td>
-                              <td className="num" data-label="مبلغ مبنا">{fa(basis)}</td>
-                              <td data-label="نرخ (٪)">
-                                <NumberInput allowDecimal value={row.rate} onChange={(v) => updateDeduction(i, { rate: v, manual: false })} />
-                              </td>
-                              <td data-label="مبلغ کسر">
-                                <NumberInput
-                                  value={row.manual ? row.amount : String(amount)}
-                                  onChange={(v) => updateDeduction(i, { amount: v, manual: true })}
-                                />
-                                {row.manual && (
-                                  <button type="button" className="link-btn" onClick={() => updateDeduction(i, { manual: false, amount: '' })}>
-                                    محاسبه از نرخ
-                                  </button>
-                                )}
-                              </td>
-                              <td className="card-actions">
-                                <button
-                                  type="button"
-                                  className="icon-btn-danger"
-                                  aria-label="حذف کسر"
-                                  onClick={() => setDeductions((prev) => prev.filter((_, index) => index !== i))}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <button type="button" onClick={addDeduction} disabled={unusedTypes.length === 0}>
-                    <Plus size={14} /> افزودن کسر
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="invoice-form-footer">
-              <div className="invoice-totals">
-                <span>کل: {fa(gross)}</span>
-                {lineDiscount + headerDiscount > 0 && <span>تخفیف: {fa(lineDiscount + headerDiscount)}</span>}
-                {additionsTotal > 0 && <span>اضافات: {fa(additionsTotal)}</span>}
-                {dutiesTotal > 0 && <span>عوارض: {fa(dutiesTotal)}</span>}
-                <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {fa(taxAmount)}</span>
-                <span>جمع فاکتور: {fa(invoiceTotal)}</span>
-                {computedDeductions.map(({ row, type, amount }, i) => (
-                  <span key={`${row.typeId}-sum-${i}`}>{type?.name ?? 'کسر'} (−): {fa(amount)}</span>
-                ))}
-                <span className="invoice-total">
-                  خالص قابل پرداخت به تأمین‌کننده: {fa(payable)}
-                  {currencyCode ? ` ${currencyCode}` : ''}
-                </span>
-                {currencyCode && <span className="hint">معادل ریالی: {fa(payable * rate)}</span>}
+                <label>
+                  تاریخ
+                  <JalaliDatePicker value={invoiceDate} onChange={setInvoiceDate} />
+                </label>
               </div>
-              <button type="submit" className="btn-primary" disabled={submitting}>
-                <Save size={14} /> ثبت فاکتور خرید خدمات
-              </button>
-            </div>
-            {message && <div className="hint">{message}</div>}
-          </form>
-        </SectionCard>
-      </div>
+              {blacklisted && <BlacklistBanner name={contacts.find((c) => c.id === contactId)?.name} />}
+              <div className="field-row">
+                <label>
+                  مرکز هزینه
+                  <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                    <option value="">— بدون مرکز —</option>
+                    {costCenters.map((c) => (
+                      <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  نرخ مالیات بر ارزش افزوده (٪)
+                  <NumberInput allowDecimal value={taxRate} onChange={setTaxRate} />
+                </label>
+                {currencies.length > 0 && (
+                  <label>
+                    ارز فاکتور
+                    <select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
+                      <option value="">ریال (پایه)</option>
+                      {currencies.map((c) => (
+                        <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {currencyCode && (
+                  <label>
+                    نرخ برابری (۱ {currencyCode} = ؟ ریال)
+                    <NumberInput allowDecimal value={exchangeRate} onChange={setExchangeRate} />
+                  </label>
+                )}
+              </div>
+              <div className="field-row">
+                <label>
+                  شرح
+                  <input value={description} onChange={(e) => setDescription(e.target.value)} />
+                </label>
+                <label>
+                  شرح دوم
+                  <input value={description2} onChange={(e) => setDescription2(e.target.value)} />
+                </label>
+              </div>
 
-      <InvoiceList
-        key={reloadKey}
-        token={token}
-        me={me}
-        kind="purchase"
-        purchaseKind="service"
-        items={serviceOptions}
-        onDuplicate={(invoice) => void handleDuplicate(invoice)}
-        onCreatePayment={onCreatePayment}
-      />
+              <div className="table-scroll">
+                <table className="invoice-lines cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>خدمت</th>
+                      <th>معین هزینه</th>
+                      <th>مقدار</th>
+                      <th>فی</th>
+                      <th>تخفیف</th>
+                      <th>اضافات</th>
+                      <th>عوارض</th>
+                      <th>شرح</th>
+                      <th>مبلغ</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line, i) => {
+                      const service = serviceById.get(line.itemId)
+                      const defaultLabel = service?.expense_account_name
+                        ? `پیش‌فرضِ خدمت: ${service.expense_account_code} — ${service.expense_account_name}`
+                        : 'معینِ پیش‌فرضِ خدمت'
+                      const amount = num(line.qty) * num(line.unitCost) - num(line.discount) + num(line.addition) + num(line.dutyAmount)
+                      return (
+                        <tr key={i}>
+                          <td data-label="خدمت">
+                            <ItemPicker
+                              items={serviceOptions}
+                              value={line.itemId}
+                              placeholder="— انتخاب خدمت —"
+                              onChange={(id) => updateLine(i, { itemId: id, accountId: '' })}
+                            />
+                          </td>
+                          <td data-label="معین هزینه">
+                            <select
+                              className="line-account"
+                              title={line.accountId ? undefined : defaultLabel}
+                              value={line.accountId}
+                              onChange={(e) => updateLine(i, { accountId: e.target.value })}
+                            >
+                              <option value="">{defaultLabel}</option>
+                              {expenseAccounts.map((a) => (
+                                <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td data-label="مقدار">
+                            <div className="qty-with-unit">
+                              <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(i, { qty: v })} />
+                              {unitOf(line.itemId) && <span className="unit-suffix">{unitOf(line.itemId)}</span>}
+                            </div>
+                          </td>
+                          <td data-label="فی">
+                            <NumberInput value={line.unitCost} onChange={(v) => updateLine(i, { unitCost: v })} />
+                          </td>
+                          <td data-label="تخفیف">
+                            <NumberInput value={line.discount} onChange={(v) => updateLine(i, { discount: v })} placeholder="۰" />
+                          </td>
+                          <td data-label="اضافات">
+                            <NumberInput value={line.addition} onChange={(v) => updateLine(i, { addition: v })} placeholder="۰" />
+                          </td>
+                          <td data-label="عوارض">
+                            <NumberInput value={line.dutyAmount} onChange={(v) => updateLine(i, { dutyAmount: v })} placeholder="۰" />
+                          </td>
+                          <td data-label="شرح">
+                            <input value={line.description} onChange={(e) => updateLine(i, { description: e.target.value })} />
+                          </td>
+                          <td className="num" data-label="مبلغ">{line.itemId ? fa(Math.max(amount, 0)) : '—'}</td>
+                          <td className="card-actions">
+                            <button
+                              type="button"
+                              className="icon-btn-danger"
+                              aria-label="حذف ردیف"
+                              disabled={lines.length === 1}
+                              onClick={() => setLines((prev) => prev.filter((_, index) => index !== i))}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="invoice-adjustments">
+                <button type="button" onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE }])}>
+                  <Plus size={14} /> افزودن ردیف
+                </button>
+                <label className="adj-field">تخفیف کل<NumberInput value={invoiceDiscount} onChange={setInvoiceDiscount} placeholder="۰" /></label>
+                <label className="adj-field">اضافات کل<NumberInput value={invoiceAddition} onChange={setInvoiceAddition} placeholder="۰" /></label>
+                <label className="adj-field">عوارض کل<NumberInput value={invoiceDuty} onChange={setInvoiceDuty} placeholder="۰" /></label>
+              </div>
+
+              <div className="invoice-deductions">
+                <h4><Percent size={14} /> کسورات</h4>
+                {types.length === 0 ? (
+                  <p className="hint">
+                    هنوز نوعِ کسرِ فعالی تعریف نشده. برای مالیات تکلیفی یا بیمه، در تبِ «انواع کسورات» یک نوع بسازید.
+                  </p>
+                ) : (
+                  <>
+                    {deductions.length > 0 && (
+                      <div className="table-scroll">
+                        <table className="cards-on-mobile">
+                          <thead>
+                            <tr>
+                              <th>نوع کسر</th>
+                              <th>ماهیت</th>
+                              <th>مبنا</th>
+                              <th>مبلغ مبنا</th>
+                              <th>نرخ (٪)</th>
+                              <th>مبلغ کسر</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {computedDeductions.map(({ row, type, basis, amount }, i) => (
+                              <tr key={`${row.typeId}-${i}`}>
+                                <td className="card-title" data-label="نوع کسر">
+                                  <select
+                                    value={row.typeId}
+                                    onChange={(e) => {
+                                      const next = typeById.get(e.target.value)
+                                      updateDeduction(i, { typeId: e.target.value, rate: next ? String(Number(next.rate)) : row.rate, manual: false, amount: '' })
+                                    }}
+                                  >
+                                    {types
+                                      .filter((t) => t.id === row.typeId || !deductions.some((d) => d.typeId === t.id))
+                                      .map((t) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                      ))}
+                                  </select>
+                                </td>
+                                <td data-label="ماهیت">{type ? PURCHASE_DEDUCTION_NATURE_LABELS[type.nature] : '—'}</td>
+                                <td data-label="مبنا">{type ? PURCHASE_DEDUCTION_BASIS_LABELS[type.basis] : '—'}</td>
+                                <td className="num" data-label="مبلغ مبنا">{fa(basis)}</td>
+                                <td data-label="نرخ (٪)">
+                                  <NumberInput allowDecimal value={row.rate} onChange={(v) => updateDeduction(i, { rate: v, manual: false })} />
+                                </td>
+                                <td data-label="مبلغ کسر">
+                                  <NumberInput
+                                    value={row.manual ? row.amount : String(amount)}
+                                    onChange={(v) => updateDeduction(i, { amount: v, manual: true })}
+                                  />
+                                  {row.manual && (
+                                    <button type="button" className="link-btn" onClick={() => updateDeduction(i, { manual: false, amount: '' })}>
+                                      محاسبه از نرخ
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="card-actions">
+                                  <button
+                                    type="button"
+                                    className="icon-btn-danger"
+                                    aria-label="حذف کسر"
+                                    onClick={() => setDeductions((prev) => prev.filter((_, index) => index !== i))}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <button type="button" onClick={addDeduction} disabled={unusedTypes.length === 0}>
+                      <Plus size={14} /> افزودن کسر
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="invoice-form-footer">
+                <div className="invoice-totals">
+                  <span>کل: {fa(gross)}</span>
+                  {lineDiscount + headerDiscount > 0 && <span>تخفیف: {fa(lineDiscount + headerDiscount)}</span>}
+                  {additionsTotal > 0 && <span>اضافات: {fa(additionsTotal)}</span>}
+                  {dutiesTotal > 0 && <span>عوارض: {fa(dutiesTotal)}</span>}
+                  <span>مالیات ({taxRateNum.toLocaleString('fa-IR')}٪): {fa(taxAmount)}</span>
+                  <span>جمع فاکتور: {fa(invoiceTotal)}</span>
+                  {computedDeductions.map(({ row, type, amount }, i) => (
+                    <span key={`${row.typeId}-sum-${i}`}>{type?.name ?? 'کسر'} (−): {fa(amount)}</span>
+                  ))}
+                  <span className="invoice-total">
+                    خالص قابل پرداخت به تأمین‌کننده: {fa(payable)}
+                    {currencyCode ? ` ${currencyCode}` : ''}
+                  </span>
+                  {currencyCode && <span className="hint">معادل ریالی: {fa(payable * rate)}</span>}
+                </div>
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  <Save size={14} /> ثبت فاکتور خرید خدمات
+                </button>
+              </div>
+              {message && <div className="hint">{message}</div>}
+            </form>
+          </SectionCard>
+        </div>
+      )}
+
+      {view !== 'form' && (
+        <InvoiceList
+          key={reloadKey}
+          token={token}
+          me={me}
+          kind="purchase"
+          purchaseKind="service"
+          items={serviceOptions}
+          onDuplicate={(invoice) => (onDuplicate ? onDuplicate(invoice) : void handleDuplicate(invoice))}
+          onCreatePayment={onCreatePayment}
+        />
+      )}
     </>
   )
 }

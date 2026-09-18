@@ -17,7 +17,7 @@
  * خروجِ ناصفر یعنی دستِ‌کم یک صفحه مشکل دارد.
  */
 import { chromium } from 'playwright'
-import { navTargets } from './lib/navTargets.mjs'
+import { groupMenuTargets, navTargets } from './lib/navTargets.mjs'
 
 //: **نبودِ مرورگر باید مثلِ نبودِ اعتبارنامه پیام بدهد، نه stack trace.**
 //:
@@ -65,7 +65,16 @@ if (!EMAIL || !PASSWORD) {
  * فهرستِ دستی یعنی پوششی که به یادِ آدم‌ها بند است. حالا هر صفحه‌ای که به
  * ناوبری اضافه شود خودبه‌خود این‌جا می‌آید.
  */
-const TARGETS = navTargets().map((t) => [t.heading, t.label])
+//: گروهی با منوی کار‌به‌کار (`OPS_MENUS`) ردیفِ صفحه ندارد؛ به‌جای «خرید»/«انبار»
+//: هر ورودیِ عملیات و فهرستش جداگانه سنجیده می‌شود.
+const MENU_TARGETS = groupMenuTargets()
+const MENU_HEADINGS = new Set(MENU_TARGETS.map((t) => t.heading))
+const TARGETS = [
+  ...navTargets()
+    .filter((t) => !MENU_HEADINGS.has(t.heading))
+    .map((t) => [t.heading, t.label]),
+  ...MENU_TARGETS.map((t) => [t.heading, t.label]),
+]
 
 const widths = flag('width') ? [Number(flag('width'))] : [1440, 390]
 const only = flag('page')

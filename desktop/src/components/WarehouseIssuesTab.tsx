@@ -81,6 +81,7 @@ export function WarehouseIssuesTab({
   items,
   onChanged,
   onCreateInvoice,
+  view,
 }: {
   token: string
   me: MeResponse
@@ -88,6 +89,9 @@ export function WarehouseIssuesTab({
   items: ItemCache[]
   onChanged: () => void
   onCreateInvoice: (context: IssueInvoiceContext) => void
+  /** «فرم» یا «دفتر» یا هر دو (پیش‌فرض). منوی «تامین‌کنندگان و انبار» فرم را در
+   *  «عملیات» و دفتر را در «فهرست» می‌گذارد؛ هر دو همین کامپوننت‌اند، نه نسخه‌ی دوم. */
+  view?: 'form' | 'ledger'
 }) {
   const [contacts, setContacts] = useState<ContactRecord[]>([])
   useEffect(() => {
@@ -101,17 +105,22 @@ export function WarehouseIssuesTab({
 
   return (
     <>
-      {can(me, 'inventory', 'create') && (
+      {view === 'form' && !can(me, 'inventory', 'create') && (
+        <p className="hint">مجوزِ ثبتِ حواله ندارید؛ حواله‌های ثبت‌شده در «فهرست رسیدها و حواله‌های انبار» هستند.</p>
+      )}
+      {view !== 'ledger' && can(me, 'inventory', 'create') && (
         <IssueForm token={token} warehouses={warehouses} items={items} contacts={contacts} onCreated={reload} />
       )}
-      <WarehouseIssueLedger
-        token={token}
-        me={me}
-        warehouses={warehouses}
-        reloadKey={reloadKey}
-        onCreateInvoice={onCreateInvoice}
-        onChanged={reload}
-      />
+      {view !== 'form' && (
+        <WarehouseIssueLedger
+          token={token}
+          me={me}
+          warehouses={warehouses}
+          reloadKey={reloadKey}
+          onCreateInvoice={onCreateInvoice}
+          onChanged={reload}
+        />
+      )}
     </>
   )
 }

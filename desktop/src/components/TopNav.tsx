@@ -13,7 +13,7 @@ import {
   User,
 } from 'lucide-react'
 import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
-import { LIST_MENUS } from './moduleLists'
+import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { useNavSection } from './navContext'
 import { isElectron } from '../platform'
@@ -277,7 +277,12 @@ export function TopNav({
                 type="button"
                 className={`topnav-item${hasActive ? ' active' : ''}`}
                 // اگر همین حالا داخلِ این ماژول هستیم، کلیک نباید از صفحه‌ی فعلی بپراند.
-                onClick={() => go(hasActive ? active : first.key)}
+                onClick={() => {
+                  if (hasActive) return go(active)
+                  //: گروهی با منوی کار‌به‌کار روی اولین کارش باز می‌شود، نه اولین صفحه.
+                  const landing = OPS_MENUS[group.heading]?.[0]
+                  go(landing?.key ?? first.key, landing?.section)
+                }}
               >
                 {label}
                 {badgeKey ? navBadge(badgeKey) : null}
@@ -397,6 +402,9 @@ export function TopNav({
             <div className="topnav-mobile-body">
               {groups.map((group) => {
                 const lists = LIST_MENUS[group.heading] ?? []
+                const opsMenu = OPS_MENUS[group.heading]
+                //: تبِ فعالِ صفحه‌ی جاری — ورودی‌های منو که به یک تب اشاره می‌کنند با آن فعال‌اند.
+                const curSection = navSection?.section ?? MODULE_SECTIONS[active]?.[0]?.key ?? null
                 const isOpen = openGroup === group.heading
                 const hasActive =
                   group.items.some((i) => i.key === active) || lists.some((i) => i.key === active)
@@ -415,7 +423,22 @@ export function TopNav({
                         {/* تیترِ «عملیات»/«فهرست» فقط وقتی معنا دارد که گروه هر دو را داشته
                             باشد؛ گروهی که فقط عملیات دارد با یک تیترِ تنها شلوغ‌تر می‌شد. */}
                         {lists.length > 0 && <div className="mob-section-label">عملیات</div>}
-                        {group.items.map((item) => {
+                        {/* منوی کار‌به‌کار («تامین‌کنندگان و انبار»): هر ردیف یک کار است که
+                            ممکن است تبی از صفحه‌ی «خرید» یا «انبار» باشد. */}
+                        {opsMenu?.map((entry) => {
+                          const Icon = entry.icon
+                          return (
+                            <MobileRow
+                              key={`${entry.key}:${entry.section ?? ''}`}
+                              level="item"
+                              icon={<Icon size={18} />}
+                              label={entry.label}
+                              active={menuEntryActive(entry, active, curSection)}
+                              onClick={() => go(entry.key, entry.section)}
+                            />
+                          )
+                        })}
+                        {!opsMenu && group.items.map((item) => {
                           const sections = MODULE_SECTIONS[item.key]
                           if (!sections) {
                             return (
@@ -494,12 +517,12 @@ export function TopNav({
                           const Icon = item.icon
                           return (
                             <MobileRow
-                              key={item.key}
+                              key={`${item.key}:${item.section ?? ''}`}
                               level="item"
                               icon={<Icon size={16} />}
                               label={item.label}
-                              active={active === item.key}
-                              onClick={() => go(item.key)}
+                              active={menuEntryActive(item, active, curSection)}
+                              onClick={() => go(item.key, item.section)}
                             />
                           )
                         })}

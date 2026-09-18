@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, ListChecks, Plus, Printer, Save, XCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, CheckCircle2, ClipboardCheck, ListChecks, Plus, Printer, Save, Tag, XCircle } from 'lucide-react'
 import type { WarehouseCache } from '../electron.d'
 import {
   cancelStockCount,
@@ -36,7 +36,27 @@ const STATUS_TONE: Record<StockCountStatus, string> = {
 const faInt = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faQty = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
-export function StockCountPanel({ token, warehouses }: { token: string; warehouses: WarehouseCache[] }) {
+/**
+ * انبارگردانی — سه کار از یک منطق:
+ *  - `tags`: ساختِ جلسه (عکس از موجودیِ سیستمی) و چاپِ برگه‌های شمارش.
+ *  - `variance`: واردکردنِ شمارش، دیدنِ مغایرت و ثبتِ نهایی (سندِ تعدیل).
+ *  - `list`: همه‌ی جلسه‌ها با وضعیتشان.
+ * بی‌`mode` همان نمای یک‌جای قدیمی است. `sessionId` جلسه‌ای است که کاربر از تبِ
+ * دیگری برای شمارش باز کرده؛ `onOpenSession` او را به تبِ «ثبت مغایرت» می‌برد.
+ */
+export function StockCountPanel({
+  token,
+  warehouses,
+  mode,
+  sessionId = null,
+  onOpenSession,
+}: {
+  token: string
+  warehouses: WarehouseCache[]
+  mode?: 'tags' | 'variance' | 'list'
+  sessionId?: string | null
+  onOpenSession?: (id: string) => void
+}) {
   const [sessions, setSessions] = useState<StockCountSummary[]>([])
   const [selected, setSelected] = useState<StockCountSession | null>(null)
   const [counts, setCounts] = useState<Record<string, string>>({})
@@ -60,7 +80,8 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
     void refreshList()
   }, [])
 
-  function loadDraft(session: StockCountSession) {
+
+  const loadDraft = useCallback((session: StockCountSession) => {
     setSelected(session)
     //: ردیفِ نشمرده **خالی** می‌ماند، نه صفر. رشته‌ی خالی تنها بازنماییِ
     //: «هنوز نشمرده‌ام» است؛ صفر یعنی «شمردم، هیچ نبود» و کسریِ واقعی می‌سازد.
@@ -70,16 +91,36 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
       ),
     )
     setMessage(null)
-  }
+  }, [])
 
-  async function openSession(id: string) {
-    setError(null)
-    try {
-      loadDraft(await fetchStockCount(token, id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+  const openSession = useCallback(
+    async (id: string) => {
+      setError(null)
+      try {
+        loadDraft(await fetchStockCount(token, id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+      }
+    },
+    [token, loadDraft],
+  )
+
+  //: «ثبت مغایرت» با جلسه‌ای باز می‌شود که کاربر از تبِ دیگر انتخاب کرده؛ اگر
+  //: نکرده، با تازه‌ترین جلسه‌ی باز — همان که به احتمالِ زیاد در حالِ شمارشش است.
+  const [autoOpened, setAutoOpened] = useState(false)
+  useEffect(() => {
+    if (mode !== 'variance' || autoOpened) return
+    if (sessionId) {
+      setAutoOpened(true)
+      void openSession(sessionId)
+      return
     }
-  }
+    const latestOpen = sessions.find((x) => x.status === 'open')
+    if (latestOpen) {
+      setAutoOpened(true)
+      void openSession(latestOpen.id)
+    }
+  }, [mode, sessionId, sessions, autoOpened, openSession])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -94,6 +135,7 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
       const session = await createStockCount(token, { warehouse_id: wid, count_date: countDate, notes })
       loadDraft(session)
       setNotes('')
+      if (mode === 'tags') setMessage(`جلسه‌ی انبارگردانیِ «${session.warehouse_name}» ساخته شد. برگه‌های شمارش را چاپ کنید.`)
       await refreshList()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -149,11 +191,11 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
     }
   }
 
-  async function openTags() {
-    if (!selected) return
+  async function openTags(id = selected?.id) {
+    if (!id) return
     try {
       //: همان مسیرِ چاپِ بقیه‌ی اسناد — نه یک راهِ دومِ مخصوصِ این صفحه.
-      await printCountTags(token, selected.id)
+      await printCountTags(token, id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
@@ -192,6 +234,273 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
   const varianceCount = liveRows.filter((r) => r.variance !== null && r.variance !== 0).length
   const countedCount = liveRows.filter((r) => r.counted !== null).length
 
+  //: کنشِ ردیف: در نمای یک‌جا جلسه همین‌جا باز می‌شود؛ در منوی تازه به تبِ «ثبت مغایرت» می‌رود.
+  const openOrGo = (id: string) => (onOpenSession && mode !== 'variance' ? onOpenSession(id) : void openSession(id))
+  const sessionsTable = (
+    rows: StockCountSummary[],
+    actions: (s: StockCountSummary) => React.ReactNode,
+    pager: React.ReactNode = null,
+    emptyText = 'هنوز جلسه‌ای ثبت نشده.',
+  ) => (
+    <>
+      {rows.length === 0 ? (
+        <EmptyState icon={ClipboardCheck} text={emptyText} />
+      ) : (
+        <div className="entity-table-wrap">
+          <div className="table-scroll">
+            <table className="entity-table cards-on-mobile">
+              <thead>
+                <tr>
+                  <th>انبار</th>
+                  <th>تاریخ</th>
+                  <th>وضعیت</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s) => (
+                  <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
+                    <td className="entity-name card-title" data-label="انبار">{s.warehouse_name}</td>
+                    <td data-label="تاریخ">{formatJalali(s.count_date)}</td>
+                    <td data-label="وضعیت">
+                      <span className={`status-badge ${STATUS_TONE[s.status]}`}>{STATUS_LABEL[s.status]}</span>
+                    </td>
+                    <td className="card-actions">
+                      {actions(s)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {pager}
+        </div>
+      )}
+    </>
+  )
+  const openButton = (s: StockCountSummary) => (
+    <button type="button" onClick={() => openOrGo(s.id)}>
+      {s.status === 'open' ? 'شمارش و ثبت مغایرت' : 'باز کردن'}
+    </button>
+  )
+  const createForm = (
+    <form className="invoice-form form-full" onSubmit={handleCreate}>
+      <label>
+        انبار
+        <select value={warehouseId || warehouses[0]?.id || ''} onChange={(e) => setWarehouseId(e.target.value)}>
+          {warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        تاریخ شمارش
+        <JalaliDatePicker value={countDate} onChange={setCountDate} />
+      </label>
+      <label>
+        توضیحات
+        <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
+      </label>
+      <div className="invoice-form-footer">
+        <button type="submit" className="btn-primary">
+          <Plus size={14} /> ایجاد جلسه و عکس‌برداری
+        </button>
+      </div>
+    </form>
+  )
+  const countCard = (
+    <SectionCard
+      icon={ClipboardCheck}
+      title={selected ? `شمارش انبار «${selected.warehouse_name}»` : 'شمارش'}
+      description={
+        selected
+          ? `${formatJalali(selected.count_date)} — ${STATUS_LABEL[selected.status]}`
+          : 'یک جلسه را از فهرست باز کنید یا جلسه‌ی تازه بسازید.'
+      }
+      actions={
+        selected ? (
+          <div className="check-actions">
+            {/* برگه‌ی شمارش عمداً موجودیِ سیستمی را نشان نمی‌دهد — شمارنده
+                نباید با عددِ سیستم سوگیر شود. */}
+            <button type="button" onClick={() => void openTags()}>
+              <Printer size={13} /> برگه‌های شمارش
+            </button>
+            {editable && (
+              <>
+                <button type="button" onClick={() => void checkDrift()}>
+                  <AlertTriangle size={13} /> بررسی حرکت پس از شمارش
+                </button>
+                <button type="button" onClick={() => void handleSaveCounts()}>
+                  <Save size={13} /> ذخیره
+                </button>
+                <button type="button" className="btn-primary" onClick={() => void handlePost()}>
+                  <CheckCircle2 size={13} /> ثبت نهایی
+                </button>
+                <button type="button" className="icon-btn-danger" onClick={() => void handleCancel()}>
+                  <XCircle size={13} /> لغو
+                </button>
+              </>
+            )}
+          </div>
+        ) : undefined
+      }
+    >
+      {!selected ? (
+        <EmptyState icon={ClipboardCheck} text="جلسه‌ای انتخاب نشده." />
+      ) : (
+        <>
+          {drift.length > 0 && (
+            <div className="fy-note">
+              <strong>{faInt(drift.length)} کالا پس از ثبتِ شمارششان حرکت کرده‌اند.</strong>{' '}
+              اختلافشان همچنان درست حساب می‌شود — مبنایش وضعیتِ لحظه‌ی شمارش است — ولی اگر
+              می‌خواهید شمارشِ تازه‌تری داشته باشید، دوباره بشمارید و ذخیره کنید:{' '}
+              {drift.map((d) => d.item_name).join('، ')}
+            </div>
+          )}
+          <div className="stat-inline">
+            <span>شمرده‌شده: <strong>{faInt(countedCount)}</strong> از {faInt(liveRows.length)}</span>
+            <span>ردیف‌های دارای مغایرت: <strong>{faInt(varianceCount)}</strong></span>
+            <span className={totalVarianceValue < 0 ? 'text-danger' : totalVarianceValue > 0 ? 'text-success' : ''}>
+              ارزش خالص مغایرت: <strong>{faInt(totalVarianceValue)}</strong> ریال
+            </span>
+          </div>
+          <div className="entity-table-wrap">
+            <div className="table-scroll">
+              <table className="entity-table cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>کالا</th>
+                    <th>سیستمی</th>
+                    <th>شمارش</th>
+                    <th>مغایرت</th>
+                    <th>ارزش مغایرت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveRows.map(({ line, variance, value }) => (
+                    <tr key={line.id}>
+                      <td className="card-title" data-label="کالا">
+                        <div className="entity-name">{line.item_name}</div>
+                        <div className="entity-sub">{line.item_sku} · {line.unit}</div>
+                      </td>
+                      <td data-label="سیستمی">{faQty(line.system_qty)}</td>
+                      <td data-label="شمارش">
+                        {editable ? (
+                          <NumberInput
+                            allowDecimal
+                            className="count-input"
+                            value={counts[line.id] ?? ''}
+                            onChange={(v) => setCounts((prev) => ({ ...prev, [line.id]: v }))}
+                          />
+                        ) : (
+                          line.counted_qty === null ? (
+                            <span className="muted">نشمرده</span>
+                          ) : (
+                            faQty(line.counted_qty)
+                          )
+                        )}
+                      </td>
+                      {/* نشمرده مغایرتِ صفر نیست — خط تیره است. وگرنه جدول
+                          «بدون اختلاف» نشان می‌دهد در حالی که سراغش نرفته‌ایم. */}
+                      <td
+                        data-label="مغایرت"
+                        className={variance === null ? 'muted' : variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}
+                      >
+                        {variance === null ? '—' : `${variance > 0 ? '+' : ''}${faQty(variance)}`}
+                      </td>
+                      <td data-label="ارزش مغایرت" className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>
+                        {variance === null ? '—' : faInt(value)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {message && <div className="hint">{message}</div>}
+        </>
+      )}
+    </SectionCard>
+  )
+  const openSessions = sessions.filter((x) => x.status === 'open')
+
+  if (mode === 'tags') {
+    return (
+      <SectionCard
+        icon={Tag}
+        title="تگ انبارگردانی"
+        description="جلسه بسازید تا از موجودیِ سیستمیِ انبار عکس گرفته شود، بعد برگه‌های شمارش را چاپ کنید. برگه عمداً عددِ سیستم را ندارد."
+      >
+        {createForm}
+        {message && <div className="hint">{message}</div>}
+        <h3 className="panel-subhead"><ListChecks size={15} /> جلسه‌های باز</h3>
+        {sessionsTable(
+          openSessions,
+          (s) => (
+            <div className="check-actions">
+              <button type="button" onClick={() => void openTags(s.id)}>
+                <Printer size={13} /> برگه‌های شمارش
+              </button>
+              {openButton(s)}
+            </div>
+          ),
+          null,
+          'جلسه‌ی بازی نیست؛ با فرمِ بالا یکی بسازید.',
+        )}
+        {error && <div className="error">{error}</div>}
+      </SectionCard>
+    )
+  }
+
+  if (mode === 'variance') {
+    return (
+      <>
+        <SectionCard
+          icon={ClipboardCheck}
+          title="ثبت مغایرت انبارگردانی"
+          description="جلسه را انتخاب کنید، شمارشِ فیزیکی را وارد کنید و مغایرت را ثبت کنید؛ سندِ تعدیل خودکار صادر می‌شود."
+        >
+          {sessions.length === 0 ? (
+            <EmptyState icon={ClipboardCheck} text="هنوز جلسه‌ای نیست؛ از «تگ انبارگردانی» یکی بسازید." />
+          ) : (
+            <label className="form-full">
+              جلسه‌ی انبارگردانی
+              <select value={selected?.id ?? ''} onChange={(e) => e.target.value && void openSession(e.target.value)}>
+                <option value="">— انتخاب جلسه —</option>
+                {sessions.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.warehouse_name} — {formatJalali(x.count_date)} — {STATUS_LABEL[x.status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {error && <div className="error">{error}</div>}
+        </SectionCard>
+        {countCard}
+      </>
+    )
+  }
+
+  if (mode === 'list') {
+    return (
+      <SectionCard
+        icon={ListChecks}
+        title="فهرست انبارگردانی‌ها"
+        description="همه‌ی جلسه‌های انبارگردانی با وضعیتشان — باز، ثبت‌شده یا لغوشده."
+      >
+        {sessionsTable(
+          sessionsPg.pageItems,
+          openButton,
+          <Pager page={sessionsPg.page} pageCount={sessionsPg.pageCount} onChange={sessionsPg.setPage} />,
+        )}
+        {error && <div className="error">{error}</div>}
+      </SectionCard>
+    )
+  }
+
   return (
     <div className="split-2col">
       <SectionCard
@@ -199,183 +508,18 @@ export function StockCountPanel({ token, warehouses }: { token: string; warehous
         title="جلسه‌ی انبارگردانی جدید"
         description="از موجودی سیستمیِ همه‌ی کالاهای انبار عکس‌برداری می‌شود؛ سپس شمارش فیزیکی را وارد کنید."
       >
-        <form className="invoice-form form-full" onSubmit={handleCreate}>
-          <label>
-            انبار
-            <select value={warehouseId || warehouses[0]?.id || ''} onChange={(e) => setWarehouseId(e.target.value)}>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            تاریخ شمارش
-            <JalaliDatePicker value={countDate} onChange={setCountDate} />
-          </label>
-          <label>
-            توضیحات
-            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="اختیاری" />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Plus size={14} /> ایجاد جلسه و عکس‌برداری
-            </button>
-          </div>
-        </form>
+        {createForm}
 
         <h3 className="panel-subhead"><ListChecks size={15} /> جلسه‌های اخیر</h3>
-        {sessions.length === 0 ? (
-          <EmptyState icon={ClipboardCheck} text="هنوز جلسه‌ای ثبت نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table cards-on-mobile">
-                <thead>
-                  <tr>
-                    <th>انبار</th>
-                    <th>تاریخ</th>
-                    <th>وضعیت</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessionsPg.pageItems.map((s) => (
-                    <tr key={s.id} className={selected?.id === s.id ? 'row-selected' : undefined}>
-                      <td className="entity-name card-title" data-label="انبار">{s.warehouse_name}</td>
-                      <td data-label="تاریخ">{formatJalali(s.count_date)}</td>
-                      <td data-label="وضعیت">
-                        <span className={`status-badge ${STATUS_TONE[s.status]}`}>{STATUS_LABEL[s.status]}</span>
-                      </td>
-                      <td className="card-actions">
-                        <button type="button" onClick={() => void openSession(s.id)}>
-                          باز کردن
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pager page={sessionsPg.page} pageCount={sessionsPg.pageCount} onChange={sessionsPg.setPage} />
-          </div>
+        {sessionsTable(
+          sessionsPg.pageItems,
+          openButton,
+          <Pager page={sessionsPg.page} pageCount={sessionsPg.pageCount} onChange={sessionsPg.setPage} />,
         )}
         {error && <div className="error">{error}</div>}
       </SectionCard>
 
-      <SectionCard
-        icon={ClipboardCheck}
-        title={selected ? `شمارش انبار «${selected.warehouse_name}»` : 'شمارش'}
-        description={
-          selected
-            ? `${formatJalali(selected.count_date)} — ${STATUS_LABEL[selected.status]}`
-            : 'یک جلسه را از فهرست باز کنید یا جلسه‌ی تازه بسازید.'
-        }
-        actions={
-          selected ? (
-            <div className="check-actions">
-              {/* برگه‌ی شمارش عمداً موجودیِ سیستمی را نشان نمی‌دهد — شمارنده
-                  نباید با عددِ سیستم سوگیر شود. */}
-              <button type="button" onClick={() => void openTags()}>
-                <Printer size={13} /> برگه‌های شمارش
-              </button>
-              {editable && (
-                <>
-                  <button type="button" onClick={() => void checkDrift()}>
-                    <AlertTriangle size={13} /> بررسی حرکت پس از شمارش
-                  </button>
-                  <button type="button" onClick={() => void handleSaveCounts()}>
-                    <Save size={13} /> ذخیره
-                  </button>
-                  <button type="button" className="btn-primary" onClick={() => void handlePost()}>
-                    <CheckCircle2 size={13} /> ثبت نهایی
-                  </button>
-                  <button type="button" className="icon-btn-danger" onClick={() => void handleCancel()}>
-                    <XCircle size={13} /> لغو
-                  </button>
-                </>
-              )}
-            </div>
-          ) : undefined
-        }
-      >
-        {!selected ? (
-          <EmptyState icon={ClipboardCheck} text="جلسه‌ای انتخاب نشده." />
-        ) : (
-          <>
-            {drift.length > 0 && (
-              <div className="fy-note">
-                <strong>{faInt(drift.length)} کالا پس از ثبتِ شمارششان حرکت کرده‌اند.</strong>{' '}
-                اختلافشان همچنان درست حساب می‌شود — مبنایش وضعیتِ لحظه‌ی شمارش است — ولی اگر
-                می‌خواهید شمارشِ تازه‌تری داشته باشید، دوباره بشمارید و ذخیره کنید:{' '}
-                {drift.map((d) => d.item_name).join('، ')}
-              </div>
-            )}
-            <div className="stat-inline">
-              <span>شمرده‌شده: <strong>{faInt(countedCount)}</strong> از {faInt(liveRows.length)}</span>
-              <span>ردیف‌های دارای مغایرت: <strong>{faInt(varianceCount)}</strong></span>
-              <span className={totalVarianceValue < 0 ? 'text-danger' : totalVarianceValue > 0 ? 'text-success' : ''}>
-                ارزش خالص مغایرت: <strong>{faInt(totalVarianceValue)}</strong> ریال
-              </span>
-            </div>
-            <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table cards-on-mobile">
-                  <thead>
-                    <tr>
-                      <th>کالا</th>
-                      <th>سیستمی</th>
-                      <th>شمارش</th>
-                      <th>مغایرت</th>
-                      <th>ارزش مغایرت</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {liveRows.map(({ line, variance, value }) => (
-                      <tr key={line.id}>
-                        <td className="card-title" data-label="کالا">
-                          <div className="entity-name">{line.item_name}</div>
-                          <div className="entity-sub">{line.item_sku} · {line.unit}</div>
-                        </td>
-                        <td data-label="سیستمی">{faQty(line.system_qty)}</td>
-                        <td data-label="شمارش">
-                          {editable ? (
-                            <NumberInput
-                              allowDecimal
-                              className="count-input"
-                              value={counts[line.id] ?? ''}
-                              onChange={(v) => setCounts((prev) => ({ ...prev, [line.id]: v }))}
-                            />
-                          ) : (
-                            line.counted_qty === null ? (
-                              <span className="muted">نشمرده</span>
-                            ) : (
-                              faQty(line.counted_qty)
-                            )
-                          )}
-                        </td>
-                        {/* نشمرده مغایرتِ صفر نیست — خط تیره است. وگرنه جدول
-                            «بدون اختلاف» نشان می‌دهد در حالی که سراغش نرفته‌ایم. */}
-                        <td
-                          data-label="مغایرت"
-                          className={variance === null ? 'muted' : variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : ''}
-                        >
-                          {variance === null ? '—' : `${variance > 0 ? '+' : ''}${faQty(variance)}`}
-                        </td>
-                        <td data-label="ارزش مغایرت" className={value < 0 ? 'text-danger' : value > 0 ? 'text-success' : ''}>
-                          {variance === null ? '—' : faInt(value)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {message && <div className="hint">{message}</div>}
-          </>
-        )}
-      </SectionCard>
+      {countCard}
     </div>
   )
 }
