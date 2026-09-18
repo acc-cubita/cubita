@@ -337,12 +337,11 @@ const RULES = [
     level: 'error',
     title: 'تبِ بی‌راه',
     why:
-      'گروهی که `LIST_MENUS` یا `OPS_MENUS` دارد، منوی گروه را نشان می‌دهد و ' +
-      '`sectionLists`/`ops`ِ خودِ صفحه اصلاً رندر نمی‌شوند (`ModulePanels`). بالای ' +
-      '۱۰۲۴px نوارِ تبِ درون‌صفحه و کشوی موبایل هم پنهان‌اند — پس تبی که در منوی ' +
-      'گروه ردیف ندارد **هیچ راهِ ورودی ندارد**. سه تبِ «طرف حساب‌ها»، «سنین ' +
-      'مطالبات» و «بخش‌بندی» دقیقاً همین‌طور گم شدند: نه tsc دیدشان (کلیدها رشته‌اند) ' +
-      'و نه ممیز، چون خودشان درست اعلام شده بودند.',
+      'کشوی موبایل (`TopNav`) منوی گروه را رندر می‌کند: زیرِ ۱۰۲۴px تنها راهِ رسیدن ' +
+      'به صفحه‌ها و تب‌های فهرست همان است. پس تبی که در منوی گروهش ردیف ندارد روی ' +
+      'موبایل باز نمی‌شود. (روی دسکتاپ کارتِ فهرست از `listsForOps` می‌آید و این ' +
+      'قاعده لازمش نیست — ولی هر دو باید کار کنند.) سه تبِ «طرف حساب‌ها»، «سنین ' +
+      'مطالبات» و «بخش‌بندی» یک بار دقیقاً همین‌طور گم شدند.',
     scope: 'nav',
     check() {
       const lists = fs.readFileSync(path.join(SRC, 'components', 'moduleLists.tsx'), 'utf8')
@@ -396,6 +395,90 @@ const RULES = [
               })
             }
           }
+        }
+      }
+      return found
+    },
+  },
+  {
+    id: 'R14',
+    level: 'error',
+    title: 'فهرستِ بی‌صاحب',
+    why:
+      'کارتِ «فهرست» از `listsForOps(page, section)` ساخته می‌شود — یعنی فقط دفترهایی ' +
+      'که گزینه‌ی عملیاتِ فعال صاحبشان است. پس دفتری که هیچ عملیاتی به آن اشاره ' +
+      'نکند از کارت بیرون می‌ماند. پیش از دامنه‌دارشدنِ کارت، ۱۴ فهرست دقیقاً همین ' +
+      'وضع را داشتند و فقط به لطفِ منوی فله‌ای دیده می‌شدند.',
+    scope: 'nav',
+    check() {
+      const lists = fs.readFileSync(path.join(SRC, 'components', 'moduleLists.tsx'), 'utf8')
+      const secSrc = fs.readFileSync(path.join(SRC, 'components', 'moduleSections.tsx'), 'utf8')
+
+      // ── بخش‌های هر صفحه ──
+      const secBody = secSrc.slice(secSrc.indexOf('export const MODULE_SECTIONS'))
+      const sections = {}
+      for (const m of secBody.matchAll(/\n {2}([a-zA-Z]+): \[([\s\S]*?)\n {2}\]/g)) {
+        sections[m[1]] = [...m[2].matchAll(/key: '([a-z0-9-]+)', label: '([^']+)'([^\n]*)/g)].map((x) => ({
+          key: x[1],
+          label: x[2],
+          isList: /kind: 'list'/.test(x[3]),
+        }))
+      }
+
+      // ── SECTION_LIST_MAP ──
+      const smStart = lists.indexOf('export const SECTION_LIST_MAP')
+      const smBody = lists.slice(smStart, lists.indexOf('\n}\n', smStart))
+      const sectionMap = {}
+      for (const m of smBody.matchAll(/^ {2}'([a-z]+\/[a-z0-9-]+)': \[([^\]]*)\]/gm)) {
+        sectionMap[m[1]] = [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1])
+      }
+
+      // ── OPS_LIST_MAP (تک‌مقصدی یا آرایه‌ای) ──
+      const omBody = lists.slice(lists.indexOf('OPS_LIST_MAP'), lists.indexOf('export interface ListDef'))
+      const opsMap = {}
+      for (const m of omBody.matchAll(/^ {2}([a-zA-Z]+): (?:'([a-zA-Z]+)'|\[([^\]]*)\])/gm)) {
+        opsMap[m[1]] = m[2] !== undefined ? [m[2]] : [...m[3].matchAll(/'([^']+)'/g)].map((x) => x[1])
+      }
+      const EXCUSE = new Set(['state', 'view', 'none'])
+
+      // ── مقصدهایی که باید صاحب داشته باشند ──
+      const destinations = new Map()
+      for (const [page, secs] of Object.entries(sections)) {
+        for (const s of secs) if (s.isList) destinations.set(`${page}/${s.key}`, s.label)
+      }
+      const lmBody = lists.slice(lists.indexOf('export const LIST_MENUS'), lists.indexOf('export const LIST_PAGE_GROUP'))
+      for (const m of lmBody.matchAll(/key: '([a-zA-Z]+)'(?:, section: '([a-z0-9-]+)')?, label: '([^']+)'/g)) {
+        destinations.set(m[2] ? `${m[1]}/${m[2]}` : m[1], m[3])
+      }
+
+      // ── صاحب‌ها: هر گزینه‌ی عملیات چه چیزی را باز می‌کند ──
+      //: همان ترتیبی که `listsForOps` دارد — ریز، بعد تب‌های فهرستِ صفحه، بعد نگاشتِ صفحه.
+      const owned = new Set()
+      //: جهانِ گزینه‌های عملیات = هر صفحه‌ی تب‌دار (از `MODULE_SECTIONS`) به‌علاوه‌ی
+      //: صفحه‌های منو. «پخشِ من» و «بازارِ خرید» ورودیِ شرطی‌اند و داخلِ `buildNav`
+      //: ساخته می‌شوند، پس در ثابتِ `NAV_GROUPS` نیستند — بدونِ این، بی‌صاحب شمرده می‌شدند.
+      const opsPages = new Set([...Object.keys(sections), ...navTargets().map((t) => t.key)])
+      for (const page of opsPages) {
+        const secs = sections[page] ?? []
+        const ownLists = secs.filter((s) => s.isList).map((s) => `${page}/${s.key}`)
+        const opsTabs = secs.filter((s) => !s.isList)
+        if (opsTabs.length > 0) {
+          for (const t of opsTabs) (sectionMap[`${page}/${t.key}`] ?? ownLists).forEach((x) => owned.add(x))
+        } else if (ownLists.length > 0) {
+          ownLists.forEach((x) => owned.add(x))
+        } else {
+          for (const t of opsMap[page] ?? []) if (!EXCUSE.has(t)) owned.add(t)
+        }
+      }
+
+      const found = []
+      for (const [id, label] of destinations) {
+        if (!owned.has(id)) found.push({ line: 1, msg: `فهرستِ «${label}» (${id}) صاحبی ندارد — از هیچ عملیاتی باز نمی‌شود` })
+      }
+      //: غلطِ تایپی در SECTION_LIST_MAP بی‌صداست: مقصدِ ناشناخته فقط حذف می‌شود.
+      for (const [from, targets] of Object.entries(sectionMap)) {
+        for (const t of targets) {
+          if (!destinations.has(t)) found.push({ line: 1, msg: `SECTION_LIST_MAP["${from}"] به مقصدِ ناموجودِ «${t}» اشاره می‌کند` })
         }
       }
       return found

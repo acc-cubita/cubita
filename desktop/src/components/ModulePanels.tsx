@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
-import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
+import { MODULE_SECTIONS, opsSections, type SectionDef } from './moduleSections'
 import {
   LIST_MENUS,
   LIST_PAGE_GROUP,
   MODULE_LISTS,
   OPS_MENUS,
   listDefFor,
+  listsForOps,
   menuEntryActive,
   type ListMenuItem,
   type ListRow,
@@ -109,7 +110,6 @@ export function ModulePanels({
   //: بخش‌های دفتری (فهرست دارایی‌ها، گزارش اسناد استهلاک، …) تبِ همین صفحه‌اند ولی
   //: جایشان ستونِ «فهرست» است — کنارِ کارهایی که کاربر *انجام می‌دهد* نمی‌نشینند.
   const ops = opsSections(sections)
-  const sectionLists = listSections(sections)
   // صفحه‌های هم‌گروه فقط وقتی فهرست می‌شوند که بیش از یکی باشند؛ گروهِ تک‌صفحه‌ای
   // در نوارِ بالا هم با نامِ خودش دیده می‌شود، پس تکرارش در کارت بی‌فایده است.
   //
@@ -121,11 +121,15 @@ export function ModulePanels({
   const siblings = group?.items ?? []
   const pages = siblings.length > 1 || LIST_PAGE_GROUP[page] ? siblings : []
   //: ورودی‌ای که صفحه‌اش برای این کسب‌وکار نیست (ماژولِ خاموش، نوعِ دیگرِ کسب‌وکار) نمی‌آید.
-  const reachable = <T extends { key: PageKey }>(menu: T[] | undefined) =>
-    menu?.filter((e) => menuEntryVisible(e.key, groups))
-  const listMenu = group ? reachable(LIST_MENUS[group.heading]) : undefined
+  const reachable = <T extends { key: PageKey }>(menu: T[]) => menu.filter((e) => menuEntryVisible(e.key, groups))
   //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
-  const opsMenu = group ? reachable(OPS_MENUS[group.heading]) : undefined
+  const opsMenu = group && OPS_MENUS[group.heading] ? reachable(OPS_MENUS[group.heading]) : undefined
+  //: کارتِ «فهرست» به گزینه‌ی فعال گره می‌خورد، نه به گروه. پیش‌تر منوی گروه را
+  //: می‌داد و کاربر بیست ردیفِ بی‌ربط می‌دید؛ همان چیزی که رد شد.
+  const scopedLists = reachable(listsForOps(page, activeSection))
+  //: عملیاتی که نه دفترِ نظیر دارد و نه رکوردِ زنده («واحدها»، «تنظیمات»، …) کارتِ
+  //: خالی نمی‌گیرد؛ کارتِ همیشه‌خالی فقط عرض می‌گیرد و چیزی نمی‌گوید.
+  const hasList = scopedLists.length > 0 || listDefFor(page, activeSection) !== null
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -209,6 +213,7 @@ export function ModulePanels({
         </section>
       )}
 
+      {hasList && (
       <section className={`mod-panel mod-panel--list${collapsed.list ? ' collapsed' : ''}`}>
         <button
           type="button"
@@ -222,18 +227,16 @@ export function ModulePanels({
           <ChevronRight size={15} className="mod-panel-chev" />
         </button>
         <div className="mod-panel-body">
-          {listMenu ? (
-            // ماژولی که چند فهرستِ بی‌ربط دارد، به‌جای ردیف‌های داده منو می‌گیرد؛
-            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
-            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate)
-          ) : sectionLists.length > 0 ? (
-            // ماژولِ تب‌داری که دفترهایش خودشان تب‌اند: منوی همان تب‌ها.
-            sectionButtons(sectionLists, activeSection, onSelectSection)
+          {scopedLists.length > 0 ? (
+            // فهرست‌های همان گزینه‌ای که در «عملیات» فعال است — نه منوی کلِ گروه.
+            menuButtons(scopedLists, page, activeSection, onSelectSection, onNavigate)
           ) : (
+            // دفترِ جدا ندارد: چند رکوردِ آخرِ همین عملیات، زنده.
             <ListPanel token={token} page={page} section={activeSection} />
           )}
         </div>
       </section>
+      )}
     </div>
   )
 }

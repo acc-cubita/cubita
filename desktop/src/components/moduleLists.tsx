@@ -25,24 +25,19 @@ import {
   fetchWarehouseIssueLedger,
 } from '../api'
 import {
-  Activity,
   Archive,
-  BarChart3,
   BookMarked,
   CalendarClock,
   CalendarDays,
   CalendarRange,
-  Coins,
   Contact2,
   CreditCard,
   DatabaseBackup,
-  Download,
   FileCheck2,
   FilePenLine,
   FileSignature,
   FileSpreadsheet,
   FileStack,
-  Gauge,
   HandCoins,
   History,
   Hash,
@@ -52,15 +47,12 @@ import {
   ListTree,
   MapPin,
   Receipt,
-  Repeat,
   Scale,
   Tag,
   Tags,
   Target,
-  Upload,
   UsersRound,
   Wallet,
-  Wrench,
   type LucideIcon,
   ClipboardList,
   FileText,
@@ -92,6 +84,7 @@ import {
   PieChart,
   Ticket,
 } from 'lucide-react'
+import { MODULE_SECTIONS } from './moduleSections'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
 
@@ -252,9 +245,6 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'حسابداری': [
     { key: 'entrylist', label: 'اسناد حسابداری', icon: FileStack },
     { key: 'accountlist', label: 'فهرست حساب‌ها', icon: ListTree },
-    { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: Repeat },
-    { key: 'budgetlist', label: 'بودجه‌بندی', icon: Target },
-    { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: Coins },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
     { key: 'analyticlist', label: 'تفصیلی‌های سایر', icon: Tag },
   ],
@@ -299,13 +289,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
   'شرکت': [
-    { key: 'dataexport', label: 'ارسال اطلاعات', icon: Upload },
-    { key: 'dataimport', label: 'دریافت اطلاعات', icon: Download },
-    { key: 'reportbuilder', label: 'گزارش‌ساز', icon: Wrench },
     { key: 'dynamicreports', label: 'گزارش‌های پویا', icon: LayoutList },
-    { key: 'dayactivity', label: 'فعالیت‌های روز', icon: Activity },
-    { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: BarChart3 },
-    { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: Gauge },
     { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound },
     { key: 'ownertxnlist', label: 'تراکنش‌های شریک', icon: HandCoins },
     { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2 },
@@ -402,7 +386,7 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
  *  * `'view'`  — خودش فهرست یا گزارش است (جستجوی چک، گزارش ترازها).
  *  * `'none'`  — چیزی ثبت نمی‌کند (راهنمای مسیر، تنظیمات، تغییر رمز).
  */
-export type OpsListTarget = PageKey | 'state' | 'view' | 'none'
+export type OpsListTarget = PageKey | readonly PageKey[] | 'state' | 'view' | 'none'
 
 export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   ownertxn: 'ownertxnlist', //: ثبت ↔ دفتر — الگوی «فروش اقساطی»
@@ -459,8 +443,10 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   reports: 'view',
 
   // ── شرکت ──
-  contactnew: 'contactlist',
-  installments: 'installmentplans', //: الگوی مرجعِ این قاعده
+  //: «افراد مرتبط» دفترِ دومِ همین عملیات است؛ صاحبِ دیگری ندارد.
+  contactnew: ['contactlist', 'relatedpeople'],
+  //: الگوی مرجعِ این قاعده. «همه اقساط» نمای ردیف‌به‌ردیفِ همان قراردادهاست.
+  installments: ['installmentplans', 'allinstallments'],
   costcenter: 'costcenterlist',
   geo: 'geolist',
   contactgroup: 'contactgrouplist',
@@ -468,6 +454,18 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   yearendreminder: 'calendarlist', //: یادآوری‌اش روی همان تقویم می‌نشیند
   openingops: 'none', //: راهنمای مسیر
   yearendops: 'none',
+
+  //: نُه گزینه‌ای که با دامنه‌دارشدنِ کارتِ فهرست به «عملیات» آمدند.
+  dataexport: 'none',
+  dataimport: 'none',
+  reportbuilder: 'dynamicreports', //: دفترِ همان چیزی که می‌سازد
+  dayactivity: 'view',
+  mgmtreports: 'view',
+  usagereport: 'view',
+  //: فرم و دفترشان یک صفحه است — استثنای «عملیاتی که خودش فهرست است».
+  recurringlist: 'view',
+  budgetlist: 'view',
+  currencylist: 'view',
 
   // ── تنظیمات ──
   fiscalyear: 'fiscalyearlist',
@@ -744,4 +742,149 @@ export function listDefFor(page: PageKey, section: string | null): ListDef | nul
   const mod = MODULE_LISTS[page]
   if (!mod) return null
   return mod[section ?? '__default'] ?? mod.__default ?? null
+}
+
+// ── دامنه‌ی کارتِ «فهرست» ──────────────────────────────────────────────────
+
+/**
+ * کارتِ «فهرست» زیرمجموعه‌ی همان گزینه‌ای است که در «عملیات» فعال است — نه
+ * منوی کلِ گروه.
+ *
+ * **چرا این عوض شد:** تا امروز کارت به *گروه* گره خورده بود
+ * (`LIST_MENUS[group.heading]`)، پس در «مشتریان و فروش» هر بیست ردیف دیده
+ * می‌شد چه روی «اشخاص» ایستاده باشی چه روی «فاکتور فروش». کاربر همین را
+ * رد کرد: «فهرستِ مربوط به اون فقط باید بیاد، نه یک فهرستِ فله‌ای».
+ *
+ * ترتیبِ حل، از ریز به درشت:
+ *
+ *  1. `SECTION_LIST_MAP` — ریزکردنِ دستی برای تبی که دفترِ مشخصی دارد
+ *     («حواله انبار» ← «فهرست رسیدها و حواله‌ها»، نه هر هشت دفترِ انبار).
+ *  2. تب‌های `kind: 'list'`ِ **همان صفحه** — پیش‌فرضِ ماژول‌های تب‌دار.
+ *  3. `OPS_LIST_MAP[page]` — برای صفحه‌ای که تبِ فهرستی ندارد.
+ *
+ * هیچ‌کدام جواب ندهد، کارت به `ListPanel` می‌افتد که چند رکوردِ آخرِ همان
+ * عملیات را زنده نشان می‌دهد. یعنی «خالی» حالتِ آخر است، نه اولین.
+ */
+
+/** مقصدِ فهرست: یا `'<page>/<section>'` (تبِ یک صفحه)، یا کلیدِ صفحه‌ی فهرست. */
+export type ListTarget = string
+
+/**
+ * ریزکردن در سطحِ تب. فقط جایی نوشته می‌شود که پیش‌فرضِ «همه‌ی تب‌های فهرستِ
+ * صفحه» زیادی درشت باشد — یعنی ماژولی با چند دفترِ بی‌ربط به هم.
+ *
+ * نبودنِ یک تب این‌جا خطا نیست؛ یعنی «همان پیش‌فرض درست است».
+ */
+export const SECTION_LIST_MAP: Record<string, readonly ListTarget[]> = {
+  // ── انبار: هشت دفتر دارد و هیچ‌کدام به همه‌ی چهارده عملیات مربوط نیست ──
+  'inventory/products': ['inventory/stock', 'inventory/kardex', 'inventory/low', 'inventory/batches', 'inventory/serials'],
+  'inventory/warehouses': ['inventory/stock'],
+  'inventory/count-tags': ['inventory/count-list'],
+  'inventory/count': ['inventory/count-list'],
+  'inventory/issues': ['inventory/documents'],
+  'inventory/issue-returns': ['inventory/issue-return-list'],
+  'inventory/transfer': ['inventory/documents'],
+  'inventory/unpriced': ['inventory/documents'],
+  'inventory/valuation': ['inventory/documents'],
+  //: تعریف‌های کوچک دفترِ جدا ندارند؛ جدولشان داخلِ خودِ تب است.
+  'inventory/units': [],
+  'inventory/taxonomy': [],
+  'inventory/pricelists': [],
+  'inventory/adjust': [],
+  'inventory/import': [],
+
+  // ── خرید ──
+  //: «فهرست تامین‌کنندگان» صاحبِ دیگری ندارد و این نزدیک‌ترین عملیات به آن است.
+  'purchases/invoices': ['purchases/invoice-list', 'supplierlist'],
+  'purchases/services': ['purchases/service-list'],
+  'purchases/receipts': ['inventory/documents'],
+  'purchases/returns': [],
+  'purchases/deductions': [],
+
+  // ── دارایی ثابت ──
+  'fixedassets/assets': ['fixedassets/registry'],
+  'fixedassets/placement': ['fixedassets/assignments'],
+  'fixedassets/transfer': ['fixedassets/assignments'],
+  'fixedassets/depreciation-calc': ['fixedassets/depreciation-list'],
+  'fixedassets/depreciation-post': ['fixedassets/depreciation-docs'],
+  'fixedassets/disposal': ['fixedassets/disposals'],
+  'fixedassets/estimate': ['fixedassets/registry'],
+  'fixedassets/improvement': ['fixedassets/registry'],
+
+  // ── تولید ──
+  'manufacturing/boms': ['manufacturing/bom-list'],
+  'manufacturing/orders': ['manufacturing/order-list'],
+  'manufacturing/materials': ['manufacturing/variance'],
+  'manufacturing/receipts': ['manufacturing/kardex'],
+  'manufacturing/costing': ['manufacturing/cost-report'],
+
+  // ── پخش و بازارگاه: دفترها مالِ چیزی‌اند که می‌فروشی ──
+  'distributor/catalog': ['distributor/orders', 'distributor/returns', 'distributor/commission'],
+  'distributor/connections': [],
+  'distributor/zones': [],
+  'distributor/settings': [],
+  'marketplace/catalog': ['marketplace/orders', 'marketplace/returns'],
+  'marketplace/distributors': [],
+
+  // ── حقوق ──
+  //: فیش که صادر می‌شود، سه دفتر کنارِ هم لازم است: خودِ فیش‌ها، پرسنل، و مزایا.
+  'payroll/run': ['payslipledger', 'payroll/staff', 'payroll/benefits'],
+  'payroll/settings': [],
+
+  // ── مؤدیان: دفترش صفحه‌ی مستقل است، نه تب ──
+  'moadian/send': ['moadianhistory'],
+  'moadian/status': [],
+  'moadian/settings': [],
+
+  // ── ماژول‌هایی که دفتری ندارند ──
+  'integration/build': [],
+  'integration/connect': [],
+  'calendar/reminders': ['calendarlist'],
+  'calendar/calendar': ['calendarlist'],
+}
+
+/** نمایه‌ی «مقصد ← برچسب و آیکن»، از همان دو جایی که از قبل دارندشان. */
+let destIndex: Map<string, ListMenuItem> | null = null
+
+function destinations(): Map<string, ListMenuItem> {
+  if (destIndex) return destIndex
+  const m = new Map<string, ListMenuItem>()
+  //: صفحه‌های فهرست (و تب‌هایی که در منوی گروه ردیف دارند).
+  for (const items of Object.values(LIST_MENUS)) {
+    for (const it of items) m.set(it.section ? `${it.key}/${it.section}` : it.key, it)
+  }
+  //: تب‌های `kind: 'list'` — برچسب و آیکن را از خودِ تعریفِ بخش می‌گیرند.
+  for (const [page, secs] of Object.entries(MODULE_SECTIONS)) {
+    for (const s of secs) {
+      if (s.kind !== 'list') continue
+      const id = `${page}/${s.key}`
+      if (!m.has(id)) m.set(id, { key: page as PageKey, section: s.key, label: s.label, icon: s.icon })
+    }
+  }
+  destIndex = m
+  return m
+}
+
+/** تب‌های فهرستِ یک صفحه، به ترتیبی که در `MODULE_SECTIONS` آمده‌اند. */
+function ownListTabs(page: PageKey): ListTarget[] {
+  return (MODULE_SECTIONS[page] ?? []).filter((s) => s.kind === 'list').map((s) => `${page}/${s.key}`)
+}
+
+/** فهرست‌هایی که به گزینه‌ی عملیاتِ فعال مربوط‌اند. خالی یعنی «دفترِ جدا ندارد». */
+export function listsForOps(page: PageKey, section: string | null): ListMenuItem[] {
+  const refined = section ? SECTION_LIST_MAP[`${page}/${section}`] : undefined
+  const targets =
+    refined ??
+    (ownListTabs(page).length > 0
+      ? ownListTabs(page)
+      : ((t) => (t === undefined || t === 'state' || t === 'view' || t === 'none'
+          ? []
+          : Array.isArray(t)
+            ? t
+            : [t]))(OPS_LIST_MAP[page]))
+
+  const index = destinations()
+  //: مقصدِ ناشناخته بی‌صدا حذف می‌شود تا یک غلطِ تایپی کلِ کارت را نشکند؛
+  //: قاعده‌ی R14 همان را در ممیز قرمز می‌کند.
+  return targets.map((t) => index.get(t)).filter((x): x is ListMenuItem => x !== undefined)
 }
