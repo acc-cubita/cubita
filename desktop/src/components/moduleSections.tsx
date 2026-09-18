@@ -134,15 +134,15 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList },
   ],
   contacts: [
-    { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound },
-    { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock },
+    { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, kind: 'list' },
+    { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, kind: 'list' },
     { key: 'import', label: 'ورود گروهی اشخاص', icon: FileUp },
   ],
   crm: [
     { key: 'leads', label: 'سرنخ‌ها', icon: Target },
     { key: 'activities', label: 'پیگیری‌ها', icon: CalendarClock },
     { key: 'loyalty', label: 'باشگاه مشتریان', icon: Gift },
-    { key: 'segments', label: 'بخش‌بندی', icon: PieChart },
+    { key: 'segments', label: 'بخش‌بندی', icon: PieChart, kind: 'list' },
     { key: 'tiers', label: 'سطوح باشگاه', icon: Medal },
     { key: 'rewards', label: 'جوایز', icon: Ticket },
     { key: 'birthdays', label: 'تولدها', icon: Cake },
