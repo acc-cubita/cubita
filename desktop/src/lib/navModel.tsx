@@ -41,6 +41,7 @@ import {
   Hash,
   HeartHandshake,
   HelpCircle,
+  Keyboard,
   KeyRound,
   Landmark,
   Layers,
@@ -140,6 +141,7 @@ export type PageKey =
   | 'numbering'
   | 'coding'
   | 'personalization'
+  | 'shortcuts'
   | 'contactimport'
   //: ماژولِ «شرکت» — عملیاتِ سطحِ شرکت.
   | 'contactnew'
@@ -488,6 +490,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
       { key: 'coding', label: 'کدینگ', icon: <ListTree size={18} /> },
       { key: 'personalization', label: 'شخصی‌سازی', icon: <Settings2 size={18} /> },
+      { key: 'shortcuts', label: 'کلیدهای میان‌بر', icon: <Keyboard size={18} /> },
       { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
       { key: 'contactimport', label: 'ورود گروهی اشخاص', icon: <FileUp size={18} /> },
       { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },

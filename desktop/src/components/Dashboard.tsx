@@ -43,6 +43,8 @@ import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
 import { CodingPage } from '../pages/CodingPage'
 import { PersonalizationPage } from '../pages/PersonalizationPage'
+import { ShortcutsPage } from '../pages/ShortcutsPage'
+import { useShortcuts } from '../lib/useShortcuts'
 import { ContractFormPage } from '../pages/payroll/ContractFormPage'
 import { ContractListPage } from '../pages/payroll/ContractListPage'
 import { PayslipLedgerPage } from '../pages/payroll/PayslipLedgerPage'
@@ -359,6 +361,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   integrity: 'بررسی یکپارچگی',
   entrylist: 'اسناد حسابداری',
   accountlist: 'فهرست حساب‌ها',
+  shortcuts: 'کلیدهای میان‌بر',
   recurringlist: 'اسناد تکرارشونده',
   budgetlist: 'بودجه‌بندی',
   currencylist: 'ارزها و نرخ ارز',
@@ -421,6 +424,9 @@ export function Dashboard({
     setSection(s)
     setEditContactId(null)
   }
+  //: میان‌برهای کاربر — از هر جای برنامه، نه فقط داشبورد. خودش گاردِ «در حالِ
+  //: نوشتن» را دارد تا Ctrl+B وسطِ شرحِ یک سند صفحه را عوض نکند.
+  useShortcuts((pg, sec) => navigate(pg as PageKey, sec ?? null))
   //: شناسه‌ی طرف‌حسابی که در دستِ ویرایش است. `navigate` پاکش می‌کند تا رفتنِ
   //: بعدی به «طرف حساب جدید» واقعاً *جدید* باشد، نه ویرایشِ دوباره‌ی قبلی.
   const [editContactId, setEditContactId] = useState<string | null>(null)
@@ -859,6 +865,10 @@ export function Dashboard({
           {page === 'backup' && <BackupPage token={token} me={me} />}
           {page === 'coding' && <CodingPage token={token} />}
           {page === 'personalization' && <PersonalizationPage token={token} />}
+          {page === 'shortcuts' && (
+            //: مقصدها از localStorage می‌آیند، پس تایپشان `string` است نه `PageKey`.
+            <ShortcutsPage me={me} onNavigate={(pg, sec) => navigate(pg as PageKey, sec ?? null)} />
+          )}
           {page === 'numbering' && <NumberingPage token={token} />}
           {page === 'contactimport' && <ContactImportPage token={token} />}
           {page === 'backuplist' && <BackupListPage token={token} me={me} />}

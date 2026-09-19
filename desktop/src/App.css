@@ -11441,3 +11441,56 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 @media (max-width: 760px) {
   .mod-search-kbd { display: none; }
 }
+
+/* ── کلیدهای میان‌بر ─────────────────────────────────────────────────────── */
+.sc-note {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.sc-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  margin-bottom: var(--sp-3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.sc-search > svg { color: var(--text-muted); flex: none; }
+.sc-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 9px 0;
+  outline: none;
+}
+.sc-kbd {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  white-space: nowrap;
+  /* ترکیب لاتین است و در جریانِ راست‌به‌چپ به‌هم می‌ریزد. */
+  direction: ltr;
+  display: inline-block;
+}
+.sc-recording {
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+}
+.sc-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: var(--sp-2);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
