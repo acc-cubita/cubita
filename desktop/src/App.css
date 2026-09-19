@@ -1100,6 +1100,11 @@ button:disabled {
   background: var(--surface-2);
   color: var(--text-muted);
 }
+/* اطلاعی و خنثی (مثلِ جدولِ مالیاتِ «آینده») — نه موفق، نه هشدار. */
+.status-badge.tone-info {
+  background: var(--accent-bg);
+  color: var(--accent-on-tint);
+}
 /* بنفشِ آزمایشی — هم‌رنگِ دکمه‌ی «۱۴ روز رایگان»ِ سایت */
 .status-badge.tone-trial {
   background: color-mix(in srgb, var(--accent-2) 16%, transparent);
@@ -11383,6 +11388,162 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ef-callout > svg { flex: 0 0 auto; color: var(--accent-on-tint); }
 .ef-callout > p { flex: 1 1 260px; margin: 0; line-height: 1.8; }
 
+/* --- فیلدِ فرعی، گریدِ دوستونه، واحد درونِ فیلد، کلید --- */
+.ef-optional {
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+}
+.ef-grid--2 { grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - var(--ef-gap)) / 2)), 1fr)); }
+
+/* «ریال» و «٪» در انتهای فیلد (چپ در راست‌به‌چپ)؛ عدد راست‌چین است، پس به هم نمی‌خورند. */
+.ef-affix { position: relative; display: flex; align-items: center; min-width: 0; }
+/* هم‌اختصاصیتِ قاعده‌ی «یک ارتفاع» و بعد از آن — همان الگوی `.ef-search`. */
+.ef-form .ef-affix > input:not([type='checkbox']) { padding-inline-end: 48px; }
+/* ورودیِ عددی `dir="ltr"` است: «انتهای» خودش راست است، ولی واحد سمتِ چپ نشسته. */
+.ef-form .ef-affix > input[dir='ltr'] { padding-inline: 48px 12px; }
+.ef-affix-unit {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 12px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+/* عددِ مشتق (نه ورودی): هم‌شکلِ فیلد، ولی با زمینه‌ی خاکستری و مرزِ خط‌چین که بگوید تایپ‌شدنی نیست. */
+.ef-affix.is-static {
+  width: 100%;
+  height: var(--ef-h);
+  padding-inline: 12px 48px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.ef-affix-value { flex: 1 1 auto; min-width: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.ef-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--ef-h);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.ef-switch > input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.ef-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transition: background 0.15s;
+}
+.ef-switch-knob {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: inset-inline-start 0.15s, background 0.15s;
+}
+.ef-switch > input:checked + .ef-switch-track { background: var(--accent); }
+/* دستگیره از توکنِ متنِ لهجه — مثلِ `.mp-switch`، تا روی لهجه‌ی طلاییِ پوسته‌ی برند گم نشود. */
+.ef-switch > input:checked + .ef-switch-track .ef-switch-knob { inset-inline-start: 17px; background: var(--accent-text); }
+.ef-switch > input:focus-visible + .ef-switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ef-cap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.ef-cap > .ef-affix { flex: 1 1 170px; }
+
+/* شمار: کنارِ عنوانِ کارت («۲ جدول ثبت‌شده») یا درونِ خانه‌ی جدول («۴ پله») */
+.ef-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ef-count--accent { border-color: transparent; background: var(--accent-bg); color: var(--accent-on-tint); }
+.ef-title-row .ef-count { margin-inline-start: 6px; }
+
+/* --- جدولِ سازمانی: سرستونِ خاکستریِ ملایم، مرزِ شفاف، گوشه‌ی گرد ---
+   قاعده‌ها فقط بالای ۷۶۰px‌اند: زیرِ آن جدول کارت می‌شود و قاعده‌های `cards-on-mobile` حاکم‌اند.
+   اختصاصیتِ (۰،۳،۲) از `:root[data-structure='guided'] .page th` (۰،۳،۱) بالاتر است. */
+.ef-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.page .ef-table-wrap > table.ef-table { margin-top: 0; }
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.ef-table th {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .page .ef-table-wrap > table.ef-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .page .ef-table-wrap > table.ef-table--edit td { padding-block: 8px; }
+  .page .ef-table-wrap > table.ef-table tbody tr:last-child td { border-bottom: 0; }
+  .page .ef-table-wrap > table.ef-table tr.is-editing td { background: var(--accent-bg); }
+  .ef-table .ef-col-min { width: 1%; white-space: nowrap; }
+  .ef-table td > .ef-affix,
+  .ef-table td > .ef-cap { min-width: 170px; }
+}
+/* نشانِ خاکستری روی کارتِ خاکستریِ موبایل گم می‌شد؛ خطِ دورِ ظریف نگهش می‌دارد. */
+.ef-table .status-badge.tone-muted { box-shadow: inset 0 0 0 1px var(--border); }
+.ef-cell-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ef-cell-title > span { color: var(--text-h); font-weight: 600; }
+.ef-cell-title > small { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; }
+
+/* دکمه‌های آیکونیِ ستونِ «عملیات» */
+.ef-row-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.ef-row-btn {
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.ef-row-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint); }
+.ef-row-btn.is-danger:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.ef-row-btn-wrap { display: inline-flex; }
+/* تا hover به پوسته برسد و راهنمای «چرا غیرفعال است» باز شود. */
+.ef-row-btn-wrap > .ef-row-btn:disabled { pointer-events: none; }
+.ef-row-btn-label { display: none; }
+
+/* «افزودنِ ردیف» زیرِ آخرین ردیف */
+.ef-add-row {
+  justify-content: center;
+  width: 100%;
+  min-height: var(--ef-h);
+  margin-top: var(--sp-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--accent-on-tint);
+  font-weight: 600;
+}
+.ef-add-row:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint); }
+
 @media (max-width: 760px) {
   .ef-form > section,
   .ef-form > form > section,
@@ -11393,6 +11554,13 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ef-actions { padding: 12px var(--sp-4); }
   .ef-actions-buttons { width: 100%; }
   .ef-actions-buttons button { flex: 1 1 0; justify-content: center; padding: 0 12px; }
+  /* جدولِ کارت‌شده خودش مرز دارد؛ قابِ بیرونی فقط قابِ دوم می‌شد. */
+  .ef-table-wrap { border: 0; border-radius: 0; background: transparent; }
+  /* در کارت دکمه تمام‌عرض است، پس نامِ کار هم کنارِ آیکون می‌آید. */
+  .ef-row-btn-label { display: inline; }
+  .ef-row-actions > *,
+  .ef-row-btn-wrap > .ef-row-btn { flex: 1 1 0; }
+  table.cards-on-mobile td.card-actions .ef-row-btn { width: auto; height: auto; min-height: 36px; gap: 6px; }
 }
 
 /* ── جست‌وجوی ماژول روی داشبورد ─────────────────────────────────────────────

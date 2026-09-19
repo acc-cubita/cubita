@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, HelpCircle, Plus, Search, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, HelpCircle, Plus, Search, X, type LucideIcon } from 'lucide-react'
 
 /**
  * اجزای فرمِ سازمانی (`ef-*`) — برچسب، راهنمای شناور، انتخاب با دکمه‌ی «+»، تب، نوارِ
@@ -52,6 +52,7 @@ export function FormField({
   tip,
   message,
   span,
+  optional,
   children,
 }: {
   /** شناسه‌ی ثابتِ کنترل، وقتی صفحه باید خودش به آن برسد (مثلاً فوکوس بعد از خطا). */
@@ -63,6 +64,8 @@ export function FormField({
   message?: ReactNode
   /** تمامِ ردیف را بگیرد. پهنای دوستونه عمداً نیست: گریدِ یک‌ستونه‌ی موبایل را سرریز می‌کرد. */
   span?: 'full'
+  /** فیلدِ فرعی: برچسبِ کم‌رنگِ «اختیاری» کنارش می‌نشیند تا چشم از رویش رد شود. */
+  optional?: boolean
   children: ReactNode | ((id: string) => ReactNode)
 }) {
   const autoId = useId()
@@ -79,6 +82,7 @@ export function FormField({
           )}
         </label>
         {tip && <InfoTip text={tip} />}
+        {optional && <span className="ef-optional">اختیاری</span>}
       </div>
       {typeof children === 'function' ? children(id) : children}
       {message && (
@@ -90,9 +94,109 @@ export function FormField({
   )
 }
 
-/** گریدِ منظمِ فرم: سه ستون در عرضِ کافی، دو ستون در عرضِ متوسط، یک ستون در موبایل. */
-export function FormGrid({ children }: { children: ReactNode }) {
-  return <div className="ef-grid">{children}</div>
+/**
+ * گریدِ منظمِ فرم: سه ستون در عرضِ کافی، دو ستون در عرضِ متوسط، یک ستون در موبایل.
+ * `cols={2}` برای فرمِ کوتاهی که فیلدهایش جفت‌جفت خوانده می‌شوند (عنوان کنارِ گروه، تاریخ کنارِ نوع).
+ */
+export function FormGrid({ cols = 3, children }: { cols?: 2 | 3; children: ReactNode }) {
+  return <div className={cols === 2 ? 'ef-grid ef-grid--2' : 'ef-grid'}>{children}</div>
+}
+
+/**
+ * واحد درونِ فیلد («ریال»، «٪») به‌جای واحد در برچسب یا سرستون. واحد در انتهای فیلد می‌نشیند
+ * (چپ در راست‌به‌چپ)، همان‌جا که عدد تمام می‌شود. با `readOnly` جعبه‌ی هم‌شکلِ فقط‌خواندنی است،
+ * برای عددِ مشتق که ورودی نیست (مثلِ «از مبلغ»ِ پله).
+ */
+export function InputAffix({ unit, readOnly, children }: { unit: string; readOnly?: boolean; children: ReactNode }) {
+  return (
+    <div className={readOnly ? 'ef-affix is-static' : 'ef-affix'}>
+      {readOnly ? <output className="ef-affix-value">{children}</output> : children}
+      <span className="ef-affix-unit" aria-hidden="true">
+        {unit}
+      </span>
+    </div>
+  )
+}
+
+/** کلیدِ روشن/خاموش با برچسب — چک‌باکسِ واقعی زیرش است، پس Space و صفحه‌خوان همان کار را می‌کنند. */
+export function Switch({
+  id,
+  checked,
+  onChange,
+  label,
+}: {
+  id?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+}) {
+  return (
+    <label className="ef-switch">
+      <input id={id} type="checkbox" role="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="ef-switch-track" aria-hidden="true">
+        <span className="ef-switch-knob" />
+      </span>
+      <span>{label}</span>
+    </label>
+  )
+}
+
+/** شمارِ کنارِ عنوانِ کارت یا درونِ خانه‌ی جدول («۲ جدول ثبت‌شده»، «۴ پله»). */
+export function CountBadge({ accent, children }: { accent?: boolean; children: ReactNode }) {
+  return <span className={accent ? 'ef-count ef-count--accent' : 'ef-count'}>{children}</span>
+}
+
+/**
+ * دکمه‌ی آیکونیِ ستونِ «عملیات»ِ جدولِ فهرست. نامِ کار همیشه در `aria-label` و `title` است؛
+ * در نمای کارتیِ موبایل متنش هم کنارِ آیکون دیده می‌شود، چون آن‌جا دکمه تمام‌عرض است.
+ */
+export function RowAction({
+  icon: Icon,
+  label,
+  onClick,
+  danger,
+  disabled,
+  title,
+}: {
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+  danger?: boolean
+  disabled?: boolean
+  /** وقتی دکمه غیرفعال است، چرایش — مثلاً «فیش‌هایی به این جدول استناد کرده‌اند». */
+  title?: string
+}) {
+  const button = (
+    <button
+      type="button"
+      className={danger ? 'ef-row-btn is-danger' : 'ef-row-btn'}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={disabled && title ? undefined : (title ?? label)}
+    >
+      <Icon size={15} aria-hidden="true" />
+      <span className="ef-row-btn-label">{label}</span>
+    </button>
+  )
+  //: دکمه‌ی غیرفعال رویدادِ موس نمی‌گیرد و راهنمای `title`ش در بعضی مرورگرها دیده نمی‌شود؛
+  //: پوسته‌ای که title دارد چرای غیرفعال‌بودن را همیشه نشان می‌دهد.
+  return disabled && title ? (
+    <span className="ef-row-btn-wrap" title={title}>
+      {button}
+    </span>
+  ) : (
+    button
+  )
+}
+
+/** دکمه‌ی «افزودنِ ردیف» درست زیرِ آخرین ردیفِ جدولِ ویرایشی — همان‌جا که ردیفِ تازه می‌آید. */
+export function AddRowButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="ef-add-row" onClick={onClick}>
+      <Plus size={15} /> {children}
+    </button>
+  )
 }
 
 /**
