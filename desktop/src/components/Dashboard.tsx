@@ -456,6 +456,9 @@ export function Dashboard({
     setSection(null)
   }
   const [navOpen, setNavOpen] = useState(false)
+  //: کامندپالت. مالکش این‌جاست چون دو راهِ بازکردن دارد: `Ctrl+K` از خودِ پالت،
+  //: و دکمه‌ی جست‌وجوی نوارِ بالا — که روی موبایل تنها راه است.
+  const [searchOpen, setSearchOpen] = useState(false)
   // شمارِ پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشانِ آن روی منوی «بازارِ خرید»/«پخشِ من».
   // فقط برای حسابِ بازار پول می‌شود؛ هر ~۲۵ ثانیه + با هر جابه‌جاییِ صفحه (تا پس از
   // خواندنِ پیام‌ها زود به‌روز شود). آفلاین/خطا بی‌صدا رد می‌شود.
@@ -941,6 +944,7 @@ export function Dashboard({
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
             mpUnread={mpUnread}
+            onOpenSearch={() => setSearchOpen(true)}
             onLogout={onLogout}
             onSync={isElectron ? () => handleSync() : undefined}
             syncing={syncing}
@@ -958,7 +962,9 @@ export function Dashboard({
             />
             <main className="app-content">{pageContent}</main>
           </div>
-          {theme.content === 'guided' && <CommandPalette me={me} onNavigate={navigate} />}
+          {/* بی‌قید‌وشرط: دکمه‌ی جست‌وجوی نوارِ بالا در هر عرضی هست و نباید هیچ‌وقت
+              به چیزی وصل باشد که رندر نشده. */}
+          <CommandPalette me={me} onNavigate={navigate} open={searchOpen} onOpenChange={setSearchOpen} />
         </div>
       ) : (
         <div className={`app-shell${panelsClass}`}>

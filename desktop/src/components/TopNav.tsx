@@ -12,10 +12,10 @@ import {
   Download,
   User,
 } from 'lucide-react'
-import { buildNav, menuEntryVisible, uniqueNavItems, type PageKey } from '../lib/navModel'
+import { buildNav, menuEntryVisible, type PageKey } from '../lib/navModel'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
-import { textMatches } from '../lib/commands'
+import { fitBar } from '../lib/topnavFit'
 import { useNavSection } from './navContext'
 import { isElectron } from '../platform'
 
@@ -42,6 +42,7 @@ export function TopNav({
   allowedModules,
   isOwner,
   mpUnread = 0,
+  onOpenSearch,
   onLogout,
   onSync,
   syncing,
@@ -63,6 +64,8 @@ export function TopNav({
   isOwner?: boolean
   /** پیامِ خوانده‌نشده‌ی گفتگوی بازار — نشان روی منوی «بازارِ خرید»/«پخشِ من». */
   mpUnread?: number
+  /** بازکردنِ کامندپالت — همان چیزی که `Ctrl+K` باز می‌کند. */
+  onOpenSearch: () => void
   onLogout: () => void
   onSync?: () => void
   syncing?: boolean
@@ -97,7 +100,6 @@ export function TopNav({
   const [openModule, setOpenModule] = useState<PageKey | null>(null)
   //: تبِ فعالِ صفحه — تا بخشِ انتخاب‌شده در کشو هایلایت شود.
   const navSection = useNavSection()
-  const [query, setQuery] = useState('')
   const barRef = useRef<HTMLElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLElement>(null)
@@ -112,8 +114,9 @@ export function TopNav({
      `neededRef` عرضِ طبیعیِ نوارِ *باز* را نگه می‌دارد؛ چون منو نمی‌شکند، این عدد به
      عرضِ پنجره وابسته نیست. باز‌شدنِ دوباره با همان عدد سنجیده می‌شود، پس نوسانِ
      باز/بسته رخ نمی‌دهد (همبرگر از منو باریک‌تر است، پس هر بار که باز می‌شود جا دارد). */
-  //: دو مرحله‌ی کوچک‌شدنِ نوار، به همین ترتیب: اول جست‌وجوی ماژول کنار می‌رود
-  //: (`tight`)، و تنها اگر باز هم جا نشد کلِ منو به کشوی همبرگری می‌رود (`collapsed`).
+  //: دو مرحله‌ی کوچک‌شدنِ نوار، به همین ترتیب: اول قرصِ جست‌وجو به ذره‌بین جمع
+  //: می‌شود (`tight`)، و تنها اگر باز هم جا نشد کلِ منو به کشوی همبرگری می‌رود
+  //: (`collapsed`). جست‌وجو در هیچ پله‌ای پنهان نمی‌شود — قاعده در `fitBar` است.
   const [tight, setTight] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
@@ -145,36 +148,58 @@ export function TopNav({
         px(ms.columnGap) * (items.length - 1) +
         px(ms.marginInlineStart)
 
-      // بقیه‌ی نوار — عمداً **بی‌احتسابِ همبرگر**، که فقط در حالتِ جمع‌شده وجود دارد.
-      // اگر آن را می‌شمردیم، هر بار که نوار باز می‌شد عرضِ لازم عوض می‌شد و تصمیم بین
-      // باز و بسته نوسان می‌کرد.
+      // بقیه‌ی نوار. منو و همبرگر هر دو کنار گذاشته می‌شوند و جداگانه به `fitBar`
+      // داده می‌شوند، چون **جایگزینِ هم‌اند نه اضافه بر هم**: یا منو روی نوار است و
+      // همبرگری نیست، یا برعکس. شمردنِ همیشگیِ همبرگر نوار را در عرض‌های میانی
+      // بی‌دلیل به کشو می‌فرستاد، و نشمردنش روی ۳۲۰px سرریز می‌داد.
       const others = (Array.from(inner.children) as HTMLElement[]).filter(
         (el) => el !== menu && !el.classList.contains('topnav-hamburger') && el.offsetWidth > 0,
       )
       const cs = getComputedStyle(inner)
-      const base =
-        menuWidth +
+      const gap = px(cs.columnGap)
+      // فرزندانِ درجریانِ نوار همیشه `others` هستند به‌علاوه‌ی *یکی* از «منو یا
+      // همبرگر» — آن دو هرگز با هم نیستند. پس تعدادِ فاصله‌ها `others.length` است،
+      // در هر دو چیدمان.
+      const chrome =
         others.reduce((sum, el) => sum + el.offsetWidth, 0) +
         px(cs.paddingInlineStart) +
         px(cs.paddingInlineEnd) +
-        px(cs.columnGap) * others.length
+        gap * others.length
 
-      // هزینه‌ی جست‌وجو جدا حساب می‌شود تا هر دو مرحله در *یک* سنجش تصمیم‌گیری شوند.
-      // اگر مرحله‌به‌مرحله سنجیده می‌شد، هر تغییرِ حالت یک سنجشِ تازه می‌خواست و
-      // نوار می‌توانست بین دو حالت بلرزد.
-      const search = inner.querySelector('.topnav-search') as HTMLElement | null
+      // هزینه‌ی هر دو نمای جست‌وجو در *یک* سنجش لازم است، وگرنه هر تغییرِ حالت یک
+      // سنجشِ تازه می‌خواهد و نوار بین دو حالت می‌لرزد. نمایی که لازم نیست از
+      // جریان بیرون می‌رود ولی اندازه‌پذیر می‌ماند، پس هر دو همیشه خواندنی‌اند.
       const actions = inner.querySelector('.topnav-actions') as HTMLElement | null
-      const searchCost =
-        search && search.offsetWidth > 0
-          ? search.offsetWidth + (actions ? px(getComputedStyle(actions).columnGap) : 0)
-          : 0
-      // `base` وقتی نوار tight است جست‌وجو را نمی‌شمارد (از جریان بیرون رفته).
-      const withSearch = tight ? base + searchCost : base
-      const withoutSearch = tight ? base : base - searchCost
+      const aGap = actions ? px(getComputedStyle(actions).columnGap) : 0
+      const costOf = (sel: string) => {
+        const el = inner.querySelector(sel) as HTMLElement | null
+        return el ? el.offsetWidth + aGap : 0
+      }
+      const pill = costOf('.topnav-search')
+      const icon = costOf('.topnav-search-icon')
 
-      const avail = inner.clientWidth
-      setTight(withSearch > avail)
-      setCollapsed(withoutSearch > avail)
+      // همبرگر با `display:none` اندازه‌پذیر نیست، ولی عرضش در CSS صریح است، پس
+      // `getComputedStyle` همان را می‌دهد حتی وقتی رندر نشده.
+      const ham = inner.querySelector('.topnav-hamburger') as HTMLElement | null
+
+      // زیرِ ۱۰۲۴px مدیاکوئری خودش منو را برمی‌دارد و همبرگر را می‌گذارد. آن‌جا عرضِ
+      // آیتم‌ها صفر خوانده می‌شود و سنجش نتیجه می‌گرفت «منو روی نوار جا شد»، پس
+      // هزینه‌ی همبرگر را نمی‌شمرد و نوار روی ۳۲۰px از لبه بیرون می‌زد. `Infinity`
+      // یعنی «منو در هیچ قیمتی روی نوار نیست» — که دقیقاً حقیقتِ آن‌جاست.
+      const menuForced = getComputedStyle(menu).display === 'none'
+
+      // `chrome` هزینه‌ی نمایی از جست‌وجو را دارد که *همین حالا* در جریان است؛
+      // برداشتنش «نوارِ بدونِ منو، بدونِ همبرگر و بدونِ جست‌وجو» را می‌دهد.
+      const fit = fitBar({
+        bare: chrome - (tight ? icon : pill),
+        menu: menuForced ? Infinity : menuWidth,
+        hamburger: ham ? px(getComputedStyle(ham).width) : 0,
+        pill,
+        icon,
+        avail: inner.clientWidth,
+      })
+      setTight(fit.search === 'icon')
+      setCollapsed(fit.menu === 'drawer')
     }
 
     fit()
@@ -186,10 +211,7 @@ export function TopNav({
   // کلیک بیرون از نوار → بستنِ منوها. (پنل‌ها stopPropagation ندارند؛ ناوبری خودش می‌بندد.)
   useEffect(() => {
     function onDown(e: PointerEvent) {
-      if (barRef.current && !barRef.current.contains(e.target as Node)) {
-        setOpen(null)
-        setQuery('')
-      }
+      if (barRef.current && !barRef.current.contains(e.target as Node)) setOpen(null)
     }
     document.addEventListener('pointerdown', onDown)
     return () => document.removeEventListener('pointerdown', onDown)
@@ -201,7 +223,6 @@ export function TopNav({
       if (e.key === 'Escape') {
         setOpen(null)
         setMobileOpen(false)
-        setQuery('')
       }
     }
     document.addEventListener('keydown', onKey)
@@ -212,7 +233,6 @@ export function TopNav({
     onNavigate(page, section)
     setOpen(null)
     setMobileOpen(false)
-    setQuery('')
   }
 
   //: با هر بار باز شدنِ کشو، گروهی که صفحه‌ی فعال در آن است باز می‌شود. بدونِ این،
@@ -229,17 +249,6 @@ export function TopNav({
     //: ماژولِ فعالِ تب‌دار هم باز می‌شود تا بخشِ انتخاب‌شده بدونِ ضربه‌ی اضافه دیده شود.
     setOpenModule(MODULE_SECTIONS[active] ? active : null)
   }, [mobileOpen, activeGroupHeading, active])
-
-  // جست‌وجوی سریعِ ماژول‌ها: همه‌ی آیتم‌ها را تخت می‌کند و با متنِ ورودی فیلتر می‌کند.
-  const allItems = useMemo(
-    () => uniqueNavItems(groups, secondary),
-    [groups, secondary],
-  )
-  //: همان نرمال‌سازیِ کامندپالت — وگرنه «طرف حساب» با فاصله‌ی معمولی، منویی با
-  //: نیم‌فاصله را پیدا نمی‌کرد و کاربر نتیجه می‌گرفت که «نیست».
-  const results = query.trim()
-    ? allItems.filter((i) => textMatches(i.label, query)).slice(0, 8)
-    : []
 
   return (
     <header
@@ -295,26 +304,31 @@ export function TopNav({
         </nav>
 
         <div className="topnav-actions">
-          <div className="topnav-search">
+          {/* یک کار، دو نما. کادرِ تایپِ قبلی فقط منوها را می‌گشت؛ این‌ها همان
+              کامندپالتی را باز می‌کنند که `Ctrl+K` باز می‌کند — صفحه‌ها *و*
+              «شروعِ کار» — پس نتیجه در هر عرضی یکی است.
+              نمایی که لازم نیست `display:none` نمی‌گیرد بلکه از جریان بیرون
+              می‌رود و پنهان می‌شود: هم از دسترسِ Tab و صفحه‌خوان بیرون می‌ماند، هم
+              اندازه‌پذیر می‌ماند تا سنجشِ بالا در هر عرض بتواند تصمیم بگیرد. */}
+          <button
+            type="button"
+            className="topnav-search"
+            onClick={onOpenSearch}
+            title="جست‌وجوی ماژول یا کار — Ctrl + K"
+          >
             <Search size={15} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="جست‌وجوی ماژول…"
-              aria-label="جست‌وجوی ماژول"
-            />
-            {results.length > 0 && (
-              <div className="topnav-search-results">
-                {results.map((r) => (
-                  <button key={r.key} type="button" className="topnav-dd-item" onClick={() => go(r.key)}>
-                    <span className="topnav-dd-ico">{r.icon}</span>
-                    <span>{r.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+            <span className="topnav-search-label">جست‌وجو…</span>
+            <kbd className="topnav-search-kbd">Ctrl + K</kbd>
+          </button>
+          <button
+            type="button"
+            className="topnav-search-icon"
+            onClick={onOpenSearch}
+            aria-label="جست‌وجوی ماژول یا کار"
+            title="جست‌وجوی ماژول یا کار — Ctrl + K"
+          >
+            <Search size={18} />
+          </button>
 
           {businessName && token && currentTenantId ? (
             <TenantSwitcher token={token} currentTenantId={currentTenantId} businessName={businessName} />
