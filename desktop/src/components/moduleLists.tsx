@@ -468,6 +468,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   currencylist: 'view',
 
   // ── تنظیمات ──
+  shortcuts: 'none', //: ترجیحِ شخصی، رکوردی نمی‌سازد
   fiscalyear: 'fiscalyearlist',
   //: قالبِ صنفی حساب می‌سازد، و دفترِ حساب‌ها همان «فهرست حساب‌ها» است — فهرستِ
   //: دوم یعنی دو نمای یک داده.

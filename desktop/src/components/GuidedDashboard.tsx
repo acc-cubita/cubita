@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Wallet, TrendingUp, PackageSearch, Inbox, Rocket } from 'lucide-react'
 import { fetchIncomeStatement, fetchTrialBalance } from '../api'
+import type { MeResponse } from '../api'
 import type { PageKey } from './Sidebar'
 import { StatCard } from './StatCard'
 import { SectionCard } from './SectionCard'
 import { AlertsPanel } from './AlertsPanel'
+import { ModuleSearch } from './ModuleSearch'
 import { TASK_LAUNCHERS } from '../lib/taskRegistry'
 
 const fa = (v: number) => v.toLocaleString('fa-IR')
@@ -16,12 +18,14 @@ const fa = (v: number) => v.toLocaleString('fa-IR')
  */
 export function GuidedDashboard({
   token,
+  me,
   userName,
   pendingOutboxCount,
   itemsCount,
   onNavigate,
 }: {
   token: string
+  me: MeResponse
   userName: string
   pendingOutboxCount: number
   itemsCount: number
@@ -55,6 +59,10 @@ export function GuidedDashboard({
         <h1>خوش آمدید، {userName}</h1>
         <p className="hint">یک کار را از «مرکزِ اقدام» شروع کنید، یا کارهای نیازمندِ رسیدگی را ببینید.</p>
       </div>
+
+      {/* بالای KPIها عمدی است: کسی که داشبورد را باز می‌کند معمولاً می‌خواهد
+          *جایی برود*، نه عددی بخواند. */}
+      <ModuleSearch me={me} onNavigate={onNavigate} />
 
       <div className="stat-grid">
         <StatCard
