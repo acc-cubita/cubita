@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ClipboardList, FileSignature, List, Plus, Save, Sparkles, Trash2, X } from 'lucide-react'
+import { ClipboardList, FileSignature, List, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import {
   CONTRACT_TYPE_LABELS,
   EMPLOYMENT_TYPES,
@@ -28,7 +28,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { NumberInput } from '../../components/NumberInput'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
-import { ActionBar, FormField, FormGrid, FormTabs, SelectWithAdd, TabHead } from '../../components/form/FormKit'
+import { ActionBar, FormField, FormGrid, FormStatus, FormTabs, InlineCreate, SelectWithAdd, TabHead } from '../../components/form/FormKit'
 import type { PageKey } from '../../lib/navModel'
 import { EmployeePicker } from './EmployeePicker'
 
@@ -248,16 +248,19 @@ export function ContractFormPage({
   }
 
   //: نوارِ پایین همیشه چیزی مفید می‌گوید: نتیجه‌ی آخرین ثبت، وگرنه جمعِ ماهانه‌ی قرارداد.
-  const status = msg ? (
-    <span className={msg.kind === 'ok' ? 'is-ok' : 'is-err'} role={msg.kind === 'ok' ? 'status' : 'alert'}>
-      {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />} {msg.text}
-    </span>
-  ) : payTotal > 0 ? (
-    <span>
-      جمعِ حقوق و مزایای ثابت: <b>{fa(payTotal)}</b> ریال
-      {deductionTotal > 0 && <> · کسورات: <b>{fa(deductionTotal)}</b> ریال</>}
-    </span>
-  ) : null
+  const status = (
+    <FormStatus
+      msg={msg}
+      idle={
+        payTotal > 0 && (
+          <>
+            جمعِ حقوق و مزایای ثابت: <b>{fa(payTotal)}</b> ریال
+            {deductionTotal > 0 && <> · کسورات: <b>{fa(deductionTotal)}</b> ریال</>}
+          </>
+        )
+      }
+    />
+  )
 
   return (
     <div className="page panels">
@@ -510,75 +513,6 @@ function EmploymentTab(p: {
         />
       )}
     </FormGrid>
-  )
-}
-
-// ── ساختِ درجای یک رکوردِ مرجع ────────────────────────────────────────────────
-
-function InlineCreate({
-  label,
-  fields,
-  onCreate,
-  onClose,
-}: {
-  label: string
-  fields: { key: string; label: string; required?: boolean; options?: string[] }[]
-  onCreate: (values: Record<string, string>) => Promise<void>
-  onClose: () => void
-}) {
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ready = fields.every((f) => !f.required || (values[f.key] ?? '').trim())
-
-  async function go() {
-    setBusy(true)
-    setError(null)
-    try {
-      await onCreate(values)
-      setValues({})
-    } catch (err) {
-      setError(errText(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <section className="ef-inline-create" aria-label={label}>
-      <div className="ef-inline-create-head">
-        {label}
-        <button type="button" className="ef-tip-btn" onClick={onClose} aria-label="بستن">
-          <X size={14} />
-        </button>
-      </div>
-      <FormGrid>
-        {fields.map((f) => (
-          <FormField key={f.key} label={f.label} required={f.required}>
-            {(id) =>
-              f.options ? (
-                <select id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
-                  <option value="">— انتخاب کنید —</option>
-                  {f.options.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
-              )
-            }
-          </FormField>
-        ))}
-      </FormGrid>
-      <div className="ef-inline-create-foot">
-        <button type="button" className="btn-primary" onClick={go} disabled={busy || !ready}>
-          <Plus size={14} /> بساز و انتخاب کن
-        </button>
-        {error && <p className="ef-message ef-message--warn">{error}</p>}
-      </div>
-    </section>
   )
 }
 

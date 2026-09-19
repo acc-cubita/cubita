@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Settings, Save, Plus, Trash2, Sparkles, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Plus, Save, Settings, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
+import { ActionBar, FormField, FormGrid, FormStatus, FormTabs, InfoTip, TabHead } from './form/FormKit'
 import {
   fetchPayrollFactors,
   fetchPayrollSettings,
@@ -10,8 +11,10 @@ import {
   type PayrollSettingsRecord,
 } from '../api'
 import { isoToJalali, todayIso } from '../lib/jalali'
+import type { Msg } from '../pages/accounting/kit'
 
 const fa = (v: string | number) => Math.round(Number(v || 0)).toLocaleString('fa-IR')
+const faYear = (y: number) => y.toLocaleString('fa-IR', { useGrouping: false })
 
 type BracketRow = { up_to: string; rate: string }
 
@@ -82,10 +85,15 @@ const DEFAULT_PARAMS: StatutoryDraft = {
   roundDigits: '0',
 }
 
+type SettingsTab = 'params' | 'exempt' | 'brackets' | 'notes'
+
 /**
  * ویرایشگرِ تنظیماتِ حقوق برای هر سالِ شمسی: نرخِ بیمه‌ی سهمِ کارمند/کارفرما،
  * معافیتِ مالیاتیِ سالانه و پلکانِ مالیات. تا وقتی این تنظیمات (با پلکانِ نرخ‌غیرصفر)
  * ثبت نشود، سرور صدورِ فیشِ حقوق را مسدود می‌کند — پس این پنل پیش‌نیازِ کلِ ماژول است.
+ *
+ * چیدمان همان «قرارداد جدید» است: کارتِ اصلی (سال و نرخ‌های پایه) و کارتِ جزئیات با
+ * تب، و نوارِ ذخیره‌ی چسبیده به پایین.
  */
 export function PayrollSettingsPanel({
   token,
@@ -105,8 +113,10 @@ export function PayrollSettingsPanel({
   const [brackets, setBrackets] = useState<BracketRow[]>([{ up_to: '', rate: '' }])
   const [params, setParams] = useState<StatutoryDraft>(DEFAULT_PARAMS)
   const [factors, setFactors] = useState<PayrollFactorRecord[]>([])
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [msg, setMsg] = useState<Msg>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [tab, setTab] = useState<SettingsTab>('params')
 
   const current = useMemo(() => all.find((s) => s.year === year) ?? null, [all, year])
 
@@ -149,24 +159,24 @@ export function PayrollSettingsPanel({
   }, [])
 
   const load = useCallback(async () => {
-    setError(null)
+    setLoadError(null)
     try {
       const [list, factorRows] = await Promise.all([fetchPayrollSettings(token), fetchPayrollFactors(token)])
       setAll(list)
       setFactors(factorRows)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setLoadError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }, [token])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => { populate(current) }, [current, populate])
 
-  // آیا پلکانِ سالِ جاری هنوز placeholderِ نرخ‌صفر است؟ (همان گاردِ سرور)
   //: نقشِ بیمهٔ تکمیلی/درمانِ سهمِ کارمند فقط روی عاملِ **کسور** معنی دارد؛
   //: سهمِ کارفرما می‌تواند مزایا هم باشد، پس آن‌جا فهرست محدود نمی‌شود.
   const deductionFactors = factors.filter((f) => f.category === 'deduction')
 
+  // آیا پلکانِ سالِ جاری هنوز placeholderِ نرخ‌صفر است؟ (همان گاردِ سرور)
   const isPlaceholder = !current || !current.tax_brackets?.length || current.tax_brackets.every((b) => Number(b.rate) === 0)
 
   function setParam<K extends keyof StatutoryDraft>(key: K, value: StatutoryDraft[K]) {
@@ -187,27 +197,35 @@ export function PayrollSettingsPanel({
     setExemption(EXAMPLE.exemption); setMinWage(EXAMPLE.minWage); setLeaveDays(EXAMPLE.leaveDays)
     setBrackets(EXAMPLE.brackets.map((b) => ({ ...b })))
     setNotes('ارقامِ نمونه — پیش از صدورِ فیشِ واقعی با بخش‌نامه‌ی رسمیِ همان سال تطبیق دهید.')
-    setMessage('ارقامِ نمونه بارگذاری شد؛ آن‌ها را بازبینی و ذخیره کنید.')
+    setMsg({ text: 'ارقامِ نمونه بارگذاری شد؛ آن‌ها را بازبینی و ذخیره کنید.', kind: 'ok' })
+  }
+
+  /** خطای پلکان کاربر را به تبِ پلکان می‌برد — وگرنه پیام به ردیفی اشاره می‌کرد که پیدا نبود. */
+  function bracketError(text: string) {
+    setTab('brackets')
+    setMsg({ text, kind: 'err' })
   }
 
   async function save() {
-    setError(null); setMessage(null)
+    setMsg(null)
     if (!(Number(empRate) >= 0) || !(Number(employerRate) >= 0)) {
-      setError('نرخِ بیمه معتبر نیست.'); return
+      setMsg({ text: 'نرخِ بیمه معتبر نیست.', kind: 'err' })
+      return
     }
     const rows = brackets.filter((b) => b.rate !== '' || b.up_to !== '')
-    if (rows.length === 0) { setError('حداقل یک پلکانِ مالیاتی لازم است.'); return }
+    if (rows.length === 0) { bracketError('حداقل یک پلکانِ مالیاتی لازم است.'); return }
     // آخرین پلکان همیشه نامحدود (up_to = null) است
     const payloadBrackets = rows.map((b, i) => ({
       up_to: i === rows.length - 1 ? null : (b.up_to === '' ? null : Number(b.up_to)),
       rate: fromPct(b.rate),
     }))
     if (payloadBrackets.slice(0, -1).some((b) => b.up_to == null)) {
-      setError('فقط ردیفِ آخر می‌تواند سقفِ نامحدود داشته باشد؛ برای بقیه سقف وارد کنید.'); return
+      bracketError('فقط ردیفِ آخر می‌تواند سقفِ نامحدود داشته باشد؛ برای بقیه سقف وارد کنید.'); return
     }
     if (payloadBrackets.some((b) => b.rate < 0 || b.rate > 1)) {
-      setError('نرخِ هر پلکان باید بین ۰ تا ۱۰۰ درصد باشد.'); return
+      bracketError('نرخِ هر پلکان باید بین ۰ تا ۱۰۰ درصد باشد.'); return
     }
+    setBusy(true)
     try {
       await upsertPayrollSettings(token, {
         year,
@@ -235,234 +253,300 @@ export function PayrollSettingsPanel({
         allow_negative_tax: params.allowNegativeTax,
         payment_rounding_digits: Number(params.roundDigits) || 0,
       })
-      setMessage(`تنظیماتِ حقوقِ سال ${year} ذخیره شد.`)
+      setMsg({ text: `تنظیماتِ حقوقِ سال ${faYear(year)} ذخیره شد.`, kind: 'ok' })
       await load()
       onSaved?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    } finally {
+      setBusy(false)
     }
   }
 
   const years = Array.from(new Set([year, ...all.map((s) => s.year)])).sort((a, b) => b - a)
 
-  return (
-    <SectionCard
-      icon={Settings}
-      title="تنظیماتِ حقوق — نرخِ بیمه و پلکانِ مالیات"
-      description="پیش‌نیازِ صدورِ فیش: نرخِ بیمه‌ی سهمِ کارمند/کارفرما، معافیتِ مالیاتی و پلکانِ مالیاتِ هر سال."
-    >
-      <div className="payroll-settings-bar">
-        <label>
-          سال (شمسی)
-          <NumberInput group={false} value={year} onChange={(v) => setYear(Number(v) || year)} style={{ width: 100 }} list="payroll-setting-years" />
-          <datalist id="payroll-setting-years">
-            {years.map((y) => <option key={y} value={y} />)}
-          </datalist>
-        </label>
-        <span className={`status-badge ${isPlaceholder ? 'tone-warning' : 'tone-success'}`}>
-          {isPlaceholder
-            ? <><AlertTriangle size={13} /> تنظیماتِ این سال ناقص است</>
-            : <><ShieldCheck size={13} /> تنظیماتِ این سال آماده است</>}
-        </span>
-        <button type="button" onClick={loadExample}><Sparkles size={13} /> بارگذاریِ ارقامِ نمونه</button>
-      </div>
-
-      {isPlaceholder && (
-        <p className="field-hint payroll-warn">
-          تا وقتی پلکانِ مالیاتِ این سال با نرخِ واقعی (غیرصفر) ثبت نشود، صدورِ فیشِ حقوق مسدود است. اعدادِ مالیات/بیمه هرسال طبق بخش‌نامه تغییر می‌کنند؛ مسئولیتِ صحتِ ارقام با کارفرماست.
-        </p>
-      )}
-
-      <div className="payroll-settings-grid">
-        <label>
-          نرخِ بیمه — سهمِ کارمند (٪)
-          <NumberInput allowDecimal value={empRate} onChange={setEmpRate} placeholder="مثلاً ۷" />
-        </label>
-        <label>
-          نرخِ بیمه — سهمِ کارفرما (٪)
-          <NumberInput allowDecimal value={employerRate} onChange={setEmployerRate} placeholder="مثلاً ۲۳" />
-        </label>
-        <label>
-          معافیتِ مالیاتیِ سالانه (ریال)
-          <NumberInput value={exemption} onChange={setExemption} />
-          <span className="field-hint">{exemption ? `${fa(exemption)} ریال — ماهانه ≈ ${fa(Number(exemption) / 12)}` : 'مبلغِ سالانه‌ی معاف از مالیات'}</span>
-        </label>
-        <label>
-          حداقلِ حقوقِ ماهانه (پایه‌ی سقفِ عیدی، ریال)
-          <NumberInput value={minWage} onChange={setMinWage} />
-          <span className="field-hint">{minWage ? `${fa(minWage)} ریال` : '۰ = بدون سقفِ عیدی'}</span>
-        </label>
-        <label>
-          روزهای مرخصیِ استحقاقیِ سالانه
-          <NumberInput value={leaveDays} onChange={setLeaveDays} />
-        </label>
-      </div>
-
-      <h3 className="panel-subhead">پارامترهای قانونی</h3>
-      <p className="field-hint">
-        تا پیش از این، این عددها در کدِ سرور ثابت بودند. پیش‌فرضِ هرکدام همان عددِ قبلی است،
-        پس تا وقتی دست نزنید هیچ محاسبه‌ای فرق نمی‌کند.
-      </p>
-      <div className="payroll-settings-grid">
-        <label>
-          سقفِ روزانهٔ دستمزدِ مشمولِ بیمه (ریال)
-          <NumberInput value={params.ceiling} onChange={(v) => setParam('ceiling', v)} />
-          <span className="field-hint">
-            {Number(params.ceiling) > 0
-              ? `ماهانه ≈ ${fa(Number(params.ceiling) * (Number(params.monthDays) || 30))} ریال`
-              : '۰ = بی‌سقف (رفتارِ پیش‌فرض)'}
-          </span>
-        </label>
-        <label>
-          نرخِ بیمهٔ بیکاری (٪)
-          <NumberInput allowDecimal value={params.unemployment} onChange={(v) => setParam('unemployment', v)} />
-          <span className="field-hint">سهمِ کارفرماست و به نرخِ کارفرما اضافه می‌شود.</span>
-        </label>
-        <label>
-          نرخِ بیمهٔ مشاغل سخت (٪)
-          <NumberInput allowDecimal value={params.hardJob} onChange={(v) => setParam('hardJob', v)} />
-          <span className="field-hint">
-            ثبت می‌شود ولی هنوز اعمال نمی‌شود: شمولِ آن به کارمند وابسته است و کوبیتا هنوز آن پرچم را ندارد.
-          </span>
-        </label>
-        <label>
-          ضریبِ مبنای عیدی
-          <NumberInput allowDecimal value={params.eidiMult} onChange={(v) => setParam('eidiMult', v)} />
-          <span className="field-hint">۲ = دو برابرِ مبنا.</span>
-        </label>
-        <label>
-          روزهای مبنای سنوات در هر سال
-          <NumberInput value={params.sevDays} onChange={(v) => setParam('sevDays', v)} />
-          <span className="field-hint">۳۰ = یک ماه به‌ازای هر سال سابقه.</span>
-        </label>
-        <label>
-          مبنای روزِ کاریِ ماه
-          <NumberInput allowDecimal value={params.monthDays} onChange={(v) => setParam('monthDays', v)} />
-          <span className="field-hint">مقسومٌ‌علیهِ نسبتِ کارکرد و دستمزدِ روزانه.</span>
-        </label>
-        <label>
-          ساعتِ کارِ ماهانهٔ قانونی
-          <NumberInput allowDecimal value={params.monthHours} onChange={(v) => setParam('monthHours', v)} />
-        </label>
-        <label>
-          ضریبِ اضافه‌کار
-          <NumberInput allowDecimal value={params.otMult} onChange={(v) => setParam('otMult', v)} />
-        </label>
-        <label>
-          رندِ خالصِ پرداختی (تعدادِ رقم)
-          <NumberInput value={params.roundDigits} onChange={(v) => setParam('roundDigits', v)} />
-          <span className="field-hint">
-            {Number(params.roundDigits) > 0
-              ? `تا ${fa(10 ** Number(params.roundDigits))} ریال گِرد می‌شود؛ اختلاف به حسابِ «تعدیل رند حقوق» می‌رود.`
-              : '۰ = بدونِ رند (رفتارِ پیش‌فرض)'}
-          </span>
-        </label>
-      </div>
-
-      <h3 className="panel-subhead">معافیتِ بیمه از مالیات</h3>
-      <p className="field-hint">
-        چه کسری از هر بیمه پیش از اعمالِ پلکان، از مبنای مالیات کم شود. برای بیمهٔ تکمیلی و درمان
-        باید بگویید کدام عاملِ کسور همان است، وگرنه ضریب روی هیچ مبلغی نمی‌نشیند.
-      </p>
-      <div className="payroll-settings-grid">
-        <label>
-          ضریبِ معافیتِ تأمین اجتماعی (٪)
-          <NumberInput allowDecimal value={params.coefSocial} onChange={(v) => setParam('coefSocial', v)} />
-        </label>
-        <label>
-          ضریبِ معافیتِ بیمهٔ تکمیلی (٪)
-          <NumberInput allowDecimal value={params.coefSupp} onChange={(v) => setParam('coefSupp', v)} />
-        </label>
-        <label>
-          ضریبِ معافیتِ بیمهٔ درمان (٪)
-          <NumberInput allowDecimal value={params.coefMedical} onChange={(v) => setParam('coefMedical', v)} />
-        </label>
-        <label>
-          عاملِ بیمهٔ تکمیلی — سهمِ کارمند
-          <select value={params.suppEmployee} onChange={(e) => setParam('suppEmployee', e.target.value)}>
-            <option value="">— نسبت داده نشده —</option>
-            {deductionFactors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </label>
-        <label>
-          عاملِ بیمهٔ تکمیلی — سهمِ کارفرما
-          <select value={params.suppEmployer} onChange={(e) => setParam('suppEmployer', e.target.value)}>
-            <option value="">— نسبت داده نشده —</option>
-            {factors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </label>
-        <label>
-          عاملِ بیمهٔ درمان
-          <select value={params.medical} onChange={(e) => setParam('medical', e.target.value)}>
-            <option value="">— نسبت داده نشده —</option>
-            {deductionFactors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </label>
-      </div>
-      <label className="payroll-notes">
-        <input
-          type="checkbox"
-          checked={params.allowNegativeTax}
-          onChange={(e) => setParam('allowNegativeTax', e.target.checked)}
+  /** فیلدِ عددیِ یک پارامتر. `note` پیامِ زنده‌ی زیرِ فیلد است (مثلاً معادلِ ماهانه). */
+  const paramField = (key: keyof StatutoryDraft, label: string, opts: { tip?: string; decimal?: boolean; note?: string } = {}) => (
+    <FormField label={label} tip={opts.tip} message={opts.note}>
+      {(id) => (
+        <NumberInput
+          id={id}
+          allowDecimal={opts.decimal}
+          value={params[key] as string}
+          onChange={(v) => setParam(key, v as never)}
         />
-        {' '}مالیاتِ منفی محاسبه شود (استرداد در همان فیش)
-      </label>
-      <p className="field-hint">
-        خاموش (پیش‌فرض) یعنی ماهِ کم‌درآمد مالیاتِ منفی نمی‌گیرد؛ استرداد کارِ تعدیلِ پایانِ سال است.
-      </p>
+      )}
+    </FormField>
+  )
 
-      <h3 className="panel-subhead">پلکانِ مالیاتِ سالانه</h3>
-      <p className="field-hint">هر پلکان روی «مشمولِ سالانه پس از کسرِ معافیت» اعمال می‌شود. سقف‌ها تجمعی و صعودی‌اند؛ ردیفِ آخر خودبه‌خود نامحدود (به‌بالا) در نظر گرفته می‌شود.</p>
-      <div className="entity-table-wrap">
-        <div className="table-scroll">
-          <table className="entity-table tax-bracket-table cards-on-mobile">
-            <thead>
-              <tr><th>ردیف</th><th>تا سقفِ سالانه (ریال)</th><th>نرخ (٪)</th><th></th></tr>
-            </thead>
-            {/* audit-r9-exempt: پلکانِ فرم همیشه دستِ‌کم یک ردیف دارد و
-                به‌جای حالتِ خالی دکمه‌ی «افزودنِ پلکان» می‌گیرد. */}
-            <tbody>
-              {brackets.map((b, i) => {
-                const last = i === brackets.length - 1
-                return (
-                  <tr key={i}>
-                    <td data-label="ردیف">{fa(i + 1)}</td>
-                    <td data-label="تا سقفِ سالانه (ریال)">
-                      {last ? (
-                        <span className="muted">به‌بالا (نامحدود)</span>
-                      ) : (
-                        <NumberInput value={b.up_to} onChange={(v) => setBracket(i, { up_to: v })} placeholder="سقفِ تجمعی" />
-                      )}
-                    </td>
-                    <td data-label="نرخ (٪)">
-                      <NumberInput allowDecimal value={b.rate} onChange={(v) => setBracket(i, { rate: v })} />
-                    </td>
-                    <td className="tax-bracket-action card-actions">
-                      <button type="button" className="icon-btn-danger" title="حذفِ ردیف" onClick={() => removeBracket(i)} disabled={brackets.length <= 1}>
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div className="check-actions" style={{ marginTop: 8 }}>
-        <button type="button" onClick={addBracket}><Plus size={13} /> افزودنِ پلکان</button>
-      </div>
+  const factorSelect = (key: 'suppEmployee' | 'suppEmployer' | 'medical', label: string, list: PayrollFactorRecord[]) => (
+    <FormField label={label}>
+      {(id) => (
+        <select id={id} value={params[key]} onChange={(e) => setParam(key, e.target.value)}>
+          <option value="">— نسبت داده نشده —</option>
+          {list.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </FormField>
+  )
 
-      <label className="payroll-notes">
-        یادداشت
-        <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="مرجعِ بخش‌نامه یا توضیح" />
-      </label>
+  return (
+    <form
+      className="ef-form"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault()
+        void save()
+      }}
+    >
+      <SectionCard
+        icon={Settings}
+        title="تنظیماتِ حقوقِ سال"
+        tip="پیش‌نیازِ صدورِ فیش: نرخِ بیمه‌ی سهمِ کارمند/کارفرما، معافیتِ مالیاتی و پلکانِ مالیاتِ هر سال. اعدادِ مالیات و بیمه هر سال طبقِ بخش‌نامه تغییر می‌کنند؛ مسئولیتِ صحتِ ارقام با کارفرماست."
+        actions={
+          <>
+            <span className={`status-badge ${isPlaceholder ? 'tone-warning' : 'tone-success'}`}>
+              {isPlaceholder ? (
+                <>
+                  <AlertTriangle size={13} /> ناقص
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={13} /> آماده
+                </>
+              )}
+            </span>
+            <button type="button" onClick={loadExample}>
+              <Sparkles size={14} /> بارگذاریِ ارقامِ نمونه
+            </button>
+          </>
+        }
+      >
+        {loadError && <p className="ef-message ef-message--warn" role="alert">{loadError}</p>}
+        <FormGrid>
+          <FormField label="سال (شمسی)" tip="برای دیدن یا ویرایشِ سالِ دیگر، عددش را بنویسید؛ سال‌های ثبت‌شده در فهرستِ پیشنهادی می‌آیند.">
+            {(id) => (
+              <>
+                <NumberInput
+                  id={id}
+                  group={false}
+                  value={year}
+                  onChange={(v) => setYear(Number(v) || year)}
+                  list="payroll-setting-years"
+                />
+                <datalist id="payroll-setting-years">
+                  {years.map((y) => (
+                    <option key={y} value={y} />
+                  ))}
+                </datalist>
+              </>
+            )}
+          </FormField>
+          <FormField label="نرخِ بیمه — سهمِ کارمند (٪)">
+            {(id) => <NumberInput id={id} allowDecimal value={empRate} onChange={setEmpRate} placeholder="۷" />}
+          </FormField>
+          <FormField label="نرخِ بیمه — سهمِ کارفرما (٪)">
+            {(id) => <NumberInput id={id} allowDecimal value={employerRate} onChange={setEmployerRate} placeholder="۲۳" />}
+          </FormField>
+          <FormField
+            label="معافیتِ مالیاتیِ سالانه (ریال)"
+            tip="مبلغِ سالانه‌ی معاف از مالیات."
+            message={Number(exemption) > 0 ? `ماهانه ≈ ${fa(Number(exemption) / 12)} ریال` : undefined}
+          >
+            {(id) => <NumberInput id={id} value={exemption} onChange={setExemption} />}
+          </FormField>
+          <FormField label="حداقلِ حقوقِ ماهانه (ریال)" tip="پایه‌ی سقفِ عیدی. ۰ یعنی عیدی سقف ندارد.">
+            {(id) => <NumberInput id={id} value={minWage} onChange={setMinWage} />}
+          </FormField>
+          <FormField label="روزهای مرخصیِ استحقاقیِ سالانه">
+            {(id) => <NumberInput id={id} value={leaveDays} onChange={setLeaveDays} />}
+          </FormField>
+        </FormGrid>
+        {isPlaceholder && (
+          <p className="ef-message ef-message--warn ef-block-note" role="status">
+            تا وقتی پلکانِ مالیاتِ این سال با نرخِ واقعی (غیرصفر) ثبت نشود، صدورِ فیشِ حقوق مسدود است.
+          </p>
+        )}
+      </SectionCard>
 
-      <div className="invoice-form-footer">
-        <button type="button" className="btn-primary" onClick={() => void save()}><Save size={14} /> ذخیرهٔ تنظیماتِ سال {year}</button>
-      </div>
-      {message && <div className="hint">{message}</div>}
-      {error && <div className="error">{error}</div>}
-    </SectionCard>
+      <SectionCard icon={ClipboardList} title="جزئیات">
+        <FormTabs
+          label="جزئیاتِ تنظیماتِ حقوق"
+          active={tab}
+          onChange={(k) => setTab(k as SettingsTab)}
+          tabs={[
+            { key: 'params', label: 'پارامترهای قانونی' },
+            { key: 'exempt', label: 'معافیت بیمه از مالیات' },
+            {
+              key: 'brackets',
+              label: 'پلکان مالیات',
+              badge: brackets.length ? brackets.length.toLocaleString('fa-IR') : undefined,
+            },
+            { key: 'notes', label: 'یادداشت' },
+          ]}
+        >
+          {tab === 'params' && (
+            <>
+              <TabHead
+                title="پارامترهای قانونی"
+                tip="تا پیش از این، این عددها در کدِ سرور ثابت بودند. پیش‌فرضِ هرکدام همان عددِ قبلی است، پس تا وقتی دست نزنید هیچ محاسبه‌ای فرق نمی‌کند."
+              />
+              <FormGrid>
+                {paramField('ceiling', 'سقفِ روزانهٔ دستمزدِ مشمولِ بیمه (ریال)', {
+                  tip: '۰ یعنی بی‌سقف (رفتارِ پیش‌فرض).',
+                  note:
+                    Number(params.ceiling) > 0
+                      ? `ماهانه ≈ ${fa(Number(params.ceiling) * (Number(params.monthDays) || 30))} ریال`
+                      : undefined,
+                })}
+                {paramField('unemployment', 'نرخِ بیمهٔ بیکاری (٪)', {
+                  decimal: true,
+                  tip: 'سهمِ کارفرماست و به نرخِ کارفرما اضافه می‌شود.',
+                })}
+                {paramField('hardJob', 'نرخِ بیمهٔ مشاغل سخت (٪)', {
+                  decimal: true,
+                  tip: 'ثبت می‌شود ولی هنوز اعمال نمی‌شود: شمولِ آن به کارمند وابسته است و کوبیتا هنوز آن پرچم را ندارد.',
+                })}
+                {paramField('eidiMult', 'ضریبِ مبنای عیدی', { decimal: true, tip: '۲ یعنی دو برابرِ مبنا.' })}
+                {paramField('sevDays', 'روزهای مبنای سنوات در هر سال', { tip: '۳۰ یعنی یک ماه به‌ازای هر سال سابقه.' })}
+                {paramField('monthDays', 'مبنای روزِ کاریِ ماه', {
+                  decimal: true,
+                  tip: 'مقسومٌ‌علیهِ نسبتِ کارکرد و دستمزدِ روزانه.',
+                })}
+                {paramField('monthHours', 'ساعتِ کارِ ماهانهٔ قانونی', { decimal: true })}
+                {paramField('otMult', 'ضریبِ اضافه‌کار', { decimal: true })}
+                {paramField('roundDigits', 'رندِ خالصِ پرداختی (تعدادِ رقم)', {
+                  tip: '۰ یعنی بدونِ رند (رفتارِ پیش‌فرض). اختلافِ رند به حسابِ «تعدیل رند حقوق» می‌رود.',
+                  note:
+                    Number(params.roundDigits) > 0
+                      ? `تا ${fa(10 ** Number(params.roundDigits))} ریال گِرد می‌شود.`
+                      : undefined,
+                })}
+              </FormGrid>
+            </>
+          )}
+
+          {tab === 'exempt' && (
+            <>
+              <TabHead
+                title="معافیتِ بیمه از مالیات"
+                tip="چه کسری از هر بیمه پیش از اعمالِ پلکان، از مبنای مالیات کم شود. برای بیمهٔ تکمیلی و درمان باید بگویید کدام عاملِ کسور همان است، وگرنه ضریب روی هیچ مبلغی نمی‌نشیند."
+              />
+              <FormGrid>
+                {paramField('coefSocial', 'ضریبِ معافیتِ تأمین اجتماعی (٪)', { decimal: true })}
+                {paramField('coefSupp', 'ضریبِ معافیتِ بیمهٔ تکمیلی (٪)', { decimal: true })}
+                {paramField('coefMedical', 'ضریبِ معافیتِ بیمهٔ درمان (٪)', { decimal: true })}
+                {factorSelect('suppEmployee', 'عاملِ بیمهٔ تکمیلی — سهمِ کارمند', deductionFactors)}
+                {factorSelect('suppEmployer', 'عاملِ بیمهٔ تکمیلی — سهمِ کارفرما', factors)}
+                {factorSelect('medical', 'عاملِ بیمهٔ درمان', deductionFactors)}
+                <div className="ef-checks">
+                  <span className="ef-check-tip">
+                    <label className="fy-check">
+                      <input
+                        type="checkbox"
+                        checked={params.allowNegativeTax}
+                        onChange={(e) => setParam('allowNegativeTax', e.target.checked)}
+                      />
+                      مالیاتِ منفی محاسبه شود (استرداد در همان فیش)
+                    </label>
+                    <InfoTip text="خاموش (پیش‌فرض) یعنی ماهِ کم‌درآمد مالیاتِ منفی نمی‌گیرد؛ استرداد کارِ تعدیلِ پایانِ سال است." />
+                  </span>
+                </div>
+              </FormGrid>
+            </>
+          )}
+
+          {tab === 'brackets' && (
+            <>
+              <TabHead
+                title="پلکانِ مالیاتِ سالانه"
+                tip="هر پلکان روی «مشمولِ سالانه پس از کسرِ معافیت» اعمال می‌شود. سقف‌ها تجمعی و صعودی‌اند؛ ردیفِ آخر خودبه‌خود نامحدود (به‌بالا) در نظر گرفته می‌شود."
+                actions={
+                  <button type="button" onClick={addBracket}>
+                    <Plus size={14} /> افزودنِ پلکان
+                  </button>
+                }
+              />
+              <div className="table-scroll">
+                <table className="entity-table tax-bracket-table cards-on-mobile">
+                  <thead>
+                    <tr>
+                      <th>ردیف</th>
+                      <th>تا سقفِ سالانه (ریال)</th>
+                      <th>نرخ (٪)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  {/* audit-r9-exempt: پلکانِ فرم همیشه دستِ‌کم یک ردیف دارد و
+                      به‌جای حالتِ خالی دکمه‌ی «افزودنِ پلکان» می‌گیرد. */}
+                  <tbody>
+                    {brackets.map((b, i) => {
+                      const last = i === brackets.length - 1
+                      return (
+                        <tr key={i}>
+                          <td data-label="ردیف">{(i + 1).toLocaleString('fa-IR')}</td>
+                          <td data-label="تا سقفِ سالانه (ریال)">
+                            {last ? (
+                              <span className="muted">به‌بالا (نامحدود)</span>
+                            ) : (
+                              <NumberInput
+                                aria-label="تا سقفِ سالانه (ریال)"
+                                value={b.up_to}
+                                onChange={(v) => setBracket(i, { up_to: v })}
+                              />
+                            )}
+                          </td>
+                          <td data-label="نرخ (٪)">
+                            <NumberInput aria-label="نرخ (٪)" allowDecimal value={b.rate} onChange={(v) => setBracket(i, { rate: v })} />
+                          </td>
+                          <td className="tax-bracket-action card-actions">
+                            <button
+                              type="button"
+                              className="ef-icon-btn"
+                              aria-label="حذفِ ردیف"
+                              title="حذفِ ردیف"
+                              onClick={() => removeBracket(i)}
+                              disabled={brackets.length <= 1}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {tab === 'notes' && (
+            <FormGrid>
+              <FormField label="یادداشت" span="full">
+                {(id) => (
+                  <textarea
+                    id={id}
+                    rows={4}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="مرجعِ بخش‌نامه یا توضیح"
+                  />
+                )}
+              </FormField>
+            </FormGrid>
+          )}
+        </FormTabs>
+      </SectionCard>
+
+      <ActionBar status={<FormStatus msg={msg} />}>
+        <button type="submit" className="btn-primary" disabled={busy}>
+          <Save size={15} /> {busy ? 'در حال ذخیره…' : `ذخیرهٔ تنظیماتِ سال ${faYear(year)}`}
+        </button>
+      </ActionBar>
+    </form>
   )
 }

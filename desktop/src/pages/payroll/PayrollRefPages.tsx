@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Briefcase, Building2, Percent, Plus, Save, Landmark, SlidersHorizontal } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { Briefcase, Building2, Landmark, Percent, Plus, Save, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import {
   BRANCH_KIND_LABELS,
   FACTOR_CATEGORY_LABELS,
@@ -35,25 +35,45 @@ import {
   type ServiceLocationRecord,
 } from '../../api'
 import { EmptyState } from '../../components/EmptyState'
+import { NumberInput } from '../../components/NumberInput'
 import { SectionCard } from '../../components/SectionCard'
-import { AsyncBlock, Note, OpsPage, type Msg } from '../accounting/kit'
+import {
+  ActionBar,
+  FormField,
+  FormGrid,
+  FormStatus,
+  FormTabs,
+  InfoTip,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
+import { ActiveChip, AsyncBlock, Note, OpsPage, type Msg } from '../accounting/kit'
 
 /**
  * جدول‌های مرجعِ حقوق و دستمزد — محل خدمت، شغل، عوامل، گروه مالیاتی، شعب.
  *
- * هر پنج‌تا یک شکل دارند: فرمِ ساختِ کوتاه در بالا، دفترِ همان رکوردها زیرش. عمداً
- * یک الگو، چون کاربر پنج فرمِ متفاوت را یاد نمی‌گیرد.
+ * هر پنج‌تا یک شکل دارند: کارتِ فرمِ ساخت با نوارِ «ثبت» زیرش، و کارتِ دفترِ همان
+ * رکوردها. عمداً یک الگو، چون کاربر پنج فرمِ متفاوت را یاد نمی‌گیرد. چیدمان با اجزای
+ * فرمِ سازمانی است (`components/form/FormKit`) — همان «قرارداد جدید».
  *
  * **حذف عمداً نیست.** رکوردی که در قراردادی استفاده شده نباید ناپدید شود؛ «غیرفعال»
  * آن را از فهرستِ انتخابِ فرمِ قرارداد بیرون می‌برد بی‌آنکه قراردادهای قدیمی
  * بی‌مرجع شوند.
  *
- * همین کامپوننت‌ها در فرمِ قرارداد هم به‌صورتِ «ساختِ درجا» استفاده می‌شوند: وقتی
- * عنوانِ موردنظر در فهرست نیست، کاربر باید همان‌جا بسازدش بی‌آنکه فرم را ترک کند.
+ * محل خدمت و شغل در فرمِ قرارداد هم «ساختِ درجا» دارند (دکمه‌ی «+» کنارِ فهرست): وقتی
+ * عنوانِ موردنظر در فهرست نیست، کاربر همان‌جا می‌سازدش بی‌آنکه فرم را ترک کند.
  */
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
+
+/** دکمه‌ی ثبتِ نوارِ عملیات — در حینِ ثبت متنش عوض می‌شود، نه اینکه بی‌صدا خاموش شود. */
+function SubmitButton({ busy, label }: { busy: boolean; label: string }) {
+  return (
+    <button type="submit" className="btn-primary" disabled={busy}>
+      <Save size={15} /> {busy ? 'در حال ثبت…' : label}
+    </button>
+  )
+}
 
 // ── محل خدمت ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +101,14 @@ export function ServiceLocationPage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([
+      [code, 'sl-code', 'کد را وارد کنید.'],
+      [name, 'sl-name', 'عنوان را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -103,43 +131,40 @@ export function ServiceLocationPage({ token }: { token: string }) {
       title="محل خدمت جدید"
       description="جایی که کارمند واقعاً کار می‌کند: انبار، شعبه‌ی ۳ فروشگاه، دفتر مرکزی."
     >
-      <SectionCard icon={Plus} title="ثبت محل خدمت">
-        <form className="cmp-form" onSubmit={submit}>
-          <p className="muted cmp-form-wide">
-            محل خدمت جدا از مرکز هزینه است: مرکز هزینه می‌گوید هزینه به کدام حساب
-            می‌رود، محل خدمت می‌گوید خودِ کارمند کجاست.
-          </p>
-          <label>
-            <span>کد *</span>
-            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} required />
-          </label>
-          <label>
-            <span>عنوان *</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} required />
-          </label>
-          <label>
-            <span>عنوان (۲)</span>
-            <input dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />
-            <span className="field-hint">اختیاری — معمولاً همان عنوان به لاتین.</span>
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !code.trim() || !name.trim()}>
-              <Save size={13} /> ثبت محل خدمت
-            </button>
-          </div>
-          <Note msg={msg} />
+      <div className="ef-form">
+        <form onSubmit={submit} noValidate>
+          <SectionCard
+            icon={Plus}
+            title="ثبت محل خدمت"
+            tip="محل خدمت جدا از مرکز هزینه است: مرکز هزینه می‌گوید هزینه به کدام حساب می‌رود، محل خدمت می‌گوید خودِ کارمند کجاست."
+          >
+            <FormGrid>
+              <FormField id="sl-code" label="کد" required>
+                {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />}
+              </FormField>
+              <FormField id="sl-name" label="عنوان" required>
+                {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />}
+              </FormField>
+              <FormField label="عنوان (۲)" tip="اختیاری — معمولاً همان عنوان به لاتین.">
+                {(id) => <input id={id} dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />}
+              </FormField>
+            </FormGrid>
+          </SectionCard>
+          <ActionBar status={<FormStatus msg={msg} />}>
+            <SubmitButton busy={busy} label="ثبت محل خدمت" />
+          </ActionBar>
         </form>
-      </SectionCard>
 
-      <SectionCard icon={Building2} title={rows ? `${fa(rows.length)} محل خدمت` : 'در حال بارگذاری…'}>
-        <RefTable
-          rows={rows}
-          error={error}
-          emptyText="هنوز محل خدمتی ثبت نشده — اولی را با فرمِ بالا بسازید."
-          head={['کد', 'عنوان', 'عنوان (۲)', 'وضعیت']}
-          render={(r) => [r.code, r.name, r.name2 || '—', r.is_active ? 'فعال' : 'غیرفعال']}
-        />
-      </SectionCard>
+        <SectionCard icon={Building2} title={rows ? `${fa(rows.length)} محل خدمت` : 'در حال بارگذاری…'}>
+          <RefTable
+            rows={rows}
+            error={error}
+            emptyText="هنوز محل خدمتی ثبت نشده — اولی را با فرمِ بالا بسازید."
+            head={['کد', 'عنوان', 'عنوان (۲)', 'وضعیت']}
+            render={(r) => [r.code, r.name, r.name2 || '—', <ActiveChip key="st" active={r.is_active} />]}
+          />
+        </SectionCard>
+      </div>
     </OpsPage>
   )
 }
@@ -172,6 +197,14 @@ export function JobTitlePage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([
+      [code, 'jt-code', 'کد را وارد کنید.'],
+      [name, 'jt-name', 'عنوان را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -201,69 +234,79 @@ export function JobTitlePage({ token }: { token: string }) {
       title="شغل جدید"
       description="عنوان‌های شغلی و رسته‌شان — همان فهرستی که فرمِ قرارداد از آن انتخاب می‌کند."
     >
-      <SectionCard icon={Plus} title="ثبت شغل">
-        <form className="cmp-form" onSubmit={submit}>
-          <label>
-            <span>کد *</span>
-            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} required />
-          </label>
-          <label>
-            <span>عنوان *</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} required />
-          </label>
-          <label>
-            <span>عنوان (۲)</span>
-            <input dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />
-          </label>
-          <label>
-            <span>رسته شغل</span>
-            <select value={family} onChange={(e) => setFamily(e.target.value)}>
-              <option value="">— انتخاب کنید —</option>
-              {JOB_FAMILIES.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>کد شغل بیمه</span>
-            <input dir="ltr" value={insuranceCode} onChange={(e) => setInsuranceCode(e.target.value)} maxLength={30} />
-            <span className="field-hint">در لیستِ تأمین اجتماعی لازم است؛ روی شغل می‌ماند تا هر بار تایپ نشود.</span>
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !code.trim() || !name.trim()}>
-              <Save size={13} /> ثبت شغل
-            </button>
-          </div>
-          <Note msg={msg} />
+      <div className="ef-form">
+        <form onSubmit={submit} noValidate>
+          <SectionCard icon={Plus} title="ثبت شغل">
+            <FormGrid>
+              <FormField id="jt-code" label="کد" required>
+                {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />}
+              </FormField>
+              <FormField id="jt-name" label="عنوان" required>
+                {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />}
+              </FormField>
+              <FormField label="عنوان (۲)" tip="اختیاری — معمولاً همان عنوان به لاتین.">
+                {(id) => <input id={id} dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />}
+              </FormField>
+              <FormField label="رسته شغل">
+                {(id) => (
+                  <select id={id} value={family} onChange={(e) => setFamily(e.target.value)}>
+                    <option value="">— انتخاب کنید —</option>
+                    {JOB_FAMILIES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField label="کد شغل بیمه" tip="در لیستِ تأمین اجتماعی لازم است؛ روی شغل می‌ماند تا هر بار تایپ نشود.">
+                {(id) => (
+                  <input id={id} dir="ltr" value={insuranceCode} onChange={(e) => setInsuranceCode(e.target.value)} maxLength={30} />
+                )}
+              </FormField>
+            </FormGrid>
+          </SectionCard>
+          <ActionBar status={<FormStatus msg={msg} />}>
+            <SubmitButton busy={busy} label="ثبت شغل" />
+          </ActionBar>
         </form>
-      </SectionCard>
 
-      <SectionCard icon={Briefcase} title={rows ? `${fa(rows.length)} شغل` : 'در حال بارگذاری…'}>
-        <RefTable
-          rows={rows}
-          error={error}
-          emptyText="هنوز شغلی ثبت نشده — اولی را با فرمِ بالا بسازید."
-          head={['کد', 'عنوان', 'رسته', 'کد بیمه', 'وضعیت']}
-          render={(r) => [r.code, r.name, r.job_family || '—', r.insurance_job_code || '—', r.is_active ? 'فعال' : 'غیرفعال']}
-        />
-      </SectionCard>
+        <SectionCard icon={Briefcase} title={rows ? `${fa(rows.length)} شغل` : 'در حال بارگذاری…'}>
+          <RefTable
+            rows={rows}
+            error={error}
+            emptyText="هنوز شغلی ثبت نشده — اولی را با فرمِ بالا بسازید."
+            head={['کد', 'عنوان', 'رسته', 'کد بیمه', 'وضعیت']}
+            render={(r) => [
+              r.code,
+              r.name,
+              r.job_family || '—',
+              r.insurance_job_code ? <span key="ins" dir="ltr">{r.insurance_job_code}</span> : '—',
+              <ActiveChip key="st" active={r.is_active} />,
+            ]}
+          />
+        </SectionCard>
+      </div>
     </OpsPage>
   )
 }
 
 // ── عوامل حقوق و مزایا ───────────────────────────────────────────────────────
 
-//: ترتیبِ ستون‌های ماتریس — همان ترتیبی که موتور در آن حساب می‌کند:
-//: اول مبناهای ماهانه (بیمه، مالیات)، بعد سه مبنای مزایا.
 /** حسابِ برگی — تنها چیزی که ردیفِ سند می‌گیرد. */
 type PostableAccount = { id: string; code: string; name: string; is_group: number }
 
+//: ترتیبِ ستون‌های ماتریس — همان ترتیبی که موتور در آن حساب می‌کند:
+//: اول مبناهای ماهانه (بیمه، مالیات)، بعد سه مبنای مزایا.
 const PURPOSES = ['insurance_base', 'tax_base', 'eidi_base', 'severance_base', 'leave_base'] as const
 
 export function PayrollFactorPage({ token }: { token: string }) {
   const [rows, setRows] = useState<PayrollFactorRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
+  //: پیامِ کنش‌های ردیفیِ فهرست و ماتریس — کنارِ همان جدول، نه در نوارِ فرمِ بالا.
+  const [listMsg, setListMsg] = useState<Msg>(null)
+  const [matrixMsg, setMatrixMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
   const [name2, setName2] = useState('')
@@ -302,12 +345,12 @@ export function PayrollFactorPage({ token }: { token: string }) {
    *  برگرداندنِ یک تیک به حالتِ اولش داده‌ی اضافه جا نمی‌گذارد. */
   async function toggle(row: PayrollFactorRecord, purpose: string, on: boolean) {
     setBusy(true)
-    setMsg(null)
+    setMatrixMsg(null)
     try {
       await setFactorParticipation(token, row.id, { [purpose]: on ? 1 : 0 })
       await refresh()
     } catch (err) {
-      setMsg({ text: errText(err), kind: 'err' })
+      setMatrixMsg({ text: errText(err), kind: 'err' })
     } finally {
       setBusy(false)
     }
@@ -341,16 +384,18 @@ export function PayrollFactorPage({ token }: { token: string }) {
     setPayableAccount(row.payable_account_id ?? '')
     setPayableDetail(row.payable_detail_class ?? '')
     setMsg(null)
+    //: فرم بالای صفحه است و دکمه‌ی «ویرایش» پایینِ جدول؛ فوکوس صفحه را به فرم می‌برد.
+    document.getElementById('pf-name')?.focus()
   }
 
   /** فعال/غیرفعال. **غیرفعال یعنی «دیگر انتخاب نشو»، نه «از گذشته پاک شو»** —
    *  حکم‌های موجود و فیش‌های صادرشده دست نمی‌خورند. */
   async function toggleActive(row: PayrollFactorRecord) {
     setBusy(true)
-    setMsg(null)
+    setListMsg(null)
     try {
       await updatePayrollFactor(token, row.id, { is_active: !row.is_active })
-      setMsg({
+      setListMsg({
         text: row.is_active
           ? `«${row.name}» غیرفعال شد؛ به حکمِ تازه اضافه نمی‌شود.`
           : `«${row.name}» فعال شد.`,
@@ -358,7 +403,7 @@ export function PayrollFactorPage({ token }: { token: string }) {
       })
       await refresh()
     } catch (err) {
-      setMsg({ text: errText(err), kind: 'err' })
+      setListMsg({ text: errText(err), kind: 'err' })
     } finally {
       setBusy(false)
     }
@@ -366,6 +411,11 @@ export function PayrollFactorPage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([[name, 'pf-name', 'عنوانِ عامل را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -383,12 +433,11 @@ export function PayrollFactorPage({ token }: { token: string }) {
       }
       if (editing) {
         await updatePayrollFactor(token, editing.id, body)
-        setMsg({ text: `«${body.name}» به‌روز شد.`, kind: 'ok' })
       } else {
         await createPayrollFactor(token, body)
-        setMsg({ text: `عاملِ «${body.name}» ساخته شد.`, kind: 'ok' })
       }
       clearForm()
+      setMsg({ text: editing ? `«${body.name}» به‌روز شد.` : `عاملِ «${body.name}» ساخته شد.`, kind: 'ok' })
       await refresh()
     } catch (err) {
       setMsg({ text: errText(err), kind: 'err' })
@@ -399,17 +448,19 @@ export function PayrollFactorPage({ token }: { token: string }) {
 
   async function seed() {
     setBusy(true)
-    setMsg(null)
+    setListMsg(null)
     try {
       const all = await createDefaultPayrollFactors(token)
       setRows(all)
-      setMsg({ text: 'عوامل پیش‌فرض آماده شدند.', kind: 'ok' })
+      setListMsg({ text: 'عوامل پیش‌فرض آماده شدند.', kind: 'ok' })
     } catch (err) {
-      setMsg({ text: errText(err), kind: 'err' })
+      setListMsg({ text: errText(err), kind: 'err' })
     } finally {
       setBusy(false)
     }
   }
+
+  const benefit = category === 'benefit'
 
   return (
     <OpsPage
@@ -417,219 +468,203 @@ export function PayrollFactorPage({ token }: { token: string }) {
       title="عوامل حقوق و مزایا"
       description="حقوق پایه، حق اولاد، حق مسکن، حق خواروبار و هر عاملِ دیگری که خودتان می‌سازید."
     >
-      <SectionCard
-        icon={Plus}
-        title={editing ? `ویرایش «${editing.name}»` : 'ثبت عامل'}
-        actions={
-          <button type="button" onClick={seed} disabled={busy}>
-            ساخت عوامل پیش‌فرض
-          </button>
-        }
-      >
-        <form className="cmp-form" onSubmit={submit}>
-          <p className="muted cmp-form-wide">
-            «مزایا» به حقوق اضافه می‌شود و «کسورات» از آن کم — مثلِ بیمه‌ی تکمیلی و
-            اقساطِ وام. عوامل پیش‌فرض همان چهارتایی‌اند که موتورِ فیشِ حقوقی
-            می‌شناسدشان؛ بقیه در «سایر مزایا» جمع می‌شوند.
-          </p>
-          <label>
-            <span>عنوان *</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} required />
-          </label>
-          <label>
-            <span>عنوان (۲)</span>
-            <input dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />
-          </label>
-          <label>
-            <span>طبقه</span>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {Object.entries(FACTOR_CATEGORY_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>نوع</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              {Object.entries(FACTOR_KIND_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-            <span className="field-hint">
-              «قراردادی» مبلغش روی حکمِ حقوقی نوشته می‌شود. «متغیر» مبلغش هر دوره جدا وارد
-              می‌شود (کارکرد و صدور فیش ← ورودیِ عوامل) و روی حکم نمی‌نشیند.
-            </span>
-          </label>
-          <label>
-            <span>اولویت نمایش</span>
-            <input
-              dir="ltr"
-              type="number"
-              min="0"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-            />
-            <span className="field-hint">
-              ترتیبِ ردیف‌های فیش. فقط نمایشی است؛ هیچ محاسبه‌ای از آن نمی‌خوانَد و فیشِ صادرشده را هم تکان نمی‌دهد.
-            </span>
-          </label>
-          <div className="cmp-form-wide role-picker">
-            <label className="fy-check">
-              <input type="checkbox" checked={extraordinary} onChange={(e) => setExtraordinary(e.target.checked)} />
-              فوق‌العاده است
-            </label>
-            {/* صادق باشیم: این پرچم امروز هیچ عددی را عوض نمی‌کند. گذاشتنش
-                بدونِ این توضیح یعنی کاربر فکر کند مالیات یا بیمه را تکان
-                می‌دهد — همان‌طور که «اولویت نمایش» هم توضیحِ خودش را دارد. */}
-            <span className="field-hint">
-              فقط برای دسته‌بندی و گزارش. هیچ محاسبه‌ای — نه مالیات، نه بیمه، نه اضافه‌کار —
-              از این گزینه نمی‌خوانَد.
-            </span>
-          </div>
-
-          {category === 'benefit' ? (
-            <>
-              <label>
-                <span>حساب معین هزینه</span>
-                <select value={expenseAccount} onChange={(e) => setExpenseAccount(e.target.value)}>
-                  <option value="">— حساب عمومی حقوق —</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-                  ))}
-                </select>
-                <span className="field-hint">
-                  خالی یعنی سهمِ این عامل مثلِ امروز به «هزینه حقوق» می‌رود.
-                </span>
-              </label>
-              <label>
-                <span>طبقه تفصیلی</span>
-                <select
-                  value={expenseDetail}
-                  onChange={(e) => setExpenseDetail(e.target.value)}
-                  disabled={!expenseAccount}
-                >
-                  {Object.entries(FACTOR_DETAIL_CLASS_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <>
-              <label>
-                <span>حساب معین پرداختنی</span>
-                <select value={payableAccount} onChange={(e) => setPayableAccount(e.target.value)}>
-                  <option value="">— حساب عمومی سایر کسور —</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-                  ))}
-                </select>
-                <span className="field-hint">
-                  مثلاً بیمه‌گرِ تکمیلی: پولی که از کارمند نگه داشته‌ایم و به او بدهکاریم.
-                </span>
-              </label>
-              <label>
-                <span>طبقه تفصیلی</span>
-                <select
-                  value={payableDetail}
-                  onChange={(e) => setPayableDetail(e.target.value)}
-                  disabled={!payableAccount}
-                >
-                  {Object.entries(FACTOR_DETAIL_CLASS_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              <Save size={13} /> {editing ? 'ذخیره تغییرات' : 'ثبت عامل'}
-            </button>
-            {editing ? (
-              <button type="button" onClick={clearForm} disabled={busy}>انصراف</button>
-            ) : null}
-          </div>
-          <Note msg={msg} />
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={SlidersHorizontal} title={rows ? `${fa(rows.length)} عامل` : 'در حال بارگذاری…'}>
-        <RefTable
-          rows={rows}
-          error={error}
-          emptyText="هنوز عاملی نیست — «ساخت عوامل پیش‌فرض» را بزنید تا چهار عاملِ اصلی ساخته شوند."
-          head={['عنوان', 'طبقه', 'نوع', 'فوق‌العاده', 'اولویت', 'حساب اختصاصی', 'وضعیت', '']}
-          render={(r) => [
-            r.name,
-            FACTOR_CATEGORY_LABELS[r.category] ?? r.category,
-            FACTOR_KIND_LABELS[r.kind] ?? r.kind,
-            r.is_extraordinary ? 'بله' : 'خیر',
-            fa(r.display_priority ?? 0),
-            r.expense_account_id || r.payable_account_id ? 'دارد' : '—',
-            r.is_active ? 'فعال' : 'غیرفعال',
-            <span className="card-actions" key="actions">
-              <button type="button" onClick={() => edit(r)} disabled={busy}>ویرایش</button>
-              <button
-                type="button"
-                onClick={() => void toggleActive(r)}
-                disabled={busy}
-                title={r.is_active ? 'دیگر به حکمِ تازه اضافه نمی‌شود' : 'دوباره قابلِ انتخاب می‌شود'}
+      <div className="ef-form">
+        <form onSubmit={submit} noValidate>
+          <SectionCard
+            icon={Plus}
+            title={editing ? `ویرایش «${editing.name}»` : 'ثبت عامل'}
+            tip="«مزایا» به حقوق اضافه می‌شود و «کسورات» از آن کم — مثلِ بیمه‌ی تکمیلی و اقساطِ وام. عوامل پیش‌فرض همان چهارتایی‌اند که موتورِ فیشِ حقوقی می‌شناسدشان؛ بقیه در «سایر مزایا» جمع می‌شوند."
+          >
+            <FormGrid>
+              <FormField id="pf-name" label="عنوان" required>
+                {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />}
+              </FormField>
+              <FormField label="عنوان (۲)" tip="اختیاری — معمولاً همان عنوان به لاتین.">
+                {(id) => <input id={id} dir="ltr" value={name2} onChange={(e) => setName2(e.target.value)} maxLength={150} />}
+              </FormField>
+              <FormField label="طبقه">
+                {(id) => (
+                  <select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {Object.entries(FACTOR_CATEGORY_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField
+                label="نوع"
+                tip="«قراردادی» مبلغش روی حکمِ حقوقی نوشته می‌شود. «متغیر» مبلغش هر دوره جدا وارد می‌شود (کارکرد و صدور فیش ← ورودیِ عوامل) و روی حکم نمی‌نشیند."
               >
-                {r.is_active ? 'غیرفعال کن' : 'فعال کن'}
-              </button>
-            </span>,
-          ]}
-        />
-      </SectionCard>
+                {(id) => (
+                  <select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                    {Object.entries(FACTOR_KIND_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField
+                label="اولویت نمایش"
+                tip="ترتیبِ ردیف‌های فیش. فقط نمایشی است؛ هیچ محاسبه‌ای از آن نمی‌خوانَد و فیشِ صادرشده را هم تکان نمی‌دهد."
+              >
+                {(id) => <NumberInput id={id} group={false} value={priority} onChange={setPriority} />}
+              </FormField>
+              <div className="ef-checks">
+                <span className="ef-check-tip">
+                  <label className="fy-check">
+                    <input type="checkbox" checked={extraordinary} onChange={(e) => setExtraordinary(e.target.checked)} />
+                    فوق‌العاده است
+                  </label>
+                  {/* صادق باشیم: این پرچم امروز هیچ عددی را عوض نمی‌کند. گذاشتنش بدونِ این
+                      توضیح یعنی کاربر فکر کند مالیات یا بیمه را تکان می‌دهد. */}
+                  <InfoTip text="فقط برای دسته‌بندی و گزارش. هیچ محاسبه‌ای — نه مالیات، نه بیمه، نه اضافه‌کار — از این گزینه نمی‌خوانَد." />
+                </span>
+              </div>
 
-      <SectionCard
-        icon={SlidersHorizontal}
-        title="مشارکت عوامل در مبناها"
-        description="هر عامل در کدام محاسبه شمرده شود. تیک‌ها پیش‌فرضِ امروز را نشان می‌دهند؛ تا دست نزنید هیچ عددی عوض نمی‌شود."
-      >
-        <p className="field-hint">
-          «مشمولِ بیمه» یک پرچمِ واحد نیست: یک عامل می‌تواند مبنای بیمه را بسازد ولی در مبنای عیدی نیاید.
-          پیش‌فرضِ مبنای بیمه و مالیات «همهٔ عوامل» است و پیش‌فرضِ سه مبنای مزایا «فقط حقوق پایه» —
-          دقیقاً همان فرمولی که تا امروز اجرا می‌شد.
-        </p>
-        <AsyncBlock
-          loading={rows == null}
-          error={error}
-          empty={rows != null && rows.length === 0}
-          emptyText="اول یک عامل بسازید."
+              <div className="ef-subhead">حساب در سند</div>
+              <FormField
+                label={benefit ? 'حساب معین هزینه' : 'حساب معین پرداختنی'}
+                tip={
+                  benefit
+                    ? 'خالی یعنی سهمِ این عامل مثلِ امروز به «هزینه حقوق» می‌رود.'
+                    : 'مثلاً بیمه‌گرِ تکمیلی: پولی که از کارمند نگه داشته‌ایم و به او بدهکاریم.'
+                }
+              >
+                {(id) => (
+                  <select
+                    id={id}
+                    value={benefit ? expenseAccount : payableAccount}
+                    onChange={(e) => (benefit ? setExpenseAccount : setPayableAccount)(e.target.value)}
+                  >
+                    <option value="">{benefit ? '— حساب عمومی حقوق —' : '— حساب عمومی سایر کسور —'}</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code} — {a.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField label="طبقه تفصیلی">
+                {(id) => (
+                  <select
+                    id={id}
+                    value={benefit ? expenseDetail : payableDetail}
+                    onChange={(e) => (benefit ? setExpenseDetail : setPayableDetail)(e.target.value)}
+                    disabled={benefit ? !expenseAccount : !payableAccount}
+                  >
+                    {Object.entries(FACTOR_DETAIL_CLASS_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+            </FormGrid>
+          </SectionCard>
+          <ActionBar status={<FormStatus msg={msg} />}>
+            {editing && (
+              <button type="button" className="ef-btn-secondary" onClick={clearForm} disabled={busy}>
+                <X size={15} /> انصراف
+              </button>
+            )}
+            <SubmitButton busy={busy} label={editing ? 'ذخیره تغییرات' : 'ثبت عامل'} />
+          </ActionBar>
+        </form>
+
+        <SectionCard
+          icon={SlidersHorizontal}
+          title={rows ? `${fa(rows.length)} عامل` : 'در حال بارگذاری…'}
+          actions={
+            <button type="button" onClick={seed} disabled={busy}>
+              <Sparkles size={14} /> ساخت عوامل پیش‌فرض
+            </button>
+          }
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>عامل</th>
-                  {PURPOSES.map((key) => <th key={key}>{FACTOR_PURPOSE_LABELS[key]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {(rows ?? []).map((row) => (
-                  <tr key={row.id}>
-                    <td className="card-title" data-label="عامل">{row.name}</td>
+          <RefTable
+            rows={rows}
+            error={error}
+            emptyText="هنوز عاملی نیست — «ساخت عوامل پیش‌فرض» را بزنید تا چهار عاملِ اصلی ساخته شوند."
+            head={['عنوان', 'طبقه', 'نوع', 'فوق‌العاده', 'اولویت', 'حساب اختصاصی', 'وضعیت', '']}
+            render={(r) => [
+              r.name,
+              FACTOR_CATEGORY_LABELS[r.category] ?? r.category,
+              FACTOR_KIND_LABELS[r.kind] ?? r.kind,
+              r.is_extraordinary ? 'بله' : 'خیر',
+              fa(r.display_priority ?? 0),
+              r.expense_account_id || r.payable_account_id ? 'دارد' : '—',
+              <ActiveChip key="st" active={r.is_active} />,
+              <Fragment key="actions">
+                <button type="button" onClick={() => edit(r)} disabled={busy}>
+                  ویرایش
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleActive(r)}
+                  disabled={busy}
+                  title={r.is_active ? 'دیگر به حکمِ تازه اضافه نمی‌شود' : 'دوباره قابلِ انتخاب می‌شود'}
+                >
+                  {r.is_active ? 'غیرفعال کن' : 'فعال کن'}
+                </button>
+              </Fragment>,
+            ]}
+          />
+          <Note msg={listMsg} />
+        </SectionCard>
+
+        <SectionCard
+          icon={SlidersHorizontal}
+          title="مشارکت عوامل در مبناها"
+          description="هر عامل در کدام محاسبه شمرده شود. تا دست نزنید هیچ عددی عوض نمی‌شود."
+          tip="«مشمولِ بیمه» یک پرچمِ واحد نیست: یک عامل می‌تواند مبنای بیمه را بسازد ولی در مبنای عیدی نیاید. پیش‌فرضِ مبنای بیمه و مالیات «همهٔ عوامل» است و پیش‌فرضِ سه مبنای مزایا «فقط حقوق پایه» — دقیقاً همان فرمولی که تا امروز اجرا می‌شد."
+        >
+          <AsyncBlock
+            loading={rows == null}
+            error={error}
+            empty={rows != null && rows.length === 0}
+            emptyText="اول یک عامل بسازید."
+          >
+            <div className="table-scroll">
+              <table className="cards-on-mobile">
+                <thead>
+                  <tr>
+                    <th>عامل</th>
                     {PURPOSES.map((key) => (
-                      <td key={key} data-label={FACTOR_PURPOSE_LABELS[key]}>
-                        <input
-                          type="checkbox"
-                          checked={Number(row.participation?.[key] ?? 0) > 0}
-                          disabled={busy}
-                          onChange={(e) => void toggle(row, key, e.target.checked)}
-                        />
-                      </td>
+                      <th key={key}>{FACTOR_PURPOSE_LABELS[key]}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-        <Note msg={msg} />
-      </SectionCard>
+                </thead>
+                <tbody>
+                  {(rows ?? []).map((row) => (
+                    <tr key={row.id}>
+                      <td className="card-title" data-label="عامل">
+                        {row.name}
+                      </td>
+                      {PURPOSES.map((key) => (
+                        <td key={key} data-label={FACTOR_PURPOSE_LABELS[key]}>
+                          <input
+                            type="checkbox"
+                            aria-label={`${row.name} — ${FACTOR_PURPOSE_LABELS[key]}`}
+                            checked={Number(row.participation?.[key] ?? 0) > 0}
+                            disabled={busy}
+                            onChange={(e) => void toggle(row, key, e.target.checked)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </AsyncBlock>
+          <Note msg={matrixMsg} />
+        </SectionCard>
+      </div>
     </OpsPage>
   )
 }
@@ -674,7 +709,14 @@ const EMPTY_BRANCH: BranchForm = {
   tax_calculation_method: '',
 }
 
+type TaxGroupTab = 'groups' | 'branches'
+
+/**
+ * دو دفترِ کنارِ هم در دو تب: گروه‌های مالیاتی و شعب. هر تب فرمِ ساخت و فهرستِ خودش را
+ * دارد — پیش‌تر دو فرم و دو جدول پشتِ هم می‌آمدند و فرمِ دوم زیرِ جدولِ اول گم می‌شد.
+ */
 export function PayrollTaxGroupPage({ token }: { token: string }) {
+  const [tab, setTab] = useState<TaxGroupTab>('groups')
   const [rows, setRows] = useState<PayrollTaxGroupRecord[] | null>(null)
   const [branches, setBranches] = useState<InsuranceTaxBranchRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -726,6 +768,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
       tax_calculation_method: branch.tax_calculation_method,
     })
     setMsg(null)
+    document.getElementById('br-name')?.focus()
   }
 
   function clearBranchForm() {
@@ -740,6 +783,11 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
 
   async function submitGroup(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([[name, 'tg-name', 'عنوانِ گروه را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -761,6 +809,11 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
 
   async function submitBranch(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([[form.name, 'br-name', 'عنوانِ شعبه را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -804,241 +857,259 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
       title="گروه مالیاتی و شعب"
       description="گروه‌های مالیاتی (مناطق عادی، محروم، معاف) و شعبه‌های بیمه و حوزه‌های مالیاتی."
     >
-      <SectionCard icon={Percent} title="گروه مالیاتی جدید">
-        <form className="cmp-form" onSubmit={submitGroup}>
-          <p className="muted cmp-form-wide">
-            درصد می‌گوید چند درصد از مالیاتِ محاسبه‌شده واقعاً وصول می‌شود: مناطق محروم
-            نصف، معاف صفر. خالی بگذارید تا پیش‌فرضِ همان نوع بنشیند.
-          </p>
-          <label>
-            <span>عنوان *</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} required />
-          </label>
-          <label>
-            <span>نوع</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              {Object.entries(TAX_GROUP_KIND_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>درصد</span>
-            <input type="number" min="0" max="100" step="0.01" value={percent}
-                   onChange={(e) => setPercent(e.target.value)} placeholder="پیش‌فرضِ نوع" />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              <Save size={13} /> ثبت گروه
-            </button>
-          </div>
-        </form>
-      </SectionCard>
-
-      <SectionCard
-        icon={Landmark}
-        title={editingBranch ? `ویرایش «${editingBranch.name}»` : 'شعبه بیمه یا حوزه مالیاتی جدید'}
-      >
-        <form className="cmp-form" onSubmit={submitBranch}>
-          <label>
-            <span>نوع</span>
-            <select
-              value={form.kind}
-              onChange={(e) => set({ kind: e.target.value })}
-              disabled={editingBranch?.in_use}
-            >
-              {Object.entries(BRANCH_KIND_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-            {editingBranch?.in_use ? (
-              <span className="field-hint">
-                این شعبه روی حکم‌های حقوقی استفاده شده و نوعش دیگر عوض نمی‌شود. اگر نوعش
-                اشتباه بوده، شعبه‌ی درست را بسازید و حکم‌ها را به آن ببرید.
-              </span>
-            ) : null}
-          </label>
-          <label>
-            <span>عنوان *</span>
-            <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={150} required />
-          </label>
-          <label>
-            <span>کد تفصیلی شعبه</span>
-            <input dir="ltr" value={form.code} onChange={(e) => set({ code: e.target.value })} maxLength={20} />
-          </label>
-          <label>
-            <span>طرف حساب سازمان</span>
-            <select value={form.contact_id} onChange={(e) => set({ contact_id: e.target.value })}>
-              <option value="">— وصل نشده —</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <span className="field-hint">
-              بدهیِ بیمه و مالیاتِ حقوق به همین سازمان پرداخت می‌شود؛ با این پیوند، مانده و
-              تفصیلی‌اش در دفتر پیدا می‌شود. خالی گذاشتنش چیزی را خراب نمی‌کند.
-            </span>
-          </label>
-
-          <label>
-            <span>کد شرکت / شماره پرونده</span>
-            <input
-              dir="ltr"
-              value={form.registration_code}
-              onChange={(e) => set({ registration_code: e.target.value })}
-              maxLength={50}
-            />
-            <span className="field-hint">
-              {form.kind === 'tax' ? 'شماره پرونده مالیاتی.' : 'کد کارگاه نزد مرجع.'}
-            </span>
-          </label>
-          <label>
-            <span>نام کارگاه</span>
-            <input
-              value={form.workplace_name}
-              onChange={(e) => set({ workplace_name: e.target.value })}
-              maxLength={200}
-            />
-            <span className="field-hint">
-              کارگاهِ ثبت‌شده نزد مرجع — با «محل خدمت» یکی نیست.
-            </span>
-          </label>
-          <label className="cmp-form-wide">
-            <span>نشانی کارگاه</span>
-            <input
-              value={form.workplace_address}
-              onChange={(e) => set({ workplace_address: e.target.value })}
-            />
-          </label>
-          <label>
-            <span>نام کارفرما</span>
-            <input
-              value={form.employer_name}
-              onChange={(e) => set({ employer_name: e.target.value })}
-              maxLength={200}
-            />
-          </label>
-          <label>
-            <span>شماره پیمان</span>
-            <input
-              dir="ltr"
-              value={form.agreement_number}
-              onChange={(e) => set({ agreement_number: e.target.value })}
-              maxLength={50}
-            />
-            <span className="field-hint">
-              قرارداد کارفرما با مرجع قانونی — نه قرارداد استخدامی کارمند.
-            </span>
-          </label>
-          <label>
-            <span>نفرات معاف از بیمه</span>
-            <input
-              dir="ltr"
-              type="number"
-              min={0}
-              value={form.insurance_exempt_count}
-              onChange={(e) => set({ insurance_exempt_count: e.target.value })}
-            />
-            <span className="field-hint">
-              عددِ سرصفحه‌ی ثبت کارگاه. معافیتِ هر کارمند روی حکمِ خودش تعیین می‌شود و این
-              عدد در هیچ محاسبه‌ای استفاده نمی‌شود.
-            </span>
-          </label>
-          <label>
-            <span>مرکز هزینه</span>
-            <select value={form.cost_center_id} onChange={(e) => set({ cost_center_id: e.target.value })}>
-              <option value="">— ندارد —</option>
-              {costCenters.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-
-          {/* فقط برای حوزه مالیاتی — سرور هم همین را می‌سنجد، نه فقط این‌جا. */}
-          {form.kind === 'tax' ? (
-            <label>
-              <span>نحوه محاسبه مالیات</span>
-              <select
-                value={form.tax_calculation_method}
-                onChange={(e) => set({ tax_calculation_method: e.target.value })}
-              >
-                <option value="">— تعیین نشده —</option>
-                {Object.entries(TAX_CALC_METHOD_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <span className="field-hint">
-                فعلاً ثبت می‌شود ولی در محاسبه‌ی مالیات اعمال نمی‌شود؛ موتور امروز تعدیل
-                تجمیعی انجام می‌دهد.
-              </span>
-            </label>
-          ) : null}
-
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !form.name.trim()}>
-              <Save size={13} /> {editingBranch ? 'ذخیره تغییرات' : 'ثبت شعبه'}
-            </button>
-            {editingBranch ? (
-              <button type="button" onClick={clearBranchForm} disabled={busy}>
-                انصراف
-              </button>
-            ) : null}
-          </div>
-          <Note msg={msg} />
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={Percent} title={rows ? `${fa(rows.length)} گروه مالیاتی` : 'در حال بارگذاری…'}>
-        <RefTable
-          rows={rows}
-          error={error}
-          emptyText="هنوز گروه مالیاتی‌ای ثبت نشده."
-          head={['عنوان', 'نوع', 'درصد']}
-          render={(r) => [r.name, TAX_GROUP_KIND_LABELS[r.kind] ?? r.kind, `${fa(Number(r.percent))}٪`]}
-        />
-      </SectionCard>
-
-      <SectionCard icon={Landmark} title={branches ? `${fa(branches.length)} شعبه` : 'در حال بارگذاری…'}>
-        <RefTable
-          rows={branches}
-          error={error}
-          emptyText="هنوز شعبه‌ای ثبت نشده."
-          head={[
-            'عنوان',
-            'نوع',
-            'کد تفصیلی شعبه',
-            'طرف حساب سازمان',
-            'کد شرکت / شماره پرونده',
-            'شماره پیمان',
-            'نفرات معاف از بیمه',
-            'نحوه محاسبه مالیات',
-            'نام کارگاه',
-            'نام کارفرما',
-            'نشانی کارگاه',
-            'مرکز هزینه',
-            '',
+      <div className="ef-form">
+        <FormTabs
+          label="گروه مالیاتی و شعب"
+          active={tab}
+          onChange={(k) => {
+            setTab(k as TaxGroupTab)
+            setMsg(null)
+          }}
+          tabs={[
+            { key: 'groups', label: 'گروه‌های مالیاتی', badge: rows?.length ? fa(rows.length) : undefined },
+            { key: 'branches', label: 'شعب بیمه و حوزه‌های مالیاتی', badge: branches?.length ? fa(branches.length) : undefined },
           ]}
-          render={(r) => [
-            r.name,
-            BRANCH_KIND_LABELS[r.kind] ?? r.kind,
-            r.code ? <span key="code" dir="ltr">{r.code}</span> : '—',
-            r.contact_name || '—',
-            r.registration_code ? <span key="reg" dir="ltr">{r.registration_code}</span> : '—',
-            r.agreement_number ? <span key="agr" dir="ltr">{r.agreement_number}</span> : '—',
-            r.insurance_exempt_count ? fa(r.insurance_exempt_count) : '—',
-            //: عمداً خالی برای شعبه‌ای که مالیاتی نیست — همان چیزی که فهرستِ
-            //: سپیدار نشان می‌دهد، و همان قیدی که سرور دارد.
-            TAX_CALC_METHOD_LABELS[r.tax_calculation_method] ?? '—',
-            r.workplace_name || '—',
-            r.employer_name || '—',
-            r.workplace_address || '—',
-            r.cost_center_name || '—',
-            <button key="edit" type="button" onClick={() => editBranch(r)}>
-              ویرایش
-            </button>,
-          ]}
-        />
-      </SectionCard>
+        >
+          {tab === 'groups' ? (
+            <div className="ef-form">
+              <form onSubmit={submitGroup} noValidate>
+                <SectionCard icon={Plus} title="گروه مالیاتی جدید">
+                  <FormGrid>
+                    <FormField id="tg-name" label="عنوان" required>
+                      {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />}
+                    </FormField>
+                    <FormField label="نوع">
+                      {(id) => (
+                        <select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                          {Object.entries(TAX_GROUP_KIND_LABELS).map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </FormField>
+                    <FormField
+                      label="درصد"
+                      tip="چند درصد از مالیاتِ محاسبه‌شده واقعاً وصول می‌شود: مناطق محروم نصف، معاف صفر. خالی بگذارید تا پیش‌فرضِ همان نوع بنشیند."
+                    >
+                      {(id) => <NumberInput id={id} allowDecimal value={percent} onChange={setPercent} />}
+                    </FormField>
+                  </FormGrid>
+                </SectionCard>
+                <ActionBar status={<FormStatus msg={msg} />}>
+                  <SubmitButton busy={busy} label="ثبت گروه" />
+                </ActionBar>
+              </form>
+
+              <SectionCard icon={Percent} title={rows ? `${fa(rows.length)} گروه مالیاتی` : 'در حال بارگذاری…'}>
+                <RefTable
+                  rows={rows}
+                  error={error}
+                  emptyText="هنوز گروه مالیاتی‌ای ثبت نشده."
+                  head={['عنوان', 'نوع', 'درصد']}
+                  render={(r) => [r.name, TAX_GROUP_KIND_LABELS[r.kind] ?? r.kind, `${fa(Number(r.percent))}٪`]}
+                />
+              </SectionCard>
+            </div>
+          ) : (
+            <div className="ef-form">
+              <form onSubmit={submitBranch} noValidate>
+                <SectionCard
+                  icon={Landmark}
+                  title={editingBranch ? `ویرایش «${editingBranch.name}»` : 'شعبه بیمه یا حوزه مالیاتی جدید'}
+                >
+                  <FormGrid>
+                    <FormField
+                      label="نوع"
+                      message={
+                        editingBranch?.in_use
+                          ? 'این شعبه روی حکم‌های حقوقی استفاده شده و نوعش دیگر عوض نمی‌شود. اگر نوعش اشتباه بوده، شعبه‌ی درست را بسازید و حکم‌ها را به آن ببرید.'
+                          : undefined
+                      }
+                    >
+                      {(id) => (
+                        <select
+                          id={id}
+                          value={form.kind}
+                          onChange={(e) => set({ kind: e.target.value })}
+                          disabled={editingBranch?.in_use}
+                        >
+                          {Object.entries(BRANCH_KIND_LABELS).map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </FormField>
+                    <FormField id="br-name" label="عنوان" required>
+                      {(id) => <input id={id} value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={150} />}
+                    </FormField>
+                    <FormField label="کد تفصیلی شعبه">
+                      {(id) => <input id={id} dir="ltr" value={form.code} onChange={(e) => set({ code: e.target.value })} maxLength={20} />}
+                    </FormField>
+
+                    <FormField
+                      label="طرف حساب سازمان"
+                      tip="بدهیِ بیمه و مالیاتِ حقوق به همین سازمان پرداخت می‌شود؛ با این پیوند، مانده و تفصیلی‌اش در دفتر پیدا می‌شود. خالی گذاشتنش چیزی را خراب نمی‌کند."
+                    >
+                      {(id) => (
+                        <select id={id} value={form.contact_id} onChange={(e) => set({ contact_id: e.target.value })}>
+                          <option value="">— وصل نشده —</option>
+                          {contacts.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </FormField>
+                    <FormField
+                      label="کد شرکت / شماره پرونده"
+                      tip={form.kind === 'tax' ? 'شماره پرونده مالیاتی.' : 'کد کارگاه نزد مرجع.'}
+                    >
+                      {(id) => (
+                        <input
+                          id={id}
+                          dir="ltr"
+                          value={form.registration_code}
+                          onChange={(e) => set({ registration_code: e.target.value })}
+                          maxLength={50}
+                        />
+                      )}
+                    </FormField>
+                    <FormField label="مرکز هزینه">
+                      {(id) => (
+                        <select id={id} value={form.cost_center_id} onChange={(e) => set({ cost_center_id: e.target.value })}>
+                          <option value="">— ندارد —</option>
+                          {costCenters.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </FormField>
+
+                    <div className="ef-subhead">کارگاه و کارفرما</div>
+                    <FormField label="نام کارگاه" tip="کارگاهِ ثبت‌شده نزد مرجع — با «محل خدمت» یکی نیست.">
+                      {(id) => (
+                        <input id={id} value={form.workplace_name} onChange={(e) => set({ workplace_name: e.target.value })} maxLength={200} />
+                      )}
+                    </FormField>
+                    <FormField label="نام کارفرما">
+                      {(id) => (
+                        <input id={id} value={form.employer_name} onChange={(e) => set({ employer_name: e.target.value })} maxLength={200} />
+                      )}
+                    </FormField>
+                    <FormField label="شماره پیمان" tip="قرارداد کارفرما با مرجع قانونی — نه قرارداد استخدامی کارمند.">
+                      {(id) => (
+                        <input
+                          id={id}
+                          dir="ltr"
+                          value={form.agreement_number}
+                          onChange={(e) => set({ agreement_number: e.target.value })}
+                          maxLength={50}
+                        />
+                      )}
+                    </FormField>
+                    <FormField label="نشانی کارگاه" span="full">
+                      {(id) => <input id={id} value={form.workplace_address} onChange={(e) => set({ workplace_address: e.target.value })} />}
+                    </FormField>
+                    <FormField
+                      label="نفرات معاف از بیمه"
+                      tip="عددِ سرصفحه‌ی ثبت کارگاه. معافیتِ هر کارمند روی حکمِ خودش تعیین می‌شود و این عدد در هیچ محاسبه‌ای استفاده نمی‌شود."
+                    >
+                      {(id) => (
+                        <NumberInput
+                          id={id}
+                          group={false}
+                          value={form.insurance_exempt_count}
+                          onChange={(v) => set({ insurance_exempt_count: v })}
+                        />
+                      )}
+                    </FormField>
+
+                    {/* فقط برای حوزه مالیاتی — سرور هم همین را می‌سنجد، نه فقط این‌جا. */}
+                    {form.kind === 'tax' && (
+                      <FormField
+                        label="نحوه محاسبه مالیات"
+                        tip="فعلاً ثبت می‌شود ولی در محاسبه‌ی مالیات اعمال نمی‌شود؛ موتور امروز تعدیل تجمیعی انجام می‌دهد."
+                      >
+                        {(id) => (
+                          <select
+                            id={id}
+                            value={form.tax_calculation_method}
+                            onChange={(e) => set({ tax_calculation_method: e.target.value })}
+                          >
+                            <option value="">— تعیین نشده —</option>
+                            {Object.entries(TAX_CALC_METHOD_LABELS).map(([k, v]) => (
+                              <option key={k} value={k}>
+                                {v}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </FormField>
+                    )}
+                  </FormGrid>
+                </SectionCard>
+                <ActionBar status={<FormStatus msg={msg} />}>
+                  {editingBranch && (
+                    <button type="button" className="ef-btn-secondary" onClick={clearBranchForm} disabled={busy}>
+                      <X size={15} /> انصراف
+                    </button>
+                  )}
+                  <SubmitButton busy={busy} label={editingBranch ? 'ذخیره تغییرات' : 'ثبت شعبه'} />
+                </ActionBar>
+              </form>
+
+              <SectionCard icon={Landmark} title={branches ? `${fa(branches.length)} شعبه` : 'در حال بارگذاری…'}>
+                <RefTable
+                  rows={branches}
+                  error={error}
+                  emptyText="هنوز شعبه‌ای ثبت نشده."
+                  head={[
+                    'عنوان',
+                    'نوع',
+                    'کد تفصیلی شعبه',
+                    'طرف حساب سازمان',
+                    'کد شرکت / شماره پرونده',
+                    'شماره پیمان',
+                    'نفرات معاف از بیمه',
+                    'نحوه محاسبه مالیات',
+                    'نام کارگاه',
+                    'نام کارفرما',
+                    'نشانی کارگاه',
+                    'مرکز هزینه',
+                    '',
+                  ]}
+                  render={(r) => [
+                    r.name,
+                    BRANCH_KIND_LABELS[r.kind] ?? r.kind,
+                    r.code ? <span key="code" dir="ltr">{r.code}</span> : '—',
+                    r.contact_name || '—',
+                    r.registration_code ? <span key="reg" dir="ltr">{r.registration_code}</span> : '—',
+                    r.agreement_number ? <span key="agr" dir="ltr">{r.agreement_number}</span> : '—',
+                    r.insurance_exempt_count ? fa(r.insurance_exempt_count) : '—',
+                    //: عمداً خالی برای شعبه‌ای که مالیاتی نیست — همان چیزی که فهرستِ
+                    //: سپیدار نشان می‌دهد، و همان قیدی که سرور دارد.
+                    TAX_CALC_METHOD_LABELS[r.tax_calculation_method] ?? '—',
+                    r.workplace_name || '—',
+                    r.employer_name || '—',
+                    r.workplace_address || '—',
+                    r.cost_center_name || '—',
+                    <button key="edit" type="button" onClick={() => editBranch(r)}>
+                      ویرایش
+                    </button>,
+                  ]}
+                />
+              </SectionCard>
+            </div>
+          )}
+        </FormTabs>
+      </div>
     </OpsPage>
   )
 }
@@ -1067,7 +1138,11 @@ function RefTable<T extends { id: string }>({
         <div className="table-scroll">
           <table className="cards-on-mobile">
             <thead>
-              <tr>{head.map((h, i) => <th key={h || `col-${i}`}>{h}</th>)}</tr>
+              <tr>
+                {head.map((h, i) => (
+                  <th key={h || `col-${i}`}>{h}</th>
+                ))}
+              </tr>
             </thead>
             <tbody>
               {rows.map((row) => {

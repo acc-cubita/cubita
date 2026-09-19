@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { createEmployee } from '../api'
 import { todayIso } from './jalali'
 
-/** منطقِ مشترکِ «افزودن پرسنل» — مصرف‌شده در فرمِ کلاسیک و ویزارد. */
+/** منطقِ «افزودن پرسنل» (تبِ «پرسنل و احکام»). */
 export function useEmployeeDraft({ token, onCreated }: { token: string; onCreated: () => void }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [nationalId, setNationalId] = useState('')
   const [hireDate, setHireDate] = useState(todayIso())
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const valid = !!firstName && !!lastName && !!nationalId
@@ -16,7 +16,7 @@ export function useEmployeeDraft({ token, onCreated }: { token: string; onCreate
   async function submit(): Promise<boolean> {
     setMessage(null)
     if (!valid) {
-      setMessage('نام، نام‌خانوادگی و کد ملی الزامی است.')
+      setMessage({ text: 'نام، نام‌خانوادگی و کد ملی الزامی است.', kind: 'err' })
       return false
     }
     setSubmitting(true)
@@ -33,11 +33,11 @@ export function useEmployeeDraft({ token, onCreated }: { token: string; onCreate
       setFirstName('')
       setLastName('')
       setNationalId('')
-      setMessage('کارمند ثبت شد.')
+      setMessage({ text: `«${firstName} ${lastName}» ثبت شد.`, kind: 'ok' })
       onCreated()
       return true
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
       return false
     } finally {
       setSubmitting(false)
@@ -54,6 +54,7 @@ export function useEmployeeDraft({ token, onCreated }: { token: string; onCreate
     hireDate,
     setHireDate,
     message,
+    setMessage,
     submitting,
     valid,
     submit,
