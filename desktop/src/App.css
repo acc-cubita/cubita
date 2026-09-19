@@ -3767,14 +3767,32 @@ button:disabled {
 .topnav--collapsed .topnav-hamburger {
   display: inline-flex;
 }
-/* جست‌وجو هم مثلِ منو پنهان می‌شود ولی اندازه‌پذیر می‌ماند، تا وقتی پنجره باز شد
-   TopNav بداند چقدر جا لازم دارد و برش گرداند. */
+/* دو نمای جست‌وجو جای هم را می‌گیرند: همیشه دقیقاً یکی در جریان است و آن یکی
+   پارک می‌شود — پنهان، ولی اندازه‌پذیر، تا TopNav در هر عرض هزینه‌ی هر دو را
+   بداند و بتواند برگرداندشان. `display:none` هر دو را صفر می‌کرد و نوار دیگر
+   هرگز به قرص برنمی‌گشت.
+
+   **جست‌وجو هیچ‌وقت هر دو را پارک نمی‌کند.** پیش از این `topnav--tight` تنها
+   نمای موجود را پنهان می‌کرد و زیرِ ۷۶۰px یک `display:none` هم رویش بود — یعنی
+   بیرون از داشبورد هیچ راهی به جست‌وجو نمی‌ماند. */
+.topnav-search-icon {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .topnav--tight .topnav-search {
   position: absolute;
   top: 0;
   inset-inline-start: 0;
   visibility: hidden;
   pointer-events: none;
+}
+.topnav--tight .topnav-search-icon {
+  position: static;
+  visibility: visible;
+  pointer-events: auto;
 }
 /* آیتم‌ها نباید فشرده شوند: سنجشِ بالا به عرضِ *طبیعیِ* هر ماژول تکیه دارد، و فشرده‌شدن
    یعنی نوار به‌جای رفتن به کشو، متن‌ها را روی هم می‌ریزد. */
@@ -3959,44 +3977,46 @@ button:disabled {
   margin-inline-start: auto;
   flex-shrink: 0;
 }
-.topnav-search {
-  position: relative;
-  display: flex;
+/* جست‌وجوی نوار: دو نمای یک دکمه — قرصِ نوشته‌دار، و ذره‌بینِ ۳۴px وقتی جا کم است.
+   هر دو کامندپالت را باز می‌کنند (همان چیزی که `Ctrl+K` باز می‌کند). کدام‌یک در
+   جریان باشد را سنجشِ TopNav تصمیم می‌گیرد، نه بریک‌پوینتِ ثابت. */
+.topnav-search,
+.topnav-search-icon {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
   height: 34px;
-  padding: 0 10px;
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--topnav-muted);
-}
-.topnav-search input {
-  width: 130px;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--topnav-text);
   font: inherit;
+  cursor: pointer;
 }
-.topnav-search input::placeholder {
-  color: var(--topnav-muted);
+.topnav-search:hover,
+.topnav-search-icon:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--topnav-text);
 }
-.topnav-search-results {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-start: 0;
-  min-width: 220px;
-  padding: 6px;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.topnav-search {
+  gap: 6px;
+  padding: 0 10px;
+}
+.topnav-search-icon {
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+}
+.topnav-search-label {
+  white-space: nowrap;
+}
+.topnav-search-kbd {
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
 }
 .topnav-org {
   display: inline-flex;
@@ -4463,13 +4483,24 @@ button.topnav-org:hover {
   .topnav-actions { gap: 6px; }
   .topnav-brand { padding: 0 4px; }
   .topnav-brand-name { font-size: 14px; }
-  .topnav-search { padding: 0 8px; }
-  .topnav-search input { width: 96px; }
+  .topnav-search { padding: 0 8px; gap: 4px; }
+}
+/* پله‌ی دوم: پیش از رفتن به کشوی همبرگری، نوار یک بار دیگر کوچک می‌شود — فونت و
+   فاصله‌ی ماژول‌ها ریزتر و نشانِ میان‌بر برداشته می‌شود. این ~۱۰۰px یعنی چند ماژولِ
+   دیگر روی نوار می‌مانند به‌جای اینکه کاربر برای رسیدن به آن‌ها کشو را باز کند. */
+@media (max-width: 1200px) {
+  .topnav-item { padding: 0 5px; gap: 2px; font-size: 12px; }
+  .topnav-item .topnav-item-chev { width: 12px; height: 12px; }
+  .topnav-search-kbd { display: none; }
+  .topnav-brand-name { font-size: 13px; }
 }
 /* جست‌وجوی ماژول با بریک‌پوینتِ ثابت کنار نمی‌رود، بلکه *سنجیده* — کلاسِ
    `topnav--tight` از TopNav. پیش از رفتن به کشوی همبرگری، اول این ~۱۳۰px آزاد
    می‌شود؛ در بیشترِ عرض‌ها همین کافی است تا کلِ ماژول‌ها روی نوار بمانند. */
-/* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو. جست‌وجو/نامِ کسب‌وکار دیرتر (۷۶۰) پنهان می‌شوند. */
+/* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو.
+   این‌جا برخلافِ `topnav--collapsed` واقعاً `display:none` است، چون پارکِ یک منوی
+   ~۹۰۰px داخلِ پنجره‌ی ۳۹۰px خودش سرریزِ افقی می‌سازد. عوضش سنجشِ TopNav همین
+   `display:none` را می‌بیند و می‌فهمد منو در هیچ قیمتی روی نوار نیست. */
 @media (max-width: 1024px) {
   .topnav-menu {
     display: none;
@@ -4478,8 +4509,10 @@ button.topnav-org:hover {
     display: inline-flex;
   }
 }
+/* زیرِ ۷۶۰px فقط نامِ کسب‌وکار می‌رود. جست‌وجو **نمی‌رود**: سنجشِ TopNav تا این‌جا
+   خودش به ذره‌بین رسیده، و ذره‌بین همان چیزی است که روی موبایل تنها راهِ رسیدن به
+   جست‌وجوست — کشوی همبرگری کادر ندارد و `Ctrl+K` صفحه‌کلیدی ندارد که زده شود. */
 @media (max-width: 760px) {
-  .topnav-search,
   .topnav-org {
     display: none;
   }
@@ -11729,4 +11762,12 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   color: var(--warning);
   font-size: var(--fs-xs);
   white-space: nowrap;
+}
+
+/* حالتِ بازِ `SearchSelect`. `ItemPicker` این را از کلاسِ `.item-picker.open` روی
+   ظرفش می‌گیرد؛ `SearchSelect` ظرف ندارد (پاپ‌آورش مستقیم به body می‌رود)، پس
+   همان نشانه را از `aria-expanded` می‌خوانَد — که به‌هرحال باید درست باشد. */
+.item-picker-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }

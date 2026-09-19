@@ -5,11 +5,24 @@ import type { PageKey } from '../lib/navModel'
 import { buildCommands, searchCommands, type Command } from '../lib/commands'
 
 /**
- * کامندپالتِ سراسری (Ctrl/⌘+K) برای «نسخه‌ی جدید» — پرش به هر صفحه یا شروعِ یک کار.
- * منبعِ فرمان‌ها همان navModel + taskRegistry است تا با منو یکی بماند. فقط پوسته‌ی guided.
+ * کامندپالتِ سراسری — پرش به هر صفحه یا شروعِ یک کار. منبعِ فرمان‌ها همان
+ * navModel + taskRegistry است تا با منو یکی بماند.
+ *
+ * **حالتِ باز/بسته بیرون است.** `Ctrl+K` تنها راهِ بازکردنش نیست: دکمه‌ی جست‌وجوی
+ * نوارِ بالا هم همین را باز می‌کند، و روی موبایل که صفحه‌کلیدی نیست، تنها راه
+ * همان دکمه است. پس مالکِ حالت `Dashboard` است که هر دو را رندر می‌کند.
  */
-export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate: (page: PageKey, section: string | null) => void }) {
-  const [open, setOpen] = useState(false)
+export function CommandPalette({
+  me,
+  onNavigate,
+  open,
+  onOpenChange,
+}: {
+  me: MeResponse
+  onNavigate: (page: PageKey, section: string | null) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -23,14 +36,14 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
       //: می‌ماند برای صفحه‌کلیدهایی که `code` معناداری نمی‌دهند (مثلِ صفحه‌کلیدِ مجازی).
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key.toLowerCase() === 'k')) {
         e.preventDefault()
-        setOpen((o) => !o)
+        onOpenChange(!open)
       } else if (e.key === 'Escape') {
-        setOpen(false)
+        onOpenChange(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [open, onOpenChange])
 
   const commands = useMemo(() => buildCommands(me), [me])
   const filtered = useMemo(() => searchCommands(commands, query), [commands, query])
@@ -56,7 +69,7 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
 
   function run(c: Command) {
     onNavigate(c.page, c.section ?? null)
-    setOpen(false)
+    onOpenChange(false)
   }
 
   function onInputKey(e: React.KeyboardEvent) {
@@ -74,7 +87,7 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
   }
 
   return (
-    <div className="cmdk-overlay" onMouseDown={() => setOpen(false)}>
+    <div className="cmdk-overlay" onMouseDown={() => onOpenChange(false)}>
       <div className="cmdk" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جست‌وجوی فرمان">
         <div className="cmdk-search">
           <Search size={18} />

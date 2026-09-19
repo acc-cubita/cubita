@@ -42,6 +42,7 @@ import { fetchEmployees, updateEmployee, type EmployeeRecord, type PayrollPeriod
 import { useEmployeeDraft } from '../lib/employeeDraft'
 import { usePayrollRunDraft, type PayrollRunDraft } from '../lib/payrollRunDraft'
 import { Note, type Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * ماژولِ «حقوق و دستمزد» — چهار بخش: پرسنل و احکام، کارکرد و صدور فیش، مزایا، تنظیمات.
@@ -233,11 +234,11 @@ export function EmployeeList({
       {employees.length > 0 && (
         <ListToolbar>
           <SearchField value={query} onChange={setQuery} placeholder="نام یا کد ملی…" />
-          <select aria-label="وضعیت" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+          <SearchSelect aria-label="وضعیت" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
             <option value="">همه‌ی وضعیت‌ها</option>
             <option value="active">فعال</option>
             <option value="inactive">غیرفعال</option>
-          </select>
+          </SearchSelect>
         </ListToolbar>
       )}
       {shown.length === 0 ? (
@@ -396,13 +397,13 @@ function PeriodCard({ d }: { d: PayrollRunDraft }) {
           </FormField>
           <FormField label="ماه">
             {(id) => (
-              <select id={id} value={d.month} onChange={(e) => d.setMonth(Number(e.target.value))}>
+              <SearchSelect id={id} value={d.month} onChange={(e) => d.setMonth(Number(e.target.value))}>
                 {JALALI_MONTH_NAMES.map((name, idx) => (
                   <option key={idx} value={idx + 1}>
                     {name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             )}
           </FormField>
           <div className="ef-field ef-field--action">

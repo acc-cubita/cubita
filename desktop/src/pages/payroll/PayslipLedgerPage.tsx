@@ -15,6 +15,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { ListToolbar } from '../../components/form/FormKit'
 import { JALALI_MONTH_NAMES } from '../../lib/jalali'
 import { AsyncBlock, OpsPage } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * «مرور حقوق» — دفترِ فیش‌های صادرشده در همه‌ی دوره‌ها.
@@ -165,18 +166,18 @@ export function PayslipLedgerPage({ token }: { token: string }) {
       <div className="ef-form">
         <SectionCard icon={Receipt} title={rows ? `${fa(rows.length)} فیش` : 'در حال بارگذاری…'}>
           <ListToolbar>
-            <select aria-label="دوره" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
+            <SearchSelect aria-label="دوره" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
               <option value="">همه‌ی دوره‌ها</option>
               {periods.map((p) => (
                 <option key={p.id} value={p.id}>{periodLabel(p)}</option>
               ))}
-            </select>
-            <select aria-label="کارمند" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            </SearchSelect>
+            <SearchSelect aria-label="کارمند" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               <option value="">همه‌ی پرسنل</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>{`${e.first_name} ${e.last_name}`.trim()}</option>
               ))}
-            </select>
+            </SearchSelect>
           </ListToolbar>
           <AsyncBlock
             loading={rows == null}

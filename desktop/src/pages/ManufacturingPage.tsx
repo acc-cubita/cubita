@@ -40,6 +40,7 @@ import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { Pager, usePagination } from '../components/Pager'
 import { useNavSection } from '../components/navContext'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const PLAN_STATUS_LABELS: Record<ProductionPlanStatus, string> = {
   draft: 'پیش‌نویس',
@@ -245,23 +246,23 @@ function OrdersTab({
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
             فرمولِ ساخت (محصول)
-            <select value={bomId} onChange={(e) => setBomId(e.target.value)} required>
+            <SearchSelect value={bomId} onChange={(e) => setBomId(e.target.value)} required>
               <option value="">— انتخاب —</option>
               {activeBoms.map((b) => (
                 <option key={b.id} value={b.id}>
                   {itemById.get(b.finished_item_id)?.name ?? '—'}{b.name ? ` — ${b.name}` : ''}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <div className="field-row">
             <label>
               انبار
-              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+              <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               تاریخِ برنامه
@@ -343,7 +344,7 @@ function OrderListTab({
                       </td>
                       <td className="card-actions" data-label="اقدام">
                         {options.length > 0 && (
-                          <select
+                          <SearchSelect
                             value=""
                             onChange={(e) => {
                               if (e.target.value) void changeStatus(p, e.target.value as ProductionPlanStatus)
@@ -353,7 +354,7 @@ function OrderListTab({
                             {options.map((s) => (
                               <option key={s} value={s}>{PLAN_STATUS_LABELS[s]}</option>
                             ))}
-                          </select>
+                          </SearchSelect>
                         )}
                       </td>
                     </tr>
@@ -478,12 +479,12 @@ function BomsTab({
       <form className="invoice-form form-full" onSubmit={submit}>
         <label>
           محصولِ نهایی
-          <select value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
+          <SearchSelect value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
             <option value="">— انتخاب —</option>
             {goodsItems.map((i) => (
               <option key={i.id} value={i.id}>{i.name}</option>
             ))}
-          </select>
+          </SearchSelect>
           {editingId && <span className="field-hint">محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.</span>}
         </label>
         <div className="field-row">
@@ -511,12 +512,12 @@ function BomsTab({
                 {lines.map((l, i) => (
                   <tr key={i}>
                     <td data-label="جزء">
-                      <select value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
+                      <SearchSelect value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
                         <option value="">— انتخاب کالا —</option>
                         {goodsItems.map((it) => (
                           <option key={it.id} value={it.id}>{it.name}</option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </td>
                     <td data-label="مقدار">
                       <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
@@ -753,14 +754,14 @@ function MaterialIssueTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               سفارشِ تولید
-              <select value={planId} onChange={(e) => { setPlanId(e.target.value); setQty('') }} required>
+              <SearchSelect value={planId} onChange={(e) => { setPlanId(e.target.value); setQty('') }} required>
                 <option value="">— انتخاب —</option>
                 {openPlans.map((p) => (
                   <option key={p.id} value={p.id}>
                     {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (باقی‌مانده: {fa(remainingOf(p))})
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="field-row">
               <label>
@@ -910,14 +911,14 @@ function ProductReceiptTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               سفارشِ تولید
-              <select value={planId} onChange={(e) => pickPlan(e.target.value)} required>
+              <SearchSelect value={planId} onChange={(e) => pickPlan(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {openPlans.map((p) => (
                   <option key={p.id} value={p.id}>
                     {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (باقی‌مانده: {fa(remainingOf(p))})
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="field-row">
               <label>
@@ -1052,14 +1053,14 @@ function CostCalcTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               سفارشِ تولید
-              <select value={planId} onChange={(e) => setPlanId(e.target.value)} required>
+              <SearchSelect value={planId} onChange={(e) => setPlanId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {eligiblePlans.map((p) => (
                   <option key={p.id} value={p.id}>
                     {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (دریافت‌شده: {fa(Number(p.qty_produced))})
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="field-row">
               <label>
@@ -1168,14 +1169,14 @@ function VarianceTab({
         <div className="invoice-form">
           <label>
             سفارشِ تولید
-            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+            <SearchSelect value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
               <option value="">همه‌ی سفارش‌ها</option>
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
                   {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         </div>
 
@@ -1276,23 +1277,23 @@ function KardexTab({
         <div className="invoice-form">
           <label>
             سفارشِ تولید
-            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+            <SearchSelect value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
               <option value="">همه‌ی سفارش‌ها</option>
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
                   {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             کالا
-            <select value={itemFilter} onChange={(e) => setItemFilter(e.target.value)}>
+            <SearchSelect value={itemFilter} onChange={(e) => setItemFilter(e.target.value)}>
               <option value="">همه‌ی کالاها</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         </div>
 
@@ -1388,14 +1389,14 @@ function CostReportTab({
         <div className="invoice-form">
           <label>
             سفارشِ تولید
-            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+            <SearchSelect value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
               <option value="">همه‌ی سفارش‌ها</option>
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
                   {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         </div>
 

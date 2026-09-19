@@ -32,6 +32,7 @@ import { ReconciliationPanel } from '../../components/ReconciliationPanel'
 import { parseCsv, toNumber } from '../../lib/csv'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * عملیاتِ بانکیِ ماژولِ «دریافت و پرداخت» — صورت‌حساب، مغایرت، کارتخوان و مرورِ گردش.
@@ -156,14 +157,14 @@ export function BankStatementPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               حساب بانکی
-              <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+              <SearchSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
                 <option value="">— انتخاب —</option>
                 {(banks.data ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           </div>
           {bankAccountId && (
@@ -363,7 +364,7 @@ export function PosSettlementPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               دستگاه
-              <select value={posTerminalId} onChange={(e) => setPosTerminalId(e.target.value)}>
+              <SearchSelect value={posTerminalId} onChange={(e) => setPosTerminalId(e.target.value)}>
                 <option value="">— انتخابِ دستگاه —</option>
                 {terminals.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -371,7 +372,7 @@ export function PosSettlementPage({ token }: { token: string }) {
                     {t.label || 'کارتخوان'}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="acc-inline-field">
               تسویه تا تاریخ
@@ -582,14 +583,14 @@ export function BankLedgerPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               حساب بانکی
-              <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+              <SearchSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
                 <option value="">همه‌ی حساب‌ها</option>
                 {(banks.data ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="cc-presets">
               {(

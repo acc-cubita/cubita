@@ -37,6 +37,7 @@ import {
   toFaDigits,
   todayIso,
 } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const CATEGORY_META: Record<CalendarCategory, { label: string; cls: string }> = {
   reminder: { label: 'یادآوری', cls: 'cat-reminder' },
@@ -239,7 +240,7 @@ export function CalendarPage({ token }: { token: string }) {
         </label>
         <label>
           دسته‌بندی
-          <select
+          <SearchSelect
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value as CalendarCategory })}
           >
@@ -248,7 +249,7 @@ export function CalendarPage({ token }: { token: string }) {
                 {CATEGORY_META[c].label}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           تاریخ

@@ -18,6 +18,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
+import { SearchSelect } from '../components/SearchSelect'
 
 interface FormState {
   code: string
@@ -229,25 +230,25 @@ export function PurchaseDeductionTypesPanel({
           <div className="field-row">
             <label>
               ماهیت
-              <select
+              <SearchSelect
                 value={form.nature}
                 onChange={(e) => setForm({ ...form, nature: e.target.value as PurchaseDeductionNature })}
               >
                 {(Object.keys(PURCHASE_DEDUCTION_NATURE_LABELS) as PurchaseDeductionNature[]).map((key) => (
                   <option key={key} value={key}>{PURCHASE_DEDUCTION_NATURE_LABELS[key]}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               مبنای محاسبه
-              <select
+              <SearchSelect
                 value={form.basis}
                 onChange={(e) => setForm({ ...form, basis: e.target.value as PurchaseDeductionBasis })}
               >
                 {(Object.keys(PURCHASE_DEDUCTION_BASIS_LABELS) as PurchaseDeductionBasis[]).map((key) => (
                   <option key={key} value={key}>{PURCHASE_DEDUCTION_BASIS_LABELS[key]}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               نرخِ پیش‌فرض (٪)
@@ -256,12 +257,12 @@ export function PurchaseDeductionTypesPanel({
           </div>
           <label>
             حسابِ بدهی
-            <select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+            <SearchSelect value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
               <option value="">— پیش‌فرض: «{DEFAULT_ACCOUNT_LABEL[form.nature]}» —</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
               ))}
-            </select>
+            </SearchSelect>
             <span className="field-hint">
               خالی بگذارید تا حسابِ پیش‌فرضِ همین ماهیت بخورد؛ اگر در چارت نباشد، با اولین فاکتور ساخته می‌شود.
             </span>
@@ -273,13 +274,13 @@ export function PurchaseDeductionTypesPanel({
             </label>
             <label>
               وضعیت
-              <select
+              <SearchSelect
                 value={form.isActive ? 'active' : 'inactive'}
                 onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })}
               >
                 <option value="active">فعال</option>
                 <option value="inactive">غیرفعال</option>
-              </select>
+              </SearchSelect>
             </label>
           </div>
           <div className="invoice-form-footer">

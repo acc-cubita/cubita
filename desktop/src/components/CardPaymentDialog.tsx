@@ -8,6 +8,7 @@ import {
   type TreasuryTransactionRecord,
 } from '../api'
 import { todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -204,13 +205,13 @@ function CardPaymentDialog({
               {terminals.length > 1 && (
                 <label>
                   دستگاه
-                  <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)}>
+                  <SearchSelect value={terminalId} onChange={(e) => setTerminalId(e.target.value)}>
                     {terminals.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.label || 'کارتخوان'}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
               )}
               <div className="card-pay-hint">با فشردنِ دکمه، مبلغ به دستگاه ارسال می‌شود؛ سپس مشتری کارت می‌کشد.</div>

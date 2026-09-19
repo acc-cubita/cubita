@@ -42,6 +42,7 @@ import { Pager, usePagination } from '../../components/Pager'
 import { SectionCard } from '../../components/SectionCard'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 type Instrument = 'cash' | 'transfer' | 'cheque' | 'card'
 
@@ -372,20 +373,20 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               نوع دریافت
-              <select value={receiptType} onChange={(e) => { setReceiptType(e.target.value as ReceiptType); setContactId('') }}>
+              <SearchSelect value={receiptType} onChange={(e) => { setReceiptType(e.target.value as ReceiptType); setContactId('') }}>
                 {(Object.keys(RECEIPT_TYPE_LABELS) as ReceiptType[]).map((key) => (
                   <option key={key} value={key}>{RECEIPT_TYPE_LABELS[key]}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               طرف مقابل
-              <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+              <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)}>
                 <option value="">— انتخاب کنید —</option>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>{contact.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               تاریخ
@@ -393,12 +394,12 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
             </label>
             <label>
               ارز
-              <select value={currency} onChange={(e) => void chooseCurrency(e.target.value)}>
+              <SearchSelect value={currency} onChange={(e) => void chooseCurrency(e.target.value)}>
                 <option value="IRR">ریال</option>
                 {(data.data?.currencies ?? []).filter((c) => c.code !== 'IRR').map((c) => (
                   <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             {currency !== 'IRR' && (
               <label>
@@ -413,11 +414,11 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
               <div className="inline-fields">
                 <label>
                   ابزار
-                  <select value={instrument} onChange={(e) => { setInstrument(e.target.value as Instrument); clearLine() }}>
+                  <SearchSelect value={instrument} onChange={(e) => { setInstrument(e.target.value as Instrument); clearLine() }}>
                     {(Object.keys(INSTRUMENT_LABELS) as Instrument[]).map((key) => (
                       <option key={key} value={key}>{INSTRUMENT_LABELS[key]}</option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label>
                   مبلغ
@@ -426,24 +427,24 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
                 {instrument === 'cash' && (
                   <label>
                     صندوق
-                    <select value={cashboxId} onChange={(e) => setCashboxId(e.target.value)}>
+                    <SearchSelect value={cashboxId} onChange={(e) => setCashboxId(e.target.value)}>
                       <option value="">صندوق پیش‌فرض</option>
                       {currencyBoxes.map((box) => (
                         <option key={box.id} value={box.id}>{box.name}</option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </label>
                 )}
                 {instrument === 'transfer' && (
                   <>
                     <label>
                       حساب بانکی
-                      <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+                      <SearchSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
                         <option value="">— انتخاب کنید —</option>
                         {currencyBanks.map((bank) => (
                           <option key={bank.id} value={bank.id}>{bank.name}</option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </label>
                     <label>
                       شماره حواله
@@ -456,12 +457,12 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
                   <>
                     <label>
                       دستگاه
-                      <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)}>
+                      <SearchSelect value={terminalId} onChange={(e) => setTerminalId(e.target.value)}>
                         <option value="">— انتخاب کنید —</option>
                         {currencyTerminals.map((term) => (
                           <option key={term.id} value={term.id}>{term.label}</option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </label>
                     <label>
                       کد پیگیری
@@ -562,12 +563,12 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
             {Number(discount || 0) > 0 && (
               <label>
                 حساب تخفیف
-                <select value={discountAccountId} onChange={(e) => setDiscountAccountId(e.target.value)}>
+                <SearchSelect value={discountAccountId} onChange={(e) => setDiscountAccountId(e.target.value)}>
                   <option value="">— انتخاب کنید —</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>{account.code} — {account.name}</option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
             )}
             <label className="form-wide">

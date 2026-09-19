@@ -25,6 +25,7 @@ import { BarcodeScanner } from '../components/BarcodeScanner'
 import { CardPaymentButton } from '../components/CardPaymentDialog'
 import { PosReceipt, type ReceiptData } from '../components/PosReceipt'
 import { todayIso, formatJalali } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -368,30 +369,30 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
       <div className="pos-toolbar">
         <label>
           انبار
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           مشتری
-          <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+          <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)}>
             <option value="">مشتریِ گذری (نقدی)</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         {saleTypes.length > 0 && (
           <label>
             نوع فروش
-            <select value={saleTypeId} onChange={(e) => setSaleTypeId(e.target.value)}>
+            <SearchSelect value={saleTypeId} onChange={(e) => setSaleTypeId(e.target.value)}>
               <option value="">عادی</option>
               {saleTypes.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         <label>

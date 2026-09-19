@@ -9,6 +9,7 @@ import { EmptyState } from './EmptyState'
 import { NumberInput } from './NumberInput'
 import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -72,12 +73,12 @@ export function MpRetailerReturns({ token }: { token: string }) {
       <SectionCard icon={Undo2} title="درخواستِ مرجوعی" description="روی یک سفارشِ تأییدشده، اقلام و تعدادِ مرجوعی را مشخص کنید. با تأییدِ پخش‌کننده، کالا از انبارتان کم و بدهی‌تان اصلاح می‌شود.">
         {error && <div className="error">{error}</div>}
         <label>سفارش (تأییدشده)
-          <select value={orderId} onChange={(e) => { setOrderId(e.target.value); setQtys({}) }}>
+          <SearchSelect value={orderId} onChange={(e) => { setOrderId(e.target.value); setQtys({}) }}>
             <option value="">— انتخابِ سفارش —</option>
             {confirmedOrders.map((o) => (
               <option key={o.id} value={o.id}>سفارش #{faNum(o.order_number)} — {o.distributor_name} — {faMoney(o.total)} ریال</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
 
         {selected && (

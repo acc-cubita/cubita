@@ -12,6 +12,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * مدیریتِ انبارها — مشخصات، معینِ حسابداری، و فعال/غیرفعال‌سازی.
@@ -159,7 +160,7 @@ export function WarehousesPanel({ token, onChanged }: { token: string; onChanged
       <div className="field-row">
         <label>
           معین انبار
-          <select
+          <SearchSelect
             value={value.gl_account_id ?? ''}
             onChange={(e) => set({ ...value, gl_account_id: e.target.value || null })}
           >
@@ -167,7 +168,7 @@ export function WarehousesPanel({ token, onChanged }: { token: string; onChanged
             {accountOptions.map((a) => (
               <option key={a.id} value={a.id}>{a.label}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       </div>
     </>

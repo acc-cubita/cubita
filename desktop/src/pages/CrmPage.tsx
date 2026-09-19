@@ -54,6 +54,7 @@ import { BirthdaysPanel } from '../components/BirthdaysPanel'
 import { PieChart, Medal, Ticket, Cake } from 'lucide-react'
 import type { LoyaltySettings } from '../api'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 const isOverdue = (d: string | null | undefined) => !!d && d < todayIso()
@@ -261,11 +262,11 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
           <div className="field-row">
             <label>
               وضعیت
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LeadStatus })}>
+              <SearchSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LeadStatus })}>
                 {STATUS_ORDER.map((s) => (
                   <option key={s} value={s}>{LEAD_STATUS[s].label}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               پیگیری بعدی
@@ -289,12 +290,12 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
         description={`${fa(filtered.length)} سرنخ`}
         actions={
           <div className="check-actions">
-            <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+            <SearchSelect value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
               <option value="all">همه</option>
               <option value="open">در حال پیگیری</option>
               <option value="won">موفق</option>
               <option value="lost">ناموفق</option>
-            </select>
+            </SearchSelect>
           </div>
         }
       >
@@ -329,11 +330,11 @@ function LeadsTab({ token, leads, onChanged }: { token: string; leads: LeadRecor
                         </div>
                       </td>
                       <td data-label="وضعیت">
-                        <select className="status-select" value={l.status} onChange={(e) => void changeStatus(l.id, e.target.value as LeadStatus)}>
+                        <SearchSelect className="status-select" value={l.status} onChange={(e) => void changeStatus(l.id, e.target.value as LeadStatus)}>
                           {STATUS_ORDER.map((s) => (
                             <option key={s} value={s}>{LEAD_STATUS[s].label}</option>
                           ))}
-                        </select>
+                        </SearchSelect>
                       </td>
                       <td data-label="ارزش تخمینی" className="money-cell">{Number(l.estimated_value) > 0 ? fa(Number(l.estimated_value)) : '—'}</td>
                       <td data-label="پیگیری بعدی">
@@ -445,11 +446,11 @@ function ActivitiesTab({
           <div className="field-row">
             <label>
               نوع
-              <select value={kind} onChange={(e) => setKind(e.target.value as ActivityKind)}>
+              <SearchSelect value={kind} onChange={(e) => setKind(e.target.value as ActivityKind)}>
                 {(Object.keys(KIND_LABELS) as ActivityKind[]).map((k) => (
                   <option key={k} value={k}>{KIND_LABELS[k]}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               تاریخ
@@ -459,19 +460,19 @@ function ActivitiesTab({
           <div className="field-row">
             <label>
               مرتبط با
-              <select value={targetType} onChange={(e) => { setTargetType(e.target.value as 'lead' | 'contact'); setTargetId('') }}>
+              <SearchSelect value={targetType} onChange={(e) => { setTargetType(e.target.value as 'lead' | 'contact'); setTargetId('') }}>
                 <option value="lead">سرنخ</option>
                 <option value="contact">مشتری</option>
-              </select>
+              </SearchSelect>
             </label>
             <label>
               {targetType === 'lead' ? 'سرنخ' : 'مشتری'}
-              <select value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+              <SearchSelect value={targetId} onChange={(e) => setTargetId(e.target.value)}>
                 <option value="">— انتخاب —</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           </div>
           <label>
@@ -654,20 +655,20 @@ function LoyaltyTab({
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
             مشتری
-            <select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
+            <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)} required>
               <option value="">— انتخاب —</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <div className="field-row">
             <label>
               نوع
-              <select value={mode} onChange={(e) => setMode(e.target.value as 'earn' | 'redeem')}>
+              <SearchSelect value={mode} onChange={(e) => setMode(e.target.value as 'earn' | 'redeem')}>
                 <option value="earn">افزودن امتیاز</option>
                 <option value="redeem">استفاده از امتیاز</option>
-              </select>
+              </SearchSelect>
             </label>
             <label>
               امتیاز

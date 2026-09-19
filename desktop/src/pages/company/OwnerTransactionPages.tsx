@@ -19,6 +19,7 @@ import { NumberInput } from '../../components/NumberInput'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { formatJalali, todayIso } from '../../lib/jalali'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR')
 
@@ -180,7 +181,7 @@ export function OwnerTransactionPage({ token }: { token: string }) {
           >
             <label className="form-full">
               نوعِ تراکنش
-              <select value={form.type} onChange={(e) => set({ type: e.target.value })} required>
+              <SearchSelect value={form.type} onChange={(e) => set({ type: e.target.value })} required>
                 <option value="">— انتخابِ نوع —</option>
                 {TYPE_GROUPS.map((group) => (
                   <optgroup key={group.label} label={group.label}>
@@ -189,17 +190,17 @@ export function OwnerTransactionPage({ token }: { token: string }) {
                     ))}
                   </optgroup>
                 ))}
-              </select>
+              </SearchSelect>
               {chosen && <span className="field-hint">{chosen.hint}</span>}
             </label>
             <label>
               شریک
-              <select value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
+              <SearchSelect value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
                 <option value="">— انتخابِ شریک —</option>
                 {partners.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               مبلغ
@@ -211,33 +212,33 @@ export function OwnerTransactionPage({ token }: { token: string }) {
             </label>
             <label>
               از/به
-              <select
+              <SearchSelect
                 value={form.method}
                 onChange={(e) => set({ method: e.target.value as 'cash' | 'bank', bankAccountId: '', cashboxId: '' })}
               >
                 <option value="cash">صندوق</option>
                 <option value="bank">بانک</option>
-              </select>
+              </SearchSelect>
             </label>
             {form.method === 'cash' ? (
               <label>
                 صندوق
-                <select value={form.cashboxId} onChange={(e) => set({ cashboxId: e.target.value })}>
+                <SearchSelect value={form.cashboxId} onChange={(e) => set({ cashboxId: e.target.value })}>
                   <option value="">— صندوقِ پیش‌فرض —</option>
                   {cashboxes.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
             ) : (
               <label>
                 حسابِ بانکی
-                <select value={form.bankAccountId} onChange={(e) => set({ bankAccountId: e.target.value })} required>
+                <SearchSelect value={form.bankAccountId} onChange={(e) => set({ bankAccountId: e.target.value })} required>
                   <option value="">— انتخابِ حساب —</option>
                   {banks.map((b) => (
                     <option key={b.id} value={b.id}>{b.name} — {b.bank_name}</option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
             )}
             <label>

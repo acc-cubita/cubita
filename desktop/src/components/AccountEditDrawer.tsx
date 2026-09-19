@@ -10,6 +10,7 @@ import {
   type AccountTraits,
   type ChartAccount,
 } from '../api'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * فرمِ ویرایشِ حساب — همان چیزی که تا امروز سه‌تا `window.prompt` بود.
@@ -175,24 +176,24 @@ export function AccountEditDrawer({
               </label>
               <label>
                 <span>ماهیت</span>
-                <select value={nature} onChange={(e) => setNature(e.target.value)}>
+                <SearchSelect value={nature} onChange={(e) => setNature(e.target.value)}>
                   <option value="">
                     پیش‌فرضِ نوعِ حساب ({ACCOUNT_NATURE_LABELS[account.effective_nature]})
                   </option>
                   <option value="debit">بدهکار</option>
                   <option value="credit">بستانکار</option>
                   <option value="any">مهم نیست</option>
-                </select>
+                </SearchSelect>
               </label>
               <label>
                 <span>وضعیت</span>
-                <select
+                <SearchSelect
                   value={isActive ? '1' : '0'}
                   onChange={(e) => setIsActive(e.target.value === '1')}
                 >
                   <option value="1">فعال</option>
                   <option value="0">غیرفعال</option>
-                </select>
+                </SearchSelect>
               </label>
             </div>
 

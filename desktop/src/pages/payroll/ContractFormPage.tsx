@@ -31,6 +31,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { ActionBar, FormField, FormGrid, FormStatus, FormTabs, InlineCreate, SelectWithAdd, TabHead } from '../../components/form/FormKit'
 import type { PageKey } from '../../lib/navModel'
 import { EmployeePicker } from './EmployeePicker'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * «قرارداد جدید» — فرمِ استخدام و اصلاحِ قرارداد، به ساختارِ سپیدار.
@@ -291,13 +292,13 @@ export function ContractFormPage({
               }
             >
               {(id) => (
-                <select id={id} value={contractType} onChange={(e) => setContractType(e.target.value)}>
+                <SearchSelect id={id} value={contractType} onChange={(e) => setContractType(e.target.value)}>
                   {allowedTypes.map((t) => (
                     <option key={t} value={t}>
                       {CONTRACT_TYPE_LABELS[t] ?? t}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               )}
             </FormField>
             <FormField label="شماره" tip="شماره‌ی داخلیِ قرارداد، اگر دارید — اختیاری.">
@@ -425,26 +426,26 @@ function EmploymentTab(p: {
       </FormField>
       <FormField label="نوع استخدام">
         {(id) => (
-          <select id={id} value={p.employmentType} onChange={(e) => p.setEmploymentType(e.target.value)}>
+          <SearchSelect id={id} value={p.employmentType} onChange={(e) => p.setEmploymentType(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {EMPLOYMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         )}
       </FormField>
       <FormField label="مرکز هزینه" tip="هزینه‌ی حقوقِ این نفر به این مرکز می‌رود.">
         {(id) => (
-          <select id={id} value={p.costCenterId} onChange={(e) => p.setCostCenterId(e.target.value)}>
+          <SearchSelect id={id} value={p.costCenterId} onChange={(e) => p.setCostCenterId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {p.costCenters.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code} — {c.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         )}
       </FormField>
 
@@ -578,14 +579,14 @@ function LinesTab({
                 {rows.map((row, i) => (
                   <tr key={`${row.factor_id}-${i}`}>
                     <td className="card-title" data-label="عامل">
-                      <select aria-label="عامل" value={row.factor_id} onChange={(e) => update(i, { factor_id: e.target.value })}>
+                      <SearchSelect aria-label="عامل" value={row.factor_id} onChange={(e) => update(i, { factor_id: e.target.value })}>
                         <option value="">— انتخاب کنید —</option>
                         {factors.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.name}
                           </option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </td>
                     <td className="num" data-label="مبلغ (ریال)">
                       <NumberInput aria-label="مبلغ (ریال)" value={row.amount} onChange={(v) => update(i, { amount: v })} />
@@ -643,26 +644,26 @@ function OtherTab(p: {
       <div className="ef-subhead">مالیات</div>
       <FormField label="گروه مالیاتی" tip="مناطق عادی، مناطق محروم یا معاف — درصدِ وصولِ مالیات را تعیین می‌کند.">
         {(id) => (
-          <select id={id} value={p.taxGroupId} onChange={(e) => p.setTaxGroupId(e.target.value)}>
+          <SearchSelect id={id} value={p.taxGroupId} onChange={(e) => p.setTaxGroupId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {p.taxGroups.filter((g) => g.is_active).map((g) => (
               <option key={g.id} value={g.id}>
                 {g.name} — {TAX_GROUP_KIND_LABELS[g.kind] ?? g.kind}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         )}
       </FormField>
       <FormField label="حوزه مالیاتی">
         {(id) => (
-          <select id={id} value={p.taxBranchId} onChange={(e) => p.setTaxBranchId(e.target.value)}>
+          <SearchSelect id={id} value={p.taxBranchId} onChange={(e) => p.setTaxBranchId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {tax.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         )}
       </FormField>
       <FormField label="قسط وام مسکن معاف از مالیات (ریال)">
@@ -680,14 +681,14 @@ function OtherTab(p: {
       {p.isInsured && (
         <FormField label="شعبه بیمه">
           {(id) => (
-            <select id={id} value={p.insuranceBranchId} onChange={(e) => p.setInsuranceBranchId(e.target.value)}>
+            <SearchSelect id={id} value={p.insuranceBranchId} onChange={(e) => p.setInsuranceBranchId(e.target.value)}>
               <option value="">— انتخاب کنید —</option>
               {insurance.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           )}
         </FormField>
       )}

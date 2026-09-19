@@ -14,6 +14,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { toNumber } from '../../lib/csv'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { fa, Note, OpsPage, type Msg } from './kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * مانده‌های اول دوره — سندِ افتتاحیه‌ی نقطه‌ی شروعِ کار با کوبیتا.
@@ -123,12 +124,12 @@ export function OpeningBalancePage({ token }: { token: string }) {
             </label>
             <label>
               حسابِ تراز (سرمایه)
-              <select value={balancingId} onChange={(e) => setBalancingId(e.target.value)}>
+              <SearchSelect value={balancingId} onChange={(e) => setBalancingId(e.target.value)}>
                 <option value="">— بدون تراز خودکار (باید متوازن باشد) —</option>
                 {postable.map((a) => (
                   <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           </div>
 
@@ -142,12 +143,12 @@ export function OpeningBalancePage({ token }: { token: string }) {
                 {lines.map((l, i) => (
                   <tr key={i}>
                     <td className="card-wide" data-label="حساب">
-                      <select value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, account_id: e.target.value } : x))}>
+                      <SearchSelect value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, account_id: e.target.value } : x))}>
                         <option value="">— انتخاب حساب —</option>
                         {postable.map((a) => (
                           <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </td>
                     <td data-label="بدهکار"><NumberInput value={l.debit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, debit: v, credit: '' } : x))} /></td>
                     <td data-label="بستانکار"><NumberInput value={l.credit} onChange={(v) => setLines(lines.map((x, j) => j === i ? { ...x, credit: v, debit: '' } : x))} /></td>
@@ -172,16 +173,16 @@ export function OpeningBalancePage({ token }: { token: string }) {
                     {stock.map((s, i) => (
                       <tr key={i}>
                         <td className="card-wide" data-label="کالا">
-                          <select value={s.item_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, item_id: e.target.value } : x))}>
+                          <SearchSelect value={s.item_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, item_id: e.target.value } : x))}>
                             <option value="">— انتخاب کالا —</option>
                             {items.map((it) => (<option key={it.id} value={it.id}>{it.sku} — {it.name}</option>))}
-                          </select>
+                          </SearchSelect>
                         </td>
                         <td className="card-wide" data-label="انبار">
-                          <select value={s.warehouse_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, warehouse_id: e.target.value } : x))}>
+                          <SearchSelect value={s.warehouse_id} onChange={(e) => setStock(stock.map((x, j) => j === i ? { ...x, warehouse_id: e.target.value } : x))}>
                             <option value="">— انبار —</option>
                             {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-                          </select>
+                          </SearchSelect>
                         </td>
                         <td data-label="تعداد"><NumberInput value={s.qty} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, qty: v } : x))} /></td>
                         <td data-label="بهای واحد"><NumberInput value={s.unit_cost} onChange={(v) => setStock(stock.map((x, j) => j === i ? { ...x, unit_cost: v } : x))} /></td>

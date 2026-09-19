@@ -12,6 +12,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number | string) => Number(n).toLocaleString('fa-IR')
 
@@ -212,9 +213,9 @@ export function BatchDetailDrawer({
             <p className="hint">مقدارِ واردشده از باقی‌مانده‌ی این بار و از موجودیِ انبار کم می‌شود و سندِ زیان ثبت می‌گردد.</p>
             <div className="field-row">
               <label>نوع
-                <select value={adjReason} onChange={(e) => setAdjReason(e.target.value as typeof adjReason)}>
+                <SearchSelect value={adjReason} onChange={(e) => setAdjReason(e.target.value as typeof adjReason)}>
                   {REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-                </select>
+                </SearchSelect>
               </label>
               <label>مقدار<NumberInput allowDecimal value={adjQty} onChange={setAdjQty} /></label>
             </div>

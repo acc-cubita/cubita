@@ -16,6 +16,7 @@ import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { BatchDetailDrawer } from './BatchDetailDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const SOURCE_LABEL: Record<string, { label: string; tone: string }> = {
   purchase_invoice: { label: 'خرید', tone: 'tone-success' },
@@ -114,21 +115,21 @@ export function BatchesPanel({ token }: { token: string }) {
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
             کالا
-            <select value={itemId} onChange={(e) => setItemId(e.target.value)} required>
+            <SearchSelect value={itemId} onChange={(e) => setItemId(e.target.value)} required>
               <option value="">— انتخاب —</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <div className="field-row">
             <label>
               انبار
-              <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+              <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               شماره‌ی بچ/سری

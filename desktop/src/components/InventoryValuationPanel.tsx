@@ -16,6 +16,7 @@ import { EmptyState } from './EmptyState'
 import { ItemPicker } from './ItemPicker'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { SectionCard } from './SectionCard'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => (Number(v) || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
 const faMoney = (v: string | number) => Math.round(Number(v) || 0).toLocaleString('fa-IR')
@@ -172,14 +173,14 @@ export function InventoryValuationPanel({
           </label>
           <label>
             انبار
-            <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
               <option value="">همه‌ی انبارها</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             کالا

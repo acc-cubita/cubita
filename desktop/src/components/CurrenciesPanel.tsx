@@ -15,6 +15,7 @@ import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -170,13 +171,13 @@ export function CurrenciesPanel({ token }: { token: string }) {
             <div className="field-row">
               <label>
                 ارز
-                <select value={rateCode} onChange={(e) => setRateCode(e.target.value)}>
+                <SearchSelect value={rateCode} onChange={(e) => setRateCode(e.target.value)}>
                   {currencies.map((c) => (
                     <option key={c.id} value={c.code}>
                       {c.code} — {c.name}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
               <label>
                 تاریخ

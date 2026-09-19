@@ -484,6 +484,35 @@ const RULES = [
       return found
     },
   },
+  {
+    id: 'R15',
+    level: 'error',
+    title: '`<select>`ِ خام',
+    why:
+      'فهرستِ انتخاب باید `SearchSelect` باشد نه `<select>`ِ خام. فهرستِ واحدها ' +
+      '۳۹۳ ردیف است، کالاها صدها و حساب‌ها هزارها؛ با `<select>` کاربر باید اسکرول ' +
+      'کند و چشمی بگردد. `SearchSelect` زیرِ ۸ گزینه خودش `<select>`ِ بومی رندر ' +
+      'می‌کند، پس این قاعده چیزی را بدتر نمی‌کند — فقط جلوی فهرستِ بلندِ ' +
+      'بی‌جست‌وجو را می‌گیرد. (خودِ `SearchSelect.tsx` مستثناست: همان‌جاست که ' +
+      '`<select>`ِ بومی رندر می‌شود.)',
+    scope: 'components',
+    check(text, file) {
+      if (/components[\\/]SearchSelect\.tsx$/.test(file)) return []
+      //: توضیحات با فاصله پر می‌شوند تا شماره‌ی خط نلغزد — چند docstring درباره‌ی
+      //: «جایگزینِ `<select>`های بلند» حرف می‌زنند و کد نیستند.
+      const code = text
+        .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+        .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+      const found = []
+      for (const m of code.matchAll(/<select(?=[\s>])/g)) {
+        found.push({
+          line: lineOf(code, m.index),
+          msg: '`<select>`ِ خام — به‌جایش `SearchSelect` استفاده کنید',
+        })
+      }
+      return found
+    },
+  },
 ]
 
 /** پایانِ یک تگِ باز — با احترام به `{}`، `()` و رشته‌ها، چون attributeهای JSX

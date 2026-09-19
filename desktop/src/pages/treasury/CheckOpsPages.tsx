@@ -46,6 +46,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * عملیاتِ چکِ ماژولِ «دریافت و پرداخت».
@@ -254,7 +255,7 @@ function CheckActionTable({
                         {(banks.data ?? []).find((b) => b.id === c.bank_account_id)?.name ?? '—'}
                       </span>
                     ) : (
-                      <select
+                      <SearchSelect
                         value={bankPick[c.id] ?? ''}
                         onChange={(e) => setBankPick({ ...bankPick, [c.id]: e.target.value })}
                       >
@@ -264,13 +265,13 @@ function CheckActionTable({
                             {b.name}
                           </option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     )}
                   </td>
                 )}
                 {needsCashbox && (
                   <td data-label="به صندوق">
-                    <select
+                    <SearchSelect
                       value={boxPick[c.id] ?? ''}
                       onChange={(e) => setBoxPick({ ...boxPick, [c.id]: e.target.value })}
                     >
@@ -280,7 +281,7 @@ function CheckActionTable({
                           {b.name}
                         </option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </td>
                 )}
                 <td className="card-actions">
@@ -435,14 +436,14 @@ function CheckForm({
       </label>
       <label>
         {type === 'receivable' ? 'از طرف حساب' : 'به طرف حساب'}
-        <select value={form.contact_id} onChange={(e) => setForm({ ...form, contact_id: e.target.value })}>
+        <SearchSelect value={form.contact_id} onChange={(e) => setForm({ ...form, contact_id: e.target.value })}>
           <option value="">— بدون طرف حساب —</option>
           {(contacts.data ?? []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         تاریخ صدور
@@ -923,14 +924,14 @@ export function CheckSearchPage({
           <div className="acc-filters">
             <label>
               وضعیت
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <SearchSelect value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="">همه</option>
                 {Object.entries(CHECK_STATUS_LABEL).map(([key, label]) => (
                   <option key={key} value={key}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               سررسید از
@@ -1329,7 +1330,7 @@ export function CheckbooksPage({ token }: { token: string }) {
       >
         <label className="acc-inline-field">
           از دسته‌چکِ
-          <select value={issueFrom} onChange={(e) => setIssueFrom(e.target.value)}>
+          <SearchSelect value={issueFrom} onChange={(e) => setIssueFrom(e.target.value)}>
             <option value="">— انتخاب دسته —</option>
             {books
               .filter((b) => b.is_active && b.remaining_count > 0)
@@ -1338,7 +1339,7 @@ export function CheckbooksPage({ token }: { token: string }) {
                   {b.bank_account_name} — {b.first_number} تا {b.last_number} ({b.remaining_count} برگ مانده)
                 </option>
               ))}
-          </select>
+          </SearchSelect>
         </label>
         {issueFrom ? (
           <CheckForm
@@ -1382,7 +1383,7 @@ export function CheckbooksPage({ token }: { token: string }) {
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               حساب بانکی
-              <select
+              <SearchSelect
                 value={form.bank_account_id}
                 onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
                 required
@@ -1393,7 +1394,7 @@ export function CheckbooksPage({ token }: { token: string }) {
                     {b.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               سریِ دسته

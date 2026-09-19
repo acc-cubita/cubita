@@ -30,6 +30,7 @@ import { Pager, usePagination } from './Pager'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 const faQty = (v: string | number | null | undefined) =>
   Number(v || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
@@ -264,15 +265,15 @@ function ReturnForm({
       <form className="invoice-form" onSubmit={(e) => void submit(e)}>
         <label>
           نوع برگشت
-          <select value={returnType} onChange={(e) => changeType(e.target.value as IssueReturnType)}>
+          <SearchSelect value={returnType} onChange={(e) => changeType(e.target.value as IssueReturnType)}>
             {TYPES.map((t) => (
               <option key={t} value={t}>{ISSUE_RETURN_TYPE_LABELS[t]}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           مبنا
-          <select value={basisKey} onChange={(e) => setBasisKey(e.target.value)} disabled={docsLoading}>
+          <SearchSelect value={basisKey} onChange={(e) => setBasisKey(e.target.value)} disabled={docsLoading}>
             <option value="">{docsLoading ? 'در حال بارگذاری…' : '— انتخاب کنید —'}</option>
             {docs.map((doc) => (
               <option key={`${doc.kind}:${doc.id}`} value={`${doc.kind}:${doc.id}`}>
@@ -280,24 +281,24 @@ function ReturnForm({
                 {doc.party_name ? ` — ${doc.party_name}` : ''} (مانده {faQty(doc.remaining_qty)})
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           انبار
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           {needsDeliverer ? 'تحویل‌دهنده' : 'تحویل‌دهنده (اختیاری)'}
-          <select value={delivererId} onChange={(e) => setDelivererId(e.target.value)}>
+          <SearchSelect value={delivererId} onChange={(e) => setDelivererId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           تاریخ
@@ -477,29 +478,29 @@ export function IssueReturnLedger({
       <div className="invoice-form">
         <label>
           نوع
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <SearchSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">همه‌ی نوع‌ها</option>
             {TYPES.map((t) => (
               <option key={t} value={t}>{ISSUE_RETURN_TYPE_LABELS[t]}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           انبار
-          <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
+          <SearchSelect value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
             <option value="">همه‌ی انبارها</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           وضعیت
-          <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+          <SearchSelect value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
             <option value="">همه</option>
             <option value="active">معتبر</option>
             <option value="voided">باطل‌شده</option>
-          </select>
+          </SearchSelect>
         </label>
       </div>
       <Note msg={msg} />

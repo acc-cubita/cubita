@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ArrowDownUp, ArrowDown, ArrowUp } from 'lucide-react'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * مرتب‌سازیِ سمتِ کلاینت برای جدول‌های فهرست — یک حالت، **دو نمایش**.
@@ -131,13 +132,13 @@ export function SortBar<T>({ sort }: { sort: SortState<T> }) {
     <div className="sort-bar">
       <label className="acc-inline-field">
         مرتب‌سازی
-        <select value={sort.key} onChange={(e) => sort.setKey(e.target.value)}>
+        <SearchSelect value={sort.key} onChange={(e) => sort.setKey(e.target.value)}>
           {Object.entries(sort.columns).map(([k, c]) => (
             <option key={k} value={k}>
               {c.label}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <button
         type="button"

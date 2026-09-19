@@ -12,6 +12,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { StatCard } from '../../components/StatCard'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali } from '../../lib/jalali'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR')
 
@@ -124,21 +125,21 @@ export function OwnerTransactionListPage({ token }: { token: string }) {
         <div className="vr-actions">
           <label>
             نوع
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            <SearchSelect value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="">همه</option>
               {types.map(([key, label]) => (
                 <option key={key} value={key}>{label}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             شریک
-            <select value={partner} onChange={(e) => setPartner(e.target.value)}>
+            <SearchSelect value={partner} onChange={(e) => setPartner(e.target.value)}>
               <option value="">همه</option>
               {balances.map((b) => (
                 <option key={b.contact_id} value={b.contact_id}>{b.contact_name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         </div>
 

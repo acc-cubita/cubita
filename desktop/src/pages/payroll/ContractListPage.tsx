@@ -16,6 +16,7 @@ import { ListToolbar, SearchField } from '../../components/form/FormKit'
 import { formatJalali } from '../../lib/jalali'
 import type { PageKey } from '../../lib/navModel'
 import { AsyncBlock, OpsPage } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * دفترِ قراردادهای حقوق — نظیرِ «قرارداد جدید».
@@ -87,12 +88,12 @@ export function ContractListPage({
         >
           <ListToolbar>
             <SearchField value={query} onChange={setQuery} placeholder="نام کارمند یا شماره…" />
-            <select aria-label="نوع قرارداد" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <SearchSelect aria-label="نوع قرارداد" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option value="">همه‌ی انواع</option>
               {Object.entries(CONTRACT_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </SearchSelect>
           </ListToolbar>
           <AsyncBlock
             loading={rows == null}

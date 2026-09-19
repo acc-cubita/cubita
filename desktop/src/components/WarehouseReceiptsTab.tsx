@@ -41,6 +41,7 @@ import { Pager, usePagination } from './Pager'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 const faQty = (v: string | number) => Number(v || 0).toLocaleString('fa-IR')
 const num = (v: string) => Number(v || 0)
@@ -246,17 +247,17 @@ function DirectReceiptForm({
       <form className="invoice-form" onSubmit={(event) => void submit(event)}>
         <label>
           نوع رسید
-          <select value={receiptType} onChange={(e) => setReceiptType(e.target.value)}>
+          <SearchSelect value={receiptType} onChange={(e) => setReceiptType(e.target.value)}>
             {Object.entries(WAREHOUSE_RECEIPT_TYPE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           انبار
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           تاریخ رسید
@@ -264,10 +265,10 @@ function DirectReceiptForm({
         </label>
         <label>
           تحویل‌دهنده
-          <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+          <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)}>
             <option value="">— بدونِ تحویل‌دهنده (خریدِ نقدی) —</option>
             {suppliers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           نرخ مالیات کالا (٪)
@@ -287,12 +288,12 @@ function DirectReceiptForm({
               {lines.map((line) => (
                 <tr key={line.key}>
                   <td className="card-title">
-                    <select value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
+                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
                       <option value="">— انتخاب کالا —</option>
                       {items.map((item) => (
                         <option key={item.id} value={item.id}>{item.name}{item.sku ? ` — ${item.sku}` : ''}</option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </td>
                   <td data-label="مقدار">
                     <NumberInput allowDecimal value={line.qty} onChange={(value) => updateLine(line.key, { qty: value })} />
@@ -340,16 +341,16 @@ function DirectReceiptForm({
         </label>
         <label>
           حمل‌کننده
-          <select value={carrierId} onChange={(e) => setCarrierId(e.target.value)}>
+          <SearchSelect value={carrierId} onChange={(e) => setCarrierId(e.target.value)}>
             <option value="">— بدونِ حمل‌کننده (پرداختِ نقدی) —</option>
             {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           مبنای تسهیم
-          <select value={freightBasis} onChange={(e) => setFreightBasis(e.target.value)}>
+          <SearchSelect value={freightBasis} onChange={(e) => setFreightBasis(e.target.value)}>
             <option value="equal">به نسبت مساوی</option>
-          </select>
+          </SearchSelect>
         </label>
         <label>
           جمع مبلغ حمل
@@ -491,19 +492,19 @@ function ReceiptLedger({
       <div className="invoice-form">
         <label>
           نوع رسید
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <SearchSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">همه‌ی نوع‌ها</option>
             {Object.entries(WAREHOUSE_RECEIPT_TYPE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           انبار
-          <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
+          <SearchSelect value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
             <option value="">همه‌ی انبارها</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
       </div>
       <Note msg={msg} />
@@ -740,11 +741,11 @@ function ReceiptReturnPanel({
         <form className="invoice-form" onSubmit={(event) => void submit(event)}>
           <label>
             نوع برگشت
-            <select value={returnType} onChange={(e) => setReturnType(e.target.value)}>
+            <SearchSelect value={returnType} onChange={(e) => setReturnType(e.target.value)}>
               {Object.entries(RETURN_TYPE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>{label}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ برگشت
@@ -752,10 +753,10 @@ function ReceiptReturnPanel({
           </label>
           <label>
             تحویل‌گیرنده
-            <select value={receiverId} onChange={(e) => setReceiverId(e.target.value)}>
+            <SearchSelect value={receiverId} onChange={(e) => setReceiverId(e.target.value)}>
               <option value="">— بدونِ تحویل‌گیرنده (نقدی) —</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             توضیحات

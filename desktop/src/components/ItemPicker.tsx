@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Plus } from 'lucide-react'
 
+import { placePopover, type Placement } from '../lib/popover'
+
 /** حداقلِ شکلی که برای انتخابِ کالا لازم است.
  *
  * هم `ItemCache` (کشِ آفلاین، بدونِ بارکد) و هم `ItemRecord` (زنده، با بارکد) این
@@ -65,7 +67,7 @@ export function ItemPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null)
+  const [rect, setRect] = useState<Placement | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,22 +86,19 @@ export function ItemPicker({
   // موقعیتِ پاپ‌آور را از دکمه می‌گیرد و با اسکرول/تغییرِ اندازه به‌روز می‌کند.
   //
   // روی موبایل ستونِ «کالا» باریک است؛ اگر عرضِ پاپ‌آور را برابرِ همان بگذاریم،
-  // جست‌وجو و آیتم‌ها فشرده و بریده می‌شوند. پس عرض را دستِ‌کم ۲۶۰px می‌گیریم (تا
-  // عرضِ صفحه)، لبه‌ی راستش را به لبه‌ی راستِ دکمه می‌چسبانیم (طبیعیِ RTL)، و داخلِ
-  // صفحه نگه می‌داریم. ارتفاعِ فهرست هم به فضای پایین محدود می‌شود تا از صفحه بیرون نزند.
+  // جست‌وجو و آیتم‌ها فشرده و بریده می‌شوند. پس عرض را دستِ‌کم ۲۶۰px می‌گیریم.
+  // بقیه‌ی حساب (ماندن داخلِ صفحه و پریدن به بالای دکمه وقتی پایین جا نیست) در
+  // `placePopover` است — همان‌که `SearchSelect` هم از آن می‌خواند.
   function reposition() {
     const el = triggerRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    const m = 8
-    const vw = window.innerWidth
-    const w = Math.min(Math.max(r.width, 260), vw - m * 2)
-    let left = r.right - w // لبه‌ی راست به دکمه بچسبد
-    if (left + w > vw - m) left = vw - m - w
-    if (left < m) left = m
-    // ۴۸px برای نوارِ جست‌وجو کنار گذاشته می‌شود تا کلِ پاپ‌آور از پایینِ صفحه نزند.
-    const maxH = Math.max(140, Math.min(320, window.innerHeight - r.bottom - m - 48))
-    setRect({ top: r.bottom + 4, left, width: w, maxH })
+    setRect(
+      placePopover(
+        el.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        { minWidth: 260 },
+      ),
+    )
   }
 
   useLayoutEffect(() => {
@@ -198,7 +197,13 @@ export function ItemPicker({
           <div
             ref={popRef}
             className="item-picker-pop"
-            style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width }}
+            style={{
+              position: 'fixed',
+              top: rect.top,
+              bottom: rect.bottom,
+              left: rect.left,
+              width: rect.width,
+            }}
           >
             <div className="item-picker-search">
               <Search size={14} />

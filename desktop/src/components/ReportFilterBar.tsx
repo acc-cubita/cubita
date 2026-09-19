@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { fetchAnalytics, fetchCostCenters, type ReportFilters } from '../api'
 import { SOURCE_LABELS, useAsync } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * فیلترهای مشترکِ گزارش‌های حسابداری — **یک نوار برای هر سه خانواده**.
@@ -37,19 +38,19 @@ export function ReportFilterBar({
     <>
       <label className="acc-inline-field">
         وضعیت سند
-        <select
+        <SearchSelect
           value={filters.status ?? ''}
           onChange={(e) => set({ status: (e.target.value || undefined) as ReportFilters['status'] })}
         >
           <option value="">همه</option>
           <option value="permanent">فقط دائم</option>
           <option value="temporary">فقط موقت</option>
-        </select>
+        </SearchSelect>
       </label>
 
       <label className="acc-inline-field">
         منشأ سند
-        <select
+        <SearchSelect
           value={filters.sourceType ?? ''}
           onChange={(e) => set({ sourceType: e.target.value || undefined })}
         >
@@ -59,12 +60,12 @@ export function ReportFilterBar({
               {label}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
 
       <label className="acc-inline-field">
         مرکز هزینه
-        <select
+        <SearchSelect
           value={filters.costCenterId ?? ''}
           onChange={(e) => set({ costCenterId: e.target.value || undefined })}
         >
@@ -74,13 +75,13 @@ export function ReportFilterBar({
               {c.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
 
       {showAnalytic && (
         <label className="acc-inline-field">
           تفصیلی
-          <select
+          <SearchSelect
             value={filters.analyticId ?? ''}
             onChange={(e) => set({ analyticId: e.target.value || undefined })}
           >
@@ -90,7 +91,7 @@ export function ReportFilterBar({
                 {a.code} — {a.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       )}
 

@@ -15,6 +15,7 @@ import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number | string) => Math.round(Number(n)).toLocaleString('fa-IR')
 
@@ -125,12 +126,12 @@ export function BirthdaysPanel({
           <form className="invoice-form form-full" onSubmit={saveBirthday}>
             <label>
               مشتری
-              <select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
+              <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}{c.birthday ? ' ✓' : ''}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               تاریخِ تولد
@@ -148,11 +149,11 @@ export function BirthdaysPanel({
           title="تولدهای پیشِ‌رو"
           description={`${fa(rows.length)} مشتری تا ${fa(days)} روزِ آینده`}
           actions={
-            <select value={days} onChange={(e) => { const d = Number(e.target.value); setDays(d); void refresh(d) }}>
+            <SearchSelect value={days} onChange={(e) => { const d = Number(e.target.value); setDays(d); void refresh(d) }}>
               <option value={7}>۷ روز</option>
               <option value={30}>۳۰ روز</option>
               <option value={90}>۹۰ روز</option>
-            </select>
+            </SearchSelect>
           }
         >
           {rows.length === 0 ? (

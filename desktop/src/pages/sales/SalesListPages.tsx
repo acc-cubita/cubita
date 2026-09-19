@@ -64,6 +64,7 @@ import { Pager, usePagination } from '../../components/Pager'
 import { SortBar, SortTh, useSort } from '../../components/SortControls'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { formatJalali, toFaDigits } from '../../lib/jalali'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /** وضعیتِ مالیِ سندِ برگشت. «باطل» عمداً از «تسویه‌نشده» جداست — یکی پولی است که
  *  هنوز نرفته، دیگری پولی که اصلاً قرار نیست برود. */
@@ -210,12 +211,12 @@ export function SalesInvoiceListPage({
                 />
                 <label className="acc-inline-field">
                   وضعیت
-                  <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                  <SearchSelect value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
                     <option value="">همه</option>
                     <option value="open">باز</option>
                     <option value="closed">بسته</option>
                     <option value="void">باطل</option>
-                  </select>
+                  </SearchSelect>
                 </label>
               </>
             }
@@ -864,11 +865,11 @@ export function PriceAnnouncementListPage({ token }: { token: string }) {
                           <div className="invoice-form form-full">
                             <label>
                               نحوه‌ی تغییر
-                              <select value={mode} onChange={(e) => setMode(e.target.value as BulkPriceMode)}>
+                              <SearchSelect value={mode} onChange={(e) => setMode(e.target.value as BulkPriceMode)}>
                                 {(Object.keys(BULK_MODE_LABELS) as BulkPriceMode[]).map((m) => (
                                   <option key={m} value={m}>{BULK_MODE_LABELS[m]}</option>
                                 ))}
-                              </select>
+                              </SearchSelect>
                             </label>
                             <label>
                               مقدار
@@ -876,11 +877,11 @@ export function PriceAnnouncementListPage({ token }: { token: string }) {
                             </label>
                             <label>
                               رندِ فی
-                              <select value={rounding} onChange={(e) => setRounding(Number(e.target.value))}>
+                              <SearchSelect value={rounding} onChange={(e) => setRounding(Number(e.target.value))}>
                                 {ROUNDING_STEPS.map((step) => (
                                   <option key={step} value={step}>{`${faInt(step)} ریال`}</option>
                                 ))}
-                              </select>
+                              </SearchSelect>
                               <span className="field-hint">
                                 فی عددِ صحیحِ ریالی است، پس به‌جای رقمِ اعشار، مضربِ رند انتخاب می‌شود.
                               </span>
@@ -1390,22 +1391,22 @@ export function NoteListPage({ token, onNavigate }: { token: string; onNavigate:
               <>
                 <label className="acc-inline-field">
                   طرف حساب
-                  <select value={who} onChange={(e) => setWho(e.target.value)}>
+                  <SearchSelect value={who} onChange={(e) => setWho(e.target.value)}>
                     <option value="">همه</option>
                     {(contacts.data ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label className="acc-inline-field">
                   وضعیت
-                  <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                  <SearchSelect value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
                     <option value="all">همه</option>
                     <option value="active">فعال</option>
                     <option value="voided">باطل‌شده</option>
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label className="acc-inline-field">
                   جست‌وجو

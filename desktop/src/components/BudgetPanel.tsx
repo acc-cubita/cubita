@@ -14,6 +14,7 @@ import { StatCard } from './StatCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { JALALI_MONTH_NAMES, isoToJalali, jalaliToIso, toFaDigits, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -119,34 +120,34 @@ export function BudgetPanel({ token, accounts }: { token: string; accounts: Acco
           <form className="invoice-form form-full" onSubmit={handleSubmit}>
             <label>
               حساب
-              <select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+              <SearchSelect value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
                 <option value="">— انتخاب حساب —</option>
                 {postable.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               سال
-              <select value={form.jy} onChange={(e) => setForm({ ...form, jy: Number(e.target.value) })}>
+              <SearchSelect value={form.jy} onChange={(e) => setForm({ ...form, jy: Number(e.target.value) })}>
                 {years.map((y) => (
                   <option key={y} value={y}>
                     {toFaDigits(y)}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               ماه
-              <select value={form.jm} onChange={(e) => setForm({ ...form, jm: Number(e.target.value) })}>
+              <SearchSelect value={form.jm} onChange={(e) => setForm({ ...form, jm: Number(e.target.value) })}>
                 {JALALI_MONTH_NAMES.map((name, i) => (
                   <option key={name} value={i + 1}>
                     {name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               مبلغ بودجه

@@ -31,6 +31,7 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker, type PickableItem } from './ItemPicker'
 import { InvoiceList, type AnyInvoice } from './InvoiceList'
 import { BlacklistBanner } from './BlacklistBanner'
+import { SearchSelect } from '../components/SearchSelect'
 
 interface ServiceLine {
   itemId: string
@@ -363,12 +364,12 @@ export function ServicePurchaseTab({
               <div className="field-row">
                 <label>
                   تأمین‌کننده
-                  <select value={contactId} onChange={(e) => setContactId(e.target.value)}>
+                  <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)}>
                     <option value="">— انتخاب تأمین‌کننده —</option>
                     {contacts.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label>
                   شماره فاکتور تأمین‌کننده
@@ -383,12 +384,12 @@ export function ServicePurchaseTab({
               <div className="field-row">
                 <label>
                   مرکز هزینه
-                  <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                  <SearchSelect value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
                     <option value="">— بدون مرکز —</option>
                     {costCenters.map((c) => (
                       <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label>
                   نرخ مالیات بر ارزش افزوده (٪)
@@ -397,12 +398,12 @@ export function ServicePurchaseTab({
                 {currencies.length > 0 && (
                   <label>
                     ارز فاکتور
-                    <select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
+                    <SearchSelect value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
                       <option value="">ریال (پایه)</option>
                       {currencies.map((c) => (
                         <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </label>
                 )}
                 {currencyCode && (
@@ -457,7 +458,7 @@ export function ServicePurchaseTab({
                             />
                           </td>
                           <td data-label="معین هزینه">
-                            <select
+                            <SearchSelect
                               className="line-account"
                               title={line.accountId ? undefined : defaultLabel}
                               value={line.accountId}
@@ -467,7 +468,7 @@ export function ServicePurchaseTab({
                               {expenseAccounts.map((a) => (
                                 <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                               ))}
-                            </select>
+                            </SearchSelect>
                           </td>
                           <td data-label="مقدار">
                             <div className="qty-with-unit">
@@ -543,7 +544,7 @@ export function ServicePurchaseTab({
                             {computedDeductions.map(({ row, type, basis, amount }, i) => (
                               <tr key={`${row.typeId}-${i}`}>
                                 <td className="card-title" data-label="نوع کسر">
-                                  <select
+                                  <SearchSelect
                                     value={row.typeId}
                                     onChange={(e) => {
                                       const next = typeById.get(e.target.value)
@@ -555,7 +556,7 @@ export function ServicePurchaseTab({
                                       .map((t) => (
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                       ))}
-                                  </select>
+                                  </SearchSelect>
                                 </td>
                                 <td data-label="ماهیت">{type ? PURCHASE_DEDUCTION_NATURE_LABELS[type.nature] : '—'}</td>
                                 <td data-label="مبنا">{type ? PURCHASE_DEDUCTION_BASIS_LABELS[type.basis] : '—'}</td>

@@ -34,6 +34,7 @@ import {
 import { firstMissing } from '../../components/form/firstMissing'
 import { formatJalali } from '../../lib/jalali'
 import { ActiveChip, AsyncBlock, Note, OpsPage, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * وامِ پرسنلی، تسویه‌حساب، و اطلاعاتِ استقرار.
@@ -96,14 +97,14 @@ function EmployeeSelect({
       }
     >
       {(fid) => (
-        <select id={fid} value={value} onChange={(e) => onChange(e.target.value)}>
+        <SearchSelect id={fid} value={value} onChange={(e) => onChange(e.target.value)}>
           <option value="">— انتخاب کنید —</option>
           {(employees ?? []).map((e) => (
             <option key={e.id} value={e.id}>
               {empName(e)}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       )}
     </FormField>
   )

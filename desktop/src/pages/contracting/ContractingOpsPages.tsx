@@ -26,6 +26,7 @@ import { NumberInput } from '../../components/NumberInput'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { formatJalali, todayIso } from '../../lib/jalali'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR')
 
@@ -152,14 +153,14 @@ export function ContractPage({ token }: { token: string }) {
           >
             <label>
               کارفرما
-              <select value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
+              <SearchSelect value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
                 <option value="">— انتخابِ کارفرما —</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               شماره‌ی قراردادِ کارفرما
@@ -195,14 +196,14 @@ export function ContractPage({ token }: { token: string }) {
             </label>
             <label>
               مرکزِ هزینه
-              <select value={form.costCenterId} onChange={(e) => set({ costCenterId: e.target.value })}>
+              <SearchSelect value={form.costCenterId} onChange={(e) => set({ costCenterId: e.target.value })}>
                 <option value="">— بدونِ مرکزِ هزینه —</option>
                 {costCenters.filter((c) => c.is_active).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="form-full">
               توضیحات
@@ -310,7 +311,7 @@ export function ContractStatusPage({ token }: { token: string }) {
         >
           <label>
             پیمان
-            <select
+            <SearchSelect
               value={selectedId}
               onChange={(e) => {
                 setSelectedId(e.target.value)
@@ -324,7 +325,7 @@ export function ContractStatusPage({ token }: { token: string }) {
                   {fa(c.number)} — {c.contact_name} ({STATUS_LABELS[c.status]})
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           {selected && (
             <>
@@ -333,7 +334,7 @@ export function ContractStatusPage({ token }: { token: string }) {
               </p>
               <label>
                 وضعیتِ تازه
-                <select
+                <SearchSelect
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value as ContractStatus)}
                   required
@@ -345,7 +346,7 @@ export function ContractStatusPage({ token }: { token: string }) {
                       {STATUS_LABELS[s]}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
               {options.length === 0 && (
                 <p className="hint">این پیمان به وضعیتِ پایانی رسیده و گذارِ دیگری ندارد.</p>
@@ -455,14 +456,14 @@ export function ContractAmendmentPage({ token }: { token: string }) {
           >
             <label>
               پیمان
-              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+              <SearchSelect value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
                 <option value="">— انتخابِ پیمان —</option>
                 {contracts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {fa(c.number)} — {c.contact_name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             {selected && (
               <p className="hint">
@@ -627,14 +628,14 @@ export function ContractStatementPage({ token }: { token: string }) {
           >
             <label>
               پیمان
-              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+              <SearchSelect value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
                 <option value="">— انتخابِ پیمان —</option>
                 {contracts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {fa(c.number)} — {c.contact_name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             {selected && (
               <p className="hint">
@@ -820,14 +821,14 @@ export function ContractSettlementPage({ token }: { token: string }) {
           >
             <label>
               پیمان
-              <select value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
+              <SearchSelect value={form.contractId} onChange={(e) => set({ contractId: e.target.value })} required>
                 <option value="">— انتخابِ پیمان —</option>
                 {selectable.map((c) => (
                   <option key={c.id} value={c.id}>
                     {fa(c.number)} — {c.contact_name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             {selected && (
               <p className="hint">

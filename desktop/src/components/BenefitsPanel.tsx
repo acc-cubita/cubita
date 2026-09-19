@@ -19,6 +19,7 @@ import { ActionBar, FormField, FormGrid, FormStatus } from './form/FormKit'
 import { firstMissing } from './form/firstMissing'
 import { isoToJalali, todayIso } from '../lib/jalali'
 import type { Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faDays = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -222,14 +223,14 @@ export function BenefitsPanel({ token }: { token: string }) {
           <FormGrid>
             <FormField id="lv-employee" label="کارمند" required>
               {(id) => (
-                <select id={id} value={leaveEmp} onChange={(e) => setLeaveEmp(e.target.value)}>
+                <SearchSelect id={id} value={leaveEmp} onChange={(e) => setLeaveEmp(e.target.value)}>
                   <option value="">— انتخاب کنید —</option>
                   {employees.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.first_name} {e.last_name}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               )}
             </FormField>
             <FormField label="تاریخ">

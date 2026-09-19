@@ -34,6 +34,7 @@ import {
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import { EmptyState } from '../../components/EmptyState'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * داده‌های پایه‌ی «شرکت»: گروهِ طرف‌حساب، محلِ جغرافیایی، فردِ مرتبط.
@@ -364,13 +365,13 @@ export function GeoLocationsPage({ token }: { token: string }) {
           </label>
           <label>
             <span>سطح</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            <SearchSelect value={kind} onChange={(e) => setKind(e.target.value)}>
               {GEO_ORDER.map((k) => (
                 <option key={k} value={k}>
                   {GEO_KIND_LABELS[k]}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             <span>کد</span>
@@ -378,14 +379,14 @@ export function GeoLocationsPage({ token }: { token: string }) {
           </label>
           <label className="cmp-form-wide">
             <span>زیرمجموعه‌ی</span>
-            <select value={parent} onChange={(e) => setParent(e.target.value)}>
+            <SearchSelect value={parent} onChange={(e) => setParent(e.target.value)}>
               <option value="">— ریشه —</option>
               {parentOptions.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.path}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label className="cmp-check">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
@@ -581,14 +582,14 @@ export function RelatedPeoplePage({ token }: { token: string }) {
         <form onSubmit={(e) => void submit(e)} className="cmp-form">
           <label className="cmp-form-wide">
             <span>طرف حساب</span>
-            <select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
+            <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)} required>
               <option value="">— انتخاب کنید —</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             <span>نام</span>

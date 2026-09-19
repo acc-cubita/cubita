@@ -21,6 +21,7 @@ import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { BarcodeScanner } from './BarcodeScanner'
+import { SearchSelect } from '../components/SearchSelect'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -424,10 +425,10 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
             </label>
             <label>
               گروه
-              <select value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}>
+              <SearchSelect value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}>
                 <option value="">— بدون گروه —</option>
                 {groups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-              </select>
+              </SearchSelect>
               <span className="field-hint">
                 گروه یک رکورد است نه یک متن — گروهِ تازه را در تبِ «گروه و مشخصات» بسازید.
               </span>
@@ -436,7 +437,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           <div className="field-row">
             <label>
               واحد اصلی
-              <select
+              <SearchSelect
                 value={form.primaryUnitId}
                 onChange={(e) => {
                   const picked = units.find((u) => u.id === e.target.value)
@@ -445,7 +446,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               >
                 <option value="">— انتخاب کنید —</option>
                 {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
-              </select>
+              </SearchSelect>
               <span className="field-hint">
                 خدمت هم واحد دارد — «ساعت» واحدِ مشاوره است، ولی موجودی نمی‌سازد. واحدِ تازه را
                 در تبِ «واحدها» بسازید.
@@ -490,7 +491,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           <div className="field-row">
             <label>
               واحد فرعی
-              <select
+              <SearchSelect
                 value={form.secondaryUnitId}
                 onChange={(e) => setForm({ ...form, secondaryUnitId: e.target.value })}
               >
@@ -498,18 +499,18 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 {units
                   .filter((u) => u.id !== form.primaryUnitId)
                   .map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               نحوه‌ی تبدیل
-              <select
+              <SearchSelect
                 value={form.conversionMode}
                 onChange={(e) => setForm({ ...form, conversionMode: e.target.value })}
                 disabled={!form.secondaryUnitId}
               >
                 <option value="fixed">نسبت ثابت</option>
                 <option value="variable">نسبت متغیر</option>
-              </select>
+              </SearchSelect>
             </label>
           </div>
           {form.secondaryUnitId && form.conversionMode === 'fixed' && (
@@ -620,20 +621,20 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           <div className="field-row">
             <label>
               وضعیت مالیاتی — فروش
-              <select value={form.vatStatus} onChange={(e) => setForm({ ...form, vatStatus: e.target.value })}>
+              <SearchSelect value={form.vatStatus} onChange={(e) => setForm({ ...form, vatStatus: e.target.value })}>
                 <option value="taxable">مشمول</option>
                 <option value="exempt">معاف</option>
-              </select>
+              </SearchSelect>
             </label>
             <label>
               وضعیت مالیاتی — خرید
-              <select
+              <SearchSelect
                 value={form.purchaseVatStatus}
                 onChange={(e) => setForm({ ...form, purchaseVatStatus: e.target.value })}
               >
                 <option value="taxable">مشمول</option>
                 <option value="exempt">معاف</option>
-              </select>
+              </SearchSelect>
             </label>
           </div>
           <div className="field-row">
@@ -668,7 +669,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
               <h4 className="form-section-title">حسابداریِ خدمت</h4>
               <label className="form-field">
                 معین هزینه خرید خدمت
-                <select
+                <SearchSelect
                   value={form.expenseAccountId}
                   onChange={(e) => setForm({ ...form, expenseAccountId: e.target.value })}
                 >
@@ -676,7 +677,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                   {accountOptions.map((a) => (
                     <option key={a.id} value={a.id}>{a.label}</option>
                   ))}
-                </select>
+                </SearchSelect>
                 <span className="field-hint">
                   خریدِ خدمت به این حساب می‌نشیند، نه به «موجودی کالا» — خدمت حرکتِ انباری ندارد.
                 </span>
