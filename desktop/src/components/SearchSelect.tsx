@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, Search } from 'lucide-react'
 
 import { textMatches } from '../lib/commands'
+import { placePopover, type Placement } from '../lib/popover'
 import { flatten, shouldSearch, type Opt } from '../lib/selectOptions'
 
 /**
@@ -38,7 +39,9 @@ import { flatten, shouldSearch, type Opt } from '../lib/selectOptions'
  * نیم‌فاصله هم پیدا می‌شوند.
  *
  * پاپ‌آور با portal و `position: fixed` رندر می‌شود تا داخلِ جدولِ اسکرول‌دار
- * بریده نشود — همان درسی که `ItemPicker` از آن آمده.
+ * بریده نشود — همان درسی که `ItemPicker` از آن آمده. جاگذاری‌اش از `placePopover`
+ * می‌آید که با هم‌او مشترک است، پس فیلدِ نزدیکِ پایینِ پنجره فهرستش را **بالا** باز
+ * می‌کند نه بیرونِ صفحه.
  */
 
 type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> & {
@@ -71,7 +74,7 @@ function Searchable({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null)
+  const [rect, setRect] = useState<Placement | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -89,16 +92,12 @@ function Searchable({
   function reposition() {
     const el = triggerRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    const m = 8
-    const vw = window.innerWidth
-    const w = Math.min(Math.max(r.width, 240), vw - m * 2)
-    //: لبه‌ی راست به دکمه می‌چسبد — طبیعیِ راست‌به‌چپ.
-    let left = r.right - w
-    if (left + w > vw - m) left = vw - m - w
-    if (left < m) left = m
-    const maxH = Math.max(140, Math.min(320, window.innerHeight - r.bottom - m - 48))
-    setRect({ top: r.bottom + 4, left, width: w, maxH })
+    setRect(
+      placePopover(el.getBoundingClientRect(), {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+    )
   }
 
   useLayoutEffect(() => {
@@ -190,7 +189,15 @@ function Searchable({
           <div
             ref={popRef}
             className="item-picker-pop"
-            style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width }}
+            //: یکی از `top`/`bottom` تعریف‌نشده است — سمتی که پاپ‌آور به آن باز
+            //: نمی‌شود. React سبکِ تعریف‌نشده را نمی‌نویسد.
+            style={{
+              position: 'fixed',
+              top: rect.top,
+              bottom: rect.bottom,
+              left: rect.left,
+              width: rect.width,
+            }}
             role="listbox"
           >
             <div className="item-picker-search">
