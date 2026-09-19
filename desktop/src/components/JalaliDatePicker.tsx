@@ -12,10 +12,13 @@ import {
 } from '../lib/jalali'
 
 export function JalaliDatePicker({
+  id,
   value,
   onChange,
   placeholder = 'انتخاب تاریخ',
 }: {
+  /** شناسه‌ی دکمه‌ی بازکننده — تا `<label htmlFor>` به آن وصل شود. */
+  id?: string
   value: string
   onChange: (iso: string) => void
   placeholder?: string
@@ -75,7 +78,7 @@ export function JalaliDatePicker({
 
   return (
     <div className="jalali-date-field" ref={containerRef}>
-      <button type="button" className="jalali-date-trigger" onClick={() => setOpen((o) => !o)}>
+      <button type="button" id={id} className="jalali-date-trigger" onClick={() => setOpen((o) => !o)}>
         <CalendarIcon size={14} />
         <span className={value ? '' : 'jalali-date-placeholder'}>{value ? formatJalali(value) : placeholder}</span>
       </button>

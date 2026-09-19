@@ -11019,3 +11019,310 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
     gap: 4px;
   }
 }
+
+/* ═══════════════ فرمِ سازمانی (ef-*) — اجزای components/form/FormKit.tsx ═══════════════
+   اولین مصرف‌کننده «قرارداد جدید» است. قاعده‌ها:
+   * همه‌ی کنترل‌ها (ورودی، فهرست، دکمه‌ی تاریخ، دکمه‌ی «+») یک ارتفاع دارند: --ef-h.
+   * گریدِ فیلدها حداکثر سه‌ستونه است و با تنگ‌شدنِ عرض خودش دو و بعد یک‌ستونه می‌شود —
+     بدونِ media query و بدونِ container query. container query روی کارت‌ها stacking
+     context می‌ساخت و تقویمِ بازشده‌ی کارتِ بالا زیرِ کارتِ پایینی می‌رفت.
+   * راهنما آیکونِ «؟» کنارِ برچسب است؛ متنِ زیرِ فیلد فقط پیامِ همین لحظه است. */
+
+/* فرم خودش پنل نیست: بومِ پشتِ کارت‌هاست تا دو کارت و نوارِ عملیات جدا دیده شوند. */
+.page.panels > .ef-form {
+  --ef-h: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  background: var(--bg);
+}
+.ef-form > section {
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.ef-form > section > .section-card-header { margin-bottom: var(--sp-4); }
+
+/* --- گرید و فیلد --- */
+.ef-grid {
+  --ef-gap: var(--sp-5);
+  display: grid;
+  /* هر ستون دست‌کم یک‌سومِ عرض است (پس بیش از سه ستون نمی‌شود) و دست‌کم ۲۲۰px (پس در
+     عرضِ تنگ دو و بعد یک ستون). */
+  grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 2 * var(--ef-gap)) / 3)), 1fr));
+  gap: var(--sp-4) var(--ef-gap);
+  align-items: start;
+}
+.ef-span-full { grid-column: 1 / -1; }
+.ef-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ef-label { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.ef-label > label { font-size: var(--fs-sm); font-weight: 600; color: var(--text-h); }
+.ef-req { margin-inline-start: 3px; color: var(--danger); }
+.ef-message { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-muted); }
+.ef-message--warn { color: var(--danger); }
+
+/* یک ارتفاع برای همه‌ی کنترل‌ها */
+.ef-form :is(input:not([type='checkbox']):not([type='radio']), select, .jalali-date-trigger) {
+  width: 100%;
+  height: var(--ef-h);
+  min-height: var(--ef-h);
+  padding-block: 0;
+  padding-inline: 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-base);
+}
+.ef-form textarea { width: 100%; min-height: 128px; padding: 10px 12px; border-radius: var(--radius-sm); resize: vertical; }
+
+/* تاریخ: آیکونِ تقویم همیشه در انتهای فیلد (چپ در راست‌به‌چپ)، متن در ابتدا */
+.ef-form .jalali-date-trigger { display: flex; align-items: center; gap: 8px; }
+.ef-form .jalali-date-trigger svg { order: 1; margin-inline-start: auto; flex: 0 0 auto; color: var(--text-muted); }
+.ef-form .jalali-date-trigger:hover svg { color: var(--accent-on-tint); }
+
+/* فهرست + دکمه‌ی «+» */
+.ef-select-add { display: flex; gap: 8px; }
+.ef-select-add > select { flex: 1 1 auto; min-width: 0; }
+.ef-icon-btn {
+  flex: 0 0 var(--ef-h);
+  justify-content: center;
+  width: var(--ef-h);
+  height: var(--ef-h);
+  min-height: var(--ef-h);
+  padding: 0;
+  color: var(--text-muted);
+}
+.ef-icon-btn.is-on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint); }
+
+/* --- راهنمای شناور «؟» --- */
+.ef-tip { position: relative; display: inline-flex; }
+.ef-tip-btn {
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: help;
+}
+.ef-tip-btn:hover:not(:disabled),
+.ef-tip-btn[aria-expanded='true'] { color: var(--accent-on-tint); background: var(--accent-bg); }
+.ef-tip-bubble {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 8px);
+  inset-inline-start: -10px;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: 1.8;
+  text-align: start;
+  white-space: normal;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+  pointer-events: none;
+}
+.ef-tip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  inset-inline-start: 15px;
+  border: 6px solid transparent;
+  border-top-color: #1e293b;
+}
+
+/* --- تب‌ها --- */
+.ef-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.ef-tabs::-webkit-scrollbar { display: none; }
+.ef-tab {
+  position: relative;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ef-tab:not([aria-selected='true']):hover { background: var(--surface-hover); color: var(--text-h); }
+/* `.ef-tabs` جلویش: قاعده‌ی سراسریِ button:hover (0,2,1) رنگِ تبِ فعال را زیرِ نشانگرِ موس زرد می‌کرد. */
+.ef-tabs .ef-tab[aria-selected='true'] { color: var(--accent-on-tint); font-weight: 700; }
+.ef-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 10px;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+.ef-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.ef-tab-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+.ef-tab[aria-selected='true'] .ef-tab-badge { background: var(--accent-bg); color: var(--accent-on-tint); }
+.ef-tab-panel { padding-top: var(--sp-5); }
+
+.ef-tab-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.ef-tab-title { display: flex; align-items: center; gap: 4px; }
+.ef-tab-title h3 { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text-h); }
+.ef-tab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ef-tab-actions button { min-height: 36px; }
+
+.ef-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: var(--sp-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.ef-subhead {
+  grid-column: 1 / -1;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
+  font-weight: 600;
+}
+.ef-subhead:not(:first-child) { margin-top: var(--sp-2); }
+.ef-checks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 24px; }
+.ef-lines-total { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--sp-3); color: var(--text-h); }
+.ef-lines-total b { font-variant-numeric: tabular-nums; }
+
+/* پنلِ ساختِ درجا (محل خدمت/شغلِ تازه) */
+.ef-inline-create {
+  grid-column: 1 / -1;
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.ef-inline-create-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: var(--sp-3); font-weight: 600; color: var(--text-h); }
+.ef-inline-create-foot { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); }
+
+/* --- جست‌وجو و انتخابِ کارمند --- */
+.ef-combo { position: relative; }
+.ef-combo-field { position: relative; }
+/* اختصاصیتِ بالاتر از قاعده‌ی «یک ارتفاع»، وگرنه padding آن جای آیکون را می‌گرفت. */
+.ef-form .ef-combo-field input[role='combobox'] { padding-inline: 36px; }
+.ef-combo-icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 12px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.ef-combo-clear {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 6px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+.ef-combo-list {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  max-height: 280px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.ef-combo-option { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.ef-combo-option.is-active { background: var(--surface-hover); }
+.ef-combo-option[aria-selected='true'] { background: var(--accent-bg); }
+.ef-combo-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-h); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.ef-combo-meta { flex: 0 0 auto; color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.ef-combo-empty { padding: 12px 10px; color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.8; }
+.ef-chip {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* --- نوارِ عملیاتِ چسبیده به پایین --- */
+.ef-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.08);
+}
+.ef-actions-status { display: flex; flex: 1 1 240px; align-items: center; gap: 8px; min-width: 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.ef-actions-status .is-ok { color: var(--success); }
+.ef-actions-status .is-err { color: var(--danger); }
+.ef-actions-status svg { flex: 0 0 auto; }
+/* دکمه‌ها در انتهای ردیف (چپ در راست‌به‌چپ)؛ «ثبت» آخرین است، پس چپ‌ترین. */
+.ef-actions-buttons { display: flex; gap: 10px; margin-inline-start: auto; }
+.ef-actions-status:empty { display: none; }
+.ef-actions-buttons button { min-height: var(--ef-h); padding: 0 22px; font-weight: 600; white-space: nowrap; }
+.ef-btn-secondary { background: transparent; border-color: var(--border-strong); }
+
+@media (max-width: 760px) {
+  .ef-form > section { padding: var(--sp-4); }
+  .ef-actions { padding: 12px var(--sp-4); }
+  .ef-actions-buttons { width: 100%; }
+  .ef-actions-buttons button { flex: 1 1 0; justify-content: center; padding: 0 12px; }
+}
