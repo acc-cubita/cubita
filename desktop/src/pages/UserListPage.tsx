@@ -19,6 +19,7 @@ import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
 import { Pager, usePagination } from '../components/Pager'
 import { PermissionMatrix, isFullAccess, summarize } from '../components/PermissionMatrix'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * فهرستِ کاربران — نیمه‌ی «دیدن و مدیریت‌کردن».
@@ -140,7 +141,7 @@ export function UserListPage({ token }: { token: string }) {
                         </div>
                       </td>
                       <td data-label="نقش">
-                        <select
+                        <SearchSelect
                           value={m.role_key}
                           disabled={busy}
                           onChange={(e) =>
@@ -156,7 +157,7 @@ export function UserListPage({ token }: { token: string }) {
                           {!roles.some((r) => r.key === m.role_key) && (
                             <option value={m.role_key}>{m.role_name}</option>
                           )}
-                        </select>
+                        </SearchSelect>
                       </td>
                       <td data-label="دسترسی">
                         <span className="tm-perm-sum">

@@ -7,6 +7,7 @@ import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali } from '../lib/jalali'
 import { returnableKey, useSalesReturnDraft, type SalesReturnDraft } from '../lib/salesReturnDraft'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -47,14 +48,14 @@ export function SalesReturnForm({ token }: { token: string }) {
         >
           <label>
             فاکتور فروش
-            <select value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
+            <SearchSelect value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
               <option value="">— انتخاب فاکتور —</option>
               {r.invoices.map((inv) => (
                 <option key={inv.id} value={inv.id}>
                   شماره {inv.number ?? '—'} — {formatJalali(inv.invoice_date)} — {Number(inv.total_amount).toLocaleString('fa-IR')}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ برگشت
@@ -151,7 +152,7 @@ export function ReturnableTable({
                 </td>
                 {withReasons && (
                   <td data-label="علت برگشت">
-                    <select
+                    <SearchSelect
                       value={r.reasonByLine?.[key] ?? ''}
                       disabled={remaining <= 0}
                       onChange={(e) => r.setReasonByLine?.((prev) => ({ ...prev, [key]: e.target.value }))}
@@ -161,7 +162,7 @@ export function ReturnableTable({
                       {activeReasons.map((reason) => (
                         <option key={reason.id} value={reason.id}>{reason.title}</option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </td>
                 )}
               </tr>

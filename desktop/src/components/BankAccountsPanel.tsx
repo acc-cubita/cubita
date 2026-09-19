@@ -14,6 +14,7 @@ import { Pager, usePagination } from './Pager'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 //: میان‌بُر، نه فهرستِ کامل — ارزهای تعریف‌شده در تنظیماتِ ارز می‌آیند.
 const CURRENCIES = ['IRR', 'USD', 'EUR', 'AED']
@@ -223,19 +224,19 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
               </label>
             </div>
             <label>تفصیلی
-              <select value={form.analytic_id} onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}>
+              <SearchSelect value={form.analytic_id} onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}>
                 <option value="">— بدونِ تفصیلی (فقط برای حسابِ اول) —</option>
                 {analytics.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-              </select>
+              </SearchSelect>
               <span className="field-hint">
                 بدونِ تفصیلی، مانده‌ی این حساب از بقیه جدا نمی‌شود. حسابِ باسابقه تفصیلی‌اش عوض نمی‌شود.
               </span>
             </label>
             <div className="field-row">
               <label>ارز
-                <select value={form.currency_code} onChange={(e) => setForm({ ...form, currency_code: e.target.value })}>
+                <SearchSelect value={form.currency_code} onChange={(e) => setForm({ ...form, currency_code: e.target.value })}>
                   {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                </SearchSelect>
                 <span className="field-hint">یک حساب، یک ارز. برای ارزِ دیگر حسابِ جدا بسازید.</span>
               </label>
               <label>تاریخ افتتاح
@@ -402,23 +403,23 @@ function BankTransactionForm({
     <SectionCard icon={Save} title="واریز / برداشتِ بانکی" description="جابه‌جاییِ دستیِ وجه بین بانک و حسابِ مقابل (مثلاً صندوق).">
       <form className="invoice-form" onSubmit={handleSubmit}>
         <label>حساب بانکی
-          <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+          <SearchSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
             <option value="">— انتخاب —</option>
             {banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
         <label>نوع
-          <select value={direction} onChange={(e) => setDirection(e.target.value as 'deposit' | 'withdraw')}>
+          <SearchSelect value={direction} onChange={(e) => setDirection(e.target.value as 'deposit' | 'withdraw')}>
             <option value="deposit">واریز</option>
             <option value="withdraw">برداشت</option>
-          </select>
+          </SearchSelect>
         </label>
         <label>مبلغ<NumberInput value={amount} onChange={setAmount} /></label>
         <label>حساب مقابل (مثلاً صندوق)
-          <select value={counterAccountId} onChange={(e) => setCounterAccountId(e.target.value)}>
+          <SearchSelect value={counterAccountId} onChange={(e) => setCounterAccountId(e.target.value)}>
             <option value="">— انتخاب —</option>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-          </select>
+          </SearchSelect>
         </label>
         <label>توضیحات<input type="text" value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <label>تاریخ<JalaliDatePicker value={transactionDate} onChange={setTransactionDate} /></label>

@@ -57,6 +57,7 @@ import {
   useRange,
   type Msg,
 } from './kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * چهار عملیاتِ *سندسازِ* پایانِ دوره.
@@ -1053,14 +1054,14 @@ export function BalanceReclassPage({ token }: { token: string }) {
         <div className="cc-toolbar">
           <label className="acc-inline-field">
             حسابِ مقصد
-            <select value={destAccount} onChange={(e) => setDestAccount(e.target.value)}>
+            <SearchSelect value={destAccount} onChange={(e) => setDestAccount(e.target.value)}>
               <option value="">— انتخاب کنید —</option>
               {postable.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.code} — {a.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label className="acc-inline-field">
             تفصیلیِ مقصد (اختیاری)

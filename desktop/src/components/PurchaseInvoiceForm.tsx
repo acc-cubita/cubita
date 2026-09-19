@@ -8,6 +8,7 @@ import { ItemPicker } from './ItemPicker'
 import { QuickItemForm } from './QuickItemForm'
 import { usePurchaseInvoiceDraft } from '../lib/purchaseInvoiceDraft'
 import { BlacklistBanner } from './BlacklistBanner'
+import { SearchSelect } from '../components/SearchSelect'
 
 /** فرمِ کلاسیکِ «ثبت فاکتور خرید» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [usePurchaseInvoiceDraft] است تا با ویزاردِ نسخه‌ی جدید یک‌دست بماند. */
@@ -48,23 +49,23 @@ export function PurchaseInvoiceForm({
           {d.costCenters.length > 0 && (
             <label>
               مرکز هزینه/پروژه (اختیاری)
-              <select value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+              <SearchSelect value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
                 <option value="">— بدون مرکز —</option>
                 {d.costCenters.map((c) => (
                   <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {d.contacts.length > 0 && (
             <label>
               تأمین‌کننده
-              <select value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
+              <SearchSelect value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
                 <option value="">— انتخاب تأمین‌کننده —</option>
                 {d.contacts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
@@ -82,12 +83,12 @@ export function PurchaseInvoiceForm({
             <div className="field-row">
               <label>
                 ارز فاکتور
-                <select value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+                <SearchSelect value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
                   <option value="">ریال (پایه)</option>
                   {d.currencies.map((c) => (
                     <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
               {d.currencyCode && (
                 <label>

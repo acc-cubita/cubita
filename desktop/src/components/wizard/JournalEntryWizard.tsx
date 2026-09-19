@@ -6,6 +6,7 @@ import { JournalLinesTable } from '../JournalEntryForm'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { NumberInput } from '../NumberInput'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -59,12 +60,12 @@ export function JournalEntryWizard({
           {d.costCenters.length > 0 && (
             <label>
               مرکز هزینه/پروژه (اختیاری)
-              <select value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+              <SearchSelect value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
                 <option value="">— بدون مرکز —</option>
                 {d.costCenters.map((c) => (
                   <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {/* همان ابعادِ فرمِ کلاسیک: دو پوسته باید یک سند بسازند، وگرنه کاربرِ
@@ -72,33 +73,33 @@ export function JournalEntryWizard({
           {d.analytics.length > 0 && (
             <label>
               تفصیلی سایر (اختیاری)
-              <select value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
+              <SearchSelect value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
                 <option value="">— بدون تفصیلی —</option>
                 {d.analytics.map((a) => (
                   <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           <label>
             وضعیتِ سند
-            <select
+            <SearchSelect
               value={d.status}
               onChange={(e) => d.setStatus(e.target.value as 'temporary' | 'permanent')}
             >
               <option value="temporary">موقت — در کارتابل بازبینی شود</option>
               <option value="permanent">دائم — همین حالا قطعی</option>
-            </select>
+            </SearchSelect>
           </label>
           {d.currencies.length > 0 && (
             <label>
               ارزِ سند (اختیاری)
-              <select value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+              <SearchSelect value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
                 <option value="">— ریالی —</option>
                 {d.currencies.map((c) => (
                   <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {d.currencyCode && (

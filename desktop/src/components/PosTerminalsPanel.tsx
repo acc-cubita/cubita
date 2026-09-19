@@ -14,6 +14,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { SearchSelect } from '../components/SearchSelect'
 
 interface Draft {
   label: string
@@ -256,7 +257,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
               </label>
               <label>
                 روشِ اتصال
-                <select
+                <SearchSelect
                   value={form.transport}
                   onChange={(e) => setForm({ ...form, transport: e.target.value as PosTransport })}
                 >
@@ -265,7 +266,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
             </div>
 
@@ -300,7 +301,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                     placeholder="COM3"
                   />
                 ) : (
-                  <select
+                  <SearchSelect
                     value={form.com_port}
                     onChange={(e) => setForm({ ...form, com_port: e.target.value })}
                     className="ltr-cell"
@@ -313,7 +314,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                     {form.com_port && !serialPorts.some((p) => p.path === form.com_port) && (
                       <option value={form.com_port}>{form.com_port} (وصل نیست)</option>
                     )}
-                  </select>
+                  </SearchSelect>
                 )}
                 <span className="field-hint">
                   {serialPorts !== null && serialPorts.length === 0
@@ -345,7 +346,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             <div className="field-row">
               <label>
                 ارز
-                <select
+                <SearchSelect
                   value={form.currency_code}
                   onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
                 >
@@ -354,12 +355,12 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                       {c}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
                 <span className="field-hint">باید با ارزِ حسابِ تسویه یکی باشد.</span>
               </label>
               <label>
                 حسابِ بانکیِ تسویه
-                <select
+                <SearchSelect
                   value={form.bank_account_id}
                   onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
                 >
@@ -370,7 +371,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                       {b.bank_name ? ` · ${b.bank_name}` : ''}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
                 <span className="field-hint">
                   مقصدِ تسویه است، نه جایی که کارت‌کشی می‌نشیند: کارت‌کشی به «وجوهِ
                   در راهِ کارت‌خوان» می‌رود و تسویه آن را به اینجا می‌آورد.
@@ -378,7 +379,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
               </label>
               <label>
                 تفصیلیِ وجوهِ در راه
-                <select
+                <SearchSelect
                   value={form.analytic_id}
                   onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}
                 >
@@ -388,7 +389,7 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
                       {a.code} — {a.name}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
                 <span className="field-hint">
                   بدونِ تفصیلی، وجوهِ در راهِ این دستگاه از بقیه جدا نمی‌شود. دستگاهِ
                   باسابقه تفصیلی‌اش عوض نمی‌شود.

@@ -21,6 +21,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
+import { SearchSelect } from '../../components/SearchSelect'
 import {
   closeInvoices,
   fetchChartAccounts,
@@ -473,30 +474,30 @@ function NoticeSide({
       <h5 className="cdn-side-title">{label}</h5>
       <label>
         نوعِ {label}
-        <select value={side.type} onChange={(e) => onChange(emptySide(e.target.value as SideType))}>
+        <SearchSelect value={side.type} onChange={(e) => onChange(emptySide(e.target.value as SideType))}>
           {(Object.keys(SIDE_TYPE_LABELS) as SideType[]).map((t) => (
             <option key={t} value={t}>
               {SIDE_TYPE_LABELS[t]}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       {party && (
         <label>
           {SIDE_TYPE_LABELS[side.type]}
-          <select value={side.contactId} onChange={(e) => onChange({ ...side, contactId: e.target.value })}>
+          <SearchSelect value={side.contactId} onChange={(e) => onChange({ ...side, contactId: e.target.value })}>
             <option value="">— انتخاب کنید —</option>
             {options.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       )}
       <label>
         حساب معین
-        <select value={side.accountId} onChange={(e) => onChange({ ...side, accountId: e.target.value })}>
+        <SearchSelect value={side.accountId} onChange={(e) => onChange({ ...side, accountId: e.target.value })}>
           <option value="">
             {party
               ? `پیش‌فرضِ نقش${roleDefault ? ` — ${toFaDigits(roleDefault.code)} ${roleDefault.name}` : ''}`
@@ -507,7 +508,7 @@ function NoticeSide({
               {toFaDigits(a.code)} — {a.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <dl className="cdn-side-info">
         <div>
@@ -697,7 +698,7 @@ export function CreditDebitNotePage({ token, onNavigate }: { token: string; onNa
         </label>
         <label>
           ارز
-          <select value={currency} onChange={(e) => void chooseCurrency(e.target.value)}>
+          <SearchSelect value={currency} onChange={(e) => void chooseCurrency(e.target.value)}>
             <option value="IRR">ریال (IRR)</option>
             {currencies
               .filter((c) => c.code !== 'IRR')
@@ -706,7 +707,7 @@ export function CreditDebitNotePage({ token, onNavigate }: { token: string; onNa
                   {c.name} ({c.code})
                 </option>
               ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           نرخ ارز
@@ -842,7 +843,7 @@ function SaleTypeAccountFields({
       {SALE_TYPE_ACCOUNT_SLOTS.map(({ key, label }) => (
         <label key={key}>
           {label}
-          <select
+          <SearchSelect
             value={value[key] ?? ''}
             onChange={(e) => onChange({ ...value, [key]: e.target.value || null })}
           >
@@ -852,7 +853,7 @@ function SaleTypeAccountFields({
                 {a.code} — {a.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       ))}
       <p className="field-hint">
@@ -1119,10 +1120,10 @@ function SaleTypeEditDrawer({
         </label>
         <label>
           وضعیت
-          <select value={isActive ? '1' : '0'} onChange={(e) => setIsActive(e.target.value === '1')}>
+          <SearchSelect value={isActive ? '1' : '0'} onChange={(e) => setIsActive(e.target.value === '1')}>
             <option value="1">فعال</option>
             <option value="0">غیرفعال (بایگانی)</option>
-          </select>
+          </SearchSelect>
           <span className="field-hint">
             نوعِ غیرفعال در فاکتورِ تازه انتخاب نمی‌شود، ولی روی فاکتورهای گذشته سرِ جایش
             می‌ماند. نوعِ فروش حذف نمی‌شود.
@@ -1200,10 +1201,10 @@ function PricingFactorForm({ token, kind }: { token: string; kind: 'discount' | 
       </label>
       <label>
         مبنا
-        <select value={mode} onChange={(e) => setMode(e.target.value as 'percent' | 'amount')}>
+        <SearchSelect value={mode} onChange={(e) => setMode(e.target.value as 'percent' | 'amount')}>
           <option value="percent">درصدی</option>
           <option value="amount">مبلغِ ثابت به ازای هر واحد</option>
-        </select>
+        </SearchSelect>
       </label>
       <label>
         {mode === 'percent' ? 'درصد' : 'مبلغ (ریال)'}
@@ -1211,36 +1212,36 @@ function PricingFactorForm({ token, kind }: { token: string; kind: 'discount' | 
       </label>
       <label>
         دامنه
-        <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
+        <SearchSelect value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
           <option value="all">همه‌ی کالاها</option>
           <option value="item">یک کالا</option>
           <option value="group">یک گروهِ کالا</option>
-        </select>
+        </SearchSelect>
       </label>
       {scope === 'item' && (
         <label>
           کالا
-          <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
+          <SearchSelect value={itemId} onChange={(e) => setItemId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {items.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.sku} — {i.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       )}
       {scope === 'group' && (
         <label>
           گروهِ کالا
-          <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+          <SearchSelect value={groupId} onChange={(e) => setGroupId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {(groups.data ?? []).map((g) => (
               <option key={g.id} value={g.id}>
                 {g.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
       )}
       <label>
@@ -1662,7 +1663,7 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
         <div className="invoice-form form-full">
           <label>
             هدفِ قاعده
-            <select
+            <SearchSelect
               value={draft.targetKind}
               onChange={(e) =>
                 setDraft({ ...draft, targetKind: e.target.value as 'item' | 'group', itemId: '', itemGroupId: '' })
@@ -1670,7 +1671,7 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
             >
               <option value="item">یک کالا/خدمت</option>
               <option value="group">گروهِ فروشِ کالا</option>
-            </select>
+            </SearchSelect>
             <span className="field-hint">
               قاعده‌ای که خودِ کالا را نام ببرد بر قاعده‌ی گروهش می‌چربد.
             </span>
@@ -1683,52 +1684,52 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
           ) : (
             <label>
               گروهِ فروشِ کالا
-              <select value={draft.itemGroupId} onChange={(e) => setDraft({ ...draft, itemGroupId: e.target.value })}>
+              <SearchSelect value={draft.itemGroupId} onChange={(e) => setDraft({ ...draft, itemGroupId: e.target.value })}>
                 <option value="">— انتخاب گروه —</option>
                 {itemGroups.map((g) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           <label>
             نوعِ فروش
-            <select value={draft.saleTypeId} onChange={(e) => setDraft({ ...draft, saleTypeId: e.target.value })}>
+            <SearchSelect value={draft.saleTypeId} onChange={(e) => setDraft({ ...draft, saleTypeId: e.target.value })}>
               <option value="">همه</option>
               {saleTypes.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             واحد
-            <select value={draft.unitId} onChange={(e) => setDraft({ ...draft, unitId: e.target.value })}>
+            <SearchSelect value={draft.unitId} onChange={(e) => setDraft({ ...draft, unitId: e.target.value })}>
               <option value="">همه</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
-            </select>
+            </SearchSelect>
             <span className="field-hint">
               قیمتِ کارتن از قیمتِ عدد ضربِ ضریبِ تبدیل درنمی‌آید؛ هر واحد قاعده‌ی خودش را دارد.
             </span>
           </label>
           <label>
             گروهِ مشتری
-            <select value={draft.contactGroupId} onChange={(e) => setDraft({ ...draft, contactGroupId: e.target.value })}>
+            <SearchSelect value={draft.contactGroupId} onChange={(e) => setDraft({ ...draft, contactGroupId: e.target.value })}>
               <option value="">همه</option>
               {contactGroups.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             ارز
-            <select value={draft.currencyCode} onChange={(e) => setDraft({ ...draft, currencyCode: e.target.value })}>
+            <SearchSelect value={draft.currencyCode} onChange={(e) => setDraft({ ...draft, currencyCode: e.target.value })}>
               <option value="IRR">ریال</option>
               {currencies.filter((c) => c.code !== 'IRR').map((c) => (
                 <option key={c.code} value={c.code}>{c.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             فی
@@ -1995,14 +1996,14 @@ export function CommissionPage({ token }: { token: string }) {
       >
         <label>
           فروشنده
-          <select value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}>
+          <SearchSelect value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}>
             <option value="">— انتخاب کنید —</option>
             {people.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           نرخ (درصد)
@@ -2010,10 +2011,10 @@ export function CommissionPage({ token }: { token: string }) {
         </label>
         <label>
           مبنا
-          <select value={basis} onChange={(e) => setBasis(e.target.value as 'net' | 'profit')}>
+          <SearchSelect value={basis} onChange={(e) => setBasis(e.target.value as 'net' | 'profit')}>
             <option value="net">خالصِ فاکتور</option>
             <option value="profit">سودِ ناخالص</option>
-          </select>
+          </SearchSelect>
         </label>
       </FormCard>
 
@@ -2346,13 +2347,13 @@ export function SalesBrowsePage({ token }: { token: string }) {
         <div className="acc-filters">
           <label className="acc-inline-field">
             زاویه
-            <select value={tab} onChange={(e) => setTab(e.target.value)}>
+            <SearchSelect value={tab} onChange={(e) => setTab(e.target.value)}>
               {SALES_REVIEW_TABS.map((t) => (
                 <option key={t.key} value={t.key}>
                   {t.label}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         </div>
         {tab === 'items' && <SalesItemsView token={token} scope={scope} cacheKey={key} />}
@@ -2784,14 +2785,14 @@ export function ContactPicker({
   return (
     <label className="acc-inline-field">
       طرف حساب
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <SearchSelect value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">— انتخاب کنید —</option>
         {contacts.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
         ))}
-      </select>
+      </SearchSelect>
     </label>
   )
 }
@@ -2946,11 +2947,11 @@ export function ContactOverviewPage({ token }: { token: string }) {
                 <ContactPicker contacts={contacts} value={contactId} onChange={setContactId} />
                 <label className="acc-inline-field">
                   نقش
-                  <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+                  <SearchSelect value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
                     <option value="">همه</option>
                     <option value="customer">مشتری</option>
                     <option value="supplier">تأمین‌کننده</option>
-                  </select>
+                  </SearchSelect>
                 </label>
               </>
             }

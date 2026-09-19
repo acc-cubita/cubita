@@ -43,6 +43,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * فروشِ اقساطی — قرارداد، زمان‌بندیِ وصول، و پرونده‌ی هر قرارداد.
@@ -284,14 +285,14 @@ function PlanForm({
     >
       <label>
         مشتری
-        <select value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
+        <SearchSelect value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
           <option value="">— انتخاب مشتری —</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         عنوان قرارداد
@@ -976,25 +977,25 @@ export function InstallmentSalesPage({
                       </label>
                       <label>
                         روش
-                        <select
+                        <SearchSelect
                           value={settle.method}
                           onChange={(e) => setSettle({ ...settle, method: e.target.value as 'cash' | 'bank' })}
                         >
                           <option value="cash">نقدی (صندوق)</option>
                           <option value="bank">بانکی</option>
-                        </select>
+                        </SearchSelect>
                       </label>
                       {settle.method === 'bank' && (
                         <label>
                           حساب بانکی
-                          <select value={settle.bankId} onChange={(e) => setSettle({ ...settle, bankId: e.target.value })}>
+                          <SearchSelect value={settle.bankId} onChange={(e) => setSettle({ ...settle, bankId: e.target.value })}>
                             <option value="">— انتخاب —</option>
                             {bankAccounts.map((b) => (
                               <option key={b.id} value={b.id}>
                                 {b.name}
                               </option>
                             ))}
-                          </select>
+                          </SearchSelect>
                         </label>
                       )}
                       <button type="button" className="btn-primary" onClick={() => void submitSettle()}>
@@ -1086,25 +1087,25 @@ export function InstallmentSalesPage({
                                     </label>
                                     <label>
                                       روش
-                                      <select
+                                      <SearchSelect
                                         value={pay.method}
                                         onChange={(e) => setPay({ ...pay, method: e.target.value as 'cash' | 'bank' })}
                                       >
                                         <option value="cash">نقدی (صندوق)</option>
                                         <option value="bank">بانکی</option>
-                                      </select>
+                                      </SearchSelect>
                                     </label>
                                     {pay.method === 'bank' && (
                                       <label>
                                         حساب بانکی
-                                        <select value={pay.bankId} onChange={(e) => setPay({ ...pay, bankId: e.target.value })}>
+                                        <SearchSelect value={pay.bankId} onChange={(e) => setPay({ ...pay, bankId: e.target.value })}>
                                           <option value="">— انتخاب —</option>
                                           {bankAccounts.map((b) => (
                                             <option key={b.id} value={b.id}>
                                               {b.name}
                                             </option>
                                           ))}
-                                        </select>
+                                        </SearchSelect>
                                       </label>
                                     )}
                                     <label>

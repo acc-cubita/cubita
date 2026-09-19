@@ -41,6 +41,7 @@ import { BackupPage } from '../BackupPage'
 import { BackupListPage } from '../BackupListPage'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso } from '../../lib/jalali'
 import type { AccountCache } from '../../electron.d'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * صفحه‌های «فهرست»ِ ماژولِ شرکت.
@@ -230,13 +231,13 @@ export function UsageReportPage({ token }: { token: string }) {
         icon={Gauge}
         title="بازه"
         actions={
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <SearchSelect value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {USAGE_RANGES.map((d) => (
               <option key={d} value={d}>
                 {fa(d)} روزِ گذشته
               </option>
             ))}
-          </select>
+          </SearchSelect>
         }
       >
         {data == null ? (
@@ -415,21 +416,21 @@ export function ContactListPage({
         title={rows ? `${fa(shown.length)} طرف حساب` : 'در حال بارگذاری…'}
         actions={
           <>
-            <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
+            <SearchSelect value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
               <option value="">همه‌ی گروه‌ها</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
-            </select>
-            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+            </SearchSelect>
+            <SearchSelect value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
               <option value="">همه‌ی نقش‌ها</option>
               <option value="customer">مشتری</option>
               <option value="supplier">تأمین‌کننده</option>
               <option value="broker">واسطه</option>
               <option value="shareholder">سهامدار</option>
-            </select>
+            </SearchSelect>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جست‌وجو…" />
             {/* راهِ ساختِ طرف‌حساب از این فهرست گم بود: کاربر «طرف حساب‌ها» را باز
                 می‌کرد و هیچ راهی به فرمِ ساخت نداشت. ساخت همچنان یک‌جاست («شرکت ←
@@ -656,12 +657,12 @@ export function AllInstallmentsPage({ token }: { token: string }) {
         icon={ListChecks}
         title="سررسیدها"
         actions={
-          <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+          <SearchSelect value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
             <option value="all">همه</option>
             <option value="due">پرداخت‌نشده</option>
             <option value="overdue">معوق</option>
             <option value="paid">پرداخت‌شده</option>
-          </select>
+          </SearchSelect>
         }
       >
         {plans == null ? (

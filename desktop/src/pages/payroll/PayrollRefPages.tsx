@@ -47,6 +47,7 @@ import {
 } from '../../components/form/FormKit'
 import { firstMissing } from '../../components/form/firstMissing'
 import { ActiveChip, AsyncBlock, Note, OpsPage, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * جدول‌های مرجعِ حقوق و دستمزد — محل خدمت، شغل، عوامل، گروه مالیاتی، شعب.
@@ -249,14 +250,14 @@ export function JobTitlePage({ token }: { token: string }) {
               </FormField>
               <FormField label="رسته شغل">
                 {(id) => (
-                  <select id={id} value={family} onChange={(e) => setFamily(e.target.value)}>
+                  <SearchSelect id={id} value={family} onChange={(e) => setFamily(e.target.value)}>
                     <option value="">— انتخاب کنید —</option>
                     {JOB_FAMILIES.map((f) => (
                       <option key={f} value={f}>
                         {f}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField label="کد شغل بیمه" tip="در لیستِ تأمین اجتماعی لازم است؛ روی شغل می‌ماند تا هر بار تایپ نشود.">
@@ -484,13 +485,13 @@ export function PayrollFactorPage({ token }: { token: string }) {
               </FormField>
               <FormField label="طبقه">
                 {(id) => (
-                  <select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
+                  <SearchSelect id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
                     {Object.entries(FACTOR_CATEGORY_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>
                         {v}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField
@@ -498,13 +499,13 @@ export function PayrollFactorPage({ token }: { token: string }) {
                 tip="«قراردادی» مبلغش روی حکمِ حقوقی نوشته می‌شود. «متغیر» مبلغش هر دوره جدا وارد می‌شود (کارکرد و صدور فیش ← ورودیِ عوامل) و روی حکم نمی‌نشیند."
               >
                 {(id) => (
-                  <select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                  <SearchSelect id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
                     {Object.entries(FACTOR_KIND_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>
                         {v}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField
@@ -535,7 +536,7 @@ export function PayrollFactorPage({ token }: { token: string }) {
                 }
               >
                 {(id) => (
-                  <select
+                  <SearchSelect
                     id={id}
                     value={benefit ? expenseAccount : payableAccount}
                     onChange={(e) => (benefit ? setExpenseAccount : setPayableAccount)(e.target.value)}
@@ -546,12 +547,12 @@ export function PayrollFactorPage({ token }: { token: string }) {
                         {a.code} — {a.name}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField label="طبقه تفصیلی">
                 {(id) => (
-                  <select
+                  <SearchSelect
                     id={id}
                     value={benefit ? expenseDetail : payableDetail}
                     onChange={(e) => (benefit ? setExpenseDetail : setPayableDetail)(e.target.value)}
@@ -562,7 +563,7 @@ export function PayrollFactorPage({ token }: { token: string }) {
                         {v}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
             </FormGrid>
@@ -880,13 +881,13 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                     </FormField>
                     <FormField label="نوع">
                       {(id) => (
-                        <select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                        <SearchSelect id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
                           {Object.entries(TAX_GROUP_KIND_LABELS).map(([k, v]) => (
                             <option key={k} value={k}>
                               {v}
                             </option>
                           ))}
-                        </select>
+                        </SearchSelect>
                       )}
                     </FormField>
                     <FormField
@@ -929,7 +930,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                       }
                     >
                       {(id) => (
-                        <select
+                        <SearchSelect
                           id={id}
                           value={form.kind}
                           onChange={(e) => set({ kind: e.target.value })}
@@ -940,7 +941,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                               {v}
                             </option>
                           ))}
-                        </select>
+                        </SearchSelect>
                       )}
                     </FormField>
                     <FormField id="br-name" label="عنوان" required>
@@ -955,14 +956,14 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                       tip="بدهیِ بیمه و مالیاتِ حقوق به همین سازمان پرداخت می‌شود؛ با این پیوند، مانده و تفصیلی‌اش در دفتر پیدا می‌شود. خالی گذاشتنش چیزی را خراب نمی‌کند."
                     >
                       {(id) => (
-                        <select id={id} value={form.contact_id} onChange={(e) => set({ contact_id: e.target.value })}>
+                        <SearchSelect id={id} value={form.contact_id} onChange={(e) => set({ contact_id: e.target.value })}>
                           <option value="">— وصل نشده —</option>
                           {contacts.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
                             </option>
                           ))}
-                        </select>
+                        </SearchSelect>
                       )}
                     </FormField>
                     <FormField
@@ -981,14 +982,14 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                     </FormField>
                     <FormField label="مرکز هزینه">
                       {(id) => (
-                        <select id={id} value={form.cost_center_id} onChange={(e) => set({ cost_center_id: e.target.value })}>
+                        <SearchSelect id={id} value={form.cost_center_id} onChange={(e) => set({ cost_center_id: e.target.value })}>
                           <option value="">— ندارد —</option>
                           {costCenters.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
                             </option>
                           ))}
-                        </select>
+                        </SearchSelect>
                       )}
                     </FormField>
 
@@ -1038,7 +1039,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                         tip="فعلاً ثبت می‌شود ولی در محاسبه‌ی مالیات اعمال نمی‌شود؛ موتور امروز تعدیل تجمیعی انجام می‌دهد."
                       >
                         {(id) => (
-                          <select
+                          <SearchSelect
                             id={id}
                             value={form.tax_calculation_method}
                             onChange={(e) => set({ tax_calculation_method: e.target.value })}
@@ -1049,7 +1050,7 @@ export function PayrollTaxGroupPage({ token }: { token: string }) {
                                 {v}
                               </option>
                             ))}
-                          </select>
+                          </SearchSelect>
                         )}
                       </FormField>
                     )}

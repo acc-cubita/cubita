@@ -17,6 +17,7 @@ import { isElectron } from '../platform'
 import type { BackupSettings, BackupStatus } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * تنظیماتِ تهیه‌ی پشتیبانِ خودکار.
@@ -230,7 +231,7 @@ export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
 
               <label>
                 فاصله‌ی نسخه‌ها
-                <select
+                <SearchSelect
                   value={s.everyHours}
                   disabled={!s.enabled}
                   onChange={(e) => void patch({ everyHours: Number(e.target.value) })}
@@ -240,7 +241,7 @@ export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
 
               <label>

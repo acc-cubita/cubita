@@ -20,6 +20,7 @@ import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso, toFaDigits } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 interface DraftLine {
   accountId: string
@@ -232,11 +233,11 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
             <div className="field-row">
               <label>
                 تناوب
-                <select value={frequency} onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}>
+                <SearchSelect value={frequency} onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}>
                   <option value="weekly">هفتگی</option>
                   <option value="monthly">ماهانه</option>
                   <option value="yearly">سالانه</option>
-                </select>
+                </SearchSelect>
               </label>
               <label>
                 هر چند دوره یک‌بار
@@ -258,14 +259,14 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
             {costCenters.length > 0 && (
               <label>
                 مرکز هزینه/پروژه (اختیاری)
-                <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                <SearchSelect value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
                   <option value="">— بدون مرکز —</option>
                   {costCenters.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.code ? `${c.code} — ${c.name}` : c.name}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
             )}
 
@@ -283,14 +284,14 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                 {lines.map((line, i) => (
                   <tr key={i}>
                     <td data-label="حساب">
-                      <select value={line.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })}>
+                      <SearchSelect value={line.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })}>
                         <option value="">— انتخاب حساب —</option>
                         {postableAccounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.code} — {a.name}
                           </option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </td>
                     <td data-label="بدهکار">
                       <NumberInput

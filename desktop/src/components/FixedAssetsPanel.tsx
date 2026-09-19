@@ -40,6 +40,7 @@ import {
   type DisposalType,
   type FixedAssetRecord,
 } from '../api'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -252,14 +253,14 @@ function AssignmentTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               دارایی
-              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
+              <SearchSelect value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {available.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}{a.custodian_name ? ` (دستِ ${a.custodian_name})` : ''}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
               {asset && (asset.custodian_name || asset.location) && (
                 <span className="field-hint">
                   وضعیتِ فعلی: {asset.custodian_name || '—'}{asset.location ? ` · ${asset.location}` : ''}
@@ -273,10 +274,10 @@ function AssignmentTab({
               </label>
               <label>
                 تحویل‌گیرنده
-                <select value={custodianId} onChange={(e) => setCustodianId(e.target.value)}>
+                <SearchSelect value={custodianId} onChange={(e) => setCustodianId(e.target.value)}>
                   <option value="">— بدونِ تغییر —</option>
                   {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                </SearchSelect>
               </label>
             </div>
             <div className="field-row">
@@ -286,10 +287,10 @@ function AssignmentTab({
               </label>
               <label>
                 مرکزِ هزینه
-                <select value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                <SearchSelect value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
                   <option value="">— بدونِ تغییر —</option>
                   {centers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                </SearchSelect>
               </label>
             </div>
             <label className="form-full">
@@ -376,10 +377,10 @@ function AssignmentsListTab({
       <div className="invoice-form">
         <label>
           دارایی
-          <select value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
+          <SearchSelect value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
             <option value="">همه‌ی دارایی‌ها</option>
             {assets.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
       </div>
 
@@ -491,10 +492,10 @@ function ImprovementTab({ token, d }: { token: string; d: FixedAssetDraft }) {
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               دارایی
-              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
+              <SearchSelect value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {available.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-              </select>
+              </SearchSelect>
               {asset && (
                 <span className="field-hint">
                   بهای فعلی {fa(asset.cost)} · عمرِ مفید {fa(asset.useful_life_months)} ماه · {fa(asset.remaining_months)} ماه مانده
@@ -514,10 +515,10 @@ function ImprovementTab({ token, d }: { token: string; d: FixedAssetDraft }) {
             <div className="field-row">
               <label>
                 پرداخت از
-                <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <SearchSelect value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                   <option value="">— بدون سند (جای دیگر ثبت شده) —</option>
                   {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-                </select>
+                </SearchSelect>
               </label>
               <label>
                 افزایشِ عمرِ مفید (ماه)
@@ -655,10 +656,10 @@ function EstimateChangeTab({ token, d }: { token: string; d: FixedAssetDraft }) 
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               دارایی
-              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
+              <SearchSelect value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {available.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-              </select>
+              </SearchSelect>
               {asset && (
                 <span className="field-hint">
                   اکنون: {DEPRECIATION_METHOD_LABELS[asset.method as DepreciationMethod] ?? asset.method} ·
@@ -674,11 +675,11 @@ function EstimateChangeTab({ token, d }: { token: string; d: FixedAssetDraft }) 
               </label>
               <label>
                 روشِ استهلاک
-                <select value={method} onChange={(e) => setMethod(e.target.value as DepreciationMethod)}>
+                <SearchSelect value={method} onChange={(e) => setMethod(e.target.value as DepreciationMethod)}>
                   {(Object.keys(DEPRECIATION_METHOD_LABELS) as DepreciationMethod[]).map((m) => (
                     <option key={m} value={m}>{DEPRECIATION_METHOD_LABELS[m]}</option>
                   ))}
-                </select>
+                </SearchSelect>
                 {method === 'declining_balance' && (
                   <span className="field-hint">نرخِ مضاعف روی ماندهٔ دفتری — دوره‌های اول سنگین‌تر.</span>
                 )}
@@ -907,10 +908,10 @@ function DepreciationEntriesTab({
       <div className="invoice-form">
         <label>
           دارایی
-          <select value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
+          <SearchSelect value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
             <option value="">همه‌ی دارایی‌ها</option>
             {assets.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
         <label>از تاریخ<JalaliDatePicker value={from} onChange={setFrom} /></label>
         <label>تا تاریخ<JalaliDatePicker value={to} onChange={setTo} /></label>
@@ -1107,19 +1108,19 @@ function DisposalTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               دارایی
-              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
+              <SearchSelect value={assetId} onChange={(e) => setAssetId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {available.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="field-row">
               <label>
                 نوعِ خروج
-                <select value={type} onChange={(e) => setType(e.target.value as DisposalType)}>
+                <SearchSelect value={type} onChange={(e) => setType(e.target.value as DisposalType)}>
                   {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
                     <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
                   ))}
-                </select>
+                </SearchSelect>
                 {!sale && <span className="field-hint">اسقاط و اهدا مبلغِ دریافتی ندارند؛ کلِ ارزشِ دفتری زیان می‌شود.</span>}
               </label>
               <label>
@@ -1135,20 +1136,20 @@ function DisposalTab({
                 </label>
                 <label>
                   دریافت در حساب
-                  <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                  <SearchSelect value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                     <option value="">— انتخاب —</option>
                     {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-                  </select>
+                  </SearchSelect>
                 </label>
               </div>
             )}
             <div className="field-row">
               <label>
                 {sale ? 'خریدار' : 'طرفِ مقابل'}
-                <select value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+                <SearchSelect value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
                   <option value="">— بدونِ طرف‌حساب —</option>
                   {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                </SearchSelect>
               </label>
               <label>
                 توضیحات
@@ -1221,12 +1222,12 @@ function DisposalsReportTab({ token, refreshKey }: { token: string; refreshKey: 
       <div className="invoice-form">
         <label>
           نوعِ خروج
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <SearchSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">همه</option>
             {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
               <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           از تاریخ
@@ -1345,10 +1346,10 @@ export function FixedAssetFields({ d, splitStep }: { d: FixedAssetDraft; splitSt
           {!d.editingId && (
             <label>
               پرداخت از
-              <select value={d.form.funding_account_id} onChange={(e) => d.setFormField('funding_account_id', e.target.value)}>
+              <SearchSelect value={d.form.funding_account_id} onChange={(e) => d.setFormField('funding_account_id', e.target.value)}>
                 <option value="">— بدون سند (آورده / قبلاً در دفاتر) —</option>
                 {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-              </select>
+              </SearchSelect>
             </label>
           )}
         </>

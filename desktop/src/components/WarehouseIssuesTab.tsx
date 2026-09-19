@@ -45,6 +45,7 @@ import { Pager, usePagination } from './Pager'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 const faQty = (v: string | number | null | undefined) =>
   Number(v || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
@@ -298,31 +299,31 @@ function IssueForm({
       <form className="invoice-form" onSubmit={(e) => void submit(e)}>
         <label>
           نوع خروج
-          <select value={kind} onChange={(e) => setKind(e.target.value as IssueKind)}>
+          <SearchSelect value={kind} onChange={(e) => setKind(e.target.value as IssueKind)}>
             {KINDS.map((k) => (
               <option key={k} value={k}>{WAREHOUSE_ISSUE_TYPE_LABELS[k]}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           {kind === 'transfer' ? 'انبار مبدأ' : 'انبار'}
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         {kind === 'transfer' && (
           <label>
             انبار مقصد
-            <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
+            <SearchSelect value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
               <option value="">— انتخاب کنید —</option>
               {warehouses
                 .filter((w) => w.id !== warehouseId)
                 .map((w) => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         <label>
@@ -332,36 +333,36 @@ function IssueForm({
         {kind === 'sale' && (
           <label>
             تحویل‌گیرنده
-            <select value={receiverId} onChange={(e) => setReceiverId(e.target.value)}>
+            <SearchSelect value={receiverId} onChange={(e) => setReceiverId(e.target.value)}>
               <option value="">— انتخاب کنید —</option>
               {receivers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         {kind === 'sale' && receiverQuotations.length > 0 && (
           <label>
             پیش‌فاکتور (اختیاری)
-            <select value={quotationId} onChange={(e) => setQuotationId(e.target.value)}>
+            <SearchSelect value={quotationId} onChange={(e) => setQuotationId(e.target.value)}>
               <option value="">— بدونِ پیش‌فاکتور —</option>
               {receiverQuotations.map((q) => (
                 <option key={q.id} value={q.id}>
                   پیش‌فاکتور {faNum(q.number)} — {formatJalali(q.quotation_date)}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         {needsAccount && (
           <label>
             حساب معین
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <SearchSelect value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">— انتخاب کنید —</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         <label className="field-full">
@@ -386,12 +387,12 @@ function IssueForm({
               {lines.map((line) => (
                 <tr key={line.key}>
                   <td data-label="کالا">
-                    <select value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
+                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
                       <option value="">— انتخاب کالا —</option>
                       {goods.map((it) => (
                         <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </td>
                   <td data-label="مقدار">
                     <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(line.key, { qty: v })} />
@@ -399,12 +400,12 @@ function IssueForm({
                   <td data-label="واحد">{itemById.get(line.itemId)?.unit || '—'}</td>
                   {needsAccount && (
                     <td data-label="حساب معین ردیف">
-                      <select value={line.accountId} onChange={(e) => updateLine(line.key, { accountId: e.target.value })}>
+                      <SearchSelect value={line.accountId} onChange={(e) => updateLine(line.key, { accountId: e.target.value })}>
                         <option value="">— حسابِ سربرگ —</option>
                         {accounts.map((a) => (
                           <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                         ))}
-                      </select>
+                      </SearchSelect>
                     </td>
                   )}
                   <td data-label="توضیحات">
@@ -604,30 +605,30 @@ export function WarehouseIssueLedger({
         {!transfersOnly && (
           <label>
             نوع
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <SearchSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option value="">همه‌ی نوع‌ها</option>
               {KINDS.map((k) => (
                 <option key={k} value={k}>{WAREHOUSE_ISSUE_TYPE_LABELS[k]}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
         )}
         <label>
           {transfersOnly ? 'انبار مبدأ' : 'انبار'}
-          <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
+          <SearchSelect value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
             <option value="">همه‌ی انبارها</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           وضعیت
-          <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+          <SearchSelect value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
             <option value="">همه</option>
             <option value="active">معتبر</option>
             <option value="voided">باطل‌شده</option>
-          </select>
+          </SearchSelect>
         </label>
       </div>
       <Note msg={msg} />

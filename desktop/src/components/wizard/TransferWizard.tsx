@@ -5,6 +5,7 @@ import { useTransferDraft, type TransferDraft } from '../../lib/transferDraft'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { TransferLinesTable } from '../TransferForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /** ویزاردِ «انتقال بین انبار» — دو مرحله + پیش‌نمایشِ زنده. فهرست را صفحه زیرِ ویزارد می‌گذارد. */
 export function TransferWizard({
@@ -41,17 +42,17 @@ export function TransferWizard({
         <div className="invoice-form">
           <label>
             انبار مبدأ
-            <select value={d.fromWarehouseId} onChange={(e) => d.setFromWarehouseId(e.target.value)}>
+            <SearchSelect value={d.fromWarehouseId} onChange={(e) => d.setFromWarehouseId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             انبار مقصد
-            <select value={d.toWarehouseId} onChange={(e) => d.setToWarehouseId(e.target.value)}>
+            <SearchSelect value={d.toWarehouseId} onChange={(e) => d.setToWarehouseId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ حواله

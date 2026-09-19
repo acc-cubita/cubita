@@ -35,6 +35,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
 import type { PageKey } from '../../lib/navModel'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * «طرف حساب جدید» — شناسنامه‌ی کاملِ طرف‌حساب.
@@ -546,10 +547,10 @@ export function ContactNewPage({
           <div className="cmp-form">
             <label>
               <span>نوع شخص</span>
-              <select value={entityType} onChange={(e) => setEntityType(e.target.value as 'real' | 'legal')}>
+              <SearchSelect value={entityType} onChange={(e) => setEntityType(e.target.value as 'real' | 'legal')}>
                 <option value="real">حقیقی</option>
                 <option value="legal">حقوقی</option>
-              </select>
+              </SearchSelect>
             </label>
             <label>
               <span>نوع فرعی</span>
@@ -767,17 +768,17 @@ function ContactTab(p: {
       </label>
       <label>
         <span>گروه</span>
-        <select value={p.groupId} onChange={(e) => p.setGroupId(e.target.value)}>
+        <SearchSelect value={p.groupId} onChange={(e) => p.setGroupId(e.target.value)}>
           <option value="">— بدون گروه —</option>
           {p.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         <span>محلِ جغرافیایی</span>
-        <select value={p.geoId} onChange={(e) => p.setGeoId(e.target.value)}>
+        <SearchSelect value={p.geoId} onChange={(e) => p.setGeoId(e.target.value)}>
           <option value="">— تعیین‌نشده —</option>
           {p.locations.map((l) => <option key={l.id} value={l.id}>{l.path}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       {p.entityType === 'real' && (
         <>
@@ -877,9 +878,9 @@ function RolesTab(p: {
       </label>
       <label>
         <span>دسته‌بندی وزارت دارایی</span>
-        <select value={p.taxClass} onChange={(e) => p.setTaxClass(e.target.value)}>
+        <SearchSelect value={p.taxClass} onChange={(e) => p.setTaxClass(e.target.value)}>
           {Object.entries(TAX_MINISTRY_CLASS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
 
       <label>
@@ -890,9 +891,9 @@ function RolesTab(p: {
           کنترل» یعنی سقف‌های ثبت‌شده‌ی قبلی یک‌شبه جلوی فروش را نمی‌گیرند. */}
       <label>
         <span>با عبور از سقف</span>
-        <select value={p.creditAction} onChange={(e) => p.setCreditAction(e.target.value)}>
+        <SearchSelect value={p.creditAction} onChange={(e) => p.setCreditAction(e.target.value)}>
           {Object.entries(CREDIT_ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
 
       {/* مانده‌ی اول دوره فقط دو نقش دارد: حسابِ دریافتنی (مشتری) و پرداختنی
@@ -911,10 +912,10 @@ function RolesTab(p: {
           </label>
           <label>
             <span>سمت</span>
-            <select value={p.openingArSide} onChange={(e) => p.setOpeningArSide(e.target.value)}>
+            <SearchSelect value={p.openingArSide} onChange={(e) => p.setOpeningArSide(e.target.value)}>
               <option value="debit">بدهکار (به ما بدهکار است)</option>
               <option value="credit">بستانکار (پیش‌دریافت)</option>
-            </select>
+            </SearchSelect>
           </label>
         </>
       )}
@@ -926,10 +927,10 @@ function RolesTab(p: {
           </label>
           <label>
             <span>سمت</span>
-            <select value={p.openingApSide} onChange={(e) => p.setOpeningApSide(e.target.value)}>
+            <SearchSelect value={p.openingApSide} onChange={(e) => p.setOpeningApSide(e.target.value)}>
               <option value="credit">بستانکار (ما به او بدهکاریم)</option>
               <option value="debit">بدهکار (پیش‌پرداخت)</option>
-            </select>
+            </SearchSelect>
           </label>
         </>
       )}
@@ -964,9 +965,9 @@ function AddressesTab({ rows, setRows }: { rows: DraftAddress[]; setRows: Setter
       </p>
       <label>
         <span>نوع</span>
-        <select value={draft.address_type} onChange={(e) => setDraft({ ...draft, address_type: e.target.value })}>
+        <SearchSelect value={draft.address_type} onChange={(e) => setDraft({ ...draft, address_type: e.target.value })}>
           {Object.entries(ADDRESS_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         <span>عنوان</span>
@@ -1042,9 +1043,9 @@ function PhonesTab({ rows, setRows }: { rows: DraftPhone[]; setRows: Setter<Draf
       </p>
       <label>
         <span>نوع</span>
-        <select value={draft.channel_type} onChange={(e) => setDraft({ ...draft, channel_type: e.target.value })}>
+        <SearchSelect value={draft.channel_type} onChange={(e) => setDraft({ ...draft, channel_type: e.target.value })}>
           {Object.entries(CHANNEL_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         <span>برچسب</span>
@@ -1191,17 +1192,17 @@ function EmployeeTab(p: {
 
       <label>
         <span>جنسیت</span>
-        <select value={p.gender} onChange={(e) => p.setGender(e.target.value)}>
+        <SearchSelect value={p.gender} onChange={(e) => p.setGender(e.target.value)}>
           <option value="">— تعیین‌نشده —</option>
           {Object.entries(GENDER_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         <span>وضعیت تأهل</span>
-        <select value={p.maritalStatus} onChange={(e) => p.setMaritalStatus(e.target.value)}>
+        <SearchSelect value={p.maritalStatus} onChange={(e) => p.setMaritalStatus(e.target.value)}>
           <option value="">— تعیین‌نشده —</option>
           {Object.entries(MARITAL_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         <span>تاریخ وضعیت تأهل</span>
@@ -1231,12 +1232,12 @@ function EmployeeTab(p: {
           آدم است نه شغلش — مشتریِ غیرکارمند هم می‌تواند داشته باشدش. */}
       <label className="cmp-form-wide">
         <span>کارمندِ متناظر در حقوق و دستمزد</span>
-        <select value={p.employeeId} onChange={(e) => p.setEmployeeId(e.target.value)}>
+        <SearchSelect value={p.employeeId} onChange={(e) => p.setEmployeeId(e.target.value)}>
           <option value="">— وصل نشده —</option>
           {p.employees.map((e) => (
             <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.national_id}</option>
           ))}
-        </select>
+        </SearchSelect>
         <span className="field-hint">
           حکم حقوقی، تاریخ استخدام و شماره حساب در «حقوق و دستمزد» نگهداری می‌شوند و
           این‌جا فقط به آن وصل می‌شود — تا یک آدم دو رکوردِ ناهماهنگ نداشته باشد.

@@ -16,6 +16,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number | string) => Math.round(Number(n)).toLocaleString('fa-IR')
 
@@ -127,10 +128,10 @@ export function LoyaltyTiersPanel({ token }: { token: string }) {
         <div className="benefit-toolbar">
           <label>
             مبنا
-            <select value={basis} onChange={(e) => void saveSettings({ tier_basis: e.target.value as 'points' | 'spend' })}>
+            <SearchSelect value={basis} onChange={(e) => void saveSettings({ tier_basis: e.target.value as 'points' | 'spend' })}>
               <option value="points">امتیازِ فعال</option>
               <option value="spend">خریدِ سالانه (ریال)</option>
-            </select>
+            </SearchSelect>
           </label>
           <label className="cal-check-inline">
             <input

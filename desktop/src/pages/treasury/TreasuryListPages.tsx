@@ -30,6 +30,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * دفترهای ماژولِ «دریافت و پرداخت» — نظیرِ فهرستیِ عملیاتِ رکوردساز.
@@ -73,7 +74,7 @@ export function PaymentNoticeListPage({ token }: { token: string }) {
       <SectionCard icon={ArrowUpFromLine} title="فهرست اعلامیه‌ها" description={`${faInt(rows.length)} اعلامیه`}>
         <div className="acc-filters">
           <label className="acc-search"><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="شماره، طرف حساب یا شرح" /></label>
-          <label>نوع<select value={type} onChange={(e) => setType(e.target.value as typeof type)}><option value="all">همه</option><option value="supplier">به تأمین‌کننده</option><option value="customer">به مشتری</option><option value="other">سایر</option></select></label>
+          <label>نوع<SearchSelect value={type} onChange={(e) => setType(e.target.value as typeof type)}><option value="all">همه</option><option value="supplier">به تأمین‌کننده</option><option value="customer">به مشتری</option><option value="other">سایر</option></SearchSelect></label>
         </div>
         <AsyncBlock loading={data.loading} error={data.error} empty={rows.length === 0} emptyText="اعلامیه‌ای با این شرایط نیست.">
           <div className="table-scroll"><table className="cards-on-mobile acc-table">
@@ -660,14 +661,14 @@ export function CheckOperationListPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               نوعِ عملیات
-              <select value={operation} onChange={(e) => setOperation(e.target.value)}>
+              <SearchSelect value={operation} onChange={(e) => setOperation(e.target.value)}>
                 <option value="">همه</option>
                 {Object.entries(CHECK_OPERATION_LABEL).map(([key, label]) => (
                   <option key={key} value={key}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           </div>
           <div className="cc-summary">

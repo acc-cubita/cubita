@@ -36,6 +36,7 @@ import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { KardexSummary, KardexTable } from './KardexTable'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
 
@@ -418,14 +419,14 @@ export function Reports({ token }: { token: string }) {
 
       {active === 'kardex' && (
         <div className="check-actions">
-          <select value={kardexItemId} onChange={(e) => setKardexItemId(e.target.value)}>
+          <SearchSelect value={kardexItemId} onChange={(e) => setKardexItemId(e.target.value)}>
             <option value="">— انتخاب کالا —</option>
             {items.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.sku} — {i.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
           <button type="button" onClick={() => void loadData()}>
             <Search size={13} /> نمایش
           </button>
@@ -451,11 +452,11 @@ export function Reports({ token }: { token: string }) {
             placeholder="سال شمسی"
             style={{ width: 110 }}
           />
-          <select value={seasonalQuarter} onChange={(e) => setSeasonalQuarter(Number(e.target.value))}>
+          <SearchSelect value={seasonalQuarter} onChange={(e) => setSeasonalQuarter(Number(e.target.value))}>
             {QUARTER_OPTIONS.map((q) => (
               <option key={q.value} value={q.value}>{q.label}</option>
             ))}
-          </select>
+          </SearchSelect>
           <button type="button" onClick={() => void loadSeasonal()}>
             <Search size={13} /> نمایش
           </button>
@@ -561,14 +562,14 @@ export function Reports({ token }: { token: string }) {
 
       {active === 'contact-statement' && (
         <div className="check-actions">
-          <select value={statementContactId} onChange={(e) => setStatementContactId(e.target.value)}>
+          <SearchSelect value={statementContactId} onChange={(e) => setStatementContactId(e.target.value)}>
             <option value="">— انتخاب طرف‌حساب —</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
           <button type="button" onClick={() => void loadData()}>
             <Search size={13} /> نمایش
           </button>

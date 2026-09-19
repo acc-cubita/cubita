@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { PackagePlus, Save, X } from 'lucide-react'
 import { createItemLive, type ItemRecord } from '../api'
 import { NumberInput } from './NumberInput'
+import { SearchSelect } from '../components/SearchSelect'
 
 // همان واحدهای رایجِ فرمِ کالا؛ اینجا هم برای انتخابِ سریع تکرار شده تا این کامپوننت
 // خودبسنده بماند و به ProductsPanel گره نخورد.
@@ -119,13 +120,13 @@ export function QuickItemForm({
               </label>
               <label>
                 واحد
-                <select
+                <SearchSelect
                   value={COMMON_UNITS.includes(unit) ? unit : '__custom__'}
                   onChange={(e) => setUnit(e.target.value === '__custom__' ? '' : e.target.value)}
                 >
                   {COMMON_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
                   <option value="__custom__">سایر (دستی)…</option>
-                </select>
+                </SearchSelect>
                 {!COMMON_UNITS.includes(unit) && (
                   <input
                     type="text"

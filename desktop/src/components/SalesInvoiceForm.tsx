@@ -9,6 +9,7 @@ import { ItemPicker } from './ItemPicker'
 import { PriceRuleHint } from './PriceRuleHint'
 import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../lib/salesInvoiceDraft'
 import { BlacklistBanner } from './BlacklistBanner'
+import { SearchSelect } from '../components/SearchSelect'
 
 /** فاکتوری که از خروج انبار ساخته می‌شود — مشترکِ فرم و ویزارد (§۱۵ §۱۶). */
 export function SourceIssueBanner({ d }: { d: SalesInvoiceDraft }) {
@@ -65,7 +66,7 @@ export function SalesInvoiceForm({
           <SourceIssueBanner d={d} />
           <label>
             انبار پیشنهادی (اختیاری)
-            <select
+            <SearchSelect
               value={d.effectiveWarehouseId}
               disabled={!!d.sourceIssue}
               onChange={(e) => d.setWarehouseId(e.target.value)}
@@ -76,7 +77,7 @@ export function SalesInvoiceForm({
                   {w.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ فاکتور
@@ -89,27 +90,27 @@ export function SalesInvoiceForm({
           {d.costCenters.length > 0 && (
             <label>
               مرکز هزینه/پروژه (اختیاری)
-              <select value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+              <SearchSelect value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
                 <option value="">— بدون مرکز —</option>
                 {d.costCenters.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.code ? `${c.code} — ${c.name}` : c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {d.contacts.length > 0 && (
             <label>
               مشتری (اختیاری)
-              <select value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
+              <SearchSelect value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
                 <option value="">— بدون مشتری —</option>
                 {d.contacts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
               {d.autoTier && (
                 <span className="tier-discount-hint">
                   {d.autoTier.source === 'tier'
@@ -129,11 +130,11 @@ export function SalesInvoiceForm({
           </label>
           <label>
             شرایط تسویه
-            <select value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
+            <SearchSelect value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
               <option value="credit">نسیه</option>
               <option value="cash">نقدی</option>
               <option value="mixed">نقدی/نسیه</option>
-            </select>
+            </SearchSelect>
             <span className="field-hint">نقدی بودن، وصول را خودکار نمی‌سازد؛ رسید دریافت جدا ثبت می‌شود.</span>
           </label>
           <label>
@@ -147,41 +148,41 @@ export function SalesInvoiceForm({
           {d.salespeople.length > 0 && (
             <label>
               فروشنده (اختیاری)
-              <select value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
+              <SearchSelect value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
                 <option value="">— بدون فروشنده —</option>
                 {d.salespeople.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
               <span className="field-hint">مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.</span>
             </label>
           )}
           {d.saleTypes.length > 0 && (
             <label>
               نوع فروش (اختیاری)
-              <select value={d.saleTypeId} onChange={(e) => d.setSaleTypeId(e.target.value)}>
+              <SearchSelect value={d.saleTypeId} onChange={(e) => d.setSaleTypeId(e.target.value)}>
                 <option value="">— تعیین‌نشده —</option>
                 {d.saleTypes.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {d.brokers.length > 0 && (
             <label>
               واسطه (اختیاری)
-              <select value={d.brokerId} onChange={(e) => d.setBrokerId(e.target.value)}>
+              <SearchSelect value={d.brokerId} onChange={(e) => d.setBrokerId(e.target.value)}>
                 <option value="">— بدون واسطه —</option>
                 {d.brokers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
               {d.brokerCommission && (
                 <span className="field-hint">
                   {d.brokerCommission.pct > 0
@@ -195,14 +196,14 @@ export function SalesInvoiceForm({
             <div className="field-row">
               <label>
                 ارز فاکتور
-                <select value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+                <SearchSelect value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
                   <option value="">ریال (پایه)</option>
                   {d.currencies.map((c) => (
                     <option key={c.id} value={c.code}>
                       {c.code} — {c.name}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               </label>
               {d.currencyCode && (
                 <label>

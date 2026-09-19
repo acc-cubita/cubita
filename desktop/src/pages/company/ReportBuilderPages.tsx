@@ -24,6 +24,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
 import type { PageKey } from '../../lib/navModel'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * گزارش‌ساز و گزارش‌های پویا.
@@ -388,13 +389,13 @@ export function ReportBuilderPage({ token }: { token: string }) {
             : `${fa(rows.length)} ردیف خوانده شد؛ ${fa(columns.length)} ستون در دسترس است.`
         }
         actions={
-          <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+          <SearchSelect value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
             {SOURCES.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         }
       >
         <p className="bk-hint">
@@ -456,7 +457,7 @@ export function ReportBuilderPage({ token }: { token: string }) {
           <div className="rb-filters">
             {config.filters.map((f, i) => (
               <div key={i} className="rb-filter">
-                <select
+                <SearchSelect
                   value={f.column}
                   onChange={(e) =>
                     setConfig((c) => ({
@@ -470,8 +471,8 @@ export function ReportBuilderPage({ token }: { token: string }) {
                       {fieldLabel(c)}
                     </option>
                   ))}
-                </select>
-                <select
+                </SearchSelect>
+                <SearchSelect
                   value={f.op}
                   onChange={(e) =>
                     setConfig((c) => ({
@@ -485,7 +486,7 @@ export function ReportBuilderPage({ token }: { token: string }) {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
                 <input
                   value={f.value}
                   disabled={f.op === 'nonempty'}
@@ -513,7 +514,7 @@ export function ReportBuilderPage({ token }: { token: string }) {
         <div className="rb-sort">
           <label>
             <span>مرتب بر اساسِ</span>
-            <select
+            <SearchSelect
               value={config.sortBy}
               onChange={(e) => setConfig((c) => ({ ...c, sortBy: e.target.value }))}
             >
@@ -523,11 +524,11 @@ export function ReportBuilderPage({ token }: { token: string }) {
                   {fieldLabel(c)}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             <span>جهت</span>
-            <select
+            <SearchSelect
               value={config.sortDir}
               onChange={(e) =>
                 setConfig((c) => ({ ...c, sortDir: e.target.value as 'asc' | 'desc' }))
@@ -535,7 +536,7 @@ export function ReportBuilderPage({ token }: { token: string }) {
             >
               <option value="asc">صعودی</option>
               <option value="desc">نزولی</option>
-            </select>
+            </SearchSelect>
           </label>
           <label>
             <span>حداکثر ردیف</span>

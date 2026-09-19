@@ -47,6 +47,7 @@ import {
   useRange,
   type Msg,
 } from './kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * پنج عملیاتِ *ساختار*: چارت، سرفصلِ تازه، اصلاحِ طبقه‌بندی، تفصیلیِ سایر، و مرورِ حساب‌ها.
@@ -155,14 +156,14 @@ export function NewAccountPage({ token, onChanged }: { token: string; onChanged?
         <form className="invoice-form" onSubmit={submit}>
           <label>
             سرفصلِ مادر
-            <select value={form.parent_id} onChange={(e) => void pickParent(e.target.value)}>
+            <SearchSelect value={form.parent_id} onChange={(e) => void pickParent(e.target.value)}>
               <option value="">— بدونِ مادر (ریشه) —</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.code} — {g.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             کدِ حساب
@@ -185,13 +186,13 @@ export function NewAccountPage({ token, onChanged }: { token: string; onChanged?
           </label>
           <label>
             نوعِ حساب
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <SearchSelect value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
               {Object.entries(TYPE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label className="cal-check-inline">
             <input
@@ -361,7 +362,7 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
                         {a.parent_id ? byId.get(a.parent_id)?.name ?? '—' : '— ریشه —'}
                       </td>
                       <td data-label="سرفصلِ تازه">
-                        <select
+                        <SearchSelect
                           value={chosen}
                           onChange={(e) => setEdits({ ...edits, [a.id]: e.target.value })}
                         >
@@ -373,7 +374,7 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
                                 {g.code} — {g.name}
                               </option>
                             ))}
-                        </select>
+                        </SearchSelect>
                       </td>
                     </tr>
                   )

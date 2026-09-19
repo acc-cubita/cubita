@@ -15,6 +15,7 @@ import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { Pager, usePagination } from '../components/Pager'
 import { formatJalali } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -267,21 +268,21 @@ export function AccountsAdminPage({
             <label>رمز اولیه (≥۱۰ کاراکتر)<input type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required /></label>
             <label>
               مدت اشتراک اولیه
-              <select value={days} onChange={(e) => setDays(e.target.value)}>
+              <SearchSelect value={days} onChange={(e) => setDays(e.target.value)}>
                 <option value="365">یک سال (۳۶۵ روز)</option>
                 <option value="180">شش ماه (۱۸۰ روز)</option>
                 <option value="90">سه ماه (۹۰ روز)</option>
                 <option value="30">یک ماه (۳۰ روز)</option>
                 <option value="0">بدون اشتراک</option>
-              </select>
+              </SearchSelect>
             </label>
             <label>
               نوعِ حساب (بازارِ عمده‌فروشی)
-              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+              <SearchSelect value={kind} onChange={(e) => setKind(e.target.value)}>
                 <option value="standard">عادی</option>
                 <option value="distributor">پخش‌کننده (ماژولِ «پخشِ من»)</option>
                 <option value="retailer">فروشگاه (ماژولِ «بازارِ خرید»)</option>
-              </select>
+              </SearchSelect>
             </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary"><UserPlus size={14} /> ساخت اکانت</button>
@@ -389,7 +390,7 @@ export function AccountsAdminPage({
                   <button type="button" disabled={busyId === a.tenant_id} onClick={() => resetPw(a)}>
                     <KeyRound size={13} /> رمز جدید
                   </button>
-                  <select
+                  <SearchSelect
                     className="account-kind-select"
                     value={a.kind}
                     disabled={busyId === a.tenant_id}
@@ -399,8 +400,8 @@ export function AccountsAdminPage({
                     <option value="standard">نوع: عادی</option>
                     <option value="distributor">نوع: پخش‌کننده</option>
                     <option value="retailer">نوع: فروشگاه</option>
-                  </select>
-                  <select
+                  </SearchSelect>
+                  <SearchSelect
                     className="account-kind-select"
                     value={a.industry}
                     disabled={busyId === a.tenant_id}
@@ -410,7 +411,7 @@ export function AccountsAdminPage({
                     {Object.entries(INDUSTRY_LABEL).map(([k, label]) => (
                       <option key={k} value={k}>صنف: {label}</option>
                     ))}
-                  </select>
+                  </SearchSelect>
                   {RESTRICTED_MODULES.map(({ key, label, icon: Icon }) => {
                     const on = a.granted_modules.includes(key)
                     return (

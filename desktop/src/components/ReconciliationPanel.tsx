@@ -14,6 +14,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { formatJalali } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 type ParsedStatementLine = {
   line_date: string
@@ -188,13 +189,13 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
         <>
           <label>
             حساب بانکی
-            <select value={effectiveBankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+            <SearchSelect value={effectiveBankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
               {bankAccounts.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
 
           {summary && (

@@ -9,6 +9,7 @@ import { ItemPicker } from '../ItemPicker'
 import { QuickItemForm } from '../QuickItemForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { BlacklistBanner } from '../BlacklistBanner'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -101,19 +102,19 @@ function HeaderStep({ d }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache
       {d.costCenters.length > 0 && (
         <label>
           مرکز هزینه/پروژه (اختیاری)
-          <select value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+          <SearchSelect value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
             <option value="">— بدون مرکز —</option>
             {d.costCenters.map((c) => (<option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
       )}
       {d.contacts.length > 0 && (
         <label>
           تأمین‌کننده
-          <select value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
+          <SearchSelect value={d.contactId} onChange={(e) => d.setContactId(e.target.value)}>
             <option value="">— انتخاب تأمین‌کننده —</option>
             {d.contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
       )}
       {d.blacklisted && <BlacklistBanner name={d.contacts.find((c) => c.id === d.contactId)?.name} />}
@@ -123,10 +124,10 @@ function HeaderStep({ d }: { d: PurchaseInvoiceDraft; warehouses: WarehouseCache
         <div className="field-row">
           <label>
             ارز فاکتور
-            <select value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+            <SearchSelect value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
               <option value="">ریال (پایه)</option>
               {d.currencies.map((c) => (<option key={c.id} value={c.code}>{c.code} — {c.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           {d.currencyCode && (
             <label>

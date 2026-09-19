@@ -7,6 +7,7 @@ import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali } from '../lib/jalali'
 import { useStockAdjustmentDraft, type StockAdjustmentDraft } from '../lib/stockAdjustmentDraft'
+import { SearchSelect } from '../components/SearchSelect'
 
 /** فرمِ کلاسیکِ «تعدیل دستیِ موجودی» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [useStockAdjustmentDraft]. */
@@ -35,24 +36,24 @@ export function StockAdjustmentForm({
       >
         <label>
           کالا
-          <select value={d.itemId} onChange={(e) => d.setItemId(e.target.value)}>
+          <SearchSelect value={d.itemId} onChange={(e) => d.setItemId(e.target.value)}>
             <option value="">— انتخاب —</option>
             {items.map((i) => (<option key={i.id} value={i.id}>{i.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           انبار
-          <select value={d.warehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+          <SearchSelect value={d.warehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
             <option value="">— انتخاب —</option>
             {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           نوع تعدیل
-          <select value={d.direction} onChange={(e) => d.setDirection(e.target.value as 'shortage' | 'surplus')}>
+          <SearchSelect value={d.direction} onChange={(e) => d.setDirection(e.target.value as 'shortage' | 'surplus')}>
             <option value="shortage">کسری (کاهش موجودی)</option>
             <option value="surplus">اضافی (افزایش موجودی)</option>
-          </select>
+          </SearchSelect>
         </label>
         <label>
           مقدار

@@ -13,6 +13,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
 
@@ -140,7 +141,7 @@ export function CashboxesPage({ token }: { token: string }) {
           </label>
           <label>
             تفصیلی
-            <select
+            <SearchSelect
               value={form.analytic_id}
               onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}
             >
@@ -150,11 +151,11 @@ export function CashboxesPage({ token }: { token: string }) {
                   {a.code} — {a.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             ارز
-            <select
+            <SearchSelect
               value={form.currency_code}
               onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
             >
@@ -163,7 +164,7 @@ export function CashboxesPage({ token }: { token: string }) {
                   {c}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
             <span className="field-hint">یک صندوق، یک ارز. برای ارزِ دیگر صندوقِ جدا بسازید.</span>
           </label>
           <label>

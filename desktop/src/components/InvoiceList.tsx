@@ -37,6 +37,7 @@ import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
+import { SearchSelect } from '../components/SearchSelect'
 
 export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
 type NamedItem = { id: string; name: string }
@@ -653,7 +654,7 @@ function WarehouseIssueEditor({
       {open && (
         <div className="invoice-form">
           <p className="hint">فقط این سند، موجودی کالا و بهای تمام‌شده را تغییر می‌دهد؛ خدمات در این فهرست نمی‌آیند.</p>
-          <label>انبار<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}><option value="">— انتخاب کنید —</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+          <label>انبار<SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}><option value="">— انتخاب کنید —</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SearchSelect></label>
           <label>تاریخ خروج<JalaliDatePicker value={issueDate} onChange={setIssueDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>
@@ -784,7 +785,7 @@ function WarehouseReceiptEditor({
       {open && (
         <div className="invoice-form">
           <p className="hint">ثبت فاکتور به‌تنهایی موجودی را تغییر نمی‌دهد؛ فقط این رسید ورود فیزیکی می‌سازد.</p>
-          <label>انبار<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+          <label>انبار<SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</SearchSelect></label>
           <label>تاریخ رسید<JalaliDatePicker value={receiptDate} onChange={setReceiptDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>

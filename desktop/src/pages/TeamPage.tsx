@@ -23,6 +23,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { PermissionMatrix, isFullAccess, summarize } from '../components/PermissionMatrix'
+import { SearchSelect } from '../components/SearchSelect'
 
 /**
  * کاربر جدید — نیمه‌ی «ساختن».
@@ -187,7 +188,7 @@ export function TeamPage({ token }: { token: string }) {
           </label>
           <label>
             نقش (نقطه‌ی شروعِ دسترسی)
-            <select
+            <SearchSelect
               value={roleKey}
               onChange={(e) => {
                 setRoleKey(e.target.value)
@@ -200,7 +201,7 @@ export function TeamPage({ token }: { token: string }) {
                   {r.name}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
             <span className="bk-hint">{selectedRole ? summarize(selectedRole.permissions) : ''}</span>
           </label>
 

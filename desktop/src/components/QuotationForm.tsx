@@ -6,6 +6,7 @@ import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { useQuotationDraft } from '../lib/quotationDraft'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -51,10 +52,10 @@ export function QuotationForm({
               <button type="button" className={q.customerMode === 'manual' ? 'active' : ''} onClick={() => q.setCustomerMode('manual')}>دستی</button>
             </div>
             {q.customerMode === 'list' ? (
-              <select value={q.contactId} onChange={(e) => q.setContactId(e.target.value)}>
+              <SearchSelect value={q.contactId} onChange={(e) => q.setContactId(e.target.value)}>
                 <option value="">— بدون مشتری —</option>
                 {q.contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-              </select>
+              </SearchSelect>
             ) : (
               <input type="text" value={q.customerName} onChange={(e) => q.setCustomerName(e.target.value)} placeholder="نام مشتری را بنویسید" />
             )}
@@ -62,11 +63,11 @@ export function QuotationForm({
 
           <label>
             انبار
-            <select value={q.effectiveWarehouseId} onChange={(e) => q.setWarehouseId(e.target.value)}>
+            <SearchSelect value={q.effectiveWarehouseId} onChange={(e) => q.setWarehouseId(e.target.value)}>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ پیشنهاد

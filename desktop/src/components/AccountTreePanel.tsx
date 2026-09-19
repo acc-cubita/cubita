@@ -28,6 +28,7 @@ import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 import { AccountEditDrawer } from './AccountEditDrawer'
+import { SearchSelect } from '../components/SearchSelect'
 
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   asset: 'دارایی', liability: 'بدهی', equity: 'سرمایه', income: 'درآمد', expense: 'هزینه',
@@ -492,12 +493,12 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                   placeholder="عنوان دوم (اختیاری)"
                   dir="ltr"
                 />
-                <select value={newNature} onChange={(e) => setNewNature(e.target.value)} title="ماهیتِ حساب">
+                <SearchSelect value={newNature} onChange={(e) => setNewNature(e.target.value)} title="ماهیتِ حساب">
                   <option value="">ماهیت: پیش‌فرضِ نوعِ حساب</option>
                   <option value="debit">بدهکار</option>
                   <option value="credit">بستانکار</option>
                   <option value="any">مهم نیست</option>
-                </select>
+                </SearchSelect>
                 <label className="fy-check">
                   <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
                   سرفصل است
@@ -552,12 +553,12 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <SearchSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option value="">همه‌ی انواع</option>
               {Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </SearchSelect>
             <button type="button" onClick={() => setCollapsed(new Set())}>بازکردن همه</button>
             <button type="button" onClick={() => setCollapsed(new Set(allGroupIds))}>بستن همه</button>
             <button type="button" onClick={() => void refresh()} title="به‌روزرسانی">

@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, HelpCircle, Plus, Search, X, type LucideIcon } from 'lucide-react'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * اجزای فرمِ سازمانی (`ef-*`) — برچسب، راهنمای شناور، انتخاب با دکمه‌ی «+»، تب، نوارِ
@@ -223,14 +224,14 @@ export function SelectWithAdd({
 }) {
   return (
     <div className="ef-select-add">
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      <SearchSelect id={id} value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">— انتخاب کنید —</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
-      </select>
+      </SearchSelect>
       <button
         type="button"
         className={`ef-icon-btn${adding ? ' is-on' : ''}`}
@@ -421,14 +422,14 @@ export function InlineCreate({
           <FormField key={f.key} label={f.label} required={f.required}>
             {(id) =>
               f.options ? (
-                <select id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
+                <SearchSelect id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
                   <option value="">— انتخاب کنید —</option>
                   {f.options.map((o) => (
                     <option key={o} value={o}>
                       {o}
                     </option>
                   ))}
-                </select>
+                </SearchSelect>
               ) : (
                 <input id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
               )

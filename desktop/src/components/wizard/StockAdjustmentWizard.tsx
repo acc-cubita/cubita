@@ -4,6 +4,7 @@ import { NumberInput } from '../NumberInput'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { StockAdjustmentHistory } from '../StockAdjustmentForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /** ویزاردِ «تعدیل دستیِ موجودی» — دو مرحله + پیش‌نمایشِ زنده؛ تاریخچه زیرِ ویزارد. */
 export function StockAdjustmentWizard({
@@ -30,24 +31,24 @@ export function StockAdjustmentWizard({
         <div className="invoice-form">
           <label>
             کالا
-            <select value={d.itemId} onChange={(e) => d.setItemId(e.target.value)}>
+            <SearchSelect value={d.itemId} onChange={(e) => d.setItemId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {items.map((i) => (<option key={i.id} value={i.id}>{i.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             انبار
-            <select value={d.warehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
+            <SearchSelect value={d.warehouseId} onChange={(e) => d.setWarehouseId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             نوع تعدیل
-            <select value={d.direction} onChange={(e) => d.setDirection(e.target.value as 'shortage' | 'surplus')}>
+            <SearchSelect value={d.direction} onChange={(e) => d.setDirection(e.target.value as 'shortage' | 'surplus')}>
               <option value="shortage">کسری (کاهش موجودی)</option>
               <option value="surplus">اضافی (افزایش موجودی)</option>
-            </select>
+            </SearchSelect>
           </label>
         </div>
       ),

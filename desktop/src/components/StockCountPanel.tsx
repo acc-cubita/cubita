@@ -21,6 +21,7 @@ import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { SearchSelect } from '../components/SearchSelect'
 
 const STATUS_LABEL: Record<StockCountStatus, string> = {
   open: 'باز',
@@ -287,13 +288,13 @@ export function StockCountPanel({
     <form className="invoice-form form-full" onSubmit={handleCreate}>
       <label>
         انبار
-        <select value={warehouseId || warehouses[0]?.id || ''} onChange={(e) => setWarehouseId(e.target.value)}>
+        <SearchSelect value={warehouseId || warehouses[0]?.id || ''} onChange={(e) => setWarehouseId(e.target.value)}>
           {warehouses.map((w) => (
             <option key={w.id} value={w.id}>
               {w.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         تاریخ شمارش
@@ -467,14 +468,14 @@ export function StockCountPanel({
           ) : (
             <label className="form-full">
               جلسه‌ی انبارگردانی
-              <select value={selected?.id ?? ''} onChange={(e) => e.target.value && void openSession(e.target.value)}>
+              <SearchSelect value={selected?.id ?? ''} onChange={(e) => e.target.value && void openSession(e.target.value)}>
                 <option value="">— انتخاب جلسه —</option>
                 {sessions.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.warehouse_name} — {formatJalali(x.count_date)} — {STATUS_LABEL[x.status]}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           )}
           {error && <div className="error">{error}</div>}

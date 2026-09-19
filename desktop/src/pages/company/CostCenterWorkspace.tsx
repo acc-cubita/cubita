@@ -55,6 +55,7 @@ import {
   todayIso,
 } from '../../lib/jalali'
 import { faCompact } from '../../lib/format'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * میزکارِ «مرکز هزینه» — تنها جای برنامه که مرکز ساخته، سنجیده و بودجه‌بندی می‌شود.
@@ -357,17 +358,17 @@ function CenterForm({
       </label>
       <label>
         نوع
-        <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+        <SearchSelect value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
           {COST_CENTER_KINDS.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         زیرمجموعه‌ی
-        <select
+        <SearchSelect
           value={form.parent_id ?? ''}
           onChange={(e) => setForm({ ...form, parent_id: e.target.value || null })}
         >
@@ -379,7 +380,7 @@ function CenterForm({
                 {c.path}
               </option>
             ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         سرپرست
@@ -507,7 +508,7 @@ function CenterBudget({
       <form className="invoice-form form-full cc-budget-form" onSubmit={submit}>
         <label>
           حساب
-          <select
+          <SearchSelect
             value={form.accountId}
             onChange={(e) => setForm({ ...form, accountId: e.target.value })}
           >
@@ -517,27 +518,27 @@ function CenterBudget({
                 {a.code} — {a.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           سال
-          <select value={form.jy} onChange={(e) => setForm({ ...form, jy: Number(e.target.value) })}>
+          <SearchSelect value={form.jy} onChange={(e) => setForm({ ...form, jy: Number(e.target.value) })}>
             {years.map((y) => (
               <option key={y} value={y}>
                 {toFaDigits(y)}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           ماه
-          <select value={form.jm} onChange={(e) => setForm({ ...form, jm: Number(e.target.value) })}>
+          <SearchSelect value={form.jm} onChange={(e) => setForm({ ...form, jm: Number(e.target.value) })}>
             {JALALI_MONTH_NAMES.map((m, i) => (
               <option key={m} value={i + 1}>
                 {m}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label>
           مبلغ

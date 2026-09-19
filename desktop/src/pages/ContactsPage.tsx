@@ -30,6 +30,7 @@ import { EmptyState } from '../components/EmptyState'
 import { AgingPanel } from '../components/AgingPanel'
 import { ContactStatementDrawer } from '../components/ContactStatementDrawer'
 import type { PageKey } from '../lib/navModel'
+import { SearchSelect } from '../components/SearchSelect'
 
 const TYPE_LABELS: Record<ContactRecord['type'], string> = {
   customer: 'مشتری',
@@ -189,16 +190,16 @@ export function ContactsPage({
         description={`${faMoney(filteredContacts.length)} طرف حساب`}
         actions={
           <div className="check-actions">
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value as typeof filterType)}>
+            <SearchSelect value={filterType} onChange={(e) => setFilterType(e.target.value as typeof filterType)}>
               <option value="all">همه</option>
               <option value="customer">مشتریان</option>
               <option value="supplier">تأمین‌کنندگان</option>
-            </select>
-            <select value={filterActive} onChange={(e) => setFilterActive(e.target.value as typeof filterActive)}>
+            </SearchSelect>
+            <SearchSelect value={filterActive} onChange={(e) => setFilterActive(e.target.value as typeof filterActive)}>
               <option value="all">فعال و غیرفعال</option>
               <option value="active">فقط فعال</option>
               <option value="inactive">فقط غیرفعال</option>
-            </select>
+            </SearchSelect>
             <input type="text" placeholder="جستجو نام یا تلفن..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         }

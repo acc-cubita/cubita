@@ -12,6 +12,7 @@ import {
 } from '../api'
 import { isoToJalali, todayIso } from '../lib/jalali'
 import type { Msg } from '../pages/accounting/kit'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Math.round(Number(v || 0)).toLocaleString('fa-IR')
 const faYear = (y: number) => y.toLocaleString('fa-IR', { useGrouping: false })
@@ -282,14 +283,14 @@ export function PayrollSettingsPanel({
   const factorSelect = (key: 'suppEmployee' | 'suppEmployer' | 'medical', label: string, list: PayrollFactorRecord[]) => (
     <FormField label={label}>
       {(id) => (
-        <select id={id} value={params[key]} onChange={(e) => setParam(key, e.target.value)}>
+        <SearchSelect id={id} value={params[key]} onChange={(e) => setParam(key, e.target.value)}>
           <option value="">— نسبت داده نشده —</option>
           {list.map((f) => (
             <option key={f.id} value={f.id}>
               {f.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       )}
     </FormField>
   )

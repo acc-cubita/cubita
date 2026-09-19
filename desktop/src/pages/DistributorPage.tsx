@@ -30,6 +30,7 @@ import { MpDistributorReturns } from '../components/MpDistributorReturns'
 import { useListingDraft } from '../lib/listingDraft'
 import { formatJalali } from '../lib/jalali'
 import { useTheme } from '../lib/theme'
+import { SearchSelect } from '../components/SearchSelect'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -613,10 +614,10 @@ function ConnectionsPanel({ token }: { token: string }) {
         {showZone && (
           <td data-label="زون">
             {c.status === 'approved' ? (
-              <select value={c.zone_id ?? ''} disabled={busy === c.id} onChange={(e) => void assignZone(c, e.target.value)}>
+              <SearchSelect value={c.zone_id ?? ''} disabled={busy === c.id} onChange={(e) => void assignZone(c, e.target.value)}>
                 <option value="">— بدونِ زون —</option>
                 {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
-              </select>
+              </SearchSelect>
             ) : '—'}
           </td>
         )}

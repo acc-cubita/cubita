@@ -37,6 +37,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { Pager, usePagination } from './Pager'
 import { StorefrontGallery } from './StorefrontGallery'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: string | number) => Number(n).toLocaleString('fa-IR')
 
@@ -334,10 +335,10 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
           </div>
           <div className="sf-field">
             <label>واحدِ پول (نمایش و پرداخت)</label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            <SearchSelect value={currency} onChange={(e) => setCurrency(e.target.value)}>
               <option value="toman">تومان</option>
               <option value="rial">ریال</option>
-            </select>
+            </SearchSelect>
             <span className="field-hint">مبلغِ ارسالی به درگاهِ پرداخت بر این پایه محاسبه می‌شود؛ با واحدِ قیمت‌های حسابداری‌تان یکی باشد.</span>
           </div>
           <div className="sf-actions">
@@ -488,14 +489,14 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
                         <td data-label="مبلغ" className="money-cell">{fa(o.total)}</td>
                         <td data-label="پرداخت"><span className={`status-badge tone-${pay.tone}`}>{pay.label}</span></td>
                         <td data-label="وضعیتِ ارسال">
-                          <select
+                          <SearchSelect
                             className="sf-slug-input"
                             value={o.fulfillment_status}
                             disabled={busy || o.payment_status !== 'paid'}
                             onChange={(e) => void changeFulfillment(o, e.target.value)}
                           >
                             {FULFILLMENT.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-                          </select>
+                          </SearchSelect>
                         </td>
                         <td className="integration-action" data-label="اقدام">
                           {o.payment_status === 'pending' ? (

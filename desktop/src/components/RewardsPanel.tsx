@@ -14,6 +14,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number | string) => Math.round(Number(n)).toLocaleString('fa-IR')
 
@@ -120,11 +121,11 @@ export function RewardsPanel({
               </label>
               <label>
                 نوع
-                <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as RewardKind })}>
+                <SearchSelect value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as RewardKind })}>
                   <option value="gift">هدیه</option>
                   <option value="discount">تخفیف (٪)</option>
                   <option value="other">سایر</option>
-                </select>
+                </SearchSelect>
               </label>
             </div>
             <label>
@@ -142,21 +143,21 @@ export function RewardsPanel({
           <form className="invoice-form form-full" onSubmit={redeem}>
             <label>
               مشتری
-              <select value={redeemContact} onChange={(e) => setRedeemContact(e.target.value)} required>
+              <SearchSelect value={redeemContact} onChange={(e) => setRedeemContact(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label>
               جایزه
-              <select value={redeemReward_} onChange={(e) => setRedeemReward(e.target.value)} required>
+              <SearchSelect value={redeemReward_} onChange={(e) => setRedeemReward(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {activeRewards.map((r) => (
                   <option key={r.id} value={r.id}>{r.name} ({fa(r.points_cost)} امتیاز)</option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <div className="invoice-form-footer">
               <button type="submit" className="btn-primary"><Ticket size={14} /> بازخرید</button>

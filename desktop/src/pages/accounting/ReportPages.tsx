@@ -54,6 +54,7 @@ import {
   useAsync,
   useRange,
 } from './kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * چهار گزارشِ پایه‌ی دفترداری.
@@ -266,7 +267,7 @@ export function BalanceReportPage({ token }: { token: string }) {
               <>
                 <label className="acc-inline-field">
                   ستون‌ها
-                  <select
+                  <SearchSelect
                     value={columns}
                     onChange={(e) => setColumns(Number(e.target.value) as Columns)}
                   >
@@ -275,21 +276,21 @@ export function BalanceReportPage({ token }: { token: string }) {
                         {o.label} — {o.hint}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label className="acc-inline-field">
                   سطح
-                  <select value={level} onChange={(e) => setLevel(Number(e.target.value))}>
+                  <SearchSelect value={level} onChange={(e) => setLevel(Number(e.target.value))}>
                     {LEVEL_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <label className="acc-inline-field">
                   نوعِ مانده
-                  <select
+                  <SearchSelect
                     value={balanceFilter}
                     onChange={(e) => setBalanceFilter(e.target.value as BalanceFilter)}
                   >
@@ -298,7 +299,7 @@ export function BalanceReportPage({ token }: { token: string }) {
                         {o.label}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
                 <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               </>
@@ -677,14 +678,14 @@ export function LedgerReportPage({ token }: { token: string }) {
                 <>
                   <label className="acc-inline-field">
                     حسابِ کل
-                    <select value={generalId} onChange={(e) => setGeneralId(e.target.value)}>
+                    <SearchSelect value={generalId} onChange={(e) => setGeneralId(e.target.value)}>
                       <option value="">— انتخابِ حسابِ کل —</option>
                       {generalAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.code} — {a.name}
                         </option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </label>
                   <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
                 </>
@@ -692,14 +693,14 @@ export function LedgerReportPage({ token }: { token: string }) {
                 <>
                   <label className="acc-inline-field">
                     حساب
-                    <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                    <SearchSelect value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                       <option value="">— انتخابِ حساب —</option>
                       {postable.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.code} — {a.name}
                         </option>
                       ))}
-                    </select>
+                    </SearchSelect>
                   </label>
                   <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
                 </>
@@ -1073,23 +1074,23 @@ export function VatPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               سالِ مالی
-              <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+              <SearchSelect value={year} onChange={(e) => setYear(Number(e.target.value))}>
                 {[now.jy + 1, now.jy, now.jy - 1, now.jy - 2].map((y) => (
                   <option key={y} value={y}>
                     {fa(y)}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="acc-inline-field">
               فصل
-              <select value={quarter} onChange={(e) => setQuarter(Number(e.target.value))}>
+              <SearchSelect value={quarter} onChange={(e) => setQuarter(Number(e.target.value))}>
                 {QUARTERS.map((q) => (
                   <option key={q.value} value={q.value}>
                     {q.label}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
           </div>
           <div className="cc-summary">

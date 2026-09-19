@@ -39,6 +39,7 @@ import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { PaymentVoucherDocumentPage } from './PaymentVoucherPage'
 import { ReceiptVoucherDocumentPage } from './ReceiptVoucherPage'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * عملیاتِ پولیِ ماژولِ «دریافت و پرداخت» — رسید، اعلامیه، تسویه‌ی طرف‌حساب، صندوق و تنخواه.
@@ -353,7 +354,7 @@ export function ContactSettlementPage({ token }: { token: string }) {
           <div className="cc-toolbar">
             <label className="acc-inline-field">
               معین طرف مقابل
-              <select
+              <SearchSelect
                 value={activeAccount}
                 onChange={(e) => {
                   setAccountId(e.target.value)
@@ -365,11 +366,11 @@ export function ContactSettlementPage({ token }: { token: string }) {
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="acc-inline-field">
               طرف حساب
-              <select
+              <SearchSelect
                 value={contactId}
                 onChange={(e) => {
                   setContactId(e.target.value)
@@ -382,7 +383,7 @@ export function ContactSettlementPage({ token }: { token: string }) {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="acc-inline-field">
               تاریخ تسویه
@@ -840,14 +841,14 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
             </label>
             <label>
               تأمین از حسابِ
-              <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} required>
+              <SearchSelect value={sourceId} onChange={(e) => setSourceId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {postable.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="form-wide">
               شرح
@@ -976,14 +977,14 @@ export function PettyExpensePage({ token, accounts }: { token: string; accounts:
             </label>
             <label>
               بابتِ حسابِ هزینه
-              <select value={expenseId} onChange={(e) => setExpenseId(e.target.value)} required>
+              <SearchSelect value={expenseId} onChange={(e) => setExpenseId(e.target.value)} required>
                 <option value="">— انتخاب —</option>
                 {expenseAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </SearchSelect>
             </label>
             <label className="form-wide">
               شرح
@@ -1083,11 +1084,11 @@ export function TreasuryLedgerPage({ token }: { token: string }) {
           </label>
           <label>
             نوع
-            <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+            <SearchSelect value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
               <option value="all">همه</option>
               <option value="receipt">دریافت</option>
               <option value="payment">پرداخت</option>
-            </select>
+            </SearchSelect>
           </label>
         </div>
 

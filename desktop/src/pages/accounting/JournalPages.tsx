@@ -54,6 +54,7 @@ import {
   useRange,
   type Msg,
 } from './kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * پنج عملیاتی که مستقیماً روی *سند* کار می‌کنند.
@@ -913,11 +914,11 @@ export function EntryListPage({ token }: { token: string }) {
             extra={
               <label className="acc-inline-field">
                 وضعیت
-                <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                <SearchSelect value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
                   <option value="">همه</option>
                   <option value="temporary">موقت</option>
                   <option value="permanent">دائم</option>
-                </select>
+                </SearchSelect>
               </label>
             }
           />

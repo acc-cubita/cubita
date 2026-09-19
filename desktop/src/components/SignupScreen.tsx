@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, MailCheck, RefreshCw, Factory } from 'lucide-react'
 import { requestSignupCode, signup, fetchMe, type MeResponse } from '../api'
+import { SearchSelect } from '../components/SearchSelect'
 
 const MIN_PASSWORD_LENGTH = 10
 const CODE_LENGTH = 6
@@ -172,11 +173,11 @@ export function SignupScreen({
               صنفِ کسب‌وکار
               <div className="input-with-icon">
                 <Factory size={16} className="input-icon" />
-                <select value={industry} onChange={(e) => setIndustry(e.target.value)}>
+                <SearchSelect value={industry} onChange={(e) => setIndustry(e.target.value)}>
                   {INDUSTRIES.map((it) => (
                     <option key={it.key} value={it.key}>{it.label}</option>
                   ))}
-                </select>
+                </SearchSelect>
               </div>
               <span className="field-hint">ماژول‌های پنل بر اساسِ صنف تنظیم می‌شوند؛ بعداً از «شخصی‌سازیِ پنل» قابلِ تغییر است.</span>
             </label>

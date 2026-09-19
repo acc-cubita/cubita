@@ -29,6 +29,7 @@ import {
 import { firstMissing } from '../../components/form/firstMissing'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Note, OpsPage, type Msg } from '../accounting/kit'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * جدول‌های مالیاتِ حقوق.
@@ -230,14 +231,14 @@ export function TaxTablesPage({ token }: { token: string }) {
                 tip="هر گروه نرخ‌های خودش را دارد؛ نرخ از همین جدول می‌آید، نه از ضربِ درصد گروه."
               >
                 {(id) => (
-                  <select id={id} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                  <SearchSelect id={id} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
                     <option value="">— پیش‌فرض (حکم‌های بدون گروه) —</option>
                     {groups.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField id="tt-date" label="تاریخ اجرا" required>
@@ -245,13 +246,13 @@ export function TaxTablesPage({ token }: { token: string }) {
               </FormField>
               <FormField label="نوع محاسبه" required tip="جدولِ حقوق برای عیدی به کار نمی‌رود — آستانه‌هایشان یکی نیست.">
                 {(id) => (
-                  <select id={id} value={purpose} onChange={(e) => setPurpose(e.target.value)}>
+                  <SearchSelect id={id} value={purpose} onChange={(e) => setPurpose(e.target.value)}>
                     {Object.entries(TAX_CALC_PURPOSE_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>
                         {v}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 )}
               </FormField>
               <FormField

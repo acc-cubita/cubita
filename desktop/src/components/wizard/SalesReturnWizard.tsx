@@ -5,6 +5,7 @@ import { JalaliDatePicker } from '../JalaliDatePicker'
 import { formatJalali } from '../../lib/jalali'
 import { ReturnableTable, SalesReturnsList } from '../SalesReturnForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { SearchSelect } from '../../components/SearchSelect'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -94,14 +95,14 @@ function InvoiceStep({ r }: { r: SalesReturnDraft }) {
     <div className="invoice-form">
       <label>
         فاکتور فروش
-        <select value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
+        <SearchSelect value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
           <option value="">— انتخاب فاکتور —</option>
           {r.invoices.map((inv) => (
             <option key={inv.id} value={inv.id}>
               شماره {inv.number ?? '—'} — {formatJalali(inv.invoice_date)} — {Number(inv.total_amount).toLocaleString('fa-IR')}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <label>
         تاریخ برگشت

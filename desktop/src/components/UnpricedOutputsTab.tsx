@@ -3,6 +3,7 @@ import { BadgeDollarSign } from 'lucide-react'
 import { applyReceiptPrices, fetchUnpricedOutputs, type UnpricedOutput } from '../api'
 import { formatJalali } from '../lib/jalali'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 const faQty = (v: string) => Number(v).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
@@ -117,13 +118,13 @@ export function UnpricedOutputsTab({
       <div className="toolbar">
         <label className="field">
           <span>انبار</span>
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <SearchSelect value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>
             ))}
-          </select>
+          </SearchSelect>
         </label>
         <label className="field">
           <span>از تاریخ</span>

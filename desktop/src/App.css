@@ -11730,3 +11730,11 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
+
+/* حالتِ بازِ `SearchSelect`. `ItemPicker` این را از کلاسِ `.item-picker.open` روی
+   ظرفش می‌گیرد؛ `SearchSelect` ظرف ندارد (پاپ‌آورش مستقیم به body می‌رود)، پس
+   همان نشانه را از `aria-expanded` می‌خوانَد — که به‌هرحال باید درست باشد. */
+.item-picker-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}

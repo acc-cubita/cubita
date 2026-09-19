@@ -6,6 +6,7 @@ import { ReturnableTable } from './SalesReturnForm'
 import { formatJalali } from '../lib/jalali'
 import { usePurchaseReturnDraft, type PurchaseReturnDraft } from '../lib/purchaseReturnDraft'
 import { RETURN_TYPE_LABELS } from '../api'
+import { SearchSelect } from '../components/SearchSelect'
 
 /** فرمِ کلاسیکِ «برگشت از خرید» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [usePurchaseReturnDraft]؛ جدولِ اقلامِ قابلِ برگشت با فروش مشترک است ([ReturnableTable]). */
@@ -35,14 +36,14 @@ export function PurchaseReturnForm({ token }: { token: string }) {
         >
           <label>
             فاکتور خرید
-            <select value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
+            <SearchSelect value={r.invoiceId} onChange={(e) => r.setInvoiceId(e.target.value)}>
               <option value="">— انتخاب فاکتور —</option>
               {r.invoices.map((inv) => (
                 <option key={inv.id} value={inv.id}>
                   شماره {inv.number ?? '—'} — {formatJalali(inv.invoice_date)} — {Number(inv.total_amount).toLocaleString('fa-IR')}
                 </option>
               ))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ برگشت

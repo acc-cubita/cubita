@@ -4,6 +4,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { useTransferDraft, type TransferDraft } from '../lib/transferDraft'
+import { SearchSelect } from '../components/SearchSelect'
 
 /** فرمِ کلاسیکِ «انتقال بین انبار» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ [useTransferDraft]. */
 export function TransferForm({
@@ -37,17 +38,17 @@ export function TransferForm({
         >
           <label>
             انبار مبدأ
-            <select value={d.fromWarehouseId} onChange={(e) => d.setFromWarehouseId(e.target.value)}>
+            <SearchSelect value={d.fromWarehouseId} onChange={(e) => d.setFromWarehouseId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             انبار مقصد
-            <select value={d.toWarehouseId} onChange={(e) => d.setToWarehouseId(e.target.value)}>
+            <SearchSelect value={d.toWarehouseId} onChange={(e) => d.setToWarehouseId(e.target.value)}>
               <option value="">— انتخاب —</option>
               {warehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-            </select>
+            </SearchSelect>
           </label>
           <label>
             تاریخ حواله
@@ -87,10 +88,10 @@ export function TransferLinesTable({ d }: { d: TransferDraft }) {
           {d.lines.map((line, i) => (
             <tr key={i}>
               <td data-label="کالا">
-                <select value={line.itemId} onChange={(e) => d.updateLine(i, { itemId: e.target.value })}>
+                <SearchSelect value={line.itemId} onChange={(e) => d.updateLine(i, { itemId: e.target.value })}>
                   <option value="">— انتخاب کالا —</option>
                   {d.goodsItems.map((it) => (<option key={it.id} value={it.id}>{it.name}</option>))}
-                </select>
+                </SearchSelect>
               </td>
               <td data-label="تعداد">
                 <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
