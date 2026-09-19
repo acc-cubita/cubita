@@ -7,6 +7,7 @@ export function SectionCard({
   title,
   description,
   tip,
+  badge,
   actions,
   children,
 }: {
@@ -15,6 +16,8 @@ export function SectionCard({
   description?: string
   /** راهنمای بلند — آیکونِ «؟» کنارِ عنوان، به‌جای پاراگرافِ ثابت زیرِ آن. */
   tip?: string
+  /** شمار یا وضعیتِ کوتاه کنارِ عنوان («۲ جدول ثبت‌شده»). */
+  badge?: ReactNode
   actions?: ReactNode
   children: ReactNode
 }) {
@@ -26,10 +29,11 @@ export function SectionCard({
             <Icon size={16} />
           </span>
           <div>
-            {tip ? (
+            {tip || badge ? (
               <div className="ef-title-row">
                 <h2>{title}</h2>
-                <InfoTip text={tip} />
+                {tip && <InfoTip text={tip} />}
+                {badge}
               </div>
             ) : (
               <h2>{title}</h2>
