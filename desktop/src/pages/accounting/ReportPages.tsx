@@ -10,7 +10,6 @@ import {
   Percent,
   Printer,
   Scale,
-  Search,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -38,6 +37,7 @@ import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
+import { SearchField } from '../../components/form/FormKit'
 import { Pager, usePagination } from '../../components/Pager'
 import { downloadCsv } from '../../lib/csv'
 import { formatJalali, isoToJalali, jalaaliMonthLength, jalaliToIso, todayIso } from '../../lib/jalali'
@@ -256,6 +256,7 @@ export function BalanceReportPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Scale}
       title="گزارش ترازها"
       description="تراز آزمایشی در چهار قالبِ استاندارد و سه سطحِ حساب. همان یک داده است؛ ستون‌ها تعیین می‌کنند چقدرش را ببینید."
@@ -330,11 +331,16 @@ export function BalanceReportPage({ token }: { token: string }) {
         }
         actions={
           <>
-            <button type="button" onClick={exportCsv} disabled={visible.length === 0}>
-              <Download size={13} /> خروجی CSV
+            <button
+              type="button"
+              className="ef-btn-secondary"
+              onClick={exportCsv}
+              disabled={visible.length === 0}
+            >
+              <Download size={14} /> خروجی CSV
             </button>
-            <button type="button" onClick={() => window.print()}>
-              <Printer size={13} /> چاپ
+            <button type="button" className="ef-btn-secondary" onClick={() => window.print()}>
+              <Printer size={14} /> چاپ
             </button>
           </>
         }
@@ -345,8 +351,8 @@ export function BalanceReportPage({ token }: { token: string }) {
           empty={visible.length === 0}
           emptyText="با این فیلترها ردیفی نیست — بازه یا نوعِ مانده را عوض کنید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table acc-table--wide">
+          <div className="table-scroll ef-table-wrap">
+            <table className="ef-table cards-on-mobile acc-table acc-table--wide">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -473,8 +479,8 @@ function MissingTafsiliCard({ token }: { token: string }) {
         empty={list.length === 0}
         emptyText="هر ردیفی که روی حسابِ تفصیلی‌پذیر نشسته، تفصیلی دارد."
       >
-        <div className="table-scroll">
-          <table className="cards-on-mobile acc-table">
+        <div className="table-scroll ef-table-wrap">
+          <table className="ef-table cards-on-mobile acc-table">
             <thead>
               <tr>
                 <th>تاریخ</th>
@@ -540,8 +546,8 @@ function NatureViolationsCard({ token }: { token: string }) {
             : 'هیچ حسابی خلافِ ماهیتش نیست.'
         }
       >
-        <div className="table-scroll">
-          <table className="cards-on-mobile acc-table">
+        <div className="table-scroll ef-table-wrap">
+          <table className="ef-table cards-on-mobile acc-table">
             <thead>
               <tr>
                 <th>کد</th>
@@ -626,6 +632,7 @@ export function LedgerReportPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={BookOpenCheck}
       title="گزارش دفتر"
       description="سه دفترِ حسابداری: روزنامه (همه‌ی اسناد به‌ترتیبِ تاریخ)، کل (گردشِ یک سرفصل با همه‌ی زیرحساب‌هایش) و معین (گردشِ یک حساب با مانده‌ی دوره‌ای)."
@@ -665,15 +672,12 @@ export function LedgerReportPage({ token }: { token: string }) {
             range={range}
             extra={
               book === 'journal' ? (
-                <label className="acc-search">
-                  <Search size={14} />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="شماره یا شرحِ سند"
-                  />
-                </label>
+                <SearchField
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="نام یا کدِ حساب"
+                  label="جست‌وجوی حساب"
+                />
               ) : book === 'general' ? (
                 <>
                   <label className="acc-inline-field">
@@ -793,8 +797,8 @@ function DaybookCard({
       title="دفتر روزنامه"
       description={`${faInt(entries.length)} سند — هر سند با ردیف‌هایش`}
       actions={
-        <button type="button" onClick={exportCsv} disabled={entries.length === 0}>
-          <Download size={13} /> خروجی CSV
+        <button type="button" className="ef-btn-secondary" onClick={exportCsv} disabled={entries.length === 0}>
+          <Download size={14} /> خروجی CSV
         </button>
       }
     >
@@ -890,6 +894,7 @@ function SubsidiaryCard({
       actions={
         <button
           type="button"
+          className="ef-btn-secondary"
           disabled={!data || data.lines.length === 0}
           onClick={() =>
             data &&
@@ -939,8 +944,8 @@ function SubsidiaryCard({
         }
       >
         <p className="hint">روی هر ردیف کلیک کنید تا سندش باز شود.</p>
-        <div className="table-scroll">
-          <table className="cards-on-mobile acc-table">
+        <div className="table-scroll ef-table-wrap">
+          <table className="ef-table cards-on-mobile acc-table">
             <thead>
               <tr>
                 <th>سند</th>
@@ -1066,6 +1071,7 @@ export function VatPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Percent}
       title="مالیات بر ارزش افزوده"
       description="مالیاتِ فروش منهای اعتبارِ مالیاتیِ خرید در یک فصل — همان عددی که در اظهارنامه‌ی فصلی می‌رود."
@@ -1123,6 +1129,7 @@ export function VatPage({ token }: { token: string }) {
         actions={
           <button
             type="button"
+            className="ef-btn-secondary"
             disabled={!data}
             onClick={() =>
               data &&
@@ -1133,13 +1140,13 @@ export function VatPage({ token }: { token: string }) {
               )
             }
           >
-            <Download size={13} /> خروجی CSV
+            <Download size={14} /> خروجی CSV
           </button>
         }
       >
         <AsyncBlock loading={report.loading} error={report.error}>
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="ef-table cards-on-mobile acc-table">
               <thead>
                 <tr>
                   <th>شرح</th>
@@ -1183,8 +1190,8 @@ export function VatPage({ token }: { token: string }) {
         description="چقدر از فروش و خریدِ دوره مشمول بوده و چقدر معاف. وضعیت از لحظه‌ی معامله می‌آید، نه از وضعیتِ امروزِ کالا. برگشت‌ها در این جدول نمی‌آیند."
       >
         <AsyncBlock loading={report.loading} error={report.error}>
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="ef-table cards-on-mobile acc-table">
               <thead>
                 <tr>
                   <th>طبقه</th>
@@ -1220,8 +1227,8 @@ export function VatPage({ token }: { token: string }) {
                 {fa(mixed.length)} فاکتور ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر
                 است — یعنی روی ردیفِ معاف هم مالیات گرفته شده.
               </p>
-              <div className="table-scroll">
-                <table className="cards-on-mobile acc-table">
+              <div className="table-scroll ef-table-wrap">
+                <table className="ef-table cards-on-mobile acc-table">
                   <thead>
                     <tr>
                       <th>فاکتور</th>
@@ -1287,6 +1294,7 @@ export function LegalBooksPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={FileSpreadsheet}
       title="دفاتر تجارت الکترونیک"
       description="ردیف‌های دفترِ روزنامه با چیدمانِ دفاترِ قانونی — آماده‌ی خروجی و بارگذاری در سامانه. اسنادِ باطل و معکوسشان هر دو می‌آیند، چون دفترِ قانونی باید اصلاح را هم نشان دهد."
@@ -1317,11 +1325,11 @@ export function LegalBooksPage({ token }: { token: string }) {
         description="یک ردیف به‌ازای هر ردیفِ سند، به‌ترتیبِ تاریخ و شماره."
         actions={
           <>
-            <button type="button" onClick={exportCsv} disabled={rows.length === 0}>
-              <Download size={13} /> خروجی CSV
+            <button type="button" className="ef-btn-secondary" onClick={exportCsv} disabled={rows.length === 0}>
+              <Download size={14} /> خروجی CSV
             </button>
-            <button type="button" onClick={() => window.print()}>
-              <Printer size={13} /> چاپ
+            <button type="button" className="ef-btn-secondary" onClick={() => window.print()}>
+              <Printer size={14} /> چاپ
             </button>
           </>
         }
@@ -1332,8 +1340,8 @@ export function LegalBooksPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="در این بازه ردیفی ثبت نشده."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table acc-table--wide">
+          <div className="table-scroll ef-table-wrap">
+            <table className="ef-table cards-on-mobile acc-table acc-table--wide">
               <thead>
                 <tr>
                   <th>سند</th>

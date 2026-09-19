@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  Check,
   Archive,
   ArrowLeftRight,
   BookOpenCheck,
@@ -38,6 +39,14 @@ import {
   type ClosingRow,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
+import { SearchSelect } from '../../components/SearchSelect'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+} from '../../components/form/FormKit'
 import { CurrenciesPanel } from '../../components/CurrenciesPanel'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
@@ -46,7 +55,6 @@ import {
   AsyncBlock,
   BalanceFooter,
   Metric,
-  Note,
   OpsPage,
   RangeBar,
   fa,
@@ -57,7 +65,6 @@ import {
   useRange,
   type Msg,
 } from './kit'
-import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * چهار عملیاتِ *سندسازِ* پایانِ دوره.
@@ -105,6 +112,7 @@ export function FxRevaluationPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Coins}
       title="صدور سند تسعیر ارز"
       description="مانده‌ی ارزیِ هر حساب با نرخِ روز سنجیده می‌شود و اختلافِ ریالی به سود/زیانِ تسعیر می‌رود. فقط ردیف‌هایی که هنگامِ ثبت مبلغِ ارزی داشته‌اند وارد محاسبه می‌شوند."
@@ -142,22 +150,11 @@ export function FxRevaluationPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
-
       <SectionCard
         icon={Scale}
         title="پیش‌نمایشِ تسعیر"
-        description="ارزشِ دفتری در برابرِ ارزشِ امروز؛ اختلاف همان سندی است که زده می‌شود."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!data || net === 0}
-            onClick={() => void issue()}
-          >
-            <Coins size={14} /> صدورِ سند
-          </button>
-        }
+        tip="ارزشِ دفتری در برابرِ ارزشِ امروز؛ اختلاف همان سندی است که زده می‌شود."
+        badge={data ? <CountBadge>{faInt(data.items.length)} حساب</CountBadge> : undefined}
       >
         {data && data.missing_rates.length > 0 && (
           <p className="hint acc-note acc-note--err">
@@ -165,15 +162,18 @@ export function FxRevaluationPage({ token }: { token: string }) {
             برای {data.missing_rates.join('، ')} تا این تاریخ نرخی ثبت نشده؛ این ارزها در محاسبه نیامدند.
           </p>
         )}
-        <label className="acc-inline-field acc-merge-desc">
-          شرحِ سند (اختیاری)
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={`سند تسعیر ارز تا ${formatJalali(asOf)}`}
-          />
-        </label>
+        <div className="ef-block-top">
+          <FormField label="شرحِ سند" optional>
+            {(id) => (
+              <input
+                id={id}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={`سند تسعیر ارز تا ${formatJalali(asOf)}`}
+              />
+            )}
+          </FormField>
+        </div>
 
         <AsyncBlock
           loading={preview.loading}
@@ -181,8 +181,8 @@ export function FxRevaluationPage({ token }: { token: string }) {
           empty={(data?.items.length ?? 0) === 0}
           emptyText="هیچ حسابی مانده‌ی ارزی ندارد. برای ثبتِ ردیفِ ارزی، هنگامِ ثبتِ سند ارز و مبلغِ ارزی را وارد کنید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>حساب</th>
@@ -251,6 +251,22 @@ export function FxRevaluationPage({ token }: { token: string }) {
       </SectionCard>
 
       <CurrenciesPanel token={token} />
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              net === 0
+                ? 'اختلافِ تسعیری وجود ندارد؛ سندی لازم نیست.'
+                : `${net >= 0 ? 'سودِ' : 'زیانِ'} تسعیر: ${fa(Math.abs(net))} ریال`
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" disabled={!data || net === 0} onClick={() => void issue()}>
+          <Coins size={15} /> صدورِ سند تسعیر
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -312,6 +328,7 @@ export function ClosePnlPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={CalendarCheck}
       title="بستن حساب‌های سود و زیان"
       description="حساب‌های موقت (درآمد و هزینه) صفر می‌شوند و سود/زیانِ خالص به سود انباشته می‌رود. سند موقت است؛ قفلِ دوره گامِ دومِ جداست."
@@ -353,8 +370,6 @@ export function ClosePnlPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
-
       <SectionCard
         icon={Scale}
         title="گامِ ۱ — صدور سند بستن"
@@ -363,26 +378,14 @@ export function ClosePnlPage({ token }: { token: string }) {
             ? `${data.date_from ? `بازه: ${formatJalali(data.date_from)} تا ${formatJalali(data.date_to)}` : `از ابتدا تا ${formatJalali(dateTo)}`} · مقصد: ${data.destination_account_name}`
             : `از ابتدا تا ${formatJalali(dateTo)}`
         }
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={rows.length === 0 || difference !== 0}
-            onClick={() => void issue()}
-          >
-            <Scale size={14} /> صدور سند بستن
-          </button>
-        }
       >
-        <label className="acc-inline-field acc-merge-desc">
-          شرحِ سند
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <span className="field-hint">خالی بگذارید تا خودکار نوشته شود.</span>
-        </label>
+        <div className="ef-block-top">
+          <FormField label="شرحِ سند" optional tip="خالی بگذارید تا خودکار نوشته شود.">
+            {(id) => (
+              <input id={id} value={description} onChange={(e) => setDescription(e.target.value)} />
+            )}
+          </FormField>
+        </div>
 
         {alreadyClosed && (
           <section className="fy-status">
@@ -399,8 +402,8 @@ export function ClosePnlPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="در این بازه هیچ فعالیتِ درآمد/هزینه‌ای برای بستن نیست."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>حساب</th>
@@ -453,35 +456,38 @@ export function ClosePnlPage({ token }: { token: string }) {
       <SectionCard
         icon={Lock}
         title="گامِ ۲ — قفل کردن دوره"
-        description="پس از قفل، هیچ سندی در این بازه ثبت یا اصلاح نمی‌شود و اسنادِ موقتِ داخلش دائم می‌شوند. این کار برگشت ندارد."
-        actions={
-          <button type="button" className="btn-primary" onClick={() => void lock()}>
-            <Lock size={14} /> قفل کردن دوره
-          </button>
-        }
+        tip="پس از قفل، هیچ سندی در این بازه ثبت یا اصلاح نمی‌شود و اسنادِ موقتِ داخلش دائم می‌شوند. این کار برگشت ندارد."
       >
-        <label className="acc-inline-field acc-merge-desc">
-          یادداشت
-          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
+        <FormGrid cols={2}>
+          <FormField label="یادداشت" optional>
+            {(id) => <input id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+          </FormField>
+        </FormGrid>
         {!alreadyClosed && rows.length > 0 && (
-          <section className="fy-status">
-            <p className="fy-note">
-              هنوز سندِ بستن زده نشده. اگر مستقیم قفل کنید، سند همین‌جا خودکار زده می‌شود.
-            </p>
-          </section>
+          <p className="ef-message ef-message--warn ef-block-note">
+            هنوز سندِ بستن زده نشده. اگر مستقیم قفل کنید، سند همین‌جا خودکار زده می‌شود.
+          </p>
         )}
+        <div className="ef-card-foot">
+          <button type="button" className="ef-btn-secondary" onClick={() => void lock()}>
+            <Lock size={15} /> قفل کردن دوره
+          </button>
+        </div>
       </SectionCard>
 
-      <SectionCard icon={Archive} title="دوره‌های بسته‌شده">
+      <SectionCard
+        icon={Archive}
+        title="دوره‌های بسته‌شده"
+        badge={closes.data ? <CountBadge>{faInt(closes.data.length)} دوره</CountBadge> : undefined}
+      >
         <AsyncBlock
           loading={closes.loading}
           error={closes.error}
           empty={(closes.data?.length ?? 0) === 0}
           emptyText="هنوز هیچ دوره‌ای بسته نشده."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>تاریخِ بستن</th>
@@ -506,6 +512,27 @@ export function ClosePnlPage({ token }: { token: string }) {
           </div>
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              rows.length === 0
+                ? 'در این بازه فعالیتِ درآمد/هزینه‌ای برای بستن نیست.'
+                : `${profit >= 0 ? 'سودِ' : 'زیانِ'} دوره: ${fa(Math.abs(profit))} ریال`
+            }
+          />
+        }
+      >
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={rows.length === 0 || difference !== 0}
+          onClick={() => void issue()}
+        >
+          <Scale size={15} /> صدور سند بستن
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -516,6 +543,7 @@ export function ClosingOpeningPage({ token }: { token: string }) {
   const [tab, setTab] = useState<'closing' | 'opening'>('closing')
   return (
     <OpsPage
+      canvas
       icon={Archive}
       title="صدور سند اختتامیه و افتتاحیه"
       description="پایانِ سال: اختتامیه همه‌ی حساب‌های دائمی را می‌بندد و افتتاحیه در سالِ بعد دقیقاً همان‌ها را باز می‌کند. اول باید سود و زیان بسته شده باشد."
@@ -571,37 +599,26 @@ function ClosingTab({ token }: { token: string }) {
 
   return (
     <>
-      <Note msg={msg} />
       <SectionCard
         icon={Lock}
         title="سندِ اختتامیه"
-        description="هر حسابِ دائمی برعکسِ مانده‌اش زده می‌شود تا صفر شود؛ طرفِ مقابل، حسابِ اختتامیه است."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={rows.length === 0 || pnlOpen}
-            onClick={() => void issue()}
-          >
-            <Lock size={14} /> صدورِ اختتامیه
-          </button>
-        }
+        tip="هر حسابِ دائمی برعکسِ مانده‌اش زده می‌شود تا صفر شود؛ طرفِ مقابل، حسابِ اختتامیه است."
       >
-        <div className="acc-filters">
-          <label className="acc-inline-field">
-            تاریخِ اختتامیه
-            <JalaliDatePicker value={asOf} onChange={setAsOf} />
-          </label>
-          <label className="acc-inline-field acc-merge-desc">
-            شرحِ سند
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={`سند اختتامیه ${formatJalali(asOf)}`}
-            />
-          </label>
-        </div>
+        <FormGrid cols={2}>
+          <FormField label="تاریخِ اختتامیه" required>
+            {(id) => <JalaliDatePicker id={id} value={asOf} onChange={setAsOf} />}
+          </FormField>
+          <FormField label="شرحِ سند" optional>
+            {(id) => (
+              <input
+                id={id}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={`سند اختتامیه ${formatJalali(asOf)}`}
+              />
+            )}
+          </FormField>
+        </FormGrid>
 
         {pnlOpen && (
           <p className="hint acc-note acc-note--err">
@@ -626,6 +643,23 @@ function ClosingTab({ token }: { token: string }) {
           <EntryTotals rowDebit={debit} rowCredit={credit} label="حساب اختتامیه" />
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={pnlOpen ? 'اول «بستن حساب‌های سود و زیان» را انجام دهید.' : `${faInt(rows.length)} حساب بسته می‌شود.`}
+          />
+        }
+      >
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={rows.length === 0 || pnlOpen}
+          onClick={() => void issue()}
+        >
+          <Lock size={15} /> صدورِ اختتامیه
+        </button>
+      </ActionBar>
     </>
   )
 }
@@ -659,41 +693,29 @@ function OpeningTab({ token }: { token: string }) {
 
   return (
     <>
-      <Note msg={msg} />
       <SectionCard
         icon={DoorOpen}
         title="سندِ افتتاحیه"
-        description="دقیقاً معکوسِ سندِ اختتامیه‌ی سالِ قبل — پس سالِ جدید با همان مانده‌ای باز می‌شود که سالِ قبل بسته شد."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={rows.length === 0}
-            onClick={() => void issue()}
-          >
-            <DoorOpen size={14} /> صدورِ افتتاحیه
-          </button>
-        }
+        tip="دقیقاً معکوسِ سندِ اختتامیه‌ی سالِ قبل — پس سالِ جدید با همان مانده‌ای باز می‌شود که سالِ قبل بسته شد."
       >
-        <div className="acc-filters">
-          <label className="acc-inline-field">
-            تاریخِ اختتامیه‌ی سالِ قبل
-            <JalaliDatePicker value={sourceDate} onChange={setSourceDate} />
-          </label>
-          <label className="acc-inline-field">
-            تاریخِ افتتاحیه
-            <JalaliDatePicker value={asOf} onChange={setAsOf} />
-          </label>
-          <label className="acc-inline-field acc-merge-desc">
-            شرحِ سند
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={`سند افتتاحیه ${formatJalali(asOf)}`}
-            />
-          </label>
-        </div>
+        <FormGrid>
+          <FormField label="تاریخِ اختتامیه‌ی سالِ قبل" required>
+            {(id) => <JalaliDatePicker id={id} value={sourceDate} onChange={setSourceDate} />}
+          </FormField>
+          <FormField label="تاریخِ افتتاحیه" required>
+            {(id) => <JalaliDatePicker id={id} value={asOf} onChange={setAsOf} />}
+          </FormField>
+          <FormField label="شرحِ سند" optional>
+            {(id) => (
+              <input
+                id={id}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={`سند افتتاحیه ${formatJalali(asOf)}`}
+              />
+            )}
+          </FormField>
+        </FormGrid>
 
         {data?.closing_entry_number != null && (
           <p className="hint">
@@ -712,6 +734,22 @@ function OpeningTab({ token }: { token: string }) {
           <EntryTotals rowDebit={debit} rowCredit={credit} label="حساب افتتاحیه" />
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              rows.length === 0
+                ? 'در این تاریخ سندِ اختتامیه‌ای پیدا نشد.'
+                : `${faInt(rows.length)} حساب در سالِ تازه باز می‌شود.`
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" disabled={rows.length === 0} onClick={() => void issue()}>
+          <DoorOpen size={15} /> صدورِ افتتاحیه
+        </button>
+      </ActionBar>
     </>
   )
 }
@@ -735,8 +773,8 @@ function EntryTotals({ rowDebit, rowCredit, label }: { rowDebit: number; rowCred
 function ClosingTable({ rows }: { rows: ClosingRow[] }) {
   const pg = usePagination(rows, 20)
   return (
-    <div className="table-scroll">
-      <table className="cards-on-mobile acc-table">
+    <div className="table-scroll ef-table-wrap">
+      <table className="cards-on-mobile acc-table ef-table">
         <thead>
           <tr>
             <th>حساب</th>
@@ -827,6 +865,7 @@ export function GeneralDocumentPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={FileSpreadsheet}
       title="صدور سند کل"
       description="خلاصه‌ی گردشِ یک بازه در سطحِ حسابِ کل — همان برگه‌ای که در پایانِ ماه چاپ و بایگانی می‌شود. سندِ تازه‌ای ثبت نمی‌کند؛ فقط اسنادِ موجود را تجمیع می‌کند."
@@ -850,8 +889,8 @@ export function GeneralDocumentPage({ token }: { token: string }) {
             : 'از ابتدای دفتر'
         }
         actions={
-          <button type="button" onClick={() => window.print()}>
-            <Printer size={13} /> چاپ
+          <button type="button" className="ef-btn-secondary" onClick={() => window.print()}>
+            <Printer size={14} /> چاپ
           </button>
         }
       >
@@ -861,8 +900,8 @@ export function GeneralDocumentPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="در این بازه گردشی ثبت نشده."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>کدِ کل</th>
@@ -960,6 +999,7 @@ export function BalanceReclassPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={ArrowLeftRight}
       title="اصلاح طبقه‌بندی مانده"
       description="مانده‌ی یک حساب/تفصیلی را با یک سندِ متوازن به جای درست می‌برد. اسنادِ گذشته دست‌نخورده می‌مانند و اصلاح به‌عنوان رویدادی تاریخ‌دار ثبت می‌شود."
@@ -986,12 +1026,11 @@ export function BalanceReclassPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
-
       <SectionCard
         icon={ArrowLeftRight}
-        title="مبدأ — حساب‌های دارای مانده"
-        description="مانده تا تاریخِ اصلاح. فقط همان ترکیبی که انتخاب می‌کنید منتقل می‌شود، نه کلِ حساب."
+        title="گامِ ۱ — مبدأ"
+        tip="مانده تا تاریخِ اصلاح. فقط همان ترکیبی که انتخاب می‌کنید منتقل می‌شود، نه کلِ حساب."
+        badge={<CountBadge accent>{faInt(chosen.length)} انتخاب‌شده</CountBadge>}
       >
         <AsyncBlock
           loading={sources.loading}
@@ -999,8 +1038,8 @@ export function BalanceReclassPage({ token }: { token: string }) {
           empty={(sources.data?.length ?? 0) === 0}
           emptyText="در این تاریخ هیچ حسابی مانده ندارد."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th />
@@ -1041,59 +1080,52 @@ export function BalanceReclassPage({ token }: { token: string }) {
         </AsyncBlock>
       </SectionCard>
 
-      <SectionCard
-        icon={ArrowLeftRight}
-        title="مقصد"
-        description="مانده به این حساب/تفصیلی منتقل می‌شود."
-        actions={
-          <button type="button" disabled={!chosen.length || !destAccount} onClick={() => void runPreview()}>
-            پیش‌نمایش
-          </button>
-        }
-      >
-        <div className="cc-toolbar">
-          <label className="acc-inline-field">
-            حسابِ مقصد
-            <SearchSelect value={destAccount} onChange={(e) => setDestAccount(e.target.value)}>
-              <option value="">— انتخاب کنید —</option>
-              {postable.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code} — {a.name}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label className="acc-inline-field">
-            تفصیلیِ مقصد (اختیاری)
-            <input
-              type="text"
-              value={destAnalytic}
-              onChange={(e) => setDestAnalytic(e.target.value)}
-              dir="ltr"
+      <SectionCard icon={ArrowLeftRight} title="گامِ ۲ — مقصد" tip="مانده به این حساب/تفصیلی منتقل می‌شود.">
+        <FormGrid cols={2}>
+          <FormField label="حسابِ مقصد" required>
+            {(id) => (
+              <SearchSelect id={id} value={destAccount} onChange={(e) => setDestAccount(e.target.value)}>
+                <option value="">— انتخاب کنید —</option>
+                {postable.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+          <FormField label="تفصیلیِ مقصد" optional tip="شناسه‌ی تفصیلی؛ خالی یعنی بدونِ تفصیلی.">
+            {(id) => (
+              <input
+                id={id}
+                value={destAnalytic}
+                onChange={(e) => setDestAnalytic(e.target.value)}
+                dir="ltr"
               />
-            <span className="field-hint">شناسه‌ی تفصیلی؛ خالی = بدونِ تفصیلی.</span>
-          </label>
+            )}
+          </FormField>
+        </FormGrid>
+        <div className="ef-card-foot">
+          <button
+            type="button"
+            className="ef-btn-secondary"
+            disabled={!chosen.length || !destAccount}
+            onClick={() => void runPreview()}
+          >
+            <Scale size={15} /> پیش‌نمایشِ سند
+          </button>
         </div>
       </SectionCard>
 
       {preview && (
-        <SectionCard
-          icon={Scale}
-          title="پیش‌نمایشِ سند"
-          description="تا اختلاف صفر نشود، سند صادر نمی‌شود."
-          actions={
-            <button type="button" className="btn-primary" disabled={!ready} onClick={() => void issue()}>
-              صدورِ سند
-            </button>
-          }
-        >
+        <SectionCard icon={Scale} title="گامِ ۳ — پیش‌نمایشِ سند" tip="تا اختلاف صفر نشود، سند صادر نمی‌شود.">
           {preview.warnings.map((w) => (
             <p key={w} className="fy-note fy-note--warn">
               <AlertTriangle size={14} /> {w}
             </p>
           ))}
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>مبدأ</th>
@@ -1126,11 +1158,29 @@ export function BalanceReclassPage({ token }: { token: string }) {
               </tbody>
             </table>
           </div>
-          <p className={Number(preview.difference) === 0 ? 'hint' : 'fy-note fy-note--warn'}>
+          <p className={Number(preview.difference) === 0 ? 'hint' : 'ef-message ef-message--warn ef-block-note'}>
             اختلاف: {fa(preview.difference)}
           </p>
         </SectionCard>
       )}
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              preview === null
+                ? 'مبدأ و مقصد را انتخاب کنید و پیش‌نمایش بگیرید.'
+                : ready
+                  ? 'پیش‌نمایش متوازن است؛ سند صادر شدنی است.'
+                  : `اختلافِ پیش‌نمایش: ${fa(preview.difference)}`
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" disabled={!ready} onClick={() => void issue()}>
+          <Check size={16} /> صدورِ سند اصلاح
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }

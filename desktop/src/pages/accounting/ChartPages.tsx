@@ -5,9 +5,10 @@ import {
   FolderTree,
   Layers,
   ListTree,
+  Check,
+  Pencil,
   Plus,
-  Save,
-  Search,
+  Power,
   Tag,
   Trash2,
   Wallet,
@@ -33,11 +34,22 @@ import { AccountTreePanel } from '../../components/AccountTreePanel'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
+import { SearchSelect } from '../../components/SearchSelect'
 import { Pager, usePagination } from '../../components/Pager'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  ListToolbar,
+  RowAction,
+  SearchField,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
 import {
   AsyncBlock,
   Metric,
-  Note,
   OpsPage,
   RangeBar,
   fa,
@@ -47,7 +59,6 @@ import {
   useRange,
   type Msg,
 } from './kit'
-import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * پنج عملیاتِ *ساختار*: چارت، سرفصلِ تازه، اصلاحِ طبقه‌بندی، تفصیلیِ سایر، و مرورِ حساب‌ها.
@@ -70,6 +81,7 @@ const TYPE_LABELS: Record<string, string> = {
 export function ChartOfAccountsPage({ token, onChanged }: { token: string; onChanged?: () => void }) {
   return (
     <OpsPage
+      canvas
       icon={ListTree}
       title="درختواره حساب‌ها"
       description="ساختارِ کاملِ چارت: سرفصل‌ها، حساب‌های سطحِ آخر، کدینگ و قالب‌های آماده‌ی صنفی."
@@ -114,6 +126,14 @@ export function NewAccountPage({ token, onChanged }: { token: string; onChanged?
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([
+      [form.code, 'acc-code', 'کدِ حساب را وارد کنید.'],
+      [form.name, 'acc-name', 'نامِ حساب را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setMsg(null)
     try {
       const created = await createAccount(token, {
@@ -143,74 +163,81 @@ export function NewAccountPage({ token, onChanged }: { token: string; onChanged?
 
   return (
     <OpsPage
+      canvas
       icon={Plus}
       title="سرفصل جدید"
       description="افزودنِ یک حساب یا سرفصلِ تازه به چارت. سرفصل فقط دسته‌بندی می‌کند و سند مستقیم نمی‌گیرد؛ حسابِ سطحِ آخر است که سند می‌خورد."
     >
-      <Note msg={msg} />
-      <SectionCard
-        icon={Plus}
-        title="مشخصاتِ حساب"
-        description="اول سرفصلِ مادر را انتخاب کنید تا نوع و کدِ پیشنهادی خودکار پر شوند."
-      >
-        <form className="invoice-form" onSubmit={submit}>
-          <label>
-            سرفصلِ مادر
-            <SearchSelect value={form.parent_id} onChange={(e) => void pickParent(e.target.value)}>
-              <option value="">— بدونِ مادر (ریشه) —</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.code} — {g.name}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label>
-            کدِ حساب
-            <input
-              type="text"
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              dir="ltr"
-              required
-            />
-          </label>
-          <label>
-            نامِ حساب
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            نوعِ حساب
-            <SearchSelect value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              {Object.entries(TYPE_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label className="cal-check-inline">
-            <input
-              type="checkbox"
-              checked={form.is_group}
-              onChange={(e) => setForm({ ...form, is_group: e.target.checked })}
-            />
-            سرفصل است (سند مستقیم نمی‌گیرد)
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Save size={14} /> ساختِ حساب
-            </button>
-          </div>
-        </form>
-      </SectionCard>
+      <form noValidate onSubmit={submit}>
+        <SectionCard
+          icon={Plus}
+          title="مشخصاتِ حساب"
+          tip="اول سرفصلِ مادر را انتخاب کنید تا نوعِ حساب و کدِ پیشنهادیِ بعدی خودکار پر شوند."
+        >
+          <FormGrid>
+            <FormField label="سرفصلِ مادر" tip="نوعِ حساب از مادر گرفته می‌شود تا ترازنامه و سود و زیان یک چیز بگویند.">
+              {(id) => (
+                <SearchSelect id={id} value={form.parent_id} onChange={(e) => void pickParent(e.target.value)}>
+                  <option value="">— بدونِ مادر (ریشه) —</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.code} — {g.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <FormField id="acc-code" label="کدِ حساب" required>
+              {(id) => (
+                <input
+                  id={id}
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  dir="ltr"
+                />
+              )}
+            </FormField>
+            <FormField id="acc-name" label="نامِ حساب" required>
+              {(id) => (
+                <input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              )}
+            </FormField>
+            <FormField label="نوعِ حساب" required>
+              {(id) => (
+                <SearchSelect id={id} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  {Object.entries(TYPE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <div className="ef-checks">
+              <label className="ef-check-tip">
+                <input
+                  type="checkbox"
+                  checked={form.is_group}
+                  onChange={(e) => setForm({ ...form, is_group: e.target.checked })}
+                />
+                سرفصل است (سند مستقیم نمی‌گیرد)
+              </label>
+            </div>
+          </FormGrid>
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={msg} />}>
+          <button type="submit" className="btn-primary">
+            <Check size={16} /> ساختِ حساب
+          </button>
+        </ActionBar>
+      </form>
 
-      <SectionCard icon={ListTree} title="تازه‌ترین حساب‌ها" description="آخرین کدهای چارت.">
+      <SectionCard
+        icon={ListTree}
+        title="تازه‌ترین حساب‌ها"
+        description="آخرین کدهایی که به چارت اضافه شده‌اند."
+        badge={<CountBadge>{faInt(recent.length)} حساب</CountBadge>}
+      >
         <AsyncBlock
           loading={accounts.loading}
           error={accounts.error}
@@ -269,7 +296,10 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
   const pending = Object.entries(edits).filter(([id, parentId]) => byId.get(id)?.parent_id !== parentId)
 
   async function apply() {
-    if (pending.length === 0) return
+    if (pending.length === 0) {
+      setMsg({ text: 'هیچ حسابی سرفصلِ تازه نگرفته است.', kind: 'err' })
+      return
+    }
     try {
       const out = await reclassifyAccounts(
         token,
@@ -292,52 +322,28 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
 
   return (
     <OpsPage
+      canvas
       icon={ArrowLeftRight}
       title="جابه‌جایی حساب در درختواره"
       description="جابه‌جاییِ دسته‌ایِ حساب‌ها زیرِ سرفصلِ درست. نوعِ حساب از سرفصلِ مقصد گرفته می‌شود تا ترازنامه و سود و زیان یک چیز بگویند. ⚠️ این کار مانده را جابه‌جا نمی‌کند و چون ساختارِ حساب را عوض می‌کند، گزارش‌های گذشته هم از این پس با طبقه‌بندیِ تازه دیده می‌شوند — برای بردنِ مانده به حسابِ درست، «اصلاح طبقه‌بندی مانده» را باز کنید."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <label className="acc-search">
-              <Search size={14} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="نام یا کدِ حساب"
-              />
-            </label>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={pending.length === 0}
-              onClick={() => void apply()}
-            >
-              <Save size={14} /> اعمالِ {faInt(pending.length)} تغییر
-            </button>
-            {pending.length > 0 && (
-              <button type="button" onClick={() => setEdits({})}>
-                <X size={13} /> انصراف
-              </button>
-            )}
-          </div>
-        </div>
-      }
     >
-      <Note msg={msg} />
       <SectionCard
         icon={FolderTree}
         title="حساب‌های قابلِ جابه‌جایی"
-        description="حساب‌های دارای نقشِ سیستمی (صندوق، بانک، …) نشان داده نمی‌شوند؛ ثبتِ خودکار به آن‌ها گره خورده."
+        tip="حساب‌های دارای نقشِ سیستمی (صندوق، بانک، …) نشان داده نمی‌شوند؛ ثبتِ خودکار به آن‌ها گره خورده."
+        badge={<CountBadge>{faInt(movable.length)} حساب</CountBadge>}
       >
+        <ListToolbar>
+          <SearchField value={search} onChange={setSearch} placeholder="نام یا کدِ حساب" label="جست‌وجوی حساب" />
+        </ListToolbar>
         <AsyncBlock
           loading={accounts.loading}
           error={accounts.error}
           empty={movable.length === 0}
           emptyText="حسابی با این جست‌وجو پیدا نشد."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -361,8 +367,9 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
                       <td data-label="سرفصلِ فعلی">
                         {a.parent_id ? byId.get(a.parent_id)?.name ?? '—' : '— ریشه —'}
                       </td>
-                      <td data-label="سرفصلِ تازه">
+                      <td className="card-wide ef-col-wide" data-label="سرفصلِ تازه">
                         <SearchSelect
+                          aria-label={`سرفصلِ تازه‌ی حسابِ ${a.name}`}
                           value={chosen}
                           onChange={(e) => setEdits({ ...edits, [a.id]: e.target.value })}
                         >
@@ -385,6 +392,27 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
           </div>
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              pending.length > 0
+                ? `${faInt(pending.length)} حساب سرفصلِ تازه گرفته است.`
+                : 'برای هر حساب، سرفصلِ تازه‌اش را از ستونِ آخر انتخاب کنید.'
+            }
+          />
+        }
+      >
+        {pending.length > 0 && (
+          <button type="button" className="ef-btn-secondary" onClick={() => setEdits({})}>
+            <X size={15} /> انصراف
+          </button>
+        )}
+        <button type="button" className="btn-primary" onClick={() => void apply()}>
+          <Check size={16} /> {pending.length > 0 ? `اعمالِ ${faInt(pending.length)} تغییر` : 'اعمالِ تغییرها'}
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -411,6 +439,14 @@ export function AnalyticsPage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([
+      [form.code, 'an-code', 'کدِ تفصیلی را وارد کنید.'],
+      [form.name, 'an-name', 'نامِ تفصیلی را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setMsg(null)
     try {
       if (editing) {
@@ -449,6 +485,7 @@ export function AnalyticsPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Tag}
       title="تفصیلی سایر"
       description="بُعدِ تحلیلیِ آزادِ ردیفِ سند — برای هرچه نه طرف‌حساب است نه مرکزِ هزینه: خودرو، قرارداد، دستگاه، پرونده."
@@ -470,72 +507,74 @@ export function AnalyticsPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
-
-      <SectionCard
-        icon={editing ? Save : Plus}
-        title={editing ? `ویرایشِ «${editing.name}»` : 'تفصیلیِ تازه'}
-        description="کد یکتاست و در گزارش‌ها به‌جای نام استفاده می‌شود."
-        actions={
-          editing ? (
+      <form noValidate onSubmit={submit}>
+        <SectionCard
+          icon={editing ? Pencil : Plus}
+          title={editing ? `ویرایشِ «${editing.name}»` : 'تفصیلیِ تازه'}
+          tip="کد یکتاست و در گزارش‌ها به‌جای نام استفاده می‌شود."
+        >
+          <FormGrid>
+            <FormField id="an-code" label="کد" required>
+              {(id) => (
+                <input
+                  id={id}
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  dir="ltr"
+                />
+              )}
+            </FormField>
+            <FormField id="an-name" label="نام" required>
+              {(id) => (
+                <input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              )}
+            </FormField>
+            <FormField label="دسته" optional tip="تفصیلی‌های هم‌دسته در فهرست زیرِ یک عنوان جمع می‌شوند.">
+              {(id) => (
+                <input
+                  id={id}
+                  value={form.group_name}
+                  onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                  placeholder="مثلاً خودرو"
+                />
+              )}
+            </FormField>
+            <FormField label="توضیح" optional span="full">
+              {(id) => (
+                <input
+                  id={id}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              )}
+            </FormField>
+          </FormGrid>
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={msg} />}>
+          {editing && (
             <button
               type="button"
+              className="ef-btn-secondary"
               onClick={() => {
                 setEditing(null)
                 setForm(EMPTY_ANALYTIC)
               }}
             >
-              <X size={13} /> انصراف
+              <X size={15} /> انصراف
             </button>
-          ) : undefined
-        }
-      >
-        <form className="invoice-form" onSubmit={submit}>
-          <label>
-            کد
-            <input
-              type="text"
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              dir="ltr"
-              required
-            />
-          </label>
-          <label>
-            نام
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            دسته (اختیاری)
-            <input
-              type="text"
-              value={form.group_name}
-              onChange={(e) => setForm({ ...form, group_name: e.target.value })}
-              placeholder="مثلاً خودرو"
-            />
-          </label>
-          <label>
-            توضیح
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Save size={14} /> {editing ? 'ذخیره' : 'ساخت'}
-            </button>
-          </div>
-        </form>
-      </SectionCard>
+          )}
+          <button type="submit" className="btn-primary">
+            <Check size={16} /> {editing ? 'ذخیرهٔ تغییرات' : 'ثبت تفصیلی'}
+          </button>
+        </ActionBar>
+      </form>
 
-      <SectionCard icon={Tag} title="فهرستِ تفصیلی‌ها">
+      <SectionCard
+        icon={Tag}
+        title="فهرستِ تفصیلی‌ها"
+        badge={<CountBadge accent>{faInt(rows.length)} تفصیلی</CountBadge>}
+        description="تفصیلی‌ها به تفکیکِ دسته. تفصیلیِ استفاده‌شده حذف نمی‌شود؛ غیرفعالش کنید."
+      >
         <AsyncBlock
           loading={list.loading}
           error={list.error}
@@ -547,8 +586,8 @@ export function AnalyticsPage({ token }: { token: string }) {
               <h4 className="acc-day-head">
                 {group} <span>{faInt(items.length)} مورد</span>
               </h4>
-              <div className="table-scroll">
-                <table className="cards-on-mobile acc-table">
+              <div className="table-scroll ef-table-wrap">
+                <table className="cards-on-mobile acc-table ef-table">
                   <thead>
                     <tr>
                       <th>کد</th>
@@ -556,7 +595,7 @@ export function AnalyticsPage({ token }: { token: string }) {
                       <th>توضیح</th>
                       <th>ردیفِ سند</th>
                       <th>وضعیت</th>
-                      <th />
+                      <th className="ef-col-min">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -568,32 +607,47 @@ export function AnalyticsPage({ token }: { token: string }) {
                         <td data-label="نام">{row.name}</td>
                         <td data-label="توضیح">{row.description || '—'}</td>
                         <td data-label="ردیفِ سند" className="num">
-                          {faInt(row.line_count)}
+                          <CountBadge>{faInt(row.line_count)} ردیف</CountBadge>
                         </td>
-                        <td data-label="وضعیت">{row.is_active ? 'فعال' : 'غیرفعال'}</td>
-                        <td className="acc-row-actions">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditing(row)
-                              setForm({
-                                code: row.code,
-                                name: row.name,
-                                group_name: row.group_name,
-                                description: row.description,
-                              })
-                            }}
-                          >
-                            <Save size={13} /> ویرایش
-                          </button>
-                          <button type="button" onClick={() => void toggleActive(row)}>
-                            {row.is_active ? 'غیرفعال' : 'فعال'}
-                          </button>
-                          {row.line_count === 0 && (
-                            <button type="button" className="danger" onClick={() => void remove(row)}>
-                              <Trash2 size={13} />
-                            </button>
-                          )}
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${row.is_active ? 'tone-success' : 'tone-muted'}`}>
+                            {row.is_active ? 'فعال' : 'غیرفعال'}
+                          </span>
+                        </td>
+                        <td className="card-actions ef-col-min">
+                          <div className="row-actions ef-row-actions">
+                            <RowAction
+                              icon={Pencil}
+                              label="ویرایش"
+                              onClick={() => {
+                                setEditing(row)
+                                setForm({
+                                  code: row.code,
+                                  name: row.name,
+                                  group_name: row.group_name,
+                                  description: row.description,
+                                })
+                                document.getElementById('an-code')?.focus()
+                              }}
+                            />
+                            <RowAction
+                              icon={Power}
+                              label={row.is_active ? 'غیرفعال‌کردن' : 'فعال‌کردن'}
+                              onClick={() => void toggleActive(row)}
+                            />
+                            <RowAction
+                              icon={Trash2}
+                              label="حذف"
+                              danger
+                              onClick={() => void remove(row)}
+                              disabled={row.line_count > 0}
+                              title={
+                                row.line_count > 0
+                                  ? 'ردیف‌های سند به این تفصیلی اشاره کرده‌اند؛ به‌جای حذف غیرفعالش کنید.'
+                                  : undefined
+                              }
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -689,6 +743,7 @@ export function AccountBrowsePage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Layers}
       title="مرور حساب‌ها"
       description="از سرفصل تا حسابِ سطحِ آخر، سطح‌به‌سطح. رقمِ هر سرفصل جمعِ زیرشاخه‌هایش است."
@@ -742,8 +797,8 @@ export function AccountBrowsePage({ token }: { token: string }) {
           empty={current.length === 0}
           emptyText="این حساب زیرمجموعه ندارد — سطحِ آخر است."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -823,34 +878,28 @@ export function AccountListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={ListTree}
       title="فهرست حساب‌ها"
       description="نمای تختِ چارت برای پیداکردنِ سریعِ یک حساب یا کد."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <label className="acc-search">
-              <Search size={14} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="نام یا کدِ حساب"
-              />
-            </label>
-          </div>
-        </div>
-      }
     >
-      <SectionCard icon={ListTree} title="حساب‌ها" description={`${faInt(rows.length)} حساب`}>
+      <SectionCard
+        icon={ListTree}
+        title="حساب‌ها"
+        badge={accounts.data ? <CountBadge accent>{faInt(rows.length)} حساب</CountBadge> : undefined}
+        description="نمای تختِ چارت — سرفصل‌ها و حساب‌های سطحِ آخر کنارِ هم."
+      >
+        <ListToolbar>
+          <SearchField value={search} onChange={setSearch} placeholder="نام یا کدِ حساب" label="جست‌وجوی حساب" />
+        </ListToolbar>
         <AsyncBlock
           loading={accounts.loading}
           error={accounts.error}
           empty={rows.length === 0}
           emptyText="حسابی پیدا نشد."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -869,7 +918,11 @@ export function AccountListPage({ token }: { token: string }) {
                     <td data-label="نام">{a.name}</td>
                     <td data-label="نوع">{TYPE_LABELS[a.type] ?? a.type}</td>
                     <td data-label="سطح">{a.is_group ? 'سرفصل' : 'حساب'}</td>
-                    <td data-label="وضعیت">{a.is_active ? 'فعال' : 'غیرفعال'}</td>
+                    <td data-label="وضعیت">
+                      <span className={`status-badge ${a.is_active ? 'tone-success' : 'tone-muted'}`}>
+                        {a.is_active ? 'فعال' : 'غیرفعال'}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

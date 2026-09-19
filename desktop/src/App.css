@@ -11112,7 +11112,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ef-message--warn { color: var(--danger); }
 
 /* یک ارتفاع برای همه‌ی کنترل‌ها */
-.ef-form :is(input:not([type='checkbox']):not([type='radio']), select, .jalali-date-trigger) {
+/* `.item-picker-trigger` همان دکمه‌ی `SearchSelect` و انتخابگرِ کالاست. */
+.ef-form :is(input:not([type='checkbox']):not([type='radio']), select, .jalali-date-trigger, .item-picker-trigger) {
   width: 100%;
   height: var(--ef-h);
   min-height: var(--ef-h);
@@ -11125,6 +11126,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 
 /* تاریخ: آیکونِ تقویم همیشه در انتهای فیلد (چپ در راست‌به‌چپ)، متن در ابتدا */
 .ef-form .jalali-date-trigger { display: flex; align-items: center; gap: 8px; }
+/* دکمه‌ی انتخابِ جست‌وجوپذیر: متن در ابتدا، فلش در انتها — مثلِ فهرستِ بومی. */
+.ef-form .item-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: start; }
+.ef-form td > .item-picker-trigger { min-width: 120px; }
+.ef-table td.ef-col-wide > .item-picker-trigger { min-width: 260px; }
 .ef-form .jalali-date-trigger svg { order: 1; margin-inline-start: auto; flex: 0 0 auto; color: var(--text-muted); }
 .ef-form .jalali-date-trigger:hover svg { color: var(--accent-on-tint); }
 
@@ -11421,6 +11426,77 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ef-callout > svg { flex: 0 0 auto; color: var(--accent-on-tint); }
 .ef-callout > p { flex: 1 1 260px; margin: 0; line-height: 1.8; }
 
+/* --- بومِ صفحه‌های عملیات/فهرستِ حسابداری و شرکت (`OpsPage canvas`) ---
+   همان قطعه‌های قدیمِ kit (بازه، ارقام، فیلدِ درون‌خطی، فهرستِ دسته‌ها) این‌جا ظاهرِ فرمِ
+   سازمانی را می‌گیرند. همه زیرِ `.ef-form`اند تا ماژول‌هایی که هنوز بازطراحی نشده‌اند
+   (فروش، خزانه) دست نخورند. */
+.ef-form > .ef-head { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ef-form .cc-head { gap: var(--sp-4); }
+.ef-form .cc-toolbar { align-items: flex-end; gap: var(--sp-3) var(--sp-4); }
+/* بازه: کنترلِ قطعه‌ای هم‌ارتفاعِ فیلدها */
+.ef-form .cc-presets {
+  height: var(--ef-h);
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.ef-form .cc-presets > svg { flex: 0 0 auto; margin-inline: 8px 4px; }
+.ef-form .cc-presets button {
+  height: 100%;
+  min-height: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.ef-form .cc-presets button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-h); }
+.ef-form .cc-presets button.is-active,
+.ef-form .cc-presets button.is-active:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--accent-on-tint);
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+.ef-form .cc-custom-range { gap: var(--sp-3); }
+.ef-form .cc-custom-range > * { flex: 0 0 170px; min-width: 0; }
+/* فیلدِ کنارِ بازه («وضعیت»، «شروع از شماره»): برچسب بالا، کنترلِ ۴۰px زیرش */
+.ef-form .acc-inline-field {
+  gap: 6px;
+  min-width: 170px;
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ef-form .acc-inline-field > :is(input, select) { font-weight: 400; }
+/* ارقامِ سرِ صفحه: کاشی‌های جدا به‌جای نوارِ یک‌تکه */
+.ef-form .cc-summary {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.ef-form .cc-metric {
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.ef-form .cc-metric-label { font-size: var(--fs-xs); font-weight: 600; }
+.ef-form .cc-metric-value { font-size: 1.2rem; font-weight: 700; }
+.ef-form .acc-groups { border-radius: var(--radius-md); }
+.ef-form .acc-groups li { min-height: 52px; padding: 8px 14px; }
+.ef-form .acc-groups li button { min-height: 34px; }
+/* فهرستِ انتخابی (ادغام) و گروهِ روزانه */
+.ef-form .acc-day-head { font-size: var(--fs-sm); }
+
 /* --- فیلدِ فرعی، گریدِ دوستونه، واحد درونِ فیلد، کلید --- */
 .ef-optional {
   padding: 0 7px;
@@ -11538,7 +11614,24 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ef-table .ef-col-min { width: 1%; white-space: nowrap; }
   .ef-table td > .ef-affix,
   .ef-table td > .ef-cap { min-width: 170px; }
+  /* ستونِ حسابِ سند: نامِ حساب بلند است و ۱۲۰px آن را به سه نقطه می‌رساند. */
+  .ef-table td.ef-col-wide > select { min-width: 260px; }
 }
+/* کارت‌هایی که درونِ یک بسته‌بندیِ دوستونه‌اند (پنل‌های ارز/بودجه) هم کارتِ بوم‌اند. */
+.ef-form > .split-2col > section,
+.ef-form > .workspace-split > section {
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+/* عنوانِ زیربخشِ درونِ کارت (ردیف‌های سند، موجودیِ اول دوره) */
+.ef-block-title { margin: 0 0 var(--sp-3); font-size: var(--fs-md); font-weight: 600; color: var(--text-h); }
+/* دکمه‌ی متنیِ درونِ خانه (افزودنِ شماره فرعی) نباید دو خط شود. */
+.ef-table .link-btn { white-space: nowrap; }
+/* فیلدِ تکیِ بالای فهرستِ درونِ کارت (شرحِ سندِ ادغامی) */
+.ef-block-top { margin-bottom: var(--sp-4); max-width: 420px; }
 /* نشانِ خاکستری روی کارتِ خاکستریِ موبایل گم می‌شد؛ خطِ دورِ ظریف نگهش می‌دارد. */
 .ef-table .status-badge.tone-muted { box-shadow: inset 0 0 0 1px var(--border); }
 .ef-cell-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -11587,6 +11680,12 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ef-actions { padding: 12px var(--sp-4); }
   .ef-actions-buttons { width: 100%; }
   .ef-actions-buttons button { flex: 1 1 0; justify-content: center; padding: 0 12px; }
+  /* بازه و فیلدهای کنارش تمام‌عرض؛ پیش‌تنظیم‌ها در عرضِ تنگ می‌لغزند نه می‌شکنند. */
+  .ef-form .cc-toolbar > * { flex: 1 1 100%; }
+  .ef-form .cc-presets { overflow-x: auto; scrollbar-width: none; }
+  .ef-form .cc-presets button { flex: 0 0 auto; }
+  .ef-form .cc-custom-range > * { flex: 1 1 0; }
+  .ef-form .cc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* جدولِ کارت‌شده خودش مرز دارد؛ قابِ بیرونی فقط قابِ دوم می‌شد. */
   .ef-table-wrap { border: 0; border-radius: 0; background: transparent; }
   /* در کارت دکمه تمام‌عرض است، پس نامِ کار هم کنارِ آیکون می‌آید. */

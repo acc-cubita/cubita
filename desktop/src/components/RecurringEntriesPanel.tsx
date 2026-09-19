@@ -15,12 +15,23 @@ import {
   type RecurringFrequency,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { SearchSelect } from './SearchSelect'
+import {
+  ActionBar,
+  AddRowButton,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  InputAffix,
+  RowAction,
+  Switch,
+} from './form/FormKit'
 import { Pager, usePagination } from './Pager'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso, toFaDigits } from '../lib/jalali'
-import { SearchSelect } from '../components/SearchSelect'
 
 interface DraftLine {
   accountId: string
@@ -205,165 +216,208 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
   }
 
   return (
-    <div className="split-2col">
-      <SectionCard
-        icon={editingId ? Pencil : Plus}
-        title={editingId ? 'ویرایش قالب تکرارشونده' : 'قالب تکرارشونده جدید'}
-        description="یک سند دوره‌ای (اجاره، بیمه، اقساط…) که خودکار در سررسیدهایش ساخته می‌شود."
-        actions={
-          editingId ? (
-            <button type="button" onClick={resetForm}>
-              <X size={13} /> انصراف
-            </button>
-          ) : undefined
-        }
-      >
-        {postableAccounts.length === 0 ? (
-          <p className="hint">قبل از ساخت قالب، چارت حساب باید در دسترس باشد (یک‌بار هم‌گام‌سازی کنید).</p>
-        ) : (
-          <form className="invoice-form" onSubmit={handleSubmit}>
-            <label>
-              عنوان
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً اجاره‌ی دفتر" />
-            </label>
-            <label>
-              شرح سند (اختیاری)
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
-            </label>
-            <div className="field-row">
-              <label>
-                تناوب
-                <SearchSelect value={frequency} onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}>
-                  <option value="weekly">هفتگی</option>
-                  <option value="monthly">ماهانه</option>
-                  <option value="yearly">سالانه</option>
-                </SearchSelect>
-              </label>
-              <label>
-                هر چند دوره یک‌بار
-                <NumberInput value={interval} onChange={setIntervalValue} />
-              </label>
-            </div>
-            <div className="field-row">
-              <label>
-                تاریخ شروع
-                <JalaliDatePicker value={startDate} onChange={setStartDate} />
-              </label>
-              <label>
-                <span className="inline-check">
-                  <input type="checkbox" checked={hasEnd} onChange={(e) => setHasEnd(e.target.checked)} /> تاریخ پایان
-                </span>
-                {hasEnd && <JalaliDatePicker value={endDate} onChange={setEndDate} />}
-              </label>
-            </div>
-            {costCenters.length > 0 && (
-              <label>
-                مرکز هزینه/پروژه (اختیاری)
-                <SearchSelect value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
-                  <option value="">— بدون مرکز —</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code ? `${c.code} — ${c.name}` : c.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              </label>
-            )}
+    <>
+      {postableAccounts.length === 0 ? (
+        <SectionCard icon={Plus} title="قالب تکرارشونده جدید">
+          <div className="ef-empty">قبل از ساخت قالب، چارت حساب باید در دسترس باشد (یک‌بار هم‌گام‌سازی کنید).</div>
+        </SectionCard>
+      ) : (
+        <form noValidate onSubmit={handleSubmit}>
+          <SectionCard
+            icon={editingId ? Pencil : Plus}
+            title={editingId ? 'ویرایش قالب تکرارشونده' : 'قالب تکرارشونده جدید'}
+            tip="یک سندِ دوره‌ای (اجاره، بیمه، اقساط…) که خودکار در سررسیدهایش ساخته می‌شود."
+          >
+            <FormGrid>
+              <FormField id="rc-title" label="عنوان" required>
+                {(id) => (
+                  <input
+                    id={id}
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="مثلاً اجاره‌ی دفتر"
+                  />
+                )}
+              </FormField>
+              <FormField label="شرح سند" optional>
+                {(id) => <input id={id} value={description} onChange={(e) => setDescription(e.target.value)} />}
+              </FormField>
+              <FormField label="تناوب" required>
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={frequency}
+                    onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}
+                  >
+                    <option value="weekly">هفتگی</option>
+                    <option value="monthly">ماهانه</option>
+                    <option value="yearly">سالانه</option>
+                  </SearchSelect>
+                )}
+              </FormField>
+              <FormField label="هر چند دوره یک‌بار" required>
+                {(id) => <NumberInput id={id} value={interval} onChange={setIntervalValue} group={false} />}
+              </FormField>
+              <FormField label="تاریخ شروع" required>
+                {(id) => <JalaliDatePicker id={id} value={startDate} onChange={setStartDate} />}
+              </FormField>
+              <FormField
+                label="تاریخ پایان"
+                optional
+                tip="اگر خاموش باشد، قالب تا وقتی غیرفعالش نکنید ادامه می‌دهد."
+                message={
+                  <Switch checked={hasEnd} onChange={setHasEnd} label={hasEnd ? 'تاریخ پایان دارد' : 'بدون تاریخ پایان'} />
+                }
+              >
+                {(id) =>
+                  hasEnd ? (
+                    <JalaliDatePicker id={id} value={endDate} onChange={setEndDate} />
+                  ) : (
+                    <input id={id} value="" disabled placeholder="—" readOnly />
+                  )
+                }
+              </FormField>
+              {costCenters.length > 0 && (
+                <FormField label="مرکز هزینه / پروژه" optional>
+                  {(id) => (
+                    <SearchSelect id={id} value={costCenterId} onChange={(e) => setCostCenterId(e.target.value)}>
+                      <option value="">— بدون مرکز —</option>
+                      {costCenters.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code ? `${c.code} — ${c.name}` : c.name}
+                        </option>
+                      ))}
+                    </SearchSelect>
+                  )}
+                </FormField>
+              )}
+            </FormGrid>
 
-            <div className="table-scroll">
-            <table className="invoice-lines cards-on-mobile">
-              <thead>
-                <tr>
-                  <th>حساب</th>
-                  <th>بدهکار</th>
-                  <th>بستانکار</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, i) => (
-                  <tr key={i}>
-                    <td data-label="حساب">
-                      <SearchSelect value={line.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })}>
-                        <option value="">— انتخاب حساب —</option>
-                        {postableAccounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.code} — {a.name}
-                          </option>
-                        ))}
-                      </SearchSelect>
-                    </td>
-                    <td data-label="بدهکار">
-                      <NumberInput
-                        value={line.debit}
-                        onChange={(v) => updateLine(i, { debit: v, credit: '' })}
-                      />
-                    </td>
-                    <td data-label="بستانکار">
-                      <NumberInput
-                        value={line.credit}
-                        onChange={(v) => updateLine(i, { credit: v, debit: '' })}
-                      />
-                    </td>
-                    <td className="card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn-danger"
-                        onClick={() => setLines((prev) => (prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev))}
-                        disabled={lines.length === 2}
-                        aria-label="حذف ردیف"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-
-            <div className="invoice-form-footer je-lines-footer">
-              <div className="je-add-col">
-                <button type="button" onClick={() => setLines((prev) => [...prev, emptyLine()])}>
-                  <Plus size={14} /> افزودن ردیف
-                </button>
-                <span className={isBalanced ? 'invoice-total' : 'invoice-total error'}>
-                  بدهکار: {fa(totalDebit)} / بستانکار: {fa(totalCredit)}
-                </span>
+            <div className="ef-block">
+              <h3 className="ef-block-title">ردیف‌های سند</h3>
+              <div className="table-scroll ef-table-wrap">
+                <table className="cards-on-mobile ef-table ef-table--edit">
+                  <thead>
+                    <tr>
+                      <th className="ef-col-min">ردیف</th>
+                      <th>حساب</th>
+                      <th>بدهکار</th>
+                      <th>بستانکار</th>
+                      <th className="ef-col-min" aria-label="حذف" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line, i) => (
+                      <tr key={i}>
+                        <td className="card-title ef-col-min" data-label="ردیف">
+                          ردیف {fa(i + 1)}
+                        </td>
+                        <td className="card-wide ef-col-wide" data-label="حساب">
+                          <SearchSelect
+                            aria-label={`حسابِ ردیفِ ${fa(i + 1)}`}
+                            value={line.accountId}
+                            onChange={(e) => updateLine(i, { accountId: e.target.value })}
+                          >
+                            <option value="">— انتخاب حساب —</option>
+                            {postableAccounts.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.code} — {a.name}
+                              </option>
+                            ))}
+                          </SearchSelect>
+                        </td>
+                        <td className="card-wide" data-label="بدهکار">
+                          <InputAffix unit="ریال">
+                            <NumberInput
+                              aria-label={`بدهکارِ ردیفِ ${fa(i + 1)}`}
+                              value={line.debit}
+                              onChange={(v) => updateLine(i, { debit: v, credit: '' })}
+                            />
+                          </InputAffix>
+                        </td>
+                        <td className="card-wide" data-label="بستانکار">
+                          <InputAffix unit="ریال">
+                            <NumberInput
+                              aria-label={`بستانکارِ ردیفِ ${fa(i + 1)}`}
+                              value={line.credit}
+                              onChange={(v) => updateLine(i, { credit: v, debit: '' })}
+                            />
+                          </InputAffix>
+                        </td>
+                        <td className="card-actions ef-col-min">
+                          <RowAction
+                            icon={Trash2}
+                            label="حذف ردیف"
+                            danger
+                            disabled={lines.length === 2}
+                            title={lines.length === 2 ? 'سند دست‌کم دو ردیف می‌خواهد.' : undefined}
+                            onClick={() =>
+                              setLines((prev) => (prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev))
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <button type="submit" className="btn-primary">
-                <Save size={14} /> {editingId ? 'ذخیره تغییرات' : 'ثبت قالب'}
-              </button>
+              <AddRowButton onClick={() => setLines((prev) => [...prev, emptyLine()])}>افزودن ردیف</AddRowButton>
             </div>
-            {message && <div className="hint">{message}</div>}
-          </form>
-        )}
-      </SectionCard>
+          </SectionCard>
+          <ActionBar
+            status={
+              <FormStatus
+                msg={message ? { text: message, kind: 'ok' } : null}
+                idle={
+                  <span className={isBalanced ? 'is-ok' : 'is-err'}>
+                    بدهکار {fa(totalDebit)} · بستانکار {fa(totalCredit)}
+                    {isBalanced ? ' — متوازن' : ' — نامتوازن'}
+                  </span>
+                }
+              />
+            }
+          >
+            {editingId && (
+              <button type="button" className="ef-btn-secondary" onClick={resetForm}>
+                <X size={15} /> انصراف
+              </button>
+            )}
+            <button type="submit" className="btn-primary">
+              <Save size={16} /> {editingId ? 'ذخیرهٔ تغییرات' : 'ثبت قالب'}
+            </button>
+          </ActionBar>
+        </form>
+      )}
 
       <SectionCard
         icon={Repeat}
         title="قالب‌های تکرارشونده"
-        description={dueCount > 0 ? `${toFaDigits(dueCount)} قالب سررسید شده` : 'سررسیدها را با یک دکمه بسازید.'}
+        badge={<CountBadge accent>{toFaDigits(entries.length)} قالب</CountBadge>}
+        description={dueCount > 0 ? `${toFaDigits(dueCount)} قالب سررسید شده است.` : 'سررسیدها را با یک دکمه بسازید.'}
         actions={
-          <button type="button" className={dueCount > 0 ? 'btn-primary' : undefined} onClick={() => void handleRunDue()}>
-            <Play size={13} /> تولید سررسیدها
+          <button
+            type="button"
+            className={dueCount > 0 ? 'btn-primary' : 'ef-btn-secondary'}
+            onClick={() => void handleRunDue()}
+          >
+            <Play size={14} /> تولید سررسیدها
           </button>
         }
       >
-        {error && <div className="error">{error}</div>}
+        {error && <p className="ef-message ef-message--warn ef-block-note">{error}</p>}
         {entries.length === 0 ? (
           <EmptyState icon={Repeat} text="هنوز قالبی ثبت نشده." />
         ) : (
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>عنوان</th>
                     <th>تناوب</th>
                     <th>سررسید بعدی</th>
                     <th>مبلغ</th>
-                    <th></th>
+                    <th className="ef-col-min">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,22 +433,29 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
                         {e.is_due && <span className="status-badge tone-warning due-badge">سررسید</span>}
                       </td>
                       <td className="money-cell" data-label="مبلغ">{fa(e.amount)}</td>
-                      <td className="card-actions">
-                        <div className="row-actions">
-                          <button type="button" onClick={() => startEdit(e)} aria-label="ویرایش">
-                            <Pencil size={13} />
-                          </button>
-                          {e.is_active && (
-                            <button type="button" onClick={() => void handleRunOne(e.id)} aria-label="تولید همین حالا">
-                              <Play size={13} />
-                            </button>
-                          )}
-                          <button type="button" onClick={() => void toggleActive(e)} aria-label={e.is_active ? 'غیرفعال' : 'فعال'}>
-                            {e.is_active ? <PauseCircle size={13} /> : <PlayCircle size={13} />}
-                          </button>
-                          <button type="button" className="icon-btn-danger" onClick={() => void handleDelete(e.id)} aria-label="حذف">
-                            <Trash2 size={13} />
-                          </button>
+                      <td className="card-actions ef-col-min">
+                        <div className="row-actions ef-row-actions">
+                          <RowAction
+                            icon={Pencil}
+                            label="ویرایش"
+                            onClick={() => {
+                              startEdit(e)
+                              document.getElementById('rc-title')?.focus()
+                            }}
+                          />
+                          <RowAction
+                            icon={Play}
+                            label="تولید همین حالا"
+                            onClick={() => void handleRunOne(e.id)}
+                            disabled={!e.is_active}
+                            title={!e.is_active ? 'قالبِ غیرفعال سند تولید نمی‌کند.' : undefined}
+                          />
+                          <RowAction
+                            icon={e.is_active ? PauseCircle : PlayCircle}
+                            label={e.is_active ? 'غیرفعال‌کردن' : 'فعال‌کردن'}
+                            onClick={() => void toggleActive(e)}
+                          />
+                          <RowAction icon={Trash2} label="حذف" danger onClick={() => void handleDelete(e.id)} />
                         </div>
                       </td>
                     </tr>
@@ -406,6 +467,6 @@ export function RecurringEntriesPanel({ token, accounts }: { token: string; acco
           </div>
         )}
       </SectionCard>
-    </div>
+    </>
   )
 }

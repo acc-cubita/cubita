@@ -9,6 +9,7 @@ import {
   fetchNumbering,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
+import { CountBadge, ListToolbar, SearchField } from '../../components/form/FormKit'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits } from '../../lib/jalali'
 import { AsyncBlock, Metric, OpsPage, faInt, useAsync } from '../accounting/kit'
@@ -42,6 +43,7 @@ export function AnalyticListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Tag}
       title="تفصیلی‌های سایر"
       description="بُعدِ تحلیلیِ آزادِ چارت — خودرو، قرارداد، پرونده و هر چیزی که نه طرف‌حساب است نه مرکزِ هزینه."
@@ -69,20 +71,22 @@ export function AnalyticListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={Tag} title="تفصیلی‌ها" description={`${faInt(rows.length)} ردیف`}>
-        <div className="acc-filters">
-          <label className="acc-search">
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="کد، نام یا دسته" />
-          </label>
-        </div>
+      <SectionCard
+        icon={Tag}
+        title="تفصیلی‌ها"
+        badge={data.data ? <CountBadge accent>{faInt(rows.length)} ردیف</CountBadge> : undefined}
+      >
+        <ListToolbar>
+          <SearchField value={q} onChange={setQ} placeholder="کد، نام یا دسته" label="جست‌وجو" />
+        </ListToolbar>
         <AsyncBlock
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
           emptyText="تفصیلی‌ای با این شرایط نیست. از عملیاتِ «تفصیلی سایر» بسازید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -100,7 +104,7 @@ export function AnalyticListPage({ token }: { token: string }) {
                     <td data-label="دسته">{a.group_name || '—'}</td>
                     <td className="num" data-label="ردیفِ سند">{faInt(a.line_count)}</td>
                     <td data-label="وضعیت">
-                      <span className={`status-badge ${a.is_active ? 'tone-success' : ''}`}>
+                      <span className={`status-badge ${a.is_active ? 'tone-success' : 'tone-muted'}`}>
                         {a.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
@@ -131,6 +135,7 @@ export function GeoListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={MapPin}
       title="محل‌های جغرافیایی"
       description="درختِ کشور ← استان ← شهر ← منطقه و اینکه هر محل به چند طرف‌حساب خورده است."
@@ -143,20 +148,22 @@ export function GeoListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={MapPin} title="محل‌ها" description={`${faInt(rows.length)} ردیف`}>
-        <div className="acc-filters">
-          <label className="acc-search">
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="نام، مسیر یا کد" />
-          </label>
-        </div>
+      <SectionCard
+        icon={MapPin}
+        title="محل‌ها"
+        badge={data.data ? <CountBadge accent>{faInt(rows.length)} ردیف</CountBadge> : undefined}
+      >
+        <ListToolbar>
+          <SearchField value={q} onChange={setQ} placeholder="نام، مسیر یا کد" label="جست‌وجو" />
+        </ListToolbar>
         <AsyncBlock
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
           emptyText="محلی با این شرایط نیست. از عملیاتِ «محل‌های جغرافیایی» بسازید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>نام</th>
@@ -176,7 +183,7 @@ export function GeoListPage({ token }: { token: string }) {
                     <td className="card-wide" data-label="مسیر">{g.path}</td>
                     <td className="num" data-label="طرف حساب">{faInt(g.contact_count)}</td>
                     <td data-label="وضعیت">
-                      <span className={`status-badge ${g.is_active ? 'tone-success' : ''}`}>
+                      <span className={`status-badge ${g.is_active ? 'tone-success' : 'tone-muted'}`}>
                         {g.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
@@ -202,6 +209,7 @@ export function ContactGroupListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Tags}
       title="گروه‌های طرف حساب"
       description="گروه‌بندیِ مشتریان و تأمین‌کنندگان و شمارِ اعضای هر گروه."
@@ -214,15 +222,19 @@ export function ContactGroupListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={Tags} title="گروه‌ها" description={`${faInt(rows.length)} گروه`}>
+      <SectionCard
+        icon={Tags}
+        title="گروه‌ها"
+        badge={data.data ? <CountBadge accent>{faInt(rows.length)} گروه</CountBadge> : undefined}
+      >
         <AsyncBlock
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
           emptyText="گروهی ثبت نشده. از عملیاتِ «گروه جدید» بسازید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>نام</th>
@@ -240,7 +252,7 @@ export function ContactGroupListPage({ token }: { token: string }) {
                     <td className="card-wide" data-label="یادداشت">{g.notes || '—'}</td>
                     <td className="num" data-label="اعضا">{faInt(g.contact_count)}</td>
                     <td data-label="وضعیت">
-                      <span className={`status-badge ${g.is_active ? 'tone-success' : ''}`}>
+                      <span className={`status-badge ${g.is_active ? 'tone-success' : 'tone-muted'}`}>
                         {g.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
@@ -296,6 +308,7 @@ export function CalendarListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={CalendarDays}
       title="رویدادهای تقویم"
       description="همه‌ی یادآوری‌ها و رویدادهای ثبت‌شده — انجام‌شده و باز."
@@ -323,15 +336,19 @@ export function CalendarListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={CalendarDays} title="رویدادها" description={`${faInt(rows.length)} ردیف`}>
+      <SectionCard
+        icon={CalendarDays}
+        title="رویدادها"
+        badge={data.data ? <CountBadge accent>{faInt(rows.length)} ردیف</CountBadge> : undefined}
+      >
         <AsyncBlock
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
           emptyText="رویدادی با این فیلتر نیست. از عملیاتِ «تقویم و یادآوری» بسازید."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>تاریخ</th>
@@ -394,6 +411,7 @@ export function NumberingListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Hash}
       title="روش‌های شماره‌گذاری"
       description="شماره‌ی بعدیِ هر نوع سند — همان چیزی که هنگامِ ثبت روی مدرک می‌نشیند."
@@ -405,15 +423,19 @@ export function NumberingListPage({ token }: { token: string }) {
         </div>
       }
     >
-      <SectionCard icon={Hash} title="شماره‌گذاری" description={`${faInt(rows.length)} نوع سند`}>
+      <SectionCard
+        icon={Hash}
+        title="شماره‌گذاری"
+        badge={data.data ? <CountBadge accent>{faInt(rows.length)} نوع سند</CountBadge> : undefined}
+      >
         <AsyncBlock
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
           emptyText="هنوز شماره‌گذاری‌ای تعریف نشده."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>نوع سند</th>
