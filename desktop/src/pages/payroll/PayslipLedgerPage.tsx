@@ -12,6 +12,7 @@ import {
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
 import { SectionCard } from '../../components/SectionCard'
+import { ListToolbar } from '../../components/form/FormKit'
 import { JALALI_MONTH_NAMES } from '../../lib/jalali'
 import { AsyncBlock, OpsPage } from '../accounting/kit'
 
@@ -25,6 +26,8 @@ import { AsyncBlock, OpsPage } from '../accounting/kit'
  *
  * فیلتر سمتِ سرور می‌رود (`period_id` / `employee_id`)، نه اینکه کلِ دفتر کشیده
  * شود و در مرورگر غربال شود — با چند سالِ فیش، آن روش از کار می‌افتد.
+ *
+ * چیدمان همان «قرارداد جدید» است: کارت با سایه‌ی نرم و نوارِ فیلترِ هم‌ارتفاعِ فرم‌ها.
  */
 
 const ORIGIN_LABELS: Record<string, string> = {
@@ -39,7 +42,7 @@ const faAmount = (v: string | number) => (Number(v) === 0 ? '—' : Math.round(N
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
 
 const periodLabel = (p: PayrollPeriodRecord) =>
-  `${JALALI_MONTH_NAMES[p.month - 1] ?? p.month} ${fa(p.year)}`
+  `${JALALI_MONTH_NAMES[p.month - 1] ?? p.month} ${p.year.toLocaleString('fa-IR', { useGrouping: false })}`
 
 /**
  * تفکیکِ یک فیش — «این خالص از چه ساخته شد».
@@ -159,125 +162,122 @@ export function PayslipLedgerPage({ token }: { token: string }) {
       title="مرور حقوق"
       description="دفترِ فیش‌های حقوقیِ صادرشده در همه‌ی دوره‌ها، با جمعِ ناخالص، بیمه، مالیات و خالص."
     >
-      <SectionCard
-        icon={Receipt}
-        title={rows ? `${fa(rows.length)} فیش` : 'در حال بارگذاری…'}
-        actions={
-          <>
-            <select value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
+      <div className="ef-form">
+        <SectionCard icon={Receipt} title={rows ? `${fa(rows.length)} فیش` : 'در حال بارگذاری…'}>
+          <ListToolbar>
+            <select aria-label="دوره" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
               <option value="">همه‌ی دوره‌ها</option>
               {periods.map((p) => (
                 <option key={p.id} value={p.id}>{periodLabel(p)}</option>
               ))}
             </select>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <select aria-label="کارمند" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               <option value="">همه‌ی پرسنل</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>{`${e.first_name} ${e.last_name}`.trim()}</option>
               ))}
             </select>
-          </>
-        }
-      >
-        <AsyncBlock
-          loading={rows == null}
-          error={error}
-          empty={rows != null && rows.length === 0}
-          emptyText={
-            filtered
-              ? 'فیشی با این فیلترها نیست — دوره یا کارمندِ دیگری را انتخاب کنید.'
-              : 'هنوز فیشی صادر نشده — در «حقوق و دستمزد ← کارکرد و صدور فیش» دوره بسازید و فیش صادر کنید.'
-          }
-        >
-          {rows != null && rows.length === 0 ? (
-            <EmptyState
-              icon={Receipt}
-              text={
-                filtered
-                  ? 'فیشی با این فیلترها نیست — دوره یا کارمندِ دیگری را انتخاب کنید.'
-                  : 'هنوز فیشی صادر نشده — در «حقوق و دستمزد ← کارکرد و صدور فیش» دوره بسازید و فیش صادر کنید.'
-              }
-            />
-          ) : (
-            <>
-              <div className="table-scroll">
-                <table className="cards-on-mobile">
-                  <thead>
-                    <tr>
-                      <th>شماره</th>
-                      <th>کارمند</th>
-                      <th>دوره</th>
-                      <th>حقوق پایه</th>
-                      <th>مزایا</th>
-                      <th>اضافه‌کاری</th>
-                      <th>ناخالص</th>
-                      <th>بیمه سهم کارمند</th>
-                      <th>مالیات</th>
-                      <th>قسط وام</th>
-                      <th>سایر کسورات</th>
-                      <th>خالص پرداختی</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pg.pageItems.map((r) => (
-                      <Fragment key={r.id}>
+          </ListToolbar>
+          <AsyncBlock
+            loading={rows == null}
+            error={error}
+            empty={rows != null && rows.length === 0}
+            emptyText={
+              filtered
+                ? 'فیشی با این فیلترها نیست — دوره یا کارمندِ دیگری را انتخاب کنید.'
+                : 'هنوز فیشی صادر نشده — در «حقوق و دستمزد ← کارکرد و صدور فیش» دوره بسازید و فیش صادر کنید.'
+            }
+          >
+            {rows != null && rows.length === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                text={
+                  filtered
+                    ? 'فیشی با این فیلترها نیست — دوره یا کارمندِ دیگری را انتخاب کنید.'
+                    : 'هنوز فیشی صادر نشده — در «حقوق و دستمزد ← کارکرد و صدور فیش» دوره بسازید و فیش صادر کنید.'
+                }
+              />
+            ) : (
+              <>
+                <div className="table-scroll">
+                  <table className="cards-on-mobile">
+                    <thead>
                       <tr>
-                        <td className="card-title" data-label="شماره">{r.number == null ? '—' : fa(r.number)}</td>
-                        <td data-label="کارمند">{empName.get(r.employee_id) ?? '—'}</td>
-                        <td data-label="دوره">{periodName.get(r.period_id) ?? '—'}</td>
-                        <td className="num" data-label="حقوق پایه">{faAmount(r.base_salary)}</td>
-                        <td className="num" data-label="مزایا">{faAmount(r.allowances_total)}</td>
-                        <td className="num" data-label="اضافه‌کاری">{faAmount(r.overtime_pay)}</td>
-                        <td className="num" data-label="ناخالص">{faAmount(r.gross_pay)}</td>
-                        <td className="num" data-label="بیمه سهم کارمند">{faAmount(r.insurance_employee_share)}</td>
-                        <td className="num" data-label="مالیات">{faAmount(r.tax_amount)}</td>
-                        <td className="num" data-label="قسط وام">{faAmount(r.loan_deduction)}</td>
-                        <td className="num" data-label="سایر کسورات">{faAmount(r.other_deductions)}</td>
-                        <td className="num" data-label="خالص پرداختی">{faAmount(r.net_pay)}</td>
-                        <td className="card-actions">
-                          {r.lines.length > 0 ? (
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              onClick={() => setOpenId(openId === r.id ? null : r.id)}
-                            >
-                              {openId === r.id ? 'بستنِ تفکیک' : 'تفکیک'}
-                            </button>
-                          ) : (
-                            <span className="field-hint">تفکیک ندارد</span>
-                          )}
-                        </td>
+                        <th>شماره</th>
+                        <th>کارمند</th>
+                        <th>دوره</th>
+                        <th>حقوق پایه</th>
+                        <th>مزایا</th>
+                        <th>اضافه‌کاری</th>
+                        <th>ناخالص</th>
+                        <th>بیمه سهم کارمند</th>
+                        <th>مالیات</th>
+                        <th>قسط وام</th>
+                        <th>سایر کسورات</th>
+                        <th>خالص پرداختی</th>
+                        <th />
                       </tr>
-                      {openId === r.id && (
+                    </thead>
+                    <tbody>
+                      {pg.pageItems.map((r) => (
+                        <Fragment key={r.id}>
                         <tr>
-                          <td className="card-full" colSpan={13}>
-                            <PayslipBreakdown lines={r.lines} net={r.net_pay} />
+                          <td className="card-title" data-label="شماره">{r.number == null ? '—' : fa(r.number)}</td>
+                          <td data-label="کارمند">{empName.get(r.employee_id) ?? '—'}</td>
+                          <td data-label="دوره">{periodName.get(r.period_id) ?? '—'}</td>
+                          <td className="num" data-label="حقوق پایه">{faAmount(r.base_salary)}</td>
+                          <td className="num" data-label="مزایا">{faAmount(r.allowances_total)}</td>
+                          <td className="num" data-label="اضافه‌کاری">{faAmount(r.overtime_pay)}</td>
+                          <td className="num" data-label="ناخالص">{faAmount(r.gross_pay)}</td>
+                          <td className="num" data-label="بیمه سهم کارمند">{faAmount(r.insurance_employee_share)}</td>
+                          <td className="num" data-label="مالیات">{faAmount(r.tax_amount)}</td>
+                          <td className="num" data-label="قسط وام">{faAmount(r.loan_deduction)}</td>
+                          <td className="num" data-label="سایر کسورات">{faAmount(r.other_deductions)}</td>
+                          <td className="num" data-label="خالص پرداختی">{faAmount(r.net_pay)}</td>
+                          <td className="card-actions">
+                            {r.lines.length > 0 ? (
+                              <button
+                                type="button"
+                                className="btn-ghost"
+                                onClick={() => setOpenId(openId === r.id ? null : r.id)}
+                              >
+                                {openId === r.id ? 'بستنِ تفکیک' : 'تفکیک'}
+                              </button>
+                            ) : (
+                              <span className="muted">تفکیک ندارد</span>
+                            )}
                           </td>
                         </tr>
-                      )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td className="card-title" data-label="جمع" colSpan={6}>جمعِ ردیف‌های نمایش‌داده‌شده</td>
-                      <td className="num" data-label="ناخالص">{faAmount(totals.gross)}</td>
-                      <td className="num" data-label="بیمه سهم کارمند">{faAmount(totals.insurance)}</td>
-                      <td className="num" data-label="مالیات">{faAmount(totals.tax)}</td>
-                      <td className="num" data-label="قسط وام">{faAmount(totals.loan)}</td>
-                      <td className="num" data-label="سایر کسورات">{faAmount(totals.other)}</td>
-                      <td className="num" data-label="خالص پرداختی">{faAmount(totals.net)}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-            </>
-          )}
-        </AsyncBlock>
-      </SectionCard>
+                        {openId === r.id && (
+                          <tr>
+                            <td className="card-full" colSpan={13}>
+                              <PayslipBreakdown lines={r.lines} net={r.net_pay} />
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td className="card-title" data-label="جمع" colSpan={6}>جمعِ ردیف‌های نمایش‌داده‌شده</td>
+                        <td className="num" data-label="ناخالص">{faAmount(totals.gross)}</td>
+                        <td className="num" data-label="بیمه سهم کارمند">{faAmount(totals.insurance)}</td>
+                        <td className="num" data-label="مالیات">{faAmount(totals.tax)}</td>
+                        <td className="num" data-label="قسط وام">{faAmount(totals.loan)}</td>
+                        <td className="num" data-label="سایر کسورات">{faAmount(totals.other)}</td>
+                        <td className="num" data-label="خالص پرداختی">{faAmount(totals.net)}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+              </>
+            )}
+          </AsyncBlock>
+        </SectionCard>
+      </div>
     </OpsPage>
   )
 }

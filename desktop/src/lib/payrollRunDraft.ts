@@ -25,7 +25,7 @@ interface AttendanceEntry {
 
 /**
  * منطقِ مشترکِ فرایندِ «کارکرد و صدور فیش» — دوره (انتخاب/ساخت) + جدولِ کارکردِ همه‌ی
- * پرسنل + صدور فیش + لیستِ بیمه. مصرف‌شده در پنلِ کلاسیک و ویزاردِ سه‌مرحله‌ای.
+ * پرسنل + صدور فیش + لیستِ بیمه. مصرف‌شده در تبِ «کارکرد و صدور فیش».
  */
 export function usePayrollRunDraft({ token, employees }: { token: string; employees: EmployeeRecord[] }) {
   const [periods, setPeriods] = useState<PayrollPeriodRecord[]>([])
@@ -43,7 +43,7 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
   const [variableFactors, setVariableFactors] = useState<PayrollFactorRecord[]>([])
   const [inputError, setInputError] = useState<string | null>(null)
   const [payslips, setPayslips] = useState<PayslipRecord[]>([])
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [openPayslip, setOpenPayslip] = useState<PayslipRecord | null>(null)
 
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees])
@@ -116,7 +116,7 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     }))
     try {
       await saveFactorInputs(token, selectedPeriodId, rows)
-      setMessage('ورودیِ عوامل ذخیره شد.')
+      setMessage({ text: 'ورودیِ عوامل ذخیره شد.', kind: 'ok' })
       return true
     } catch (e) {
       setInputError(e instanceof Error ? e.message : 'خطای ناشناخته')
@@ -146,14 +146,19 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
 
   async function saveAttendance(empId: string) {
     const entry = attendance[empId] ?? { worked: '30', overtime: '0' }
-    await upsertAttendance(token, {
-      employee_id: empId,
-      period_id: selectedPeriodId,
-      worked_days: Number(entry.worked) || 0,
-      absent_days: 30 - (Number(entry.worked) || 0),
-      overtime_hours: Number(entry.overtime) || 0,
-    })
-    setMessage('کارکرد ذخیره شد.')
+    //: پیش‌تر خطای سرور این‌جا گرفته نمی‌شد و دکمه بی‌صدا هیچ کاری نمی‌کرد.
+    try {
+      await upsertAttendance(token, {
+        employee_id: empId,
+        period_id: selectedPeriodId,
+        worked_days: Number(entry.worked) || 0,
+        absent_days: 30 - (Number(entry.worked) || 0),
+        overtime_hours: Number(entry.overtime) || 0,
+      })
+      setMessage({ text: 'کارکرد ذخیره شد.', kind: 'ok' })
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+    }
   }
 
   async function generate(): Promise<boolean> {
@@ -161,10 +166,10 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
     try {
       const result = await generatePayslips(token, selectedPeriodId)
       setPayslips(result)
-      setMessage(`${result.length} فیش حقوقی صادر شد.`)
+      setMessage({ text: `${result.length.toLocaleString('fa-IR')} فیش حقوقی صادر شد.`, kind: 'ok' })
       return true
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
       return false
     }
   }
@@ -180,7 +185,7 @@ export function usePayrollRunDraft({ token, employees }: { token: string; employ
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
     }
   }
 

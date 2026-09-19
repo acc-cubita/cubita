@@ -11021,7 +11021,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 
 /* ═══════════════ فرمِ سازمانی (ef-*) — اجزای components/form/FormKit.tsx ═══════════════
-   اولین مصرف‌کننده «قرارداد جدید» است. قاعده‌ها:
+   همه‌ی صفحه‌های «حقوق و دستمزد» (اولی «قرارداد جدید» بود). قاعده‌ها:
    * همه‌ی کنترل‌ها (ورودی، فهرست، دکمه‌ی تاریخ، دکمه‌ی «+») یک ارتفاع دارند: --ef-h.
    * گریدِ فیلدها حداکثر سه‌ستونه است و با تنگ‌شدنِ عرض خودش دو و بعد یک‌ستونه می‌شود —
      بدونِ media query و بدونِ container query. container query روی کارت‌ها stacking
@@ -11029,21 +11029,31 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
    * راهنما آیکونِ «؟» کنارِ برچسب است؛ متنِ زیرِ فیلد فقط پیامِ همین لحظه است. */
 
 /* فرم خودش پنل نیست: بومِ پشتِ کارت‌هاست تا دو کارت و نوارِ عملیات جدا دیده شوند. */
-.page.panels > .ef-form {
+.ef-form,
+.ef-form > form {
   --ef-h: 40px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  background: var(--bg);
+  min-width: 0;
 }
-.ef-form > section {
+/* صفحه‌ای که چند فرم یا «فرم + فهرست» دارد: هر <form> درونِ بوم خودش ستونِ کارت‌ها و نوارِ
+   عملیاتش است. نوارِ چسبنده فقط تا پایانِ همان فرم می‌چسبد و روی جدولِ زیرش نمی‌افتد. */
+.page.panels > .ef-form { background: var(--bg); }
+/* دو قاعده‌ی آخر برای بومِ درونِ تبِ ماژول («حقوق و دستمزد ← تنظیمات» و …):
+   `.page.panels .tab-panel section` (0,3,1) کارت‌های درونِ تب را تخت می‌کرد. */
+.ef-form > section,
+.ef-form > form > section,
+.page.panels .tab-panel .ef-form > section,
+.page.panels .tab-panel .ef-form > form > section {
   padding: var(--sp-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
-.ef-form > section > .section-card-header { margin-bottom: var(--sp-4); }
+.ef-form section > .section-card-header { margin-bottom: var(--sp-4); }
+.ef-title-row { display: flex; align-items: center; gap: 4px; }
 
 /* --- گرید و فیلد --- */
 .ef-grid {
@@ -11186,6 +11196,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 .ef-tab[aria-selected='true'] .ef-tab-badge { background: var(--accent-bg); color: var(--accent-on-tint); }
 .ef-tab-panel { padding-top: var(--sp-5); }
+/* تب در سطحِ صفحه (بیرونِ کارت): فاصله را gapِ بوم می‌دهد، نه paddingِ پنل. */
+.ef-form > .ef-tab-panel { padding-top: 0; }
 
 .ef-tab-head {
   display: flex;
@@ -11221,7 +11233,13 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 .ef-subhead:not(:first-child) { margin-top: var(--sp-2); }
 .ef-checks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 24px; }
+.ef-check-tip { display: inline-flex; align-items: center; gap: 4px; }
 .ef-lines-total { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--sp-3); color: var(--text-h); }
+/* زیربخشِ درونِ یک کارت: پله‌ها، اقساطِ وامِ بازشده، فهرستِ دوره‌ها */
+.ef-block { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--border); }
+.ef-block-note { margin-top: var(--sp-3); }
+/* ورودیِ درونِ جدول: پهنای ۱۰۰٪ِ قاعده‌ی «یک ارتفاع» در جدولِ خودکار ستون را تا صفر جمع می‌کرد. */
+.ef-form td > :is(input:not([type='checkbox']):not([type='radio']), select) { min-width: 120px; }
 .ef-lines-total b { font-variant-numeric: tabular-nums; }
 
 /* پنلِ ساختِ درجا (محل خدمت/شغلِ تازه) */
@@ -11320,8 +11338,58 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ef-actions-buttons button { min-height: var(--ef-h); padding: 0 22px; font-weight: 600; white-space: nowrap; }
 .ef-btn-secondary { background: transparent; border-color: var(--border-strong); }
 
+/* --- نوارِ فیلترِ فهرست --- */
+.ef-toolbar { --ef-h: 40px; display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.ef-toolbar > * { flex: 0 1 220px; min-width: 0; }
+.ef-toolbar > .ef-search { flex: 1 1 260px; max-width: 360px; }
+.ef-search { position: relative; }
+.ef-form .ef-search input[type='search'] { padding-inline-start: 36px; }
+
+/* دکمه‌های کارِ خودِ یک کارت (نه کارِ اصلیِ صفحه) — ته کارت، در انتهای ردیف */
+.ef-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.ef-card-foot .ef-message { margin-inline-end: auto; }
+/* خانه‌ی گریدی که به‌جای فیلد دکمه دارد — هم‌ترازِ پایینِ کنترل‌های کنارش */
+.ef-field--action { align-self: end; align-items: flex-start; }
+.ef-field--action button { min-height: var(--ef-h); }
+
+/* انتخابِ یکی از چند گزینه‌ی کوتاه (دوره‌ی حقوق) */
+.ef-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ef-chip-btn { gap: 6px; min-height: 36px; padding: 0 14px; border-radius: var(--radius-pill); }
+.ef-chip-btn .status-badge { padding-block: 0; font-size: var(--fs-xs); }
+.ef-chips .ef-chip-btn[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint); font-weight: 600; }
+
+/* یادداشتِ کوتاه با یک دکمه — جایِ پاراگرافِ توضیحیِ بلند */
+.ef-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px var(--sp-4);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+.ef-callout > svg { flex: 0 0 auto; color: var(--accent-on-tint); }
+.ef-callout > p { flex: 1 1 260px; margin: 0; line-height: 1.8; }
+
 @media (max-width: 760px) {
-  .ef-form > section { padding: var(--sp-4); }
+  .ef-form > section,
+  .ef-form > form > section,
+  .page.panels .tab-panel .ef-form > section,
+  .page.panels .tab-panel .ef-form > form > section { padding: var(--sp-4); }
+  .ef-toolbar > *,
+  .ef-toolbar > .ef-search { flex: 1 1 100%; max-width: none; }
   .ef-actions { padding: 12px var(--sp-4); }
   .ef-actions-buttons { width: 100%; }
   .ef-actions-buttons button { flex: 1 1 0; justify-content: center; padding: 0 12px; }

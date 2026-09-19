@@ -1,10 +1,10 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { HelpCircle, Plus, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, HelpCircle, Plus, Search, X } from 'lucide-react'
 
 /**
- * اجزای فرمِ سازمانی (`ef-*`) — برچسب، راهنمای شناور، انتخاب با دکمه‌ی «+»، تب و نوارِ
- * عملیات. اولین مصرف‌کننده «قرارداد جدید» است؛ هر فرمِ بلندِ دیگری هم می‌تواند همین‌ها را
- * بگیرد تا ارتفاعِ فیلدها، جای راهنما و ترتیبِ دکمه‌ها در همه‌جا یکی شود.
+ * اجزای فرمِ سازمانی (`ef-*`) — برچسب، راهنمای شناور، انتخاب با دکمه‌ی «+»، تب، نوارِ
+ * عملیات و نوارِ فیلترِ فهرست. همه‌ی صفحه‌های «حقوق و دستمزد» با همین‌ها ساخته شده‌اند
+ * (اولی «قرارداد جدید» بود) تا ارتفاعِ فیلدها، جای راهنما و ترتیبِ دکمه‌ها همه‌جا یکی باشد.
  *
  * قاعده‌ها:
  * * راهنمای طولانی زیرِ فیلد نمی‌نشیند؛ آیکونِ «؟» کنارِ برچسب است و با hover، فوکوسِ
@@ -230,5 +230,114 @@ export function ActionBar({ status, children }: { status?: ReactNode; children: 
       <div className="ef-actions-status">{status}</div>
       <div className="ef-actions-buttons">{children}</div>
     </div>
+  )
+}
+
+/** پیامِ نوارِ عملیات: نتیجه‌ی آخرین کار (موفق/خطا)، وگرنه `idle` — مثلاً جمعِ فرم. */
+export function FormStatus({ msg, idle }: { msg: { text: string; kind: 'ok' | 'err' } | null; idle?: ReactNode }) {
+  if (msg) {
+    return (
+      <span className={msg.kind === 'ok' ? 'is-ok' : 'is-err'} role={msg.kind === 'ok' ? 'status' : 'alert'}>
+        {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />} {msg.text}
+      </span>
+    )
+  }
+  return idle ? <span>{idle}</span> : null
+}
+
+/** نوارِ فیلترِ بالای جدولِ فهرست — جست‌وجو و فهرست‌های انتخاب، هم‌ارتفاعِ فرم‌ها. */
+export function ListToolbar({ children }: { children: ReactNode }) {
+  return <div className="ef-toolbar">{children}</div>
+}
+
+/** ورودیِ جست‌وجو با آیکون، برای نوارِ فیلتر. */
+export function SearchField({
+  value,
+  onChange,
+  placeholder = 'جست‌وجو…',
+  label = 'جست‌وجو',
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  label?: string
+}) {
+  return (
+    <div className="ef-search">
+      <Search size={15} className="ef-combo-icon" aria-hidden="true" />
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} />
+    </div>
+  )
+}
+
+/**
+ * ساختِ درجای یک رکوردِ مرجع کنارِ فهرستش — همان رفتارِ سپیدار: اگر عنوانِ موردنظر در
+ * فهرست نبود، کاربر همان‌جا می‌سازدش بی‌آنکه فرم را ترک کند و ورودی‌هایش برود. با دکمه‌ی
+ * «+»ِ `SelectWithAdd` باز و بسته می‌شود.
+ */
+export function InlineCreate({
+  label,
+  fields,
+  onCreate,
+  onClose,
+}: {
+  label: string
+  fields: { key: string; label: string; required?: boolean; options?: string[] }[]
+  onCreate: (values: Record<string, string>) => Promise<void>
+  onClose: () => void
+}) {
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ready = fields.every((f) => !f.required || (values[f.key] ?? '').trim())
+
+  async function go() {
+    setBusy(true)
+    setError(null)
+    try {
+      await onCreate(values)
+      setValues({})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="ef-inline-create" aria-label={label}>
+      <div className="ef-inline-create-head">
+        {label}
+        <button type="button" className="ef-tip-btn" onClick={onClose} aria-label="بستن">
+          <X size={14} />
+        </button>
+      </div>
+      <FormGrid>
+        {fields.map((f) => (
+          <FormField key={f.key} label={f.label} required={f.required}>
+            {(id) =>
+              f.options ? (
+                <select id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
+                  <option value="">— انتخاب کنید —</option>
+                  {f.options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input id={id} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
+              )
+            }
+          </FormField>
+        ))}
+      </FormGrid>
+      <div className="ef-inline-create-foot">
+        <button type="button" className="btn-primary" onClick={go} disabled={busy || !ready}>
+          <Plus size={14} /> بساز و انتخاب کن
+        </button>
+        {error && <p className="ef-message ef-message--warn">{error}</p>}
+      </div>
+    </section>
   )
 }

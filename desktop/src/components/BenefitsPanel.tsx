@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Gift, Save, CalendarPlus, Coins, Wallet } from 'lucide-react'
+import { CalendarPlus, Coins, Gift, Save, SlidersHorizontal, Wallet } from 'lucide-react'
 import {
   fetchBenefits,
   fetchEmployees,
@@ -15,17 +15,31 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import { ActionBar, FormField, FormGrid, FormStatus } from './form/FormKit'
+import { firstMissing } from './form/firstMissing'
 import { isoToJalali, todayIso } from '../lib/jalali'
+import type { Msg } from '../pages/accounting/kit'
 
 const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faDays = (v: string | number) => Number(v).toLocaleString('fa-IR')
+const faYear = (y: number) => y.toLocaleString('fa-IR', { useGrouping: false })
+const faDoc = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('fa-IR'))
+const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
 
+/**
+ * «مزایا» — عیدیِ پایان سال، سنوات و مرخصی.
+ *
+ * سه کارت: تنظیمِ سال (سقفِ عیدی و روزهای مرخصی)، جدولِ مزایای هر کارمند با صدورِ سندِ
+ * سنوات/مرخصی در همان ردیف، و ثبتِ مرخصیِ استفاده‌شده. کارِ اصلیِ صفحه — صدورِ عیدیِ
+ * سال — در نوارِ چسبیده‌ی پایین است، کنارِ ذخیره‌ی تنظیمات.
+ */
 export function BenefitsPanel({ token }: { token: string }) {
   const [year, setYear] = useState(isoToJalali(todayIso()).jy)
   const [report, setReport] = useState<BenefitsReport | null>(null)
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
-  const [message, setMessage] = useState<string | null>(null)
+  const [msg, setMsg] = useState<Msg>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   // تنظیمِ سریعِ سقف عیدی و روز مرخصی
   const [minWage, setMinWage] = useState('')
@@ -45,7 +59,7 @@ export function BenefitsPanel({ token }: { token: string }) {
       setMinWage(Number(r.min_base_wage) ? String(Number(r.min_base_wage)) : '')
       setLeaveDays(String(r.annual_leave_days))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setError(errText(err))
     }
   }, [token, year])
 
@@ -57,62 +71,59 @@ export function BenefitsPanel({ token }: { token: string }) {
     fetchEmployees(token).then(setEmployees).catch(() => setEmployees([]))
   }, [token])
 
-  async function saveSettings() {
-    setMessage(null)
+  /** هر کنشِ این صفحه یک شکل دارد: پیام پاک، کار، پیامِ نتیجه، بارگذاریِ دوباره. */
+  async function act(run: () => Promise<string>) {
+    setMsg(null)
+    setBusy(true)
     try {
+      setMsg({ text: await run(), kind: 'ok' })
+      await load()
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveSettings = () =>
+    act(async () => {
       await setBenefitSettings(token, {
         year,
         min_base_wage: Number(minWage) || 0,
         annual_leave_days: Number(leaveDays) || 26,
       })
-      setMessage('تنظیمات مزایا ذخیره شد.')
-      await load()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+      return `تنظیماتِ مزایای سال ${faYear(year)} ذخیره شد.`
+    })
 
-  async function handleIssueEidi() {
-    setMessage(null)
-    try {
+  const handleIssueEidi = () =>
+    act(async () => {
       const r = await issueEidi(token, year)
-      setMessage(`عیدی سال ${year} صادر شد — سند شماره ${r.journal_entry_number ?? '—'} به مبلغ ${fa(r.amount)}.`)
-      await load()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+      return `عیدی سال ${faYear(year)} صادر شد — سند شماره ${faDoc(r.journal_entry_number)} به مبلغ ${fa(r.amount)} ریال.`
+    })
 
-  async function handleSeverance(empId: string) {
-    setMessage(null)
-    try {
+  const handleSeverance = (empId: string) =>
+    act(async () => {
       const r = await issueSeverance(token, empId)
-      setMessage(`سنوات صادر شد — سند شماره ${r.journal_entry_number ?? '—'} به مبلغ ${fa(r.amount)}.`)
-      await load()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+      return `سنوات صادر شد — سند شماره ${faDoc(r.journal_entry_number)} به مبلغ ${fa(r.amount)} ریال.`
+    })
 
-  async function handleLeavePayout(empId: string) {
-    setMessage(null)
-    try {
+  const handleLeavePayout = (empId: string) =>
+    act(async () => {
       const r = await issueLeavePayout(token, empId, year)
-      setMessage(`بازخرید مرخصی صادر شد — سند شماره ${r.journal_entry_number ?? '—'} به مبلغ ${fa(r.amount)}.`)
-      await load()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
-  }
+      return `بازخرید مرخصی صادر شد — سند شماره ${faDoc(r.journal_entry_number)} به مبلغ ${fa(r.amount)} ریال.`
+    })
 
-  async function handleRecordLeave(e: React.FormEvent) {
+  function handleRecordLeave(e: React.FormEvent) {
     e.preventDefault()
-    setMessage(null)
-    if (!leaveEmp || !(Number(leaveTaken) > 0)) {
-      setMessage('کارمند و تعداد روز مرخصی الزامی است.')
+    const missing = firstMissing([
+      [leaveEmp, 'lv-employee', 'کارمند را انتخاب کنید.'],
+      [Number(leaveTaken) > 0, 'lv-days', 'تعدادِ روزِ مرخصی را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
       return
     }
-    try {
+    void act(async () => {
       await recordLeave(token, {
         employee_id: leaveEmp,
         leave_date: leaveDate,
@@ -121,54 +132,38 @@ export function BenefitsPanel({ token }: { token: string }) {
       })
       setLeaveTaken('')
       setLeaveNote('')
-      setMessage('مرخصی ثبت شد.')
-      await load()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
-    }
+      return 'مرخصی ثبت شد.'
+    })
   }
 
   return (
-    <SectionCard
-      icon={Gift}
-      title="مزایا — عیدی، سنوات و مرخصی"
-      description="محاسبه‌ی عیدیِ پایان سال، سنوات پایان خدمت و ماندهٔ مرخصیِ هر کارمند، و صدور سند برای هرکدام."
-    >
-      <div className="benefit-toolbar">
-        <label>
-          سال (شمسی)
-          <NumberInput
-            group={false}
-            value={year}
-            onChange={(v) => setYear(Number(v) || year)}
-            style={{ width: 100 }}
-          />
-        </label>
-        <label>
-          حداقل حقوق ماهانه (سقف عیدی)
-          <NumberInput value={minWage} onChange={setMinWage} placeholder="۰ = بدون سقف" />
-        </label>
-        <label>
-          روزهای مرخصی سالانه
-          <NumberInput value={leaveDays} onChange={setLeaveDays} />
-        </label>
-        <button type="button" onClick={() => void saveSettings()}>
-          <Save size={13} /> ذخیره تنظیمات
-        </button>
-        <button type="button" className="btn-primary" onClick={() => void handleIssueEidi()}>
-          <Gift size={13} /> صدور عیدی سال {year}
-        </button>
-      </div>
+    <div className="ef-form">
+      <SectionCard icon={SlidersHorizontal} title="تنظیمِ مزایای سال">
+        <FormGrid>
+          <FormField label="سال (شمسی)">
+            {(id) => <NumberInput id={id} group={false} value={year} onChange={(v) => setYear(Number(v) || year)} />}
+          </FormField>
+          <FormField label="حداقل حقوق ماهانه (ریال)" tip="سقفِ عیدی از همین عدد ساخته می‌شود. خالی یا ۰ یعنی عیدی سقف ندارد.">
+            {(id) => <NumberInput id={id} value={minWage} onChange={setMinWage} placeholder="۰" />}
+          </FormField>
+          <FormField label="روزهای مرخصی سالانه">
+            {(id) => <NumberInput id={id} value={leaveDays} onChange={setLeaveDays} />}
+          </FormField>
+        </FormGrid>
+      </SectionCard>
 
-      {message && <div className="hint">{message}</div>}
-      {error && <div className="error">{error}</div>}
-
-      {!report ? (
-        <p className="hint">در حال بارگذاری…</p>
-      ) : report.rows.length === 0 ? (
-        <EmptyState icon={Gift} text="برای این سال کارمندی با حکم حقوقی یافت نشد." />
-      ) : (
-        <div className="entity-table-wrap">
+      <SectionCard
+        icon={Gift}
+        title="عیدی، سنوات و مرخصی"
+        tip="محاسبه‌ی عیدیِ پایان سال، سنوات پایان خدمت و ماندهٔ مرخصیِ هر کارمند. سند را از همان ردیف صادر کنید."
+      >
+        {error ? (
+          <p className="ef-message ef-message--warn" role="alert">{error}</p>
+        ) : !report ? (
+          <p className="muted">در حال بارگذاری…</p>
+        ) : report.rows.length === 0 ? (
+          <EmptyState icon={Gift} text="برای این سال کارمندی با حکم حقوقی یافت نشد." />
+        ) : (
           <div className="table-scroll">
             <table className="entity-table benefits-table cards-on-mobile">
               <thead>
@@ -189,14 +184,16 @@ export function BenefitsPanel({ token }: { token: string }) {
                     <td data-label="حقوق پایه" className="money-cell">{fa(r.base_salary)}</td>
                     <td data-label="عیدی" className="money-cell">{fa(r.eidi)}</td>
                     <td data-label="سنوات تا امروز" className="money-cell">{fa(r.severance)}</td>
-                    <td data-label="ماندهٔ مرخصی (روز)" className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>{faDays(r.leave_remaining)}</td>
+                    <td data-label="ماندهٔ مرخصی (روز)" className={Number(r.leave_remaining) < 0 ? 'text-danger' : ''}>
+                      {faDays(r.leave_remaining)}
+                    </td>
                     <td data-label="طلب مرخصی" className="money-cell">{fa(r.leave_value)}</td>
                     <td className="benefits-action" data-label="عملیات">
                       <div className="row-actions">
-                        <button type="button" onClick={() => void handleSeverance(r.employee_id)} title="صدور سنوات">
+                        <button type="button" onClick={() => void handleSeverance(r.employee_id)} disabled={busy} title="صدور سند سنوات">
                           <Coins size={13} /> سنوات
                         </button>
-                        <button type="button" onClick={() => void handleLeavePayout(r.employee_id)} title="بازخرید مرخصی">
+                        <button type="button" onClick={() => void handleLeavePayout(r.employee_id)} disabled={busy} title="صدور سند بازخرید مرخصی">
                           <Wallet size={13} /> مرخصی
                         </button>
                       </div>
@@ -217,38 +214,50 @@ export function BenefitsPanel({ token }: { token: string }) {
               </tfoot>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </SectionCard>
 
-      <h3 className="panel-subhead"><CalendarPlus size={15} /> ثبت مرخصیِ استفاده‌شده</h3>
-      <form className="benefit-toolbar" onSubmit={handleRecordLeave}>
-        <label>
-          کارمند
-          <select value={leaveEmp} onChange={(e) => setLeaveEmp(e.target.value)}>
-            <option value="">— انتخاب —</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.first_name} {e.last_name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          تاریخ
-          <JalaliDatePicker value={leaveDate} onChange={setLeaveDate} />
-        </label>
-        <label>
-          تعداد روز
-          <NumberInput allowDecimal value={leaveTaken} onChange={setLeaveTaken} style={{ width: 90 }} />
-        </label>
-        <label>
-          توضیح
-          <input type="text" value={leaveNote} onChange={(e) => setLeaveNote(e.target.value)} />
-        </label>
-        <button type="submit" className="btn-primary">
-          <CalendarPlus size={13} /> ثبت مرخصی
-        </button>
+      <form onSubmit={handleRecordLeave} noValidate>
+        <SectionCard icon={CalendarPlus} title="ثبت مرخصیِ استفاده‌شده">
+          <FormGrid>
+            <FormField id="lv-employee" label="کارمند" required>
+              {(id) => (
+                <select id={id} value={leaveEmp} onChange={(e) => setLeaveEmp(e.target.value)}>
+                  <option value="">— انتخاب کنید —</option>
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.first_name} {e.last_name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+            <FormField label="تاریخ">
+              {(id) => <JalaliDatePicker id={id} value={leaveDate} onChange={setLeaveDate} />}
+            </FormField>
+            <FormField id="lv-days" label="تعداد روز" required>
+              {(id) => <NumberInput id={id} allowDecimal value={leaveTaken} onChange={setLeaveTaken} />}
+            </FormField>
+            <FormField label="توضیح" span="full">
+              {(id) => <input id={id} type="text" value={leaveNote} onChange={(e) => setLeaveNote(e.target.value)} />}
+            </FormField>
+          </FormGrid>
+          <div className="ef-card-foot">
+            <button type="submit" className="ef-btn-secondary" disabled={busy}>
+              <CalendarPlus size={15} /> ثبت مرخصی
+            </button>
+          </div>
+        </SectionCard>
       </form>
-    </SectionCard>
+
+      <ActionBar status={<FormStatus msg={msg} />}>
+        <button type="button" className="ef-btn-secondary" onClick={() => void saveSettings()} disabled={busy}>
+          <Save size={15} /> ذخیره تنظیمات
+        </button>
+        <button type="button" className="btn-primary" onClick={() => void handleIssueEidi()} disabled={busy}>
+          <Gift size={15} /> صدور عیدی سال {faYear(year)}
+        </button>
+      </ActionBar>
+    </div>
   )
 }
