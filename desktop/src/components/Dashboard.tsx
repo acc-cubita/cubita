@@ -556,6 +556,7 @@ export function Dashboard({
             (theme.content === 'guided' ? (
               <GuidedDashboard
                 token={token}
+                me={me}
                 userName={me.name}
                 pendingOutboxCount={pendingOutboxCount}
                 itemsCount={items.length}

@@ -15,6 +15,7 @@ import {
 import { buildNav, menuEntryVisible, uniqueNavItems, type PageKey } from '../lib/navModel'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
+import { textMatches } from '../lib/commands'
 import { useNavSection } from './navContext'
 import { isElectron } from '../platform'
 
@@ -234,8 +235,10 @@ export function TopNav({
     () => uniqueNavItems(groups, secondary),
     [groups, secondary],
   )
+  //: همان نرمال‌سازیِ کامندپالت — وگرنه «طرف حساب» با فاصله‌ی معمولی، منویی با
+  //: نیم‌فاصله را پیدا نمی‌کرد و کاربر نتیجه می‌گرفت که «نیست».
   const results = query.trim()
-    ? allItems.filter((i) => i.label.includes(query.trim())).slice(0, 8)
+    ? allItems.filter((i) => textMatches(i.label, query)).slice(0, 8)
     : []
 
   return (

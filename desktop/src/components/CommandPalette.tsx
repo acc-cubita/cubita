@@ -1,19 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import type { MeResponse } from '../api'
-import { buildNav, uniqueNavItems, type PageKey } from '../lib/navModel'
-import { TASK_LAUNCHERS } from '../lib/taskRegistry'
-
-interface Command {
-  id: string
-  title: string
-  subtitle?: string
-  keywords: string
-  icon: ReactNode
-  page: PageKey
-  section?: string
-  kind: 'task' | 'page'
-}
+import type { PageKey } from '../lib/navModel'
+import { buildCommands, searchCommands, type Command } from '../lib/commands'
 
 /**
  * کامندپالتِ سراسری (Ctrl/⌘+K) برای «نسخه‌ی جدید» — پرش به هر صفحه یا شروعِ یک کار.
@@ -29,7 +18,10 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
   // Ctrl/⌘+K برای باز/بسته؛ Escape برای بستن. سراسری تا از هر جای برنامه در دسترس باشد.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      //: `e.code` جای فیزیکیِ کلید است و به چیدمان کار ندارد؛ `e.key` در چیدمانِ
+      //: فارسی «ن» می‌دهد و میانبر بی‌صدا از کار می‌افتاد. `e.key` به‌عنوان تکیه‌گاه
+      //: می‌ماند برای صفحه‌کلیدهایی که `code` معناداری نمی‌دهند (مثلِ صفحه‌کلیدِ مجازی).
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key.toLowerCase() === 'k')) {
         e.preventDefault()
         setOpen((o) => !o)
       } else if (e.key === 'Escape') {
@@ -40,43 +32,8 @@ export function CommandPalette({ me, onNavigate }: { me: MeResponse; onNavigate:
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const commands = useMemo<Command[]>(() => {
-    const { groups, secondary } = buildNav({
-      isPlatformAdmin: me.is_platform_admin,
-      isSuperAdmin: me.is_super_admin,
-      tenantKind: me.tenant_kind,
-      enabledModules: me.enabled_modules,
-      allowedModules: me.allowed_modules,
-      isOwner: me.role_key === 'owner',
-    })
-    const tasks: Command[] = TASK_LAUNCHERS.map((t) => ({
-      id: `task-${t.key}`,
-      title: t.title,
-      subtitle: t.desc,
-      keywords: `${t.title} ${t.desc}`,
-      icon: <t.icon size={16} />,
-      page: t.page,
-      section: t.section,
-      kind: 'task',
-    }))
-    const pageItems = uniqueNavItems(groups, secondary)
-    const pages: Command[] = pageItems.map((it) => ({
-      id: `page-${it.key}`,
-      title: it.label,
-      subtitle: 'رفتن به صفحه',
-      keywords: it.label,
-      icon: it.icon,
-      page: it.key,
-      kind: 'page',
-    }))
-    return [...tasks, ...pages]
-  }, [me])
-
-  const filtered = useMemo(() => {
-    const q = query.trim()
-    if (!q) return commands
-    return commands.filter((c) => c.keywords.includes(q))
-  }, [commands, query])
+  const commands = useMemo(() => buildCommands(me), [me])
+  const filtered = useMemo(() => searchCommands(commands, query), [commands, query])
 
   useEffect(() => {
     setActive(0)
