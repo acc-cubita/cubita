@@ -41,6 +41,7 @@ import {
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import type { Allocation } from '../lib/batchAllocation'
 import { BatchAllocationPicker } from './BatchAllocationPicker'
+import { PickingSheetDrawer } from './PickingSheetDrawer'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { NumberInput } from './NumberInput'
@@ -565,6 +566,8 @@ export function WarehouseIssueLedger({
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
   const [openId, setOpenId] = useState<string | null>(null)
+  //: §۱۲ — برگه‌ی جمع‌آوریِ یک خروج: کدام بار و کجا.
+  const [pickingFor, setPickingFor] = useState<WarehouseIssueRow | null>(null)
   const [journalId, setJournalId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [localKey, setLocalKey] = useState(0)
@@ -772,6 +775,12 @@ export function WarehouseIssueLedger({
                             <FileText size={13} /> {open ? 'بستنِ جزئیات' : 'جزئیات'}
                           </button>
                         )}
+                        {/* §۱۲ — انباردار باید بداند کدام بار و کجا. */}
+                        {isIssue && !voided && (
+                          <button type="button" onClick={() => setPickingFor(row)}>
+                            <ClipboardList size={13} /> جمع‌آوری
+                          </button>
+                        )}
                         {row.journal_entry_id && (
                           <button type="button" onClick={() => setJournalId(row.journal_entry_id)}>
                             <ScrollText size={13} /> سند حسابداری
@@ -811,6 +820,14 @@ export function WarehouseIssueLedger({
       </AsyncBlock>
 
       {journalId && <JournalEntryDrawer token={token} entryId={journalId} onClose={() => setJournalId(null)} />}
+      {pickingFor && (
+        <PickingSheetDrawer
+          token={token}
+          issueId={pickingFor.id}
+          issueNumber={pickingFor.number}
+          onClose={() => setPickingFor(null)}
+        />
+      )}
     </SectionCard>
   )
 }

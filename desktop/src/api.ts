@@ -5780,6 +5780,27 @@ export interface BatchTrace {
   /** §۱۶ — «مشتریانی که این بار را دریافت کرده‌اند قابل شناسایی باشند». */
   recipients: { contact_id: string; name: string; issue_number: number; issue_date: string }[]
 }
+/** یک ردیفِ برگه‌ی جمع‌آوری (§۱۲). */
+export interface PickingRow {
+  item_id: string
+  item_name: string
+  qty: string
+  unit: string
+  /** تهی = کالای بی‌ردیابی؛ برگه همان‌طور چاپ می‌شود، فقط بی ستونِ بار. */
+  batch_id: string | null
+  batch_number: string
+  expiry_date: string | null
+  location: string
+}
+export const fetchPickingSheet = (token: string, issueId: string) =>
+  authedGet<PickingRow[]>(token, `/api/warehouse-issues/${issueId}/picking`)
+
+/** جایگزینیِ بارِ یک ردیفِ خروج — **دلیل اجباری** (§۱۳). */
+export const substituteBatch = (
+  token: string,
+  data: { source_line_id: string; original_batch_id: string; new_batch_id: string; qty: number; reason: string },
+) => authedSend<{ id: string; qty: string; reason: string }>(token, 'POST', '/api/stock-batches/substitute', data)
+
 export const fetchBatchTrace = (token: string, batchId: string) =>
   authedGet<BatchTrace>(token, `/api/stock-batches/${batchId}/trace`)
 
@@ -9229,6 +9250,16 @@ export interface IssueReturnRecord {
 export const fetchIssueReturn = (token: string, returnId: string) =>
   authedGet<IssueReturnRecord>(token, `/api/warehouse-issue-returns/${returnId}`)
 
+/** حالِ کالای برگشتی (§۱۴) — تصمیمِ انباردار، نه یک عدد. */
+export type ReturnCondition = 'sellable' | 'damaged' | 'expired' | 'quarantine' | 'blocked'
+export const RETURN_CONDITION_LABELS: Record<ReturnCondition, string> = {
+  sellable: 'سالم و قابلِ فروش',
+  damaged: 'معیوب',
+  expired: 'منقضی',
+  quarantine: 'قرنطینه',
+  blocked: 'مسدود',
+}
+
 /** هر ردیف دقیقاً یک مبنا دارد: ردیفِ فاکتور برگشتی یا ردیفِ خود خروج. */
 export interface IssueReturnIn {
   return_date: string
@@ -9241,6 +9272,12 @@ export interface IssueReturnIn {
     warehouse_issue_line_id?: string | null
     qty: number
     unit_id?: string | null
+    /**
+     * §۱۴ — حالِ کالای برگشتی. سالم به موجودیِ قابلِ فروش برمی‌گردد؛
+     * خراب/منقضی/قرنطینه فیزیکی برمی‌گردد ولی قابلِ فروش نمی‌شود.
+     * نیامده = `sellable`، یعنی رفتارِ دیروز.
+     */
+    return_condition?: ReturnCondition
     description?: string
   }[]
 }
