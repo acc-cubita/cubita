@@ -57,6 +57,13 @@ export function CatalogAllocationDrawer({
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // بستن با Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   //: اجزای لیستینگ — بارها فقط از کالاهای همین اجزا می‌آیند.
   const itemIds = useMemo(
     () => listing.components.map((c) => c.item_id).filter(Boolean),
