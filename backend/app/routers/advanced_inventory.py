@@ -332,6 +332,12 @@ def list_stock_batches(
     return _decorate_batches(db, batches)
 
 
+#: سه فیلدی که **ویرایش** عوضشان نمی‌کند، و هرکدام دلیلِ خودش را دارد:
+#: جابه‌جا کردنِ بار بینِ کالا یا انبار یعنی حرکت‌های دفترش به بارِ بی‌ربط گره
+#: بخورند، و `qty` از دفتر مشتق می‌شود — با تعدیل کم می‌شود، نه با ویرایش.
+IMMUTABLE_BATCH_FIELDS = {"item_id", "warehouse_id", "qty"}
+
+
 @router.post("/stock-batches", response_model=StockBatchOut, status_code=201)
 def create_stock_batch(
     data: StockBatchIn,
@@ -358,15 +364,19 @@ def update_stock_batch(
     db: Session = Depends(get_db),
     _=Depends(require_permission("inventory", "update")),
 ):
-    """ویرایشِ شماره‌ی بار/انقضا/یادداشت (نه مقدار — مقدار با تعدیلِ کسری/معیوب کم می‌شود)."""
+    """ویرایشِ شناسنامه‌ی بار (نه مقدار — مقدار با تعدیلِ کسری/معیوب کم می‌شود).
+
+    **فیلدها از خودِ اسکیما گرفته می‌شوند، نه از فهرستی دستی.** فهرستِ دستی یک بار
+    از قلم افتاد و شش ستونِ تازه (محلِ قرارگیری، کدِ بارِ تأمین‌کننده، وضعیتِ QC و
+    دو قیمتِ مصرف‌کننده) **پذیرفته و ۲۰۰ گرفته و بی‌صدا دور ریخته می‌شدند** — بی
+    هیچ خطایی، پس کاربر فکر می‌کرد ذخیره شده. `POST` این باگ را نداشت چون
+    `**data.model_dump()` می‌زند، یعنی هر ستونِ تازه خودبه‌خود می‌آمد.
+    """
     batch = db.get(StockBatch, batch_id)
     if batch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "بار یافت نشد")
-    batch.batch_number = data.batch_number
-    batch.expiry_date = data.expiry_date
-    batch.production_date = data.production_date
-    batch.consumer_price = data.consumer_price
-    batch.notes = data.notes
+    for field, value in data.model_dump(exclude=IMMUTABLE_BATCH_FIELDS).items():
+        setattr(batch, field, value)
     db.flush()
     db.refresh(batch)
     return _decorate_batches(db, [batch])[0]

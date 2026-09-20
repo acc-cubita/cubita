@@ -49,6 +49,13 @@ export function BatchDetailDrawer({
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // بستن با Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   // افزودنِ سریال — دو حالت
   const [mode, setMode] = useState<'manual' | 'sequence'>('manual')
   const [manualText, setManualText] = useState('')

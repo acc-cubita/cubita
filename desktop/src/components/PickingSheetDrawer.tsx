@@ -44,6 +44,13 @@ export function PickingSheetDrawer({
     }
   }, [token, issueId])
 
+  // بستن با Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const anyBatch = (rows ?? []).some((r) => r.batch_id !== null)
 
   return (
