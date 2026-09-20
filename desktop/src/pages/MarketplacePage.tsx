@@ -12,6 +12,7 @@ import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { NumberInput } from '../components/NumberInput'
 import { Pager, usePagination } from '../components/Pager'
+import { useTrades, labelOfTrade } from '../lib/useTrades'
 import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 import { MpRetailerReturns } from '../components/MpRetailerReturns'
 
@@ -49,7 +50,7 @@ const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = 
  * کشف/اتصال به پخش‌کننده‌ها، دیدنِ کاتالوگِ تأییدشده‌ها، ثبتِ سفارش، و «سفارش‌های من».
  * با تأییدِ پخش‌کننده، کالا خودکار در انبارِ فروشگاه ثبت و تعدادش اضافه می‌شود.
  */
-export function MarketplacePage({ token }: { token: string }) {
+export function MarketplacePage({ token, trade }: { token: string; trade: string | null }) {
   return (
     <div className="page panels">
       <PageHeader
@@ -60,8 +61,8 @@ export function MarketplacePage({ token }: { token: string }) {
       <Tabs
         syncPage="marketplace"
         tabs={[
-          { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store, content: <Distributors token={token} /> },
-          { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} /> },
+          { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store, content: <Distributors token={token} trade={trade} /> },
+          { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} trade={trade} /> },
           { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList, content: <Orders token={token} /> },
           { key: 'returns', label: 'مرجوعی', icon: Undo2, content: <MpRetailerReturns token={token} /> },
         ]}
@@ -70,7 +71,8 @@ export function MarketplacePage({ token }: { token: string }) {
   )
 }
 
-function Distributors({ token }: { token: string }) {
+function Distributors({ token, trade }: { token: string; trade: string | null }) {
+  const { groups: tradeGroups } = useTrades()
   const [dists, setDists] = useState<DistributorCard[]>([])
   const [conns, setConns] = useState<MpConnection[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -115,8 +117,25 @@ function Distributors({ token }: { token: string }) {
 
       <SectionCard icon={Store} title="پخش‌کننده‌های بازار" description="برای دیدنِ کاتالوگ و سفارش، ابتدا درخواستِ اتصال بدهید و منتظرِ تأییدِ پخش‌کننده بمانید.">
         {error && <div className="error">{error}</div>}
+        {/* فیلترِ صنف سمتِ سرور اعمال می‌شود و می‌تواند فهرست را کوتاه کند. بی‌گفتنِ
+            دلیل، فروشگاه یک صفحه‌ی کم‌پشت می‌بیند و نتیجه می‌گیرد بازار خالی است —
+            پس همیشه گفته می‌شود، نه فقط وقتی فهرست خالی است. */}
+        {trade && (
+          <p className="mp-note-line">
+            این فهرست بر اساسِ صنفِ شما ({labelOfTrade(tradeGroups, trade)}) فیلتر شده است:
+            پخش‌کننده‌هایی که به این صنف جنس می‌دهند، به‌علاوه‌ی آن‌هایی که صنفی مشخص
+            نکرده‌اند. صنف از «شخصی‌سازیِ پنل» قابلِ تغییر است.
+          </p>
+        )}
         {dists.length === 0 ? (
-          <EmptyState icon={Store} text="هنوز پخش‌کننده‌ی فعالی در بازار نیست." />
+          <EmptyState
+            icon={Store}
+            text={
+              trade
+                ? 'پخش‌کننده‌ای که به صنفِ شما جنس بدهد پیدا نشد.'
+                : 'هنوز پخش‌کننده‌ی فعالی در بازار نیست.'
+            }
+          />
         ) : (
           <div className="entity-table-wrap">
             <div className="table-scroll">
@@ -129,7 +148,16 @@ function Distributors({ token }: { token: string }) {
                     const canRequest = st === null || st === 'rejected'
                     return (
                       <tr key={d.tenant_id}>
-                        <td className="card-title" data-label="پخش‌کننده"><div className="entity-name">{d.display_name}</div></td>
+                        <td className="card-title" data-label="پخش‌کننده">
+                          <div className="entity-name">{d.display_name}</div>
+                          {/* فقط وقتی کاتالوگ برای این فروشگاه باریک‌تر از کلِ کاتالوگ
+                              است — وگرنه برای پخش‌کننده‌ی کاملاً مرتبط نویز است. */}
+                          {d.matching_listings < d.total_listings && (
+                            <div className="entity-sub">
+                              {faNum(d.matching_listings)} قلم از {faNum(d.total_listings)} قلم برای صنفِ شما
+                            </div>
+                          )}
+                        </td>
                         <td data-label="وضعیت">{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
                         <td className="card-actions">
                           <div className="check-actions">
@@ -176,7 +204,8 @@ function Distributors({ token }: { token: string }) {
 
 interface CartLine { listing: CatalogListing; qty: string }
 
-function Catalog({ token }: { token: string }) {
+function Catalog({ token, trade }: { token: string; trade: string | null }) {
+  const { groups: tradeGroups } = useTrades()
   const [items, setItems] = useState<CatalogListing[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -256,6 +285,16 @@ function Catalog({ token }: { token: string }) {
         }
       >
         {error && <div className="error">{error}</div>}
+        {/* کاتالوگ هم مثلِ فهرستِ پخش‌کننده‌ها با صنف فیلتر می‌شود. بی‌گفتنِ دلیل،
+            فروشگاه می‌بیند پخش‌کننده‌ای که به او وصل است دو قلم دارد و نتیجه
+            می‌گیرد انبارش خالی است. */}
+        {trade && (
+          <p className="mp-note-line">
+            بر اساسِ صنفِ شما ({labelOfTrade(tradeGroups, trade)}) فیلتر شده است: اقلامی که
+            پخش‌کننده به این صنف می‌دهد. ممکن است یک پخش‌کننده اقلامِ دیگری هم داشته باشد
+            که برای صنفِ دیگری گذاشته.
+          </p>
+        )}
         {categories.length > 0 && (
           <div className="cat-chips" role="tablist" aria-label="دسته‌بندی">
             <button

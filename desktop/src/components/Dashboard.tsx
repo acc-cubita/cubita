@@ -681,7 +681,7 @@ export function Dashboard({
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
           {page === 'distributor' && me.tenant_kind === 'distributor' && <DistributorPage token={token} items={items} />}
-          {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} />}
+          {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} trade={me.trade} />}
           {page === 'fixedassets' && (
             <div className="page panels">
               <PageHeader

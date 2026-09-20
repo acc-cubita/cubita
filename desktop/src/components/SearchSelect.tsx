@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, Search } from 'lucide-react'
 
 import { textMatches } from '../lib/commands'
+import { toFaDigits } from '../lib/jalali'
 import { placePopover, type Placement } from '../lib/popover'
 import { flatten, shouldSearch, type Opt } from '../lib/selectOptions'
 
@@ -50,6 +51,11 @@ type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> & {
   searchPlaceholder?: string
 }
 
+//: سقفِ ردیف‌های نمایش‌داده‌شده. بریدن لازم است (فهرستِ واحدها ۳۹۳ ردیف است) ولی
+//: **بی‌صدا** بریدن نه: با ۹۴ صنف، گروهِ آخر برای کسی که فقط اسکرول می‌کند اصلاً
+//: وجود نداشت. حالا هر وقت چیزی بریده شود، خودِ پاپ‌آور می‌گویدش.
+const SHOW_LIMIT = 80
+
 export function SearchSelect({ children, searchPlaceholder, ...rest }: Props) {
   const options = useMemo(() => flatten(children), [children])
 
@@ -83,10 +89,10 @@ function Searchable({
   const current = String(value ?? '')
   const selected = options.find((o) => o.value === current) ?? null
 
-  const filtered = useMemo(() => {
+  const { filtered, hidden } = useMemo(() => {
     const hits = query.trim() ? options.filter((o) => textMatches(o.label, query)) : options
     //: سقفِ نمایش تا فهرست سبک بماند؛ تایپ‌کردن باریکش می‌کند.
-    return hits.slice(0, 80)
+    return { filtered: hits.slice(0, SHOW_LIMIT), hidden: Math.max(0, hits.length - SHOW_LIMIT) }
   }, [options, query])
 
   function reposition() {
@@ -232,6 +238,11 @@ function Searchable({
                 ))
               )}
             </ul>
+            {hidden > 0 && (
+              <p className="item-picker-more">
+                {toFaDigits(String(hidden))} گزینه‌ی دیگر هم هست — برای پیدا‌کردنشان تایپ کنید.
+              </p>
+            )}
           </div>,
           document.body,
         )}

@@ -22,6 +22,8 @@ export interface ListingFormState {
   minOrderQty: string
   maxOrderQty: string
   dailyOrderLimit: string
+  /** اصنافی که این قلم، *علاوه بر* اصنافِ کلیِ پخش‌کننده، به آن‌ها هم می‌رسد. */
+  extraTrades: string[]
   components: PackRow[]
 }
 
@@ -39,6 +41,7 @@ export const EMPTY_LISTING_FORM: ListingFormState = {
   minOrderQty: '',
   maxOrderQty: '',
   dailyOrderLimit: '',
+  extraTrades: [],
   components: [{ itemId: '', qty: '1' }],
 }
 
@@ -53,7 +56,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
   const [saving, setSaving] = useState(false)
 
   function reset() {
-    setForm({ ...EMPTY_LISTING_FORM, images: [], components: [{ itemId: '', qty: '1' }] })
+    setForm({ ...EMPTY_LISTING_FORM, images: [], extraTrades: [], components: [{ itemId: '', qty: '1' }] })
     setEditingId(null)
     setMsg(null)
   }
@@ -74,6 +77,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       minOrderQty: Number(l.min_order_qty) ? String(Number(l.min_order_qty)) : '',
       maxOrderQty: Number(l.max_order_qty) ? String(Number(l.max_order_qty)) : '',
       dailyOrderLimit: Number(l.daily_order_limit) ? String(Number(l.daily_order_limit)) : '',
+      extraTrades: l.extra_trades ?? [],
       components:
         l.kind === 'pack' && l.components.length
           ? l.components.map((c) => ({ itemId: c.item_id, qty: String(Number(c.qty)) }))
@@ -109,6 +113,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       min_order_qty: Number(form.minOrderQty) || 0,
       max_order_qty: Number(form.maxOrderQty) || 0,
       daily_order_limit: Number(form.dailyOrderLimit) || 0,
+      extra_trades: form.extraTrades,
       item_id: form.kind === 'single' ? form.itemId : null,
       components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: Number(r.qty) })) : [],
     }

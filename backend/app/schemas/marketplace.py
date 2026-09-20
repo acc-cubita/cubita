@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.marketplace import LISTING_KINDS, SETTLEMENT_MODES
+from app.services.trades import clean_trades, is_valid_trade
 
 # ── سقفِ عکسِ کاتالوگ ──────────────────────────────────────────────────
 # عکس‌ها به‌صورتِ data URIِ فشرده‌شده در JSONB ذخیره می‌شوند (نه فایلِ روی دیسک)،
@@ -57,6 +58,19 @@ class MarketplaceSettingsIn(BaseModel):
     #: سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود، و مهلتِ مرجوعی به روز (۰ = بی‌محدودیت).
     return_policy: str = ""
     return_window_days: int = 0
+    #: اصنافی که این پخش‌کننده به آن‌ها جنس می‌دهد. خالی = بدونِ محدودیت.
+    target_trades: list[str] = []
+
+    @field_validator("target_trades")
+    @classmethod
+    def _targets(cls, v: list[str]) -> list[str]:
+        #: کلیدِ ناشناخته رد می‌شود نه اینکه بی‌صدا دور ریخته شود: اگر کلاینتی کلیدِ
+        #: غلط بفرستد، پخش‌کننده فکر می‌کند صنفی را هدف گرفته که در واقع ذخیره نشده
+        #: — و بعد نمی‌فهمد چرا آن فروشگاه‌ها سفارش نمی‌دهند.
+        unknown = [k for k in v if not is_valid_trade(k)]
+        if unknown:
+            raise ValueError(f"صنفِ نامعتبر: {'، '.join(unknown)}")
+        return clean_trades(v)
 
     @field_validator("settlement_mode")
     @classmethod
@@ -80,6 +94,7 @@ class MarketplaceSettingsOut(BaseModel):
     require_delivery: bool = False
     return_policy: str = ""
     return_window_days: int = 0
+    target_trades: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -116,6 +131,9 @@ class ListingIn(BaseModel):
     images: list = []
     category: str = ""
     is_published: bool = False
+    #: اصنافی که این قلم **علاوه بر** اصنافِ کلیِ پخش‌کننده به آن‌ها هم نشان داده
+    #: می‌شود. خالی = فقط همان اصنافِ کلی.
+    extra_trades: list[str] = []
     #: محدودیت‌های سفارش‌گذاری (۰ = بدونِ محدودیت).
     min_order_qty: Decimal = Decimal(0)
     max_order_qty: Decimal = Decimal(0)
@@ -130,6 +148,16 @@ class ListingIn(BaseModel):
         if v not in LISTING_KINDS:
             raise ValueError("نوعِ لیستینگ نامعتبر است")
         return v
+
+    @field_validator("extra_trades")
+    @classmethod
+    def _extra_trades(cls, v: list[str]) -> list[str]:
+        #: مثلِ `target_trades`: کلیدِ ناشناخته رد می‌شود نه اینکه بی‌صدا دور ریخته
+        #: شود — وگرنه پخش‌کننده فکر می‌کند قلمش به صنفی می‌رسد که نمی‌رسد.
+        unknown = [k for k in v if not is_valid_trade(k)]
+        if unknown:
+            raise ValueError(f"صنفِ نامعتبر: {'، '.join(unknown)}")
+        return clean_trades(v)
 
     @field_validator("images")
     @classmethod
@@ -170,6 +198,7 @@ class ListingOut(BaseModel):
     images: list
     category: str
     is_published: bool
+    extra_trades: list[str] = []
     min_order_qty: Decimal
     max_order_qty: Decimal
     daily_order_limit: int
@@ -188,6 +217,11 @@ class DistributorCardOut(BaseModel):
     display_name: str
     #: None = هنوز درخواستی نداده‌ام؛ وگرنه pending|approved|rejected|blocked.
     connection_status: str | None
+    #: تعدادِ اقلامِ منتشرشده‌ای که به صنفِ این فروشگاه می‌رسند، و کلِ اقلامِ منتشرشده.
+    #: وقتی اولی از دومی کمتر است، کارت می‌گوید چند قلم به درد می‌خورد — تا فروشگاه
+    #: پیش از درخواستِ اتصال بداند کاتالوگِ باریکی در انتظارش است.
+    matching_listings: int = 0
+    total_listings: int = 0
 
 
 class ConnectionRequestIn(BaseModel):

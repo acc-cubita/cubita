@@ -62,6 +62,8 @@ export interface MeResponse {
   //: ── شخصی‌سازیِ پنل ──
   //: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
   industry: string
+  //: صنفِ ریز — `null` یعنی هنوز اعلام نشده.
+  trade: string | null
   //: کلیدِ ماژول‌های *روشن* (ترجیحِ مالک، شاملِ core). ناوبری با این فیلتر می‌شود.
   enabled_modules: string[]
   //: کلیدِ ماژول‌های *مجاز* (حقِ دسترسی). نمایشِ نهایی = enabled ∩ allowed.
@@ -127,11 +129,21 @@ export async function signup(
   password: string,
   code: string,
   industry: string,
+  /** صنفِ ریز. خالی یعنی «اعلام نکرد» و سرور `NULL` ذخیره می‌کند. */
+  trade?: string,
 ): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ business_name: businessName, owner_name: ownerName, email, password, code, industry }),
+    body: JSON.stringify({
+      business_name: businessName,
+      owner_name: ownerName,
+      email,
+      password,
+      code,
+      industry,
+      trade: trade || null,
+    }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
@@ -2603,6 +2615,8 @@ export const setAdminAccountModules = (token: string, tenantId: string, granted:
 //: وضعیتِ کاملِ ماژول‌های کسب‌وکار — منبعِ صفحه‌ی «شخصی‌سازیِ پنل».
 export interface ModulesState {
   industry: string
+  //: صنفِ ریز — «چه می‌فروشد». `null` یعنی هنوز اعلام نشده.
+  trade: string | null
   //: کلیدِ ماژول‌های روشن (ترجیحِ مالک، شاملِ core).
   enabled: string[]
   //: کلیدِ ماژول‌های مجاز (حقِ دسترسی).
@@ -2615,6 +2629,33 @@ export interface ModulesState {
 }
 
 export const fetchModules = (token: string) => authedGet<ModulesState>(token, '/api/modules')
+
+/** اعلامِ صنفِ کسب‌وکار (فقط مالک). `null` پاکش می‌کند. */
+export const setTrade = (token: string, trade: string | null) =>
+  authedSend<ModulesState>(token, 'PUT', '/api/modules/trade', { trade })
+
+// ── اصناف ─────────────────────────────────────────────────────────────
+export interface TradeOption {
+  key: string
+  label: string
+}
+
+export interface TradeGroup {
+  key: string
+  label: string
+  trades: TradeOption[]
+}
+
+/**
+ * فهرستِ اصناف — **عمداً بدونِ توکن**، چون صفحه‌ی ثبت‌نام هم همین را می‌خواهد و
+ * آن‌جا هنوز کسی وارد نشده. و عمداً از سرور می‌آید نه از یک ثابتِ فرانت: کلیدِ صنف
+ * کلیدِ تطبیق بینِ دو کسب‌وکار است و دو فهرستِ موازی دیر یا زود از هم دور می‌شوند.
+ */
+export async function fetchTrades(): Promise<TradeGroup[]> {
+  const res = await fetch(`${API_BASE_URL}/api/trades`)
+  if (!res.ok) throw new Error('دریافتِ فهرستِ اصناف ناموفق بود')
+  return res.json()
+}
 
 //: ترجیحِ نمایشِ مالک را ذخیره می‌کند (فهرستِ کلیدِ ماژول‌های اختیاریِ روشن).
 export const updateModules = (token: string, enabled: string[]) =>
@@ -5672,6 +5713,8 @@ export interface MarketplaceSettings {
   display_name: string
   settlement_mode: 'credit' | 'online'
   is_active: boolean
+  //: اصنافی که این پخش‌کننده به آن‌ها جنس می‌دهد. خالی = بدونِ محدودیت.
+  target_trades?: string[]
   //: گردشِ کارِ «تحویل با مامور حمل» — ورودِ کالا به انبارِ فروشگاه هنگامِ ثبتِ تحویل.
   require_delivery?: boolean
   return_policy?: string
@@ -5697,6 +5740,8 @@ export interface Listing {
   images: string[]
   category: string
   is_published: boolean
+  /** اصنافی که این قلم *علاوه بر* اصنافِ کلیِ پخش‌کننده به آن‌ها هم می‌رسد. */
+  extra_trades: string[]
   min_order_qty: string
   max_order_qty: string
   daily_order_limit: number
@@ -5716,6 +5761,7 @@ export interface ListingIn {
   images?: string[]
   category?: string
   is_published?: boolean
+  extra_trades?: string[]
   min_order_qty?: number
   max_order_qty?: number
   daily_order_limit?: number
@@ -5753,6 +5799,12 @@ export interface DistributorCard {
   tenant_id: string
   display_name: string
   connection_status: MpConnectionStatus | null
+  /**
+   * تعدادِ اقلامِ منتشرشده‌ای که به صنفِ من می‌رسند، و کلِ اقلامِ منتشرشده. وقتی
+   * اولی از دومی کمتر است یعنی کاتالوگِ باریکی در انتظار است — و کارت می‌گویدش.
+   */
+  matching_listings: number
+  total_listings: number
 }
 
 export interface MpMessage {

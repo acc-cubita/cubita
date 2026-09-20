@@ -59,6 +59,7 @@ from app.routers import (
     stock_taking,
     storefront,
     subscription,
+    trades,
     owner_transactions,
     transfers,
     warehouse_issues,
@@ -171,6 +172,8 @@ app.include_router(installments.router)
 app.include_router(shop.router)
 app.include_router(storefront.router)
 app.include_router(marketplace.router)
+#: عمومی — صفحه‌ی ثبت‌نام پیش از داشتنِ توکن صنف را می‌پرسد.
+app.include_router(trades.router)
 app.include_router(devices.router)
 app.include_router(sales_ops.router)
 app.include_router(client_errors.router)

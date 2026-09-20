@@ -2,18 +2,31 @@ import { useState } from 'react'
 import { Plus, Trash2, Boxes, Package } from 'lucide-react'
 import type { ItemCache } from '../../electron.d'
 import type { ListingDraft } from '../../lib/listingDraft'
+import type { TradeGroup } from '../../api'
 import { ItemPicker } from '../ItemPicker'
 import { NumberInput } from '../NumberInput'
 import { ImageUploader } from '../ImageUploader'
 import { TaskFlow, type WizardStep } from './TaskFlow'
+import { TradePicker, ExtraTradesHint } from '../TradePicker'
+import { useTrades, labelOfTrade } from '../../lib/useTrades'
 
 const faMoney = (v: string | number) => Math.round(Number(v) || 0).toLocaleString('fa-IR')
 
 /** ویزاردِ «ثبت/ویرایشِ لیستینگ» در ماژولِ پخشِ من (نسخه‌ی جدید). همان منطقِ فرمِ کلاسیک
  *  ([useListingDraft]) در چهار مرحله‌ی تاییدشونده + پیش‌نمایشِ زنده. */
-export function ListingWizard({ draft, items }: { draft: ListingDraft; items: ItemCache[] }) {
+export function ListingWizard({
+  draft,
+  items,
+  ownTargets = [],
+}: {
+  draft: ListingDraft
+  items: ItemCache[]
+  /** اصنافِ کلیِ خودِ پخش‌کننده — برای گفتنِ اینکه انتخابِ «اضافه» کِی بی‌اثر است. */
+  ownTargets?: string[]
+}) {
   const [resetTick, setResetTick] = useState(0)
   const { form, setForm } = draft
+  const { groups: tradeGroups } = useTrades()
 
   const steps: WizardStep[] = [
     {
@@ -70,6 +83,19 @@ export function ListingWizard({ draft, items }: { draft: ListingDraft; items: It
             همین حالا منتشر شود (فروشگاه‌های متصل ببینند)
           </label>
           <p className="hint field-full">۰ یا خالی یعنی بدونِ محدودیت. هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد.</p>
+          {/* این پوسته پیش‌فرضِ هر سه تم است؛ نبودنِ انتخابگرِ صنف این‌جا یعنی قابلیت
+              برای اکثرِ کاربران اصلاً وجود ندارد. */}
+          {tradeGroups.length > 0 && (
+            <fieldset className="mp-limits field-full">
+              <legend>ارائه به اصنافِ دیگر (اختیاری)</legend>
+              <ExtraTradesHint count={form.extraTrades.length} ownTargets={ownTargets} />
+              <TradePicker
+                groups={tradeGroups}
+                value={form.extraTrades}
+                onChange={(next) => setForm({ ...form, extraTrades: next })}
+              />
+            </fieldset>
+          )}
         </div>
       ),
     },
@@ -77,7 +103,7 @@ export function ListingWizard({ draft, items }: { draft: ListingDraft; items: It
       key: 'review',
       title: 'بازبینی و ثبت',
       subtitle: 'یک‌بار مرور کنید، بعد ثبت را بزنید.',
-      body: <ReviewStep draft={draft} items={items} />,
+      body: <ReviewStep draft={draft} items={items} tradeGroups={tradeGroups} />,
     },
   ]
 
@@ -159,7 +185,15 @@ function DetailsStep({ draft, items }: { draft: ListingDraft; items: ItemCache[]
   )
 }
 
-function ReviewStep({ draft, items }: { draft: ListingDraft; items: ItemCache[] }) {
+function ReviewStep({
+  draft,
+  items,
+  tradeGroups,
+}: {
+  draft: ListingDraft
+  items: ItemCache[]
+  tradeGroups: TradeGroup[]
+}) {
   const { form } = draft
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? '—'
   return (
@@ -173,6 +207,12 @@ function ReviewStep({ draft, items }: { draft: ListingDraft; items: ItemCache[] 
         <div className="live-preview-row"><span>قیمتِ عمده</span><strong>{faMoney(form.wholesalePrice)} ریال</strong></div>
         {form.category && <div className="live-preview-row"><span>دسته</span><strong>{form.category}</strong></div>}
         <div className="live-preview-row"><span>وضعیت</span><strong>{form.isPublished ? 'منتشرشده' : 'پیش‌نویس'}</strong></div>
+        {form.extraTrades.length > 0 && (
+          <div className="live-preview-row">
+            <span>اصنافِ اضافه</span>
+            <strong>{form.extraTrades.map((k) => labelOfTrade(tradeGroups, k)).join('، ')}</strong>
+          </div>
+        )}
       </div>
       {form.kind === 'pack' && draft.packRows.length > 0 && (
         <div className="table-scroll">

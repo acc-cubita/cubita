@@ -19,6 +19,9 @@ import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { useNavSection } from '../components/navContext'
+import { useTrades, labelOfTrade } from '../lib/useTrades'
+import { TradePicker, ExtraTradesHint } from '../components/TradePicker'
+import { toFaDigits } from '../lib/jalali'
 import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
 import { ImageUploader } from '../components/ImageUploader'
@@ -101,6 +104,15 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
 }
 
 function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
+  const { groups: tradeGroups } = useTrades()
+  //: اصنافِ کلیِ خودِ پخش‌کننده لازم است چون «اضافه» روی «همه» بی‌اثر است؛ بدونِ
+  //: دانستنش نمی‌شود این را به کاربر گفت و انتخابش بی‌صدا بی‌نتیجه می‌ماند.
+  const [ownTargets, setOwnTargets] = useState<string[]>([])
+  useEffect(() => {
+    void fetchMpSettings(token)
+      .then((st) => setOwnTargets(st.target_trades ?? []))
+      .catch(() => setOwnTargets([]))
+  }, [token])
   const guided = useTheme().theme.content === 'guided'
   const [listings, setListings] = useState<Listing[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -229,6 +241,18 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
           <span className="field-hint">هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد؛ و در هر روز حداکثر به تعدادِ تعیین‌شده می‌تواند سفارش ثبت کند.</span>
         </fieldset>
 
+        {tradeGroups.length > 0 && (
+          <fieldset className="mp-limits">
+            <legend>ارائه به اصنافِ دیگر (اختیاری)</legend>
+            <ExtraTradesHint count={form.extraTrades.length} ownTargets={ownTargets} />
+            <TradePicker
+              groups={tradeGroups}
+              value={form.extraTrades}
+              onChange={(next) => setForm({ ...form, extraTrades: next })}
+            />
+          </fieldset>
+        )}
+
         <label className="cal-check-inline">
           <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
           منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
@@ -265,6 +289,16 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                             {l.kind === 'pack'
                               ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
                               : (itemName.get(l.item_id ?? '') ?? '—')}
+                            {/* وضعیتی که دیده نشود عملاً وجود ندارد: بدونِ این نشان،
+                                پخش‌کننده نمی‌داند کدام قلمش اصنافِ اضافه دارد. */}
+                            {(l.extra_trades?.length ?? 0) > 0 && (
+                              <span
+                                className="status-badge tone-info trade-extra-badge"
+                                title={l.extra_trades.map((k) => labelOfTrade(tradeGroups, k)).join('، ')}
+                              >
+                                +{toFaDigits(String(l.extra_trades.length))} صنف
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -302,7 +336,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
 
       {guided ? (
         <>
-          <ListingWizard draft={draft} items={items} />
+          <ListingWizard draft={draft} items={items} ownTargets={ownTargets} />
           {listCard}
         </>
       ) : (
@@ -766,6 +800,9 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
   const [settings, setSettings] = useState<MarketplaceSettings>({ display_name: '', settlement_mode: 'credit', is_active: false })
   const [msg, setMsg] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const { groups: tradeGroups } = useTrades()
+
+  const targets = settings.target_trades ?? []
 
   useEffect(() => {
     void fetchMpSettings(token).then((s) => { setSettings(s); onActiveChange?.(s.is_active) }).catch(() => {})
@@ -815,6 +852,30 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
             «مامور حمل/انتقال» را بدهید تا فقط بتواند سفارش‌ها را ببیند و تحویل را ثبت کند.
           </span>
         </fieldset>
+
+        {tradeGroups.length > 0 && (
+          <fieldset className="mp-limits">
+            <legend>اصنافی که به آن‌ها جنس می‌دهید</legend>
+            {/* فهرستِ خالی رفتار را عوض نمی‌کند (همه می‌بینندتان)، ولی بی‌هشدار
+                گذاشتنش یعنی پخش‌کننده هرگز نمی‌فهمد این قابلیت هست. */}
+            {targets.length === 0 ? (
+              <p className="mp-limit-hint">
+                هنوز صنفی انتخاب نکرده‌اید، پس <b>همه‌ی فروشگاه‌ها</b> شما را در بازار می‌بینند.
+                با انتخابِ صنف، فقط فروشگاه‌های همان اصناف شما را می‌بینند.
+              </p>
+            ) : (
+              <p className="field-hint">
+                {toFaDigits(String(targets.length))} صنف انتخاب شده — فقط فروشگاه‌های همین
+                اصناف شما را در بازار می‌بینند.
+              </p>
+            )}
+            <TradePicker
+              groups={tradeGroups}
+              value={targets}
+              onChange={(next) => setSettings({ ...settings, target_trades: next })}
+            />
+          </fieldset>
+        )}
 
         <fieldset className="mp-limits">
           <legend>سیاستِ مرجوعی</legend>

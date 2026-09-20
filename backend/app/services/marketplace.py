@@ -78,6 +78,7 @@ def update_settings(db: Session, distributor_tenant_id: UUID, data) -> Marketpla
     row.require_delivery = data.require_delivery
     row.return_policy = data.return_policy.strip()
     row.return_window_days = data.return_window_days
+    row.target_trades = list(data.target_trades)
     db.flush()
     return row
 
@@ -148,6 +149,7 @@ def create_listing(db: Session, distributor_tenant_id: UUID, data) -> Marketplac
         images=data.images or [],
         category=data.category.strip(),
         is_published=data.is_published,
+        extra_trades=list(data.extra_trades),
         min_order_qty=data.min_order_qty,
         max_order_qty=data.max_order_qty,
         daily_order_limit=data.daily_order_limit,
@@ -177,6 +179,7 @@ def update_listing(db: Session, distributor_tenant_id: UUID, listing_id: UUID, d
     listing.images = data.images or []
     listing.category = data.category.strip()
     listing.is_published = data.is_published
+    listing.extra_trades = list(data.extra_trades)
     listing.min_order_qty = data.min_order_qty
     listing.max_order_qty = data.max_order_qty
     listing.daily_order_limit = data.daily_order_limit
@@ -220,6 +223,7 @@ def listing_dict(listing: MarketplaceListing) -> dict:
         "images": listing.images or [],
         "category": listing.category,
         "is_published": listing.is_published,
+        "extra_trades": list(listing.extra_trades or []),
         "min_order_qty": listing.min_order_qty,
         "max_order_qty": listing.max_order_qty,
         "daily_order_limit": listing.daily_order_limit,
@@ -265,28 +269,130 @@ def _active_distributor(db: Session, distributor_tenant_id: UUID) -> Tenant:
     return t
 
 
+def distributor_matches_trade(retailer_trade: str | None, target_trades: list | None) -> bool:
+    """آیا این پخش‌کننده باید در بازارِ این فروشگاه دیده شود؟
+
+    | فروشگاه | پخش‌کننده | نتیجه |
+    |---|---|---|
+    | صنف دارد | فهرستِ هدف خالی | دیده می‌شود (بدونِ محدودیت) |
+    | صنف دارد | صنفِ فروشگاه در فهرست هست | دیده می‌شود |
+    | صنف دارد | صنفِ فروشگاه در فهرست **نیست** | پنهان |
+    | صنفی اعلام نکرده | هرچه | دیده می‌شود |
+
+    **ردیفِ آخر عمدی است.** همه‌ی فروشگاه‌های موجود `trade = NULL` اند، چون این ستون
+    تا امروز وجود نداشت. اگر «نمی‌دانم» را مثلِ «هیچ‌کدام» حساب می‌کردیم، هر
+    فروشگاهِ موجود با این ارتقا هر پخش‌کننده‌ی هدف‌داری را از دست می‌داد — بی‌آنکه
+    کسی بفهمد چرا بازارش خالی شد.
+    """
+    if not retailer_trade:
+        return True
+    if not target_trades:
+        return True
+    return retailer_trade in target_trades
+
+
+def listing_visible_to_trade(
+    retailer_trade: str | None, target_trades: list | None, extra_trades: list | None
+) -> bool:
+    """آیا این قلمِ کاتالوگ برای این فروشگاه دیده می‌شود؟
+
+    مخاطبِ هر قلم = اصنافِ کلیِ پخش‌کننده **∪** اصنافِ اضافه‌ی خودِ قلم.
+
+    | فروشگاه | اصنافِ کلی | اضافه‌ی قلم | نتیجه |
+    |---|---|---|---|
+    | پوشاک | [پوشاک] | — | دیده می‌شود |
+    | یدکی | [پوشاک] | — | پنهان |
+    | یدکی | [پوشاک] | [یدکی] | **دیده می‌شود** |
+    | پوشاک | [پوشاک] | [یدکی] | دیده می‌شود — «اضافه» چیزی را برنمی‌دارد |
+    | اعلام‌نکرده | [پوشاک] | هرچه | دیده می‌شود |
+    | یدکی | — (خالی) | هرچه | دیده می‌شود |
+
+    **ردیفِ آخر قیدِ ذاتیِ «اضافه‌کردن» است:** پخش‌کننده‌ای که صنفِ کلی اعلام نکرده،
+    کاتالوگش برای همه باز است و «اضافه» روی «همه» چیزی را محدود نمی‌کند. فرم همین
+    را همان‌جا می‌گوید تا انتخابِ بی‌اثر، بی‌صدا نماند.
+    """
+    if not retailer_trade:
+        return True
+    if not target_trades:
+        return True
+    return retailer_trade in target_trades or retailer_trade in (extra_trades or [])
+
+
 def list_distributors_for_retailer(db: Session, retailer_tenant_id: UUID) -> list[dict]:
-    """پخش‌کننده‌های فعالِ بازار + وضعیتِ اتصالِ این فروشگاه به هرکدام."""
+    """پخش‌کننده‌های فعالِ بازار + وضعیتِ اتصالِ این فروشگاه به هرکدام.
+
+    فهرست با صنفِ فروشگاه فیلتر می‌شود (`distributor_matches_trade`). چون فیلتر
+    می‌تواند فهرست را کوتاه کند، سمتِ فرانت **دلیلش را می‌گوید** — وگرنه فروشگاه
+    یک صفحه‌ی کم‌پشت می‌بیند و نتیجه می‌گیرد بازار خالی است.
+    """
     conns = {
         c.distributor_tenant_id: c.status
         for c in db.query(MarketplaceConnection)
         .filter(MarketplaceConnection.retailer_tenant_id == retailer_tenant_id)
         .all()
     }
+    retailer = db.get(Tenant, retailer_tenant_id)
+    retailer_trade = retailer.trade if retailer is not None else None
+
+    live = [
+        s
+        for s in db.query(MarketplaceSettings).filter(MarketplaceSettings.is_active.is_(True)).all()
+        if (t := db.get(Tenant, s.distributor_tenant_id)) is not None
+        and t.kind == "distributor"
+        and t.status == "active"
+    ]
+    names = {s.distributor_tenant_id: s for s in live}
+    counts = _listing_trade_counts(db, retailer_trade, names)
+
     rows: list[dict] = []
-    for s in db.query(MarketplaceSettings).filter(MarketplaceSettings.is_active.is_(True)).all():
-        t = db.get(Tenant, s.distributor_tenant_id)
-        if t is None or t.kind != "distributor" or t.status != "active":
+    for s in live:
+        did = s.distributor_tenant_id
+        t = db.get(Tenant, did)
+        matching, total = counts[did]
+        #: پخش‌کننده‌ای که هدفش این صنف نیست ولی یک قلمِ «اضافه‌دار» دارد، باید پیدا
+        #: شود — وگرنه فروشگاه هرگز به او وصل نمی‌شود و آن قلم برایش وجود ندارد.
+        if not distributor_matches_trade(retailer_trade, s.target_trades) and matching == 0:
             continue
         rows.append(
             {
-                "tenant_id": s.distributor_tenant_id,
+                "tenant_id": did,
                 "display_name": s.display_name.strip() or t.name,
-                "connection_status": conns.get(s.distributor_tenant_id),
+                "connection_status": conns.get(did),
+                "matching_listings": matching,
+                "total_listings": total,
             }
         )
     rows.sort(key=lambda d: d["display_name"])
     return rows
+
+
+def _listing_trade_counts(
+    db: Session, retailer_trade: str | None, settings_by_id: dict
+) -> dict[UUID, tuple[int, int]]:
+    """به‌ازای هر پخش‌کننده: (تعدادِ اقلامِ دیده‌شدنی برای این صنف، کلِ اقلامِ منتشرشده).
+
+    یک کوئریِ گروهی با **دو ستون** پیش از حلقه، نه یک کوئری به‌ازای هر پخش‌کننده.
+    جمع‌بستن در پایتون انجام می‌شود نه با `@>`ِ JSONB، چون خواناتر است و بدونِ
+    دیتابیس هم به تست درمی‌آید؛ اگر روزی حجمِ کاتالوگ بزرگ شد، همین‌جا با
+    `GROUP BY` + containment جمع می‌شود.
+    """
+    out = {did: (0, 0) for did in settings_by_id}
+    if not settings_by_id:
+        return out
+    rows = (
+        db.query(MarketplaceListing.distributor_tenant_id, MarketplaceListing.extra_trades)
+        .filter(
+            MarketplaceListing.is_published.is_(True),
+            MarketplaceListing.distributor_tenant_id.in_(settings_by_id.keys()),
+        )
+        .all()
+    )
+    for did, extra in rows:
+        matching, total = out[did]
+        targets = settings_by_id[did].target_trades
+        hit = listing_visible_to_trade(retailer_trade, targets, extra)
+        out[did] = (matching + (1 if hit else 0), total + 1)
+    return out
 
 
 # ── اتصال‌ها ──────────────────────────────────────────────────────────
@@ -614,8 +720,26 @@ def approved_distributor_ids(db: Session, retailer_tenant_id: UUID) -> set[UUID]
     return {r[0] for r in rows}
 
 
+def _targets_by_distributor(db: Session, distributor_ids) -> dict[UUID, list]:
+    """اصنافِ هدفِ هر پخش‌کننده، یک‌جا — تا داخلِ حلقه‌ی لیستینگ‌ها کوئری نخورد."""
+    if not distributor_ids:
+        return {}
+    rows = (
+        db.query(MarketplaceSettings.distributor_tenant_id, MarketplaceSettings.target_trades)
+        .filter(MarketplaceSettings.distributor_tenant_id.in_(distributor_ids))
+        .all()
+    )
+    return {did: targets for did, targets in rows}
+
+
 def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: UUID | None = None) -> list[dict]:
-    """لیستینگ‌های منتشرشده‌ی پخش‌کننده‌های تأییدشده. با فیلترِ صریحِ اتصال (RLS نیست)."""
+    """لیستینگ‌های منتشرشده‌ی پخش‌کننده‌های تأییدشده. با فیلترِ صریحِ اتصال (RLS نیست).
+
+    علاوه بر اتصال، هر قلم با `listing_visible_to_trade` هم سنجیده می‌شود: اتصال
+    می‌گوید «حق داری کاتالوگش را ببینی»، صنف می‌گوید «کدام اقلامش به تو مربوط است».
+    فروشگاهی که فقط به‌خاطرِ یک قلمِ اضافه‌دار وصل شده، همان یک قلم را می‌بیند نه
+    کلِ کاتالوگ را — که کلِ نکته‌ی این قابلیت است.
+    """
     allowed = approved_distributor_ids(db, retailer_tenant_id)
     if distributor_tenant_id is not None:
         if distributor_tenant_id not in allowed:
@@ -623,6 +747,10 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
         allowed = {distributor_tenant_id}
     if not allowed:
         return []
+
+    retailer = db.get(Tenant, retailer_tenant_id)
+    retailer_trade = retailer.trade if retailer is not None else None
+    targets = _targets_by_distributor(db, allowed)
 
     listings = (
         db.query(MarketplaceListing)
@@ -637,6 +765,8 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
     out: list[dict] = []
     for l in listings:
         did = l.distributor_tenant_id
+        if not listing_visible_to_trade(retailer_trade, targets.get(did), l.extra_trades):
+            continue
         if did not in names:
             names[did] = distributor_display_name(db, did)
         out.append(
@@ -710,6 +840,13 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
     if distributor_id not in approved_distributor_ids(db, retailer_tenant_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "به این پخش‌کننده متصل نیستید یا اتصال هنوز تأیید نشده است")
 
+    #: فیلترِ صنف این‌جا هم اعمال می‌شود، نه فقط روی نمایش: وگرنه فروشگاه با
+    #: `listing_id`ِ حدس‌زده قلمی را سفارش می‌دهد که حق دیدنش را ندارد و فیلتر
+    #: می‌شود یک تزئینِ سمتِ کلاینت.
+    retailer = db.get(Tenant, retailer_tenant_id)
+    retailer_trade = retailer.trade if retailer is not None else None
+    targets = _targets_by_distributor(db, [distributor_id]).get(distributor_id)
+
     listing_ids = [ln.listing_id for ln in data.lines]
     listings = {
         l.id: l
@@ -720,6 +857,7 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
             MarketplaceListing.is_published.is_(True),
         )
         .all()
+        if listing_visible_to_trade(retailer_trade, targets, l.extra_trades)
     }
 
     order_lines: list[MarketplaceOrderLine] = []

@@ -71,6 +71,14 @@ class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
     return_window_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     #: شماره‌ی مرجوعیِ بعدی (شمارنده‌ی نمایشیِ per-distributor).
     next_return_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    #: اصنافی که این پخش‌کننده به آن‌ها جنس می‌دهد — کلیدهای `app/services/trades.py`.
+    #:
+    #: **فهرستِ خالی = بدونِ محدودیت** (همه‌ی فروشگاه‌ها می‌بینندش). پیش‌فرض همین
+    #: است تا هیچ پخش‌کننده‌ی موجودی با این ارتقا از بازار غیب نشود؛ تبِ تنظیمات
+    #: به‌جایش هشدار می‌دهد که قابلیت را ندیده نگیرد.
+    target_trades: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
 
 
 class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
@@ -95,6 +103,19 @@ class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
     images: Mapped[list] = mapped_column(JSONB, default=list)
     category: Mapped[str] = mapped_column(String(100), default="", server_default="")
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: اصنافی که این قلم **علاوه بر** اصنافِ کلیِ پخش‌کننده
+    #: (`MarketplaceSettings.target_trades`) به آن‌ها هم نشان داده می‌شود.
+    #:
+    #: موردِ کاربردش: تولیدیِ پوشاک که هدفش پوشاک‌فروشی‌هاست، ولی «لباس کار» را به
+    #: یدکی‌فروشی و ابزارفروشی هم می‌دهد — بدونِ اینکه کلِ کاتالوگِ پیراهن و مانتو
+    #: برای آن‌ها باز شود.
+    #:
+    #: **اضافه می‌کند، جایگزین نمی‌کند.** پس تغییرِ بعدیِ اصنافِ کلی خودکار روی همه‌ی
+    #: اقلام اثر می‌گذارد و لیستینگ‌ها از آن عقب نمی‌مانند. نتیجه‌اش این است که
+    #: پخش‌کننده‌ی بدونِ صنفِ کلی (= همه می‌بینند) نمی‌تواند یک قلم را محدود کند؛
+    #: این ذاتیِ همین انتخاب است و در فرم صریح گفته می‌شود.
+    extra_trades: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
 
     #: محدودیت‌های سفارش‌گذاری که پخش‌کننده روی همین لیستینگ می‌گذارد (۰ = بدونِ محدودیت):
     #:   min/max_order_qty = کف/سقفِ تعداد در هر سفارش

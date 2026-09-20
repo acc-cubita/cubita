@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, MailCheck, RefreshCw, Factory } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, MailCheck, RefreshCw, Factory, Store } from 'lucide-react'
 import { requestSignupCode, signup, fetchMe, type MeResponse } from '../api'
 import { SearchSelect } from '../components/SearchSelect'
+import { useTrades } from '../lib/useTrades'
 
 const MIN_PASSWORD_LENGTH = 10
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 60
 
-//: صنف‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند. قالبِ پیش‌فرضِ ماژول‌های پنل را تعیین می‌کند.
+//: قالبِ ماژول‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند. این با «صنف»
+//: پایین‌تر فرق دارد: این تعیین می‌کند کدام ماژول‌های پنل روشن باشند، آن می‌گوید
+//: کسب‌وکار چه می‌فروشد. فهرستِ اصناف عمداً این‌جا تکرار نشده و از `/api/trades`
+//: می‌آید — ~۹۰ ردیف است و دو فهرستِ موازی دیر یا زود از هم دور می‌شوند.
 const INDUSTRIES = [
   { key: 'general', label: 'عمومی (همه‌ی ماژول‌ها)' },
   { key: 'retail', label: 'خرده‌فروشی' },
@@ -32,6 +36,8 @@ export function SignupScreen({
   const [step, setStep] = useState<'details' | 'code'>('details')
   const [businessName, setBusinessName] = useState('')
   const [industry, setIndustry] = useState('general')
+  const [trade, setTrade] = useState('')
+  const { groups: tradeGroups } = useTrades()
   const [ownerName, setOwnerName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -103,7 +109,7 @@ export function SignupScreen({
     setError(null)
     setLoading(true)
     try {
-      const t = await signup(businessName.trim(), ownerName.trim(), email.trim(), password, code.trim(), industry)
+      const t = await signup(businessName.trim(), ownerName.trim(), email.trim(), password, code.trim(), industry, trade)
       await window.cubita?.setAuthToken(t)
       onDone(t, await fetchMe(t))
     } catch (err) {
@@ -179,8 +185,38 @@ export function SignupScreen({
                   ))}
                 </SearchSelect>
               </div>
-              <span className="field-hint">ماژول‌های پنل بر اساسِ صنف تنظیم می‌شوند؛ بعداً از «شخصی‌سازیِ پنل» قابلِ تغییر است.</span>
+              <span className="field-hint">ماژول‌های پنل بر اساسِ آن تنظیم می‌شوند؛ بعداً از «شخصی‌سازیِ پنل» قابلِ تغییر است.</span>
             </label>
+
+            {/* صنف از قالبِ ماژول جداست: آن می‌گوید چه ابزاری لازم داری، این می‌گوید
+                چه می‌فروشی. دومی است که در بازارِ پخش تو را به پخش‌کننده‌ی درست وصل
+                می‌کند. اگر فهرست نیامده باشد (سرورِ قدیمی/آفلاین) کلاً نشان داده
+                نمی‌شود — صنف اختیاری است و ثبت‌نام نباید به‌خاطرش بماند. */}
+            {tradeGroups.length > 0 && (
+              <label>
+                صنف — چه می‌فروشید؟
+                <div className="input-with-icon">
+                  <Store size={16} className="input-icon" />
+                  <SearchSelect
+                    value={trade}
+                    onChange={(e) => setTrade(e.target.value)}
+                    searchPlaceholder="نامِ صنف…"
+                  >
+                    <option value="">— انتخاب کنید (اختیاری) —</option>
+                    {tradeGroups.map((g) => (
+                      <optgroup key={g.key} label={g.label}>
+                        {g.trades.map((t) => (
+                          <option key={t.key} value={t.key}>{t.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </SearchSelect>
+                </div>
+                <span className="field-hint">
+                  شرکت‌های پخش با همین صنف شما را پیدا می‌کنند. بعداً هم قابلِ تغییر است.
+                </span>
+              </label>
+            )}
 
             <label>
               نام و نام خانوادگی
