@@ -12,6 +12,7 @@ import {
   ISSUE_RETURN_TYPE_LABELS,
   newIdempotencyKey,
   printIssueReturn,
+  RETURN_CONDITION_LABELS,
   voidIssueReturn,
   type ContactRecord,
   type IssueReturnBasis,
@@ -21,6 +22,7 @@ import {
   type IssueReturnRow,
   type IssueReturnType,
   type MeResponse,
+  type ReturnCondition,
 } from '../api'
 import type { WarehouseCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
@@ -133,6 +135,8 @@ function ReturnForm({
   const [basisKey, setBasisKey] = useState(initial ? `${initial.kind}:${initial.id}` : '')
   const [basis, setBasis] = useState<IssueReturnBasis | null>(null)
   const [qty, setQty] = useState<Record<string, string>>({})
+  //: §۱۴ — حالِ هر ردیفِ برگشتی. نیامده = `sellable`، یعنی رفتارِ دیروز.
+  const [condition, setCondition] = useState<Record<string, ReturnCondition>>({})
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? '')
   const [delivererId, setDelivererId] = useState('')
   const [returnDate, setReturnDate] = useState(todayIso())
@@ -226,8 +230,16 @@ function ReturnForm({
           description: description.trim(),
           lines: chosen.map((line) =>
             basis.kind === 'sales_return'
-              ? { sales_return_line_id: line.basis_line_id, qty: Number(qty[line.basis_line_id]) }
-              : { warehouse_issue_line_id: line.basis_line_id, qty: Number(qty[line.basis_line_id]) },
+              ? {
+                  sales_return_line_id: line.basis_line_id,
+                  qty: Number(qty[line.basis_line_id]),
+                  return_condition: condition[line.basis_line_id] ?? 'sellable',
+                }
+              : {
+                  warehouse_issue_line_id: line.basis_line_id,
+                  qty: Number(qty[line.basis_line_id]),
+                  return_condition: condition[line.basis_line_id] ?? 'sellable',
+                },
           ),
         },
         requestKey.current,
@@ -333,6 +345,7 @@ function ReturnForm({
                   <th>برگشت‌خورده</th>
                   <th>باقیمانده</th>
                   <th>مقدار برگشت</th>
+                  <th>حالِ کالا</th>
                   <th>فی</th>
                   <th>مبلغ</th>
                 </tr>
@@ -357,6 +370,27 @@ function ReturnForm({
                           disabled={done}
                           onChange={(v) => setQty((prev) => ({ ...prev, [line.basis_line_id]: v }))}
                         />
+                      </td>
+                      {/*
+                        §۱۴ — سالم به موجودیِ قابلِ فروش برمی‌گردد، خراب نه.
+                        کالای خراب فیزیکی برمی‌گردد (واقعاً در انبار است) ولی از
+                        «قابلِ فروش» بیرون می‌ماند.
+                      */}
+                      <td data-label="حالِ کالا">
+                        <SearchSelect
+                          value={condition[line.basis_line_id] ?? 'sellable'}
+                          disabled={done}
+                          onChange={(e) =>
+                            setCondition((prev) => ({
+                              ...prev,
+                              [line.basis_line_id]: e.target.value as ReturnCondition,
+                            }))
+                          }
+                        >
+                          {(Object.keys(RETURN_CONDITION_LABELS) as ReturnCondition[]).map((k) => (
+                            <option key={k} value={k}>{RETURN_CONDITION_LABELS[k]}</option>
+                          ))}
+                        </SearchSelect>
                       </td>
                       <td className="num" data-label="فی">{faAmount(line.unit_cost)}</td>
                       <td className="num" data-label="مبلغ">

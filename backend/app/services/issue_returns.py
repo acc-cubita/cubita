@@ -32,6 +32,7 @@ from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.counters import DOC_WAREHOUSE_ISSUE_RETURN
 from app.models.inventory import Contact, Item, Warehouse
 from app.models.invoices import ISSUE_TYPE_LABELS, SalesInvoice, WarehouseIssue, WarehouseIssueLine
+from app.models.returns import NON_SELLABLE_CONDITIONS, RETURN_CONDITION_LABELS
 from app.models.issue_returns import (
     ISSUE_RETURN_TYPE_LABELS,
     WarehouseIssueReturn,
@@ -44,6 +45,8 @@ from app.pagination import PageParams, paginate
 from app.schemas.issue_returns import IssueReturnIn
 from app.services import chart_codes as cc
 from app.services import items as items_svc
+from app.services import batches as batches_svc
+from app.services import reservations as reservations_svc
 from app.services import units
 from app.services import valuation
 from app.services import warehouses
@@ -80,6 +83,9 @@ class _Row:
     qty: Decimal
     sales_return_line_id: UUID | None = None
     description: str = ""
+    #: §۱۴ — حالِ کالای برگشتی. **آخرِ فهرست** است و این عمدی است: سه فراخوانِ
+    #: `_Row(...)` موضعی‌اند و درجِ وسط بی‌صدا `description` را جابه‌جا می‌کرد.
+    return_condition: str = "sellable"
 
 
 # ─────────────────────────── مانده‌های مشتق ───────────────────────────
@@ -240,6 +246,8 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
     for row in rows:
         by_item[row.source.item_id] += row.qty
 
+    #: (حرکت، ردیف، کالا، بار، مقدار، حال) — پس از `flush` به هم وصل می‌شوند.
+    pending: list[tuple] = []
     lock_items(db, by_item.keys())
     fresh = {
         item.id: item
@@ -290,15 +298,27 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
             item_code_snapshot=source.item_code_snapshot or item.sku,
             item_name_snapshot=source.item_name_snapshot or item.name,
             unit_snapshot=source.unit_snapshot or item.unit,
+            return_condition=row.return_condition,
             description=row.description,
         )
         ret.lines.append(line)
-        move = StockLedger(
-            item_id=item.id, warehouse_id=ret.warehouse_id, qty=row.qty, unit_cost=unit_cost,
-            entry_date=ret.return_date, source_type=SOURCE_TYPE, source_id=ret.id,
-        )
-        db.add(move)
-        moves.append(move)
+        #: **§۱۴ — کالا به همان باری برمی‌گردد که از آن رفته بود.** چون خروج
+        #: به‌ازای هر بار یک حرکتِ جدا نوشته و `source_line_id` را هم نشانده،
+        #: این بی هیچ ورودیِ تازه‌ای معلوم است. کالای بی‌ردیابی فهرستِ خالی
+        #: می‌گیرد و یک حرکتِ بی‌برچسب — همان رفتارِ دیروز.
+        back = batches_svc.plan_return(db, source.id, row.qty)
+        splits = back or [(None, row.qty)]
+        for batch_id, take in splits:
+            move = StockLedger(
+                item_id=item.id, warehouse_id=ret.warehouse_id, qty=take, unit_cost=unit_cost,
+                entry_date=ret.return_date, source_type=SOURCE_TYPE, source_id=ret.id,
+                batch_id=batch_id,
+            )
+            db.add(move)
+            moves.append(move)
+            #: شناسه‌ی ردیف تا پس از `flush` وجود ندارد، و هم برچسبِ حرکت و هم
+            #: کلیدِ تکرارناپذیریِ رزرو به آن گره می‌خورند.
+            pending.append((move, line, item, batch_id, take, row.return_condition))
 
         qty_before, average = running[item.id]
         qty_after = qty_before + row.qty
@@ -309,6 +329,29 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
         amount = line.amount
         debits[cost_center_id] += amount
         credits[(account_id, cost_center_id)] += amount
+
+    db.flush()
+    for move, line, item, batch_id, take, condition in pending:
+        move.source_line_id = line.id
+        #: **«وارد موجودی قابل فروش نشود» مکانیزمِ تازه نگرفت (§۱۴).** ادعای
+        #: `blocked`ِ دفترِ رزرو دقیقاً همین کار را می‌کند: از `available` کم
+        #: می‌شود بی آنکه `physical` تکان بخورد. ستونِ تازه یعنی دو کم‌شونده با
+        #: دو مکانیزمِ مختلف که روزی با هم اختلاف پیدا می‌کنند.
+        if condition in NON_SELLABLE_CONDITIONS:
+            reservations_svc.reserve(
+                db,
+                item=item,
+                warehouse_id=ret.warehouse_id,
+                qty=take,
+                on=ret.return_date,
+                source_type=SOURCE_TYPE,
+                source_id=ret.id,
+                source_line_id=line.id,
+                batch_id=batch_id,
+                kind="blocked",
+                notes=f"برگشتِ {RETURN_CONDITION_LABELS[condition]}",
+                user=user,
+            )
 
     for item_id, (_, average) in running.items():
         fresh[item_id].average_cost = average
@@ -402,7 +445,7 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
             for source, issue, take in _allocate_sales_return_line(
                 db, sr_line, qty, planned=planned_issue, name=item.name
             ):
-                rows.append(_Row(source, issue, take, sr_line.id, description))
+                rows.append(_Row(source, issue, take, sr_line.id, description, req.return_condition))
             continue
 
         source = lines.get(req.warehouse_issue_line_id)
@@ -439,7 +482,7 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
                 f"(باقیمانده: {_q(max(remaining, Decimal(0)))})",
             )
         planned_issue[source.id] += qty
-        rows.append(_Row(source, issue, qty, None, description))
+        rows.append(_Row(source, issue, qty, None, description, req.return_condition))
     return rows
 
 

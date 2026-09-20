@@ -153,6 +153,9 @@ class StockBatchIn(BaseModel):
     supplier_id: UUID | None = None
     location_id: UUID | None = None
     qc_status: str = "passed"
+    #: §۱۸ §۱۹ — `consumer_price`ِ بالا همان «پیشنهادی» است؛ این دو تازه‌اند.
+    printed_consumer_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
 
     @field_validator("qc_status")
     @classmethod
@@ -209,6 +212,9 @@ class StockBatchOut(BaseModel):
     hold_status: str = "none"
     hold_reason: str = ""
     is_closed: bool = False
+    #: §۱۸ — سه قیمتِ جدا. «پیشنهادی» همان `consumer_price`ِ بالاست.
+    printed_consumer_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
 
     #: چهار عددِ §۴ به‌علاوه‌ی وضعیتِ مشتق (روتر پُر می‌کند).
     #:
@@ -407,3 +413,42 @@ class BatchTraceOut(BaseModel):
     remaining_qty: Decimal
     movements: list[BatchMovementOut] = []
     recipients: list[BatchRecipientOut] = []
+
+
+# ── جایگزینیِ بار و برگه‌ی جمع‌آوری (§۱۲ §۱۳) ────────────────────────
+class BatchSubstitutionIn(BaseModel):
+    """جایگزینیِ بارِ یک ردیفِ خروج. **دلیل اجباری است** — §۱۳."""
+
+    source_line_id: UUID
+    original_batch_id: UUID
+    new_batch_id: UUID
+    qty: Decimal
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("دلیلِ جایگزینی نمی‌تواند خالی باشد")
+        return v.strip()
+
+    @field_validator("qty")
+    @classmethod
+    def _positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مقدارِ جایگزینی باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class PickingRowOut(BaseModel):
+    """یک ردیفِ برگه‌ی جمع‌آوری (§۱۲)."""
+
+    item_id: UUID
+    item_name: str
+    qty: Decimal
+    unit: str = ""
+    #: تهی = کالای بی‌ردیابی؛ برگه همان‌طور چاپ می‌شود، فقط بی ستونِ بار.
+    batch_id: UUID | None = None
+    batch_number: str = ""
+    expiry_date: date | None = None
+    location: str = ""

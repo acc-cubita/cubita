@@ -721,5 +721,14 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     tax_rate_snapshot: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     tax_amount_snapshot: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
+    #: **اشانتیون — یادداشتِ گزارشی، نه ورودیِ محاسبه (§۲۵).**
+    #:
+    #: کارتنِ رایگان یک ردیفِ **صفرقیمت** نمی‌شود: میانگینِ موزون از دفتر بازپخش
+    #: می‌شود و ردیفِ صفرقیمت میانگین را پایین می‌کشد بی آنکه جایی نوشته باشد
+    #: چرا. به‌جایش تعداد ۱۱ با تخفیفی برابرِ بهای ۱ واحد ثبت می‌شود، و آن‌وقت
+    #: `total_paid / 11` — همان `effective_unit_cost`ِ §۲۵ — خودبه‌خود درست
+    #: درمی‌آید. این ستون فقط می‌گوید از آن ۱۱ تا، ۱ تا رایگان بوده.
+    bonus_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+
     invoice: Mapped["PurchaseInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

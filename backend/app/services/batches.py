@@ -734,3 +734,186 @@ def trace(db: Session, batch: StockBatch) -> dict:
         "movements": movements,
         "recipients": recipients,
     }
+
+
+def origin_batches(db: Session, source_line_id: UUID) -> list[tuple[UUID, Decimal]]:
+    """بارهایی که یک **ردیفِ خروج** از آن‌ها برداشته، با مقدارِ هرکدام.
+
+    §۱۴ می‌گوید کالای برگشتی «به موجودیِ همان Batch برگردد». چون خروج از فاز ۱
+    به‌ازای هر بار یک حرکتِ جدا می‌نویسد و `source_line_id` را هم می‌نشاند، این
+    پرسش بی هیچ جدولِ تازه‌ای جواب دارد.
+
+    ترتیب همان ترتیبِ مصرف است؛ برگشت از آخر شروع می‌شود (آنچه دیرتر رفت، زودتر
+    برمی‌گردد) چون بارِ قدیمی‌تر احتمالاً تا حالا مصرف شده.
+    """
+    rows = (
+        db.query(StockLedger.batch_id, func.coalesce(func.sum(StockLedger.qty), 0))
+        .filter(
+            StockLedger.source_line_id == source_line_id,
+            StockLedger.batch_id.isnot(None),
+            StockLedger.qty < 0,
+        )
+        .group_by(StockLedger.batch_id)
+        .all()
+    )
+    return [(bid, -Decimal(total)) for bid, total in rows if bid is not None]
+
+
+def plan_return(db: Session, source_line_id: UUID, qty: Decimal) -> list[tuple[UUID, Decimal]]:
+    """تقسیمِ یک مقدارِ برگشتی بینِ بارهای مبدأ (§۱۴).
+
+    اگر ردیفِ خروج اصلاً بار نداشته (کالای بی‌ردیابی) فهرستِ خالی برمی‌گردد و
+    فراخوان یک حرکتِ بی‌برچسب می‌نویسد — همان رفتارِ دیروز.
+
+    برگشتِ بیش از آنچه رفته این‌جا رد نمی‌شود: سقفِ برگشت را خودِ سند از قبل
+    می‌سنجد و دو گارد برای یک چیز یعنی دو جا برای واگرایی. اگر چیزی ته کشید،
+    باقی‌مانده بی‌برچسب می‌ماند و در گزارشِ مغایرت دیده می‌شود.
+    """
+    origins = origin_batches(db, source_line_id)
+    if not origins:
+        return []
+    plan: list[tuple[UUID, Decimal]] = []
+    remaining = Decimal(qty)
+    #: از آخر: آنچه دیرتر رفت، زودتر برمی‌گردد.
+    for batch_id, taken in reversed(origins):
+        if remaining <= 0:
+            break
+        give = min(taken, remaining)
+        if give <= 0:
+            continue
+        plan.append((batch_id, give))
+        remaining -= give
+    return plan
+
+
+def substitute(
+    db: Session,
+    *,
+    source_line_id: UUID,
+    original_batch_id: UUID,
+    new_batch_id: UUID,
+    qty: Decimal,
+    reason: str,
+    source_type: str,
+    source_id: UUID | None,
+    user,
+) -> "BatchSubstitution":
+    """بارِ یک ردیفِ خروج را عوض می‌کند — **با ردِ ممیزی** (§۱۳).
+
+    بارِ اصلی ممکن است ته‌انبار نباشد، شکسته باشد یا اصلاً پیدا نشود. §۱۳ صریح
+    است: «این تغییر نباید بدون Audit Trail انجام شود».
+
+    دو چیز نوشته می‌شود و هر دو لازم‌اند:
+
+    * **حرکتِ دفتر** — منفیِ بارِ تازه و مثبتِ بارِ اصلی، هم‌تاریخ. جمعشان صفر
+      است، پس موجودیِ کالا تکان نمی‌خورد؛ فقط از یک بار به بارِ دیگر جابه‌جا
+      می‌شود.
+    * **ردیفِ جایگزینی** — چون حرکتِ دفتر می‌گوید «چه شد» ولی نمی‌گوید **چرا**،
+      و همان «چرا» است که ماهِ بعد کسی دنبالش می‌گردد.
+    """
+    from app.models.batch_substitutions import BatchSubstitution
+    from app.services.inventory import lock_items
+
+    if not reason.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای جایگزینیِ بار، دلیل الزامی است")
+    if original_batch_id == new_batch_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "بارِ جایگزین با بارِ اصلی یکی است")
+
+    original = db.get(StockBatch, original_batch_id)
+    replacement = db.get(StockBatch, new_batch_id)
+    if original is None or replacement is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "بار یافت نشد")
+    if original.item_id != replacement.item_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "بارِ جایگزین مالِ کالای دیگری است")
+    if original.warehouse_id != replacement.warehouse_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "بارِ جایگزین در انبارِ دیگری است")
+
+    from app.models.inventory import Item
+
+    item = db.get(Item, original.item_id)
+    lock_items(db, [item.id])
+    qty = Decimal(qty)
+    nums = numbers(db, [replacement], {item.id: item}, date.today())[replacement.id]
+    if qty > nums["available_qty"]:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"موجودیِ بارِ «{replacement.batch_number}» کافی نیست "
+            f"(موجود: {nums['available_qty'].normalize():f})",
+        )
+
+    origin = (
+        db.query(StockLedger)
+        .filter(StockLedger.source_line_id == source_line_id, StockLedger.batch_id == original_batch_id)
+        .first()
+    )
+    if origin is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "این ردیف از بارِ اصلی برداشتی نداشته است")
+
+    #: جمعِ صفر — موجودیِ کالا تکان نمی‌خورد، فقط بارش عوض می‌شود.
+    for batch_id, signed in ((original_batch_id, qty), (new_batch_id, -qty)):
+        db.add(StockLedger(
+            item_id=item.id, warehouse_id=original.warehouse_id, qty=signed,
+            unit_cost=origin.unit_cost, entry_date=origin.entry_date,
+            source_type=origin.source_type, source_id=origin.source_id,
+            batch_id=batch_id, source_line_id=source_line_id,
+        ))
+
+    row = BatchSubstitution(
+        original_batch_id=original_batch_id,
+        new_batch_id=new_batch_id,
+        qty=qty,
+        source_type=source_type,
+        source_id=source_id,
+        reason=reason.strip(),
+        changed_by_id=getattr(user, "id", None),
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def picking_sheet(db: Session, issue_id: UUID) -> list[dict]:
+    """برگه‌ی جمع‌آوری (§۱۲) — کالا، تعداد، **بار**، انقضا و محلِ قرارگیری.
+
+    انباردار باید بداند کدام بار را بردارد و کجا پیدایش کند. همه‌ی این‌ها از
+    قبل در دفتر و روی بار هستند؛ این تابع فقط کنارِ هم می‌گذاردشان.
+    """
+    from app.models.inventory import Item
+    from app.models.warehouse_locations import WarehouseLocation
+
+    rows = (
+        db.query(StockLedger)
+        .filter(StockLedger.source_type == "warehouse_issue", StockLedger.source_id == issue_id)
+        .order_by(StockLedger.seq)
+        .all()
+    )
+    if not rows:
+        return []
+    batches = {
+        b.id: b for b in db.query(StockBatch).filter(StockBatch.id.in_({r.batch_id for r in rows if r.batch_id})).all()
+    }
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_({r.item_id for r in rows})).all()}
+    locations = {
+        loc.id: loc
+        for loc in db.query(WarehouseLocation)
+        .filter(WarehouseLocation.id.in_({b.location_id for b in batches.values() if b.location_id}))
+        .all()
+    } if batches else {}
+
+    out: list[dict] = []
+    for row in rows:
+        batch = batches.get(row.batch_id) if row.batch_id else None
+        loc = locations.get(batch.location_id) if batch and batch.location_id else None
+        out.append({
+            "item_id": row.item_id,
+            "item_name": items[row.item_id].name if row.item_id in items else "—",
+            "qty": -Decimal(row.qty),
+            "unit": items[row.item_id].unit if row.item_id in items else "",
+            #: بارِ تهی یعنی کالای بی‌ردیابی — برگه همان‌طور چاپ می‌شود، فقط
+            #: بی ستونِ بار. §۲۸: هیچ‌چیز اجباری نمی‌شود.
+            "batch_id": batch.id if batch else None,
+            "batch_number": batch.batch_number if batch else "",
+            "expiry_date": batch.expiry_date if batch else None,
+            "location": loc.code if loc else "",
+        })
+    return out

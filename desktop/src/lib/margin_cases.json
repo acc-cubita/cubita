@@ -1,0 +1,89 @@
+{
+  "_comment": "نمونه‌های مشترکِ محاسبه‌ی سود — پایتون و تایپ‌اسکریپت هر دو همین را می‌خوانند. هیچ‌کدام صاحبِ حقیقت نیست؛ این پرونده هست. درصدها با یک رقمِ اعشار و ROUND_HALF_UP گِرد می‌شوند، چون float64 و Decimal در رقم‌های آخر فرق می‌کنند.",
+
+  "net_purchase_price": [
+    { "name": "بی تخفیف", "list_price": 300000, "discount": 0, "expected": 300000 },
+    { "name": "تخفیفِ مبلغی §۲۳", "list_price": 300000, "discount": 15000, "expected": 285000 },
+    { "name": "تخفیف بیش از قیمت، منفی نمی‌شود", "list_price": 1000, "discount": 5000, "expected": 0 }
+  ],
+
+  "percent_to_amount": [
+    { "name": "۵٪ از ۳۰۰٬۰۰۰", "list_price": 300000, "percent": 5, "expected": 15000 },
+    { "name": "صفر درصد", "list_price": 300000, "percent": 0, "expected": 0 },
+    { "name": "گِردکردنِ نیم‌ریالی", "list_price": 1001, "percent": 50, "expected": 501 }
+  ],
+
+  "gross_profit": [
+    { "name": "مثالِ §۲۱", "consumer_price": 450000, "net_cost": 300000, "expected": 150000 },
+    { "name": "با تخفیف §۲۳", "consumer_price": 450000, "net_cost": 285000, "expected": 165000 },
+    { "name": "زیان هم عدد است", "consumer_price": 100, "net_cost": 150, "expected": -50 }
+  ],
+
+  "markup_percent": [
+    { "name": "مثالِ §۲۲", "consumer_price": 450000, "net_cost": 300000, "expected": 50.0 },
+    { "name": "با تخفیف", "consumer_price": 450000, "net_cost": 285000, "expected": 57.9 },
+    { "name": "بهای صفر جواب ندارد", "consumer_price": 450000, "net_cost": 0, "expected": null }
+  ],
+
+  "margin_percent": [
+    { "name": "مثالِ §۲۲ — با مارک‌آپ یکی نیست", "consumer_price": 450000, "net_cost": 300000, "expected": 33.3 },
+    { "name": "با تخفیف", "consumer_price": 450000, "net_cost": 285000, "expected": 36.7 },
+    { "name": "قیمتِ صفر جواب ندارد", "consumer_price": 0, "net_cost": 300000, "expected": null }
+  ],
+
+  "effective_unit_cost": [
+    { "name": "مثالِ §۲۵ — ۱۲۰ پول، ۱۳۲ گرفته", "total_paid": 36000000, "total_received": 132, "expected": 272727.2727272727272727272727 },
+    { "name": "بی اشانتیون", "total_paid": 36000000, "total_received": 120, "expected": 300000 },
+    { "name": "چیزی نگرفته‌ای", "total_paid": 1000, "total_received": 0, "expected": null }
+  ],
+
+  "profit_per_pack": [
+    { "name": "مثالِ §۲۷", "unit_profit": 150000, "units_per_pack": 12, "expected": 1800000 },
+    { "name": "نسبتِ تعریف‌نشده حدس زده نمی‌شود", "unit_profit": 150000, "units_per_pack": 0, "expected": null }
+  ],
+
+  "effective_consumer_price": [
+    { "name": "§۱۹ — قیمتِ بار می‌چربد", "batch_price": 520000, "product_price": 450000, "expected": 520000 },
+    { "name": "بار ندارد، کالا دارد", "batch_price": null, "product_price": 450000, "expected": 450000 },
+    { "name": "هیچ‌کدام ندارد", "batch_price": null, "product_price": null, "expected": null },
+    { "name": "صفرِ بار یک مقدارِ معتبر است، نه نبود", "batch_price": 0, "product_price": 450000, "expected": 0 }
+  ],
+
+  "order_analysis": [
+    {
+      "name": "مثالِ کاملِ §۲۶",
+      "input": { "qty": 120, "list_price": 300000, "discount": 0, "consumer_price": 450000, "units_per_pack": null, "bonus_qty": 0 },
+      "expected": {
+        "order_quantity": 120,
+        "net_purchase_amount": 36000000,
+        "potential_revenue": 54000000,
+        "potential_gross_profit": 18000000,
+        "markup_percent": 50.0,
+        "margin_percent": 33.3
+      }
+    },
+    {
+      "name": "بی قیمتِ مصرف‌کننده، فقط آنچه معلوم است برمی‌گردد (§۲۶)",
+      "input": { "qty": 10, "list_price": 1000, "discount": 0, "consumer_price": null, "units_per_pack": null, "bonus_qty": 0 },
+      "expected": { "order_quantity": 10, "net_purchase_amount": 10000 }
+    },
+    {
+      "name": "اشانتیون بهای واقعی را پایین می‌آورد (§۲۵)",
+      "input": { "qty": 120, "list_price": 300000, "discount": 0, "consumer_price": 450000, "units_per_pack": null, "bonus_qty": 12 },
+      "expected": {
+        "order_quantity": 120,
+        "net_purchase_amount": 36000000,
+        "bonus_quantity": 12,
+        "effective_unit_cost": 272727.2727272727272727272727,
+        "potential_revenue": 59400000,
+        "markup_percent": 65.0,
+        "margin_percent": 39.4
+      }
+    },
+    {
+      "name": "سودِ هر کارتن وقتی نسبت معلوم است (§۲۷)",
+      "input": { "qty": 10, "list_price": 300000, "discount": 0, "consumer_price": 450000, "units_per_pack": 12, "bonus_qty": 0 },
+      "expected": { "profit_per_pack": 1800000 }
+    }
+  ]
+}

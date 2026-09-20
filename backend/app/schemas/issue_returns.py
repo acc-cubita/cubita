@@ -2,9 +2,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.issue_returns import ISSUE_RETURN_TYPES
+from app.models.returns import RETURN_CONDITIONS
 
 
 class IssueReturnLineIn(BaseModel):
@@ -15,7 +16,18 @@ class IssueReturnLineIn(BaseModel):
     qty: Decimal
     #: خالی یعنی واحدِ اصلی؛ تبدیل فقط در `units.to_primary`.
     unit_id: UUID | None = None
+    #: **حالِ کالای برگشتی (§۱۴).** سالم به موجودیِ قابلِ فروش برمی‌گردد؛
+    #: خراب/منقضی/قرنطینه فیزیکی برمی‌گردد ولی قابلِ فروش نمی‌شود. پیش‌فرض
+    #: `sellable` یعنی رفتارِ دیروز.
+    return_condition: str = "sellable"
     description: str = ""
+
+    @field_validator("return_condition")
+    @classmethod
+    def _valid_condition(cls, v: str) -> str:
+        if v not in RETURN_CONDITIONS:
+            raise ValueError("حالِ کالای برگشتی نامعتبر است")
+        return v
 
     @model_validator(mode="after")
     def validate_line(self) -> "IssueReturnLineIn":

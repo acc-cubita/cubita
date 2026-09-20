@@ -120,6 +120,11 @@ class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
     #: محدودیت‌های سفارش‌گذاری که پخش‌کننده روی همین لیستینگ می‌گذارد (۰ = بدونِ محدودیت):
     #:   min/max_order_qty = کف/سقفِ تعداد در هر سفارش
     #:   daily_order_limit = حداکثر دفعاتِ سفارشِ این کالا در یک روز، به‌ازای هر فروشگاه
+    #: **اشانتیون (§۲۵):** «۱۰ کارتن بخر، ۱ کارتن رایگان». صفر = بدونِ
+    #: اشانتیون، یعنی رفتارِ امروزِ هر لیستینگی که چیزی اعلام نکرده.
+    bonus_threshold_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    bonus_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+
     min_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
     max_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
     daily_order_limit: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
