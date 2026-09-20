@@ -191,10 +191,14 @@ echo "نسخه‌ی نهایی: $VERSION (انتظار: $EXPECTED)"
 # --- ۷. راه‌اندازی و راستی‌آزمایی ---------------------------------------------------
 say "۷/۷ راه‌اندازی و راستی‌آزمایی"
 systemctl start "$SERVICE"
-for i in $(seq 1 30); do
+# **۱۲۰ ثانیه و نه ۳۰.** بالاآمدنِ اپ روی همین ماشین حدودِ ۳۵ ثانیه طول می‌کشد (ایمپورتِ
+# SQLAlchemy و ساختِ متادیتا)، پس سقفِ ۳۰ ثانیه یک استقرارِ **سالم** را شکست‌خورده
+# می‌خواند و بی‌دلیل برمی‌گرداند — دقیقاً چیزی که ۱۴۰۵/۰۶/۲۹ اتفاق افتاد.
+HEALTH_WAIT=120
+for i in $(seq 1 $HEALTH_WAIT); do
     sleep 1
-    curl -sf "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break
-    [[ $i -eq 30 ]] && { echo "سرویس بعد از ۳۰ ثانیه پاسخ نداد" >&2; false; }
+    curl -sf "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { echo "سرویس بعد از ${i} ثانیه بالا آمد"; break; }
+    [[ $i -eq $HEALTH_WAIT ]] && { echo "سرویس بعد از ${HEALTH_WAIT} ثانیه پاسخ نداد" >&2; false; }
 done
 echo "health: $(curl -s http://127.0.0.1:$PORT/api/health)"
 
