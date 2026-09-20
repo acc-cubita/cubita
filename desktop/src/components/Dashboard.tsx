@@ -844,7 +844,9 @@ export function Dashboard({
                 title="گزارش‌ها"
                 description="تراز آزمایشی، سود و زیان، ترازنامه و دفتر کل — همیشه زنده و مستقیم از دفاتر حسابداری."
               />
-              <Reports token={token} />
+              <div className="ef-form">
+                <Reports token={token} />
+              </div>
             </div>
           )}
           {page === 'contractingnew' && <ContractPage token={token} />}

@@ -505,8 +505,8 @@ export function Reports({ token }: { token: string }) {
                 </p>
               ) : (
                 <div className="entity-table-wrap">
-                  <div className="table-scroll">
-                    <table className="entity-table rep-seasonal-table cards-on-mobile">
+                  <div className="table-scroll ef-table-wrap">
+                    <table className="entity-table rep-seasonal-table cards-on-mobile ef-table">
                       <thead>
                         <tr>
                           <th>طرف حساب</th>
@@ -589,8 +589,8 @@ export function Reports({ token }: { token: string }) {
             </div>
           </div>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-stmt-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-stmt-table cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>تاریخ</th>
@@ -629,8 +629,8 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">هنوز بودجه‌ای تعریف نشده. از «حسابداری ← بودجه‌بندی» بودجه اضافه کنید.</p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table rep-budget-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table rep-budget-table cards-on-mobile ef-table">
                   <thead>
                     <tr>
                       <th>کد</th>
@@ -690,8 +690,8 @@ export function Reports({ token }: { token: string }) {
 
           <h3>گردشِ دوره</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   <tr><td className="card-title">ماندهٔ اول دوره</td><td className="money-cell" data-label="مبلغ">{fa(equity.opening_equity)}</td></tr>
                   <tr><td className="card-title">آورده‌ی سرمایه</td><td className="money-cell pos-in" data-label="مبلغ">{fa(equity.contributions)}</td></tr>
@@ -715,8 +715,8 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">هیچ حسابِ حقوق صاحبان سهامی در این بازه حرکتی نداشت.</p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table cards-on-mobile ef-table">
                   <thead>
                     <tr><th>حساب</th><th>اول دوره</th><th>تغییر</th><th>پایان دوره</th></tr>
                   </thead>
@@ -743,8 +743,8 @@ export function Reports({ token }: { token: string }) {
             </p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table cards-on-mobile ef-table">
                   <thead>
                     <tr><th>شریک</th><th>آورده</th><th>برداشت</th></tr>
                   </thead>
@@ -794,8 +794,8 @@ export function Reports({ token }: { token: string }) {
                   <p className="hint">موردی در این فعالیت نبود.</p>
                 ) : (
                   <div className="entity-table-wrap">
-                    <div className="table-scroll">
-                      <table className="entity-table rep-2col-table cards-on-mobile">
+                    <div className="table-scroll ef-table-wrap">
+                      <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                         <tbody>
                           {g.lines.map((l) => (
                             <tr key={l.account_id}>
@@ -827,8 +827,8 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «شرکت ← مرکز هزینه» شروع کنید.</p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table rep-cc-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table rep-cc-table cards-on-mobile ef-table">
                   <thead>
                     <tr>
                       <th>کد</th>
@@ -889,8 +889,8 @@ export function Reports({ token }: { token: string }) {
             </p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table rep-aging-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table rep-aging-table cards-on-mobile ef-table">
                   <thead>
                     <tr>
                       <th>{aging.kind === 'receivable' ? 'مشتری' : 'تأمین‌کننده'}</th>
@@ -943,8 +943,8 @@ export function Reports({ token }: { token: string }) {
             <p className="hint">در این بازه کالایی مانده یا گردش ندارد.</p>
           ) : (
             <div className="entity-table-wrap">
-              <div className="table-scroll">
-                <table className="entity-table rep-inv-table cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="entity-table rep-inv-table cards-on-mobile ef-table">
                   <thead>
                     <tr>
                       <th>کد</th>
@@ -1015,8 +1015,8 @@ export function Reports({ token }: { token: string }) {
           </div>
           <h3>درآمدها</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   {incomeStatement.income.map((r) => (
                     <tr key={r.account_id}>
@@ -1030,8 +1030,8 @@ export function Reports({ token }: { token: string }) {
           </div>
           <h3>هزینه‌ها</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   {incomeStatement.expenses.map((r) => (
                     <tr key={r.account_id}>
@@ -1061,8 +1061,8 @@ export function Reports({ token }: { token: string }) {
           </div>
           <h3>دارایی‌ها</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   {balanceSheet.assets.map((r) => (
                     <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>
@@ -1075,8 +1075,8 @@ export function Reports({ token }: { token: string }) {
 
           <h3>بدهی‌ها</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   {balanceSheet.liabilities.map((r) => (
                     <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>
@@ -1089,8 +1089,8 @@ export function Reports({ token }: { token: string }) {
 
           <h3>حقوق صاحبان سرمایه</h3>
           <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table rep-2col-table cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table rep-2col-table cards-on-mobile ef-table">
                 <tbody>
                   {balanceSheet.equity.map((r) => (
                     <tr key={r.account_id}><td className="card-title">{r.account_name}</td><td className="money-cell" data-label="مبلغ">{fa(r.balance)}</td></tr>

@@ -10,12 +10,22 @@ import {
   type ExchangeRate,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { SearchSelect } from './SearchSelect'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  InputAffix,
+  RowAction,
+} from './form/FormKit'
+
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
-import { SearchSelect } from '../components/SearchSelect'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -98,110 +108,129 @@ export function CurrenciesPanel({ token }: { token: string }) {
   }
 
   return (
-    <div className="split-2col">
-      <SectionCard
-        icon={Coins}
-        title="ارزها"
-        description="ارزهای خارجی را تعریف کنید؛ ریال ارزِ پایه است و لازم نیست اضافه شود."
-      >
-        <form className="invoice-form form-full" onSubmit={handleAddCurrency}>
-          <div className="field-row">
-            <label>
-              کد (مثل USD)
-              <input type="text" value={code} onChange={(e) => setCode(e.target.value)} maxLength={3} placeholder="USD" />
-            </label>
-            <label>
-              نماد
-              <input type="text" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="$" />
-            </label>
-          </div>
-          <label>
-            نام
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="دلار آمریکا" />
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary">
-              <Plus size={14} /> افزودن ارز
-            </button>
-          </div>
-          {message && <div className="hint">{message}</div>}
-        </form>
+    <>
+      <form noValidate onSubmit={handleAddCurrency}>
+        <SectionCard
+          icon={Coins}
+          title="ارزها"
+          tip="ارزهای خارجی را تعریف کنید؛ ریال ارزِ پایه است و لازم نیست اضافه شود."
+          badge={<CountBadge accent>{fa(currencies.length)} ارز</CountBadge>}
+        >
+          <FormGrid>
+            <FormField label="کد ارز" required tip="کدِ سه‌حرفیِ استاندارد، مثلِ USD یا EUR.">
+              {(id) => (
+                <input
+                  id={id}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  maxLength={3}
+                  dir="ltr"
+                  placeholder="USD"
+                />
+              )}
+            </FormField>
+            <FormField label="نماد" optional>
+              {(id) => <input id={id} value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="$" />}
+            </FormField>
+            <FormField label="نام" required>
+              {(id) => (
+                <input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="دلار آمریکا" />
+              )}
+            </FormField>
+          </FormGrid>
 
-        {currencies.length === 0 ? (
-          <EmptyState icon={Coins} text="ارزی تعریف نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table cards-on-mobile">
+          <div className="ef-block">
+            <h3 className="ef-block-title">ارزهای تعریف‌شده</h3>
+          {currencies.length === 0 ? (
+            <EmptyState icon={Coins} text="ارزی تعریف نشده." />
+          ) : (
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>کد</th>
                     <th>نام</th>
                     <th>نماد</th>
-                    <th></th>
+                    <th className="ef-col-min">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {curPg.pageItems.map((c) => (
                     <tr key={c.id}>
-                      <td className="entity-name card-title" data-label="کد">{c.code}</td>
+                      <td className="entity-name card-title" data-label="کد" dir="ltr">
+                        {c.code}
+                      </td>
                       <td data-label="نام">{c.name}</td>
                       <td data-label="نماد">{c.symbol || '—'}</td>
-                      <td className="card-actions">
-                        <button type="button" className="icon-btn-danger" onClick={() => void handleDeleteCurrency(c.id)} aria-label="حذف">
-                          <Trash2 size={13} /> حذف
-                        </button>
+                      <td className="card-actions ef-col-min">
+                        <div className="row-actions ef-row-actions">
+                          <RowAction
+                            icon={Trash2}
+                            label="حذف"
+                            danger
+                            onClick={() => void handleDeleteCurrency(c.id)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <Pager page={curPg.page} pageCount={curPg.pageCount} onChange={curPg.setPage} />
             </div>
-            <Pager page={curPg.page} pageCount={curPg.pageCount} onChange={curPg.setPage} />
+          )}
           </div>
-        )}
-        {error && <div className="error">{error}</div>}
-      </SectionCard>
+          {error && <p className="ef-message ef-message--warn ef-block-note">{error}</p>}
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={message ? { text: message, kind: 'ok' } : null} />}>
+          <button type="submit" className="btn-primary">
+            <Plus size={16} /> افزودن ارز
+          </button>
+        </ActionBar>
+      </form>
 
-      <SectionCard icon={TrendingUp} title="نرخ برابری" description="چند ریال به‌ازای یک واحد ارز. فرم فاکتور آخرین نرخ را پیشنهاد می‌دهد.">
-        {currencies.length === 0 ? (
-          <p className="hint">ابتدا یک ارز تعریف کنید.</p>
-        ) : (
-          <form className="invoice-form form-full" onSubmit={handleAddRate}>
-            <div className="field-row">
-              <label>
-                ارز
-                <SearchSelect value={rateCode} onChange={(e) => setRateCode(e.target.value)}>
-                  {currencies.map((c) => (
-                    <option key={c.id} value={c.code}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              </label>
-              <label>
-                تاریخ
-                <JalaliDatePicker value={rateDate} onChange={setRateDate} />
-              </label>
-            </div>
-            <label>
-              نرخ (ریال به‌ازای ۱ واحد)
-              <NumberInput allowDecimal value={rateValue} onChange={setRateValue} placeholder="۸۰۰۰۰۰" />
-            </label>
-            <div className="invoice-form-footer">
-              <button type="submit" className="btn-primary">
-                <Save size={14} /> ثبت نرخ
-              </button>
-            </div>
-          </form>
-        )}
+      <form noValidate onSubmit={handleAddRate}>
+        <SectionCard
+          icon={TrendingUp}
+          title="نرخ برابری"
+          tip="چند ریال به‌ازای یک واحد ارز. فرمِ فاکتور آخرین نرخ را پیشنهاد می‌دهد."
+          badge={<CountBadge>{fa(rates.length)} نرخ</CountBadge>}
+        >
+          {currencies.length === 0 ? (
+            <div className="ef-empty">ابتدا یک ارز تعریف کنید.</div>
+          ) : (
+            <FormGrid>
+              <FormField label="ارز" required>
+                {(id) => (
+                  <SearchSelect id={id} value={rateCode} onChange={(e) => setRateCode(e.target.value)}>
+                    {currencies.map((c) => (
+                      <option key={c.id} value={c.code}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
+              <FormField label="تاریخ" required>
+                {(id) => <JalaliDatePicker id={id} value={rateDate} onChange={setRateDate} />}
+              </FormField>
+              <FormField label="نرخ" required tip="ریال به‌ازای یک واحد ارز.">
+                {(id) => (
+                  <InputAffix unit="ریال">
+                    <NumberInput id={id} allowDecimal value={rateValue} onChange={setRateValue} placeholder="۸۰۰۰۰۰" />
+                  </InputAffix>
+                )}
+              </FormField>
+            </FormGrid>
+          )}
 
-        {rates.length === 0 ? (
-          <EmptyState icon={TrendingUp} text="نرخی ثبت نشده." />
-        ) : (
-          <div className="entity-table-wrap">
-            <div className="table-scroll">
-              <table className="entity-table cards-on-mobile">
+          <div className="ef-block">
+            <h3 className="ef-block-title">نرخ‌های ثبت‌شده</h3>
+          {rates.length === 0 ? (
+            <EmptyState icon={TrendingUp} text="نرخی ثبت نشده." />
+          ) : (
+            <div className="table-scroll ef-table-wrap">
+              <table className="entity-table cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>ارز</th>
@@ -212,18 +241,30 @@ export function CurrenciesPanel({ token }: { token: string }) {
                 <tbody>
                   {ratePg.pageItems.map((r) => (
                     <tr key={r.id}>
-                      <td className="entity-name card-title" data-label="ارز">{r.currency_code}</td>
+                      <td className="entity-name card-title" data-label="ارز" dir="ltr">
+                        {r.currency_code}
+                      </td>
                       <td data-label="تاریخ">{formatJalali(r.rate_date)}</td>
-                      <td data-label="نرخ (ریال)" className="money-cell">{fa(r.rate)}</td>
+                      <td data-label="نرخ (ریال)" className="money-cell">
+                        {fa(r.rate)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <Pager page={ratePg.page} pageCount={ratePg.pageCount} onChange={ratePg.setPage} />
             </div>
-            <Pager page={ratePg.page} pageCount={ratePg.pageCount} onChange={ratePg.setPage} />
+          )}
           </div>
+        </SectionCard>
+        {currencies.length > 0 && (
+          <ActionBar>
+            <button type="submit" className="btn-primary">
+              <Save size={16} /> ثبت نرخ
+            </button>
+          </ActionBar>
         )}
-      </SectionCard>
-    </div>
+      </form>
+    </>
   )
 }

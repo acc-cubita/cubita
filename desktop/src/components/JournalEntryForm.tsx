@@ -1,12 +1,29 @@
-import { BookOpen, Plus, Trash2, Save } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, Rows3, Trash2 } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
+import { SearchSelect } from './SearchSelect'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
+import {
+  ActionBar,
+  AddRowButton,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  InputAffix,
+  RowAction,
+} from './form/FormKit'
 import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntryDraft'
-import { SearchSelect } from '../components/SearchSelect'
 
-/** فرمِ کلاسیکِ «ثبت سند حسابداری دستی» (پوسته‌های تیره/روشن). منطق در هوکِ [useJournalEntryDraft]. */
+const fa = (n: number) => n.toLocaleString('fa-IR')
+
+/**
+ * فرمِ «ثبت سند حسابداری دستی» — منطق در هوکِ [useJournalEntryDraft].
+ *
+ * دو کارت و یک نوار: سربرگِ سند، ردیف‌ها، و نوارِ چسبنده‌ای که جمعِ بدهکار/بستانکار را همیشه
+ * جلوی چشم نگه می‌دارد — سندی که جمعش نمی‌خواند نباید تا لحظه‌ی زدنِ دکمه پنهان بماند.
+ */
 export function JournalEntryForm({
   token,
   accounts,
@@ -18,118 +35,148 @@ export function JournalEntryForm({
 }) {
   const d = useJournalEntryDraft({ token, accounts, onQueued })
 
+  if (d.postableAccounts.length === 0) {
+    return (
+      <SectionCard icon={BookOpen} title="ثبت سند حسابداری">
+        <div className="ef-empty">قبل از ثبت سند، یک‌بار «هم‌گام‌سازی» کنید تا چارت حساب در دسترس باشد.</div>
+      </SectionCard>
+    )
+  }
+
   return (
-    <SectionCard icon={BookOpen} title="ثبت سند حسابداری دستی">
-      {d.postableAccounts.length === 0 ? (
-        <p className="hint">قبل از ثبت سند، یک‌بار «هم‌گام‌سازی» کنید تا چارت حساب در دسترس باشد.</p>
-      ) : (
-        <form
-          className="invoice-form"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void d.submit()
-          }}
-        >
-          <label>
-            شرح سند
-            <input type="text" value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
-          </label>
-          <label>
-            تاریخ سند
-            <JalaliDatePicker value={d.entryDate} onChange={d.setEntryDate} />
-          </label>
-          {/* شماره عطف عمداً در فرم نیست: سرور لحظه‌ی ثبت می‌دهدش و کاربر
-              انتخابی ندارد. پس از ثبت، در دفترِ «اسناد حسابداری» دیده می‌شود. */}
-          <label>
-            شماره فرعی (اختیاری)
-            <input
-              type="text"
-              value={d.subNumber}
-              onChange={(e) => d.setSubNumber(e.target.value)}
-              maxLength={30}
-              placeholder="شماره‌ی پرونده، سندِ سیستمِ قبلی، کدِ دسته"
-            />
-          </label>
-          {d.costCenters.length > 0 && (
-            <label>
-              مرکز هزینه/پروژه (اختیاری)
-              <SearchSelect value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
-                <option value="">— بدون مرکز —</option>
-                {d.costCenters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code ? `${c.code} — ${c.name}` : c.name}
-                  </option>
-                ))}
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault()
+        void d.submit()
+      }}
+    >
+      <SectionCard
+        icon={BookOpen}
+        title="سربرگ سند"
+        tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
+      >
+        <FormGrid>
+          <FormField label="شرح سند">
+            {(id) => <input id={id} value={d.description} onChange={(e) => d.setDescription(e.target.value)} />}
+          </FormField>
+          <FormField label="تاریخ سند" required>
+            {(id) => <JalaliDatePicker id={id} value={d.entryDate} onChange={d.setEntryDate} />}
+          </FormField>
+          <FormField
+            label="وضعیت سند"
+            tip="موقت: در کارتابل بازبینی می‌شود. دائم: همین حالا قطعی می‌شود و دیگر ادغام یا بازشماره‌گذاری نمی‌شود."
+          >
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={d.status}
+                onChange={(e) => d.setStatus(e.target.value as 'temporary' | 'permanent')}
+              >
+                <option value="temporary">موقت — در کارتابل بازبینی شود</option>
+                <option value="permanent">دائم — همین حالا قطعی</option>
               </SearchSelect>
-            </label>
+            )}
+          </FormField>
+          <FormField label="شماره فرعی" optional tip="ارجاعِ خودتان: شماره‌ی پرونده، سندِ سیستمِ قبلی یا کدِ دسته.">
+            {(id) => (
+              <input
+                id={id}
+                value={d.subNumber}
+                onChange={(e) => d.setSubNumber(e.target.value)}
+                maxLength={30}
+                placeholder="مثلاً: پرونده ۱۴۲"
+              />
+            )}
+          </FormField>
+          {d.costCenters.length > 0 && (
+            <FormField label="مرکز هزینه / پروژه" optional>
+              {(id) => (
+                <SearchSelect id={id} value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+                  <option value="">— بدون مرکز —</option>
+                  {d.costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code ? `${c.code} — ${c.name}` : c.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
           )}
           {d.analytics.length > 0 && (
-            <label>
-              تفصیلی سایر (اختیاری)
-              <SearchSelect value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
-                <option value="">— بدون تفصیلی —</option>
-                {d.analytics.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.code} — {a.name}
-                  </option>
-                ))}
-              </SearchSelect>
-            </label>
+            <FormField label="تفصیلی سایر" optional>
+              {(id) => (
+                <SearchSelect id={id} value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
+                  <option value="">— بدون تفصیلی —</option>
+                  {d.analytics.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code} — {a.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
           )}
-          <label>
-            وضعیتِ سند
-            <SearchSelect
-              value={d.status}
-              onChange={(e) => d.setStatus(e.target.value as 'temporary' | 'permanent')}
-            >
-              <option value="temporary">موقت — در کارتابل بازبینی شود</option>
-              <option value="permanent">دائم — همین حالا قطعی</option>
-            </SearchSelect>
-          </label>
           {/* ارزِ سند: تا وقتی انتخاب نشده، ستونِ ارزی در ردیف‌ها هم دیده نمی‌شود —
               اکثرِ سندها ریالی‌اند و یک ستونِ همیشه‌خالی فقط شلوغی است. */}
           {d.currencies.length > 0 && (
-            <label>
-              ارزِ سند (اختیاری)
-              <SearchSelect value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
-                <option value="">— ریالی —</option>
-                {d.currencies.map((c) => (
-                  <option key={c.id} value={c.code}>
-                    {c.code} — {c.name}
-                  </option>
-                ))}
-              </SearchSelect>
-            </label>
+            <FormField label="ارز سند" optional tip="تا ارز انتخاب نشود، ستونِ مبلغِ ارزی در ردیف‌ها نمی‌آید.">
+              {(id) => (
+                <SearchSelect id={id} value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+                  <option value="">— ریالی —</option>
+                  {d.currencies.map((c) => (
+                    <option key={c.id} value={c.code}>
+                      {c.code} — {c.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
           )}
           {d.currencyCode && (
-            <label>
-              نرخِ {d.currencyCode} (ریال)
-              <NumberInput value={d.fxRate} onChange={d.setFxRate} allowDecimal />
-            </label>
+            <FormField label={`نرخ ${d.currencyCode}`}>
+              {(id) => (
+                <InputAffix unit="ریال">
+                  <NumberInput id={id} value={d.fxRate} onChange={d.setFxRate} allowDecimal />
+                </InputAffix>
+              )}
+            </FormField>
           )}
+        </FormGrid>
+      </SectionCard>
 
-          <JournalLinesTable d={d} />
+      <SectionCard
+        icon={Rows3}
+        title="ردیف‌های سند"
+        tip="هر ردیف یا بدهکار دارد یا بستانکار. سند دست‌کم دو ردیفِ معتبر و جمعِ برابر می‌خواهد."
+        badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
+      >
+        <JournalLinesTable d={d} />
+        <AddRowButton onClick={d.addLine}>افزودن ردیف</AddRowButton>
+      </SectionCard>
 
-          <div className="invoice-form-footer">
-            <button type="button" onClick={d.addLine}>
-              <Plus size={14} /> افزودن ردیف
-            </button>
-            <span className={d.isBalanced ? 'invoice-total' : 'invoice-total error'}>
-              بدهکار: {d.totalDebit.toLocaleString('fa-IR')} / بستانکار: {d.totalCredit.toLocaleString('fa-IR')}
-            </span>
-            <button type="submit" className="btn-primary" disabled={d.submitting}>
-              <Save size={14} /> ثبت سند
-            </button>
-          </div>
-
-          {d.message && <div className="hint">{d.message}</div>}
-        </form>
-      )}
-    </SectionCard>
+      <ActionBar status={<FormStatus msg={d.message} idle={<BalanceStatus d={d} />} />}>
+        <button type="submit" className="btn-primary" disabled={d.submitting}>
+          <Check size={16} /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
+        </button>
+      </ActionBar>
+    </form>
   )
 }
 
-/** گریدِ ردیف‌های سند (حساب + بدهکار/بستانکار) — مشترکِ فرم و ویزارد. */
+/** جمعِ زنده‌ی سند در نوارِ پایین، با نشانِ توازن. */
+function BalanceStatus({ d }: { d: JournalEntryDraft }) {
+  if (d.totalDebit === 0 && d.totalCredit === 0) return <>مبلغی وارد نشده است.</>
+  return (
+    <span className={d.isBalanced ? 'is-ok' : 'is-err'}>
+      {d.isBalanced ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />} بدهکار {fa(d.totalDebit)} · بستانکار{' '}
+      {fa(d.totalCredit)}
+      {d.isBalanced ? ' — متوازن' : ` — اختلاف ${fa(Math.abs(d.totalDebit - d.totalCredit))}`}
+    </span>
+  )
+}
+
+/** گریدِ ردیف‌های سند (حساب + بدهکار/بستانکار). */
 export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
   // ستون‌های پیگیری فقط وقتی ظاهر می‌شوند که دستِ‌کم یک ردیف حسابِ پیگیری‌دار
   // داشته باشد. همیشه نشان دادنشان جدولِ چهارستونی را برای همه‌ی کسانی که هرگز
@@ -139,25 +186,33 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
   // برخلافِ پیگیری، این یکی **اجباری** است و خالی‌ماندنش سند را رد می‌کند.
   const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
   return (
-    <div className="table-scroll">
-      <table className="invoice-lines cards-on-mobile">
+    <div className="table-scroll ef-table-wrap">
+      <table className="cards-on-mobile ef-table ef-table--edit">
         <thead>
           <tr>
+            <th className="ef-col-min">ردیف</th>
             <th>حساب</th>
-            {d.currencyCode && <th>مبلغ {d.currencyCode}</th>}
+            {d.currencyCode && <th>مبلغ ارزی</th>}
             {showTafsili && <th>تفصیلی</th>}
             <th>بدهکار</th>
             <th>بستانکار</th>
             {showTracking && <th>شماره پیگیری</th>}
             {showTracking && <th>تاریخ پیگیری</th>}
-            <th></th>
+            <th className="ef-col-min" aria-label="حذف" />
           </tr>
         </thead>
         <tbody>
           {d.lines.map((line, i) => (
             <tr key={i}>
-              <td data-label="حساب">
-                <SearchSelect value={line.accountId} onChange={(e) => d.updateLine(i, { accountId: e.target.value })}>
+              <td className="card-title ef-col-min" data-label="ردیف">
+                ردیف {fa(i + 1)}
+              </td>
+              <td className="card-wide ef-col-wide" data-label="حساب">
+                <SearchSelect
+                  aria-label={`حسابِ ردیفِ ${fa(i + 1)}`}
+                  value={line.accountId}
+                  onChange={(e) => d.updateLine(i, { accountId: e.target.value })}
+                >
                   <option value="">— انتخاب حساب —</option>
                   {d.postableAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -167,18 +222,22 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                 </SearchSelect>
               </td>
               {d.currencyCode && (
-                <td data-label="مبلغ ارزی">
-                  <NumberInput
-                    value={line.fxAmount ?? ''}
-                    onChange={(v) => d.setLineFx(i, v)}
-                    allowDecimal
-                  />
+                <td className="card-wide" data-label="مبلغ ارزی">
+                  <InputAffix unit={d.currencyCode}>
+                    <NumberInput
+                      aria-label={`مبلغِ ارزیِ ردیفِ ${fa(i + 1)}`}
+                      value={line.fxAmount ?? ''}
+                      onChange={(v) => d.setLineFx(i, v)}
+                      allowDecimal
+                    />
+                  </InputAffix>
                 </td>
               )}
               {showTafsili && (
-                <td data-label="تفصیلی">
+                <td className="card-wide" data-label="تفصیلی">
                   {d.tafsiliRequired.has(line.accountId) ? (
                     <SearchSelect
+                      aria-label={`تفصیلیِ ردیفِ ${fa(i + 1)}`}
                       value={line.analyticId ?? ''}
                       onChange={(e) => d.updateLine(i, { analyticId: e.target.value })}
                       //: در «شناور» فیلد هست ولی اجباری نیست — همان انتخابی که
@@ -187,9 +246,7 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                     >
                       {/* اگر سطحِ سند تفصیلی دارد، خالی‌گذاشتن یعنی «همان» — پس
                           متنِ گزینه‌ی خالی باید همین را بگوید، نه «انتخاب کنید». */}
-                      <option value="">
-                        {d.analyticId ? '— تفصیلیِ سند —' : '— انتخاب کنید —'}
-                      </option>
+                      <option value="">{d.analyticId ? '— تفصیلیِ سند —' : '— انتخاب کنید —'}</option>
                       {d.analytics.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.code} — {a.name}
@@ -197,23 +254,36 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                       ))}
                     </SearchSelect>
                   ) : (
-                    <input type="text" value="" disabled placeholder="—" readOnly />
+                    <input type="text" value="" disabled placeholder="—" readOnly aria-label="بدونِ تفصیلی" />
                   )}
                 </td>
               )}
-              <td data-label="بدهکار">
-                <NumberInput value={line.debit} onChange={(v) => d.updateLine(i, { debit: v, credit: '' })} />
+              <td className="card-wide" data-label="بدهکار">
+                <InputAffix unit="ریال">
+                  <NumberInput
+                    aria-label={`بدهکارِ ردیفِ ${fa(i + 1)}`}
+                    value={line.debit}
+                    onChange={(v) => d.updateLine(i, { debit: v, credit: '' })}
+                  />
+                </InputAffix>
               </td>
-              <td data-label="بستانکار">
-                <NumberInput value={line.credit} onChange={(v) => d.updateLine(i, { credit: v, debit: '' })} />
+              <td className="card-wide" data-label="بستانکار">
+                <InputAffix unit="ریال">
+                  <NumberInput
+                    aria-label={`بستانکارِ ردیفِ ${fa(i + 1)}`}
+                    value={line.credit}
+                    onChange={(v) => d.updateLine(i, { credit: v, debit: '' })}
+                  />
+                </InputAffix>
               </td>
               {showTracking && (
-                <td data-label="شماره پیگیری">
+                <td className="card-wide" data-label="شماره پیگیری">
                   {/* ردیفی که حسابش پیگیری نمی‌پذیرد خالی و غیرفعال می‌ماند، نه
                       پنهان: ستون که هست، جای خالی خودش می‌گوید این حساب پیگیری
                       ندارد. */}
                   <input
                     type="text"
+                    aria-label={`شماره پیگیریِ ردیفِ ${fa(i + 1)}`}
                     value={line.trackingNo ?? ''}
                     onChange={(e) => d.updateLine(i, { trackingNo: e.target.value })}
                     disabled={!d.trackingAllowed.has(line.accountId)}
@@ -223,27 +293,26 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                 </td>
               )}
               {showTracking && (
-                <td data-label="تاریخ پیگیری">
+                <td className="card-wide" data-label="تاریخ پیگیری">
                   {d.trackingAllowed.has(line.accountId) ? (
                     <JalaliDatePicker
                       value={line.trackingDate ?? ''}
                       onChange={(v) => d.updateLine(i, { trackingDate: v })}
                     />
                   ) : (
-                    <input type="text" value="" disabled placeholder="—" readOnly />
+                    <input type="text" value="" disabled placeholder="—" readOnly aria-label="بدونِ پیگیری" />
                   )}
                 </td>
               )}
-              <td className="card-actions">
-                <button
-                  type="button"
-                  className="icon-btn-danger"
-                  onClick={() => d.removeLine(i)}
+              <td className="card-actions ef-col-min">
+                <RowAction
+                  icon={Trash2}
+                  label="حذف ردیف"
+                  danger
                   disabled={d.lines.length === 2}
-                  aria-label="حذف ردیف"
-                >
-                  <Trash2 size={14} />
-                </button>
+                  title={d.lines.length === 2 ? 'سند دست‌کم دو ردیف می‌خواهد.' : undefined}
+                  onClick={() => d.removeLine(i)}
+                />
               </td>
             </tr>
           ))}

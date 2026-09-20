@@ -59,6 +59,7 @@ export function IntegrityPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={ShieldCheck}
       title="بررسی یکپارچگی"
       description="دفتر را از چند زاویه می‌سنجد و ناسازگاری‌ها را نشان می‌دهد. چیزی مسدود نمی‌شود؛ تصمیم با شماست."
@@ -159,8 +160,8 @@ function CheckCard({
       {check.ok ? (
         <p className="muted">این بررسی چیزی پیدا نکرد.</p>
       ) : (
-        <div className="table-scroll">
-          <table className="cards-on-mobile acc-table">
+        <div className="table-scroll ef-table-wrap">
+          <table className="ef-table cards-on-mobile acc-table">
             <thead>
               <tr>
                 <th>مورد</th>

@@ -12,7 +12,6 @@ import {
   Lock,
   Printer,
   RefreshCw,
-  Search,
   Trash2,
 } from 'lucide-react'
 import {
@@ -32,10 +31,17 @@ import type { AccountCache, OutboxEntry } from '../../electron.d'
 import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { JournalEntryForm } from '../../components/JournalEntryForm'
-import { JournalEntryWizard } from '../../components/wizard/JournalEntryWizard'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormStatus,
+  ListToolbar,
+  RowAction,
+  SearchField,
+} from '../../components/form/FormKit'
 import { OutboxList } from '../../components/OutboxList'
 import { Pager, usePagination } from '../../components/Pager'
-import { useTheme } from '../../lib/theme'
 import { isElectron } from '../../platform'
 import { formatJalali } from '../../lib/jalali'
 import {
@@ -80,19 +86,14 @@ export function JournalEntryPage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
-  const guided = useTheme().theme.content === 'guided'
-
   return (
     <OpsPage
+      canvas
       icon={BookOpen}
       title="سند حسابداری"
       description="ثبتِ سندِ دستی. سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور و فیش و چک خودشان خودکار سند می‌خورند. دفترِ کاملِ اسناد زیرِ کارتِ «فهرست» است."
     >
-      {guided ? (
-        <JournalEntryWizard token={token} accounts={accounts} onQueued={onQueued} />
-      ) : (
-        <JournalEntryForm token={token} accounts={accounts} onQueued={onQueued} />
-      )}
+      <JournalEntryForm token={token} accounts={accounts} onQueued={onQueued} />
 
       {isElectron && (
         <SectionCard
@@ -133,8 +134,8 @@ function EntryTable({
     e.lines.reduce((sum, l) => sum + Number(l.debit || 0), 0)
 
   return (
-    <div className="table-scroll">
-      <table className="cards-on-mobile acc-table">
+    <div className="table-scroll ef-table-wrap">
+      <table className="cards-on-mobile acc-table ef-table">
         <thead>
           <tr>
             <th>شماره</th>
@@ -148,7 +149,7 @@ function EntryTable({
             <th>وضعیت</th>
             <th>ردیف</th>
             <th>مبلغ</th>
-            {(onVoid || onPrint) && <th />}
+            {(onVoid || onPrint) && <th className="ef-col-min">عملیات</th>}
           </tr>
         </thead>
         <tbody>
@@ -184,18 +185,27 @@ function EntryTable({
                 {faAmount(total(e))}
               </td>
               {(onVoid || onPrint) && (
-                <td className="acc-row-actions card-actions">
-                  {onPrint && (
-                    <button type="button" onClick={() => onPrint(e)}>
-                      <Printer size={13} /> چاپ
-                    </button>
-                  )}
-                  {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
-                  {onVoid && !e.voided_at && e.source_type === 'manual' && (
-                    <button type="button" className="danger" onClick={() => onVoid(e)}>
-                      <Trash2 size={13} /> ابطال
-                    </button>
-                  )}
+                <td className="card-actions ef-col-min">
+                  <div className="row-actions ef-row-actions">
+                    {onPrint && <RowAction icon={Printer} label="چاپ" onClick={() => onPrint(e)} />}
+                    {/* فقط سندِ دستی: سندِ خودکار با ابطالِ خودِ فاکتور/فیش برمی‌گردد. */}
+                    {onVoid && (
+                      <RowAction
+                        icon={Trash2}
+                        label="ابطال"
+                        danger
+                        onClick={() => onVoid(e)}
+                        disabled={!!e.voided_at || e.source_type !== 'manual'}
+                        title={
+                          e.voided_at
+                            ? 'این سند قبلاً باطل شده است.'
+                            : e.source_type !== 'manual'
+                              ? 'سندِ خودکار با ابطالِ فاکتور، فیش یا عملیاتِ منشأ برمی‌گردد.'
+                              : undefined
+                        }
+                      />
+                    )}
+                  </div>
                 </td>
               )}
             </tr>
@@ -227,6 +237,10 @@ export function EntryCartablePage({ token }: { token: string }) {
     })
 
   async function finalize(payload: Parameters<typeof finalizeEntries>[1], label: string) {
+    if ('entry_ids' in payload && (payload.entry_ids?.length ?? 0) === 0) {
+      setMsg({ text: 'اول از جدولِ «اسنادِ در انتظار» سندی را علامت بزنید.', kind: 'err' })
+      return
+    }
     if (!window.confirm(`${label}\nسندِ دائم دیگر ادغام یا بازشماره‌گذاری نمی‌شود. ادامه؟`)) return
     try {
       const out = await finalizeEntries(token, payload)
@@ -241,6 +255,7 @@ export function EntryCartablePage({ token }: { token: string }) {
   const data = cartable.data
   return (
     <OpsPage
+      canvas
       icon={ClipboardCheck}
       title="کارتابل صدور سند حسابداری"
       description="صفِ اسنادِ موقت — هرچه ثبت شده ولی هنوز بازبینی نشده. سند را ببینید، بعد دائمش کنید."
@@ -268,12 +283,11 @@ export function EntryCartablePage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
-
       <SectionCard
         icon={Layers}
         title="دسته‌ها"
-        description="معمولاً تصمیم دسته‌ای است: «همه‌ی سندهای فاکتورِ فروشِ این بازه درست‌اند»."
+        tip="معمولاً تصمیم دسته‌ای است: «همه‌ی سندهای فاکتورِ فروشِ این بازه درست‌اند»."
+        badge={data ? <CountBadge accent>{faInt(data.groups.length)} منشأ</CountBadge> : undefined}
       >
         <AsyncBlock
           loading={cartable.loading}
@@ -289,6 +303,7 @@ export function EntryCartablePage({ token }: { token: string }) {
                 <span className="acc-group-total">{fa(g.total)}</span>
                 <button
                   type="button"
+                  className="ef-btn-secondary"
                   onClick={() =>
                     finalize(
                       { date_from: range.from, date_to: range.to, source_type: g.source_type },
@@ -307,24 +322,8 @@ export function EntryCartablePage({ token }: { token: string }) {
       <SectionCard
         icon={ListChecks}
         title="اسنادِ در انتظار"
-        description={
-          data
-            ? `${faInt(data.entries.length)} سندِ نخست نمایش داده می‌شود`
-            : 'در حال بارگذاری…'
-        }
-        actions={
-          picked.size > 0 ? (
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() =>
-                finalize({ entry_ids: [...picked] }, `دائم‌کردنِ ${picked.size} سندِ انتخابی.`)
-              }
-            >
-              <Lock size={13} /> دائم‌کردنِ {faInt(picked.size)} سند
-            </button>
-          ) : undefined
-        }
+        badge={data ? <CountBadge accent>{faInt(data.entries.length)} سند</CountBadge> : undefined}
+        description="سندهایی را که بازبینی کرده‌اید علامت بزنید و از نوارِ پایین دائم کنید."
       >
         <AsyncBlock
           loading={cartable.loading}
@@ -335,6 +334,22 @@ export function EntryCartablePage({ token }: { token: string }) {
           <CartableTable entries={data?.entries ?? []} picked={picked} onToggle={toggle} />
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={picked.size > 0 ? `${faInt(picked.size)} سند انتخاب شده است.` : 'سندی انتخاب نشده است.'}
+          />
+        }
+      >
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => finalize({ entry_ids: [...picked] }, `دائم‌کردنِ ${picked.size} سندِ انتخابی.`)}
+        >
+          <Lock size={15} /> دائم‌کردنِ {picked.size > 0 ? `${faInt(picked.size)} سند` : 'انتخاب‌شده‌ها'}
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -350,11 +365,11 @@ function CartableTable({
 }) {
   const pg = usePagination(entries, 15)
   return (
-    <div className="table-scroll">
-      <table className="cards-on-mobile acc-table">
+    <div className="table-scroll ef-table-wrap">
+      <table className="cards-on-mobile acc-table ef-table">
         <thead>
           <tr>
-            <th />
+            <th className="ef-col-min" aria-label="انتخاب" />
             <th>شماره</th>
             <th>عطف</th>
             <th>فرعی</th>
@@ -368,8 +383,13 @@ function CartableTable({
         <tbody>
           {pg.pageItems.map((e) => (
             <tr key={e.id}>
-              <td data-label="انتخاب">
-                <input type="checkbox" checked={picked.has(e.id)} onChange={() => onToggle(e.id)} />
+              <td className="ef-col-min" data-label="انتخاب">
+                <input
+                  type="checkbox"
+                  aria-label={`انتخابِ سندِ ${fa(e.number ?? 0)}`}
+                  checked={picked.has(e.id)}
+                  onChange={() => onToggle(e.id)}
+                />
               </td>
               <td className="card-title" data-label="شماره">
                 {fa(e.number ?? 0)}
@@ -409,6 +429,10 @@ export function FinalizeEntriesPage({ token }: { token: string }) {
 
   async function run() {
     const count = preview.data?.total_count ?? 0
+    if (count === 0) {
+      setMsg({ text: 'در این بازه سندِ موقتی نیست؛ بازه را عوض کنید.', kind: 'err' })
+      return
+    }
     if (
       !window.confirm(
         `${count} سندِ موقتِ این بازه دائم می‌شوند.\nاین کار برگشت‌پذیر نیست. ادامه می‌دهید؟`,
@@ -430,6 +454,7 @@ export function FinalizeEntriesPage({ token }: { token: string }) {
   const data = preview.data
   return (
     <OpsPage
+      canvas
       icon={Lock}
       title="تبدیل اسناد موقت به دائم"
       description="عملیاتِ پایانِ ماه: همه‌ی اسنادِ موقتِ یک بازه یک‌جا قطعی می‌شوند. اثرِ مالی ندارد — فقط سند را از دسترسِ ادغام و بازشماره‌گذاری بیرون می‌برد."
@@ -457,21 +482,11 @@ export function FinalizeEntriesPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
       <SectionCard
         icon={Lock}
         title="آنچه دائم می‌شود"
         description="پیش از تأیید، دقیقاً همان چیزی را ببینید که قطعی خواهد شد."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!data || data.total_count === 0}
-            onClick={() => void run()}
-          >
-            <Lock size={14} /> دائم‌کردنِ همه
-          </button>
-        }
+        badge={data ? <CountBadge accent>{faInt(data.total_count)} سند</CountBadge> : undefined}
       >
         <AsyncBlock
           loading={preview.loading}
@@ -490,6 +505,11 @@ export function FinalizeEntriesPage({ token }: { token: string }) {
           </ul>
         </AsyncBlock>
       </SectionCard>
+      <ActionBar status={<FormStatus msg={msg} idle="اثرِ مالی ندارد، ولی برگشت‌پذیر هم نیست." />}>
+        <button type="button" className="btn-primary" disabled={preview.loading} onClick={() => void run()}>
+          <Lock size={15} /> دائم‌کردنِ همه
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -523,6 +543,10 @@ export function RenumberEntriesPage({ token }: { token: string }) {
 
   async function run() {
     const manual = picked.size > 0
+    if (!manual && (preview.data?.changed_count ?? 0) === 0) {
+      setMsg({ text: 'شماره‌ی هیچ سندی عوض نمی‌شود؛ بازه یا شماره‌ی شروع را عوض کنید.', kind: 'err' })
+      return
+    }
     if (
       !window.confirm(
         `شماره‌ی ${manual ? picked.size : (preview.data?.count ?? 0)} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
@@ -552,6 +576,7 @@ export function RenumberEntriesPage({ token }: { token: string }) {
   const data = preview.data
   return (
     <OpsPage
+      canvas
       icon={Hash}
       title="شماره‌گذاری مجدد اسناد"
       description="شماره‌ی اسناد را به‌ترتیبِ تاریخ از نو می‌دهد. فقط روی اسنادِ موقت — سندِ دائم شماره‌ی امضاشده دارد و جابه‌جا نمی‌شود."
@@ -562,7 +587,7 @@ export function RenumberEntriesPage({ token }: { token: string }) {
             extra={
               <label className="acc-inline-field">
                 شروع از شماره
-                <NumberInput value={start} onChange={setStart} />
+                <NumberInput value={start} onChange={setStart} group={false} />
               </label>
             }
           />
@@ -592,21 +617,10 @@ export function RenumberEntriesPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
       <SectionCard
         icon={Hash}
         title="پیش‌نمایشِ شماره‌ها"
-        description="فقط اسنادِ موقت در نقشه می‌آیند؛ سندِ دائم شماره‌ی امضاشده دارد و جابه‌جا نمی‌شود."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!data || data.changed_count === 0}
-            onClick={() => void run()}
-          >
-            <Hash size={14} /> اعمالِ شماره‌گذاری
-          </button>
-        }
+        tip="فقط اسنادِ موقت در نقشه می‌آیند؛ سندِ دائم شماره‌ی امضاشده دارد و جابه‌جا نمی‌شود. اگر ردیفی را علامت بزنید، فقط همان‌ها بازشماره می‌شوند."
       >
         <AsyncBlock
           loading={preview.loading}
@@ -617,11 +631,11 @@ export function RenumberEntriesPage({ token }: { token: string }) {
           {data?.truncated && (
             <p className="hint">فقط {faInt(data.rows.length)} ردیفِ نخست نمایش داده می‌شود؛ اعمال روی همه انجام می‌شود.</p>
           )}
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
-                  <th />
+                  <th className="ef-col-min" aria-label="انتخاب" />
                   <th>تاریخ</th>
                   <th>شرح</th>
                   <th>وضعیت</th>
@@ -635,9 +649,10 @@ export function RenumberEntriesPage({ token }: { token: string }) {
               <tbody>
                 {(data?.rows ?? []).map((r) => (
                   <tr key={r.id} className={r.changed ? 'acc-row--changed' : ''}>
-                    <td data-label="انتخاب">
+                    <td className="ef-col-min" data-label="انتخاب">
                       <input
                         type="checkbox"
+                        aria-label="انتخابِ سند"
                         checked={picked.has(r.id)}
                         onChange={() => togglePick(r.id)}
                       />
@@ -665,6 +680,22 @@ export function RenumberEntriesPage({ token }: { token: string }) {
           </div>
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              picked.size > 0
+                ? `فقط ${faInt(picked.size)} سندِ علامت‌خورده بازشماره می‌شوند.`
+                : 'همه‌ی اسنادِ موقتِ این بازه بازشماره می‌شوند.'
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" disabled={preview.loading} onClick={() => void run()}>
+          <Hash size={15} /> اعمالِ شماره‌گذاری
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -723,7 +754,10 @@ export function MergeEntriesPage({ token }: { token: string }) {
   }
 
   async function run() {
-    if (picked.size < 2) return
+    if (picked.size < 2) {
+      setMsg({ text: 'دست‌کم دو سندِ هم‌تاریخ را برای ادغام علامت بزنید.', kind: 'err' })
+      return
+    }
     if (!window.confirm(`${picked.size} سند در یک سند ادغام می‌شوند و اصل‌ها حذف خواهند شد. ادامه؟`))
       return
     try {
@@ -742,6 +776,7 @@ export function MergeEntriesPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Combine}
       title="ادغام اسناد"
       description="چند سندِ موقتِ دستیِ هم‌تاریخ را در یک سند جمع می‌کند. مانده‌ی هیچ حسابی تکان نمی‌خورد — فقط تعدادِ اسناد کم می‌شود."
@@ -765,31 +800,23 @@ export function MergeEntriesPage({ token }: { token: string }) {
         </div>
       }
     >
-      <Note msg={msg} />
       <SectionCard
         icon={Combine}
         title="اسنادِ موقتِ دستی"
-        description="فقط روزهایی که بیش از یک سند دارند نشان داده می‌شوند؛ ادغام بینِ دو تاریخ معنا ندارد."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={picked.size < 2}
-            onClick={() => void run()}
-          >
-            <Combine size={14} /> ادغامِ {faInt(picked.size)} سند
-          </button>
-        }
+        tip="فقط روزهایی که بیش از یک سند دارند نشان داده می‌شوند؛ ادغام بینِ دو تاریخ معنا ندارد."
       >
-        <label className="acc-inline-field acc-merge-desc">
-          شرحِ سندِ ادغامی (اختیاری)
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="خالی بگذارید تا شماره‌ی اسنادِ اصلی نوشته شود"
-          />
-        </label>
+        <div className="ef-block-top">
+          <FormField label="شرحِ سندِ ادغامی" optional tip="خالی بگذارید تا شماره‌ی اسنادِ اصلی نوشته شود.">
+            {(id) => (
+              <input
+                id={id}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="مثلاً: هزینه‌های تنخواهِ هفته‌ی اول"
+              />
+            )}
+          </FormField>
+        </div>
 
         <AsyncBlock
           loading={list.loading}
@@ -825,13 +852,24 @@ export function MergeEntriesPage({ token }: { token: string }) {
               </ul>
             </div>
           ))}
-          {pickedDate && (
-            <p className="hint">
-              انتخاب روی تاریخ {formatJalali(pickedDate)} قفل شد؛ برای تاریخِ دیگر اول انتخاب را پاک کنید.
-            </p>
-          )}
         </AsyncBlock>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              pickedDate
+                ? `${faInt(picked.size)} سندِ ${formatJalali(pickedDate)} علامت خورده؛ برای تاریخِ دیگر اول انتخاب را پاک کنید.`
+                : 'دست‌کم دو سندِ هم‌تاریخ را علامت بزنید.'
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" onClick={() => void run()}>
+          <Combine size={15} /> {picked.size > 1 ? `ادغامِ ${faInt(picked.size)} سند` : 'ادغامِ اسناد'}
+        </button>
+      </ActionBar>
     </OpsPage>
   )
 }
@@ -904,6 +942,7 @@ export function EntryListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={FileStack}
       title="اسناد حسابداری"
       description="همه‌ی اسنادِ دفتر — دستی و خودکار، موقت و دائم. «عطف» شماره‌ی ثابتِ سند است و با شماره‌گذاری مجدد عوض نمی‌شود؛ «فرعی» ارجاعِ خودِ شماست. سندِ دستی را می‌توان از همین‌جا ابطال کرد."
@@ -928,25 +967,21 @@ export function EntryListPage({ token }: { token: string }) {
       <SectionCard
         icon={FileStack}
         title="اسناد"
-        description={`${faInt(rows.length)} سند`}
-        actions={
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw size={13} /> به‌روزرسانی
-          </button>
-        }
+        badge={list.data ? <CountBadge accent>{faInt(rows.length)} سند</CountBadge> : undefined}
+        description="دفترِ کاملِ اسناد — دستی و خودکار، موقت و دائم."
       >
+        <ListToolbar>
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="شماره، عطف، شماره فرعی یا شرحِ سند"
+            label="جست‌وجو در اسناد"
+          />
+          <button type="button" className="ef-btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
+            <RefreshCw size={14} /> به‌روزرسانی
+          </button>
+        </ListToolbar>
         <Note msg={msg} />
-        <div className="acc-filters">
-          <label className="acc-search">
-            <Search size={14} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="شماره، عطف، شماره فرعی یا شرحِ سند"
-            />
-          </label>
-        </div>
 
         <AsyncBlock
           loading={list.loading}

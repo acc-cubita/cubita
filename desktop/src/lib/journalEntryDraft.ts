@@ -55,7 +55,7 @@ export function useJournalEntryDraft({
   const [subNumber, setSubNumber] = usePersistentState('cubita.draft.journal.subNumber', '')
   const [entryDate, setEntryDate] = usePersistentState('cubita.draft.journal.entryDate', todayIso())
   const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', [emptyLine(), emptyLine()])
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.journal.costCenterId', '')
@@ -151,13 +151,16 @@ export function useJournalEntryDraft({
 
     const validLines = lines.filter((l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0))
     if (validLines.length < 2) {
-      setMessage('سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.')
+      setMessage({ text: 'سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.', kind: 'err' })
       return false
     }
     const debitSum = validLines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0)
     const creditSum = validLines.reduce((sum, l) => sum + (Number(l.credit) || 0), 0)
     if (debitSum !== creditSum || debitSum === 0) {
-      setMessage(`سند متوازن نیست: بدهکار=${debitSum.toLocaleString('fa-IR')} بستانکار=${creditSum.toLocaleString('fa-IR')}`)
+      setMessage({
+        text: `سند متوازن نیست: بدهکار ${debitSum.toLocaleString('fa-IR')} و بستانکار ${creditSum.toLocaleString('fa-IR')}.`,
+        kind: 'err',
+      })
       return false
     }
 
@@ -171,9 +174,10 @@ export function useJournalEntryDraft({
             .filter(({ l }) => tafsiliRequired.has(l.accountId) && !(l.analyticId || analyticId))
             .map(({ i }) => (i + 1).toLocaleString('fa-IR'))
     if (missingTafsili.length > 0) {
-      setMessage(
-        `ردیفِ ${missingTafsili.join('، ')}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
-      )
+      setMessage({
+        text: `ردیفِ ${missingTafsili.join('، ')}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
+        kind: 'err',
+      })
       return false
     }
 
@@ -215,10 +219,13 @@ export function useJournalEntryDraft({
     try {
       if (isElectron) {
         await window.cubita.queueJournalEntry(payload)
-        setMessage('سند در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.')
+        setMessage({ text: 'سند در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.', kind: 'ok' })
       } else {
         await createJournalEntryDirect(token, payload)
-        setMessage(status === 'permanent' ? 'سند به‌صورتِ دائم ثبت شد.' : 'سندِ موقت ثبت شد؛ در کارتابل قابلِ بازبینی است.')
+        setMessage({
+          text: status === 'permanent' ? 'سند به‌صورتِ دائم ثبت شد.' : 'سندِ موقت ثبت شد؛ در کارتابل قابلِ بازبینی است.',
+          kind: 'ok',
+        })
       }
       setDescription('')
       //: پاک می‌شود مثلِ شرح. چسبیدنِ شماره فرعیِ سندِ قبلی به سندِ بعدی، ارجاعِ
@@ -230,7 +237,7 @@ export function useJournalEntryDraft({
       onQueued()
       return true
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
       return false
     } finally {
       setSubmitting(false)

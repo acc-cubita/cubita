@@ -4,6 +4,7 @@ import { BudgetPanel } from '../../components/BudgetPanel'
 import { CurrenciesPanel } from '../../components/CurrenciesPanel'
 import { RecurringEntriesPanel } from '../../components/RecurringEntriesPanel'
 import { SectionCard } from '../../components/SectionCard'
+import { CountBadge } from '../../components/form/FormKit'
 import { fetchPeriodCloses } from '../../api'
 import { formatJalali } from '../../lib/jalali'
 import { AsyncBlock, OpsPage, fa, faInt, useAsync } from './kit'
@@ -20,6 +21,7 @@ import { AsyncBlock, OpsPage, fa, faInt, useAsync } from './kit'
 export function RecurringListPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   return (
     <OpsPage
+      canvas
       icon={Repeat}
       title="اسناد تکرارشونده"
       description="سندهایی که در فاصله‌های مشخص خودکار ثبت می‌شوند — اجاره، حقوقِ ثابت، اقساط."
@@ -32,6 +34,7 @@ export function RecurringListPage({ token, accounts }: { token: string; accounts
 export function BudgetListPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   return (
     <OpsPage
+      canvas
       icon={Target}
       title="بودجه‌بندی"
       description="رقمِ برنامه‌ریزی‌شده‌ی هر حساب در هر ماه. مقایسه‌ی بودجه با عملکرد در «گزارش‌ها» است."
@@ -44,6 +47,7 @@ export function BudgetListPage({ token, accounts }: { token: string; accounts: A
 export function CurrencyListPage({ token }: { token: string }) {
   return (
     <OpsPage
+      canvas
       icon={Coins}
       title="ارزها و نرخ ارز"
       description="ارزهای تعریف‌شده و نرخِ برابری‌شان با ریال در هر تاریخ. «صدور سند تسعیر ارز» از همین نرخ‌ها می‌خواند."
@@ -59,6 +63,7 @@ export function PeriodCloseListPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={Archive}
       title="دوره‌های بسته‌شده"
       description="هر بار که حساب‌های سود و زیان بسته شده‌اند، یک ردیف اینجاست. تاریخِ آخرین بستن، مرزِ ثبتِ سند است."
@@ -66,7 +71,8 @@ export function PeriodCloseListPage({ token }: { token: string }) {
       <SectionCard
         icon={Archive}
         title="تاریخچه‌ی بستنِ دوره"
-        description={`${faInt(rows.length)} دوره`}
+        badge={closes.data ? <CountBadge accent>{faInt(rows.length)} دوره</CountBadge> : undefined}
+        description="هر ردیف یک بار بستنِ حساب‌های سود و زیان است."
       >
         <AsyncBlock
           loading={closes.loading}
@@ -74,8 +80,8 @@ export function PeriodCloseListPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="هنوز هیچ دوره‌ای بسته نشده."
         >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile acc-table ef-table">
               <thead>
                 <tr>
                   <th>تاریخِ بستن</th>

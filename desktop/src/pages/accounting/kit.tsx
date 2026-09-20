@@ -72,7 +72,18 @@ export const SOURCE_LABELS: Record<string, string> = {
   depreciation: 'استهلاک',
   asset_acquisition: 'خرید دارایی ثابت',
   production: 'تولید',
-  production_order: 'سفارشِ تولید',
+  //: پس از جداشدنِ «سفارش» (برنامه) از «سند تولید» (اجرا): جدولِ production_orders همان
+  //: سندِ تولید است و production_plan سندِ دستمزد و سربارِ سفارش.
+  production_order: 'سند تولید',
+  production_plan: 'سفارش تولید',
+  warehouse_receipt: 'رسید انبار',
+  asset_disposal: 'خروج دارایی ثابت',
+  asset_improvement: 'تعمیرات اساسی دارایی',
+  owner_transaction: 'تراکنش شریک',
+  pos_settlement: 'تسویه کارتخوان',
+  contract_settlement: 'تسویه حساب پیمان',
+  payment_withdrawal: 'برداشت از حساب',
+  payment_void: 'ابطال اعلامیه پرداخت',
   stock_adjustment: 'تعدیل انبار',
   stock_count: 'انبارگردانی',
   adjustment: 'تعدیل',
@@ -168,6 +179,7 @@ export function OpsPage({
   title,
   description,
   head,
+  canvas,
   children,
 }: {
   icon: LucideIcon
@@ -175,13 +187,28 @@ export function OpsPage({
   description: string
   /** نوارِ ابزار/ارقامِ همیشه‌دیده — بیرون از پوسته‌ی «راهنما» که سرصفحه را پنهان می‌کند. */
   head?: ReactNode
+  /**
+   * بومِ فرمِ سازمانی (`ef-form`): هر بخش کارتِ جدا با سایه، نوارِ بازه و ارقام کارتِ بالای
+   * صفحه، و نوارِ عملیاتِ چسبنده. صفحه‌های حسابداری، شرکت و حقوق این را دارند؛ بقیه‌ی
+   * ماژول‌ها تا بازطراحی‌شان همان پوسته‌ی قبلی را دارند.
+   */
+  canvas?: boolean
   children: ReactNode
 }) {
   return (
     <div className="page panels">
       <PageHeader icon={icon} title={title} description={description} />
-      {head}
-      {children}
+      {canvas ? (
+        <div className="ef-form">
+          {head && <section className="ef-head">{head}</section>}
+          {children}
+        </div>
+      ) : (
+        <>
+          {head}
+          {children}
+        </>
+      )}
     </div>
   )
 }
