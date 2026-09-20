@@ -15,9 +15,11 @@ from app.models.inventory import Contact, Item, StockAdjustment, StockLedger
 from app.models.user import User
 from app.schemas.advanced_inventory import (
     BatchCloseIn,
+    BatchSubstitutionIn,
     BatchHoldIn,
     BatchReconciliationOut,
     BatchTraceOut,
+    PickingRowOut,
     SerialAssignIn,
     SerialAssignOut,
     SerialTraceOut,
@@ -651,3 +653,40 @@ def trace_batch(
     عقب بیفتد.
     """
     return batches_svc.trace(db, _get_batch_or_404(db, batch_id))
+
+
+@router.get("/warehouse-issues/{issue_id}/picking", response_model=list[PickingRowOut])
+def picking_sheet(
+    issue_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """برگه‌ی جمع‌آوری (§۱۲) — انباردار باید بداند کدام بار و کجا.
+
+    همه‌ی داده از قبل در دفتر و روی بار هست؛ این مسیر فقط کنارِ هم می‌گذاردشان.
+    """
+    return batches_svc.picking_sheet(db, issue_id)
+
+
+@router.post("/stock-batches/substitute", response_model=dict, status_code=201)
+def substitute_batch(
+    data: BatchSubstitutionIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """بارِ یک ردیفِ خروج را عوض می‌کند، با ردِ ممیزی (§۱۳).
+
+    موجودیِ کالا تکان نمی‌خورد — فقط از یک بار به بارِ دیگر جابه‌جا می‌شود.
+    """
+    row = batches_svc.substitute(
+        db,
+        source_line_id=data.source_line_id,
+        original_batch_id=data.original_batch_id,
+        new_batch_id=data.new_batch_id,
+        qty=data.qty,
+        reason=data.reason,
+        source_type="warehouse_issue",
+        source_id=None,
+        user=user,
+    )
+    return {"id": str(row.id), "qty": str(row.qty), "reason": row.reason}

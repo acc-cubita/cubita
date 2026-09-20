@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
+from app.models.returns import RETURN_CONDITIONS
 from app.models.tenant import TenantMixin
 
 #: سه نوع — **بدونِ «انتقال»**. فصل صریح می‌گوید فهرستِ نوع‌های خروج را کورکورانه
@@ -83,12 +84,25 @@ class WarehouseIssueReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMix
 
 class WarehouseIssueReturnLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "warehouse_issue_return_lines"
-    __table_args__ = (CheckConstraint("qty > 0", name="ck_warehouse_issue_return_lines_qty_positive"),)
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="ck_warehouse_issue_return_lines_qty_positive"),
+        CheckConstraint(f"return_condition IN {RETURN_CONDITIONS}", name="ck_warehouse_issue_return_lines_condition"),
+    )
 
     return_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_issue_returns.id", ondelete="CASCADE"), index=True
     )
     seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: **§۱۴ — مرجوعی بارمحور است.** تا امروز برگشت فقط «چند تا» را می‌دانست،
+    #: نه «از کدام بار» و نه «در چه حالی». تهی = برگشتی که بار ندارد (کالای
+    #: بی‌ردیابی) — همان رفتارِ دیروز.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    #: کالای سالم به موجودیِ قابلِ فروشِ همان بار برمی‌گردد؛ خراب/منقضی/قرنطینه
+    #: فیزیکی برمی‌گردد ولی **قابلِ فروش نیست**. پیش‌فرض `sellable` یعنی رفتارِ
+    #: دیروز: تا امروز هر برگشتی مستقیم قابلِ فروش می‌شد.
+    return_condition: Mapped[str] = mapped_column(String(20), default="sellable", server_default="sellable")
     #: **ردیفِ خروجی که برمی‌گردد — اجباری.** سقفِ برگشت، بها و حسابِ برگشت همه از آن.
     warehouse_issue_line_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_issue_lines.id"), nullable=False, index=True

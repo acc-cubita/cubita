@@ -21,6 +21,24 @@ from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
 
+#: **حالِ کالای برگشتی (§۱۴).** مرجوعی یک عدد نیست، یک تصمیم است: سالم به
+#: موجودیِ قابلِ فروش برمی‌گردد و خراب نه.
+#:
+#: «قابلِ فروش نبودن» مکانیزمِ تازه نگرفت — ادعای `blocked`ِ دفترِ رزرو
+#: (مهاجرتِ ۰۱۷۳) دقیقاً همین کار را می‌کند: از `available` کم می‌شود بی آنکه
+#: `physical` تکان بخورد. ستونِ تازه یعنی دو کم‌شونده با دو مکانیزمِ مختلف.
+RETURN_CONDITIONS = ("sellable", "damaged", "expired", "quarantine", "blocked")
+RETURN_CONDITION_LABELS = {
+    "sellable": "سالم و قابلِ فروش",
+    "damaged": "معیوب",
+    "expired": "منقضی",
+    "quarantine": "قرنطینه",
+    "blocked": "مسدود",
+}
+#: حال‌هایی که کالا را از موجودیِ **قابلِ فروش** بیرون نگه می‌دارند.
+NON_SELLABLE_CONDITIONS = frozenset(RETURN_CONDITIONS) - {"sellable"}
+
+
 class SalesReturnReason(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """علتِ برگشتِ کالا — مِسترِ مستقل، نه متنِ آزاد.
 
@@ -91,7 +109,21 @@ class SalesReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base)
 class SalesReturnLine(TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_return_lines"
 
+    __table_args__ = (
+        CheckConstraint(f"return_condition IN {RETURN_CONDITIONS}", name="ck_sales_return_lines_condition"),
+    )
+
     return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_returns.id"))
+    #: **§۱۴ — مرجوعی بارمحور است.** تا امروز برگشت فقط «چند تا» را می‌دانست،
+    #: نه «از کدام بار» و نه «در چه حالی». تهی = برگشتی که بار ندارد (کالای
+    #: بی‌ردیابی) — همان رفتارِ دیروز.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    #: کالای سالم به موجودیِ قابلِ فروشِ همان بار برمی‌گردد؛ خراب/منقضی/قرنطینه
+    #: فیزیکی برمی‌گردد ولی **قابلِ فروش نیست**. پیش‌فرض `sellable` یعنی رفتارِ
+    #: دیروز: تا امروز هر برگشتی مستقیم قابلِ فروش می‌شد.
+    return_condition: Mapped[str] = mapped_column(String(20), default="sellable", server_default="sellable")
     #: **ردیفِ فاکتورِ مبدأ.** بدونِ این، برگشت فقط می‌دانست «کدام کالا» و نه «کدام
     #: ردیف» — پس فاکتوری با دو ردیفِ یک کالا به دو قیمت، میانگین می‌گرفت و
     #: مشتری چیزی پس می‌گرفت که هرگز نپرداخته بود.
