@@ -4549,7 +4549,7 @@ button.topnav-org:hover {
   margin-top: var(--sp-2);
   /* بلندتر از این، فرمِ تنظیمات را به یک صفحه‌ی اسکرولِ بی‌پایان تبدیل می‌کند و
      دکمه‌ی «ذخیره» را از دید بیرون می‌برد. */
-  max-height: 340px;
+  max-height: 380px;
   overflow-y: auto;
 }
 .trade-group {
@@ -4564,11 +4564,60 @@ button.topnav-org:hover {
   gap: var(--sp-2);
   margin-bottom: 4px;
 }
+/* سرِ گروه خودش دکمه‌ی باز/جمع است — سطحِ کلیکِ بزرگ‌تر از یک فلشِ ۱۴ پیکسلی،
+   که روی لمس واقعاً قابلِ زدن باشد. */
+.trade-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: right;
+  color: inherit;
+}
+.trade-group-toggle:hover .trade-group-title { color: var(--accent); }
 .trade-group-title {
   font-weight: 700;
   font-size: var(--fs-sm);
   color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* «۳ از ۲۰» — وقتی چیزی انتخاب شده برجسته می‌شود، چون تنها نشانه‌ی انتخاب در
+   گروهِ جمع‌شده همین است. */
+.trade-group-count {
+  margin-inline-start: auto;
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.trade-group-count.on { color: var(--accent); font-weight: 700; }
+/* فیلدِ جست‌وجوی بالای انتخابگر. */
+.trade-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.trade-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+}
+.trade-search input:focus { outline: none; }
+.trade-picker-wrap { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
 .trade-items {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
