@@ -102,6 +102,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         trial_expired=tinfo.expired,
         locked_features=list(PREMIUM_FEATURES) if tinfo.is_trial else [],
         industry=principal.membership.tenant.industry,
+        trade=principal.membership.tenant.trade,
         enabled_modules=modules_service.enabled_modules(principal.membership.tenant),
         allowed_modules=sorted(modules_service.allowed_modules(principal.membership.tenant)),
     )
@@ -165,6 +166,9 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
     # صنفِ اعلام‌شده قالبِ ماژول‌ها را می‌گذارد؛ ماژولِ محدود (تولید) خودکار گرنت نمی‌شود
     # (grant_restricted=False) — آن فقط با تأییدِ سوپرادمین باز می‌شود.
     modules_service.set_industry(tenant, data.industry, grant_restricted=False)
+    #: صنفِ ریز جداست و هیچ ماژولی را روشن/خاموش نمی‌کند؛ فقط می‌گوید این کسب‌وکار
+    #: چه می‌فروشد. نگفتنش `NULL` می‌ماند، نه پیش‌فرض.
+    tenant.trade = data.trade
     # ایمیل همین حالا با کد تأیید شد؛ ثبتش می‌کنیم تا نشانِ «تأییدشده» درست باشد.
     user.email_verified_at = datetime.now(timezone.utc)
     db.flush()

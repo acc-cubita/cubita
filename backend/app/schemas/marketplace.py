@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.marketplace import LISTING_KINDS, SETTLEMENT_MODES
+from app.services.trades import clean_trades, is_valid_trade
 
 # ── سقفِ عکسِ کاتالوگ ──────────────────────────────────────────────────
 # عکس‌ها به‌صورتِ data URIِ فشرده‌شده در JSONB ذخیره می‌شوند (نه فایلِ روی دیسک)،
@@ -57,6 +58,19 @@ class MarketplaceSettingsIn(BaseModel):
     #: سیاستِ مرجوعی که به فروشگاه نشان داده می‌شود، و مهلتِ مرجوعی به روز (۰ = بی‌محدودیت).
     return_policy: str = ""
     return_window_days: int = 0
+    #: اصنافی که این پخش‌کننده به آن‌ها جنس می‌دهد. خالی = بدونِ محدودیت.
+    target_trades: list[str] = []
+
+    @field_validator("target_trades")
+    @classmethod
+    def _targets(cls, v: list[str]) -> list[str]:
+        #: کلیدِ ناشناخته رد می‌شود نه اینکه بی‌صدا دور ریخته شود: اگر کلاینتی کلیدِ
+        #: غلط بفرستد، پخش‌کننده فکر می‌کند صنفی را هدف گرفته که در واقع ذخیره نشده
+        #: — و بعد نمی‌فهمد چرا آن فروشگاه‌ها سفارش نمی‌دهند.
+        unknown = [k for k in v if not is_valid_trade(k)]
+        if unknown:
+            raise ValueError(f"صنفِ نامعتبر: {'، '.join(unknown)}")
+        return clean_trades(v)
 
     @field_validator("settlement_mode")
     @classmethod
@@ -80,6 +94,7 @@ class MarketplaceSettingsOut(BaseModel):
     require_delivery: bool = False
     return_policy: str = ""
     return_window_days: int = 0
+    target_trades: list[str] = []
 
     model_config = {"from_attributes": True}
 

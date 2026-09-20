@@ -2,6 +2,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.services.trades import is_valid_trade
+
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -71,6 +73,9 @@ class MeOut(BaseModel):
     #: ── شخصی‌سازیِ پنل (app/services/modules.py) ──
     #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
     industry: str = "general"
+    #: صنفِ ریز (app/services/trades.py) — «چه می‌فروشد». `None` یعنی هنوز اعلام
+    #: نشده، که با «هیچ‌کدام» فرق دارد: بازار برای این حساب چیزی را فیلتر نمی‌کند.
+    trade: str | None = None
     #: کلیدِ ماژول‌های *روشن* (ترجیحِ مالک، شاملِ core). فرانت ناوبری را با این فیلتر می‌کند.
     enabled_modules: list[str] = []
     #: کلیدِ ماژول‌های *مجاز* (حقِ دسترسی). فرانت با تفاوتِ enabled/allowed «قفل» را نشان می‌دهد؛
@@ -169,6 +174,17 @@ class SignupIn(BaseModel):
     #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌های پنل را تعیین می‌کند. ماژول‌های محدود (تولید)
     #: با اعلامِ صنف خودکار باز نمی‌شوند؛ آن‌ها فقط با گرنتِ سوپرادمین فعال می‌شوند.
     industry: str = "general"
+    #: صنفِ ریز — اختیاری است تا کلاینتِ قدیمی‌تر بتواند ثبت‌نام کند.
+    trade: str | None = None
+
+    @field_validator("trade")
+    @classmethod
+    def _trade(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not is_valid_trade(v):
+            raise ValueError("صنف نامعتبر است")
+        return v
 
     @field_validator("code")
     @classmethod

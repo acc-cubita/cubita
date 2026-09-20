@@ -78,6 +78,7 @@ def update_settings(db: Session, distributor_tenant_id: UUID, data) -> Marketpla
     row.require_delivery = data.require_delivery
     row.return_policy = data.return_policy.strip()
     row.return_window_days = data.return_window_days
+    row.target_trades = list(data.target_trades)
     db.flush()
     return row
 
@@ -265,18 +266,49 @@ def _active_distributor(db: Session, distributor_tenant_id: UUID) -> Tenant:
     return t
 
 
+def distributor_matches_trade(retailer_trade: str | None, target_trades: list | None) -> bool:
+    """آیا این پخش‌کننده باید در بازارِ این فروشگاه دیده شود؟
+
+    | فروشگاه | پخش‌کننده | نتیجه |
+    |---|---|---|
+    | صنف دارد | فهرستِ هدف خالی | دیده می‌شود (بدونِ محدودیت) |
+    | صنف دارد | صنفِ فروشگاه در فهرست هست | دیده می‌شود |
+    | صنف دارد | صنفِ فروشگاه در فهرست **نیست** | پنهان |
+    | صنفی اعلام نکرده | هرچه | دیده می‌شود |
+
+    **ردیفِ آخر عمدی است.** همه‌ی فروشگاه‌های موجود `trade = NULL` اند، چون این ستون
+    تا امروز وجود نداشت. اگر «نمی‌دانم» را مثلِ «هیچ‌کدام» حساب می‌کردیم، هر
+    فروشگاهِ موجود با این ارتقا هر پخش‌کننده‌ی هدف‌داری را از دست می‌داد — بی‌آنکه
+    کسی بفهمد چرا بازارش خالی شد.
+    """
+    if not retailer_trade:
+        return True
+    if not target_trades:
+        return True
+    return retailer_trade in target_trades
+
+
 def list_distributors_for_retailer(db: Session, retailer_tenant_id: UUID) -> list[dict]:
-    """پخش‌کننده‌های فعالِ بازار + وضعیتِ اتصالِ این فروشگاه به هرکدام."""
+    """پخش‌کننده‌های فعالِ بازار + وضعیتِ اتصالِ این فروشگاه به هرکدام.
+
+    فهرست با صنفِ فروشگاه فیلتر می‌شود (`distributor_matches_trade`). چون فیلتر
+    می‌تواند فهرست را کوتاه کند، سمتِ فرانت **دلیلش را می‌گوید** — وگرنه فروشگاه
+    یک صفحه‌ی کم‌پشت می‌بیند و نتیجه می‌گیرد بازار خالی است.
+    """
     conns = {
         c.distributor_tenant_id: c.status
         for c in db.query(MarketplaceConnection)
         .filter(MarketplaceConnection.retailer_tenant_id == retailer_tenant_id)
         .all()
     }
+    retailer = db.get(Tenant, retailer_tenant_id)
+    retailer_trade = retailer.trade if retailer is not None else None
     rows: list[dict] = []
     for s in db.query(MarketplaceSettings).filter(MarketplaceSettings.is_active.is_(True)).all():
         t = db.get(Tenant, s.distributor_tenant_id)
         if t is None or t.kind != "distributor" or t.status != "active":
+            continue
+        if not distributor_matches_trade(retailer_trade, s.target_trades):
             continue
         rows.append(
             {

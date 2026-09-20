@@ -71,6 +71,14 @@ class MarketplaceSettings(UUIDPKMixin, TimestampMixin, Base):
     return_window_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     #: شماره‌ی مرجوعیِ بعدی (شمارنده‌ی نمایشیِ per-distributor).
     next_return_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    #: اصنافی که این پخش‌کننده به آن‌ها جنس می‌دهد — کلیدهای `app/services/trades.py`.
+    #:
+    #: **فهرستِ خالی = بدونِ محدودیت** (همه‌ی فروشگاه‌ها می‌بینندش). پیش‌فرض همین
+    #: است تا هیچ پخش‌کننده‌ی موجودی با این ارتقا از بازار غیب نشود؛ تبِ تنظیمات
+    #: به‌جایش هشدار می‌دهد که قابلیت را ندیده نگیرد.
+    target_trades: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
 
 
 class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):

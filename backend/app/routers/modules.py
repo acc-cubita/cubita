@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import Principal, get_principal
 from app.models.tenant import Tenant
-from app.schemas.modules import ModulesStateOut, SetModulesIn
+from app.schemas.modules import ModulesStateOut, SetModulesIn, SetTradeIn
 from app.services import modules as svc
 
 router = APIRouter(prefix="/api/modules", tags=["modules"])
@@ -30,6 +30,7 @@ def require_owner(principal: Principal = Depends(get_principal)) -> Principal:
 def _state(tenant: Tenant) -> ModulesStateOut:
     return ModulesStateOut(
         industry=tenant.industry,
+        trade=tenant.trade,
         enabled=svc.enabled_modules(tenant),
         allowed=sorted(svc.allowed_modules(tenant)),
         core=list(svc.CORE_MODULES),
@@ -53,5 +54,26 @@ def set_modules(
 ):
     """ترجیحِ نمایشِ مالک را ذخیره می‌کند (فقط اختیاری‌های مجاز)."""
     svc.set_enabled(principal.membership.tenant, data.enabled)
+    db.flush()
+    return _state(principal.membership.tenant)
+
+
+@router.put("/trade", response_model=ModulesStateOut)
+def set_trade(
+    data: SetTradeIn,
+    principal: Principal = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    """صنفِ کسب‌وکار را اعلام/عوض می‌کند.
+
+    **چرا این‌جا و نه فقط در ثبت‌نام.** صنف تا امروز وجود نداشت، پس همه‌ی
+    کسب‌وکارهای موجود `NULL` اند. بدونِ راهی برای اعلامش، هدف‌گیریِ پخش‌کننده برای
+    هیچ‌کدامشان هرگز کار نمی‌کرد و فقط حساب‌های تازه از این قابلیت بهره می‌بردند.
+
+    مثلِ ماژول‌ها فقط مالک — این تنظیمِ کلِ کسب‌وکار است، نه ترجیحِ یک کاربر. و
+    برخلافِ `industry` (که فقط سوپرادمین عوضش می‌کند) این چیزی را قفل یا باز
+    نمی‌کند، پس دستِ خودِ مالک است.
+    """
+    principal.membership.tenant.trade = data.trade
     db.flush()
     return _state(principal.membership.tenant)
