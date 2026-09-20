@@ -8,6 +8,7 @@ import {
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import { CountBadge, FormField, ListToolbar } from '../../components/form/FormKit'
 import { EmptyState } from '../../components/EmptyState'
 import { StatCard } from '../../components/StatCard'
 import { Pager, usePagination } from '../../components/Pager'
@@ -87,6 +88,7 @@ export function OwnerTransactionListPage({ token }: { token: string }) {
         description="دفترِ آورده، برداشت، وام و بازپرداختِ مالکان — و ماندهٔ جاری هر شریک."
       />
 
+      <div className="ef-form">
       <section className="kpi-row">
         <StatCard icon={<Landmark size={18} />} label="تعداد" value={fa(totals.count)} />
         <StatCard icon={<TrendingUp size={18} />} label="آورده‌ی سرمایه" value={fa(totals.contributed)} />
@@ -97,13 +99,14 @@ export function OwnerTransactionListPage({ token }: { token: string }) {
       <SectionCard
         icon={Wallet}
         title="ماندهٔ جاری شرکا"
-        description="فقط وام و بازپرداخت. آورده‌ی سرمایه بدهیِ شرکت به شریک نمی‌سازد و این‌جا شمرده نمی‌شود."
+        tip="فقط وام و بازپرداخت. آورده‌ی سرمایه بدهیِ شرکت به شریک نمی‌سازد و این‌جا شمرده نمی‌شود."
+        badge={balances.length > 0 ? <CountBadge accent>{fa(balances.length)} شریک</CountBadge> : undefined}
       >
         {balances.length === 0 ? (
           <EmptyState icon={Wallet} text="هنوز سهامداری ثبت نشده است. در پرونده‌ی طرف حساب گزینه‌ی «سهامدار» را فعال کنید." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr><th>شریک</th><th>سهم</th><th>ماندهٔ جاری</th></tr>
               </thead>
@@ -121,37 +124,48 @@ export function OwnerTransactionListPage({ token }: { token: string }) {
         )}
       </SectionCard>
 
-      <SectionCard icon={HandCoins} title="دفترِ تراکنش‌ها">
-        <div className="vr-actions">
-          <label>
-            نوع
-            <SearchSelect value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="">همه</option>
-              {types.map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label>
-            شریک
-            <SearchSelect value={partner} onChange={(e) => setPartner(e.target.value)}>
-              <option value="">همه</option>
-              {balances.map((b) => (
-                <option key={b.contact_id} value={b.contact_id}>{b.contact_name}</option>
-              ))}
-            </SearchSelect>
-          </label>
-        </div>
+      <SectionCard
+        icon={HandCoins}
+        title="دفترِ تراکنش‌ها"
+        badge={rows ? <CountBadge accent>{fa(visible.length)} تراکنش</CountBadge> : undefined}
+        description="همه‌ی تراکنش‌های شرکا؛ برای ثبتِ تازه به «تراکنش شریک» بروید."
+      >
+        <ListToolbar>
+          <FormField label="نوع">
+            {(id) => (
+              <SearchSelect id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="">همه</option>
+                {types.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+          <FormField label="شریک">
+            {(id) => (
+              <SearchSelect id={id} value={partner} onChange={(e) => setPartner(e.target.value)}>
+                <option value="">همه</option>
+                {balances.map((b) => (
+                  <option key={b.contact_id} value={b.contact_id}>
+                    {b.contact_name}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+        </ListToolbar>
 
         {error ? (
-          <div className="error">{error}</div>
+          <p className="ef-message ef-message--warn ef-block-note">{error}</p>
         ) : rows === null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : visible.length === 0 ? (
           <EmptyState icon={HandCoins} text="تراکنشی با این شرایط پیدا نشد. از «تراکنش شریک» ثبت کنید." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr>
                   <th>تاریخ</th><th>شریک</th><th>نوع</th><th>اثر</th>
@@ -187,6 +201,7 @@ export function OwnerTransactionListPage({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }

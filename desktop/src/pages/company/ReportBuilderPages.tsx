@@ -21,6 +21,13 @@ import {
 import { MODULE_LISTS } from '../../components/moduleLists'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import {
+  ActionBar,
+  FormField,
+  FormGrid,
+  FormStatus,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
 import type { PageKey } from '../../lib/navModel'
@@ -254,8 +261,8 @@ export function ResultTable({
   }
   return (
     <>
-      <div className="table-scroll">
-        <table className="cards-on-mobile">
+      <div className="table-scroll ef-table-wrap">
+        <table className="cards-on-mobile ef-table">
           <thead>
             <tr>
               {columns.map((c) => (
@@ -344,6 +351,15 @@ export function ReportBuilderPage({ token }: { token: string }) {
   }
 
   async function save() {
+    if (config.columns.length === 0) {
+      setMsg({ text: 'دستِ‌کم یک ستون انتخاب کنید.', kind: 'err' })
+      return
+    }
+    const missing = firstMissing([[name, 'rb-name', 'نامِ گزارش را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     if (!name.trim() || config.columns.length === 0) return
     setBusy(true)
     setMsg(null)
@@ -378,8 +394,7 @@ export function ReportBuilderPage({ token }: { token: string }) {
         title="گزارش‌ساز"
         description="منبعِ داده را انتخاب کنید، ستون‌ها و فیلترها را بچینید، و نتیجه را همان‌جا ببینید. آنچه ذخیره می‌شود *تعریفِ* گزارش است، پس هر بار تازه اجرا می‌شود."
       />
-      <Note msg={msg} />
-
+      <div className="ef-form">
       <SectionCard
         icon={Wrench}
         title="۱. منبعِ داده"
@@ -409,8 +424,12 @@ export function ReportBuilderPage({ token }: { token: string }) {
         description="ترتیبِ انتخاب همان ترتیبِ ستون‌ها در خروجی است."
         actions={
           config.columns.length > 0 ? (
-            <button type="button" onClick={() => setConfig((c) => ({ ...c, columns: [] }))}>
-              <X size={13} /> پاک‌کردن
+            <button
+              type="button"
+              className="ef-btn-secondary"
+              onClick={() => setConfig((c) => ({ ...c, columns: [] }))}
+            >
+              <X size={14} /> پاک‌کردن
             </button>
           ) : undefined
         }
@@ -563,30 +582,32 @@ export function ReportBuilderPage({ token }: { token: string }) {
         title="۵. ذخیره"
         description={`این تعریف روی منبعِ «${source?.label ?? '—'}» ذخیره می‌شود و برای همه‌ی کاربرانِ کسب‌وکار دیده خواهد شد.`}
       >
-        <div className="cmp-form">
-          <label className="cmp-form-wide">
-            <span>نامِ گزارش</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />
-          </label>
-          <label className="cmp-form-wide">
-            <span>توضیح</span>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </label>
-        </div>
-        <div className="invoice-form-footer">
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={busy || !name.trim() || config.columns.length === 0}
-            onClick={() => void save()}
-          >
-            <Save size={13} /> ذخیره‌ی گزارش
-          </button>
-        </div>
-        {config.columns.length === 0 && (
-          <p className="bk-hint">برای ذخیره، دستِ‌کم یک ستون انتخاب کنید.</p>
-        )}
+        <FormGrid cols={2}>
+          <FormField id="rb-name" label="نامِ گزارش" required>
+            {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />}
+          </FormField>
+          <FormField label="توضیح" optional>
+            {(id) => <input id={id} value={description} onChange={(e) => setDescription(e.target.value)} />}
+          </FormField>
+        </FormGrid>
       </SectionCard>
+      <ActionBar
+        status={
+          <FormStatus
+            msg={msg}
+            idle={
+              config.columns.length === 0
+                ? 'برای ذخیره، دستِ‌کم یک ستون انتخاب کنید.'
+                : `${fa(config.columns.length)} ستون و ${fa(config.filters.length)} فیلتر انتخاب شده است.`
+            }
+          />
+        }
+      >
+        <button type="button" className="btn-primary" disabled={busy} onClick={() => void save()}>
+          <Save size={16} /> ذخیره‌ی گزارش
+        </button>
+      </ActionBar>
+      </div>
     </div>
   )
 }
@@ -700,6 +721,7 @@ export function DynamicReportsPage({
         title="گزارش‌های پویا"
         description="گزارش‌هایی که خودتان ساخته‌اید. هر بار که بازشان کنید روی داده‌ی امروز اجرا می‌شوند."
       />
+      <div className="ef-form">
       <Note msg={msg} />
 
       <SectionCard
@@ -719,8 +741,8 @@ export function DynamicReportsPage({
             text="هنوز گزارشی نساخته‌اید — از «گزارش‌ساز» اولین گزارش را بسازید."
           />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr>
                   <th>نام</th>
@@ -791,6 +813,7 @@ export function DynamicReportsPage({
           )}
         </SectionCard>
       )}
+      </div>
     </div>
   )
 }

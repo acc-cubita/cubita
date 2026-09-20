@@ -39,6 +39,14 @@ import type { BankAccountCache } from '../../electron.d'
 import { PageHeader } from '../../components/PageHeader'
 import { NumberInput } from '../../components/NumberInput'
 import { SectionCard } from '../../components/SectionCard'
+import {
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  InputAffix,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
 import { EmptyState } from '../../components/EmptyState'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
@@ -258,6 +266,8 @@ function PlanForm({
   onCancel: () => void
   msg: Msg
 }) {
+  //: پیامِ اعتبارسنجیِ خودِ فرم؛ پیامِ سرور از بیرون (`msg`) می‌آید و اولویت دارد.
+  const [localMsg, setLocalMsg] = useState<Msg>(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm({ ...form, ...patch })
 
@@ -277,67 +287,119 @@ function PlanForm({
 
   return (
     <form
-      className="invoice-form form-full inst-form"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault()
+        const missing = firstMissing([
+          [form.contactId, 'inst-contact', 'مشتری را انتخاب کنید.'],
+          [form.cash, 'inst-cash', 'قیمتِ نقدی را وارد کنید.'],
+          [form.count, 'inst-count', 'تعدادِ اقساط را وارد کنید.'],
+        ])
+        if (missing) {
+          setLocalMsg({ text: missing, kind: 'err' })
+          return
+        }
         void onSubmit(form, preview?.total ?? 0)
       }}
     >
-      <label>
-        مشتری
-        <SearchSelect value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
-          <option value="">— انتخاب مشتری —</option>
-          {contacts.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </SearchSelect>
-      </label>
-      <label>
-        عنوان قرارداد
-        <input value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="مثلاً خرید یخچال" />
-      </label>
-      <label>
-        قیمت نقدی
-        <NumberInput value={form.cash} onChange={(v) => set({ cash: v })} required />
-      </label>
-      <label>
-        سود فروش اقساطی
-        <NumberInput value={form.profit} onChange={(v) => set({ profit: v })} placeholder="۰" />
-      </label>
-      <label>
-        پیش‌پرداخت
-        <NumberInput value={form.down} onChange={(v) => set({ down: v })} placeholder="۰" />
-      </label>
-      <label>
-        تعداد اقساط
-        <NumberInput value={form.count} onChange={(v) => set({ count: v })} required />
-      </label>
-      <label>
-        فاصله (ماه)
-        <NumberInput value={form.interval} onChange={(v) => set({ interval: v })} />
-      </label>
-      <label>
-        تاریخِ اولین قسط
-        <JalaliDatePicker value={form.startDate} onChange={(iso) => set({ startDate: iso })} />
-      </label>
-      <label>
-        جریمه‌ی دیرکرد (٪ ماهانه)
-        <NumberInput value={form.penalty} onChange={(v) => set({ penalty: v })} placeholder="۰" />
-      </label>
-      <label>
-        نام ضامن
-        <input value={form.guarantorName} onChange={(e) => set({ guarantorName: e.target.value })} />
-      </label>
-      <label>
-        تلفن ضامن
-        <input value={form.guarantorPhone} onChange={(e) => set({ guarantorPhone: e.target.value })} />
-      </label>
-      <label>
-        کد ملی ضامن
-        <input value={form.guarantorId} onChange={(e) => set({ guarantorId: e.target.value })} />
-      </label>
+      <FormGrid>
+        <FormField id="inst-contact" label="مشتری" required>
+          {(id) => (
+            <SearchSelect id={id} value={form.contactId} onChange={(e) => set({ contactId: e.target.value })}>
+              <option value="">— انتخاب مشتری —</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
+        <FormField label="عنوان قرارداد" optional>
+          {(id) => (
+            <input
+              id={id}
+              value={form.title}
+              onChange={(e) => set({ title: e.target.value })}
+              placeholder="مثلاً خرید یخچال"
+            />
+          )}
+        </FormField>
+        <FormField id="inst-cash" label="قیمت نقدی" required>
+          {(id) => (
+            <InputAffix unit="ریال">
+              <NumberInput id={id} value={form.cash} onChange={(v) => set({ cash: v })} />
+            </InputAffix>
+          )}
+        </FormField>
+        <FormField label="سود فروش اقساطی" optional>
+          {(id) => (
+            <InputAffix unit="ریال">
+              <NumberInput id={id} value={form.profit} onChange={(v) => set({ profit: v })} placeholder="۰" />
+            </InputAffix>
+          )}
+        </FormField>
+        <FormField label="پیش‌پرداخت" optional>
+          {(id) => (
+            <InputAffix unit="ریال">
+              <NumberInput id={id} value={form.down} onChange={(v) => set({ down: v })} placeholder="۰" />
+            </InputAffix>
+          )}
+        </FormField>
+        <FormField id="inst-count" label="تعداد اقساط" required>
+          {(id) => <NumberInput id={id} value={form.count} onChange={(v) => set({ count: v })} group={false} />}
+        </FormField>
+        <FormField label="فاصله" tip="فاصله‌ی سررسیدها به ماه؛ ۱ یعنی ماهانه.">
+          {(id) => (
+            <InputAffix unit="ماه">
+              <NumberInput id={id} value={form.interval} onChange={(v) => set({ interval: v })} group={false} />
+            </InputAffix>
+          )}
+        </FormField>
+        <FormField label="تاریخِ اولین قسط" required>
+          {(id) => (
+            <JalaliDatePicker id={id} value={form.startDate} onChange={(iso) => set({ startDate: iso })} />
+          )}
+        </FormField>
+        <FormField label="جریمه‌ی دیرکرد" optional tip="درصدِ ماهانه روی قسطِ معوق؛ فقط برآورد می‌شود و سند نمی‌خورد.">
+          {(id) => (
+            <InputAffix unit="٪">
+              <NumberInput
+                id={id}
+                value={form.penalty}
+                onChange={(v) => set({ penalty: v })}
+                allowDecimal
+                placeholder="۰"
+              />
+            </InputAffix>
+          )}
+        </FormField>
+        <FormField label="نام ضامن" optional>
+          {(id) => (
+            <input id={id} value={form.guarantorName} onChange={(e) => set({ guarantorName: e.target.value })} />
+          )}
+        </FormField>
+        <FormField label="تلفن ضامن" optional>
+          {(id) => (
+            <input
+              id={id}
+              value={form.guarantorPhone}
+              onChange={(e) => set({ guarantorPhone: e.target.value })}
+              dir="ltr"
+            />
+          )}
+        </FormField>
+        <FormField label="کد ملی ضامن" optional>
+          {(id) => (
+            <input
+              id={id}
+              value={form.guarantorId}
+              onChange={(e) => set({ guarantorId: e.target.value })}
+              dir="ltr"
+            />
+          )}
+        </FormField>
+      </FormGrid>
 
       {preview && (
         <div className="pos-summary inst-preview">
@@ -369,15 +431,15 @@ function PlanForm({
         </div>
       )}
 
-      <div className="invoice-form-footer">
-        <button type="button" onClick={onCancel}>
-          <X size={13} /> انصراف
+      <div className="ef-card-foot">
+        <FormStatus msg={msg ?? localMsg} />
+        <button type="button" className="ef-btn-secondary" onClick={onCancel}>
+          <X size={15} /> انصراف
         </button>
         <button type="submit" className="btn-primary">
-          <Save size={14} /> ثبت قرارداد
+          <Save size={16} /> ثبت قرارداد
         </button>
       </div>
-      <Note msg={msg} />
     </form>
   )
 }
@@ -410,8 +472,8 @@ function RescheduleEditor({
         سررسید و مبلغِ هر قسط را می‌توانید عوض کنید — تعویق، تجمیع، یا تقسیمِ دوباره. تنها قیدِ سرور این است که
         جمعِ اقساط برابرِ مبلغِ تسهیم‌شده بماند و هیچ قسطی کمتر از مبلغِ وصول‌شده‌اش نشود.
       </p>
-      <div className="table-scroll">
-        <table className="cards-on-mobile">
+      <div className="table-scroll ef-table-wrap">
+        <table className="cards-on-mobile ef-table">
           <thead>
             <tr>
               <th>قسط</th>
@@ -677,7 +739,8 @@ export function InstallmentSalesPage({
         title="فروش اقساطی"
         description="قرارداد اقساط برای فروشِ نسیه، زمان‌بندیِ وصول، و ثبتِ هر پرداخت به‌صورتِ دریافتِ واقعیِ خزانه. قرارداد بدهی نمی‌سازد — بدهی از فاکتورِ نسیه می‌آید."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       {/* ── سبدِ اقساط ── */}
       <div className="cc-head">
@@ -722,10 +785,17 @@ export function InstallmentSalesPage({
         <SectionCard
           icon={CalendarClock}
           title="قراردادها"
-          description={`${faInt(filtered.length)} از ${faInt(plans.length)} قرارداد`}
+          badge={<CountBadge accent>{faInt(filtered.length)} از {faInt(plans.length)}</CountBadge>}
           actions={
-            <button type="button" onClick={() => { setFormOpen(true); setFormMsg(null) }}>
-              <Plus size={13} /> قرارداد جدید
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                setFormOpen(true)
+                setFormMsg(null)
+              }}
+            >
+              <Plus size={14} /> قرارداد جدید
             </button>
           }
         >
@@ -859,8 +929,8 @@ export function InstallmentSalesPage({
               <div className="inst-debtors">
                 <h4>بدهکارانِ بزرگ</h4>
                 <p className="hint">مجموعِ ماندهٔ همه‌ی قراردادهای هر مشتری — ریسک روی «مشتری» است نه «قرارداد».</p>
-                <div className="table-scroll">
-                  <table className="cards-on-mobile">
+                <div className="table-scroll ef-table-wrap">
+                  <table className="cards-on-mobile ef-table">
                     <thead>
                       <tr>
                         <th>مشتری</th>
@@ -1029,7 +1099,7 @@ export function InstallmentSalesPage({
                     </div>
                   )}
 
-                  <div className="table-scroll">
+                  <div className="table-scroll ef-table-wrap">
                     <table className="inst-sched-table cards-on-mobile">
                       <thead>
                         <tr>
@@ -1139,8 +1209,8 @@ export function InstallmentSalesPage({
                 (selected.payments.length === 0 ? (
                   <EmptyState icon={Wallet} text="هنوز پرداختی روی این قرارداد ثبت نشده." />
                 ) : (
-                  <div className="table-scroll">
-                    <table className="cards-on-mobile">
+                  <div className="table-scroll ef-table-wrap">
+                    <table className="cards-on-mobile ef-table">
                       <thead>
                         <tr>
                           <th>تاریخ</th>
@@ -1174,6 +1244,7 @@ export function InstallmentSalesPage({
             </>
           )}
         </SectionCard>
+      </div>
       </div>
     </div>
   )

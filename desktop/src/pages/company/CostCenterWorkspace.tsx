@@ -562,8 +562,8 @@ function CenterBudget({
       ) : lines.length === 0 ? (
         <EmptyState icon={Target} text="برای این مرکز هنوز بودجه‌ای تعریف نشده." />
       ) : (
-        <div className="table-scroll">
-          <table className="cards-on-mobile">
+        <div className="table-scroll ef-table-wrap">
+          <table className="cards-on-mobile ef-table">
             <thead>
               <tr>
                 <th>دوره</th>
@@ -629,7 +629,7 @@ function CenterLedger({
         فقط ردیف‌های درآمد و هزینه — همان‌هایی که سودِ مرکز از آن‌ها ساخته می‌شود. سبز درآمد است و قرمز هزینه.
         سقفِ نمایش ۲۰۰ ردیفِ اخیر است.
       </p>
-      <div className="table-scroll">
+      <div className="table-scroll ef-table-wrap">
         <table className="cards-on-mobile cc-ledger-table">
           <thead>
             <tr>
@@ -1110,8 +1110,8 @@ export function CostCenterWorkspace({
                     {analysis.children.length > 0 && (
                       <div className="cc-panel">
                         <h4>زیرمجموعه‌ها</h4>
-                        <div className="table-scroll">
-                          <table className="cards-on-mobile">
+                        <div className="table-scroll ef-table-wrap">
+                          <table className="cards-on-mobile ef-table">
                             <thead>
                               <tr>
                                 <th>مرکز</th>
