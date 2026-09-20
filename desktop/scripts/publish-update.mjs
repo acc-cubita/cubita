@@ -28,8 +28,48 @@ const ROOT = path.join(HERE, '..')
 const RELEASE = path.join(ROOT, 'release')
 
 const HOST = process.env.CUBITA_DEPLOY_HOST ?? 'root@62.60.129.39'
-const KEY = process.env.CUBITA_DEPLOY_KEY ?? path.join(process.env.HOME ?? '', '.ssh', 'ipnet_vps')
 const REMOTE = '/opt/hesabdari/updates'
+
+/**
+ * کلید خصوصی SSH — باید *وجود داشته باشد*، وگرنه همین‌جا می‌ایستیم.
+ *
+ * **چرا اصلاً بررسی می‌شود:** قبلاً این‌جا یک مسیر ثابت بود و اگر آن فایل نبود،
+ * ssh بی‌صدا به احراز با رمز برمی‌گشت و وسط انتشار یک دیالوگ رمز بالا می‌آمد —
+ * یعنی خطای «کلید پیدا نشد» به شکل «رمزت را بده» ظاهر می‌شد. آن دیالوگ در یک
+ * اسکریپت غیرتعاملی (CI، یا همین اسکریپت پشت `npm run`) اصلاً دیده نمی‌شود و
+ * انتشار فقط هنگ می‌کند.
+ *
+ * پس دو کار: اول بین نام‌های شناخته‌شده دنبال کلیدِ موجود می‌گردیم، و اگر هیچ‌کدام
+ * نبود **بلند شکست می‌خوریم** با پیامی که می‌گوید دقیقاً چه چیزی کم است.
+ */
+const KEY_CANDIDATES = ['cubita_vps', 'ipnet_vps']
+const SSH_DIR = path.join(process.env.HOME ?? '', '.ssh')
+
+function resolveKey() {
+  const explicit = process.env.CUBITA_DEPLOY_KEY
+  if (explicit) {
+    // مسیر صریح حدس نمی‌خورد: اگر کاربر مسیری داده و آن مسیر نیست، اشتباهِ
+    // اوست و باید ببیندش — نه اینکه بی‌صدا سراغ کلید دیگری برویم.
+    if (!existsSync(explicit)) {
+      console.error(`CUBITA_DEPLOY_KEY به فایلی اشاره می‌کند که وجود ندارد:\n  ${explicit}`)
+      process.exit(1)
+    }
+    return explicit
+  }
+  for (const name of KEY_CANDIDATES) {
+    const p = path.join(SSH_DIR, name)
+    if (existsSync(p)) return p
+  }
+  console.error(
+    'کلید SSH برای انتشار پیدا نشد.\n' +
+      `جست‌وجو شد در ${SSH_DIR}: ${KEY_CANDIDATES.join('، ')}\n\n` +
+      'یا کلید را با یکی از این نام‌ها آن‌جا بگذارید، یا مسیرش را بدهید:\n' +
+      '  CUBITA_DEPLOY_KEY="$HOME/.ssh/نام-کلید" npm run publish-update',
+  )
+  process.exit(1)
+}
+
+const KEY = resolveKey()
 
 const version = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
 if (version === '0.0.0') {
@@ -52,7 +92,24 @@ for (const f of files) {
 // کار می‌کند و مسیر را *عیناً* می‌گیرد؛ هر escape ای که اینجا اضافه شود جزئی از
 // نام فایل می‌شود. با artifactName بدون فاصله، این اصلاً موضوعیت ندارد — ولی
 // نوشته می‌ماند چون هر دو اشتباه (نقل‌قول و backslash) یک‌بار اتفاق افتادند.
-const BASE_OPTS = ['-i', KEY, '-o', 'StrictHostKeyChecking=no', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
+//
+// `PasswordAuthentication=no` + `KbdInteractiveAuthentication=no` مکمّلِ بررسیِ
+// بالاست: آن‌جا مطمئن شدیم فایلِ کلید *هست*، این‌جا مطمئن می‌شویم اگر سرور همان
+// کلید را **نپذیرد** (منقضی، روی سرور نصب‌نشده، مالِ هاستِ دیگر) باز هم دیالوگِ
+// رمز بالا نیاید. بدون این دو، تنها نشانه‌ی «کلیدت کار نمی‌کند» یک پنجره‌ی رمز
+// است که معنایش را نمی‌گوید. با این دو، ssh صریح می‌گوید Permission denied.
+//
+// عمداً `BatchMode=yes` نیست: آن *همه‌ی* پرسش‌ها را می‌بندد، از جمله پرسیدنِ
+// عبارتِ عبورِ خودِ کلید — که پرسشِ به‌جایی است و باید بماند.
+const BASE_OPTS = [
+  '-i', KEY,
+  '-o', 'IdentitiesOnly=yes',
+  '-o', 'PasswordAuthentication=no',
+  '-o', 'KbdInteractiveAuthentication=no',
+  '-o', 'StrictHostKeyChecking=no',
+  '-o', 'ServerAliveInterval=15',
+  '-o', 'ServerAliveCountMax=3',
+]
 
 // **چرا یک اتصال ماندگار (ControlMaster) و نه یک اتصال تازه به‌ازای هر تکه:**
 // نصب‌کننده روی این کانال سه‌بار جور دیگری شکست خورد. اول با «Connection reset
