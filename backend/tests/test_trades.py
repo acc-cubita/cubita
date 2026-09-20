@@ -87,7 +87,10 @@ def test_validity_and_label_lookup():
 
 
 def test_trades_of_group():
-    assert "icecream" in trades_of_group("food")
+    assert "supermarket" in trades_of_group("food")
+    #: صنف می‌تواند بینِ گروه‌ها جابه‌جا شود (بستنی‌فروشی از «مواد غذایی» به «نان و
+    #: شیرینی» رفت) — کلیدِ گروه ذخیره نمی‌شود، پس این جابه‌جایی بی‌خطر است.
+    assert "icecream" in trades_of_group("bakery_sweets")
     assert trades_of_group("nope") == ()
 
 
@@ -388,3 +391,52 @@ def test_listing_rejects_unknown_extra_trade(as_distributor):
         json={"kind": "pack", "title": "x", "components": [], "extra_trades": ["نه‌چنین‌صنفی"]},
     )
     assert r.status_code == 422
+
+
+# ── نگهبانِ قولِ Additive ───────────────────────────────────────────────
+#
+# این ۹۴ کلید در ۱۴۰۵/۰۶/۲۹ منتشر شدند و از همان روز در دیتابیسِ production
+# می‌نشینند: `tenants.trade`, `marketplace_settings.target_trades`,
+# `marketplace_listings.extra_trades`.
+#
+# **این تاپل هرگز کوتاه نمی‌شود.** فهرستِ اصناف قرار است رشد کند — صنفِ تازه اضافه
+# شود، گروه‌بندی عوض شود، برچسبِ فارسی اصلاح شود. همه‌ی این‌ها آزادند. چیزی که آزاد
+# نیست، *برداشتنِ* یک کلید است: صنفی که یک کسب‌وکارِ واقعی اعلام کرده، با حذفِ
+# کلیدش به یک رشته‌ی ناشناخته تبدیل می‌شود که `trade_label` خودش را برمی‌گرداند و
+# `distributor_matches_trade` دیگر با هیچ هدفی جور نمی‌شود — بی‌آنکه خطایی بدهد.
+LEGACY_94 = (
+    "supermarket", "hypermarket", "grocery", "icecream", "confectionery",
+    "bakery", "dairy", "butcher", "poultry_fish", "produce",
+    "nuts", "cafe", "restaurant", "fastfood", "beverages",
+    "clothing", "boutique", "childrens_wear", "underwear", "shoes_bags",
+    "fabric", "haberdashery", "workwear", "autoparts", "motorcycle_parts",
+    "tires", "car_accessories", "oil_filter", "tools", "electrical",
+    "hardware", "iron_metal", "paint", "building_material", "plumbing",
+    "hvac", "industrial_equipment", "mobile", "computer", "home_appliance",
+    "audio_video", "camera", "gaming", "office_equipment", "pharmacy",
+    "cosmetics", "medical_equipment", "optician", "herbal", "supplement",
+    "barber", "beauty_salon", "furniture", "carpet", "lighting",
+    "curtain", "tile", "kitchenware", "bedding", "flowers",
+    "stationery", "bookstore", "toys", "sports", "music_instruments",
+    "handicraft", "pet_shop", "gift_shop", "gold", "watch",
+    "silver", "antique", "construction", "auto_repair", "technical_services",
+    "printing", "transport", "real_estate", "education", "it_services",
+    "travel", "laundry", "accounting_services", "insurance", "farm_inputs",
+    "animal_feed", "greenhouse", "veterinary", "food_distribution", "hygiene_distribution",
+    "pharma_distribution", "industrial_distribution", "general_wholesale", "other",
+)
+
+
+def test_legacy_keys_survive_every_taxonomy_change():
+    """هر کلیدی که یک بار منتشر شده، برای همیشه معتبر می‌ماند."""
+    missing = [k for k in LEGACY_94 if not is_valid_trade(k)]
+    assert not missing, (
+        "کلیدِ صنفی که در دیتابیس ذخیره شده از تاکسونومی حذف شده و کسب‌وکارهای "
+        f"اعلام‌کننده‌اش بی‌صدا از هدف‌گیری می‌افتند: {missing}"
+    )
+
+
+def test_legacy_keys_still_have_labels():
+    """حذف‌نشدن کافی نیست — برچسب هم باید باشد، وگرنه کاربر کلیدِ خام می‌بیند."""
+    bare = [k for k in LEGACY_94 if trade_label(k) == k]
+    assert not bare, f"کلیدِ بدونِ برچسبِ فارسی: {bare}"

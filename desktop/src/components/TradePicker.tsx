@@ -1,4 +1,8 @@
-import { toggleGroup, toggleTrade } from '../lib/tradeSelection'
+import { useState } from 'react'
+import { ChevronLeft, ChevronDown, Search } from 'lucide-react'
+
+import { toggleExpanded, toggleGroup, toggleTrade, viewGroups } from '../lib/tradeSelection'
+import { textMatches } from '../lib/commands'
 import { toFaDigits } from '../lib/jalali'
 import type { TradeGroup } from '../api'
 
@@ -18,38 +22,79 @@ export function TradePicker({
   value: string[]
   onChange: (next: string[]) => void
 }) {
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const chosen = new Set(value)
+  const views = viewGroups(groups, value, query, expanded, textMatches)
+
   return (
-    <div className="trade-picker">
-      {groups.map((g) => {
-        const keys = g.trades.map((t) => t.key)
-        const allOn = keys.every((k) => chosen.has(k))
-        return (
-          <div key={g.key} className="trade-group">
-            <div className="trade-group-head">
-              <span className="trade-group-title">{g.label}</span>
-              <button type="button" className="link-btn" onClick={() => onChange(toggleGroup(value, keys))}>
-                {allOn ? 'برداشتنِ گروه' : 'کلِ گروه'}
-              </button>
-            </div>
-            <div className="trade-items">
-              {g.trades.map((t) => (
-                <label key={t.key} className="cal-check-inline">
-                  <input
-                    type="checkbox"
-                    checked={chosen.has(t.key)}
-                    onChange={() => onChange(toggleTrade(value, t.key))}
-                  />
-                  {t.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        )
-      })}
+    <div className="trade-picker-wrap">
+      {/* با ~۶۰ گروه و صدها صنف، اسکرول‌کردن راهِ پیداکردن نیست. `textMatches`
+          همان نرمال‌سازیِ نیم‌فاصله و ی/ك عربی را می‌دهد که بقیه‌ی جست‌وجوهای
+          برنامه دارند — نه یک includes‌ِ تازه که «بستني» را پیدا نکند. */}
+      <label className="trade-search">
+        <Search size={14} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="جست‌وجوی صنف…"
+        />
+      </label>
+
+      {views.length === 0 ? (
+        <p className="field-hint">صنفی با «{query.trim()}» پیدا نشد.</p>
+      ) : (
+        <div className="trade-picker">
+          {views.map((g) => {
+            const keys = g.trades.map((t) => t.key)
+            const allOn = keys.length > 0 && keys.every((k) => chosen.has(k))
+            return (
+              <div key={g.key} className="trade-group">
+                <div className="trade-group-head">
+                  <button
+                    type="button"
+                    className="trade-group-toggle"
+                    aria-expanded={g.open}
+                    onClick={() => setExpanded((e) => toggleExpanded(e, g.key))}
+                  >
+                    {g.open ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}
+                    <span className="trade-group-title">{g.label}</span>
+                    {/* شمارنده از کلِ گروه است نه از نتایجِ جست‌وجو — گروهِ جمع‌شده
+                        وگرنه انتخاب‌هایش را پنهان می‌کند و کاربر فکر می‌کند پاک شده‌اند. */}
+                    <span className={`trade-group-count${g.chosen ? ' on' : ''}`}>
+                      {toFaDigits(String(g.chosen))} از {toFaDigits(String(g.total))}
+                    </span>
+                  </button>
+                  {g.open && (
+                    <button type="button" className="link-btn" onClick={() => onChange(toggleGroup(value, keys))}>
+                      {allOn ? 'برداشتنِ این‌ها' : 'همه‌ی این‌ها'}
+                    </button>
+                  )}
+                </div>
+                {g.open && (
+                  <div className="trade-items">
+                    {g.trades.map((t) => (
+                      <label key={t.key} className="cal-check-inline">
+                        <input
+                          type="checkbox"
+                          checked={chosen.has(t.key)}
+                          onChange={() => onChange(toggleTrade(value, t.key))}
+                        />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
+
 
 /**
  * راهنمای فیلدستِ «اصنافِ اضافه» — یک متن، دو مصرف‌کننده (فرمِ کلاسیک و ویزارد).
