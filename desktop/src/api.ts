@@ -59,6 +59,9 @@ export interface MeResponse {
   trial_expired: boolean
   //: قابلیت‌های قفل‌شده در آزمایشی (moadian/storefront) — جای ماژول باکسِ «خرید پلن» می‌آید.
   locked_features: string[]
+  //: کارت‌های داشبوردِ همین کاربر (`page` یا `page/section`). `null` یعنی هنوز
+  //: انتخاب نکرده → پیش‌فرض‌ها؛ `[]` یعنی عمداً خالی. این دو یکی نیستند.
+  dashboard_cards: string[] | null
   //: ── شخصی‌سازیِ پنل ──
   //: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
   industry: string
@@ -2627,6 +2630,14 @@ export interface ModulesState {
   restricted: string[]
   industries: string[]
 }
+
+/** کارت‌های داشبورد. خواندن لازم نیست — `fetchMe` همین را با خودش می‌آورد. */
+export const saveDashboardCards = (token: string, cards: string[]) =>
+  authedSend<{ cards: string[] | null }>(token, 'PUT', '/api/dashboard/cards', { cards })
+
+/** بازگشت به پیش‌فرض: ستون دوباره `null` می‌شود، نه کپیِ منجمدی از پیش‌فرضِ امروز. */
+export const resetDashboardCards = (token: string) =>
+  authedDeleteJson<{ cards: string[] | null }>(token, '/api/dashboard/cards')
 
 export const fetchModules = (token: string) => authedGet<ModulesState>(token, '/api/modules')
 

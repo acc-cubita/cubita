@@ -11,20 +11,29 @@ import { TrendChart, type TrendSeries } from '../components/TrendChart'
 import { ActivityFeed } from '../components/ActivityFeed'
 import { SalesDashboard } from '../components/SalesDashboard'
 import { AlertsPanel } from '../components/AlertsPanel'
+import { LauncherBoard } from '../components/LauncherBoard'
 import { Wallet, TrendingUp, PackageSearch, Inbox } from 'lucide-react'
+import type { MeResponse } from '../api'
+import type { PageKey } from '../lib/navModel'
 
 const fa = (v: number) => v.toLocaleString('fa-IR')
 
 export function OverviewPage({
   token,
+  me,
   userName,
   pendingOutboxCount,
   itemsCount,
+  onNavigate,
+  onMeUpdated,
 }: {
   token: string
+  me: MeResponse
   userName: string
   pendingOutboxCount: number
   itemsCount: number
+  onNavigate: (page: PageKey, section?: string) => void
+  onMeUpdated: (me: MeResponse) => void
 }) {
   const [cashBalance, setCashBalance] = useState<number | null>(null)
   const [inventoryValue, setInventoryValue] = useState<number | null>(null)
@@ -94,6 +103,10 @@ export function OverviewPage({
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {/* کارت‌های کاربر پیش از اعداد: کسی که داشبورد را باز می‌کند معمولاً می‌خواهد
+          کاری را *شروع کند*. همان کامپوننتِ داشبوردِ «راهنما»، نه نسخه‌ی دوم. */}
+      <LauncherBoard token={token} me={me} onMeUpdated={onMeUpdated} onNavigate={onNavigate} />
 
       <AlertsPanel token={token} />
 

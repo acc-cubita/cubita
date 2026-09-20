@@ -17,7 +17,10 @@ export const TASK_LAUNCHERS: TaskLauncher[] = [
   { key: 'sales-invoice', title: 'فاکتور فروش', desc: 'ثبت فروش؛ سند حسابداری و خروج انبار جدا صادر می‌شوند.', icon: ShoppingCart, page: 'salesinvoice' },
   { key: 'quotation', title: 'پیش‌فاکتور', desc: 'صدورِ پیش‌فاکتور برای مشتری.', icon: FileText, page: 'quotations' },
   { key: 'purchase-invoice', title: 'فاکتور خرید', desc: 'ثبتِ خرید از تأمین‌کننده.', icon: PackagePlus, page: 'purchases', section: 'invoices' },
-  { key: 'treasury', title: 'دریافت و پرداخت', desc: 'ثبتِ دریافت/پرداختِ نقد و بانک.', icon: HandCoins, page: 'contacts', section: 'treasury' },
+  //: `contacts/treasury` بود؛ چنین تبی وجود ندارد (نه در `MODULE_SECTIONS` و نه در
+  //: خودِ صفحه‌ی طرف‌حساب) پس کارت و فرمانِ کامندپالت هر دو به تبِ اولِ «اشخاص»
+  //: می‌افتادند. «رسید دریافت» همان کاری است که این لانچر نامش را می‌برد.
+  { key: 'treasury', title: 'دریافت و پرداخت', desc: 'ثبتِ دریافت/پرداختِ نقد و بانک.', icon: HandCoins, page: 'receiptvoucher' },
   { key: 'journal', title: 'ثبت سند', desc: 'سندِ دستیِ حسابداری.', icon: BookOpen, page: 'journalentry' },
   { key: 'product', title: 'کالای جدید', desc: 'افزودنِ کالا یا خدمت به انبار.', icon: Package, page: 'inventory', section: 'products' },
 ]

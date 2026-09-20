@@ -12031,3 +12031,147 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
+
+/* ═══ انتخاب‌گرِ کارت‌های داشبورد (LauncherPicker) ═══════════════════════════
+   بی‌قید به `data-structure` نوشته شده: باکسِ «شروعِ کارِ تازه» در هر دو داشبورد
+   (راهنما و کلاسیک) همین انتخاب‌گر را باز می‌کند. */
+.lp-card {
+  width: min(760px, 100%);
+  max-height: min(86vh, 780px);
+  display: flex;
+  flex-direction: column;
+}
+.lp-body {
+  overflow-y: auto;
+  gap: var(--sp-2);
+}
+/* `.modal-body` ستونِ فلکس است و فرزندانش پیش‌فرض کوچک می‌شوند؛ با `overflow-y`
+   روی همان ستون، گروه‌ها به‌جای اسکرول‌شدن **له** می‌شدند — هر گروهِ باز فقط یک
+   ردیف نشان می‌داد و بقیه بریده می‌شد. */
+.lp-body > * { flex: 0 0 auto; }
+.lp-lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh);
+}
+.lp-tools {
+  --ef-h: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  /* نوارِ جست‌وجو هنگام اسکرولِ فهرست می‌ماند؛ بدونِ پس‌زمینه، ردیف‌ها از زیرش رد می‌شوند. */
+  background: var(--surface);
+  padding-block: var(--sp-2);
+}
+.lp-search { flex: 1 1 240px; min-width: 0; }
+.lp-search .ef-search input[type='search'] { padding-inline-start: 36px; }
+.lp-kinds { display: flex; gap: 6px; flex: 0 0 auto; }
+.lp-kind {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.lp-kind.is-on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+.lp-empty { padding: var(--sp-5) 0; text-align: center; }
+
+.lp-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.lp-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: start;
+}
+.lp-group-head:hover { background: var(--surface-hover); }
+.lp-group-title { flex: 1 1 auto; min-width: 0; }
+.lp-group-count { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; }
+.lp-chev { flex: 0 0 auto; color: var(--text-muted); transition: transform 0.16s ease; }
+.lp-group.is-open .lp-chev { transform: rotate(-90deg); }
+
+.lp-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+  padding: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.lp-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 0;
+}
+.lp-item:hover { border-color: var(--accent); }
+.lp-item.is-on { border-color: var(--accent); background: var(--accent-bg); }
+/* سقف خورده و این ردیف تیک نخورده: دیده می‌شود ولی نمی‌شود اضافه‌اش کرد. */
+.lp-item.is-full { opacity: 0.55; cursor: not-allowed; }
+.lp-item input[type='checkbox'] { flex: 0 0 auto; accent-color: var(--accent); }
+.lp-item > svg { flex: 0 0 auto; color: var(--text-muted); }
+.lp-item.is-on > svg { color: var(--text-h); }
+.lp-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-sm);
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-item-parent { font-size: var(--fs-xs); color: var(--text-muted); }
+.lp-tag {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.lp-tag.is-list { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+.lp-foot { justify-content: flex-start; flex-wrap: wrap; }
+.lp-status { flex: 1 1 200px; }
+.lp-foot button { min-height: 40px; }
+.lp-foot .btn-primary { margin-inline-start: auto; }
+
+@media (max-width: 760px) {
+  .lp-card { width: 100%; max-height: 92vh; }
+  .lp-items { grid-template-columns: 1fr; }
+  .lp-tools { position: static; }
+  .lp-foot { gap: var(--sp-2); }
+  .lp-foot .btn-primary { margin-inline-start: 0; }
+  .lp-foot button { flex: 1 1 140px; justify-content: center; }
+}
