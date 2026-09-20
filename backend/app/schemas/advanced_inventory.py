@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.models.advanced_inventory import QC_STATUSES
+
 
 # ── لیستِ قیمت ──────────────────────────────────────────
 class PriceListIn(BaseModel):
@@ -145,6 +147,19 @@ class StockBatchIn(BaseModel):
     consumer_price: Decimal = Decimal(0)
     received_date: date
     notes: str = ""
+    #: شناسنامه‌ی بار — همه اختیاری (§۲۸). کسب‌وکاری که این‌ها را ندارد
+    #: هیچ‌وقت نمی‌بیندشان و هیچ اعتبارسنجیِ تازه‌ای نمی‌خورد.
+    supplier_batch_code: str = ""
+    supplier_id: UUID | None = None
+    location_id: UUID | None = None
+    qc_status: str = "passed"
+
+    @field_validator("qc_status")
+    @classmethod
+    def _valid_qc(cls, v: str) -> str:
+        if v not in QC_STATUSES:
+            raise ValueError("وضعیتِ کنترلِ کیفیت نامعتبر است")
+        return v
 
     @field_validator("batch_number")
     @classmethod
@@ -169,12 +184,60 @@ class StockBatchOut(BaseModel):
     source_id: UUID | None = None
     received_date: date
     notes: str
-    #: مجموعِ کسری/معیوب/ضایعاتِ ثبت‌شده روی این بار = received_qty − qty (روتر پُر می‌کند).
+    #: مجموعِ کسری/معیوب/ضایعاتِ ثبت‌شده روی این بار — از سندِ **تعدیل** مشتق
+    #: می‌شود، نه از `received_qty − qty`: حالا فروش هم مانده را کم می‌کند و
+    #: فروش کسری نیست (روتر پُر می‌کند).
     defect_qty: Decimal = Decimal(0)
     #: تعدادِ سریالِ کارتنِ ثبت‌شده روی این بار (روتر پُر می‌کند).
     serial_count: int = 0
 
+    #: `ledger` = مانده از دفترِ انبار مشتق شد و دقیق است.
+    #: `legacy` = این بار ردیفِ ورودیِ برچسب‌خورده ندارد (بارِ دستی، یا سندی که
+    #: مهاجرتِ ۰۱۷۱ به‌خاطرِ ابهام از آن رد شد)، پس عددِ ستونِ قدیمی نشان داده
+    #: می‌شود و رابط باید نشانه بگذارد — نه اینکه مثلِ عددِ دقیق جلوه‌اش دهد.
+    qty_source: str = "legacy"
+    #: هر دو عددِ خام، کنارِ هم: گزارشِ مغایرت از همین اختلاف ساخته می‌شود.
+    ledger_qty: Decimal = Decimal(0)
+    legacy_qty: Decimal = Decimal(0)
+
+    #: شناسنامه و وضعیت (مهاجرتِ ۰۱۷۲).
+    supplier_batch_code: str = ""
+    supplier_id: UUID | None = None
+    location_id: UUID | None = None
+    parent_batch_id: UUID | None = None
+    qc_status: str = "passed"
+    hold_status: str = "none"
+    hold_reason: str = ""
+    is_closed: bool = False
+
+    #: چهار عددِ §۴ به‌علاوه‌ی وضعیتِ مشتق (روتر پُر می‌کند).
+    #:
+    #: `physical` هرگز با نزدیک‌شدنِ انقضا تکان نمی‌خورد؛ `sellable` است که صفر
+    #: می‌شود. §۲۹ صریح است که این دو یکی نیستند.
+    physical_qty: Decimal = Decimal(0)
+    reserved_qty: Decimal = Decimal(0)
+    available_qty: Decimal = Decimal(0)
+    sellable_qty: Decimal = Decimal(0)
+    days_to_expiry: int | None = None
+    #: از واژگانِ §۳، ولی **محاسبه‌شده** — هیچ ستونی نگهش نمی‌دارد تا کهنه شود.
+    status: str = "available"
+
     model_config = {"from_attributes": True}
+
+
+class BatchReconciliationOut(BaseModel):
+    """یک بار که مانده‌اش از دفتر درنمی‌آید — گزارش است، نه خطا."""
+
+    batch_id: UUID
+    item_id: UUID
+    warehouse_id: UUID
+    batch_number: str
+    received_date: date
+    legacy_qty: Decimal
+    ledger_qty: Decimal
+    delta: Decimal
+    #: manual | ambiguous | pre_tracking — برچسبِ فارسی سمتِ رابط است.
+    reason: str
 
 
 # ── سریالِ کارتن ────────────────────────────────────────
@@ -293,3 +356,54 @@ class SerialTraceOut(BaseModel):
     last_source_id: UUID | None
     last_entry_date: date | None
     events: list[SerialEventOut]
+
+
+# ── انسداد، فراخوان، ردیابی (§۱۵ §۱۶) ───────────────────────────────
+class BatchHoldIn(BaseModel):
+    """انسداد یا فراخوانِ یک بار. دلیل اجباری است — بارِ مسدودِ بی‌دلیل، ماهِ بعد
+    هیچ‌کس نمی‌داند چرا مسدود شده و کسی هم جرأتِ آزادکردنش را ندارد."""
+
+    hold_status: str = "blocked"
+    reason: str = ""
+
+    @field_validator("hold_status")
+    @classmethod
+    def _valid_hold(cls, v: str) -> str:
+        if v not in ("blocked", "recalled"):
+            raise ValueError("وضعیت باید «مسدود» یا «فراخوان‌شده» باشد")
+        return v
+
+
+class BatchCloseIn(BaseModel):
+    is_closed: bool = True
+
+
+class BatchMovementOut(BaseModel):
+    entry_date: date
+    qty: Decimal
+    source_type: str
+    source_id: UUID | None = None
+    #: برچسبِ خوانا، از همان واژگانِ کاردکس — نه نگاشتِ دوم.
+    document: str
+
+
+class BatchRecipientOut(BaseModel):
+    """چه کسی این بار را گرفت — §۱۶ برای فراخوان لازمش دارد."""
+
+    contact_id: UUID
+    name: str
+    issue_number: int
+    issue_date: date
+
+
+class BatchTraceOut(BaseModel):
+    batch_id: UUID
+    batch_number: str
+    received_qty: Decimal
+    sold_qty: Decimal
+    returned_qty: Decimal
+    damaged_qty: Decimal
+    reserved_qty: Decimal
+    remaining_qty: Decimal
+    movements: list[BatchMovementOut] = []
+    recipients: list[BatchRecipientOut] = []

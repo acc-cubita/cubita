@@ -606,6 +606,10 @@ def create_warehouse_receipt(
     db.flush()
 
     moves: list[StockLedger] = []
+    #: (حرکت، بار، ردیف) — بعد از حلقه یک‌جا فلاش و به هم وصل می‌شوند، تا حرکتِ
+    #: ورودی بداند کدام بار را ساخت. فلاش داخلِ حلقه همین کار را می‌کرد ولی
+    #: به‌ازای هر ردیف یک رفت‌وبرگشت.
+    tagged: list[tuple[StockLedger, StockBatch, WarehouseReceiptLine]] = []
     for index, row in enumerate(rows, start=1):
         item = row["item"]
         receipt.lines.append(
@@ -652,21 +656,28 @@ def create_warehouse_receipt(
         )
         db.add(move)
         moves.append(move)
-        db.add(
-            StockBatch(
-                item_id=item.id,
-                warehouse_id=data.warehouse_id,
-                batch_number=f"WR{receipt.number}-{index}",
-                qty=row["qty"],
-                received_qty=row["qty"],
-                unit_cost=landed_unit_cost,
-                source_type="warehouse_receipt",
-                source_id=receipt.id,
-                received_date=data.receipt_date,
-                notes=data.description.strip(),
-                created_by_id=user.id,
-            )
+        batch = StockBatch(
+            item_id=item.id,
+            warehouse_id=data.warehouse_id,
+            batch_number=f"WR{receipt.number}-{index}",
+            qty=row["qty"],
+            received_qty=row["qty"],
+            unit_cost=landed_unit_cost,
+            source_type="warehouse_receipt",
+            source_id=receipt.id,
+            received_date=data.receipt_date,
+            notes=data.description.strip(),
+            created_by_id=user.id,
         )
+        db.add(batch)
+        tagged.append((move, batch, receipt.lines[-1]))
+
+    #: برچسبِ بار روی حرکتِ ورودی — مانده‌ی هر بار از همین مشتق می‌شود.
+    if tagged:
+        db.flush()
+        for move, batch, line in tagged:
+            move.batch_id = batch.id
+            move.source_line_id = line.id
 
     #: **این‌جا نقطه‌ی ثبت تصمیم می‌گیرد (§۳۷).**
     #:

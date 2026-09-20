@@ -26,6 +26,7 @@ from app.models.transfers import StockTransfer, StockTransferLine
 from app.models.user import User
 from app.schemas.transfers import StockTransferIn
 from app.services import items as items_svc
+from app.services import batches as batches_svc
 from app.services import valuation
 from app.services import warehouses
 from app.services.common import make_journal_entry
@@ -83,16 +84,33 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
         #: انتقالِ پیش‌تاریخ با میانگینِ همان روز — همان قاعده‌ی خروج.
         unit_cost = valuation.cost_for_posting(db, fresh[line.item_id], data.transfer_date)
         total += (Decimal(line.qty) * unit_cost).quantize(Decimal(1))
-        for warehouse_id, qty, source_type in (
-            (data.from_warehouse_id, -Decimal(line.qty), "transfer_out"),
-            (data.to_warehouse_id, Decimal(line.qty), "transfer_in"),
-        ):
-            move = StockLedger(
-                item_id=line.item_id, warehouse_id=warehouse_id, qty=qty, unit_cost=unit_cost,
-                entry_date=data.transfer_date, source_type=source_type, source_id=transfer.id,
+        #: **بار باید از مرزِ انبار رد شود، وگرنه گم می‌شود.**
+        #:
+        #: `StockBatch` به `(کالا، انبار)` بسته است. بی این تفکیک، انتقال از
+        #: مبدأ کم می‌کرد و در مقصد کالا **بی‌بچ** ظاهر می‌شد — با تاریخِ انقضایی
+        #: که دیگر هیچ‌جا نوشته نبود. برای هر بارِ مبدأ یک بارِ آینه در مقصد ساخته
+        #: می‌شود که `parent_batch_id`ش زنجیره را نگه می‌دارد.
+        plan = batches_svc.plan_outflow(
+            db, fresh[line.item_id], data.from_warehouse_id, Decimal(line.qty), data.transfer_date
+        )
+        splits = plan or [(None, Decimal(line.qty))]
+        for batch_id, take in splits:
+            mirror_id = (
+                batches_svc.mirror_batch(db, batch_id, data.to_warehouse_id, user).id
+                if batch_id is not None
+                else None
             )
-            db.add(move)
-            moves.append(move)
+            for warehouse_id, qty, source_type, tag in (
+                (data.from_warehouse_id, -take, "transfer_out", batch_id),
+                (data.to_warehouse_id, take, "transfer_in", mirror_id),
+            ):
+                move = StockLedger(
+                    item_id=line.item_id, warehouse_id=warehouse_id, qty=qty, unit_cost=unit_cost,
+                    entry_date=data.transfer_date, source_type=source_type, source_id=transfer.id,
+                    batch_id=tag,
+                )
+                db.add(move)
+                moves.append(move)
     valuation.settle_posting(db, moves)
 
     #: جمعِ موجودیِ شرکت عوض نمی‌شود (§۲۸)، پس میانِ دو انبارِ هم‌حساب سندی نیست.

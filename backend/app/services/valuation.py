@@ -80,7 +80,11 @@ OUT_AVERAGE = "out_average"
 OUT_COST = "out_cost"
 
 #: ورودهایی که با میانگینِ همان لحظه می‌نشینند، نه با بهای ثبت‌شده‌شان.
-AVERAGE_INFLOWS = frozenset({"transfer_in", "adjustment", "stock_count"})
+#: `batch_opening` عضوِ این مجموعه است چون سندِ «انتسابِ موجودی به بار» نباید
+#: میانگین را تکان دهد: ورودی‌اش همان کالایی است که همین حالا در انبار بود،
+#: فقط حالا هویتِ بار گرفته. ارزش‌گذاری با میانگینِ جاری یعنی این خاصیت
+#: **اعلانی** است، نه وابسته به اینکه ثبت‌کننده عددِ درست را حساب کرده باشد.
+AVERAGE_INFLOWS = frozenset({"transfer_in", "adjustment", "stock_count", "batch_opening"})
 #: خروج‌هایی که با بهای خودشان بیرون می‌روند و ارزش را کم می‌کنند.
 COST_OUTFLOWS = frozenset({"purchase_return"})
 TRANSFER_SOURCES = frozenset({"transfer_in", "transfer_out"})
@@ -414,7 +418,18 @@ def document_numbers(db: Session, keys: Iterable[tuple[str, UUID | None]]) -> di
             wanted[model].add(source_id)
     by_model: dict[tuple[type, UUID], int] = {}
     for model, ids in wanted.items():
-        for doc_id, number in db.query(model.id, model.number).filter(model.id.in_(ids)).all():
+        #: **هر سندی شماره ندارد.** `StockAdjustment` از مهاجرتِ ۰۱۵۸ در
+        #: `_SOURCE_MODELS` است ولی ستونِ `number` ندارد، و این تابع کورکورانه
+        #: `model.number` می‌خواند — یعنی کاردکسِ **هر کالایی که یک تعدیل خورده
+        #: باشد** با `AttributeError` و خطای ۵۰۰ می‌شکست. با یک درخواستِ واقعی
+        #: به `/api/reports/kardex/{id}` بازتولید و تأیید شد.
+        #:
+        #: سندِ بی‌شماره برچسبِ بی‌شماره می‌گیرد («تعدیل انبار»)، که همان چیزی
+        #: است که `document_label` از قبل بلد بود.
+        number_col = getattr(model, "number", None)
+        if number_col is None:
+            continue
+        for doc_id, number in db.query(model.id, number_col).filter(model.id.in_(ids)).all():
             by_model[(model, doc_id)] = number
     out: dict[tuple[str, UUID], int] = {}
     for source_type, source_id in keys:

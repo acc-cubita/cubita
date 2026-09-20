@@ -773,7 +773,7 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
 
 def _release_batch(
     db: Session, receipt: WarehouseReceipt, receipt_line, qty: Decimal
-) -> None:
+) -> StockBatch | None:
     """مقدارِ برگشتی را از **همان بارِ ورودی** کم می‌کند.
 
     فصل: «Where the source Item is Batch/Serial/Tracking controlled, return the
@@ -797,8 +797,12 @@ def _release_batch(
         .one_or_none()
     )
     if batch is None:
-        return
+        return None
+    #: ستونِ قدیمی همچنان نگهداری می‌شود چون برای بارهای `legacy` تنها عددِ
+    #: موجود است؛ مانده‌ی واقعی از برچسبِ حرکتِ خروجی مشتق می‌شود (فراخوان
+    #: شناسه‌ی همین بار را روی حرکت می‌نشاند).
     batch.qty = max(Decimal(batch.qty) - Decimal(qty), Decimal(0))
+    return batch
 
 
 def _receipt_returnable_lines(
@@ -1118,7 +1122,12 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
                 )
             )
             if receipt is not None:
-                _release_batch(db, receipt, row.line, qty)
+                #: خروجِ برگشت به **همان باری** برچسب می‌خورد که واردش شده بود،
+                #: وگرنه مانده‌ی آن بار بالاتر از واقع می‌ماند.
+                released = _release_batch(db, receipt, row.line, qty)
+                if released is not None:
+                    stock_moves[-1].batch_id = released.id
+                    stock_moves[-1].source_line_id = row.line.id
 
     #: **اختلافِ ارزشِ دفتری و مبلغ توافقی، سندی ندارد که در آن بنشیند.**
     #:

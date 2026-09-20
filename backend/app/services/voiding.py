@@ -143,6 +143,12 @@ def _compensating_moves(db: Session, source_type: str, source_id: UUID, void_dat
             entry_date=void_date,
             source_type=VOID_SOURCE,
             source_id=source_id,
+            #: **برچسبِ بار با حرکتِ قرینه می‌آید.** بی این، ابطال موجودی را از
+            #: بارش جدا می‌کرد: عددِ کالا درست برمی‌گشت ولی مانده‌ی بار همان‌جا
+            #: می‌ماند — و چون هیچ خطایی نمی‌داد، تا اولین گزارشِ مغایرت کسی
+            #: خبردار نمی‌شد.
+            batch_id=move.batch_id,
+            source_line_id=move.source_line_id,
         )
         for move in original
     ]

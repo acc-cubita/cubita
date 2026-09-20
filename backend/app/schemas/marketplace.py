@@ -1,7 +1,7 @@
 """بازارِ عمده‌فروشی — شکلِ ورودی/خروجیِ سمتِ پخش‌کننده (M2)."""
 import base64
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -392,6 +392,12 @@ class CatalogListingOut(BaseModel):
     min_order_qty: Decimal
     max_order_qty: Decimal
     daily_order_limit: int
+    #: §۳۰ — «موجودی قابل سفارش»، از انبارِ پخش‌کننده منهای رزروِ سفارش‌های دیگر.
+    #:
+    #: `None` یعنی **نامعلوم** (پخش‌کننده انبارِ فعالی ندارد) و رابط اصلاً نشانش
+    #: نمی‌دهد؛ صفر یعنی واقعاً ناموجود و باید دیده شود. یکی‌کردنِ این دو یعنی
+    #: کاتالوگ «ناموجود» بگوید در حالی که فقط پیکربندی ناقص است.
+    orderable_qty: Decimal | None = None
     components: list[CatalogComponentOut]
 
 
@@ -520,3 +526,36 @@ class CommissionSettleOut(BaseModel):
     period: str
     count: int
     amount: int
+
+
+# ── تخصیصِ بار به کاتالوگ (§۵ §۶ §۷) ─────────────────────────────────
+class CatalogAllocationIn(BaseModel):
+    """«از این بار، این‌قدر در این قلمِ کاتالوگ عرضه شود»."""
+
+    batch_id: UUID
+    qty: Decimal
+
+    @field_validator("qty")
+    @classmethod
+    def _positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("مقدارِ تخصیص باید بزرگ‌تر از صفر باشد")
+        return v
+
+
+class CatalogAllocationOut(BaseModel):
+    id: UUID
+    batch_id: UUID
+    batch_number: str
+    item_name: str
+    expiry_date: date | None = None
+    qty: Decimal
+    #: قابلِ فروشِ خودِ بار — سقفِ واقعیِ این تخصیص. اگر بار فراخوان یا مسدود شود
+    #: این عدد صفر می‌شود و تخصیص خودبه‌خود بی‌اثر می‌گردد (§۱۶).
+    batch_sellable_qty: Decimal
+    batch_status: str
+    is_active: bool
+
+
+class CatalogAllocationToggleIn(BaseModel):
+    is_active: bool

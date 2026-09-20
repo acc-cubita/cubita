@@ -31,6 +31,10 @@ _current_tenant: ContextVar[UUID | None] = ContextVar("current_tenant", default=
 #: کلید نگهداری مستأجر روی خودِ Session
 SESSION_KEY = "cubita_tenant_id"
 
+#: نگهبانِ «کلید اصلاً نبود» — با «کلید بود و None بود» فرق دارد، و `tenant_scope`
+#: باید هر دو را درست برگرداند.
+_MISSING = object()
+
 
 def set_current_tenant(tenant_id: UUID | None) -> None:
     _current_tenant.set(tenant_id)
@@ -74,14 +78,36 @@ def tenant_scope(db: Session, tenant_id: UUID | None):
 
     ست کردن ContextVar به‌تنهایی کافی نیست وقتی تراکنش از قبل شروع شده: after_begin
     دیگر شلیک نمی‌شود، پس مقدار را همین‌جا هم روی اتصال جاری می‌نشانیم.
+
+    **و در پایان هر سه چیز برمی‌گردند، نه فقط ContextVar.** تا امروز `finally`
+    فقط `_current_tenant.reset(token)` می‌زد؛ `db.info[SESSION_KEY]` و متغیرِ
+    `app.tenant_id`ِ خودِ Postgres — که سیاستِ RLS رویش می‌نشیند — دست‌نخورده
+    می‌ماندند. یعنی بعد از خروج از بلوک، هم `session_tenant()` و هم پایگاه‌داده
+    فکر می‌کردند مستأجرِ جاری هنوز مستأجرِ **داخلی** است.
+
+    نگزیده بود چون هیچ فراخوانی بعد از بلوک کارِ مستأجرمحور نمی‌کرد: `_fulfill`
+    بعدش فقط جدولِ سراسریِ سفارش را می‌نویسد، و دو فراخوانِ دیگر حلقه‌اند و هر
+    دور مقدار را بازنویسی می‌کنند. ولی «هنوز نگزیده» با «امن» یکی نیست — اولین
+    کدی که بعد از بلوک یک کوئریِ مستأجرمحور بزند، آن را زیرِ مستأجرِ اشتباه
+    می‌زند. با تست بازتولید شد ([test_tenant_scope_restores](../../tests/test_tenant_scope_restores.py)).
     """
     token = _current_tenant.set(tenant_id)
+    #: `_MISSING` لازم است چون «نبودِ کلید» با «کلیدِ None» یکی نیست: اولی یعنی
+    #: هرگز ست نشده، دومی یعنی صریحاً بی‌مستأجر.
+    previous = db.info.get(SESSION_KEY, _MISSING)
     db.info[SESSION_KEY] = tenant_id
     try:
         apply_tenant_to_transaction(db, tenant_id)
         yield
     finally:
         _current_tenant.reset(token)
+        if previous is _MISSING:
+            db.info.pop(SESSION_KEY, None)
+        else:
+            db.info[SESSION_KEY] = previous
+        #: زمینه‌ی پایگاه‌داده هم باید برگردد، وگرنه RLS زیرِ مستأجرِ اشتباه
+        #: می‌ماند حتی وقتی کد درست فکر می‌کند.
+        apply_tenant_to_transaction(db, session_tenant(db))
 
 
 def apply_tenant_to_transaction(db: Session, tenant_id: UUID | None) -> None:

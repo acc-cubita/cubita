@@ -12032,6 +12032,45 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
+/* ── انتخابگرِ بارِ ردیفِ خروج (FEFO، قابلِ نقض) ───────────────────────── */
+.batch-allocation-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-1);
+}
+.batch-allocation-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.batch-allocation-summary > span {
+  /* رشته‌ی «بار: مقدار · بار: مقدار» می‌تواند بلند شود؛ باید بشکند نه اینکه
+     صفحه را پهن کند. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.batch-allocation-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.batch-allocation-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .batch-allocation-summary,
+  .batch-allocation-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
 /* ═══ انتخاب‌گرِ کارت‌های داشبورد (LauncherPicker) ═══════════════════════════
    بی‌قید به `data-structure` نوشته شده: باکسِ «شروعِ کارِ تازه» در هر دو داشبورد
    (راهنما و کلاسیک) همین انتخاب‌گر را باز می‌کند. */
@@ -12174,4 +12213,14 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .lp-foot { gap: var(--sp-2); }
   .lp-foot .btn-primary { margin-inline-start: 0; }
   .lp-foot button { flex: 1 1 140px; justify-content: center; }
+}
+
+/* «موجودی قابل سفارش» روی کارتِ کاتالوگ (§۳۰) */
+.product-card-stock {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.product-card-stock--out {
+  color: var(--danger);
+  font-weight: 600;
 }

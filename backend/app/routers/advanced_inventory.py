@@ -1,17 +1,23 @@
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.database import get_db
 from app.deps import require_permission
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, StockBatchSerial
-from app.models.inventory import Contact, StockAdjustment
+from app.models.inventory import Contact, Item, StockAdjustment, StockLedger
 from app.models.user import User
 from app.schemas.advanced_inventory import (
+    BatchCloseIn,
+    BatchHoldIn,
+    BatchReconciliationOut,
+    BatchTraceOut,
     SerialAssignIn,
     SerialAssignOut,
     SerialTraceOut,
@@ -28,6 +34,7 @@ from app.schemas.advanced_inventory import (
     StockBatchOut,
 )
 from app.schemas.inventory import StockAdjustmentIn
+from app.services import batches as batches_svc
 from app.services import serials as serials_svc
 from app.services.inventory import post_stock_adjustment
 
@@ -202,7 +209,13 @@ def delete_price_list_item(
 
 # ── بچ / بارِ ورودی / سریالِ کارتن ──────────────────────────
 def _decorate_batches(db: Session, batches: list[StockBatch]) -> list[StockBatch]:
-    """defect_qty (received − remaining) و serial_count را روی هر بار می‌نشاند."""
+    """مانده‌ی مشتق‌شده، منشأش، کسری و شمارِ سریال را روی هر بار می‌نشاند.
+
+    **مانده دیگر از ستون خوانده نمی‌شود.** `batches.qty_view` تصمیم می‌گیرد که
+    عددِ این بار از دفتر می‌آید یا (برای بارهای پیش از ردیابی) از ستونِ قدیمی —
+    و کدام را انتخاب کرده در `qty_source` صریح برمی‌گردد، تا رابط بتواند
+    نشانه بگذارد به‌جای اینکه عددِ نامطمئن را مثلِ عددِ دقیق نشان دهد.
+    """
     if not batches:
         return batches
     ids = [b.id for b in batches]
@@ -212,8 +225,33 @@ def _decorate_batches(db: Session, batches: list[StockBatch]) -> list[StockBatch
         .group_by(StockBatchSerial.batch_id)
         .all()
     )
+    view = batches_svc.qty_view(db, batches)
+    defects = batches_svc.defect_qty(db, ids)
+    #: کالاها یک‌جا خوانده می‌شوند چون «حداقلِ عمرِ مفیدِ فروش» روی کالاست، نه بار
+    #: (§۲۹) — و بی آن `sellable` نمی‌تواند محاسبه شود.
+    items = {
+        i.id: i for i in db.query(Item).filter(Item.id.in_({b.item_id for b in batches})).all()
+    }
+    nums = batches_svc.numbers(db, batches, items, date.today())
     for b in batches:
-        b.defect_qty = (b.received_qty or 0) - (b.qty or 0)
+        v = view[b.id]
+        n = nums[b.id]
+        b.physical_qty = n["physical_qty"]
+        b.reserved_qty = n["reserved_qty"]
+        b.available_qty = n["available_qty"]
+        b.sellable_qty = n["sellable_qty"]
+        b.days_to_expiry = n["days_to_expiry"]
+        b.status = n["status"]
+        #: **`set_committed_value` و نه انتساب ساده.** انتساب، صفت را کثیف
+        #: علامت می‌زد و فلاشِ پایانِ درخواست عددِ مشتق را در ستونِ قدیمی
+        #: می‌نوشت — یعنی یک درخواستِ `GET` بی‌صدا داده می‌نوشت و شاهدِ بارهای
+        #: `legacy` را نابود می‌کرد. این تابع مقدار را «انگار از پایگاه‌داده
+        #: خوانده شده» می‌نشاند، پس هرگز ذخیره نمی‌شود.
+        set_committed_value(b, "qty", v["qty"])
+        b.qty_source = v["qty_source"]
+        b.ledger_qty = v["ledger_qty"]
+        b.legacy_qty = v["legacy_qty"]
+        b.defect_qty = defects.get(b.id, Decimal(0))
         b.serial_count = counts.get(b.id, 0)
     return batches
 
@@ -232,6 +270,50 @@ def expiring_batches(
         .all()
     )
     return _decorate_batches(db, batches)
+
+
+@router.get("/stock-batches/reconciliation", response_model=list[BatchReconciliationOut])
+def batch_reconciliation(
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """بارهایی که مانده‌شان از دفترِ انبار درنمی‌آید.
+
+    **گزارش است، نه خطا.** هیچ‌کدامِ این ردیف‌ها جلوی کاری را نمی‌گیرند؛ فقط
+    می‌گویند عددِ کدام بار هنوز از ستونِ قدیمی می‌آید و چرا. بارهای تازه از
+    همان اول از دفتر مشتق می‌شوند و این فهرست کوتاه‌تر و کوتاه‌تر می‌شود.
+    """
+    batches = db.query(StockBatch).order_by(StockBatch.received_date.desc()).all()
+    return batches_svc.reconciliation(db, batches)
+
+
+@router.get("/stock-batches/available", response_model=list[StockBatchOut])
+def available_batches(
+    item_id: UUID = Query(...),
+    warehouse_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """بارهای **قابلِ فروشِ** یک کالا در یک انبار، به ترتیبِ FEFO (§۱۱).
+
+    بارِ منقضی، مسدود، فراخوان‌شده، مردودِ کنترلِ کیفیت و بسته کنار گذاشته
+    می‌شوند. بارِ بدونِ تاریخِ انقضا **آخر** می‌آید نه اول: «نمی‌دانم» نباید جلوی
+    باری بیفتد که تاریخش دارد می‌گذرد.
+
+    فرمِ خروجِ انبار این را می‌گیرد و پیش‌فرض را از رویش می‌چیند؛ کاربر می‌تواند
+    نقضش کند، که خواسته‌ی صریحِ §۱۱ است.
+    """
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    rows = (
+        db.query(StockBatch)
+        .filter(StockBatch.item_id == item_id, StockBatch.warehouse_id == warehouse_id)
+        .all()
+    )
+    ordered = batches_svc.fefo_order(rows)
+    decorated = _decorate_batches(db, ordered)
+    return [b for b in decorated if b.sellable_qty > 0]
 
 
 @router.get("/stock-batches", response_model=list[StockBatchOut])
@@ -297,6 +379,15 @@ def delete_stock_batch(
     batch = db.get(StockBatch, batch_id)
     if batch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "بار یافت نشد")
+    #: باری که در دفترِ انبار گردش دارد حذف نمی‌شود — حذفش یعنی پاک‌کردنِ
+    #: تاریخچه‌ی حرکت. کلیدِ خارجی `RESTRICT` هم جلویش را می‌گیرد، ولی آن یک
+    #: خطای خامِ ۵۰۰ می‌داد؛ این پیام می‌گوید به‌جایش چه کار کند.
+    if db.query(StockLedger.id).filter(StockLedger.batch_id == batch_id).first() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"بارِ «{batch.batch_number}» در دفترِ انبار گردش دارد و حذف نمی‌شود. "
+            "اگر کارتان با آن تمام شده، به‌جای حذف آن را ببندید.",
+        )
     db.delete(batch)
 
 
@@ -425,7 +516,7 @@ def adjust_batch(
         )
     label = _ADJUST_REASON[data.reason]
     reason_text = f"{label}ِ بارِ «{batch.batch_number}»" + (f" — {data.notes}" if data.notes else "")
-    adjustment = post_stock_adjustment(
+    post_stock_adjustment(
         db,
         StockAdjustmentIn(
             item_id=batch.item_id,
@@ -433,10 +524,15 @@ def adjust_batch(
             qty_diff=-data.qty,
             reason=reason_text,
             adjustment_date=data.adjustment_date,
+            #: **حالا خودِ تعدیل بار را می‌شناسد.** تا امروز `batch_id` بعد از
+            #: ثبت روی سند می‌نشست و حرکتِ دفتر بی‌برچسب می‌ماند؛ یعنی کسری از
+            #: موجودیِ کالا کم می‌شد ولی از مانده‌ی بار نه.
+            batch_id=batch.id,
         ),
         user,
     )
-    adjustment.batch_id = batch.id
+    #: ستونِ قدیمی همچنان نگهداری می‌شود: برای بارهای `legacy` هنوز **تنها**
+    #: عددِ موجود است و تا وقتی گزارشِ مغایرت پاک نشده نباید کهنه شود.
     batch.qty = (batch.qty or 0) - data.qty
     db.flush()
     db.refresh(batch)
@@ -494,3 +590,64 @@ def assign_serials(
         event_type=data.event_type,
         user=user,
     )
+
+
+# ── انسداد، فراخوان، بستن، ردیابی (§۱۵ §۱۶) ─────────────────────────
+@router.post("/stock-batches/{batch_id}/hold", response_model=StockBatchOut)
+def hold_batch(
+    batch_id: UUID,
+    data: BatchHoldIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """بار را مسدود یا فراخوان می‌کند (§۱۶).
+
+    موجودیِ فیزیکی تکان نمی‌خورد — بار همان‌جاست، فقط از «قابلِ فروش» بیرون
+    می‌رود و FEFO دیگر برش نمی‌دارد. برای همین هم انسداد سندِ انبار نمی‌خورد:
+    چیزی جابه‌جا نشده.
+    """
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_hold(db, batch, hold_status=data.hold_status, reason=data.reason, user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.post("/stock-batches/{batch_id}/release", response_model=StockBatchOut)
+def release_batch_hold(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """انسداد یا فراخوان را برمی‌دارد — بار دوباره قابلِ فروش می‌شود."""
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_hold(db, batch, hold_status="none", reason="", user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.post("/stock-batches/{batch_id}/close", response_model=StockBatchOut)
+def close_batch(
+    batch_id: UUID,
+    data: BatchCloseIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """بار را می‌بندد یا باز می‌کند — تصمیم است، نه نتیجه‌ی عدد."""
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_closed(db, batch, closed=data.is_closed, user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.get("/stock-batches/{batch_id}/trace", response_model=BatchTraceOut)
+def trace_batch(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """گزارشِ کاملِ یک بار: چه رسید، چه فروخته شد، به که، با کدام سند (§۱۵ §۱۶).
+
+    همه‌چیز از دفترِ انبار مشتق می‌شود؛ هیچ شمارنده‌ای نگهداری نمی‌شود که بتواند
+    عقب بیفتد.
+    """
+    return batches_svc.trace(db, _get_batch_or_404(db, batch_id))

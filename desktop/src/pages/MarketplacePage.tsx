@@ -344,6 +344,18 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
                         : l.unit}
                     </div>
                     {orderLimitHint(l) && <div className="product-card-limit">{orderLimitHint(l)}</div>}
+                    {/*
+                      §۳۰ — فیلدی که مقدار ندارد اصلاً نمایش داده نمی‌شود. `null`
+                      یعنی پخش‌کننده انبارِ فعالی ندارد و ما نمی‌دانیم؛ صفر یعنی
+                      واقعاً ناموجود و باید دیده شود.
+                    */}
+                    {l.orderable_qty !== null && (
+                      Number(l.orderable_qty) > 0 ? (
+                        <div className="product-card-stock">قابلِ سفارش: {faNum(l.orderable_qty)}</div>
+                      ) : (
+                        <div className="product-card-stock product-card-stock--out">فعلاً ناموجود</div>
+                      )
+                    )}
                     <div className="product-card-price"><strong>{faMoney(l.wholesale_price)}</strong> ریال</div>
                     {Number(l.consumer_price) > Number(l.wholesale_price) && (
                       <div className="product-card-margin">
@@ -361,7 +373,14 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
                         <button type="button" aria-label="زیاد" onClick={() => addToCart(l)}><Plus size={15} /></button>
                       </div>
                     ) : (
-                      <button type="button" className="btn-primary product-add" onClick={() => addToCart(l)}><Plus size={14} /> افزودن به سبد</button>
+                      <button
+                        type="button"
+                        className="btn-primary product-add"
+                        disabled={l.orderable_qty !== null && Number(l.orderable_qty) <= 0}
+                        onClick={() => addToCart(l)}
+                      >
+                        <Plus size={14} /> افزودن به سبد
+                      </button>
                     )}
                   </div>
                 </article>

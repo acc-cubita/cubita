@@ -69,6 +69,8 @@ interface DraftForm {
   isService: boolean
   isSellable: boolean
   isSerialTracked: boolean
+  isBatchTracked: boolean
+  minShelfLifeDays: string
 }
 
 const EMPTY_FORM: DraftForm = {
@@ -79,6 +81,7 @@ const EMPTY_FORM: DraftForm = {
   conversionMode: 'fixed', unitWeight: '', unitVolume: '',
   minStock: '', maxStock: '', groupId: '', attributes: {}, warehouses: [],
   isService: false, isSellable: true, isSerialTracked: false,
+  isBatchTracked: false, minShelfLifeDays: '',
 }
 
 /**
@@ -266,6 +269,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       isService: p.is_service,
       isSellable: p.is_sellable,
       isSerialTracked: p.is_serial_tracked,
+      isBatchTracked: p.is_batch_tracked ?? false,
+      minShelfLifeDays: p.minimum_sellable_shelf_life_days == null ? '' : String(p.minimum_sellable_shelf_life_days),
     })
     setMessage(null)
   }
@@ -322,6 +327,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       expense_account_id: form.isService ? form.expenseAccountId || null : null,
       is_sellable: form.isSellable,
       is_serial_tracked: form.isService ? false : form.isSerialTracked,
+      is_batch_tracked: form.isService ? false : form.isBatchTracked,
+      minimum_sellable_shelf_life_days: form.minShelfLifeDays === '' ? null : Number(form.minShelfLifeDays),
     }
     setSaving(true)
     try {
@@ -705,11 +712,38 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                   />
                   ثبت سریالی
                 </label>
+                <label className="cal-check-inline">
+                  <input
+                    type="checkbox"
+                    checked={form.isBatchTracked}
+                    onChange={(e) => setForm({ ...form, isBatchTracked: e.target.checked })}
+                  />
+                  ردیابیِ بار (بچ)
+                </label>
               </div>
               <p className="hint">
                 «ثبت سریالی» پس از شروعِ گردشِ انباری قابل تغییر نیست: موجودیِ ثبت‌شده سریال
                 ندارد و عوض‌کردنِ این تنظیم ردیابی را مبهم می‌کند.
               </p>
+              <p className="hint">
+                «ردیابیِ بار» یعنی هر خروجِ این کالا باید بگوید از کدام بار برداشته شده. فقط وقتی
+                روشن می‌شود که همه‌ی موجودیِ فعلی به یک بار منتسب باشد؛ اگر نبود، سرور می‌گوید
+                چه‌قدر بی‌بار مانده و با «انتسابِ موجودی به بار» می‌شود درستش کرد.
+              </p>
+              {form.isBatchTracked && (
+                <label>
+                  حداقل عمرِ مفیدِ فروش (روز)
+                  <NumberInput
+                    value={form.minShelfLifeDays}
+                    onChange={(v) => setForm({ ...form, minShelfLifeDays: v })}
+                    placeholder="خالی = بدونِ قاعده"
+                  />
+                  <span className="field-hint">
+                    باری که کمتر از این تعداد روز تا انقضا دارد، دیگر «قابلِ فروش» شمرده نمی‌شود —
+                    ولی موجودیِ فیزیکی‌اش سرِ جایش می‌ماند.
+                  </span>
+                </label>
+              )}
               <div className="field-row">
                 <label>
                   حداقل موجودی

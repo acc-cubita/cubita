@@ -883,7 +883,15 @@ def test_confirm_full_credit_records_no_treasury(as_distributor, retailer_tenant
         assert db.query(TreasuryTransaction).count() == 0
 
 
-def test_confirm_fails_without_distributor_stock(as_distributor, retailer_tenant, db):
+def test_placing_fails_without_distributor_stock(as_distributor, retailer_tenant, db):
+    """**این تست عمداً عوض شد.** پیش از این ادعا می‌کرد سفارش ثبت می‌شود و فقط
+    *تأیید* شکست می‌خورد — یعنی رفتارِ باگ‌دار را قانونی می‌کرد.
+
+    `place_order` اتصال، صنف، کف/سقفِ تعداد و سقفِ روزانه را می‌سنجید و انبارِ
+    پخش‌کننده را **هرگز**. نتیجه: فروشگاه سفارشی می‌داد که فکر می‌کرد ثبت شده و
+    روزِ بعد رد می‌شد. حالا همان‌جا رد می‌شود، با عددِ «قابلِ سفارش» در پیام.
+    """
+
     primary_id = _primary_id(db)
     retailer_id = retailer_tenant
     db.add(MarketplaceSettings(distributor_tenant_id=primary_id, is_active=True))
@@ -896,11 +904,18 @@ def test_confirm_fails_without_distributor_stock(as_distributor, retailer_tenant
     db.add(listing)
     db.flush()
     _approve(db, primary_id, retailer_id)
-    order = svc.place_order(
-        db, retailer_id, OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(5))])
-    )
-    # موجودی کافی نیست → ۴۰۰، و سفارش «تأیید» نمی‌شود.
-    assert as_distributor.post(f"/api/marketplace/distributor/orders/{order.id}/confirm").status_code == 400
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as err:
+        svc.place_order(
+            db, retailer_id,
+            OrderPlaceIn(distributor_tenant_id=primary_id, lines=[OrderLineIn(listing_id=listing.id, qty=Decimal(5))]),
+        )
+    assert err.value.status_code == 400
+    #: پیام عنوانِ **لیستینگ** را می‌گوید، نه نامِ کالای داخلیِ پخش‌کننده —
+    #: فروشگاه آن نام را ندیده و نباید ببیند.
+    assert "بی‌موجودی عمده" in err.value.detail
+    assert "قابلِ سفارش" in err.value.detail
 
 
 def test_distributor_rejects_placed_order_and_guards(as_distributor, db):

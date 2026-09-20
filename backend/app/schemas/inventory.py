@@ -81,6 +81,112 @@ class WarehouseStockPositionOut(BaseModel):
     items: list[dict] = []
 
 
+class StockReservationIn(BaseModel):
+    """ادعای دستی روی موجودی — نگه‌داشت یا انسدادِ جزئی.
+
+    رزروِ سفارش را سرور خودش می‌سازد؛ این مسیر برای کارهایی است که سندی ندارند:
+    «این ۲۰ تا را برای مشتریِ فلان کنار بگذار» یا «این ۵۰ تا قرنطینه است».
+    """
+
+    item_id: UUID
+    warehouse_id: UUID
+    qty: Decimal
+    entry_date: date
+    #: تهی = «ادعا هست، بارش هنوز انتخاب نشده» (§۷).
+    batch_id: UUID | None = None
+    kind: str = "hold"
+    notes: str = ""
+
+    @field_validator("kind")
+    @classmethod
+    def _valid_kind(cls, v: str) -> str:
+        #: «سفارش» از این مسیر ساخته نمی‌شود — آن را جریانِ سفارش می‌سازد و
+        #: دست‌سازش یعنی ادعایی که هیچ سندی پشتش نیست.
+        if v not in ("hold", "blocked"):
+            raise ValueError("نوعِ ادعا باید «نگه‌داشت» یا «انسداد» باشد")
+        return v
+
+    @model_validator(mode="after")
+    def _positive(self) -> "StockReservationIn":
+        if self.qty <= 0:
+            raise ValueError("مقدارِ رزرو باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class StockReservationOut(BaseModel):
+    """ادعای بازِ یک سند — جمعِ ردیف‌های دفتر، نه یک ردیفِ خام."""
+
+    source_type: str
+    source_id: UUID | None = None
+    kind: str
+    qty: Decimal
+    since: date
+
+
+class AssignStockToBatchIn(BaseModel):
+    """انتسابِ موجودیِ موجودِ یک کالا به یک بارِ اول‌دوره — راهِ عبورِ گاردِ ردیابی."""
+
+    warehouse_id: UUID
+    batch_number: str
+    assigned_date: date
+    expiry_date: date | None = None
+    production_date: date | None = None
+
+    @field_validator("batch_number")
+    @classmethod
+    def _number_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("شماره‌ی بار نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class WarehouseLocationIn(BaseModel):
+    """موقعیتِ قرارگیری داخلِ انبار — فقط `code` اجباری است (§۲۸)."""
+
+    warehouse_id: UUID
+    code: str
+    name: str = ""
+    aisle: str = ""
+    rack: str = ""
+    level: str = ""
+    notes: str = ""
+
+    @field_validator("code")
+    @classmethod
+    def _code_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("کدِ موقعیت نمی‌تواند خالی باشد")
+        return v.strip()
+
+
+class WarehouseLocationUpdateIn(BaseModel):
+    """ویرایش — کد پس از ساخت ثابت است چون روی بارها نشسته."""
+
+    name: str | None = None
+    aisle: str | None = None
+    rack: str | None = None
+    level: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class WarehouseLocationOut(BaseModel):
+    id: UUID
+    warehouse_id: UUID
+    code: str
+    name: str = ""
+    aisle: str = ""
+    rack: str = ""
+    level: str = ""
+    is_active: bool = True
+    notes: str = ""
+    #: تعدادِ بارهایی که روی این موقعیت نشسته‌اند — رابط پیش از غیرفعال‌کردن
+    #: می‌پرسد تا بتواند **قبل** از خطا بگوید چه چیزی سرِ راه است.
+    batch_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
 ENTITY_TYPES = ("real", "legal")
 
 
@@ -614,6 +720,10 @@ class ItemIn(BaseModel):
     is_sellable: bool = True
     #: §۸ — کالا سریال‌محور است یا نه.
     is_serial_tracked: bool = False
+    #: ردیابیِ بارِ ورودی. پیش‌فرض خاموش = رفتارِ دیروز برای هر کالای موجود.
+    is_batch_tracked: bool = False
+    #: حداقلِ عمرِ مفیدِ لازم برای فروش (روز). تهی = بدونِ قاعده.
+    minimum_sellable_shelf_life_days: int | None = None
     #: §۱۳ — نرخِ کالا. صفر = «نرخِ سرِ فاکتور»، نه معافیت (معافیت پرچمِ جداست).
     tax_rate: Decimal = Decimal(0)
     duty_rate: Decimal = Decimal(0)
@@ -717,6 +827,8 @@ class ItemOut(BaseModel):
     barcode2: str = ""
     is_sellable: bool = True
     is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    minimum_sellable_shelf_life_days: int | None = None
     tax_rate: Decimal = Decimal(0)
     duty_rate: Decimal = Decimal(0)
     purchase_vat_status: str = "taxable"
@@ -766,6 +878,8 @@ class ItemUpdateIn(BaseModel):
     barcode2: str | None = None
     is_sellable: bool | None = None
     is_serial_tracked: bool | None = None
+    is_batch_tracked: bool | None = None
+    minimum_sellable_shelf_life_days: int | None = None
     tax_rate: Decimal | None = None
     duty_rate: Decimal | None = None
     purchase_vat_status: str | None = None
@@ -894,6 +1008,10 @@ class StockAdjustmentIn(BaseModel):
     qty_diff: Decimal
     reason: str = ""
     adjustment_date: date
+    #: کدام **بارِ ورودی** کم/زیاد شد. تهی = تعدیلِ کلیِ کالا (رفتارِ پیش‌فرض).
+    #: وقتی پر باشد، حرکتِ دفتر هم همان برچسب را می‌گیرد — وگرنه تعدیل از موجودیِ
+    #: کالا کم می‌کرد ولی از مانده‌ی بار نه، و آن دو از هم جدا می‌افتادند.
+    batch_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_nonzero(self) -> "StockAdjustmentIn":

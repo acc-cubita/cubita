@@ -19,6 +19,7 @@ import {
   fetchAccountsLive,
   fetchContacts,
   fetchIssueInvoiceContext,
+  fetchItemsLive,
   fetchSalesQuotations,
   fetchStockLevels,
   fetchWarehouseIssue,
@@ -38,6 +39,8 @@ import {
   type WarehouseIssueRow,
 } from '../api'
 import type { ItemCache, WarehouseCache } from '../electron.d'
+import type { Allocation } from '../lib/batchAllocation'
+import { BatchAllocationPicker } from './BatchAllocationPicker'
 import { SectionCard } from './SectionCard'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { NumberInput } from './NumberInput'
@@ -54,7 +57,15 @@ const errText = (err: unknown, fallback: string) => (err instanceof Error ? err.
 
 type IssueKind = 'sale' | 'consumption' | 'other' | 'transfer'
 const KINDS: IssueKind[] = ['sale', 'consumption', 'other', 'transfer']
-type DraftLine = { key: number; itemId: string; qty: string; accountId: string; description: string }
+type DraftLine = {
+  key: number
+  itemId: string
+  qty: string
+  accountId: string
+  description: string
+  //: `null` = «دست نزده‌ام، پیشنهادِ خودکار برود». آرایه = نقضِ صریحِ FEFO (§۱۱).
+  batches: Allocation[] | null
+}
 type AccountOption = { id: string; code: string; name: string }
 
 /** نوعِ خروج فقط برچسب نیست — معنای اقتصادیِ خروج را می‌گوید (§۲). */
@@ -142,7 +153,9 @@ function IssueForm({
   onCreated: () => void
 }) {
   const seq = useRef(1)
-  const blank = (): DraftLine => ({ key: seq.current++, itemId: '', qty: '', accountId: '', description: '' })
+  const blank = (): DraftLine => ({
+    key: seq.current++, itemId: '', qty: '', accountId: '', description: '', batches: null,
+  })
   const [kind, setKind] = useState<IssueKind>('sale')
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? '')
   const [destinationId, setDestinationId] = useState('')
@@ -155,6 +168,9 @@ function IssueForm({
   const [accounts, setAccounts] = useState<AccountOption[]>([])
   const [quotations, setQuotations] = useState<SalesQuotationRecord[]>([])
   const [stock, setStock] = useState<StockLevel[]>([])
+  //: کدام کالاها ردیابیِ بار دارند. `ItemCache`ِ آفلاین این پرچم را ندارد، پس
+  //: یک‌بار سرِ بارگذاری خوانده می‌شود — نه یک‌بار به‌ازای هر ردیف.
+  const [trackedIds, setTrackedIds] = useState<Set<string>>(new Set())
   const [msg, setMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
   //: کلید به *این* خروج گره می‌خورد و فقط پس از موفقیت نو می‌شود (§۴۶).
@@ -174,6 +190,9 @@ function IssueForm({
     void fetchSalesQuotations(token)
       .then((rows) => setQuotations(rows.filter((q) => q.status !== 'rejected')))
       .catch(() => setQuotations([]))
+    void fetchItemsLive(token)
+      .then((rows) => setTrackedIds(new Set(rows.filter((i) => i.is_batch_tracked).map((i) => i.id))))
+      .catch(() => setTrackedIds(new Set()))
   }, [token])
 
   const refreshStock = useCallback(() => {
@@ -260,6 +279,13 @@ function IssueForm({
               qty: Number(line.qty),
               account_id: needsAccount && line.accountId ? line.accountId : null,
               description: line.description.trim(),
+              //: کالای بی‌ردیابی هیچ‌وقت تفکیک نمی‌فرستد — همان رفتارِ دیروز. کالای
+              //: ردیابی‌شده اگر کاربر دست نزده باشد هم چیزی نمی‌فرستد و سرور خودش
+              //: FEFO می‌زند؛ فرستادن فقط وقتی است که کاربر صریحاً نقض کرده.
+              batch_allocations:
+                trackedIds.has(line.itemId) && line.batches && line.batches.length > 0
+                  ? line.batches
+                  : null,
             })),
           },
           requestKey.current,
@@ -395,7 +421,16 @@ function IssueForm({
                     </SearchSelect>
                   </td>
                   <td data-label="مقدار">
-                    <NumberInput allowDecimal value={line.qty} onChange={(v) => updateLine(line.key, { qty: v })} />
+                    {/*
+                      تغییرِ مقدار، تفکیکِ بار را هم باطل می‌کند تا دوباره پیشنهاد
+                      شود: وگرنه کاربر مقدار را ۱۰ به ۲۰ می‌کرد و تفکیکِ کهنه‌ی
+                      ۱۰تایی سرِ جایش می‌ماند و فقط موقعِ ثبت خطا می‌گرفت.
+                    */}
+                    <NumberInput
+                      allowDecimal
+                      value={line.qty}
+                      onChange={(v) => updateLine(line.key, { qty: v, batches: null })}
+                    />
                   </td>
                   <td data-label="واحد">{itemById.get(line.itemId)?.unit || '—'}</td>
                   {needsAccount && (
@@ -428,6 +463,27 @@ function IssueForm({
                   </td>
                 </tr>
               ))}
+              {/* انتخابگرِ بار فقط برای کالای ردیابی‌شده — بقیه اصلاً نمی‌بینندش (§۲۸). */}
+              {kind !== 'transfer' &&
+                lines
+                  .filter((line) => trackedIds.has(line.itemId) && Number(line.qty) > 0)
+                  .map((line) => (
+                    <tr key={`batch-${line.key}`}>
+                      <td className="card-full" colSpan={needsAccount ? 6 : 5}>
+                        <div className="batch-allocation-label">
+                          بارِ «{itemById.get(line.itemId)?.name ?? '—'}»
+                        </div>
+                        <BatchAllocationPicker
+                          token={token}
+                          itemId={line.itemId}
+                          warehouseId={warehouseId}
+                          qty={Number(line.qty)}
+                          value={line.batches}
+                          onChange={(next) => updateLine(line.key, { batches: next })}
+                        />
+                      </td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>

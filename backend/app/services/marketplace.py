@@ -6,7 +6,7 @@
 به مستأجرِ پخش‌کننده، کوئریِ `Item` فقط کالاهای خودش را برمی‌گرداند.
 """
 from datetime import date, datetime, timezone
-from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -732,6 +732,306 @@ def _targets_by_distributor(db: Session, distributor_ids) -> dict[UUID, list]:
     return {did: targets for did, targets in rows}
 
 
+def _reserved_by_listing_item(db: Session, listing_ids: list) -> dict:
+    """رزروِ بازِ هر `(لیستینگ، کالا)` — به واحدِ **کالا**، نه واحدِ لیستینگ.
+
+    **چرا واحدش مهم است.** سقفِ تخصیص به واحدِ کالا است (بار مالِ کالاست)، پس
+    چیزی که از آن کم می‌شود هم باید به واحدِ کالا باشد. جمع‌زدنِ «تعدادِ پک»ها
+    با «تعدادِ شامپو»ها عددی می‌داد که هیچ‌چیز نبود.
+
+    منبع دفترِ رزرو است و پیوندش به لیستینگ از `source_line_id` می‌آید: هر رزرو
+    به ردیفِ سفارش گره خورده و ردیفِ سفارش لیستینگ را می‌داند.
+    """
+    from app.models.stock_reservations import StockReservation
+
+    lines = (
+        db.query(MarketplaceOrderLine.id, MarketplaceOrderLine.listing_id)
+        .filter(MarketplaceOrderLine.listing_id.in_(listing_ids))
+        .all()
+    )
+    listing_of_line = {lid: listing for lid, listing in lines}
+    if not listing_of_line:
+        return {}
+
+    rows = (
+        db.query(
+            StockReservation.source_line_id,
+            StockReservation.item_id,
+            func.coalesce(func.sum(StockReservation.qty), 0),
+        )
+        .filter(
+            StockReservation.source_type == ORDER_RESERVATION_SOURCE,
+            StockReservation.source_line_id.in_(listing_of_line.keys()),
+        )
+        .group_by(StockReservation.source_line_id, StockReservation.item_id)
+        .all()
+    )
+    out: dict[tuple[UUID, UUID], Decimal] = {}
+    for line_id, item_id, qty in rows:
+        listing_id = listing_of_line.get(line_id)
+        if listing_id is None:
+            continue
+        key = (listing_id, item_id)
+        out[key] = out.get(key, Decimal(0)) + Decimal(qty)
+    return out
+
+
+# ── تخصیصِ بار به کاتالوگ (§۵ §۶ §۷) ──────────────────────────────────
+def _allocations_by_item(db: Session, listing_ids: list) -> dict:
+    """سقفِ عرضه‌ی هر `(لیستینگ، کالا)` — **درونِ scopeِ پخش‌کننده**.
+
+    سقف، جمعِ تخصیص‌های فعال است ولی هر تخصیص به اندازه‌ی **قابلِ فروشِ بارِ
+    خودش** محدود می‌شود. همین یک قید §۱۶ را هم برآورده می‌کند: بارِ فراخوان‌شده
+    `sellable = 0` دارد، پس تخصیصش خودبه‌خود از کاتالوگ بیرون می‌رود بی آنکه
+    کسی یادش باشد ردیف را غیرفعال کند.
+    """
+    from app.models.marketplace_allocations import MarketplaceCatalogAllocation
+    from app.services import batches as batches_svc
+
+    rows = (
+        db.query(MarketplaceCatalogAllocation)
+        .filter(
+            MarketplaceCatalogAllocation.listing_id.in_(listing_ids),
+            MarketplaceCatalogAllocation.is_active.is_(True),
+        )
+        .all()
+    )
+    if not rows:
+        return {}
+
+    batches = {
+        b.id: b
+        for b in db.query(StockBatch).filter(StockBatch.id.in_({r.batch_id for r in rows})).all()
+    }
+    items = {
+        i.id: i for i in db.query(Item).filter(Item.id.in_({b.item_id for b in batches.values()})).all()
+    }
+    nums = batches_svc.numbers(db, list(batches.values()), items, date.today())
+
+    caps: dict[tuple[UUID, UUID], Decimal] = {}
+    for row in rows:
+        batch = batches.get(row.batch_id)
+        if batch is None:
+            continue
+        usable = min(Decimal(row.qty), nums[batch.id]["sellable_qty"])
+        key = (row.listing_id, batch.item_id)
+        caps[key] = caps.get(key, Decimal(0)) + max(usable, Decimal(0))
+    return caps
+
+
+def _reserved_by_listing(db: Session, listing_ids: list) -> dict:
+    """چند واحد از هر لیستینگ سفارش خورده ولی هنوز تحویل نشده.
+
+    از خودِ ردیف‌های سفارش می‌آید نه از دفترِ رزرو، و این عمدی است: دفترِ رزرو به
+    واحدِ **کالا** است و پکِ چندجزئی چند کالا دارد، پس جمعش با «چند پک» قابلِ
+    مقایسه نیست. ردیفِ سفارش دقیقاً به واحدِ لیستینگ است.
+
+    هر دو از یک واقعیت مشتق می‌شوند (همان سفارش)، پس این «دو نمای یک داده» نیست
+    — دو پرسشِ متفاوت از یک منبع است.
+    """
+    rows = (
+        db.query(MarketplaceOrderLine.listing_id, func.coalesce(func.sum(MarketplaceOrderLine.qty), 0))
+        .join(MarketplaceOrder, MarketplaceOrder.id == MarketplaceOrderLine.order_id)
+        .filter(
+            MarketplaceOrderLine.listing_id.in_(listing_ids),
+            MarketplaceOrder.status == "placed",
+        )
+        .group_by(MarketplaceOrderLine.listing_id)
+        .all()
+    )
+    return {lid: Decimal(qty) for lid, qty in rows}
+
+
+def catalog_allocation_rows(db: Session, distributor_tenant_id: UUID, listing_id: UUID) -> list[dict]:
+    """تخصیص‌های یک لیستینگ، با شناسنامه‌ی بار — برای صفحه‌ی پخش‌کننده."""
+    from app.models.marketplace_allocations import MarketplaceCatalogAllocation
+    from app.services import batches as batches_svc
+
+    with tenant_scope(db, distributor_tenant_id):
+        rows = (
+            db.query(MarketplaceCatalogAllocation)
+            .filter(MarketplaceCatalogAllocation.listing_id == listing_id)
+            .order_by(MarketplaceCatalogAllocation.created_at)
+            .all()
+        )
+        if not rows:
+            return []
+        batches = {
+            b.id: b
+            for b in db.query(StockBatch).filter(StockBatch.id.in_({r.batch_id for r in rows})).all()
+        }
+        items = {
+            i.id: i
+            for i in db.query(Item).filter(Item.id.in_({b.item_id for b in batches.values()})).all()
+        }
+        nums = batches_svc.numbers(db, list(batches.values()), items, date.today())
+        out = []
+        for row in rows:
+            batch = batches.get(row.batch_id)
+            if batch is None:
+                continue
+            out.append({
+                "id": row.id,
+                "batch_id": batch.id,
+                "batch_number": batch.batch_number,
+                "item_name": items[batch.item_id].name if batch.item_id in items else "—",
+                "expiry_date": batch.expiry_date,
+                "qty": Decimal(row.qty),
+                "batch_sellable_qty": nums[batch.id]["sellable_qty"],
+                "batch_status": nums[batch.id]["status"],
+                "is_active": row.is_active,
+            })
+        return out
+
+
+def allocate_batch(
+    db: Session, distributor_tenant_id: UUID, listing_id: UUID, batch_id: UUID, qty: Decimal, user
+) -> dict:
+    """بخشی از یک بار را به کاتالوگ می‌دهد (§۶).
+
+    دو چیز سنجیده می‌شود و هر دو لازم‌اند: بار مالِ کالایی باشد که این لیستینگ
+    واقعاً می‌فروشد، و مقدار از موجودیِ قابلِ فروشِ خودِ بار بیشتر نباشد. بی
+    اولی می‌شد بارِ شامپو را به لیستینگِ روغن داد.
+    """
+    from app.models.marketplace_allocations import MarketplaceCatalogAllocation
+    from app.services import batches as batches_svc
+
+    listing = db.get(MarketplaceListing, listing_id)
+    if listing is None or listing.distributor_tenant_id != distributor_tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "قلمِ کاتالوگ یافت نشد")
+    qty = Decimal(qty)
+    if qty <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "مقدارِ تخصیص باید بزرگ‌تر از صفر باشد")
+    component_items = {c.distributor_item_id for c in listing.components}
+
+    with tenant_scope(db, distributor_tenant_id):
+        batch = db.get(StockBatch, batch_id)
+        if batch is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "بار یافت نشد")
+        if batch.item_id not in component_items:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"بارِ «{batch.batch_number}» مالِ کالایی نیست که این قلمِ کاتالوگ می‌فروشد",
+            )
+        item = db.get(Item, batch.item_id)
+        sellable = batches_svc.numbers(db, [batch], {item.id: item}, date.today())[batch.id]["sellable_qty"]
+        if qty > sellable:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"موجودیِ قابلِ فروشِ بارِ «{batch.batch_number}» {sellable.normalize():f} است "
+                f"و کمتر از مقدارِ تخصیص.",
+            )
+        row = (
+            db.query(MarketplaceCatalogAllocation)
+            .filter(
+                MarketplaceCatalogAllocation.listing_id == listing_id,
+                MarketplaceCatalogAllocation.batch_id == batch_id,
+            )
+            .one_or_none()
+        )
+        if row is None:
+            row = MarketplaceCatalogAllocation(
+                listing_id=listing_id, batch_id=batch_id, qty=qty,
+                created_by_id=getattr(user, "id", None),
+            )
+            db.add(row)
+        else:
+            #: تخصیصِ دوباره همان ردیف را به‌روز می‌کند، نه ردیفِ دوم — قیدِ یکتا
+            #: هم همین را می‌گوید.
+            row.qty = qty
+            row.is_active = True
+        db.flush()
+        return {"id": row.id, "batch_id": batch_id, "qty": Decimal(row.qty), "is_active": row.is_active}
+
+
+def set_allocation_active(
+    db: Session, distributor_tenant_id: UUID, allocation_id: UUID, *, is_active: bool
+) -> None:
+    """تخصیص را روشن/خاموش می‌کند — حذف نمی‌شود تا تاریخچه بماند (§۱۶)."""
+    from app.models.marketplace_allocations import MarketplaceCatalogAllocation
+
+    with tenant_scope(db, distributor_tenant_id):
+        row = db.get(MarketplaceCatalogAllocation, allocation_id)
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "تخصیص یافت نشد")
+        row.is_active = is_active
+        db.flush()
+
+
+def _orderable_by_listing(db: Session, listings: list, allowed: set) -> dict:
+    """«چند تا از این قلم می‌شود سفارش داد؟» برای هر لیستینگ (§۳۰).
+
+    موجودی مالِ **پخش‌کننده** است ولی این کوئری در نشستِ **فروشگاه** اجرا می‌شود،
+    پس به‌ازای هر پخش‌کننده یک `tenant_scope` لازم است. کندتر از یک join است و
+    عمداً: جدول‌های بازار RLS ندارند و اگر مستقیم به `items`/`stock_ledger`ِ
+    مستأجرِ دیگر join بزنیم، جداسازی را از کدِ روتر به دستِ تصادف سپرده‌ایم.
+
+    پکِ چندجزئی به **کم‌یاب‌ترین جزئش** محدود است: اگر پکی ۲ شامپو و ۱ صابون
+    دارد و فقط ۵ صابون مانده، بیشتر از ۵ پک نمی‌شود فروخت.
+
+    `None` یعنی **نمی‌دانیم** (پخش‌کننده انبارِ فعالی ندارد)، نه «صفر». این دو را
+    یکی‌کردن یعنی کاتالوگ بگوید «ناموجود» در حالی که فقط پیکربندی ناقص است.
+    """
+    from app.services import reservations as reservations_svc
+
+    out: dict[UUID, Decimal | None] = {}
+    by_distributor: dict[UUID, list] = {}
+    for l in listings:
+        by_distributor.setdefault(l.distributor_tenant_id, []).append(l)
+
+    for did, rows in by_distributor.items():
+        if did not in allowed:
+            continue
+        with tenant_scope(db, did):
+            warehouse = (
+                db.query(Warehouse)
+                .filter(Warehouse.is_active.is_(True))
+                .order_by(Warehouse.code)
+                .first()
+            )
+            if warehouse is None:
+                for l in rows:
+                    out[l.id] = None
+                continue
+            #: موجودیِ آزادِ هر کالا یک بار حساب می‌شود، نه یک بار به‌ازای هر
+            #: لیستینگی که به آن اشاره دارد.
+            free: dict[UUID, Decimal] = {}
+            for l in rows:
+                for comp in l.components:
+                    if comp.distributor_item_id not in free:
+                        free[comp.distributor_item_id] = reservations_svc.available_for(
+                            db, comp.distributor_item_id, warehouse.id
+                        )
+            #: سقفِ عرضه (§۶) و آنچه از آن سقف قبلاً سفارش خورده. تخصیصِ نداشته
+            #: یعنی بی‌سقف — همان رفتارِ دیروزِ هر لیستینگی که تخصیص نگرفته.
+            listing_ids = [l.id for l in rows]
+            caps = _allocations_by_item(db, listing_ids)
+            taken = _reserved_by_listing_item(db, listing_ids)
+
+            for l in rows:
+                comps = list(l.components)
+                if not comps:
+                    out[l.id] = None
+                    continue
+                limits = []
+                for comp in comps:
+                    per_unit = Decimal(comp.qty or 0)
+                    if per_unit <= 0:
+                        continue
+                    avail = free.get(comp.distributor_item_id, Decimal(0))
+                    cap = caps.get((l.id, comp.distributor_item_id))
+                    if cap is not None:
+                        #: **سقف هم باید از سفارش‌های ثبت‌شده کم شود.** موجودیِ
+                        #: آزاد رزروها را از قبل کم کرده، ولی سقف یک عددِ ثابت
+                        #: است: ۴۰۰ تخصیص با ۱۰۰ سفارشِ ثبت‌شده یعنی ۳۰۰ مانده،
+                        #: نه ۴۰۰.
+                        avail = min(avail, cap - taken.get((l.id, comp.distributor_item_id), Decimal(0)))
+                    limits.append(max(avail, Decimal(0)) / per_unit)
+                #: کفِ عدد، چون نصفِ پک فروخته نمی‌شود.
+                out[l.id] = max(min(limits).to_integral_value(rounding=ROUND_FLOOR), Decimal(0)) if limits else None
+    return out
+
+
 def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: UUID | None = None) -> list[dict]:
     """لیستینگ‌های منتشرشده‌ی پخش‌کننده‌های تأییدشده. با فیلترِ صریحِ اتصال (RLS نیست).
 
@@ -761,12 +1061,18 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
         .order_by(MarketplaceListing.created_at.desc())
         .all()
     )
+    #: فقط برای اقلامی که واقعاً نشان داده می‌شوند — فیلترِ صنف اول اعمال می‌شود
+    #: تا برای قلمی که فروشگاه حق دیدنش را ندارد انبارِ کسی خوانده نشود.
+    visible = [
+        l for l in listings
+        if listing_visible_to_trade(retailer_trade, targets.get(l.distributor_tenant_id), l.extra_trades)
+    ]
+    orderable = _orderable_by_listing(db, visible, allowed)
+
     names: dict[UUID, str] = {}
     out: list[dict] = []
-    for l in listings:
+    for l in visible:
         did = l.distributor_tenant_id
-        if not listing_visible_to_trade(retailer_trade, targets.get(did), l.extra_trades):
-            continue
         if did not in names:
             names[did] = distributor_display_name(db, did)
         out.append(
@@ -787,6 +1093,9 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
                 "min_order_qty": l.min_order_qty,
                 "max_order_qty": l.max_order_qty,
                 "daily_order_limit": l.daily_order_limit,
+                #: §۳۰ — «موجودی قابل سفارش». `None` یعنی نامعلوم و رابط اصلاً
+                #: نشانش نمی‌دهد؛ صفر یعنی واقعاً ناموجود و باید دیده شود.
+                "orderable_qty": orderable.get(l.id),
                 "components": [{"item_name": c.item_name, "qty": c.qty} for c in l.components],
             }
         )
@@ -914,8 +1223,116 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
         lines=order_lines,
     )
     db.add(order)
+    #: flush لازم است: شناسه‌ی سفارش و ردیف‌هایش تا این‌جا ساخته نشده‌اند و رزرو
+    #: به هر دو گره می‌خورد.
     db.flush()
+
+    #: **رزرو در دفترِ پخش‌کننده.** تنها جایی در این جریان که فروشگاه به انبارِ
+    #: طرفِ مقابل دست می‌زند، و عمداً از `tenant_scope` رد می‌شود تا RLS همان
+    #: مستأجر را ببیند.
+    with tenant_scope(db, distributor_id):
+        _reserve_order_stock(db, order, listings)
     return order
+
+
+# ── رزروِ موجودی برای سفارشِ بازار (§۸ §۹) ────────────────────────────────
+#: منشأِ رزرو در دفترِ پخش‌کننده. سفارش جدولِ **سراسری** است، پس `source_id` به
+#: ردیفی اشاره می‌کند که FK ندارد — همان کاری که `distributor_sales_invoice_id`
+#: از سمتِ مقابل می‌کند.
+ORDER_RESERVATION_SOURCE = "marketplace_order"
+
+
+def _order_requirements(order: MarketplaceOrder, listings: dict) -> dict:
+    """هر ردیفِ سفارش → کالاهای واقعیِ پخش‌کننده و مقدارشان.
+
+    کلید `(کالا، ردیفِ سفارش)` است نه فقط کالا: پکِ چندجزئی یک ردیف است ولی چند
+    کالا می‌خواهد، و دو ردیفِ سفارش می‌توانند یک کالا را بخواهند. تفکیکشان لازم
+    است تا لغوِ یک ردیف، رزروِ ردیفِ دیگر را آزاد نکند.
+    """
+    needs: dict[tuple[UUID, UUID], Decimal] = {}
+    titles: dict[tuple[UUID, UUID], str] = {}
+    for ol in order.lines:
+        listing = listings.get(ol.listing_id)
+        if listing is None:
+            continue
+        for comp in listing.components:
+            key = (comp.distributor_item_id, ol.id)
+            needs[key] = needs.get(key, Decimal(0)) + Decimal(comp.qty) * Decimal(ol.qty)
+            titles[key] = listing.title
+    return {"needs": needs, "titles": titles}
+
+
+def _reserve_order_stock(db: Session, order: MarketplaceOrder, listings: dict) -> None:
+    """موجودیِ پخش‌کننده را برای این سفارش کنار می‌گذارد — **درونِ scopeِ پخش‌کننده**.
+
+    **تا امروز `place_order` اصلاً موجودی را نمی‌سنجید.** اتصال، صنف، کف/سقفِ
+    تعداد و سقفِ روزانه را می‌سنجید و انبارِ پخش‌کننده را هرگز؛ کمبود تازه موقعِ
+    *تأیید* بیرون می‌زد، یعنی فروشگاه سفارشی می‌داد که فکر می‌کرد ثبت شده و روزِ
+    بعد رد می‌شد.
+
+    پیام عمداً عنوانِ **لیستینگ** را می‌گوید و «قابلِ سفارش» را عدد می‌دهد، نه
+    نامِ کالای داخلیِ پخش‌کننده: فروشگاه آن نام را ندیده و نباید ببیند.
+    """
+    from app.services import reservations as reservations_svc
+    from app.services.inventory import lock_items
+
+    plan = _order_requirements(order, listings)
+    needs, titles = plan["needs"], plan["titles"]
+    if not needs:
+        return
+
+    warehouse = _default_warehouse(db, order.distributor_tenant_id)
+    actor = _tenant_actor(db, order.distributor_tenant_id)
+    item_ids = {item_id for item_id, _ in needs}
+    #: قفل پیش از خواندن — وگرنه دو سفارشِ هم‌زمان هر دو همان موجودی را می‌بینند.
+    lock_items(db, item_ids)
+    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
+
+    #: نیازِ **کلِ این سفارش** به هر کالا یک‌جا سنجیده می‌شود، نه ردیف‌به‌ردیف:
+    #: سفارشی با دو ردیفِ ۶تایی از یک کالا در برابرِ موجودیِ ۱۰ نباید پاس شود.
+    wanted_by_item: dict[UUID, Decimal] = {}
+    for (item_id, _), qty in needs.items():
+        wanted_by_item[item_id] = wanted_by_item.get(item_id, Decimal(0)) + qty
+
+    for item_id, wanted in wanted_by_item.items():
+        item = items.get(item_id)
+        if item is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "یکی از اقلامِ سفارش دیگر موجود نیست")
+        free = reservations_svc.available_for(db, item_id, warehouse.id)
+        if free < wanted:
+            title = next((t for (i, _), t in titles.items() if i == item_id), item.name)
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"موجودیِ «{title}» برای این تعداد کافی نیست "
+                f"(قابلِ سفارش: {max(free, Decimal(0)).normalize():f})",
+            )
+
+    for (item_id, line_id), qty in needs.items():
+        reservations_svc.reserve(
+            db,
+            item=items[item_id],
+            warehouse_id=warehouse.id,
+            qty=qty,
+            on=date.today(),
+            source_type=ORDER_RESERVATION_SOURCE,
+            source_id=order.id,
+            source_line_id=line_id,
+            notes=f"سفارشِ بازار #{order.order_number}",
+            user=actor,
+        )
+
+
+def _release_order_stock(db: Session, order: MarketplaceOrder, *, consumed: bool) -> None:
+    """ادعای یک سفارش را آزاد یا مصرف‌شده علامت می‌زند — **درونِ scopeِ پخش‌کننده**.
+
+    `consumed=True` یعنی کالا واقعاً بیرون رفت (تأیید/تحویل)، و `False` یعنی لغو.
+    هر دو منفی‌اند ولی یکی نیستند: §۱۵ می‌خواهد «فروخته‌شده» از «لغوشده» تفکیک
+    بماند و اگر هر دو `release` بودند آن گزارش برای همیشه غیرممکن می‌شد.
+    """
+    from app.services import reservations as reservations_svc
+
+    fn = reservations_svc.consume if consumed else reservations_svc.release
+    fn(db, source_type=ORDER_RESERVATION_SOURCE, source_id=order.id, on=date.today())
 
 
 def _default_warehouse(db: Session, tenant_id: UUID) -> Warehouse:
@@ -1177,6 +1594,11 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
                 if cp and cp > 0:
                     batch.consumer_price = cp
             db.flush()
+
+    #: کالا واقعاً بیرون رفت، پس ادعای این سفارش **مصرف** می‌شود نه آزاد.
+    #: تفکیکشان برای گزارشِ §۱۵ لازم است: «فروخته‌شده» با «لغوشده» یکی نیست.
+    with tenant_scope(db, distributor_id):
+        _release_order_stock(db, order, consumed=True)
 
     order.distributor_sales_invoice_id = sales_invoice_id
     order.retailer_purchase_invoice_id = purchase_invoice_id
@@ -1505,6 +1927,10 @@ def reject_order(db: Session, distributor_tenant_id: UUID, order_id: UUID) -> Ma
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
     if order.status == "confirmed":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارشِ تأییدشده قابلِ رد نیست")
+    #: ادعای این سفارش آزاد می‌شود تا موجودی به فروشگاه‌های دیگر برگردد (§۱۰).
+    #: بی این، ردِ سفارش موجودی را تا ابد قفل نگه می‌داشت.
+    with tenant_scope(db, distributor_tenant_id):
+        _release_order_stock(db, order, consumed=False)
     order.status = "rejected"
     db.flush()
     return order

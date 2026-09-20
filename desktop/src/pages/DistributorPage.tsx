@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Truck, Package, Boxes, Plus, Trash2, Save, Pencil, X, Eye, EyeOff, Settings as SettingsIcon,
   Link2, Check, Ban, Store, ClipboardList, CheckCircle2, Percent, AlertCircle, MessageSquare,
-  MapPin, Undo2,
+  MapPin, Undo2, Layers,
 } from 'lucide-react'
 import type { ItemCache } from '../electron.d'
 import {
@@ -11,12 +11,14 @@ import {
   setMpConnectionStatus, setMpListingPublished, updateMpSettings,
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
   fetchMpZones, assignMpConnectionZone,
+  fetchWarehousesLive,
   type Listing, type MarketplaceSettings, type MpCommissionPeriod, type MpConnection, type MpOrder, type MpZone,
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
+import { CatalogAllocationDrawer } from '../components/CatalogAllocationDrawer'
 import { Tabs } from '../components/Tabs'
 import { useNavSection } from '../components/navContext'
 import { useTrades, labelOfTrade } from '../lib/useTrades'
@@ -116,6 +118,14 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
   const guided = useTheme().theme.content === 'guided'
   const [listings, setListings] = useState<Listing[]>([])
   const [error, setError] = useState<string | null>(null)
+  //: §۶ — درایورِ «از کدام بار چه‌قدر در کاتالوگ عرضه شود».
+  const [allocFor, setAllocFor] = useState<Listing | null>(null)
+  const [warehouseId, setWarehouseId] = useState('')
+  useEffect(() => {
+    void fetchWarehousesLive(token)
+      .then((ws) => setWarehouseId(ws[0]?.id ?? ''))
+      .catch(() => setWarehouseId(''))
+  }, [token])
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -312,6 +322,8 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                       <div className="check-actions">
                         <button type="button" onClick={() => void togglePublish(l)}>{l.is_published ? <><EyeOff size={13} /> پنهان</> : <><Eye size={13} /> انتشار</>}</button>
                         <button type="button" onClick={() => draft.startEdit(l)}><Pencil size={13} /> ویرایش</button>
+                        {/* §۶ — «چه‌قدر از کدام بار در کاتالوگ عرضه شود». */}
+                        <button type="button" onClick={() => setAllocFor(l)}><Layers size={13} /> بارها</button>
                         <button type="button" className="icon-btn-danger" onClick={() => void remove(l)} aria-label="حذف"><Trash2 size={13} /> حذف</button>
                       </div>
                     </td>
@@ -322,6 +334,14 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
           </div>
           <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </div>
+      )}
+      {allocFor && warehouseId && (
+        <CatalogAllocationDrawer
+          token={token}
+          listing={allocFor}
+          warehouseId={warehouseId}
+          onClose={() => setAllocFor(null)}
+        />
       )}
     </SectionCard>
   )

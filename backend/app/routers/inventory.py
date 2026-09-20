@@ -1,4 +1,5 @@
-from uuid import UUID
+from datetime import date
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
@@ -19,6 +20,8 @@ from app.models.inventory import (
     Warehouse,
 )
 from app.models.user import User
+from app.models.advanced_inventory import StockBatch
+from app.models.warehouse_locations import WarehouseLocation
 from decimal import Decimal
 
 from app.models.company import ContactAddress, ContactChannel, RelatedPerson
@@ -28,7 +31,15 @@ from app.pagination import Page, PageParams, paginate
 from app.services import items as items_svc
 from app.services import units as units_svc
 from app.services import warehouses as warehouses_svc
+from app.services import batches as batches_svc
+from app.services import reservations as reservations_svc
 from app.schemas.inventory import (
+    AssignStockToBatchIn,
+    StockReservationIn,
+    StockReservationOut,
+    WarehouseLocationIn,
+    WarehouseLocationOut,
+    WarehouseLocationUpdateIn,
     ContactAddressIn,
     ContactAddressOut,
     ContactChannelIn,
@@ -951,6 +962,9 @@ def update_item(
         #: §۹ — این ویژگی ساختاری است؛ عوض‌کردنش پس از گردشِ انباری موجودیِ
         #: قدیمی را مبهم می‌کند.
         items_svc.assert_serial_toggle_allowed(db, item, fields["is_serial_tracked"])
+    if "is_batch_tracked" in fields:
+        #: گاردِ این یکی **کمّی** است نه تاریخی — دلیلش در خودِ تابع.
+        items_svc.assert_batch_toggle_allowed(db, item, fields["is_batch_tracked"])
     #: `None` یعنی «دست نزن»؛ فهرستِ خالی یعنی «همه‌ی انبارها» (§۲۹).
     links = fields.pop("warehouses", None)
     attributes = fields.pop("attributes", None)
@@ -1185,3 +1199,198 @@ def over_stock(db: Session = Depends(get_db), _=Depends(require_permission("inve
             )
     rows.sort(key=lambda r: r.excess, reverse=True)
     return rows
+
+
+# ── موقعیتِ قرارگیری داخلِ انبار (مهاجرتِ ۰۱۷۲) ──────────────────────────
+def _location_counts(db: Session, locations: list[WarehouseLocation]) -> list[WarehouseLocation]:
+    """تعدادِ بارهای نشسته روی هر موقعیت را می‌نشاند."""
+    if not locations:
+        return locations
+    counts = dict(
+        db.query(StockBatch.location_id, func.count(StockBatch.id))
+        .filter(StockBatch.location_id.in_([x.id for x in locations]))
+        .group_by(StockBatch.location_id)
+        .all()
+    )
+    for loc in locations:
+        loc.batch_count = counts.get(loc.id, 0)
+    return locations
+
+
+@router.get("/api/warehouse-locations", response_model=list[WarehouseLocationOut])
+def list_warehouse_locations(
+    warehouse_id: UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    q = db.query(WarehouseLocation)
+    if warehouse_id:
+        q = q.filter(WarehouseLocation.warehouse_id == warehouse_id)
+    rows = q.order_by(WarehouseLocation.code).all()
+    return _location_counts(db, rows)
+
+
+@router.post("/api/warehouse-locations", response_model=WarehouseLocationOut, status_code=201)
+def create_warehouse_location(
+    data: WarehouseLocationIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "create")),
+):
+    if db.get(Warehouse, data.warehouse_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "انبار یافت نشد")
+    duplicate = (
+        db.query(WarehouseLocation.id)
+        .filter(
+            WarehouseLocation.warehouse_id == data.warehouse_id,
+            WarehouseLocation.code == data.code,
+        )
+        .first()
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"موقعیتِ «{data.code}» در این انبار از قبل تعریف شده است"
+        )
+    loc = WarehouseLocation(**data.model_dump())
+    db.add(loc)
+    db.flush()
+    db.refresh(loc)
+    return _location_counts(db, [loc])[0]
+
+
+@router.patch("/api/warehouse-locations/{location_id}", response_model=WarehouseLocationOut)
+def update_warehouse_location(
+    location_id: UUID,
+    data: WarehouseLocationUpdateIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "update")),
+):
+    loc = db.get(WarehouseLocation, location_id)
+    if loc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "موقعیت یافت نشد")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(loc, key, value)
+    db.flush()
+    db.refresh(loc)
+    return _location_counts(db, [loc])[0]
+
+
+@router.delete("/api/warehouse-locations/{location_id}", status_code=204)
+def delete_warehouse_location(
+    location_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "delete")),
+):
+    """موقعیتِ دارای بار **غیرفعال** می‌شود، حذف نمی‌شود.
+
+    همان قاعده‌ی اعلامیه‌ی قیمت: حذفِ فیزیکی یعنی بارهایی که آن‌جا نشسته‌اند
+    محلشان را برای همیشه از دست بدهند. غیرفعال یعنی «جای تازه این‌جا نگذار»،
+    و همان کارِ لازم را می‌کند بی‌آنکه چیزی نابود شود.
+    """
+    loc = db.get(WarehouseLocation, location_id)
+    if loc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "موقعیت یافت نشد")
+    has_batches = (
+        db.query(StockBatch.id).filter(StockBatch.location_id == location_id).first() is not None
+    )
+    if has_batches:
+        loc.is_active = False
+        db.flush()
+        return
+    db.delete(loc)
+
+
+@router.post("/api/items/{item_id}/assign-stock-to-batch", response_model=dict, status_code=201)
+def assign_stock_to_batch(
+    item_id: UUID,
+    data: AssignStockToBatchIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """موجودیِ بی‌برچسبِ یک کالا را روی یک بارِ اول‌دوره می‌نشاند (جمعِ صفر).
+
+    راهِ عبورِ گاردِ «ردیابیِ بار»: بی این، کالایی که سال‌ها موجودی داشته هرگز
+    نمی‌توانست ردیابی بگیرد و پیامِ آن گارد به مسیری اشاره می‌کرد که وجود ندارد.
+    """
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    warehouses_svc.assert_usable(db, data.warehouse_id, action="انتسابِ موجودی به بار")
+    batch = batches_svc.align_stock_to_batch(
+        db,
+        item,
+        data.warehouse_id,
+        batch_number=data.batch_number,
+        expiry_date=data.expiry_date,
+        production_date=data.production_date,
+        user=user,
+        on=data.assigned_date,
+    )
+    return {"batch_id": str(batch.id), "batch_number": batch.batch_number, "qty": str(batch.qty)}
+
+
+# ── رزروِ موجودی (مهاجرتِ ۰۱۷۳) ──────────────────────────────────────────
+@router.get("/api/stock-reservations", response_model=list[StockReservationOut])
+def list_stock_reservations(
+    item_id: UUID = Query(...),
+    warehouse_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """ادعاهای بازِ یک کالا در یک انبار، به تفکیکِ سند (§۱۰).
+
+    ردیف‌های خام برنمی‌گردند: دفتر علامت‌دار است و ردیفِ «رزرو ۱۵۰» بی ردیفِ
+    «آزادسازی ۵۰»ِ کنارش گمراه‌کننده است. آن‌چه معنا دارد **مانده‌ی هر سند** است.
+    """
+    return reservations_svc.open_reservations(db, item_id, warehouse_id)
+
+
+@router.post("/api/stock-reservations", response_model=dict, status_code=201)
+def create_stock_reservation(
+    data: StockReservationIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """ادعای دستی روی موجودی — پس از قفلِ کالا و سنجشِ موجودیِ آزاد.
+
+    شناسه‌ی سند خودِ ردیف است، پس هر ادعای دستی مستقل می‌ماند و بعداً با همان
+    شناسه آزاد می‌شود.
+    """
+    item = db.get(Item, data.item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    warehouses_svc.assert_usable(db, data.warehouse_id, action="رزروِ موجودی")
+    handle = uuid4()
+    reservations_svc.reserve(
+        db,
+        item=item,
+        warehouse_id=data.warehouse_id,
+        qty=data.qty,
+        on=data.entry_date,
+        source_type="manual",
+        source_id=handle,
+        batch_id=data.batch_id,
+        kind=data.kind,
+        notes=data.notes,
+        user=user,
+    )
+    return {"source_type": "manual", "source_id": str(handle), "qty": str(data.qty)}
+
+
+@router.delete("/api/stock-reservations/{source_id}", status_code=200, response_model=dict)
+def release_stock_reservation(
+    source_id: UUID,
+    source_type: str = Query("manual"),
+    qty: Decimal | None = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """ادعای یک سند را آزاد می‌کند — کامل، یا به‌اندازه (لغوِ جزئیِ §۱۰).
+
+    چیزی حذف نمی‌شود: ردیفِ منفی کنارِ ردیفِ مثبت می‌نشیند تا تاریخچه بماند.
+    """
+    freed = reservations_svc.release(
+        db, source_type=source_type, source_id=source_id, on=date.today(), qty=qty, user=user,
+    )
+    if freed == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ادعای بازی با این شناسه نیست")
+    return {"released": str(freed)}

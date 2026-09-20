@@ -1286,6 +1286,8 @@ export interface ItemRecord {
   /** «قابل فروش» جدا از «فعال»: موادِ اولیه موجودی دارند و فروختنی نیستند. */
   is_sellable: boolean
   is_serial_tracked: boolean
+  is_batch_tracked?: boolean
+  minimum_sellable_shelf_life_days?: number | null
   sales_price: string
   average_cost: string
   barcode: string | null
@@ -1353,6 +1355,8 @@ export interface ItemIn {
   is_service?: boolean
   is_sellable?: boolean
   is_serial_tracked?: boolean
+  is_batch_tracked?: boolean
+  minimum_sellable_shelf_life_days?: number | null
   sales_price?: number
   barcode?: string | null
   iran_code?: string
@@ -5658,6 +5662,43 @@ export interface StockBatchRecord {
   notes: string
   defect_qty: string
   serial_count: number
+  /**
+   * `ledger` = مانده از دفترِ انبار مشتق شد و دقیق است.
+   * `legacy` = این بار ردیفِ ورودیِ برچسب‌خورده ندارد، پس عددِ ستونِ قدیمی
+   * نشان داده می‌شود و باید نشانه بخورد — نه اینکه مثلِ عددِ دقیق جلوه کند.
+   */
+  qty_source: 'ledger' | 'legacy'
+  ledger_qty: string
+  legacy_qty: string
+  supplier_batch_code: string
+  supplier_id: string | null
+  location_id: string | null
+  parent_batch_id: string | null
+  qc_status: 'passed' | 'pending' | 'failed'
+  hold_status: 'none' | 'blocked' | 'recalled'
+  hold_reason: string
+  is_closed: boolean
+  /** §۴ — چهار عددِ جدا. `physical` با نزدیک‌شدنِ انقضا تکان نمی‌خورد؛ `sellable` صفر می‌شود. */
+  physical_qty: string
+  reserved_qty: string
+  available_qty: string
+  sellable_qty: string
+  days_to_expiry: number | null
+  /** محاسبه‌شده، نه ذخیره‌شده. */
+  status: string
+}
+
+/** یک بار که مانده‌اش از دفتر درنمی‌آید — گزارش است، نه خطا. */
+export interface BatchReconciliationRow {
+  batch_id: string
+  item_id: string
+  warehouse_id: string
+  batch_number: string
+  received_date: string
+  legacy_qty: string
+  ledger_qty: string
+  delta: string
+  reason: 'manual' | 'ambiguous' | 'pre_tracking'
 }
 
 export interface BatchSerialRecord {
@@ -5693,10 +5734,104 @@ export interface StockBatchIn {
   consumer_price?: number
   received_date: string
   notes?: string
+  supplier_batch_code?: string
+  supplier_id?: string | null
+  location_id?: string | null
+  qc_status?: 'passed' | 'pending' | 'failed'
 }
 export const createStockBatch = (token: string, data: StockBatchIn) =>
   authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
 export const deleteStockBatch = (token: string, id: string) => authedDelete(token, `/api/stock-batches/${id}`)
+export const fetchBatchReconciliation = (token: string) =>
+  authedGet<BatchReconciliationRow[]>(token, '/api/stock-batches/reconciliation')
+
+/** گزارشِ کاملِ یک بار — §۱۵ و §۱۶. همه‌چیز از دفترِ انبار مشتق می‌شود. */
+export interface BatchTrace {
+  batch_id: string
+  batch_number: string
+  received_qty: string
+  sold_qty: string
+  returned_qty: string
+  damaged_qty: string
+  reserved_qty: string
+  remaining_qty: string
+  movements: {
+    entry_date: string
+    qty: string
+    source_type: string
+    source_id: string | null
+    document: string
+  }[]
+  /** §۱۶ — «مشتریانی که این بار را دریافت کرده‌اند قابل شناسایی باشند». */
+  recipients: { contact_id: string; name: string; issue_number: number; issue_date: string }[]
+}
+export const fetchBatchTrace = (token: string, batchId: string) =>
+  authedGet<BatchTrace>(token, `/api/stock-batches/${batchId}/trace`)
+
+/** انسداد یا فراخوانِ بار. موجودیِ فیزیکی تکان نمی‌خورد — فقط فروختنی نیست. */
+export const holdBatch = (
+  token: string,
+  batchId: string,
+  data: { hold_status: 'blocked' | 'recalled'; reason: string },
+) => authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/hold`, data)
+export const releaseBatchHold = (token: string, batchId: string) =>
+  authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/release`, {})
+export const closeBatch = (token: string, batchId: string, isClosed: boolean) =>
+  authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/close`, { is_closed: isClosed })
+
+/** موقعیتِ قرارگیری داخلِ انبار — راهرو/قفسه/طبقه. */
+export interface WarehouseLocationRecord {
+  id: string
+  warehouse_id: string
+  code: string
+  name: string
+  aisle: string
+  rack: string
+  level: string
+  is_active: boolean
+  notes: string
+  batch_count: number
+}
+export interface WarehouseLocationInput {
+  warehouse_id: string
+  code: string
+  name?: string
+  aisle?: string
+  rack?: string
+  level?: string
+  notes?: string
+}
+export const fetchWarehouseLocations = (token: string, warehouseId?: string) =>
+  authedGet<WarehouseLocationRecord[]>(
+    token,
+    `/api/warehouse-locations${warehouseId ? `?warehouse_id=${warehouseId}` : ''}`,
+  )
+export const createWarehouseLocation = (token: string, data: WarehouseLocationInput) =>
+  authedSend<WarehouseLocationRecord>(token, 'POST', '/api/warehouse-locations', data)
+export const updateWarehouseLocation = (
+  token: string,
+  id: string,
+  patch: Partial<Omit<WarehouseLocationInput, 'warehouse_id' | 'code'>> & { is_active?: boolean },
+) => authedSend<WarehouseLocationRecord>(token, 'PATCH', `/api/warehouse-locations/${id}`, patch)
+/** موقعیتِ دارای بار حذف نمی‌شود — سرور غیرفعالش می‌کند تا بار محلش را گم نکند. */
+export const deleteWarehouseLocation = (token: string, id: string) =>
+  authedDelete(token, `/api/warehouse-locations/${id}`)
+
+/** بارهای قابلِ فروشِ یک کالا در یک انبار، به ترتیبِ FEFO. */
+export const fetchAvailableBatches = (token: string, itemId: string, warehouseId: string) =>
+  authedGet<StockBatchRecord[]>(
+    token,
+    `/api/stock-batches/available?item_id=${itemId}&warehouse_id=${warehouseId}`,
+  )
+
+/** موجودیِ بی‌بارِ یک کالا را روی یک بارِ اول‌دوره می‌نشاند (جمعِ صفر). */
+export const assignStockToBatch = (
+  token: string,
+  itemId: string,
+  data: { warehouse_id: string; batch_number: string; assigned_date: string; expiry_date?: string | null; production_date?: string | null },
+) => authedSend<{ batch_id: string; batch_number: string; qty: string }>(
+  token, 'POST', `/api/items/${itemId}/assign-stock-to-batch`, data,
+)
 
 // سریالِ کارتنِ یک بار
 export const fetchBatchSerials = (token: string, batchId: string) =>
@@ -5865,8 +6000,36 @@ export interface CatalogListing {
   min_order_qty: string
   max_order_qty: string
   daily_order_limit: number
+  /**
+   * §۳۰ — «موجودی قابل سفارش»، از انبارِ پخش‌کننده منهای رزروِ سفارش‌های دیگر.
+   * `null` یعنی **نامعلوم** و اصلاً نشان داده نمی‌شود؛ صفر یعنی واقعاً ناموجود.
+   */
+  orderable_qty: string | null
   components: { item_name: string; qty: string }[]
 }
+
+/** تخصیصِ بارِ ورودی به یک قلمِ کاتالوگ (§۶). */
+export interface CatalogAllocation {
+  id: string
+  batch_id: string
+  batch_number: string
+  item_name: string
+  expiry_date: string | null
+  qty: string
+  /** قابلِ فروشِ خودِ بار — سقفِ واقعیِ این تخصیص. بارِ فراخوان‌شده صفر می‌شود. */
+  batch_sellable_qty: string
+  batch_status: string
+  is_active: boolean
+}
+export const fetchCatalogAllocations = (token: string, listingId: string) =>
+  authedGet<CatalogAllocation[]>(token, `/api/marketplace/distributor/listings/${listingId}/allocations`)
+export const allocateBatchToListing = (token: string, listingId: string, batchId: string, qty: number) =>
+  authedSend<{ id: string; batch_id: string; qty: string }>(
+    token, 'POST', `/api/marketplace/distributor/listings/${listingId}/allocations`,
+    { batch_id: batchId, qty },
+  )
+export const toggleCatalogAllocation = (token: string, allocationId: string, isActive: boolean) =>
+  authedSend<void>(token, 'POST', `/api/marketplace/distributor/allocations/${allocationId}/toggle`, { is_active: isActive })
 
 // سمتِ پخش‌کننده — اتصال‌ها
 export const fetchMpDistributorConnections = (token: string) =>
@@ -8888,7 +9051,18 @@ export interface DirectWarehouseIssueIn {
   cost_center_id?: string | null
   account_id?: string | null
   description?: string
-  lines: { item_id: string; qty: number; unit_id?: string | null; account_id?: string | null; description?: string }[]
+  lines: {
+    item_id: string
+    qty: number
+    unit_id?: string | null
+    account_id?: string | null
+    description?: string
+    /**
+     * نقضِ FEFO (§۱۱) — مقدارها به **واحدِ اصلیِ کالا**.
+     * `null`/نیامده = سرور خودش نزدیک‌ترین انقضا را برمی‌دارد.
+     */
+    batch_allocations?: { batch_id: string; qty: number }[] | null
+  }[]
 }
 
 export const createDirectWarehouseIssue = (token: string, data: DirectWarehouseIssueIn, idempotencyKey: string) =>

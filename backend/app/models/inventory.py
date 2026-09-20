@@ -432,6 +432,21 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: موجودیِ قدیمی سریال ندارد و مبهم می‌شود.
     is_serial_tracked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
+    #: **ردیابیِ بارِ ورودی (بچ).** پرچم *الزام* را روشن می‌کند، نه *قابلیت* را:
+    #: بار برای همه‌ی کالاها ساخته و گزارش می‌شود (همان‌طور که امروز می‌شود) و
+    #: روشن‌بودنِ این پرچم فقط یعنی «سندِ خروجِ این کالا باید بار را نام ببرد».
+    #: همین تفکیک است که «پیش‌فرض = رفتارِ دیروز» را نگه می‌دارد.
+    #:
+    #: گاردِ روشن‌کردنش — برخلافِ `is_serial_tracked` — **تاریخی نیست، کمّی است**:
+    #: `assert_batch_toggle_allowed` در [items](../services/items.py). دلیلش این
+    #: است که بچ از قبل وجود دارد، پس «گردشِ انباری دارد → رد» این قابلیت را
+    #: دقیقاً برای کالاهایی که مهم‌اند غیرقابلِ دسترس می‌کرد.
+    is_batch_tracked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: §۲۹ — کالایی که عمرِ باقی‌مانده‌اش از این کمتر است دیگر **قابلِ فروش**
+    #: شمرده نمی‌شود، بی‌آنکه موجودیِ فیزیکی‌اش تکان بخورد. تهی = بدونِ قاعده،
+    #: یعنی رفتارِ امروز.
+    minimum_sellable_shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     #: ایران‌کد (§۱۱) و بارکدِ دوبعدی (§۱۲) — **سه شناسه‌ی جدا** با `sku` و
     #: `barcode`. فصل صریح است که یکی‌شان نکنیم. بارکدِ دوبعدی متنِ بلند است (QR)
     #: پس اندازه‌اش با بارکدِ خطی یکی نیست.
@@ -684,6 +699,27 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
 
     source_type: Mapped[str] = mapped_column(String(50))  # sales_invoice | purchase_invoice | adjustment
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    #: کدام **بارِ ورودی** (بچ) این حرکت را ساخت یا مصرف کرد. مانده‌ی هر بار از
+    #: همین ستون مشتق می‌شود: `SUM(qty) WHERE batch_id = …` — همان‌طور که موجودیِ
+    #: کالا از روزِ اول `SUM(qty)` بوده. پیش از مهاجرتِ ۰۱۷۱، `stock_batches.qty`
+    #: یک ستونِ شمارنده بود که فروش و خروج اصلاً کمش نمی‌کردند.
+    #:
+    #: **فقط هویت است.** بهای بار هرگز در `unit_cost` نمی‌نشیند: میانگینِ موزون
+    #: سراسریِ کالاست و [ارزش‌گذاری](../services/valuation.py) بچ نمی‌شناسد. اگر
+    #: روزی بهای بچ این‌جا نوشته شود، بازپخش بی‌صدا غلط می‌شود — پس `batch_id`
+    #: عمداً در `_COLUMNS`ِ آن ماژول نیست و تستِ اسکنِ منبع همین را نگه می‌دارد.
+    #:
+    #: تهی‌پذیر می‌ماند و همیشه خواهد ماند: کالایی که ردیابیِ بار ندارد (پیش‌فرضِ
+    #: همه) حرکتش بی‌برچسب است، و همان «رفتارِ دیروز» است.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    #: کدام **ردیفِ** سند. `source_id` فقط سند را می‌گوید، و یک ردیفِ ۱۰تایی که
+    #: بینِ دو بار تقسیم می‌شود دو ردیفِ دفتر می‌سازد — بی این ستون، سندی با دو
+    #: ردیفِ یک کالا در یک انبار برگشت‌ناپذیر مبهم است. بی FK، چون مثلِ
+    #: `source_id` به ردیفِ سندهای مختلف اشاره می‌کند.
+    source_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     item: Mapped["Item"] = relationship()
     warehouse: Mapped["Warehouse"] = relationship()
