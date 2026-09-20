@@ -103,6 +103,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         locked_features=list(PREMIUM_FEATURES) if tinfo.is_trial else [],
         industry=principal.membership.tenant.industry,
         trade=principal.membership.tenant.trade,
+        dashboard_cards=principal.membership.dashboard_cards,
         enabled_modules=modules_service.enabled_modules(principal.membership.tenant),
         allowed_modules=sorted(modules_service.allowed_modules(principal.membership.tenant)),
     )

@@ -1,7 +1,7 @@
 """مقدارِ بچ از دفترِ انبار مشتق می‌شود
 
 Revision ID: 0171
-Revises: 0169
+Revises: 0170
 
 ## چه چیزی اضافه می‌شود
 
@@ -67,7 +67,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.migration_utils import rls_disabled
 
 revision: str = "0171"
-down_revision: Union[str, None] = "0169"
+down_revision: Union[str, None] = "0170"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

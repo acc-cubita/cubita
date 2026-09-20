@@ -570,13 +570,17 @@ export function Dashboard({
                 pendingOutboxCount={pendingOutboxCount}
                 itemsCount={items.length}
                 onNavigate={navigate}
+                onMeUpdated={onMeUpdated}
               />
             ) : (
               <OverviewPage
                 token={token}
+                me={me}
                 userName={me.name}
                 pendingOutboxCount={pendingOutboxCount}
                 itemsCount={items.length}
+                onNavigate={navigate}
+                onMeUpdated={onMeUpdated}
               />
             ))}
           {/* ── ماژولِ فروش: هجده عملیات و دوازده دفتر (قاعده‌ی نظیر) ── */}

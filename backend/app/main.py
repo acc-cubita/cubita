@@ -30,6 +30,7 @@ from app.routers import (
     cost_centers,
     crm,
     currencies,
+    dashboard,
     devices,
     installments,
     integration,
@@ -177,6 +178,7 @@ app.include_router(trades.router)
 app.include_router(devices.router)
 app.include_router(sales_ops.router)
 app.include_router(client_errors.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/api/health")

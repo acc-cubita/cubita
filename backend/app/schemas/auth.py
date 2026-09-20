@@ -70,6 +70,11 @@ class MeOut(BaseModel):
     #: را جای ماژول می‌گذارد. برای مشتریِ واقعی خالی.
     locked_features: list[str] = []
 
+    #: کارت‌های داشبوردِ همین کاربر در همین کسب‌وکار (`page` یا `page/section`).
+    #: `None` یعنی هنوز انتخاب نکرده → فرانت پیش‌فرض‌ها را نشان می‌دهد؛ `[]` یعنی
+    #: عمداً خالی. این دو یکی نیستند.
+    dashboard_cards: list[str] | None = None
+
     #: ── شخصی‌سازیِ پنل (app/services/modules.py) ──
     #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
     industry: str = "general"

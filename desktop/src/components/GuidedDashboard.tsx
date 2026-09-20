@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Wallet, TrendingUp, PackageSearch, Inbox, Rocket } from 'lucide-react'
+import { Wallet, TrendingUp, PackageSearch, Inbox } from 'lucide-react'
 import { fetchIncomeStatement, fetchTrialBalance } from '../api'
 import type { MeResponse } from '../api'
 import type { PageKey } from './Sidebar'
 import { StatCard } from './StatCard'
-import { SectionCard } from './SectionCard'
 import { AlertsPanel } from './AlertsPanel'
 import { ModuleSearch } from './ModuleSearch'
-import { TASK_LAUNCHERS } from '../lib/taskRegistry'
+import { LauncherBoard } from './LauncherBoard'
 
 const fa = (v: number) => v.toLocaleString('fa-IR')
 
 /**
- * داشبوردِ «نسخه‌ی جدید» (پوسته‌ی guided): اقدام‌محور. سه بخش — چند KPIِ کلیدی، «مرکزِ
- * اقدام» (لانچرهای شروعِ یک کار)، و «کارهای نیازمندِ رسیدگی» (همان AlertsPanelِ موجود).
- * داده‌ها و پنل‌ها از همان منابعِ overview بازاستفاده می‌شوند.
+ * داشبوردِ «نسخه‌ی جدید» (پوسته‌ی guided): اقدام‌محور. سه بخش — چند KPIِ کلیدی،
+ * «شروعِ کارِ تازه» (کارت‌هایی که خودِ کاربر از میانِ ماژول‌ها چیده، `LauncherBoard`)،
+ * و «کارهای نیازمندِ رسیدگی» (همان AlertsPanelِ موجود). داده‌ها و پنل‌ها از همان
+ * منابعِ overview بازاستفاده می‌شوند.
  */
 export function GuidedDashboard({
   token,
@@ -23,6 +23,7 @@ export function GuidedDashboard({
   pendingOutboxCount,
   itemsCount,
   onNavigate,
+  onMeUpdated,
 }: {
   token: string
   me: MeResponse
@@ -30,6 +31,7 @@ export function GuidedDashboard({
   pendingOutboxCount: number
   itemsCount: number
   onNavigate: (page: PageKey, section?: string) => void
+  onMeUpdated: (me: MeResponse) => void
 }) {
   const [cashBalance, setCashBalance] = useState<number | null>(null)
   const [inventoryValue, setInventoryValue] = useState<number | null>(null)
@@ -57,7 +59,7 @@ export function GuidedDashboard({
     <div className="page guided-dash">
       <div className="guided-welcome">
         <h1>خوش آمدید، {userName}</h1>
-        <p className="hint">یک کار را از «مرکزِ اقدام» شروع کنید، یا کارهای نیازمندِ رسیدگی را ببینید.</p>
+        <p className="hint">یک کار را از «شروعِ کارِ تازه» شروع کنید، یا کارهای نیازمندِ رسیدگی را ببینید.</p>
       </div>
 
       {/* بالای KPIها عمدی است: کسی که داشبورد را باز می‌کند معمولاً می‌خواهد
@@ -91,26 +93,7 @@ export function GuidedDashboard({
         />
       </div>
 
-      <SectionCard
-        icon={Rocket}
-        title="شروعِ کارِ تازه"
-        description="یک کارِ حسابداری را انتخاب کنید تا مرحله‌به‌مرحله جلو برود."
-      >
-        <div className="action-hub-grid">
-          {TASK_LAUNCHERS.map((t) => {
-            const Icon = t.icon
-            return (
-              <button key={t.key} type="button" className="action-card" onClick={() => onNavigate(t.page, t.section)}>
-                <span className="action-card-icon">
-                  <Icon size={22} />
-                </span>
-                <span className="action-card-title">{t.title}</span>
-                <span className="action-card-desc">{t.desc}</span>
-              </button>
-            )
-          })}
-        </div>
-      </SectionCard>
+      <LauncherBoard token={token} me={me} onMeUpdated={onMeUpdated} onNavigate={onNavigate} />
 
       <AlertsPanel token={token} />
     </div>
