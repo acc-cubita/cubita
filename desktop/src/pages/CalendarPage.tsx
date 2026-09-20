@@ -24,6 +24,8 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { FormField, FormGrid, FormStatus } from '../components/form/FormKit'
+import { firstMissing } from '../components/form/firstMissing'
 import { ReminderCenterPanel } from '../components/ReminderCenterPanel'
 import { StatCard } from '../components/StatCard'
 import { Tabs } from '../components/Tabs'
@@ -143,6 +145,11 @@ export function CalendarPage({ token }: { token: string }) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    const missing = firstMissing([[form.title, 'cal-title', 'عنوانِ رویداد را وارد کنید.']])
+    if (missing) {
+      setFormMessage(missing)
+      return
+    }
     setFormMessage(null)
     if (!form.title.trim()) {
       setFormMessage('عنوان رویداد الزامی است.')
@@ -219,82 +226,109 @@ export function CalendarPage({ token }: { token: string }) {
     <SectionCard
       icon={editingId ? Pencil : CalendarPlus}
       title={editingId ? 'ویرایش رویداد' : 'رویداد / یادآوری جدید'}
+      tip="روی هر روزِ تقویم کلیک کنید تا تاریخِ فرم همان شود؛ روی رویدادِ موجود کلیک کنید تا ویرایش شود."
       actions={
         editingId ? (
-          <button onClick={resetForm}>
-            <X size={13} /> انصراف
+          <button type="button" className="ef-btn-secondary" onClick={resetForm}>
+            <X size={14} /> انصراف
           </button>
         ) : undefined
       }
     >
-      <form className="invoice-form" onSubmit={handleSave}>
-        <label>
-          عنوان
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="مثلاً: سررسید چک شماره ۱۲۳"
-            required
-          />
-        </label>
-        <label>
-          دسته‌بندی
-          <SearchSelect
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value as CalendarCategory })}
-          >
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_META[c].label}
-              </option>
-            ))}
-          </SearchSelect>
-        </label>
-        <label>
-          تاریخ
-          <JalaliDatePicker value={form.event_date} onChange={(iso) => setForm({ ...form, event_date: iso })} />
-        </label>
-        <div className="cal-time-row">
-          <label>
-            ساعت شروع (اختیاری)
-            <input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
-          </label>
-          <label>
-            ساعت پایان (اختیاری)
-            <input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
-          </label>
-        </div>
-        <label>
-          توضیحات
-          <input
-            type="text"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-        </label>
-        <label className="cal-check-inline">
-          <input type="checkbox" checked={form.is_done} onChange={(e) => setForm({ ...form, is_done: e.target.checked })} />
-          انجام‌شده / رسیدگی‌شده
-        </label>
-        <div className="invoice-form-footer">
-          <button type="submit" className="btn-primary">
-            <Save size={14} /> {editingId ? 'ذخیره تغییرات' : 'ثبت رویداد'}
-          </button>
+      <form noValidate onSubmit={handleSave}>
+        <FormGrid cols={2}>
+          <FormField id="cal-title" label="عنوان" required span="full">
+            {(id) => (
+              <input
+                id={id}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="مثلاً: سررسید چک شماره ۱۲۳"
+              />
+            )}
+          </FormField>
+          <FormField label="دسته‌بندی" required>
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value as CalendarCategory })}
+              >
+                {CATEGORY_ORDER.map((c) => (
+                  <option key={c} value={c}>
+                    {CATEGORY_META[c].label}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+          <FormField label="تاریخ" required>
+            {(id) => (
+              <JalaliDatePicker
+                id={id}
+                value={form.event_date}
+                onChange={(iso) => setForm({ ...form, event_date: iso })}
+              />
+            )}
+          </FormField>
+          <FormField label="ساعت شروع" optional>
+            {(id) => (
+              <input
+                id={id}
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              />
+            )}
+          </FormField>
+          <FormField label="ساعت پایان" optional>
+            {(id) => (
+              <input
+                id={id}
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+              />
+            )}
+          </FormField>
+          <FormField label="توضیحات" optional span="full">
+            {(id) => (
+              <input
+                id={id}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            )}
+          </FormField>
+          <div className="ef-checks">
+            <label className="ef-check-tip">
+              <input
+                type="checkbox"
+                checked={form.is_done}
+                onChange={(e) => setForm({ ...form, is_done: e.target.checked })}
+              />
+              انجام‌شده / رسیدگی‌شده
+            </label>
+          </div>
+        </FormGrid>
+        <div className="ef-card-foot">
+          <FormStatus msg={formMessage ? { text: formMessage, kind: 'ok' } : null} />
           {editingId && (
             <button
               type="button"
-              className="icon-btn-danger"
+              className="ef-btn-secondary"
               onClick={() => {
                 const ev = events.find((x) => x.id === editingId)
                 if (ev) void handleDelete(ev)
               }}
             >
-              <Trash2 size={14} /> حذف
+              <Trash2 size={15} /> حذف
             </button>
           )}
+          <button type="submit" className="btn-primary">
+            <Save size={16} /> {editingId ? 'ذخیره تغییرات' : 'ثبت رویداد'}
+          </button>
         </div>
-        {formMessage && <div className="hint">{formMessage}</div>}
       </form>
     </SectionCard>
   )
@@ -305,7 +339,7 @@ export function CalendarPage({ token }: { token: string }) {
       title={`${JALALI_MONTH_NAMES[viewMonth - 1]} ${toFaDigits(viewYear)}`}
       actions={
         <div className="cal-nav">
-          <button type="button" onClick={goToday}>
+          <button type="button" className="ef-btn-secondary" onClick={goToday}>
             امروز
           </button>
           <button type="button" onClick={prevMonth} title="ماه قبل" aria-label="ماه قبل">
@@ -376,7 +410,7 @@ export function CalendarPage({ token }: { token: string }) {
         description="رویدادها، جلسات، سررسید چک‌ها و یادآوری‌های کسب‌وکار را ثبت کنید؛ در نمای ماهانه‌ی شمسی ببینید و مدیریت کنید."
       />
 
-      {error && <div className="error">{error}</div>}
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <div className="stat-grid">
         <StatCard icon={<CalendarDays size={18} />} label="کل رویدادها" value={kpis.total.toLocaleString('fa-IR')} />
@@ -404,9 +438,11 @@ export function CalendarPage({ token }: { token: string }) {
             label: 'تقویم ماهانه',
             icon: CalendarDays,
             content: (
-              <div className="cal-layout">
-                {monthView}
-                {eventForm}
+              <div className="ef-form">
+                <div className="cal-layout">
+                  {monthView}
+                  {eventForm}
+                </div>
               </div>
             ),
           },

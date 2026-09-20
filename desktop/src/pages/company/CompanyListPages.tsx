@@ -10,6 +10,7 @@ import {
   Target,
   UserPlus,
   UsersRound,
+  Pencil,
 } from 'lucide-react'
 import {
   fetchAuditEntries,
@@ -32,6 +33,7 @@ import {
 import type { PageKey } from '../../lib/navModel'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import { CountBadge, FormField, ListToolbar, RowAction, SearchField } from '../../components/form/FormKit'
 import { EmptyState } from '../../components/EmptyState'
 import { StatCard } from '../../components/StatCard'
 import { Pager, usePagination } from '../../components/Pager'
@@ -133,7 +135,8 @@ export function DayActivityPage({ token }: { token: string }) {
         title="فعالیت‌های روز"
         description="هرچه امروز در برنامه ثبت یا عوض شده — از دفترِ ردِ حسابرسی، به ترتیبِ زمان."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <div className="stat-grid">
         <StatCard label="رویدادهای این روز" value={fa(ofDay.length)} icon={<Activity size={16} />} />
@@ -158,8 +161,8 @@ export function DayActivityPage({ token }: { token: string }) {
           <EmptyState icon={Activity} text="در این روز رویدادی ثبت نشده — تاریخِ دیگری را امتحان کنید." />
         ) : (
           <>
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>ساعت</th>
@@ -180,7 +183,7 @@ export function DayActivityPage({ token }: { token: string }) {
                       </td>
                       <td data-label="کاربر">{r.actor_email || '—'}</td>
                       <td data-label="کنش">
-                        <span className="badge">{label(ACTION_LABELS, r.action)}</span>
+                        <span className="status-badge tone-muted">{label(ACTION_LABELS, r.action)}</span>
                       </td>
                       <td data-label="موضوع">{label(ENTITY_LABELS, r.entity_type)}</td>
                       <td className="card-title" data-label="شرح">{r.summary || '—'}</td>
@@ -193,6 +196,7 @@ export function DayActivityPage({ token }: { token: string }) {
           </>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -225,7 +229,8 @@ export function UsageReportPage({ token }: { token: string }) {
         title="گزارش استفاده از نرم‌افزار"
         description="چه کسی، چقدر، روی چه چیزی کار کرده است. شمارش سمتِ سرور روی کلِ بازه انجام می‌شود، نه روی یک صفحه از فهرست."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <SectionCard
         icon={Gauge}
@@ -288,6 +293,7 @@ export function UsageReportPage({ token }: { token: string }) {
           />
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -308,8 +314,8 @@ function UsageTable({
       {rows.length === 0 ? (
         <p className="muted">داده‌ای در این بازه نیست.</p>
       ) : (
-        <div className="table-scroll">
-          <table className="cards-on-mobile">
+        <div className="table-scroll ef-table-wrap">
+          <table className="cards-on-mobile ef-table">
             <tbody>
               {rows.slice(0, 12).map((r) => (
                 <tr key={r.key}>
@@ -409,40 +415,56 @@ export function ContactListPage({
             : 'همه‌ی مشتریان، تأمین‌کنندگان، واسطه‌ها و سهامداران — با گروه و محلِ جغرافیایی‌شان.'
         }
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <SectionCard
         icon={UsersRound}
-        title={rows ? `${fa(shown.length)} طرف حساب` : 'در حال بارگذاری…'}
+        title="طرف حساب‌ها"
+        badge={rows ? <CountBadge accent>{fa(shown.length)} طرف حساب</CountBadge> : undefined}
+        description="مشتری، تأمین‌کننده، واسطه و سهامدار — با گروه و محلِ جغرافیایی."
         actions={
-          <>
-            <SearchSelect value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
-              <option value="">همه‌ی گروه‌ها</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </SearchSelect>
-            <SearchSelect value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-              <option value="">همه‌ی نقش‌ها</option>
-              <option value="customer">مشتری</option>
-              <option value="supplier">تأمین‌کننده</option>
-              <option value="broker">واسطه</option>
-              <option value="shareholder">سهامدار</option>
-            </SearchSelect>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جست‌وجو…" />
-            {/* راهِ ساختِ طرف‌حساب از این فهرست گم بود: کاربر «طرف حساب‌ها» را باز
-                می‌کرد و هیچ راهی به فرمِ ساخت نداشت. ساخت همچنان یک‌جاست («شرکت ←
-                طرف حساب جدید») و این فقط میان‌بُر است، نه فرمِ دوم. */}
-            {onNavigate && (
-              <button type="button" className="btn-primary" onClick={() => onNavigate('contactnew')}>
-                <UserPlus size={13} /> طرف حساب جدید
-              </button>
-            )}
-          </>
+          /* راهِ ساختِ طرف‌حساب از این فهرست گم بود: کاربر «طرف حساب‌ها» را باز
+             می‌کرد و هیچ راهی به فرمِ ساخت نداشت. ساخت همچنان یک‌جاست («شرکت ←
+             طرف حساب جدید») و این فقط میان‌بُر است، نه فرمِ دوم. */
+          onNavigate ? (
+            <button type="button" className="btn-primary" onClick={() => onNavigate('contactnew')}>
+              <UserPlus size={14} /> طرف حساب جدید
+            </button>
+          ) : undefined
         }
       >
+        <ListToolbar>
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder="نام، تلفن، ایمیل یا شناسه"
+            label="جست‌وجوی طرف حساب"
+          />
+          <FormField label="گروه">
+            {(id) => (
+              <SearchSelect id={id} value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
+                <option value="">همه‌ی گروه‌ها</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+          <FormField label="نقش">
+            {(id) => (
+              <SearchSelect id={id} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                <option value="">همه‌ی نقش‌ها</option>
+                <option value="customer">مشتری</option>
+                <option value="supplier">تأمین‌کننده</option>
+                <option value="broker">واسطه</option>
+                <option value="shareholder">سهامدار</option>
+              </SearchSelect>
+            )}
+          </FormField>
+        </ListToolbar>
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : shown.length === 0 ? (
@@ -456,8 +478,8 @@ export function ContactListPage({
           />
         ) : (
           <>
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>نام</th>
@@ -466,7 +488,7 @@ export function ContactListPage({
                     <th>محل</th>
                     <th>تلفن</th>
                     <th>وضعیت</th>
-                    <th />
+                    <th className="ef-col-min">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -480,14 +502,16 @@ export function ContactListPage({
                       </td>
                       <td data-label="تلفن">{r.phone || '—'}</td>
                       <td data-label="وضعیت">
-                        <span className={`badge ${r.is_active ? 'success' : ''}`}>
+                        <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-muted'}`}>
                           {r.is_active ? 'فعال' : 'غیرفعال'}
                         </span>
                       </td>
-                      <td className="card-actions">
-                        {onEditContact && (
-                          <button type="button" onClick={() => onEditContact(r.id)}>ویرایش</button>
-                        )}
+                      <td className="card-actions ef-col-min">
+                        <div className="row-actions ef-row-actions">
+                          {onEditContact && (
+                            <RowAction icon={Pencil} label="ویرایش" onClick={() => onEditContact(r.id)} />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -498,6 +522,7 @@ export function ContactListPage({
           </>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -537,7 +562,8 @@ export function InstallmentPlansPage({ token }: { token: string }) {
         title="قراردادهای اقساطی"
         description="فهرستِ قراردادهای فروشِ اقساطی. برای ساخت، وصول و تنظیمِ زمان‌بندی به «شرکت ← فروش اقساطی» بروید."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <div className="stat-grid">
         <StatCard label="کلِ قراردادها" value={fa(totals.count)} icon={<CalendarClock size={16} />} />
@@ -552,8 +578,8 @@ export function InstallmentPlansPage({ token }: { token: string }) {
           <EmptyState icon={CalendarClock} text="هنوز قرارداد اقساطی ثبت نشده — از «شرکت ← فروش اقساطی» اولین قرارداد را بسازید." />
         ) : (
           <>
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>طرف حساب</th>
@@ -589,6 +615,7 @@ export function InstallmentPlansPage({ token }: { token: string }) {
           </>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -639,7 +666,8 @@ export function AllInstallmentsPage({ token }: { token: string }) {
         title="همه اقساط"
         description="تکِ‌تکِ سررسیدها از همه‌ی قراردادها، مرتب بر اساسِ تاریخ — تا معوق‌ها لای قراردادها گم نشوند."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <div className="stat-grid">
         <StatCard label="اقساطِ نمایش‌داده‌شده" value={fa(rows.length)} icon={<ListChecks size={16} />} />
@@ -671,8 +699,8 @@ export function AllInstallmentsPage({ token }: { token: string }) {
           <EmptyState icon={ListChecks} text="قسطی در این وضعیت نیست — فیلتر را عوض کنید." />
         ) : (
           <>
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>سررسید</th>
@@ -703,6 +731,7 @@ export function AllInstallmentsPage({ token }: { token: string }) {
           </>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -723,7 +752,9 @@ export function CostCenterPage({
         title="مرکز هزینه"
         description="بُعدی برای برچسب‌زدنِ اسناد و سنجشِ سود به تفکیکِ پروژه، شعبه یا واحد. برچسب روی ردیفِ سند می‌نشیند، پس گزارش از تراکنشِ واقعی درمی‌آید — نه از تخصیصِ دستی."
       />
+      <div className="ef-form">
       <CostCenterWorkspace token={token} accounts={accounts} />
+      </div>
     </div>
   )
 }
@@ -760,7 +791,8 @@ export function CostCenterListPage({
         title="مراکز هزینه"
         description="فهرستِ مراکز/پروژه‌ها با سود و زیانِ سالِ جاری. برای ساخت، ویرایش و تحلیل به «شرکت ← مرکز هزینه» بروید."
       />
-      {error && <div className="error">{error}</div>}
+      <div className="ef-form">
+      {error && <p className="ef-message ef-message--warn">{error}</p>}
 
       <SectionCard
         icon={Target}
@@ -780,8 +812,8 @@ export function CostCenterListPage({
           <EmptyState icon={Target} text="هنوز مرکزی تعریف نشده — از «شرکت ← مرکز هزینه» اولین مرکز را بسازید." />
         ) : (
           <>
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr>
                     <th>کد</th>
@@ -810,7 +842,7 @@ export function CostCenterListPage({
                         <strong>{money(r.rollup_profit)}</strong>
                       </td>
                       <td data-label="وضعیت">
-                        <span className={`badge ${r.is_active ? 'success' : ''}`}>
+                        <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-muted'}`}>
                           {r.is_active ? 'فعال' : 'بسته'}
                         </span>
                       </td>
@@ -823,6 +855,7 @@ export function CostCenterListPage({
           </>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -841,7 +874,9 @@ export function ManagementReportsPage({ token }: { token: string }) {
         title="گزارش‌ها و نمودارهای مدیریتی"
         description="سود و زیان، ترازنامه، جریان نقد، مطالبات و نمودارهای روند — نمای مدیریتیِ کسب‌وکار."
       />
+      <div className="ef-form">
       <Reports token={token} />
+      </div>
     </div>
   )
 }

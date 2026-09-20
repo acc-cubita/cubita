@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HandCoins, Landmark, Wallet } from 'lucide-react'
+import { Check, HandCoins, Landmark, Wallet } from 'lucide-react'
 import {
   createOwnerTransaction,
   fetchBankAccountsAdmin,
@@ -13,8 +13,17 @@ import {
   type OwnerTransactionRecord,
   type PartnerBalanceRecord,
 } from '../../api'
-import { OpsPage, Note, type Msg } from '../accounting/kit'
+import { OpsPage, type Msg } from '../accounting/kit'
 import { SectionCard } from '../../components/SectionCard'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  InputAffix,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
 import { NumberInput } from '../../components/NumberInput'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
@@ -119,6 +128,16 @@ export function OwnerTransactionPage({ token }: { token: string }) {
   const chosen = useMemo(() => ALL_TYPES.find((t) => t.key === form.type) ?? null, [form.type])
 
   async function submit() {
+    const missing = firstMissing([
+      [form.type, 'ot-type', 'نوعِ تراکنش را انتخاب کنید.'],
+      [form.contactId, 'ot-contact', 'شریک را انتخاب کنید.'],
+      [form.amount, 'ot-amount', 'مبلغ را وارد کنید.'],
+      [form.method === 'bank' ? form.bankAccountId : 'نقدی', 'ot-bank', 'حسابِ بانکی را انتخاب کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setMsg(null)
     if (!form.type) {
       setMsg({ kind: 'err', text: 'نوعِ تراکنش را انتخاب کنید — از روی جهتِ پول حدس زده نمی‌شود.' })
@@ -161,116 +180,154 @@ export function OwnerTransactionPage({ token }: { token: string }) {
 
   return (
     <OpsPage
+      canvas
       icon={HandCoins}
       title="تراکنش شریک"
       description="آورده، برداشت، وام و بازپرداختِ مالکان — با نوعِ صریح، نه حدس از روی جهتِ پول."
     >
-      <div className="workspace-split">
-        <SectionCard icon={HandCoins} title="تراکنشِ تازه">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
+        <SectionCard
+          icon={HandCoins}
+          title="تراکنشِ تازه"
+          tip="نوعِ تراکنش سندِ حسابداری را تعیین می‌کند؛ آورده‌ی سرمایه با وامِ شریک یکی نیست."
+        >
           {partners.length === 0 && !loadError && (
-            <p className="hint">
+            <p className="ef-message ef-message--warn ef-block-note">
               هنوز کسی «سهامدار» علامت نخورده است. در «طرف حساب جدید» گزینه‌ی سهامدار را فعال کنید.
             </p>
           )}
-          <form
-            className="invoice-form form-full"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void submit()
-            }}
-          >
-            <label className="form-full">
-              نوعِ تراکنش
-              <SearchSelect value={form.type} onChange={(e) => set({ type: e.target.value })} required>
-                <option value="">— انتخابِ نوع —</option>
-                {TYPE_GROUPS.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.items.map((t) => (
-                      <option key={t.key} value={t.key}>{t.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </SearchSelect>
-              {chosen && <span className="field-hint">{chosen.hint}</span>}
-            </label>
-            <label>
-              شریک
-              <SearchSelect value={form.contactId} onChange={(e) => set({ contactId: e.target.value })} required>
-                <option value="">— انتخابِ شریک —</option>
-                {partners.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </SearchSelect>
-            </label>
-            <label>
-              مبلغ
-              <NumberInput value={form.amount} onChange={(v) => set({ amount: v })} required />
-            </label>
-            <label>
-              تاریخ
-              <JalaliDatePicker value={form.transactionDate} onChange={(iso) => set({ transactionDate: iso })} />
-            </label>
-            <label>
-              از/به
-              <SearchSelect
-                value={form.method}
-                onChange={(e) => set({ method: e.target.value as 'cash' | 'bank', bankAccountId: '', cashboxId: '' })}
-              >
-                <option value="cash">صندوق</option>
-                <option value="bank">بانک</option>
-              </SearchSelect>
-            </label>
+          <FormGrid>
+            <FormField
+              id="ot-type"
+              label="نوعِ تراکنش"
+              required
+              span="full"
+              message={chosen ? chosen.hint : undefined}
+            >
+              {(id) => (
+                <SearchSelect id={id} value={form.type} onChange={(e) => set({ type: e.target.value })}>
+                  <option value="">— انتخابِ نوع —</option>
+                  {TYPE_GROUPS.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.items.map((t) => (
+                        <option key={t.key} value={t.key}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <FormField id="ot-contact" label="شریک" required>
+              {(id) => (
+                <SearchSelect id={id} value={form.contactId} onChange={(e) => set({ contactId: e.target.value })}>
+                  <option value="">— انتخابِ شریک —</option>
+                  {partners.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <FormField id="ot-amount" label="مبلغ" required>
+              {(id) => (
+                <InputAffix unit="ریال">
+                  <NumberInput id={id} value={form.amount} onChange={(v) => set({ amount: v })} />
+                </InputAffix>
+              )}
+            </FormField>
+            <FormField label="تاریخ" required>
+              {(id) => (
+                <JalaliDatePicker
+                  id={id}
+                  value={form.transactionDate}
+                  onChange={(iso) => set({ transactionDate: iso })}
+                />
+              )}
+            </FormField>
+            <FormField label="از / به" required>
+              {(id) => (
+                <SearchSelect
+                  id={id}
+                  value={form.method}
+                  onChange={(e) =>
+                    set({ method: e.target.value as 'cash' | 'bank', bankAccountId: '', cashboxId: '' })
+                  }
+                >
+                  <option value="cash">صندوق</option>
+                  <option value="bank">بانک</option>
+                </SearchSelect>
+              )}
+            </FormField>
             {form.method === 'cash' ? (
-              <label>
-                صندوق
-                <SearchSelect value={form.cashboxId} onChange={(e) => set({ cashboxId: e.target.value })}>
-                  <option value="">— صندوقِ پیش‌فرض —</option>
-                  {cashboxes.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </SearchSelect>
-              </label>
+              <FormField label="صندوق">
+                {(id) => (
+                  <SearchSelect id={id} value={form.cashboxId} onChange={(e) => set({ cashboxId: e.target.value })}>
+                    <option value="">— صندوقِ پیش‌فرض —</option>
+                    {cashboxes.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
             ) : (
-              <label>
-                حسابِ بانکی
-                <SearchSelect value={form.bankAccountId} onChange={(e) => set({ bankAccountId: e.target.value })} required>
-                  <option value="">— انتخابِ حساب —</option>
-                  {banks.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name} — {b.bank_name}</option>
-                  ))}
-                </SearchSelect>
-              </label>
+              <FormField id="ot-bank" label="حسابِ بانکی" required>
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={form.bankAccountId}
+                    onChange={(e) => set({ bankAccountId: e.target.value })}
+                  >
+                    <option value="">— انتخابِ حساب —</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} — {b.bank_name}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
             )}
-            <label>
-              شماره‌ی مدرک
-              <input
-                value={form.evidenceRef}
-                onChange={(e) => set({ evidenceRef: e.target.value })}
-                placeholder="اختیاری"
-              />
-            </label>
-            <label className="form-full">
-              شرح
-              <input value={form.description} onChange={(e) => set({ description: e.target.value })} placeholder="اختیاری" />
-            </label>
-            <div className="form-full">
-              <button type="submit" disabled={busy}>{busy ? 'در حال ثبت…' : 'ثبتِ تراکنش'}</button>
-            </div>
-          </form>
-          <Note msg={loadError ? { kind: 'err', text: loadError } : null} />
-          <Note msg={msg} />
+            <FormField label="شماره‌ی مدرک" optional>
+              {(id) => (
+                <input id={id} value={form.evidenceRef} onChange={(e) => set({ evidenceRef: e.target.value })} />
+              )}
+            </FormField>
+            <FormField label="شرح" optional span="full">
+              {(id) => (
+                <input id={id} value={form.description} onChange={(e) => set({ description: e.target.value })} />
+              )}
+            </FormField>
+          </FormGrid>
         </SectionCard>
+        <ActionBar status={<FormStatus msg={msg ?? (loadError ? { text: loadError, kind: 'err' } : null)} />}>
+          <button type="submit" className="btn-primary" disabled={busy}>
+            <Check size={16} /> {busy ? 'در حال ثبت…' : 'ثبتِ تراکنش'}
+          </button>
+        </ActionBar>
+      </form>
 
-        <SectionCard
-          icon={Wallet}
-          title="ماندهٔ جاری شرکا"
-          description="فقط وام و بازپرداخت. آورده‌ی سرمایه بدهیِ شرکت به شریک نمی‌سازد."
-        >
+      <SectionCard
+        icon={Wallet}
+        title="ماندهٔ جاری شرکا"
+        tip="فقط وام و بازپرداخت. آورده‌ی سرمایه بدهیِ شرکت به شریک نمی‌سازد."
+        badge={balances.length > 0 ? <CountBadge accent>{fa(balances.length)} شریک</CountBadge> : undefined}
+      >
           {balances.length === 0 ? (
             <EmptyState icon={Wallet} text="هنوز سهامداری ثبت نشده است." />
           ) : (
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr><th>شریک</th><th>سهم</th><th>مانده</th></tr>
                 </thead>
@@ -287,12 +344,18 @@ export function OwnerTransactionPage({ token }: { token: string }) {
             </div>
           )}
 
-          <h4 className="vr-heading">تراکنش‌های اخیر</h4>
+      </SectionCard>
+
+      <SectionCard
+        icon={Landmark}
+        title="تراکنش‌های اخیر"
+        badge={recent.length > 0 ? <CountBadge>{fa(recent.length)} تراکنش</CountBadge> : undefined}
+      >
           {recent.length === 0 ? (
             <EmptyState icon={Landmark} text="هنوز تراکنشی ثبت نشده است." />
           ) : (
-            <div className="table-scroll">
-              <table className="cards-on-mobile">
+            <div className="table-scroll ef-table-wrap">
+              <table className="cards-on-mobile ef-table">
                 <thead>
                   <tr><th>تاریخ</th><th>شریک</th><th>نوع</th><th>مبلغ</th></tr>
                 </thead>
@@ -309,8 +372,7 @@ export function OwnerTransactionPage({ token }: { token: string }) {
               </table>
             </div>
           )}
-        </SectionCard>
-      </div>
+      </SectionCard>
     </OpsPage>
   )
 }

@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Archive,
   BellRing,
-  CheckCircle2,
   PlayCircle,
 } from 'lucide-react'
 import {
@@ -17,6 +16,7 @@ import {
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import { ActionBar, CountBadge, FormStatus } from '../../components/form/FormKit'
 import { EmptyState } from '../../components/EmptyState'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import type { PageKey } from '../../lib/navModel'
@@ -34,16 +34,6 @@ import type { PageKey } from '../../lib/navModel'
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 type Msg = { text: string; kind: 'ok' | 'err' } | null
-
-function Note({ msg }: { msg: Msg }) {
-  if (!msg) return null
-  return (
-    <div className={`fy-note ${msg.kind === 'ok' ? 'fy-note--ok' : 'fy-note--err'}`}>
-      {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-      <div>{msg.text}</div>
-    </div>
-  )
-}
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : 'خطای ناشناخته'
@@ -121,7 +111,7 @@ export function OpeningOpsPage({
         title="عملیات اول دوره"
         description="کارهایی که یک‌بار در ابتدای دوره انجام می‌شوند تا دفترها از نقطه‌ی درست شروع کنند."
       />
-
+      <div className="ef-form">
       <SectionCard
         icon={PlayCircle}
         title="مسیرِ شروعِ دوره"
@@ -181,6 +171,7 @@ export function OpeningOpsPage({
           />
         </div>
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -217,9 +208,9 @@ export function YearEndOpsPage({
         title="عملیات پایان سال"
         description="بستنِ دوره کارِ برگشت‌ناپذیری است؛ ترتیبِ زیر تضمین می‌کند چیزی جا نماند."
       />
-
+      <div className="ef-form">
       {active && daysLeft !== null && daysLeft <= 60 && !closed && (
-        <div className="fy-note fy-note--err">
+        <div className="ef-callout ef-callout--warn">
           <AlertTriangle size={16} />
           <div>
             {daysLeft >= 0
@@ -281,6 +272,7 @@ export function YearEndOpsPage({
           />
         </div>
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -329,6 +321,10 @@ export function YearEndReminderPage({ token }: { token: string }) {
   }
 
   async function create() {
+    if (picked.length === 0) {
+      setMsg({ text: 'دست‌کم یک فاصله‌ی یادآوری را علامت بزنید.', kind: 'err' })
+      return
+    }
     if (!active) return
     setBusy(true)
     setMsg(null)
@@ -369,8 +365,7 @@ export function YearEndReminderPage({ token }: { token: string }) {
         title="یادآوری عملیات پایان سال"
         description="بستنِ سال کارِ یک‌روزه نیست. این‌جا چند یادآوری روی تقویمِ برنامه می‌نشیند تا انبارگردانی و تطبیق‌ها به روزهای آخر نیفتند."
       />
-      <Note msg={msg} />
-
+      <div className="ef-form">
       {!active ? (
         <EmptyState icon={BellRing} text="سالِ مالیِ فعالی نیست — اول در «سال مالی» یک دوره تعریف و فعال کنید تا تاریخِ پایانش مشخص باشد." />
       ) : (
@@ -378,6 +373,7 @@ export function YearEndReminderPage({ token }: { token: string }) {
           <SectionCard
             icon={BellRing}
             title="ساختِ یادآوری"
+            tip="یادآوری‌ها به‌صورتِ رویدادِ تقویم ثبت می‌شوند و در «کارهای امروز» و مرکزِ هشدارها دیده می‌شوند."
             description={`پایانِ سالِ مالیِ «${active.title}»: ${formatJalali(active.end_date)}`}
           >
             <div className="cd-levels">
@@ -386,7 +382,7 @@ export function YearEndReminderPage({ token }: { token: string }) {
                 const past = date !== null && date < todayIso()
                 const on = picked.includes(offset)
                 return (
-                  <label key={offset} className={`cmp-check${past ? ' is-past' : ''}`}>
+                  <label key={offset} className={`ef-check-tip${past ? ' is-past' : ''}`}>
                     <input
                       type="checkbox"
                       checked={on}
@@ -407,27 +403,34 @@ export function YearEndReminderPage({ token }: { token: string }) {
               })}
             </div>
 
-            <div className="invoice-form-footer">
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={busy || picked.length === 0}
-                onClick={() => void create()}
-              >
-                <BellRing size={13} /> ثبت در تقویم
-              </button>
-            </div>
-            <p className="bk-hint">
-              یادآوری‌ها به‌صورتِ رویدادِ تقویم ثبت می‌شوند و در «کارهای امروز» و مرکزِ هشدارها دیده می‌شوند.
-            </p>
           </SectionCard>
+          <ActionBar
+            status={
+              <FormStatus
+                msg={msg}
+                idle={
+                  picked.length > 0
+                    ? `${fa(picked.length)} یادآوری ثبت می‌شود.`
+                    : 'فاصله‌های موردِنظر را علامت بزنید.'
+                }
+              />
+            }
+          >
+            <button type="button" className="btn-primary" disabled={busy} onClick={() => void create()}>
+              <BellRing size={16} /> ثبت در تقویم
+            </button>
+          </ActionBar>
 
-          <SectionCard icon={BellRing} title="یادآوری‌های ثبت‌شده">
+          <SectionCard
+            icon={BellRing}
+            title="یادآوری‌های ثبت‌شده"
+            badge={mine.length > 0 ? <CountBadge accent>{fa(mine.length)} یادآوری</CountBadge> : undefined}
+          >
             {mine.length === 0 ? (
               <EmptyState icon={BellRing} text="هنوز یادآوری‌ای ثبت نشده — از بالا فاصله‌های موردِنظر را انتخاب و ثبت کنید." />
             ) : (
-              <div className="table-scroll">
-                <table className="cards-on-mobile">
+              <div className="table-scroll ef-table-wrap">
+                <table className="cards-on-mobile ef-table">
                   <thead>
                     <tr>
                       <th>تاریخ</th>
@@ -441,7 +444,7 @@ export function YearEndReminderPage({ token }: { token: string }) {
                         <td data-label="تاریخ">{formatJalali(e.event_date)}</td>
                         <td className="card-title" data-label="عنوان">{e.title}</td>
                         <td data-label="وضعیت">
-                          <span className={`badge ${e.is_done ? 'success' : ''}`}>
+                          <span className={`status-badge ${e.is_done ? 'tone-success' : 'tone-muted'}`}>
                             {e.is_done ? 'انجام شده' : 'در انتظار'}
                           </span>
                         </td>
@@ -454,6 +457,7 @@ export function YearEndReminderPage({ token }: { token: string }) {
           </SectionCard>
         </>
       )}
+      </div>
     </div>
   )
 }

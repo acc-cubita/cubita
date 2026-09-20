@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle,
-  CheckCircle2,
   Contact2,
   MapPin,
   Plus,
@@ -33,6 +31,17 @@ import {
 } from '../../api'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import {
+  ActionBar,
+  CountBadge,
+  FormField,
+  FormGrid,
+  FormStatus,
+  ListToolbar,
+  RowAction,
+  SearchField,
+} from '../../components/form/FormKit'
+import { firstMissing } from '../../components/form/firstMissing'
 import { EmptyState } from '../../components/EmptyState'
 import { SearchSelect } from '../../components/SearchSelect'
 
@@ -50,16 +59,6 @@ import { SearchSelect } from '../../components/SearchSelect'
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 type Msg = { text: string; kind: 'ok' | 'err' } | null
-
-function Note({ msg }: { msg: Msg }) {
-  if (!msg) return null
-  return (
-    <div className={`fy-note ${msg.kind === 'ok' ? 'fy-note--ok' : 'fy-note--err'}`}>
-      {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-      <div>{msg.text}</div>
-    </div>
-  )
-}
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : 'خطای ناشناخته'
@@ -109,7 +108,11 @@ export function ContactGroupPage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    const missing = firstMissing([[name, 'cg-name', 'نامِ گروه را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -149,53 +152,58 @@ export function ContactGroupPage({ token }: { token: string }) {
         title="گروه جدید"
         description="طرف‌حساب‌ها را دسته کنید (عمده‌فروش، خرده‌فروش، همکار…) تا گزارش‌های فروش و مطالبات به تفکیکِ گروه معنا پیدا کنند."
       />
-      <Note msg={msg} />
+      <div className="ef-form">
+      <form noValidate onSubmit={(e) => void submit(e)}>
+        <SectionCard
+          icon={Tags}
+          title={editing ? `ویرایشِ گروه «${editing.name}»` : 'گروه تازه'}
+          tip="نام الزامی است؛ کد اختیاری و فقط برای مرتب‌سازی و ارجاع است."
+        >
+          <FormGrid>
+            <FormField id="cg-name" label="نام گروه" required>
+              {(id) => (
+                <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              )}
+            </FormField>
+            <FormField label="کد" optional>
+              {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />}
+            </FormField>
+            <FormField label="توضیحات" optional>
+              {(id) => <input id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+            </FormField>
+            <div className="ef-checks">
+              <label className="ef-check-tip">
+                <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+                فعال — گروهِ غیرفعال در فرم‌ها پیشنهاد نمی‌شود
+              </label>
+            </div>
+          </FormGrid>
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={msg} />}>
+          {editing && (
+            <button type="button" className="ef-btn-secondary" onClick={reset} disabled={busy}>
+              <X size={15} /> انصراف
+            </button>
+          )}
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {editing ? <Save size={16} /> : <Plus size={16} />} {editing ? 'ذخیرهٔ تغییرات' : 'افزودن گروه'}
+          </button>
+        </ActionBar>
+      </form>
 
       <SectionCard
         icon={Tags}
-        title={editing ? `ویرایشِ گروه «${editing.name}»` : 'گروه تازه'}
-        description="نام الزامی است؛ کد اختیاری و فقط برای مرتب‌سازی و ارجاع است."
-        actions={
-          editing ? (
-            <button type="button" onClick={reset} disabled={busy}>
-              <X size={13} /> انصراف
-            </button>
-          ) : undefined
-        }
+        title="گروه‌های موجود"
+        badge={rows ? <CountBadge accent>{fa(rows.length)} گروه</CountBadge> : undefined}
+        description="برای ویرایش روی هر ردیف کلیک کنید."
       >
-        <form onSubmit={(e) => void submit(e)} className="cmp-form">
-          <label>
-            <span>نام گروه</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
-          </label>
-          <label>
-            <span>کد</span>
-            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />
-          </label>
-          <label className="cmp-form-wide">
-            <span>توضیحات</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
-          <label className="cmp-check">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-            <span>فعال — گروهِ غیرفعال در فرم‌ها پیشنهاد نمی‌شود</span>
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              {editing ? <Save size={13} /> : <Plus size={13} />} {editing ? 'ذخیره' : 'افزودن گروه'}
-            </button>
-          </div>
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={Tags} title="گروه‌های موجود" description="برای ویرایش روی هر ردیف کلیک کنید.">
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : rows.length === 0 ? (
           <EmptyState icon={Tags} text="هنوز گروهی نساخته‌اید — اولین گروه را از فرمِ بالا اضافه کنید." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr>
                   <th>کد</th>
@@ -213,23 +221,21 @@ export function ContactGroupPage({ token }: { token: string }) {
                     <td className="card-title" data-label="نام">{r.name}</td>
                     <td data-label="طرف‌حساب">{fa(r.contact_count)}</td>
                     <td data-label="وضعیت">
-                      <span className={`badge ${r.is_active ? 'success' : ''}`}>
+                      <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-muted'}`}>
                         {r.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
                     <td data-label="توضیحات">{r.notes || '—'}</td>
-                    <td className="card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn-danger"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void remove(r)
-                        }}
-                      >
-                        <Trash2 size={13} /> حذف
-                      </button>
+                    <td className="card-actions ef-col-min">
+                      <div className="row-actions ef-row-actions">
+                        <RowAction
+                          icon={Trash2}
+                          label="حذف"
+                          danger
+                          disabled={busy}
+                          onClick={() => void remove(r)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -238,6 +244,7 @@ export function ContactGroupPage({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -298,7 +305,11 @@ export function GeoLocationsPage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    const missing = firstMissing([[name, 'geo-name', 'نامِ محل را وارد کنید.']])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -344,63 +355,71 @@ export function GeoLocationsPage({ token }: { token: string }) {
         title="محل‌های جغرافیایی"
         description="درختِ کشور ← استان ← شهر ← منطقه. طرف‌حساب به برگِ این درخت وصل می‌شود تا گزارشِ منطقه‌ای بی‌ابهام باشد."
       />
-      <Note msg={msg} />
+      <div className="ef-form">
+      <form noValidate onSubmit={(e) => void submit(e)}>
+        <SectionCard
+          icon={MapPin}
+          title={editing ? `ویرایشِ «${editing.name}»` : 'محل تازه'}
+          tip="«زیرمجموعه‌ی» خالی یعنی این محل ریشه است؛ طرف‌حساب به برگِ درخت وصل می‌شود."
+        >
+          <FormGrid>
+            <FormField id="geo-name" label="نام" required>
+              {(id) => (
+                <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              )}
+            </FormField>
+            <FormField label="سطح" required>
+              {(id) => (
+                <SearchSelect id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+                  {GEO_ORDER.map((k) => (
+                    <option key={k} value={k}>
+                      {GEO_KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <FormField label="کد" optional>
+              {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />}
+            </FormField>
+            <FormField label="زیرمجموعه‌ی" optional>
+              {(id) => (
+                <SearchSelect id={id} value={parent} onChange={(e) => setParent(e.target.value)}>
+                  <option value="">— ریشه —</option>
+                  {parentOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.path}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <div className="ef-checks">
+              <label className="ef-check-tip">
+                <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+                فعال
+              </label>
+            </div>
+          </FormGrid>
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={msg} />}>
+          {editing && (
+            <button type="button" className="ef-btn-secondary" onClick={reset} disabled={busy}>
+              <X size={15} /> انصراف
+            </button>
+          )}
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {editing ? <Save size={16} /> : <Plus size={16} />} {editing ? 'ذخیرهٔ تغییرات' : 'افزودن محل'}
+          </button>
+        </ActionBar>
+      </form>
 
       <SectionCard
         icon={MapPin}
-        title={editing ? `ویرایشِ «${editing.name}»` : 'محل تازه'}
-        description="«زیرمجموعه‌ی» خالی یعنی این محل ریشه است."
-        actions={
-          editing ? (
-            <button type="button" onClick={reset} disabled={busy}>
-              <X size={13} /> انصراف
-            </button>
-          ) : undefined
-        }
+        title="محل‌های ثبت‌شده"
+        badge={rows ? <CountBadge accent>{fa(rows.length)} محل</CountBadge> : undefined}
+        description="مرتب بر اساسِ مسیرِ درخت؛ برای ویرایش روی هر ردیف کلیک کنید."
       >
-        <form onSubmit={(e) => void submit(e)} className="cmp-form">
-          <label>
-            <span>نام</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
-          </label>
-          <label>
-            <span>سطح</span>
-            <SearchSelect value={kind} onChange={(e) => setKind(e.target.value)}>
-              {GEO_ORDER.map((k) => (
-                <option key={k} value={k}>
-                  {GEO_KIND_LABELS[k]}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label>
-            <span>کد</span>
-            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />
-          </label>
-          <label className="cmp-form-wide">
-            <span>زیرمجموعه‌ی</span>
-            <SearchSelect value={parent} onChange={(e) => setParent(e.target.value)}>
-              <option value="">— ریشه —</option>
-              {parentOptions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.path}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label className="cmp-check">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-            <span>فعال</span>
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              {editing ? <Save size={13} /> : <Plus size={13} />} {editing ? 'ذخیره' : 'افزودن محل'}
-            </button>
-          </div>
-        </form>
-      </SectionCard>
-
-      <SectionCard icon={MapPin} title="محل‌های ثبت‌شده" description="مرتب بر اساسِ مسیرِ درخت.">
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : rows.length === 0 ? (
@@ -409,8 +428,8 @@ export function GeoLocationsPage({ token }: { token: string }) {
             text="هنوز محلی ثبت نشده — از ریشه شروع کنید: مثلاً «ایران» به‌عنوانِ کشور، بعد استان‌ها زیرِ آن."
           />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr>
                   <th>مسیر</th>
@@ -418,7 +437,7 @@ export function GeoLocationsPage({ token }: { token: string }) {
                   <th>کد</th>
                   <th>طرف‌حساب</th>
                   <th>وضعیت</th>
-                  <th />
+                  <th className="ef-col-min">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -429,22 +448,20 @@ export function GeoLocationsPage({ token }: { token: string }) {
                     <td data-label="کد">{r.code || '—'}</td>
                     <td data-label="طرف‌حساب">{fa(r.contact_count)}</td>
                     <td data-label="وضعیت">
-                      <span className={`badge ${r.is_active ? 'success' : ''}`}>
+                      <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-muted'}`}>
                         {r.is_active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
-                    <td className="card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn-danger"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void remove(r)
-                        }}
-                      >
-                        <Trash2 size={13} /> حذف
-                      </button>
+                    <td className="card-actions ef-col-min">
+                      <div className="row-actions ef-row-actions">
+                        <RowAction
+                          icon={Trash2}
+                          label="حذف"
+                          danger
+                          disabled={busy}
+                          onClick={() => void remove(r)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -453,6 +470,7 @@ export function GeoLocationsPage({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }
@@ -511,7 +529,14 @@ export function RelatedPeoplePage({ token }: { token: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!contactId || !name.trim()) return
+    const missing = firstMissing([
+      [contactId, 'rp-contact', 'طرف حساب را انتخاب کنید.'],
+      [name, 'rp-name', 'نامِ فرد را وارد کنید.'],
+    ])
+    if (missing) {
+      setMsg({ text: missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -565,71 +590,86 @@ export function RelatedPeoplePage({ token }: { token: string }) {
         title="افراد مرتبط"
         description="آدم‌های واقعیِ پشتِ هر طرف‌حساب — مدیر خرید، حسابدار، راننده. شماره‌شان به‌جای فیلدِ توضیحات، جای خودش می‌نشیند و جست‌وجوپذیر است."
       />
-      <Note msg={msg} />
-
-      <SectionCard
-        icon={Contact2}
-        title={editing ? `ویرایشِ «${editing.name}»` : 'فردِ تازه'}
-        description="«نفرِ اصلی» در هر طرف‌حساب یکی است؛ با علامت‌زدنِ فردِ تازه، قبلی خودکار از این حالت درمی‌آید."
-        actions={
-          editing ? (
-            <button type="button" onClick={reset} disabled={busy}>
-              <X size={13} /> انصراف
+      <div className="ef-form">
+      <form noValidate onSubmit={(e) => void submit(e)}>
+        <SectionCard
+          icon={Contact2}
+          title={editing ? `ویرایشِ «${editing.name}»` : 'فردِ تازه'}
+          tip="«نفرِ اصلی» در هر طرف‌حساب یکی است؛ با علامت‌زدنِ فردِ تازه، قبلی خودکار از این حالت درمی‌آید."
+        >
+          <FormGrid>
+            <FormField id="rp-contact" label="طرف حساب" required>
+              {(id) => (
+                <SearchSelect id={id} value={contactId} onChange={(e) => setContactId(e.target.value)}>
+                  <option value="">— انتخاب کنید —</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
+            <FormField id="rp-name" label="نام" required>
+              {(id) => (
+                <input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
+              )}
+            </FormField>
+            <FormField label="سمت" optional>
+              {(id) => (
+                <input
+                  id={id}
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="مدیر خرید"
+                  maxLength={120}
+                />
+              )}
+            </FormField>
+            <FormField label="تلفن" optional>
+              {(id) => (
+                <input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} dir="ltr" />
+              )}
+            </FormField>
+            <FormField label="ایمیل" optional>
+              {(id) => (
+                <input id={id} value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} dir="ltr" />
+              )}
+            </FormField>
+            <div className="ef-checks">
+              <label className="ef-check-tip">
+                <input type="checkbox" checked={primary} onChange={(e) => setPrimary(e.target.checked)} />
+                نفرِ اصلیِ تماس
+              </label>
+            </div>
+          </FormGrid>
+        </SectionCard>
+        <ActionBar status={<FormStatus msg={msg} />}>
+          {editing && (
+            <button type="button" className="ef-btn-secondary" onClick={reset} disabled={busy}>
+              <X size={15} /> انصراف
             </button>
-          ) : undefined
-        }
-      >
-        <form onSubmit={(e) => void submit(e)} className="cmp-form">
-          <label className="cmp-form-wide">
-            <span>طرف حساب</span>
-            <SearchSelect value={contactId} onChange={(e) => setContactId(e.target.value)} required>
-              <option value="">— انتخاب کنید —</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </SearchSelect>
-          </label>
-          <label>
-            <span>نام</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} />
-          </label>
-          <label>
-            <span>سمت</span>
-            <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="مدیر خرید" maxLength={120} />
-          </label>
-          <label>
-            <span>تلفن</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
-          </label>
-          <label>
-            <span>ایمیل</span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} />
-          </label>
-          <label className="cmp-check">
-            <input type="checkbox" checked={primary} onChange={(e) => setPrimary(e.target.checked)} />
-            <span>نفرِ اصلیِ تماس</span>
-          </label>
-          <div className="invoice-form-footer">
-            <button type="submit" className="btn-primary" disabled={busy || !contactId || !name.trim()}>
-              {editing ? <Save size={13} /> : <Plus size={13} />} {editing ? 'ذخیره' : 'افزودن'}
-            </button>
-          </div>
-        </form>
-      </SectionCard>
+          )}
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {editing ? <Save size={16} /> : <Plus size={16} />} {editing ? 'ذخیرهٔ تغییرات' : 'افزودن فرد'}
+          </button>
+        </ActionBar>
+      </form>
 
       <SectionCard
         icon={Contact2}
         title="فهرستِ افراد"
-        actions={
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="جست‌وجو در نام، سمت، تلفن…"
-          />
-        }
+        badge={rows ? <CountBadge accent>{fa(shown.length)} نفر</CountBadge> : undefined}
+        description="برای ویرایش روی هر ردیف کلیک کنید."
       >
+        <ListToolbar>
+          <SearchField
+            value={filter}
+            onChange={setFilter}
+            placeholder="جست‌وجو در نام، سمت، تلفن…"
+            label="جست‌وجوی افراد"
+          />
+        </ListToolbar>
         {rows == null ? (
           <p className="muted">در حال بارگذاری…</p>
         ) : shown.length === 0 ? (
@@ -638,8 +678,8 @@ export function RelatedPeoplePage({ token }: { token: string }) {
             text={filter ? 'چیزی با این عبارت پیدا نشد.' : 'هنوز فردی ثبت نشده — از فرمِ بالا اولین فرد را اضافه کنید.'}
           />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr>
                   <th>نام</th>
@@ -647,7 +687,7 @@ export function RelatedPeoplePage({ token }: { token: string }) {
                   <th>سمت</th>
                   <th>تلفن</th>
                   <th>ایمیل</th>
-                  <th />
+                  <th className="ef-col-min">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -660,18 +700,16 @@ export function RelatedPeoplePage({ token }: { token: string }) {
                     <td data-label="سمت">{r.role || '—'}</td>
                     <td data-label="تلفن">{r.phone || '—'}</td>
                     <td data-label="ایمیل">{r.email || '—'}</td>
-                    <td className="card-actions">
-                      <button
-                        type="button"
-                        className="icon-btn-danger"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void remove(r)
-                        }}
-                      >
-                        <Trash2 size={13} /> حذف
-                      </button>
+                    <td className="card-actions ef-col-min">
+                      <div className="row-actions ef-row-actions">
+                        <RowAction
+                          icon={Trash2}
+                          label="حذف"
+                          danger
+                          disabled={busy}
+                          onClick={() => void remove(r)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -680,6 +718,7 @@ export function RelatedPeoplePage({ token }: { token: string }) {
           </div>
         )}
       </SectionCard>
+      </div>
     </div>
   )
 }

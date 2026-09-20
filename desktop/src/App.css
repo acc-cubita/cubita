@@ -11671,13 +11671,73 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 /* کارت‌هایی که درونِ یک بسته‌بندیِ دوستونه‌اند (پنل‌های ارز/بودجه) هم کارتِ بوم‌اند. */
 .ef-form > .split-2col > section,
-.ef-form > .workspace-split > section {
+.ef-form > .workspace-split > section,
+.ef-form > .cal-layout > section {
   padding: var(--sp-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
+/* گریدِ فیلدِ قدیمیِ صفحه‌های «شرکت» (`cmp-form`) درونِ بوم، همان ظاهرِ FormField را می‌گیرد:
+   برچسبِ پررنگِ کوچک، کنترلِ ۴۰px، راهنمای زیرِ فیلد. این‌طور فرمِ طرف‌حساب با ده‌ها فیلد
+   بدونِ بازنویسیِ تک‌تکِ آن‌ها یکدست می‌شود. */
+.ef-form .cmp-form {
+  grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 2 * var(--sp-5)) / 3)), 1fr));
+  gap: var(--sp-4) var(--sp-5);
+  align-items: start;
+}
+.ef-form .cmp-form > label { gap: 6px; }
+.ef-form .cmp-form > label > span:first-child {
+  min-height: 22px;
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ef-form .cmp-form .field-hint { margin-top: 0; font-size: var(--fs-sm); }
+.ef-form .cmp-check { font-size: var(--fs-sm); }
+.ef-form .cmp-check > span { font-weight: 400; }
+/* فرمِ قدیمیِ `invoice-form` هم، وقتی درونِ بوم است، همان گرید و برچسبِ فرمِ سازمانی را
+   می‌گیرد (مرکز هزینه، بودجه‌ی مرکز، فروش اقساطی). */
+.ef-form .invoice-form {
+  grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 2 * var(--sp-5)) / 3)), 1fr));
+  gap: var(--sp-4) var(--sp-5);
+  margin-top: 0;
+}
+.ef-form .invoice-form > label { color: var(--text-h); font-size: var(--fs-sm); font-weight: 600; }
+.ef-form .invoice-form > label > :is(input, select, .jalali-date-trigger, .item-picker-trigger) { font-weight: 400; }
+.ef-form .invoice-form .field-hint { font-weight: 400; }
+/* فوترِ قدیمیِ فرم، ته‌کارتِ راست‌چینِ تازه */
+.ef-form .invoice-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+/* تبِ قدیمیِ درونِ کارت (`cc-tabs`) هم‌شکلِ تبِ فرمِ سازمانی */
+.ef-form .cc-tabs { gap: 4px; margin-bottom: var(--sp-4); }
+.ef-form .cc-tabs button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-bottom: 3px solid transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: var(--fs-base);
+}
+.ef-form .cc-tabs button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-h); }
+.ef-form .cc-tabs button.is-active,
+.ef-form .cc-tabs button.is-active:hover:not(:disabled) {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  color: var(--accent-on-tint);
+  font-weight: 700;
+}
+/* یادداشتِ هشداری با همان قابِ callout (نزدیکیِ پایانِ سال) */
+.ef-callout--warn { border-inline-start-color: var(--danger); }
+.ef-callout--warn > svg { color: var(--danger); }
 /* عنوانِ زیربخشِ درونِ کارت (ردیف‌های سند، موجودیِ اول دوره) */
 .ef-block-title { margin: 0 0 var(--sp-3); font-size: var(--fs-md); font-weight: 600; color: var(--text-h); }
 /* دکمه‌ی متنیِ درونِ خانه (افزودنِ شماره فرعی) نباید دو خط شود. */

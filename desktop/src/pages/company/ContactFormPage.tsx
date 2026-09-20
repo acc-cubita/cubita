@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Layers, Save, UserPlus } from 'lucide-react'
+import { Layers, Save, UserPlus } from 'lucide-react'
 import {
   ADDRESS_TYPE_LABELS,
   CHANNEL_TYPE_LABELS,
@@ -34,6 +34,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
+import { ActionBar, FormStatus } from '../../components/form/FormKit'
 import type { PageKey } from '../../lib/navModel'
 import { SearchSelect } from '../../components/SearchSelect'
 
@@ -372,6 +373,11 @@ export function ContactNewPage({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (!displayName) {
+      setMsg({ text: 'نامِ طرف حساب را وارد کنید.', kind: 'err' })
+      document.querySelector<HTMLInputElement>('.ef-form input')?.focus()
+      return
+    }
     if (!displayName) return
     //: بی‌نقش یعنی طرف‌حسابی که هیچ‌جا به کار نمی‌آید — نه در فاکتور دیده می‌شود نه
     //: در فهرستِ واسطه‌ها. بهتر است همین‌جا بگوییم تا کاربر بعداً دنبالش نگردد.
@@ -525,16 +531,10 @@ export function ContactNewPage({
         description="شناسنامه‌ی مشتری، تأمین‌کننده، واسطه یا سهامدار — با نشانی‌های ارسال، تلفن‌ها، افرادِ مرتبط و کدِ تفصیلی."
       />
 
+      <div className="ef-form">
       {loading && <p className="muted">در حال بارگذاری…</p>}
 
-      {msg && (
-        <section className={`fy-note ${msg.kind === 'ok' ? 'fy-note--ok' : 'fy-note--err'}`}>
-          {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-          <div>{msg.text}</div>
-        </section>
-      )}
-
-      <form onSubmit={(e) => void submit(e)}>
+      <form noValidate onSubmit={(e) => void submit(e)}>
         <SectionCard
           icon={UserPlus}
           title="مشخصات اصلی"
@@ -719,13 +719,23 @@ export function ContactNewPage({
           )}
         </SectionCard>
 
-        <div className="invoice-form-footer">
-          <button type="button" onClick={() => onNavigate('contactlist')}>فهرستِ طرف‌حساب‌ها</button>
-          <button type="submit" className="btn-primary" disabled={busy || loading || !displayName}>
-            <Save size={13} /> {isEdit ? 'ذخیره‌ی تغییرات' : 'ثبتِ طرف حساب'}
+        <ActionBar
+          status={
+            <FormStatus
+              msg={msg}
+              idle={displayName ? `نامِ نمایشی: ${displayName}` : 'نام را وارد کنید تا نامِ نمایشی ساخته شود.'}
+            />
+          }
+        >
+          <button type="button" className="ef-btn-secondary" onClick={() => onNavigate('contactlist')}>
+            فهرستِ طرف‌حساب‌ها
           </button>
-        </div>
+          <button type="submit" className="btn-primary" disabled={busy || loading}>
+            <Save size={16} /> {isEdit ? 'ذخیره‌ی تغییرات' : 'ثبتِ طرف حساب'}
+          </button>
+        </ActionBar>
       </form>
+      </div>
     </div>
   )
 }
@@ -998,8 +1008,8 @@ function AddressesTab({ rows, setRows }: { rows: DraftAddress[]; setRows: Setter
         {rows.length === 0 ? (
           <EmptyState icon={UserPlus} text="هنوز نشانیِ اضافه‌ای وارد نشده — نشانیِ اصلی در تبِ «تماس» است." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead>
                 <tr><th>نوع</th><th>عنوان</th><th>نشانی</th><th>کد پستی</th><th>کد مسیر</th><th>اصلی</th><th /></tr>
               </thead>
@@ -1068,8 +1078,8 @@ function PhonesTab({ rows, setRows }: { rows: DraftPhone[]; setRows: Setter<Draf
         {rows.length === 0 ? (
           <EmptyState icon={UserPlus} text="هنوز شماره‌ی اضافه‌ای وارد نشده." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead><tr><th>نوع</th><th>برچسب</th><th>شماره</th><th>اصلی</th><th /></tr></thead>
               <tbody>
                 {rows.map((r, i) => (
@@ -1147,8 +1157,8 @@ function PeopleTab({ rows, setRows }: { rows: DraftPerson[]; setRows: Setter<Dra
         {rows.length === 0 ? (
           <EmptyState icon={UserPlus} text="هنوز فردِ مرتبطی وارد نشده." />
         ) : (
-          <div className="table-scroll">
-            <table className="cards-on-mobile">
+          <div className="table-scroll ef-table-wrap">
+            <table className="cards-on-mobile ef-table">
               <thead><tr><th>نام</th><th>سمت</th><th>تلفن</th><th>پست الکترونیک</th><th>اصلی</th><th /></tr></thead>
               <tbody>
                 {rows.map((r, i) => (
