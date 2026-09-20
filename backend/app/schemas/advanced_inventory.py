@@ -356,3 +356,54 @@ class SerialTraceOut(BaseModel):
     last_source_id: UUID | None
     last_entry_date: date | None
     events: list[SerialEventOut]
+
+
+# ── انسداد، فراخوان، ردیابی (§۱۵ §۱۶) ───────────────────────────────
+class BatchHoldIn(BaseModel):
+    """انسداد یا فراخوانِ یک بار. دلیل اجباری است — بارِ مسدودِ بی‌دلیل، ماهِ بعد
+    هیچ‌کس نمی‌داند چرا مسدود شده و کسی هم جرأتِ آزادکردنش را ندارد."""
+
+    hold_status: str = "blocked"
+    reason: str = ""
+
+    @field_validator("hold_status")
+    @classmethod
+    def _valid_hold(cls, v: str) -> str:
+        if v not in ("blocked", "recalled"):
+            raise ValueError("وضعیت باید «مسدود» یا «فراخوان‌شده» باشد")
+        return v
+
+
+class BatchCloseIn(BaseModel):
+    is_closed: bool = True
+
+
+class BatchMovementOut(BaseModel):
+    entry_date: date
+    qty: Decimal
+    source_type: str
+    source_id: UUID | None = None
+    #: برچسبِ خوانا، از همان واژگانِ کاردکس — نه نگاشتِ دوم.
+    document: str
+
+
+class BatchRecipientOut(BaseModel):
+    """چه کسی این بار را گرفت — §۱۶ برای فراخوان لازمش دارد."""
+
+    contact_id: UUID
+    name: str
+    issue_number: int
+    issue_date: date
+
+
+class BatchTraceOut(BaseModel):
+    batch_id: UUID
+    batch_number: str
+    received_qty: Decimal
+    sold_qty: Decimal
+    returned_qty: Decimal
+    damaged_qty: Decimal
+    reserved_qty: Decimal
+    remaining_qty: Decimal
+    movements: list[BatchMovementOut] = []
+    recipients: list[BatchRecipientOut] = []

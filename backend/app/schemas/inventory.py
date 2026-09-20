@@ -81,6 +81,48 @@ class WarehouseStockPositionOut(BaseModel):
     items: list[dict] = []
 
 
+class StockReservationIn(BaseModel):
+    """ادعای دستی روی موجودی — نگه‌داشت یا انسدادِ جزئی.
+
+    رزروِ سفارش را سرور خودش می‌سازد؛ این مسیر برای کارهایی است که سندی ندارند:
+    «این ۲۰ تا را برای مشتریِ فلان کنار بگذار» یا «این ۵۰ تا قرنطینه است».
+    """
+
+    item_id: UUID
+    warehouse_id: UUID
+    qty: Decimal
+    entry_date: date
+    #: تهی = «ادعا هست، بارش هنوز انتخاب نشده» (§۷).
+    batch_id: UUID | None = None
+    kind: str = "hold"
+    notes: str = ""
+
+    @field_validator("kind")
+    @classmethod
+    def _valid_kind(cls, v: str) -> str:
+        #: «سفارش» از این مسیر ساخته نمی‌شود — آن را جریانِ سفارش می‌سازد و
+        #: دست‌سازش یعنی ادعایی که هیچ سندی پشتش نیست.
+        if v not in ("hold", "blocked"):
+            raise ValueError("نوعِ ادعا باید «نگه‌داشت» یا «انسداد» باشد")
+        return v
+
+    @model_validator(mode="after")
+    def _positive(self) -> "StockReservationIn":
+        if self.qty <= 0:
+            raise ValueError("مقدارِ رزرو باید بزرگ‌تر از صفر باشد")
+        return self
+
+
+class StockReservationOut(BaseModel):
+    """ادعای بازِ یک سند — جمعِ ردیف‌های دفتر، نه یک ردیفِ خام."""
+
+    source_type: str
+    source_id: UUID | None = None
+    kind: str
+    qty: Decimal
+    since: date
+
+
 class AssignStockToBatchIn(BaseModel):
     """انتسابِ موجودیِ موجودِ یک کالا به یک بارِ اول‌دوره — راهِ عبورِ گاردِ ردیابی."""
 

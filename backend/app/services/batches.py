@@ -31,7 +31,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -40,7 +40,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.models.advanced_inventory import HOLD_STATUS_LABELS, StockBatch
+from app.models.advanced_inventory import HOLD_STATUS_LABELS, HOLD_STATUSES, StockBatch
 from app.models.inventory import StockAdjustment, StockLedger
 
 if TYPE_CHECKING:  # pragma: no cover - فقط برای نوع، نه زمانِ اجرا
@@ -289,17 +289,21 @@ def sellable_qty(
 def numbers(db: Session, batches: list[StockBatch], item_by_id: dict[UUID, "Item"], on: date) -> dict[UUID, dict]:
     """چهار عددِ §۴ به‌علاوه‌ی وضعیتِ مشتق، برای هر بار.
 
-    `reserved` فعلاً همیشه صفر است چون موتورِ رزرو هنوز نیامده (گامِ بعد). شکلِ
-    خروجی از همین حالا جا دارد تا وصل‌کردنش یک خط باشد، نه بازنویسیِ مصرف‌کننده‌ها.
+    `reserved` از دفترِ رزرو می‌آید (مهاجرتِ ۰۱۷۳). تا وقتی هیچ رزروی ثبت نشده
+    صفر است، یعنی این تابع برای مستأجری که رزرو به کار نمی‌برد دقیقاً همان عددِ
+    دیروز را می‌دهد.
     """
+    from app.services import reservations as reservations_svc
+
     ids = [b.id for b in batches]
     ledger = on_hand(db, ids)
     tagged = with_ledger_inbound(db, ids)
+    claims = reservations_svc.reserved_by_batch(db, ids)
     out: dict[UUID, dict] = {}
     for batch in batches:
         has_inbound = batch.id in tagged
         physical = ledger.get(batch.id, Decimal(0)) if has_inbound else Decimal(batch.qty or 0)
-        reserved = Decimal(0)
+        reserved = claims.get(batch.id, Decimal(0))
         item = item_by_id.get(batch.item_id)
         shelf = getattr(item, "minimum_sellable_shelf_life_days", None) if item else None
         out[batch.id] = {
@@ -438,6 +442,18 @@ def plan_outflow(
     if not item.is_batch_tracked:
         return []
     if wanted:
+        #: **جمعِ تفکیک باید دقیقاً مقدارِ ردیف باشد، و این‌جا سنجیده می‌شود نه در
+        #: اسکیما:** `qty` تا این‌جا به واحدِ اصلی تبدیل شده و بارها هم به واحدِ
+        #: اصلی‌اند. سنجشِ زودهنگام در اسکیما، ردیفی را که با «کارتن» وارد شده
+        #: اشتباه رد می‌کرد. بی این سنجش هم حرکت‌های دفتر با مقدارِ ردیف نمی‌خواند
+        #: و موجودی بی‌صدا منحرف می‌شد.
+        total = sum((Decimal(take) for _, take in wanted), Decimal(0))
+        if total != Decimal(qty):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"جمعِ تفکیکِ بارهای «{item.name}» ({total.normalize():f}) با مقدارِ ردیف "
+                f"({Decimal(qty).normalize():f}) برابر نیست",
+            )
         assert_allocation(db, item, warehouse_id, wanted, on)
         return [(bid, Decimal(take)) for bid, take in wanted]
 
@@ -584,3 +600,137 @@ def align_stock_to_batch(
     valuation.settle_posting(db, moves)
     db.flush()
     return batch
+
+
+# ── انسداد، فراخوان، بستن، و ردیابی (§۱۵ §۱۶) ──────────────────────────
+def set_hold(db: Session, batch: StockBatch, *, hold_status: str, reason: str, user) -> StockBatch:
+    """بار را مسدود یا فراخوان می‌کند — یا آزادش می‌کند.
+
+    **فراخوان با انسداد یکی نیست** و برای همین دو مقدارِ جدا دارند: انسداد یک
+    تصمیمِ داخلی است (شک به کیفیت، قرنطینه)، فراخوان یک رویدادِ بیرونی که ممکن
+    است پاسخ‌گویی و اطلاع‌رسانی بخواهد. یکی‌کردنشان یعنی گزارشِ «کدام بارها
+    فراخوان شده‌اند» برای همیشه غیرممکن شود.
+
+    موجودیِ فیزیکی **تکان نمی‌خورد** — بار همان‌جاست، فقط دیگر فروختنی نیست.
+    §۱۶ دقیقاً همین را می‌خواهد.
+    """
+    if hold_status not in HOLD_STATUSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "وضعیتِ انسداد نامعتبر است")
+    if hold_status != "none" and not reason.strip():
+        #: بارِ مسدودِ بی‌دلیل، ماهِ بعد هیچ‌کس نمی‌داند چرا مسدود شده و کسی هم
+        #: جرأت نمی‌کند آزادش کند.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "برای انسداد یا فراخوان، دلیل الزامی است")
+
+    batch.hold_status = hold_status
+    batch.hold_reason = reason.strip()
+    if hold_status == "none":
+        batch.held_at = None
+        batch.held_by_id = None
+    else:
+        batch.held_at = datetime.now(timezone.utc)
+        batch.held_by_id = getattr(user, "id", None)
+    db.flush()
+    return batch
+
+
+def set_closed(db: Session, batch: StockBatch, *, closed: bool, user) -> StockBatch:
+    """«کارم با این بار تمام است» — حتی اگر مانده‌ی کوچکی داشته باشد.
+
+    مشتق‌شدنی نیست چون تصمیم است، نه نتیجه‌ی عدد: باری با ۰٫۳ مانده ممکن است
+    عملاً تمام باشد و باری با مانده‌ی صفر ممکن است منتظرِ برگشتِ فروش باشد.
+    """
+    batch.is_closed = closed
+    batch.closed_at = datetime.now(timezone.utc) if closed else None
+    db.flush()
+    return batch
+
+
+#: حرکت‌هایی که «فروش» شمرده می‌شوند در گزارشِ ردیابی. برگشت‌ها جدا شمرده
+#: می‌شوند چون §۱۵ صریحاً هر دو را جداگانه خواسته.
+_SOLD_SOURCES = frozenset({"sales_invoice", "warehouse_issue"})
+_RETURNED_SOURCES = frozenset({"sales_return", "warehouse_issue_return"})
+_DAMAGED_SOURCES = frozenset({"adjustment"})
+
+
+def trace(db: Session, batch: StockBatch) -> dict:
+    """گزارشِ کاملِ یک بار: چه رسید، کجا رفت، به که (§۱۵ §۱۶).
+
+    همه‌چیز از `stock_ledger`ِ برچسب‌خورده مشتق می‌شود — هیچ شمارنده‌ی جدایی
+    نگهداری نمی‌شود که بتواند از واقعیت عقب بیفتد.
+
+    واژگانِ سند از `valuation.SOURCE_LABELS` می‌آید، نه از نگاشتِ دوم: اگر دو
+    فهرستِ نامِ سند داشته باشیم، روزی یکی‌شان به‌روز می‌شود و دیگری نه.
+    """
+    from app.models.inventory import Contact
+    from app.models.invoices import WarehouseIssue
+    from app.services import reservations as reservations_svc
+    from app.services import valuation
+
+    rows = ledger_rows(db, batch.id)
+    numbers = valuation.document_numbers(db, [(r.source_type, r.source_id) for r in rows])
+
+    received = sold = returned = damaged = Decimal(0)
+    movements: list[dict] = []
+    issue_ids: set = set()
+    for row in rows:
+        qty = Decimal(row.qty)
+        if qty > 0:
+            #: برگشتِ فروش هم ورودی است، ولی «رسید» نیست — جدا شمرده می‌شود.
+            if row.source_type in _RETURNED_SOURCES:
+                returned += qty
+            else:
+                received += qty
+        else:
+            out = -qty
+            if row.source_type in _SOLD_SOURCES:
+                sold += out
+            elif row.source_type in _DAMAGED_SOURCES:
+                damaged += out
+        if row.source_type == "warehouse_issue" and row.source_id is not None:
+            issue_ids.add(row.source_id)
+        number = numbers.get((row.source_type, row.source_id))
+        movements.append({
+            "entry_date": row.entry_date,
+            "qty": qty,
+            "source_type": row.source_type,
+            "source_id": row.source_id,
+            "document": valuation.document_label(row.source_type, number),
+        })
+
+    #: **§۱۶ — «مشتریانی که این بار را دریافت کرده‌اند قابل شناسایی باشند».**
+    #: چون حرکتِ خروج شناسه‌ی سندش را دارد و سند تحویل‌گیرنده را، این پرسش بی
+    #: هیچ جدولِ تازه‌ای جواب دارد.
+    recipients: list[dict] = []
+    if issue_ids:
+        issues = db.query(WarehouseIssue).filter(WarehouseIssue.id.in_(issue_ids)).all()
+        contact_ids = {i.receiver_id for i in issues if i.receiver_id is not None}
+        names = {
+            c.id: c.name
+            for c in db.query(Contact).filter(Contact.id.in_(contact_ids)).all()
+        } if contact_ids else {}
+        seen: set = set()
+        for issue in issues:
+            if issue.receiver_id is None or issue.receiver_id in seen:
+                continue
+            seen.add(issue.receiver_id)
+            recipients.append({
+                "contact_id": issue.receiver_id,
+                "name": names.get(issue.receiver_id, "—"),
+                "issue_number": issue.number,
+                "issue_date": issue.issue_date,
+            })
+
+    remaining = on_hand(db, [batch.id]).get(batch.id, Decimal(0))
+    reserved = reservations_svc.reserved_by_batch(db, [batch.id]).get(batch.id, Decimal(0))
+    return {
+        "batch_id": batch.id,
+        "batch_number": batch.batch_number,
+        "received_qty": received,
+        "sold_qty": sold,
+        "returned_qty": returned,
+        "damaged_qty": damaged,
+        "reserved_qty": reserved,
+        "remaining_qty": remaining,
+        "movements": movements,
+        "recipients": recipients,
+    }

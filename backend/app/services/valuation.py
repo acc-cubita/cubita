@@ -418,7 +418,18 @@ def document_numbers(db: Session, keys: Iterable[tuple[str, UUID | None]]) -> di
             wanted[model].add(source_id)
     by_model: dict[tuple[type, UUID], int] = {}
     for model, ids in wanted.items():
-        for doc_id, number in db.query(model.id, model.number).filter(model.id.in_(ids)).all():
+        #: **هر سندی شماره ندارد.** `StockAdjustment` از مهاجرتِ ۰۱۵۸ در
+        #: `_SOURCE_MODELS` است ولی ستونِ `number` ندارد، و این تابع کورکورانه
+        #: `model.number` می‌خواند — یعنی کاردکسِ **هر کالایی که یک تعدیل خورده
+        #: باشد** با `AttributeError` و خطای ۵۰۰ می‌شکست. با یک درخواستِ واقعی
+        #: به `/api/reports/kardex/{id}` بازتولید و تأیید شد.
+        #:
+        #: سندِ بی‌شماره برچسبِ بی‌شماره می‌گیرد («تعدیل انبار»)، که همان چیزی
+        #: است که `document_label` از قبل بلد بود.
+        number_col = getattr(model, "number", None)
+        if number_col is None:
+            continue
+        for doc_id, number in db.query(model.id, number_col).filter(model.id.in_(ids)).all():
             by_model[(model, doc_id)] = number
     out: dict[tuple[str, UUID], int] = {}
     for source_type, source_id in keys:

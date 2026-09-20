@@ -5734,6 +5734,40 @@ export const deleteStockBatch = (token: string, id: string) => authedDelete(toke
 export const fetchBatchReconciliation = (token: string) =>
   authedGet<BatchReconciliationRow[]>(token, '/api/stock-batches/reconciliation')
 
+/** گزارشِ کاملِ یک بار — §۱۵ و §۱۶. همه‌چیز از دفترِ انبار مشتق می‌شود. */
+export interface BatchTrace {
+  batch_id: string
+  batch_number: string
+  received_qty: string
+  sold_qty: string
+  returned_qty: string
+  damaged_qty: string
+  reserved_qty: string
+  remaining_qty: string
+  movements: {
+    entry_date: string
+    qty: string
+    source_type: string
+    source_id: string | null
+    document: string
+  }[]
+  /** §۱۶ — «مشتریانی که این بار را دریافت کرده‌اند قابل شناسایی باشند». */
+  recipients: { contact_id: string; name: string; issue_number: number; issue_date: string }[]
+}
+export const fetchBatchTrace = (token: string, batchId: string) =>
+  authedGet<BatchTrace>(token, `/api/stock-batches/${batchId}/trace`)
+
+/** انسداد یا فراخوانِ بار. موجودیِ فیزیکی تکان نمی‌خورد — فقط فروختنی نیست. */
+export const holdBatch = (
+  token: string,
+  batchId: string,
+  data: { hold_status: 'blocked' | 'recalled'; reason: string },
+) => authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/hold`, data)
+export const releaseBatchHold = (token: string, batchId: string) =>
+  authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/release`, {})
+export const closeBatch = (token: string, batchId: string, isClosed: boolean) =>
+  authedSend<StockBatchRecord>(token, 'POST', `/api/stock-batches/${batchId}/close`, { is_closed: isClosed })
+
 /** موقعیتِ قرارگیری داخلِ انبار — راهرو/قفسه/طبقه. */
 export interface WarehouseLocationRecord {
   id: string
@@ -8978,7 +9012,18 @@ export interface DirectWarehouseIssueIn {
   cost_center_id?: string | null
   account_id?: string | null
   description?: string
-  lines: { item_id: string; qty: number; unit_id?: string | null; account_id?: string | null; description?: string }[]
+  lines: {
+    item_id: string
+    qty: number
+    unit_id?: string | null
+    account_id?: string | null
+    description?: string
+    /**
+     * نقضِ FEFO (§۱۱) — مقدارها به **واحدِ اصلیِ کالا**.
+     * `null`/نیامده = سرور خودش نزدیک‌ترین انقضا را برمی‌دارد.
+     */
+    batch_allocations?: { batch_id: string; qty: number }[] | null
+  }[]
 }
 
 export const createDirectWarehouseIssue = (token: string, data: DirectWarehouseIssueIn, idempotencyKey: string) =>

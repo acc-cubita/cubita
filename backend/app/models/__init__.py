@@ -17,6 +17,7 @@ from app.models.counters import DocumentCounter
 from app.models.device_token import DeviceToken
 from app.models.email_verification import EmailVerificationCode
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, StockBatchSerial
+from app.models.stock_reservations import StockReservation
 from app.models.warehouse_locations import WarehouseLocation
 from app.models.crm import (
     CrmActivity,
@@ -179,6 +180,7 @@ __all__ = [
     "PriceList",
     "PriceListItem",
     "StockBatch",
+    "StockReservation",
     "WarehouseLocation",
     "StockBatchSerial",
     "FixedAsset",

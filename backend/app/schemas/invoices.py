@@ -586,6 +586,19 @@ class WarehouseReceiptOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BatchAllocationIn(BaseModel):
+    """«از این بار، این‌قدر» — تفکیکِ صریحِ یک ردیفِ خروج بینِ بارها."""
+
+    batch_id: UUID
+    qty: Decimal
+
+    @model_validator(mode="after")
+    def _positive(self) -> "BatchAllocationIn":
+        if self.qty <= 0:
+            raise ValueError("مقدارِ تفکیکِ بار باید بزرگ‌تر از صفر باشد")
+        return self
+
+
 class WarehouseIssueLineIn(BaseModel):
     """ردیفِ خروج — یا به ردیفِ فاکتور اشاره می‌کند، یا خودش کالا را نام می‌برد."""
 
@@ -598,6 +611,16 @@ class WarehouseIssueLineIn(BaseModel):
     #: معینِ طرفِ بدهکار برای «مصرف» و «سایر». خالی = حسابِ سربرگ.
     account_id: UUID | None = None
     description: str = ""
+    #: **نقضِ FEFO (§۱۱).** خالی یعنی «خودت تصمیم بگیر» و سرور نزدیک‌ترین انقضا را
+    #: برمی‌دارد. پرکردنش یعنی انباردار می‌داند کدام بار را برداشته — و او جلوی
+    #: قفسه ایستاده، نه ما. سرور فقط اعتبارسنجی می‌کند: بار مالِ همین کالا و انبار
+    #: باشد، منعقد/مردود/بسته نباشد، و مقدارش را داشته باشد.
+    #:
+    #: مقدارها به **واحدِ اصلیِ کالا**اند، نه واحدِ ردیف: بار در واحدِ اصلی نگهداری
+    #: می‌شود و `unit_id` فقط شکلِ ورودِ `qty` را عوض می‌کند. برابریِ جمعِ تفکیک با
+    #: مقدارِ ردیف هم به همین دلیل این‌جا سنجیده نمی‌شود — آن‌جا سنجیده می‌شود که
+    #: هر دو عدد در یک واحد باشند (`batches.plan_outflow`).
+    batch_allocations: list["BatchAllocationIn"] | None = None
 
     @model_validator(mode="after")
     def validate_qty(self) -> "WarehouseIssueLineIn":

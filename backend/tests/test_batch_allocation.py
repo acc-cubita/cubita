@@ -267,3 +267,71 @@ def test_warehouse_location_crud_and_soft_delete(client, db):
     #: موقعیتِ دارای بار حذف نمی‌شود، غیرفعال می‌شود — وگرنه بار محلش را گم می‌کند.
     assert client.delete(f"/api/warehouse-locations/{loc['id']}").status_code == 204
     assert client.get("/api/warehouse-locations", params={"warehouse_id": wh}).json()[0]["is_active"] is False
+
+
+# ── نقضِ FEFO (§۱۱) ──────────────────────────────────────────────────
+def test_user_can_override_fefo_on_a_direct_issue(client, db):
+    """انباردار جلوی قفسه ایستاده، نه ما — پس باید بتواند بارِ دیگری بردارد."""
+    wh = _main_wh(client)
+    it = _item(client, "BA-OVR", "نقض")
+    _buy(client, wh, it, 10)
+    _buy(client, wh, it, 10)
+    assert client.patch(f"/api/items/{it}", json={"is_batch_tracked": True}).status_code == 200
+
+    first, second = _batches(db, it)
+    _set_expiry(client, str(first.id), str(date.today() + timedelta(days=5)))
+    _set_expiry(client, str(second.id), str(date.today() + timedelta(days=200)))
+
+    receiver = client.post("/api/contacts", json={"name": "گیرنده", "type": "customer"}).json()["id"]
+    #: FEFO بارِ اول را می‌داد؛ ما صریح بارِ دوم را می‌خواهیم.
+    r = client.post("/api/warehouse-issues", json={
+        "issue_date": TODAY, "issue_type": "sale", "warehouse_id": wh, "receiver_id": receiver,
+        "lines": [{
+            "item_id": it, "qty": 6,
+            "batch_allocations": [{"batch_id": str(second.id), "qty": 6}],
+        }],
+    })
+    assert r.status_code == 201, r.text
+
+    db.expire_all()
+    assert batches_svc.on_hand(db, [first.id])[first.id] == 10, "بارِ نزدیک‌تر نباید لمس شود"
+    assert batches_svc.on_hand(db, [second.id])[second.id] == 4
+
+
+def test_override_must_add_up_to_the_line_quantity(client, db):
+    wh = _main_wh(client)
+    it = _item(client, "BA-SUMCHK", "جمع")
+    _buy(client, wh, it, 10)
+    assert client.patch(f"/api/items/{it}", json={"is_batch_tracked": True}).status_code == 200
+    batch = _batches(db, it)[0]
+    receiver = client.post("/api/contacts", json={"name": "گیرنده۲", "type": "customer"}).json()["id"]
+
+    r = client.post("/api/warehouse-issues", json={
+        "issue_date": TODAY, "issue_type": "sale", "warehouse_id": wh, "receiver_id": receiver,
+        "lines": [{
+            "item_id": it, "qty": 6,
+            "batch_allocations": [{"batch_id": str(batch.id), "qty": 4}],
+        }],
+    })
+    assert r.status_code == 400
+    assert "برابر نیست" in r.json()["detail"]
+
+
+def test_override_cannot_exceed_the_batch(client, db):
+    wh = _main_wh(client)
+    it = _item(client, "BA-OVERDRAW", "زیاده")
+    _buy(client, wh, it, 5)
+    _buy(client, wh, it, 20)
+    assert client.patch(f"/api/items/{it}", json={"is_batch_tracked": True}).status_code == 200
+    small = _batches(db, it)[0]
+    receiver = client.post("/api/contacts", json={"name": "گیرنده۳", "type": "customer"}).json()["id"]
+
+    r = client.post("/api/warehouse-issues", json={
+        "issue_date": TODAY, "issue_type": "sale", "warehouse_id": wh, "receiver_id": receiver,
+        "lines": [{
+            "item_id": it, "qty": 9,
+            "batch_allocations": [{"batch_id": str(small.id), "qty": 9}],
+        }],
+    })
+    assert r.status_code == 400
+    assert "کافی نیست" in r.json()["detail"]

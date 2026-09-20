@@ -12031,3 +12031,43 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
+
+/* ── انتخابگرِ بارِ ردیفِ خروج (FEFO، قابلِ نقض) ───────────────────────── */
+.batch-allocation-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-1);
+}
+.batch-allocation-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.batch-allocation-summary > span {
+  /* رشته‌ی «بار: مقدار · بار: مقدار» می‌تواند بلند شود؛ باید بشکند نه اینکه
+     صفحه را پهن کند. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.batch-allocation-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.batch-allocation-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .batch-allocation-summary,
+  .batch-allocation-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

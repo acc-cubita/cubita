@@ -41,6 +41,7 @@ from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import units
 from app.services import batches as batches_svc
+from app.services import reservations as reservations_svc
 from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
@@ -217,6 +218,26 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
                 status.HTTP_400_BAD_REQUEST,
                 f"موجودی «{fresh[item_id].name}» کافی نیست (موجود: {available}, درخواستی: {qty})",
             )
+        #: **رزروِ سندهای دیگر هم موجودی را می‌بلعد (§۸).** ادعای خودِ این سند
+        #: کسر نمی‌شود — وگرنه رزرو به‌جای تضمینِ کالا مانعِ تحویلِ همان کالا
+        #: می‌شد. تا وقتی هیچ رزروی ثبت نشده، این عدد دقیقاً همان بالایی است،
+        #: پس برای مستأجری که رزرو به کار نمی‌برد هیچ‌چیز عوض نمی‌شود.
+        #: `sales_invoice` واژگانِ منشأِ سند است (همان `valuation.SOURCE_LABELS`)،
+        #: نه `issue.origin` که «invoice/direct» است و هیچ رزروی با آن ثبت
+        #: نمی‌شود. امروز هیچ مسیری برای فاکتورِ فروش رزرو نمی‌سازد، پس این کسر
+        #: صفر است و گارد همه‌ی ادعاها را می‌شمارد — که همان رفتارِ درست است.
+        #: وقتی سفارشِ بازار رزرو بسازد (فاز ۲)، همین کلید سرِ جایش است.
+        unclaimed = reservations_svc.available_for(
+            db, item_id, issue.warehouse_id,
+            source_type="sales_invoice", source_id=issue.sales_invoice_id,
+        )
+        if unclaimed < qty:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"موجودیِ «{fresh[item_id].name}» رزروِ سندهای دیگر است "
+                f"(قابلِ استفاده: {unclaimed.normalize():f}، درخواستی: {Decimal(qty).normalize():f}). "
+                "اول رزروِ مربوط را آزاد کنید.",
+            )
 
     issue.number = next_document_number(db, DOC_WAREHOUSE_ISSUE)
     db.add(issue)
@@ -348,6 +369,7 @@ def create_warehouse_issue(
             code=by_id[row.sales_invoice_line_id].item_code_snapshot or "",
             name=by_id[row.sales_invoice_line_id].item_name_snapshot or "",
             unit=by_id[row.sales_invoice_line_id].unit_snapshot or "",
+            batch_allocations=[(a.batch_id, Decimal(a.qty)) for a in (row.batch_allocations or [])] or None,
         )
         #: ترتیبِ ردیف‌ها همان ترتیبی است که کاربر فرستاده، نه ترتیبِ تصادفیِ UUID.
         for row in data.lines
@@ -409,7 +431,10 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
             if wanted not in checked:
                 checked[wanted] = _debit_account(db, wanted, inventory_ids).id
             account_id = checked[wanted]
-        rows.append(_Row(item=item, qty=qty, account_id=account_id, description=line.description.strip()))
+        rows.append(_Row(
+            item=item, qty=qty, account_id=account_id, description=line.description.strip(),
+            batch_allocations=[(a.batch_id, Decimal(a.qty)) for a in (line.batch_allocations or [])] or None,
+        ))
     if sale:
         #: §۷ §۵۳ فصلِ کالا — ماده‌ی اولیه موجودی دارد ولی فروختنی نیست.
         items_svc.assert_sellable(db, [row.item for row in rows])

@@ -14,7 +14,10 @@ from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, 
 from app.models.inventory import Contact, Item, StockAdjustment, StockLedger
 from app.models.user import User
 from app.schemas.advanced_inventory import (
+    BatchCloseIn,
+    BatchHoldIn,
     BatchReconciliationOut,
+    BatchTraceOut,
     SerialAssignIn,
     SerialAssignOut,
     SerialTraceOut,
@@ -587,3 +590,64 @@ def assign_serials(
         event_type=data.event_type,
         user=user,
     )
+
+
+# ── انسداد، فراخوان، بستن، ردیابی (§۱۵ §۱۶) ─────────────────────────
+@router.post("/stock-batches/{batch_id}/hold", response_model=StockBatchOut)
+def hold_batch(
+    batch_id: UUID,
+    data: BatchHoldIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """بار را مسدود یا فراخوان می‌کند (§۱۶).
+
+    موجودیِ فیزیکی تکان نمی‌خورد — بار همان‌جاست، فقط از «قابلِ فروش» بیرون
+    می‌رود و FEFO دیگر برش نمی‌دارد. برای همین هم انسداد سندِ انبار نمی‌خورد:
+    چیزی جابه‌جا نشده.
+    """
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_hold(db, batch, hold_status=data.hold_status, reason=data.reason, user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.post("/stock-batches/{batch_id}/release", response_model=StockBatchOut)
+def release_batch_hold(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """انسداد یا فراخوان را برمی‌دارد — بار دوباره قابلِ فروش می‌شود."""
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_hold(db, batch, hold_status="none", reason="", user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.post("/stock-batches/{batch_id}/close", response_model=StockBatchOut)
+def close_batch(
+    batch_id: UUID,
+    data: BatchCloseIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """بار را می‌بندد یا باز می‌کند — تصمیم است، نه نتیجه‌ی عدد."""
+    batch = _get_batch_or_404(db, batch_id)
+    batches_svc.set_closed(db, batch, closed=data.is_closed, user=user)
+    db.refresh(batch)
+    return _decorate_batches(db, [batch])[0]
+
+
+@router.get("/stock-batches/{batch_id}/trace", response_model=BatchTraceOut)
+def trace_batch(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """گزارشِ کاملِ یک بار: چه رسید، چه فروخته شد، به که، با کدام سند (§۱۵ §۱۶).
+
+    همه‌چیز از دفترِ انبار مشتق می‌شود؛ هیچ شمارنده‌ای نگهداری نمی‌شود که بتواند
+    عقب بیفتد.
+    """
+    return batches_svc.trace(db, _get_batch_or_404(db, batch_id))

@@ -1,4 +1,5 @@
-from uuid import UUID
+from datetime import date
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
@@ -31,8 +32,11 @@ from app.services import items as items_svc
 from app.services import units as units_svc
 from app.services import warehouses as warehouses_svc
 from app.services import batches as batches_svc
+from app.services import reservations as reservations_svc
 from app.schemas.inventory import (
     AssignStockToBatchIn,
+    StockReservationIn,
+    StockReservationOut,
     WarehouseLocationIn,
     WarehouseLocationOut,
     WarehouseLocationUpdateIn,
@@ -1322,3 +1326,71 @@ def assign_stock_to_batch(
         on=data.assigned_date,
     )
     return {"batch_id": str(batch.id), "batch_number": batch.batch_number, "qty": str(batch.qty)}
+
+
+# ── رزروِ موجودی (مهاجرتِ ۰۱۷۳) ──────────────────────────────────────────
+@router.get("/api/stock-reservations", response_model=list[StockReservationOut])
+def list_stock_reservations(
+    item_id: UUID = Query(...),
+    warehouse_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("inventory", "view")),
+):
+    """ادعاهای بازِ یک کالا در یک انبار، به تفکیکِ سند (§۱۰).
+
+    ردیف‌های خام برنمی‌گردند: دفتر علامت‌دار است و ردیفِ «رزرو ۱۵۰» بی ردیفِ
+    «آزادسازی ۵۰»ِ کنارش گمراه‌کننده است. آن‌چه معنا دارد **مانده‌ی هر سند** است.
+    """
+    return reservations_svc.open_reservations(db, item_id, warehouse_id)
+
+
+@router.post("/api/stock-reservations", response_model=dict, status_code=201)
+def create_stock_reservation(
+    data: StockReservationIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """ادعای دستی روی موجودی — پس از قفلِ کالا و سنجشِ موجودیِ آزاد.
+
+    شناسه‌ی سند خودِ ردیف است، پس هر ادعای دستی مستقل می‌ماند و بعداً با همان
+    شناسه آزاد می‌شود.
+    """
+    item = db.get(Item, data.item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    warehouses_svc.assert_usable(db, data.warehouse_id, action="رزروِ موجودی")
+    handle = uuid4()
+    reservations_svc.reserve(
+        db,
+        item=item,
+        warehouse_id=data.warehouse_id,
+        qty=data.qty,
+        on=data.entry_date,
+        source_type="manual",
+        source_id=handle,
+        batch_id=data.batch_id,
+        kind=data.kind,
+        notes=data.notes,
+        user=user,
+    )
+    return {"source_type": "manual", "source_id": str(handle), "qty": str(data.qty)}
+
+
+@router.delete("/api/stock-reservations/{source_id}", status_code=200, response_model=dict)
+def release_stock_reservation(
+    source_id: UUID,
+    source_type: str = Query("manual"),
+    qty: Decimal | None = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("inventory", "update")),
+):
+    """ادعای یک سند را آزاد می‌کند — کامل، یا به‌اندازه (لغوِ جزئیِ §۱۰).
+
+    چیزی حذف نمی‌شود: ردیفِ منفی کنارِ ردیفِ مثبت می‌نشیند تا تاریخچه بماند.
+    """
+    freed = reservations_svc.release(
+        db, source_type=source_type, source_id=source_id, on=date.today(), qty=qty, user=user,
+    )
+    if freed == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ادعای بازی با این شناسه نیست")
+    return {"released": str(freed)}
