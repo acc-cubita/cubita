@@ -722,6 +722,11 @@ class ItemIn(BaseModel):
     is_serial_tracked: bool = False
     #: ردیابیِ بارِ ورودی. پیش‌فرض خاموش = رفتارِ دیروز برای هر کالای موجود.
     is_batch_tracked: bool = False
+    #: قیمتِ مصرف‌کننده (§۱۷ §۱۸) — پیش‌فرض خاموش، و هر سه قیمت اختیاری (§۲۸).
+    has_consumer_price: bool = False
+    printed_consumer_price: Decimal | None = None
+    suggested_retail_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
     #: حداقلِ عمرِ مفیدِ لازم برای فروش (روز). تهی = بدونِ قاعده.
     minimum_sellable_shelf_life_days: int | None = None
     #: §۱۳ — نرخِ کالا. صفر = «نرخِ سرِ فاکتور»، نه معافیت (معافیت پرچمِ جداست).
@@ -829,6 +834,10 @@ class ItemOut(BaseModel):
     is_serial_tracked: bool = False
     is_batch_tracked: bool = False
     minimum_sellable_shelf_life_days: int | None = None
+    has_consumer_price: bool = False
+    printed_consumer_price: Decimal | None = None
+    suggested_retail_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
     tax_rate: Decimal = Decimal(0)
     duty_rate: Decimal = Decimal(0)
     purchase_vat_status: str = "taxable"
@@ -880,6 +889,10 @@ class ItemUpdateIn(BaseModel):
     is_serial_tracked: bool | None = None
     is_batch_tracked: bool | None = None
     minimum_sellable_shelf_life_days: int | None = None
+    has_consumer_price: bool | None = None
+    printed_consumer_price: Decimal | None = None
+    suggested_retail_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
     tax_rate: Decimal | None = None
     duty_rate: Decimal | None = None
     purchase_vat_status: str | None = None

@@ -71,6 +71,10 @@ interface DraftForm {
   isSerialTracked: boolean
   isBatchTracked: boolean
   minShelfLifeDays: string
+  hasConsumerPrice: boolean
+  printedPrice: string
+  suggestedPrice: string
+  maxPrice: string
 }
 
 const EMPTY_FORM: DraftForm = {
@@ -82,6 +86,7 @@ const EMPTY_FORM: DraftForm = {
   minStock: '', maxStock: '', groupId: '', attributes: {}, warehouses: [],
   isService: false, isSellable: true, isSerialTracked: false,
   isBatchTracked: false, minShelfLifeDays: '',
+  hasConsumerPrice: false, printedPrice: '', suggestedPrice: '', maxPrice: '',
 }
 
 /**
@@ -271,6 +276,10 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       isSerialTracked: p.is_serial_tracked,
       isBatchTracked: p.is_batch_tracked ?? false,
       minShelfLifeDays: p.minimum_sellable_shelf_life_days == null ? '' : String(p.minimum_sellable_shelf_life_days),
+      hasConsumerPrice: p.has_consumer_price ?? false,
+      printedPrice: p.printed_consumer_price == null ? '' : String(p.printed_consumer_price),
+      suggestedPrice: p.suggested_retail_price == null ? '' : String(p.suggested_retail_price),
+      maxPrice: p.maximum_retail_price == null ? '' : String(p.maximum_retail_price),
     })
     setMessage(null)
   }
@@ -329,6 +338,12 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       is_serial_tracked: form.isService ? false : form.isSerialTracked,
       is_batch_tracked: form.isService ? false : form.isBatchTracked,
       minimum_sellable_shelf_life_days: form.minShelfLifeDays === '' ? null : Number(form.minShelfLifeDays),
+      has_consumer_price: form.hasConsumerPrice,
+      //: رشته‌ی خالی → `null` و نه صفر: §۳۰ می‌گوید فیلدِ بی‌مقدار اصلاً نمایش
+      //: داده نشود، و صفر یک مقدارِ معتبرِ دیگر است (کالای رایگان).
+      printed_consumer_price: form.printedPrice === '' ? null : Number(form.printedPrice),
+      suggested_retail_price: form.suggestedPrice === '' ? null : Number(form.suggestedPrice),
+      maximum_retail_price: form.maxPrice === '' ? null : Number(form.maxPrice),
     }
     setSaving(true)
     try {
@@ -730,6 +745,42 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 روشن می‌شود که همه‌ی موجودیِ فعلی به یک بار منتسب باشد؛ اگر نبود، سرور می‌گوید
                 چه‌قدر بی‌بار مانده و با «انتسابِ موجودی به بار» می‌شود درستش کرد.
               </p>
+              <label className="cal-check-inline">
+                <input
+                  type="checkbox"
+                  checked={form.hasConsumerPrice}
+                  onChange={(e) => setForm({ ...form, hasConsumerPrice: e.target.checked })}
+                />
+                قیمتِ مصرف‌کننده دارد
+              </label>
+              {/*
+                §۱۷ — این قابلیت برای همه‌ی کالاها نیست: پیچ و مهره قیمتِ چاپی
+                ندارد. §۲۸ هم می‌گوید هیچ‌کدام اجباری نشود، پس فیلدها فقط وقتی
+                دیده می‌شوند که کاربر صریحاً گفته باشد این کالا چنین قیمتی دارد.
+              */}
+              {form.hasConsumerPrice && (
+                <>
+                  <div className="field-row">
+                    <label>
+                      قیمتِ چاپی روی بسته
+                      <NumberInput value={form.printedPrice} onChange={(v) => setForm({ ...form, printedPrice: v })} placeholder="اختیاری" />
+                    </label>
+                    <label>
+                      قیمتِ پیشنهادیِ فروش
+                      <NumberInput value={form.suggestedPrice} onChange={(v) => setForm({ ...form, suggestedPrice: v })} placeholder="اختیاری" />
+                    </label>
+                    <label>
+                      حداکثرِ قیمتِ فروش
+                      <NumberInput value={form.maxPrice} onChange={(v) => setForm({ ...form, maxPrice: v })} placeholder="اختیاری" />
+                    </label>
+                  </div>
+                  <p className="hint">
+                    این سه قیمت از هم جدا هستند (§۱۸): «چاپی» آن‌چه واقعاً روی بسته نوشته شده،
+                    «پیشنهادی» نظرِ تولیدکننده یا پخش‌کننده، و «حداکثر» سقفِ مجاز. هر بارِ ورودی
+                    می‌تواند قیمتِ خودش را داشته باشد و بر این‌ها بچربد.
+                  </p>
+                </>
+              )}
               {form.isBatchTracked && (
                 <label>
                   حداقل عمرِ مفیدِ فروش (روز)

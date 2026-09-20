@@ -12224,3 +12224,18 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   color: var(--danger);
   font-weight: 600;
 }
+
+/* پیشنهادِ اشانتیون روی کارتِ کاتالوگ و سودِ زنده در سبد (§۲۵ §۲۶) */
+.product-card-bonus {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+}
+.cart-profit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+  /* عددِ بلندِ فارسی نباید ستون را از عرضِ نمایشگر بزرگ‌تر کند. */
+  overflow-wrap: anywhere;
+}

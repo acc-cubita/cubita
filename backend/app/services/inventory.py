@@ -670,6 +670,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 discount=line_discount,
                 addition=line_addition,
                 duty_amount=line_duty,
+                #: یادداشتِ اشانتیون (§۲۵) — هیچ محاسبه‌ای به آن وابسته نیست،
+                #: چون تخفیفِ ردیف از قبل بهای واقعی را درست کرده.
+                bonus_qty=line.bonus_qty,
                 description=line.description,
                 #: **سمتِ خرید پرچمِ خودش را دارد (§۱۳).** تا امروز همان
                 #: `vat_status`ِ فروش کپی می‌شد، یعنی کوبیتا فرض می‌کرد وضعیتِ

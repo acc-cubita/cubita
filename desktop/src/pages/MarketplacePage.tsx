@@ -5,6 +5,7 @@ import {
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
   type CatalogListing, type DistributorCard, type MpConnection, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
 } from '../api'
+import { orderAnalysis } from '../lib/margins'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
@@ -204,6 +205,19 @@ function Distributors({ token, trade }: { token: string; trade: string | null })
 
 interface CartLine { listing: CatalogListing; qty: string }
 
+/**
+ * چند تا اشانتیون به این تعداد تعلق می‌گیرد (§۲۵).
+ *
+ * «۱۰ بخر ۱ رایگان» یعنی به‌ازای هر ۱۰ کاملِ سفارش، ۱ تا. ۲۵ تا سفارش = ۲ تا
+ * اشانتیون، نه ۲٫۵ — نصفِ کارتن تحویل نمی‌شود.
+ */
+function bonusFor(listing: CatalogListing, qty: number): number {
+  const threshold = Number(listing.bonus_threshold_qty) || 0
+  const bonus = Number(listing.bonus_qty) || 0
+  if (threshold <= 0 || bonus <= 0 || qty < threshold) return 0
+  return Math.floor(qty / threshold) * bonus
+}
+
 function Catalog({ token, trade }: { token: string; trade: string | null }) {
   const { groups: tradeGroups } = useTrades()
   const [items, setItems] = useState<CatalogListing[]>([])
@@ -349,6 +363,12 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
                       یعنی پخش‌کننده انبارِ فعالی ندارد و ما نمی‌دانیم؛ صفر یعنی
                       واقعاً ناموجود و باید دیده شود.
                     */}
+                    {/* §۲۵ — پیشنهادِ اشانتیون، فقط وقتی اعلام شده باشد. */}
+                    {Number(l.bonus_threshold_qty) > 0 && Number(l.bonus_qty) > 0 && (
+                      <div className="product-card-bonus">
+                        {faNum(l.bonus_threshold_qty)} بخر، {faNum(l.bonus_qty)} رایگان
+                      </div>
+                    )}
                     {l.orderable_qty !== null && (
                       Number(l.orderable_qty) > 0 ? (
                         <div className="product-card-stock">قابلِ سفارش: {faNum(l.orderable_qty)}</div>
@@ -408,7 +428,36 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
                           <div className="entity-sub">{ln.listing.distributor_name}</div>
                         </td>
                         <td style={{ maxWidth: 110 }} data-label="تعداد"><NumberInput allowDecimal value={ln.qty} onChange={(v) => setQty(ln.listing.id, v)} /></td>
-                        <td className="money-cell" data-label="جمع">{faMoney(Number(ln.listing.wholesale_price) * (Number(ln.qty) || 0))}</td>
+                        <td className="money-cell" data-label="جمع">
+                          {faMoney(Number(ln.listing.wholesale_price) * (Number(ln.qty) || 0))}
+                          {/*
+                            §۲۶ — تحلیلِ زنده. محاسبه سمتِ کلاینت است چون با هر
+                            تغییرِ تعداد باید عوض شود؛ درخواست به سرور به‌ازای هر
+                            کلید یعنی تأخیر. فرمول‌ها با سمتِ سرور از یک پرونده‌ی
+                            نمونه سنجیده می‌شوند (`margin_cases.json`).
+                            و §۲۶: فقط آنچه قابلِ محاسبه است نشان داده می‌شود.
+                          */}
+                          {(() => {
+                            const a = orderAnalysis({
+                              qty: Number(ln.qty) || 0,
+                              list_price: ln.listing.wholesale_price,
+                              consumer_price: Number(ln.listing.consumer_price) > 0 ? ln.listing.consumer_price : null,
+                              bonus_qty: bonusFor(ln.listing, Number(ln.qty) || 0),
+                            })
+                            if (a.potential_gross_profit === undefined) return null
+                            return (
+                              <div className="cart-profit">
+                                سودِ بالقوه: <strong>{faMoney(a.potential_gross_profit)}</strong>
+                                {a.margin_percent !== undefined && (
+                                  <> · مارجین {a.margin_percent.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}٪</>
+                                )}
+                                {a.bonus_quantity !== undefined && (
+                                  <> · اشانتیون {faNum(a.bonus_quantity)}</>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </td>
                         <td className="card-actions"><button type="button" className="icon-btn-danger" onClick={() => removeLine(ln.listing.id)} aria-label="حذف"><Trash2 size={14} /></button></td>
                       </tr>
                     ))}

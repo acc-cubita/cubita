@@ -447,6 +447,21 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: یعنی رفتارِ امروز.
     minimum_sellable_shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    #: **قیمتِ مصرف‌کننده (§۱۷ §۱۸).** پیش‌فرض خاموش، چون این قابلیت برای همه‌ی
+    #: کالاها وجود ندارد: پیچ و مهره قیمتِ چاپی ندارد. §۲۸ صریح است که هیچ
+    #: اعتبارسنجیِ اجباریِ عمومی ساخته نشود.
+    has_consumer_price: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: سه قیمتِ **جدا** (§۱۸)، هر سه تهی‌پذیر:
+    #:   printed   = آن‌چه واقعاً روی بسته چاپ شده
+    #:   suggested = پیشنهادِ پخش‌کننده یا تولیدکننده
+    #:   maximum   = سقفِ مجازِ فروش، اگر چنین مفهومی باشد
+    #:
+    #: تهی‌پذیر و نه «صفر = نامشخص»: §۳۰ می‌گوید فیلدِ بی‌مقدار اصلاً نباید نمایش
+    #: داده شود، و صفر یک مقدارِ معتبرِ دیگر است.
+    printed_consumer_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    suggested_retail_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    maximum_retail_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+
     #: ایران‌کد (§۱۱) و بارکدِ دوبعدی (§۱۲) — **سه شناسه‌ی جدا** با `sku` و
     #: `barcode`. فصل صریح است که یکی‌شان نکنیم. بارکدِ دوبعدی متنِ بلند است (QR)
     #: پس اندازه‌اش با بارکدِ خطی یکی نیست.

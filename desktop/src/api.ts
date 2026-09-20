@@ -1288,6 +1288,11 @@ export interface ItemRecord {
   is_serial_tracked: boolean
   is_batch_tracked?: boolean
   minimum_sellable_shelf_life_days?: number | null
+  /** §۱۷ §۱۸ — سه قیمتِ جدا، هر سه اختیاری. `null` = اعلام‌نشده، نه صفر. */
+  has_consumer_price?: boolean
+  printed_consumer_price?: string | null
+  suggested_retail_price?: string | null
+  maximum_retail_price?: string | null
   sales_price: string
   average_cost: string
   barcode: string | null
@@ -1357,6 +1362,11 @@ export interface ItemIn {
   is_serial_tracked?: boolean
   is_batch_tracked?: boolean
   minimum_sellable_shelf_life_days?: number | null
+  /** §۱۷ §۱۸ — سه قیمتِ جدا، هر سه اختیاری. `null` = اعلام‌نشده، نه صفر. */
+  has_consumer_price?: boolean
+  printed_consumer_price?: number | null
+  suggested_retail_price?: number | null
+  maximum_retail_price?: number | null
   sales_price?: number
   barcode?: string | null
   iran_code?: string
@@ -5676,6 +5686,9 @@ export interface StockBatchRecord {
   parent_batch_id: string | null
   qc_status: 'passed' | 'pending' | 'failed'
   hold_status: 'none' | 'blocked' | 'recalled'
+  /** §۱۹ — قیمتِ بار بر قیمتِ کالا می‌چربد. «پیشنهادی» همان `consumer_price` است. */
+  printed_consumer_price: string | null
+  maximum_retail_price: string | null
   hold_reason: string
   is_closed: boolean
   /** §۴ — چهار عددِ جدا. `physical` با نزدیک‌شدنِ انقضا تکان نمی‌خورد؛ `sellable` صفر می‌شود. */
@@ -5738,6 +5751,8 @@ export interface StockBatchIn {
   supplier_id?: string | null
   location_id?: string | null
   qc_status?: 'passed' | 'pending' | 'failed'
+  printed_consumer_price?: number | null
+  maximum_retail_price?: number | null
 }
 export const createStockBatch = (token: string, data: StockBatchIn) =>
   authedSend<StockBatchRecord>(token, 'POST', '/api/stock-batches', data)
@@ -6005,6 +6020,9 @@ export interface CatalogListing {
    * `null` یعنی **نامعلوم** و اصلاً نشان داده نمی‌شود؛ صفر یعنی واقعاً ناموجود.
    */
   orderable_qty: string | null
+  /** §۲۵ — «۱۰ کارتن بخر، ۱ رایگان». هر دو صفر = اعلام‌نشده. */
+  bonus_threshold_qty: string
+  bonus_qty: string
   components: { item_name: string; qty: string }[]
 }
 

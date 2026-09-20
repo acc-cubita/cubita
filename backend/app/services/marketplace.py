@@ -150,6 +150,8 @@ def create_listing(db: Session, distributor_tenant_id: UUID, data) -> Marketplac
         category=data.category.strip(),
         is_published=data.is_published,
         extra_trades=list(data.extra_trades),
+        bonus_threshold_qty=data.bonus_threshold_qty,
+        bonus_qty=data.bonus_qty,
         min_order_qty=data.min_order_qty,
         max_order_qty=data.max_order_qty,
         daily_order_limit=data.daily_order_limit,
@@ -180,6 +182,8 @@ def update_listing(db: Session, distributor_tenant_id: UUID, listing_id: UUID, d
     listing.category = data.category.strip()
     listing.is_published = data.is_published
     listing.extra_trades = list(data.extra_trades)
+    listing.bonus_threshold_qty = data.bonus_threshold_qty
+    listing.bonus_qty = data.bonus_qty
     listing.min_order_qty = data.min_order_qty
     listing.max_order_qty = data.max_order_qty
     listing.daily_order_limit = data.daily_order_limit
@@ -1096,6 +1100,9 @@ def list_catalog(db: Session, retailer_tenant_id: UUID, distributor_tenant_id: U
                 #: §۳۰ — «موجودی قابل سفارش». `None` یعنی نامعلوم و رابط اصلاً
                 #: نشانش نمی‌دهد؛ صفر یعنی واقعاً ناموجود و باید دیده شود.
                 "orderable_qty": orderable.get(l.id),
+                #: §۲۵ — «۱۰ کارتن بخر، ۱ کارتن رایگان». صفر = اعلام‌نشده.
+                "bonus_threshold_qty": l.bonus_threshold_qty,
+                "bonus_qty": l.bonus_qty,
                 "components": [{"item_name": c.item_name, "qty": c.qty} for c in l.components],
             }
         )

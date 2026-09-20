@@ -205,6 +205,13 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: قیمتِ مصرف‌کننده (فروشِ پیشنهادی) برای این بار — تا حاشیه‌ی سود (فروش − خرید) معلوم
     #: باشد. هنگامِ خریدِ بازار خودکار از قیمتِ لیستینگ می‌آید؛ در ورودِ دستی وارد می‌شود. ۰ = نامشخص.
     consumer_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
+    #: **دو قیمتِ دیگرِ §۱۸ روی بار.** `suggested` همان `consumer_price`ِ بالاست
+    #: و ستونِ تازه نگرفت: افزودنِ ستونی به همان معنا یعنی دو نمای یک داده.
+    #:
+    #: §۱۹ — هر بار می‌تواند قیمتِ خودش را داشته باشد (بسته‌ی پارسال ۴۵۰٬۰۰۰ و
+    #: امسال ۵۲۰٬۰۰۰). قیمتِ کالا فقط پیش‌فرض است و بار رویش می‌چربد.
+    printed_consumer_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
+    maximum_retail_price: Mapped[float | None] = mapped_column(Numeric(18, 0), nullable=True)
     #: تاریخِ تولیدِ این بار (اختیاری) — کنارِ تاریخِ انقضا برای ردیابیِ عمرِ کالا.
     production_date: Mapped[date_ | None] = mapped_column(Date, nullable=True)
     #: منشأِ بار: purchase_invoice | manual | marketplace. با source_id به سندِ مبدأ می‌رسد.

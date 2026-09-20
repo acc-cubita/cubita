@@ -134,6 +134,9 @@ class ListingIn(BaseModel):
     #: اصنافی که این قلم **علاوه بر** اصنافِ کلیِ پخش‌کننده به آن‌ها هم نشان داده
     #: می‌شود. خالی = فقط همان اصنافِ کلی.
     extra_trades: list[str] = []
+    #: §۲۵ — «۱۰ کارتن بخر، ۱ کارتن رایگان». هر دو صفر = بدونِ اشانتیون.
+    bonus_threshold_qty: Decimal = Decimal(0)
+    bonus_qty: Decimal = Decimal(0)
     #: محدودیت‌های سفارش‌گذاری (۰ = بدونِ محدودیت).
     min_order_qty: Decimal = Decimal(0)
     max_order_qty: Decimal = Decimal(0)
@@ -199,6 +202,8 @@ class ListingOut(BaseModel):
     category: str
     is_published: bool
     extra_trades: list[str] = []
+    bonus_threshold_qty: Decimal = Decimal(0)
+    bonus_qty: Decimal = Decimal(0)
     min_order_qty: Decimal
     max_order_qty: Decimal
     daily_order_limit: int
@@ -398,6 +403,9 @@ class CatalogListingOut(BaseModel):
     #: نمی‌دهد؛ صفر یعنی واقعاً ناموجود و باید دیده شود. یکی‌کردنِ این دو یعنی
     #: کاتالوگ «ناموجود» بگوید در حالی که فقط پیکربندی ناقص است.
     orderable_qty: Decimal | None = None
+    #: §۲۵ — پیشنهادِ اشانتیون. صفر یعنی اعلام‌نشده و رابط نشانش نمی‌دهد.
+    bonus_threshold_qty: Decimal = Decimal(0)
+    bonus_qty: Decimal = Decimal(0)
     components: list[CatalogComponentOut]
 
 

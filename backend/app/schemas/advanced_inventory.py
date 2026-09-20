@@ -153,6 +153,9 @@ class StockBatchIn(BaseModel):
     supplier_id: UUID | None = None
     location_id: UUID | None = None
     qc_status: str = "passed"
+    #: §۱۸ §۱۹ — `consumer_price`ِ بالا همان «پیشنهادی» است؛ این دو تازه‌اند.
+    printed_consumer_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
 
     @field_validator("qc_status")
     @classmethod
@@ -209,6 +212,9 @@ class StockBatchOut(BaseModel):
     hold_status: str = "none"
     hold_reason: str = ""
     is_closed: bool = False
+    #: §۱۸ — سه قیمتِ جدا. «پیشنهادی» همان `consumer_price`ِ بالاست.
+    printed_consumer_price: Decimal | None = None
+    maximum_retail_price: Decimal | None = None
 
     #: چهار عددِ §۴ به‌علاوه‌ی وضعیتِ مشتق (روتر پُر می‌کند).
     #:
