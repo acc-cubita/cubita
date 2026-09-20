@@ -40,6 +40,7 @@ from app.schemas.invoices import DirectWarehouseIssueIn, SalesInvoiceIn, Warehou
 from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import units
+from app.services import batches as batches_svc
 from app.services import valuation
 from app.services import warehouses
 from app.services.common import get_account, make_journal_entry
@@ -95,6 +96,10 @@ class _Row:
     code: str = ""
     name: str = ""
     unit: str = ""
+    #: تخصیصِ صریحِ بار، اگر کاربر داده باشد: [(batch_id, qty), ...]. تهی یعنی
+    #: «خودت تصمیم بگیر» و سرور FEFO می‌زند. کالای بی‌ردیابی اصلاً واردِ این مسیر
+    #: نمی‌شود و تخصیصش خالی می‌ماند — همان رفتارِ دیروز.
+    batch_allocations: list[tuple[UUID, Decimal]] | None = None
 
 
 # ─────────────────────────── قاعده‌های مشترک ───────────────────────────
@@ -221,6 +226,7 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
     debits: dict[UUID, Decimal] = defaultdict(Decimal)
     total = Decimal(0)
     moves: list[StockLedger] = []
+    pending_lines: list[tuple[StockLedger, WarehouseIssueLine]] = []
     for seq, row in enumerate(rows, start=1):
         item = fresh[row.item.id]
         #: خروجِ پیش‌تاریخ میانگینِ **همان روز** را می‌گیرد: خروجِ دهمِ ماه نباید بهای
@@ -242,15 +248,33 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
             description=row.description,
         )
         issue.lines.append(line)
-        move = StockLedger(
-            item_id=item.id, warehouse_id=issue.warehouse_id, qty=-row.qty, unit_cost=unit_cost,
-            entry_date=issue.issue_date, source_type="warehouse_issue", source_id=issue.id,
+        #: **تفکیکِ بار (§۱۱).** کالای بی‌ردیابی یک حرکتِ بی‌برچسب می‌گیرد، دقیقاً
+        #: مثلِ دیروز. کالای ردیابی‌شده به‌ازای هر باری که مصرف می‌کند یک حرکت
+        #: می‌گیرد — چون مانده‌ی بار از همین حرکت‌ها مشتق می‌شود و یک حرکتِ جمعی
+        #: نمی‌تواند بگوید از کدام بار چقدر رفت.
+        plan = batches_svc.plan_outflow(
+            db, item, issue.warehouse_id, row.qty, issue.issue_date, wanted=row.batch_allocations
         )
-        db.add(move)
-        moves.append(move)
+        splits = plan or [(None, row.qty)]
+        for batch_id, take in splits:
+            move = StockLedger(
+                item_id=item.id, warehouse_id=issue.warehouse_id, qty=-take, unit_cost=unit_cost,
+                entry_date=issue.issue_date, source_type="warehouse_issue", source_id=issue.id,
+                batch_id=batch_id,
+            )
+            db.add(move)
+            moves.append(move)
+            pending_lines.append((move, line))
         amount = line.amount
         debits[row.account_id] += amount
         total += amount
+
+    #: شناسه‌ی ردیف تا این‌جا ساخته نشده بود (کلیدِ اصلی موقعِ INSERT می‌آید). بی
+    #: این، خروجی با دو ردیفِ یک کالا در یک انبار برگشت‌ناپذیر مبهم می‌ماند.
+    db.flush()
+    for move, line in pending_lines:
+        move.source_line_id = line.id
+
     #: خروجِ پیش‌تاریخ نباید گذشته را منفی کند — گاردِ بالا فقط موجودیِ امروز را دید.
     valuation.settle_posting(db, moves)
 

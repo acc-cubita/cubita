@@ -153,6 +153,7 @@ export const OPS_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: FileSpreadsheet },
     { key: 'inventory', section: 'products', label: 'کالاها', icon: Package },
     { key: 'inventory', section: 'warehouses', label: 'انبارها', icon: Warehouse },
+    { key: 'inventory', section: 'locations', label: 'موقعیت‌های انبار', icon: MapPin },
     { key: 'inventory', section: 'units', label: 'واحدها', icon: Ruler },
     { key: 'inventory', section: 'taxonomy', label: 'گروه و مشخصات', icon: FolderTree },
     { key: 'inventory', section: 'pricelists', label: 'لیست قیمت', icon: Tags },

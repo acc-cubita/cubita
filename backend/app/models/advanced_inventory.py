@@ -5,16 +5,23 @@
   - price_list_items: قیمتِ هر کالا در هر لیست (جایگزینِ قیمتِ پایه هنگام فروش/صندوق).
   - stock_batches: ثبتِ بچ/سریِ کالا با تاریخِ انقضا — برای دیده‌بانی و هشدارِ انقضا.
 
-نکته: `stock_batches` یک «دفترِ ثبتِ بچ» است (نه موتورِ مصرفِ بچ‌محور)؛ برای شفافیت و
-هشدارِ انقضا کافی است بی‌آنکه موتورِ اصلیِ موجودی بازنویسی شود.
+**این توضیح تا مهاجرتِ ۰۱۷۱ درست بود و دیگر نیست.** `stock_batches` یک «دفترِ
+ثبت» بود که فروش و خروج اصلاً لمسش نمی‌کردند، پس مانده‌اش از اولین فروش به بعد
+دروغ می‌گفت. حالا مانده از `stock_ledger.batch_id` مشتق می‌شود و ستونِ `qty`
+فقط برای بارهای پیش از ردیابی زنده مانده — شرحِ کامل در
+[services/batches.py](../services/batches.py).
+
+موتورِ **بها** همان میانگینِ موزونِ سراسری است و عوض نشده: بچ *مقدار* را ردیابی
+می‌کند، نه قیمت.
 """
 import uuid
-from datetime import date as date_
+from datetime import date as date_, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Numeric,
@@ -155,6 +162,13 @@ class PriceListItem(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     price_list: Mapped["PriceList"] = relationship(back_populates="items")
 
 
+#: وضعیتِ کنترلِ کیفیت و وضعیتِ انسداد — دو محورِ مستقل (مهاجرتِ ۰۱۷۲).
+QC_STATUSES = ("passed", "pending", "failed")
+HOLD_STATUSES = ("none", "blocked", "recalled")
+QC_STATUS_LABELS = {"passed": "تأییدشده", "pending": "در انتظارِ کنترل", "failed": "مردود"}
+HOLD_STATUS_LABELS = {"none": "آزاد", "blocked": "مسدود", "recalled": "فراخوان‌شده"}
+
+
 class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک **بارِ ورودیِ کالا** (بچ/سری) — هر خرید جداگانه ثبت می‌شود تا اگر کسری/معیوب/
     ضایعات پیش آمد، معلوم شود کدام بار مشکل داشته است. همچنین تاریخِ انقضا و سریال‌های
@@ -167,6 +181,13 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "stock_batches"
+
+    __table_args__ = (
+        CheckConstraint(f"qc_status IN {QC_STATUSES}", name="ck_stock_batches_qc_status"),
+        CheckConstraint(f"hold_status IN {HOLD_STATUSES}", name="ck_stock_batches_hold_status"),
+        #: پرسشِ همیشگیِ FEFO: «بارهای این کالا در این انبار، به ترتیبِ انقضا».
+        Index("ix_stock_batches_fefo", "tenant_id", "item_id", "warehouse_id", "expiry_date"),
+    )
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
@@ -192,6 +213,47 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     received_date: Mapped[date_] = mapped_column(Date)
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    #: شماره‌ی باری که **تأمین‌کننده** روی بسته زده — با شماره‌ی داخلیِ ما یکی
+    #: نیست و در فراخوانِ کارخانه همین عدد اعلام می‌شود، نه مالِ ما.
+    supplier_batch_code: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True
+    )
+    #: کجای انبار. تهی = ثبت‌نشده، و برای انبارِ کوچک حالتِ کاملاً عادی است (§۲۸).
+    location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("warehouse_locations.id", ondelete="SET NULL"), nullable=True
+    )
+    #: بارِ مبدأ وقتی این بار با **انتقال بینِ انبار** ساخته شده.
+    #:
+    #: `StockBatch` به `(کالا، انبار)` بسته است، پس انتقال باید در مقصد بارِ
+    #: آینه بسازد وگرنه کالا آن‌طرفِ مرز بی‌بچ ظاهر می‌شود. این ستون زنجیره را
+    #: نگه می‌دارد تا «این بار از کجا آمد؟» در مقصد هم جواب داشته باشد.
+    parent_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stock_batches.id"), nullable=True
+    )
+
+    #: **وضعیت: سه ستونِ عمود بر هم، نه یک ستونِ چندحالته.**
+    #:
+    #: فصل ۱۲ وضعیت خواسته بود ولی خودش هم گفت «نباید فقط به status تکیه شود».
+    #: آن ۱۲ تا سه واقعیتِ مستقل‌اند — بار می‌تواند هم‌زمان منتظرِ QC **و**
+    #: فراخوان‌شده باشد — و بقیه‌شان (`near_expiry`، `depleted`، `fully_reserved`)
+    #: از عدد و تاریخ مشتق می‌شوند. ستونی که بتواند با واقعیت اختلاف پیدا کند،
+    #: بالاخره پیدا می‌کند؛ پس فقط **نیتِ انسان** ذخیره می‌شود.
+    #:
+    #: `passed` پیش‌فرض است نه `pending`: هر بارِ موجود امروز قابلِ استفاده است و
+    #: کسب‌وکارِ بدونِ QC هرگز این فیلد را نمی‌بیند.
+    qc_status: Mapped[str] = mapped_column(String(20), default="passed", server_default="passed")
+    hold_status: Mapped[str] = mapped_column(String(20), default="none", server_default="none")
+    hold_reason: Mapped[str] = mapped_column(Text, default="", server_default="")
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    held_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    #: «کارم با این بار تمام است» — حتی با ۰٫۳ مانده. مشتق‌شدنی نیست چون تصمیم
+    #: است، نه نتیجه‌ی عدد.
+    is_closed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     serials: Mapped[list["StockBatchSerial"]] = relationship(
         back_populates="batch", cascade="all, delete-orphan", order_by="StockBatchSerial.serial"

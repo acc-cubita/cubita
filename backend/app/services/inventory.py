@@ -719,6 +719,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                     "qty": Decimal(line.qty),
                     "unit_cost": effective_unit_cost.quantize(Decimal(1)),
                     "idx": idx + 1,
+                    #: ردیفِ متناظر، تا حرکتِ دفتر بداند از کدام ردیف آمده. شیء
+                    #: است نه شناسه، چون شناسه تا `flush` ساخته نشده.
+                    "line": invoice_lines[-1],
                 }
             )
 
@@ -885,28 +888,42 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
     db.flush()
-    for move in stock_moves:
-        move.source_id = invoice.id
-        db.add(move)
-    valuation.settle_posting(db, stock_moves)
 
     # یک بارِ ورودی به‌ازای هر ردیفِ کالا (نه خدمت). شماره‌ی بار خودکار = P{شماره‌فاکتور}-{ردیف}؛
     # اپراتور بعداً می‌تواند سریالِ کارتن و کسری/معیوب را روی همین بار ثبت کند.
-    for seed in batch_seeds:
-        db.add(
-            StockBatch(
-                item_id=seed["item_id"],
-                warehouse_id=data.warehouse_id,
-                batch_number=f"P{number}-{seed['idx']}",
-                qty=seed["qty"],
-                received_qty=seed["qty"],
-                unit_cost=seed["unit_cost"],
-                source_type="purchase_invoice",
-                source_id=invoice.id,
-                received_date=data.invoice_date,
-                created_by_id=user.id,
-            )
+    #
+    #: **ترتیب عوض شد و تزئینی نیست:** بارها باید *پیش از* `settle_posting` ساخته
+    #: و فلاش شوند تا `move.batch_id` پر باشد. حرکتی که بی‌برچسب ثبت شود، مانده‌ی
+    #: بار را برای همیشه از موجودیِ کالا جدا می‌کند — و بی‌صدا.
+    batches = [
+        StockBatch(
+            item_id=seed["item_id"],
+            warehouse_id=data.warehouse_id,
+            batch_number=f"P{number}-{seed['idx']}",
+            qty=seed["qty"],
+            received_qty=seed["qty"],
+            unit_cost=seed["unit_cost"],
+            source_type="purchase_invoice",
+            source_id=invoice.id,
+            received_date=data.invoice_date,
+            created_by_id=user.id,
         )
+        for seed in batch_seeds
+    ]
+    for batch in batches:
+        db.add(batch)
+    db.flush()
+
+    #: `stock_moves` و `batch_seeds` در یک حلقه و با هم پر شده‌اند، پس هم‌اندیس‌اند.
+    #: `strict=True` تزئینی نیست: اگر روزی یکی از این سه فهرست جای دیگری هم پر
+    #: شود، `zip`ِ ساده بی‌صدا کوتاه می‌کرد و بخشی از حرکت‌ها بی‌برچسب می‌ماندند —
+    #: همان خطای خاموشی که این قابلیت برای رفعش ساخته شده.
+    for move, batch, seed in zip(stock_moves, batches, batch_seeds, strict=True):
+        move.source_id = invoice.id
+        move.batch_id = batch.id
+        move.source_line_id = seed["line"].id
+        db.add(move)
+    valuation.settle_posting(db, stock_moves)
 
     db.flush()
     db.refresh(invoice)
@@ -1040,6 +1057,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         unit_cost=unit_cost,
         reason=data.reason,
         adjustment_date=data.adjustment_date,
+        batch_id=data.batch_id,
         journal_entry_id=journal_entry.id if journal_entry else None,
         created_by_id=user.id,
     )
@@ -1055,6 +1073,8 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         entry_date=data.adjustment_date,
         source_type="adjustment",
         source_id=adjustment.id,
+        #: تعدیلِ بارمحور باید از مانده‌ی **همان بار** کم کند، نه فقط از کلِ کالا.
+        batch_id=data.batch_id,
     )
     db.add(move)
     valuation.settle_posting(db, [move])

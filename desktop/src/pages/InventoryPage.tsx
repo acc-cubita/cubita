@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileStack, FileUp, FolderTree, History, ListChecks, Package, PackageMinus, PackageSearch, PackageX, RefreshCw, RotateCcw, Ruler, ScanSearch, Tag, Tags, Warehouse } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BadgeDollarSign, Boxes, Calculator, CalendarClock, ClipboardCheck, ClipboardList, Coins, FileStack, FileUp, FolderTree, History, ListChecks, MapPin, Package, PackageMinus, PackageSearch, PackageX, RefreshCw, RotateCcw, Ruler, ScanSearch, Tag, Tags, Warehouse } from 'lucide-react'
 import { InventoryValuationPanel } from '../components/InventoryValuationPanel'
 import { WarehouseIssuesTab } from '../components/WarehouseIssuesTab'
 import { WarehouseReceiptsTab } from '../components/WarehouseReceiptsTab'
@@ -20,6 +20,7 @@ import { LowStockPanel, OverStockPanel } from '../components/LowStockPanel'
 import { ItemTaxonomyPanel } from '../components/ItemTaxonomyPanel'
 import { UnitsPanel } from '../components/UnitsPanel'
 import { WarehousesPanel } from '../components/WarehousesPanel'
+import { WarehouseLocationsPanel } from '../components/WarehouseLocationsPanel'
 import { KardexDrawer } from '../components/KardexDrawer'
 import { KardexPanel } from '../components/KardexPanel'
 import {
@@ -279,6 +280,12 @@ export function InventoryPage({
             label: 'انبارها',
             icon: Warehouse,
             content: <WarehousesPanel token={token} onChanged={() => void refreshStock()} />,
+          },
+          {
+            key: 'locations',
+            label: 'موقعیت‌های انبار',
+            icon: MapPin,
+            content: <WarehouseLocationsPanel token={token} />,
           },
           {
             key: 'units',

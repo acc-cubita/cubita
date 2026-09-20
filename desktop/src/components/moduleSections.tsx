@@ -101,6 +101,7 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   inventory: [
     { key: 'products', label: 'کالاها', icon: Package },
     { key: 'warehouses', label: 'انبارها', icon: Warehouse },
+    { key: 'locations', label: 'موقعیت‌های انبار', icon: MapPin },
     { key: 'units', label: 'واحدها', icon: Ruler },
     { key: 'taxonomy', label: 'گروه و مشخصات', icon: FolderTree },
     { key: 'count-tags', label: 'تگ انبارگردانی', icon: Tag },

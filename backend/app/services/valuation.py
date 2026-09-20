@@ -80,7 +80,11 @@ OUT_AVERAGE = "out_average"
 OUT_COST = "out_cost"
 
 #: ورودهایی که با میانگینِ همان لحظه می‌نشینند، نه با بهای ثبت‌شده‌شان.
-AVERAGE_INFLOWS = frozenset({"transfer_in", "adjustment", "stock_count"})
+#: `batch_opening` عضوِ این مجموعه است چون سندِ «انتسابِ موجودی به بار» نباید
+#: میانگین را تکان دهد: ورودی‌اش همان کالایی است که همین حالا در انبار بود،
+#: فقط حالا هویتِ بار گرفته. ارزش‌گذاری با میانگینِ جاری یعنی این خاصیت
+#: **اعلانی** است، نه وابسته به اینکه ثبت‌کننده عددِ درست را حساب کرده باشد.
+AVERAGE_INFLOWS = frozenset({"transfer_in", "adjustment", "stock_count", "batch_opening"})
 #: خروج‌هایی که با بهای خودشان بیرون می‌روند و ارزش را کم می‌کنند.
 COST_OUTFLOWS = frozenset({"purchase_return"})
 TRANSFER_SOURCES = frozenset({"transfer_in", "transfer_out"})

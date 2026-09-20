@@ -3,9 +3,11 @@ import { CalendarClock, PackagePlus, Trash2, AlertTriangle, ScanBarcode } from '
 import {
   createStockBatch,
   deleteStockBatch,
+  fetchBatchReconciliation,
   fetchItemsLive,
   fetchStockBatches,
   fetchWarehousesLive,
+  type BatchReconciliationRow,
   type ItemRecord,
   type StockBatchRecord,
 } from '../api'
@@ -17,6 +19,28 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { BatchDetailDrawer } from './BatchDetailDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
+
+//: چرا مانده‌ی این بار از دفتر درنمی‌آید. عمداً می‌گوید «چه کار کنم»، نه فقط «خطا».
+const REASON_LABEL: Record<string, string> = {
+  manual: 'بارِ دستی است و حرکتِ انباری ندارد — عدد از ثبتِ خودتان می‌آید.',
+  ambiguous: 'سندِ ورودش بیش از یک ردیفِ این کالا داشت، پس انتساب خودکار انجام نشد.',
+  pre_tracking: 'پیش از ردیابیِ بچ ثبت شده؛ خروج‌هایش بار نداشته‌اند.',
+}
+
+//: واژگانِ §۳ — همه **محاسبه‌شده** سمتِ سرور، نه ستونِ ذخیره‌شده.
+const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
+  draft: { label: 'پیش‌نویس', tone: 'tone-muted' },
+  qc_pending: { label: 'در انتظارِ کنترل', tone: 'tone-warning' },
+  available: { label: 'قابلِ فروش', tone: 'tone-success' },
+  partially_reserved: { label: 'بخشی رزرو', tone: 'tone-warning' },
+  fully_reserved: { label: 'کاملاً رزرو', tone: 'tone-warning' },
+  near_expiry: { label: 'نزدیکِ انقضا', tone: 'tone-warning' },
+  blocked: { label: 'مسدود', tone: 'tone-danger' },
+  recalled: { label: 'فراخوان‌شده', tone: 'tone-danger' },
+  expired: { label: 'منقضی', tone: 'tone-danger' },
+  depleted: { label: 'تمام‌شده', tone: 'tone-muted' },
+  closed: { label: 'بسته', tone: 'tone-muted' },
+}
 
 const SOURCE_LABEL: Record<string, { label: string; tone: string }> = {
   purchase_invoice: { label: 'خرید', tone: 'tone-success' },
@@ -36,10 +60,20 @@ export function BatchesPanel({ token }: { token: string }) {
   const [items, setItems] = useState<ItemRecord[]>([])
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
   const [batches, setBatches] = useState<StockBatchRecord[]>([])
-  const pg = usePagination(batches, 10)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [detail, setDetail] = useState<StockBatchRecord | null>(null)
+  const [recon, setRecon] = useState<BatchReconciliationRow[]>([])
+  const [onlyMismatch, setOnlyMismatch] = useState(false)
+
+  const reconById = useMemo(() => new Map(recon.map((r) => [r.batch_id, r])), [recon])
+  //: صفحه‌بندی روی فهرستِ **فیلترشده** می‌نشیند، وگرنه فیلتر فقط صفحه‌ی جاری را
+  //: می‌تراشد و کاربر فکر می‌کند مغایرتی نمانده.
+  const shown = useMemo(
+    () => (onlyMismatch ? batches.filter((b) => reconById.has(b.id)) : batches),
+    [batches, onlyMismatch, reconById],
+  )
+  const pg = usePagination(shown, 10)
 
   const [itemId, setItemId] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
@@ -54,11 +88,17 @@ export function BatchesPanel({ token }: { token: string }) {
   async function refresh() {
     setError(null)
     try {
-      const [its, ws, bs] = await Promise.all([fetchItemsLive(token), fetchWarehousesLive(token), fetchStockBatches(token)])
+      const [its, ws, bs, rc] = await Promise.all([
+        fetchItemsLive(token),
+        fetchWarehousesLive(token),
+        fetchStockBatches(token),
+        fetchBatchReconciliation(token),
+      ])
       setItems(its.filter((i) => !i.is_service && i.is_active))
       setWarehouses(ws)
       if (ws[0] && !warehouseId) setWarehouseId(ws[0].id)
       setBatches(bs)
+      setRecon(rc)
       // اگر درایورِ جزئیات باز است، همان بار را تازه نگه دار (مقدار/معیوب به‌روز شود)
       setDetail((cur) => (cur ? bs.find((b) => b.id === cur.id) ?? null : null))
     } catch (err) {
@@ -187,14 +227,38 @@ export function BatchesPanel({ token }: { token: string }) {
         description={`${fa(batches.length)} بار — هر خرید خودکار یک بار می‌سازد. روی «مدیریت» بزنید تا سریالِ کارتن اضافه یا کسری/معیوب ثبت کنید.`}
       >
         {error && <div className="error">{error}</div>}
-        {batches.length === 0 ? (
-          <EmptyState icon={CalendarClock} text="باری ثبت نشده — با ثبتِ فاکتورِ خرید خودکار ساخته می‌شود." />
+        {/*
+          گزارش است، نه گارد: هیچ‌کدامِ این ردیف‌ها جلوی کاری را نمی‌گیرند. فقط
+          می‌گویند عددِ کدام بار هنوز از ستونِ قدیمی می‌آید — و بارهای تازه از
+          همان اول از دفتر مشتق می‌شوند، پس این فهرست کوتاه و کوتاه‌تر می‌شود.
+        */}
+        {recon.length > 0 && (
+          <section className="fy-note">
+            <AlertTriangle size={14} />
+            <span>
+              مانده‌ی {fa(recon.length)} بار از دفترِ انبار محاسبه نشده و تخمینی است — این‌ها پیش از
+              ردیابیِ بچ ثبت شده‌اند یا حرکتِ انباری ندارند.
+            </span>
+            <button type="button" onClick={() => setOnlyMismatch((v) => !v)}>
+              {onlyMismatch ? 'نمایشِ همه' : 'فقط همین‌ها'}
+            </button>
+          </section>
+        )}
+        {shown.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            text={
+              onlyMismatch
+                ? 'هیچ بارِ تخمینی‌ای نمانده — مانده‌ی همه‌ی بارها از دفتر محاسبه می‌شود.'
+                : 'باری ثبت نشده — با ثبتِ فاکتورِ خرید خودکار ساخته می‌شود.'
+            }
+          />
         ) : (
           <div className="entity-table-wrap">
             <div className="table-scroll">
               <table className="entity-table cards-on-mobile">
                 <thead>
-                  <tr><th>کالا</th><th>بار</th><th>منشأ</th><th>ورودی/مانده</th><th>کسری</th><th>سریال</th><th>انقضا</th><th></th></tr>
+                  <tr><th>کالا</th><th>بار</th><th>منشأ</th><th>وضعیت</th><th>ورودی</th><th>مانده</th><th>قابلِ فروش</th><th>کسری</th><th>سریال</th><th>انقضا</th><th></th></tr>
                 </thead>
                 <tbody>
                   {pg.pageItems.map((b) => {
@@ -203,12 +267,36 @@ export function BatchesPanel({ token }: { token: string }) {
                     const expired = d !== null && d < 0
                     const src = SOURCE_LABEL[b.source_type] ?? SOURCE_LABEL.manual
                     const defect = Number(b.defect_qty)
+                    const mismatch = reconById.get(b.id)
+                    const st = STATUS_LABEL[b.status] ?? STATUS_LABEL.available
                     return (
                       <tr key={b.id}>
                         <td className="entity-name card-title" data-label="کالا">{itemById.get(b.item_id)?.name ?? '—'}</td>
                         <td className="ltr-cell" data-label="بار">{b.batch_number}</td>
                         <td data-label="منشأ"><span className={`status-badge ${src.tone}`}>{src.label}</span></td>
-                        <td data-label="ورودی/مانده">{fa(Number(b.received_qty))} / <strong>{fa(Number(b.qty))}</strong></td>
+                        <td data-label="وضعیت">
+                          <span className={`status-badge ${st.tone}`}>{st.label}</span>
+                        </td>
+                        <td className="num" data-label="ورودی">{fa(Number(b.received_qty))}</td>
+                        <td className="num" data-label="مانده">
+                          <strong>{fa(Number(b.qty))}</strong>
+                          {/* عددِ نامطمئن نباید مثلِ عددِ دقیق دیده شود. */}
+                          {b.qty_source === 'legacy' && (
+                            <span
+                              className="status-badge tone-warning"
+                              title={REASON_LABEL[mismatch?.reason ?? ''] ?? 'مانده از دفترِ انبار محاسبه نشده است.'}
+                            >
+                              <AlertTriangle size={12} /> تخمینی
+                            </span>
+                          )}
+                        </td>
+                        <td className="num" data-label="قابلِ فروش">
+                          {/* §۲۹ — «قابلِ فروش» با «موجودی» یکی نیست: بارِ نزدیک به انقضا
+                              موجودی دارد ولی فروختنی نیست. جدا نشان داده می‌شود. */}
+                          {Number(b.sellable_qty) < Number(b.qty)
+                            ? <strong className="stock-over">{fa(Number(b.sellable_qty))}</strong>
+                            : fa(Number(b.sellable_qty))}
+                        </td>
                         <td data-label="کسری" className={defect > 0 ? 'stock-over' : undefined}>{defect > 0 ? fa(defect) : '—'}</td>
                         <td data-label="سریال">{b.serial_count > 0 ? fa(b.serial_count) : '—'}</td>
                         <td data-label="انقضا">
