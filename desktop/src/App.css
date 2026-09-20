@@ -1322,6 +1322,14 @@ button:disabled {
 }
 .item-picker-opt.active { background: var(--surface-hover); }
 .item-picker-opt.selected { background: var(--accent-bg); }
+/* خطِ «n گزینه‌ی دیگر هم هست» — بریدنِ فهرست باید دیده شود، نه بی‌صدا بماند. */
+.item-picker-more {
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
 .item-picker-opt.disabled { opacity: 0.4; cursor: not-allowed; }
 .item-picker-opt-name { font-size: var(--fs-base); color: var(--text); text-align: right; }
 /* متادیتا کدِ لاتین (SKU/بارکد) + واحدِ فارسی را قاطی دارد؛ با جهتِ LTRِ صریح و
@@ -4530,6 +4538,48 @@ button.topnav-org:hover {
 }
 .mp-limits legend { font-size: var(--fs-sm); color: var(--text-muted); padding: 0 6px; }
 .mp-limit-hint { color: var(--warning); }
+
+/* ── انتخابگرِ اصنافِ هدفِ پخش‌کننده ───────────────────────────────────────
+   ~۹۰ چک‌باکس در ۱۲ گروه. گریدِ خودتنظیم به‌جای ستونِ ثابت، چون تعدادِ اصنافِ هر
+   گروه از ۴ تا ۱۵ فرق دارد و ستونِ ثابت یا فضا هدر می‌دهد یا می‌شکند. */
+.trade-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  /* بلندتر از این، فرمِ تنظیمات را به یک صفحه‌ی اسکرولِ بی‌پایان تبدیل می‌کند و
+     دکمه‌ی «ذخیره» را از دید بیرون می‌برد. */
+  max-height: 340px;
+  overflow-y: auto;
+}
+.trade-group {
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-2);
+}
+.trade-group:first-child { border-top: 0; padding-top: 0; }
+.trade-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+.trade-group-title {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: var(--text-h);
+}
+.trade-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px var(--sp-3);
+}
+/* آیتمِ گرید بدونِ این، با برچسبِ بلند از عرضِ ظرف بیرون می‌زند. */
+.trade-items > * { min-width: 0; }
+@media (max-width: 760px) {
+  .trade-items { grid-template-columns: 1fr; }
+  .trade-picker { max-height: none; }
+}
 
 /* ── کارت‌های محصولِ کاتالوگِ فروشگاه (نمای فروشگاهِ اینترنتی) ──────────── */
 /* در نمای «بازارِ خرید» کاتالوگ ستونِ پهن می‌گیرد و سبد سایدبارِ باریک می‌شود. */

@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Lock, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { Check, Lock, RotateCcw, SlidersHorizontal, Store } from 'lucide-react'
 import {
   fetchModules,
   updateModules,
+  setTrade as saveTrade,
   fetchMe,
   type ModulesState,
   type MeResponse,
 } from '../api'
 import { NAV_GROUPS, uniqueNavItems } from '../lib/navModel'
 import { PageHeader } from '../components/PageHeader'
+import { SearchSelect } from '../components/SearchSelect'
 import { SectionCard } from '../components/SectionCard'
+import { useTrades } from '../lib/useTrades'
 
 /**
  * شخصی‌سازیِ پنل — کدام ماژول‌ها در منو دیده شوند.
@@ -23,7 +26,9 @@ import { SectionCard } from '../components/SectionCard'
  * برجسته نیست؛ کلیدِ آرام همان اطلاعات را می‌دهد و *خاموش‌ها* را دیدنی می‌کند.
  */
 
-//: برچسبِ فارسیِ صنف‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند.
+//: برچسبِ فارسیِ *قالبِ ماژول‌ها* — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند.
+//: این با «صنف» (کارتِ جدا، `/api/trades`) فرق دارد و عمداً «قالب» نامیده می‌شود:
+//: دو چیزِ متفاوت که هر دو «صنف» صدا شوند، همان چیزی است که تا امروز گیج‌کننده بود.
 const INDUSTRY_LABELS: Record<string, string> = {
   general: 'عمومی',
   manufacturing: 'تولیدی',
@@ -52,6 +57,8 @@ export function ModulesPage({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tradeSaving, setTradeSaving] = useState(false)
+  const { groups: tradeGroups } = useTrades()
 
   function applyState(s: ModulesState) {
     setState(s)
@@ -144,6 +151,19 @@ export function ModulesPage({
 
   const industry = state ? INDUSTRY_LABELS[state.industry] ?? state.industry : ''
 
+  async function saveTradeKey(key: string) {
+    setMessage(null)
+    setTradeSaving(true)
+    try {
+      applyState(await saveTrade(token, key || null))
+      setMessage('صنف ذخیره شد.')
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setTradeSaving(false)
+    }
+  }
+
   return (
     <div className="page panels">
       <PageHeader
@@ -154,12 +174,52 @@ export function ModulesPage({
 
       {error && <div className="error">{error}</div>}
 
+      {/* صنف پیش از ماژول‌هاست چون یک تصمیمِ یک‌خطی است و بیرونِ این پنل اثر دارد
+          (بازارِ پخش)، در حالی که ماژول‌ها فقط منوی خودِ کاربر را عوض می‌کنند. */}
+      <SectionCard
+        icon={Store}
+        title="صنفِ کسب‌وکار"
+        description="این می‌گوید شما چه می‌فروشید. شرکت‌های پخش با همین شما را پیدا می‌کنند."
+      >
+        {tradeGroups.length === 0 ? (
+          <p className="mp-note-line">فهرستِ اصناف در دسترس نیست.</p>
+        ) : (
+          <>
+            <SearchSelect
+              value={state?.trade ?? ''}
+              onChange={(e) => saveTradeKey(e.target.value)}
+              disabled={!isOwner || tradeSaving || !state}
+              aria-label="صنفِ کسب‌وکار"
+              searchPlaceholder="نامِ صنف…"
+            >
+              <option value="">— اعلام نشده —</option>
+              {tradeGroups.map((g) => (
+                <optgroup key={g.key} label={g.label}>
+                  {g.trades.map((t) => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </SearchSelect>
+            {state && !state.trade && (
+              <p className="mp-note-line">
+                تا وقتی صنفی اعلام نکنید، بازارِ پخش برای شما فیلتر نمی‌شود و همه‌ی
+                پخش‌کننده‌ها را می‌بینید.
+              </p>
+            )}
+            {!isOwner && (
+              <p className="mp-note-line">تغییرِ صنف فقط دستِ مالکِ کسب‌وکار است.</p>
+            )}
+          </>
+        )}
+      </SectionCard>
+
       <SectionCard
         icon={SlidersHorizontal}
         title="ماژول‌های پنل"
         description={
           state
-            ? `صنفِ ${industry} — ${fa(onCount)} از ${fa(toggleable.length)} ماژولِ اختیاری روشن است.`
+            ? `قالبِ ${industry} — ${fa(onCount)} از ${fa(toggleable.length)} ماژولِ اختیاری روشن است.`
             : 'در حال بارگذاری…'
         }
         actions={
