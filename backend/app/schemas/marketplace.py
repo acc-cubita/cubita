@@ -392,6 +392,12 @@ class CatalogListingOut(BaseModel):
     min_order_qty: Decimal
     max_order_qty: Decimal
     daily_order_limit: int
+    #: §۳۰ — «موجودی قابل سفارش»، از انبارِ پخش‌کننده منهای رزروِ سفارش‌های دیگر.
+    #:
+    #: `None` یعنی **نامعلوم** (پخش‌کننده انبارِ فعالی ندارد) و رابط اصلاً نشانش
+    #: نمی‌دهد؛ صفر یعنی واقعاً ناموجود و باید دیده شود. یکی‌کردنِ این دو یعنی
+    #: کاتالوگ «ناموجود» بگوید در حالی که فقط پیکربندی ناقص است.
+    orderable_qty: Decimal | None = None
     components: list[CatalogComponentOut]
 
 

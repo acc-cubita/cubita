@@ -6000,6 +6000,11 @@ export interface CatalogListing {
   min_order_qty: string
   max_order_qty: string
   daily_order_limit: number
+  /**
+   * §۳۰ — «موجودی قابل سفارش»، از انبارِ پخش‌کننده منهای رزروِ سفارش‌های دیگر.
+   * `null` یعنی **نامعلوم** و اصلاً نشان داده نمی‌شود؛ صفر یعنی واقعاً ناموجود.
+   */
+  orderable_qty: string | null
   components: { item_name: string; qty: string }[]
 }
 

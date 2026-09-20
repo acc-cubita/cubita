@@ -12214,3 +12214,13 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .lp-foot .btn-primary { margin-inline-start: 0; }
   .lp-foot button { flex: 1 1 140px; justify-content: center; }
 }
+
+/* «موجودی قابل سفارش» روی کارتِ کاتالوگ (§۳۰) */
+.product-card-stock {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.product-card-stock--out {
+  color: var(--danger);
+  font-weight: 600;
+}
