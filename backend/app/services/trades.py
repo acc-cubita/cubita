@@ -1234,6 +1234,7 @@ TRADE_GROUPS: tuple[TradeGroup, ...] = (
             Trade("construction_equipment_rental", "اجاره تجهیزات ساختمانی"),
             Trade("audio_equipment_rental", "اجاره تجهیزات صوتی"),
             Trade("camera_rental", "اجاره تجهیزات تصویری"),
+            Trade("event_rental", "اجاره لوازم مراسم"),
         ),
     ),
     TradeGroup(
