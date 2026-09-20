@@ -21,6 +21,9 @@ from app.models.marketplace import MarketplaceOrder
 from app.models.user import User
 from app.services.payment_providers import get_provider
 from app.schemas.marketplace import (
+    CatalogAllocationIn,
+    CatalogAllocationOut,
+    CatalogAllocationToggleIn,
     CatalogListingOut,
     CommissionOverviewOut,
     CommissionPeriodOut,
@@ -621,3 +624,43 @@ def my_commissions(
     db: Session = Depends(get_db),
 ):
     return [CommissionPeriodOut(**r) for r in svc.commission_summary(db, principal.tenant_id)]
+
+
+# ── تخصیصِ بار به کاتالوگ: سمتِ پخش‌کننده (§۵ §۶ §۷) ──────────────────
+@router.get("/distributor/listings/{listing_id}/allocations", response_model=list[CatalogAllocationOut])
+def list_catalog_allocations(
+    listing_id: UUID,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+):
+    """بارهایی که به این قلمِ کاتالوگ داده شده‌اند، با وضعیتِ واقعیِ هرکدام."""
+    return [CatalogAllocationOut(**r) for r in svc.catalog_allocation_rows(db, principal.tenant_id, listing_id)]
+
+
+@router.post("/distributor/listings/{listing_id}/allocations", response_model=dict, status_code=201)
+def allocate_batch_to_listing(
+    listing_id: UUID,
+    data: CatalogAllocationIn,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("marketplace", "update")),
+):
+    """بخشی از یک بار را به کاتالوگ می‌دهد (§۶).
+
+    بارِ ۱۰۰۰تایی در انبار لزوماً یعنی ۱۰۰۰ تا برای فروشِ عمده نیست؛ این مرز
+    تا امروز اصلاً وجود نداشت.
+    """
+    row = svc.allocate_batch(db, principal.tenant_id, listing_id, data.batch_id, data.qty, user)
+    return {"id": str(row["id"]), "batch_id": str(row["batch_id"]), "qty": str(row["qty"])}
+
+
+@router.post("/distributor/allocations/{allocation_id}/toggle", status_code=204)
+def toggle_catalog_allocation(
+    allocation_id: UUID,
+    data: CatalogAllocationToggleIn,
+    principal: Principal = Depends(distributor_principal),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("marketplace", "update")),
+):
+    """تخصیص را روشن/خاموش می‌کند — حذف نمی‌شود تا تاریخچه بماند."""
+    svc.set_allocation_active(db, principal.tenant_id, allocation_id, is_active=data.is_active)

@@ -6008,6 +6008,29 @@ export interface CatalogListing {
   components: { item_name: string; qty: string }[]
 }
 
+/** تخصیصِ بارِ ورودی به یک قلمِ کاتالوگ (§۶). */
+export interface CatalogAllocation {
+  id: string
+  batch_id: string
+  batch_number: string
+  item_name: string
+  expiry_date: string | null
+  qty: string
+  /** قابلِ فروشِ خودِ بار — سقفِ واقعیِ این تخصیص. بارِ فراخوان‌شده صفر می‌شود. */
+  batch_sellable_qty: string
+  batch_status: string
+  is_active: boolean
+}
+export const fetchCatalogAllocations = (token: string, listingId: string) =>
+  authedGet<CatalogAllocation[]>(token, `/api/marketplace/distributor/listings/${listingId}/allocations`)
+export const allocateBatchToListing = (token: string, listingId: string, batchId: string, qty: number) =>
+  authedSend<{ id: string; batch_id: string; qty: string }>(
+    token, 'POST', `/api/marketplace/distributor/listings/${listingId}/allocations`,
+    { batch_id: batchId, qty },
+  )
+export const toggleCatalogAllocation = (token: string, allocationId: string, isActive: boolean) =>
+  authedSend<void>(token, 'POST', `/api/marketplace/distributor/allocations/${allocationId}/toggle`, { is_active: isActive })
+
 // سمتِ پخش‌کننده — اتصال‌ها
 export const fetchMpDistributorConnections = (token: string) =>
   authedGet<MpConnection[]>(token, '/api/marketplace/distributor/connections')
