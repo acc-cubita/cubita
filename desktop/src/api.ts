@@ -5740,6 +5740,8 @@ export interface Listing {
   images: string[]
   category: string
   is_published: boolean
+  /** اصنافی که این قلم *علاوه بر* اصنافِ کلیِ پخش‌کننده به آن‌ها هم می‌رسد. */
+  extra_trades: string[]
   min_order_qty: string
   max_order_qty: string
   daily_order_limit: number
@@ -5759,6 +5761,7 @@ export interface ListingIn {
   images?: string[]
   category?: string
   is_published?: boolean
+  extra_trades?: string[]
   min_order_qty?: number
   max_order_qty?: number
   daily_order_limit?: number
@@ -5796,6 +5799,12 @@ export interface DistributorCard {
   tenant_id: string
   display_name: string
   connection_status: MpConnectionStatus | null
+  /**
+   * تعدادِ اقلامِ منتشرشده‌ای که به صنفِ من می‌رسند، و کلِ اقلامِ منتشرشده. وقتی
+   * اولی از دومی کمتر است یعنی کاتالوگِ باریکی در انتظار است — و کارت می‌گویدش.
+   */
+  matching_listings: number
+  total_listings: number
 }
 
 export interface MpMessage {

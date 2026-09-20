@@ -19,7 +19,8 @@ import { StatCard } from '../components/StatCard'
 import { EmptyState } from '../components/EmptyState'
 import { Tabs } from '../components/Tabs'
 import { useNavSection } from '../components/navContext'
-import { useTrades } from '../lib/useTrades'
+import { useTrades, labelOfTrade } from '../lib/useTrades'
+import { TradePicker, ExtraTradesHint } from '../components/TradePicker'
 import { toFaDigits } from '../lib/jalali'
 import { ItemPicker } from '../components/ItemPicker'
 import { NumberInput } from '../components/NumberInput'
@@ -103,6 +104,15 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
 }
 
 function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
+  const { groups: tradeGroups } = useTrades()
+  //: اصنافِ کلیِ خودِ پخش‌کننده لازم است چون «اضافه» روی «همه» بی‌اثر است؛ بدونِ
+  //: دانستنش نمی‌شود این را به کاربر گفت و انتخابش بی‌صدا بی‌نتیجه می‌ماند.
+  const [ownTargets, setOwnTargets] = useState<string[]>([])
+  useEffect(() => {
+    void fetchMpSettings(token)
+      .then((st) => setOwnTargets(st.target_trades ?? []))
+      .catch(() => setOwnTargets([]))
+  }, [token])
   const guided = useTheme().theme.content === 'guided'
   const [listings, setListings] = useState<Listing[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -231,6 +241,18 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
           <span className="field-hint">هر فروشگاه در هر سفارش باید بین حداقل و حداکثر سفارش دهد؛ و در هر روز حداکثر به تعدادِ تعیین‌شده می‌تواند سفارش ثبت کند.</span>
         </fieldset>
 
+        {tradeGroups.length > 0 && (
+          <fieldset className="mp-limits">
+            <legend>ارائه به اصنافِ دیگر (اختیاری)</legend>
+            <ExtraTradesHint count={form.extraTrades.length} ownTargets={ownTargets} />
+            <TradePicker
+              groups={tradeGroups}
+              value={form.extraTrades}
+              onChange={(next) => setForm({ ...form, extraTrades: next })}
+            />
+          </fieldset>
+        )}
+
         <label className="cal-check-inline">
           <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })} />
           منتشر شود (در بازار برای فروشگاه‌های متصل دیده شود)
@@ -267,6 +289,16 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
                             {l.kind === 'pack'
                               ? `${l.components.length} قلم: ${l.components.map((c) => `${itemName.get(c.item_id) ?? c.item_name}×${faMoney(c.qty)}`).join('، ')}`
                               : (itemName.get(l.item_id ?? '') ?? '—')}
+                            {/* وضعیتی که دیده نشود عملاً وجود ندارد: بدونِ این نشان،
+                                پخش‌کننده نمی‌داند کدام قلمش اصنافِ اضافه دارد. */}
+                            {(l.extra_trades?.length ?? 0) > 0 && (
+                              <span
+                                className="status-badge tone-info trade-extra-badge"
+                                title={l.extra_trades.map((k) => labelOfTrade(tradeGroups, k)).join('، ')}
+                              >
+                                +{toFaDigits(String(l.extra_trades.length))} صنف
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -304,7 +336,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
 
       {guided ? (
         <>
-          <ListingWizard draft={draft} items={items} />
+          <ListingWizard draft={draft} items={items} ownTargets={ownTargets} />
           {listCard}
         </>
       ) : (
@@ -771,21 +803,6 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
   const { groups: tradeGroups } = useTrades()
 
   const targets = settings.target_trades ?? []
-  const targetSet = new Set(targets)
-
-  function setTargets(next: string[]) {
-    setSettings({ ...settings, target_trades: next })
-  }
-
-  function toggleTrade(key: string) {
-    setTargets(targetSet.has(key) ? targets.filter((k) => k !== key) : [...targets, key])
-  }
-
-  /** «کلِ این گروه» — اگر همه‌اش انتخاب است برمی‌دارد، وگرنه همه را می‌گذارد. */
-  function toggleGroup(keys: string[]) {
-    const all = keys.every((k) => targetSet.has(k))
-    setTargets(all ? targets.filter((k) => !keys.includes(k)) : [...new Set([...targets, ...keys])])
-  }
 
   useEffect(() => {
     void fetchMpSettings(token).then((s) => { setSettings(s); onActiveChange?.(s.is_active) }).catch(() => {})
@@ -852,34 +869,11 @@ function SettingsPanel({ token, onActiveChange }: { token: string; onActiveChang
                 اصناف شما را در بازار می‌بینند.
               </p>
             )}
-            <div className="trade-picker">
-              {tradeGroups.map((g) => {
-                const keys = g.trades.map((t) => t.key)
-                const allOn = keys.every((k) => targetSet.has(k))
-                return (
-                  <div key={g.key} className="trade-group">
-                    <div className="trade-group-head">
-                      <span className="trade-group-title">{g.label}</span>
-                      <button type="button" className="link-btn" onClick={() => toggleGroup(keys)}>
-                        {allOn ? 'برداشتنِ گروه' : 'کلِ گروه'}
-                      </button>
-                    </div>
-                    <div className="trade-items">
-                      {g.trades.map((t) => (
-                        <label key={t.key} className="cal-check-inline">
-                          <input
-                            type="checkbox"
-                            checked={targetSet.has(t.key)}
-                            onChange={() => toggleTrade(t.key)}
-                          />
-                          {t.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            <TradePicker
+              groups={tradeGroups}
+              value={targets}
+              onChange={(next) => setSettings({ ...settings, target_trades: next })}
+            />
           </fieldset>
         )}
 

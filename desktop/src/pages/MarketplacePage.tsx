@@ -62,7 +62,7 @@ export function MarketplacePage({ token, trade }: { token: string; trade: string
         syncPage="marketplace"
         tabs={[
           { key: 'distributors', label: 'پخش‌کننده‌ها', icon: Store, content: <Distributors token={token} trade={trade} /> },
-          { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} /> },
+          { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} trade={trade} /> },
           { key: 'orders', label: 'سفارش‌های من', icon: ClipboardList, content: <Orders token={token} /> },
           { key: 'returns', label: 'مرجوعی', icon: Undo2, content: <MpRetailerReturns token={token} /> },
         ]}
@@ -148,7 +148,16 @@ function Distributors({ token, trade }: { token: string; trade: string | null })
                     const canRequest = st === null || st === 'rejected'
                     return (
                       <tr key={d.tenant_id}>
-                        <td className="card-title" data-label="پخش‌کننده"><div className="entity-name">{d.display_name}</div></td>
+                        <td className="card-title" data-label="پخش‌کننده">
+                          <div className="entity-name">{d.display_name}</div>
+                          {/* فقط وقتی کاتالوگ برای این فروشگاه باریک‌تر از کلِ کاتالوگ
+                              است — وگرنه برای پخش‌کننده‌ی کاملاً مرتبط نویز است. */}
+                          {d.matching_listings < d.total_listings && (
+                            <div className="entity-sub">
+                              {faNum(d.matching_listings)} قلم از {faNum(d.total_listings)} قلم برای صنفِ شما
+                            </div>
+                          )}
+                        </td>
                         <td data-label="وضعیت">{badge ? <span className={`status-badge ${badge.tone}`}>{badge.label}</span> : <span className="entity-sub">متصل نیستید</span>}</td>
                         <td className="card-actions">
                           <div className="check-actions">
@@ -195,7 +204,8 @@ function Distributors({ token, trade }: { token: string; trade: string | null })
 
 interface CartLine { listing: CatalogListing; qty: string }
 
-function Catalog({ token }: { token: string }) {
+function Catalog({ token, trade }: { token: string; trade: string | null }) {
+  const { groups: tradeGroups } = useTrades()
   const [items, setItems] = useState<CatalogListing[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -275,6 +285,16 @@ function Catalog({ token }: { token: string }) {
         }
       >
         {error && <div className="error">{error}</div>}
+        {/* کاتالوگ هم مثلِ فهرستِ پخش‌کننده‌ها با صنف فیلتر می‌شود. بی‌گفتنِ دلیل،
+            فروشگاه می‌بیند پخش‌کننده‌ای که به او وصل است دو قلم دارد و نتیجه
+            می‌گیرد انبارش خالی است. */}
+        {trade && (
+          <p className="mp-note-line">
+            بر اساسِ صنفِ شما ({labelOfTrade(tradeGroups, trade)}) فیلتر شده است: اقلامی که
+            پخش‌کننده به این صنف می‌دهد. ممکن است یک پخش‌کننده اقلامِ دیگری هم داشته باشد
+            که برای صنفِ دیگری گذاشته.
+          </p>
+        )}
         {categories.length > 0 && (
           <div className="cat-chips" role="tablist" aria-label="دسته‌بندی">
             <button

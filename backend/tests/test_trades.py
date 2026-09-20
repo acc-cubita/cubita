@@ -13,7 +13,7 @@ import uuid
 
 import pytest
 
-from app.models.marketplace import MarketplaceSettings
+from app.models.marketplace import MarketplaceConnection, MarketplaceListing, MarketplaceSettings
 from app.models.tenant import Tenant
 from app.services import marketplace as mp
 from tests.conftest import PRIMARY_SLUG
@@ -239,3 +239,152 @@ def test_marketplace_settings_roundtrip_trades(as_distributor):
     )
     assert r.status_code == 200, r.text
     assert r.json()["target_trades"] == ["icecream", "tools"]
+
+
+# ── اصنافِ اضافه‌ی یک قلمِ کاتالوگ ──────────────────────────────────────
+#
+# موردِ واقعی: تولیدیِ پوشاک که «لباس کار» هم می‌سازد و می‌خواهد فقط همان یک قلم را
+# به یدکی‌فروشی و ابزارفروشی بدهد، بدونِ اینکه کلِ کاتالوگِ پیراهن و مانتو برایشان
+# باز شود.
+@pytest.mark.parametrize(
+    "retailer_trade,targets,extra,visible,why",
+    [
+        ("apparel", ["apparel"], [], True, "صنفِ خودِ هدف"),
+        ("autoparts", ["apparel"], [], False, "بیرون از هدف، بدونِ اضافه"),
+        ("autoparts", ["apparel"], ["autoparts", "tools"], True, "موردِ لباس کار"),
+        ("apparel", ["apparel"], ["autoparts"], True, "«اضافه» چیزی را برنمی‌دارد"),
+        (None, ["apparel"], [], True, "فروشگاهِ بی‌صنف"),
+        ("autoparts", [], ["apparel"], True, "بدونِ صنفِ کلی، «اضافه» بی‌اثر است"),
+    ],
+)
+def test_listing_visibility_rule(retailer_trade, targets, extra, visible, why):
+    assert mp.listing_visible_to_trade(retailer_trade, targets, extra) is visible, why
+
+
+def _listing(db, dist: Tenant, title: str, extra: list[str]) -> MarketplaceListing:
+    l = MarketplaceListing(
+        distributor_tenant_id=dist.id,
+        kind="single",
+        title=title,
+        unit="عدد",
+        wholesale_price=10000,
+        is_published=True,
+        extra_trades=extra,
+        distributor_item_id=None,
+    )
+    db.add(l)
+    db.flush()
+    return l
+
+
+def _connect(db, dist: Tenant, shop: Tenant) -> None:
+    db.add(
+        MarketplaceConnection(
+            distributor_tenant_id=dist.id, retailer_tenant_id=shop.id, status="approved"
+        )
+    )
+    db.flush()
+
+
+@pytest.fixture
+def apparel_maker(db):
+    """تولیدیِ پوشاک: هدفش پوشاک است، ولی «لباس کار» را به یدکی هم می‌دهد."""
+    dist = _distributor(db, ["apparel"])
+    _listing(db, dist, "پیراهن مردانه", [])
+    _listing(db, dist, "لباس کار", ["autoparts"])
+    return dist
+
+
+def test_autoparts_shop_discovers_the_maker_through_one_item(db, apparel_maker):
+    """بدونِ این، یدکی‌فروش هرگز وصل نمی‌شود و «لباس کار» برایش وجود ندارد."""
+    shop = _bare(db, "retailer", trade="autoparts")
+    cards = {r["display_name"]: r for r in mp.list_distributors_for_retailer(db, shop.id)}
+    card = cards.get(f"پخش {apparel_maker.slug}")
+    assert card is not None
+    #: کارت می‌گوید کاتالوگِ باریکی در انتظار است، تا فروشگاه پیش از اتصال بداند.
+    assert (card["matching_listings"], card["total_listings"]) == (1, 2)
+
+
+def test_autoparts_shop_sees_only_the_extra_item(db, apparel_maker):
+    """کلِ نکته‌ی این قابلیت: یک قلم باز می‌شود، نه کلِ کاتالوگ."""
+    shop = _bare(db, "retailer", trade="autoparts")
+    _connect(db, apparel_maker, shop)
+    assert [r["title"] for r in mp.list_catalog(db, shop.id)] == ["لباس کار"]
+
+
+def test_apparel_shop_still_sees_everything(db, apparel_maker):
+    """«اضافه» اضافه می‌کند و برنمی‌دارد — قلمِ اضافه‌دار از مخاطبِ اصلی گرفته نمی‌شود."""
+    shop = _bare(db, "retailer", trade="apparel")
+    _connect(db, apparel_maker, shop)
+    assert sorted(r["title"] for r in mp.list_catalog(db, shop.id)) == ["لباس کار", "پیراهن مردانه"]
+
+
+def test_retailer_without_trade_sees_the_whole_catalog(db, apparel_maker):
+    """تضمینِ بی‌اثری روی داده‌ی موجود: همه‌ی فروشگاه‌های امروز `trade = NULL` اند."""
+    shop = _bare(db, "retailer", trade=None)
+    _connect(db, apparel_maker, shop)
+    assert len(mp.list_catalog(db, shop.id)) == 2
+
+
+def test_distributor_without_targets_shows_everything(db):
+    """پخش‌کننده‌ی بدونِ صنفِ کلی: «اضافه» چیزی را محدود نمی‌کند — قیدِ صریحِ طراحی."""
+    dist = _distributor(db, [])
+    _listing(db, dist, "قلمِ عادی", [])
+    _listing(db, dist, "قلمِ اضافه‌دار", ["icecream"])
+    shop = _bare(db, "retailer", trade="autoparts")
+    _connect(db, dist, shop)
+    assert len(mp.list_catalog(db, shop.id)) == 2
+
+
+def test_order_on_an_invisible_listing_is_rejected(db, apparel_maker):
+    """فیلتر باید گارد باشد نه تزئین: با `listing_id`ِ حدس‌زده هم نباید سفارش برود."""
+    from fastapi import HTTPException
+
+    shop = _bare(db, "retailer", trade="autoparts")
+    _connect(db, apparel_maker, shop)
+    hidden = (
+        db.query(MarketplaceListing)
+        .filter(
+            MarketplaceListing.distributor_tenant_id == apparel_maker.id,
+            MarketplaceListing.title == "پیراهن مردانه",
+        )
+        .one()
+    )
+
+    class _Line:
+        listing_id = hidden.id
+        qty = 1
+
+    class _Data:
+        distributor_tenant_id = apparel_maker.id
+        lines = [_Line()]
+        note = ""
+
+    with pytest.raises(HTTPException) as e:
+        mp.place_order(db, shop.id, _Data())
+    assert e.value.status_code == 400
+    #: پیام را هم می‌سنجیم تا تست با یک ۴۰۰ِ بی‌ربط (اعتبارسنجیِ تعداد و …) سبز نماند.
+    assert "کاتالوگِ این پخش‌کننده" in e.value.detail
+
+    #: شاهد: همان مسیر با قلمِ دیده‌شدنی از این گیت رد می‌شود.
+    visible = (
+        db.query(MarketplaceListing)
+        .filter(
+            MarketplaceListing.distributor_tenant_id == apparel_maker.id,
+            MarketplaceListing.title == "لباس کار",
+        )
+        .one()
+    )
+    _Line.listing_id = visible.id
+    try:
+        mp.place_order(db, shop.id, _Data())
+    except HTTPException as ok:
+        assert "کاتالوگِ این پخش‌کننده" not in ok.detail
+
+
+def test_listing_rejects_unknown_extra_trade(as_distributor):
+    r = as_distributor.post(
+        "/api/marketplace/distributor/listings",
+        json={"kind": "pack", "title": "x", "components": [], "extra_trades": ["نه‌چنین‌صنفی"]},
+    )
+    assert r.status_code == 422

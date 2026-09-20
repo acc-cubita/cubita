@@ -4576,6 +4576,8 @@ button.topnav-org:hover {
 }
 /* آیتمِ گرید بدونِ این، با برچسبِ بلند از عرضِ ظرف بیرون می‌زند. */
 .trade-items > * { min-width: 0; }
+/* نشانِ «+n صنف» کنارِ زیرنویسِ لیستینگ — نه سرِ خط، که ردیف را بلند نکند. */
+.trade-extra-badge { margin-inline-start: var(--sp-2); vertical-align: middle; }
 @media (max-width: 760px) {
   .trade-items { grid-template-columns: 1fr; }
   .trade-picker { max-height: none; }
