@@ -188,10 +188,12 @@ def extend_account(db: Session, tenant_id: UUID, *, days: int | None = None, exp
     db.flush()
 
 
-def set_status(db: Session, tenant_id: UUID, *, new_status: str, acting_tenant_id: UUID) -> None:
-    """تعلیق/فعال‌سازیِ کسب‌وکار. مدیر نمی‌تواند اکانتِ خودش را تعلیق کند (قفلِ بیرون)."""
-    if tenant_id == acting_tenant_id and new_status != "active":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نمی‌توانید اکانتِ خودتان را تعلیق کنید")
+def set_status(db: Session, tenant_id: UUID, *, new_status: str) -> None:
+    """تعلیق/فعال‌سازیِ کسب‌وکار.
+
+    گاردِ «اکانتِ خودت را تعلیق نکن» برداشته شد چون دیگر موضوعیت ندارد: کارمندِ
+    ستاد از `admin.cubita.ir` کار می‌کند و اصلاً مستأجری ندارد که خودش باشد.
+    """
     tenant = _require(db, tenant_id)
     tenant.status = new_status
     db.flush()
@@ -207,9 +209,22 @@ def reset_owner_password(db: Session, tenant_id: UUID, *, password: str) -> None
     db.flush()
 
 
-def delete_account(db: Session, tenant_id: UUID, *, acting_tenant_id: UUID) -> None:
-    """پاک‌سازیِ کاملِ اکانت. مدیر نمی‌تواند اکانتِ خودش را حذف کند."""
-    if tenant_id == acting_tenant_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نمی‌توانید اکانتِ خودتان را حذف کنید")
-    _require(db, tenant_id)
+def delete_account(db: Session, tenant_id: UUID, *, confirm_slug: str) -> None:
+    """پاک‌سازیِ کاملِ اکانت — برگشت‌ناپذیر.
+
+    گاردِ قدیمی «اکانتِ خودت را حذف نکن» با کوچ به هویتِ ستاد بی‌موضوع شد (کارمندِ
+    ستاد مستأجری ندارد). جایش چیزی نشست که واقعاً از اشتباه جلوگیری می‌کند:
+    **تایپ‌کردنِ شناسه‌ی همان کسب‌وکار**.
+
+    `idempotency.idempotent` اینجا قابلِ استفاده نیست: `IdempotencyKey` جدولِ
+    مستأجرمحور است و درخواستِ ستاد هیچ مستأجری ندارد، پس `WITH CHECK` درجش را رد
+    می‌کند. خودِ `confirm_slug` نقشِ گارد را بازی می‌کند و DELETEِ تکراری روی
+    اکانتِ حذف‌شده ۴۰۴ می‌گیرد. این را عوض نکنید بدونِ خواندنِ همین بند.
+    """
+    tenant = _require(db, tenant_id)
+    if (confirm_slug or "").strip() != tenant.slug:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"برای حذف باید شناسه‌ی کسب‌وکار («{tenant.slug}») را دقیق وارد کنید",
+        )
     purge_tenant(db, tenant_id)

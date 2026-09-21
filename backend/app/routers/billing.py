@@ -1,15 +1,18 @@
-from uuid import UUID
+"""قیفِ فروشِ خودِ کوبیتا — **فقط مسیرهای عمومی**.
 
+دو اندپوینتِ ستادیِ `/api/admin/purchases*` به `app/routers/admin_billing.py`
+منتقل شدند. اینجا ماندنشان یعنی یک فایل هم مسیرِ بی‌احراز‌هویتِ cubita.ir را
+داشت و هم قدرتِ دیدنِ داده‌ی هویتیِ همه‌ی مشتریان را — و تفکیکشان در بازبینی
+به چشم نمی‌آمد.
+"""
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import require_platform_admin
 from app.models.billing import Plan
-from app.models.user import User
-from app.schemas.billing import PlanOut, PurchaseFulfillIn, PurchaseOut, PurchaseRequestIn, PurchaseRequestOut
+from app.schemas.billing import PlanOut, PurchaseRequestIn, PurchaseRequestOut
 from app.services import billing as billing_service
 
 router = APIRouter(tags=["billing"])
@@ -41,21 +44,3 @@ def purchase_callback(Authority: str, Status: str, db: Session = Depends(get_db)
         return RedirectResponse(f"{site}/checkout-result?status=success")
     return RedirectResponse(f"{site}/checkout-result?status=failed")
 
-
-@router.get("/api/admin/purchases", response_model=list[PurchaseOut])
-def admin_list_purchases(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_platform_admin),
-):
-    """کنترل‌پنل پلتفرم — داده‌ی هویتی همه‌ی مشتریان. پشت PLATFORM_ADMIN_EMAILS، نه RBAC مستأجر."""
-    return billing_service.list_purchases(db)
-
-
-@router.post("/api/admin/purchases/{purchase_id}/fulfill", response_model=PurchaseOut)
-def admin_fulfill_purchase(
-    purchase_id: UUID,
-    data: PurchaseFulfillIn,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_platform_admin),
-):
-    return billing_service.fulfill_purchase(db, purchase_id, data.admin_notes)

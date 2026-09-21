@@ -81,6 +81,16 @@ _password_reset_per_phone = SlidingWindowLimiter(max_events=3, window_seconds=36
 #: راستی‌آزماییِ کدِ بازیابیِ پیامکی — سقفِ IP روی خودِ «سنجشِ کد». `consume_code` سقفِ ۵
 #: تلاش را per-code دارد؛ این، حدسِ توزیع‌شده از یک IP روی چند شماره را هم می‌بندد.
 _sms_reset_verify_limiter = SlidingWindowLimiter(max_events=10, window_seconds=900)
+#: ورودِ ستاد (admin.cubita.ir). سخت‌گیرانه‌تر از ورودِ مستأجر (۱۰/۵دقیقه) چون این
+#: دامنه هدفِ به‌مراتب باارزش‌تری است و سطلِ IP‌اش با هیچ چیزِ دیگری مشترک نیست.
+#: سقفِ واقعی اما `limit_req`ِ nginx است — شمارنده‌ی اینجا درون‌فرایندی است و با
+#: چند worker ضرب می‌شود (بالای همین فایل توضیح داده شده).
+_admin_login_limiter = SlidingWindowLimiter(max_events=5, window_seconds=900)
+#: سقفِ جداگانه بر اساس خودِ ایمیل، تا حدسِ رمزِ یک کارمندِ مشخص از چند IP بسته شود.
+_admin_login_per_email = SlidingWindowLimiter(max_events=10, window_seconds=3600)
+#: نوشتن‌های کنترل‌پنل. هدف نه حدسِ رمز، که مهارِ اسکریپتی است که تصادفاً روی
+#: اندپوینتِ مخرب حلقه می‌زند.
+_admin_write_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
 
 
 def limit_login(request: Request) -> None:
@@ -141,6 +151,24 @@ def limit_sms_reset_verify(request: Request) -> None:
     _sms_reset_verify_limiter.check(f"sms-reset-verify:{client_key(request)}")
 
 
+def limit_admin_login(request: Request) -> None:
+    _admin_login_limiter.check(f"admin-login:{client_key(request)}")
+
+
+def limit_admin_login_for_email(email: str) -> None:
+    """برخلافِ بازیابیِ رمز، اینجا استثنا می‌اندازد.
+
+    آنجا یکنواختیِ پاسخ لازم بود تا وجودِ ایمیل لو نرود؛ اینجا هر پاسخِ ناموفق
+    **یکسان** است (۴۰۱ـِ واحد برای رمزِ غلط، کاربرِ غیرفعال و نبودِ ردیفِ ستاد)، پس
+    ۴۲۹ چیزی درباره‌ی وجودِ ایمیل نمی‌گوید.
+    """
+    _admin_login_per_email.check(f"admin-login-email:{email.strip().lower()}")
+
+
+def limit_admin_write(request: Request) -> None:
+    _admin_write_limiter.check(f"admin-write:{client_key(request)}")
+
+
 def reset_all() -> None:
     """فقط برای تست — وگرنه تست‌ها به‌خاطر سقف مشترک روی هم اثر می‌گذارند."""
     _login_limiter.reset()
@@ -152,3 +180,6 @@ def reset_all() -> None:
     _sms_code_limiter.reset()
     _email_code_limiter.reset()
     _email_code_per_email.reset()
+    _admin_login_limiter.reset()
+    _admin_login_per_email.reset()
+    _admin_write_limiter.reset()

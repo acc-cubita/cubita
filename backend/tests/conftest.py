@@ -79,7 +79,13 @@ def _schema():
         #: `check_events` هم فقط‌افزودنی است (§۴۷ فصلِ عملیاتِ چک). بدونِ این خط،
         #: تست‌ها روی جدولی اجرا می‌شدند که قابلِ ویرایش است — یعنی همان خاصیتی که
         #: کلِ ارزشِ جدول است سنجیده نمی‌شد.
-        for stmt in append_only_statements() + append_only_statements("check_events"):
+        #: `staff_audit_log` هم فقط‌افزودنی است — و از آن دوتای بالا حساس‌تر، چون
+        #: تنها ردِ کارهایی است که هیچ جای دیگری ثبت نمی‌شوند (حذفِ اکانت).
+        for stmt in (
+            append_only_statements()
+            + append_only_statements("check_events")
+            + append_only_statements("staff_audit_log")
+        ):
             conn.execute(text(stmt))
 
     session = SessionLocal()
@@ -210,3 +216,62 @@ def client(db, user):
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def staff_user(db):
+    """کاربرِ ستاد + ردیفِ `platform_admins`.
+
+    عمداً **هیچ عضویتی در هیچ کسب‌وکاری ندارد** — همین نکته‌ی اصلیِ هویتِ ستاد است
+    و اگر فیکسچر عضویت می‌ساخت، تست‌ها چیزی را می‌سنجیدند که در production نیست.
+    """
+    from app.models.tenant import PlatformAdmin
+    from app.security import hash_password
+
+    def _make(email: str = "staff@staff.cubita.ir", role: str = "owner") -> PlatformAdmin:
+        u = User(
+            name="کارمندِ ستاد",
+            email=email,
+            hashed_password=hash_password("StaffPassword!2026"),
+            active=True,
+        )
+        db.add(u)
+        db.flush()
+        admin = PlatformAdmin(user_id=u.id, is_active=True, role=role)
+        db.add(admin)
+        db.flush()
+        return admin
+
+    return _make
+
+
+@pytest.fixture
+def staff_client(db, staff_user):
+    """کلاینتِ ستاد با **توکنِ واقعی** — بدونِ override کردنِ احراز هویت.
+
+    برخلافِ فیکسچرِ `client`، اینجا مسیرِ واقعیِ `get_staff_principal` اجرا می‌شود.
+    دلیلش این است که خودِ آن مسیر چیزی است که باید سنجیده شود: نوعِ توکن، نبودِ
+    عضویت، و اینکه هیچ مستأجری بسته نمی‌شود.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.security import create_staff_token
+
+    def _make(role: str = "owner", email: str = "staff@staff.cubita.ir") -> TestClient:
+        admin = staff_user(email=email, role=role)
+        app.dependency_overrides[get_db] = lambda: db
+        c = TestClient(app)
+        c.headers.update({"Authorization": f"Bearer {create_staff_token(admin.user)}"})
+        return c
+
+    try:
+        yield _make
+    finally:
+        app_overrides_clear()
+
+
+def app_overrides_clear() -> None:
+    from app.main import app
+
+    app.dependency_overrides.clear()

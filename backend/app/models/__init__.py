@@ -142,10 +142,13 @@ from app.models.settlement import Settlement, SettlementAllocation
 from app.models.owner_transactions import OwnerTransaction
 from app.models.treasury import TreasuryTransaction
 from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
+from app.models.staff_audit import StaffAuditLog
 from app.models.user import Role, User
 
 __all__ = [
     "AssuranceEngagement",
+    "PlatformAdmin",
+    "StaffAuditLog",
     "AssuranceFinding",
     "AssuranceRun",
     "Settlement",

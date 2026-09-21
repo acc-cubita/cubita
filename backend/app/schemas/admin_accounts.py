@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 MIN_PASSWORD = 10  # هم‌راستا با SignupIn
 
@@ -161,3 +161,16 @@ class ResetPasswordIn(BaseModel):
         if len(v) < MIN_PASSWORD:
             raise ValueError(f"رمز عبور باید حداقل {MIN_PASSWORD} کاراکتر باشد")
         return v
+
+
+class DeleteAccountIn(BaseModel):
+    """تأییدِ حذفِ برگشت‌ناپذیر.
+
+    تایپ‌کردنِ شناسه‌ی کسب‌وکار تنها گاردی است که هم جلوی کلیکِ اشتباه را می‌گیرد و
+    هم جلوی ارسالِ دوباره. دلیلِ اینکه از `idempotent()` استفاده نشده در
+    docstringِ `admin_accounts.delete_account` نوشته شده.
+    """
+
+    confirm_slug: str
+    #: دلیل در ردِ ستاد می‌نشیند. حذفی که دلیلش ثبت نشده، شش ماه بعد قابلِ دفاع نیست.
+    reason: str = Field(min_length=10, max_length=300)

@@ -193,11 +193,36 @@ class Membership(UUIDPKMixin, TimestampMixin, Base):
 
 
 class PlatformAdmin(UUIDPKMixin, TimestampMixin, Base):
-    """ادمین خودِ کوبیتا. جدا از RBAC مستأجر، عمداً."""
+    """کارمندِ ستادِ کوبیتا. جدا از RBAC مستأجر، عمداً.
+
+    **اعتبارنامه اینجا نیست، روی `users` است.** `set_password` تنها مسیرِ سنجیده‌ی
+    تغییرِ رمز است و `token_version` تنها سازوکارِ ابطال؛ انبارِ دومِ رمز یعنی مسیرِ
+    دومِ هش و بازیابی و ابطال، و سه فرصتِ تازه برای اشتباه بی‌هیچ سود. پس:
+    `users` = هویت، `platform_admins` = اختیار.
+
+    نتیجه‌ی مهمش این است که کارمندِ ستاد می‌تواند **صفر عضویت** در هر کسب‌وکاری
+    داشته باشد — و همین هدفِ کوچ به admin.cubita.ir است.
+    """
 
     __tablename__ = "platform_admins"
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    user: Mapped["User"] = relationship()  # noqa: F821
+    #: owner | admin | finance | support — `app/staff_roles.py`.
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="support")
+
+    #: مجوزِ اختصاصی؛ NULL یعنی «پیش‌فرضِ نقش»، نه «هیچ مجوزی». دقیقاً همان
+    #: معناشناسیِ `Membership.permissions` بالا — یک مدلِ ذهنی، نه دو تا.
+    permissions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    #: چه کسی این قدرت را داد. SET NULL چون حذفِ کاربرِ اعطاکننده نباید ردیفِ
+    #: کارمندِ فعلی را از بین ببرد.
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])  # noqa: F821

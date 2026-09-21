@@ -217,3 +217,73 @@ def test_every_model_module_is_registered_in_the_package():
         f"{sorted(set(missing))}\n"
         "autogenerate برایشان دستور DROP تولید می‌کند."
     )
+
+
+def tenant_fk_delete_rules(db, schema: str) -> dict[str, str]:
+    """قاعده‌ی حذفِ هر کلیدِ خارجیِ `tenant_id` که به `tenants` اشاره می‌کند."""
+    rows = db.execute(
+        text(
+            """
+            SELECT tc.table_name, rc.delete_rule
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON kcu.constraint_name = tc.constraint_name
+             AND kcu.constraint_schema = tc.constraint_schema
+            JOIN information_schema.referential_constraints rc
+              ON rc.constraint_name = tc.constraint_name
+             AND rc.constraint_schema = tc.constraint_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+             AND ccu.constraint_schema = tc.constraint_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.constraint_schema = :s
+              AND ccu.table_name = 'tenants'
+              AND kcu.column_name = 'tenant_id'
+            """
+        ),
+        {"s": schema},
+    ).all()
+    return {table: rule for table, rule in rows}
+
+
+#: تنها استثنای عمدی: تلهمتریِ پیش‌از‌احراز‌هویت نباید با رفتنِ مستأجر پاک شود.
+DELIBERATE_SET_NULL = {"client_errors"}
+
+
+def test_every_tenant_fk_cascades_in_the_migrated_schema(db, migrated_schema):
+    """حذفِ اکانت به این بند است، و این تست بعد از یک باگِ واقعی نوشته شد.
+
+    `purge_tenant` با `DELETE FROM tenants` کار می‌کند و به آبشار تکیه دارد.
+    `TenantMixin` از روزِ اول `ondelete="CASCADE"` داشته، پس اسکیمای
+    `create_all`ِ تست‌ها درست بود و حذف در آن کار می‌کرد — ولی مهاجرت‌ها ۴۷ جدول
+    را با `NO ACTION` ساخته بودند و در production **هیچ اکانتی قابلِ حذف نبود**.
+
+    هیچ‌کدام از تست‌های این پرونده آن را نمی‌دیدند چون فقط ایندکس‌های یکتا و
+    وجودِ جدول‌ها را مقایسه می‌کردند. مهاجرتِ ۰۱۸۱ اصلاحش کرد؛ این تست نمی‌گذارد
+    برگردد.
+    """
+    offenders = {
+        table: rule
+        for table, rule in tenant_fk_delete_rules(db, migrated_schema).items()
+        if rule != "CASCADE" and table not in DELIBERATE_SET_NULL
+    }
+    assert not offenders, (
+        "این جدول‌ها کلیدِ خارجیِ tenant_id بدونِ CASCADE دارند، پس حذفِ اکانت "
+        f"روی هر مستأجری که در آن‌ها ردیف داشته باشد شکست می‌خورد: {sorted(offenders)}"
+    )
+
+
+def test_models_and_migrations_agree_on_tenant_fk_delete_rules(db, migrated_schema):
+    """همان انحرافی که باگِ بالا از آن آمد، به‌صورتِ کلی."""
+    from_models = tenant_fk_delete_rules(db, TEST_SCHEMA)
+    from_migrations = tenant_fk_delete_rules(db, migrated_schema)
+
+    mismatched = {
+        table: (from_models[table], from_migrations[table])
+        for table in from_models.keys() & from_migrations.keys()
+        if from_models[table] != from_migrations[table]
+    }
+    assert not mismatched, (
+        "قاعده‌ی حذفِ کلیدِ خارجیِ مدل‌ها و مهاجرت‌ها یکی نیست "
+        f"(مدل، مهاجرت): {mismatched}"
+    )
