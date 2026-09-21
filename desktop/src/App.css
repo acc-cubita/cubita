@@ -12070,6 +12070,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
     align-items: flex-start;
     flex-direction: column;
   }
+}
 
 /* ═══ انتخاب‌گرِ کارت‌های داشبورد (LauncherPicker) ═══════════════════════════
    بی‌قید به `data-structure` نوشته شده: باکسِ «شروعِ کارِ تازه» در هر دو داشبورد
