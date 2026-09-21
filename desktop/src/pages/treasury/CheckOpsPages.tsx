@@ -47,6 +47,7 @@ import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../../components/form/FormKit'
 
 /**
  * عملیاتِ چکِ ماژولِ «دریافت و پرداخت».
@@ -401,27 +402,30 @@ function CheckForm({
 
   return (
     <form className="invoice-form form-full" onSubmit={submit}>
-      <label>
-        شماره چک
-        <input dir="ltr" value={number} onChange={(e) => setForm({ ...form, number: e.target.value })} required />
-        {suggestedNumber && <span className="field-hint">شماره‌ی برگِ بعدیِ این دسته پیشنهاد شد.</span>}
-      </label>
+      <FormField
+        label="شماره چک"
+        required
+        message={suggestedNumber ? 'شماره‌ی برگِ بعدیِ این دسته پیشنهاد شد.' : null}
+      >
+        {(id) => (
+          <input id={id} dir="ltr" value={number} onChange={(e) => setForm({ ...form, number: e.target.value })} required />
+        )}
+      </FormField>
       <label>
         بانک
         <input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} />
       </label>
-      <label>
-        کد صیادی
-        <input
-          dir="ltr"
-          inputMode="numeric"
-          value={form.sayad_id}
-          onChange={(e) => setForm({ ...form, sayad_id: e.target.value })}
-        />
-        <span className="field-hint">
-          ۱۶ رقمِ روی برگ. یکتاییِ واقعیِ چک همین است — شماره‌ی چک بینِ بانک‌ها تکرار می‌شود.
-        </span>
-      </label>
+      <FormField label="کد صیادی" tip="۱۶ رقمِ روی برگ. یکتاییِ واقعیِ چک همین است — شماره‌ی چک بینِ بانک‌ها تکرار می‌شود.">
+        {(id) => (
+          <input
+            id={id}
+            dir="ltr"
+            inputMode="numeric"
+            value={form.sayad_id}
+            onChange={(e) => setForm({ ...form, sayad_id: e.target.value })}
+          />
+        )}
+      </FormField>
       <label>
         پشت نمره
         <input
@@ -1396,16 +1400,17 @@ export function CheckbooksPage({ token }: { token: string }) {
                 ))}
               </SearchSelect>
             </label>
-            <label>
-              سریِ دسته
-              <input
-                dir="ltr"
-                value={form.serial}
-                onChange={(e) => setForm({ ...form, serial: e.target.value })}
-                placeholder="1234567890123456"
-              />
-              <span className="field-hint">اختیاری — سریِ صیاد یا شماره‌ی داخلیِ بانک.</span>
-            </label>
+            <FormField label="سریِ دسته" tip="اختیاری — سریِ صیاد یا شماره‌ی داخلیِ بانک.">
+              {(id) => (
+                <input
+                  id={id}
+                  dir="ltr"
+                  value={form.serial}
+                  onChange={(e) => setForm({ ...form, serial: e.target.value })}
+                  placeholder="1234567890123456"
+                />
+              )}
+            </FormField>
             <label>
               شماره‌ی اولین برگ
               <input
@@ -1428,15 +1433,16 @@ export function CheckbooksPage({ token }: { token: string }) {
               تاریخِ دریافتِ دسته
               <JalaliDatePicker value={form.issue_date} onChange={(iso) => setForm({ ...form, issue_date: iso })} />
             </label>
-            <label>
-              قالبِ چاپِ چک
-              <input
-                dir="ltr"
-                value={form.cheque_print_format}
-                onChange={(e) => setForm({ ...form, cheque_print_format: e.target.value })}
-              />
-              <span className="field-hint">خالی بگذارید تا از حسابِ بانکی ارث ببرد.</span>
-            </label>
+            <FormField label="قالبِ چاپِ چک" tip="خالی بگذارید تا از حسابِ بانکی ارث ببرد.">
+              {(id) => (
+                <input
+                  id={id}
+                  dir="ltr"
+                  value={form.cheque_print_format}
+                  onChange={(e) => setForm({ ...form, cheque_print_format: e.target.value })}
+                />
+              )}
+            </FormField>
             <label className="form-wide">
               توضیح
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
