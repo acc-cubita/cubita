@@ -12,6 +12,7 @@ import { CreditBanner, SourceIssueBanner } from '../SalesInvoiceForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { BlacklistBanner } from '../BlacklistBanner'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../form/FormKit'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -188,18 +189,18 @@ function HeaderStep({ d, warehouses }: { d: SalesInvoiceDraft; warehouses: Wareh
         <input value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
       </label>
           {d.salespeople.length > 0 && (
-        <label>
-          فروشنده (اختیاری)
-          <SearchSelect value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
-          <option value="">— بدون فروشنده —</option>
-          {d.salespeople.map((p) => (
-            <option key={p.id} value={p.id}>
-            {p.name}
-            </option>
-          ))}
-          </SearchSelect>
-          <span className="field-hint">مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.</span>
-        </label>
+        <FormField label="فروشنده (اختیاری)" tip="مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.">
+          {(id) => (
+            <SearchSelect id={id} value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
+              <option value="">— بدون فروشنده —</option>
+              {d.salespeople.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
       )}
       {d.saleTypes.length > 0 && (
         <label>

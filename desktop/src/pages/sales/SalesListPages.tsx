@@ -88,6 +88,7 @@ import {
   useRange,
   type Msg,
 } from '../accounting/kit'
+import { FormField } from '../../components/form/FormKit'
 
 /**
  * دفترهای نظیرِ عملیاتِ فروش — «هر عملیاتِ رکوردساز، یک فهرست».
@@ -875,17 +876,15 @@ export function PriceAnnouncementListPage({ token }: { token: string }) {
                               مقدار
                               <NumberInput value={value} onChange={setValue} disabled={mode === 'none'} />
                             </label>
-                            <label>
-                              رندِ فی
-                              <SearchSelect value={rounding} onChange={(e) => setRounding(Number(e.target.value))}>
-                                {ROUNDING_STEPS.map((step) => (
-                                  <option key={step} value={step}>{`${faInt(step)} ریال`}</option>
-                                ))}
-                              </SearchSelect>
-                              <span className="field-hint">
-                                فی عددِ صحیحِ ریالی است، پس به‌جای رقمِ اعشار، مضربِ رند انتخاب می‌شود.
-                              </span>
-                            </label>
+                            <FormField label="رندِ فی" tip="فی عددِ صحیحِ ریالی است، پس به‌جای رقمِ اعشار، مضربِ رند انتخاب می‌شود.">
+                              {(id) => (
+                                <SearchSelect id={id} value={rounding} onChange={(e) => setRounding(Number(e.target.value))}>
+                                  {ROUNDING_STEPS.map((step) => (
+                                    <option key={step} value={step}>{`${faInt(step)} ریال`}</option>
+                                  ))}
+                                </SearchSelect>
+                              )}
+                            </FormField>
                             <div className="invoice-form-footer">
                               <button
                                 type="button"
@@ -1534,21 +1533,25 @@ export function NoteListPage({ token, onNavigate }: { token: string; onNavigate:
                                 ? `اصلاحِ اعلامیه‌ی ${fa(n.number ?? 0)}: اول با سندِ معکوس باطل می‌شود، بعد فرمِ صدور با همین ردیف‌ها باز می‌شود تا نسخه‌ی درست را ثبت کنید. سندِ ثبت‌شده ویرایش نمی‌شود.`
                                 : `ابطالِ اعلامیه‌ی ${fa(n.number ?? 0)}: یک سندِ معکوس زده می‌شود و اصل سرِ جایش می‌ماند.`}
                             </p>
-                            <label>
-                              تاریخِ سندِ معکوس
-                              <JalaliDatePicker value={action.date} onChange={(d) => setAction({ ...action, date: d })} />
-                              <span className="field-hint">پیش‌فرض تاریخِ خودِ اعلامیه است؛ اگر آن دوره بسته شده، تاریخی در دوره‌ی باز بدهید.</span>
-                            </label>
-                            <label>
-                              علتِ ابطال
-                              <input
-                                type="text"
-                                value={action.reason}
-                                maxLength={300}
-                                onChange={(e) => setAction({ ...action, reason: e.target.value })}
-                              />
-                              <span className="field-hint">دستِ‌کم سه حرف — در سندِ معکوس و روی اعلامیه می‌ماند.</span>
-                            </label>
+                            <FormField
+                              label="تاریخِ سندِ معکوس"
+                              tip="پیش‌فرض تاریخِ خودِ اعلامیه است؛ اگر آن دوره بسته شده، تاریخی در دوره‌ی باز بدهید."
+                            >
+                              {(id) => (
+                                <JalaliDatePicker id={id} value={action.date} onChange={(d) => setAction({ ...action, date: d })} />
+                              )}
+                            </FormField>
+                            <FormField label="علتِ ابطال" tip="دستِ‌کم سه حرف — در سندِ معکوس و روی اعلامیه می‌ماند.">
+                              {(id) => (
+                                <input
+                                  id={id}
+                                  type="text"
+                                  value={action.reason}
+                                  maxLength={300}
+                                  onChange={(e) => setAction({ ...action, reason: e.target.value })}
+                                />
+                              )}
+                            </FormField>
                             <div className="cdn-void-actions">
                               <button
                                 type="button"

@@ -799,11 +799,9 @@ function UnitMapCard({ token }: { token: string }) {
             ))}
           </datalist>
         </label>
-        <label className="form-field">
-          کدِ سامانه
-          <input value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" />
-          <span className="field-hint">از جدولِ رسمیِ واحدهای سامانه مؤدیان.</span>
-        </label>
+        <FormField label="کدِ سامانه" tip="از جدولِ رسمیِ واحدهای سامانه مؤدیان.">
+          {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" />}
+        </FormField>
         <button
           type="button"
           className="btn-primary"

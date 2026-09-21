@@ -19,6 +19,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 interface FormState {
   code: string
@@ -255,18 +256,19 @@ export function PurchaseDeductionTypesPanel({
               <NumberInput allowDecimal value={form.rate} onChange={(value) => setForm({ ...form, rate: value })} />
             </label>
           </div>
-          <label>
-            حسابِ بدهی
-            <SearchSelect value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
-              <option value="">— پیش‌فرض: «{DEFAULT_ACCOUNT_LABEL[form.nature]}» —</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-              ))}
-            </SearchSelect>
-            <span className="field-hint">
-              خالی بگذارید تا حسابِ پیش‌فرضِ همین ماهیت بخورد؛ اگر در چارت نباشد، با اولین فاکتور ساخته می‌شود.
-            </span>
-          </label>
+          <FormField
+            label="حسابِ بدهی"
+            tip="خالی بگذارید تا حسابِ پیش‌فرضِ همین ماهیت بخورد؛ اگر در چارت نباشد، با اولین فاکتور ساخته می‌شود."
+          >
+            {(id) => (
+              <SearchSelect id={id} value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+                <option value="">— پیش‌فرض: «{DEFAULT_ACCOUNT_LABEL[form.nature]}» —</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
           <div className="field-row">
             <label>
               توضیح

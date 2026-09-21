@@ -56,6 +56,7 @@ import {
 } from '../../lib/jalali'
 import { faCompact } from '../../lib/format'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../../components/form/FormKit'
 
 /**
  * میزکارِ «مرکز هزینه» — تنها جای برنامه که مرکز ساخته، سنجیده و بودجه‌بندی می‌شود.
@@ -338,16 +339,17 @@ function CenterForm({
           placeholder="پروژه برج آسمان"
         />
       </label>
-      <label>
-        عنوان (۲)
-        <input
-          value={form.name2}
-          onChange={(e) => setForm({ ...form, name2: e.target.value })}
-          dir="ltr"
-          maxLength={200}
-        />
-        <span className="field-hint">عنوانِ لاتین برای گزارشِ دوزبانه. اختیاری.</span>
-      </label>
+      <FormField label="عنوان (۲)" tip="عنوانِ لاتین برای گزارشِ دوزبانه. اختیاری.">
+        {(id) => (
+          <input
+            id={id}
+            value={form.name2}
+            onChange={(e) => setForm({ ...form, name2: e.target.value })}
+            dir="ltr"
+            maxLength={200}
+          />
+        )}
+      </FormField>
       <label>
         کد (اختیاری)
         <input
