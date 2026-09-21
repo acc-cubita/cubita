@@ -16,6 +16,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { navTargets } from './lib/navTargets.mjs'
+import { cssBraceFindings } from './lib/cssBlocks.mjs'
 import { deadFiles } from './find-dead-code.mjs'
 import { fileURLToPath } from 'node:url'
 
@@ -30,11 +31,11 @@ const onlyRule =
 
 // ── جمع‌آوریِ فایل‌ها ────────────────────────────────────────────────────────
 
-function walk(dir, out = []) {
+function walk(dir, ext = '.tsx', out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) walk(full, out)
-    else if (entry.name.endsWith('.tsx')) out.push(full)
+    if (entry.isDirectory()) walk(full, ext, out)
+    else if (entry.name.endsWith(ext)) out.push(full)
   }
   return out
 }
@@ -45,6 +46,9 @@ const rel = (f) => path.relative(ROOT, f).replace(/\\/g, '/')
  *  سطح‌بالای components/ که خودشان یک صفحه‌ی کامل رندر می‌کنند. */
 const pageFiles = walk(path.join(SRC, 'pages'))
 const componentFiles = walk(path.join(SRC, 'components'))
+
+/** برگه‌های سبک — کلِ `src`، تا شیوه‌نامه‌ی تازه خودبه‌خود زیرِ ممیز بیاید (R16). */
+const cssFiles = walk(SRC, '.css')
 
 // ── قاعده‌ها ────────────────────────────────────────────────────────────────
 //
@@ -513,6 +517,30 @@ const RULES = [
       return found
     },
   },
+  {
+    id: 'R16',
+    level: 'error',
+    title: 'توازنِ آکولادِ CSS',
+    why:
+      'یک `}`ِ جاافتاده بی‌صدا هرچه پس از آن می‌آید را به بلوکِ باز می‌بلعد. ' +
+      'دقیقاً همین افتاد: در `App.css` بلوکِ `@media (max-width: 760px)` بسته نشد ' +
+      'و ۱۶۸ خطِ بعدی — کلِ ظاهرِ انتخابگرِ کارتِ داشبورد — موبایل‌مخصوص شد، پس ' +
+      'روی دسکتاپ پنل بی‌قد رندر می‌شد و دکمه‌ی «تأیید» زیرِ لبه‌ی صفحه بیرون از ' +
+      'دسترس می‌ماند. ۱۰ ساعت روی تولید زنده بود. ' +
+      'دو نکته که این را از یک خطای معمولی جدا می‌کند: اولاً آکولاد در حلِ تعارضِ ' +
+      'یک **merge** گم شد — هر دو والد متوازن بودند، پس بازبینِ هیچ‌کدام از دو ' +
+      'شاخه نمی‌توانست ببیندش. ثانیاً هیچ ابزارِ دیگری اینجا CSS را تجزیه نمی‌کند: ' +
+      'نه `tsc`، نه `oxlint`، نه ویت (که CSS را عبور می‌دهد و خم به ابرو نمی‌آورد) ' +
+      'و نه مرورگر. این قاعده تنها چشمی است که به برگه‌های سبک نگاه می‌کند.',
+    scope: 'css',
+    check() {
+      const found = []
+      for (const file of cssFiles)
+        for (const hit of cssBraceFindings(fs.readFileSync(file, 'utf8')))
+          found.push({ file: rel(file), ...hit })
+      return found
+    },
+  },
 ]
 
 /** پایانِ یک تگِ باز — با احترام به `{}`، `()` و رشته‌ها، چون attributeهای JSX
@@ -570,6 +598,11 @@ for (const rule of RULES) {
       results.push({ rule: rule.id, level: rule.level, file: 'src/lib/navModel.tsx', ...hit })
     continue
   }
+  // قاعده‌ی `css` هم یک‌بار اجرا می‌شود و خودش فایلِ هر یافته را همراه می‌آورد.
+  if (rule.scope === 'css') {
+    for (const hit of rule.check('', '')) results.push({ rule: rule.id, level: rule.level, ...hit })
+    continue
+  }
   const files = rule.scope === 'pages' ? pageFiles : [...pageFiles, ...componentFiles]
   for (const file of files) {
     const text = fs.readFileSync(file, 'utf8')
@@ -587,7 +620,9 @@ if (asJson) {
     if (!byRule.has(r.rule)) byRule.set(r.rule, [])
     byRule.get(r.rule).push(r)
   }
-  console.log(`\nممیزِ صفحه‌ها — ${pageFiles.length} فایلِ صفحه، ${componentFiles.length} کامپوننت\n`)
+  console.log(
+    `\nممیزِ صفحه‌ها — ${pageFiles.length} فایلِ صفحه، ${componentFiles.length} کامپوننت، ${cssFiles.length} برگه‌ی سبک\n`,
+  )
   for (const rule of RULES) {
     if (onlyRule && rule.id !== onlyRule) continue
     const hits = byRule.get(rule.id) ?? []
