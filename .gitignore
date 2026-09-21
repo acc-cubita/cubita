@@ -19,6 +19,7 @@ desktop/dist/
 desktop/dist-electron/
 desktop/release/
 website/dist/
+admin/dist/
 *.log
 
 # Local SQLite data

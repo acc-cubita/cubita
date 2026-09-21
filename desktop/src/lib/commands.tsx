@@ -3,6 +3,8 @@ import { TASK_LAUNCHERS } from './taskRegistry'
 import type { MeResponse } from '../api'
 import type { ReactNode } from 'react'
 
+import { normalizeFa, textMatches } from './faText'
+
 /**
  * فهرستِ «هرجا که می‌شود رفت» — یک منبع برای هر جست‌وجویی که در برنامه هست.
  *
@@ -23,39 +25,8 @@ export interface Command {
   kind: 'task' | 'page'
 }
 
-/**
- * یکسان‌سازیِ متنِ فارسی پیش از تطبیق.
- *
- * **چرا لازم است:** تطبیقِ قبلی `includes` خام بود، پس «طرف حساب» با فاصله‌ی
- * معمولی، منویی به نامِ «طرف‌حساب» با نیم‌فاصله را پیدا **نمی‌کرد** — و کاربر
- * نتیجه می‌گرفت که «نیست»، نه اینکه «جور دیگری نوشته شده». همین برای «ي» و «ك»ِ
- * عربی که روی کیبوردهای ویندوز خیلی راحت تایپ می‌شوند، و ارقامِ فارسی.
- */
-export function normalizeFa(text: string): string {
-  return text
-    .replace(/‌|‏|‎/g, ' ') //: نیم‌فاصله و نشانه‌های جهت → فاصله
-    .replace(/ـ/g, '') //: کشیدگی (ـ)
-    .replace(/[ً-ْ]/g, '') //: اعرابِ عربی
-    .replace(/[يى]/g, 'ی') //: ي ى → ی
-    .replace(/ك/g, 'ک') //: ك → ک
-    .replace(/ة/g, 'ه') //: ة → ه
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)) //: ارقامِ فارسی
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)) //: ارقامِ عربی
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/**
- * آیا این متن به آنچه کاربر تایپ کرده می‌خورد؟ هر واژه **جدا** سنجیده می‌شود، پس
- * «فروش فاکتور» هم «فاکتور فروش» را پیدا می‌کند — کاربر ترتیبِ واژه‌ها را حفظ نمی‌کند.
- */
-export function textMatches(haystack: string, query: string): boolean {
-  const q = normalizeFa(query)
-  if (!q) return true
-  const hay = normalizeFa(haystack)
-  return q.split(' ').every((word) => hay.includes(word))
-}
+//: دوباره export می‌شوند چون چهار مصرف‌کننده و دو تست از همین‌جا واردشان می‌کنند.
+export { normalizeFa, textMatches }
 
 /** همان، روی متنِ جست‌وجوپذیرِ یک فرمان. */
 export function commandMatches(command: Command, query: string): boolean {
