@@ -90,6 +90,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
+import { FormField } from '../../components/form/FormKit'
 import {
   ActiveChip,
   AsyncBlock,
@@ -709,18 +710,19 @@ export function CreditDebitNotePage({ token, onNavigate }: { token: string; onNa
               ))}
           </SearchSelect>
         </label>
-        <label>
-          نرخ ارز
-          <input
-            type="text"
-            inputMode="decimal"
-            dir="ltr"
-            value={rate}
-            disabled={!foreign}
-            onChange={(e) => setRate(latinNumber(e.target.value))}
-          />
-          <span className="field-hint">عکسِ همین لحظه — تغییرِ نرخِ روز، اعلامیه‌ی ثبت‌شده را عوض نمی‌کند.</span>
-        </label>
+        <FormField label="نرخ ارز" tip="عکسِ همین لحظه — تغییرِ نرخِ روز، اعلامیه‌ی ثبت‌شده را عوض نمی‌کند.">
+          {(id) => (
+            <input
+              id={id}
+              type="text"
+              inputMode="decimal"
+              dir="ltr"
+              value={rate}
+              disabled={!foreign}
+              onChange={(e) => setRate(latinNumber(e.target.value))}
+            />
+          )}
+        </FormField>
         <label>
           شرح
           <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
@@ -924,25 +926,21 @@ export function SaleTypePage({ token }: { token: string }) {
           نام
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
         </label>
-        <label>
-          کد
-          <input type="text" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />
-          <span className="field-hint">اختیاری. کدِ خودِ نوعِ فروش است، نه شماره‌ی فاکتور.</span>
-        </label>
+        <FormField label="کد" tip="اختیاری. کدِ خودِ نوعِ فروش است، نه شماره‌ی فاکتور.">
+          {(id) => (
+            <input id={id} type="text" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} />
+          )}
+        </FormField>
         <label>
           عنوانِ دوم
           <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={80} />
         </label>
-        <label>
-          مهلتِ تسویه (روز)
-          <NumberInput value={dueDays} onChange={setDueDays} />
-          <span className="field-hint">صفر یعنی نقدی.</span>
-        </label>
-        <label>
-          نرخِ مالیاتِ پیش‌فرض (درصد)
-          <NumberInput value={taxRate} onChange={setTaxRate} allowDecimal />
-          <span className="field-hint">خالی یعنی از تنظیماتِ عمومی بیاید.</span>
-        </label>
+        <FormField label="مهلتِ تسویه (روز)" tip="صفر یعنی نقدی.">
+          {(id) => <NumberInput id={id} value={dueDays} onChange={setDueDays} />}
+        </FormField>
+        <FormField label="نرخِ مالیاتِ پیش‌فرض (درصد)" tip="خالی یعنی از تنظیماتِ عمومی بیاید.">
+          {(id) => <NumberInput id={id} value={taxRate} onChange={setTaxRate} allowDecimal />}
+        </FormField>
         <label>
           توضیح
           <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -1118,17 +1116,17 @@ function SaleTypeEditDrawer({
           عنوانِ دوم
           <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={80} />
         </label>
-        <label>
-          وضعیت
-          <SearchSelect value={isActive ? '1' : '0'} onChange={(e) => setIsActive(e.target.value === '1')}>
-            <option value="1">فعال</option>
-            <option value="0">غیرفعال (بایگانی)</option>
-          </SearchSelect>
-          <span className="field-hint">
-            نوعِ غیرفعال در فاکتورِ تازه انتخاب نمی‌شود، ولی روی فاکتورهای گذشته سرِ جایش
-            می‌ماند. نوعِ فروش حذف نمی‌شود.
-          </span>
-        </label>
+        <FormField
+          label="وضعیت"
+          tip="نوعِ غیرفعال در فاکتورِ تازه انتخاب نمی‌شود، ولی روی فاکتورهای گذشته سرِ جایش می‌ماند. نوعِ فروش حذف نمی‌شود."
+        >
+          {(id) => (
+            <SearchSelect id={id} value={isActive ? '1' : '0'} onChange={(e) => setIsActive(e.target.value === '1')}>
+              <option value="1">فعال</option>
+              <option value="0">غیرفعال (بایگانی)</option>
+            </SearchSelect>
+          )}
+        </FormField>
         <SaleTypeAccountFields accounts={accounts} value={accountIds} onChange={setAccountIds} />
             {error && <p className="hint acc-note acc-note--err">{error}</p>}
             <div className="invoice-form-footer">
@@ -1302,11 +1300,11 @@ export function ReturnReasonPage({ token }: { token: string }) {
           عنوان
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
         </label>
-        <label>
-          عنوان دوم
-          <input type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={120} />
-          <span className="field-hint">اختیاری — نامِ جایگزین یا لاتین.</span>
-        </label>
+        <FormField label="عنوان دوم" tip="اختیاری — نامِ جایگزین یا لاتین.">
+          {(id) => (
+            <input id={id} type="text" value={title2} onChange={(e) => setTitle2(e.target.value)} maxLength={120} />
+          )}
+        </FormField>
       </FormCard>
 
       <SectionCard icon={Undo2} title="علت‌ها" description={`${faInt(rows.length)} ردیف`}>
@@ -1661,21 +1659,20 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
         }
       >
         <div className="invoice-form form-full">
-          <label>
-            هدفِ قاعده
-            <SearchSelect
-              value={draft.targetKind}
-              onChange={(e) =>
-                setDraft({ ...draft, targetKind: e.target.value as 'item' | 'group', itemId: '', itemGroupId: '' })
-              }
-            >
-              <option value="item">یک کالا/خدمت</option>
-              <option value="group">گروهِ فروشِ کالا</option>
-            </SearchSelect>
-            <span className="field-hint">
-              قاعده‌ای که خودِ کالا را نام ببرد بر قاعده‌ی گروهش می‌چربد.
-            </span>
-          </label>
+          <FormField label="هدفِ قاعده" tip="قاعده‌ای که خودِ کالا را نام ببرد بر قاعده‌ی گروهش می‌چربد.">
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={draft.targetKind}
+                onChange={(e) =>
+                  setDraft({ ...draft, targetKind: e.target.value as 'item' | 'group', itemId: '', itemGroupId: '' })
+                }
+              >
+                <option value="item">یک کالا/خدمت</option>
+                <option value="group">گروهِ فروشِ کالا</option>
+              </SearchSelect>
+            )}
+          </FormField>
           {draft.targetKind === 'item' ? (
             <label>
               کالا/خدمت
@@ -1701,18 +1698,19 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
               ))}
             </SearchSelect>
           </label>
-          <label>
-            واحد
-            <SearchSelect value={draft.unitId} onChange={(e) => setDraft({ ...draft, unitId: e.target.value })}>
-              <option value="">همه</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </SearchSelect>
-            <span className="field-hint">
-              قیمتِ کارتن از قیمتِ عدد ضربِ ضریبِ تبدیل درنمی‌آید؛ هر واحد قاعده‌ی خودش را دارد.
-            </span>
-          </label>
+          <FormField
+            label="واحد"
+            tip="قیمتِ کارتن از قیمتِ عدد ضربِ ضریبِ تبدیل درنمی‌آید؛ هر واحد قاعده‌ی خودش را دارد."
+          >
+            {(id) => (
+              <SearchSelect id={id} value={draft.unitId} onChange={(e) => setDraft({ ...draft, unitId: e.target.value })}>
+                <option value="">همه</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
           <label>
             گروهِ مشتری
             <SearchSelect value={draft.contactGroupId} onChange={(e) => setDraft({ ...draft, contactGroupId: e.target.value })}>
@@ -1735,11 +1733,11 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
             فی
             <NumberInput value={draft.price} onChange={(v) => setDraft({ ...draft, price: v })} />
           </label>
-          <label>
-            درصدِ اضافات
-            <NumberInput value={draft.additionPercent} onChange={(v) => setDraft({ ...draft, additionPercent: v })} />
-            <span className="field-hint">ثبت و نمایش می‌شود؛ روی مبلغِ فاکتور اعمال نمی‌شود.</span>
-          </label>
+          <FormField label="درصدِ اضافات" tip="ثبت و نمایش می‌شود؛ روی مبلغِ فاکتور اعمال نمی‌شود.">
+            {(id) => (
+              <NumberInput id={id} value={draft.additionPercent} onChange={(v) => setDraft({ ...draft, additionPercent: v })} />
+            )}
+          </FormField>
           <label className="cal-check-inline">
             <input
               type="checkbox"
@@ -1756,24 +1754,26 @@ export function PriceAnnouncementPage({ token }: { token: string }) {
             />
             امکانِ تغییرِ تخفیف در فاکتور
           </label>
-          <label>
-            درصدِ کاهشِ مجاز
-            <NumberInput
-              value={draft.maxDecrease}
-              onChange={(v) => setDraft({ ...draft, maxDecrease: v })}
-              disabled={!draft.allowRate}
-            />
-            <span className="field-hint">خالی یا صفر = بی‌حد.</span>
-          </label>
-          <label>
-            درصدِ افزایشِ مجاز
-            <NumberInput
-              value={draft.maxIncrease}
-              onChange={(v) => setDraft({ ...draft, maxIncrease: v })}
-              disabled={!draft.allowRate}
-            />
-            <span className="field-hint">لازم نیست با کاهش یکی باشد.</span>
-          </label>
+          <FormField label="درصدِ کاهشِ مجاز" tip="خالی یا صفر = بی‌حد.">
+            {(id) => (
+              <NumberInput
+                id={id}
+                value={draft.maxDecrease}
+                onChange={(v) => setDraft({ ...draft, maxDecrease: v })}
+                disabled={!draft.allowRate}
+              />
+            )}
+          </FormField>
+          <FormField label="درصدِ افزایشِ مجاز" tip="لازم نیست با کاهش یکی باشد.">
+            {(id) => (
+              <NumberInput
+                id={id}
+                value={draft.maxIncrease}
+                onChange={(v) => setDraft({ ...draft, maxIncrease: v })}
+                disabled={!draft.allowRate}
+              />
+            )}
+          </FormField>
         </div>
       </SectionCard>
 
@@ -1891,11 +1891,9 @@ export function ProductBundlePage({ token }: { token: string }) {
           نامِ بسته
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
         </label>
-        <label>
-          قیمتِ بسته (ریال)
-          <NumberInput value={bundlePrice} onChange={setBundlePrice} />
-          <span className="field-hint">خالی = جمعِ قیمتِ اعضا.</span>
-        </label>
+        <FormField label="قیمتِ بسته (ریال)" tip="خالی = جمعِ قیمتِ اعضا.">
+          {(id) => <NumberInput id={id} value={bundlePrice} onChange={setBundlePrice} />}
+        </FormField>
         <label>
           توضیح
           <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -2237,11 +2235,11 @@ export function CustomsPage({ token }: { token: string }) {
           گمرکِ مبدأ
           <input type="text" value={office} onChange={(e) => setOffice(e.target.value)} maxLength={120} />
         </label>
-        <label>
-          کدِ تعرفه (HS)
-          <input type="text" value={hs} onChange={(e) => setHs(e.target.value)} maxLength={20} dir="ltr" />
-          <span className="field-hint">کدِ تعرفه‌ی گمرکی؛ صفرِ ابتدایی حفظ می‌شود.</span>
-        </label>
+        <FormField label="کدِ تعرفه (HS)" tip="کدِ تعرفه‌ی گمرکی؛ صفرِ ابتدایی حفظ می‌شود.">
+          {(id) => (
+            <input id={id} type="text" value={hs} onChange={(e) => setHs(e.target.value)} maxLength={20} dir="ltr" />
+          )}
+        </FormField>
         <label>
           کشورِ مقصد
           <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} maxLength={80} />
@@ -2250,17 +2248,18 @@ export function CustomsPage({ token }: { token: string }) {
           ارزشِ اظهارشده
           <NumberInput value={value} onChange={setValue} allowDecimal />
         </label>
-        <label>
-          ارز
-          <input
-            type="text"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            maxLength={3}
-            dir="ltr"
-          />
-          <span className="field-hint">کدِ سه‌حرفی — مثلاً USD، EUR، IRR.</span>
-        </label>
+        <FormField label="ارز" tip="کدِ سه‌حرفی — مثلاً USD، EUR، IRR.">
+          {(id) => (
+            <input
+              id={id}
+              type="text"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              maxLength={3}
+              dir="ltr"
+            />
+          )}
+        </FormField>
       </FormCard>
     </OpsPage>
   )

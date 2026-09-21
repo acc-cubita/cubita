@@ -15,6 +15,7 @@ import { AccountLedgerDrawer } from './AccountLedgerDrawer'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 //: میان‌بُر، نه فهرستِ کامل — ارزهای تعریف‌شده در تنظیماتِ ارز می‌آیند.
 const CURRENCIES = ['IRR', 'USD', 'EUR', 'AED']
@@ -214,50 +215,48 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
               </label>
             </div>
             <div className="field-row">
-              <label>شماره کارت
-                <input value={form.card_number} onChange={(e) => setForm({ ...form, card_number: e.target.value })} dir="ltr" inputMode="numeric" />
-                <span className="field-hint">۱۶ رقم — با شبا و شماره حساب یکی نیست.</span>
-              </label>
-              <label>شماره شبا
-                <input value={form.iban} onChange={(e) => setForm({ ...form, iban: e.target.value })} dir="ltr" />
-                <span className="field-hint">با IR شروع می‌شود.</span>
-              </label>
+              <FormField label="شماره کارت" tip="۱۶ رقم — با شبا و شماره حساب یکی نیست.">
+                {(id) => <input id={id} value={form.card_number} onChange={(e) => setForm({ ...form, card_number: e.target.value })} dir="ltr" inputMode="numeric" />}
+              </FormField>
+              <FormField label="شماره شبا" tip="با IR شروع می‌شود.">
+                {(id) => <input id={id} value={form.iban} onChange={(e) => setForm({ ...form, iban: e.target.value })} dir="ltr" />}
+              </FormField>
             </div>
-            <label>تفصیلی
-              <SearchSelect value={form.analytic_id} onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}>
-                <option value="">— بدونِ تفصیلی (فقط برای حسابِ اول) —</option>
-                {analytics.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-              </SearchSelect>
-              <span className="field-hint">
-                بدونِ تفصیلی، مانده‌ی این حساب از بقیه جدا نمی‌شود. حسابِ باسابقه تفصیلی‌اش عوض نمی‌شود.
-              </span>
-            </label>
-            <div className="field-row">
-              <label>ارز
-                <SearchSelect value={form.currency_code} onChange={(e) => setForm({ ...form, currency_code: e.target.value })}>
-                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            <FormField
+              label="تفصیلی"
+              tip="بدونِ تفصیلی، مانده‌ی این حساب از بقیه جدا نمی‌شود. حسابِ باسابقه تفصیلی‌اش عوض نمی‌شود."
+            >
+              {(id) => (
+                <SearchSelect id={id} value={form.analytic_id} onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}>
+                  <option value="">— بدونِ تفصیلی (فقط برای حسابِ اول) —</option>
+                  {analytics.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                 </SearchSelect>
-                <span className="field-hint">یک حساب، یک ارز. برای ارزِ دیگر حسابِ جدا بسازید.</span>
-              </label>
-              <label>تاریخ افتتاح
-                <JalaliDatePicker value={form.opening_date} onChange={(v) => setForm({ ...form, opening_date: v })} />
-                <span className="field-hint">از چه زمانی این حساب واقعاً باز شده — نه تاریخِ ثبتش در کوبیتا.</span>
-              </label>
+              )}
+            </FormField>
+            <div className="field-row">
+              <FormField label="ارز" tip="یک حساب، یک ارز. برای ارزِ دیگر حسابِ جدا بسازید.">
+                {(id) => (
+                  <SearchSelect id={id} value={form.currency_code} onChange={(e) => setForm({ ...form, currency_code: e.target.value })}>
+                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </SearchSelect>
+                )}
+              </FormField>
+              <FormField label="تاریخ افتتاح" tip="از چه زمانی این حساب واقعاً باز شده — نه تاریخِ ثبتش در کوبیتا.">
+                {(id) => <JalaliDatePicker id={id} value={form.opening_date} onChange={(v) => setForm({ ...form, opening_date: v })} />}
+              </FormField>
             </div>
             <div className="field-row">
-              <label>نام صاحب حساب
-                <input value={form.holder_name} onChange={(e) => setForm({ ...form, holder_name: e.target.value })} />
-                <span className="field-hint">می‌تواند با نامِ شرکت فرق داشته باشد.</span>
-              </label>
+              <FormField label="نام صاحب حساب" tip="می‌تواند با نامِ شرکت فرق داشته باشد.">
+                {(id) => <input id={id} value={form.holder_name} onChange={(e) => setForm({ ...form, holder_name: e.target.value })} />}
+              </FormField>
               <label>نام دوم صاحب حساب
                 <input value={form.holder_name2} onChange={(e) => setForm({ ...form, holder_name2: e.target.value })} />
               </label>
             </div>
             <div className="field-row">
-              <label>مبلغ بلوکه‌شده
-                <NumberInput value={form.blocked_amount} onChange={(v) => setForm({ ...form, blocked_amount: v })} />
-                <span className="field-hint">از مانده کم نمی‌شود؛ فقط «قابل استفاده» را پایین می‌آورد.</span>
-              </label>
+              <FormField label="مبلغ بلوکه‌شده" tip="از مانده کم نمی‌شود؛ فقط «قابل استفاده» را پایین می‌آورد.">
+                {(id) => <NumberInput id={id} value={form.blocked_amount} onChange={(v) => setForm({ ...form, blocked_amount: v })} />}
+              </FormField>
               <label>فرمت چاپ چک
                 <input value={form.cheque_print_format} onChange={(e) => setForm({ ...form, cheque_print_format: e.target.value })} />
               </label>
