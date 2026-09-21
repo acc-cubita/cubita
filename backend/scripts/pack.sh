@@ -44,6 +44,30 @@ say "بسته‌ی وب"
     echo "desktop/dist ساخته نشده. اول: cd desktop && npm run build" >&2
     exit 1
 }
+
+# **وجودِ `dist` کافی نیست — تازگی‌اش هم باید سنجیده شود.**
+#
+# ۱۴۰۵/۰۶/۲۹ بسته‌ای مستقر شد که کدِ بک‌اندش سرِ `master` بود ولی وبش بیلدی از
+# چند ساعت قبل: قابلیتی که همان روز مرج شده بود روی production ناپدید شد و
+# همکار فکر کرد مرج کارش را برگردانده. هیچ گامی شکست نخورده بود — `dist` فقط
+# قدیمی بود و این اسکریپت بی‌صدا بسته‌بندی‌اش کرد.
+#
+# پس اگر هر فایلِ منبعی از `index.html`ِ بیلد تازه‌تر باشد، این‌جا **می‌ایستیم**.
+# هشدار کافی نیست: هشدار در خروجیِ یک اسکریپتِ موفق دیده نمی‌شود.
+NEWER=$(find desktop/src desktop/index.html desktop/vite.config.ts desktop/package.json \
+            -type f -newer desktop/dist/index.html -print -quit 2>/dev/null || true)
+if [[ -n "$NEWER" ]]; then
+    cat >&2 <<MSG
+بیلدِ وب کهنه است — دست‌کم یک فایلِ منبع از آن تازه‌تر است:
+  $NEWER
+  بیلد: $(date -r desktop/dist/index.html '+%Y-%m-%d %H:%M')
+
+اول بیلد کن، بعد بسته بساز:
+  cd desktop && npm run build && cd ..
+  bash backend/scripts/pack.sh
+MSG
+    exit 1
+fi
 tar -czf "$WEB" -C desktop/dist .
 echo "$WEB  ($(du -h "$WEB" | cut -f1))"
 
