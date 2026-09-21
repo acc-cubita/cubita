@@ -29,9 +29,14 @@ WRITE_PATHS = [
 
 
 @pytest.fixture
-def super_client(client, monkeypatch):
-    monkeypatch.setattr(get_settings(), "super_admin_emails", OWNER)
-    return client
+def super_client(client, staff_client):
+    """کارتابلِ ستاد با توکنِ ستادی.
+
+    `client` هم گرفته می‌شود چون همه‌ی تست‌های این پرونده سمتِ مستأجر را هم لمس
+    می‌کنند و ترتیبِ ساختِ فیکسچرها باید ثابت بماند (هر دو `get_db` را به همان
+    session می‌بندند).
+    """
+    return staff_client(role="owner")
 
 
 @pytest.fixture

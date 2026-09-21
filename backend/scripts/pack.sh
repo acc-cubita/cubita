@@ -24,6 +24,9 @@ DEST="${1:-dist}"
 mkdir -p "$DEST"
 CODE="$DEST/cubita_code.tgz"
 WEB="$DEST/cubita_web_production.tgz"
+# اپِ ستاد (admin.cubita.ir). فقط اگر `admin/dist` ساخته شده باشد بسته می‌شود؛
+# استقرارِ بک‌اند بی‌نیاز از آن است و هر بار ساختنش اجباری نیست.
+ADMIN="$DEST/cubita_web_admin.tgz"
 
 say() { echo; echo "=== $* ==="; }
 
@@ -71,6 +74,28 @@ fi
 tar -czf "$WEB" -C desktop/dist .
 echo "$WEB  ($(du -h "$WEB" | cut -f1))"
 
+# --- بسته‌ی اپِ ستاد ---------------------------------------------------------------
+if [[ -f admin/dist/index.html ]]; then
+    say "بسته‌ی اپِ ستاد"
+    # همان قاعده‌ی کهنگیِ بالا — به همان دلیل.
+    NEWER_ADMIN=$(find admin/src admin/index.html admin/vite.config.ts admin/package.json                        -type f -newer admin/dist/index.html -print -quit 2>/dev/null || true)
+    if [[ -n "$NEWER_ADMIN" ]]; then
+        cat >&2 <<MSG
+بیلدِ اپِ ستاد کهنه است — دست‌کم یک فایلِ منبع از آن تازه‌تر است:
+  $NEWER_ADMIN
+  بیلد: $(date -r admin/dist/index.html '+%Y-%m-%d %H:%M')
+
+  cd admin && VITE_API_URL=https://admin.cubita.ir npm run build && cd ..
+MSG
+        exit 1
+    fi
+    tar -czf "$ADMIN" -C admin/dist .
+    echo "$ADMIN  ($(du -h "$ADMIN" | cut -f1))"
+else
+    echo
+    echo "(admin/dist نیست — بسته‌ی اپِ ستاد ساخته نشد)"
+fi
+
 # --- آزمون ------------------------------------------------------------------------
 # آنچه روی سرور اتفاق می‌افتد، همین‌جا یک بار انجام می‌شود. هر شکستی که این‌جا
 # دیده شود، شکستی است که پیش از توقفِ سرویس دیده شده.
@@ -101,9 +126,41 @@ if tar tzf "$CODE" | grep -Eq '(^|/)\.env$|\.pem$|\.key$'; then
 fi
 echo "  بدونِ فایلِ راز  ✓"
 
-# ۵) مهاجرت‌ها و باندل
+# ۵) **آدرسِ APIِ بیک‌شده** — گاردی که جابه‌جاییِ دو باندل را پیش از آپلود می‌گیرد.
+#
+# `deploy.sh` گامِ ۴ فقط می‌سنجد که باندل آدرسِ *درست* را دارد؛ نمی‌سنجد که
+# آدرسِ *غلط* را ندارد. با دو باندلِ هم‌شکل این کافی نیست: باندلِ ستاد اگر با
+# acc.cubita.ir بیلد شود، گاردِ production هم قبولش می‌کند و دو اپ بی‌صدا
+# جابه‌جا می‌شوند. پس هر بسته باید مبدأِ خودش را داشته باشد و مبدأِ آن یکی را نه.
+#
+# با `https://` کامل سنجیده می‌شود، نه نامِ میزبانِ خالی: متنِ راهنمای اپِ ستاد
+# عمداً رشته‌ی «acc.cubita.ir» را دارد («برای ورود به نرم‌افزار به acc… بروید»).
+assert_origin() {
+    local tgz="$1" want="$2" avoid="$3" dir
+    dir="$(mktemp -d)"
+    tar xzf "$tgz" -C "$dir"
+    if ! grep -rqF "$want" "$dir"/assets/*.js 2>/dev/null; then
+        echo "  ✗ $(basename "$tgz") به $want اشاره نمی‌کند" >&2
+        grep -rhoE 'https://[a-z.]*cubita[a-z.]*' "$dir"/assets/*.js 2>/dev/null | sort -u | head >&2
+        rm -rf "$dir"; return 1
+    fi
+    if grep -rqF "$avoid" "$dir"/assets/*.js 2>/dev/null; then
+        echo "  ✗ $(basename "$tgz") آدرسِ $avoid را هم دارد — باندلِ اشتباه؟" >&2
+        rm -rf "$dir"; return 1
+    fi
+    rm -rf "$dir"
+    echo "  $(basename "$tgz") → $want  ✓"
+}
+assert_origin "$WEB" "https://acc.cubita.ir" "https://admin.cubita.ir"
+[[ -f "$ADMIN" ]] && assert_origin "$ADMIN" "https://admin.cubita.ir" "https://acc.cubita.ir"
+
+# ۶) مهاجرت‌ها و باندل
 echo "  مهاجرت‌ها: $(ls "$TMP"/alembic/versions/*.py | wc -l) (آخرین: $(ls "$TMP"/alembic/versions/*.py | sort | tail -1 | xargs basename))"
 echo "  فایل‌های وب: $(tar tzf "$WEB" | grep -c '[^/]$')"
 
 say "checksum"
-sha256sum "$CODE" "$WEB"
+if [[ -f "$ADMIN" ]]; then
+    sha256sum "$CODE" "$WEB" "$ADMIN"
+else
+    sha256sum "$CODE" "$WEB"
+fi

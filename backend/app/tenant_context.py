@@ -134,11 +134,18 @@ def _stamp_tenant_on_new_rows(session, flush_context, instances) -> None:
 
     RLS همچنان لایه‌ی پشتیبان است نه جایگزین: اگر این مهر به هر دلیلی نخورد،
     WITH CHECK در پایگاه‌داده جلوی نوشتن را می‌گیرد.
+
+    مدلی که `__tenant_stamp__ = False` بگذارد کنار گذاشته می‌شود. تنها مصرفش امروز
+    `StaffAuditLog` است: ستونِ `tenant_id` دارد ولی سراسری است، و ردیفی که واقعاً
+    مستأجر ندارد (مثلِ «ورودِ کارمندِ ستاد») نباید بی‌صدا مهرِ مستأجرِ فعال بخورد —
+    ردِ کاری که به مشتریِ بی‌ربط نسبت داده شود، بدتر از نبودنش است.
     """
     tenant_id = session.info.get(SESSION_KEY) or _current_tenant.get()
     if tenant_id is None:
         return
     for obj in session.new:
+        if getattr(type(obj), "__tenant_stamp__", True) is False:
+            continue
         if hasattr(type(obj), "tenant_id") and getattr(obj, "tenant_id", None) is None:
             obj.tenant_id = tenant_id
 

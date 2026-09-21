@@ -35,8 +35,6 @@ export function TopNav({
   businessName,
   token,
   currentTenantId,
-  isPlatformAdmin,
-  isSuperAdmin,
   tenantKind,
   enabledModules,
   allowedModules,
@@ -55,8 +53,6 @@ export function TopNav({
   businessName: string
   token?: string
   currentTenantId?: string
-  isPlatformAdmin: boolean
-  isSuperAdmin: boolean
   tenantKind: string
   /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
   enabledModules?: string[]
@@ -72,8 +68,6 @@ export function TopNav({
   syncStatus?: string
 }) {
   const { groups, secondary } = buildNav({
-    isPlatformAdmin,
-    isSuperAdmin,
     tenantKind,
     enabledModules,
     allowedModules,

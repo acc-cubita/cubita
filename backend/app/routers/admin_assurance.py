@@ -1,4 +1,4 @@
-"""کارتابلِ حسابرسیِ ستاد — فقط سوپرادمین.
+"""کارتابلِ حسابرسیِ ستاد — فقط کارمندِ ستاد (`require_staff`).
 
 **قاعده‌ی این فایل:** هر تغییری روی قرارداد، درونِ زمینه‌ی مستأجرِ *مشتری* اجرا
 می‌شود (`tenant_scope`)، نه زمینه‌ی خودِ ادمین. دو دلیل، هر دو سخت:
@@ -11,15 +11,19 @@
 
 همان الگویی که `auth.my_tenants` برای خواندنِ نامِ نقش‌ها به کار می‌برد: وارد
 زمینه شو، کار را بکن، زمینه را برگردان.
+
+**`_client_scope` حذف شد.** وجودش برای برگرداندنِ زمینه‌ی مستأجرِ *خودِ ادمین*
+بود؛ حالا درخواستِ ستاد اصلاً مستأجری ندارد که به آن برگردیم، و خودِ
+`tenant_scope` حالتِ «هیچ مستأجری بسته نبود» را درست برمی‌گرداند. نتیجه‌اش
+ساده‌تر و امن‌تر است: درخواست دیگر **با یک مستأجرِ بسته تمام نمی‌شود**.
 """
-from contextlib import contextmanager
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import Principal, get_principal, require_super_admin
+from app.deps import StaffPrincipal, require_staff
 from app.models.assurance import AssuranceEngagement
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -33,20 +37,10 @@ from app.schemas.assurance import (
     StaffEngagementOut,
 )
 from app.services import assurance as service
-from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, tenant_scope
+from app.services import staff_audit
+from app.tenant_context import tenant_scope
 
 router = APIRouter(prefix="/api/admin/assurance", tags=["assurance-admin"])
-
-
-@contextmanager
-def _client_scope(db: Session, principal: Principal, tenant_id: UUID):
-    """زمینه‌ی مستأجرِ مشتری، با بازگرداندنِ تضمین‌شده‌ی زمینه‌ی ادمین."""
-    try:
-        with tenant_scope(db, tenant_id):
-            yield
-    finally:
-        bind_session_tenant(db, principal.tenant_id)
-        apply_tenant_to_transaction(db, principal.tenant_id)
 
 
 def _row(db: Session, engagement: AssuranceEngagement) -> StaffEngagementOut:
@@ -76,7 +70,7 @@ def _load(db: Session, engagement_id: UUID) -> AssuranceEngagement:
 def list_engagements(
     status_filter: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: StaffPrincipal = Depends(require_staff("assurance", "view")),
 ):
     """صفِ درخواست‌ها در همه‌ی کسب‌وکارها، تازه‌ترین اول."""
     query = db.query(AssuranceEngagement)
@@ -91,21 +85,32 @@ def approve(
     engagement_id: UUID,
     data: ApproveIn,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    actor: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     engagement = _load(db, engagement_id)
-    with _client_scope(db, principal, engagement.tenant_id):
+    with tenant_scope(db, engagement.tenant_id):
         service.approve(
             db,
             engagement,
-            actor,
+            staff.user,
             auditor_email=data.auditor_email,
             days=data.days,
             period_from=data.period_from,
             period_to=data.period_to,
         )
-    return _row(db, engagement)
+    row = _row(db, engagement)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_approve",
+        summary=f"تأییدِ حسابرسیِ «{row.tenant_name}» — حسابرس: {data.auditor_email}",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        target_label=row.tenant_name,
+        tenant_id=engagement.tenant_id,
+        details={"auditor_email": data.auditor_email, "days": data.days},
+    )
+    return row
 
 
 @router.post("/{engagement_id}/reject", response_model=StaffEngagementOut)
@@ -113,13 +118,24 @@ def reject(
     engagement_id: UUID,
     data: RejectIn,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    actor: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     engagement = _load(db, engagement_id)
-    with _client_scope(db, principal, engagement.tenant_id):
-        service.reject(db, engagement, actor, reason=data.reason)
-    return _row(db, engagement)
+    with tenant_scope(db, engagement.tenant_id):
+        service.reject(db, engagement, staff.user, reason=data.reason)
+    row = _row(db, engagement)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_reject",
+        summary=f"ردِ درخواستِ حسابرسیِ «{row.tenant_name}» — {data.reason}",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        target_label=row.tenant_name,
+        tenant_id=engagement.tenant_id,
+        details={"reason": data.reason},
+    )
+    return row
 
 
 @router.post("/{engagement_id}/assign", response_model=StaffEngagementOut)
@@ -127,13 +143,24 @@ def assign(
     engagement_id: UUID,
     data: AssignIn,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    actor: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     engagement = _load(db, engagement_id)
-    with _client_scope(db, principal, engagement.tenant_id):
-        service.assign(db, engagement, actor, auditor_email=data.auditor_email, days=data.days)
-    return _row(db, engagement)
+    with tenant_scope(db, engagement.tenant_id):
+        service.assign(db, engagement, staff.user, auditor_email=data.auditor_email, days=data.days)
+    row = _row(db, engagement)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_assign",
+        summary=f"گمارشِ حسابرسِ «{row.tenant_name}» به {data.auditor_email}",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        target_label=row.tenant_name,
+        tenant_id=engagement.tenant_id,
+        details={"auditor_email": data.auditor_email},
+    )
+    return row
 
 
 @router.post("/{engagement_id}/extend", response_model=StaffEngagementOut)
@@ -141,29 +168,50 @@ def extend(
     engagement_id: UUID,
     data: ExtendIn,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    _: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     engagement = _load(db, engagement_id)
-    with _client_scope(db, principal, engagement.tenant_id):
+    with tenant_scope(db, engagement.tenant_id):
         service.extend(db, engagement, days=data.days)
-    return _row(db, engagement)
+    row = _row(db, engagement)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_extend",
+        summary=f"تمدیدِ دسترسیِ حسابرسِ «{row.tenant_name}» — {data.days} روز",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        target_label=row.tenant_name,
+        tenant_id=engagement.tenant_id,
+        details={"days": data.days},
+    )
+    return row
 
 
 @router.post("/{engagement_id}/run", response_model=RunOut)
 def run_now(
     engagement_id: UUID,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    actor: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     """اجرای بررسی از سمتِ ستاد — برای وقتی اجرای هنگامِ تأیید شکست خورده."""
     engagement = _load(db, engagement_id)
     if engagement.status not in ("approved", "active"):
         raise HTTPException(status.HTTP_409_CONFLICT, "این قرارداد باز نیست")
-    with _client_scope(db, principal, engagement.tenant_id):
-        run = service.run_snapshot(db, engagement, actor, trigger="staff")
-        return RunOut.model_validate(run)
+    with tenant_scope(db, engagement.tenant_id):
+        run = service.run_snapshot(db, engagement, staff.user, trigger="staff")
+        out = RunOut.model_validate(run)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_run",
+        summary=f"اجرای دستیِ بررسیِ حسابرسی — نمره {out.score}",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        tenant_id=engagement.tenant_id,
+        details={"score": float(out.score) if out.score is not None else None},
+    )
+    return out
 
 
 @router.post("/{engagement_id}/close", response_model=StaffEngagementOut)
@@ -171,10 +219,21 @@ def close(
     engagement_id: UUID,
     data: CloseIn,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-    _: User = Depends(require_super_admin),
+    staff: StaffPrincipal = Depends(require_staff("assurance", "approve")),
 ):
     engagement = _load(db, engagement_id)
-    with _client_scope(db, principal, engagement.tenant_id):
+    with tenant_scope(db, engagement.tenant_id):
         service.close(db, engagement, note=data.note)
-    return _row(db, engagement)
+    row = _row(db, engagement)
+    staff_audit.record(
+        db,
+        staff,
+        "assurance_close",
+        summary=f"بستنِ پرونده‌ی حسابرسیِ «{row.tenant_name}»",
+        target_type="assurance_engagement",
+        target_id=engagement.id,
+        target_label=row.tenant_name,
+        tenant_id=engagement.tenant_id,
+        details={"note": data.note},
+    )
+    return row

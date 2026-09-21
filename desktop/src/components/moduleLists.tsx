@@ -560,9 +560,6 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   overview: 'view',
   modules: 'none',
   profile: 'none',
-  billing: 'view',
-  accounts: 'view',
-  mpcommission: 'view',
 }
 
 export interface ListDef {

@@ -34,9 +34,14 @@ AUDITOR_EMAIL = "auditor@cubita.invalid"
 
 
 @pytest.fixture
-def super_client(client, monkeypatch):
-    monkeypatch.setattr(get_settings(), "super_admin_emails", OWNER)
-    return client
+def super_client(client, staff_client):
+    """کارتابلِ ستاد با توکنِ ستادی.
+
+    `client` هم گرفته می‌شود چون همه‌ی تست‌های این پرونده سمتِ مستأجر را هم لمس
+    می‌کنند و ترتیبِ ساختِ فیکسچرها باید ثابت بماند (هر دو `get_db` را به همان
+    session می‌بندند).
+    """
+    return staff_client(role="owner")
 
 
 @pytest.fixture
@@ -271,8 +276,25 @@ def test_client_reads_only_own_engagement(client, db, tenant_id):
 # ── کارتابلِ ستاد ────────────────────────────────────────────────────────────
 
 
-def test_admin_gate_blocks_non_super_admin(client):
-    assert client.get("/api/admin/assurance").status_code == 403
+def test_admin_gate_blocks_everyone_but_staff(client, db, user):
+    """کارتابل فقط با هویتِ ستاد باز می‌شود.
+
+    دو مسیرِ شکست جداست و هر دو باید بسته باشند: بی‌توکن ۴۰۱، و با توکنِ
+    مستأجریِ یک کاربرِ عادی ۴۰۱/۴۰۳ (پلِ سازگاری فقط ایمیل‌های روی allowlist را
+    رد می‌کند، نه هر توکنِ معتبری).
+    """
+    from fastapi.testclient import TestClient
+
+    from app.database import get_db
+    from app.main import app
+    from app.security import create_access_token
+
+    assert client.get("/api/admin/assurance").status_code == 401
+
+    app.dependency_overrides[get_db] = lambda: db
+    raw = TestClient(app)
+    raw.headers.update({"Authorization": f"Bearer {create_access_token(user)}"})
+    assert raw.get("/api/admin/assurance").status_code in (401, 403)
 
 
 def test_admin_list_spans_tenants(client, super_client, db):

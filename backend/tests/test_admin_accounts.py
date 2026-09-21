@@ -8,10 +8,13 @@ OWNER = "test-owner@example.invalid"  # = SEED_OWNER_EMAIL
 
 
 @pytest.fixture
-def super_client(client, monkeypatch):
-    """همان کلاینتِ تست، ولی کاربرش را سوپرادمین می‌کند (به‌جای acc.cubita پیش‌فرض)."""
-    monkeypatch.setattr(get_settings(), "super_admin_emails", OWNER)
-    return client
+def super_client(staff_client):
+    """کلاینتِ ستاد با نقشِ `owner`.
+
+    بعد از کوچ به `admin.cubita.ir`، «سوپرادمین» دیگر یک ایمیل روی allowlist
+    نیست: یک ردیف در `platform_admins` است با توکنی که **هیچ مستأجری ندارد**.
+    """
+    return staff_client(role="owner")
 
 
 def _create(super_client, email="new-cust@example.com", days=365):
@@ -29,10 +32,32 @@ def _create(super_client, email="new-cust@example.com", days=365):
 
 # --- گیت --------------------------------------------------------------------
 
-def test_gate_blocks_non_super_admin(client):
-    # بدونِ سوپرادمین‌کردن، کاربرِ عادیِ تست دسترسی ندارد
-    assert client.get("/api/admin/accounts").status_code == 403
-    assert client.post("/api/admin/accounts", json={}).status_code == 403
+def test_gate_blocks_an_ordinary_tenant_user(raw_tenant_client):
+    """کاربرِ عادیِ یک کسب‌وکار، با توکنِ کاملاً معتبرِ خودش."""
+    assert raw_tenant_client.get("/api/admin/accounts").status_code in (401, 403)
+    assert raw_tenant_client.post("/api/admin/accounts", json={}).status_code in (401, 403)
+
+
+@pytest.fixture
+def raw_tenant_client(db, user):
+    """کلاینتِ مستأجری با توکنِ واقعی — بدونِ override شدنِ احراز هویت.
+
+    فیکسچرِ `client` عمداً `get_principal` را override می‌کند، پس برای سنجیدنِ
+    خودِ گیت به کار نمی‌آید.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.database import get_db
+    from app.main import app
+    from app.security import create_access_token
+
+    app.dependency_overrides[get_db] = lambda: db
+    c = TestClient(app)
+    c.headers.update({"Authorization": f"Bearer {create_access_token(user)}"})
+    try:
+        yield c
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_super_admin_can_list(super_client):
@@ -151,11 +176,19 @@ def test_suspend_and_activate(super_client):
     assert super_client.post(f"/api/admin/accounts/{tid}/status", json={"status": "active"}).json()["status"] == "active"
 
 
-def test_cannot_suspend_own_account(super_client):
+def test_staff_can_suspend_any_account_because_they_own_none(super_client):
+    """گاردِ «اکانتِ خودت را تعلیق نکن» با کوچ بی‌موضوع شد.
+
+    آن گارد `principal.tenant_id` را با هدف مقایسه می‌کرد؛ کارمندِ ستاد اصلاً
+    مستأجری ندارد، پس مقایسه معنا ندارد و حذف شد. این تست ثبت می‌کند که حذفش
+    عمدی بوده، نه یک رگرسیون.
+    """
     rows = super_client.get("/api/admin/accounts").json()
     own = next(r for r in rows if r["owner_email"] == OWNER)
-    r = super_client.post(f"/api/admin/accounts/{own['tenant_id']}/status", json={"status": "suspended"})
-    assert r.status_code == 400
+    r = super_client.post(
+        f"/api/admin/accounts/{own['tenant_id']}/status", json={"status": "suspended"}
+    )
+    assert r.status_code == 200, r.text
 
 
 # --- بازنشانی رمز -----------------------------------------------------------
@@ -168,17 +201,50 @@ def test_reset_owner_password(super_client):
 
 # --- حذف --------------------------------------------------------------------
 
+def _delete(super_client, tid, slug, reason="پاک‌سازیِ اکانتِ آزمایشی"):
+    return super_client.request(
+        "DELETE",
+        f"/api/admin/accounts/{tid}",
+        json={"confirm_slug": slug, "reason": reason},
+    )
+
+
 def test_delete_account(super_client):
-    tid = _create(super_client, email="del@example.com").json()["tenant_id"]
-    assert super_client.delete(f"/api/admin/accounts/{tid}").status_code == 200
+    row = _create(super_client, email="del@example.com").json()
+    assert _delete(super_client, row["tenant_id"], row["slug"]).status_code == 200
     rows = super_client.get("/api/admin/accounts").json()
-    assert all(row["tenant_id"] != tid for row in rows)
+    assert all(r["tenant_id"] != row["tenant_id"] for r in rows)
 
 
-def test_cannot_delete_own_account(super_client):
-    rows = super_client.get("/api/admin/accounts").json()
-    own = next(r for r in rows if r["owner_email"] == OWNER)
-    assert super_client.delete(f"/api/admin/accounts/{own['tenant_id']}").status_code == 400
+def test_delete_needs_the_exact_slug(super_client):
+    """گاردی که جای «اکانتِ خودت را حذف نکن» نشست.
+
+    آن گارد فقط یک اکانت را محافظت می‌کرد؛ این یکی همه را — و هم جلوی کلیکِ
+    اشتباه را می‌گیرد و هم جلوی ارسالِ دوباره.
+    """
+    row = _create(super_client, email="keep@example.com").json()
+    assert _delete(super_client, row["tenant_id"], "slug-اشتباه").status_code == 400
+    assert any(
+        r["tenant_id"] == row["tenant_id"] for r in super_client.get("/api/admin/accounts").json()
+    )
+
+
+def test_delete_needs_a_reason(super_client):
+    row = _create(super_client, email="why@example.com").json()
+    r = _delete(super_client, row["tenant_id"], row["slug"], reason="کوتاه")
+    assert r.status_code == 422
+
+
+def test_delete_is_owner_only(staff_client):
+    """حذفِ اکانت حتی با مجوزِ کامل هم فقط دستِ `owner` است."""
+    admin = staff_client(role="admin", email="admin2@staff.cubita.ir")
+    rows = admin.get("/api/admin/accounts").json()
+    r = admin.request(
+        "DELETE",
+        f"/api/admin/accounts/{rows[0]['tenant_id']}",
+        json={"confirm_slug": rows[0]["slug"], "reason": "تلاشِ غیرمجاز برای حذف"},
+    )
+    assert r.status_code == 403
 
 
 # --- فعالیتِ کاربران --------------------------------------------------------

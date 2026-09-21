@@ -44,10 +44,6 @@ export interface MeResponse {
   permissions: Record<string, string[]>
   tenant_id: string
   tenant_name: string
-  //: کاربر روی allowlist کنترل‌پنل فروش خودِ کوبیتاست، نه صاحب یک کسب‌وکار عادی.
-  is_platform_admin: boolean
-  //: سوپرادمینِ کلِ سامانه (فقط مالک) — گیتِ ماژولِ «مدیریت اکانت‌ها».
-  is_super_admin: boolean
   //: نوعِ حساب در بازارِ عمده‌فروشی: standard | distributor (پخش‌کننده) | retailer (فروشگاه).
   //: ماژول‌های «پخشِ من» / «بازارِ خرید» با این گیت می‌شوند.
   tenant_kind: string
@@ -2538,94 +2534,9 @@ export const createCheckDirect = (
   },
 ) => authedSend<unknown>(token, 'POST', '/api/checks', data)
 
-export interface PurchaseRecord {
-  id: string
-  plan_id: string
-  plan_name: string
-  customer_name: string
-  customer_email: string
-  customer_phone: string
-  business_name: string
-  amount_toman: string
-  status: string
-  zarinpal_ref_id: string | null
-  admin_notes: string
-  created_at: string
-}
-
-export const fetchAdminPurchases = (token: string) => authedGet<PurchaseRecord[]>(token, '/api/admin/purchases')
-
-export const fulfillPurchase = (token: string, purchaseId: string, adminNotes: string) =>
-  authedSend<PurchaseRecord>(token, 'POST', `/api/admin/purchases/${purchaseId}/fulfill`, { admin_notes: adminNotes })
-
-// ── مدیریت اکانت‌ها (فقط سوپرادمین) ──────────────────────────────────────────
-export interface AdminAccountUser {
-  name: string
-  email: string
-  status: string // عضویت: active | invited | disabled
-  is_owner: boolean
-  last_login_at: string | null
-}
-
-export interface AdminAccount {
-  tenant_id: string
-  name: string
-  slug: string
-  status: string // active | suspended | cancelled
-  kind: string // standard | distributor | retailer
-  //: صنف (قالبِ ماژول‌ها) و ماژول‌های محدودِ گرنت‌شده — شخصی‌سازیِ سوپرادمین.
-  industry: string
-  granted_modules: string[]
-  owner_name: string
-  owner_email: string
-  created_at: string
-  user_count: number
-  max_users: number | null
-  subscription_status: string // active | grace | expired | cancelled | none
-  expires_at: string | null
-  days_left: number | null
-  plan_name: string
-  is_trial: boolean
-  trial_days_left: number | null
-  trial_expired: boolean
-  owner_last_login_at: string | null
-  last_activity_at: string | null
-  users: AdminAccountUser[]
-}
-
-export const fetchAdminAccounts = (token: string) =>
-  authedGet<AdminAccount[]>(token, '/api/admin/accounts')
-
-export const createAdminAccount = (
-  token: string,
-  data: { business_name: string; owner_name: string; email: string; password: string; days: number; kind?: string },
-) => authedSend<AdminAccount>(token, 'POST', '/api/admin/accounts', data)
-
-export const setAdminAccountKind = (token: string, tenantId: string, kind: string) =>
-  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/kind`, { kind })
-
-export const extendAdminAccount = (
-  token: string,
-  tenantId: string,
-  data: { days?: number; expires_at?: string },
-) => authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/extend`, data)
-
-export const setAdminAccountStatus = (token: string, tenantId: string, status: 'active' | 'suspended') =>
-  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/status`, { status })
-
-export const resetAdminAccountPassword = (token: string, tenantId: string, password: string) =>
-  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/reset-password`, { password })
-
-export const deleteAdminAccount = (token: string, tenantId: string) =>
-  authedDelete(token, `/api/admin/accounts/${tenantId}`)
-
-//: صنفِ اکانت را می‌گذارد (ماژول‌ها به قالبِ صنف بازنشانی + محدودهای قالب گرنت می‌شوند).
-export const setAdminAccountIndustry = (token: string, tenantId: string, industry: string) =>
-  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/industry`, { industry })
-
-//: «حقِ دسترسی»ِ ماژول‌های محدود را می‌گذارد (فهرستِ کاملِ محدودهای مجاز، نه افزایشی).
-export const setAdminAccountModules = (token: string, tenantId: string, granted: string[]) =>
-  authedSend<AdminAccount>(token, 'POST', `/api/admin/accounts/${tenantId}/modules`, { granted })
+//: کنترل‌پنلِ پلتفرم به اپِ مستقلِ `admin/` کوچ کرد (admin.cubita.ir).
+//: رَپرهای `/api/admin/*` اینجا حذف شدند تا باندلِ مشتری اصلاً کدِ
+//: مدیریتی نداشته باشد — نه پنهان، که **نبوده**.
 
 // ── شخصی‌سازیِ پنل توسطِ مالک ──
 
@@ -6271,24 +6182,9 @@ export interface MpCommissionOverview {
 }
 
 // سوپرادمین (مالکِ سامانه)
-export const fetchMpCommissionOverview = (token: string) =>
-  authedGet<MpCommissionOverview>(token, '/api/marketplace/admin/commissions/overview')
+//: سه رَپرِ ستادیِ کمیسیون به اپِ `admin/` رفتند. نوعِ `MpCommissionPeriod`
+//: می‌ماند چون صورتِ خودِ پخش‌کننده (پایین) همان شکل را دارد.
 
-export const fetchMpCommissions = (token: string) =>
-  authedGet<MpCommissionPeriod[]>(token, '/api/marketplace/admin/commissions')
-
-export const settleMpCommission = (
-  token: string,
-  data: { distributor_tenant_id: string; period: string; note?: string },
-) =>
-  authedSend<{ distributor_tenant_id: string; period: string; count: number; amount: number }>(
-    token,
-    'POST',
-    '/api/marketplace/admin/commissions/settle',
-    data,
-  )
-
-// پخش‌کننده — صورتِ کمیسیونِ خودش
 export const fetchMyMpCommissions = (token: string) =>
   authedGet<MpCommissionPeriod[]>(token, '/api/marketplace/distributor/commissions')
 
@@ -10097,8 +9993,8 @@ export const voidContractSettlement = (token: string, id: string, reason: string
 
 // ── حسابرسی ──────────────────────────────────────────────────────────────────
 //
-// دو خانواده‌ی مسیر: `/api/assurance` (سمتِ مشتری) و `/api/admin/assurance`
-// (کارتابلِ ستاد، فقط سوپرادمین). مسیرهای کاری روی سرور پشتِ ماژولِ مشتق‌اند، پس
+// فقط سمتِ مشتری (`/api/assurance`). کارتابلِ ستاد (`/api/admin/assurance`) به
+// اپِ مستقلِ `admin/` کوچ کرد. مسیرهای کاری روی سرور پشتِ ماژولِ مشتق‌اند، پس
 // پیش از تأییدِ قرارداد ۴۰۳ می‌دهند — پنهان‌بودنِ منو فقط راحتیِ کاربر است، نه گارد.
 
 export interface AssuranceEngagementRecord {
@@ -10120,11 +10016,6 @@ export interface AssuranceEngagementRecord {
   close_note: string
   auditor_name: string
   auditor_email: string
-}
-
-export interface StaffAssuranceEngagement extends AssuranceEngagementRecord {
-  tenant_name: string
-  owner_email: string
 }
 
 /** یک ردیفِ جدولِ توضیحِ نمره. این جدول **خودِ نمره** است، نه ضمیمه‌اش. */
@@ -10211,35 +10102,3 @@ export const fetchAssuranceFindings = (
 
 export const refreshAssuranceRun = (token: string, idempotencyKey?: string) =>
   authedSend<AssuranceRunRecord>(token, 'POST', '/api/assurance/runs', {}, idempotencyKey)
-
-// ── ستاد ─────────────────────────────────────────────────────────────────────
-
-export const fetchAssuranceRequests = (token: string, status?: string) =>
-  authedGet<StaffAssuranceEngagement[]>(
-    token,
-    status ? `/api/admin/assurance?status_filter=${status}` : '/api/admin/assurance',
-  )
-
-export const approveAssuranceRequest = (
-  token: string,
-  id: string,
-  body: { auditor_email: string; days: number; period_from?: string | null; period_to?: string | null },
-) => authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/approve`, body)
-
-export const rejectAssuranceRequest = (token: string, id: string, reason: string) =>
-  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/reject`, { reason })
-
-export const assignAssuranceAuditor = (
-  token: string,
-  id: string,
-  body: { auditor_email: string; days?: number | null },
-) => authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/assign`, body)
-
-export const extendAssuranceAccess = (token: string, id: string, days: number) =>
-  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/extend`, { days })
-
-export const runAssuranceSnapshot = (token: string, id: string) =>
-  authedSend<AssuranceRunRecord>(token, 'POST', `/api/admin/assurance/${id}/run`, {})
-
-export const closeAssuranceEngagement = (token: string, id: string, note: string) =>
-  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/close`, { note })

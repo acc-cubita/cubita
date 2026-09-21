@@ -19,7 +19,11 @@ desktop/dist/
 desktop/dist-electron/
 desktop/release/
 website/dist/
+admin/dist/
 *.log
+
+# بسته‌های استقرار — خروجیِ backend/scripts/pack.sh (مقصدِ پیش‌فرض: dist/)
+/dist/
 
 # Local SQLite data
 desktop/data/*.db

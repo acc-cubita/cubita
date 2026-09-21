@@ -13,6 +13,11 @@ from app.routers import (
     accounts,
     admin_accounts,
     admin_assurance,
+    admin_auth,
+    admin_billing,
+    admin_commissions,
+    admin_errors,
+    admin_staff,
     advanced_inventory,
     alerts,
     assets,
@@ -124,7 +129,13 @@ app.include_router(auth.router)
 app.include_router(fiscal_year.router)
 app.include_router(cashbox.router)
 app.include_router(numbering.router)
+app.include_router(admin_auth.router)
+app.include_router(admin_auth.diagnostics_router)
 app.include_router(admin_accounts.router)
+app.include_router(admin_billing.router)
+app.include_router(admin_commissions.router)
+app.include_router(admin_errors.router)
+app.include_router(admin_staff.router)
 app.include_router(members.router)
 app.include_router(modules.router)
 app.include_router(accounts.router)

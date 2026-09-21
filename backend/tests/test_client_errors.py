@@ -115,10 +115,18 @@ def test_an_empty_batch_is_harmless(client):
 def test_listing_refuses_an_ordinary_user(client):
     """stack trace داده‌ی عملیاتیِ ماست، نه دفترِ مشتری.
 
-    (fixtureِ `client` احراز را override می‌کند و کاربرش سوپرادمین نیست، پس آنچه
-    اینجا سنجیده می‌شود همان چیزی است که اهمیت دارد: کاربرِ عادی رد می‌شود.)
+    خواندنِ گزارش‌ها به `/api/admin/client-errors` منتقل شد؛ مسیرِ قدیمی دیگر
+    وجود ندارد و ingestِ عمومی سرِ جایش ماند.
     """
-    assert client.get("/api/client-errors").status_code == 403
+    assert client.get("/api/client-errors").status_code == 405
+    assert client.get("/api/admin/client-errors").status_code in (401, 403)
+
+
+def test_staff_can_read_the_reports(client, staff_client, db):
+    client.post("/api/client-errors", json={"reports": [_report("visible")]})
+    r = staff_client(role="owner").get("/api/admin/client-errors")
+    assert r.status_code == 200, r.text
+    assert any(row["name"] for row in r.json())
 
 
 @pytest.mark.parametrize("fatal", [True, False])

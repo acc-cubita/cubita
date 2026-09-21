@@ -24,8 +24,6 @@ const me = {
   permissions: {},
   tenant_id: 't1',
   tenant_name: 'نمونه',
-  is_platform_admin: false,
-  is_super_admin: false,
   tenant_kind: 'standard',
   is_trial: false,
   trial_days_left: null,

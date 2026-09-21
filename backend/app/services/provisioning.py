@@ -205,10 +205,16 @@ def purge_tenant(db: Session, tenant_id) -> None:
     #
     # فقط کسانی که *هیچ* عضویتی ندارند: یک حسابدار مستقل می‌تواند دفتر چند
     # کسب‌وکار را ببرد، و رفتن یکی از آن‌ها نباید حسابش را پاک کند.
+    #
+    # **و کارمندانِ ستاد استثنا هستند.** «بی‌عضویت» تا دیروز مترادفِ «یتیم» بود،
+    # ولی هویتِ ستادِ `admin.cubita.ir` عمداً هیچ عضویتی ندارد — همین نکته‌اش
+    # است. بدونِ این شرط، اولین حذفِ اکانت روی قیدِ `platform_admins_user_id_fkey`
+    # می‌شکست و **هیچ اکانتی در production قابلِ حذف نبود**.
     db.execute(
         text(
             "DELETE FROM users u WHERE NOT EXISTS "
-            "(SELECT 1 FROM memberships m WHERE m.user_id = u.id)"
+            "(SELECT 1 FROM memberships m WHERE m.user_id = u.id) "
+            "AND NOT EXISTS (SELECT 1 FROM platform_admins p WHERE p.user_id = u.id)"
         )
     )
 

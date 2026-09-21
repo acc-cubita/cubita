@@ -1112,33 +1112,6 @@ button:disabled {
   gap: 4px;
 }
 
-/* نوارِ فیلترِ اکانت‌ها (همه / آزمایشی / پولی) در «مدیریت اکانت‌ها» */
-.account-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.account-filter button {
-  padding: 5px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.account-filter button.is-active {
-  background: var(--accent, #2563eb);
-  border-color: var(--accent, #2563eb);
-  color: #fff;
-}
-.account-filter button.is-active.filter-trial {
-  background: var(--accent-2);
-  border-color: var(--accent-2);
-}
-
 /* صفحه‌بندیِ عددیِ فهرست‌های عمودی (آخرین رویدادها، یادآوری‌ها) — کامپوننتِ Pager */
 .pager {
   display: flex;
@@ -1356,95 +1329,6 @@ button:disabled {
   color: var(--text-muted);
 }
 .invoice-detail-totals strong { color: var(--text); }
-
-/* ── مدیریت اکانت‌ها (سوپرادمین) ── کارتِ هر اکانت؛ موبایل‌پسند بدونِ جدولِ فشرده */
-.account-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
-.account-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 14px);
-  background: var(--surface-2);
-  padding: 14px 16px;
-}
-.account-card--suspended { opacity: 0.72; border-style: dashed; }
-.account-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.account-name { font-weight: 700; color: var(--text-h); font-size: var(--fs-md); }
-.account-owner { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 2px; }
-.account-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 10px 0;
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-}
-.account-meta span { display: inline-flex; align-items: center; gap: 5px; }
-.account-meta strong { color: var(--text); }
-.account-suspended-tag { color: var(--danger, crimson); font-weight: 600; }
-.account-extend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-}
-.account-extend button { padding: 4px 10px; font-size: var(--fs-sm); }
-.account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-}
-
-/* فهرستِ کاربرانِ اکانت + آخرین فعالیتِ هرکدام (باز/بسته‌شونده) */
-.account-users {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.account-user-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 14px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  font-size: var(--fs-sm);
-}
-.account-user-row:nth-child(odd) { background: var(--surface); }
-.account-user-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.account-user-name { display: inline-flex; align-items: center; gap: 6px; color: var(--text-h); font-weight: 600; }
-.account-user-email { color: var(--text-muted); direction: ltr; text-align: right; }
-.account-user-owner {
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--accent, #2563eb);
-  background: color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-.account-user-tag {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-.account-user-seen { color: var(--text); white-space: nowrap; }
-.account-user-seen.is-never { color: var(--text-muted); font-style: italic; }
 
 /* ── تخفیفِ کل و گِرد کردن (فرم فاکتور فروش) ── */
 .invoice-adjustments {
