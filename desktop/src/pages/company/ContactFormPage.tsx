@@ -34,7 +34,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionCard } from '../../components/SectionCard'
-import { ActionBar, FormStatus } from '../../components/form/FormKit'
+import { ActionBar, FormField, FormStatus } from '../../components/form/FormKit'
 import type { PageKey } from '../../lib/navModel'
 import { SearchSelect } from '../../components/SearchSelect'
 
@@ -633,13 +633,11 @@ export function ContactNewPage({
             }
           >
             <div className="cmp-form">
-              <label>
-                <span>کد تفصیلی</span>
-                <input value={tafsiliCode} onChange={(e) => setTafsiliCode(e.target.value)} dir="ltr" maxLength={20} />
-                <span className="field-hint">
-                  خالی بگذارید تا خودکار ساخته شود؛ عددِ پیشنهادی اولین کدِ آزاد است.
-                </span>
-              </label>
+              <FormField label="کد تفصیلی" tip="خالی بگذارید تا خودکار ساخته شود؛ عددِ پیشنهادی اولین کدِ آزاد است.">
+                {(id) => (
+                  <input id={id} value={tafsiliCode} onChange={(e) => setTafsiliCode(e.target.value)} dir="ltr" maxLength={20} />
+                )}
+              </FormField>
               <label>
                 <span>عنوان تفصیلی</span>
                 <input
@@ -759,11 +757,9 @@ function ContactTab(p: {
 }) {
   return (
     <div className="cmp-form">
-      <label>
-        <span>تلفن اصلی</span>
-        <input value={p.phone} onChange={(e) => p.setPhone(e.target.value)} maxLength={20} />
-        <span className="field-hint">شماره‌های دیگر را در تبِ «تلفن» اضافه کنید.</span>
-      </label>
+      <FormField label="تلفن اصلی" tip="شماره‌های دیگر را در تبِ «تلفن» اضافه کنید.">
+        {(id) => <input id={id} value={p.phone} onChange={(e) => p.setPhone(e.target.value)} maxLength={20} />}
+      </FormField>
       <label>
         <span>ایمیل</span>
         <input value={p.email} onChange={(e) => p.setEmail(e.target.value)} maxLength={150} />
@@ -802,11 +798,9 @@ function ContactTab(p: {
           </label>
         </>
       )}
-      <label className="cmp-form-wide">
-        <span>نشانی اصلی</span>
-        <input value={p.address} onChange={(e) => p.setAddress(e.target.value)} />
-        <span className="field-hint">نشانی‌های دیگر (انبار، ارسال کالا…) را در تبِ «نشانی» اضافه کنید.</span>
-      </label>
+      <FormField label="نشانی اصلی" span="full" tip="نشانی‌های دیگر (انبار، ارسال کالا…) را در تبِ «نشانی» اضافه کنید.">
+        {(id) => <input id={id} value={p.address} onChange={(e) => p.setAddress(e.target.value)} />}
+      </FormField>
     </div>
   )
 }
@@ -865,12 +859,12 @@ function RolesTab(p: {
           : ''}
       </p>
       {p.isBroker && (
-        <label>
-          <span>نرخ پورسانت (٪)</span>
-          <input type="number" step="0.01" min="0" max="100" value={p.commissionRate}
-                 onChange={(e) => p.setCommissionRate(e.target.value)} placeholder="۰" />
-          <span className="field-hint">درصدی که بابتِ واسطه‌گری به او می‌رسد.</span>
-        </label>
+        <FormField label="نرخ پورسانت (٪)" tip="درصدی که بابتِ واسطه‌گری به او می‌رسد.">
+          {(id) => (
+            <input id={id} type="number" step="0.01" min="0" max="100" value={p.commissionRate}
+                   onChange={(e) => p.setCommissionRate(e.target.value)} placeholder="۰" />
+          )}
+        </FormField>
       )}
       {p.isShareholder && (
         <label>
@@ -1222,11 +1216,11 @@ function EmployeeTab(p: {
         <span>تعداد فرزند</span>
         <input type="number" min="0" value={p.childrenCount} onChange={(e) => p.setChildrenCount(e.target.value)} placeholder="۰" />
       </label>
-      <label>
-        <span>افراد تحت تکفل</span>
-        <input type="number" min="0" value={p.dependentsCount} onChange={(e) => p.setDependentsCount(e.target.value)} placeholder="۰" />
-        <span className="field-hint">مبنای معافیتِ مالیاتی و بیمه — جدا از تعدادِ فرزند.</span>
-      </label>
+      <FormField label="افراد تحت تکفل" tip="مبنای معافیتِ مالیاتی و بیمه — جدا از تعدادِ فرزند.">
+        {(id) => (
+          <input id={id} type="number" min="0" value={p.dependentsCount} onChange={(e) => p.setDependentsCount(e.target.value)} placeholder="۰" />
+        )}
+      </FormField>
       <label>
         <span>مدرک تحصیلی</span>
         <input value={p.educationLevel} onChange={(e) => p.setEducationLevel(e.target.value)}
@@ -1240,19 +1234,20 @@ function EmployeeTab(p: {
       {/* پیوند، نه کپی: حکم حقوقی، تاریخِ استخدام، شماره حساب، مرخصی و حضور و غیاب
           در ماژولِ حقوق و دستمزد می‌مانند. مشخصاتِ *شخصیِ* بالا این‌جاست چون واقعیتِ
           آدم است نه شغلش — مشتریِ غیرکارمند هم می‌تواند داشته باشدش. */}
-      <label className="cmp-form-wide">
-        <span>کارمندِ متناظر در حقوق و دستمزد</span>
-        <SearchSelect value={p.employeeId} onChange={(e) => p.setEmployeeId(e.target.value)}>
-          <option value="">— وصل نشده —</option>
-          {p.employees.map((e) => (
-            <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.national_id}</option>
-          ))}
-        </SearchSelect>
-        <span className="field-hint">
-          حکم حقوقی، تاریخ استخدام و شماره حساب در «حقوق و دستمزد» نگهداری می‌شوند و
-          این‌جا فقط به آن وصل می‌شود — تا یک آدم دو رکوردِ ناهماهنگ نداشته باشد.
-        </span>
-      </label>
+      <FormField
+        label="کارمندِ متناظر در حقوق و دستمزد"
+        span="full"
+        tip="حکم حقوقی، تاریخ استخدام و شماره حساب در «حقوق و دستمزد» نگهداری می‌شوند و این‌جا فقط به آن وصل می‌شود — تا یک آدم دو رکوردِ ناهماهنگ نداشته باشد."
+      >
+        {(id) => (
+          <SearchSelect id={id} value={p.employeeId} onChange={(e) => p.setEmployeeId(e.target.value)}>
+            <option value="">— وصل نشده —</option>
+            {p.employees.map((e) => (
+              <option key={e.id} value={e.id}>{e.first_name} {e.last_name} — {e.national_id}</option>
+            ))}
+          </SearchSelect>
+        )}
+      </FormField>
     </div>
   )
 }

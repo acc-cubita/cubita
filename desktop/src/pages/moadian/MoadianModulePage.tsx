@@ -41,6 +41,7 @@ import {
   MOADIAN_STATUS_TONE,
   type MoadianPanelState,
 } from '../../lib/moadianPanel'
+import { FormField } from '../../components/form/FormKit'
 
 /**
  * ماژولِ «سامانه مؤدیان» — چهار بخش به‌ترتیبِ کارِ واقعی: وضعیت، ارسال، تاریخچه، تنظیمات.
@@ -585,17 +586,18 @@ function SettingsTab({ m, token }: { m: MoadianPanelState; token: string }) {
           }}
         >
           <div className="mdn-grid">
-            <label>
-              شناسه یکتای حافظه مالیاتی
-              <input
-                dir="ltr"
-                value={form.memory_id}
-                onChange={(e) => setForm({ ...form, memory_id: e.target.value })}
-                maxLength={6}
-                placeholder="A1B2C3"
-              />
-              <span className="field-hint">دقیقاً ۶ کاراکتر، از کارپوشه.</span>
-            </label>
+            <FormField label="شناسه یکتای حافظه مالیاتی" tip="دقیقاً ۶ کاراکتر، از کارپوشه.">
+              {(id) => (
+                <input
+                  id={id}
+                  dir="ltr"
+                  value={form.memory_id}
+                  onChange={(e) => setForm({ ...form, memory_id: e.target.value })}
+                  maxLength={6}
+                  placeholder="A1B2C3"
+                />
+              )}
+            </FormField>
             <label>
               شناسه ملی / کد ملی مؤدی
               <input dir="ltr" value={form.national_id} onChange={(e) => setForm({ ...form, national_id: e.target.value })} />
@@ -604,60 +606,69 @@ function SettingsTab({ m, token }: { m: MoadianPanelState; token: string }) {
               شماره اقتصادی
               <input dir="ltr" value={form.economic_code} onChange={(e) => setForm({ ...form, economic_code: e.target.value })} />
             </label>
-            <label>
-              شناسه‌ی پیش‌فرضِ کالا/خدمت
-              <input
-                dir="ltr"
-                value={form.default_stuff_id}
-                onChange={(e) => setForm({ ...form, default_stuff_id: e.target.value })}
-                inputMode="numeric"
-              />
-              <span className="field-hint">
-                ۱۳ رقم، اختیاری. هر کالا می‌تواند کدِ خودش را داشته باشد؛ این کد فقط جایگزینِ کالاهای بدونِ کد است.
-              </span>
-            </label>
+            <FormField
+              label="شناسه‌ی پیش‌فرضِ کالا/خدمت"
+              tip="۱۳ رقم، اختیاری. هر کالا می‌تواند کدِ خودش را داشته باشد؛ این کد فقط جایگزینِ کالاهای بدونِ کد است."
+            >
+              {(id) => (
+                <input
+                  id={id}
+                  dir="ltr"
+                  value={form.default_stuff_id}
+                  onChange={(e) => setForm({ ...form, default_stuff_id: e.target.value })}
+                  inputMode="numeric"
+                />
+              )}
+            </FormField>
           </div>
 
-          <label className="mdn-wide">
-            کلید خصوصی (PEM)
-            <textarea
-              dir="ltr"
-              rows={6}
-              className="mdn-pem"
-              value={form.private_key_pem}
-              onChange={(e) => setForm({ ...form, private_key_pem: e.target.value })}
-              placeholder="-----BEGIN PRIVATE KEY-----"
-            />
-            {settings?.has_private_key && (
-              <span className="field-hint">کلید ثبت شده است — خالی بگذارید تا دست‌نخورده بماند، یا کلیدِ تازه را بچسبانید.</span>
+          <FormField
+            label="کلید خصوصی (PEM)"
+            span="full"
+            message={settings?.has_private_key ? 'کلید ثبت شده است — خالی بگذارید تا دست‌نخورده بماند، یا کلیدِ تازه را بچسبانید.' : null}
+          >
+            {(id) => (
+              <textarea
+                id={id}
+                dir="ltr"
+                rows={6}
+                className="mdn-pem"
+                value={form.private_key_pem}
+                onChange={(e) => setForm({ ...form, private_key_pem: e.target.value })}
+                placeholder="-----BEGIN PRIVATE KEY-----"
+              />
             )}
-          </label>
+          </FormField>
 
-          <label className="mdn-wide">
-            گواهیِ امضا — Certificate (PEM)
-            <textarea
-              dir="ltr"
-              rows={6}
-              className="mdn-pem"
-              value={form.certificate_pem}
-              onChange={(e) => setForm({ ...form, certificate_pem: e.target.value })}
-              placeholder="-----BEGIN CERTIFICATE-----"
-            />
-            {settings?.has_certificate && (
-              <span className="field-hint">گواهی ثبت شده است — خالی بگذارید تا دست‌نخورده بماند، یا گواهیِ تازه را بچسبانید.</span>
+          <FormField
+            label="گواهیِ امضا — Certificate (PEM)"
+            span="full"
+            message={settings?.has_certificate ? 'گواهی ثبت شده است — خالی بگذارید تا دست‌نخورده بماند، یا گواهیِ تازه را بچسبانید.' : null}
+          >
+            {(id) => (
+              <textarea
+                id={id}
+                dir="ltr"
+                rows={6}
+                className="mdn-pem"
+                value={form.certificate_pem}
+                onChange={(e) => setForm({ ...form, certificate_pem: e.target.value })}
+                placeholder="-----BEGIN CERTIFICATE-----"
+              />
             )}
-          </label>
+          </FormField>
 
-          <label className="mdn-wide">
-            آدرس پایه (اختیاری)
-            <input
-              dir="ltr"
-              value={form.base_url_override}
-              onChange={(e) => setForm({ ...form, base_url_override: e.target.value })}
-              placeholder={settings?.effective_base_url ?? ''}
-            />
-            <span className="field-hint">خالی یعنی آدرسِ پیش‌فرضِ همان محیط.</span>
-          </label>
+          <FormField label="آدرس پایه (اختیاری)" span="full" tip="خالی یعنی آدرسِ پیش‌فرضِ همان محیط.">
+            {(id) => (
+              <input
+                id={id}
+                dir="ltr"
+                value={form.base_url_override}
+                onChange={(e) => setForm({ ...form, base_url_override: e.target.value })}
+                placeholder={settings?.effective_base_url ?? ''}
+              />
+            )}
+          </FormField>
 
           <div className="mdn-toggles">
             <label className="cal-check-inline">
