@@ -128,9 +128,6 @@ export type PageKey =
   | 'settlement'
   | 'deploymentinfo'
   | 'integration'
-  | 'billing'
-  | 'accounts'
-  | 'mpcommission'
   | 'reports'
   | 'calendar'
   | 'team'
@@ -281,8 +278,6 @@ export type PageKey =
   //: فهرست‌های حسابرسی
   | 'assurancefindinglist'
   | 'assurancerunlist'
-  //: کارتابلِ ستاد — از SUPER_ADMIN_NAV_ITEMS می‌آید، نه از NAV_GROUPS.
-  | 'assuranceadmin'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -616,17 +611,10 @@ const GATED_MODULE_KEYS = new Set<PageKey>([
   'integration', 'calendar', 'contacts', 'reports',
 ])
 
-// تبِ کنترل‌پنلِ فروشِ خودِ کوبیتا (نه فیچرِ مشتری) — فقط برای ادمینِ پلتفرم.
-export const PLATFORM_ADMIN_NAV_ITEMS: NavItem[] = [
-  { key: 'billing', label: 'خریدهای سایت تجاری', icon: <CreditCard size={18} /> },
-]
-
-// «مدیریت اکانت‌ها» فقط برای سوپرادمینِ سامانه (مالک) — سخت‌گیرانه‌تر از ادمینِ پلتفرم.
-export const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
-  { key: 'accounts', label: 'مدیریت اکانت‌ها', icon: <ShieldCheck size={18} /> },
-  { key: 'mpcommission', label: 'کمیسیونِ بازار', icon: <Percent size={18} /> },
-  { key: 'assuranceadmin', label: 'کارتابل حسابرسی', icon: <ClipboardCheck size={18} /> },
-]
+//: **مدیریتِ پلتفرم اینجا نیست و نباید برگردد.** چهار منوی «مدیریت سامانه»
+//: (مدیریت اکانت‌ها، کمیسیونِ بازار، کارتابلِ حسابرسی، خریدهای سایت) به اپِ
+//: مستقلِ `admin/` کوچ کردند — `admin.cubita.ir`. این اپ فقط دفترِ مشتری است.
+//: تستِ `navModel.test.ts` نمی‌گذارد هیچ‌کدامشان بی‌صدا برگردند.
 
 //: ورودی‌های پایینِ سایدبار/منوی کاربر. «ظاهر» و «راهنما» به گروهِ «تنظیمات» منتقل
 //: شدند تا در ساختارِ تازه‌ی ماژول‌ها یک‌جا جمع باشند.
@@ -658,15 +646,11 @@ export function uniqueNavItems(groups: NavGroup[], extra: NavItem[] = []): NavIt
 /** فهرستِ گروه‌ها و آیتم‌های ثانویه را با گیتِ نقش/نوعِ حساب و شخصی‌سازیِ ماژول می‌سازد.
  *  Sidebar و TopNav هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
 export function buildNav({
-  isPlatformAdmin,
-  isSuperAdmin,
   tenantKind,
   enabledModules = [],
   allowedModules = [],
   isOwner = false,
 }: {
-  isPlatformAdmin: boolean
-  isSuperAdmin: boolean
   tenantKind: string
   //: کلیدِ ماژول‌های روشن/مجازِ کسب‌وکار (از MeResponse). خالی = فیلتر نکن (fail-open).
   enabledModules?: string[]
@@ -691,10 +675,6 @@ export function buildNav({
     items: g.items.filter((i) => isVisible(i.key)),
   })).filter((g) => g.items.length > 0)
 
-  const adminItems = [
-    ...(isPlatformAdmin ? PLATFORM_ADMIN_NAV_ITEMS : []),
-    ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : []),
-  ]
   // ماژول‌های بازارِ عمده‌فروشی — فقط برای حسابِ متناظر (انحصاری). standard هیچ‌کدام را نمی‌بیند.
   const marketplaceItems: NavItem[] = [
     ...(tenantKind === 'distributor'
@@ -709,7 +689,6 @@ export function buildNav({
     ...(marketplaceItems.length
       ? [{ heading: 'بازارِ عمده‌فروشی', icon: <Truck size={17} />, items: marketplaceItems }]
       : []),
-    ...(adminItems.length ? [{ heading: 'مدیریت سامانه', icon: <Settings size={17} />, items: adminItems }] : []),
   ]
 
   // «شخصی‌سازیِ پنل» (فقط مالک) به انتهای گروهِ «تنظیمات» اضافه می‌شود.

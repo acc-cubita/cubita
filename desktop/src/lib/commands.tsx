@@ -47,8 +47,6 @@ export function searchCommands(commands: Command[], query: string, limit?: numbe
  */
 export function buildCommands(me: MeResponse): Command[] {
   const { groups, secondary } = buildNav({
-    isPlatformAdmin: me.is_platform_admin,
-    isSuperAdmin: me.is_super_admin,
     tenantKind: me.tenant_kind,
     enabledModules: me.enabled_modules,
     allowedModules: me.allowed_modules,

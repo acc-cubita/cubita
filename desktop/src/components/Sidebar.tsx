@@ -12,8 +12,6 @@ export function Sidebar({
   onNavigate,
   userName,
   roleName,
-  isPlatformAdmin,
-  isSuperAdmin,
   tenantKind,
   enabledModules,
   allowedModules,
@@ -28,8 +26,6 @@ export function Sidebar({
   onNavigate: (page: PageKey, section?: string) => void
   userName: string
   roleName: string
-  isPlatformAdmin: boolean
-  isSuperAdmin: boolean
   /** نوعِ حساب در بازار: standard | distributor | retailer — گیتِ ماژول‌های بازار. */
   tenantKind: string
   /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
@@ -43,8 +39,6 @@ export function Sidebar({
 }) {
   // ناوبری (گروه‌ها + آیتم‌های ثانویه) از منبعِ مشترکِ navModel با گیتِ نقش/نوعِ حساب/ماژول.
   const { groups, secondary } = buildNav({
-    isPlatformAdmin,
-    isSuperAdmin,
     tenantKind,
     enabledModules,
     allowedModules,

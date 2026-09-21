@@ -22,8 +22,6 @@ const WORK_LISTS: PageKey[] = ['assurancefindinglist', 'assurancerunlist']
 
 const nav = (allowed: string[], enabled?: string[]) =>
   buildNav({
-    isPlatformAdmin: false,
-    isSuperAdmin: false,
     tenantKind: 'standard',
     enabledModules: enabled ?? allowed,
     allowedModules: allowed,
@@ -66,19 +64,47 @@ describe('گیتِ ماژولِ حسابرسی', () => {
     expect(visible.has('assurancerequest')).toBe(false)
   })
 
-  it('کارتابلِ ستاد از NAV_GROUPS نمی‌آید — پس گیتِ ماژول شاملش نیست', () => {
-    //: `assuranceadmin` در `SUPER_ADMIN_NAV_ITEMS` است و با `is_super_admin`
-    //: گیت می‌شود، نه با ماژول. آمدنش این‌جا یعنی جای اشتباهی ثبت شده.
-    expect(keys([...BASE, 'assurance_work']).has('assuranceadmin')).toBe(false)
-    const asSuper = buildNav({
-      isPlatformAdmin: false,
-      isSuperAdmin: true,
-      tenantKind: 'standard',
-      enabledModules: BASE,
-      allowedModules: BASE,
-    })
-    const superKeys = uniqueNavItems(asSuper.groups, asSuper.secondary).map((i) => i.key)
-    expect(superKeys).toContain('assuranceadmin')
+})
+
+describe('مدیریتِ پلتفرم برنمی‌گردد', () => {
+  //: چهار منوی «مدیریت سامانه» به اپِ مستقلِ `admin/` کوچ کردند
+  //: (`admin.cubita.ir`). این تست وارونه‌ی تستِ قبلی است: پیش‌تر اثبات می‌کرد
+  //: کارتابلِ ستاد از `SUPER_ADMIN_NAV_ITEMS` **می‌آید**؛ حالا اثبات می‌کند
+  //: هیچ‌کدامشان از هیچ راهی نمی‌آیند.
+  //:
+  //: گاردِ واقعی سرور است، ولی برگشتنِ یک منوی مدیریتی به اپِ مشتری دقیقاً همان
+  //: چیزی است که این کوچ برای حذفش انجام شد — و بی‌صدا هم اتفاق می‌افتد.
+  const ADMIN_KEYS = ['accounts', 'mpcommission', 'assuranceadmin', 'billing']
+
+  const EVERY_MODULE = [
+    ...BASE,
+    'assurance_work',
+    'manufacturing',
+    'integration',
+    'banking',
+    'payroll',
+    'fixedassets',
+    'calendar',
+  ]
+
+  it('با هر ترکیبی از ماژول‌ها و نقش‌ها، هیچ منوی مدیریتی‌ای نیست', () => {
+    for (const modules of [BASE, EVERY_MODULE, []]) {
+      for (const kind of ['standard', 'distributor', 'retailer']) {
+        for (const isOwner of [false, true]) {
+          const { groups, secondary } = buildNav({
+            tenantKind: kind,
+            enabledModules: modules,
+            allowedModules: modules,
+            isOwner,
+          })
+          const found = uniqueNavItems(groups, secondary).map((i) => i.key as string)
+          for (const key of ADMIN_KEYS) {
+            expect(found, `${key} با ${kind}/${modules.length} ماژول برگشت`).not.toContain(key)
+          }
+          expect(groups.map((g) => g.heading)).not.toContain('مدیریت سامانه')
+        }
+      }
+    }
   })
 })
 

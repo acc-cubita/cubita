@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw, Menu, Users, Store, BarChart3, CreditCard, Link2, Building2 } from 'lucide-react'
+import { RefreshCw, Menu, Users, Store, BarChart3, Link2, Building2 } from 'lucide-react'
 import {
   fetchAccountsLive,
   fetchBankAccountsLive,
@@ -22,7 +22,6 @@ import { NativeStorefrontPanel } from './NativeStorefrontPanel'
 import { Tabs } from './Tabs'
 import { FeatureUpsell } from './FeatureUpsell'
 import { StorefrontGallery } from './StorefrontGallery'
-import { PurchasesAdminPanel } from './PurchasesAdminPanel'
 import { Reports } from './Reports'
 import { FixedAssetsPanel } from './FixedAssetsPanel'
 import { PageHeader } from './PageHeader'
@@ -36,7 +35,6 @@ import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { ContractAmendmentPage, ContractPage, ContractSettlementPage, ContractStatementPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
 import { AssuranceHealthPage, AssuranceRequestPage } from '../pages/assurance/AssuranceOpsPages'
 import { AssuranceFindingListPage, AssuranceRunListPage } from '../pages/assurance/AssuranceListPages'
-import { AssuranceAdminPage } from '../pages/AssuranceAdminPage'
 import { OwnerTransactionPage } from '../pages/company/OwnerTransactionPages'
 import { OwnerTransactionListPage } from '../pages/company/OwnerTransactionListPage'
 import { ContractAmendmentListPage, ContractingListPage, ContractSettlementListPage, ContractStatementListPage } from '../pages/contracting/ContractingListPages'
@@ -71,8 +69,6 @@ import { BackupListPage } from '../pages/BackupListPage'
 import { UserListPage } from '../pages/UserListPage'
 import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
-import { AccountsAdminPage } from '../pages/AccountsAdminPage'
-import { MarketplaceCommissionPage } from '../pages/MarketplaceCommissionPage'
 import {
   CommissionCalcPage,
   CommissionPage,
@@ -318,7 +314,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   assurancehealth: 'کارنامه سلامت دفتر',
   assurancefindinglist: 'یافته‌های حسابرسی',
   assurancerunlist: 'تاریخچه بررسی‌ها',
-  assuranceadmin: 'کارتابل حسابرسی',
   moadian: 'سامانه مؤدیان',
   moadianhistory: 'تاریخچه ارسال‌ها',
   distributor: 'پخشِ من',
@@ -337,9 +332,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   payrolltaxgroups: 'گروه مالیاتی و شعب',
   taxtables: 'جداول مالیات',
   integration: 'اتصال فروشگاه',
-  billing: 'خریدهای سایت تجاری',
-  accounts: 'مدیریت اکانت‌ها',
-  mpcommission: 'کمیسیونِ بازار',
   reports: 'گزارش‌ها',
   calendar: 'تقویم و یادآوری',
   team: 'کاربر جدید',
@@ -835,21 +827,6 @@ export function Dashboard({
               )}
             </div>
           )}
-          {page === 'billing' && me.is_platform_admin && (
-            <div className="page panels">
-              <PageHeader
-                icon={CreditCard}
-                title="خریدهای سایت تجاری"
-                description="خریدهای پرداخت‌شده از cubita.ir را ببینید و بعد از راه‌اندازی دستی نسخه‌ی اختصاصی مشتری، تحویل را ثبت کنید."
-              />
-              <PurchasesAdminPanel token={token} />
-            </div>
-          )}
-          {page === 'accounts' && me.is_super_admin && (
-            <AccountsAdminPage token={token} me={me} onMeUpdated={onMeUpdated} />
-          )}
-          {page === 'assuranceadmin' && me.is_super_admin && <AssuranceAdminPage token={token} />}
-          {page === 'mpcommission' && me.is_super_admin && <MarketplaceCommissionPage token={token} />}
           {page === 'reports' && (
             <div className="page panels">
               <PageHeader
@@ -933,14 +910,12 @@ export function Dashboard({
   const navGroups = useMemo(
     () =>
       buildNav({
-        isPlatformAdmin: me.is_platform_admin,
-        isSuperAdmin: me.is_super_admin,
         tenantKind: me.tenant_kind,
         enabledModules: me.enabled_modules,
         allowedModules: me.allowed_modules,
         isOwner: me.role_key === 'owner',
       }).groups,
-    [me.is_platform_admin, me.is_super_admin, me.tenant_kind, me.enabled_modules, me.allowed_modules, me.role_key],
+    [me.tenant_kind, me.enabled_modules, me.allowed_modules, me.role_key],
   )
 
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
@@ -958,8 +933,6 @@ export function Dashboard({
             businessName={me.tenant_name}
             token={token}
             currentTenantId={me.tenant_id}
-            isPlatformAdmin={me.is_platform_admin}
-            isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
@@ -995,8 +968,6 @@ export function Dashboard({
             onNavigate={navigate}
             userName={me.name}
             roleName={me.role_name}
-            isPlatformAdmin={me.is_platform_admin}
-            isSuperAdmin={me.is_super_admin}
             tenantKind={me.tenant_kind}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
