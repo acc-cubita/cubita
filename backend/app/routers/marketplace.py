@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings as get_app_settings
 from app.database import get_db
-from app.deps import Principal, get_principal, require_permission, require_super_admin
+from app.deps import Principal, get_principal, require_permission
 from app.models.marketplace import MarketplaceOrder
 from app.models.user import User
 from app.services.payment_providers import get_provider
@@ -25,10 +25,7 @@ from app.schemas.marketplace import (
     CatalogAllocationOut,
     CatalogAllocationToggleIn,
     CatalogListingOut,
-    CommissionOverviewOut,
     CommissionPeriodOut,
-    CommissionSettleIn,
-    CommissionSettleOut,
     ConnectionOut,
     ConnectionRequestIn,
     ConnectionStatusIn,
@@ -588,33 +585,9 @@ async def pay_callback(request: Request, db: Session = Depends(get_db)):
 
 
 # ══════════ کمیسیونِ پلتفرم (۲٪) ══════════════════════════════════════════
-# پنلِ سوپرادمین — فقط مالکِ سامانه (acc.cubita@gmail.com) با require_super_admin.
-# جدولِ کمیسیون سراسری است، پس این کوئری‌ها به tenant_scope نیاز ندارند.
-@router.get("/admin/commissions/overview", response_model=CommissionOverviewOut)
-def commission_overview(
-    _: User = Depends(require_super_admin),
-    db: Session = Depends(get_db),
-):
-    return CommissionOverviewOut(**svc.commission_overview(db))
-
-
-@router.get("/admin/commissions", response_model=list[CommissionPeriodOut])
-def commission_summary(
-    _: User = Depends(require_super_admin),
-    db: Session = Depends(get_db),
-):
-    return [CommissionPeriodOut(**r) for r in svc.commission_summary(db)]
-
-
-@router.post("/admin/commissions/settle", response_model=CommissionSettleOut)
-def settle_commission(
-    data: CommissionSettleIn,
-    _: User = Depends(require_super_admin),
-    db: Session = Depends(get_db),
-):
-    return CommissionSettleOut(
-        **svc.settle_commission_period(db, data.distributor_tenant_id, data.period, data.note)
-    )
+# کارتابلِ ستاد به `app/routers/admin_commissions.py` منتقل شد (پیشوندِ
+# `/api/marketplace/admin/*` هنگامِ شمردنِ سطحِ ستاد پیدا نمی‌شد). فقط صورتِ
+# خودِ پخش‌کننده اینجا می‌ماند، چون مسیرِ مستأجری است نه ستادی.
 
 
 # صورتِ کمیسیونِ خودِ پخش‌کننده (شفافیت) — فقط مالِ خودش، با فیلترِ صریحِ tenant.

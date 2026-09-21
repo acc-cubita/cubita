@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -23,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_super_admin
 from app.models.client_error import ClientError
 from app.models.user import User
 from app.security import decode_access_token
@@ -138,32 +136,6 @@ def ingest(
     return IngestOut(stored=stored, duplicates=len(incoming) - stored)
 
 
-@router.get("", response_model=list[ClientErrorOut])
-def list_errors(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_super_admin),
-    limit: Annotated[int, Field(ge=1, le=200)] = 100,
-    only_fatal: bool = False,
-) -> list[ClientErrorOut]:
-    """تازه‌ترین گزارش‌ها. فقط سوپرادمین — stack trace داده‌ی عملیاتیِ ماست."""
-    q = select(ClientError).order_by(ClientError.received_at.desc()).limit(limit)
-    if only_fatal:
-        q = q.where(ClientError.fatal.is_(True))
-    rows = db.execute(q).scalars().all()
-    return [
-        ClientErrorOut(
-            id=str(r.id),
-            occurred_at=r.occurred_at,
-            received_at=r.received_at,
-            fatal=r.fatal,
-            name=r.name,
-            message=r.message,
-            stack=r.stack,
-            screen=r.screen,
-            app_version=r.app_version,
-            platform=r.platform,
-            os_version=r.os_version,
-            device=r.device,
-        )
-        for r in rows
-    ]
+#: خواندنِ گزارش‌ها به `app/routers/admin_errors.py` منتقل شد تا کنارِ بقیه‌ی
+#: `/api/admin/*` باشد. ingestِ بالا عمداً اینجا و عمومی می‌ماند: مرورگری که در
+#: حالِ سقوط است هنوز توکنِ معتبر ندارد.

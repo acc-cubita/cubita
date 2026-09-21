@@ -1183,12 +1183,13 @@ def test_retailer_cannot_place_order_for_unapproved_listing(as_retailer, db):
 
 # ══════════ کمیسیونِ پلتفرم (۲٪) ══════════════════════════════════════════
 @pytest.fixture
-def super_client(client, user, monkeypatch):
-    """همان کلاینت، ولی کاربرش سوپرادمین می‌شود (ایمیلِ کاربر در فهرست)."""
-    from app.config import get_settings
+def super_client(client, staff_client):
+    """کارتابلِ ستاد با توکنِ ستادی.
 
-    monkeypatch.setattr(get_settings(), "super_admin_emails", user.email)
-    return client
+    کمیسیون از `/api/marketplace/admin/*` به `/api/admin/commissions` منتقل شد
+    تا کنارِ بقیه‌ی سطحِ ستاد بنشیند و هنگامِ شمردنِ آن سطح از قلم نیفتد.
+    """
+    return staff_client(role="owner")
 
 
 def _confirm_sale(as_distributor, retailer_id, db, user, wholesale=8000, qty=10):
@@ -1285,10 +1286,12 @@ def test_settle_empty_period_404(as_distributor, retailer_tenant, db, user):
 
 def test_admin_commission_endpoints_require_super_admin(as_distributor, retailer_tenant, db, user, client):
     _confirm_sale(as_distributor, retailer_tenant, db, user)
-    # کاربرِ عادی (نه سوپرادمین) → ۴۰۳ روی همه‌ی اندپوینت‌های admin.
-    assert client.get("/api/marketplace/admin/commissions").status_code == 403
-    assert client.get("/api/marketplace/admin/commissions/overview").status_code == 403
-    assert client.post("/api/marketplace/admin/commissions/settle", json={}).status_code in (403, 422)
+    # کاربرِ عادی (نه کارمندِ ستاد) → بسته روی همه‌ی اندپوینت‌های ستاد.
+    assert client.get("/api/admin/commissions").status_code in (401, 403)
+    assert client.get("/api/admin/commissions/overview").status_code in (401, 403)
+    assert client.post("/api/admin/commissions/settle", json={}).status_code in (401, 403, 422)
+    # و مسیرِ قدیمی دیگر اصلاً وجود ندارد.
+    assert client.get("/api/marketplace/admin/commissions").status_code == 404
 
 
 # ── انتقالِ خودکارِ بارکد از پخش‌کننده به فروشگاه هنگامِ تأییدِ سفارش ─────────
@@ -1366,14 +1369,14 @@ def test_admin_can_view_and_settle_via_endpoint(as_distributor, retailer_tenant,
     order, primary_id = _confirm_sale(as_distributor, retailer_tenant, db, user, wholesale=8000, qty=10)
     period = db.query(MarketplaceCommission).filter_by(order_id=order.id).one().period
 
-    ov = super_client.get("/api/marketplace/admin/commissions/overview")
+    ov = super_client.get("/api/admin/commissions/overview")
     assert ov.status_code == 200 and ov.json()["pending_amount"] >= 1600
 
-    lst = super_client.get("/api/marketplace/admin/commissions").json()
+    lst = super_client.get("/api/admin/commissions").json()
     assert any(r["period"] == period and r["total_amount"] == 1600 for r in lst)
 
     s = super_client.post(
-        "/api/marketplace/admin/commissions/settle",
+        "/api/admin/commissions/settle",
         json={"distributor_tenant_id": str(primary_id), "period": period, "note": "واریز نقدی"},
     )
     assert s.status_code == 200, s.text
