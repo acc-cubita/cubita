@@ -33,6 +33,7 @@ import { parseCsv, toNumber } from '../../lib/csv'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../../components/form/FormKit'
 
 /**
  * عملیاتِ بانکیِ ماژولِ «دریافت و پرداخت» — صورت‌حساب، مغایرت، کارتخوان و مرورِ گردش.
@@ -505,18 +506,12 @@ export function PosSettlementPage({ token }: { token: string }) {
         description="این رسیدها تسویه‌شده علامت می‌خورند، خالص به بانک می‌رود و کارمزد به هزینه."
       >
         <div className="invoice-form form-full">
-          <label>
-            تاریخِ واریزِ شرکتِ پرداخت
-            <JalaliDatePicker value={settlementDate} onChange={setSettlementDate} />
-            <span className="field-hint">
-              روزی که پول به بانک نشست — لازم نیست با «تسویه تا تاریخ» یکی باشد.
-            </span>
-          </label>
-          <label>
-            کارمزد (ریال)
-            <NumberInput value={fee} onChange={setFee} />
-            <span className="field-hint">۰ بگذارید اگر کارمزدی کسر نشده.</span>
-          </label>
+          <FormField label="تاریخِ واریزِ شرکتِ پرداخت" tip="روزی که پول به بانک نشست — لازم نیست با «تسویه تا تاریخ» یکی باشد.">
+            {(id) => <JalaliDatePicker id={id} value={settlementDate} onChange={setSettlementDate} />}
+          </FormField>
+          <FormField label="کارمزد (ریال)" tip="۰ بگذارید اگر کارمزدی کسر نشده.">
+            {(id) => <NumberInput id={id} value={fee} onChange={setFee} />}
+          </FormField>
           <label>
             حسابِ بانکیِ واریز
             <input value={selected?.bank_account_name ?? ''} readOnly placeholder="— از دستگاه —" />

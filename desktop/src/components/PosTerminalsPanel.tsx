@@ -15,6 +15,7 @@ import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 interface Draft {
   label: string
@@ -325,18 +326,17 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             )}
 
             <div className="field-row">
-              <label>
-                شماره پایانه
-                <input
-                  value={form.terminal_no}
-                  onChange={(e) => setForm({ ...form, terminal_no: e.target.value })}
-                  dir="ltr"
-                  inputMode="numeric"
-                />
-                <span className="field-hint">
-                  شماره‌ای که خودِ دستگاه گزارش می‌کند — با شماره‌ی کارتِ بانکی یکی نیست.
-                </span>
-              </label>
+              <FormField label="شماره پایانه" tip="شماره‌ای که خودِ دستگاه گزارش می‌کند — با شماره‌ی کارتِ بانکی یکی نیست.">
+                {(id) => (
+                  <input
+                    id={id}
+                    value={form.terminal_no}
+                    onChange={(e) => setForm({ ...form, terminal_no: e.target.value })}
+                    dir="ltr"
+                    inputMode="numeric"
+                  />
+                )}
+              </FormField>
               <label>
                 عنوان دوم
                 <input value={form.name2} onChange={(e) => setForm({ ...form, name2: e.target.value })} />
@@ -344,57 +344,60 @@ export function PosTerminalsPanel({ token, bankAccounts }: { token: string; bank
             </div>
 
             <div className="field-row">
-              <label>
-                ارز
-                <SearchSelect
-                  value={form.currency_code}
-                  onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
-                >
-                  {['IRR', 'USD', 'EUR', 'AED'].map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </SearchSelect>
-                <span className="field-hint">باید با ارزِ حسابِ تسویه یکی باشد.</span>
-              </label>
-              <label>
-                حسابِ بانکیِ تسویه
-                <SearchSelect
-                  value={form.bank_account_id}
-                  onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
-                >
-                  <option value="">— انتخاب —</option>
-                  {bankAccounts.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                      {b.bank_name ? ` · ${b.bank_name}` : ''}
-                    </option>
-                  ))}
-                </SearchSelect>
-                <span className="field-hint">
-                  مقصدِ تسویه است، نه جایی که کارت‌کشی می‌نشیند: کارت‌کشی به «وجوهِ
-                  در راهِ کارت‌خوان» می‌رود و تسویه آن را به اینجا می‌آورد.
-                </span>
-              </label>
-              <label>
-                تفصیلیِ وجوهِ در راه
-                <SearchSelect
-                  value={form.analytic_id}
-                  onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}
-                >
-                  <option value="">— بدونِ تفصیلی (فقط برای دستگاهِ اول) —</option>
-                  {analytics.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.code} — {a.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-                <span className="field-hint">
-                  بدونِ تفصیلی، وجوهِ در راهِ این دستگاه از بقیه جدا نمی‌شود. دستگاهِ
-                  باسابقه تفصیلی‌اش عوض نمی‌شود.
-                </span>
-              </label>
+              <FormField label="ارز" tip="باید با ارزِ حسابِ تسویه یکی باشد.">
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={form.currency_code}
+                    onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
+                  >
+                    {['IRR', 'USD', 'EUR', 'AED'].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
+              <FormField
+                label="حسابِ بانکیِ تسویه"
+                tip="مقصدِ تسویه است، نه جایی که کارت‌کشی می‌نشیند: کارت‌کشی به «وجوهِ در راهِ کارت‌خوان» می‌رود و تسویه آن را به اینجا می‌آورد."
+              >
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={form.bank_account_id}
+                    onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
+                  >
+                    <option value="">— انتخاب —</option>
+                    {bankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                        {b.bank_name ? ` · ${b.bank_name}` : ''}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
+              <FormField
+                label="تفصیلیِ وجوهِ در راه"
+                tip="بدونِ تفصیلی، وجوهِ در راهِ این دستگاه از بقیه جدا نمی‌شود. دستگاهِ باسابقه تفصیلی‌اش عوض نمی‌شود."
+              >
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={form.analytic_id}
+                    onChange={(e) => setForm({ ...form, analytic_id: e.target.value })}
+                  >
+                    <option value="">— بدونِ تفصیلی (فقط برای دستگاهِ اول) —</option>
+                    {analytics.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code} — {a.name}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
               <label>
                 شرکتِ پرداخت (اختیاری)
                 <input

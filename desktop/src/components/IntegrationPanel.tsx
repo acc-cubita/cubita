@@ -14,6 +14,7 @@ import {
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { StatCard } from './StatCard'
+import { FormField } from './form/FormKit'
 
 const EMPTY_SETTINGS: StorefrontSettingsIn = {
   base_url: '',
@@ -198,14 +199,18 @@ export function IntegrationPanel({ token }: { token: string }) {
               </label>
             </div>
             <div className="field-row">
-              <label>
-                آستانه‌ی سفارش (cutover)
-                <NumberInput
-                  value={settings.cutover_order_id || ''}
-                  onChange={(v) => setSettings({ ...settings, cutover_order_id: Number(v) || 0 })}
-                />
-                <span className="field-hint">سفارش‌های با شماره‌ی کوچک‌تر/مساویِ این مقدار وارد نمی‌شوند (سفارش‌های قدیمیِ پیش از اتصال).</span>
-              </label>
+              <FormField
+                label="آستانه‌ی سفارش (cutover)"
+                tip="سفارش‌های با شماره‌ی کوچک‌تر/مساویِ این مقدار وارد نمی‌شوند (سفارش‌های قدیمیِ پیش از اتصال)."
+              >
+                {(id) => (
+                  <NumberInput
+                    id={id}
+                    value={settings.cutover_order_id || ''}
+                    onChange={(v) => setSettings({ ...settings, cutover_order_id: Number(v) || 0 })}
+                  />
+                )}
+              </FormField>
               <label className="check-inline">
                 <input
                   type="checkbox"

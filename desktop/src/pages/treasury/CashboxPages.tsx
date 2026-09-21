@@ -14,6 +14,7 @@ import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../../components/form/FormKit'
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
 
@@ -153,30 +154,30 @@ export function CashboxesPage({ token }: { token: string }) {
               ))}
             </SearchSelect>
           </label>
-          <label>
-            ارز
-            <SearchSelect
-              value={form.currency_code}
-              onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </SearchSelect>
-            <span className="field-hint">یک صندوق، یک ارز. برای ارزِ دیگر صندوقِ جدا بسازید.</span>
-          </label>
-          <label>
-            تاریخ افتتاح
-            <JalaliDatePicker
-              value={form.opening_date}
-              onChange={(v) => setForm({ ...form, opening_date: v })}
-            />
-            <span className="field-hint">
-              از چه زمانی این صندوق واقعاً باز شده — نه تاریخِ ثبتش در کوبیتا.
-            </span>
-          </label>
+          <FormField label="ارز" tip="یک صندوق، یک ارز. برای ارزِ دیگر صندوقِ جدا بسازید.">
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={form.currency_code}
+                onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </SearchSelect>
+            )}
+          </FormField>
+          <FormField label="تاریخ افتتاح" tip="از چه زمانی این صندوق واقعاً باز شده — نه تاریخِ ثبتش در کوبیتا.">
+            {(id) => (
+              <JalaliDatePicker
+                id={id}
+                value={form.opening_date}
+                onChange={(v) => setForm({ ...form, opening_date: v })}
+              />
+            )}
+          </FormField>
           <div className="invoice-form-footer">
             <button type="submit" className="btn-primary">
               <Save size={14} /> ساختِ صندوق

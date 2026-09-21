@@ -38,6 +38,7 @@ import { SectionCard } from './SectionCard'
 import { Pager, usePagination } from './Pager'
 import { StorefrontGallery } from './StorefrontGallery'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 const fa = (n: string | number) => Number(n).toLocaleString('fa-IR')
 
@@ -334,12 +335,17 @@ export function NativeStorefrontPanel({ token }: { token: string }) {
             </div>
           </div>
           <div className="sf-field">
-            <label>واحدِ پول (نمایش و پرداخت)</label>
-            <SearchSelect value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              <option value="toman">تومان</option>
-              <option value="rial">ریال</option>
-            </SearchSelect>
-            <span className="field-hint">مبلغِ ارسالی به درگاهِ پرداخت بر این پایه محاسبه می‌شود؛ با واحدِ قیمت‌های حسابداری‌تان یکی باشد.</span>
+            <FormField
+              label="واحدِ پول (نمایش و پرداخت)"
+              tip="مبلغِ ارسالی به درگاهِ پرداخت بر این پایه محاسبه می‌شود؛ با واحدِ قیمت‌های حسابداری‌تان یکی باشد."
+            >
+              {(id) => (
+                <SearchSelect id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <option value="toman">تومان</option>
+                  <option value="rial">ریال</option>
+                </SearchSelect>
+              )}
+            </FormField>
           </div>
           <div className="sf-actions">
             <button type="button" className="btn-primary" onClick={() => void saveSettings()} disabled={busy}>

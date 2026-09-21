@@ -10,6 +10,7 @@ import { PriceRuleHint } from './PriceRuleHint'
 import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../lib/salesInvoiceDraft'
 import { BlacklistBanner } from './BlacklistBanner'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 /** فاکتوری که از خروج انبار ساخته می‌شود — مشترکِ فرم و ویزارد (§۱۵ §۱۶). */
 export function SourceIssueBanner({ d }: { d: SalesInvoiceDraft }) {
@@ -128,15 +129,15 @@ export function SalesInvoiceForm({
             محل تحویل (اختیاری)
             <input value={d.deliveryLocation} onChange={(e) => d.setDeliveryLocation(e.target.value)} />
           </label>
-          <label>
-            شرایط تسویه
-            <SearchSelect value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
-              <option value="credit">نسیه</option>
-              <option value="cash">نقدی</option>
-              <option value="mixed">نقدی/نسیه</option>
-            </SearchSelect>
-            <span className="field-hint">نقدی بودن، وصول را خودکار نمی‌سازد؛ رسید دریافت جدا ثبت می‌شود.</span>
-          </label>
+          <FormField label="شرایط تسویه" tip="نقدی بودن، وصول را خودکار نمی‌سازد؛ رسید دریافت جدا ثبت می‌شود.">
+            {(id) => (
+              <SearchSelect id={id} value={d.settlementTerms} onChange={(e) => d.setSettlementTerms(e.target.value as 'cash' | 'credit' | 'mixed')}>
+                <option value="credit">نسیه</option>
+                <option value="cash">نقدی</option>
+                <option value="mixed">نقدی/نسیه</option>
+              </SearchSelect>
+            )}
+          </FormField>
           <label>
             تاریخ سررسید/صورتحساب (اختیاری)
             <JalaliDatePicker value={d.statementDate} onChange={d.setStatementDate} />
@@ -146,18 +147,18 @@ export function SalesInvoiceForm({
             <input value={d.description} onChange={(e) => d.setDescription(e.target.value)} />
           </label>
           {d.salespeople.length > 0 && (
-            <label>
-              فروشنده (اختیاری)
-              <SearchSelect value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
-                <option value="">— بدون فروشنده —</option>
-                {d.salespeople.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </SearchSelect>
-              <span className="field-hint">مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.</span>
-            </label>
+            <FormField label="فروشنده (اختیاری)" tip="مبنای «محاسبه پورسانت»؛ بدونِ آن فاکتور در پورسانت نمی‌آید.">
+              {(id) => (
+                <SearchSelect id={id} value={d.salespersonId} onChange={(e) => d.setSalespersonId(e.target.value)}>
+                  <option value="">— بدون فروشنده —</option>
+                  {d.salespeople.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              )}
+            </FormField>
           )}
           {d.saleTypes.length > 0 && (
             <label>

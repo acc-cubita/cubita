@@ -22,6 +22,7 @@ import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { BarcodeScanner } from './BarcodeScanner'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 const faMoney = (n: number) => n.toLocaleString('fa-IR')
 
@@ -411,19 +412,22 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
         <form className="invoice-form form-full" onSubmit={handleSubmit}>
           <h4 className="form-section-title">اطلاعات پایه</h4>
           <div className="field-row">
-            <label>
-              کد کالا (SKU)
-              <input
-                type="text"
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                placeholder="مثلاً A-1001"
-                required
-              />
-              <span className="field-hint">
-                شناسه‌ی کسب‌وکاری است و قابلِ اصلاح؛ پیوندهای درونیِ سیستم رویش بسته نیستند.
-              </span>
-            </label>
+            <FormField
+              label="کد کالا (SKU)"
+              required
+              tip="شناسه‌ی کسب‌وکاری است و قابلِ اصلاح؛ پیوندهای درونیِ سیستم رویش بسته نیستند."
+            >
+              {(id) => (
+                <input
+                  id={id}
+                  type="text"
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  placeholder="مثلاً A-1001"
+                  required
+                />
+              )}
+            </FormField>
             <label>
               نام کالا
               <input
@@ -445,35 +449,34 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 placeholder="اختیاری — مثلاً نامِ انگلیسی"
               />
             </label>
-            <label>
-              گروه
-              <SearchSelect value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}>
-                <option value="">— بدون گروه —</option>
-                {groups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-              </SearchSelect>
-              <span className="field-hint">
-                گروه یک رکورد است نه یک متن — گروهِ تازه را در تبِ «گروه و مشخصات» بسازید.
-              </span>
-            </label>
+            <FormField label="گروه" tip="گروه یک رکورد است نه یک متن — گروهِ تازه را در تبِ «گروه و مشخصات» بسازید.">
+              {(id) => (
+                <SearchSelect id={id} value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}>
+                  <option value="">— بدون گروه —</option>
+                  {groups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
+                </SearchSelect>
+              )}
+            </FormField>
           </div>
           <div className="field-row">
-            <label>
-              واحد اصلی
-              <SearchSelect
-                value={form.primaryUnitId}
-                onChange={(e) => {
-                  const picked = units.find((u) => u.id === e.target.value)
-                  setForm({ ...form, primaryUnitId: e.target.value, unit: picked?.name ?? form.unit })
-                }}
-              >
-                <option value="">— انتخاب کنید —</option>
-                {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
-              </SearchSelect>
-              <span className="field-hint">
-                خدمت هم واحد دارد — «ساعت» واحدِ مشاوره است، ولی موجودی نمی‌سازد. واحدِ تازه را
-                در تبِ «واحدها» بسازید.
-              </span>
-            </label>
+            <FormField
+              label="واحد اصلی"
+              tip="خدمت هم واحد دارد — «ساعت» واحدِ مشاوره است، ولی موجودی نمی‌سازد. واحدِ تازه را در تبِ «واحدها» بسازید."
+            >
+              {(id) => (
+                <SearchSelect
+                  id={id}
+                  value={form.primaryUnitId}
+                  onChange={(e) => {
+                    const picked = units.find((u) => u.id === e.target.value)
+                    setForm({ ...form, primaryUnitId: e.target.value, unit: picked?.name ?? form.unit })
+                  }}
+                >
+                  <option value="">— انتخاب کنید —</option>
+                  {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+                </SearchSelect>
+              )}
+            </FormField>
             <label>
               قیمت فروش (ریال، هر {form.unit || 'واحد'})
               <NumberInput
@@ -623,17 +626,21 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 dir="ltr"
               />
             </label>
-            <label>
-              شناسه کالا/خدمتِ مالیاتی (مؤدیان، ۱۳ رقمی)
-              <input
-                type="text"
-                value={form.taxStuffId}
-                onChange={(e) => setForm({ ...form, taxStuffId: e.target.value })}
-                placeholder="اختیاری"
-                inputMode="numeric"
-              />
-              <span className="field-hint">خالی بماند، «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود.</span>
-            </label>
+            <FormField
+              label="شناسه کالا/خدمتِ مالیاتی (مؤدیان، ۱۳ رقمی)"
+              tip="خالی بماند، «شناسه‌ی پیش‌فرض»ِ تنظیماتِ مؤدیان استفاده می‌شود."
+            >
+              {(id) => (
+                <input
+                  id={id}
+                  type="text"
+                  value={form.taxStuffId}
+                  onChange={(e) => setForm({ ...form, taxStuffId: e.target.value })}
+                  placeholder="اختیاری"
+                  inputMode="numeric"
+                />
+              )}
+            </FormField>
           </div>
           <p className="hint">
             کدِ کالا، بارکد، ایران‌کد و بارکدِ دوبعدی چهار شناسه‌ی جدا هستند و یکی‌شان نمی‌کنیم.
@@ -689,36 +696,42 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
           {form.isService ? (
             <>
               <h4 className="form-section-title">حسابداریِ خدمت</h4>
-              <label className="form-field">
-                معین هزینه خرید خدمت
-                <SearchSelect
-                  value={form.expenseAccountId}
-                  onChange={(e) => setForm({ ...form, expenseAccountId: e.target.value })}
-                >
-                  <option value="">— حساب پیش‌فرضِ «هزینه خرید خدمات» —</option>
-                  {accountOptions.map((a) => (
-                    <option key={a.id} value={a.id}>{a.label}</option>
-                  ))}
-                </SearchSelect>
-                <span className="field-hint">
-                  خریدِ خدمت به این حساب می‌نشیند، نه به «موجودی کالا» — خدمت حرکتِ انباری ندارد.
-                </span>
-              </label>
+              <FormField
+                label="معین هزینه خرید خدمت"
+                tip="خریدِ خدمت به این حساب می‌نشیند، نه به «موجودی کالا» — خدمت حرکتِ انباری ندارد."
+              >
+                {(id) => (
+                  <SearchSelect
+                    id={id}
+                    value={form.expenseAccountId}
+                    onChange={(e) => setForm({ ...form, expenseAccountId: e.target.value })}
+                  >
+                    <option value="">— حساب پیش‌فرضِ «هزینه خرید خدمات» —</option>
+                    {accountOptions.map((a) => (
+                      <option key={a.id} value={a.id}>{a.label}</option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
             </>
           ) : (
             <>
               <h4 className="form-section-title">انبار و موجودی</h4>
               <div className="field-row">
-                <label>
-                  نقطه‌ی سفارش (حداقلِ موجودی)
-                  <NumberInput
-                    allowDecimal
-                    value={form.reorderPoint}
-                    onChange={(v) => setForm({ ...form, reorderPoint: v })}
-                    placeholder="۰ = بدون هشدار"
-                  />
-                  <span className="field-hint">وقتی موجودیِ کل به این عدد یا کمتر برسد، در «نیازمندِ سفارش» هشدار داده می‌شود.</span>
-                </label>
+                <FormField
+                  label="نقطه‌ی سفارش (حداقلِ موجودی)"
+                  tip="وقتی موجودیِ کل به این عدد یا کمتر برسد، در «نیازمندِ سفارش» هشدار داده می‌شود."
+                >
+                  {(id) => (
+                    <NumberInput
+                      id={id}
+                      allowDecimal
+                      value={form.reorderPoint}
+                      onChange={(v) => setForm({ ...form, reorderPoint: v })}
+                      placeholder="۰ = بدون هشدار"
+                    />
+                  )}
+                </FormField>
                 <label className="cal-check-inline">
                   <input
                     type="checkbox"
@@ -782,18 +795,19 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                 </>
               )}
               {form.isBatchTracked && (
-                <label>
-                  حداقل عمرِ مفیدِ فروش (روز)
-                  <NumberInput
-                    value={form.minShelfLifeDays}
-                    onChange={(v) => setForm({ ...form, minShelfLifeDays: v })}
-                    placeholder="خالی = بدونِ قاعده"
-                  />
-                  <span className="field-hint">
-                    باری که کمتر از این تعداد روز تا انقضا دارد، دیگر «قابلِ فروش» شمرده نمی‌شود —
-                    ولی موجودیِ فیزیکی‌اش سرِ جایش می‌ماند.
-                  </span>
-                </label>
+                <FormField
+                  label="حداقل عمرِ مفیدِ فروش (روز)"
+                  tip="باری که کمتر از این تعداد روز تا انقضا دارد، دیگر «قابلِ فروش» شمرده نمی‌شود — ولی موجودیِ فیزیکی‌اش سرِ جایش می‌ماند."
+                >
+                  {(id) => (
+                    <NumberInput
+                      id={id}
+                      value={form.minShelfLifeDays}
+                      onChange={(v) => setForm({ ...form, minShelfLifeDays: v })}
+                      placeholder="خالی = بدونِ قاعده"
+                    />
+                  )}
+                </FormField>
               )}
               <div className="field-row">
                 <label>

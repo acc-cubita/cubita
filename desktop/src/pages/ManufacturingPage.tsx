@@ -41,6 +41,7 @@ import { Pager, usePagination } from '../components/Pager'
 import { useNavSection } from '../components/navContext'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from '../components/form/FormKit'
 
 const PLAN_STATUS_LABELS: Record<ProductionPlanStatus, string> = {
   draft: 'پیش‌نویس',
@@ -477,16 +478,20 @@ function BomsTab({
       actions={editingId ? <button type="button" onClick={resetForm}><X size={13} /> انصراف</button> : undefined}
     >
       <form className="invoice-form form-full" onSubmit={submit}>
-        <label>
-          محصولِ نهایی
-          <SearchSelect value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
-            <option value="">— انتخاب —</option>
-            {goodsItems.map((i) => (
-              <option key={i.id} value={i.id}>{i.name}</option>
-            ))}
-          </SearchSelect>
-          {editingId && <span className="field-hint">محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.</span>}
-        </label>
+        <FormField
+          label="محصولِ نهایی"
+          required
+          message={editingId ? 'محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.' : null}
+        >
+          {(id) => (
+            <SearchSelect id={id} value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
+              <option value="">— انتخاب —</option>
+              {goodsItems.map((i) => (
+                <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
         <div className="field-row">
           <label>
             نامِ فرمول (اختیاری)

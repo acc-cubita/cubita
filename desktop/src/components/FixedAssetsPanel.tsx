@@ -41,6 +41,7 @@ import {
   type FixedAssetRecord,
 } from '../api'
 import { SearchSelect } from '../components/SearchSelect'
+import { FormField } from './form/FormKit'
 
 const fa = (v: string | number) => Number(v).toLocaleString('fa-IR')
 
@@ -520,11 +521,9 @@ function ImprovementTab({ token, d }: { token: string; d: FixedAssetDraft }) {
                   {d.fundingAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
                 </SearchSelect>
               </label>
-              <label>
-                افزایشِ عمرِ مفید (ماه)
-                <NumberInput value={extraLife} onChange={setExtraLife} />
-                <span className="field-hint">صفر یعنی عمر دست‌نخورده می‌ماند.</span>
-              </label>
+              <FormField label="افزایشِ عمرِ مفید (ماه)" tip="صفر یعنی عمر دست‌نخورده می‌ماند.">
+                {(id) => <NumberInput id={id} value={extraLife} onChange={setExtraLife} />}
+              </FormField>
             </div>
             <label className="form-full">
               شرحِ مخارج
@@ -673,17 +672,18 @@ function EstimateChangeTab({ token, d }: { token: string; d: FixedAssetDraft }) 
                 تاریخِ تغییر
                 <JalaliDatePicker value={date} onChange={setDate} />
               </label>
-              <label>
-                روشِ استهلاک
-                <SearchSelect value={method} onChange={(e) => setMethod(e.target.value as DepreciationMethod)}>
-                  {(Object.keys(DEPRECIATION_METHOD_LABELS) as DepreciationMethod[]).map((m) => (
-                    <option key={m} value={m}>{DEPRECIATION_METHOD_LABELS[m]}</option>
-                  ))}
-                </SearchSelect>
-                {method === 'declining_balance' && (
-                  <span className="field-hint">نرخِ مضاعف روی ماندهٔ دفتری — دوره‌های اول سنگین‌تر.</span>
+              <FormField
+                label="روشِ استهلاک"
+                message={method === 'declining_balance' ? 'نرخِ مضاعف روی ماندهٔ دفتری — دوره‌های اول سنگین‌تر.' : null}
+              >
+                {(id) => (
+                  <SearchSelect id={id} value={method} onChange={(e) => setMethod(e.target.value as DepreciationMethod)}>
+                    {(Object.keys(DEPRECIATION_METHOD_LABELS) as DepreciationMethod[]).map((m) => (
+                      <option key={m} value={m}>{DEPRECIATION_METHOD_LABELS[m]}</option>
+                    ))}
+                  </SearchSelect>
                 )}
-              </label>
+              </FormField>
             </div>
             <div className="field-row">
               <label>
@@ -1114,15 +1114,18 @@ function DisposalTab({
               </SearchSelect>
             </label>
             <div className="field-row">
-              <label>
-                نوعِ خروج
-                <SearchSelect value={type} onChange={(e) => setType(e.target.value as DisposalType)}>
-                  {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
-                    <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
-                  ))}
-                </SearchSelect>
-                {!sale && <span className="field-hint">اسقاط و اهدا مبلغِ دریافتی ندارند؛ کلِ ارزشِ دفتری زیان می‌شود.</span>}
-              </label>
+              <FormField
+                label="نوعِ خروج"
+                message={!sale ? 'اسقاط و اهدا مبلغِ دریافتی ندارند؛ کلِ ارزشِ دفتری زیان می‌شود.' : null}
+              >
+                {(id) => (
+                  <SearchSelect id={id} value={type} onChange={(e) => setType(e.target.value as DisposalType)}>
+                    {(Object.keys(DISPOSAL_TYPE_LABELS) as DisposalType[]).map((t) => (
+                      <option key={t} value={t}>{DISPOSAL_TYPE_LABELS[t]}</option>
+                    ))}
+                  </SearchSelect>
+                )}
+              </FormField>
               <label>
                 تاریخِ خروج
                 <JalaliDatePicker value={date} onChange={setDate} />
