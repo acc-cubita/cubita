@@ -103,6 +103,7 @@ def audited_models() -> dict[type, str]:
     from app.models.invoices import PurchaseInvoice, SalesInvoice, WarehouseIssue, WarehouseReceipt
     from app.models.issue_returns import WarehouseIssueReturn
     from app.models.inventory_valuation import InventoryValuationRun
+    from app.models.assurance import AssuranceEngagement
     from app.models.contracting import Contract, ContractAmendment, ContractSettlement, ContractStatement
     from app.models.manufacturing import Bom, ProductionOrder
     from app.models.payroll import (
@@ -148,6 +149,10 @@ def audited_models() -> dict[type, str]:
         ContractAmendment: "متمم پیمان",
         ContractStatement: "صورت وضعیت دریافتی",
         ContractSettlement: "تسویه‌حساب پیمان",
+        #: قراردادِ حسابرسی: تأیید، گمارشِ حسابرس، تمدید و بستنِ دسترسی — همه
+        #: تصمیم‌هایی که بعداً کسی می‌پرسد «چه کسی و کی؟». خودِ اجرا و یافته‌ها
+        #: این‌جا نیستند: افزودنی‌اند و هرگز عوض نمی‌شوند، پس ردِ تغییر معنا ندارد.
+        AssuranceEngagement: "قراردادِ حسابرسی",
         #: انبارگردانی ارزشِ موجودی را جابه‌جا می‌کند و تا امروز هیچ ردی
         #: نمی‌گذاشت — نه اینکه چه کسی شمرد، نه اینکه عددی عوض شد.
         StockCountSession: "انبارگردانی",

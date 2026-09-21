@@ -50,6 +50,7 @@ DOC_LABELS: dict[str, str] = {
     "contract_amendment": "متمم پیمان",
     "contract_statement": "صورت وضعیت دریافتی",
     "contract_settlement": "تسویه‌حساب پیمان",
+    "assurance_run": "بررسیِ حسابرسی",
 }
 
 

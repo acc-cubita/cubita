@@ -107,6 +107,9 @@ export type PageKey =
   | 'contractingamendment'
   | 'contractingstatement'
   | 'contractingsettlement'
+  //: حسابرسی — «درخواست» پیش از تأیید هم دیده می‌شود؛ بقیه پشتِ ماژولِ مشتق.
+  | 'assurancerequest'
+  | 'assurancehealth'
   | 'moadian'
   | 'distributor'
   | 'marketplace'
@@ -275,6 +278,11 @@ export type PageKey =
   | 'budgetlist'
   | 'currencylist'
   | 'periodcloselist'
+  //: فهرست‌های حسابرسی
+  | 'assurancefindinglist'
+  | 'assurancerunlist'
+  //: کارتابلِ ستاد — از SUPER_ADMIN_NAV_ITEMS می‌آید، نه از NAV_GROUPS.
+  | 'assuranceadmin'
 
 export type NavItem = { key: PageKey; label: string; icon: ReactNode }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
@@ -452,6 +460,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    //: «حسابرسی» — دو عملیات و دو دفتر. صفحه‌ی «درخواست» همیشه دیده می‌شود
+    //: (کاربر باید بتواند درخواست بدهد) و «کارنامه» فقط پس از تأییدِ ما.
+    heading: 'حسابرسی',
+    icon: <ClipboardCheck size={17} />,
+    items: [
+      { key: 'assurancerequest', label: 'درخواست حسابرسی', icon: <FileSignature size={18} /> },
+      { key: 'assurancehealth', label: 'کارنامه سلامت دفتر', icon: <Gauge size={18} /> },
+    ],
+  },
+  {
     heading: 'سامانه مؤدیان',
     icon: <FileSpreadsheet size={17} />,
     items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
@@ -511,7 +529,7 @@ export const NAV_GROUPS: NavGroup[] = [
 //:
 //: مقدارِ آرایه یعنی «هر یک از این ماژول‌ها کافی است» — برای صفحه‌ای که واقعاً مالِ
 //: دو ماژول است.
-const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Object.fromEntries(
+export const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Object.fromEntries(
   (
     [
       'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
@@ -576,6 +594,22 @@ for (const key of [
   PAGE_MODULE_KEY[key] = 'contracting'
 }
 
+//: حسابرسی — دو گیتِ متفاوت روی یک ماژول.
+//:
+//: «درخواست حسابرسی» با ماژولِ عادیِ `assurance` باز است (هر کسب‌وکاری باید
+//: بتواند درخواست بدهد)، ولی صفحه‌های کاری با ماژولِ **مشتقِ** `assurance_work`
+//: که فقط با قراردادِ تأییدشده وجود دارد. هیچ‌کدام نباید از این نگاشت جا بماند:
+//: کلیدی که در هیچ‌یک از دو نگاشت نباشد، `isVisible` را از شاخه‌ی fail-open رد
+//: می‌کند و **برای همه** دیده می‌شود.
+PAGE_MODULE_KEY.assurancerequest = 'assurance'
+for (const key of [
+  'assurancehealth',
+  'assurancefindinglist',
+  'assurancerunlist',
+] as PageKey[]) {
+  PAGE_MODULE_KEY[key] = 'assurance_work'
+}
+
 const GATED_MODULE_KEYS = new Set<PageKey>([
   'overview', 'pos', 'installments', 'crm', 'purchases', 'inventory',
   'manufacturing', 'accounting', 'banking', 'fixedassets', 'payroll',
@@ -591,6 +625,7 @@ export const PLATFORM_ADMIN_NAV_ITEMS: NavItem[] = [
 export const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
   { key: 'accounts', label: 'مدیریت اکانت‌ها', icon: <ShieldCheck size={18} /> },
   { key: 'mpcommission', label: 'کمیسیونِ بازار', icon: <Percent size={18} /> },
+  { key: 'assuranceadmin', label: 'کارتابل حسابرسی', icon: <ClipboardCheck size={18} /> },
 ]
 
 //: ورودی‌های پایینِ سایدبار/منوی کاربر. «ظاهر» و «راهنما» به گروهِ «تنظیمات» منتقل
@@ -702,6 +737,23 @@ const MENU_PAGE_KEYS = new Set<PageKey>([
  * چنین ورودی‌ای صفحه‌ی خالی باز می‌کرد، پس پنهان می‌شود. صفحه‌ای که اصلاً ردیفِ منو
  * ندارد (صفحه‌ی فهرست) دست نمی‌خورد.
  */
+const modulesOf = (key: PageKey): string[] => {
+  const mapped = PAGE_MODULE_KEY[key]
+  if (mapped === undefined) return [key]
+  return Array.isArray(mapped) ? mapped : [mapped]
+}
+
 export function menuEntryVisible(key: PageKey, groups: NavGroup[]): boolean {
-  return !MENU_PAGE_KEYS.has(key) || groups.some((g) => g.items.some((i) => i.key === key))
+  if (MENU_PAGE_KEYS.has(key)) return groups.some((g) => g.items.some((i) => i.key === key))
+  //: صفحه‌ی **فهرست** ردیفِ منوی اصلی ندارد، پس فیلترِ ناوبری هرگز نمی‌بیندش. تا
+  //: امروز این بی‌خطر بود، چون خاموش‌شدنِ یک ماژول همه‌ی صفحه‌های منویش را می‌بُرد و
+  //: کارتِ «فهرست» اصلاً ساخته نمی‌شد. ماژولِ حسابرسی این فرض را شکست: صفحه‌ی
+  //: «درخواست» همیشه دیده می‌شود، پس گروه زنده می‌ماند و دفترهایش هم — حتی پیش
+  //: از تأییدِ قرارداد.
+  //:
+  //: قاعده: دفتر با همان ماژولی گیت می‌شود که صفحه‌های منویِ هم‌ماژولش. اگر هیچ
+  //: صفحه‌ی منویی از آن ماژول زنده نمانده باشد، دفترش هم راهی ندارد.
+  const wanted = modulesOf(key)
+  if (PAGE_MODULE_KEY[key] === undefined) return true
+  return groups.some((g) => g.items.some((i) => modulesOf(i.key).some((m) => wanted.includes(m))))
 }

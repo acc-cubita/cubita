@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -48,7 +49,7 @@ from app.schemas.members import (
     ResetPasswordSmsIn,
 )
 from app.security import create_access_token, record_login, set_password, verify_password
-from app.services import members, sms
+from app.services import assurance_access, members, sms
 from app.services import modules as modules_service
 from app.services import refresh as refresh_svc
 from app.services.email_verification import CODE_TTL_MINUTES as EMAIL_CODE_TTL_MINUTES
@@ -69,10 +70,28 @@ from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant,
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _not_expired():
+    """شرطِ «عضویتِ منقضی‌نشده» — یک تعریف برای هر سه جایی که لازمش دارند."""
+    return or_(
+        Membership.expires_at.is_(None),
+        Membership.expires_at > datetime.now(timezone.utc),
+    )
+
+
 def _active_memberships(db: Session, user: User) -> list[Membership]:
+    """عضویت‌های قابلِ‌استفاده — فعال، روی کسب‌وکارِ فعال، و **منقضی‌نشده**.
+
+    فیلترِ انقضا این‌جا لازم است حتی با وجودِ گاردِ `get_principal`: بدونش،
+    حسابرسی که مهلتش تمام شده هنوز آن کسب‌وکار را در سوییچر می‌دید و با هر کلیک
+    ۴۰۳ می‌گرفت.
+    """
     return (
         db.query(Membership)
-        .filter(Membership.user_id == user.id, Membership.status == "active")
+        .filter(
+            Membership.user_id == user.id,
+            Membership.status == "active",
+            _not_expired(),
+        )
         .join(Tenant, Tenant.id == Membership.tenant_id)
         .filter(Tenant.status == "active")
         .all()
@@ -82,6 +101,9 @@ def _active_memberships(db: Session, user: User) -> list[Membership]:
 def _me_out(principal: Principal, db: Session) -> MeOut:
     """پاسخِ استانداردِ «من» — یک منبعِ حقیقت برای /me و اندپوینت‌های ویرایشِ پروفایل."""
     tinfo = trial_info(db, principal.membership.tenant)
+    #: ماژول‌های مشتق در هیچ ستونی نیستند و باید از رکوردِ سرویس خوانده شوند —
+    #: یک کوئریِ ایندکس‌خورده در هر `/me`.
+    derived = assurance_access.derived_modules(db, principal.tenant_id)
     return MeOut(
         id=principal.user.id,
         name=principal.user.name,
@@ -104,8 +126,12 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         industry=principal.membership.tenant.industry,
         trade=principal.membership.tenant.trade,
         dashboard_cards=principal.membership.dashboard_cards,
-        enabled_modules=modules_service.enabled_modules(principal.membership.tenant),
-        allowed_modules=sorted(modules_service.allowed_modules(principal.membership.tenant)),
+        enabled_modules=modules_service.enabled_modules(
+            principal.membership.tenant, derived=derived
+        ),
+        allowed_modules=sorted(
+            modules_service.allowed_modules(principal.membership.tenant, derived=derived)
+        ),
     )
 
 
@@ -270,6 +296,7 @@ def switch_tenant(
             Membership.user_id == principal.user.id,
             Membership.tenant_id == data.tenant_id,
             Membership.status == "active",
+            _not_expired(),
         )
         .first()
     )

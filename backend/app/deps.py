@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -78,6 +80,14 @@ def get_principal(
     # «تعلیق» فقط جلوی ورودِ تازه را می‌گرفت و نشست‌های باز تا انقضای توکن ادامه داشتند.
     if membership.tenant.status != "active":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "این کسب‌وکار غیرفعال شده است")
+
+    # عضویتِ مهلت‌دار (امروز: حسابرسِ گماشته‌شده). این تنها نقطه‌ای است که هر
+    # درخواست از آن رد می‌شود، پس تنها جایی است که انقضا دورزدنی نیست — و چون
+    # ردیفِ عضویت همین بالا بارگذاری شده، هزینه‌اش یک مقایسه است نه یک کوئری.
+    if membership.expires_at is not None and membership.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "مهلتِ دسترسیِ شما به این کسب‌وکار تمام شده است"
+        )
 
     bind_session_tenant(db, membership.tenant_id)
     apply_tenant_to_transaction(db, membership.tenant_id)
@@ -178,8 +188,25 @@ def require_module(module: str):
     """
     from app.services import modules as modules_service
 
-    def checker(principal: Principal = Depends(get_principal)) -> User:
-        if module not in modules_service.allowed_modules(principal.membership.tenant):
+    def checker(
+        principal: Principal = Depends(get_principal), db: Session = Depends(get_db)
+    ) -> User:
+        #: ماژولِ **مشتق** در هیچ ستونی ذخیره نیست و از رکوردِ سرویس مشتق می‌شود؛
+        #: کوئری‌اش فقط وقتی زده می‌شود که این روتر واقعاً مشتق باشد، پس گیتِ
+        #: «تولید» و «اتصال فروشگاه» هیچ هزینه‌ای نمی‌دهند.
+        #:
+        #: محاسبه‌ی `derived` **این‌جا** انجام می‌شود، نه در فراخوان: اگر روتر و منو
+        #: هرکدام جداگانه حساب می‌کردند، می‌توانستند اختلاف پیدا کنند — منو باز و
+        #: سرور بسته، یا بدتر، برعکس.
+        derived: frozenset[str] = frozenset()
+        if module in modules_service.DERIVED_MODULES:
+            from app.services import assurance_access
+
+            derived = assurance_access.derived_modules(db, principal.tenant_id)
+
+        if module not in modules_service.allowed_modules(
+            principal.membership.tenant, derived=derived
+        ):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 "این ماژول برای حسابِ شما فعال نیست؛ برای فعال‌سازی با پشتیبانی تماس بگیرید.",

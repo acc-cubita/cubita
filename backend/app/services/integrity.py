@@ -41,6 +41,17 @@ from app.services.reports import (
 #: شمارشِ کامل هم کنارش هست. بدونِ سقف، یک دفترِ خرابْ صفحه را از کار می‌انداخت.
 ROW_LIMIT = 50
 
+#: سقفِ سختِ ساختِ ردیف. هیچ فراخوانی بیش از این نمی‌گیرد، حتی snapshotِ حسابرسی.
+#: ۵۰ سقفِ *نمایشِ* ابزارِ زنده است؛ اگر snapshot هم همان را می‌گرفت، دفتری با
+#: سیصد اشکال را با پنجاه ردیف ثبت می‌کرد و بعداً هیچ‌کس نمی‌فهمید بقیه کجا رفتند.
+MAX_ROW_LIMIT = 200
+
+#: خانواده‌ی پیش‌فرضِ بررسی‌ها — همان نُه بررسیِ صفحه‌ی «بررسی یکپارچگی».
+FAMILY_LEDGER = "ledger"
+#: بررسی‌های حسابرسی: روی همین موتور می‌نشینند ولی در صفحه‌ی حسابدار نمی‌آیند.
+#: ارتقای یک بررسی از این خانواده به آن یکی، عوض‌کردنِ یک واژه است.
+FAMILY_ASSURANCE = "assurance"
+
 
 def _row(
     label: str,
@@ -71,15 +82,31 @@ def _row(
     }
 
 
-def _check(key: str, title: str, description: str, severity: str, rows: list[dict], total: int) -> dict:
+def _check(
+    key: str,
+    title: str,
+    description: str,
+    severity: str,
+    rows: list[dict],
+    total: int,
+    *,
+    family: str = FAMILY_LEDGER,
+) -> dict:
+    """یک بررسی، با سقفِ سختِ ردیف.
+
+    سقفِ *نمایش* را فراخوان تعیین می‌کند (`run_integrity_check`)، نه این‌جا: ابزارِ
+    زنده پنجاه ردیف می‌خواهد و snapshotِ حسابرسی دویست‌تا. این‌جا فقط جلوی
+    مادی‌شدنِ یک فهرستِ بی‌انتها گرفته می‌شود.
+    """
     return {
         "key": key,
         "title": title,
         "description": description,
         "severity": severity,
+        "family": family,
         "ok": total == 0,
         "count": total,
-        "rows": rows[:ROW_LIMIT],
+        "rows": rows[:MAX_ROW_LIMIT],
         "truncated": total > ROW_LIMIT,
     }
 
@@ -556,12 +583,22 @@ def _stale_valuation(db: Session, filters: ReportFilters) -> dict:
     return _check(key, title, description, "warning", rows, len(rows))
 
 
-def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> dict:
+def run_integrity_check(
+    db: Session,
+    filters: ReportFilters | None = None,
+    *,
+    families: tuple[str, ...] = (FAMILY_LEDGER,),
+    row_limit: int = ROW_LIMIT,
+) -> dict:
     """همه‌ی بررسی‌ها، با جمعِ کلِ دفتر به‌عنوانِ سرخطِ گزارش.
 
     `total_debit` و `total_credit` جدا از بررسی‌ها و با یک کوئریِ ساده گرفته
     می‌شوند: این تنها عددی است که حسابدار در یک نگاه می‌خواهد، و مستقل بودنش از
     بقیه‌ی محاسبات خودش یک سنجه است.
+
+    `families` و `row_limit` **پیش‌فرضشان دقیقاً رفتارِ امروز است**، پس صفحه‌ی
+    «بررسی یکپارچگی» همان نُه بررسی را با همان ترتیب و همان سقفِ پنجاه می‌گیرد.
+    ماژولِ حسابرسی هر دو خانواده را با سقفِ بالاتر می‌خواهد — یک موتور، دو مخاطب.
     """
     filters = filters or ReportFilters()
 
@@ -586,6 +623,20 @@ def run_integrity_check(db: Session, filters: ReportFilters | None = None) -> di
         _inventory_vs_ledger(db, filters),
         _stale_valuation(db, filters),
     ]
+    if FAMILY_ASSURANCE in families:
+        #: واردکردنِ درون‌تابعی: `assurance_checks` کمک‌تابع‌های همین فایل را
+        #: می‌خوانَد، پس واردکردنِ ماژولی حلقه می‌ساخت. همان الگوی `deps.require_module`.
+        from app.services import assurance_checks
+
+        checks += assurance_checks.build(db, filters)
+
+    checks = [c for c in checks if c["family"] in families]
+    #: سقفِ نمایش را فراخوان تعیین می‌کند، و `truncated` باید با همان سقف بخواند —
+    #: وگرنه گزارشی که دویست ردیف گرفته، «قطع‌شده» را بر اساسِ پنجاه اعلام می‌کند.
+    for check in checks:
+        check["truncated"] = check["count"] > row_limit
+        check["rows"] = check["rows"][:row_limit]
+
     return {
         "date_from": filters.date_from,
         "date_to": filters.date_to,
