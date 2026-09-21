@@ -40,11 +40,14 @@ export function LauncherPicker({
   const [picked, setPicked] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState<'all' | 'ops' | 'list'>('all')
-  //: پیش‌فرضْ بسته: پانزده ماژولِ بازشده یعنی چندصد ردیف و کاربر باید کلِ برنامه را
-  //: اسکرول کند تا ماژولِ خودش را ببیند. گروهی که از قبل کارتی دارد باز می‌شود.
-  const [open, setOpen] = useState<Set<string>>(
-    () => new Set(groups.filter((g) => g.items.some((i) => selected.includes(i.id))).map((g) => g.heading)),
-  )
+  //: **همه بسته، بی استثنا.** قصدِ اولیه همین بود — «پانزده ماژولِ بازشده یعنی
+  //: چندصد ردیف و کاربر باید کلِ برنامه را اسکرول کند» — ولی استثنای «گروهی که
+  //: کارتی دارد باز شود» خودش همان را می‌ساخت: هفت کارتِ پیش‌فرض در چند گروهِ
+  //: مختلف پخش‌اند، پس کاربرِ تازه در اولین باز کردن چند گروهِ باز می‌دید.
+  //:
+  //: چیزی هم پنهان نمی‌شود: نشانِ شمارش روی سرِ گروهِ **بسته** هم می‌آید، پس
+  //: «کارت‌هایم کجاست» با یک نگاه جواب دارد، بی آنکه فهرست باز شود.
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
