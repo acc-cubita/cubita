@@ -34,6 +34,9 @@ import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
 import { ContractAmendmentPage, ContractPage, ContractSettlementPage, ContractStatementPage, ContractStatusPage } from '../pages/contracting/ContractingOpsPages'
+import { AssuranceHealthPage, AssuranceRequestPage } from '../pages/assurance/AssuranceOpsPages'
+import { AssuranceFindingListPage, AssuranceRunListPage } from '../pages/assurance/AssuranceListPages'
+import { AssuranceAdminPage } from '../pages/AssuranceAdminPage'
 import { OwnerTransactionPage } from '../pages/company/OwnerTransactionPages'
 import { OwnerTransactionListPage } from '../pages/company/OwnerTransactionListPage'
 import { ContractAmendmentListPage, ContractingListPage, ContractSettlementListPage, ContractStatementListPage } from '../pages/contracting/ContractingListPages'
@@ -311,6 +314,11 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contractingamendmentlist: 'متمم‌های پیمان',
   contractingstatementlist: 'صورت وضعیت‌های دریافتی',
   contractingsettlementlist: 'تسویه‌حساب‌های پیمان',
+  assurancerequest: 'درخواست حسابرسی',
+  assurancehealth: 'کارنامه سلامت دفتر',
+  assurancefindinglist: 'یافته‌های حسابرسی',
+  assurancerunlist: 'تاریخچه بررسی‌ها',
+  assuranceadmin: 'کارتابل حسابرسی',
   moadian: 'سامانه مؤدیان',
   moadianhistory: 'تاریخچه ارسال‌ها',
   distributor: 'پخشِ من',
@@ -840,6 +848,7 @@ export function Dashboard({
           {page === 'accounts' && me.is_super_admin && (
             <AccountsAdminPage token={token} me={me} onMeUpdated={onMeUpdated} />
           )}
+          {page === 'assuranceadmin' && me.is_super_admin && <AssuranceAdminPage token={token} />}
           {page === 'mpcommission' && me.is_super_admin && <MarketplaceCommissionPage token={token} />}
           {page === 'reports' && (
             <div className="page panels">
@@ -853,6 +862,12 @@ export function Dashboard({
               </div>
             </div>
           )}
+          {page === 'assurancerequest' && (
+            <AssuranceRequestPage token={token} me={me} />
+          )}
+          {page === 'assurancehealth' && <AssuranceHealthPage token={token} onNavigate={navigate} />}
+          {page === 'assurancefindinglist' && <AssuranceFindingListPage token={token} />}
+          {page === 'assurancerunlist' && <AssuranceRunListPage token={token} />}
           {page === 'contractingnew' && <ContractPage token={token} />}
           {page === 'contractingstatus' && <ContractStatusPage token={token} />}
           {page === 'contractingamendment' && <ContractAmendmentPage token={token} />}

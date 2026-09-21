@@ -1,6 +1,7 @@
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.analytic import AnalyticAccount
 from app.models.assets import DepreciationEntry, FixedAsset
+from app.models.assurance import AssuranceEngagement, AssuranceFinding, AssuranceRun
 from app.models.audit import AuditLog
 from app.models.auth_token import AuthToken
 from app.models.banking import BankAccount, BankStatementLine, BankTransaction, Check, PettyCashTransaction
@@ -144,6 +145,9 @@ from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.user import Role, User
 
 __all__ = [
+    "AssuranceEngagement",
+    "AssuranceFinding",
+    "AssuranceRun",
     "Settlement",
     "SettlementAllocation",
     "CommissionRule",

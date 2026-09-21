@@ -40,6 +40,7 @@ OPTIONAL_MODULES: tuple[str, ...] = (
     "payroll",
     "integration",
     "calendar",
+    "assurance",
 )
 
 #: زیرمجموعه‌ی اختیاری‌ها که «حقِ دسترسی»شان فقط با گرنتِ سوپرادمین باز می‌شود و در
@@ -51,6 +52,23 @@ OPTIONAL_MODULES: tuple[str, ...] = (
 #:
 RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration")
 
+#: ماژول‌های **مشتق** — در هیچ ستونی ذخیره نمی‌شوند.
+#:
+#: منبعشان یک رکوردِ سرویس است، نه گرنتِ سوپرادمین: «پرونده‌ی حسابرسی» فقط تا
+#: وقتی باز است که قراردادِ حسابرسیِ تأییدشده‌ای وجود داشته باشد
+#: (`services/assurance_access.derived_modules`). دو دلیل که چرا `granted_modules`
+#: نشد:
+#:
+#: ۱. `set_grants` کلِ فهرست را جایگزین می‌کند و صفحه‌ی «مدیریت اکانت‌ها» آن فهرست
+#:    را از یک آرایه‌ی ثابتِ سمتِ کلاینت می‌سازد — پس اولین باری که سوپرادمین
+#:    ماژولِ *دیگری* را برای همان حساب جابه‌جا کند، این گرنت بی‌صدا پاک می‌شد.
+#: ۲. دو منبعِ حقیقت: بستنِ قرارداد باید دسترسی را ببندد، و گرنتِ دستی می‌توانست
+#:    قراردادی که وجود ندارد را «باز» نگه دارد.
+#:
+#: این کلیدها **در `OPTIONAL_MODULES` نیستند**، پس `set_enabled`/`set_industry`
+#: نمی‌توانند خاموششان کنند و `enabled_modules` مستقیم اضافه‌شان می‌کند.
+DERIVED_MODULES: tuple[str, ...] = ("assurance_work",)
+
 #: همه‌ی کلیدهای ماژولِ کسب‌وکار (core + اختیاری) — برای اعتبارسنجی.
 ALL_BUSINESS_MODULES: tuple[str, ...] = CORE_MODULES + OPTIONAL_MODULES
 
@@ -61,25 +79,26 @@ INDUSTRY_TEMPLATES: dict[str, tuple[str, ...]] = {
     "general": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
         "contracting", "accounting", "banking", "fixedassets", "payroll",
-        "calendar",
+        "calendar", "assurance",
     ),
     # تولیدی: خط تولید فعال، بدونِ صندوق/باشگاه/اقساط.
     "manufacturing": (
         "sales", "purchases", "inventory", "manufacturing", "accounting",
-        "banking", "fixedassets", "payroll", "calendar",
+        "banking", "fixedassets", "payroll", "calendar", "assurance",
     ),
     # خرده‌فروشی: صندوق و باشگاه پررنگ، بدونِ تولید/حقوق/دارایی.
     "retail": (
         "sales", "pos", "installments", "crm", "purchases", "inventory",
-        "accounting", "banking", "calendar",
+        "accounting", "banking", "calendar", "assurance",
     ),
     # خدماتی: بدونِ انبار/صندوق/تولید.
     "services": (
-        "sales", "crm", "accounting", "banking", "payroll", "calendar",
+        "sales", "crm", "accounting", "banking", "payroll", "calendar", "assurance",
     ),
     # پخش: تمرکز روی خرید/انبار (ماژولِ «پخشِ من» جدا با tenant.kind می‌آید).
     "distribution": (
         "sales", "purchases", "inventory", "accounting", "banking", "calendar",
+        "assurance",
     ),
 }
 
@@ -87,8 +106,15 @@ INDUSTRY_TEMPLATES: dict[str, tuple[str, ...]] = {
 DEFAULT_INDUSTRY = "general"
 
 
-def allowed_modules(tenant: "Tenant") -> set[str]:
-    """مجموعه‌ی ماژول‌هایی که این کسب‌وکار مجازِ داشتنشان است (لایه‌ی حقِ دسترسی)."""
+def allowed_modules(
+    tenant: "Tenant", *, derived: frozenset[str] = frozenset()
+) -> set[str]:
+    """مجموعه‌ی ماژول‌هایی که این کسب‌وکار مجازِ داشتنشان است (لایه‌ی حقِ دسترسی).
+
+    `derived` را فراخوان حساب می‌کند (چون کوئری لازم دارد و این تابع باید خالص
+    بماند) و **کلیدواژه‌ای با پیش‌فرضِ خالی** است: هر فراخوانی که آن را ندهد،
+    ماژولِ مشتق را *نمی‌بیند*. یعنی فراموش‌کردنش در بسته‌شدن می‌شکند نه در بازشدن.
+    """
     granted = set(tenant.granted_modules or [])
     allowed = set(CORE_MODULES)
     for key in OPTIONAL_MODULES:
@@ -97,10 +123,13 @@ def allowed_modules(tenant: "Tenant") -> set[str]:
                 allowed.add(key)
         else:
             allowed.add(key)
+    allowed |= {k for k in derived if k in DERIVED_MODULES}
     return allowed
 
 
-def enabled_modules(tenant: "Tenant") -> list[str]:
+def enabled_modules(
+    tenant: "Tenant", *, derived: frozenset[str] = frozenset()
+) -> list[str]:
     """کلیدهای ماژولِ *روشن* (ترجیحِ مالک) — شاملِ core (همیشه روشن).
 
     `None` (شخصی‌سازی‌نشده) = همه‌ی اختیاری‌ها روشن، تا حساب‌های موجود چیزی از دست ندهند.
@@ -112,7 +141,9 @@ def enabled_modules(tenant: "Tenant") -> list[str]:
     else:
         stored = set(tenant.enabled_modules)
         optional_on = [k for k in OPTIONAL_MODULES if k in stored]
-    return list(CORE_MODULES) + optional_on
+    #: ماژولِ مشتق ترجیحِ نمایش ندارد: یا قرارداد بازش کرده یا نه. پس بی‌قیدِ
+    #: `enabled_modules` اضافه می‌شود و مالک نمی‌تواند خاموشش کند.
+    return list(CORE_MODULES) + optional_on + [k for k in DERIVED_MODULES if k in derived]
 
 
 def is_module_visible(tenant: "Tenant", key: str) -> bool:

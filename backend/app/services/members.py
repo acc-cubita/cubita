@@ -37,6 +37,10 @@ OWNER_ROLE_KEY = "owner"
 #: تاریخچه نباید مشتری را مجبور کند صندلی بخرد.
 SEAT_STATUSES = ("active", "invited")
 
+#: نقشی که صندلی مصرف نمی‌کند: حسابرسِ کوبیتا مهمانِ موقتِ ماست، نه کاربرِ مشتری.
+#: بدونِ این، تأییدِ حسابرسی می‌توانست مشتریِ کنارِ سقف را وادار به خریدِ صندلی کند.
+SEATLESS_ROLE_KEYS = ("auditor",)
+
 
 def _tenant_memberships(db: Session, tenant_id: UUID):
     """پایه‌ی هر کوئری این ماژول — فیلتر مستأجر اینجا یک بار و صریح انجام می‌شود."""
@@ -48,7 +52,12 @@ def list_members(db: Session, tenant_id: UUID) -> list[Membership]:
 
 
 def seats_used(db: Session, tenant_id: UUID) -> int:
-    return _tenant_memberships(db, tenant_id).filter(Membership.status.in_(SEAT_STATUSES)).count()
+    return (
+        _tenant_memberships(db, tenant_id)
+        .join(Role, Role.id == Membership.role_id)
+        .filter(Membership.status.in_(SEAT_STATUSES), Role.key.notin_(SEATLESS_ROLE_KEYS))
+        .count()
+    )
 
 
 def _role_by_key(db: Session, tenant_id: UUID, key: str) -> Role:
@@ -152,6 +161,8 @@ def set_permissions(
             status.HTTP_409_CONFLICT,
             "این تنها مالکِ فعالِ کسب‌وکار است؛ محدودکردنِ دسترسی او کسب‌وکار را بدون مدیر می‌گذارد",
         )
+
+    _guard_auditor(db, membership)
 
     membership.permissions = clean
     db.flush()
@@ -265,12 +276,36 @@ def accept_invite(db: Session, *, raw_token: str, password: str, name: str | Non
     return user, token.tenant_id
 
 
+def _guard_auditor(db: Session, membership: Membership) -> None:
+    """دسترسیِ حسابرسِ گماشته را مالکِ مشتری تنظیم نمی‌کند.
+
+    دامنه‌ی این عضویت با قراردادِ حسابرسی تعیین شده و پشتیبانیِ کوبیتا مسئولش
+    است؛ پهن‌کردنش یعنی مهمانِ موقت دسترسی‌ای بگیرد که قرارداد نمی‌گوید.
+
+    **غیرفعال‌کردن عمداً آزاد می‌ماند.** دفتر مالِ مشتری است و باید بتواند هر
+    کسی را — از جمله ما — بیرون بگذارد.
+    """
+    from app.models.assurance import AssuranceEngagement
+
+    linked = (
+        db.query(AssuranceEngagement.id)
+        .filter(AssuranceEngagement.auditor_membership_id == membership.id)
+        .first()
+    )
+    if linked is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "دسترسیِ حسابرس را پشتیبانیِ کوبیتا تنظیم می‌کند؛ برای قطعِ دسترسی می‌توانید کاربر را غیرفعال کنید",
+        )
+
+
 def change_role(db: Session, *, tenant_id: UUID, membership_id: UUID, role_key: str) -> Membership:
     membership = _get_member(db, tenant_id, membership_id)
     role = _role_by_key(db, tenant_id, role_key)
 
     if role.id != membership.role_id:
         _guard_last_owner(db, tenant_id, membership)
+        _guard_auditor(db, membership)
 
     membership.role_id = role.id
     db.flush()

@@ -488,6 +488,9 @@ class IntegrityCheckOut(BaseModel):
     description: str
     #: error سلامتِ دفتر را زیر سؤال می‌برد؛ warning فقط دیده می‌شود.
     severity: str
+    #: `ledger` = بررسیِ سازگاریِ دفتر (صفحه‌ی حسابدار)، `assurance` = بررسیِ
+    #: حسابرسی. پیش‌فرض دارد تا پاسخِ اندپوینتِ موجود ذره‌ای عوض نشود.
+    family: str = "ledger"
     ok: bool
     #: شمارشِ کاملِ یافته‌ها، حتی وقتی `rows` بریده شده.
     count: int

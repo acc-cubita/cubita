@@ -287,6 +287,12 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'contractingstatementlist', label: 'صورت وضعیت‌های دریافتی', icon: Receipt },
     { key: 'contractingsettlementlist', label: 'تسویه‌حساب‌های پیمان', icon: HandCoins },
   ],
+  //: «حسابرسی» — دو دفتر: یافته‌های آخرین بررسی، و تاریخچه‌ی اجراها. هر دو پشتِ
+  //: ماژولِ مشتق‌اند، پس پیش از تأییدِ قرارداد اصلاً در منو نمی‌آیند.
+  'حسابرسی': [
+    { key: 'assurancefindinglist', label: 'یافته‌های حسابرسی', icon: ListChecks },
+    { key: 'assurancerunlist', label: 'تاریخچه بررسی‌ها', icon: History },
+  ],
   //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
   //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
   'شرکت': [
@@ -343,6 +349,8 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   contractingamendmentlist: 'پیمانکاری',
   contractingstatementlist: 'پیمانکاری',
   contractingsettlementlist: 'پیمانکاری',
+  assurancefindinglist: 'حسابرسی',
+  assurancerunlist: 'حسابرسی',
   entrylist: 'حسابداری',
   accountlist: 'حسابداری',
   recurringlist: 'حسابداری',
@@ -543,6 +551,10 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   contractingstatement: 'contractingstatementlist',
   contractingsettlement: 'contractingsettlementlist',
   contractingstatus: 'state',
+  //: حسابرسی — «درخواست» خودش دفترِ قراردادش است (هر کسب‌وکار یک قراردادِ باز
+  //: دارد؛ فهرستی از یک ردیف بی‌معناست)، و «کارنامه» دفترِ اجراهایش را دارد.
+  assurancerequest: 'view',
+  assurancehealth: ['assurancefindinglist', 'assurancerunlist'],
   distributor: 'view',
   marketplace: 'view',
   overview: 'view',

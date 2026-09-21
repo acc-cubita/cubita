@@ -10093,3 +10093,153 @@ export const voidContractSettlement = (token: string, id: string, reason: string
     reason,
     void_date: voidDate || null,
   })
+
+
+// ── حسابرسی ──────────────────────────────────────────────────────────────────
+//
+// دو خانواده‌ی مسیر: `/api/assurance` (سمتِ مشتری) و `/api/admin/assurance`
+// (کارتابلِ ستاد، فقط سوپرادمین). مسیرهای کاری روی سرور پشتِ ماژولِ مشتق‌اند، پس
+// پیش از تأییدِ قرارداد ۴۰۳ می‌دهند — پنهان‌بودنِ منو فقط راحتیِ کاربر است، نه گارد.
+
+export interface AssuranceEngagementRecord {
+  id: string
+  tenant_id: string
+  status: 'requested' | 'approved' | 'active' | 'rejected' | 'closed'
+  requested_at: string
+  period_from: string | null
+  period_to: string | null
+  contact_phone: string
+  request_note: string
+  decided_at: string | null
+  reject_reason: string
+  access_expires_at: string | null
+  last_score: string | null
+  last_run_at: string | null
+  last_run_id: string | null
+  closed_at: string | null
+  close_note: string
+  auditor_name: string
+  auditor_email: string
+}
+
+export interface StaffAssuranceEngagement extends AssuranceEngagementRecord {
+  tenant_name: string
+  owner_email: string
+}
+
+/** یک ردیفِ جدولِ توضیحِ نمره. این جدول **خودِ نمره** است، نه ضمیمه‌اش. */
+export interface AssuranceCheckScore {
+  key: string
+  title: string
+  description: string
+  severity: 'error' | 'warning'
+  family: string
+  count: number
+  weight: number
+  lost: number
+}
+
+export interface AssuranceRunRecord {
+  id: string
+  number: number
+  ran_at: string
+  trigger: 'approval' | 'manual' | 'staff'
+  date_from: string | null
+  date_to: string | null
+  score: string
+  grade: 'healthy' | 'warning' | 'critical'
+  error_count: number
+  warning_count: number
+  finding_count: number
+  total_debit: string
+  total_credit: string
+  summary: AssuranceCheckScore[]
+}
+
+export interface AssuranceFindingRecord {
+  id: string
+  run_id: string
+  check_key: string
+  severity: 'error' | 'warning'
+  seq: number
+  label: string
+  detail: string
+  debit: string
+  credit: string
+  difference: string
+  entry_id: string | null
+  account_id: string | null
+  item_id: string | null
+}
+
+export interface AssuranceRequestIn {
+  period_from: string | null
+  period_to: string | null
+  contact_phone: string
+  note: string
+}
+
+export const fetchAssuranceEngagement = (token: string) =>
+  authedGet<AssuranceEngagementRecord | null>(token, '/api/assurance/engagement')
+
+export const submitAssuranceRequest = (
+  token: string,
+  data: AssuranceRequestIn,
+  idempotencyKey?: string,
+) => authedSend<AssuranceEngagementRecord>(token, 'POST', '/api/assurance/request', data, idempotencyKey)
+
+export const fetchAssuranceRuns = (token: string) =>
+  authedGetAll<AssuranceRunRecord>(token, '/api/assurance/runs')
+
+export const fetchLatestAssuranceRun = (token: string) =>
+  authedGet<AssuranceRunRecord | null>(token, '/api/assurance/runs/latest')
+
+export const fetchAssuranceFindings = (
+  token: string,
+  runId: string,
+  query?: { check_key?: string; severity?: string },
+) => {
+  const qs = new URLSearchParams()
+  if (query?.check_key) qs.set('check_key', query.check_key)
+  if (query?.severity) qs.set('severity', query.severity)
+  const suffix = qs.toString()
+  return authedGetAll<AssuranceFindingRecord>(
+    token,
+    `/api/assurance/runs/${runId}/findings${suffix ? `?${suffix}` : ''}`,
+  )
+}
+
+export const refreshAssuranceRun = (token: string, idempotencyKey?: string) =>
+  authedSend<AssuranceRunRecord>(token, 'POST', '/api/assurance/runs', {}, idempotencyKey)
+
+// ── ستاد ─────────────────────────────────────────────────────────────────────
+
+export const fetchAssuranceRequests = (token: string, status?: string) =>
+  authedGet<StaffAssuranceEngagement[]>(
+    token,
+    status ? `/api/admin/assurance?status_filter=${status}` : '/api/admin/assurance',
+  )
+
+export const approveAssuranceRequest = (
+  token: string,
+  id: string,
+  body: { auditor_email: string; days: number; period_from?: string | null; period_to?: string | null },
+) => authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/approve`, body)
+
+export const rejectAssuranceRequest = (token: string, id: string, reason: string) =>
+  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/reject`, { reason })
+
+export const assignAssuranceAuditor = (
+  token: string,
+  id: string,
+  body: { auditor_email: string; days?: number | null },
+) => authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/assign`, body)
+
+export const extendAssuranceAccess = (token: string, id: string, days: number) =>
+  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/extend`, { days })
+
+export const runAssuranceSnapshot = (token: string, id: string) =>
+  authedSend<AssuranceRunRecord>(token, 'POST', `/api/admin/assurance/${id}/run`, {})
+
+export const closeAssuranceEngagement = (token: string, id: string, note: string) =>
+  authedSend<StaffAssuranceEngagement>(token, 'POST', `/api/admin/assurance/${id}/close`, { note })

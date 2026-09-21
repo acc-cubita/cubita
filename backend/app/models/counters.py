@@ -77,6 +77,10 @@ DOC_CONTRACT_STATEMENT = "contract_statement"
 #: حسابداری واقعی دارد.
 DOC_CONTRACT_SETTLEMENT = "contract_settlement"
 
+#: بررسیِ حسابرسی — هر اجرای موتور یک شماره می‌گیرد تا حسابرس و مشتری بتوانند به
+#: «بررسیِ شماره‌ی ۳» ارجاع بدهند، نه به یک UUID.
+DOC_ASSURANCE_RUN = "assurance_run"
+
 DOC_TYPES = (
     DOC_JOURNAL_ENTRY,
     DOC_JOURNAL_ATF,
@@ -106,6 +110,7 @@ DOC_TYPES = (
     DOC_CONTRACT_AMENDMENT,
     DOC_CONTRACT_STATEMENT,
     DOC_CONTRACT_SETTLEMENT,
+    DOC_ASSURANCE_RUN,
 )
 
 

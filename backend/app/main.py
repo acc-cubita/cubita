@@ -12,9 +12,11 @@ from app.routers import (
     accounting_ops,
     accounts,
     admin_accounts,
+    admin_assurance,
     advanced_inventory,
     alerts,
     assets,
+    assurance,
     audit,
     auth,
     backup,
@@ -179,6 +181,10 @@ app.include_router(devices.router)
 app.include_router(sales_ops.router)
 app.include_router(client_errors.router)
 app.include_router(dashboard.router)
+app.include_router(assurance.router)
+#: روترِ کاری پشتِ گیتِ ماژولِ مشتق — هر اندپوینتِ تازه‌اش خودکار گیت می‌خورد.
+app.include_router(assurance.work_router)
+app.include_router(admin_assurance.router)
 
 
 @app.get("/api/health")

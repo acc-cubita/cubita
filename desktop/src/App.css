@@ -12254,3 +12254,15 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   /* عددِ بلندِ فارسی نباید ستون را از عرضِ نمایشگر بزرگ‌تر کند. */
   overflow-wrap: anywhere;
 }
+/* فهرستِ نکته‌های «حسابرس چه چیزی خواهد دید» — متنِ توضیحی، نه داده. */
+.ef-bullets {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh);
+}
+.ef-bullets strong { color: var(--text-h); font-weight: 600; }
