@@ -166,6 +166,54 @@ jobs:
         env:
           VITE_API_URL: https://acc.cubita.ir
 
+  admin:
+    # اپِ ستاد (admin.cubita.ir) — پروژه‌ی مستقل، پس jobِ مستقل.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - name: نصب
+        working-directory: admin
+        run: npm ci
+
+      - name: بررسی نوع‌ها
+        working-directory: admin
+        run: npx tsc -b
+
+      - name: lint
+        working-directory: admin
+        run: npx oxlint src
+
+      - name: تست‌های واحد
+        working-directory: admin
+        run: npm test
+
+      - name: ممیزِ ساختاری
+        # نُه قاعده‌ی مخصوصِ این اپ. `audit-pages.mjs`ِ دسکتاپ به کار نمی‌آید:
+        # مسیرش سیم‌کشی‌شده است و چهار قاعده‌اش روی `NAV_GROUPS` کار می‌کنند که
+        # اینجا وجود ندارد.
+        working-directory: admin
+        run: node scripts/audit-admin.mjs
+
+      - name: واگراییِ فایل‌های مشترک
+        # چهار فایل از `desktop/src` کپی شده‌اند. این قدم تنها چیزی است که
+        # واگرایی را **پرصدا** می‌کند؛ بدونش یکی از دو نسخه بی‌صدا عقب می‌ماند.
+        working-directory: admin
+        run: node scripts/check-shared.mjs
+
+      - name: build
+        working-directory: admin
+        run: npx vite build
+        env:
+          # همان آدرسی که `deploy-admin-web.sh` پیش از جابه‌جایی grepش می‌کند.
+          VITE_API_URL: https://admin.cubita.ir
+
   mobile:
     runs-on: ubuntu-latest
     # همان دلیلِ دو jobِ بالا: jobِ هنگ‌کرده بدونِ سقف تا شش ساعت اسلات را
