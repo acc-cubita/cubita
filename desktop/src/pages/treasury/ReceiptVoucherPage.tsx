@@ -43,6 +43,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { SearchSelect } from '../../components/SearchSelect'
+import { FormField } from '../../components/form/FormKit'
 
 type Instrument = 'cash' | 'transfer' | 'cheque' | 'card'
 
@@ -402,11 +403,9 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
               </SearchSelect>
             </label>
             {currency !== 'IRR' && (
-              <label>
-                نرخ تسعیر
-                <NumberInput value={rate} onChange={setRate} allowDecimal />
-                <span className="field-hint">سند به ریال ثبت می‌شود؛ این نرخ معادل ریالی را می‌سازد.</span>
-              </label>
+              <FormField label="نرخ تسعیر" tip="سند به ریال ثبت می‌شود؛ این نرخ معادل ریالی را می‌سازد.">
+                {(id) => <NumberInput id={id} value={rate} onChange={setRate} allowDecimal />}
+              </FormField>
             )}
 
             <fieldset className="form-wide">
@@ -446,11 +445,9 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
                         ))}
                       </SearchSelect>
                     </label>
-                    <label>
-                      شماره حواله
-                      <input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} dir="ltr" />
-                      <span className="field-hint">در مغایرت بانکی از همین پیدا می‌شود.</span>
-                    </label>
+                    <FormField label="شماره حواله" tip="در مغایرت بانکی از همین پیدا می‌شود.">
+                      {(id) => <input id={id} value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} dir="ltr" />}
+                    </FormField>
                   </>
                 )}
                 {instrument === 'card' && (
@@ -480,11 +477,9 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
                       شماره چک
                       <input value={checkNo} onChange={(e) => setCheckNo(e.target.value)} dir="ltr" />
                     </label>
-                    <label>
-                      کد صیادی
-                      <input value={sayadId} onChange={(e) => setSayadId(e.target.value)} dir="ltr" maxLength={16} />
-                      <span className="field-hint">شانزده رقم؛ جدا از شماره چک.</span>
-                    </label>
+                    <FormField label="کد صیادی" tip="شانزده رقم؛ جدا از شماره چک.">
+                      {(id) => <input id={id} value={sayadId} onChange={(e) => setSayadId(e.target.value)} dir="ltr" maxLength={16} />}
+                    </FormField>
                     <label>
                       سررسید
                       <JalaliDatePicker value={dueDate} onChange={setDueDate} />
@@ -509,11 +504,9 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
                       شماره حساب
                       <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} dir="ltr" />
                     </label>
-                    <label>
-                      صاحب چک
-                      <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
-                      <span className="field-hint">اگر چک شخص ثالث است، نامِ صادرکننده.</span>
-                    </label>
+                    <FormField label="صاحب چک" tip="اگر چک شخص ثالث است، نامِ صادرکننده.">
+                      {(id) => <input id={id} value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />}
+                    </FormField>
                   </>
                 )}
                 <label>
@@ -555,11 +548,9 @@ export function ReceiptVoucherDocumentPage({ token }: { token: string }) {
               </div>
             )}
 
-            <label>
-              تخفیف تسویه
-              <NumberInput value={discount} onChange={setDiscount} />
-              <span className="field-hint">پولی دریافت نمی‌شود؛ فقط مطالبه بسته می‌شود.</span>
-            </label>
+            <FormField label="تخفیف تسویه" tip="پولی دریافت نمی‌شود؛ فقط مطالبه بسته می‌شود.">
+              {(id) => <NumberInput id={id} value={discount} onChange={setDiscount} />}
+            </FormField>
             {Number(discount || 0) > 0 && (
               <label>
                 حساب تخفیف
