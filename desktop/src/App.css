@@ -4483,15 +4483,16 @@ button.topnav-org:hover {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2, transparent);
+  color: var(--text);
   cursor: pointer;
 }
 .quick-bar-manage:hover {
-  background: var(--surface-2, rgba(0, 0, 0, 0.04));
-  color: var(--text-h);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 @media (max-width: 760px) {
   .quick-bar {
