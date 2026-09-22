@@ -2,6 +2,14 @@ import { app, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { clearReferenceCaches, getLocalDb, initLocalDb, pendingOutboxCount } from './db.js'
+import {
+  bestEffortLogout,
+  clearSession as clearStoredSession,
+  currentRefreshToken,
+  persistSession as persistStoredSession,
+  restoreSession,
+  type RestoreResult,
+} from './authSession.js'
 
 const DEBUG_LOG = path.join(app.getPath('userData'), 'startup-debug.log')
 function debugLog(msg: string) {
@@ -169,6 +177,39 @@ ipcMain.handle('window:isMaximized', () => {
 ipcMain.handle('auth:setToken', (_evt, token: string | null) => {
   authToken = token
 })
+
+// --- نشستِ آفلاین: بارِ اول یوزر/پسورد، از آن به بعد اپ خودش وارد می‌ماند ---
+//
+// سه IPC، هرکدام یک لحظه از عمرِ نشست: `persistSession` بعد از هر ورود/سوییچِ
+// موفق (نشستِ کامل روی دیسک + authToken حافظه‌ای برای sync)، `restoreSession`
+// یک‌بار در بدو اجرا (App.tsx به‌جای loadStoredToken صدایش می‌زند)، `clearSession`
+// روی خروجِ دستی. منطقِ «خطای شبکه ≠ بطلانِ نشست» داخلِ authSession.ts است؛
+// اینجا فقط authToken حافظه‌ای را با نتیجه هماهنگ نگه می‌داریم.
+
+ipcMain.handle(
+  'auth:persistSession',
+  (_evt, access: string, refresh: string, me: unknown) => {
+    persistStoredSession(access, refresh, me)
+    authToken = access
+  },
+)
+
+ipcMain.handle('auth:restoreSession', async (): Promise<RestoreResult> => {
+  const result = await restoreSession({ apiBaseUrl: API_BASE_URL })
+  authToken = result?.session.access_token ?? null
+  return result
+})
+
+ipcMain.handle('auth:clearSession', async () => {
+  // بهترین‌تلاش: خروجِ سمتِ سرور نباید مانعِ خروجِ محلی شود (مثلاً آفلاین).
+  await bestEffortLogout({ apiBaseUrl: API_BASE_URL })
+  clearStoredSession()
+  authToken = null
+})
+
+// رفرشِ فعلی — فقط برای سوییچِ کسب‌وکار (TenantSwitcher باید رفرشِ قبلی را به
+// switch-tenant بدهد تا سرور آن را باطل و یکی برای مستأجرِ مقصد صادر کند).
+ipcMain.handle('auth:currentRefreshToken', () => currentRefreshToken())
 
 ipcMain.handle('sync:pullAll', async () => {
   const config = { apiBaseUrl: API_BASE_URL, getToken: () => authToken }

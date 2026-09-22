@@ -109,9 +109,14 @@ export function SignupScreen({
     setError(null)
     setLoading(true)
     try {
-      const t = await signup(businessName.trim(), ownerName.trim(), email.trim(), password, code.trim(), industry, trade)
-      await window.cubita?.setAuthToken(t)
-      onDone(t, await fetchMe(t))
+      const { access_token: t, refresh_token } = await signup(
+        businessName.trim(), ownerName.trim(), email.trim(), password, code.trim(), industry, trade,
+      )
+      const meRes = await fetchMe(t)
+      // اولین ورودِ یوزر/پسورد همین ثبت‌نام است — نشستِ آفلاین از همین‌جا شروع می‌شود.
+      if (refresh_token) await window.cubita?.persistSession(t, refresh_token, meRes)
+      else await window.cubita?.setAuthToken(t)
+      onDone(t, meRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {

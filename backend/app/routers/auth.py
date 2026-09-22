@@ -199,7 +199,11 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
     # ایمیل همین حالا با کد تأیید شد؛ ثبتش می‌کنیم تا نشانِ «تأییدشده» درست باشد.
     user.email_verified_at = datetime.now(timezone.utc)
     db.flush()
-    return TokenOut(access_token=create_access_token(user, tenant.id))
+    # اولین ورودِ یوزر/پسورد همین ثبت‌نام است — همان رفرشِ «همیشه‌واردمانده»ی
+    # login هم اینجا صادر می‌شود تا کاربرِ تازه از همان لحظه بتواند بدونِ ورودِ
+    # دوباره آفلاین کار کند، نه فقط از دومین ورودِ به بعد.
+    refresh = refresh_svc.issue_refresh(db, user=user, tenant_id=tenant.id)
+    return TokenOut(access_token=create_access_token(user, tenant.id), refresh_token=refresh)
 
 
 @router.post("/login", response_model=TokenOut, dependencies=[Depends(limit_login)])
@@ -216,7 +220,8 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
     # اولی وارد می‌شود و بعد می‌تواند از /switch-tenant جابه‌جا شود.
     record_login(user)
     tenant_id = memberships[0].tenant_id
-    # رفرش فقط برای «همیشه‌واردمانده»ی اپ موبایل است؛ وب/دسکتاپ آن را نادیده می‌گیرند.
+    # رفرش برای «همیشه‌واردمانده» است — موبایل و دسکتاپ هر دو نگهش می‌دارند تا
+    # بارِ اولِ ورود کافی باشد؛ وب نادیده می‌گیرد.
     refresh = refresh_svc.issue_refresh(db, user=user, tenant_id=tenant_id)
     return TokenOut(access_token=create_access_token(user, tenant_id), refresh_token=refresh)
 
@@ -289,6 +294,14 @@ def switch_tenant(
     عضویت اینجا دوباره سنجیده می‌شود و نه فقط در get_principal: اگر این بررسی
     نبود، هر کاربری می‌توانست شناسه‌ی هر مستأجری را بفرستد و توکنی برای دفتر
     کسب‌وکاری بگیرد که هیچ ربطی به او ندارد.
+
+    **رفرش هم اینجا جابه‌جا می‌شود.** `refresh_svc.rotate` استفاده نمی‌شود چون
+    آن تابع رفرش را برای همان مستأجرِ ذخیره‌شده‌اش تمدید می‌کند، نه مستأجرِ
+    دلخواهِ این درخواست. پس دستی: رفرشِ قبلی (اگر کلاینت فرستاده) باطل و یکی
+    تازه برای `target.tenant_id` صادر می‌شود. بدونِ این، کلاینتی که نشستِ
+    آفلاینِ بلندمدت دارد (دسکتاپ/موبایل) بعد از سوییچ همچنان رفرشِ کسب‌وکارِ
+    لحظه‌ی ورود را نگه می‌داشت و با اولین بازیابیِ آفلاین بی‌صدا به همان
+    کسب‌وکارِ قبلی برمی‌گشت.
     """
     target = (
         db.query(Membership)
@@ -303,7 +316,14 @@ def switch_tenant(
     if target is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "عضویت فعالی در این کسب‌وکار ندارید")
 
-    return TokenOut(access_token=create_access_token(principal.user, target.tenant_id))
+    if data.refresh_token:
+        refresh_svc.revoke(db, data.refresh_token)
+    new_refresh = refresh_svc.issue_refresh(db, user=principal.user, tenant_id=target.tenant_id)
+
+    return TokenOut(
+        access_token=create_access_token(principal.user, target.tenant_id),
+        refresh_token=new_refresh,
+    )
 
 
 @router.post("/forgot-password", status_code=202)
@@ -453,7 +473,16 @@ def change_password(
     db.flush()
 
     # همه‌ی نشست‌های دیگر همین حالا باطل شدند؛ توکن تازه جای همین نشست را می‌گیرد.
-    return TokenOut(access_token=create_access_token(principal.user, principal.tenant_id))
+    #
+    # رفرشِ آفلاینِ همین نشست هم باید تازه شود: set_password نسلِ توکن را جلو
+    # می‌برد، و refresh_svc.rotate رفرشِ نسلِ قدیم را دقیقاً به همین دلیل رد
+    # می‌کند (services/refresh.py). بدونِ این، کاربری که رمزش را از داخلِ اپ عوض
+    # می‌کند، همین امروز از نشستِ آفلاینش هم بیرون می‌افتد.
+    new_refresh = refresh_svc.issue_refresh(db, user=principal.user, tenant_id=principal.tenant_id)
+    return TokenOut(
+        access_token=create_access_token(principal.user, principal.tenant_id),
+        refresh_token=new_refresh,
+    )
 
 
 @router.get("/me", response_model=MeOut)

@@ -43,9 +43,13 @@ export function LoginScreen({
     setError(null)
     setLoading(true)
     try {
-      const t = await login(email, password)
-      await window.cubita?.setAuthToken(t)
+      const { access_token: t, refresh_token } = await login(email, password)
       const meRes = await fetchMe(t)
+      // دسکتاپ: نشستِ کامل (توکن‌ها + me) روی دیسک — بارِ اولِ یوزر/پسورد کافی
+      // است تا اپ از این پس خودش وارد بماند، آنلاین یا آفلاین. رفرش همیشه از
+      // سرور می‌آید (login آن را صادر می‌کند)؛ نال‌بودنش فقط نوعاً ممکن است.
+      if (refresh_token) await window.cubita?.persistSession(t, refresh_token, meRes)
+      else await window.cubita?.setAuthToken(t)
       onLoggedIn(t, meRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')

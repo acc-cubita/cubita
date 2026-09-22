@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Building2, Check, ChevronDown, Loader2 } from 'lucide-react'
 
-import { fetchMyTenants, switchTenant, type TenantMembership } from '../api'
+import { fetchMe, fetchMyTenants, switchTenant, type TenantMembership } from '../api'
 import { storeToken } from '../lib/session'
 import { canSwitchTenant } from '../lib/tenantSwitch'
 
@@ -88,8 +88,18 @@ export function TenantSwitcher({
 
     setBusy(true)
     try {
-      const res = await switchTenant(token, target.tenant_id)
+      //: نشستِ آفلاینِ دسکتاپ رفرش دارد؛ دادنش به switch-tenant یعنی سرور آن را
+      //: باطل و یکی تازه برای مستأجرِ مقصد صادر می‌کند. بدونِ این، بعد از سوییچ و
+      //: یک بازیابیِ آفلاین، اپ بی‌صدا به کسب‌وکارِ لحظه‌ی ورود برمی‌گشت.
+      const currentRefresh = isDesktop && bridge?.currentRefreshToken ? await bridge.currentRefreshToken() : null
+      const res = await switchTenant(token, target.tenant_id, currentRefresh)
       storeToken(res.access_token)
+      if (isDesktop && bridge?.persistSession && res.refresh_token) {
+        //: me برای مستأجرِ تازه — بازخوانیِ خودِ صفحه (چند خط پایین‌تر) هم همین
+        //: را می‌گیرد، ولی نشستِ ذخیره‌شده باید *قبل* از reload به‌روز باشد.
+        const meRes = await fetchMe(res.access_token).catch(() => null)
+        await bridge.persistSession(res.access_token, res.refresh_token, meRes)
+      }
       //: کش پیش از بارِ دوباره پاک می‌شود، وگرنه صفحه‌ی تازه همان داده‌ی قبلی را
       //: از دیسک می‌خوانَد.
       if (isDesktop && bridge?.tenantClearCaches) {

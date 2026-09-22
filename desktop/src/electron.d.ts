@@ -76,8 +76,31 @@ export interface PosTerminalBridge {
   serialPorts?: () => Promise<{ path: string; label: string }[]>
 }
 
+/** نشستِ ذخیره‌شده‌ی محلی — `me` همان پاسخِ خامِ `/api/auth/me` است. */
+export interface StoredSession {
+  access_token: string
+  refresh_token: string
+  me: unknown
+}
+
+/**
+ * نتیجه‌ی بازیابیِ نشست در بدو اجرا:
+ * - `null` — نشستی نبود، یا رفرش با ۴۰۱ِ صریح رد شد (باید صفحه‌ی ورود بیاید).
+ * - `offline:false` — آنلاین، توکن‌ها و `me` تازه‌اند.
+ * - `offline:true` — قطعیِ شبکه؛ آخرین نشستِ ذخیره‌شده برگشته، دست‌نخورده.
+ */
+export type RestoreSessionResult = { session: StoredSession; offline: boolean } | null
+
 export interface CubitaBridge {
   setAuthToken: (token: string | null) => Promise<void>
+  /** بعد از ورود/ثبت‌نام/تعیینِ رمز/سوییچِ کسب‌وکار — نشستِ آفلاینِ کامل را ذخیره می‌کند. */
+  persistSession: (access: string, refresh: string, me: unknown) => Promise<void>
+  /** بدو اجرا: یک تلاشِ خاموشِ رفرش؛ نتیجه هرگز نشستِ معتبر را با خطای شبکه پاک نمی‌کند. */
+  restoreSession: () => Promise<RestoreSessionResult>
+  /** خروجِ دستی: ابطالِ سمتِ سرور (بهترین‌تلاش) + پاک‌کردنِ نشستِ محلی. */
+  clearSession: () => Promise<void>
+  /** رفرشِ فعلی — فقط برای دادن به switch-tenant (تا نشستِ آفلاین هم سوییچ کند). */
+  currentRefreshToken: () => Promise<string | null>
   pullAll: () => Promise<void>
   pushOutbox: () => Promise<{ pushed: number; failed: number }>
   queueJournalEntry: (payload: unknown) => Promise<string>

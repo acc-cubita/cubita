@@ -3,6 +3,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 // تنها سطح دسترسی مجاز renderer به دنیای بیرون: چند فراخوانی IPC مشخص، نه دسترسی خام به Node/فایل‌سیستم.
 contextBridge.exposeInMainWorld('cubita', {
   setAuthToken: (token: string | null) => ipcRenderer.invoke('auth:setToken', token),
+  // نشستِ آفلاین — بارِ اول یوزر/پسورد، از آن به بعد اپ خودش وارد می‌ماند.
+  persistSession: (access: string, refresh: string, me: unknown) =>
+    ipcRenderer.invoke('auth:persistSession', access, refresh, me),
+  restoreSession: () => ipcRenderer.invoke('auth:restoreSession'),
+  clearSession: () => ipcRenderer.invoke('auth:clearSession'),
+  currentRefreshToken: () => ipcRenderer.invoke('auth:currentRefreshToken'),
   pullAll: () => ipcRenderer.invoke('sync:pullAll'),
   pushOutbox: () => ipcRenderer.invoke('sync:pushOutbox'),
   queueJournalEntry: (payload: unknown) => ipcRenderer.invoke('journal:queueEntry', payload),

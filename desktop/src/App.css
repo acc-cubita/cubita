@@ -6958,6 +6958,22 @@ tr.kardex-voided td { color: var(--text-muted); }
   font-size: var(--fs-base);
 }
 .trial-banner--urgent { background: var(--warning-bg); }
+
+/* نوارِ آفلاینِ دسکتاپ — همان قالبِ trial-banner، رنگِ ملایم‌ترِ warning */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--warning-bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+.offline-banner svg { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .offline-banner { font-size: var(--fs-xs, 12px); }
+}
 .trial-banner__text { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .trial-banner__cta {
   display: inline-flex;

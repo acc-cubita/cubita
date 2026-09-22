@@ -244,6 +244,33 @@ def test_changing_password_kills_existing_sessions(db, account, sent_resets):
     assert fresh.get("/api/auth/me").status_code == 200
 
 
+def test_change_password_issues_a_fresh_refresh_too(db, account):
+    """نشستِ آفلاینِ دسکتاپ نباید با تغییرِ رمزِ خودِ کاربر بشکند.
+
+    set_password نسلِ توکن را جلو می‌برد و رفرشِ نسلِ قدیم را باطل می‌کند
+    (services/refresh.py) — پس اگر change-password رفرشِ تازه ندهد، کاربری که
+    رمزش را از داخلِ اپ عوض می‌کند، نشستِ آفلاینش را هم از دست می‌دهد.
+    """
+    tenant, user = account
+    app.dependency_overrides[get_db] = lambda: db
+    client = TestClient(app)
+    client.headers.update({"Authorization": f"Bearer {create_access_token(user, tenant.id)}"})
+
+    res = client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+    assert res.status_code == 200, res.text[:300]
+    new_refresh = res.json().get("refresh_token")
+    assert new_refresh
+
+    # app.dependency_overrides از بالای همین تست ست شده؛ کلاینتِ تازه هم آن را
+    # به ارث می‌برد چون هر دو همان app را می‌سازند.
+    anon = TestClient(app)
+    refreshed = anon.post("/api/auth/refresh", json={"refresh_token": new_refresh})
+    assert refreshed.status_code == 200, refreshed.text[:300]
+
+
 def test_change_password_requires_the_current_one(db, account):
     """بدون این، لپ‌تاپِ بازِ رهاشده یا توکنِ دزدیده‌شده به تصاحب دائمی حساب می‌رسد."""
     tenant, user = account

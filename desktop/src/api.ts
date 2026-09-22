@@ -24,10 +24,17 @@ export const fetchMyTenants = (token: string) =>
  * سرور عضویت را دوباره تأیید می‌کند، پس این مسیر با دستکاریِ کلاینت دور
  * نمی‌خورد. ولی کشِ محلی همچنان مالِ کسب‌وکارِ قبلی است — پاک‌کردنش کارِ
  * فراخواننده است.
+ *
+ * `refreshToken` اختیاری است (فقط دسکتاپ/موبایل نگهش می‌دارند): اگر داده
+ * شود، سرور رفرشِ قبلی را باطل و یکی تازه برای مستأجرِ مقصد صادر می‌کند —
+ * وگرنه نشستِ آفلاینِ کلاینت بعد از سوییچ همچنان به کسب‌وکارِ قبلی برمی‌گشت.
  */
-export const switchTenant = (token: string, tenantId: string) =>
-  authedSend<{ access_token: string; token_type: string }>(
-    token, 'POST', '/api/auth/switch-tenant', { tenant_id: tenantId },
+export const switchTenant = (token: string, tenantId: string, refreshToken?: string | null) =>
+  authedSend<{ access_token: string; token_type: string; refresh_token?: string | null }>(
+    token,
+    'POST',
+    '/api/auth/switch-tenant',
+    { tenant_id: tenantId, refresh_token: refreshToken || undefined },
   )
 
 export interface MeResponse {
@@ -89,7 +96,15 @@ export function can(me: MeResponse, module: string, action: string): boolean {
   return false
 }
 
-export async function login(email: string, password: string): Promise<string> {
+export interface LoginResult {
+  access_token: string
+  //: رفرشِ «همیشه‌واردمانده»ی ۶۰روزه. سرور همیشه صادرش می‌کند؛ نوعش نال‌پذیر است
+  //: چون شِمای بک‌اند (`TokenOut.refresh_token`) عمداً اختیاری مانده (سازگاریِ
+  //: عقب‌رو با پاسخ‌های دیگری که رفرش نمی‌دهند، مثلِ بازیابیِ رمز).
+  refresh_token: string | null
+}
+
+export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -100,7 +115,7 @@ export async function login(email: string, password: string): Promise<string> {
     throw new Error(body.detail ?? 'ورود ناموفق بود')
   }
   const data = await res.json()
-  return data.access_token as string
+  return { access_token: data.access_token as string, refresh_token: (data.refresh_token as string) ?? null }
 }
 
 /** ثبت‌نامِ خودسرویس — کسب‌وکار و مالکش با هم ساخته می‌شوند و حسابِ آزمایشیِ ۱۴روزه می‌گیرند. */
@@ -130,7 +145,7 @@ export async function signup(
   industry: string,
   /** صنفِ ریز. خالی یعنی «اعلام نکرد» و سرور `NULL` ذخیره می‌کند. */
   trade?: string,
-): Promise<string> {
+): Promise<LoginResult> {
   const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,7 +164,7 @@ export async function signup(
     throw new Error(body.detail ?? 'ثبت‌نام ناموفق بود')
   }
   const data = await res.json()
-  return data.access_token as string
+  return { access_token: data.access_token as string, refresh_token: (data.refresh_token as string) ?? null }
 }
 
 export async function fetchMe(token: string): Promise<MeResponse> {
@@ -4694,10 +4709,12 @@ export const setMemberActive = (token: string, membershipId: string, active: boo
   authedSend<Member>(token, 'PATCH', `/api/members/${membershipId}/status`, { active })
 
 export const changePassword = (token: string, currentPassword: string, newPassword: string) =>
-  authedSend<{ access_token: string }>(token, 'POST', '/api/auth/change-password', {
-    current_password: currentPassword,
-    new_password: newPassword,
-  })
+  authedSend<{ access_token: string; refresh_token?: string | null }>(
+    token,
+    'POST',
+    '/api/auth/change-password',
+    { current_password: currentPassword, new_password: newPassword },
+  )
 
 /** ویرایشِ پروفایلِ خودِ کاربر. تغییرِ ایمیل به `current_password` نیاز دارد. */
 export interface ProfileUpdate {

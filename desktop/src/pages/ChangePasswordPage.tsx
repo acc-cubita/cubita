@@ -87,8 +87,10 @@ export function ChangePasswordPage({
 }: {
   token: string
   me: MeResponse
-  /** توکنِ تازه‌ی سرور را در نشستِ برنامه می‌نشاند تا کاربر بیرون نیفتد. */
-  onTokenRenewed?: (token: string) => void
+  /** توکنِ تازه‌ی سرور را در نشستِ برنامه می‌نشاند تا کاربر بیرون نیفتد.
+   *  رفرش هم می‌آید چون تغییرِ رمز نسلِ توکن را جلو می‌برد و رفرشِ آفلاینِ
+   *  قبلی را باطل می‌کند — بدونِ این پارامتر، نشستِ آفلاینِ دسکتاپ می‌شکست. */
+  onTokenRenewed?: (token: string, refreshToken?: string | null) => void
 }) {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -140,7 +142,7 @@ export function ChangePasswordPage({
       setConfirm('')
       setDone(true)
       // بدونِ این، توکنِ فعلی همین حالا باطل شده و اولین کلیکِ بعدی ۴۰۱ می‌گرفت.
-      onTokenRenewed?.(res.access_token)
+      onTokenRenewed?.(res.access_token, res.refresh_token)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     } finally {
