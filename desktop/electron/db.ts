@@ -61,6 +61,20 @@ export function initLocalDb(): Database.Database {
       name TEXT NOT NULL,
       bank_name TEXT NOT NULL
     );
+
+    -- نشستِ ورود — تنها راهِ اپِ دسکتاپ برای زنده‌ماندن بدونِ اینترنت در بدو اجرا.
+    -- تا امروز توکن فقط متغیرِ حافظه‌ی main.ts بود (authToken)، پس با هر بازکردنِ
+    -- اپ صفر می‌شد و صفحه‌ی ورود می‌آمد — آنلاین یا آفلاین، فرقی نداشت. یک ردیفِ
+    -- ثابت (id=1) کافی است چون هر نصبِ دسکتاپ یک‌بار یک کاربر را نگه می‌دارد.
+    -- me_json کشِ آخرین پاسخِ /api/auth/me است تا داشبورد بدونِ شبکه هم چیزی
+    -- برای نمایش داشته باشد؛ authSession.ts مالکِ خواندن/نوشتنِ این جدول است.
+    CREATE TABLE IF NOT EXISTS session (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      me_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   for (const table of OUTBOX_TABLES) db.exec(outboxTableDdl(table))

@@ -9,6 +9,7 @@ import { Dashboard } from './components/Dashboard'
 import { TitleBar } from './components/TitleBar'
 import { isElectron } from './platform'
 import { UpdateBanner } from './components/UpdateBanner'
+import { OfflineBanner } from './components/OfflineBanner'
 import { SubscriptionBanner } from './components/SubscriptionBanner'
 import { TrialBanner } from './components/TrialBanner'
 import { TrialExpiredScreen } from './components/TrialExpiredScreen'
@@ -56,21 +57,37 @@ export default function App() {
   // ذخیره‌شده را نادیده می‌گیریم تا آن صفحه مقدم بماند — وگرنه بازیابیِ جلسه، بازدیدکننده‌ی
   // واردشده را مستقیم به داشبورد می‌برد و فرمِ ثبت‌نام/ورود هرگز باز نمی‌شود. توکن در
   // localStorage دست‌نخورده می‌ماند (پاک نمی‌شود)، فقط برای رندرِ اولیه کنار گذاشته می‌شود.
+  // Electron هیچ‌وقت توکن را با loadStoredToken بازیابی نمی‌کند (آن مسیر عمداً
+  // فقط وب است، پایینِ همین فایل توضیح داده شده) — نشستش با یک IPC آسنکرون
+  // (restoreSession) در افکتِ زیر بازیابی می‌شود، پس این‌جا همیشه null شروع می‌کند.
   const forceAuthScreen = pending != null || wantsSignup()
-  const [token, setToken] = useState<string | null>(() => (forceAuthScreen ? null : loadStoredToken()))
+  const [token, setToken] = useState<string | null>(() =>
+    forceAuthScreen || isElectron ? null : loadStoredToken(),
+  )
   const [me, setMe] = useState<MeResponse | null>(null)
-  // توکنِ بازیابی‌شده باید با سرور اعتبارسنجی شود (fetchMe)؛ تا آن زمان به‌جای فلاش‌خوردنِ
-  // صفحه‌ی ورود، یک اسپلشِ کوتاه نشان می‌دهیم.
-  const [restoring, setRestoring] = useState<boolean>(() => !forceAuthScreen && !!loadStoredToken())
+  // آفلاینِ دسکتاپ: true یعنی نشستِ نمایش‌داده‌شده از کشِ محلی آمده و آخرین
+  // تلاشِ رفرشِ خاموش به قطعیِ شبکه خورده، نه اینکه چیزی نامعتبر است.
+  const [offline, setOffline] = useState(false)
+  // توکنِ بازیابی‌شده باید با سرور اعتبارسنجی شود؛ تا آن زمان به‌جای فلاش‌خوردنِ
+  // صفحه‌ی ورود، یک اسپلشِ کوتاه نشان می‌دهیم. Electron همیشه یک تلاش می‌کند —
+  // حتی بدونِ نشستِ ذخیره‌شده، چون خودِ IPC این را سریع و بدونِ شبکه می‌فهمد.
+  const [restoring, setRestoring] = useState<boolean>(() => {
+    if (forceAuthScreen) return false
+    return isElectron || !!loadStoredToken()
+  })
   // درِ ورودیِ ترایال (demo.cubita.ir) با VITE_SIGNUP_FIRST=true مستقیم روی صفحه‌ی
   // ثبت‌نام باز می‌شود؛ اپِ اصلی (acc.cubita.ir) روی ورود.
   const [authView, setAuthView] = useState<'login' | 'signup'>(
     import.meta.env.VITE_SIGNUP_FIRST === 'true' || wantsSignup() ? 'signup' : 'login',
   )
 
-  // با یک توکنِ بازیابی‌شده اما بدونِ `me`، کاربر را از سرور می‌خوانیم. اگر توکن باطل/منقضی
-  // شده باشد، پاکش می‌کنیم و به صفحه‌ی ورود برمی‌گردیم (بدونِ حلقه‌ی بی‌پایان).
+  // وب: با یک توکنِ بازیابی‌شده از localStorage اما بدونِ `me`، کاربر را از سرور
+  // می‌خوانیم. اگر توکن باطل/منقضی شده باشد، پاکش می‌کنیم و به صفحه‌ی ورود
+  // برمی‌گردیم. **این مسیر عمداً برای Electron اجرا نمی‌شود** — افکتِ بعدی
+  // مسئولِ آن است؛ اگر این‌جا هم اجرا می‌شد، با تفاوتِ زمانِ این دو افکتِ
+  // آسنکرون، صفحه‌ی ورود یک لحظه (نادرست) روی نشستِ آفلاینِ معتبر ظاهر می‌شد.
   useEffect(() => {
+    if (isElectron) return
     if (!token || me) {
       setRestoring(false)
       return
@@ -96,10 +113,39 @@ export default function App() {
     }
   }, [token, me, restoring])
 
+  // Electron: بازیابیِ خاموشِ نشست از دیسکِ محلی — بدونِ نیازِ شبکه برای اصلِ
+  // ورود. رفرشِ خاموش را main process می‌زند (authSession.ts)؛ خطای شبکه در
+  // آن‌جا هرگز نشست را پاک نمی‌کند، فقط `offline:true` برمی‌گرداند. تنها یک‌بار
+  // در بدو اجرا اجرا می‌شود؛ اگر لینکِ بازیابیِ رمز/درِ ترایال باز بود، این
+  // بازیابی عمداً رد می‌شود — دقیقاً همان تصمیمی که وب با forceAuthScreen در
+  // مقدارِ اولیه‌ی token می‌گیرد.
+  useEffect(() => {
+    if (!isElectron || forceAuthScreen) return
+    let cancelled = false
+    window.cubita
+      .restoreSession()
+      .then((result) => {
+        if (cancelled) return
+        if (result) {
+          setToken(result.session.access_token)
+          setMe(result.session.me as MeResponse)
+          setOffline(result.offline)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- عمداً یک‌بار؛ forceAuthScreen مقدارِ لحظه‌ی mount را می‌گیرد، هم‌الگو با مقداردهیِ اولیه‌ی token در وب.
+  }, [])
+
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
     storeToken(newToken)
     setMe(newMe)
+    setOffline(false)
     setPending(null)
     setRestoring(false)
     setAuthView('login')
@@ -109,7 +155,9 @@ export default function App() {
     setToken(null)
     storeToken(null)
     setMe(null)
+    setOffline(false)
     setRestoring(false)
+    if (isElectron) void window.cubita.clearSession()
   }
 
   return (
@@ -141,6 +189,7 @@ export default function App() {
           <TrialExpiredScreen onLogout={handleLogout} />
         ) : (
           <>
+            {isElectron && offline && <OfflineBanner />}
             {/* برای حسابِ آزمایشی فقط نوارِ ترایال؛ نوارِ عمومیِ اشتراک تکراری و گیج‌کننده بود. */}
             {me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}
             <Dashboard
@@ -148,9 +197,13 @@ export default function App() {
               me={me}
               onLogout={handleLogout}
               onMeUpdated={setMe}
-              onTokenRenewed={(t) => {
+              onTokenRenewed={(t, refreshToken) => {
                 setToken(t)
                 storeToken(t)
+                // تغییرِ رمز نسلِ توکن را جلو می‌برد و رفرشِ آفلاینِ قبلی را
+                // باطل می‌کند؛ بدونِ ذخیره‌ی تازه، نشستِ آفلاینِ دسکتاپ همین‌جا
+                // می‌شکست — درست همان چیزی که این کل تغییر قرار بود جلویش را بگیرد.
+                if (isElectron && refreshToken) void window.cubita.persistSession(t, refreshToken, me)
               }}
             />
           </>

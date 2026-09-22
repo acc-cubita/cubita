@@ -413,7 +413,7 @@ export function Dashboard({
   onLogout: () => void
   onMeUpdated: (me: MeResponse) => void
   /** توکنِ تازه‌ی سرور (مثلاً پس از تغییرِ رمز) را در نشستِ برنامه می‌نشاند. */
-  onTokenRenewed?: (token: string) => void
+  onTokenRenewed?: (token: string, refreshToken?: string | null) => void
 }) {
   const [page, setPage] = useState<PageKey>('overview')
   // تبِ فعالِ صفحه (زیرمنوی سطح‌سوم). null یعنی تبِ پیش‌فرض (اولین). با NavSectionContext
