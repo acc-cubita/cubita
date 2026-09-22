@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.4.7",
+  "version": "1.4.8",
   "description": "کوبیتا — نرم‌افزار حسابداری آفلاین/آنلاین",
   "author": "ipnetcity.ir",
   "main": "dist-electron/main.js",
@@ -13,8 +13,8 @@
     "test:watch": "vitest",
     "lint": "oxlint",
     "preview": "vite preview",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "pack": "npm run build && npm run rebuild-native && electron-builder --dir",
+    "dist": "npm run build && npm run rebuild-native && electron-builder",
     "publish-update": "node scripts/publish-update.mjs",
     "verify-update-channel": "electron scripts/verify-update-channel.cjs",
     "verify-pages": "node scripts/verify-pages.mjs"
