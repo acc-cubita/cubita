@@ -14,6 +14,7 @@ import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
 import { buildNav } from '../lib/navModel'
 import { TopNav } from './TopNav'
+import { QuickAccessBar } from './QuickAccessBar'
 import { useTheme } from '../lib/theme'
 import { NavSectionContext } from './navContext'
 import { PayrollPanel } from './PayrollPanel'
@@ -943,6 +944,14 @@ export function Dashboard({
             onSync={isElectron ? () => handleSync() : undefined}
             syncing={syncing}
             syncStatus={syncStatus}
+          />
+          <QuickAccessBar
+            token={token}
+            me={me}
+            onMeUpdated={onMeUpdated}
+            onNavigate={navigate}
+            activePage={page}
+            activeSection={section}
           />
           {/* دو کارت باید کنارِ محتوا بنشینند، نه زیرِ نوار؛ پس یک ردیفِ افقی زیرِ نوار. */}
           <div className="app-body">

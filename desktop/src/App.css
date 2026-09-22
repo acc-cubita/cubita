@@ -4427,6 +4427,87 @@ button.topnav-org:hover {
   }
 }
 
+/* ── نوارِ میان‌برِ افقی (QuickAccessBar) — زیرِ TopNav، همان کارت‌های داشبورد ──
+   یک ردیفِ کوتاه و ساکن؛ فقط ناحیه‌ی چیپ‌ها اسکرولِ افقی می‌گیرد، نه کلِ نوار،
+   وگرنه دکمه‌ی مدیریت هم با هر اسکرول از دید بیرون می‌رفت. */
+.quick-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  padding: 6px clamp(10px, 1.5vw, 18px);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.quick-bar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.quick-bar-scroll::-webkit-scrollbar {
+  display: none;
+}
+.quick-bar-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2, transparent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.quick-bar-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-h);
+}
+.quick-bar-chip.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.quick-bar-manage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.quick-bar-manage:hover {
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  color: var(--text-h);
+}
+@media (max-width: 760px) {
+  .quick-bar {
+    padding: 5px 10px;
+  }
+  .quick-bar-chip {
+    padding: 5px 10px;
+    font-size: var(--fs-xs, 12px);
+  }
+  .quick-bar-chip span:last-child {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 /* ── محدودیت‌های سفارش (فرمِ کاتالوگ) + نشانه در کاتالوگِ فروشگاه ──────── */
 .mp-limits {
   border: 1px solid var(--border-strong);

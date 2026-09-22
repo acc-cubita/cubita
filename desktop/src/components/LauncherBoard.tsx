@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { LayoutGrid, Rocket } from 'lucide-react'
 
 import { SectionCard } from './SectionCard'
@@ -6,8 +6,9 @@ import { EmptyState } from './EmptyState'
 import { CountBadge } from './form/FormKit'
 import { LauncherPicker } from './LauncherPicker'
 import { LaunchIcon } from './LaunchIcon'
-import { buildLaunchers, cardHint, resolveCards } from '../lib/launchers'
-import { resetDashboardCards, saveDashboardCards, type MeResponse } from '../api'
+import { cardHint } from '../lib/launchers'
+import { useDashboardCards } from '../lib/useDashboardCards'
+import type { MeResponse } from '../api'
 import type { PageKey } from '../lib/navModel'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -36,44 +37,12 @@ export function LauncherBoard({
   onNavigate: (page: PageKey, section?: string) => void
 }) {
   const [picking, setPicking] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const groups = useMemo(() => buildLaunchers(me), [me])
-  const cards = useMemo(() => resolveCards(groups, me.dashboard_cards), [groups, me.dashboard_cards])
+  const { groups, cards, busy, error, setError, confirm, reset } = useDashboardCards(token, me, onMeUpdated)
 
   //: فهرستِ تیک‌خورده‌ی انتخاب‌گر باید همان چیزی باشد که *روی صفحه* است — نه فهرستِ
   //: خامِ ذخیره‌شده. کاربری که هنوز انتخابی نکرده، پیش‌فرض‌ها را تیک‌خورده می‌بیند و
   //: می‌تواند از همان‌جا کم و زیادشان کند.
   const selected = cards.map((t) => t.id)
-
-  async function confirm(ids: string[]) {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await saveDashboardCards(token, ids)
-      onMeUpdated({ ...me, dashboard_cards: res.cards })
-      setPicking(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'ذخیره‌ی کارت‌ها ناموفق بود')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function reset() {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await resetDashboardCards(token)
-      onMeUpdated({ ...me, dashboard_cards: res.cards })
-      setPicking(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'بازگرداندن به پیش‌فرض ناموفق بود')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <>
@@ -123,8 +92,8 @@ export function LauncherBoard({
             setPicking(false)
             setError(null)
           }}
-          onConfirm={(ids) => void confirm(ids)}
-          onReset={() => void reset()}
+          onConfirm={(ids) => void confirm(ids).then((ok) => { if (ok) setPicking(false) })}
+          onReset={() => void reset().then((ok) => { if (ok) setPicking(false) })}
         />
       )}
     </>
