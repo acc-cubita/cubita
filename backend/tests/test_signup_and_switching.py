@@ -63,6 +63,24 @@ def test_signup_creates_a_working_business(anon_client, db):
     assert me.json()["tenant_name"] == "کسب‌وکار تازه"
 
 
+def test_signup_issues_a_refresh_token_too(anon_client, db):
+    """اولین ورودِ یوزر/پسورد همین ثبت‌نام است — نشستِ آفلاینِ چندروزه باید از
+    همین لحظه شروع شود، نه فقط از دومین ورودِ به بعد (login)."""
+    email = f"refresh-signup-{uuid.uuid4().hex[:8]}@cubita-test.ir"
+    res = anon_client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "کسب‌وکار رفرش",
+            "owner_name": "مالک",
+            "email": email,
+            "password": "AStrongPassword2026",
+            "code": issue_email_code(db, email),
+        },
+    )
+    assert res.status_code == 201, res.text[:300]
+    assert res.json()["refresh_token"]
+
+
 def test_a_regular_business_owner_is_not_a_platform_admin(client, user):
     """تب «خریدهای سایت تجاری» کنترل‌پنل فروش خودِ کوبیتاست، نه ویژگی مشتری.
 
@@ -219,6 +237,56 @@ def test_switching_changes_which_ledger_is_visible(accountant_with_two_businesse
     me = switched.get("/api/auth/me").json()
     assert me["tenant_id"] == str(tenant_b.id)
     assert me["role_key"] == "accountant", "نقش باید مالِ همان کسب‌وکار باشد، نه نقش کسب‌وکار قبلی"
+
+
+def test_switching_rotates_refresh_to_the_target_tenant(accountant_with_two_businesses, anon_client, db):
+    """نشستِ آفلاینِ بلندمدت (دسکتاپ/موبایل) باید سوییچ را واقعاً دنبال کند.
+
+    قبل از این تغییر، switch-tenant فقط access را عوض می‌کرد و رفرش دست‌نخورده
+    می‌ماند — یعنی کلاینتی که رفرش را نگه می‌داشت، بعد از سوییچ و یک بازیابیِ
+    آفلاین، بی‌صدا به کسب‌وکارِ لحظه‌ی ورود برمی‌گشت، نه کسب‌وکاری که سوییچ کرده بود.
+    """
+    user, tenant_a, tenant_b = accountant_with_two_businesses
+
+    login = anon_client.post("/api/auth/login", json={"email": user.email, "password": "AStrongPassword2026"})
+    assert login.status_code == 200, login.text[:300]
+    old_refresh = login.json()["refresh_token"]
+    assert old_refresh
+
+    # anon_client از قبل override دیتابیس را روی app گذاشته؛ کلاینتِ تازه هم آن
+    # را به ارث می‌برد چون هر دو همان app را می‌سازند.
+    switch_client = TestClient(app)
+    switch_client.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
+    res = switch_client.post(
+        "/api/auth/switch-tenant",
+        json={"tenant_id": str(tenant_b.id), "refresh_token": old_refresh},
+    )
+    assert res.status_code == 200, res.text[:300]
+    new_refresh = res.json()["refresh_token"]
+    assert new_refresh and new_refresh != old_refresh
+
+    # رفرشِ قدیمی باطل شده — نشستِ آفلاینی که هنوز آن را دارد دیگر با آن زنده نمی‌شود.
+    assert anon_client.post("/api/auth/refresh", json={"refresh_token": old_refresh}).status_code == 401
+
+    # رفرشِ تازه به tenant_b گره خورده، نه tenant_a (کسب‌وکارِ لحظه‌ی ورود).
+    refreshed = anon_client.post("/api/auth/refresh", json={"refresh_token": new_refresh})
+    assert refreshed.status_code == 200, refreshed.text[:300]
+    me_client = TestClient(app)
+    me_client.headers.update({"Authorization": f"Bearer {refreshed.json()['access_token']}"})
+    me = me_client.get("/api/auth/me").json()
+    assert me["tenant_id"] == str(tenant_b.id)
+
+
+def test_switching_without_a_refresh_token_still_issues_one(accountant_with_two_businesses, db):
+    """کلاینتِ وب رفرش نمی‌فرستد (فیلد اختیاری است) — سوییچ نباید رویش بشکند،
+    و پاسخ باید یک رفرشِ تازه‌ی معتبر برای مستأجرِ مقصد بدهد تا کلاینتی که
+    می‌خواهد از این پس نگهش دارد بتواند."""
+    user, tenant_a, tenant_b = accountant_with_two_businesses
+    client = authed(db, user, tenant_a.id)
+
+    res = client.post("/api/auth/switch-tenant", json={"tenant_id": str(tenant_b.id)})
+    assert res.status_code == 200, res.text[:300]
+    assert res.json()["refresh_token"]
 
 
 def test_cannot_switch_into_a_business_you_do_not_belong_to(db, user, tenant_id):

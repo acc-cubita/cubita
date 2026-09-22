@@ -13,8 +13,9 @@ class LoginIn(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    #: فقط برای «همیشه‌واردمانده»ی اپ موبایل پر می‌شود (مسیرِ login). وب/دسکتاپ آن را
-    #: نادیده می‌گیرند. accessِ ۸ساعته که منقضی شد، اپ با این، بی‌ورودِ دوباره refresh می‌کند.
+    #: برای «همیشه‌واردمانده» پر می‌شود (مسیرِ login/switch-tenant). موبایل و دسکتاپ
+    #: هر دو نگهش می‌دارند؛ وب هنوز نادیده می‌گیرد (نشستِ مرورگر با localStorage کفایت
+    #: می‌کند). accessِ ۸ساعته که منقضی شد، اپ با این، بی‌ورودِ دوباره refresh می‌کند.
     refresh_token: str | None = None
 
 
@@ -103,6 +104,10 @@ class TenantMembershipOut(BaseModel):
 
 class SwitchTenantIn(BaseModel):
     tenant_id: UUID
+    #: رفرشِ فعلیِ کلاینت، اگر دارد (دسکتاپ/موبایل). فرستادنش باعث می‌شود سرور
+    #: آن را باطل و یک رفرشِ تازه برای مستأجرِ مقصد صادر کند — وگرنه نشستِ
+    #: آفلاینِ کلاینت بعد از سوییچ به کسب‌وکارِ قبلی برمی‌گشت. وب نمی‌فرستد.
+    refresh_token: str | None = None
 
 
 class ProfileUpdateIn(BaseModel):
