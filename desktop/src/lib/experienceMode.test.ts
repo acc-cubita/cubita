@@ -37,13 +37,13 @@ describe('رجیستریِ حالت‌ها', () => {
 })
 
 describe('ماندگاری', () => {
-  it('پیش‌فرض ساده است — رفتارِ امروز نباید بشکند', () => {
-    expect(getStoredMode()).toBe('simple')
+  it('پیش‌فرض حسابدار است — تصمیمِ ۰۱۸۳', () => {
+    expect(getStoredMode()).toBe('accountant')
   })
 
   it('مقدارِ ناشناخته به پیش‌فرض برمی‌گردد', () => {
     store.set('cubita.experience', 'wizard')
-    expect(getStoredMode()).toBe('simple')
+    expect(getStoredMode()).toBe('accountant')
   })
 
   it('نبودِ localStorage برنامه را نمی‌شکند', () => {
@@ -55,44 +55,44 @@ describe('ماندگاری', () => {
         throw new Error('پنجره‌ی ناشناس')
       },
     }
-    expect(getStoredMode()).toBe('simple')
-    expect(() => setExperience('accountant')).not.toThrow()
+    expect(getStoredMode()).toBe('accountant')
+    expect(() => setExperience('simple')).not.toThrow()
   })
 })
 
 describe('تغییرِ حالت', () => {
   it('صفتِ سند و ذخیره‌ی محلی را می‌نشاند', () => {
-    setExperience('accountant')
-    expect(attrs.get('data-experience')).toBe('accountant')
-    expect(store.get('cubita.experience')).toBe('accountant')
+    setExperience('simple')
+    expect(attrs.get('data-experience')).toBe('simple')
+    expect(store.get('cubita.experience')).toBe('simple')
   })
 
   it('به سرور می‌فرستد', async () => {
     const persist = vi.fn().mockResolvedValue({})
-    setExperience('accountant', persist)
-    expect(persist).toHaveBeenCalledWith('accountant')
+    setExperience('simple', persist)
+    expect(persist).toHaveBeenCalledWith('simple')
   })
 
   it('حالتِ تکراری هیچ کاری نمی‌کند — نه رندر، نه درخواست', () => {
     const persist = vi.fn().mockResolvedValue({})
-    setExperience('simple', persist)
+    setExperience('accountant', persist)
     expect(persist).not.toHaveBeenCalled()
   })
 
   it('شکستِ ذخیره‌ی سرور انتخابِ کاربر را پس نمی‌گیرد', async () => {
     const persist = vi.fn().mockRejectedValue(new Error('شبکه'))
-    setExperience('accountant', persist)
+    setExperience('simple', persist)
     await Promise.resolve()
     //: کاربر همین الان انتخابش را دیده؛ پس‌گرفتنِ بی‌صدا بدتر از ترجیحِ
     //: ذخیره‌نشده است.
-    expect(attrs.get('data-experience')).toBe('accountant')
+    expect(attrs.get('data-experience')).toBe('simple')
   })
 })
 
 describe('پذیرشِ مقدارِ سرور', () => {
   it('مقدارِ معتبر را می‌نشاند', () => {
-    adoptServerExperience('accountant')
-    expect(attrs.get('data-experience')).toBe('accountant')
+    adoptServerExperience('simple')
+    expect(attrs.get('data-experience')).toBe('simple')
   })
 
   it('مقدارِ نامعتبر یا تهی را نادیده می‌گیرد', () => {

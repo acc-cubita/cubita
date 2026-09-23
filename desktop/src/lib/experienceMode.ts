@@ -43,7 +43,11 @@ export const EXPERIENCES: ExperienceDef[] = [
 ]
 
 const KEY = 'cubita.experience'
-const DEFAULT_MODE: ExperienceMode = 'simple'
+//: پیش‌فرض در مهاجرتِ ۰۱۸۳ از `simple` به `accountant` رفت و باید با
+//: `User.experience_mode`ِ بک‌اند یکی بماند: این مقدار همان چیزی است که پیش از
+//: رسیدنِ پاسخِ `GET /api/auth/me` روی صفحه می‌نشیند، پس ناهمخوانی یعنی «پرشِ
+//: تراکم» در اولین ثانیه‌ی هر ورود.
+const DEFAULT_MODE: ExperienceMode = 'accountant'
 
 function isMode(v: unknown): v is ExperienceMode {
   return v === 'simple' || v === 'accountant'

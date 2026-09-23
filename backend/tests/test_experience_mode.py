@@ -9,28 +9,33 @@
 from app.models.user import EXPERIENCE_MODES, User
 
 
-def test_default_is_simple(db, user, client):
-    """پیش‌فرض باید رفتارِ امروز باشد؛ هر کاربرِ موجود فرمِ کلاسیک را می‌بیند."""
-    assert user.experience_mode == "simple"
-    assert client.get("/api/auth/me").json()["experience_mode"] == "simple"
+def test_default_is_accountant(db, user, client):
+    """پیش‌فرض از ۰۱۸۳ «حسابدار» است — تصمیمِ محصول، نه رفعِ باگ.
 
-
-def test_switch_to_accountant(db, user, client):
-    res = client.patch("/api/auth/me", json={"experience_mode": "accountant"})
-
-    assert res.status_code == 200
-    assert res.json()["experience_mode"] == "accountant"
-    db.refresh(user)
+    ستونِ دیتابیس و پیش‌فرضِ اسکیما **باید یکی باشند**: اگر فقط یکی‌شان عوض
+    می‌شد، کاربرِ تازه در دیتابیس `accountant` می‌گرفت ولی `GET /api/auth/me`
+    تا اولین ذخیره چیزِ دیگری برمی‌گرداند.
+    """
     assert user.experience_mode == "accountant"
+    assert client.get("/api/auth/me").json()["experience_mode"] == "accountant"
 
 
-def test_switch_back(db, user, client):
-    client.patch("/api/auth/me", json={"experience_mode": "accountant"})
+def test_switch_to_simple(db, user, client):
     res = client.patch("/api/auth/me", json={"experience_mode": "simple"})
 
+    assert res.status_code == 200
     assert res.json()["experience_mode"] == "simple"
     db.refresh(user)
     assert user.experience_mode == "simple"
+
+
+def test_switch_back(db, user, client):
+    client.patch("/api/auth/me", json={"experience_mode": "simple"})
+    res = client.patch("/api/auth/me", json={"experience_mode": "accountant"})
+
+    assert res.json()["experience_mode"] == "accountant"
+    db.refresh(user)
+    assert user.experience_mode == "accountant"
 
 
 def test_unknown_mode_is_rejected(db, user, client):
@@ -39,19 +44,19 @@ def test_unknown_mode_is_rejected(db, user, client):
 
     assert res.status_code == 422
     db.refresh(user)
-    assert user.experience_mode == "simple"
+    assert user.experience_mode == "accountant"
 
 
 def test_no_password_needed(db, user, client):
     """برخلافِ ایمیل، رمزِ فعلی نمی‌خواهد: نه هویت است نه مجوز."""
-    res = client.patch("/api/auth/me", json={"experience_mode": "accountant"})
+    res = client.patch("/api/auth/me", json={"experience_mode": "simple"})
     assert res.status_code == 200
 
 
 def test_other_fields_untouched(db, user, client):
     """ویرایشِ حالت نباید نام یا ایمیل را تکان دهد."""
     before_name, before_email = user.name, user.email
-    client.patch("/api/auth/me", json={"experience_mode": "accountant"})
+    client.patch("/api/auth/me", json={"experience_mode": "simple"})
     db.refresh(user)
     assert (user.name, user.email) == (before_name, before_email)
 
@@ -60,9 +65,12 @@ def test_mode_does_not_change_permissions(db, user, client):
     """**مهم‌ترین تستِ این پرونده.** حالت فقط نمایش است.
 
     اگر روزی کسی حالت را به دسترسی گره بزند، این‌جا قرمز می‌شود.
+
+    عمداً به `simple` سوییچ می‌کند و نه `accountant`: از ۰۱۸۳ حسابدار خودش
+    پیش‌فرض است و سوییچ به آن یک no-op می‌شد که هیچ‌چیز را نمی‌سنجید.
     """
     before = client.get("/api/auth/me").json()
-    client.patch("/api/auth/me", json={"experience_mode": "accountant"})
+    client.patch("/api/auth/me", json={"experience_mode": "simple"})
     after = client.get("/api/auth/me").json()
 
     assert after["permissions"] == before["permissions"]
