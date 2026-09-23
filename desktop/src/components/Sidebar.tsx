@@ -1,7 +1,8 @@
 import { LogOut, ChevronDown } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { MODULE_SECTIONS } from './moduleSections'
-import { buildNav, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
+import { buildNav, orderNavGroups, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
+import { useExperienceMode } from '../lib/experienceMode'
 
 // PageKey از navModel می‌آید؛ برای سازگاریِ importهای موجود (Dashboard/Tabs/…) از این‌جا هم صادر می‌شود.
 export type { PageKey } from '../lib/navModel'
@@ -38,12 +39,16 @@ export function Sidebar({
   onClose?: () => void
 }) {
   // ناوبری (گروه‌ها + آیتم‌های ثانویه) از منبعِ مشترکِ navModel با گیتِ نقش/نوعِ حساب/ماژول.
-  const { groups, secondary } = buildNav({
+  const { mode } = useExperienceMode()
+  const nav = buildNav({
     tenantKind,
     enabledModules,
     allowedModules,
     isOwner,
   })
+  //: همان ترتیبِ نوارِ بالا — حالت فقط ترتیب را عوض می‌کند، نه محتوا را.
+  const groups = orderNavGroups(nav.groups, mode)
+  const { secondary } = nav
 
   // آکاردئون: فقط یک گروه هم‌زمان باز است تا نوار کوتاه بماند. به‌صورتِ پیش‌فرض،
   // گروهی که صفحه‌ی فعال در آن است باز می‌شود؛ و با تغییرِ صفحه‌ی فعال هم‌گام می‌ماند.

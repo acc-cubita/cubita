@@ -12,7 +12,19 @@
  */
 import { describe, it, expect } from 'vitest'
 
-import { PAGE_MODULE_KEY, buildNav, menuEntryVisible, uniqueNavItems, type PageKey } from './navModel'
+import {
+  MODE_GROUP_LANDING,
+  MODE_GROUP_ORDER,
+  NAV_GROUPS,
+  PAGE_MODULE_KEY,
+  buildNav,
+  groupLanding,
+  menuEntryVisible,
+  orderNavGroups,
+  uniqueNavItems,
+  type PageKey,
+} from './navModel'
+import type { ExperienceMode } from './experienceMode'
 
 //: صفحه‌ی عملیاتِ کاری — در `NAV_GROUPS` است، پس با فیلترِ ناوبری سنجیده می‌شود.
 const WORK_OPS: PageKey = 'assurancehealth'
@@ -115,5 +127,73 @@ describe('fail-openِ عمومیِ گیت', () => {
     //: نتیجه‌اش «دیده‌شدن» است نه «پنهان‌شدن».
     expect(PAGE_MODULE_KEY['profile' as PageKey]).toBeUndefined()
     expect(keys(BASE).has('profile')).toBe(true)
+  })
+})
+
+describe('ترتیبِ منو در هر حالت — UI-01 §۵۲', () => {
+  const MODES: ExperienceMode[] = ['accountant', 'simple']
+  const EVERY = [
+    ...BASE, 'assurance_work', 'manufacturing', 'integration', 'banking', 'payroll', 'fixedassets', 'calendar',
+  ]
+  const headings = (mode: ExperienceMode, modules: string[] = EVERY) =>
+    orderNavGroups(nav(modules).groups, mode).map((g) => g.heading)
+
+  //: شناسه‌ی غلط این‌جا خطا نمی‌دهد: گروهِ ناشناخته فقط رتبه‌ی آخر می‌گیرد و مقصدِ
+  //: ناشناخته بی‌صدا به پیش‌فرض برمی‌گردد. پس باید صریح سنجیده شود.
+  it.each(MODES)('هر نامِ گروه و هر مقصدِ «%s» واقعاً در منو هست', (mode) => {
+    const byHeading = new Map(NAV_GROUPS.map((g) => [g.heading, g]))
+    for (const h of MODE_GROUP_ORDER[mode]) expect(byHeading.has(h), h).toBe(true)
+    for (const [h, key] of Object.entries(MODE_GROUP_LANDING[mode])) {
+      expect(byHeading.get(h)?.items.map((i) => i.key), `${h} ← ${key}`).toContain(key)
+    }
+  })
+
+  it('حسابدار: حسابداری و دریافت و پرداخت بلافاصله بعد از داشبورد', () => {
+    expect(headings('accountant').slice(0, 3)).toEqual(['میزکار', 'حسابداری', 'دریافت و پرداخت'])
+  })
+
+  it('ساده: همان ترتیبِ قبلی، بی هیچ جابه‌جایی', () => {
+    expect(headings('simple')).toEqual(nav(EVERY).groups.map((g) => g.heading))
+  })
+
+  it('بقیه‌ی گروه‌ها در حالتِ حسابدار ترتیبِ نسبیِ خودشان را نگه می‌دارند', () => {
+    const moved = new Set(MODE_GROUP_ORDER.accountant)
+    const rest = (mode: ExperienceMode) => headings(mode).filter((h) => !moved.has(h))
+    expect(rest('accountant')).toEqual(rest('simple'))
+  })
+
+  it('**حالت ≠ مجوز** — با هر ترکیبِ ماژول و نوعِ حساب، هر دو حالت دقیقاً همان صفحه‌ها را نشان می‌دهند', () => {
+    const snapshot = (groups: ReturnType<typeof nav>['groups']) =>
+      groups.map((g) => `${g.heading}:${g.items.map((i) => i.key).join(',')}`).sort()
+    for (const modules of [BASE, EVERY, [], ['overview', 'contacts', 'reports']]) {
+      for (const kind of ['standard', 'distributor', 'retailer']) {
+        for (const isOwner of [false, true]) {
+          const { groups } = buildNav({ tenantKind: kind, enabledModules: modules, allowedModules: modules, isOwner })
+          const label = `${kind}/${modules.length}/${isOwner}`
+          expect(snapshot(orderNavGroups(groups, 'accountant')), label).toEqual(snapshot(groups))
+          expect(snapshot(orderNavGroups(groups, 'simple')), label).toEqual(snapshot(groups))
+        }
+      }
+    }
+  })
+
+  it('بی ماژولِ حسابداری، حالتِ حسابدار گروهی را که نیست نمی‌سازد', () => {
+    //: `reports` هم بیرون است: صفحه‌ی «گزارش‌ها» در همین گروه است و ماژولِ خودش را
+    //: دارد، پس با آن گروه با یک صفحه زنده می‌ماند.
+    const h = headings('accountant', ['overview', 'contacts', 'banking'])
+    expect(h).not.toContain('حسابداری')
+    expect(h.slice(0, 2)).toEqual(['میزکار', 'دریافت و پرداخت'])
+  })
+
+  it('کلیک روی «حسابداری»: حسابدار به سند می‌رود، ساده به پیش‌فرض', () => {
+    const acct = nav(EVERY).groups.find((g) => g.heading === 'حسابداری')!
+    expect(groupLanding(acct, 'accountant')).toBe('journalentry')
+    expect(groupLanding(acct, 'simple')).toBeUndefined()
+  })
+
+  it('مقصدی که این کسب‌وکار نمی‌بیند انتخاب نمی‌شود — به پیش‌فرض برمی‌گردد', () => {
+    const acct = NAV_GROUPS.find((g) => g.heading === 'حسابداری')!
+    const withoutJournal = { ...acct, items: acct.items.filter((i) => i.key !== 'journalentry') }
+    expect(groupLanding(withoutJournal, 'accountant')).toBeUndefined()
   })
 })

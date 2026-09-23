@@ -1,0 +1,98 @@
+// @vitest-environment jsdom
+/**
+ * منوی بالا با حالتِ تجربه عوض می‌شود — در DOMِ واقعی، نه فقط در `orderNavGroups`.
+ *
+ * `navModel.test.ts` ترتیب را می‌سنجد؛ آنچه آن‌جا دیده نمی‌شود این است که **نوار
+ * همان لحظه‌ی عوض‌شدنِ حالت** دوباره چیده شود، و کلیک روی «حسابداری» واقعاً به سند
+ * برود. اولی به اشتراکِ `useSyncExternalStore` بسته است: اگر `TopNav` حالت را یک‌بار
+ * بخواند، کاربر حالت را عوض می‌کند و منو تا رفرش همان می‌ماند — بی هیچ خطایی.
+ */
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { TopNav } from './TopNav'
+import { __resetExperienceForTests, setExperience } from '../lib/experienceMode'
+import type { PageKey } from '../lib/navModel'
+
+//: jsdom `ResizeObserver` ندارد؛ سنجشِ جاشدنِ نوار این‌جا موضوعِ تست نیست.
+class NoopResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+let container: HTMLDivElement
+let root: Root
+let onNavigate: ReturnType<typeof vi.fn<(page: PageKey, section?: string) => void>>
+
+beforeEach(() => {
+  ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+  ;(globalThis as Record<string, unknown>).ResizeObserver = NoopResizeObserver
+  __resetExperienceForTests() // پیش‌فرض: حسابدار
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  onNavigate = vi.fn<(page: PageKey, section?: string) => void>()
+  act(() => {
+    root.render(
+      createElement(TopNav, {
+        active: 'overview',
+        onNavigate,
+        userName: 'آزمون',
+        roleName: 'مالک',
+        businessName: 'نمونه',
+        tenantKind: 'standard',
+        //: خالی یعنی «فیلتر نکن» — همه‌ی گروه‌ها.
+        enabledModules: [],
+        allowedModules: [],
+        onOpenSearch: vi.fn(),
+        onLogout: vi.fn(),
+      }),
+    )
+  })
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  container.remove()
+})
+
+const bar = () =>
+  [...container.querySelectorAll<HTMLButtonElement>('.topnav-menu .topnav-item')].map((b) => b.textContent ?? '')
+
+const click = (label: string) => {
+  const btn = [...container.querySelectorAll<HTMLButtonElement>('.topnav-menu .topnav-item')].find(
+    (b) => b.textContent === label,
+  )
+  expect(btn, label).toBeDefined()
+  act(() => btn!.click())
+}
+
+describe('منوی بالا در هر حالت', () => {
+  it('حسابدار: حسابداری و دریافت و پرداخت بلافاصله بعد از داشبورد', () => {
+    expect(bar().slice(0, 3)).toEqual(['داشبورد', 'حسابداری', 'دریافت و پرداخت'])
+  })
+
+  it('**عوض‌کردنِ حالت، نوار را همان لحظه دوباره می‌چیند** — بی رفرش', () => {
+    const before = bar()
+    act(() => setExperience('simple'))
+    const after = bar()
+
+    expect(after[1]).toBe('مشتریان و فروش')
+    expect(after).not.toEqual(before)
+    //: فقط ترتیب عوض شد، نه محتوا.
+    expect([...after].sort()).toEqual([...before].sort())
+  })
+
+  it('کلیک روی «حسابداری» در حالتِ حسابدار سند را باز می‌کند', () => {
+    click('حسابداری')
+    expect(onNavigate).toHaveBeenCalledWith('journalentry', undefined)
+  })
+
+  it('در حالتِ ساده همان پیش‌فرضِ قبلی — اولین صفحه‌ی گروه', () => {
+    act(() => setExperience('simple'))
+    click('حسابداری')
+    expect(onNavigate).toHaveBeenCalledWith('acctchart', undefined)
+  })
+})
