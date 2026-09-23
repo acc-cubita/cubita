@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AccountCache } from '../electron.d'
 import {
   createJournalEntryDirect,
@@ -14,6 +14,9 @@ import {
 import { isElectron } from '../platform'
 import { todayIso } from './jalali'
 import { usePersistentState } from './usePersistentState'
+//: کنش‌های ردیف عمداً بیرون از این هوک‌اند تا بدونِ DOM تست شوند
+//: (`journalLineOps.test.ts`). محیطِ vitest این پروژه `node` است.
+import * as ops from './journalLineOps'
 
 export interface JournalDraftLine {
   accountId: string
@@ -26,6 +29,9 @@ export interface JournalDraftLine {
   trackingDate?: string
   /** تفصیلیِ ردیف — برای حسابِ «تفصیلی پذیر» اجباری. خالی = ارث از سطحِ سند. */
   analyticId?: string
+  /** شرحِ ردیف. API از اول می‌پذیردش (`JournalLineIn.description`) ولی تا امروز
+   *  هیچ فرمی نمی‌فرستادش؛ گریدِ حسابدار اولین مصرف‌کننده‌اش است. */
+  description?: string
 }
 
 const emptyLine = (): JournalDraftLine => ({
@@ -36,6 +42,7 @@ const emptyLine = (): JournalDraftLine => ({
   trackingNo: '',
   trackingDate: '',
   analyticId: '',
+  description: '',
 })
 
 /** منطقِ مشترکِ «ثبت سند حسابداری دستی» — مصرف‌شده در فرمِ کلاسیک و ویزارد. */
@@ -71,11 +78,22 @@ export function useJournalEntryDraft({
     'temporary',
   )
 
-  const postableAccounts = accounts.filter((a) => !a.is_group)
+  //: این سه از `accounts` مشتق‌اند و `accounts` معمولاً ثابت است، ولی بدونِ
+  //: `useMemo` هر رندر آرایه/Setِ تازه می‌سازند. برای فرمِ ساده بی‌اهمیت بود؛
+  //: برای گریدِ حسابدار نه: `GridRow` با `memo` روی هویتِ همین‌ها تکیه دارد و
+  //: تازه‌شدنشان یعنی هر کلیدفشار **همه‌ی ۳۰۰ ردیف** دوباره رندر می‌شوند.
+  //: سنجیده شد: ۱۷۰ms برای هر کلید در سندِ ۳۰۰ ردیفی، پیش از این تغییر.
+  const postableAccounts = useMemo(() => accounts.filter((a) => !a.is_group), [accounts])
   /** حساب‌هایی که ردیفشان پیگیری می‌پذیرد — فرم فقط برای همین‌ها فیلد نشان می‌دهد. */
-  const trackingAllowed = new Set(accounts.filter((a) => a.has_tracking).map((a) => a.id))
+  const trackingAllowed = useMemo(
+    () => new Set(accounts.filter((a) => a.has_tracking).map((a) => a.id)),
+    [accounts],
+  )
   /** حساب‌هایی که ردیفشان تفصیلی می‌خواهند. */
-  const tafsiliRequired = new Set(accounts.filter((a) => a.accepts_tafsili).map((a) => a.id))
+  const tafsiliRequired = useMemo(
+    () => new Set(accounts.filter((a) => a.accepts_tafsili).map((a) => a.id)),
+    [accounts],
+  )
   //: سطحِ اجبار از تنظیمات ← شخصی‌سازی می‌آید. در «شناور» فیلد هست ولی اجباری
   //: نیست، پس فرم نباید جلوی ثبت را بگیرد — وگرنه انتخابِ کاربر بی‌اثر می‌شد.
   const [tafsiliMode, setTafsiliMode] = useState('hybrid')
@@ -109,9 +127,13 @@ export function useJournalEntryDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currencyCode])
 
-  function updateLine(index: number, patch: Partial<JournalDraftLine>) {
+  //: `useCallback` برای همان دلیلِ بالا: `GridRow` با `memo` رندر می‌شود و
+  //: تابعِ تازه در هر رندر، مقایسه‌ی سطحی را همیشه رد می‌کند. `setLines` خودش
+  //: پایدار است (setterِ خامِ useState)، پس وابستگی خالی درست است.
+  const updateLine = useCallback((index: number, patch: Partial<JournalDraftLine>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /** مبلغِ ارزی → معادلِ ریالی، روی همان طرفی که ردیف دارد.
    *
@@ -135,13 +157,45 @@ export function useJournalEntryDraft({
     setLines((prev) => [...prev, emptyLine()])
   }
 
-  function removeLine(index: number) {
-    setLines((prev) => (prev.length > 2 ? prev.filter((_, i) => i !== index) : prev))
-  }
+  const removeLine = useCallback((index: number) => {
+    setLines((prev) => ops.removeAt(prev, index))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const totalDebit = lines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0)
-  const totalCredit = lines.reduce((sum, l) => sum + (Number(l.credit) || 0), 0)
+  /** رونوشتِ کاملِ ردیف (با مبلغ)، بلافاصله بعد از خودش. شاخصِ تازه را برمی‌گرداند. */
+  const duplicateLine = useCallback((index: number): number => {
+    setLines((prev) => ops.duplicateAt(prev, index))
+    return index + 1
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** حساب/تفصیلی/شرحِ ردیفِ قبل را در ردیفِ جاری می‌نشاند — بدونِ مبلغ. */
+  const copyPreviousInto = useCallback((index: number) => {
+    setLines((prev) => ops.copyPreviousInto(prev, index))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const totalDebit = ops.sumSide(lines, 'debit')
+  const totalCredit = ops.sumSide(lines, 'credit')
   const isBalanced = totalDebit === totalCredit && totalDebit > 0
+
+  /** مبلغی که سند را متوازن می‌کند، و طرفش. `null` = پیشنهادی نیست. */
+  const remaining = ops.remainingOf(totalDebit, totalCredit)
+
+  /** باقی‌مانده را روی همان ردیف می‌نشاند و طرفِ مقابلش را خالی می‌کند.
+   *
+   *  همان قاعده‌ی `updateLine` در فرمِ کلاسیک: پر شدنِ یک طرف، طرفِ دیگر را
+   *  صفر می‌کند. دوباره اختراع نشده. */
+  function applyRemaining(index: number): boolean {
+    if (!remaining) return false
+    updateLine(
+      index,
+      remaining.side === 'debit'
+        ? { debit: String(remaining.amount), credit: '' }
+        : { credit: String(remaining.amount), debit: '' },
+    )
+    return true
+  }
   const validLineCount = lines.filter(
     (l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0),
   ).length
@@ -193,6 +247,10 @@ export function useJournalEntryDraft({
         account_id: l.accountId,
         debit: Number(l.debit) || 0,
         credit: Number(l.credit) || 0,
+        //: شرحِ ردیف — API از اول می‌پذیرفت (`JournalLineIn.description`، پیش‌فرض
+        //: `""`) ولی هیچ فرمی نمی‌فرستادش. خالی‌فرستادن دقیقاً همان پیش‌فرض است،
+        //: پس رفتارِ فرمِ ساده عوض نمی‌شود.
+        description: l.description?.trim() || '',
         // ردیفِ ارزی فقط وقتی ثبت می‌شود که هم ارز انتخاب شده باشد هم مبلغِ ارزی
         // نوشته شده باشد — نصفه‌کاره‌اش برای تسعیر بی‌فایده است.
         ...(currencyCode && Number(l.fxAmount)
@@ -256,6 +314,10 @@ export function useJournalEntryDraft({
     setLineFx,
     addLine,
     removeLine,
+    duplicateLine,
+    copyPreviousInto,
+    remaining,
+    applyRemaining,
     costCenters,
     costCenterId,
     setCostCenterId,

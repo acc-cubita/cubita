@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, Check, CheckCircle2, Rows3, Trash2 } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Trash2 } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
@@ -15,6 +15,8 @@ import {
   RowAction,
 } from './form/FormKit'
 import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntryDraft'
+import { useExperienceMode } from '../lib/experienceMode'
+import { JournalGrid } from './JournalGrid'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -34,6 +36,11 @@ export function JournalEntryForm({
   onQueued: () => void
 }) {
   const d = useJournalEntryDraft({ token, accounts, onQueued })
+  //: **یک پیش‌نویس، دو نما.** هر دو حالت از همین هوک می‌خوانند و همان کلیدهای
+  //: `usePersistentState` را دارند، پس عوض‌کردنِ حالت وسطِ ثبت هیچ داده‌ای را
+  //: از بین نمی‌برد — نه ردیفی، نه مبلغی (§۳۵). این خاصیتِ طراحی است، نه کدِ
+  //: اضافه: چیزی برای «انتقال» وجود ندارد چون حالت اصلاً مالکِ داده نیست.
+  const { isAccountant } = useExperienceMode()
 
   if (d.postableAccounts.length === 0) {
     return (
@@ -148,11 +155,19 @@ export function JournalEntryForm({
       <SectionCard
         icon={Rows3}
         title="ردیف‌های سند"
-        tip="هر ردیف یا بدهکار دارد یا بستانکار. سند دست‌کم دو ردیفِ معتبر و جمعِ برابر می‌خواهد."
+        //: در حالت حسابدار راهنمای طولانی جای گرید را می‌گیرد (§۳۰) — همان
+        //: جمله در حالت ساده مفید است و اینجا فقط تراکم را می‌خورد.
+        tip={
+          isAccountant
+            ? undefined
+            : 'هر ردیف یا بدهکار دارد یا بستانکار. سند دست‌کم دو ردیفِ معتبر و جمعِ برابر می‌خواهد.'
+        }
         badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
+        actions={isAccountant ? <ShortcutHint /> : undefined}
       >
-        <JournalLinesTable d={d} />
-        <AddRowButton onClick={d.addLine}>افزودن ردیف</AddRowButton>
+        {isAccountant ? <JournalGrid d={d} /> : <JournalLinesTable d={d} />}
+        {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
+        <AddRowButton onClick={d.addLine}>افزودن ردیف{isAccountant ? ' (Ctrl+Enter)' : ''}</AddRowButton>
       </SectionCard>
 
       <ActionBar status={<FormStatus msg={d.message} idle={<BalanceStatus d={d} />} />}>
@@ -161,6 +176,35 @@ export function JournalEntryForm({
         </button>
       </ActionBar>
     </form>
+  )
+}
+
+/**
+ * لینکِ کوچکِ «میان‌برها» بالای گرید (§۳۹).
+ *
+ * میان‌برهای گرید در `ShortcutsPage` هم ثبت شده‌اند؛ این فقط راهِ دیدنشان بدونِ
+ * ترک‌کردنِ فرم است. عمداً یک `title` است نه پاپ‌آور: حسابدارِ وسطِ کار نباید
+ * چیزی برای بستن داشته باشد.
+ */
+function ShortcutHint() {
+  return (
+    <span
+      className="jg-hint"
+      title={[
+        'Enter — مقدار بعدی (در ستونِ مبلغِ خالی: پذیرشِ باقی‌مانده)',
+        'Shift+Enter — مقدار قبلی',
+        'Tab / Shift+Tab — فیلد بعد/قبل',
+        '↑ ↓ — ردیف بالا/پایین در همان ستون',
+        'Ctrl+Enter — افزودن ردیف',
+        'Ctrl+D — تکرار ردیف',
+        'Ctrl+Shift+C — کپی از ردیف قبل',
+        'Ctrl+Delete — حذف ردیف',
+        'Ctrl+S — ثبت سند',
+        'Esc — بستنِ فهرستِ انتخاب',
+      ].join('\n')}
+    >
+      <Keyboard size={14} aria-hidden="true" /> میان‌برها
+    </span>
   )
 }
 
@@ -185,6 +229,10 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
   // ستونِ تفصیلی هم مثلِ پیگیری فقط وقتی می‌آید که ردیفی لازمش داشته باشد — ولی
   // برخلافِ پیگیری، این یکی **اجباری** است و خالی‌ماندنش سند را رد می‌کند.
   const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
+  //: شرحِ ردیف در حالت ساده ستونِ همیشگی نیست — اکثرِ سندهای ساده لازمش ندارند.
+  //: ولی اگر کاربری در حالت حسابدار شرح نوشته و بعد به ساده برگشته، ستون
+  //: می‌آید: داده‌ای که ثبت می‌شود هرگز نباید نامرئی بماند (§۳۵).
+  const showLineDescription = d.lines.some((l) => (l.description ?? '').trim() !== '')
   return (
     <div className="table-scroll ef-table-wrap">
       <table className="cards-on-mobile ef-table ef-table--edit">
@@ -194,6 +242,7 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
             <th>حساب</th>
             {d.currencyCode && <th>مبلغ ارزی</th>}
             {showTafsili && <th>تفصیلی</th>}
+            {showLineDescription && <th>شرح ردیف</th>}
             <th>بدهکار</th>
             <th>بستانکار</th>
             {showTracking && <th>شماره پیگیری</th>}
@@ -256,6 +305,17 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                   ) : (
                     <input type="text" value="" disabled placeholder="—" readOnly aria-label="بدونِ تفصیلی" />
                   )}
+                </td>
+              )}
+              {showLineDescription && (
+                <td className="card-wide" data-label="شرح ردیف">
+                  <input
+                    type="text"
+                    aria-label={`شرحِ ردیفِ ${fa(i + 1)}`}
+                    value={line.description ?? ''}
+                    onChange={(e) => d.updateLine(i, { description: e.target.value })}
+                    placeholder="اختیاری"
+                  />
                 </td>
               )}
               <td className="card-wide" data-label="بدهکار">

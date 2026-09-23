@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -142,8 +142,17 @@ class Role(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         return False
 
 
+#: حالت‌های تجربه‌ی کاربر. `simple` = فرم‌های راهنمادار و کم‌تراکم؛ `accountant` =
+#: گریدِ فشرده‌ی صفحه‌کلیدمحور. این‌ها **فقط نمایش و گردشِ کارند**: هیچ‌کدام مجوزی
+#: نمی‌دهند و هیچ منطقِ مالی‌ای را عوض نمی‌کنند.
+EXPERIENCE_MODES = ("simple", "accountant")
+
+
 class User(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(f"experience_mode IN {EXPERIENCE_MODES}", name="ck_users_experience_mode"),
+    )
 
     name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(150), unique=True, index=True)
@@ -179,6 +188,12 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: ساخته شده و رمزش را هنوز به او نداده‌ایم). فقط مسیرهای اعتبارسنجی‌شده‌ی ورود
     #: آن را جلو می‌برند؛ برای پنلِ مدیریت («آخرین فعالیت») خوانده می‌شود.
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: ترجیحِ تجربه‌ی کاربر (`EXPERIENCE_MODES`). روی **کاربر** است و نه عضویت،
+    #: چون هیچ شناسه‌ی مستأجری در آن نیست — برخلافِ `Membership.dashboard_cards`
+    #: که به ماژول‌های همان کسب‌وکار اشاره می‌کند. دلیلِ کامل در مهاجرتِ ۰۱۸۲.
+    experience_mode: Mapped[str] = mapped_column(
+        String(20), default="simple", server_default="simple", nullable=False
+    )
 
     # نقش روی User نمی‌نشیند: یک نفر می‌تواند در یک کسب‌وکار حسابدار و در دیگری فقط
     # بیننده باشد، پس نقش خاصیتِ «عضویت» است نه خاصیتِ «کاربر».

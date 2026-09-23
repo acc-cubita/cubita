@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
@@ -71,6 +72,12 @@ class MeOut(BaseModel):
     #: را جای ماژول می‌گذارد. برای مشتریِ واقعی خالی.
     locked_features: list[str] = []
 
+    #: حالتِ تجربه‌ی کاربر: `simple` (راهنمادار، کم‌تراکم) یا `accountant` (گریدِ
+    #: فشرده‌ی صفحه‌کلیدمحور). **فقط نمایش است** — هیچ مجوزی نمی‌دهد و هیچ منطقِ
+    #: مالی‌ای را عوض نمی‌کند. برخلافِ `dashboard_cards` روی *کاربر* است نه عضویت،
+    #: چون شناسه‌ی مستأجری در آن نیست.
+    experience_mode: str = "simple"
+
     #: کارت‌های داشبوردِ همین کاربر در همین کسب‌وکار (`page` یا `page/section`).
     #: `None` یعنی هنوز انتخاب نکرده → فرانت پیش‌فرض‌ها را نشان می‌دهد؛ `[]` یعنی
     #: عمداً خالی. این دو یکی نیستند.
@@ -122,6 +129,10 @@ class ProfileUpdateIn(BaseModel):
     phone: str | None = None
     email: EmailStr | None = None
     current_password: str | None = None
+    #: حالتِ تجربه. عمداً همین‌جا و نه در اندپوینتِ جدا: ترجیحِ پروفایلِ کاربر است،
+    #: دقیقاً مثلِ نام. `Literal` تضمین می‌کند مقدارِ نامعتبر با ۴۲۲ رد شود، نه
+    #: اینکه به `CheckConstraint` برسد و ۵۰۰ بدهد.
+    experience_mode: Literal["simple", "accountant"] | None = None
 
     @field_validator("name")
     @classmethod

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, MessageSquare, Save, ShieldCheck, UserCircle } from 'lucide-react'
+import { Building2, CheckCircle2, Circle, Gauge, MessageSquare, Save, ShieldCheck, UserCircle } from 'lucide-react'
 import {
   sendPhoneCode,
   updateBusinessName,
@@ -10,6 +10,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { setExperience, useExperienceMode } from '../lib/experienceMode'
 
 export function ProfilePage({
   token,
@@ -34,10 +35,56 @@ export function ProfilePage({
       <div className="workspace-split">
         <UserInfoCard token={token} me={me} onMeUpdated={onMeUpdated} />
         <div className="profile-side">
+          <ExperienceCard token={token} />
           {isOwner && <BusinessCard token={token} me={me} onMeUpdated={onMeUpdated} />}
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * انتخابِ حالتِ تجربه — **ترجیحِ شخصیِ همین کاربر**.
+ *
+ * چرا این‌جا و نه در «شخصی‌سازی»: آن صفحه صریحاً تنظیماتِ *کسب‌وکار* است («هر
+ * کسب‌وکار خودش انتخاب می‌کند») و این ترجیحِ یک آدم است. صاحبِ فروشگاه و
+ * حسابدارش در یک شرکت می‌توانند دو انتخابِ متفاوت داشته باشند.
+ *
+ * ذخیره بی‌درنگ است و دکمه‌ی «ذخیره» ندارد: انتخاب همان لحظه دیده می‌شود، پس
+ * تأییدِ جداگانه فقط یک کلیکِ اضافه بود.
+ */
+function ExperienceCard({ token }: { token: string }) {
+  const { mode, experiences } = useExperienceMode()
+
+  return (
+    <SectionCard
+      icon={Gauge}
+      title="حالت کار"
+      description="چیدمان و سرعتِ فرم‌ها را عوض می‌کند. دسترسی‌ها و اعدادِ مالی دست‌نخورده می‌مانند."
+    >
+      <div className="exp-choices" role="radiogroup" aria-label="حالت کار">
+        {experiences.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="radio"
+            aria-checked={mode === x.id}
+            className={mode === x.id ? 'exp-choice is-on' : 'exp-choice'}
+            onClick={() => setExperience(x.id, (m) => updateProfile(token, { experience_mode: m }))}
+          >
+            <span className="exp-choice-head">
+              {mode === x.id ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+              {x.label}
+            </span>
+            <span className="exp-choice-desc">{x.description}</span>
+          </button>
+        ))}
+      </div>
+      <p className="muted exp-note">
+        «حالت حسابدار» ثبتِ سند را به گریدِ فشرده‌ی صفحه‌کلیدمحور تبدیل می‌کند. تمِ رنگی جداست و
+        در «تنظیمات ← ظاهر» انتخاب می‌شود.
+      </p>
+    </SectionCard>
   )
 }
 

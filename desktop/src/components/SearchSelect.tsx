@@ -85,6 +85,8 @@ function Searchable({
   const popRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  //: حرفی که پاپ‌آور را باز کرد، تا اثرِ `open` به‌جای خالی‌کردن، با آن شروع کند.
+  const seedRef = useRef<string | null>(null)
 
   const current = String(value ?? '')
   const selected = options.find((o) => o.value === current) ?? null
@@ -135,7 +137,10 @@ function Searchable({
   //: می‌شود و کادرِ جست‌وجو را **وسطِ تایپِ کاربر** خالی می‌کند.
   useEffect(() => {
     if (open) {
-      setQuery('')
+      //: اگر پاپ‌آور با تایپ باز شده، همان حرف بذرِ جست‌وجوست — وگرنه خالی.
+      //: بدونِ این، `setQuery('')`ِ زیر حرفِ اولِ کاربر را بی‌صدا می‌خورد.
+      setQuery(seedRef.current ?? '')
+      seedRef.current = null
       setActive(Math.max(0, options.findIndex((o) => o.value === current)))
       requestAnimationFrame(() => inputRef.current?.focus())
     }
@@ -178,6 +183,17 @@ function Searchable({
         ref={triggerRef}
         className={`item-picker-trigger${className ? ` ${className}` : ''}`}
         onClick={() => setOpen((v) => !v)}
+        //: تایپ‌کردن روی دکمه، پاپ‌آور را باز می‌کند و همان حرف را می‌نویسد —
+        //: همان کاری که `<select>`ِ بومی می‌کند. بدونِ این، کاربری که با
+        //: صفحه‌کلید به این سلول رسیده باید Enter بزند و بعد تایپ کند.
+        //: تغییردهنده‌دارها رد می‌شوند تا میان‌برها (Ctrl+S…) دست‌نخورده بمانند.
+        onKeyDown={(e) => {
+          if (e.ctrlKey || e.altKey || e.metaKey || open) return
+          if (e.key.length !== 1) return
+          e.preventDefault()
+          seedRef.current = e.key
+          setOpen(true)
+        }}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}

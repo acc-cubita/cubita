@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fetchMe, type MeResponse } from './api'
 import { loadStoredToken, storeToken } from './lib/session'
+import { adoptServerExperience } from './lib/experienceMode'
 import { LoginScreen } from './components/LoginScreen'
 import { SignupScreen } from './components/SignupScreen'
 import { SetPasswordScreen } from './components/SetPasswordScreen'
@@ -112,6 +113,15 @@ export default function App() {
       cancelled = true
     }
   }, [token, me, restoring])
+
+  //: مقدارِ سرور منبعِ حقیقتِ حالتِ تجربه است. این‌جا یک‌جا پذیرفته می‌شود و نه
+  //: در سه فراخوانِ `setMe`، چون هر سه مسیر (ورود، بازیابیِ وب، بازیابیِ
+  //: Electron) به همین `me` می‌رسند و یک نقطه هرگز از قلم نمی‌افتد.
+  //: `adoptServerExperience` اگر مقدار با محلی یکی باشد هیچ رندری نمی‌سازد و
+  //: چیزی هم به سرور برنمی‌گرداند — پس حلقه نمی‌شود.
+  useEffect(() => {
+    adoptServerExperience(me?.experience_mode)
+  }, [me?.experience_mode])
 
   // Electron: بازیابیِ خاموشِ نشست از دیسکِ محلی — بدونِ نیازِ شبکه برای اصلِ
   // ورود. رفرشِ خاموش را main process می‌زند (authSession.ts)؛ خطای شبکه در
