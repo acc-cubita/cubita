@@ -54,7 +54,11 @@ def test_create_tafsili_under_an_unposted_moin(db, user, client):
        درختی بخشی از کدینگِ چهارسطحیِ ایران است — کم‌تعداد، ثابت، و در خودِ کد.
        `accepts_tafsili` درباره‌ی تفصیلیِ *شناور* روی ردیفِ سند است، که بُعدی متغیر
        و پرتعداد است و اصلاً در کد نمی‌آید. قیدِ واقعیِ زیرشاخه همان «والد سندِ
-       مستقیم نخورده باشد» است و تستِ بعدی نگهش می‌دارد.
+       مستقیم نخورده باشد» ماند.
+    ۴. (۱۴۰۵/۰۷/۰۱) آن قید هم **برداشته شد**. ترسش — «مانده دو منبع پیدا می‌کند» —
+       سنجیده شد و واقعی نبود: درختِ چارت «خودش + فرزندان» جمع می‌زند و گزارش‌ها
+       روی `is_group` صافی می‌گذارند نه روی «فرزند ندارد». حالا هیچ قیدی جز نوع و
+       کدینگ نمانده؛ تستِ بعدی همین را قفل می‌کند.
     """
     leaf, _ = _two_leaves(db)
     assert leaf.accepts_tafsili is False, "و هیچ پرچمی هم لازم نیست"
@@ -67,8 +71,11 @@ def test_create_tafsili_under_an_unposted_moin(db, user, client):
     assert res.json()["parent_id"] == str(leaf.id)
 
 
-def test_create_child_rejected_under_a_posted_account(db, user, client):
-    """ولی حسابی که سندِ مستقیم خورده نه — مانده‌اش دو منبع پیدا می‌کند."""
+def test_create_child_under_a_posted_account(db, user, client):
+    """حسابِ سندخورده هم زیرحساب می‌گیرد — از راهِ خودِ API، همان مسیری که کاربر زد.
+
+    تا ۱۴۰۵/۰۷/۰۱ این‌جا ۴۰۹ انتظار می‌رفت. بندِ ۴ در تستِ بالا دلیلِ برداشتنش است.
+    """
     from datetime import date
     from decimal import Decimal
 
@@ -86,7 +93,8 @@ def test_create_child_rejected_under_a_posted_account(db, user, client):
     res = client.post("/api/accounts", json={
         "code": _free_code(client, leaf), "name": "x", "type": leaf.type, "parent_id": str(leaf.id),
     })
-    assert res.status_code == 409, res.text
+    assert res.status_code == 201, res.text
+    assert res.json()["parent_id"] == str(leaf.id)
 
 
 def test_duplicate_code_rejected(db, user, client):

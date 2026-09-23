@@ -235,11 +235,15 @@ def test_suggested_code_for_a_tafsili_follows_the_rule(db):
     assert len(code) == len("1102") + widths[3]
 
 
-def test_a_posted_account_cannot_take_children(db):
-    """قیدِ اصلی: حسابی که سندِ مستقیم دارد نباید فرزند بگیرد.
+def test_a_posted_account_can_take_children(db):
+    """حسابِ سندخورده هم زیرحساب می‌گیرد — و ردیف‌های قدیمی‌اش سرِ جایشان می‌مانند.
 
-    وگرنه مانده‌اش دو منبع پیدا می‌کند — ردیف‌های خودش و جمعِ فرزندان — و هر
-    گزارشی باید حدس بزند کدام را جمع بزند.
+    تا ۱۴۰۵/۰۷/۰۱ این تست عکسش را قفل می‌کرد (۴۰۹)، با این ترس که «مانده دو منبع
+    پیدا می‌کند و هر گزارشی باید حدس بزند». ترس سنجیده شد و واقعی نبود؛ دلیل در
+    `routers/accounts.create_account`. کاربری که «صندوق» را به صندوق‌های جدا تقسیم
+    می‌کرد، بعد از اولین سند راهی نداشت.
+
+    مثالِ واقعیِ همان گزارش: «صندوق» حسابِ **سیستمی** است و سند خورده.
     """
     from datetime import date
     from decimal import Decimal
@@ -260,9 +264,57 @@ def test_a_posted_account_cannot_take_children(db):
     db.add(entry)
     db.flush()
 
-    with pytest.raises(HTTPException) as err:
-        _create(db, tenant, code="110101", name="زیرصندوق", parent=cash)
-    assert err.value.status_code == 409
+    child = _create(db, tenant, code="110101", name="زیرصندوق", parent=cash)
+
+    assert child.parent_id == cash.id
+    #: هیچ ردیفی جابه‌جا نشد — جابه‌جاکردن یعنی بازنویسیِ سندِ دائم.
+    lines_on_cash = db.query(JournalLine).filter(JournalLine.account_id == cash.id).count()
+    lines_on_child = db.query(JournalLine).filter(JournalLine.account_id == child.id).count()
+    assert (lines_on_cash, lines_on_child) == (1, 0)
+    #: و والد حسابِ گروه نشد؛ وگرنه ردیف‌های خودش از گزارش‌هایی که روی
+    #: `is_group=False` صافی می‌گذارند بی‌صدا بیرون می‌افتادند.
+    db.refresh(cash)
+    assert cash.is_group is False
+
+
+def test_trial_balance_keeps_a_posted_parents_own_lines(db):
+    """همان چیزی که گاردِ قدیمی از آن می‌ترسید: آیا مانده گم یا دوبار شمرده می‌شود؟
+
+    والدِ زیرحساب‌دار باید با ردیف‌های خودش در تراز بیاید، فرزند با ردیف‌های خودش،
+    و جمعِ کل دقیقاً همان بماند. هر ردیفِ سند مالِ یک حساب است، پس نه جا افتادن
+    ممکن است نه دوبارشمردن — ولی این تست همان را واقعاً می‌سنجد، نه ادعا می‌کند.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.accounting import JournalEntry, JournalLine
+    from app.models.user import User
+    from app.services.reports import get_trial_balance
+
+    tenant = _tenant(db)
+    user_id = db.query(User.id).scalar()
+    cash = db.query(Account).filter(Account.code == "1101").one()
+    revenue = db.query(Account).filter(Account.code == "4101").one()
+
+    def post(account, amount):
+        e = JournalEntry(entry_date=date(2026, 1, 1), description="آزمون", created_by_id=user_id)
+        e.lines = [
+            JournalLine(account_id=account.id, debit=Decimal(amount), credit=Decimal(0)),
+            JournalLine(account_id=revenue.id, debit=Decimal(0), credit=Decimal(amount)),
+        ]
+        db.add(e)
+        db.flush()
+
+    post(cash, 700)  # پیش از زیرحساب — روی خودِ صندوق
+    child = _create(db, tenant, code="110101", name="صندوقِ اصلی", parent=cash)
+    post(child, 300)  # پس از زیرحساب — روی زیرحساب
+
+    rows = {r["account_code"]: r for r in get_trial_balance(db, None, None)}
+    assert rows["1101"]["total_debit"] == Decimal(700), "ردیف‌های خودِ والد جا نیفتادند"
+    assert rows["110101"]["total_debit"] == Decimal(300)
+    total_debit = sum(r["total_debit"] for r in rows.values())
+    total_credit = sum(r["total_credit"] for r in rows.values())
+    assert total_debit == total_credit, "تراز باید همچنان متوازن باشد"
 
 
 def test_a_group_takes_children_even_with_no_documents(db):
