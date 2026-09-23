@@ -25,6 +25,7 @@ import { Tabs } from './Tabs'
 import { FeatureUpsell } from './FeatureUpsell'
 import { StorefrontGallery } from './StorefrontGallery'
 import { Reports } from './Reports'
+import { ReportCatalog } from './ReportCatalog'
 import { FixedAssetsPanel } from './FixedAssetsPanel'
 import { PageHeader } from './PageHeader'
 import { OverviewPage } from '../pages/OverviewPage'
@@ -837,9 +838,10 @@ export function Dashboard({
               <PageHeader
                 icon={BarChart3}
                 title="گزارش‌ها"
-                description="تراز آزمایشی، سود و زیان، ترازنامه و دفتر کل — همیشه زنده و مستقیم از دفاتر حسابداری."
+                description="هر گزارشی که در کوبیتا هست — همیشه زنده و مستقیم از دفاتر."
               />
-              <div className="ef-form">
+              <ReportCatalog me={me} onNavigate={navigate} />
+              <div className="ef-form" id="report-view">
                 <Reports token={token} />
               </div>
             </div>

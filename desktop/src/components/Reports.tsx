@@ -37,6 +37,8 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { KardexSummary, KardexTable } from './KardexTable'
 import { formatJalali, isoToJalali, jalaliToIso, todayIso, toFaDigits, JALALI_MONTH_NAMES } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
+import { useNavSection } from './navContext'
+import { REPORT_TABS, isReportKind, type ReportKind } from '../lib/reportCatalog'
 
 const ENTITY_LABEL: Record<string, string> = { real: 'حقیقی', legal: 'حقوقی', aggregate: 'تجمیعی' }
 
@@ -62,20 +64,6 @@ const QUARTER_OPTIONS = [
   { value: 3, label: 'پاییز' },
   { value: 4, label: 'زمستان' },
 ]
-
-type ReportKind =
-  | 'income-statement'
-  | 'balance-sheet'
-  | 'budget'
-  | 'cash-flow'
-  | 'equity-statement'
-  | 'cost-center'
-  | 'receivable-aging'
-  | 'payable-aging'
-  | 'contact-statement'
-  | 'inventory'
-  | 'kardex'
-  | 'seasonal'
 
 type PeriodPreset = 'all' | 'month' | 'quarter' | 'year' | 'custom'
 
@@ -119,7 +107,11 @@ function resolvePeriod(preset: PeriodPreset, customFrom: string, customTo: strin
 }
 
 export function Reports({ token }: { token: string }) {
-  const [active, setActive] = useState<ReportKind>('income-statement')
+  //: `reports/balance-sheet` گزارش را مستقیم باز می‌کند — از «همه‌ی گزارش‌ها» یا هر
+  //: پیوندِ دیگری. بی‌بخش یعنی پیش‌فرض، سود و زیان.
+  const nav = useNavSection()
+  const wanted = nav?.activePage === 'reports' && isReportKind(nav.section) ? nav.section : null
+  const [active, setActive] = useState<ReportKind>(wanted ?? 'income-statement')
   const [preset, setPreset] = useState<PeriodPreset>('all')
   const [customFrom, setCustomFrom] = useState(todayIso())
   const [customTo, setCustomTo] = useState(todayIso())
@@ -183,6 +175,14 @@ export function Reports({ token }: { token: string }) {
     void loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, period.from, period.to])
+
+  //: روی mount هم صدا زده می‌شود، نه فقط با تغییر: `selectTab` فهرستِ اشخاص و کالاها
+  //: را برای صورت‌حساب و کاردکس می‌گیرد، و گزارشی که مستقیم باز شده بی آن فهرست
+  //: انتخاب‌گرِ خالی نشان می‌داد.
+  useEffect(() => {
+    if (wanted) void selectTab(wanted)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted])
 
   async function selectTab(kind: ReportKind) {
     setActive(kind)
@@ -329,24 +329,9 @@ export function Reports({ token }: { token: string }) {
   }
 
   //: «تراز آزمایشی»، «دفتر کل» و «مالیات بر ارزش افزوده» از این‌جا برداشته شدند و
-  //: به ماژولِ حسابداری رفتند («گزارش ترازها»، «گزارش دفتر»، «مالیات بر ارزش
-  //: افزوده») — همان‌جا ستون‌های ۲/۴/۶/۸، سطحِ کل/معین/تفصیلی، دفترِ روزنامه و
-  //: انتخابِ فصل را هم دارند. ماندنشان این‌جا یعنی دو نسخه با دو رفتار.
-  const tabs: { key: ReportKind; label: string }[] = [
-    { key: 'income-statement', label: 'سود و زیان' },
-    { key: 'balance-sheet', label: 'ترازنامه' },
-    { key: 'budget', label: 'بودجه در برابر عملکرد' },
-    { key: 'cash-flow', label: 'جریان وجوه نقد' },
-    { key: 'equity-statement', label: 'تغییرات حقوق صاحبان سهام' },
-    { key: 'cost-center', label: 'سود پروژه/مرکز هزینه' },
-    { key: 'receivable-aging', label: 'سنی مطالبات' },
-    { key: 'payable-aging', label: 'سنی بدهی‌ها' },
-    { key: 'contact-statement', label: 'صورت‌حساب اشخاص' },
-    { key: 'inventory', label: 'ارزش موجودی انبار' },
-    { key: 'kardex', label: 'کاردکس کالا' },
-    { key: 'seasonal', label: 'معاملات فصلی (م۱۶۹)' },
-  ]
-
+  //: به ماژولِ حسابداری رفتند — همان‌جا ستون‌های ۲/۴/۶/۸، سطحِ کل/معین/تفصیلی، دفترِ
+  //: روزنامه و انتخابِ فصل را هم دارند. «همه‌ی گزارش‌ها» بالای همین صفحه به آن‌ها
+  //: پیوند می‌دهد. فهرستِ تب‌ها در `lib/reportCatalog.ts` است تا با آن یکی بماند.
   const presets: { key: PeriodPreset; label: string }[] = [
     { key: 'all', label: 'از ابتدا' },
     { key: 'month', label: 'این ماه' },
@@ -365,16 +350,14 @@ export function Reports({ token }: { token: string }) {
   return (
     <SectionCard icon={BarChart3} title="گزارش‌های حسابداری">
       <p className="hint">این گزارش‌ها همیشه مستقیم و زنده از سرور خوانده می‌شوند (نیاز به اتصال اینترنت دارند).</p>
-      <p className="hint">
-        تراز آزمایشی، دفتر کل و مالیات بر ارزش افزوده به ماژولِ «حسابداری» منتقل شده‌اند —
-        به‌ترتیب «گزارش ترازها»، «گزارش دفتر» و «مالیات بر ارزش افزوده».
-      </p>
       <div className="report-tabs">
-        {tabs.map((t) => (
+        {REPORT_TABS.map((t) => (
           <button
             key={t.key}
             className={active === t.key ? 'btn-primary' : ''}
-            onClick={() => void selectTab(t.key)}
+            //: روی صفحه‌ی «گزارش‌ها» بخشِ ناوبری عوض می‌شود و افکتِ بالا تب را باز
+            //: می‌کند — تا «همه‌ی گزارش‌ها» هم بداند کدام باز است.
+            onClick={() => (nav?.activePage === 'reports' ? nav.setSection(t.key) : void selectTab(t.key))}
           >
             {t.label}
           </button>

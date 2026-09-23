@@ -12333,3 +12333,75 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .exp-choice.is-on .exp-choice-head > svg { color: var(--accent); }
 .exp-choice-desc { color: var(--text-muted); font-size: var(--fs-sm); padding-inline-start: 22px; }
 .exp-note { margin-block-start: 10px; font-size: var(--fs-sm); }
+
+/* ── «همه‌ی گزارش‌ها» (ReportCatalog) — سرِ صفحه‌ی «گزارش‌ها» ─────────────────────
+   دسته‌ها در شبکه‌ی خودچین می‌نشینند تا روی ۱۴۴۰ دو ردیف شوند نه هفت. زیرِ ۷۶۰px
+   ردیف‌ها چیپ می‌شوند: سی‌وچند ردیفِ تمام‌عرض گزارشِ زیرِ فهرست را از دید بیرون می‌برد. */
+.rc-filter {
+  width: 100%;
+  max-width: 420px;
+  margin-block-end: 12px;
+}
+.rc-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 18px;
+}
+.rc-group { min-width: 0; }
+.rc-heading {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.rc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.rc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.rc-item > svg { flex: 0 0 15px; color: var(--text-muted); }
+.rc-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-item:hover,
+.rc-item:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-h);
+  border-color: transparent;
+}
+.rc-item.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+.rc-item.active > svg { color: var(--accent); }
+.rc-empty { grid-column: 1 / -1; margin: 0; }
+
+@media (max-width: 760px) {
+  .rc-filter { max-width: none; }
+  .rc-groups { grid-template-columns: 1fr; gap: 10px; }
+  .rc-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rc-item {
+    width: auto;
+    max-width: 100%;
+    padding: 5px 10px;
+    border-color: var(--border);
+    border-radius: 999px;
+  }
+}
