@@ -24,6 +24,7 @@ import {
   type SalesInvoiceRecord,
   type StockLevel,
 } from '../api'
+import { salesInvoiceSavedMessage } from './salesInvoiceMessage'
 import { isElectron } from '../platform'
 import { todayIso } from './jalali'
 import { pickAutoDiscount } from './autoDiscount'
@@ -588,11 +589,13 @@ export function useSalesInvoiceDraft({
         await window.cubita.queueSalesInvoice(payload)
         setMessage('فاکتور در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.')
       } else {
-        await createSalesInvoiceCommercial(token, payload, idempotencyKey.current)
+        const saved = await createSalesInvoiceCommercial(token, payload, idempotencyKey.current)
+        //: پیام از پاسخِ سرور ساخته می‌شود: سیاستِ «خودکار» سند و خروج را همان لحظه
+        //: می‌زند و «دومرحله‌ای» نه (`salesInvoiceSavedMessage`).
         setMessage(
           sourceIssue
             ? `فاکتور از خروج انبار شماره ${sourceIssue.issue_number.toLocaleString('fa-IR')} ثبت شد؛ موجودی دوباره کم نشد.`
-            : 'فاکتور تجاری ثبت شد؛ سند حسابداری و خروج انبار را از فهرست فاکتورها صادر کنید.',
+            : salesInvoiceSavedMessage(saved),
         )
       }
       idempotencyKey.current = newIdempotencyKey() // فاکتور بعدی، کلید تازه
