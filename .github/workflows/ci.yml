@@ -166,6 +166,111 @@ jobs:
         env:
           VITE_API_URL: https://acc.cubita.ir
 
+  e2e:
+    # ثبتِ سندِ حرفه‌ای از ورود تا ذخیره روی سرور، **فقط با کیبورد** (desktop/e2e).
+    # بک‌اند و وبِ واقعی روی پایگاه‌داده‌ی دورریختنیِ همین رانر. تست‌های jsdom هر رفتار
+    # را جدا می‌سنجند؛ این یکی می‌گوید کنارِ هم هم کار می‌کنند — همان‌طور که اولین
+    # اجرایش نشان داد فوکوسِ خودکارِ گرید بعد از کلیک روی نوار نمی‌رسید.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:14 # همان نسخه‌ی تولید، مثلِ جابِ backend
+        env:
+          POSTGRES_USER: cubita
+          POSTGRES_PASSWORD: cubita
+          POSTGRES_DB: cubita_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # همان قراردادِ جابِ backend: اپ با نقشِ عادیِ `cubita_app` کار می‌کند، نه superuser.
+      DATABASE_URL: postgresql+psycopg://cubita_app:cubita_app@localhost:5432/cubita_e2e
+      ADMIN_URL: postgresql://cubita:cubita@localhost:5432/cubita_e2e
+      ENV: development
+      ZARINPAL_SANDBOX: "true"
+      JWT_SECRET: ci-only-secret-not-used-outside-github-actions-0123
+      PLATFORM_ADMIN_EMAILS: ""
+      ALLOWED_ORIGINS: http://localhost:5173
+      E2E_EMAIL: e2e.accountant@example.com
+      E2E_PASSWORD: E2e@Journal2026
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: نصبِ بک‌اند
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: پایگاه‌داده‌ی دورریختنی، مهاجرت‌ها، کسب‌وکارِ آزمایشی
+        working-directory: backend
+        run: |
+          psql "$ADMIN_URL" -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE cubita_app LOGIN PASSWORD 'cubita_app'" \
+            -c "GRANT ALL ON DATABASE cubita_e2e TO cubita_app" \
+            -c "DROP SCHEMA IF EXISTS public CASCADE" \
+            -c "CREATE SCHEMA public AUTHORIZATION cubita_app"
+          alembic upgrade head
+          python ../desktop/e2e/provision.py
+
+      - name: اجرای بک‌اند
+        working-directory: backend
+        run: nohup uvicorn app.main:app --port 8000 > ../uvicorn.log 2>&1 &
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: نصبِ وب و کرومیوم
+        working-directory: desktop
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+        env:
+          # فقط کرومیوم، با قدمِ بالا — نه سه مرورگرِ postinstall.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: اجرای وب و انتظار برای هر دو
+        working-directory: desktop
+        run: |
+          nohup env WEB_ONLY=1 npx vite --port 5173 --strictPort > ../vite.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/api/health > /dev/null && curl -sf http://localhost:5173/ > /dev/null && exit 0
+            sleep 2
+          done
+          echo "بک‌اند یا وب بالا نیامد"; cat ../uvicorn.log ../vite.log; exit 1
+
+      - name: E2E — سندِ حرفه‌ای فقط با کیبورد
+        working-directory: desktop
+        run: node e2e/accountant-journal.e2e.mjs
+        env:
+          E2E_OUT: e2e-artifacts
+
+      - name: عکس و لاگ‌ها، اگر شکست خورد
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            desktop/e2e-artifacts
+            uvicorn.log
+            vite.log
+          if-no-files-found: ignore
+
   admin:
     # اپِ ستاد (admin.cubita.ir) — پروژه‌ی مستقل، پس jobِ مستقل.
     runs-on: ubuntu-latest
