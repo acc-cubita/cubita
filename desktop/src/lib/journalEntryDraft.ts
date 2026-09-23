@@ -17,6 +17,7 @@ import { usePersistentState } from './usePersistentState'
 //: کنش‌های ردیف عمداً بیرون از این هوک‌اند تا بدونِ DOM تست شوند
 //: (`journalLineOps.test.ts`). محیطِ vitest این پروژه `node` است.
 import * as ops from './journalLineOps'
+import { rememberDescriptions } from './descriptionMemory'
 
 export interface JournalDraftLine {
   accountId: string
@@ -279,6 +280,8 @@ export function useJournalEntryDraft({
           kind: 'ok',
         })
       }
+      //: حافظه‌ی شرحِ همین جلسه — سندِ بعدی شرح‌های این یکی را پیشنهاد می‌گیرد (§۲۰).
+      rememberDescriptions([description, ...validLines.map((l) => l.description ?? '')])
       setDescription('')
       //: پاک می‌شود مثلِ شرح. چسبیدنِ شماره فرعیِ سندِ قبلی به سندِ بعدی، ارجاعِ
       //: غلط می‌سازد — و ارجاعِ غلط بدتر از ارجاعِ نداشته است.

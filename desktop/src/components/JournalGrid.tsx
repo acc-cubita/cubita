@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, CopyPlus, Trash2 } from 'lucide-react'
 
 import { SearchSelect } from './SearchSelect'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { RowAction } from './form/FormKit'
+import { DescriptionInput } from './DescriptionInput'
 import type { JournalEntryDraft, JournalDraftLine } from '../lib/journalEntryDraft'
 import {
   firstInRow,
@@ -14,6 +15,8 @@ import {
   type ColId,
   type GridShape,
 } from '../lib/journalGridNav'
+import { poolFor } from '../lib/descriptionMemory'
+import { normalizeFa } from '../lib/faText'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -33,6 +36,18 @@ const fa = (n: number) => n.toLocaleString('fa-IR')
  */
 export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   const gridRef = useRef<HTMLDivElement>(null)
+  const jumpRef = useRef<HTMLInputElement>(null)
+  const [jump, setJump] = useState('')
+  const [jumpMsg, setJumpMsg] = useState<string | null>(null)
+
+  //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
+  //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
+  const linesRef = useRef(d.lines)
+  linesRef.current = d.lines
+  const descriptionPool = useCallback(
+    (row: number) => poolFor(linesRef.current.map((l) => l.description ?? ''), row),
+    [],
+  )
 
   const showFx = Boolean(d.currencyCode)
   const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
@@ -121,6 +136,26 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
    * داخلِ هر input/select/button از کار می‌افتد، و این کلیدها دقیقاً همان‌جا
    * اجرا می‌شوند. دو فضای مکمل.
    */
+  /**
+   * رفتن به ردیفِ n (UI-01 §۴۲): اسکرول، و فوکوس روی اولین خانه‌ی فعالِ همان ردیف.
+   * رقمِ فارسی هم پذیرفته می‌شود — کاربر روی چیدمانِ فارسی تایپ می‌کند.
+   */
+  function jumpTo() {
+    const raw = normalizeFa(jump)
+    const n = Number(raw)
+    if (!raw || !Number.isInteger(n) || n < 1 || n > d.lines.length) {
+      setJumpMsg(`ردیفِ ${raw ? fa(Number(raw) || 0) : '؟'} نیست — سند ${fa(d.lines.length)} ردیف دارد.`)
+      return
+    }
+    setJumpMsg(null)
+    const head = firstInRow(shape, n - 1, enabled)
+    if (!head) return
+    gridRef.current
+      ?.querySelector(`[data-cell="${head.row}-${head.col}"]`)
+      ?.scrollIntoView?.({ block: 'center' })
+    focusCell(head.row, head.col)
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const cellEl = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
     const coords = cellEl?.dataset.cell?.split('-').map(Number)
@@ -155,6 +190,14 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       if (e.code === 'KeyS') {
         e.preventDefault()
         if (!d.submitting) void d.submit()
+        return
+      }
+      //: «رفتن به ردیف» — Ctrl+G در مرورگر «یافتنِ بعدی» است، ولی فقط وقتی نوارِ
+      //: یافتن باز است؛ داخلِ خانه‌ی گرید معنای دیگری ندارد.
+      if (e.code === 'KeyG') {
+        e.preventDefault()
+        jumpRef.current?.focus()
+        jumpRef.current?.select()
         return
       }
       return
@@ -210,6 +253,39 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   }
 
   return (
+    <>
+    <div className="jg-toolbar">
+      <label className="jg-jump">
+        رفتن به ردیف
+        <input
+          ref={jumpRef}
+          type="text"
+          inputMode="numeric"
+          dir="ltr"
+          size={5}
+          value={jump}
+          aria-describedby={jumpMsg ? 'jg-jump-msg' : undefined}
+          title="Ctrl + G از هر خانه‌ی گرید"
+          onChange={(e) => {
+            setJump(e.target.value)
+            setJumpMsg(null)
+          }}
+          onKeyDown={(e) => {
+            //: Enter این‌جا فرمِ سند را ثبت نمی‌کند — فقط می‌پرد.
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              jumpTo()
+            }
+          }}
+        />
+      </label>
+      <span className="jg-count">{fa(d.lines.length)} ردیف</span>
+      {jumpMsg && (
+        <span className="jg-jump-msg" id="jg-jump-msg" role="status">
+          {jumpMsg}
+        </span>
+      )}
+    </div>
     <div
       ref={gridRef}
       className="table-scroll ef-table-wrap jg-wrap"
@@ -258,11 +334,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
               onDuplicate={d.duplicateLine}
               onCopyPrev={d.copyPreviousInto}
               onRemove={d.removeLine}
+              getDescriptionPool={descriptionPool}
             />
           ))}
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -292,6 +370,7 @@ const GridRow = memo(function GridRow({
   onDuplicate,
   onCopyPrev,
   onRemove,
+  getDescriptionPool,
 }: {
   i: number
   line: JournalDraftLine
@@ -311,6 +390,7 @@ const GridRow = memo(function GridRow({
   onDuplicate: JournalEntryDraft['duplicateLine']
   onCopyPrev: JournalEntryDraft['copyPreviousInto']
   onRemove: JournalEntryDraft['removeLine']
+  getDescriptionPool: (row: number) => string[]
 }) {
   const col = (id: ColId) => cols.indexOf(id)
 
@@ -369,11 +449,11 @@ const GridRow = memo(function GridRow({
       )}
 
       <td data-cell={`${i}-${col('description')}`}>
-        <input
-          type="text"
+        <DescriptionInput
           aria-label={`شرحِ ردیفِ ${fa(i + 1)}`}
           value={line.description ?? ''}
-          onChange={(e) => onUpdate(i, { description: e.target.value })}
+          onChange={(v) => onUpdate(i, { description: v })}
+          getPool={() => getDescriptionPool(i)}
           placeholder="اختیاری"
         />
       </td>
