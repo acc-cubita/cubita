@@ -12,6 +12,7 @@ import {
   FormGrid,
   FormStatus,
   InputAffix,
+  MoreOptions,
   RowAction,
 } from './form/FormKit'
 import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntryDraft'
@@ -50,6 +51,106 @@ export function JournalEntryForm({
     )
   }
 
+  //: فیلدهای حرفه‌ای و کم‌کاربردِ سربرگ. حسابدار همه را کنارِ هم می‌بیند (همان چیدمانِ
+  //: پیشین)؛ حالتِ ساده پشتِ «گزینه‌های بیشتر» جمعشان می‌کند (§۲۹). **هیچ‌کدام در سرور
+  //: اجباری نیست** — وضعیت پیش‌فرضِ «موقت» دارد و بقیه اختیاری‌اند — پس پنهان‌کردنشان
+  //: ثبتی را نمی‌شکند. تفصیلیِ ردیف، که گاهی اجباری است، این‌جا نیست: در جدولِ ردیف‌ها
+  //: می‌ماند و هر وقت لازم شد دیده می‌شود.
+  const advancedFields = (
+    <>
+      <FormField
+        label="وضعیت سند"
+        tip="موقت: در کارتابل بازبینی می‌شود. دائم: همین حالا قطعی می‌شود و دیگر ادغام یا بازشماره‌گذاری نمی‌شود."
+      >
+        {(id) => (
+          <SearchSelect
+            id={id}
+            value={d.status}
+            onChange={(e) => d.setStatus(e.target.value as 'temporary' | 'permanent')}
+          >
+            <option value="temporary">موقت — در کارتابل بازبینی شود</option>
+            <option value="permanent">دائم — همین حالا قطعی</option>
+          </SearchSelect>
+        )}
+      </FormField>
+      <FormField label="شماره فرعی" optional tip="ارجاعِ خودتان: شماره‌ی پرونده، سندِ سیستمِ قبلی یا کدِ دسته.">
+        {(id) => (
+          <input
+            id={id}
+            value={d.subNumber}
+            onChange={(e) => d.setSubNumber(e.target.value)}
+            maxLength={30}
+            placeholder="مثلاً: پرونده ۱۴۲"
+          />
+        )}
+      </FormField>
+      {d.costCenters.length > 0 && (
+        <FormField label="مرکز هزینه / پروژه" optional>
+          {(id) => (
+            <SearchSelect id={id} value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+              <option value="">— بدون مرکز —</option>
+              {d.costCenters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code ? `${c.code} — ${c.name}` : c.name}
+                </option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
+      )}
+      {d.analytics.length > 0 && (
+        <FormField label="تفصیلی سایر" optional>
+          {(id) => (
+            <SearchSelect id={id} value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
+              <option value="">— بدون تفصیلی —</option>
+              {d.analytics.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} — {a.name}
+                </option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
+      )}
+      {/* ارزِ سند: تا وقتی انتخاب نشده، ستونِ ارزی در ردیف‌ها هم دیده نمی‌شود —
+          اکثرِ سندها ریالی‌اند و یک ستونِ همیشه‌خالی فقط شلوغی است. */}
+      {d.currencies.length > 0 && (
+        <FormField label="ارز سند" optional tip="تا ارز انتخاب نشود، ستونِ مبلغِ ارزی در ردیف‌ها نمی‌آید.">
+          {(id) => (
+            <SearchSelect id={id} value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+              <option value="">— ریالی —</option>
+              {d.currencies.map((c) => (
+                <option key={c.id} value={c.code}>
+                  {c.code} — {c.name}
+                </option>
+              ))}
+            </SearchSelect>
+          )}
+        </FormField>
+      )}
+      {d.currencyCode && (
+        <FormField label={`نرخ ${d.currencyCode}`}>
+          {(id) => (
+            <InputAffix unit="ریال">
+              <NumberInput id={id} value={d.fxRate} onChange={d.setFxRate} allowDecimal />
+            </InputAffix>
+          )}
+        </FormField>
+      )}
+    </>
+  )
+  //: داده‌ی پُر پنهان نمی‌شود: پیش‌نویس ماندگار است و ممکن است از جلسه‌ی قبل یا از حالتِ
+  //: حسابدار مقداری در این فیلدها مانده باشد.
+  const hasAdvancedValues =
+    d.status !== 'temporary' || d.subNumber.trim() !== '' || Boolean(d.costCenterId) || Boolean(d.analyticId) || Boolean(d.currencyCode)
+  const advancedSummary = [
+    'وضعیت',
+    'شماره فرعی',
+    ...(d.costCenters.length > 0 ? ['مرکز هزینه'] : []),
+    ...(d.analytics.length > 0 ? ['تفصیلی'] : []),
+    ...(d.currencies.length > 0 ? ['ارز'] : []),
+  ].join('، ')
+
   return (
     <form
       noValidate
@@ -61,7 +162,13 @@ export function JournalEntryForm({
       <SectionCard
         icon={BookOpen}
         title="سربرگ سند"
-        tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
+        //: حالتِ ساده بی اصطلاحِ «کارتابل» و «عطف»: کاربرِ ساده این‌ها را لازم ندارد، و
+        //: راهِ درستِ کارهای روزمره‌اش فرم‌های خودشان است نه سندِ دستی (§۲۷، §۵۱).
+        tip={
+          isAccountant
+            ? 'سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد.'
+            : 'بیشترِ کارها سندِ دستی نمی‌خواهند: فاکتور، دریافت و پرداخت و چک خودشان سند می‌زنند. این فرم برای جابه‌جایی‌هایی است که فرمِ خودشان را ندارند.'
+        }
       >
         <FormGrid>
           <FormField label="شرح سند">
@@ -70,86 +177,13 @@ export function JournalEntryForm({
           <FormField label="تاریخ سند" required>
             {(id) => <JalaliDatePicker id={id} value={d.entryDate} onChange={d.setEntryDate} />}
           </FormField>
-          <FormField
-            label="وضعیت سند"
-            tip="موقت: در کارتابل بازبینی می‌شود. دائم: همین حالا قطعی می‌شود و دیگر ادغام یا بازشماره‌گذاری نمی‌شود."
-          >
-            {(id) => (
-              <SearchSelect
-                id={id}
-                value={d.status}
-                onChange={(e) => d.setStatus(e.target.value as 'temporary' | 'permanent')}
-              >
-                <option value="temporary">موقت — در کارتابل بازبینی شود</option>
-                <option value="permanent">دائم — همین حالا قطعی</option>
-              </SearchSelect>
-            )}
-          </FormField>
-          <FormField label="شماره فرعی" optional tip="ارجاعِ خودتان: شماره‌ی پرونده، سندِ سیستمِ قبلی یا کدِ دسته.">
-            {(id) => (
-              <input
-                id={id}
-                value={d.subNumber}
-                onChange={(e) => d.setSubNumber(e.target.value)}
-                maxLength={30}
-                placeholder="مثلاً: پرونده ۱۴۲"
-              />
-            )}
-          </FormField>
-          {d.costCenters.length > 0 && (
-            <FormField label="مرکز هزینه / پروژه" optional>
-              {(id) => (
-                <SearchSelect id={id} value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
-                  <option value="">— بدون مرکز —</option>
-                  {d.costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code ? `${c.code} — ${c.name}` : c.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              )}
-            </FormField>
-          )}
-          {d.analytics.length > 0 && (
-            <FormField label="تفصیلی سایر" optional>
-              {(id) => (
-                <SearchSelect id={id} value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
-                  <option value="">— بدون تفصیلی —</option>
-                  {d.analytics.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.code} — {a.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              )}
-            </FormField>
-          )}
-          {/* ارزِ سند: تا وقتی انتخاب نشده، ستونِ ارزی در ردیف‌ها هم دیده نمی‌شود —
-              اکثرِ سندها ریالی‌اند و یک ستونِ همیشه‌خالی فقط شلوغی است. */}
-          {d.currencies.length > 0 && (
-            <FormField label="ارز سند" optional tip="تا ارز انتخاب نشود، ستونِ مبلغِ ارزی در ردیف‌ها نمی‌آید.">
-              {(id) => (
-                <SearchSelect id={id} value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
-                  <option value="">— ریالی —</option>
-                  {d.currencies.map((c) => (
-                    <option key={c.id} value={c.code}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              )}
-            </FormField>
-          )}
-          {d.currencyCode && (
-            <FormField label={`نرخ ${d.currencyCode}`}>
-              {(id) => (
-                <InputAffix unit="ریال">
-                  <NumberInput id={id} value={d.fxRate} onChange={d.setFxRate} allowDecimal />
-                </InputAffix>
-              )}
-            </FormField>
-          )}
+          {isAccountant && advancedFields}
         </FormGrid>
+        {!isAccountant && (
+          <MoreOptions summary={advancedSummary} forceOpen={hasAdvancedValues}>
+            <FormGrid>{advancedFields}</FormGrid>
+          </MoreOptions>
+        )}
       </SectionCard>
 
       <SectionCard
@@ -160,7 +194,7 @@ export function JournalEntryForm({
         tip={
           isAccountant
             ? undefined
-            : 'هر ردیف یا بدهکار دارد یا بستانکار. سند دست‌کم دو ردیفِ معتبر و جمعِ برابر می‌خواهد.'
+            : 'در هر ردیف یک حساب انتخاب کنید و مبلغ را فقط در یکی از دو ستون بنویسید. جمعِ «بدهکار» و «بستانکار» باید برابر شود؛ نوارِ پایین نشان می‌دهد چقدر مانده.'
         }
         badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
         actions={isAccountant ? <ShortcutHint /> : undefined}

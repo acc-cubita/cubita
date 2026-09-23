@@ -11,9 +11,12 @@ import {
   Building2,
   Download,
   User,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react'
 import { buildNav, groupLanding, menuEntryVisible, orderNavGroups, type PageKey } from '../lib/navModel'
-import { useExperienceMode } from '../lib/experienceMode'
+import { setExperience, useExperienceMode, type ExperienceMode } from '../lib/experienceMode'
+import { updateProfile } from '../api'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { fitBar } from '../lib/topnavFit'
@@ -68,7 +71,11 @@ export function TopNav({
   syncing?: boolean
   syncStatus?: string
 }) {
-  const { mode } = useExperienceMode()
+  const { mode, experiences } = useExperienceMode()
+  //: همان ترجیحِ صفحه‌ی پروفایل — نه ترجیحِ دوم. محلی بی‌درنگ، سرور پشتش؛ بی‌توکن
+  //: (پیش از ورود) فقط محلی. حالت نه مجوز می‌دهد نه تم را عوض می‌کند (`experienceMode.ts`).
+  const switchMode = (m: ExperienceMode) =>
+    setExperience(m, token ? (next) => updateProfile(token, { experience_mode: next }) : undefined)
   const nav = buildNav({
     tenantKind,
     enabledModules,
@@ -387,6 +394,26 @@ export function TopNav({
                   </button>
                 ))}
                 <div className="topnav-dd-divider" />
+                {/* سوییچِ سریعِ حالت (§۷) — منو باز می‌ماند تا کاربر نتیجه را ببیند:
+                    نوار همان لحظه دوباره چیده می‌شود. */}
+                <div className="topnav-dd-label" id="topnav-exp-label">حالت کاربری</div>
+                <div role="radiogroup" aria-labelledby="topnav-exp-label">
+                  {experiences.map((x) => (
+                    <button
+                      key={x.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === x.id}
+                      className={`topnav-dd-item${mode === x.id ? ' active' : ''}`}
+                      title={x.description}
+                      onClick={() => switchMode(x.id)}
+                    >
+                      <span className="topnav-dd-ico">{mode === x.id ? <CheckCircle2 size={16} /> : <Circle size={16} />}</span>
+                      <span>{x.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="topnav-dd-divider" />
                 <button type="button" className="topnav-dd-item topnav-dd-danger" onClick={onLogout}>
                   <span className="topnav-dd-ico"><LogOut size={16} /></span>
                   <span>خروج</span>
@@ -571,6 +598,18 @@ export function TopNav({
                         onClick={() => go(item.key)}
                       />
                     ))}
+                    <div role="radiogroup" aria-label="حالت کاربری">
+                      {experiences.map((x) => (
+                        <MobileRow
+                          key={x.id}
+                          level="item"
+                          icon={mode === x.id ? <CheckCircle2 size={17} /> : <Circle size={17} />}
+                          label={x.label}
+                          checked={mode === x.id}
+                          onClick={() => switchMode(x.id)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -607,6 +646,7 @@ function MobileRow({
   parent = false,
   marked = false,
   danger = false,
+  checked,
   trailing,
 }: {
   level: 'group' | 'item' | 'section'
@@ -622,13 +662,15 @@ function MobileRow({
   /** نقطه‌ی «صفحه‌ی فعال داخلِ این شاخه‌ی بسته است». */
   marked?: boolean
   danger?: boolean
+  /** گزینه‌ی یک گروهِ radio (حالتِ کاربری): `role="radio"` و `aria-checked`، نه `aria-current`. */
+  checked?: boolean
   trailing?: ReactNode
 }) {
   const isAccordion = expanded !== undefined
   const cls = [
     'mob-row',
     `mob-row--${level}`,
-    active && 'is-active',
+    (active || checked) && 'is-active',
     parent && 'is-parent',
     expanded && 'is-open',
     danger && 'is-danger',
@@ -640,6 +682,8 @@ function MobileRow({
       type="button"
       className={cls}
       onClick={onClick}
+      role={checked !== undefined ? 'radio' : undefined}
+      aria-checked={checked}
       aria-expanded={isAccordion ? expanded : undefined}
       aria-current={active ? 'page' : undefined}
     >
