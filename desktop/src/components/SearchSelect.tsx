@@ -152,10 +152,29 @@ function Searchable({
     listRef.current?.querySelector('.item-picker-opt.active')?.scrollIntoView({ block: 'nearest' })
   }, [active, open])
 
+  /**
+   * بستنِ پاپ‌آور، با برگرداندنِ فوکوس به دکمه‌ی خودش.
+   *
+   * **چرا لازم است.** پاپ‌آور با portal روی `document.body` می‌نشیند، پس وقتی
+   * unmount می‌شود فوکوس روی `<body>` می‌افتد — نه روی جایی که کاربر از آن آمده
+   * بود. برای یک `<select>`ِ تنها فقط آزاردهنده است، ولی داخلِ یک رابطِ
+   * صفحه‌کلیدی مثلِ گریدِ سند **کشنده** است: آن گرید سلولِ جاری را از روی
+   * `[data-cell]`ِ عنصرِ فوکوس‌دار پیدا می‌کند، و با فوکوسِ `<body>` از همان
+   * لحظه هیچ کلیدی کار نمی‌کند تا کاربر با ماوس جایی کلیک کند. یعنی اولین
+   * انتخابِ حساب، کلِ صفحه‌کلیدِ گرید را می‌کُشت.
+   *
+   * **کلیکِ بیرون عمداً فوکوس را برنمی‌گرداند:** کاربر همان لحظه دارد جای
+   * دیگری را انتخاب می‌کند و دزدیدنِ فوکوس از مقصدِ کلیکش بدتر از مسئله است.
+   */
+  function close(restoreFocus: boolean) {
+    setOpen(false)
+    if (restoreFocus) triggerRef.current?.focus()
+  }
+
   function pick(opt: Opt) {
     if (opt.disabled) return
     onChange?.({ target: { value: opt.value } })
-    setOpen(false)
+    close(true)
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -171,7 +190,7 @@ function Searchable({
       if (o) pick(o)
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      setOpen(false)
+      close(true)
     }
   }
 
