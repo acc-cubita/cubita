@@ -12285,8 +12285,15 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   user-select: none;
 }
 
-/* سه کنشِ ردیف کنار هم، بدونِ شکستن. */
-.jg-actions { display: flex; gap: 2px; justify-content: flex-end; }
+/* سه کنشِ ردیف کنار هم، بدونِ شکستن.
+ *
+ * **فلکس روی wrapperِ داخلی است و نه روی خودِ `<td>`.** نسخه‌ی اول
+ * `display:flex` را مستقیم روی سلول گذاشت و سلول از چیدمانِ جدول بیرون افتاد:
+ * ستونش ۱۲۲px بود ولی خودش به ۱۷px جمع می‌شد و هر سه دکمه بیرون می‌زدند روی
+ * کادرِ «بستانکار». `.row-actions` از قبل در این برنامه هست و پنج جدولِ دیگر
+ * همین کار را با آن می‌کنند. */
+.jg-actions { text-align: end; }
+.jg-actions .row-actions { gap: 2px; }
 
 /* نشانِ «میان‌برها» در سرِ کارت. */
 .jg-hint {

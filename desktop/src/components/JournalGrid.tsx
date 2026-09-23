@@ -416,28 +416,34 @@ const GridRow = memo(function GridRow({
         </td>
       )}
 
+      {/* فلکس روی `.row-actions`ِ داخلی می‌نشیند و **نه روی خودِ `<td>`** — همان
+          الگویی که بقیه‌ی جدول‌های این برنامه دارند. `display:flex` روی یک
+          `<td>` سلول را از چیدمانِ جدول بیرون می‌اندازد: عرضش به ستون گوش
+          نمی‌دهد، به ۱۷px جمع می‌شود و دکمه‌ها بیرون می‌زنند روی کادرِ بستانکار. */}
       <td className="ef-col-min jg-actions card-actions">
-        <RowAction
-          icon={CopyPlus}
-          label="تکرار ردیف"
-          title="تکرار ردیف (Ctrl+D)"
-          onClick={() => onDuplicate(i)}
-        />
-        <RowAction
-          icon={Copy}
-          label="کپی از ردیف قبل"
-          title="کپیِ حساب و تفصیلی از ردیف قبل (Ctrl+Shift+C)"
-          disabled={i === 0}
-          onClick={() => onCopyPrev(i)}
-        />
-        <RowAction
-          icon={Trash2}
-          label="حذف ردیف"
-          danger
-          disabled={!canRemove}
-          title={!canRemove ? 'سند دست‌کم دو ردیف می‌خواهد.' : 'حذف ردیف (Ctrl+Delete)'}
-          onClick={() => onRemove(i)}
-        />
+        <div className="row-actions">
+          <RowAction
+            icon={CopyPlus}
+            label="تکرار ردیف"
+            title="تکرار ردیف (Ctrl+D)"
+            onClick={() => onDuplicate(i)}
+          />
+          <RowAction
+            icon={Copy}
+            label="کپی از ردیف قبل"
+            title="کپیِ حساب و تفصیلی از ردیف قبل (Ctrl+Shift+C)"
+            disabled={i === 0}
+            onClick={() => onCopyPrev(i)}
+          />
+          <RowAction
+            icon={Trash2}
+            label="حذف ردیف"
+            danger
+            disabled={!canRemove}
+            title={!canRemove ? 'سند دست‌کم دو ردیف می‌خواهد.' : 'حذف ردیف (Ctrl+Delete)'}
+            onClick={() => onRemove(i)}
+          />
+        </div>
       </td>
     </tr>
   )
