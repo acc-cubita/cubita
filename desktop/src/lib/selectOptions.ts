@@ -15,6 +15,26 @@ export interface Opt {
 }
 
 /**
+ * متنِ یک گره‌ی React را همان‌طور که کاربر می‌بیند بیرون می‌کشد.
+ *
+ * **چرا `String(children)` کافی نیست.** الگوی رایجِ این مخزن
+ * `<option>{a.code} — {a.name}</option>` است و ۵۴ جا تکرار شده. آنجا
+ * `props.children` یک **آرایه** است (`['1007', ' — ', 'بانک صادرات']`) و
+ * `String()` رویش `Array.prototype.toString` را صدا می‌زند، یعنی اعضا را با
+ * **ویرگول** می‌چسباند: `«1007, — ,بانک صادرات»`. همین رشته هم در دکمه‌ی
+ * انتخاب‌گر دیده می‌شد و هم چیزی بود که `textMatches` رویش جست‌وجو می‌کرد.
+ *
+ * عنصرِ تودرتو (مثلِ `<b>`) هم باز می‌شود تا برچسب هرگز `[object Object]` نشود.
+ */
+function textOf(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join('')
+  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children)
+  return ''
+}
+
+/**
  * فرزندانِ `<option>` (و `<optgroup>`) را به فهرستِ ساده تبدیل می‌کند.
  *
  * اگر شکلی از فرزند فهمیده نشود، آن فهرست **بی‌صدا خالی** می‌شود — نه خطا
@@ -34,9 +54,7 @@ export function flatten(children: ReactNode): Opt[] {
       return
     }
     if (child.type !== 'option') return
-    const label =
-      typeof props.children === 'string' ? props.children : String(props.children ?? '')
-    out.push({ value: String(props.value ?? ''), label, disabled: props.disabled })
+    out.push({ value: String(props.value ?? ''), label: textOf(props.children), disabled: props.disabled })
   })
   return out
 }

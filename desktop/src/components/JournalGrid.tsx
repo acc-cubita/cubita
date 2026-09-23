@@ -168,6 +168,24 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       const col = cols[at.col]
       const line = d.lines[at.row]
       const emptyAmount = line && !line.debit && !line.credit
+
+      // ── بازکردنِ انتخاب‌گرِ خالی ──
+      //: روی انتخاب‌گرِ بسته‌ای که هنوز چیزی انتخاب نشده، Enter باید **بازش
+      //: کند**، نه از آن رد شود — وگرنه با صفحه‌کلید هیچ راهی برای بازکردنش با
+      //: Enter نیست و کاربر بی‌آنکه بفهمد ردیف را با حسابِ خالی رها می‌کند.
+      //:
+      //: اگر از قبل مقدار دارد، Enter مثلِ هر ستونِ دیگری جلو می‌برد. عمدی است:
+      //: چون `SearchSelect` بعد از انتخاب فوکوس را به همین دکمه برمی‌گرداند،
+      //: «همیشه باز کن» یک حلقه می‌ساخت که کاربر با Enter هرگز از سلول بیرون
+      //: نمی‌آمد. برای عوض‌کردنِ مقدارِ موجود کافی است شروع به تایپ کند.
+      //:
+      //: `preventDefault` صدا زده **نمی‌شود** تا کلیکِ پیش‌فرضِ Enter روی دکمه
+      //: خودش پاپ‌آور را باز کند.
+      if (!e.shiftKey && (col === 'account' || col === 'tafsili')) {
+        const emptyPick = col === 'account' ? !line?.accountId : !line?.analyticId
+        if (emptyPick && (e.target as HTMLElement).closest('.item-picker-trigger')) return
+      }
+
       if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
         e.preventDefault()
         d.applyRemaining(at.row)
