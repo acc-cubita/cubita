@@ -17,6 +17,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { navTargets } from './lib/navTargets.mjs'
 import { cssBraceFindings } from './lib/cssBlocks.mjs'
+import { tdClassesIn, tdDisplayFindings } from './lib/tdDisplay.mjs'
 import { deadFiles } from './find-dead-code.mjs'
 import { fileURLToPath } from 'node:url'
 
@@ -538,6 +539,52 @@ const RULES = [
       for (const file of cssFiles)
         for (const hit of cssBraceFindings(fs.readFileSync(file, 'utf8')))
           found.push({ file: rel(file), ...hit })
+      return found
+    },
+  },
+  {
+    id: 'R17',
+    level: 'error',
+    title: '`display`ِ چیدمانی روی سلولِ جدول',
+    why:
+      '`display: flex` (یا grid) روی یک `<td>` آن سلول را از الگوریتمِ چیدمانِ ' +
+      'جدول بیرون می‌برد: دیگر به عرضِ ستونش گوش نمی‌دهد. دقیقاً همین افتاد — ' +
+      '`.jg-actions` روی سلولِ کنش‌های گریدِ سند بود، ستون ۱۲۲px داشت و سلول به ' +
+      '۱۷px جمع می‌شد، پس هر سه دکمه بیرون می‌زدند **روی کادرِ بستانکار**. ' +
+      'کاربر آن را در تولید دید، نه ما. ' +
+      'هیچ ابزارِ دیگری این را نمی‌گیرد: `tsc` و `oxlint` به CSS نگاه نمی‌کنند، ' +
+      'ویت بی‌اعتراض عبورش می‌دهد، مرورگر خطا نمی‌دهد و فقط بی‌صدا چیدمان را عوض ' +
+      'می‌کند، و حتی jsdom هم بی‌فایده است چون چیدمان ندارد. ' +
+      'رفعش همیشه یکی است: فلکس را به یک wrapperِ داخلی ببر — همان `.row-actions` ' +
+      'که پنج جدولِ دیگرِ این برنامه از آن استفاده می‌کنند. ' +
+      'دو مورد عمداً استثنا هستند: داخلِ `@media` (آنجا سلول از قبل به ' +
+      '`block`/`grid` تبدیل شده و جدولی در کار نیست) و انتخابگری که فاعلش ' +
+      'فرزندِ سلول است نه خودش.',
+    scope: 'css',
+    check() {
+      //: دو کلاسِ قدیمی که همین اشکال را دارند ولی **پیش از** این قاعده وجود
+      //: داشتند. عمداً استثنا شده‌اند و نه با پایین‌آوردنِ سطحِ قاعده: هر دو روی
+      //: `<td>` و `<div>` با هم استفاده می‌شوند (۱۱ سلول در برابر ۲۸ div)، پس
+      //: رفعشان یا wrapper می‌خواهد در ۱۱ نقطه یا چیدمانِ تازه — کاری جدا، با
+      //: راستی‌آزماییِ مرورگریِ خودش روی حسابرسی، درختِ حساب‌ها و حساب‌های بانکی.
+      //: همان الگوی `table-plain` و `OPS_LIST_MAP`: علامتِ صریح، تا خواننده
+      //: بداند تصمیم بوده نه فراموشی. **این فهرست بلندتر نمی‌شود** — هر موردِ
+      //: تازه باید رفع شود، نه اضافه.
+      const KNOWN = new Set(['check-actions', 'ef-cell-title'])
+      const tdClasses = new Set()
+      for (const file of [...pageFiles, ...componentFiles])
+        for (const cls of tdClassesIn(fs.readFileSync(file, 'utf8'))) tdClasses.add(cls)
+      for (const k of KNOWN) tdClasses.delete(k)
+      const found = []
+      for (const file of cssFiles)
+        for (const hit of tdDisplayFindings(fs.readFileSync(file, 'utf8'), tdClasses))
+          found.push({
+            file: rel(file),
+            line: hit.line,
+            msg:
+              `\`${hit.selector}\` روی سلولِ جدول \`display: ${hit.value}\` می‌گذارد — ` +
+              'فلکس را به یک wrapperِ داخلی (مثلِ `.row-actions`) ببرید',
+          })
       return found
     },
   },
