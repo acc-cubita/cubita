@@ -14,7 +14,7 @@ import { StatCard } from '../components/StatCard'
 import { PurchaseInvoiceForm } from '../components/PurchaseInvoiceForm'
 import { PurchaseInvoiceWizard } from '../components/wizard/PurchaseInvoiceWizard'
 import { PurchaseReturnWizard } from '../components/wizard/PurchaseReturnWizard'
-import { useTheme } from '../lib/theme'
+import { useGuidedForms } from '../lib/experienceMode'
 import { InvoiceList, type AnyInvoice } from '../components/InvoiceList'
 import { PurchaseReturnForm } from '../components/PurchaseReturnForm'
 import { WarehouseReceiptsTab } from '../components/WarehouseReceiptsTab'
@@ -78,7 +78,7 @@ export function PurchasesPage({
     }
   }, [token, nav])
   const fa = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
 
   return (
     <div className="page panels">

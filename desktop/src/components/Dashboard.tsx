@@ -16,6 +16,7 @@ import { buildNav } from '../lib/navModel'
 import { TopNav } from './TopNav'
 import { QuickAccessBar } from './QuickAccessBar'
 import { useTheme } from '../lib/theme'
+import { useGuidedForms } from '../lib/experienceMode'
 import { NavSectionContext } from './navContext'
 import { PayrollPanel } from './PayrollPanel'
 import { IntegrationPanel } from './IntegrationPanel'
@@ -552,6 +553,9 @@ export function Dashboard({
     .filter((e) => !e.synced).length
 
   const { theme } = useTheme()
+  //: ویزارد یا فرمِ فشرده — با حالت، نه تم (`useGuidedForms`). داشبوردِ `overview`
+  //: پایین هنوز با تم است: آن صفحه است نه فرم، و کارت‌هایش از قبل با حالت عوض می‌شوند.
+  const guidedForms = useGuidedForms()
 
   // محتوای صفحه مستقل از نوعِ چیدمان است؛ فقط کرومِ اطراف (نوارِ کناری یا افقی) عوض می‌شود.
   //: **مرزِ خطا دورِ کلِ ناحیه‌ی صفحه.**
@@ -694,7 +698,7 @@ export function Dashboard({
                 title="دارایی ثابت"
                 description="اموال و دارایی‌های سرمایه‌ای را ثبت کنید؛ استهلاکِ دوره‌ای و اسنادِ مرتبط خودکار محاسبه و صادر می‌شود."
               />
-              <FixedAssetsPanel token={token} guided={theme.content === 'guided'} />
+              <FixedAssetsPanel token={token} guided={guidedForms} />
             </div>
           )}
           {/* ── ماژولِ «حسابداری» — هجده عملیات و شش فهرست ── */}
