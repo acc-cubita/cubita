@@ -36,9 +36,18 @@ export let latest: JournalDraftLine[] = []
 //: کارایی بدتر از برنامه‌ی واقعی نشان می‌داد.
 const NO_ANALYTICS: never[] = []
 const NONE = new Set<string>()
+const NO_CENTERS: { id: string; code: string; name: string; is_active: boolean }[] = []
 const noop = () => {}
 
-export function Harness({ initial, onSubmit }: { initial: JournalDraftLine[]; onSubmit?: () => void }) {
+export function Harness({
+  initial,
+  onSubmit,
+  costCenters = NO_CENTERS,
+}: {
+  initial: JournalDraftLine[]
+  onSubmit?: () => void
+  costCenters?: { id: string; code: string; name: string; is_active: boolean }[]
+}) {
   const [lines, setLines] = useState(initial)
   latest = lines
   const updateLine = useCallback(
@@ -69,6 +78,8 @@ export function Harness({ initial, onSubmit }: { initial: JournalDraftLine[]; on
     postableAccounts: ACCOUNTS,
     analytics: NO_ANALYTICS,
     analyticId: '',
+    costCenters,
+    costCenterId: '',
     tafsiliRequired: NONE,
     trackingAllowed: NONE,
     tafsiliMode: 'optional',

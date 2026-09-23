@@ -269,6 +269,9 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
   //: ولی اگر کاربری در حالت حسابدار شرح نوشته و بعد به ساده برگشته، ستون
   //: می‌آید: داده‌ای که ثبت می‌شود هرگز نباید نامرئی بماند (§۳۵).
   const showLineDescription = d.lines.some((l) => (l.description ?? '').trim() !== '')
+  //: مرکزِ هزینه‌ی ردیف در حالتِ ساده ستون ندارد — مگر ردیفی از حالتِ حسابدار مقدار
+  //: آورده باشد؛ مقداری که ثبت می‌شود نامرئی نمی‌ماند.
+  const showLineCostCenter = d.lines.some((l) => Boolean(l.costCenterId))
   return (
     <div className="table-scroll ef-table-wrap">
       <table className="cards-on-mobile ef-table ef-table--edit">
@@ -278,6 +281,7 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
             <th>حساب</th>
             {d.currencyCode && <th>مبلغ ارزی</th>}
             {showTafsili && <th>تفصیلی</th>}
+            {showLineCostCenter && <th>مرکز هزینه</th>}
             {showLineDescription && <th>شرح ردیف</th>}
             <th>بدهکار</th>
             <th>بستانکار</th>
@@ -341,6 +345,22 @@ export function JournalLinesTable({ d }: { d: JournalEntryDraft }) {
                   ) : (
                     <input type="text" value="" disabled placeholder="—" readOnly aria-label="بدونِ تفصیلی" />
                   )}
+                </td>
+              )}
+              {showLineCostCenter && (
+                <td className="card-wide" data-label="مرکز هزینه">
+                  <SearchSelect
+                    aria-label={`مرکزِ هزینه‌ی ردیفِ ${fa(i + 1)}`}
+                    value={line.costCenterId ?? ''}
+                    onChange={(e) => d.updateLine(i, { costCenterId: e.target.value })}
+                  >
+                    <option value="">{d.costCenterId ? '— مرکزِ سند —' : '— بدون مرکز —'}</option>
+                    {d.costCenters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code ? `${c.code} — ${c.name}` : c.name}
+                      </option>
+                    ))}
+                  </SearchSelect>
                 </td>
               )}
               {showLineDescription && (

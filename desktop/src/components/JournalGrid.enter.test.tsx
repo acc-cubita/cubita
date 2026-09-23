@@ -87,3 +87,43 @@ describe('Enter روی مبلغِ خالی', () => {
     expect(focusedCell()).toBe(`2-${CREDIT}`)
   })
 })
+
+describe('ستونِ مرکزِ هزینه — بیرون از مسیرِ Enter (§۱۵)', () => {
+  const CENTERS = [{ id: 'cc1', code: '10', name: 'پروژه الف', is_active: true }]
+  //: ستون‌ها با مرکز: حساب(۰) · مرکز(۱) · شرح(۲) · بدهکار(۳) · بستانکار(۴)
+  const renderWithCenters = (initial: JournalDraftLine[]) =>
+    act(() => root.render(createElement(Harness, { initial, costCenters: CENTERS })))
+  const cell = (r: number, c: number) =>
+    //: `SearchSelect` برای فهرستِ کوتاه `<select>`ِ بومی می‌گذارد، برای بلند دکمه‌ی پاپ‌آور.
+    container.querySelector<HTMLElement>(
+      `[data-cell="${r}-${c}"] input, [data-cell="${r}-${c}"] select, [data-cell="${r}-${c}"] button`,
+    )!
+
+  it('ستون فقط وقتی کسب‌وکار مرکز دارد', () => {
+    render([line({ accountId: 'bank' }), line()])
+    expect(container.querySelector('th')?.parentElement?.textContent).not.toContain('مرکز هزینه')
+    renderWithCenters([line({ accountId: 'bank' }), line()])
+    expect(container.querySelector('thead')?.textContent).toContain('مرکز هزینه')
+  })
+
+  it('Enter از حساب مستقیم به شرح می‌رود؛ Shift+Enter از شرح به حساب برمی‌گردد', async () => {
+    renderWithCenters([line({ accountId: 'bank' }), line({ accountId: 'cust' })])
+    await enterOn(cell(0, 0))
+    expect(focusedCell()).toBe('0-2')
+
+    act(() => cell(0, 2).focus())
+    await act(async () => {
+      cell(0, 2).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(focusedCell()).toBe('0-0')
+  })
+
+  it('↓ داخلِ ستونِ مرکز کار می‌کند — Tab/موس به آن می‌رسند و از آن‌جا عمودی می‌رود', () => {
+    renderWithCenters([line({ accountId: 'bank' }), line({ accountId: 'cust' })])
+    act(() => cell(0, 1).focus())
+    act(() => {
+      cell(0, 1).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true, cancelable: true }))
+    })
+    expect(focusedCell()).toBe('1-1')
+  })
+})

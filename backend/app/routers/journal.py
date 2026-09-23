@@ -162,6 +162,9 @@ def create_entry(
     line_analytics = [
         resolve_analytic_id(db, line.analytic_id) or entry_analytic_id for line in data.lines
     ]
+    #: مرکزِ هزینه هم همان قاعده: ردیف بر سند مقدم است. هر مرکزِ ردیف جداگانه
+    #: اعتبارسنجی می‌شود (نامعتبر یا غیرفعال → ۴۰۰)، دقیقاً مثلِ مرکزِ سند.
+    line_centers = [resolve_cost_center_id(db, line.cost_center_id) or cost_center_id for line in data.lines]
     tafsili.assert_lines_have_tafsili(
         db,
         [(line.account_id, analytic) for line, analytic in zip(data.lines, line_analytics)],
@@ -184,7 +187,7 @@ def create_entry(
         lines=number_lines([
             JournalLine(
                 account_id=line.account_id,
-                cost_center_id=cost_center_id,
+                cost_center_id=center,
                 analytic_id=analytic,
                 debit=line.debit,
                 credit=line.credit,
@@ -195,7 +198,7 @@ def create_entry(
                 tracking_no=line.tracking_no,
                 tracking_date=line.tracking_date,
             )
-            for line, analytic in zip(data.lines, line_analytics)
+            for line, analytic, center in zip(data.lines, line_analytics, line_centers)
         ]),
     )
     db.add(entry)

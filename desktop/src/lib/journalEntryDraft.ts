@@ -31,6 +31,9 @@ export interface JournalDraftLine {
   trackingDate?: string
   /** تفصیلیِ ردیف — برای حسابِ «تفصیلی پذیر» اجباری. خالی = ارث از سطحِ سند. */
   analyticId?: string
+  /** مرکزِ هزینه‌ی ردیف — خالی = مرکزِ سند. سرور همان قاعده‌ی تفصیلی را دارد: ردیف مقدم
+   *  است (`JournalLineIn.cost_center_id`). پیش‌نویسِ قدیمی بی این فیلد هم معتبر است. */
+  costCenterId?: string
   /** شرحِ ردیف. API از اول می‌پذیردش (`JournalLineIn.description`) ولی تا امروز
    *  هیچ فرمی نمی‌فرستادش؛ گریدِ حسابدار اولین مصرف‌کننده‌اش است. */
   description?: string
@@ -44,6 +47,7 @@ const emptyLine = (): JournalDraftLine => ({
   trackingNo: '',
   trackingDate: '',
   analyticId: '',
+  costCenterId: '',
   description: '',
 })
 
@@ -276,6 +280,8 @@ export function useJournalEntryDraft({
         // نوشته باشد. اگر کاربر شماره‌ای بزند و بعد حساب را به حسابی بی‌پیگیری
         // عوض کند، آن مقدارِ جامانده سند را با ۴۰۰ رد می‌کرد.
         ...(l.analyticId ? { analytic_id: l.analyticId } : {}),
+        //: مرکزِ هزینه‌ی ردیف بر مرکزِ سند مقدم است؛ خالی = همان مرکزِ سند (سرور).
+        ...(l.costCenterId ? { cost_center_id: l.costCenterId } : {}),
         ...(trackingAllowed.has(l.accountId) && (l.trackingNo?.trim() || l.trackingDate)
           ? {
               tracking_no: l.trackingNo?.trim() || null,

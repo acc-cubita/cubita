@@ -52,6 +52,8 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   const showFx = Boolean(d.currencyCode)
   const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
   const showTracking = d.lines.some((l) => d.trackingAllowed.has(l.accountId))
+  //: مرکزِ هزینه‌ی ردیف فقط وقتی ستون دارد که کسب‌وکار مرکزی تعریف کرده باشد.
+  const showCostCenter = d.costCenters.length > 0
 
   //: `useMemo` حیاتی است، نه آرایش: `cols` به **هر** ردیف پاس داده می‌شود، و
   //: آرایه‌ی تازه در هر رندر یعنی مقایسه‌ی `memo`ِ همه‌ی ۳۰۰ ردیف شکست می‌خورد.
@@ -62,12 +64,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       'account',
       ...(showFx ? (['fx'] as ColId[]) : []),
       ...(showTafsili ? (['tafsili'] as ColId[]) : []),
+      ...(showCostCenter ? (['costCenter'] as ColId[]) : []),
       'description',
       'debit',
       'credit',
       ...(showTracking ? (['trackingNo', 'trackingDate'] as ColId[]) : []),
     ],
-    [showFx, showTafsili, showTracking],
+    [showFx, showTafsili, showTracking, showCostCenter],
   )
   const shape: GridShape = { cols, rowCount: d.lines.length }
 
@@ -81,6 +84,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       return true
     },
     [d.lines, d.tafsiliRequired, d.trackingAllowed],
+  )
+  //: **مسیرِ Enter از مرکزِ هزینه می‌پرد** (§۱۵): در سندِ دستی اجباری نیست، و خانه‌ای
+  //: که بیشترِ ردیف‌ها خالی می‌گذارند هر ردیف را یک Enterِ اضافه کند می‌کرد. Tab و موس
+  //: به آن می‌رسند و ↑/↓ داخلِ همان ستون کار می‌کند (آن‌ها `enabled` را می‌خوانند).
+  const onEnterPath = useCallback(
+    (row: number, col: ColId) => col !== 'costCenter' && enabled(row, col),
+    [enabled],
   )
 
   /** عنصرِ قابلِ فوکوسِ درونِ یک سلول را پیدا و فوکوس می‌کند. */
@@ -148,7 +158,7 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       return
     }
     setJumpMsg(null)
-    const head = firstInRow(shape, n - 1, enabled)
+    const head = firstInRow(shape, n - 1, onEnterPath)
     if (!head) return
     gridRef.current
       ?.querySelector(`[data-cell="${head.row}-${head.col}"]`)
@@ -235,12 +245,12 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
         e.preventDefault()
         if (d.applyRemaining(at.row)) {
-          apply(onEnter(shape, { row: at.row, col: cols.indexOf('credit') }, enabled))
+          apply(onEnter(shape, { row: at.row, col: cols.indexOf('credit') }, onEnterPath))
         }
         return
       }
       e.preventDefault()
-      apply(e.shiftKey ? onShiftEnter(shape, at, enabled) : onEnter(shape, at, enabled))
+      apply(e.shiftKey ? onShiftEnter(shape, at, onEnterPath) : onEnter(shape, at, onEnterPath))
       return
     }
 
@@ -300,6 +310,7 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
             <th>حساب</th>
             {showFx && <th>مبلغ ارزی</th>}
             {showTafsili && <th>تفصیلی</th>}
+            {showCostCenter && <th>مرکز هزینه</th>}
             <th>شرح ردیف</th>
             <th>بدهکار</th>
             <th>بستانکار</th>
@@ -328,6 +339,9 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
               accounts={d.postableAccounts}
               analytics={d.analytics}
               hasHeaderAnalytic={Boolean(d.analyticId)}
+              showCostCenter={showCostCenter}
+              costCenters={d.costCenters}
+              hasHeaderCenter={Boolean(d.costCenterId)}
               canRemove={d.lines.length > 2}
               onUpdate={d.updateLine}
               onFx={d.setLineFx}
@@ -364,6 +378,9 @@ const GridRow = memo(function GridRow({
   accounts,
   analytics,
   hasHeaderAnalytic,
+  showCostCenter,
+  costCenters,
+  hasHeaderCenter,
   canRemove,
   onUpdate,
   onFx,
@@ -384,6 +401,9 @@ const GridRow = memo(function GridRow({
   accounts: JournalEntryDraft['postableAccounts']
   analytics: JournalEntryDraft['analytics']
   hasHeaderAnalytic: boolean
+  showCostCenter: boolean
+  costCenters: JournalEntryDraft['costCenters']
+  hasHeaderCenter: boolean
   canRemove: boolean
   onUpdate: JournalEntryDraft['updateLine']
   onFx: JournalEntryDraft['setLineFx']
@@ -445,6 +465,24 @@ const GridRow = memo(function GridRow({
           ) : (
             <input type="text" value="" disabled readOnly placeholder="—" aria-label="بدونِ تفصیلی" />
           )}
+        </td>
+      )}
+
+      {showCostCenter && (
+        <td data-cell={`${i}-${col('costCenter')}`}>
+          <SearchSelect
+            aria-label={`مرکزِ هزینه‌ی ردیفِ ${fa(i + 1)}`}
+            value={line.costCenterId ?? ''}
+            onChange={(e) => onUpdate(i, { costCenterId: e.target.value })}
+          >
+            {/* خالی یعنی «همان مرکزِ سند» اگر سند مرکز دارد — متنِ گزینه همین را می‌گوید. */}
+            <option value="">{hasHeaderCenter ? '— مرکزِ سند —' : '— بدون مرکز —'}</option>
+            {costCenters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code ? `${c.code} — ${c.name}` : c.name}
+              </option>
+            ))}
+          </SearchSelect>
         </td>
       )}
 

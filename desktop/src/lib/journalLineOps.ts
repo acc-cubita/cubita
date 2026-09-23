@@ -27,7 +27,7 @@ export function duplicateAt(lines: JournalDraftLine[], index: number): JournalDr
 }
 
 /**
- * حساب، تفصیلی و شرحِ ردیفِ قبل را در ردیفِ جاری می‌نشاند — **بدونِ مبلغ**.
+ * حساب، تفصیلی، مرکزِ هزینه و شرحِ ردیفِ قبل را در ردیفِ جاری می‌نشاند — **بدونِ مبلغ** (§۱۸).
  *
  * سناریوی واقعی: ده ردیفِ پشتِ‌هم روی یک حساب با تفصیلی‌های متفاوت. کپیِ مبلغ
  * این‌جا خطرناک است: کاربر می‌خواهد عددِ تازه بزند و عددِ جامانده بی‌صدا در سند
@@ -38,7 +38,13 @@ export function copyPreviousInto(lines: JournalDraftLine[], index: number): Jour
   if (!src) return lines
   return lines.map((line, i) =>
     i === index
-      ? { ...line, accountId: src.accountId, analyticId: src.analyticId, description: src.description }
+      ? {
+          ...line,
+          accountId: src.accountId,
+          analyticId: src.analyticId,
+          costCenterId: src.costCenterId,
+          description: src.description,
+        }
       : line,
   )
 }

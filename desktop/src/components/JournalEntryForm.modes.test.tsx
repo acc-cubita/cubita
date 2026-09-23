@@ -202,3 +202,44 @@ describe('خطای ردیفی با شماره‌ی گرید — در خودِ ف
     expect(message()).not.toContain('Value error')
   })
 })
+
+describe('مرکزِ هزینه‌ی ردیف تا سرور می‌رود', () => {
+  const L = (p: Record<string, string>) => ({
+    accountId: '', debit: '', credit: '', fxAmount: '', trackingNo: '', trackingDate: '', analyticId: '', description: '', ...p,
+  })
+
+  it('فقط روی همان ردیف؛ ردیفِ بی‌مرکز کلیدی نمی‌فرستد تا مرکزِ سند را بگیرد', async () => {
+    localStorage.setItem('cubita.draft.journal.lines', JSON.stringify([
+      L({ accountId: 'bank', debit: '100', costCenterId: 'cc1' }),
+      L({ accountId: 'cust', credit: '100' }),
+    ]))
+    let sent: { lines: Record<string, unknown>[] } | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          sent = JSON.parse(String(init.body))
+          return new Response(JSON.stringify({ id: 'e1', number: 1 }), { status: 201 })
+        }
+        return new Response(JSON.stringify(API[new URL(url).pathname] ?? []), { status: 200 })
+      }),
+    )
+    await render()
+    await act(async () => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(sent!.lines[0].cost_center_id).toBe('cc1')
+    expect('cost_center_id' in sent!.lines[1]).toBe(false)
+  })
+
+  it('حالتِ ساده: ستون ندارد، مگر ردیفی مقدار داشته باشد — آن‌وقت دیده می‌شود', async () => {
+    localStorage.setItem('cubita.draft.journal.lines', JSON.stringify([
+      L({ accountId: 'bank', debit: '100', costCenterId: 'cc1' }),
+      L({ accountId: 'cust', credit: '100' }),
+    ]))
+    act(() => setExperience('simple'))
+    await render()
+    expect(container.querySelector('thead')?.textContent).toContain('مرکز هزینه')
+  })
+})

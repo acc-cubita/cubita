@@ -213,3 +213,10 @@ describe('خطای ۴۲۲ِ سرور ← شماره‌ی گرید', () => {
     expect(serverLineErrors('سند یافت نشد', posted)).toBeNull()
   })
 })
+
+describe('کپی از ردیفِ قبل — مرکزِ هزینه هم (§۱۸)', () => {
+  it('حساب، تفصیلی، مرکز و شرح می‌آیند؛ مبلغ نه', () => {
+    const rows = [line({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '900' }), line()]
+    expect(copyPreviousInto(rows, 1)[1]).toMatchObject({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '' })
+  })
+})

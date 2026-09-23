@@ -150,6 +150,11 @@ class JournalLineIn(BaseModel):
     fx_amount: Decimal | None = None
     fx_rate: Decimal | None = None
     analytic_id: UUID | None = None
+    #: مرکزِ هزینه‌ی ردیف — بر مرکزِ سند مقدم است، همان قاعده‌ی تفصیلی. None = مرکزِ
+    #: سند (رفتارِ پیشین؛ کلاینتی که این فیلد را نمی‌فرستد هیچ تفاوتی نمی‌بیند). ستونش
+    #: از مهاجرتِ ۰۰۲۸ روی `journal_lines` هست و گزارش‌ها از همان ستون می‌خوانند؛ فقط
+    #: ورودیِ API تا امروز راهی به آن نداشت.
+    cost_center_id: UUID | None = None
     #: پیگیری — فقط برای حسابی که `has_tracking` دارد؛ وگرنه روتر ردش می‌کند تا
     #: داده‌ی پیگیری بی‌صدا دور ریخته نشود.
     tracking_no: str | None = Field(default=None, max_length=50)
@@ -197,7 +202,8 @@ class JournalLineIn(BaseModel):
 class JournalEntryIn(BaseModel):
     entry_date: date
     description: str = ""
-    #: مرکز هزینه/پروژه‌ی سند؛ به همه‌ی ردیف‌هایش منتقل می‌شود. None = بدون مرکز.
+    #: مرکز هزینه/پروژه‌ی سند؛ به ردیف‌هایی می‌رسد که مرکزِ خودشان را ندارند.
+    #: None = بدون مرکز.
     cost_center_id: UUID | None = None
     #: تفصیلیِ سایرِ سند — مثلِ مرکزِ هزینه به ردیف‌ها ارث می‌رسد، مگر خودِ ردیف
     #: تفصیلیِ صریح داشته باشد.
