@@ -3,6 +3,7 @@ import { Circle, type LucideIcon } from 'lucide-react'
 
 import { buildNav, menuEntryVisible, type PageKey } from './navModel'
 import { TASK_LAUNCHERS } from './taskRegistry'
+import type { ExperienceMode } from './experienceMode'
 import { LIST_MENUS, OPS_MENUS } from '../components/moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from '../components/moduleSections'
 import type { MeResponse } from '../api'
@@ -61,8 +62,51 @@ const NOT_A_CARD = new Set<PageKey>(['overview'])
  *  آیکون است. این گارد فقط تایپ را صادق نگه می‌دارد. */
 const asIcon = (icon: ReactNode): LaunchIconSource => (isValidElement(icon) ? (icon as ReactElement) : Circle)
 
-/** کارت‌هایی که کاربرِ تازه بدونِ هیچ انتخابی می‌بیند — همان لانچرهای «شروعِ کار». */
-export const DEFAULT_CARD_IDS: string[] = TASK_LAUNCHERS.map((t) => targetId(t.page, t.section))
+/**
+ * کارت‌هایی که کاربرِ بدونِ انتخاب می‌بیند — **بسته به حالتِ تجربه‌اش.**
+ *
+ * فهرست‌ها از §۵۳ی تسکِ UI-01 آمده‌اند. پیش از این یک فهرستِ ثابت بود (شش
+ * لانچرِ `TASK_LAUNCHERS`)؛ همان شش‌تا برای حسابداری که روزش با سند و تراز می‌گذرد و
+ * برای فروشنده‌ای که فقط فاکتور می‌بُرد.
+ *
+ * **حالت فقط *پیش‌فرض* را تعیین می‌کند.** کسی که کارت‌هایش را خودش چیده
+ * (`dashboard_cards` پُر) با عوض‌کردنِ حالت چیدمانش را از دست نمی‌دهد؛ حالت فقط
+ * برای کسی مهم است که هنوز انتخابی نکرده. و چون `resolveCards` هر شناسه‌ای را که
+ * کاربر به آن دسترسی ندارد کنار می‌گذارد، این فهرست **مجوز نمی‌دهد** — حالت ≠ مجوز.
+ *
+ * هر شناسه به صفحه‌ای موجود می‌رسد؛ تستِ `launchers.test.ts` این را قفل کرده، چون
+ * شناسه‌ی غلط این‌جا خطا نمی‌دهد — بی‌صدا حذف می‌شود و داشبورد یک کارت کم دارد.
+ *
+ * سه نگاشت که از خودِ نامِ §۵۳ پیدا نیستند و در کد سنجیده شدند:
+ * * «دفتر روزنامه» ← `ledgerreport`: آن صفحه با `useState<Book>('journal')` روی
+ *   دفترِ روزنامه باز می‌شود. (`ebooks` هم‌نامش نیست؛ «دفاتر تجارت الکترونیک» است.)
+ * * «سود» ← `reports`: تب‌های آن صفحه پیوندِ مستقیم ندارند، ولی اولین و پیش‌فرضش
+ *   «سود و زیان» است.
+ * * «بدهکاران» و «طلبکاران» ← **یک** کارتِ `contacts/aging`: آن صفحه هر دو را با
+ *   یک کلید نشان می‌دهد و پیوندی به نمای بدهی ندارد. دو کارت به یک مقصد قاعده‌ی
+ *   «هر شناسه یکتاست»ِ همین کاتالوگ را می‌شکست، پس حالتِ ساده هفت کارت دارد نه هشت.
+ */
+export const MODE_DEFAULT_CARDS: Record<ExperienceMode, readonly string[]> = {
+  accountant: [
+    'journalentry', //    ثبت سند
+    'ledgerreport', //    دفتر روزنامه
+    'accountbrowse', //   مرور حساب
+    'balancereport', //   تراز آزمایشی
+    'contactoverview', // طرف حساب
+    'bankreconcile', //   مغایرت‌ها
+    'assurancehealth', // هشدار حسابرسی
+    'checkoplist', //     چک‌ها
+  ],
+  simple: [
+    'salesinvoice', //       فروش
+    'purchases/invoices', // خرید
+    'receiptvoucher', //     دریافت
+    'paymentvoucher', //     پرداخت
+    'inventory/stock', //    موجودی
+    'reports', //            سود
+    'contacts/aging', //     بدهکاران و طلبکاران
+  ],
+}
 
 /** توضیحِ خطِ دومِ کارت، فقط برای لانچرهایی که توضیحِ نوشته‌شده دارند. */
 const TASK_HINTS = new Map(TASK_LAUNCHERS.map((t) => [targetId(t.page, t.section), t.desc]))
@@ -202,12 +246,20 @@ export function launchIndex(groups: LaunchGroup[]): Map<string, LaunchTarget> {
 /**
  * کارت‌هایی که باید نشان داده شوند.
  *
- * `null` یعنی کاربر هنوز انتخاب نکرده → پیش‌فرض‌ها. `[]` یعنی عمداً خالی گذاشته →
- * هیچ کارتی. شناسه‌ی ناشناخته (ماژولی که خاموش شده، تبی که حذف شده) بی‌صدا کنار
- * می‌رود تا کارتِ مرده‌ای که به جایی نمی‌برد روی داشبورد نماند.
+ * `null` یعنی کاربر هنوز انتخاب نکرده → پیش‌فرض‌های **حالتِ خودش**. `[]` یعنی عمداً
+ * خالی گذاشته → هیچ کارتی، در هر دو حالت. شناسه‌ی ناشناخته (ماژولی که خاموش شده،
+ * تبی که حذف شده) بی‌صدا کنار می‌رود تا کارتِ مرده‌ای که به جایی نمی‌برد روی داشبورد
+ * نماند.
+ *
+ * `mode` عمداً اجباری است و پیش‌فرض ندارد: پیش‌فرضِ پنهان همان جایی است که یک
+ * فراخوانِ تازه بی‌صدا کارت‌های حالتِ اشتباه را نشان می‌داد.
  */
-export function resolveCards(groups: LaunchGroup[], saved: string[] | null): LaunchTarget[] {
+export function resolveCards(
+  groups: LaunchGroup[],
+  saved: string[] | null,
+  mode: ExperienceMode,
+): LaunchTarget[] {
   const index = launchIndex(groups)
-  const ids = saved ?? DEFAULT_CARD_IDS
+  const ids = saved ?? MODE_DEFAULT_CARDS[mode]
   return ids.map((id) => index.get(id)).filter((t): t is LaunchTarget => t !== undefined)
 }

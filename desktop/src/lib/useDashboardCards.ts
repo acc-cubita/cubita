@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useExperienceMode } from './experienceMode'
 import { buildLaunchers, resolveCards } from './launchers'
 import { resetDashboardCards, saveDashboardCards, type MeResponse } from '../api'
 
@@ -6,6 +7,11 @@ import { resetDashboardCards, saveDashboardCards, type MeResponse } from '../api
  * منطقِ مشترکِ «کارت‌های داشبورد» — هم `LauncherBoard` (کارتِ درونِ داشبورد) و هم
  * `QuickAccessBar` (نوارِ افقیِ زیرِ TopNav) همین یک منبع را می‌خوانند و ذخیره
  * می‌کنند، تا انتخابِ کاربر همه‌جا یکی بماند.
+ *
+ * حالتِ تجربه فقط *پیش‌فرض* را عوض می‌کند (`MODE_DEFAULT_CARDS`)، پس کاربری که
+ * هنوز کارت نچیده با عوض‌کردنِ حالت همان لحظه کارت‌های حالتِ تازه را می‌بیند —
+ * بی درخواستِ شبکه، چون چیزی ذخیره نمی‌شود. «بازگرداندن به پیش‌فرض» هم به
+ * پیش‌فرضِ حالتِ جاری برمی‌گرداند.
  */
 export function useDashboardCards(
   token: string,
@@ -15,8 +21,12 @@ export function useDashboardCards(
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const { mode } = useExperienceMode()
   const groups = useMemo(() => buildLaunchers(me), [me])
-  const cards = useMemo(() => resolveCards(groups, me.dashboard_cards), [groups, me.dashboard_cards])
+  const cards = useMemo(
+    () => resolveCards(groups, me.dashboard_cards, mode),
+    [groups, me.dashboard_cards, mode],
+  )
 
   async function confirm(ids: string[]): Promise<boolean> {
     setBusy(true)

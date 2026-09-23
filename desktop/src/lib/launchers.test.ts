@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest'
 
-import { DEFAULT_CARD_IDS, buildLaunchers, cardHint, launchIndex, resolveCards } from './launchers'
+import { MODE_DEFAULT_CARDS, buildLaunchers, cardHint, launchIndex, resolveCards } from './launchers'
 import type { MeResponse } from '../api'
 
 const me = {
@@ -87,25 +87,55 @@ describe('کاتالوگِ مقصدها', () => {
 })
 
 describe('کارت‌های پیش‌فرض', () => {
-  it('**هسته‌ی این تست** — هر پیش‌فرض در کاتالوگ هست', () => {
-    for (const id of DEFAULT_CARD_IDS) expect(index.has(id), id).toBe(true)
+  const MODES = ['accountant', 'simple'] as const
+
+  it.each(MODES)('**هسته‌ی این تست** — هر پیش‌فرضِ حالتِ %s در کاتالوگ هست', (mode) => {
+    //: شناسه‌ی غلط این‌جا خطا نمی‌دهد — `resolveCards` بی‌صدا کنارش می‌گذارد و
+    //: داشبورد فقط یک کارت کمتر دارد. «دفتر روزنامه» اول به `ebooks` نگاشته شده
+    //: بود که «دفاتر تجارت الکترونیک» است، نه دفترِ روزنامه.
+    for (const id of MODE_DEFAULT_CARDS[mode]) expect(index.has(id), id).toBe(true)
   })
 
-  it('بدونِ انتخابِ کاربر، همان پیش‌فرض‌ها نشان داده می‌شوند', () => {
-    expect(resolveCards(groups, null).map((t) => t.id)).toEqual(DEFAULT_CARD_IDS)
+  it.each(MODES)('پیش‌فرض‌های حالتِ %s تکراری ندارند', (mode) => {
+    const ids = MODE_DEFAULT_CARDS[mode]
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('فهرستِ خالی یعنی خالی — نه بازگشت به پیش‌فرض', () => {
-    expect(resolveCards(groups, [])).toEqual([])
+  it('همان فهرستِ §۵۳ — هشت کارتِ حسابدار، هفت کارتِ ساده', () => {
+    //: ساده هفت‌تاست نه هشت: «بدهکاران» و «طلبکاران» یک صفحه‌اند (`contacts/aging`
+    //: با یک کلید) و دو کارت به یک مقصد قاعده‌ی یکتاییِ همین کاتالوگ را می‌شکست.
+    expect(MODE_DEFAULT_CARDS.accountant).toHaveLength(8)
+    expect(MODE_DEFAULT_CARDS.simple).toHaveLength(7)
+  })
+
+  it('دو حالت واقعاً دو داشبوردِ متفاوت‌اند', () => {
+    const acc = new Set(MODE_DEFAULT_CARDS.accountant)
+    expect(MODE_DEFAULT_CARDS.simple.some((id) => acc.has(id))).toBe(false)
+  })
+
+  it.each(MODES)('بدونِ انتخابِ کاربر، پیش‌فرض‌های حالتِ %s نشان داده می‌شوند', (mode) => {
+    expect(resolveCards(groups, null, mode).map((t) => t.id)).toEqual(MODE_DEFAULT_CARDS[mode])
+  })
+
+  it.each(MODES)('فهرستِ خالی در حالتِ %s یعنی خالی — نه بازگشت به پیش‌فرض', (mode) => {
+    expect(resolveCards(groups, [], mode)).toEqual([])
+  })
+
+  it('**عوض‌کردنِ حالت چیدمانِ شخصیِ کاربر را دست نمی‌زند**', () => {
+    const saved = ['quotations', 'salesinvoice']
+    const asAccountant = resolveCards(groups, saved, 'accountant').map((t) => t.id)
+    const asSimple = resolveCards(groups, saved, 'simple').map((t) => t.id)
+    expect(asAccountant).toEqual(saved)
+    expect(asSimple).toEqual(saved)
   })
 
   it('شناسه‌ی ناشناخته کنار می‌رود و بقیه می‌مانند', () => {
-    const cards = resolveCards(groups, ['salesinvoice', 'ماژولِ حذف‌شده', 'quotations'])
+    const cards = resolveCards(groups, ['salesinvoice', 'ماژولِ حذف‌شده', 'quotations'], 'simple')
     expect(cards.map((t) => t.id)).toEqual(['salesinvoice', 'quotations'])
   })
 
   it('ترتیبِ کاربر حفظ می‌شود', () => {
-    expect(resolveCards(groups, ['quotations', 'salesinvoice']).map((t) => t.id)).toEqual([
+    expect(resolveCards(groups, ['quotations', 'salesinvoice'], 'accountant').map((t) => t.id)).toEqual([
       'quotations',
       'salesinvoice',
     ])
