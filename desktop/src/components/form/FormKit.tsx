@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, HelpCircle, Plus, Search, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, HelpCircle, Plus, Search, X, type LucideIcon } from 'lucide-react'
 import { SearchSelect } from '../../components/SearchSelect'
 
 /**
@@ -101,6 +101,51 @@ export function FormField({
  */
 export function FormGrid({ cols = 3, children }: { cols?: 2 | 3; children: ReactNode }) {
   return <div className={cols === 2 ? 'ef-grid ef-grid--2' : 'ef-grid'}>{children}</div>
+}
+
+/**
+ * «گزینه‌های بیشتر» — فیلدهای کم‌کاربرد پشتِ یک کلید، تا فرمِ روزمره خلوت بماند.
+ *
+ * **داده‌ی پُر هرگز پنهان نمی‌شود:** `forceOpen` وقتی یکی از فیلدهای درون مقدار دارد
+ * بخش را باز نگه می‌دارد و کلید را غیرفعال می‌کند. پیش‌نویسِ ماندگار (`usePersistentState`)
+ * می‌تواند مقداری از جلسه‌ی قبل بیاورد، و مقداری که ثبت می‌شود ولی دیده نمی‌شود همان
+ * چیزی است که نباید اتفاق بیفتد. فیلدِ **اجباری** هم اصلاً نباید این‌جا بیاید.
+ */
+export function MoreOptions({
+  summary,
+  forceOpen = false,
+  children,
+}: {
+  /** این بخش چه دارد — کوتاه، کنارِ کلید، تا کاربر بداند بازکردنش ارزش دارد یا نه. */
+  summary: string
+  forceOpen?: boolean
+  children: ReactNode
+}) {
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  const shown = open || forceOpen
+  return (
+    <div className="ef-more">
+      <button
+        type="button"
+        className="ef-more-toggle"
+        aria-expanded={shown}
+        aria-controls={id}
+        disabled={forceOpen}
+        title={forceOpen ? 'این گزینه‌ها مقدار دارند و پنهان نمی‌شوند.' : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronDown size={15} className="ef-more-chev" aria-hidden="true" />
+        گزینه‌های بیشتر
+        <span className="ef-more-summary">{summary}</span>
+      </button>
+      {shown && (
+        <div id={id} className="ef-more-body">
+          {children}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /**

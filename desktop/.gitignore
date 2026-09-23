@@ -24,3 +24,6 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+# عکس و خروجیِ E2E وقتی شکست می‌خورد (e2e/accountant-journal.e2e.mjs)
+e2e-artifacts/

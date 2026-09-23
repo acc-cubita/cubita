@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AccountCache } from '../electron.d'
 import {
+  ApiError,
   createJournalEntryDirect,
   fetchAnalytics,
   fetchCostCenters,
@@ -17,6 +18,7 @@ import { usePersistentState } from './usePersistentState'
 //: کنش‌های ردیف عمداً بیرون از این هوک‌اند تا بدونِ DOM تست شوند
 //: (`journalLineOps.test.ts`). محیطِ vitest این پروژه `node` است.
 import * as ops from './journalLineOps'
+import { rememberDescriptions } from './descriptionMemory'
 
 export interface JournalDraftLine {
   accountId: string
@@ -29,6 +31,9 @@ export interface JournalDraftLine {
   trackingDate?: string
   /** تفصیلیِ ردیف — برای حسابِ «تفصیلی پذیر» اجباری. خالی = ارث از سطحِ سند. */
   analyticId?: string
+  /** مرکزِ هزینه‌ی ردیف — خالی = مرکزِ سند. سرور همان قاعده‌ی تفصیلی را دارد: ردیف مقدم
+   *  است (`JournalLineIn.cost_center_id`). پیش‌نویسِ قدیمی بی این فیلد هم معتبر است. */
+  costCenterId?: string
   /** شرحِ ردیف. API از اول می‌پذیردش (`JournalLineIn.description`) ولی تا امروز
    *  هیچ فرمی نمی‌فرستادش؛ گریدِ حسابدار اولین مصرف‌کننده‌اش است. */
   description?: string
@@ -42,6 +47,7 @@ const emptyLine = (): JournalDraftLine => ({
   trackingNo: '',
   trackingDate: '',
   analyticId: '',
+  costCenterId: '',
   description: '',
 })
 
@@ -196,14 +202,28 @@ export function useJournalEntryDraft({
     )
     return true
   }
-  const validLineCount = lines.filter(
-    (l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0),
-  ).length
+  const validLineCount = lines.filter(ops.isPostedLine).length
 
   async function submit(): Promise<boolean> {
     setMessage(null)
 
-    const validLines = lines.filter((l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0))
+    //: ردیفِ نیمه‌کاره بی‌صدا حذف نمی‌شود — شماره‌ی گریدش گفته می‌شود تا کاربر
+    //: بداند کدام را کامل یا حذف کند (UI-01 §۳۸).
+    const noAccount = ops.rowsWithoutAccount(lines)
+    if (noAccount.length > 0) {
+      setMessage({ text: `ردیفِ ${ops.faRows(noAccount)}: مبلغ دارد ولی حساب ندارد — حساب را انتخاب کنید.`, kind: 'err' })
+      return false
+    }
+    const noAmount = ops.rowsWithoutAmount(lines)
+    if (noAmount.length > 0) {
+      setMessage({
+        text: `ردیفِ ${ops.faRows(noAmount)}: حساب دارد ولی مبلغ ندارد — مبلغ را بنویسید یا ردیف را حذف کنید.`,
+        kind: 'err',
+      })
+      return false
+    }
+
+    const validLines = lines.filter(ops.isPostedLine)
     if (validLines.length < 2) {
       setMessage({ text: 'سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.', kind: 'err' })
       return false
@@ -220,16 +240,12 @@ export function useJournalEntryDraft({
 
     // تفصیلیِ اجباری را همین‌جا می‌گیریم، نه با ۴۰۰ از سرور: کاربر باید بداند
     // *کدام ردیف* مشکل دارد، و آن را فقط این‌جا می‌دانیم. سرور هم گاردش را دارد.
+    // شماره‌ها شماره‌ی گریدند، نه جایگاه میانِ ردیف‌های پُر (`rowsMissingTafsili`).
     const missingTafsili =
-      tafsiliMode === 'floating'
-        ? []
-        : validLines
-            .map((l, i) => ({ l, i }))
-            .filter(({ l }) => tafsiliRequired.has(l.accountId) && !(l.analyticId || analyticId))
-            .map(({ i }) => (i + 1).toLocaleString('fa-IR'))
+      tafsiliMode === 'floating' ? [] : ops.rowsMissingTafsili(lines, tafsiliRequired, analyticId)
     if (missingTafsili.length > 0) {
       setMessage({
-        text: `ردیفِ ${missingTafsili.join('، ')}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
+        text: `ردیفِ ${ops.faRows(missingTafsili)}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
         kind: 'err',
       })
       return false
@@ -264,6 +280,8 @@ export function useJournalEntryDraft({
         // نوشته باشد. اگر کاربر شماره‌ای بزند و بعد حساب را به حسابی بی‌پیگیری
         // عوض کند، آن مقدارِ جامانده سند را با ۴۰۰ رد می‌کرد.
         ...(l.analyticId ? { analytic_id: l.analyticId } : {}),
+        //: مرکزِ هزینه‌ی ردیف بر مرکزِ سند مقدم است؛ خالی = همان مرکزِ سند (سرور).
+        ...(l.costCenterId ? { cost_center_id: l.costCenterId } : {}),
         ...(trackingAllowed.has(l.accountId) && (l.trackingNo?.trim() || l.trackingDate)
           ? {
               tracking_no: l.trackingNo?.trim() || null,
@@ -285,6 +303,8 @@ export function useJournalEntryDraft({
           kind: 'ok',
         })
       }
+      //: حافظه‌ی شرحِ همین جلسه — سندِ بعدی شرح‌های این یکی را پیشنهاد می‌گیرد (§۲۰).
+      rememberDescriptions([description, ...validLines.map((l) => l.description ?? '')])
       setDescription('')
       //: پاک می‌شود مثلِ شرح. چسبیدنِ شماره فرعیِ سندِ قبلی به سندِ بعدی، ارجاعِ
       //: غلط می‌سازد — و ارجاعِ غلط بدتر از ارجاعِ نداشته است.
@@ -295,7 +315,9 @@ export function useJournalEntryDraft({
       onQueued()
       return true
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+      //: خطای ردیفیِ سرور شماره‌ی payload دارد؛ به شماره‌ی گرید برمی‌گردد.
+      const rowText = err instanceof ApiError ? ops.serverLineErrors(err.detail, ops.postedRowNumbers(lines)) : null
+      setMessage({ text: rowText ?? (err instanceof Error ? err.message : 'خطای ناشناخته'), kind: 'err' })
       return false
     } finally {
       setSubmitting(false)

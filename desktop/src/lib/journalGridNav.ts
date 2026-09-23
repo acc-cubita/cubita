@@ -16,6 +16,7 @@ export type ColId =
   | 'account'
   | 'fx'
   | 'tafsili'
+  | 'costCenter'
   | 'description'
   | 'debit'
   | 'credit'

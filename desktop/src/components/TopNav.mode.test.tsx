@@ -96,3 +96,60 @@ describe('منوی بالا در هر حالت', () => {
     expect(onNavigate).toHaveBeenCalledWith('acctchart', undefined)
   })
 })
+
+describe('سوییچِ سریعِ حالت در منوی کاربر (§۷)', () => {
+  const radios = () => [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+
+  function renderWithToken(fetchMock: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal('fetch', fetchMock)
+    act(() => {
+      root.render(
+        createElement(TopNav, {
+          active: 'overview',
+          onNavigate,
+          userName: 'آزمون',
+          roleName: 'مالک',
+          businessName: 'نمونه',
+          token: 't',
+          tenantKind: 'standard',
+          enabledModules: [],
+          allowedModules: [],
+          onOpenSearch: vi.fn(),
+          onLogout: vi.fn(),
+        }),
+      )
+    })
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('از منوی کاربر: همان لحظه عوض می‌شود و **همان ترجیحِ پروفایل** به سرور می‌رود', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    renderWithToken(fetchMock)
+    act(() => container.querySelector<HTMLButtonElement>('.topnav-user')!.click())
+
+    const [simple, accountant] = radios()
+    expect(simple.textContent).toBe('حالت ساده')
+    expect(accountant.getAttribute('aria-checked')).toBe('true')
+
+    await act(async () => simple.click())
+    expect(simple.getAttribute('aria-checked')).toBe('true')
+    expect(bar()[1]).toBe('مشتریان و فروش') // نوار همان لحظه دوباره چیده شد
+    //: منو باز می‌ماند تا نتیجه دیده شود.
+    expect(container.querySelector('.topnav-user-panel')).not.toBeNull()
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toMatch(/\/api\/auth\/me$/)
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(String(init.body))).toEqual({ experience_mode: 'simple' })
+  })
+
+  it('در کشوی موبایل هم هست — گزینه‌ی radio، نه «صفحه‌ی فعال»', () => {
+    renderWithToken(vi.fn(async () => new Response('{}', { status: 200 })))
+    act(() => container.querySelector<HTMLButtonElement>('.topnav-hamburger')!.click())
+    const rows = radios().filter((r) => r.classList.contains('mob-row'))
+    expect(rows.map((r) => r.textContent)).toEqual(['حالت ساده', 'حالت حسابدار'])
+    expect(rows[1].getAttribute('aria-checked')).toBe('true')
+    expect(rows[1].hasAttribute('aria-current')).toBe(false)
+  })
+})

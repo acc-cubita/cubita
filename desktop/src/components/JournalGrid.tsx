@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, CopyPlus, Trash2 } from 'lucide-react'
 
 import { SearchSelect } from './SearchSelect'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { RowAction } from './form/FormKit'
+import { DescriptionInput } from './DescriptionInput'
 import type { JournalEntryDraft, JournalDraftLine } from '../lib/journalEntryDraft'
 import {
   firstInRow,
@@ -14,6 +15,8 @@ import {
   type ColId,
   type GridShape,
 } from '../lib/journalGridNav'
+import { poolFor } from '../lib/descriptionMemory'
+import { normalizeFa } from '../lib/faText'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -33,10 +36,24 @@ const fa = (n: number) => n.toLocaleString('fa-IR')
  */
 export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   const gridRef = useRef<HTMLDivElement>(null)
+  const jumpRef = useRef<HTMLInputElement>(null)
+  const [jump, setJump] = useState('')
+  const [jumpMsg, setJumpMsg] = useState<string | null>(null)
+
+  //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
+  //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
+  const linesRef = useRef(d.lines)
+  linesRef.current = d.lines
+  const descriptionPool = useCallback(
+    (row: number) => poolFor(linesRef.current.map((l) => l.description ?? ''), row),
+    [],
+  )
 
   const showFx = Boolean(d.currencyCode)
   const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
   const showTracking = d.lines.some((l) => d.trackingAllowed.has(l.accountId))
+  //: مرکزِ هزینه‌ی ردیف فقط وقتی ستون دارد که کسب‌وکار مرکزی تعریف کرده باشد.
+  const showCostCenter = d.costCenters.length > 0
 
   //: `useMemo` حیاتی است، نه آرایش: `cols` به **هر** ردیف پاس داده می‌شود، و
   //: آرایه‌ی تازه در هر رندر یعنی مقایسه‌ی `memo`ِ همه‌ی ۳۰۰ ردیف شکست می‌خورد.
@@ -47,12 +64,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       'account',
       ...(showFx ? (['fx'] as ColId[]) : []),
       ...(showTafsili ? (['tafsili'] as ColId[]) : []),
+      ...(showCostCenter ? (['costCenter'] as ColId[]) : []),
       'description',
       'debit',
       'credit',
       ...(showTracking ? (['trackingNo', 'trackingDate'] as ColId[]) : []),
     ],
-    [showFx, showTafsili, showTracking],
+    [showFx, showTafsili, showTracking, showCostCenter],
   )
   const shape: GridShape = { cols, rowCount: d.lines.length }
 
@@ -67,6 +85,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
     },
     [d.lines, d.tafsiliRequired, d.trackingAllowed],
   )
+  //: **مسیرِ Enter از مرکزِ هزینه می‌پرد** (§۱۵): در سندِ دستی اجباری نیست، و خانه‌ای
+  //: که بیشترِ ردیف‌ها خالی می‌گذارند هر ردیف را یک Enterِ اضافه کند می‌کرد. Tab و موس
+  //: به آن می‌رسند و ↑/↓ داخلِ همان ستون کار می‌کند (آن‌ها `enabled` را می‌خوانند).
+  const onEnterPath = useCallback(
+    (row: number, col: ColId) => col !== 'costCenter' && enabled(row, col),
+    [enabled],
+  )
 
   /** عنصرِ قابلِ فوکوسِ درونِ یک سلول را پیدا و فوکوس می‌کند. */
   const focusCell = useCallback((row: number, col: number) => {
@@ -80,11 +105,18 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   }, [])
 
   //: فوکوسِ خودکار روی اولین سلولِ عملیاتی (§۴۴) — کاربر نباید اول داخلِ گرید
-  //: کلیک کند. فقط یک‌بار موقعِ سوارشدن، و فقط اگر فوکوس جای دیگری نیست: اگر
-  //: کاربر از سربرگ (تاریخ/شرح) شروع کرده، دزدیدنِ فوکوس آزاردهنده است.
+  //: کلیک کند. فقط یک‌بار موقعِ سوارشدن. اگر کاربر از سربرگِ **همین فرم** شروع کرده
+  //: (تاریخ/شرح)، فوکوسش دزدیده نمی‌شود.
+  //:
+  //: فوکوسِ بیرون از فرم اما کارِ کاربر روی این سند نیست، باقی‌مانده‌ی ناوبری است:
+  //: دکمه‌ی «حسابداری»ِ نوارِ بالا که با آن آمده، یا پالتِ فرمان. شرطِ قبلی هر فوکوسی
+  //: بیرون از گرید را محترم می‌شمرد، پس کسی که با کلیک روی نوار آمده بود فوکوسی
+  //: نمی‌گرفت و باید با Tab از کلِ سربرگ رد می‌شد — E2E همین را پیدا کرد.
   useEffect(() => {
     const active = document.activeElement
-    if (active && active !== document.body && gridRef.current?.contains(active) === false) return
+    const grid = gridRef.current
+    const inOwnHeader = Boolean(active && grid?.closest('form')?.contains(active) && !grid.contains(active))
+    if (inOwnHeader) return
     const first = gridRef.current?.querySelector<HTMLElement>('[data-cell="0-0"] button, [data-cell="0-0"] select')
     first?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,6 +153,26 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
    * داخلِ هر input/select/button از کار می‌افتد، و این کلیدها دقیقاً همان‌جا
    * اجرا می‌شوند. دو فضای مکمل.
    */
+  /**
+   * رفتن به ردیفِ n (UI-01 §۴۲): اسکرول، و فوکوس روی اولین خانه‌ی فعالِ همان ردیف.
+   * رقمِ فارسی هم پذیرفته می‌شود — کاربر روی چیدمانِ فارسی تایپ می‌کند.
+   */
+  function jumpTo() {
+    const raw = normalizeFa(jump)
+    const n = Number(raw)
+    if (!raw || !Number.isInteger(n) || n < 1 || n > d.lines.length) {
+      setJumpMsg(`ردیفِ ${raw ? fa(Number(raw) || 0) : '؟'} نیست — سند ${fa(d.lines.length)} ردیف دارد.`)
+      return
+    }
+    setJumpMsg(null)
+    const head = firstInRow(shape, n - 1, onEnterPath)
+    if (!head) return
+    gridRef.current
+      ?.querySelector(`[data-cell="${head.row}-${head.col}"]`)
+      ?.scrollIntoView?.({ block: 'center' })
+    focusCell(head.row, head.col)
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const cellEl = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
     const coords = cellEl?.dataset.cell?.split('-').map(Number)
@@ -157,13 +209,24 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
         if (!d.submitting) void d.submit()
         return
       }
+      //: «رفتن به ردیف» — Ctrl+G در مرورگر «یافتنِ بعدی» است، ولی فقط وقتی نوارِ
+      //: یافتن باز است؛ داخلِ خانه‌ی گرید معنای دیگری ندارد.
+      if (e.code === 'KeyG') {
+        e.preventDefault()
+        jumpRef.current?.focus()
+        jumpRef.current?.select()
+        return
+      }
       return
     }
 
     // ── پذیرشِ مبلغِ باقی‌مانده ──
     //: در ستونِ بدهکار/بستانکارِ خالی، Enter عددی را می‌نشاند که سند را متوازن
-    //: می‌کند و بعد مثلِ همیشه جلو می‌رود. اگر ردیف از قبل عدد دارد، دست نمی‌خورد
-    //: — وگرنه Enterِ عادی مبلغِ کاربر را بازنویسی می‌کرد.
+    //: می‌کند و **در همان ضربه** جلو می‌رود — از جایی که انگار Enter روی ستونِ
+    //: بستانکار خورده: مبالغِ ردیف با همین کامل شد و طرفِ دیگرش باید خالی بماند،
+    //: پس ایستادن روی آن فقط یک Enterِ اضافه بود. اگر ردیف از قبل عدد دارد، یا
+    //: سند متوازن است، دست نمی‌خورد و Enterِ عادی اجرا می‌شود — وگرنه مبلغِ کاربر
+    //: بازنویسی می‌شد.
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
       const col = cols[at.col]
       const line = d.lines[at.row]
@@ -188,11 +251,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
 
       if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
         e.preventDefault()
-        d.applyRemaining(at.row)
+        if (d.applyRemaining(at.row)) {
+          apply(onEnter(shape, { row: at.row, col: cols.indexOf('credit') }, onEnterPath))
+        }
         return
       }
       e.preventDefault()
-      apply(e.shiftKey ? onShiftEnter(shape, at, enabled) : onEnter(shape, at, enabled))
+      apply(e.shiftKey ? onShiftEnter(shape, at, onEnterPath) : onEnter(shape, at, onEnterPath))
       return
     }
 
@@ -205,6 +270,39 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   }
 
   return (
+    <>
+    <div className="jg-toolbar">
+      <label className="jg-jump">
+        رفتن به ردیف
+        <input
+          ref={jumpRef}
+          type="text"
+          inputMode="numeric"
+          dir="ltr"
+          size={5}
+          value={jump}
+          aria-describedby={jumpMsg ? 'jg-jump-msg' : undefined}
+          title="Ctrl + G از هر خانه‌ی گرید"
+          onChange={(e) => {
+            setJump(e.target.value)
+            setJumpMsg(null)
+          }}
+          onKeyDown={(e) => {
+            //: Enter این‌جا فرمِ سند را ثبت نمی‌کند — فقط می‌پرد.
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              jumpTo()
+            }
+          }}
+        />
+      </label>
+      <span className="jg-count">{fa(d.lines.length)} ردیف</span>
+      {jumpMsg && (
+        <span className="jg-jump-msg" id="jg-jump-msg" role="status">
+          {jumpMsg}
+        </span>
+      )}
+    </div>
     <div
       ref={gridRef}
       className="table-scroll ef-table-wrap jg-wrap"
@@ -219,6 +317,7 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
             <th>حساب</th>
             {showFx && <th>مبلغ ارزی</th>}
             {showTafsili && <th>تفصیلی</th>}
+            {showCostCenter && <th>مرکز هزینه</th>}
             <th>شرح ردیف</th>
             <th>بدهکار</th>
             <th>بستانکار</th>
@@ -247,17 +346,22 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
               accounts={d.postableAccounts}
               analytics={d.analytics}
               hasHeaderAnalytic={Boolean(d.analyticId)}
+              showCostCenter={showCostCenter}
+              costCenters={d.costCenters}
+              hasHeaderCenter={Boolean(d.costCenterId)}
               canRemove={d.lines.length > 2}
               onUpdate={d.updateLine}
               onFx={d.setLineFx}
               onDuplicate={d.duplicateLine}
               onCopyPrev={d.copyPreviousInto}
               onRemove={d.removeLine}
+              getDescriptionPool={descriptionPool}
             />
           ))}
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -281,12 +385,16 @@ const GridRow = memo(function GridRow({
   accounts,
   analytics,
   hasHeaderAnalytic,
+  showCostCenter,
+  costCenters,
+  hasHeaderCenter,
   canRemove,
   onUpdate,
   onFx,
   onDuplicate,
   onCopyPrev,
   onRemove,
+  getDescriptionPool,
 }: {
   i: number
   line: JournalDraftLine
@@ -300,12 +408,16 @@ const GridRow = memo(function GridRow({
   accounts: JournalEntryDraft['postableAccounts']
   analytics: JournalEntryDraft['analytics']
   hasHeaderAnalytic: boolean
+  showCostCenter: boolean
+  costCenters: JournalEntryDraft['costCenters']
+  hasHeaderCenter: boolean
   canRemove: boolean
   onUpdate: JournalEntryDraft['updateLine']
   onFx: JournalEntryDraft['setLineFx']
   onDuplicate: JournalEntryDraft['duplicateLine']
   onCopyPrev: JournalEntryDraft['copyPreviousInto']
   onRemove: JournalEntryDraft['removeLine']
+  getDescriptionPool: (row: number) => string[]
 }) {
   const col = (id: ColId) => cols.indexOf(id)
 
@@ -363,12 +475,30 @@ const GridRow = memo(function GridRow({
         </td>
       )}
 
+      {showCostCenter && (
+        <td data-cell={`${i}-${col('costCenter')}`}>
+          <SearchSelect
+            aria-label={`مرکزِ هزینه‌ی ردیفِ ${fa(i + 1)}`}
+            value={line.costCenterId ?? ''}
+            onChange={(e) => onUpdate(i, { costCenterId: e.target.value })}
+          >
+            {/* خالی یعنی «همان مرکزِ سند» اگر سند مرکز دارد — متنِ گزینه همین را می‌گوید. */}
+            <option value="">{hasHeaderCenter ? '— مرکزِ سند —' : '— بدون مرکز —'}</option>
+            {costCenters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code ? `${c.code} — ${c.name}` : c.name}
+              </option>
+            ))}
+          </SearchSelect>
+        </td>
+      )}
+
       <td data-cell={`${i}-${col('description')}`}>
-        <input
-          type="text"
+        <DescriptionInput
           aria-label={`شرحِ ردیفِ ${fa(i + 1)}`}
           value={line.description ?? ''}
-          onChange={(e) => onUpdate(i, { description: e.target.value })}
+          onChange={(v) => onUpdate(i, { description: v })}
+          getPool={() => getDescriptionPool(i)}
           placeholder="اختیاری"
         />
       </td>

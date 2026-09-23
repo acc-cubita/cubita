@@ -12405,3 +12405,60 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
     border-radius: 999px;
   }
 }
+
+/* ── عنوانِ بخش در منوی کاربر («حالت کاربری») ── */
+.topnav-dd-label {
+  padding: 4px 10px 2px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* ── «گزینه‌های بیشتر» (MoreOptions در FormKit) ─────────────────────────────────
+   کلیدِ کم‌صدا زیرِ گریدِ فرم. غیرفعال یعنی «فیلدها مقدار دارند و پنهان نمی‌شوند»،
+   پس رنگش کم‌رنگ نمی‌شود — چیزی خراب نیست، فقط بسته نمی‌شود. */
+.ef-more { margin-block-start: 12px; }
+.ef-more-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+.ef-more-toggle:hover:not(:disabled) { background: var(--surface-hover); }
+.ef-more-toggle:disabled { cursor: default; color: var(--text-h); opacity: 1; }
+.ef-more-chev { transition: transform 0.15s; }
+.ef-more-toggle[aria-expanded='true'] .ef-more-chev { transform: rotate(180deg); }
+.ef-more-summary { color: var(--text-muted); font-weight: 400; }
+.ef-more-body {
+  margin-block-start: 10px;
+  padding-block-start: 12px;
+  border-block-start: 1px dashed var(--border);
+}
+
+/* ── نوارِ بالای گریدِ سند: «رفتن به ردیف» و شمارِ ردیف‌ها ──
+   بیرون از ظرفِ اسکرولِ گرید تا در سندِ ۳۰۰ ردیفی همیشه دیده شود. */
+.jg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-block-end: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+/* `label:has(> input)`ِ سراسری (index.css) برچسب را ستونی می‌کند؛ این‌جا برچسب کنارِ
+   کادر است، پس جهت صریح گفته می‌شود — وگرنه کادر زیرِ متن می‌افتاد. */
+.jg-toolbar .jg-jump { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+.jg-toolbar .jg-jump input { width: 72px; min-height: 0; height: 30px; padding-block: 0; text-align: center; }
+.jg-count { font-variant-numeric: tabular-nums; }
+.jg-jump-msg { color: var(--danger); }

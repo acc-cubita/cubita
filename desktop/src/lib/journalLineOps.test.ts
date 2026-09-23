@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
 import type { JournalDraftLine } from './journalEntryDraft'
-import { copyPreviousInto, duplicateAt, remainingOf, removeAt, sumSide } from './journalLineOps'
+import {
+  copyPreviousInto,
+  duplicateAt,
+  faRows,
+  isPostedLine,
+  postedRowNumbers,
+  remainingOf,
+  removeAt,
+  rowsMissingTafsili,
+  rowsWithoutAccount,
+  rowsWithoutAmount,
+  serverLineErrors,
+  sumSide,
+} from './journalLineOps'
 
 const line = (p: Partial<JournalDraftLine> = {}): JournalDraftLine => ({
   accountId: '',
@@ -115,5 +128,95 @@ describe('مبلغِ باقی‌مانده', () => {
     const rows = [line({ accountId: 'bank', debit: '20000000' }), line({ accountId: 'party' })]
     const r = remainingOf(sumSide(rows, 'debit'), sumSide(rows, 'credit'))
     expect(r).toEqual({ amount: 20_000_000, side: 'credit' })
+  })
+})
+
+describe('شماره‌ی ردیف در خطا = شماره‌ی گرید', () => {
+  //: سناریوی گزارش‌شده: پُر، خالی، نامعتبر. پیش از رفع، شمارش روی ردیف‌های پُر بود
+  //: و پیام «ردیف ۲» می‌گفت برای ردیفی که کاربر کنارش «۳» می‌بیند.
+  const TAFSILI = new Set(['needs-tafsili'])
+  const rows = [
+    line({ accountId: 'bank', debit: '5000' }),
+    line(),
+    line({ accountId: 'needs-tafsili', credit: '5000' }),
+  ]
+
+  it('ردیفِ خالیِ وسط شماره‌ها را جابه‌جا نمی‌کند — «ردیف ۳»', () => {
+    expect(rowsMissingTafsili(rows, TAFSILI, '')).toEqual([3])
+  })
+
+  it('تفصیلیِ خودِ ردیف یا سربرگ کافی است', () => {
+    expect(rowsMissingTafsili([rows[0], rows[1], { ...rows[2], analyticId: 't1' }], TAFSILI, '')).toEqual([])
+    expect(rowsMissingTafsili(rows, TAFSILI, 'header-t')).toEqual([])
+  })
+
+  it('ردیفِ بی‌مبلغ فرستاده نمی‌شود، پس خطا هم نمی‌گیرد', () => {
+    expect(rowsMissingTafsili([line({ accountId: 'needs-tafsili' })], TAFSILI, '')).toEqual([])
+  })
+
+  it('نگاشتِ payload ← گرید: ردیفِ دومِ فرستاده‌شده، ردیفِ سومِ گرید است', () => {
+    expect(postedRowNumbers(rows)).toEqual([1, 3])
+    expect(rows.filter(isPostedLine)).toHaveLength(2)
+  })
+
+  it('متنِ شماره‌ها فارسی و خوانا', () => {
+    expect(faRows([3])).toBe('۳')
+    expect(faRows([3, 5])).toBe('۳ و ۵')
+    expect(faRows([3, 5, 17])).toBe('۳، ۵ و ۱۷')
+  })
+})
+
+describe('ردیفِ نیمه‌کاره بی‌صدا حذف نمی‌شود', () => {
+  const rows = [
+    line({ accountId: 'bank', debit: '100' }),
+    line(), // خالیِ واقعی — خطا نیست
+    line({ debit: '50' }), // مبلغ بی حساب
+    line({ accountId: 'cust' }), // حساب بی مبلغ
+    line({ accountId: 'cust', credit: '100' }),
+  ]
+  it('مبلغ بی حساب → ردیفِ ۳ (شماره‌ی گرید)', () => {
+    expect(rowsWithoutAccount(rows)).toEqual([3])
+  })
+  it('حساب بی مبلغ → ردیفِ ۴؛ ردیفِ کاملاً خالی هیچ‌کدام نیست', () => {
+    expect(rowsWithoutAmount(rows)).toEqual([4])
+  })
+})
+
+describe('خطای ۴۲۲ِ سرور ← شماره‌ی گرید', () => {
+  //: ردیفِ ۲ِ گرید خالی است، پس ردیفِ دومِ payload ردیفِ ۳ِ گرید است.
+  const posted = postedRowNumbers([
+    line({ accountId: 'bank', debit: '100' }),
+    line(),
+    line({ accountId: 'cust', credit: '100' }),
+  ])
+
+  it('جایگاهِ payload به ردیفِ گرید برمی‌گردد و «Value error, » برداشته می‌شود', () => {
+    const detail = [{ loc: ['body', 'lines', 1, 'fx_rate'], msg: 'Value error, نرخِ ارز باید بزرگ‌تر از صفر باشد' }]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۳: نرخِ ارز باید بزرگ‌تر از صفر باشد')
+  })
+
+  it('پیامِ انگلیسیِ پایدانتیک → نامِ فارسیِ فیلد', () => {
+    const detail = [{ loc: ['body', 'lines', 0, 'tracking_no'], msg: 'String should have at most 50 characters' }]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۱: مقدارِ «شماره پیگیری» نامعتبر است')
+  })
+
+  it('چند ردیف، به ترتیبِ گرید', () => {
+    const detail = [
+      { loc: ['body', 'lines', 1, 'fx_amount'], msg: 'Value error, مبلغ ارزی لازم است' },
+      { loc: ['body', 'lines', 0, 'fx_rate'], msg: 'Value error, نرخ لازم است' },
+    ]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۱: نرخ لازم است — ردیفِ ۳: مبلغ ارزی لازم است')
+  })
+
+  it('خطای سطحِ سند یا متنِ ساده، ردیفی نیست → null', () => {
+    expect(serverLineErrors([{ loc: ['body'], msg: 'Value error, سند متوازن نیست' }], posted)).toBeNull()
+    expect(serverLineErrors('سند یافت نشد', posted)).toBeNull()
+  })
+})
+
+describe('کپی از ردیفِ قبل — مرکزِ هزینه هم (§۱۸)', () => {
+  it('حساب، تفصیلی، مرکز و شرح می‌آیند؛ مبلغ نه', () => {
+    const rows = [line({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '900' }), line()]
+    expect(copyPreviousInto(rows, 1)[1]).toMatchObject({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '' })
   })
 })
