@@ -10,6 +10,9 @@ import {
   remainingOf,
   removeAt,
   rowsMissingTafsili,
+  rowsWithoutAccount,
+  rowsWithoutAmount,
+  serverLineErrors,
   sumSide,
 } from './journalLineOps'
 
@@ -160,5 +163,53 @@ describe('شماره‌ی ردیف در خطا = شماره‌ی گرید', () =
     expect(faRows([3])).toBe('۳')
     expect(faRows([3, 5])).toBe('۳ و ۵')
     expect(faRows([3, 5, 17])).toBe('۳، ۵ و ۱۷')
+  })
+})
+
+describe('ردیفِ نیمه‌کاره بی‌صدا حذف نمی‌شود', () => {
+  const rows = [
+    line({ accountId: 'bank', debit: '100' }),
+    line(), // خالیِ واقعی — خطا نیست
+    line({ debit: '50' }), // مبلغ بی حساب
+    line({ accountId: 'cust' }), // حساب بی مبلغ
+    line({ accountId: 'cust', credit: '100' }),
+  ]
+  it('مبلغ بی حساب → ردیفِ ۳ (شماره‌ی گرید)', () => {
+    expect(rowsWithoutAccount(rows)).toEqual([3])
+  })
+  it('حساب بی مبلغ → ردیفِ ۴؛ ردیفِ کاملاً خالی هیچ‌کدام نیست', () => {
+    expect(rowsWithoutAmount(rows)).toEqual([4])
+  })
+})
+
+describe('خطای ۴۲۲ِ سرور ← شماره‌ی گرید', () => {
+  //: ردیفِ ۲ِ گرید خالی است، پس ردیفِ دومِ payload ردیفِ ۳ِ گرید است.
+  const posted = postedRowNumbers([
+    line({ accountId: 'bank', debit: '100' }),
+    line(),
+    line({ accountId: 'cust', credit: '100' }),
+  ])
+
+  it('جایگاهِ payload به ردیفِ گرید برمی‌گردد و «Value error, » برداشته می‌شود', () => {
+    const detail = [{ loc: ['body', 'lines', 1, 'fx_rate'], msg: 'Value error, نرخِ ارز باید بزرگ‌تر از صفر باشد' }]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۳: نرخِ ارز باید بزرگ‌تر از صفر باشد')
+  })
+
+  it('پیامِ انگلیسیِ پایدانتیک → نامِ فارسیِ فیلد', () => {
+    const detail = [{ loc: ['body', 'lines', 0, 'tracking_no'], msg: 'String should have at most 50 characters' }]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۱: مقدارِ «شماره پیگیری» نامعتبر است')
+  })
+
+  it('چند ردیف، به ترتیبِ گرید', () => {
+    const detail = [
+      { loc: ['body', 'lines', 1, 'fx_amount'], msg: 'Value error, مبلغ ارزی لازم است' },
+      { loc: ['body', 'lines', 0, 'fx_rate'], msg: 'Value error, نرخ لازم است' },
+    ]
+    expect(serverLineErrors(detail, posted)).toBe('ردیفِ ۱: نرخ لازم است — ردیفِ ۳: مبلغ ارزی لازم است')
+  })
+
+  it('خطای سطحِ سند یا متنِ ساده، ردیفی نیست → null', () => {
+    expect(serverLineErrors([{ loc: ['body'], msg: 'Value error, سند متوازن نیست' }], posted)).toBeNull()
+    expect(serverLineErrors('سند یافت نشد', posted)).toBeNull()
   })
 })

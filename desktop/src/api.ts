@@ -115,7 +115,7 @@ export async function login(email: string, password: string): Promise<LoginResul
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(body.detail ?? 'ورود ناموفق بود')
+    throw apiError(body, 'ورود ناموفق بود', res.status)
   }
   const data = await res.json()
   return { access_token: data.access_token as string, refresh_token: (data.refresh_token as string) ?? null }
@@ -134,7 +134,7 @@ export async function requestSignupCode(email: string): Promise<{ sent: boolean;
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(body.detail ?? 'ارسال کد تأیید ناموفق بود')
+    throw apiError(body, 'ارسال کد تأیید ناموفق بود', res.status)
   }
   return res.json()
 }
@@ -164,7 +164,7 @@ export async function signup(
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(body.detail ?? 'ثبت‌نام ناموفق بود')
+    throw apiError(body, 'ثبت‌نام ناموفق بود', res.status)
   }
   const data = await res.json()
   return { access_token: data.access_token as string, refresh_token: (data.refresh_token as string) ?? null }
@@ -214,6 +214,41 @@ export interface BalanceSheet {
   total_liabilities: string
   total_equity: string
   current_period_profit: string
+}
+
+/**
+ * خطای درخواست — پیامِ خوانا، به‌علاوه‌ی خودِ `detail`ِ سرور برای کسی که ساختارش را لازم دارد.
+ *
+ * FastAPI برای خطای اعتبارسنجی (۴۲۲) `detail` را **آرایه** می‌دهد (`[{loc, msg, …}]`)، نه
+ * متن، و `new Error(آرایه)` تا امروز «[object Object]» نشان می‌داد. `loc` جای خطا را هم
+ * می‌گوید — مثلاً `["body", "lines", 2, "fx_rate"]` — و فرمِ سند با آن ردیفِ گرید را پیدا
+ * می‌کند (`serverLineErrors` در `journalLineOps`). از `Error` ارث می‌برد، پس هر
+ * `err instanceof Error ? err.message : …`ِ موجود بی‌تغییر کار می‌کند.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly detail: unknown
+  constructor(message: string, status: number, detail: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
+/** متنِ خوانای `detail`: رشته همان است؛ آرایه‌ی ۴۲۲ پیام‌هایش، بی پیشوندِ «Value error, ». */
+export function detailText(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail
+  if (!Array.isArray(detail)) return null
+  const msgs = detail
+    .map((d) => (d && typeof d === 'object' && typeof (d as { msg?: unknown }).msg === 'string' ? (d as { msg: string }).msg : null))
+    .filter((m): m is string => Boolean(m))
+    .map((m) => m.replace(/^Value error, /, ''))
+  return msgs.length > 0 ? [...new Set(msgs)].join('؛ ') : null
+}
+
+function apiError(body: { detail?: unknown }, fallback: string, status: number): ApiError {
+  return new ApiError(detailText(body.detail) ?? fallback, status, body.detail)
 }
 
 async function authedGet<T>(token: string, path: string): Promise<T> {
@@ -302,7 +337,7 @@ async function authedSend<T>(
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(errBody.detail ?? `درخواست ناموفق بود (${res.status})`)
+    throw apiError(errBody, `درخواست ناموفق بود (${res.status})`, res.status)
   }
   return res.json()
 }
@@ -315,7 +350,7 @@ async function authedDelete(token: string, path: string): Promise<void> {
   // ۲۰۴ بدنه ندارد، پس res.ok کافی است؛ فقط خطاها به پیام فارسی تبدیل می‌شوند.
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(errBody.detail ?? `حذف ناموفق بود (${res.status})`)
+    throw apiError(errBody, `حذف ناموفق بود (${res.status})`, res.status)
   }
 }
 
@@ -327,7 +362,7 @@ async function authedDeleteJson<T>(token: string, path: string): Promise<T> {
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(errBody.detail ?? `حذف ناموفق بود (${res.status})`)
+    throw apiError(errBody, `حذف ناموفق بود (${res.status})`, res.status)
   }
   return res.json()
 }
@@ -1191,7 +1226,7 @@ export async function downloadPayrollCsv(
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(errBody.detail ?? `درخواست ناموفق بود (${res.status})`)
+    throw apiError(errBody, `درخواست ناموفق بود (${res.status})`, res.status)
   }
   const disposition = res.headers.get('Content-Disposition') ?? ''
   const match = /filename="?([^"]+)"?/.exec(disposition)
@@ -4760,7 +4795,7 @@ async function anonPost<T>(path: string, body: unknown): Promise<T> {
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
-    throw new Error(errBody.detail ?? `درخواست ناموفق بود (${res.status})`)
+    throw apiError(errBody, `درخواست ناموفق بود (${res.status})`, res.status)
   }
   return res.json()
 }

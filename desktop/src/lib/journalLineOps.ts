@@ -102,6 +102,73 @@ export function rowsMissingTafsili(
   )
 }
 
+const hasAmount = (l: JournalDraftLine) => (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0
+
+/**
+ * ردیف‌هایی که مبلغ دارند ولی حساب ندارند.
+ *
+ * تا امروز بی‌صدا دور ریخته می‌شدند: نوارِ پایین مبلغشان را در جمع می‌شمرد و «متوازن»
+ * می‌گفت، ولی ثبت با «سند متوازن نیست» رد می‌شد — و کاربر نمی‌دانست کدام ردیف.
+ */
+export function rowsWithoutAccount(lines: JournalDraftLine[]): number[] {
+  return lines.flatMap((l, i) => (!l.accountId && hasAmount(l) ? [i + 1] : []))
+}
+
+/**
+ * ردیف‌هایی که حساب دارند ولی مبلغ ندارند — مثلاً بعد از «کپی از ردیفِ قبل».
+ * این‌ها هم بی‌صدا حذف می‌شدند؛ ردیفی که کاربر شروع کرده و رها کرده، باید دیده شود.
+ */
+export function rowsWithoutAmount(lines: JournalDraftLine[]): number[] {
+  return lines.flatMap((l, i) => (l.accountId && !hasAmount(l) ? [i + 1] : []))
+}
+
+/** نامِ فارسیِ فیلدهای `JournalLineIn` — برای پیامِ پایدانتیکی که فارسی نیست. */
+const LINE_FIELD_FA: Record<string, string> = {
+  account_id: 'حساب',
+  debit: 'بدهکار',
+  credit: 'بستانکار',
+  description: 'شرح',
+  currency_code: 'ارز',
+  fx_amount: 'مبلغ ارزی',
+  fx_rate: 'نرخ ارز',
+  analytic_id: 'تفصیلی',
+  cost_center_id: 'مرکز هزینه',
+  tracking_no: 'شماره پیگیری',
+  tracking_date: 'تاریخ پیگیری',
+}
+
+/**
+ * خطای اعتبارسنجیِ سرور (۴۲۲) ← «ردیفِ n: …» با شماره‌ی **گرید**.
+ *
+ * `loc`ِ خطای ردیف `["body", "lines", i, field]` است و `i` جای ردیف در **payload** است،
+ * نه در گرید — ردیف‌های خالی فرستاده نمی‌شوند. `postedRows` (از `postedRowNumbers`)
+ * همان نگاشت را برمی‌گرداند. پیامی که فارسی نیست (پایدانتیک برای طول و نوع انگلیسی
+ * می‌نویسد) به «مقدارِ «فیلد» نامعتبر است» تبدیل می‌شود. `null` یعنی هیچ خطای
+ * ردیفی نبود — پیامِ عمومی کافی است.
+ *
+ * قراردادِ خطای سرور دست نخورده: خطاهای ردیفیِ بی‌شماره (تفصیلی، پیگیری) حساب را
+ * با کد و نام می‌گویند و این‌جا عمداً تجزیه نمی‌شوند.
+ */
+export function serverLineErrors(detail: unknown, postedRows: number[]): string | null {
+  if (!Array.isArray(detail)) return null
+  const byRow = new Map<number, string[]>()
+  for (const d of detail) {
+    const { loc, msg } = (d ?? {}) as { loc?: unknown; msg?: unknown }
+    if (!Array.isArray(loc) || loc[0] !== 'body' || loc[1] !== 'lines' || typeof loc[2] !== 'number') continue
+    const row = postedRows[loc[2]]
+    if (!row) continue
+    const text = typeof msg === 'string' ? msg.replace(/^Value error, /, '') : ''
+    const field = typeof loc[3] === 'string' ? LINE_FIELD_FA[loc[3]] ?? loc[3] : null
+    const shown = /[؀-ۿ]/.test(text) ? text : `مقدارِ «${field ?? 'ردیف'}» نامعتبر است`
+    byRow.set(row, [...(byRow.get(row) ?? []), shown])
+  }
+  if (byRow.size === 0) return null
+  return [...byRow]
+    .sort((a, b) => a[0] - b[0])
+    .map(([row, msgs]) => `ردیفِ ${row.toLocaleString('fa-IR')}: ${[...new Set(msgs)].join('؛ ')}`)
+    .join(' — ')
+}
+
 /** «۳، ۵ و ۱۷» — شماره‌ی ردیف‌ها برای پیامِ خطا. */
 export function faRows(rows: number[]): string {
   const fa = rows.map((r) => r.toLocaleString('fa-IR'))

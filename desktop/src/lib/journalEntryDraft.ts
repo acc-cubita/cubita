@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AccountCache } from '../electron.d'
 import {
+  ApiError,
   createJournalEntryDirect,
   fetchAnalytics,
   fetchCostCenters,
@@ -202,6 +203,22 @@ export function useJournalEntryDraft({
   async function submit(): Promise<boolean> {
     setMessage(null)
 
+    //: ردیفِ نیمه‌کاره بی‌صدا حذف نمی‌شود — شماره‌ی گریدش گفته می‌شود تا کاربر
+    //: بداند کدام را کامل یا حذف کند (UI-01 §۳۸).
+    const noAccount = ops.rowsWithoutAccount(lines)
+    if (noAccount.length > 0) {
+      setMessage({ text: `ردیفِ ${ops.faRows(noAccount)}: مبلغ دارد ولی حساب ندارد — حساب را انتخاب کنید.`, kind: 'err' })
+      return false
+    }
+    const noAmount = ops.rowsWithoutAmount(lines)
+    if (noAmount.length > 0) {
+      setMessage({
+        text: `ردیفِ ${ops.faRows(noAmount)}: حساب دارد ولی مبلغ ندارد — مبلغ را بنویسید یا ردیف را حذف کنید.`,
+        kind: 'err',
+      })
+      return false
+    }
+
     const validLines = lines.filter(ops.isPostedLine)
     if (validLines.length < 2) {
       setMessage({ text: 'سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.', kind: 'err' })
@@ -292,7 +309,9 @@ export function useJournalEntryDraft({
       onQueued()
       return true
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
+      //: خطای ردیفیِ سرور شماره‌ی payload دارد؛ به شماره‌ی گرید برمی‌گردد.
+      const rowText = err instanceof ApiError ? ops.serverLineErrors(err.detail, ops.postedRowNumbers(lines)) : null
+      setMessage({ text: rowText ?? (err instanceof Error ? err.message : 'خطای ناشناخته'), kind: 'err' })
       return false
     } finally {
       setSubmitting(false)

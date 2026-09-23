@@ -126,3 +126,79 @@ describe('عوض‌کردنِ حالت وسطِ ثبت', () => {
     expect([...container.querySelectorAll<HTMLInputElement>('input')].some((i) => i.value === 'بابت اجاره')).toBe(true)
   })
 })
+
+describe('خطای ردیفی با شماره‌ی گرید — در خودِ فرم (§۳۸)', () => {
+  const L = (p: Record<string, string>) => ({
+    accountId: '', debit: '', credit: '', fxAmount: '', trackingNo: '', trackingDate: '', analyticId: '', description: '', ...p,
+  })
+  const message = () => container.querySelector('.ef-status, [role="status"]')?.textContent ?? container.textContent ?? ''
+
+  async function submit() {
+    await act(async () => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await new Promise((r) => setTimeout(r, 0))
+    })
+  }
+
+  it('مبلغِ بی‌حساب: پیش از رفتن به سرور، «ردیفِ ۲»', async () => {
+    localStorage.setItem('cubita.draft.journal.lines', JSON.stringify([
+      L({ accountId: 'bank', debit: '100' }),
+      L({ debit: '50' }),
+      L({ accountId: 'cust', credit: '100' }),
+    ]))
+    await render()
+    await submit()
+    expect(message()).toContain('ردیفِ ۲: مبلغ دارد ولی حساب ندارد')
+    const posts = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => (c[1] as RequestInit | undefined)?.method === 'POST',
+    )
+    expect(posts).toHaveLength(0)
+  })
+
+  it('۴۲۲ِ سرور برای ردیفِ دومِ payload → «ردیفِ ۳» چون ردیفِ ۲ خالی است', async () => {
+    localStorage.setItem('cubita.draft.journal.lines', JSON.stringify([
+      L({ accountId: 'bank', debit: '100' }),
+      L({}),
+      L({ accountId: 'cust', credit: '100' }),
+    ]))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          return new Response(
+            JSON.stringify({ detail: [{ loc: ['body', 'lines', 1, 'fx_rate'], msg: 'Value error, نرخِ ارز باید بزرگ‌تر از صفر باشد' }] }),
+            { status: 422 },
+          )
+        }
+        return new Response(JSON.stringify(API[new URL(url).pathname] ?? []), { status: 200 })
+      }),
+    )
+    await render()
+    await submit()
+    expect(message()).toContain('ردیفِ ۳: نرخِ ارز باید بزرگ‌تر از صفر باشد')
+    expect(message()).not.toContain('[object Object]')
+  })
+
+  it('۴۲۲ِ سطحِ سند (بی ردیف): متنِ خوانا، نه «[object Object]»', async () => {
+    localStorage.setItem('cubita.draft.journal.lines', JSON.stringify([
+      L({ accountId: 'bank', debit: '100' }),
+      L({ accountId: 'cust', credit: '100' }),
+    ]))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ detail: [{ loc: ['body'], msg: 'Value error, مجموع سند نمی‌تواند صفر باشد' }] }), {
+            status: 422,
+          })
+        }
+        return new Response(JSON.stringify(API[new URL(url).pathname] ?? []), { status: 200 })
+      }),
+    )
+    await render()
+    await submit()
+    expect(message()).toContain('مجموع سند نمی‌تواند صفر باشد')
+    expect(message()).not.toContain('[object Object]')
+    expect(message()).not.toContain('Value error')
+  })
+})
