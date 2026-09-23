@@ -127,3 +127,34 @@ describe('ستونِ مرکزِ هزینه — بیرون از مسیرِ Enter 
     expect(focusedCell()).toBe('1-1')
   })
 })
+
+describe('فوکوسِ خودکار (§۴۴)', () => {
+  //: صفحه‌ای شبیهِ واقعی: یک دکمه‌ی نوار بیرون از فرم، و یک فیلدِ سربرگ داخلِ فرم.
+  function renderPage(focus: 'nav' | 'header') {
+    const shell = (grid: boolean) =>
+      createElement(
+        'div',
+        null,
+        createElement('button', { id: 'nav', type: 'button' }, 'حسابداری'),
+        createElement(
+          'form',
+          null,
+          createElement('input', { id: 'hdr', 'aria-label': 'شرح سند' }),
+          grid ? createElement(Harness, { initial: [line({ accountId: 'bank' }), line()] }) : null,
+        ),
+      )
+    act(() => root.render(shell(false)))
+    act(() => container.querySelector<HTMLElement>(focus === 'nav' ? '#nav' : '#hdr')!.focus())
+    act(() => root.render(shell(true)))
+  }
+
+  it('**آمده از نوارِ بالا**: فوکوسِ جامانده روی دکمه‌ی نوار، گرید را از فوکوس محروم نمی‌کند', () => {
+    renderPage('nav')
+    expect(focusedCell()).toBe('0-0')
+  })
+
+  it('کاربری که از سربرگِ همین فرم شروع کرده، فوکوسش دزدیده نمی‌شود', () => {
+    renderPage('header')
+    expect((document.activeElement as HTMLElement).id).toBe('hdr')
+  })
+})

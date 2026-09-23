@@ -105,11 +105,18 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   }, [])
 
   //: فوکوسِ خودکار روی اولین سلولِ عملیاتی (§۴۴) — کاربر نباید اول داخلِ گرید
-  //: کلیک کند. فقط یک‌بار موقعِ سوارشدن، و فقط اگر فوکوس جای دیگری نیست: اگر
-  //: کاربر از سربرگ (تاریخ/شرح) شروع کرده، دزدیدنِ فوکوس آزاردهنده است.
+  //: کلیک کند. فقط یک‌بار موقعِ سوارشدن. اگر کاربر از سربرگِ **همین فرم** شروع کرده
+  //: (تاریخ/شرح)، فوکوسش دزدیده نمی‌شود.
+  //:
+  //: فوکوسِ بیرون از فرم اما کارِ کاربر روی این سند نیست، باقی‌مانده‌ی ناوبری است:
+  //: دکمه‌ی «حسابداری»ِ نوارِ بالا که با آن آمده، یا پالتِ فرمان. شرطِ قبلی هر فوکوسی
+  //: بیرون از گرید را محترم می‌شمرد، پس کسی که با کلیک روی نوار آمده بود فوکوسی
+  //: نمی‌گرفت و باید با Tab از کلِ سربرگ رد می‌شد — E2E همین را پیدا کرد.
   useEffect(() => {
     const active = document.activeElement
-    if (active && active !== document.body && gridRef.current?.contains(active) === false) return
+    const grid = gridRef.current
+    const inOwnHeader = Boolean(active && grid?.closest('form')?.contains(active) && !grid.contains(active))
+    if (inOwnHeader) return
     const first = gridRef.current?.querySelector<HTMLElement>('[data-cell="0-0"] button, [data-cell="0-0"] select')
     first?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
