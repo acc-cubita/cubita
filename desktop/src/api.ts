@@ -65,6 +65,9 @@ export interface MeResponse {
   //: کارت‌های داشبوردِ همین کاربر (`page` یا `page/section`). `null` یعنی هنوز
   //: انتخاب نکرده → پیش‌فرض‌ها؛ `[]` یعنی عمداً خالی. این دو یکی نیستند.
   dashboard_cards: string[] | null
+  //: حالتِ تجربه‌ی کاربر — `simple` یا `accountant`. فقط نمایش است و هیچ مجوزی
+  //: نمی‌دهد. روی **کاربر** ذخیره می‌شود نه عضویت، پس بین کسب‌وکارها یکی می‌ماند.
+  experience_mode: 'simple' | 'accountant'
   //: ── شخصی‌سازیِ پنل ──
   //: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌ها.
   industry: string
@@ -4722,6 +4725,8 @@ export interface ProfileUpdate {
   phone?: string | null
   email?: string
   current_password?: string
+  //: ترجیحِ نمایش. رمز نمی‌خواهد چون نه هویت است نه مجوز.
+  experience_mode?: 'simple' | 'accountant'
 }
 
 export const updateProfile = (token: string, patch: ProfileUpdate) =>

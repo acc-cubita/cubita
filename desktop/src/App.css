@@ -12248,3 +12248,81 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   line-height: var(--lh);
 }
 .ef-bullets strong { color: var(--text-h); font-weight: 600; }
+
+/* ── گریدِ سندِ «حالت حسابدار» ─────────────────────────────────────────────────
+ *
+ * فقط تراکم و چسبندگی. رنگ، فونت، گِردی و ارتفاعِ کنترل‌ها همان توکن‌های کوبیتا
+ * می‌مانند — «حالت حسابدار» نرم‌افزارِ دیگری نیست، همین نرم‌افزار است با فاصله‌ی
+ * کمتر (§۵۷).
+ */
+.jg-wrap { max-block-size: min(62vh, 640px); overflow: auto; }
+
+/* سرستون هنگام اسکرولِ سندِ ۳۰۰ ردیفی گم نمی‌شود (§۲۵). `--surface` لازم است:
+ * سرِ شفاف روی ردیف‌های زیرش می‌افتد و هر دو خوانده نمی‌شوند. */
+.jg-table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* تراکم: ردیفِ کوتاه‌تر و padding کمتر، ولی ارتفاعِ کنترل دست‌نخورده تا
+ * خوانایی فارسی و ناحیه‌ی کلیک حفظ شود. */
+.page .ef-table-wrap > table.jg-table td { padding: 4px 8px; }
+.page .ef-table-wrap > table.jg-table th { padding: 6px 8px; }
+.jg-table td > input,
+.jg-table td > .ef-affix > input,
+.jg-table td > .item-picker-trigger,
+.jg-table td > select { block-size: 30px; }
+
+/* ستونِ شماره: عددِ ردیف باید در سندِ ۳۰۰ ردیفی سریع خوانده شود (§۴۱). */
+.jg-num {
+  text-align: center;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  user-select: none;
+}
+
+/* سه کنشِ ردیف کنار هم، بدونِ شکستن. */
+.jg-actions { display: flex; gap: 2px; justify-content: flex-end; }
+
+/* نشانِ «میان‌برها» در سرِ کارت. */
+.jg-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: help;
+}
+
+/* فوکوس باید در گرید **دیده شود** (§۳۶). ردیفِ فشرده بدونِ این، کاربرِ
+ * صفحه‌کلید را گم می‌کند — همان چیزی که کلِ این حالت برای رفعش ساخته شد. */
+.jg-table :is(input, select, button):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* گریدِ حرفه‌ای در عرضِ کم افقی می‌لغزد، نه اینکه ستون‌ها را له کند (§۴۷). */
+.jg-table { min-inline-size: 720px; }
+
+/* ── انتخابِ حالتِ کار (پروفایل) ───────────────────────────────────────────── */
+.exp-choices { display: grid; gap: 8px; }
+.exp-choice {
+  display: grid;
+  gap: 2px;
+  text-align: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+.exp-choice:hover { border-color: var(--accent); }
+.exp-choice.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.exp-choice-head { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-h); }
+.exp-choice.is-on .exp-choice-head > svg { color: var(--accent); }
+.exp-choice-desc { color: var(--text-muted); font-size: var(--fs-sm); padding-inline-start: 22px; }
+.exp-note { margin-block-start: 10px; font-size: var(--fs-sm); }

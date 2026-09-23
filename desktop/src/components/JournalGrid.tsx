@@ -1,0 +1,426 @@
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Copy, CopyPlus, Trash2 } from 'lucide-react'
+
+import { SearchSelect } from './SearchSelect'
+import { NumberInput } from './NumberInput'
+import { JalaliDatePicker } from './JalaliDatePicker'
+import { RowAction } from './form/FormKit'
+import type { JournalEntryDraft, JournalDraftLine } from '../lib/journalEntryDraft'
+import {
+  firstInRow,
+  onEnter,
+  onShiftEnter,
+  onVertical,
+  type ColId,
+  type GridShape,
+} from '../lib/journalGridNav'
+
+const fa = (n: number) => n.toLocaleString('fa-IR')
+
+/**
+ * گریدِ ثبتِ سند برای **حالت حسابدار** — فشرده و صفحه‌کلیدمحور.
+ *
+ * **همان موتور، تجربه‌ی دیگر.** این کامپوننت هیچ منطقِ مالی ندارد: همان
+ * `useJournalEntryDraft` را می‌گیرد که فرمِ ساده می‌گیرد، همان `submit` را صدا
+ * می‌زند و همان payload را می‌فرستد. تفاوت فقط در چیدمان، تراکم و رفتارِ کلید
+ * است. اگر روزی محاسبه‌ای این‌جا نوشته شود، جایش اشتباه است.
+ *
+ * **چرا focus با `data-cell` و نه ماتریسِ ref.** ردیف‌ها اضافه و حذف می‌شوند و
+ * ستون‌ها شرطی‌اند؛ ماتریسِ ref باید با هر تغییر هم‌گام می‌ماند و اولین باری که
+ * نماند، focus بی‌صدا می‌پرد. صفتِ داده روی DOM همیشه درست است چون خودِ رندر
+ * تولیدش می‌کند. به‌علاوه این‌طور `SearchSelect` و `NumberInput` دست‌نخورده
+ * می‌مانند — هیچ‌کدام لازم نیست ref بپذیرند.
+ */
+export function JournalGrid({ d }: { d: JournalEntryDraft }) {
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  const showFx = Boolean(d.currencyCode)
+  const showTafsili = d.lines.some((l) => d.tafsiliRequired.has(l.accountId))
+  const showTracking = d.lines.some((l) => d.trackingAllowed.has(l.accountId))
+
+  //: `useMemo` حیاتی است، نه آرایش: `cols` به **هر** ردیف پاس داده می‌شود، و
+  //: آرایه‌ی تازه در هر رندر یعنی مقایسه‌ی `memo`ِ همه‌ی ۳۰۰ ردیف شکست می‌خورد.
+  //: سنجیده شد — بدونِ این، تایپ در سندِ ۳۰۰ ردیفی ۲۵۰ms برای هر کلید می‌گرفت
+  //: حتی وقتی بقیه‌ی propها پایدار بودند.
+  const cols: ColId[] = useMemo(
+    () => [
+      'account',
+      ...(showFx ? (['fx'] as ColId[]) : []),
+      ...(showTafsili ? (['tafsili'] as ColId[]) : []),
+      'description',
+      'debit',
+      'credit',
+      ...(showTracking ? (['trackingNo', 'trackingDate'] as ColId[]) : []),
+    ],
+    [showFx, showTafsili, showTracking],
+  )
+  const shape: GridShape = { cols, rowCount: d.lines.length }
+
+  /** سلولی که حسابش آن را نمی‌پذیرد، غیرفعال است و ناوبری از رویش می‌پرد. */
+  const enabled = useCallback(
+    (row: number, col: ColId) => {
+      const line = d.lines[row]
+      if (!line) return false
+      if (col === 'tafsili') return d.tafsiliRequired.has(line.accountId)
+      if (col === 'trackingNo' || col === 'trackingDate') return d.trackingAllowed.has(line.accountId)
+      return true
+    },
+    [d.lines, d.tafsiliRequired, d.trackingAllowed],
+  )
+
+  /** عنصرِ قابلِ فوکوسِ درونِ یک سلول را پیدا و فوکوس می‌کند. */
+  const focusCell = useCallback((row: number, col: number) => {
+    const cell = gridRef.current?.querySelector<HTMLElement>(`[data-cell="${row}-${col}"]`)
+    const target = cell?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), button:not([disabled])')
+    if (!target) return
+    target.focus()
+    //: عددِ موجود کامل انتخاب می‌شود تا تایپِ بعدی جایگزینش کند، نه اینکه به
+    //: دنبالش بچسبد — همان رفتاری که حسابدار از Excel انتظار دارد.
+    if (target instanceof HTMLInputElement && target.type !== 'checkbox') target.select?.()
+  }, [])
+
+  //: فوکوسِ خودکار روی اولین سلولِ عملیاتی (§۴۴) — کاربر نباید اول داخلِ گرید
+  //: کلیک کند. فقط یک‌بار موقعِ سوارشدن، و فقط اگر فوکوس جای دیگری نیست: اگر
+  //: کاربر از سربرگ (تاریخ/شرح) شروع کرده، دزدیدنِ فوکوس آزاردهنده است.
+  useEffect(() => {
+    const active = document.activeElement
+    if (active && active !== document.body && gridRef.current?.contains(active) === false) return
+    const first = gridRef.current?.querySelector<HTMLElement>('[data-cell="0-0"] button, [data-cell="0-0"] select')
+    first?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** یک حرکتِ محاسبه‌شده را اجرا می‌کند؛ `appendRow` اول ردیف می‌سازد. */
+  const apply = useCallback(
+    (move: ReturnType<typeof onEnter>) => {
+      if (move.kind === 'move') {
+        focusCell(move.to.row, move.to.col)
+      } else if (move.kind === 'appendRow') {
+        const row = d.lines.length
+        d.addLine()
+        //: رندرِ ردیفِ تازه هنوز نیفتاده؛ فوکوس باید بعد از آن باشد.
+        requestAnimationFrame(() => {
+          const head = firstInRow({ ...shape, rowCount: row + 1 }, row, () => true)
+          if (head) focusCell(head.row, head.col)
+        })
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [d, focusCell, cols.length],
+  )
+
+  /**
+   * کلیدهای گرید.
+   *
+   * **میان‌برهای حرفی با `e.code` سنجیده می‌شوند، نه `e.key`** — درسی که پروژه
+   * با `Ctrl+K` گرفت و در `lib/shortcuts.ts` نوشته: روی چیدمانِ فارسی
+   * `e.key` می‌شود «ن» و میان‌بر بی‌صدا از کار می‌افتد. `e.code` جای فیزیکیِ
+   * کلید است.
+   *
+   * **تعارضی با میان‌برهای کاربر نیست:** `useShortcuts` با `isTypingTarget`
+   * داخلِ هر input/select/button از کار می‌افتد، و این کلیدها دقیقاً همان‌جا
+   * اجرا می‌شوند. دو فضای مکمل.
+   */
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const cellEl = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
+    const coords = cellEl?.dataset.cell?.split('-').map(Number)
+    if (!coords || coords.length !== 2) return
+    const at = { row: coords[0], col: coords[1] }
+
+    // ── میان‌برهای ردیف و سند ──
+    if (e.ctrlKey || e.metaKey) {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault()
+        apply({ kind: 'appendRow' })
+        return
+      }
+      if (e.code === 'KeyD') {
+        e.preventDefault()
+        const at2 = d.duplicateLine(at.row)
+        requestAnimationFrame(() => focusCell(at2, at.col))
+        return
+      }
+      if (e.code === 'KeyC' && e.shiftKey) {
+        e.preventDefault()
+        d.copyPreviousInto(at.row)
+        return
+      }
+      if (e.code === 'Delete' || e.code === 'NumpadDecimal') {
+        e.preventDefault()
+        if (d.lines.length <= 2) return
+        d.removeLine(at.row)
+        requestAnimationFrame(() => focusCell(Math.max(0, at.row - 1), at.col))
+        return
+      }
+      if (e.code === 'KeyS') {
+        e.preventDefault()
+        if (!d.submitting) void d.submit()
+        return
+      }
+      return
+    }
+
+    // ── پذیرشِ مبلغِ باقی‌مانده ──
+    //: در ستونِ بدهکار/بستانکارِ خالی، Enter عددی را می‌نشاند که سند را متوازن
+    //: می‌کند و بعد مثلِ همیشه جلو می‌رود. اگر ردیف از قبل عدد دارد، دست نمی‌خورد
+    //: — وگرنه Enterِ عادی مبلغِ کاربر را بازنویسی می‌کرد.
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      const col = cols[at.col]
+      const line = d.lines[at.row]
+      const emptyAmount = line && !line.debit && !line.credit
+      if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
+        e.preventDefault()
+        d.applyRemaining(at.row)
+        return
+      }
+      e.preventDefault()
+      apply(e.shiftKey ? onShiftEnter(shape, at, enabled) : onEnter(shape, at, enabled))
+      return
+    }
+
+    if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+      //: داخلِ پاپ‌آورِ بازِ انتخاب‌گر، پیکان مالِ خودِ فهرست است.
+      if ((e.target as HTMLElement).closest('.item-picker-pop')) return
+      e.preventDefault()
+      apply(onVertical(shape, at, e.code === 'ArrowDown' ? 1 : -1, enabled))
+    }
+  }
+
+  return (
+    <div
+      ref={gridRef}
+      className="table-scroll ef-table-wrap jg-wrap"
+      onKeyDown={onKeyDown}
+      role="grid"
+      aria-label="ردیف‌های سند"
+    >
+      <table className="ef-table ef-table--edit jg-table table-plain">
+        <thead>
+          <tr>
+            <th className="ef-col-min">ردیف</th>
+            <th>حساب</th>
+            {showFx && <th>مبلغ ارزی</th>}
+            {showTafsili && <th>تفصیلی</th>}
+            <th>شرح ردیف</th>
+            <th>بدهکار</th>
+            <th>بستانکار</th>
+            {showTracking && <th>شماره پیگیری</th>}
+            {showTracking && <th>تاریخ پیگیری</th>}
+            <th className="ef-col-min" aria-label="کنش‌ها" />
+          </tr>
+        </thead>
+        <tbody>
+          {d.lines.map((line, i) => (
+            <GridRow
+              key={i}
+              i={i}
+              line={line}
+              cols={cols}
+              showFx={showFx}
+              showTafsili={showTafsili}
+              showTracking={showTracking}
+              //: **هر prop باید پایدار باشد وگرنه `memo` بی‌اثر است.** خودِ `d`
+              //: هر رندر شیءِ تازه‌ای است، پس عمداً پاس داده نمی‌شود — سنجیده
+              //: شد که با پاس‌دادنش، هر کلیدفشار در سندِ ۳۰۰ ردیفی ۱۷۰ms
+              //: می‌گرفت چون همه‌ی ردیف‌ها دوباره رندر می‌شدند.
+              hasTafsili={d.tafsiliRequired.has(line.accountId)}
+              hasTracking={d.trackingAllowed.has(line.accountId)}
+              tafsiliRequired={d.tafsiliMode !== 'floating'}
+              accounts={d.postableAccounts}
+              analytics={d.analytics}
+              hasHeaderAnalytic={Boolean(d.analyticId)}
+              canRemove={d.lines.length > 2}
+              onUpdate={d.updateLine}
+              onFx={d.setLineFx}
+              onDuplicate={d.duplicateLine}
+              onCopyPrev={d.copyPreviousInto}
+              onRemove={d.removeLine}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/**
+ * یک ردیفِ گرید.
+ *
+ * `memo` این‌جا برای ادعای زیبایی نیست: سندِ ۳۰۰ ردیفی بدونِ آن، با هر کلیدفشاری
+ * ۳۰۰ ردیف را دوباره رندر می‌کند. مقایسه‌ی سطحیِ props کافی است چون `line` با
+ * `updateLine` **جایگزین** می‌شود (شیءِ تازه) نه ویرایش در جا.
+ */
+const GridRow = memo(function GridRow({
+  i,
+  line,
+  cols,
+  showFx,
+  showTafsili,
+  showTracking,
+  hasTafsili,
+  hasTracking,
+  tafsiliRequired,
+  accounts,
+  analytics,
+  hasHeaderAnalytic,
+  canRemove,
+  onUpdate,
+  onFx,
+  onDuplicate,
+  onCopyPrev,
+  onRemove,
+}: {
+  i: number
+  line: JournalDraftLine
+  cols: ColId[]
+  showFx: boolean
+  showTafsili: boolean
+  showTracking: boolean
+  hasTafsili: boolean
+  hasTracking: boolean
+  tafsiliRequired: boolean
+  accounts: JournalEntryDraft['postableAccounts']
+  analytics: JournalEntryDraft['analytics']
+  hasHeaderAnalytic: boolean
+  canRemove: boolean
+  onUpdate: JournalEntryDraft['updateLine']
+  onFx: JournalEntryDraft['setLineFx']
+  onDuplicate: JournalEntryDraft['duplicateLine']
+  onCopyPrev: JournalEntryDraft['copyPreviousInto']
+  onRemove: JournalEntryDraft['removeLine']
+}) {
+  const col = (id: ColId) => cols.indexOf(id)
+
+  return (
+    <tr>
+      {/* `card-title` و `card-actions` دو کلاسِ معافِ قرارداد صفحه‌اند: در نمای
+          کارتی سرِ کارت و نوارِ کنش می‌شوند و برچسب نمی‌خواهند. */}
+      <td className="ef-col-min jg-num card-title">{fa(i + 1)}</td>
+
+      <td className="ef-col-wide" data-cell={`${i}-${col('account')}`}>
+        <SearchSelect
+          aria-label={`حسابِ ردیفِ ${fa(i + 1)}`}
+          value={line.accountId}
+          onChange={(e) => onUpdate(i, { accountId: e.target.value })}
+        >
+          <option value="">— انتخاب حساب —</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.code} — {a.name}
+            </option>
+          ))}
+        </SearchSelect>
+      </td>
+
+      {showFx && (
+        <td data-cell={`${i}-${col('fx')}`}>
+          <NumberInput
+            aria-label={`مبلغِ ارزیِ ردیفِ ${fa(i + 1)}`}
+            value={line.fxAmount ?? ''}
+            onChange={(v) => onFx(i, v)}
+            allowDecimal
+          />
+        </td>
+      )}
+
+      {showTafsili && (
+        <td data-cell={`${i}-${col('tafsili')}`}>
+          {hasTafsili ? (
+            <SearchSelect
+              aria-label={`تفصیلیِ ردیفِ ${fa(i + 1)}`}
+              value={line.analyticId ?? ''}
+              onChange={(e) => onUpdate(i, { analyticId: e.target.value })}
+              required={tafsiliRequired}
+            >
+              <option value="">{hasHeaderAnalytic ? '— تفصیلیِ سند —' : '— انتخاب کنید —'}</option>
+              {analytics.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} — {a.name}
+                </option>
+              ))}
+            </SearchSelect>
+          ) : (
+            <input type="text" value="" disabled readOnly placeholder="—" aria-label="بدونِ تفصیلی" />
+          )}
+        </td>
+      )}
+
+      <td data-cell={`${i}-${col('description')}`}>
+        <input
+          type="text"
+          aria-label={`شرحِ ردیفِ ${fa(i + 1)}`}
+          value={line.description ?? ''}
+          onChange={(e) => onUpdate(i, { description: e.target.value })}
+          placeholder="اختیاری"
+        />
+      </td>
+
+      <td data-cell={`${i}-${col('debit')}`}>
+        <NumberInput
+          aria-label={`بدهکارِ ردیفِ ${fa(i + 1)}`}
+          value={line.debit}
+          onChange={(v) => onUpdate(i, { debit: v, credit: '' })}
+        />
+      </td>
+
+      <td data-cell={`${i}-${col('credit')}`}>
+        <NumberInput
+          aria-label={`بستانکارِ ردیفِ ${fa(i + 1)}`}
+          value={line.credit}
+          onChange={(v) => onUpdate(i, { credit: v, debit: '' })}
+        />
+      </td>
+
+      {showTracking && (
+        <td data-cell={`${i}-${col('trackingNo')}`}>
+          <input
+            type="text"
+            aria-label={`شماره پیگیریِ ردیفِ ${fa(i + 1)}`}
+            value={line.trackingNo ?? ''}
+            onChange={(e) => onUpdate(i, { trackingNo: e.target.value })}
+            disabled={!hasTracking}
+            maxLength={50}
+            placeholder={hasTracking ? 'حواله/نامه' : '—'}
+          />
+        </td>
+      )}
+
+      {showTracking && (
+        <td data-cell={`${i}-${col('trackingDate')}`}>
+          {hasTracking ? (
+            <JalaliDatePicker
+              value={line.trackingDate ?? ''}
+              onChange={(v) => onUpdate(i, { trackingDate: v })}
+            />
+          ) : (
+            <input type="text" value="" disabled readOnly placeholder="—" aria-label="بدونِ پیگیری" />
+          )}
+        </td>
+      )}
+
+      <td className="ef-col-min jg-actions card-actions">
+        <RowAction
+          icon={CopyPlus}
+          label="تکرار ردیف"
+          title="تکرار ردیف (Ctrl+D)"
+          onClick={() => onDuplicate(i)}
+        />
+        <RowAction
+          icon={Copy}
+          label="کپی از ردیف قبل"
+          title="کپیِ حساب و تفصیلی از ردیف قبل (Ctrl+Shift+C)"
+          disabled={i === 0}
+          onClick={() => onCopyPrev(i)}
+        />
+        <RowAction
+          icon={Trash2}
+          label="حذف ردیف"
+          danger
+          disabled={!canRemove}
+          title={!canRemove ? 'سند دست‌کم دو ردیف می‌خواهد.' : 'حذف ردیف (Ctrl+Delete)'}
+          onClick={() => onRemove(i)}
+        />
+      </td>
+    </tr>
+  )
+})

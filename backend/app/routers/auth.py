@@ -126,6 +126,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         industry=principal.membership.tenant.industry,
         trade=principal.membership.tenant.trade,
         dashboard_cards=principal.membership.dashboard_cards,
+        experience_mode=principal.user.experience_mode,
         enabled_modules=modules_service.enabled_modules(
             principal.membership.tenant, derived=derived
         ),
@@ -512,6 +513,10 @@ def update_profile(
             # شماره‌ی تازه هنوز اثباتِ مالکیت ندارد؛ تأییدِ قبلی نباید به آن منتقل شود.
             user.phone = new_phone
             user.phone_verified_at = None
+    #: حالتِ تجربه رمز نمی‌خواهد: نه هویت است نه مجوز، فقط نحوه‌ی رندرِ فرم‌ها.
+    #: اعتبارش را `Literal` اسکیما گرفته، پس این‌جا سنجشِ دوباره لازم نیست.
+    if data.experience_mode is not None:
+        user.experience_mode = data.experience_mode
 
     if data.email is not None:
         new_email = data.email.strip().lower()
