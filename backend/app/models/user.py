@@ -191,8 +191,9 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: ترجیحِ تجربه‌ی کاربر (`EXPERIENCE_MODES`). روی **کاربر** است و نه عضویت،
     #: چون هیچ شناسه‌ی مستأجری در آن نیست — برخلافِ `Membership.dashboard_cards`
     #: که به ماژول‌های همان کسب‌وکار اشاره می‌کند. دلیلِ کامل در مهاجرتِ ۰۱۸۲.
+    #: پیش‌فرض در ۰۱۸۳ از `simple` به `accountant` رفت — تصمیمِ محصول، نه رفعِ باگ.
     experience_mode: Mapped[str] = mapped_column(
-        String(20), default="simple", server_default="simple", nullable=False
+        String(20), default="accountant", server_default="accountant", nullable=False
     )
 
     # نقش روی User نمی‌نشیند: یک نفر می‌تواند در یک کسب‌وکار حسابدار و در دیگری فقط
