@@ -162,8 +162,11 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
 
     // ── پذیرشِ مبلغِ باقی‌مانده ──
     //: در ستونِ بدهکار/بستانکارِ خالی، Enter عددی را می‌نشاند که سند را متوازن
-    //: می‌کند و بعد مثلِ همیشه جلو می‌رود. اگر ردیف از قبل عدد دارد، دست نمی‌خورد
-    //: — وگرنه Enterِ عادی مبلغِ کاربر را بازنویسی می‌کرد.
+    //: می‌کند و **در همان ضربه** جلو می‌رود — از جایی که انگار Enter روی ستونِ
+    //: بستانکار خورده: مبالغِ ردیف با همین کامل شد و طرفِ دیگرش باید خالی بماند،
+    //: پس ایستادن روی آن فقط یک Enterِ اضافه بود. اگر ردیف از قبل عدد دارد، یا
+    //: سند متوازن است، دست نمی‌خورد و Enterِ عادی اجرا می‌شود — وگرنه مبلغِ کاربر
+    //: بازنویسی می‌شد.
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
       const col = cols[at.col]
       const line = d.lines[at.row]
@@ -188,7 +191,9 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
 
       if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
         e.preventDefault()
-        d.applyRemaining(at.row)
+        if (d.applyRemaining(at.row)) {
+          apply(onEnter(shape, { row: at.row, col: cols.indexOf('credit') }, enabled))
+        }
         return
       }
       e.preventDefault()

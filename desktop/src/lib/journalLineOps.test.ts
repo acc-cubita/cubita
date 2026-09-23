@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import type { JournalDraftLine } from './journalEntryDraft'
-import { copyPreviousInto, duplicateAt, remainingOf, removeAt, sumSide } from './journalLineOps'
+import {
+  copyPreviousInto,
+  duplicateAt,
+  faRows,
+  isPostedLine,
+  postedRowNumbers,
+  remainingOf,
+  removeAt,
+  rowsMissingTafsili,
+  sumSide,
+} from './journalLineOps'
 
 const line = (p: Partial<JournalDraftLine> = {}): JournalDraftLine => ({
   accountId: '',
@@ -115,5 +125,40 @@ describe('مبلغِ باقی‌مانده', () => {
     const rows = [line({ accountId: 'bank', debit: '20000000' }), line({ accountId: 'party' })]
     const r = remainingOf(sumSide(rows, 'debit'), sumSide(rows, 'credit'))
     expect(r).toEqual({ amount: 20_000_000, side: 'credit' })
+  })
+})
+
+describe('شماره‌ی ردیف در خطا = شماره‌ی گرید', () => {
+  //: سناریوی گزارش‌شده: پُر، خالی، نامعتبر. پیش از رفع، شمارش روی ردیف‌های پُر بود
+  //: و پیام «ردیف ۲» می‌گفت برای ردیفی که کاربر کنارش «۳» می‌بیند.
+  const TAFSILI = new Set(['needs-tafsili'])
+  const rows = [
+    line({ accountId: 'bank', debit: '5000' }),
+    line(),
+    line({ accountId: 'needs-tafsili', credit: '5000' }),
+  ]
+
+  it('ردیفِ خالیِ وسط شماره‌ها را جابه‌جا نمی‌کند — «ردیف ۳»', () => {
+    expect(rowsMissingTafsili(rows, TAFSILI, '')).toEqual([3])
+  })
+
+  it('تفصیلیِ خودِ ردیف یا سربرگ کافی است', () => {
+    expect(rowsMissingTafsili([rows[0], rows[1], { ...rows[2], analyticId: 't1' }], TAFSILI, '')).toEqual([])
+    expect(rowsMissingTafsili(rows, TAFSILI, 'header-t')).toEqual([])
+  })
+
+  it('ردیفِ بی‌مبلغ فرستاده نمی‌شود، پس خطا هم نمی‌گیرد', () => {
+    expect(rowsMissingTafsili([line({ accountId: 'needs-tafsili' })], TAFSILI, '')).toEqual([])
+  })
+
+  it('نگاشتِ payload ← گرید: ردیفِ دومِ فرستاده‌شده، ردیفِ سومِ گرید است', () => {
+    expect(postedRowNumbers(rows)).toEqual([1, 3])
+    expect(rows.filter(isPostedLine)).toHaveLength(2)
+  })
+
+  it('متنِ شماره‌ها فارسی و خوانا', () => {
+    expect(faRows([3])).toBe('۳')
+    expect(faRows([3, 5])).toBe('۳ و ۵')
+    expect(faRows([3, 5, 17])).toBe('۳، ۵ و ۱۷')
   })
 })

@@ -70,6 +70,44 @@ export function remainingOf(totalDebit: number, totalCredit: number): Remaining 
   }
 }
 
+/**
+ * ردیفی که در سند می‌رود: حساب دارد و یکی از دو مبلغ. ردیفِ خالی — دو ردیفِ آغازینِ
+ * فرم، یا ردیفی که کاربر رها کرده — فرستاده نمی‌شود.
+ */
+export function isPostedLine(l: JournalDraftLine): boolean {
+  return Boolean(l.accountId) && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0)
+}
+
+/**
+ * شماره‌ی ردیفِ گرید برای هر ردیفِ فرستاده‌شده، به ترتیبِ payload (از ۱).
+ *
+ * **شماره همان است که کاربر کنارِ ردیف می‌بیند**، نه جایگاهش میانِ ردیف‌های پُر.
+ * پیامِ تفصیلی پیش از این `validLines.map((l, i) => i + 1)` بود، و با یک ردیفِ
+ * خالیِ وسطِ سند برای ردیفِ سوم «ردیف ۲» می‌گفت — در سندِ ۳۰۰ ردیفی یعنی کاربر
+ * ردیفِ اشتباه را اصلاح می‌کند. خطای سرور هم ردیفِ *payload* را می‌شمارد، و همین
+ * نگاشت آن را به ردیفِ گرید برمی‌گرداند.
+ */
+export function postedRowNumbers(lines: JournalDraftLine[]): number[] {
+  return lines.flatMap((l, i) => (isPostedLine(l) ? [i + 1] : []))
+}
+
+/** ردیف‌های گریدی که حسابشان تفصیلی می‌خواهد و نه خودشان تفصیلی دارند نه سربرگ. */
+export function rowsMissingTafsili(
+  lines: JournalDraftLine[],
+  required: ReadonlySet<string>,
+  headerAnalyticId: string,
+): number[] {
+  return lines.flatMap((l, i) =>
+    isPostedLine(l) && required.has(l.accountId) && !(l.analyticId || headerAnalyticId) ? [i + 1] : [],
+  )
+}
+
+/** «۳، ۵ و ۱۷» — شماره‌ی ردیف‌ها برای پیامِ خطا. */
+export function faRows(rows: number[]): string {
+  const fa = rows.map((r) => r.toLocaleString('fa-IR'))
+  return fa.length < 2 ? (fa[0] ?? '') : `${fa.slice(0, -1).join('، ')} و ${fa.at(-1)}`
+}
+
 /** جمعِ یک طرف. رشته‌ی خالی یا نامعتبر صفر است، مثلِ خودِ فرم. */
 export function sumSide(lines: JournalDraftLine[], side: 'debit' | 'credit'): number {
   return lines.reduce((sum, l) => sum + (Number(l[side]) || 0), 0)

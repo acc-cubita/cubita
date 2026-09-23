@@ -196,14 +196,12 @@ export function useJournalEntryDraft({
     )
     return true
   }
-  const validLineCount = lines.filter(
-    (l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0),
-  ).length
+  const validLineCount = lines.filter(ops.isPostedLine).length
 
   async function submit(): Promise<boolean> {
     setMessage(null)
 
-    const validLines = lines.filter((l) => l.accountId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0))
+    const validLines = lines.filter(ops.isPostedLine)
     if (validLines.length < 2) {
       setMessage({ text: 'سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.', kind: 'err' })
       return false
@@ -220,16 +218,12 @@ export function useJournalEntryDraft({
 
     // تفصیلیِ اجباری را همین‌جا می‌گیریم، نه با ۴۰۰ از سرور: کاربر باید بداند
     // *کدام ردیف* مشکل دارد، و آن را فقط این‌جا می‌دانیم. سرور هم گاردش را دارد.
+    // شماره‌ها شماره‌ی گریدند، نه جایگاه میانِ ردیف‌های پُر (`rowsMissingTafsili`).
     const missingTafsili =
-      tafsiliMode === 'floating'
-        ? []
-        : validLines
-            .map((l, i) => ({ l, i }))
-            .filter(({ l }) => tafsiliRequired.has(l.accountId) && !(l.analyticId || analyticId))
-            .map(({ i }) => (i + 1).toLocaleString('fa-IR'))
+      tafsiliMode === 'floating' ? [] : ops.rowsMissingTafsili(lines, tafsiliRequired, analyticId)
     if (missingTafsili.length > 0) {
       setMessage({
-        text: `ردیفِ ${missingTafsili.join('، ')}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
+        text: `ردیفِ ${ops.faRows(missingTafsili)}: حسابِ «تفصیلی پذیر» بدونِ تفصیلی ثبت نمی‌شود.`,
         kind: 'err',
       })
       return false
