@@ -12456,7 +12456,9 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-size: var(--fs-sm);
   color: var(--text-muted);
 }
-.jg-jump { display: inline-flex; align-items: center; gap: 6px; }
-.jg-jump input { inline-size: 72px; block-size: 30px; text-align: center; }
+/* `label:has(> input)`ِ سراسری (index.css) برچسب را ستونی می‌کند؛ این‌جا برچسب کنارِ
+   کادر است، پس جهت صریح گفته می‌شود — وگرنه کادر زیرِ متن می‌افتاد. */
+.jg-toolbar .jg-jump { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+.jg-toolbar .jg-jump input { width: 72px; min-height: 0; height: 30px; padding-block: 0; text-align: center; }
 .jg-count { font-variant-numeric: tabular-nums; }
 .jg-jump-msg { color: var(--danger); }
