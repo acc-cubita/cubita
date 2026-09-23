@@ -89,6 +89,8 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import type { ExperienceMode } from './experienceMode'
+
 // شناسه‌ی هر صفحه‌ی برنامه. منبعِ واحد؛ Sidebar و TopNav هر دو از همین می‌خوانند.
 export type PageKey =
   | 'overview'
@@ -698,6 +700,52 @@ export function buildNav({
   }
 
   return { groups, secondary: [...SECONDARY_NAV_ITEMS] }
+}
+
+/**
+ * گروه‌هایی که در هر حالت جلوتر از بقیه می‌آیند؛ بقیه ترتیبِ `NAV_GROUPS` را نگه می‌دارند.
+ *
+ * **فقط ترتیب، نه محتوا** (UI-01 §۵۲). `buildNav` تصمیم می‌گیرد *چه* دیده شود — با
+ * ماژول و نقش — و این فقط *کجا*. پس حالت هیچ صفحه‌ای را اضافه یا پنهان نمی‌کند.
+ *
+ * `NAV_GROUPS` به ترتیبِ گردشِ کارِ کسب‌وکار چیده شده و «حسابداری» در آن هشتم است،
+ * بعد از فروش و انبار و تولید. روزِ حسابدار با سند و بانک می‌گذرد، پس آن دو
+ * بلافاصله بعد از داشبورد می‌آیند.
+ *
+ * فقط نوار و سایدبار این را صدا می‌زنند. کارتِ «عملیات» (`groupOf`)، پالتِ فرمان و
+ * انتخاب‌گرِ کارت همان ترتیبِ ثابت را می‌خوانند، تا «اولین گروهی که این صفحه را
+ * دارد» (اعلامیه بدهکار بستانکار در دو گروه است) با عوض‌شدنِ حالت عوض نشود.
+ */
+export const MODE_GROUP_ORDER: Record<ExperienceMode, readonly string[]> = {
+  accountant: ['میزکار', 'حسابداری', 'دریافت و پرداخت'],
+  simple: [],
+}
+
+export function orderNavGroups(groups: NavGroup[], mode: ExperienceMode): NavGroup[] {
+  const first = MODE_GROUP_ORDER[mode]
+  const rank = (g: NavGroup) => {
+    const i = first.indexOf(g.heading)
+    return i === -1 ? first.length : i
+  }
+  //: `sort` از ES2019 پایدار است، پس گروه‌های هم‌رتبه ترتیبِ نسبیِ خودشان را نگه می‌دارند.
+  return [...groups].sort((a, b) => rank(a) - rank(b))
+}
+
+/**
+ * صفحه‌ای که کلیک روی نامِ گروه در نوار باز می‌کند، وقتی با پیش‌فرض فرق دارد.
+ *
+ * پیش‌فرض اولین صفحه‌ی گروه است؛ برای «حسابداری» یعنی «درختواره حساب‌ها» — ساختنِ
+ * چارت، که کاری یک‌باره است. کارِ هرروزه‌ی حسابدار ثبتِ سند است.
+ */
+export const MODE_GROUP_LANDING: Record<ExperienceMode, Partial<Record<string, PageKey>>> = {
+  accountant: { 'حسابداری': 'journalentry' },
+  simple: {},
+}
+
+export function groupLanding(group: NavGroup, mode: ExperienceMode): PageKey | undefined {
+  const key = MODE_GROUP_LANDING[mode][group.heading]
+  //: صفحه‌ای که این کسب‌وکار نمی‌بیند مقصد نمی‌شود — حالت ≠ مجوز.
+  return key && group.items.some((i) => i.key === key) ? key : undefined
 }
 
 //: صفحه‌هایی که خودشان ردیفِ منوی اصلی دارند، برای هر نوعِ کسب‌وکار. صفحه‌های

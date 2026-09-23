@@ -12,7 +12,8 @@ import {
   Download,
   User,
 } from 'lucide-react'
-import { buildNav, menuEntryVisible, type PageKey } from '../lib/navModel'
+import { buildNav, groupLanding, menuEntryVisible, orderNavGroups, type PageKey } from '../lib/navModel'
+import { useExperienceMode } from '../lib/experienceMode'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { fitBar } from '../lib/topnavFit'
@@ -67,12 +68,16 @@ export function TopNav({
   syncing?: boolean
   syncStatus?: string
 }) {
-  const { groups, secondary } = buildNav({
+  const { mode } = useExperienceMode()
+  const nav = buildNav({
     tenantKind,
     enabledModules,
     allowedModules,
     isOwner,
   })
+  //: حالت فقط ترتیب را عوض می‌کند؛ اینکه چه دیده شود کارِ `buildNav` است.
+  const groups = orderNavGroups(nav.groups, mode)
+  const { secondary } = nav
 
   // نشانِ خوانده‌نشده فقط روی ماژول‌های بازار (پخش‌کننده/فروشگاه) و وقتی عدد > ۰ است.
   const navBadge = (key: PageKey) =>
@@ -285,6 +290,8 @@ export function TopNav({
                 // اگر همین حالا داخلِ این ماژول هستیم، کلیک نباید از صفحه‌ی فعلی بپراند.
                 onClick={() => {
                   if (hasActive) return go(active)
+                  const preferred = groupLanding(group, mode)
+                  if (preferred) return go(preferred)
                   //: گروهی با منوی کار‌به‌کار روی اولین کارش باز می‌شود، نه اولین صفحه.
                   const landing = OPS_MENUS[group.heading]?.find((e) => menuEntryVisible(e.key, groups))
                   go(landing?.key ?? first.key, landing?.section)
