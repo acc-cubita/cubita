@@ -34,7 +34,7 @@ import { MpZonesPanel } from '../components/MpZonesPanel'
 import { MpDistributorReturns } from '../components/MpDistributorReturns'
 import { useListingDraft } from '../lib/listingDraft'
 import { formatJalali } from '../lib/jalali'
-import { useTheme } from '../lib/theme'
+import { useGuidedForms } from '../lib/experienceMode'
 import { SearchSelect } from '../components/SearchSelect'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
@@ -115,7 +115,7 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
       .then((st) => setOwnTargets(st.target_trades ?? []))
       .catch(() => setOwnTargets([]))
   }, [token])
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
   const [listings, setListings] = useState<Listing[]>([])
   const [error, setError] = useState<string | null>(null)
   //: §۶ — درایورِ «از کدام بار چه‌قدر در کاتالوگ عرضه شود».

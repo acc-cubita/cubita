@@ -12,7 +12,7 @@ import { QuotationsList } from '../../components/QuotationsList'
 import { OutboxList } from '../../components/OutboxList'
 import { SectionCard } from '../../components/SectionCard'
 import { OpsPage } from '../accounting/kit'
-import { useTheme } from '../../lib/theme'
+import { useGuidedForms } from '../../lib/experienceMode'
 import { isElectron } from '../../platform'
 
 /**
@@ -41,7 +41,7 @@ export function SalesInvoicePage({
   outbox: OutboxEntry[]
   onQueued: () => void
 }) {
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
   const [prefill, setPrefill] = useState<SalesInvoiceRecord | null>(null)
   //: «صدور فاکتور فروش» از روی خروج انبار (§۱۶). در initializer فقط خوانده می‌شود و
   //: پس از مصرف پاک — StrictMode این تابع را دو بار صدا می‌زند.
@@ -121,7 +121,7 @@ export function QuotationPage({
   items: ItemCache[]
   onQueued: () => void
 }) {
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
   return (
     <OpsPage
       icon={FileText}
@@ -179,7 +179,7 @@ export function QuotationListPage({ token, onQueued }: { token: string; onQueued
 // ═══════════════════ فاکتور برگشتی ═══════════════════
 
 export function SalesReturnPage({ token }: { token: string }) {
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
   return (
     <OpsPage
       icon={Undo2}

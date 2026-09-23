@@ -9,7 +9,7 @@ import type { ItemCache, WarehouseCache } from '../electron.d'
 import { StockAdjustmentForm } from '../components/StockAdjustmentForm'
 import { StockAdjustmentWizard } from '../components/wizard/StockAdjustmentWizard'
 import { TransferWizard } from '../components/wizard/TransferWizard'
-import { useTheme } from '../lib/theme'
+import { useGuidedForms } from '../lib/experienceMode'
 import { StockCountPanel } from '../components/StockCountPanel'
 import { PriceListsPanel } from '../components/PriceListsPanel'
 import { BatchesPanel } from '../components/BatchesPanel'
@@ -107,7 +107,7 @@ export function InventoryPage({
 
   // شناسه‌ی کالاهایی که هشدارِ کسری دارند — برای نشانِ «سفارش» در جدولِ موجودی
   const lowIds = useMemo(() => new Set(lowStock.map((r) => r.item_id)), [lowStock])
-  const guided = useTheme().theme.content === 'guided'
+  const guided = useGuidedForms()
 
   return (
     <div className="page panels">
