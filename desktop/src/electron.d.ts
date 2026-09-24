@@ -138,6 +138,8 @@ export interface CubitaBridge {
   serverSave?: (url: string) => Promise<ServerResult>
   /** کوبیتا سازمانی: جست‌وجوی سرور روی همین رایانه و `/24`ِ شبکه‌ی داخلی. */
   serverDiscover?: () => Promise<string[]>
+  /** کوبیتا سازمانی، فقط روی خودِ سرور: اجرای نصابِ دانلودشده. خطا یا null. */
+  runUpdateInstaller?: (installerPath: string) => Promise<string | null>
   posTerminal?: PosTerminalBridge
 }
 

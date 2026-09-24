@@ -24,6 +24,7 @@
 import { autoUpdater } from 'electron-updater'
 import type { BrowserWindow } from 'electron'
 import { app } from 'electron'
+import fs from 'node:fs'
 
 /** وضعیتی که به رابط کاربری فرستاده می‌شود. */
 export type UpdateStatus =
@@ -43,7 +44,28 @@ export function currentUpdateStatus(): UpdateStatus {
   return lastStatus
 }
 
-export function setupAutoUpdate(getWindow: () => BrowserWindow | null, log: (msg: string) => void): void {
+/**
+ * «کوبیتا سازمانی»: فید از سرورِ خودِ شرکت (`/updates/`)، و سنجشِ امضا پیش از نصب.
+ *
+ * - `feedUrl`: سرور فقط نصابِ **هم‌نسخه‌ی خودش** را می‌دهد، پس کلاینت هرگز از API سرورش جلو
+ *   نمی‌زند (`backend/app/onprem/updates.py`).
+ * - `verify`: تا وقتی فایلِ دانلودشده با `latest.yml`ِ امضاشده نخواند، `autoInstallOnAppQuit`
+ *   خاموش می‌ماند و «نصب» هم کاری نمی‌کند (`updateVerify.ts`).
+ * - دانلودِ تفاضلی خاموش: سرورِ شرکت درخواستِ Range را پشتیبانی نمی‌کند و شبکه‌ی داخلی سریع است.
+ */
+export interface UpdateOptions {
+  feedUrl?: string
+  verify?: (downloadedFile: string) => Promise<string | null>
+}
+
+//: نصب فقط وقتی مجاز است که سنجش (اگر هست) قبول کرده باشد.
+let installAllowed = true
+
+export function setupAutoUpdate(
+  getWindow: () => BrowserWindow | null,
+  log: (msg: string) => void,
+  options: UpdateOptions = {},
+): void {
   // در حالت توسعه اصلاً فعال نمی‌شود: نسخه‌ی dev برابر 0.0.0 است و هر انتشاری
   // «به‌روزرسانی موجود» به‌نظر می‌رسد.
   if (!app.isPackaged) {
@@ -53,7 +75,12 @@ export function setupAutoUpdate(getWindow: () => BrowserWindow | null, log: (msg
 
   // نصب خودکار موقع خروج بله، دانلود خودکار هم بله — ولی *راه‌اندازی مجدد* خودکار نه.
   autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+  if (options.feedUrl) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: options.feedUrl })
+    autoUpdater.disableDifferentialDownload = true
+  }
+  installAllowed = !options.verify
+  autoUpdater.autoInstallOnAppQuit = installAllowed
 
   const send = (status: UpdateStatus) => {
     lastStatus = status
@@ -68,8 +95,30 @@ export function setupAutoUpdate(getWindow: () => BrowserWindow | null, log: (msg
   autoUpdater.on('update-not-available', () => send({ state: 'none' }))
   autoUpdater.on('download-progress', (p) => send({ state: 'downloading', percent: Math.round(p.percent) }))
   autoUpdater.on('update-downloaded', (info) => {
-    log(`auto-update: نسخه‌ی ${info.version} دانلود شد، در خروج نصب می‌شود`)
-    send({ state: 'ready', version: info.version })
+    const verify = options.verify
+    if (!verify) {
+      log(`auto-update: نسخه‌ی ${info.version} دانلود شد، در خروج نصب می‌شود`)
+      send({ state: 'ready', version: info.version })
+      return
+    }
+    void verify(info.downloadedFile).then((problem) => {
+      if (problem) {
+        log(`auto-update: نسخه‌ی ${info.version} رد شد — ${problem}`)
+        installAllowed = false
+        autoUpdater.autoInstallOnAppQuit = false
+        try {
+          fs.unlinkSync(info.downloadedFile)
+        } catch {
+          // فایل از قبل رفته؛ مهم این است که نصب نشود.
+        }
+        send({ state: 'error', message: problem })
+        return
+      }
+      log(`auto-update: نسخه‌ی ${info.version} دانلود و امضایش سنجیده شد`)
+      installAllowed = true
+      autoUpdater.autoInstallOnAppQuit = true
+      send({ state: 'ready', version: info.version })
+    })
   })
   autoUpdater.on('error', (err) => {
     // شکست بررسی به‌روزرسانی نباید به کاربر به‌شکل خطا نشان داده شود و کارش را
@@ -89,5 +138,6 @@ export function setupAutoUpdate(getWindow: () => BrowserWindow | null, log: (msg
 
 /** نصب فوری به درخواست صریح کاربر. */
 export function quitAndInstall(): void {
+  if (!installAllowed) return
   autoUpdater.quitAndInstall()
 }

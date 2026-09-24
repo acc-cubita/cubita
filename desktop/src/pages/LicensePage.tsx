@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
+import { ServerUpdateCard } from '../components/ServerUpdateCard'
 import { formatJalali } from '../lib/jalali'
 import { LICENSE_MODE_LABEL, licenseTone } from '../lib/license'
 
@@ -117,8 +118,8 @@ export function LicensePage({
     <div className="page panels">
       <PageHeader
         icon={BadgeCheck}
-        title="مجوز نرم‌افزار"
-        description="وضعیتِ فعال‌سازیِ کوبیتا سازمانی روی این سرور، و نصبِ کدِ مجوز."
+        title="مجوز و به‌روزرسانی"
+        description="وضعیتِ فعال‌سازیِ کوبیتا سازمانی، نصبِ کدِ مجوز، و به‌روزرسانیِ سرور."
       />
 
       {msg && (
@@ -262,6 +263,7 @@ export function LicensePage({
           )}
         </SectionCard>
       </div>
+      {isOwner && <ServerUpdateCard token={token} />}
     </div>
   )
 }

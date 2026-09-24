@@ -341,7 +341,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   calendar: 'تقویم و یادآوری',
   team: 'کاربر جدید',
   modules: 'شخصی‌سازیِ پنل',
-  license: 'مجوز نرم‌افزار',
+  license: 'مجوز و به‌روزرسانی',
   profile: 'پروفایل من',
   // ── ماژولِ «حسابداری» ──
   acctchart: 'درختواره حساب‌ها',

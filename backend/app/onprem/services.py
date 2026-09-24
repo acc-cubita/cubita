@@ -31,6 +31,7 @@ FIREWALL_RULE = "Cubita Enterprise API"
 SID_SYSTEM = "*S-1-5-18"
 SID_ADMINS = "*S-1-5-32-544"
 SID_NETWORK_SERVICE = "*S-1-5-20"
+SID_USERS = "*S-1-5-32-545"
 
 
 def acl_commands(layout: Layout) -> list[list[str]]:
@@ -45,6 +46,8 @@ def acl_commands(layout: Layout) -> list[list[str]]:
             f"{SID_ADMINS}:(OI)(CI)F",
             f"{SID_NETWORK_SERVICE}:(OI)(CI)M",
         ],
+        #: نصابِ نسخه‌ی تازه راز نیست؛ برنامه‌ی روی سرور (بی‌ارتقای UAC) باید بتواند اجرایش کند.
+        ["icacls", str(layout.updates), "/grant", f"{SID_USERS}:(OI)(CI)RX"],
     ]
 
 

@@ -447,6 +447,17 @@ export const fetchLicenseRequestCode = (token: string) =>
 /** کوبیتا سازمانی: نصبِ کدِ مجوزِ امضاشده (فقط مالک). */
 export const installLicense = (token: string, licenseToken: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license', { token: licenseToken })
+/** کوبیتا سازمانی: وضعیتِ آپدیتِ سرور (فقط مالک). */
+export interface ServerUpdateStatus {
+  running: string
+  latest_available: string | null
+  installer_path: string | null
+  serving_clients: boolean
+}
+export const fetchServerUpdateStatus = (token: string) => authedGet<ServerUpdateStatus>(token, '/api/updates')
+/** کوبیتا سازمانی: گرفتن و سنجیدنِ نسخه‌ی تازه از کانالِ ابر (فقط مالک؛ چیزی نصب نمی‌کند). */
+export const checkServerUpdate = (token: string) =>
+  authedSend<ServerUpdateStatus>(token, 'POST', '/api/updates/check', {})
 /** کوبیتا سازمانی: فعال‌سازیِ یک‌کلیکی با کدِ فعال‌سازی — سرور خودش با ابر حرف می‌زند (فقط مالک). */
 export const activateLicenseOnline = (token: string, code: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license/activate', { code })

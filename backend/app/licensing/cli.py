@@ -95,6 +95,19 @@ def _issue(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sign_update(args: argparse.Namespace) -> int:
+    """`latest.yml.sig` کنارِ `latest.yml`ِ کانالِ سازمانی — روی ابر، با همان کلید."""
+    from app.onprem.updates import SIGNATURE, parse_manifest, sign_manifest
+
+    manifest = Path(args.manifest)
+    data = manifest.read_bytes()
+    parse_manifest(data.decode("utf-8"))  # manifestِ خراب امضا نمی‌شود
+    out = manifest.with_name(SIGNATURE)
+    out.write_text(sign_manifest(data, _load_key(args.key)), encoding="utf-8")
+    print(f"امضا شد: {out}")
+    return 0
+
+
 def _inspect(args: argparse.Namespace) -> int:
     text = "".join(args.code.split())
     data = decode_unverified(text) if text.startswith(PREFIX + ".") else _decode_request(text)
@@ -127,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--org", help="نامِ سازمان؛ خالی = همان که در درخواست آمده")
     p.add_argument("--lic", help="شناسه‌ی مجوز؛ خالی = تصادفی")
     p.set_defaults(fn=_issue)
+
+    p = sub.add_parser("sign-update", help="امضای latest.yml ِ کانالِ آپدیتِ سازمانی")
+    p.add_argument("--key", required=True, help="فایلِ PEMِ کلیدِ خصوصی")
+    p.add_argument("manifest", help="مسیرِ latest.yml")
+    p.set_defaults(fn=_sign_update)
 
     p = sub.add_parser("inspect", help="نمایشِ محتوای کدِ مجوز یا درخواست (بدونِ راستی‌آزمایی)")
     p.add_argument("code")

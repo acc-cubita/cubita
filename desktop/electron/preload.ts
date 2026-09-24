@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('cubita', {
   serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
   serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
   serverDiscover: () => ipcRenderer.invoke('server:discover'),
+  runUpdateInstaller: (installerPath: string) => ipcRenderer.invoke('updates:runInstaller', installerPath),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>
       ipcRenderer.invoke('pos:pay', profile, amountRial, refId),
