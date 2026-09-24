@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code | `.github/workflows/ci.yml`، `PROJECT_OVERVIEW.md` | گروهِ concurrency روی `master` به‌ازای sha؛ مرجِ بعدی دیگر CIِ قبلی را لغو نمی‌کند (✗ ۲/۴ روی #۱۷۴–#۱۷۶) | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `desktop/e2e/accountant-journal.e2e.mjs`، `PROJECT_OVERVIEW.md`؛ اسکیمای یک‌بارمصرفِ `cubita_verify` (حذف شد) | رفعِ ناپایداریِ E2E (فوکوسِ کادرِ جست‌وجو) که CIِ مرجِ M2ِ آرش را قرمز کرد؛ بررسیِ اینکه UI-01 چیزی از M1/M2 نشکسته | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `routers/journal.py`، `main.py`، `test_journal_line_error_contract.py`، `desktop/package.json`، `PROJECT_OVERVIEW.md` | خطای ردیفیِ سند raise می‌شود تا تراکنش rollback شود (handlerِ `{detail, line_errors}` در main.py)؛ نسخه‌ی دسکتاپ ۱.۷.۰. بک‌اند ۳۸۷۳، فرانت ۴۲۱ | ۱۴۰۵/۰۷/۰۲ |
 | Codex | قرارداد خطای ردیفی journal، نمایش ردیف در دسکتاپ، سنجه و بهینه‌سازی گرید ۳۰۰ ردیفی، نصاب ۱٫۶٫۱ | تکمیل UI-01 روی master به‌روز؛ ۹۳ تست بک‌اند و ۴۲۱ تست دسکتاپ پاس؛ نصاب محلی ساخته شد | ۱۴۰۵/۰۷/۰۲ |
