@@ -270,7 +270,7 @@ jobs:
         env:
           E2E_OUT: e2e-artifacts
 
-      - name: E2E — مرور حساب: درخت → گردش → سند → برگشت
+      - name: "E2E — مرور حساب: درخت → گردش → سند → برگشت"
         working-directory: desktop
         run: node e2e/account-browser.e2e.mjs
         env:
