@@ -6,6 +6,11 @@ import electronSimple, { type ElectronSimpleOptions } from 'vite-plugin-electron
 // خودِ تابع در زمان اجرا همیشه در دسترس است، فقط با یک cast صریح تایپش درست می‌شود.
 const electron = electronSimple as unknown as (options: ElectronSimpleOptions) => Promise<Plugin[]>
 
+// کدام محصول: `CUBITA_EDITION=enterprise` بیلدِ «کوبیتا سازمانی» را می‌سازد
+// (ENTERPRISE_PLAN.md). فقط در main فریز می‌شود؛ رندرر آن را از preload می‌گیرد تا
+// یک منبعِ حقیقت بماند. نسخه‌ی وب همیشه ابری است.
+const EDITION = process.env.CUBITA_EDITION === 'enterprise' ? 'enterprise' : 'cloud'
+
 // عمداً package.json فاقد "type": "module" است تا vite-plugin-electron خروجی main/preload را CJS بسازد
 // (require('electron') در CJS همیشه کار می‌کند؛ import ESM با ماژول مجازی «electron» در این نسخه‌ی الکترون قابل‌اعتماد نبود).
 export default defineConfig({
@@ -20,6 +25,7 @@ export default defineConfig({
             main: {
               entry: 'electron/main.ts',
               vite: {
+                define: { __CUBITA_EDITION__: JSON.stringify(EDITION) },
                 build: {
                   // better-sqlite3 و serialport هر دو native addon اند؛ باندل‌کردنشان داخل main.js باعث می‌شود
                   // require دینامیک فایل .node را در زمان اجرا پیدا نکند، پس باید بیرون از باندل بمانند و از

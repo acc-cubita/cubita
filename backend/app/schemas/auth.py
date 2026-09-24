@@ -71,6 +71,8 @@ class MeOut(BaseModel):
     #: قابلیت‌های قفل‌شده در آزمایشی (مثلِ moadian/storefront) — فرانت با این باکسِ «خرید پلن»
     #: را جای ماژول می‌گذارد. برای مشتریِ واقعی خالی.
     locked_features: list[str] = []
+    #: `cloud` یا `enterprise`. رابط به متغیرِ بیلد اعتماد نمی‌کند — سرور حقیقت را می‌گوید.
+    edition: str = "cloud"
 
     #: حالتِ تجربه‌ی کاربر: `simple` (راهنمادار، کم‌تراکم) یا `accountant` (گریدِ
     #: فشرده‌ی صفحه‌کلیدمحور). **فقط نمایش است** — هیچ مجوزی نمی‌دهد و هیچ منطقِ
@@ -183,15 +185,17 @@ class SignupRequestCodeIn(BaseModel):
     email: EmailStr
 
 
-class SignupIn(BaseModel):
-    """گامِ دومِ ثبت‌نام: با کدِ تأییدِ ایمیل، کاربر و کسب‌وکارش ساخته می‌شوند."""
+class BusinessOwnerIn(BaseModel):
+    """کسب‌وکارِ تازه و مالکش — مشترکِ ثبت‌نامِ ابری و راه‌اندازیِ نسخه‌ی سازمانی.
+
+    اعتبارسنجی‌ها یک جا می‌مانند تا دو درِ ساختِ حساب از هم دور نشوند (مثلاً سقفِ
+    طولِ رمز در یکی عوض شود و در دیگری نه).
+    """
 
     business_name: str
     owner_name: str
     email: EmailStr
     password: str
-    #: کدِ ۶رقمیِ ارسال‌شده به ایمیل در گامِ اول. بدونِ آن هیچ حسابی ساخته نمی‌شود.
-    code: str
     #: صنفِ کسب‌وکار — قالبِ پیش‌فرضِ ماژول‌های پنل را تعیین می‌کند. ماژول‌های محدود (تولید)
     #: با اعلامِ صنف خودکار باز نمی‌شوند؛ آن‌ها فقط با گرنتِ سوپرادمین فعال می‌شوند.
     industry: str = "general"
@@ -205,14 +209,6 @@ class SignupIn(BaseModel):
             return None
         if not is_valid_trade(v):
             raise ValueError("صنف نامعتبر است")
-        return v
-
-    @field_validator("code")
-    @classmethod
-    def code_digits_only(cls, v: str) -> str:
-        v = v.strip()
-        if not v.isdigit():
-            raise ValueError("کد تأیید فقط عدد است")
         return v
 
     @field_validator("industry")
@@ -238,3 +234,18 @@ class SignupIn(BaseModel):
         if not v.strip():
             raise ValueError("این فیلد نمی‌تواند خالی باشد")
         return v.strip()
+
+
+class SignupIn(BusinessOwnerIn):
+    """گامِ دومِ ثبت‌نام: با کدِ تأییدِ ایمیل، کاربر و کسب‌وکارش ساخته می‌شوند."""
+
+    #: کدِ ۶رقمیِ ارسال‌شده به ایمیل در گامِ اول. بدونِ آن هیچ حسابی ساخته نمی‌شود.
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def code_digits_only(cls, v: str) -> str:
+        v = v.strip()
+        if not v.isdigit():
+            raise ValueError("کد تأیید فقط عدد است")
+        return v

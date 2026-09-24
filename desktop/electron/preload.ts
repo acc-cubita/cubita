@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// نسخه و نشانیِ سرور — همزمان، چون api.ts پیش از اولین fetch به آن نیاز دارد.
+contextBridge.exposeInMainWorld('cubitaConfig', ipcRenderer.sendSync('server:config'))
+
 // تنها سطح دسترسی مجاز renderer به دنیای بیرون: چند فراخوانی IPC مشخص، نه دسترسی خام به Node/فایل‌سیستم.
 contextBridge.exposeInMainWorld('cubita', {
   setAuthToken: (token: string | null) => ipcRenderer.invoke('auth:setToken', token),
@@ -42,6 +45,9 @@ contextBridge.exposeInMainWorld('cubita', {
   //: تعویضِ کسب‌وکار — شمارشِ صف برای گارد، و پاک‌کردنِ کشِ مرجع پس از تعویض.
   tenantPendingOutbox: () => ipcRenderer.invoke('tenant:pendingOutbox'),
   tenantClearCaches: () => ipcRenderer.invoke('tenant:clearCaches'),
+  //: کوبیتا سازمانی — آزمایش و ذخیره‌ی نشانیِ سرورِ شرکت.
+  serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
+  serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>
       ipcRenderer.invoke('pos:pay', profile, amountRial, refId),

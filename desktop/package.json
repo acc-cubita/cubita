@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "pack": "npm run build && npm run rebuild-native && electron-builder --dir",
     "dist": "npm run build && npm run rebuild-native && electron-builder",
+    "dist:enterprise": "node scripts/dist-enterprise.mjs",
     "publish-update": "node scripts/publish-update.mjs",
     "verify-update-channel": "electron scripts/verify-update-channel.cjs",
     "verify-pages": "node scripts/verify-pages.mjs"

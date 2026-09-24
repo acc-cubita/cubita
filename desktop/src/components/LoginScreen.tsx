@@ -18,9 +18,13 @@ const FEATURES = [
 export function LoginScreen({
   onLoggedIn,
   onSignup,
+  enterprise,
 }: {
   onLoggedIn: (token: string, me: MeResponse) => void
   onSignup?: () => void
+  /** کوبیتا سازمانی: نشانیِ سرورِ فعلی و راهِ تغییرش. بازیابیِ رمز با ایمیل/پیامک
+   *  آنجا نیست (سرورِ شرکت SMTP و خطِ پیامک ندارد) — رمزِ فراموش‌شده را مالک بازنشانی می‌کند. */
+  enterprise?: { serverUrl: string; onChangeServer: () => void }
 }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -304,8 +308,12 @@ export function LoginScreen({
         </div>
         <div className="login-brand-content">
           <div className="login-brand-mark">C</div>
-          <h2 className="login-brand-title">کوبیتا</h2>
-          <p className="login-brand-tagline">سامانه‌ی یکپارچه‌ی حسابداری، انبار و فروش — آفلاین و آنلاین</p>
+          <h2 className="login-brand-title">{enterprise ? 'کوبیتا سازمانی' : 'کوبیتا'}</h2>
+          <p className="login-brand-tagline">
+            {enterprise
+              ? 'حسابداریِ شرکت، روی سرورِ خودِ شرکت'
+              : 'سامانه‌ی یکپارچه‌ی حسابداری، انبار و فروش — آفلاین و آنلاین'}
+          </p>
           <ul className="login-brand-features">
             {FEATURES.map(({ icon: Icon, text }) => (
               <li key={text}>
@@ -369,16 +377,25 @@ export function LoginScreen({
             {!loading && <ArrowLeft size={15} />}
           </button>
 
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              setMode('forgot')
-              setError(null)
-            }}
-          >
-            رمز عبور را فراموش کرده‌ام
-          </button>
+          {enterprise ? (
+            <p className="login-server-line">
+              سرور: <span dir="ltr">{enterprise.serverUrl}</span>
+              <button type="button" className="link-button" onClick={enterprise.onChangeServer}>
+                تغییرِ سرور
+              </button>
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setMode('forgot')
+                setError(null)
+              }}
+            >
+              رمز عبور را فراموش کرده‌ام
+            </button>
+          )}
 
           {onSignup && (
             <div className="login-signup-cta">

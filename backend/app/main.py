@@ -8,75 +8,7 @@ from app.observability import (
     request_context_middleware,
     unhandled_exception_handler,
 )
-from app.routers import (
-    accounting_ops,
-    accounts,
-    admin_accounts,
-    admin_assurance,
-    admin_auth,
-    admin_billing,
-    admin_commissions,
-    admin_errors,
-    admin_staff,
-    advanced_inventory,
-    alerts,
-    assets,
-    assurance,
-    audit,
-    auth,
-    backup,
-    banking,
-    check_ops,
-    benefits,
-    billing,
-    budgeting,
-    calendar,
-    client_errors,
-    company,
-    contracting,
-    cost_centers,
-    crm,
-    currencies,
-    dashboard,
-    devices,
-    installments,
-    integration,
-    inventory_valuation,
-    manufacturing,
-    inventory,
-    invoices,
-    journal,
-    marketplace,
-    members,
-    moadian,
-    modules,
-    onboarding,
-    payroll,
-    fiscal_year,
-    numbering,
-    period_close,
-    cashbox,
-    pos_settlements,
-    pos_terminals,
-    quotations,
-    recurring,
-    reports,
-    returns,
-    settlements,
-    shop,
-    stock_taking,
-    storefront,
-    subscription,
-    trades,
-    owner_transactions,
-    transfers,
-    warehouse_issues,
-    issue_returns,
-    purchase_deductions,
-    receipts,
-    treasury,
-    sales_ops,
-)
+from app.routing import include_routers
 
 settings = get_settings()
 configure_logging()
@@ -125,79 +57,12 @@ async def shop_public_cors(request, call_next):
             response.headers[key] = value
     return response
 
-app.include_router(auth.router)
-app.include_router(fiscal_year.router)
-app.include_router(cashbox.router)
-app.include_router(numbering.router)
-app.include_router(admin_auth.router)
-app.include_router(admin_auth.diagnostics_router)
-app.include_router(admin_accounts.router)
-app.include_router(admin_billing.router)
-app.include_router(admin_commissions.router)
-app.include_router(admin_errors.router)
-app.include_router(admin_staff.router)
-app.include_router(members.router)
-app.include_router(modules.router)
-app.include_router(accounts.router)
-app.include_router(journal.router)
-app.include_router(accounting_ops.router)
-app.include_router(inventory.router)
-app.include_router(invoices.router)
-app.include_router(quotations.router)
-app.include_router(returns.router)
-app.include_router(owner_transactions.router)
-app.include_router(transfers.router)
-app.include_router(warehouse_issues.router)
-app.include_router(issue_returns.router)
-app.include_router(inventory_valuation.router)
-app.include_router(purchase_deductions.router)
-app.include_router(reports.router)
-app.include_router(banking.router)
-app.include_router(check_ops.router)
-app.include_router(payroll.router)
-app.include_router(benefits.router)
-app.include_router(period_close.router)
-app.include_router(integration.router)
-app.include_router(billing.router)
-app.include_router(receipts.router)
-app.include_router(treasury.router)
-app.include_router(pos_settlements.router)
-app.include_router(pos_terminals.router)
-app.include_router(settlements.router)
-app.include_router(audit.router)
-app.include_router(backup.router)
-app.include_router(subscription.router)
-app.include_router(calendar.router)
-app.include_router(assets.router)
-app.include_router(budgeting.router)
-app.include_router(company.router)
-app.include_router(cost_centers.router)
-app.include_router(moadian.router)
-app.include_router(stock_taking.router)
-app.include_router(recurring.router)
-app.include_router(alerts.router)
-app.include_router(currencies.router)
-app.include_router(crm.router)
-app.include_router(manufacturing.router)
-app.include_router(contracting.router)
-app.include_router(advanced_inventory.router)
-app.include_router(onboarding.router)
-app.include_router(installments.router)
-app.include_router(shop.router)
-app.include_router(storefront.router)
-app.include_router(marketplace.router)
-#: عمومی — صفحه‌ی ثبت‌نام پیش از داشتنِ توکن صنف را می‌پرسد.
-app.include_router(trades.router)
-app.include_router(devices.router)
-app.include_router(sales_ops.router)
-app.include_router(client_errors.router)
-app.include_router(dashboard.router)
-app.include_router(assurance.router)
-#: روترِ کاری پشتِ گیتِ ماژولِ مشتق — هر اندپوینتِ تازه‌اش خودکار گیت می‌خورد.
-app.include_router(assurance.work_router)
-app.include_router(admin_assurance.router)
+include_routers(app, settings.edition)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    #: `edition` برای جادوگرِ اولین اجرای کلاینتِ سازمانی است: «آزمایش اتصال» باید
+    #: بفهمد آدرسی که کاربر داده واقعاً سرورِ کوبیتا سازمانی است، نه هر چیزی که روی
+    #: آن پورت جواب می‌دهد (یا سرورِ ابری).
+    return {"status": "ok", "edition": settings.edition}

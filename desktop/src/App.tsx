@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { fetchMe, type MeResponse } from './api'
+import { fetchMe, fetchSetupStatus, type MeResponse } from './api'
 import { loadStoredToken, storeToken } from './lib/session'
 import { adoptServerExperience } from './lib/experienceMode'
 import { LoginScreen } from './components/LoginScreen'
@@ -8,7 +8,9 @@ import { SignupScreen } from './components/SignupScreen'
 import { SetPasswordScreen } from './components/SetPasswordScreen'
 import { Dashboard } from './components/Dashboard'
 import { TitleBar } from './components/TitleBar'
-import { isElectron } from './platform'
+import { isElectron, isEnterprise, needsServerAddress } from './platform'
+import { ServerConnectScreen } from './components/ServerConnectScreen'
+import { EnterpriseSetupScreen } from './components/EnterpriseSetupScreen'
 import { UpdateBanner } from './components/UpdateBanner'
 import { OfflineBanner } from './components/OfflineBanner'
 import { SubscriptionBanner } from './components/SubscriptionBanner'
@@ -61,7 +63,8 @@ export default function App() {
   // Electron هیچ‌وقت توکن را با loadStoredToken بازیابی نمی‌کند (آن مسیر عمداً
   // فقط وب است، پایینِ همین فایل توضیح داده شده) — نشستش با یک IPC آسنکرون
   // (restoreSession) در افکتِ زیر بازیابی می‌شود، پس این‌جا همیشه null شروع می‌کند.
-  const forceAuthScreen = pending != null || wantsSignup()
+  //: سازمانیِ هنوز وصل‌نشده نشستی ندارد که بازیابی شود — مستقیم جادوگرِ اتصال.
+  const forceAuthScreen = pending != null || wantsSignup() || needsServerAddress
   const [token, setToken] = useState<string | null>(() =>
     forceAuthScreen || isElectron ? null : loadStoredToken(),
   )
@@ -81,6 +84,10 @@ export default function App() {
   const [authView, setAuthView] = useState<'login' | 'signup'>(
     import.meta.env.VITE_SIGNUP_FIRST === 'true' || wantsSignup() ? 'signup' : 'login',
   )
+  // کوبیتا سازمانی: جادوگرِ «اتصال به سرور» (اولین اجرا، یا «تغییرِ سرور» از صفحه‌ی ورود)
+  // و راه‌اندازیِ سرورِ تازه‌نصب که هنوز هیچ کسب‌وکاری ندارد.
+  const [serverView, setServerView] = useState(needsServerAddress)
+  const [needsSetup, setNeedsSetup] = useState(false)
 
   // وب: با یک توکنِ بازیابی‌شده از localStorage اما بدونِ `me`، کاربر را از سرور
   // می‌خوانیم. اگر توکن باطل/منقضی شده باشد، پاکش می‌کنیم و به صفحه‌ی ورود
@@ -151,6 +158,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- عمداً یک‌بار؛ forceAuthScreen مقدارِ لحظه‌ی mount را می‌گیرد، هم‌الگو با مقداردهیِ اولیه‌ی token در وب.
   }, [])
 
+  // سازمانی: پیش از صفحه‌ی ورود بپرس سرور راه‌اندازی شده یا نه. خطا (سرور خاموش)
+  // عمداً نادیده گرفته می‌شود — صفحه‌ی ورود همان خطا را روشن‌تر نشان می‌دهد.
+  useEffect(() => {
+    if (!isEnterprise || needsServerAddress || token || restoring) return
+    let cancelled = false
+    fetchSetupStatus()
+      .then((r) => {
+        if (!cancelled) setNeedsSetup(r.needs_setup)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token, restoring])
+
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
     storeToken(newToken)
@@ -175,7 +197,12 @@ export default function App() {
       {isElectron && <TitleBar />}
       {isElectron && <UpdateBanner />}
       <div className="app-window-body">
-        {pending && !token ? (
+        {isEnterprise && serverView ? (
+          <ServerConnectScreen
+            currentUrl={window.cubitaConfig?.serverUrl ?? null}
+            onCancel={needsServerAddress ? undefined : () => setServerView(false)}
+          />
+        ) : pending && !token ? (
           <SetPasswordScreen
             action={pending.action}
             token={pending.token}
@@ -188,7 +215,24 @@ export default function App() {
             <p>در حال بازیابی جلسه…</p>
           </div>
         ) : !token || !me ? (
-          authView === 'signup' ? (
+          isEnterprise ? (
+            needsSetup ? (
+              <EnterpriseSetupScreen
+                onDone={(t, m) => {
+                  setNeedsSetup(false)
+                  handleAuthenticated(t, m)
+                }}
+              />
+            ) : (
+              <LoginScreen
+                onLoggedIn={handleAuthenticated}
+                enterprise={{
+                  serverUrl: window.cubitaConfig?.serverUrl ?? '',
+                  onChangeServer: () => setServerView(true),
+                }}
+              />
+            )
+          ) : authView === 'signup' ? (
             <SignupScreen onDone={handleAuthenticated} onBackToLogin={() => setAuthView('login')} />
           ) : (
             <LoginScreen onLoggedIn={handleAuthenticated} onSignup={() => setAuthView('signup')} />
@@ -201,7 +245,8 @@ export default function App() {
           <>
             {isElectron && offline && <OfflineBanner />}
             {/* برای حسابِ آزمایشی فقط نوارِ ترایال؛ نوارِ عمومیِ اشتراک تکراری و گیج‌کننده بود. */}
-            {me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}
+            {/* سازمانی اشتراکِ ابری ندارد؛ وضعیتِ مجوزش نوارِ خودش را می‌گیرد (M2). */}
+            {isEnterprise ? null : me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}
             <Dashboard
               token={token}
               me={me}

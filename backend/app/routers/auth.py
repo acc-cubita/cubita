@@ -17,7 +17,7 @@ from app.rate_limit import (
     limit_sms_code,
     limit_sms_reset_verify,
 )
-from app.deps import PREMIUM_FEATURES, Principal, get_current_user, get_principal
+from app.deps import PREMIUM_FEATURES, Principal, cloud_only, get_current_user, get_principal
 from app.models.auth_token import (
     PURPOSE_PASSWORD_RESET,
     PURPOSE_PHONE_VERIFY,
@@ -104,6 +104,7 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
     #: ماژول‌های مشتق در هیچ ستونی نیستند و باید از رکوردِ سرویس خوانده شوند —
     #: یک کوئریِ ایندکس‌خورده در هر `/me`.
     derived = assurance_access.derived_modules(db, principal.tenant_id)
+    settings = get_settings()
     return MeOut(
         id=principal.user.id,
         name=principal.user.name,
@@ -116,8 +117,12 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         permissions=principal.permissions,
         tenant_id=principal.tenant_id,
         tenant_name=principal.membership.tenant.name,
-        is_platform_admin=principal.user.email.strip().lower() in get_settings().platform_admin_emails_list,
-        is_super_admin=principal.user.email.strip().lower() in get_settings().super_admin_emails_list,
+        #: سرورِ سازمانی ستاد ندارد؛ ایمیلی که در ابر ادمین است اینجا فقط یک کاربر است.
+        is_platform_admin=not settings.is_enterprise
+        and principal.user.email.strip().lower() in settings.platform_admin_emails_list,
+        is_super_admin=not settings.is_enterprise
+        and principal.user.email.strip().lower() in settings.super_admin_emails_list,
+        edition=settings.edition,
         tenant_kind=principal.membership.tenant.kind,
         is_trial=tinfo.is_trial,
         trial_days_left=tinfo.days_left,
@@ -145,7 +150,7 @@ def _mask_email(email: str) -> str:
     return f"{shown}{'*' * max(len(local) - 1, 1)}@{domain}"
 
 
-@router.post("/signup/request-code", dependencies=[Depends(limit_email_code)])
+@router.post("/signup/request-code", dependencies=[Depends(cloud_only), Depends(limit_email_code)])
 def request_signup_code(data: SignupRequestCodeIn, db: Session = Depends(get_db)):
     """گامِ اولِ ثبت‌نام: کدِ تأیید را به ایمیل می‌فرستد — هنوز حسابی ساخته نمی‌شود.
 
@@ -171,7 +176,12 @@ def request_signup_code(data: SignupRequestCodeIn, db: Session = Depends(get_db)
     return {"sent": sent, "email": _mask_email(email), "expires_in": EMAIL_CODE_TTL_MINUTES * 60}
 
 
-@router.post("/signup", response_model=TokenOut, status_code=201, dependencies=[Depends(limit_signup)])
+@router.post(
+    "/signup",
+    response_model=TokenOut,
+    status_code=201,
+    dependencies=[Depends(cloud_only), Depends(limit_signup)],
+)
 def signup(data: SignupIn, db: Session = Depends(get_db)):
     """گامِ دومِ ثبت‌نام self-serve — با کدِ تأییدِ ایمیل، کاربر و کسب‌وکارش ساخته می‌شوند.
 
@@ -327,7 +337,7 @@ def switch_tenant(
     )
 
 
-@router.post("/forgot-password", status_code=202)
+@router.post("/forgot-password", status_code=202, dependencies=[Depends(cloud_only)])
 def forgot_password(
     data: ForgotPasswordIn,
     _limit=Depends(limit_password_reset),
@@ -401,7 +411,9 @@ def _verified_user_by_phone(db: Session, phone: str) -> User | None:
     return users[0] if len(users) == 1 else None
 
 
-@router.post("/forgot-password/sms", status_code=202, dependencies=[Depends(limit_sms_code)])
+@router.post(
+    "/forgot-password/sms", status_code=202, dependencies=[Depends(cloud_only), Depends(limit_sms_code)]
+)
 def forgot_password_sms(data: ForgotPasswordSmsIn, db: Session = Depends(get_db)):
     """کدِ بازیابیِ رمز را پیامک می‌کند — همیشه ۲۰۲ و پیامِ یکسان (قرینه‌ی نسخه‌ی ایمیلی).
 
@@ -420,7 +432,11 @@ def forgot_password_sms(data: ForgotPasswordSmsIn, db: Session = Depends(get_db)
     return {"detail": "اگر این شماره در سیستم ثبت و تأیید شده باشد، کد بازیابی برایش ارسال شد"}
 
 
-@router.post("/reset-password/sms", response_model=TokenOut, dependencies=[Depends(limit_sms_reset_verify)])
+@router.post(
+    "/reset-password/sms",
+    response_model=TokenOut,
+    dependencies=[Depends(cloud_only), Depends(limit_sms_reset_verify)],
+)
 def reset_password_sms(data: ResetPasswordSmsIn, db: Session = Depends(get_db)):
     """کدِ پیامکی را می‌سنجد، رمزِ تازه را ست و کاربر را وارد می‌کند (مثلِ بازیابیِ ایمیلی).
 
