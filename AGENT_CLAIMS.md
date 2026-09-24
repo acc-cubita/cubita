@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| — | — | **هیچ ادعای فعالی نیست.** | — |
 
 > **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
@@ -118,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Codex | قرارداد خطای ردیفی journal، نمایش ردیف در دسکتاپ، سنجه و بهینه‌سازی گرید ۳۰۰ ردیفی، نصاب ۱٫۶٫۱ | تکمیل UI-01 روی master به‌روز؛ ۹۳ تست بک‌اند و ۴۲۱ تست دسکتاپ پاس؛ نصاب محلی ساخته شد | ۱۴۰۵/۰۷/۰۲ |
 | Claude Opus 5 | مهاجرت‌های `0177`–`0179`، `models/assurance.py`، `services/assurance.py`/`assurance_access.py`/`assurance_score.py`/`assurance_checks.py`، `routers/assurance.py`/`admin_assurance.py`، `services/modules.py` (ماژولِ مشتق)، `deps.py`، `routers/auth.py`، `services/members.py`، `models/tenant.py` (`expires_at`)، `models/user.py` (نقشِ `auditor`)، `services/integrity.py` (خانواده‌بندی)، `pages/assurance/*`، `pages/AssuranceAdminPage.tsx`، `navModel.tsx`، `moduleLists.tsx` | ماژولِ حسابرسی فازِ ۱: درخواستِ مشتری، تأییدِ ستاد، گیتِ زیرمنوها با ماژولِ مشتق، دسترسیِ موقتِ فقط‌خواندنیِ حسابرس، و دوازده بررسیِ خودکار با نمره‌ی سلامت و snapshot | ۱۴۰۵/۰۶/۲۹ |
 | Claude Opus 5 | مهاجرت `0163`، `models/assets.py` (`AssetAssignment` + سه ستونِ استقرار)، `schemas/assets.py`، `services/assets.py`، `routers/assets.py`، `FixedAssetsPanel.tsx` (تب‌دار شد)، `wizard/FixedAssetWizard.tsx`، `Dashboard.tsx`، `moduleSections.tsx`، `api.ts` | دارایی ثابت، فازِ ۱: تحویل/استقرار و جابه‌جایی با تاریخچه‌ی دوسره؛ ماژول از صفحه‌ی تخت به پنج تب رفت و ویزارد داخلِ تبِ اول با درفتِ مشترک نشست | ۱۴۰۵/۰۶/۲۵ |
 | Claude Opus 5 | مهاجرت `0162`، `services/production_reports.py` (تازه)، `schemas/manufacturing.py`، `routers/manufacturing.py`، `models/manufacturing.py`، `services/manufacturing.py`، `ManufacturingPage.tsx`، `moduleSections.tsx`، `HelpPage.tsx`، `api.ts` | تولید، فازِ ۴: سه گزارشِ انحرافِ مصرفِ مواد، کاردکسِ خطِ تولید و قیمتِ تمام‌شده — مشتق از همان اسنادِ واقعی، بدونِ جدولِ گزارشیِ موازی؛ سندِ باطل‌شده شمرده نمی‌شود | ۱۴۰۵/۰۶/۲۵ |

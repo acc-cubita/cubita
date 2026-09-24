@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 import { placePopover, type Placement } from '../lib/popover'
@@ -19,16 +19,18 @@ import { suggestDescriptions } from '../lib/descriptionMemory'
  * **کارایی:** مخزن فقط با `getPool` و فقط هنگامِ تایپ در **همین** کادر خوانده
  * می‌شود. `getPool` باید پایدار باشد تا `memo`ِ ردیف‌های گرید نشکند.
  */
-export function DescriptionInput({
+export const DescriptionInput = memo(function DescriptionInput({
   value,
-  onChange,
-  getPool,
+  row,
+  onUpdate,
+  getDescriptionPool,
   'aria-label': ariaLabel,
   placeholder,
 }: {
   value: string
-  onChange: (v: string) => void
-  getPool: () => string[]
+  row: number
+  onUpdate: (row: number, patch: { description: string }) => void
+  getDescriptionPool: (row: number) => string[]
   'aria-label'?: string
   placeholder?: string
 }) {
@@ -45,7 +47,7 @@ export function DescriptionInput({
   }, [])
 
   function refresh(text: string) {
-    const next = suggestDescriptions(getPool(), text)
+    const next = suggestDescriptions(getDescriptionPool(row), text)
     setItems(next)
     setActive(-1)
     const el = inputRef.current
@@ -55,7 +57,7 @@ export function DescriptionInput({
   }
 
   function pick(s: string) {
-    onChange(s)
+    onUpdate(row, { description: s })
     close()
   }
 
@@ -108,7 +110,7 @@ export function DescriptionInput({
         value={value}
         placeholder={placeholder}
         onChange={(e) => {
-          onChange(e.target.value)
+          onUpdate(row, { description: e.target.value })
           refresh(e.target.value)
         }}
         onKeyDown={onKeyDown}
@@ -145,4 +147,4 @@ export function DescriptionInput({
         )}
     </>
   )
-}
+})

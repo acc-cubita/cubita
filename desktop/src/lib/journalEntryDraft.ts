@@ -316,7 +316,9 @@ export function useJournalEntryDraft({
       return true
     } catch (err) {
       //: خطای ردیفیِ سرور شماره‌ی payload دارد؛ به شماره‌ی گرید برمی‌گردد.
-      const rowText = err instanceof ApiError ? ops.serverLineErrors(err.detail, ops.postedRowNumbers(lines)) : null
+      const rowText = err instanceof ApiError
+        ? ops.serverLineErrors(err.detail, ops.postedRowNumbers(lines), err.lineErrors)
+        : null
       setMessage({ text: rowText ?? (err instanceof Error ? err.message : 'خطای ناشناخته'), kind: 'err' })
       return false
     } finally {
