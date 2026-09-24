@@ -8,6 +8,7 @@ from app.observability import (
     request_context_middleware,
     unhandled_exception_handler,
 )
+from app.routers.journal import JournalLineInputError, journal_line_error_handler
 from app.routing import include_routers
 
 settings = get_settings()
@@ -19,6 +20,9 @@ app = FastAPI(title="Cubita API", docs_url=None if settings.is_production else "
 # هر چیزی که داخلش لاگ می‌شود در دسترس باشد.
 app.middleware("http")(request_context_middleware)
 app.add_exception_handler(Exception, unhandled_exception_handler)
+#: خطای ردیفیِ سند (`line_errors`) — raise می‌شود تا تراکنش rollback شود، و این‌جا
+#: همان پاسخِ `{detail, line_errors}` را می‌گیرد. بی این، FastAPI فقط `detail` را می‌نوشت.
+app.add_exception_handler(JournalLineInputError, journal_line_error_handler)
 
 app.add_middleware(
     CORSMiddleware,
