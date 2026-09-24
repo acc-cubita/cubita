@@ -6,3 +6,6 @@ export const isEnterprise = typeof window !== 'undefined' && window.cubitaConfig
 
 // سازمانی‌ای که هنوز به سرورِ شرکت وصل نشده — جادوگرِ «اتصال به سرور» باید باز شود.
 export const needsServerAddress = isEnterprise && !window.cubitaConfig?.serverUrl
+
+// نامِ محصول در نوارِ عنوان و سرِ منو — دو محصولِ جدا، دو نام.
+export const PRODUCT_NAME = isEnterprise ? 'کوبیتا سازمانی' : 'کوبیتا'

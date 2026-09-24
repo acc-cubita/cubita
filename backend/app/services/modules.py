@@ -122,9 +122,17 @@ def allowed_modules(
     from app.config import get_settings
 
     if get_settings().is_enterprise:
-        #: سرورِ سازمانی سوپرادمینی ندارد که ماژولِ محدود را گرنت کند؛ تا وقتی مجوز
-        #: (M2) ماژول‌ها را تعیین کند، هرچه این نسخه دارد باز است.
+        #: سرورِ سازمانی سوپرادمینی ندارد که ماژولِ محدود را گرنت کند؛ ماژول‌ها را مجوز
+        #: تعیین می‌کند (`mods`). آزمایشی یا مجوزِ بی‌فهرست = هرچه این نسخه دارد.
+        #: مجوز از کش خوانده می‌شود تا این تابع خالص بماند — هر مسیری که به اینجا
+        #: می‌رسد (`/me`، `require_module`) اول `license_state.current(db)` را صدا می‌زند.
+        from app.licensing import state as license_state
+
         allowed = {*CORE_MODULES, *OPTIONAL_MODULES} - ENTERPRISE_REMOVED_MODULES
+        licensed = license_state.peek()
+        if licensed is not None and licensed.mods is not None:
+            #: ماژولِ پایه (core) را هیچ مجوزی نمی‌گیرد — بدونِ «اشخاص» و «گزارش‌ها» دفتر بی‌معناست.
+            allowed &= set(licensed.mods) | set(CORE_MODULES)
         allowed |= {k for k in derived if k in DERIVED_MODULES}
         return allowed
 

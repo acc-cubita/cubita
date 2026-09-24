@@ -15,6 +15,7 @@ import { Sidebar, type PageKey } from './Sidebar'
 import { buildNav } from '../lib/navModel'
 import { TopNav } from './TopNav'
 import { QuickAccessBar } from './QuickAccessBar'
+import { LicenseBanner } from './LicenseBanner'
 import { useTheme } from '../lib/theme'
 import { useGuidedForms } from '../lib/experienceMode'
 import { NavSectionContext } from './navContext'
@@ -45,6 +46,7 @@ import { MoadianHistoryPage, MoadianModulePage } from '../pages/moadian/MoadianM
 import { FiscalYearPage } from '../pages/FiscalYearPage'
 import { ChangePasswordPage } from '../pages/ChangePasswordPage'
 import { BackupPage } from '../pages/BackupPage'
+import { LicensePage } from '../pages/LicensePage'
 import { CodingPage } from '../pages/CodingPage'
 import { PersonalizationPage } from '../pages/PersonalizationPage'
 import { ShortcutsPage } from '../pages/ShortcutsPage'
@@ -339,6 +341,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   calendar: 'تقویم و یادآوری',
   team: 'کاربر جدید',
   modules: 'شخصی‌سازیِ پنل',
+  license: 'مجوز نرم‌افزار',
   profile: 'پروفایل من',
   // ── ماژولِ «حسابداری» ──
   acctchart: 'درختواره حساب‌ها',
@@ -871,6 +874,7 @@ export function Dashboard({
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'fiscalyear' && <FiscalYearPage token={token} />}
           {page === 'backup' && <BackupPage token={token} me={me} />}
+          {page === 'license' && <LicensePage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'coding' && <CodingPage token={token} />}
           {page === 'personalization' && <PersonalizationPage token={token} />}
           {page === 'shortcuts' && (
@@ -928,6 +932,11 @@ export function Dashboard({
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
   const panelsClass = hasModulePanels(page, navGroups) ? ' app-shell--panels' : ''
 
+  //: کوبیتا سازمانی: نوارِ مجوز (آزمایشی، نزدیکِ انقضا، ثبتِ بسته). در ابر `me.license` خالی است.
+  const licenseBanner = me.license ? (
+    <LicenseBanner license={me.license} onOpen={() => navigate('license')} />
+  ) : null
+
   return (
     <NavSectionContext.Provider value={{ activePage: page, section, setSection }}>
       {theme.shell === 'topnav' ? (
@@ -959,6 +968,7 @@ export function Dashboard({
             activePage={page}
             activeSection={section}
           />
+          {licenseBanner}
           {/* دو کارت باید کنارِ محتوا بنشینند، نه زیرِ نوار؛ پس یک ردیفِ افقی زیرِ نوار. */}
           <div className="app-body">
             <ModulePanels
@@ -1022,6 +1032,7 @@ export function Dashboard({
                 )}
               </div>
             </header>
+            {licenseBanner}
             <main className="app-content">{pageContent}</main>
           </div>
         </div>

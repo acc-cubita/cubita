@@ -49,6 +49,8 @@ from app.schemas.members import (
     ResetPasswordSmsIn,
 )
 from app.security import create_access_token, record_login, set_password, verify_password
+from app.licensing import state as license_state
+from app.schemas.enterprise import LicenseOut
 from app.services import assurance_access, members, sms
 from app.services import modules as modules_service
 from app.services import refresh as refresh_svc
@@ -105,6 +107,8 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
     #: یک کوئریِ ایندکس‌خورده در هر `/me`.
     derived = assurance_access.derived_modules(db, principal.tenant_id)
     settings = get_settings()
+    #: سازمانی: مجوز پیش از `allowed_modules` محاسبه می‌شود تا کشی که آن می‌خواند گرم باشد.
+    lic = license_state.current(db) if settings.is_enterprise else None
     return MeOut(
         id=principal.user.id,
         name=principal.user.name,
@@ -127,7 +131,12 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         is_trial=tinfo.is_trial,
         trial_days_left=tinfo.days_left,
         trial_expired=tinfo.expired,
-        locked_features=list(PREMIUM_FEATURES) if tinfo.is_trial else [],
+        locked_features=(
+            [f for f in PREMIUM_FEATURES if lic.feat is not None and f not in lic.feat]
+            if lic is not None
+            else list(PREMIUM_FEATURES) if tinfo.is_trial else []
+        ),
+        license=LicenseOut.of(lic) if lic is not None else None,
         industry=principal.membership.tenant.industry,
         trade=principal.membership.tenant.trade,
         dashboard_cards=principal.membership.dashboard_cards,

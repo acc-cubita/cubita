@@ -7041,6 +7041,75 @@ tr.kardex-voided td { color: var(--text-muted); }
 }
 .trial-banner--urgent { background: var(--warning-bg); }
 
+/* ── کوبیتا سازمانی: نوار و صفحه‌ی مجوز ─────────────────────────────────────── */
+.license-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-base);
+  color: var(--text);
+  background: var(--warning-bg);
+}
+.license-banner--err { background: var(--danger-bg); }
+.license-banner--err > svg { color: var(--danger); }
+.license-banner--warn > svg { color: var(--warning); }
+.license-banner__text { flex: 1; min-width: 0; }
+.license-banner__cta {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.license-banner__cta:hover { border-color: var(--accent); }
+
+.lic-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 0;
+  font-size: var(--fs-base);
+}
+.lic-facts dt { color: var(--text-muted); }
+.lic-facts dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.lic-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.lic-pill--ok { background: var(--success-bg); color: var(--success); }
+.lic-pill--warn { background: var(--warning-bg); color: var(--warning); }
+.lic-pill--err { background: var(--danger-bg); color: var(--danger); }
+.lic-mono { font-family: ui-monospace, Consolas, monospace; }
+.lic-footnote { margin: 14px 0 0; font-size: var(--fs-sm); }
+.lic-steps { display: flex; flex-direction: column; gap: 22px; }
+.lic-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.lic-step-title { font-weight: 600; color: var(--text); }
+.lic-code {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
+  resize: vertical;
+}
+
+@media (max-width: 760px) {
+  .license-banner { flex-wrap: wrap; }
+  .license-banner__cta { width: 100%; }
+  .lic-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .lic-facts dd { margin-bottom: 10px; }
+}
+
 /* نوارِ آفلاینِ دسکتاپ — همان قالبِ trial-banner، رنگِ ملایم‌ترِ warning */
 .offline-banner {
   display: flex;

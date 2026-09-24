@@ -170,7 +170,18 @@ def require_feature(feature: str):
     اندپوینتِ تازه‌ای هم که به آن روترها اضافه شود خودکار قفل می‌ماند.
     """
 
-    def checker(principal: Principal = Depends(get_principal)) -> User:
+    def checker(principal: Principal = Depends(get_principal), db: Session = Depends(get_db)) -> User:
+        if get_settings().is_enterprise:
+            #: سازمانی: قابلیت‌های پولی را مجوز تعیین می‌کند (`feat`)؛ آزمایشی همه را دارد.
+            from app.licensing import state as license_state
+
+            feat = license_state.current(db).feat
+            if feat is not None and feature not in feat:
+                raise HTTPException(
+                    status.HTTP_402_PAYMENT_REQUIRED,
+                    "این قابلیت در مجوزِ کوبیتا سازمانیِ شما نیست؛ برای افزودنش با پشتیبانی تماس بگیرید.",
+                )
+            return principal.user
         if principal.membership.tenant.is_trial:
             raise HTTPException(
                 status.HTTP_402_PAYMENT_REQUIRED,
@@ -200,6 +211,12 @@ def require_module(module: str):
         #: محاسبه‌ی `derived` **این‌جا** انجام می‌شود، نه در فراخوان: اگر روتر و منو
         #: هرکدام جداگانه حساب می‌کردند، می‌توانستند اختلاف پیدا کنند — منو باز و
         #: سرور بسته، یا بدتر، برعکس.
+        if get_settings().is_enterprise:
+            #: `allowed_modules` خالص است و مجوز را از کش می‌خواند؛ اینجا گرمش می‌کنیم.
+            from app.licensing import state as license_state
+
+            license_state.current(db)
+
         derived: frozenset[str] = frozenset()
         if module in modules_service.DERIVED_MODULES:
             from app.services import assurance_access
