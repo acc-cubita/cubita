@@ -1,10 +1,11 @@
 from uuid import UUID
 
+from dataclasses import replace
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -18,12 +19,20 @@ from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
 from app.models.user import User
 from app.pagination import Page, PageParams, paginate
-from app.schemas.accounting import EntrySourceOut, JournalEntryIn, JournalEntryOut, SubNumberIn
+from app.routers.reports import report_filters
+from app.schemas.accounting import (
+    EntrySourceOut,
+    JournalEntryIn,
+    JournalEntryOut,
+    JournalListSummaryOut,
+    SubNumberIn,
+)
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services import entry_source
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
+from app.services.reports import ReportFilters, apply_report_filters
 from app.services import tafsili
 from app.services.voiding import void_journal_entry
 
@@ -89,32 +98,29 @@ def _assert_tracking_allowed(db: Session, lines) -> None:
         )
 
 
-@router.get("", response_model=Page[JournalEntryOut])
-def list_entries(
-    date_from: date | None = None,
-    date_to: date | None = None,
-    status_filter: str | None = Query(None, alias="status"),
-    source_type: str | None = None,
-    q: str | None = None,
-    db: Session = Depends(get_db),
-    params: PageParams = Depends(),
-    _=Depends(require_permission("accounting", "view")),
-):
-    """فهرستِ اسناد با فیلترهای اختیاری.
+def _filtered_entries(db: Session, filters: ReportFilters, q: str | None):
+    """اسنادی که فهرست و جمعِ آن می‌بینند — **یک تعریف برای هر دو**.
 
-    فیلترها سمتِ سرورند نه کلاینت: صفحه‌ی «سند حسابداری»، کارتابل، ادغام و دفترِ
-    روزنامه همگی زیرمجموعه‌ای از همین فهرست را می‌خواهند، و کشیدنِ کلِ دفتر برای
-    فیلترکردنِ آن در مرورگر با هر کسب‌وکارِ چندساله از کار می‌افتاد.
+    فیلترها همان `ReportFilters`ِ دفتر و تراز است و از همان `apply_report_filters` رد
+    می‌شود، نه نسخه‌ی دومی از آن. سند وقتی می‌آید که **دست‌کم یکی** از ردیف‌هایش از
+    فیلتر رد شود، چون مرکز هزینه و تفصیلی روی ردیف‌اند نه روی سند. دفتر روزنامه سند
+    را کامل نشان می‌دهد، همان‌طور که ثبت شده.
+
+    تاریخ جدا اعمال می‌شود، چون `apply_report_filters` عمداً تاریخ نمی‌گیرد.
     """
-    query = db.query(JournalEntry).options(selectinload(JournalEntry.lines))
-    if date_from is not None:
-        query = query.filter(JournalEntry.entry_date >= date_from)
-    if date_to is not None:
-        query = query.filter(JournalEntry.entry_date <= date_to)
-    if status_filter in ("temporary", "permanent"):
-        query = query.filter(JournalEntry.status == status_filter)
-    if source_type:
-        query = query.filter(JournalEntry.source_type == source_type)
+    query = db.query(JournalEntry)
+    if filters.date_from is not None:
+        query = query.filter(JournalEntry.entry_date >= filters.date_from)
+    if filters.date_to is not None:
+        query = query.filter(JournalEntry.entry_date <= filters.date_to)
+    #: بدونِ فیلترِ دیگری، کوئری همان است که پیش از این بود — زیرکوئریِ بی‌مصرف نمی‌خورد.
+    if replace(filters, date_from=None, date_to=None) != ReportFilters():
+        matching = apply_report_filters(
+            db,
+            select(JournalLine.entry_id).join(JournalEntry, JournalLine.entry_id == JournalEntry.id),
+            filters,
+        )
+        query = query.filter(JournalEntry.id.in_(matching))
     if q:
         term = q.strip()
         # شماره فرعی هم متن است و هم چیزی که کاربر با آن دنبالِ سند می‌گردد، پس
@@ -127,6 +133,28 @@ def list_entries(
             conditions.append(JournalEntry.number == int(term))
             conditions.append(JournalEntry.atf_number == int(term))
         query = query.filter(or_(*conditions))
+    return query
+
+
+@router.get("", response_model=Page[JournalEntryOut])
+def list_entries(
+    filters: ReportFilters = Depends(report_filters),
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    params: PageParams = Depends(),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """فهرستِ اسناد با فیلترهای اختیاری.
+
+    فیلترها سمتِ سرورند نه کلاینت: صفحه‌ی «سند حسابداری»، کارتابل، ادغام و دفترِ
+    روزنامه همگی زیرمجموعه‌ای از همین فهرست را می‌خواهند، و کشیدنِ کلِ دفتر برای
+    فیلترکردنِ آن در مرورگر با هر کسب‌وکارِ چندساله از کار می‌افتاد.
+
+    فیلترها همان `report_filters`ِ دفتر و تراز است. پیش از این فقط تاریخ و وضعیت و
+    منشأ را می‌شناخت، و دفتر روزنامه نمی‌توانست بر اساسِ شماره‌ی سند یا مرکز هزینه
+    فیلتر کند.
+    """
+    query = _filtered_entries(db, filters, q).options(selectinload(JournalEntry.lines))
 
     # (entry_date, number) یکتاست چون number از sequence می‌آید — کلید امن برای keyset
     items, next_cursor = paginate(
@@ -145,6 +173,34 @@ def list_entries(
         row.source = EntrySourceOut(**found) if found is not None else None
         rows.append(row)
     return Page(items=rows, next_cursor=next_cursor)
+
+
+#: پیش از `/{entry_id}`، وگرنه «summary» به‌عنوانِ شناسه‌ی سند خوانده می‌شود و ۴۲۲ می‌گیرد.
+@router.get("/summary", response_model=JournalListSummaryOut)
+def list_summary(
+    filters: ReportFilters = Depends(report_filters),
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """جمعِ کلِ همان دامنه‌ای که `list_entries` صفحه‌به‌صفحه می‌دهد.
+
+    جمعِ ردیف‌ها فقط ردیف‌هایی را می‌شمارد که خودشان از فیلتر رد می‌شوند. سندی با یک
+    ردیفِ «مرکز تهران» و یک ردیفِ «مرکز شیراز»، با فیلترِ تهران در فهرست می‌آید ولی
+    فقط ردیفِ تهرانش در جمع است — همان عددی که دفتر و تراز با همان فیلتر می‌دهند.
+    """
+    entries = _filtered_entries(db, filters, q)
+    entry_count = entries.count()
+    lines = db.query(
+        func.count(JournalLine.id),
+        func.coalesce(func.sum(JournalLine.debit), 0),
+        func.coalesce(func.sum(JournalLine.credit), 0),
+    ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+    lines = lines.filter(JournalLine.entry_id.in_(entries.with_entities(JournalEntry.id).scalar_subquery()))
+    line_count, debit, credit = apply_report_filters(db, lines, filters).one()
+    return JournalListSummaryOut(
+        entry_count=entry_count, line_count=line_count, total_debit=debit, total_credit=credit
+    )
 
 
 @router.get("/{entry_id}", response_model=JournalEntryOut)

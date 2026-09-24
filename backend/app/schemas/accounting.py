@@ -315,3 +315,20 @@ class JournalEntryOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+class JournalListSummaryOut(BaseModel):
+    """جمعِ **کلِ دامنه‌ی** فهرستِ اسناد، نه صفحه‌ی بارگذاری‌شده.
+
+    فهرست صفحه‌بندیِ keyset دارد، پس کلاینت هیچ‌وقت همه‌ی ردیف‌ها را ندارد. جمعی که
+    کلاینت از ردیف‌های خودش بسازد، جمعِ صفحه است. دفتر روزنامه تا امروز همان را «جمعِ
+    گردشِ بازه» می‌نامید.
+
+    با فیلترِ مرکز هزینه یا تفصیلی، جمع فقط ردیف‌های منطبق را می‌شمارد، یعنی همان
+    عددی که دفتر و تراز با همان فیلتر می‌دهند. `line_count` همین ردیف‌هاست.
+    """
+
+    entry_count: int
+    line_count: int
+    total_debit: Decimal
+    total_credit: Decimal
+
