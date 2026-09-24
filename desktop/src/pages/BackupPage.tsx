@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
+  CloudDownload,
   Clock,
   DatabaseBackup,
   Download,
@@ -13,7 +14,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { fetchBackupExport, importBackup, type MeResponse } from '../api'
-import { isElectron } from '../platform'
+import { isElectron, isEnterprise } from '../platform'
 import type { BackupSettings, BackupStatus } from '../electron.d'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -369,6 +370,26 @@ export function BackupPage({ token, me }: { token: string; me: MeResponse }) {
                   <Upload size={15} /> بازیابی از فایل
                 </button>
               </div>
+            </SectionCard>
+          )}
+
+          {isEnterprise && (
+            <SectionCard
+              icon={CloudDownload}
+              title="انتقال از کوبیتای ابری"
+              description="دفترِ کسب‌وکار را از حسابِ ابری به همین سرور بیاورید."
+            >
+              <ol className="pw-facts">
+                <li>
+                  در <span dir="ltr">acc.cubita.ir</span> با حسابِ مالک وارد شوید و از همین صفحه
+                  «دانلودِ فایلِ پشتیبان» را بزنید.
+                </li>
+                <li>فایل را این‌جا با «بازیابی از فایل» بخوانید. داده‌ی فعلیِ این سرور جایگزین می‌شود.</li>
+                <li>
+                  کارمندانِ حسابِ ابری در «کاربران» با وضعیتِ <strong>غیرفعال</strong> می‌آیند. هر کدام را
+                  که می‌خواهید فعال کنید و برایش «کدِ بازنشانیِ رمز» بسازید. رمزها منتقل نمی‌شوند.
+                </li>
+              </ol>
             </SectionCard>
           )}
 

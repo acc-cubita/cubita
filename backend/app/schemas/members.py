@@ -93,6 +93,15 @@ class InviteOut(BaseModel):
     #: در production همیشه True؛ False یعنی عضویت ساخته شد ولی ایمیل نرفت و مدیر
     #: باید بداند، وگرنه منتظر کاربری می‌ماند که هرگز لینکی نگرفته.
     email_sent: bool
+    #: فقط نسخه‌ی سازمانی (بی‌ایمیل): کدِ دعوتِ ۱۶ نویسه‌ای که مالک به کارمند می‌دهد.
+    #: تنها باری است که کد دیده می‌شود؛ فقط hashاش ذخیره شده.
+    code: str | None = None
+
+
+class ResetCodeOut(BaseModel):
+    member: MemberOut
+    code: str
+    valid_hours: int
 
 
 class ChangeRoleIn(BaseModel):
@@ -105,6 +114,16 @@ class SetStatusIn(BaseModel):
 
 class AcceptInviteIn(BaseModel):
     token: str
+    password: str
+    name: str | None = None
+
+    _check = field_validator("password")(validate_password)
+
+
+class RedeemCodeIn(BaseModel):
+    """کدِ دعوت یا بازنشانیِ نسخه‌ی سازمانی — کارمند نمی‌داند کدام است و لازم هم نیست بداند."""
+
+    code: str
     password: str
     name: str | None = None
 

@@ -158,6 +158,16 @@ def cloud_only() -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
+def enterprise_only() -> None:
+    """وارونه‌ی `cloud_only`: مسیری در روترِ مشترک که فقط سرورِ سازمانی دارد.
+
+    نمونه: کدِ بازنشانیِ رمز که مالک برای کارمند می‌سازد. در ابر کاربر ممکن است عضوِ
+    چند کسب‌وکار باشد و مالکِ یکی نباید بتواند راهِ ورود به حسابِ او را بسازد.
+    """
+    if not get_settings().is_enterprise:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+
+
 #: قابلیت‌هایی که در نسخه‌ی آزمایشی قفل‌اند و فقط با پلنِ خریداری‌شده باز می‌شوند.
 #: کلیدها با locked_features در MeOut و گیتِ فرانت یکی‌اند.
 PREMIUM_FEATURES = ("moadian", "storefront")

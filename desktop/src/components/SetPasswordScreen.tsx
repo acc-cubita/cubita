@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react'
-import { acceptInvite, fetchMe, resetPassword, type MeResponse } from '../api'
+import { Lock, Eye, EyeOff, ArrowLeft, KeyRound, User } from 'lucide-react'
+import { acceptInvite, fetchMe, redeemCode, resetPassword, type MeResponse } from '../api'
+import { PRODUCT_NAME } from '../platform'
 
 const MIN_PASSWORD_LENGTH = 10
 
@@ -10,6 +11,10 @@ const MIN_PASSWORD_LENGTH = 10
  * هر دو یک شکل دارند (توکن از لینک ایمیل + یک رمز تازه) و تفاوتشان فقط در متن و
  * اندپوینت است، پس یک کامپوننت با یک پارامتر ساده‌تر از دو کامپوننت تقریباً یکسان
  * است که کم‌کم از هم واگرا می‌شوند.
+ *
+ * سومی، `redeem-code`، مالِ کوبیتا سازمانی است: سرورِ شرکت ایمیل ندارد، پس کارمند به‌جای
+ * لینک یک کدِ ۱۶ نویسه‌ای از مالک (یا مالک از `cubita-server` روی خودِ سرور) می‌گیرد و
+ * این‌جا واردش می‌کند. کارمند لازم نیست بداند کدِ دعوت است یا بازنشانی؛ سرور می‌داند.
  */
 export function SetPasswordScreen({
   action,
@@ -17,12 +22,16 @@ export function SetPasswordScreen({
   onDone,
   onCancel,
 }: {
-  action: 'reset-password' | 'accept-invite'
+  action: 'reset-password' | 'accept-invite' | 'redeem-code'
+  /** برای `redeem-code` خالی است: کد را کاربر همین‌جا وارد می‌کند. */
   token: string
   onDone: (token: string, me: MeResponse) => void
   onCancel: () => void
 }) {
   const isInvite = action === 'accept-invite'
+  const isCode = action === 'redeem-code'
+  const [code, setCode] = useState('')
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -43,7 +52,11 @@ export function SetPasswordScreen({
     setError(null)
     setLoading(true)
     try {
-      const res = isInvite ? await acceptInvite(token, password) : await resetPassword(token, password)
+      const res = isCode
+        ? await redeemCode(code.trim(), password, name.trim() || undefined)
+        : isInvite
+          ? await acceptInvite(token, password)
+          : await resetPassword(token, password)
       const accessToken = res.access_token
       await window.cubita?.setAuthToken(accessToken)
       onDone(accessToken, await fetchMe(accessToken))
@@ -64,9 +77,11 @@ export function SetPasswordScreen({
         </div>
         <div className="login-brand-content">
           <div className="login-brand-mark">C</div>
-          <h2 className="login-brand-title">کوبیتا</h2>
+          <h2 className="login-brand-title">{PRODUCT_NAME}</h2>
           <p className="login-brand-tagline">
-            {isInvite
+            {isCode
+              ? 'کدی که از مدیرِ سیستم گرفته‌اید را وارد کنید و رمزِ خودتان را بسازید'
+              : isInvite
               ? 'یک رمز عبور انتخاب کنید تا حسابتان فعال شود'
               : 'یک رمز تازه انتخاب کنید تا دوباره وارد شوید'}
           </p>
@@ -75,12 +90,42 @@ export function SetPasswordScreen({
 
       <div className="login-form-panel">
         <form className="login-card" onSubmit={handleSubmit}>
-          <h1>{isInvite ? 'فعال‌سازی حساب' : 'انتخاب رمز تازه'}</h1>
+          <h1>{isCode ? 'ورود با کد' : isInvite ? 'فعال‌سازی حساب' : 'انتخاب رمز تازه'}</h1>
           <p className="login-card-subtitle">
-            {isInvite
+            {isCode
+              ? 'کدِ دعوت یا بازنشانی را از مدیرِ سیستم بگیرید. رمزی که این‌جا می‌سازید را هیچ‌کس جز خودتان نمی‌داند.'
+              : isInvite
               ? 'شما به یک کسب‌وکار در کوبیتا دعوت شده‌اید. برای ورود رمز عبور خود را بسازید.'
               : 'رمز تازه‌ای بگذارید. با ثبت آن، همه‌ی نشست‌های باز دیگر بسته می‌شوند.'}
           </p>
+
+          {isCode && (
+            <>
+              <label>
+                کد
+                <div className="input-with-icon">
+                  <KeyRound size={16} className="input-icon" />
+                  <input
+                    dir="ltr"
+                    className="lic-activation"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <span className="field-hint">۱۶ نویسه، مثلِ XXXX-XXXX-XXXX-XXXX؛ خط‌تیره و حروفِ کوچک مهم نیست.</span>
+              </label>
+              <label>
+                نامِ شما (اختیاری)
+                <div className="input-with-icon">
+                  <User size={16} className="input-icon" />
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="برای کدِ دعوت" />
+                </div>
+              </label>
+            </>
+          )}
 
           <label>
             رمز عبور تازه
@@ -91,7 +136,7 @@ export function SetPasswordScreen({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="حداقل ۱۰ کاراکتر"
-                autoFocus
+                autoFocus={!isCode}
                 required
               />
               <button
@@ -123,7 +168,7 @@ export function SetPasswordScreen({
           {error && <div className="error">{error}</div>}
 
           <button type="submit" className="btn-primary login-submit" disabled={loading}>
-            {loading ? 'در حال ثبت...' : isInvite ? 'فعال‌سازی و ورود' : 'ثبت رمز و ورود'}
+            {loading ? 'در حال ثبت...' : isInvite || isCode ? 'فعال‌سازی و ورود' : 'ثبت رمز و ورود'}
             {!loading && <ArrowLeft size={15} />}
           </button>
 

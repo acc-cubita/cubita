@@ -19,11 +19,13 @@ import {
   type PermissionModule,
   type RoleInfo,
 } from '../api'
+import { AccessCodeCard, type IssuedCode } from '../components/AccessCodeCard'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { StatCard } from '../components/StatCard'
 import { PermissionMatrix, isFullAccess, summarize } from '../components/PermissionMatrix'
 import { SearchSelect } from '../components/SearchSelect'
+import { isEnterprise } from '../platform'
 
 /**
  * کاربر جدید — نیمه‌ی «ساختن».
@@ -45,6 +47,7 @@ export function TeamPage({ token }: { token: string }) {
   const [modules, setModules] = useState<PermissionModule[]>([])
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [issued, setIssued] = useState<IssuedCode | null>(null)
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -113,6 +116,8 @@ export function TeamPage({ token }: { token: string }) {
         </div>
       )}
 
+      {issued && <AccessCodeCard issued={issued} onClose={() => setIssued(null)} />}
+
       <div className="stat-grid">
         <StatCard icon={<UsersRound size={18} />} label="کل کاربران" value={fa(kpis.total)} />
         <StatCard icon={<UserCheck size={18} />} label="کاربران فعال" value={fa(kpis.active)} tone="success" />
@@ -160,10 +165,17 @@ export function TeamPage({ token }: { token: string }) {
               setEmail('')
               setName('')
               setDraft(null)
+              if (res.code) {
+                // سازمانی: ایمیلی نیست؛ کد یک‌بار نشان داده می‌شود و مالک دستی می‌دهدش.
+                setIssued({ kind: 'invite', name: res.member.name, code: res.code, hours: 7 * 24 })
+                return
+              }
               if (!res.email_sent) {
                 throw new Error('کاربر اضافه شد ولی ارسال ایمیل دعوت ناموفق بود — تنظیمات SMTP را بررسی کنید.')
               }
-            }, 'دعوت ارسال شد. کاربر با کلیک روی لینک ایمیل، رمز خودش را می‌سازد.')
+            }, isEnterprise
+              ? 'کاربر اضافه شد. کدِ دعوت را پایین‌تر ببینید و به او بدهید.'
+              : 'دعوت ارسال شد. کاربر با کلیک روی لینک ایمیل، رمز خودش را می‌سازد.')
           }}
         >
           <label>

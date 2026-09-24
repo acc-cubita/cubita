@@ -6,6 +6,9 @@
     cubita-server migrate    [--home DIR]         # مهاجرت‌ها با نقشِ مالک (آپدیت)
     cubita-server uninstall-services [--home DIR] # حذفِ برنامه؛ داده می‌ماند
     cubita-server status     [--home DIR]
+    cubita-server backup     [--home DIR]         # یک پشتیبانِ کامل همین حالا
+    cubita-server diagnostics [--home DIR] [--out FILE]   # زیپِ عیب‌یابی، وقتی API هم بالا نیست
+    cubita-server reset-owner-password [--home DIR] [--email E]   # مالکِ رمزفراموش‌کرده
     cubita-server selftest
 
 چیدمانِ بسته (کنارِ این exe):
@@ -89,10 +92,15 @@ def cmd_serve(args) -> int:
     _enter_home(home)
     from app.onprem.provision import Layout, read_env
 
-    env = read_env(Layout(home))
+    layout = Layout(home)
+    env = read_env(layout)
     import uvicorn
 
     from app.main import app
+    from app.onprem.maintenance import BackupScheduler
+
+    #: پشتیبانِ خودکار داخلِ همین سرویس — چیزی جدا برای نصب و خراب‌شدن نیست.
+    BackupScheduler(layout, _pg_bin(args), env["MIGRATION_DATABASE_URL"]).start()
 
     uvicorn.run(
         app,
@@ -146,6 +154,60 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    home = Path(args.home)
+    _enter_home(home)
+    from app.onprem.maintenance import BackupBusy, run_backup
+    from app.onprem.provision import Layout, ProvisionError, read_env
+
+    layout = Layout(home)
+    try:
+        target = run_backup(layout, _pg_bin(args), read_env(layout)["MIGRATION_DATABASE_URL"])
+    except (BackupBusy, ProvisionError) as exc:
+        print(f"خطا: {exc}", file=sys.stderr)
+        return 1
+    print(f"پشتیبان ساخته شد: {target}")
+    return 0
+
+
+def cmd_diagnostics(args) -> int:
+    home = Path(args.home)
+    _enter_home(home)
+    import time
+
+    from app.onprem.maintenance import base_info, diagnostics_zip
+    from app.onprem.provision import Layout
+
+    layout = Layout(home)
+    out = Path(args.out) if args.out else Path.cwd() / f"cubita-diagnostics-{time.strftime('%Y%m%d-%H%M%S')}.zip"
+    if not args.out:
+        #: پوشه‌ی داده فقط برای مدیر خواندنی است؛ زیپ جایی برود که کاربر پیدایش کند.
+        out = Path(os.environ.get("USERPROFILE", str(Path.cwd()))) / "Desktop" / out.name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(diagnostics_zip(layout, base_info(layout)))
+    print(f"زیپِ عیب‌یابی: {out}")
+    return 0
+
+
+def cmd_reset_owner(args) -> int:
+    home = Path(args.home)
+    _enter_home(home)
+    from app.onprem.maintenance import OWNER_RESET_HOURS, issue_owner_reset
+    from app.onprem.provision import Layout, read_env
+
+    issued = issue_owner_reset(read_env(Layout(home))["MIGRATION_DATABASE_URL"], args.email)
+    if not issued:
+        print("مالکِ فعالی" + (f" با ایمیلِ {args.email}" if args.email else "") + " پیدا نشد.", file=sys.stderr)
+        return 1
+    for email, name, code in issued:
+        print(f"{name} <{email}>:  {code}")
+    print(
+        f"\nدر برنامه‌ی کوبیتا، صفحه‌ی ورود ← «کدِ دعوت یا بازنشانی دارم» را بزنید و کد را وارد کنید."
+        f"\nکد {OWNER_RESET_HOURS} ساعت و فقط یک‌بار اعتبار دارد."
+    )
+    return 0
+
+
 def cmd_selftest(_args) -> int:
     os.environ.setdefault("EDITION", "enterprise")
     os.environ.setdefault("ZARINPAL_SANDBOX", "true")
@@ -179,6 +241,13 @@ def main(argv: list[str] | None = None) -> int:
     common(sub.add_parser("migrate"))
     common(sub.add_parser("uninstall-services"))
     common(sub.add_parser("status"))
+    common(sub.add_parser("backup"))
+    diag = sub.add_parser("diagnostics")
+    common(diag)
+    diag.add_argument("--out", default=None)
+    reset = sub.add_parser("reset-owner-password")
+    common(reset)
+    reset.add_argument("--email", default=None)
     sub.add_parser("selftest")
 
     args = parser.parse_args(argv)
@@ -189,6 +258,9 @@ def main(argv: list[str] | None = None) -> int:
         "migrate": lambda: cmd_migrate(args),
         "uninstall-services": lambda: cmd_uninstall(args),
         "status": lambda: cmd_status(args),
+        "backup": lambda: cmd_backup(args),
+        "diagnostics": lambda: cmd_diagnostics(args),
+        "reset-owner-password": lambda: cmd_reset_owner(args),
         "selftest": lambda: cmd_selftest(args),
     }[args.cmd]()
 
