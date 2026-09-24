@@ -8,6 +8,7 @@ import {
   sessionDescriptions,
   suggestDescriptions,
 } from './descriptionMemory'
+import { setTenantScope } from './tenantScope'
 
 /**
  * محیطِ تست `node` است و `sessionStorage` ندارد؛ بدلِ حداقلی، همان چیزی که ماژول
@@ -20,6 +21,7 @@ beforeEach(() => {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
   }
+  setTenantScope('t-a')
 })
 
 describe('پیشنهادِ شرح', () => {
@@ -70,6 +72,27 @@ describe('مخزن و حافظه‌ی جلسه', () => {
   it('بی `sessionStorage` نمی‌شکند — فقط حافظه‌ی جلسه نیست', () => {
     ;(globalThis as Record<string, unknown>).sessionStorage = undefined
     expect(() => rememberDescriptions(['x'])).not.toThrow()
+    expect(sessionDescriptions()).toEqual([])
+  })
+})
+
+describe('حافظه به‌ازای کسب‌وکار', () => {
+  it('شرح‌های کسب‌وکارِ دیگر پیشنهاد نمی‌شوند', () => {
+    rememberDescriptions(['بابت اجاره‌ی انبارِ شرکتِ الف'])
+    expect(sessionDescriptions()).toEqual(['بابت اجاره‌ی انبارِ شرکتِ الف'])
+
+    //: تعویضِ کسب‌وکار همین تب را دوباره بار می‌کند؛ `sessionStorage` سرِ جایش است.
+    setTenantScope('t-b')
+    expect(sessionDescriptions()).toEqual([])
+
+    setTenantScope('t-a')
+    expect(sessionDescriptions()).toEqual(['بابت اجاره‌ی انبارِ شرکتِ الف'])
+  })
+
+  it('پیش از ورود (بی کسب‌وکار) چیزی نه خوانده می‌شود نه نوشته', () => {
+    setTenantScope(null)
+    rememberDescriptions(['بی‌صاحب'])
+    expect(store.size).toBe(0)
     expect(sessionDescriptions()).toEqual([])
   })
 })

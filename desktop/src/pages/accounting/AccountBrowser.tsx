@@ -68,6 +68,7 @@ import {
   type Preset,
   type RangeState,
 } from './kit'
+import { tenantKey } from '../../lib/tenantScope'
 
 /**
  * «مرور حساب‌ها» — UI-02: کاوشگرِ حرفه‌ایِ حساب، از سرفصل تا خودِ سند.
@@ -103,9 +104,13 @@ interface Persisted {
   treeScroll: number
 }
 
+//: به‌ازای کسب‌وکار (`tenantKey`). با کلیدِ سراسری، بعد از تعویضِ کسب‌وکار فیلترِ مرکز
+//: هزینه یا تفصیلیِ کسب‌وکارِ قبلی به سرور می‌رفت و درخت بی‌صدا خالی می‌آمد.
 function loadPersisted(): Partial<Persisted> {
+  const key = tenantKey(STORE_KEY)
+  if (!key) return {}
   try {
-    const raw = sessionStorage.getItem(STORE_KEY)
+    const raw = sessionStorage.getItem(key)
     return raw ? (JSON.parse(raw) as Partial<Persisted>) : {}
   } catch {
     return {}
@@ -113,8 +118,10 @@ function loadPersisted(): Partial<Persisted> {
 }
 
 function savePersisted(p: Persisted) {
+  const key = tenantKey(STORE_KEY)
+  if (!key) return
   try {
-    sessionStorage.setItem(STORE_KEY, JSON.stringify(p))
+    sessionStorage.setItem(key, JSON.stringify(p))
   } catch {
     /* حافظه‌ی نشست در دسترس نیست — فقط حفظِ زمینه از دست می‌رود. */
   }

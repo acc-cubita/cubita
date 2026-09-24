@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fetchMe, fetchSetupStatus, type MeResponse } from './api'
 import { loadStoredToken, storeToken } from './lib/session'
+import { setTenantScope } from './lib/tenantScope'
 import { adoptServerExperience } from './lib/experienceMode'
 import { LoginScreen } from './components/LoginScreen'
 import { SignupScreen } from './components/SignupScreen'
@@ -191,6 +192,10 @@ export default function App() {
     setRestoring(false)
     if (isElectron) void window.cubita.clearSession()
   }
+
+  //: کلیدهای `sessionStorage`ِ صفحه‌ها به‌ازای کسب‌وکار (`lib/tenantScope.ts`). هنگامِ رندر
+  //: و نه در افکت: صفحه‌ی فرزند وضعیتِ ذخیره‌شده را در همین رندر می‌خوانَد.
+  setTenantScope(me?.tenant_id ?? null)
 
   return (
     <div className="app-window">

@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BalanceTreeNode } from '../../api'
 import { AccountBrowsePage } from './AccountBrowser'
+import { setTenantScope } from '../../lib/tenantScope'
 
 let container: HTMLDivElement
 let root: Root
@@ -130,6 +131,8 @@ beforeEach(() => {
   calls = []
   tree = bankChart()
   sessionStorage.clear()
+  //: وضعیت به‌ازای کسب‌وکار ذخیره می‌شود؛ بی کسب‌وکار چیزی نه خوانده می‌شود نه نوشته.
+  setTenantScope('t1')
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -333,6 +336,33 @@ describe('برگشت به همان نقطه (§۴۰)', () => {
     expect($('.cc-presets button.is-active')!.textContent).toBe('این فصل')
     expect(calls.some((c) => c.includes('general-ledger/melli') && c.includes('offset=0'))).toBe(false)
   })
+
+  it('بعد از تعویضِ کسب‌وکار، وضعیتِ کسب‌وکارِ قبلی برنمی‌گردد', async () => {
+    //: تعویضِ کسب‌وکار فقط صفحه را دوباره بار می‌کند و `sessionStorage` می‌ماند. با کلیدِ
+    //: سراسری، حساب و فیلترهای کسب‌وکارِ قبلی روی این یکی می‌نشستند.
+    await mount()
+    typeSearch('بانک ملی')
+    key($('.ab-search input')!, 'Enter')
+    await wait(250)
+    expect(selectedId()).toBe('melli')
+
+    act(() => root.unmount())
+    setTenantScope('t2')
+    root = createRoot(container)
+    await mount()
+    await wait(250)
+
+    expect(selectedId()).not.toBe('melli')
+    expect(rowIds()).not.toContain('melli')
+
+    //: و برگشت به کسب‌وکارِ اول، وضعیتِ خودش را پس می‌دهد.
+    act(() => root.unmount())
+    setTenantScope('t1')
+    root = createRoot(container)
+    await mount()
+    await wait(250)
+    expect(selectedId()).toBe('melli')
+  })
 })
 
 describe('بازه‌ی تاریخ (§۳۸)', () => {
@@ -384,7 +414,7 @@ describe('چارتِ ۱۰۰۰ حسابی (§۲۸)', () => {
     }
     tree = big
     const openAll = big.filter((n) => n.is_group).map((n) => n.account_id)
-    sessionStorage.setItem('cubita.accountBrowser.v1', JSON.stringify({ expanded: openAll }))
+    sessionStorage.setItem('cubita.accountBrowser.v1:t1', JSON.stringify({ expanded: openAll }))
 
     const t0 = performance.now()
     await mount()

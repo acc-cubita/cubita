@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code | `desktop/src/lib/tenantScope.ts`، `App.tsx`، `AccountBrowser.tsx`، `descriptionMemory.ts` و تست‌هایشان، `PROJECT_OVERVIEW.md` | کلیدِ `sessionStorage` به‌ازای کسب‌وکار (باگِ بازبینیِ #191) | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `services/accounting_ops.py` (`get_balance_tree`)، `services/reports.py` (`get_general_ledger`: `limit/offset`)، دو روتر و دو شِما، `AccountBrowser.tsx` (تازه)، `lib/accountTree.ts` (تازه)، `ChartPages.tsx`، `Dashboard.tsx`، `api.ts`، `App.css`، `HelpPage.tsx`، `e2e/account-browser.e2e.mjs`، `ci.yml` | UI-02 مرور حسابِ حرفه‌ای: درختِ تجمیعیِ سمتِ سرور، گردشِ صفحه‌بندی‌شده، کیبورد، جست‌وجو، حفظِ زمینه — بی‌مهاجرت | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `.github/workflows/ci.yml`، `PROJECT_OVERVIEW.md` | گروهِ concurrency روی `master` به‌ازای sha؛ مرجِ بعدی دیگر CIِ قبلی را لغو نمی‌کند (✗ ۲/۴ روی #۱۷۴–#۱۷۶) | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `desktop/e2e/accountant-journal.e2e.mjs`، `PROJECT_OVERVIEW.md`؛ اسکیمای یک‌بارمصرفِ `cubita_verify` (حذف شد) | رفعِ ناپایداریِ E2E (فوکوسِ کادرِ جست‌وجو) که CIِ مرجِ M2ِ آرش را قرمز کرد؛ بررسیِ اینکه UI-01 چیزی از M1/M2 نشکسته | ۱۴۰۵/۰۷/۰۲ |
