@@ -26,8 +26,8 @@
 |---|---|---|
 | **M0** | اسپایکِ امکان‌سنجیِ بسته‌بندی | ✅ — آزمونِ RLS با Postgresِ واقعی در M4 انجام شد؛ فقط سرویس/SmartScreen روی VM |
 | **M1** | پرچمِ نسخه + آدرسِ سرورِ زمان‌اجرا | ✅ (جز جست‌وجوی خودکارِ `/24` — به M4 رفت) |
-| **M2** | هسته‌ی مجوز (آفلاین‌محور) | ✅ — مانده: ساختِ کلیدِ امضای تولید روی ابر (یک دستور، پایین) |
-| **M3** | پنلِ ستاد + فعال‌سازیِ آنلاین | ✅ — مانده: کلیدِ امضا روی ابر + استقرار |
+| **M2** | هسته‌ی مجوز (آفلاین‌محور) | ✅ — کلیدِ تولید `edea436f` روی ابر ساخته شد (۱۴۰۵/۰۷/۰۲) |
+| **M3** | پنلِ ستاد + فعال‌سازیِ آنلاین | ✅ — کلیدِ امضا روی ابر ✅؛ مانده: استقرار |
 | **M4** | نصاب | 🟡 ساخته و محلی سنجیده شد — مانده: چک‌لیستِ VM (سرویس‌ها، فایروال، ویندوزِ تمیز) |
 | **M5** | آپدیت | ✅ ساخته و زنجیره‌ی واقعی سنجیده شد — مانده: اجرای electron-updater و UAC روی VM |
 | **M6** | مهاجرت و نگهداری | ✅ ساخته و با Postgresِ واقعی سنجیده شد — مانده: استقرارِ بک‌اندِ ابری (خروجیِ تازه) + چک‌لیستِ VM |
@@ -343,17 +343,24 @@ python -m PyInstaller --noconfirm --onedir --console --name cubita-server \
 درخواست ← کدِ مجوز)، `LicenseBanner` (فقط وقتی کاری از کاربر برمی‌آید)، و نامِ محصول در
 نوارِ عنوان/منو (`PRODUCT_NAME`). ۱۴۴۰ و ۳۹۰ بی‌سرریز.
 
-### کاری که پیش از اولین فروش مانده (یک‌بار، روی سرورِ ابری)
+### کلیدِ امضای تولید — ساخته شد (۱۴۰۵/۰۷/۰۲)
+
+روی سرورِ ابری، با کاربرِ سرویس:
 
 ```bash
-cd /opt/hesabdari/backend
-venv/bin/python -m app.licensing.cli keygen --out /opt/hesabdari/secrets/license-signing.pem
+install -d -m 700 -o hesabdari -g hesabdari /opt/hesabdari/secrets
+cd /opt/hesabdari && sudo -u hesabdari ./venv/bin/python -m app.licensing.cli keygen --out /opt/hesabdari/secrets/license-signing.pem
 ```
 
-دو مقدارِ چاپ‌شده (`kid` و کلیدِ عمومی) به `TRUSTED_PUBLIC_KEYS` در
-`backend/app/licensing/keys.py` اضافه و کامیت شوند. تا آن روز هیچ مجوزی معتبر نیست و هر نصب
-در آزمایشی می‌ماند. کلیدِ خصوصی **کنارِ پشتیبانِ دیتابیس نه** — همان قاعده‌ی `SECRETS_KEY`.
-صدور تا M3: `python -m app.licensing.cli issue --key … --request CUBREQ1.… --seats N --days 365`.
+- `kid` = `edea436f`. کلیدِ عمومی در `backend/app/licensing/keys.py` **و**
+  `desktop/electron/updateKeys.ts` است (تستِ `test_client_and_server_keys_match`).
+- `LICENSE_SIGNING_KEY_FILE=/opt/hesabdari/secrets/license-signing.pem` در
+  `/opt/hesabdari/.env` است. نسخه‌ی پیش از آن `.env.bak-license` است.
+- فایلِ کلید `600` و پوشه `700` است، هر دو فقط برای `hesabdari`. `deploy.sh` فقط `app`،
+  `alembic` و `web` را عوض می‌کند و `secrets/` در آرشیوِ برگشتش نیست.
+- کلیدِ خصوصی **فقط همان‌جاست**. اگر آن دیسک از بین برود، مجوزهای فروخته‌شده کار می‌کنند،
+  ولی مجوزِ تازه فقط با کلیدِ تازه و نسخه‌ی تازه‌ی برنامه صادر می‌شود.
+- **چرخش:** کلیدِ تازه را **اضافه** کنید، کلیدِ قبلی را پاک نکنید.
 
 ## نتایجِ M3 (۱۴۰۵/۰۷/۰۲) — پنلِ ستاد و فعال‌سازیِ آنلاین
 
