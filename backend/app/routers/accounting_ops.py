@@ -23,6 +23,7 @@ from app.schemas.accounting_ops import (
     AnalyticUpdateIn,
     BalancedIssueOut,
     BalanceRowOut,
+    BalanceTreeNodeOut,
     CartableOut,
     ClosingPreviewOut,
     FinalizeIn,
@@ -234,6 +235,19 @@ def balances(
         db, filters.date_from, filters.date_to, filters, include_zero_activity
     )
 
+
+
+@router.get("/balance-tree", response_model=list[BalanceTreeNodeOut])
+def balance_tree(
+    filters: ReportFilters = Depends(report_filters),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    """«مرور حساب‌ها»: کلِ چارت با ماندهٔ تجمیعیِ هر سرفصل — جمع در سرور، نه در مرورگر.
+
+    همان فیلترها و همان هسته‌ی `balances`؛ رقمِ هر برگ عیناً رقمِ تراز است.
+    """
+    return ops.get_balance_tree(db, filters.date_from, filters.date_to, filters)
 
 @router.get("/legal-book", response_model=LegalBookOut)
 def legal_book(

@@ -736,7 +736,7 @@ export function Dashboard({
           {page === 'closingopening' && <ClosingOpeningPage token={token} />}
           {page === 'vat' && <VatPage token={token} />}
           {page === 'ebooks' && <LegalBooksPage token={token} />}
-          {page === 'accountbrowse' && <AccountBrowsePage token={token} />}
+          {page === 'accountbrowse' && <AccountBrowsePage token={token} onNavigate={navigate} />}
           {page === 'balancereport' && <BalanceReportPage token={token} />}
           {page === 'ledgerreport' && <LedgerReportPage token={token} />}
           {page === 'integrity' && <IntegrityPage token={token} />}

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeftRight,
-  ChevronLeft,
   FolderTree,
   Layers,
   ListTree,
@@ -18,21 +17,14 @@ import {
   createAccount,
   createAnalytic,
   deleteAnalytic,
-  fetchAccountBalances,
   fetchAnalytics,
   fetchChartAccounts,
   fetchNextAccountCode,
   reclassifyAccounts,
   updateAnalytic,
   type AnalyticAccount,
-  type BalanceRow,
-  type ChartAccount,
-  type ReportFilters,
 } from '../../api'
-import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
 import { AccountTreePanel } from '../../components/AccountTreePanel'
-import { ReportFilterBar } from '../../components/ReportFilterBar'
-import { SavedViewBar } from '../../components/SavedViewBar'
 import { SectionCard } from '../../components/SectionCard'
 import { SearchSelect } from '../../components/SearchSelect'
 import { Pager, usePagination } from '../../components/Pager'
@@ -51,12 +43,8 @@ import {
   AsyncBlock,
   Metric,
   OpsPage,
-  RangeBar,
-  fa,
-  faAmount,
   faInt,
   useAsync,
-  useRange,
   type Msg,
 } from './kit'
 
@@ -663,206 +651,9 @@ export function AnalyticsPage({ token }: { token: string }) {
 }
 
 // ═══════════════════════ ۵) مرور حساب‌ها ═══════════════════════
-
-interface BrowseNode {
-  account: ChartAccount
-  children: BrowseNode[]
-  own: BalanceRow | null
-  debit: number
-  credit: number
-}
-
-/** درختِ چارت را با ارقامِ *تجمیعی* می‌سازد: هر سرفصل جمعِ زیرشاخه‌هایش است.
- *  بدونِ رول‌آپ، «مرور» فقط یک تراز آزمایشیِ تخت می‌شد که از قبل داشتیم. */
-function buildTree(accounts: ChartAccount[], balances: BalanceRow[]): BrowseNode[] {
-  const byAccount = new Map(balances.map((b) => [b.account_id, b]))
-  const nodes = new Map<string, BrowseNode>()
-  for (const account of accounts) {
-    const own = byAccount.get(account.id) ?? null
-    nodes.set(account.id, {
-      account,
-      children: [],
-      own,
-      debit: own ? Number(own.period_debit) : 0,
-      credit: own ? Number(own.period_credit) : 0,
-    })
-  }
-  const roots: BrowseNode[] = []
-  for (const node of nodes.values()) {
-    const parent = node.account.parent_id ? nodes.get(node.account.parent_id) : null
-    if (parent) parent.children.push(node)
-    else roots.push(node)
-  }
-  const rollup = (node: BrowseNode): { debit: number; credit: number } => {
-    for (const child of node.children) {
-      const sums = rollup(child)
-      node.debit += sums.debit
-      node.credit += sums.credit
-    }
-    node.children.sort((a, b) => a.account.code.localeCompare(b.account.code))
-    return { debit: node.debit, credit: node.credit }
-  }
-  roots.forEach(rollup)
-  return roots.sort((a, b) => a.account.code.localeCompare(b.account.code))
-}
-
-export function AccountBrowsePage({ token }: { token: string }) {
-  const range = useRange('year')
-  const [path, setPath] = useState<string[]>([])
-  const [filters, setFilters] = useState<ReportFilters>({})
-  const [drill, setDrill] = useState<{ id: string; code: string; name: string } | null>(null)
-  const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
-  const accounts = useAsync(() => fetchChartAccounts(token), [token])
-  const balances = useAsync(
-    () => fetchAccountBalances(token, scope),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token, JSON.stringify(scope)],
-  )
-
-  const tree = useMemo(
-    () => buildTree(accounts.data ?? [], balances.data ?? []),
-    [accounts.data, balances.data],
-  )
-
-  // مسیرِ فعلی: از ریشه تا گرهی که کاربر داخلش رفته.
-  const trail = useMemo(() => {
-    const out: BrowseNode[] = []
-    let level = tree
-    for (const id of path) {
-      const found = level.find((n) => n.account.id === id)
-      if (!found) break
-      out.push(found)
-      level = found.children
-    }
-    return out
-  }, [tree, path])
-
-  const current = trail.length ? trail[trail.length - 1].children : tree
-  const totalDebit = current.reduce((s, n) => s + n.debit, 0)
-  const totalCredit = current.reduce((s, n) => s + n.credit, 0)
-
-  return (
-    <OpsPage
-      canvas
-      icon={Layers}
-      title="مرور حساب‌ها"
-      description="از سرفصل تا حسابِ سطحِ آخر، سطح‌به‌سطح. رقمِ هر سرفصل جمعِ زیرشاخه‌هایش است."
-      head={
-        <div className="cc-head">
-          <RangeBar
-            range={range}
-            extra={<ReportFilterBar token={token} filters={filters} onChange={setFilters} />}
-          />
-          <SavedViewBar
-            token={token}
-            viewKey="accounting.account_browse"
-            filters={filters}
-            range={range}
-            setFilters={setFilters}
-          />
-          <div className="cc-summary">
-            <Metric icon={<Layers size={14} />} label="سطحِ فعلی" value={faInt(current.length)} />
-            <Metric icon={<Wallet size={14} />} label="گردشِ بدهکار" value={fa(totalDebit)} tone="in" />
-            <Metric icon={<Wallet size={14} />} label="گردشِ بستانکار" value={fa(totalCredit)} tone="out" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={FolderTree}
-        title="مرور"
-        description="روی سرفصل کلیک کنید تا داخلش بروید؛ روی حسابِ سطحِ آخر تا دفترش باز شود."
-      >
-        <nav className="acc-trail">
-          <button type="button" onClick={() => setPath([])} className={path.length ? '' : 'is-active'}>
-            کلِ چارت
-          </button>
-          {trail.map((node, i) => (
-            <span key={node.account.id}>
-              <ChevronLeft size={13} />
-              <button
-                type="button"
-                className={i === trail.length - 1 ? 'is-active' : ''}
-                onClick={() => setPath(path.slice(0, i + 1))}
-              >
-                {node.account.name}
-              </button>
-            </span>
-          ))}
-        </nav>
-
-        <AsyncBlock
-          loading={accounts.loading || balances.loading}
-          error={accounts.error ?? balances.error}
-          empty={current.length === 0}
-          emptyText="این حساب زیرمجموعه ندارد — سطحِ آخر است."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>کد</th>
-                  <th>نام</th>
-                  <th>نوع</th>
-                  <th>گردشِ بدهکار</th>
-                  <th>گردشِ بستانکار</th>
-                  <th>مانده</th>
-                </tr>
-              </thead>
-              <tbody>
-                {current.map((node) => {
-                  const net = node.debit - node.credit
-                  return (
-                    <tr
-                      key={node.account.id}
-                      className="acc-row--clickable"
-                      onClick={() =>
-                        node.children.length
-                          ? setPath([...path, node.account.id])
-                          : setDrill({
-                              id: node.account.id,
-                              code: node.account.code,
-                              name: node.account.name,
-                            })
-                      }
-                    >
-                      <td className="card-title" data-label="کد" dir="ltr">
-                        {node.account.code}
-                      </td>
-                      <td data-label="نام">
-                        {node.children.length ? <FolderTree size={13} /> : null} {node.account.name}
-                      </td>
-                      <td data-label="نوع">{TYPE_LABELS[node.account.type] ?? node.account.type}</td>
-                      <td data-label="گردشِ بدهکار" className="num">
-                        {faAmount(node.debit)}
-                      </td>
-                      <td data-label="گردشِ بستانکار" className="num">
-                        {faAmount(node.credit)}
-                      </td>
-                      <td data-label="مانده" className="num">
-                        {net === 0 ? '—' : `${fa(Math.abs(net))} ${net > 0 ? 'بد' : 'بس'}`}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-
-      {/* §۱۱ — تهِ درخت دیگر بن‌بست نیست: برگ، دفترِ خودش را با همان دامنه باز می‌کند. */}
-      {drill && (
-        <AccountLedgerDrawer
-          token={token}
-          account={drill}
-          filters={scope}
-          onClose={() => setDrill(null)}
-        />
-      )}
-    </OpsPage>
-  )
-}
+//: کاوشگرِ حرفه‌ای (UI-02) فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ
+//: ورودِ صفحه عوض نشود.
+export { AccountBrowsePage } from './AccountBrowser'
 
 /** فهرستِ تختِ حساب‌ها — صفحه‌ی «فهرست» ماژول، برای جست‌وجوی سریعِ یک کد. */
 export function AccountListPage({ token }: { token: string }) {
