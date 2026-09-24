@@ -27,6 +27,13 @@ class GeneralLedgerLineOut(BaseModel):
     fx_rate: Decimal | None = None
     tracking_no: str | None = None
     tracking_date: date | None = None
+    #: تفصیلی و مرکزِ هزینه‌ی ردیف (اگر داشته باشد) — برای ستون‌های «مرور حساب».
+    analytic_id: UUID | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
+    cost_center_id: UUID | None = None
+    cost_center_code: str | None = None
+    cost_center_name: str | None = None
 
 
 class LedgerFxTotalOut(BaseModel):
@@ -45,6 +52,14 @@ class GeneralLedgerOut(BaseModel):
     lines: list[GeneralLedgerLineOut]
     closing_balance: Decimal
     fx_totals: list[LedgerFxTotalOut] = []
+    #: جمعِ گردشِ *کلِ دوره* — مستقل از این‌که `lines` یک برش است یا همه.
+    period_debit: Decimal = Decimal(0)
+    period_credit: Decimal = Decimal(0)
+    #: شمارِ کلِ ردیف‌های دوره؛ با `offset`/`limit` صفحه‌بندی را ممکن می‌کند.
+    total_lines: int = 0
+    offset: int = 0
+    #: `None` یعنی صفحه‌بندی نشده و `lines` همه‌ی ردیف‌هاست (رفتارِ پیشین).
+    limit: int | None = None
 
 
 class TrialBalanceRowOut(BaseModel):

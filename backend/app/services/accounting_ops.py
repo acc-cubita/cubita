@@ -1265,6 +1265,36 @@ def issue_opening_entry(
 # ─────────────────── ۷) ترازها، مرورِ حساب‌ها، دفاتر ───────────────────────
 
 
+def _account_totals(
+    db: Session, filters: ReportFilters, upper: date_ | None, lower: date_ | None
+) -> dict[UUID, tuple[Decimal, Decimal]]:
+    """جمعِ بدهکار و بستانکارِ هر حساب در یک بازه — `GROUP BY` در پایگاه‌داده."""
+    query = (
+        db.query(
+            JournalLine.account_id,
+            func.coalesce(func.sum(JournalLine.debit), 0),
+            func.coalesce(func.sum(JournalLine.credit), 0),
+        )
+        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+        .group_by(JournalLine.account_id)
+    )
+    query = apply_report_filters(db, query, filters)
+    if lower is not None:
+        query = query.filter(JournalEntry.entry_date >= lower)
+    if upper is not None:
+        query = query.filter(JournalEntry.entry_date <= upper)
+    return {aid: (Decimal(d), Decimal(c)) for aid, d, c in query.all()}
+
+
+def _opening_and_period_totals(
+    db: Session, date_from: date_ | None, date_to: date_ | None, filters: ReportFilters
+) -> tuple[dict[UUID, tuple[Decimal, Decimal]], dict[UUID, tuple[Decimal, Decimal]]]:
+    """گردشِ *قبل* از بازه و گردشِ *داخلِ* بازه — دو تکه‌ای که تراز و درختِ مرور هر دو می‌خواهند."""
+    opening = _account_totals(db, filters, date_from - timedelta(days=1), None) if date_from else {}
+    period = _account_totals(db, filters, date_to, date_from)
+    return opening, period
+
+
 def get_balances(
     db: Session,
     date_from: date_ | None = None,
@@ -1288,26 +1318,7 @@ def get_balances(
     """
     filters = filters or ReportFilters()
     _assert_range(date_from, date_to)
-
-    def totals(upper: date_ | None, lower: date_ | None):
-        query = (
-            db.query(
-                JournalLine.account_id,
-                func.coalesce(func.sum(JournalLine.debit), 0),
-                func.coalesce(func.sum(JournalLine.credit), 0),
-            )
-            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
-            .group_by(JournalLine.account_id)
-        )
-        query = apply_report_filters(db, query, filters)
-        if lower is not None:
-            query = query.filter(JournalEntry.entry_date >= lower)
-        if upper is not None:
-            query = query.filter(JournalEntry.entry_date <= upper)
-        return {aid: (Decimal(d), Decimal(c)) for aid, d, c in query.all()}
-
-    opening = totals(date_from - timedelta(days=1), None) if date_from else {}
-    period = totals(date_to, date_from)
+    opening, period = _opening_and_period_totals(db, date_from, date_to, filters)
 
     accounts = {a.id: a for a in db.query(Account).filter(Account.is_group.is_(False)).all()}
     active = set(opening) | set(period)
@@ -1343,6 +1354,102 @@ def get_balances(
             }
         )
     return sorted(rows, key=lambda r: r["account_code"])
+
+
+def get_balance_tree(
+    db: Session,
+    date_from: date_ | None = None,
+    date_to: date_ | None = None,
+    filters: ReportFilters | None = None,
+) -> list[dict]:
+    """پایه‌ی «مرور حساب‌ها»: **همه‌ی** گره‌های چارت — سرفصل و برگ — با ارقامِ تجمیعی.
+
+    `get_balances` فقط برگ‌ها را می‌دهد و تا امروز جمعِ سرفصل‌ها در مرورگر زده
+    می‌شد. این‌جا همان دو تکه‌ی گردش (`_opening_and_period_totals`، با همان فیلترها)
+    خوانده و روی درخت بالا برده می‌شود؛ پس رقمِ هر برگ عیناً همان رقمِ تراز است و
+    رقمِ هر سرفصل جمعِ زیرشاخه‌هایش.
+
+    **ردیفِ مستقیم روی سرفصل هم شمرده می‌شود.** قاعده اجازه‌اش نمی‌دهد ولی داده‌ی
+    قدیمی ممکن است داشته باشد (بررسیِ یکپارچگی پیدایش می‌کند). دفترِ سرفصل
+    (`get_general_ledger`) خودِ سرفصل را هم در دامنه دارد؛ اگر این‌جا نمی‌آمد، مانده‌ی
+    درخت با پایانِ دفترِ همان گره فرق می‌کرد. پرچمِ `has_direct_lines` نشانش می‌دهد.
+
+    ارقام **خام**‌اند (بدهکار منهای بستانکار): جهت (بد/بس) از علامت می‌آید و ماهیت
+    فقط برای هشدار سنجیده می‌شود — مثلِ `get_nature_violations`، که علامتِ نوع‌محور را
+    به کار نمی‌برد چون ماهیت می‌تواند صریحاً خلافِ نوع ست شده باشد.
+    """
+    filters = filters or ReportFilters()
+    _assert_range(date_from, date_to)
+    opening, period = _opening_and_period_totals(db, date_from, date_to, filters)
+
+    accounts = db.query(Account).all()
+    by_id = {a.id: a for a in accounts}
+    children: dict[UUID | None, list[Account]] = {}
+    for a in accounts:
+        #: والدی که وجود ندارد (داده‌ی خراب) گره را ریشه می‌کند، نه یتیم و نامرئی.
+        pid = a.parent_id if a.parent_id in by_id else None
+        children.setdefault(pid, []).append(a)
+    for kids in children.values():
+        kids.sort(key=lambda k: k.code)
+
+    zero = (Decimal(0), Decimal(0))
+    rows: dict[UUID, dict] = {}
+
+    def visit(account: Account, depth: int, seen: set[UUID]) -> dict:
+        seen.add(account.id)
+        od, oc = opening.get(account.id, zero)
+        pd_, pc = period.get(account.id, zero)
+        own_activity = account.id in opening or account.id in period
+        node = {
+            "account_id": account.id,
+            "parent_id": account.parent_id if account.parent_id in by_id else None,
+            "account_code": account.code,
+            "account_name": account.name,
+            "account_type": account.type,
+            "nature": account.effective_nature,
+            "is_group": account.is_group,
+            "is_active": account.is_active,
+            "accepts_tafsili": account.accepts_tafsili,
+            "depth": depth,
+            "child_count": 0,
+            "opening": od - oc,
+            "period_debit": pd_,
+            "period_credit": pc,
+            "has_activity": own_activity,
+            "has_direct_lines": account.is_group and own_activity,
+        }
+        rows[account.id] = node
+        for child in children.get(account.id, []):
+            #: `seen` حلقه‌ی درختِ خراب را می‌شکند — مثلِ `descendant_account_ids`.
+            if child.id in seen:
+                continue
+            sub = visit(child, depth + 1, seen)
+            node["child_count"] += 1
+            node["opening"] += sub["opening"]
+            node["period_debit"] += sub["period_debit"]
+            node["period_credit"] += sub["period_credit"]
+            node["has_activity"] = node["has_activity"] or sub["has_activity"]
+        closing = node["opening"] + node["period_debit"] - node["period_credit"]
+        node["closing"] = closing
+        nature = node["nature"]
+        #: فقط روی برگ: سرفصلِ «دارایی» می‌تواند برگِ بستانکارِ مشروع (استهلاکِ
+        #: انباشته) داشته باشد و جمعش چیزی درباره‌ی خطا نمی‌گوید.
+        node["nature_violation"] = (
+            not account.is_group
+            and closing != 0
+            and ((nature == "debit" and closing < 0) or (nature == "credit" and closing > 0))
+        )
+        return node
+
+    seen: set[UUID] = set()
+    for root in children.get(None, []):
+        visit(root, 0, seen)
+    #: گره‌ای که فقط از راهِ حلقه دیده می‌شود هیچ‌وقت از ریشه نمی‌رسد؛ ریشه‌اش کن.
+    for a in sorted(accounts, key=lambda x: x.code):
+        if a.id not in seen:
+            node = visit(a, 0, seen)
+            node["parent_id"] = None
+    return sorted(rows.values(), key=lambda r: r["account_code"])
 
 
 def get_legal_book(db: Session, date_from: date_, date_to: date_) -> dict:

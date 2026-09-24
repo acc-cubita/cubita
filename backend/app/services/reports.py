@@ -8,6 +8,8 @@ from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.analytic import AnalyticAccount
+from app.models.cost_center import CostCenter
 from app.models.banking import BankAccount, Check
 from app.models.inventory import Contact, Item, StockLedger
 from app.models.owner_transactions import OwnerTransaction
@@ -570,6 +572,8 @@ def get_general_ledger(
     date_from: date | None = None,
     date_to: date | None = None,
     filters: ReportFilters | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> dict:
     """گردشِ یک حساب با مانده‌ی در حال اجرا — **شاملِ هر چه زیرش هست**.
 
@@ -589,6 +593,17 @@ def get_general_ledger(
 
     سندِ باطل و معکوسش هر دو می‌مانند — مثلِ دفترِ روزنامه، به همان دلیل: دفتر باید
     نشان دهد اشتباه رخ داد و بعد اصلاح شد.
+
+    **صفحه‌بندی (`limit`/`offset`) اختیاری است.** بی‌آن، همه‌ی ردیف‌ها مثلِ همیشه
+    می‌آیند. با آن، فقط یک برش می‌آید ولی **مانده‌ی در حال اجرا همان است که در
+    دفترِ کامل می‌بود**: مانده‌ی ابتدای برش = مانده‌ی اول دوره + جمعِ علامت‌دارِ
+    ردیف‌های پیش از برش (در پایگاه‌داده، نه با خواندنشان). `closing_balance` و
+    `period_debit`/`period_credit` و `fx_totals` همیشه مالِ کلِ دوره‌اند، نه برش.
+
+    چرا offset و نه keyset (`app/pagination.py`)؟ مانده‌ی ابتدای برش جمعِ پیشوندی
+    است و با offset یک `LIMIT` روی همان ترتیب است؛ و `JournalEntry.number` در کلیدِ
+    ترتیب NULL‌پذیر است که مقایسه‌ی تاپلیِ keyset را می‌شکند. دفترِ *یک* حساب هم آن‌قدر
+    عمیق نیست که هزینه‌ی offset محسوس شود.
     """
     filters = filters or ReportFilters()
     account = None
@@ -617,29 +632,107 @@ def get_general_ledger(
         #: دفترِ تفصیلی که ردیف‌هایش می‌توانند از حساب‌های مختلف باشند.
         return _signed_balance((account or line_account).type, Decimal(debit), Decimal(credit))
 
+    def signed_total(rows) -> Decimal:
+        #: `sign` خطی است، پس جمعِ گروه‌به‌گروه (بر حسبِ نوعِ حساب) با جمعِ ردیف‌به‌ردیف
+        #: یکی است — و در پایگاه‌داده انجام می‌شود، نه با خواندنِ همه‌ی ردیف‌ها.
+        total = Decimal(0)
+        for acc_type, debit, credit in rows:
+            total += _signed_balance(account.type if account else acc_type, Decimal(debit), Decimal(credit))
+        return total
+
+    def signed_sum(q) -> Decimal:
+        return signed_total(
+            q.with_entities(
+                Account.type,
+                func.coalesce(func.sum(JournalLine.debit), 0),
+                func.coalesce(func.sum(JournalLine.credit), 0),
+            )
+            .group_by(Account.type)
+            .all()
+        )
+
     opening_balance = Decimal(0)
     if date_from is not None:
-        for line, _entry, line_account in query.filter(JournalEntry.entry_date < date_from).all():
-            opening_balance += sign(line_account, line.debit, line.credit)
+        opening_balance = signed_sum(query.filter(JournalEntry.entry_date < date_from))
         query = query.filter(JournalEntry.entry_date >= date_from)
     if date_to is not None:
         query = query.filter(JournalEntry.entry_date <= date_to)
 
     #: `seq` و `id` ترتیبِ درونِ سند را قطعی می‌کنند؛ بدونشان دو ردیفِ یک سند در
     #: دفترِ کل هر بار جای هم عوض می‌شدند و مانده‌ی در حال اجرا ناپایدار می‌شد.
-    rows = query.order_by(
-        JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id
-    ).all()
+    order = (JournalEntry.entry_date, JournalEntry.number, JournalLine.seq, JournalLine.id)
 
+    paged = limit is not None or offset > 0
     running = opening_balance
-    lines = []
-    #: جمعِ ارزی به تفکیکِ ارز — «۱۰۰۰ دلار» با «۵۰۰ یورو» جمع‌شدنی نیست.
+    #: جمعِ ارزی به تفکیکِ ارز — «۱۰۰۰ دلار» با «۵۰۰ یورو» جمع‌شدنی نیست. ارزی هم
+    #: مثلِ ریالی علامت می‌گیرد: بدهکار مثبت، بستانکار منفی. همیشه کلِ دوره، نه برش.
     fx_totals: dict[str, Decimal] = {}
-    for line, entry, line_account in rows:
+    if paged:
+        #: جمع‌های کلِ دوره در پایگاه‌داده — ردیف‌هایش خوانده نمی‌شوند. دفترِ بی‌صفحه
+        #: همین‌ها را از خودِ ردیف‌ها می‌گیرد (پایین‌تر)، پس کوئریِ اضافه نمی‌خورد.
+        by_type = (
+            query.with_entities(
+                Account.type,
+                func.coalesce(func.sum(JournalLine.debit), 0),
+                func.coalesce(func.sum(JournalLine.credit), 0),
+                func.count(JournalLine.id),
+            )
+            .group_by(Account.type)
+            .all()
+        )
+        period_debit = sum((Decimal(d) for _t, d, _c, _n in by_type), Decimal(0))
+        period_credit = sum((Decimal(c) for _t, _d, c, _n in by_type), Decimal(0))
+        total_lines = sum(n for *_rest, n in by_type)
+        closing_balance = opening_balance + signed_total((t, d, c) for t, d, c, _n in by_type)
+        fx_rows = (
+            query.with_entities(
+                JournalLine.currency_code,
+                func.sum(case((JournalLine.debit > 0, JournalLine.fx_amount), else_=-JournalLine.fx_amount)),
+            )
+            .filter(JournalLine.currency_code.isnot(None), JournalLine.fx_amount.isnot(None))
+            .group_by(JournalLine.currency_code)
+            .all()
+        )
+        fx_totals = {code: Decimal(amount) for code, amount in fx_rows if code}
+
+    if offset:
+        #: مانده‌ی ابتدای برش: ردیف‌های پیش از برش، به همان ترتیب، جمع در پایگاه‌داده.
+        prefix = (
+            query.with_entities(
+                Account.type.label("t"),
+                JournalLine.debit.label("d"),
+                JournalLine.credit.label("c"),
+            )
+            .order_by(*order)
+            .limit(offset)
+            .subquery()
+        )
+        running += signed_total(
+            db.query(
+                prefix.c.t,
+                func.coalesce(func.sum(prefix.c.d), 0),
+                func.coalesce(func.sum(prefix.c.c), 0),
+            )
+            .group_by(prefix.c.t)
+            .all()
+        )
+
+    page = (
+        query.outerjoin(AnalyticAccount, JournalLine.analytic_id == AnalyticAccount.id)
+        .outerjoin(CostCenter, JournalLine.cost_center_id == CostCenter.id)
+        .add_columns(AnalyticAccount.code, AnalyticAccount.name, CostCenter.code, CostCenter.name)
+        .order_by(*order)
+    )
+    if offset:
+        page = page.offset(offset)
+    if limit is not None:
+        page = page.limit(limit)
+
+    lines = []
+    for line, entry, line_account, an_code, an_name, cc_code, cc_name in page.all():
         running += sign(line_account, line.debit, line.credit)
-        if line.currency_code and line.fx_amount is not None:
+        if not paged and line.currency_code and line.fx_amount is not None:
             fx = fx_totals.get(line.currency_code, Decimal(0))
-            #: ارزی هم مثلِ ریالی علامت می‌گیرد: بدهکار مثبت، بستانکار منفی.
             fx_totals[line.currency_code] = fx + (
                 Decimal(line.fx_amount) if Decimal(line.debit) > 0 else -Decimal(line.fx_amount)
             )
@@ -667,8 +760,22 @@ def get_general_ledger(
                 "fx_rate": line.fx_rate,
                 "tracking_no": line.tracking_no,
                 "tracking_date": line.tracking_date,
+                #: تفصیلی و مرکزِ هزینه‌ی ردیف — ستون‌های «مرور حساب»؛ بی‌آن‌ها کاربر
+                #: برای دیدنِ طرفِ حساب باید سند را باز می‌کرد.
+                "analytic_id": line.analytic_id,
+                "analytic_code": an_code,
+                "analytic_name": an_name,
+                "cost_center_id": line.cost_center_id,
+                "cost_center_code": cc_code or None,
+                "cost_center_name": cc_name,
             }
         )
+
+    if not paged:
+        period_debit = sum((Decimal(ln["debit"]) for ln in lines), Decimal(0))
+        period_credit = sum((Decimal(ln["credit"]) for ln in lines), Decimal(0))
+        total_lines = len(lines)
+        closing_balance = running
 
     return {
         "account_id": account.id if account else None,
@@ -676,7 +783,12 @@ def get_general_ledger(
         "account_name": account.name if account else None,
         "opening_balance": opening_balance,
         "lines": lines,
-        "closing_balance": running,
+        "closing_balance": closing_balance,
+        "period_debit": period_debit,
+        "period_credit": period_credit,
+        "total_lines": total_lines,
+        "offset": offset,
+        "limit": limit,
         "fx_totals": [{"currency_code": code, "amount": amount} for code, amount in sorted(fx_totals.items())],
     }
 

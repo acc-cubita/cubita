@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
+from app.pagination import MAX_LIMIT
 from app.schemas.cost_center import CostCenterReportOut
 from app.schemas.reports import (
     InventoryBreakdownOut,
@@ -80,12 +81,14 @@ def report_filters(
 def analytic_ledger(
     filters: ReportFilters = Depends(report_filters),
     account_id: UUID | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=MAX_LIMIT, description="بی‌آن، همه‌ی ردیف‌ها"),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
     """دفتر بدونِ حسابِ اجباری — یعنی **دفترِ تفصیلی**: گردشِ یک تفصیلی در همه‌ی حساب‌ها."""
     return reports_service.get_general_ledger(
-        db, account_id, filters.date_from, filters.date_to, filters
+        db, account_id, filters.date_from, filters.date_to, filters, limit=limit, offset=offset
     )
 
 
@@ -93,11 +96,15 @@ def analytic_ledger(
 def general_ledger(
     account_id: UUID,
     filters: ReportFilters = Depends(report_filters),
+    limit: int | None = Query(None, ge=1, le=MAX_LIMIT, description="بی‌آن، همه‌ی ردیف‌ها"),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
+    """دفترِ یک حساب با مانده‌ی در حال اجرا. `limit`/`offset` اختیاری‌اند و مانده‌ی
+    برش همان مانده‌ی دفترِ کامل است (نگاه کنید به `get_general_ledger`)."""
     return reports_service.get_general_ledger(
-        db, account_id, filters.date_from, filters.date_to, filters
+        db, account_id, filters.date_from, filters.date_to, filters, limit=limit, offset=offset
     )
 
 

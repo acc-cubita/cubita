@@ -659,6 +659,13 @@ export interface GeneralLedgerLine {
   fx_rate: string | null
   tracking_no: string | null
   tracking_date: string | null
+  /** تفصیلی و مرکزِ هزینه‌ی ردیف — ستون‌های «مرور حساب». */
+  analytic_id?: string | null
+  analytic_code?: string | null
+  analytic_name?: string | null
+  cost_center_id?: string | null
+  cost_center_code?: string | null
+  cost_center_name?: string | null
 }
 
 export interface GeneralLedger {
@@ -670,6 +677,14 @@ export interface GeneralLedger {
   lines: GeneralLedgerLine[]
   closing_balance: string
   fx_totals: { currency_code: string; amount: string }[]
+  /** جمعِ گردشِ *کلِ دوره* — حتی وقتی `lines` فقط یک برش است. */
+  period_debit?: string
+  period_credit?: string
+  /** شمارِ کلِ ردیف‌های دوره؛ پایه‌ی صفحه‌بندی. */
+  total_lines?: number
+  offset?: number
+  /** `null` یعنی صفحه‌بندی نشده و `lines` همه‌ی ردیف‌هاست. */
+  limit?: number | null
 }
 
 /**
@@ -712,6 +727,25 @@ export const fetchGeneralLedger = (token: string, accountId: string, filters: Re
     token,
     `/api/reports/general-ledger/${accountId}${reportFiltersQs(filters)}`,
   )
+
+/**
+ * یک برش از دفترِ یک حساب. مانده‌ی ردیف‌ها همان مانده‌ی دفترِ کامل است — سرور
+ * مانده‌ی ابتدای برش را حساب می‌کند، پس کلِ گردشِ چندساله به مرورگر نمی‌آید.
+ * `limit` حداکثر ۲۰۰ است (`MAX_LIMIT`).
+ */
+export const fetchGeneralLedgerPage = (
+  token: string,
+  accountId: string,
+  filters: ReportFilters,
+  limit: number,
+  offset: number,
+) => {
+  const qs = reportFiltersQs(filters)
+  return authedGet<GeneralLedger>(
+    token,
+    `/api/reports/general-ledger/${accountId}${qs}${qs ? '&' : '?'}limit=${limit}&offset=${offset}`,
+  )
+}
 
 /** دفترِ تفصیلی — بدونِ حسابِ اجباری: گردشِ یک تفصیلی در همه‌ی حساب‌ها. */
 export const fetchAnalyticLedger = (token: string, filters: ReportFilters) =>
@@ -6573,6 +6607,39 @@ export const fetchAccountBalances = (
   const zero = includeZeroActivity ? `${qs ? '&' : '?'}include_zero_activity=true` : ''
   return authedGet<BalanceRow[]>(token, `/api/accounting/balances${qs}${zero}`)
 }
+
+/**
+ * یک گره‌ی «مرور حساب‌ها» — سرفصل یا برگ — با ارقامِ تجمیعیِ زیرشاخه‌ها که
+ * **سرور** جمع زده (`/api/accounting/balance-tree`).
+ *
+ * `opening` و `closing` خام‌اند: بدهکار منهای بستانکار (مثبت = بدهکار).
+ */
+export interface BalanceTreeNode {
+  account_id: string
+  parent_id: string | null
+  account_code: string
+  account_name: string
+  account_type: string
+  /** ماهیتِ مؤثر: debit | credit | any */
+  nature: string
+  is_group: boolean
+  is_active: boolean
+  accepts_tafsili: boolean
+  depth: number
+  child_count: number
+  opening: string
+  period_debit: string
+  period_credit: string
+  closing: string
+  has_activity: boolean
+  /** سرفصلی که خودش ردیفِ سند خورده — ناهنجاری. */
+  has_direct_lines: boolean
+  /** فقط برگ: مانده‌ی پایانِ دوره خلافِ ماهیت است. */
+  nature_violation: boolean
+}
+
+export const fetchBalanceTree = (token: string, filters: ReportFilters = {}) =>
+  authedGet<BalanceTreeNode[]>(token, `/api/accounting/balance-tree${reportFiltersQs(filters)}`)
 
 export interface LegalBookRow {
   entry_id: string

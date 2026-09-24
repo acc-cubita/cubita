@@ -312,6 +312,37 @@ class BalanceRowOut(BaseModel):
     has_activity: bool = True
 
 
+
+class BalanceTreeNodeOut(BaseModel):
+    """یک گره‌ی «مرور حساب‌ها» — سرفصل یا برگ — با ارقامِ تجمیعیِ زیرشاخه‌ها.
+
+    ارقام **خام**‌اند: `opening` و `closing` بدهکار منهای بستانکار (مثبت = بدهکار).
+    جهت از علامت می‌آید، نه از نوعِ حساب؛ `nature` فقط برای هشدارِ ماهیت است.
+    """
+
+    account_id: UUID
+    parent_id: UUID | None
+    account_code: str
+    account_name: str
+    account_type: str
+    #: ماهیتِ مؤثر: debit | credit | any
+    nature: str
+    is_group: bool
+    is_active: bool
+    accepts_tafsili: bool
+    depth: int
+    child_count: int
+    opening: Decimal
+    period_debit: Decimal
+    period_credit: Decimal
+    closing: Decimal
+    #: در این دامنه (پیش از بازه یا درونش) در این گره یا زیرشاخه‌هایش ردیفی بوده.
+    has_activity: bool
+    #: سرفصلی که خودش ردیفِ سند خورده — ناهنجاری‌ای که بررسیِ یکپارچگی هم می‌گیرد.
+    has_direct_lines: bool
+    #: فقط برای برگ: مانده‌ی پایانِ دوره خلافِ ماهیتِ مؤثر است.
+    nature_violation: bool
+
 class LegalBookRowOut(BaseModel):
     entry_id: UUID
     entry_number: int | None
