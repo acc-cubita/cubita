@@ -48,6 +48,16 @@ console.log(`حساب‌ها: ${A.code} ${A.name} / ${B.code} ${B.name}`)
 
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+//: شبیه‌سازیِ رانرِ کُند: هر `requestAnimationFrame` این‌قدر میلی‌ثانیه دیرتر (`E2E_LATE_FRAMES_MS=300`).
+//: ناپایداریِ این تست فقط روی رانرِ CI دیده می‌شد، جایی که یک فریم دیر می‌رسد و کلیدها
+//: زودتر. کُندکردنِ یکنواختِ CPU بازتولیدش نکرد؛ فریمِ دیررس می‌کند.
+const lateFrames = Number(process.env.E2E_LATE_FRAMES_MS ?? 0)
+if (lateFrames > 0) {
+  await page.addInitScript((ms) => {
+    const raf = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = (cb) => raf(() => setTimeout(() => cb(performance.now()), ms))
+  }, lateFrames)
+}
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 let step = 'آغاز'
@@ -58,8 +68,19 @@ const focusedCell = () =>
 /** حساب را فقط با کیبورد انتخاب می‌کند: تایپِ کد روی دکمه، ↓ تا گزینه‌ی درست، Enter. */
 async function pickAccount(account) {
   await page.keyboard.press(account.code[0]) // حرفِ اول پاپ‌آور را باز می‌کند
-  await page.locator('.item-picker-search input').waitFor()
+  //: **هیچ کلیدی پیش از فوکوسِ کادرِ جست‌وجو.** SearchSelect فوکوس را یک فریم بعد از
+  //: بازشدن می‌دهد (`requestAnimationFrame`)، و کلیدِ زودتر به خودِ دکمه می‌رسد: رقم‌ها و
+  //: ↓ گم می‌شوند، و Enter دکمه را «کلیک» می‌کند و پاپ‌آور را **می‌بندد**. روی رانرِ کُندِ
+  //: CI همین، مرجِ M2ِ آرش را قرمز کرد («۱۱۰۲ پیدا نشد») — کدِ او سالم بود. صبر برای
+  //: وجودِ کادر کافی نبود؛ فوکوس باید رسیده باشد. `E2E_LATE_FRAMES_MS=300` بازتولیدش می‌کند.
+  await page.waitForFunction(() => document.activeElement?.closest('.item-picker-search') != null)
   await page.keyboard.type(account.code.slice(1))
+  //: پیش از گشتن: کلِ کد باید در کادر نشسته باشد — وگرنه شکست همین‌جا و با دلیلِ درست.
+  assert.equal(
+    (await page.locator('.item-picker-search input').inputValue()).trim(),
+    account.code,
+    'کدِ حساب کامل در جست‌وجو ننشست',
+  )
   const want = `${account.code} — ${account.name}`
   for (let i = 0; i < 30; i++) {
     const active = (await page.locator('.item-picker-opt.active').first().textContent())?.trim()
