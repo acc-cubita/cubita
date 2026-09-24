@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, CheckCircle2, Network, Server, ShieldCheck, Users } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Network, Radar, Server, ShieldCheck, Users } from 'lucide-react'
 
 /**
  * «کوبیتا سازمانی» — اتصالِ این رایانه به سرورِ شرکت.
@@ -17,7 +17,8 @@ export function ServerConnectScreen({
   onCancel?: () => void
 }) {
   const [address, setAddress] = useState(currentUrl ?? '')
-  const [busy, setBusy] = useState<'probe' | 'save' | null>(null)
+  const [busy, setBusy] = useState<'probe' | 'save' | 'scan' | null>(null)
+  const [found, setFound] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [verified, setVerified] = useState<string | null>(null)
 
@@ -30,6 +31,24 @@ export function ServerConnectScreen({
       const r = await window.cubita.serverProbe!(address)
       if (r.ok) setVerified(r.url)
       else setError(r.error)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function scan() {
+    setError(null)
+    setVerified(null)
+    setFound(null)
+    setBusy('scan')
+    try {
+      const list = (await window.cubita.serverDiscover?.()) ?? []
+      setFound(list)
+      // یک سرور یعنی جوابِ روشن — همان را انتخاب کن؛ کاربر فقط «اتصال» را می‌زند.
+      if (list.length === 1) {
+        setAddress(list[0])
+        setVerified(list[0])
+      }
     } finally {
       setBusy(null)
     }
@@ -112,6 +131,34 @@ export function ServerConnectScreen({
               نامِ رایانه بهتر از IP است؛ IP ممکن است با روشن‌وخاموش‌شدنِ مودم عوض شود.
             </span>
           </label>
+
+          <button type="button" className="link-button server-scan" onClick={scan} disabled={busy !== null}>
+            <Radar size={14} /> {busy === 'scan' ? 'در حال جست‌وجو در شبکه…' : 'سرور را خودکار پیدا کن'}
+          </button>
+          {found && found.length === 0 && (
+            <div className="error">
+              سروری در شبکه‌ی این رایانه پیدا نشد. روشن‌بودنِ سرور و یکی‌بودنِ شبکه را بررسی کنید، یا نشانی را دستی بنویسید.
+            </div>
+          )}
+          {found && found.length > 1 && (
+            <div className="server-found">
+              <span>چند سرور پیدا شد؛ یکی را انتخاب کنید:</span>
+              {found.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  className={`server-found-item${verified === url ? ' active' : ''}`}
+                  dir="ltr"
+                  onClick={() => {
+                    setAddress(url)
+                    setVerified(url)
+                  }}
+                >
+                  {url}
+                </button>
+              ))}
+            </div>
+          )}
 
           {error && <div className="error">{error}</div>}
           {verified && (

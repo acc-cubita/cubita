@@ -35,3 +35,39 @@ export function normalizeServerUrl(input: string): NormalizeResult {
   }
   return { ok: true, url: parsed.origin }
 }
+
+// --- جست‌وجوی سرور در شبکه ----------------------------------------------------
+
+export interface NetIface {
+  address: string
+  family: string | number
+  internal: boolean
+  netmask?: string
+}
+
+/** نشانیِ خصوصیِ IPv4؟ جست‌وجو هرگز روی شبکه‌ی عمومی (VPN به اینترنت، IPِ عمومی) نمی‌رود. */
+export function isPrivateIPv4(ip: string): boolean {
+  const p = ip.split('.').map(Number)
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false
+  return p[0] === 10 || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168)
+}
+
+/**
+ * نشانی‌هایی که باید پرسیده شوند: همه‌ی ۲۵۴ نشانیِ `/24`ِ هر کارتِ شبکه‌ی خصوصی (بجز خودِ
+ * این رایانه، که جداگانه با localhost پرسیده می‌شود). عمداً `/24` و نه ماسکِ واقعی: شبکه‌ی
+ * `/16`ِ شرکت یعنی ۶۵ هزار درخواست، و سرورِ حسابداری تقریباً همیشه در همان `/24`ِ کاربران است.
+ */
+export function candidateHosts(ifaces: NetIface[]): string[] {
+  const out = new Set<string>()
+  const own = new Set(ifaces.map((i) => i.address))
+  for (const i of ifaces) {
+    const v4 = i.family === 'IPv4' || i.family === 4
+    if (!v4 || i.internal || !isPrivateIPv4(i.address)) continue
+    const prefix = i.address.split('.').slice(0, 3).join('.')
+    for (let n = 1; n <= 254; n++) {
+      const ip = `${prefix}.${n}`
+      if (!own.has(ip)) out.add(ip)
+    }
+  }
+  return [...out]
+}

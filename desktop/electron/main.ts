@@ -56,7 +56,7 @@ import {
   type BackupSettings,
 } from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
-import { EDITION, currentServerUrl, probeServer, saveServerUrl } from './serverSettings.js'
+import { EDITION, currentServerUrl, discoverServers, probeServer, saveServerUrl } from './serverSettings.js'
 import { normalizeServerUrl } from './serverAddress.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
@@ -197,6 +197,8 @@ ipcMain.on('server:config', (evt) => {
 })
 
 ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
+
+ipcMain.handle('server:discover', () => discoverServers())
 
 ipcMain.handle('server:save', (_evt, input: string) => {
   const target = normalizeServerUrl(String(input ?? ''))

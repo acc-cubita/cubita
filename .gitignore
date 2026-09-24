@@ -19,6 +19,8 @@ desktop/dist/
 desktop/dist-electron/
 desktop/release/
 desktop/release-enterprise/
+backend/dist/
+backend/build/
 website/dist/
 admin/dist/
 *.log

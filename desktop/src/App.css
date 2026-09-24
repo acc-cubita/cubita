@@ -7229,6 +7229,20 @@ tr.kardex-voided td { color: var(--text-muted); }
   color: var(--text-muted);
 }
 .login-server-line [dir='ltr'] { overflow-wrap: anywhere; color: var(--text); }
+.server-scan { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+.server-found { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); color: var(--text-muted); }
+.server-found-item {
+  text-align: start;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.server-found-item.active, .server-found-item:hover { border-color: var(--accent); }
 
 @media (max-width: 760px) {
   .trial-banner { flex-direction: column; align-items: stretch; gap: 8px; text-align: center; }

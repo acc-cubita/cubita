@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('cubita', {
   //: کوبیتا سازمانی — آزمایش و ذخیره‌ی نشانیِ سرورِ شرکت.
   serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
   serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
+  serverDiscover: () => ipcRenderer.invoke('server:discover'),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>
       ipcRenderer.invoke('pos:pay', profile, amountRial, refId),
