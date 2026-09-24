@@ -559,6 +559,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   marketplace: 'view',
   overview: 'view',
   modules: 'none',
+  license: 'none',
   profile: 'none',
 }
 

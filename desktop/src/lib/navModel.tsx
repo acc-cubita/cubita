@@ -1,5 +1,6 @@
 import {
   Archive,
+  BadgeCheck,
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowUpFromLine,
@@ -90,6 +91,7 @@ import {
 import type { ReactNode } from 'react'
 
 import type { ExperienceMode } from './experienceMode'
+import { isEnterprise } from '../platform'
 
 // شناسه‌ی هر صفحه‌ی برنامه. منبعِ واحد؛ Sidebar و TopNav هر دو از همین می‌خوانند.
 export type PageKey =
@@ -134,6 +136,7 @@ export type PageKey =
   | 'calendar'
   | 'team'
   | 'modules'
+  | 'license'
   | 'profile'
   | 'help'
   | 'theme'
@@ -624,6 +627,14 @@ export const SECONDARY_NAV_ITEMS: NavItem[] = [
   { key: 'profile', label: 'پروفایل من', icon: <UserCircle size={18} /> },
 ]
 
+//: ورودیِ «مجوز نرم‌افزار» — فقط کوبیتا سازمانی. برای همه‌ی اعضا (دیدنِ اینکه چرا
+//: ثبت بسته است)؛ خودِ فعال‌سازی داخلِ صفحه مالک‌محور است.
+const LICENSE_SETTINGS_ITEM: NavItem = {
+  key: 'license',
+  label: 'مجوز نرم‌افزار',
+  icon: <BadgeCheck size={18} />,
+}
+
 //: ورودیِ «شخصی‌سازیِ پنل» — فقط برای مالک (روشن/خاموش‌کردنِ ماژول‌ها).
 const MODULES_SETTINGS_ITEM: NavItem = {
   key: 'modules',
@@ -697,6 +708,10 @@ export function buildNav({
   if (isOwner) {
     const settings = groups.find((g) => g.heading === 'تنظیمات')
     if (settings) settings.items = [...settings.items, MODULES_SETTINGS_ITEM]
+  }
+  if (isEnterprise) {
+    const settings = groups.find((g) => g.heading === 'تنظیمات')
+    if (settings) settings.items = [...settings.items, LICENSE_SETTINGS_ITEM]
   }
 
   return { groups, secondary: [...SECONDARY_NAV_ITEMS] }

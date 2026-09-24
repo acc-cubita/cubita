@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.schemas.enterprise import LicenseOut
 from app.services.trades import is_valid_trade
 
 
@@ -73,6 +74,8 @@ class MeOut(BaseModel):
     locked_features: list[str] = []
     #: `cloud` یا `enterprise`. رابط به متغیرِ بیلد اعتماد نمی‌کند — سرور حقیقت را می‌گوید.
     edition: str = "cloud"
+    #: فقط سازمانی: وضعیتِ مجوز برای نوارِ بالای اپ. در ابر همیشه null.
+    license: LicenseOut | None = None
 
     #: حالتِ تجربه‌ی کاربر: `simple` (راهنمادار، کم‌تراکم) یا `accountant` (گریدِ
     #: فشرده‌ی صفحه‌کلیدمحور). **فقط نمایش است** — هیچ مجوزی نمی‌دهد و هیچ منطقِ

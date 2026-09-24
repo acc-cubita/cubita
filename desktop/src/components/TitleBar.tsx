@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
+import { PRODUCT_NAME } from '../platform'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -13,7 +14,7 @@ export function TitleBar() {
     <div className="titlebar">
       <div className="titlebar-drag" onDoubleClick={() => window.windowControls?.toggleMaximize()}>
         <span className="titlebar-mark">C</span>
-        <span className="titlebar-title">کوبیتا</span>
+        <span className="titlebar-title">{PRODUCT_NAME}</span>
       </div>
 
       <div className="titlebar-controls">

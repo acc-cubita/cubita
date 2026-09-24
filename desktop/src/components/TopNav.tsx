@@ -21,7 +21,7 @@ import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { fitBar } from '../lib/topnavFit'
 import { useNavSection } from './navContext'
-import { isElectron } from '../platform'
+import { isElectron, PRODUCT_NAME } from '../platform'
 
 /** نامِ گروهِ آیتم‌های حسابِ کاربری در کشوی موبایل. */
 const ACCOUNT_GROUP = 'حساب کاربری'
@@ -273,7 +273,7 @@ export function TopNav({
 
         <button type="button" className="topnav-brand" onClick={() => go('overview')}>
           <span className="topnav-mark">C</span>
-          <span className="topnav-brand-name">کوبیتا</span>
+          <span className="topnav-brand-name">{PRODUCT_NAME}</span>
         </button>
 
         <nav className="topnav-menu" ref={menuRef}>
@@ -433,7 +433,7 @@ export function TopNav({
                 ظرفِ اسکرول‌دار بود و سربرگ با فهرستِ بلند فشرده می‌شد، تا جایی که
                 دکمه‌ی بستن روی نامِ برند می‌نشست. حالا بدنه می‌لغزد و سربرگ سرِ جا می‌ماند. */}
             <div className="topnav-mobile-head">
-              <span className="topnav-mobile-title">کوبیتا</span>
+              <span className="topnav-mobile-title">{PRODUCT_NAME}</span>
               <button
                 type="button"
                 className="topnav-mobile-close"

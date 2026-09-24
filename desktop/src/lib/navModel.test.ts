@@ -197,3 +197,11 @@ describe('ترتیبِ منو در هر حالت — UI-01 §۵۲', () => {
     expect(groupLanding(withoutJournal, 'accountant')).toBeUndefined()
   })
 })
+
+describe('«مجوز نرم‌افزار» فقط در کوبیتا سازمانی', () => {
+  it('در بیلدِ ابری (بی‌cubitaConfig) هیچ‌جای منو نیست', () => {
+    const { groups, secondary } = buildNav({ tenantKind: 'standard', isOwner: true })
+    const keys = [...groups.flatMap((g) => g.items), ...secondary].map((i) => i.key)
+    expect(keys).not.toContain('license')
+  })
+})

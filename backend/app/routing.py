@@ -43,6 +43,7 @@ from app.routers import (
     currencies,
     dashboard,
     devices,
+    enterprise_license,
     enterprise_setup,
     fiscal_year,
     installments,
@@ -106,7 +107,7 @@ CLOUD_ONLY: tuple[APIRouter, ...] = (
 )
 
 #: روترهایی که فقط روی سرورِ سازمانی معنا دارند.
-ENTERPRISE_ONLY: tuple[APIRouter, ...] = (enterprise_setup.router,)
+ENTERPRISE_ONLY: tuple[APIRouter, ...] = (enterprise_setup.router, enterprise_license.router)
 
 #: همه‌ی روترها به ترتیبِ سوارشدن.
 ALL_ROUTERS: tuple[APIRouter, ...] = (
@@ -182,6 +183,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     assurance.work_router,
     admin_assurance.router,
     enterprise_setup.router,
+    enterprise_license.router,
 )
 
 

@@ -102,6 +102,7 @@ from app.models.payroll import (
     ServiceLocation,
 )
 from app.models.refresh_token import RefreshToken
+from app.models.enterprise_license import EnterpriseLicense
 from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
 from app.models.stock_count import StockCountLine, StockCountSession
@@ -275,6 +276,7 @@ __all__ = [
     "OwnerTransaction",
     "TreasuryTransaction",
     "AuthToken",
+    "EnterpriseLicense",
     "RefreshToken",
     "DeviceToken",
     "EmailVerificationCode",

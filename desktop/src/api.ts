@@ -82,6 +82,26 @@ export interface MeResponse {
   enabled_modules: string[]
   //: کلیدِ ماژول‌های *مجاز* (حقِ دسترسی). نمایشِ نهایی = enabled ∩ allowed.
   allowed_modules: string[]
+  //: `cloud` یا `enterprise` — سرور حقیقت را می‌گوید، نه بیلد.
+  edition?: string
+  //: فقط کوبیتا سازمانی: وضعیتِ مجوز برای نوارِ بالای اپ. در ابر null.
+  license?: LicenseInfo | null
+}
+
+/** وضعیتِ مجوزِ کوبیتا سازمانی (`/api/license` و `me.license`). */
+export interface LicenseInfo {
+  mode: 'trial' | 'trial_expired' | 'active' | 'grace' | 'expired' | 'clock' | 'mismatch' | 'invalid'
+  //: false یعنی ثبتِ سندِ تازه بسته است؛ خواندن و پشتیبان‌گیری همیشه باز است.
+  writable: boolean
+  message: string | null
+  days_left: number | null
+  expires_at: string | null
+  org: string | null
+  seats: number | null
+  seats_used?: number | null
+  mods: string[] | null
+  feat: string[] | null
+  license_id: string | null
 }
 
 //: صفحه‌ی پلن‌ها و خرید روی سایتِ تجاری. خریدِ کاربرِ آزمایشی با همین ایمیل، حسابش را
@@ -416,6 +436,15 @@ export interface SubscriptionStatus {
   can_write: boolean
   should_warn: boolean
 }
+
+/** کوبیتا سازمانی: وضعیتِ مجوز با شمارِ کاربرانِ فعلی. */
+export const fetchLicense = (token: string) => authedGet<LicenseInfo>(token, '/api/license')
+/** کوبیتا سازمانی: «کدِ درخواست» برای فرستادن به پشتیبانی (فقط مالک). */
+export const fetchLicenseRequestCode = (token: string) =>
+  authedGet<{ code: string }>(token, '/api/license/request')
+/** کوبیتا سازمانی: نصبِ کدِ مجوزِ امضاشده (فقط مالک). */
+export const installLicense = (token: string, licenseToken: string) =>
+  authedSend<LicenseInfo>(token, 'POST', '/api/license', { token: licenseToken })
 
 export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 

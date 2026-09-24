@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     #: هر رفتارِ وابسته به نسخه از `is_enterprise` بپرسد، نه از مقایسه‌ی رشته.
     edition: str = "cloud"
 
+    #: دوره‌ی آزمایشیِ نسخه‌ی سازمانی پیش از فعال‌سازی (تصمیمِ مالک: ۳۰ روز).
+    enterprise_trial_days: int = 30
+    #: پوشه‌ی فایلِ `license.lic` روی سرورِ شرکت. خالی = `C:\ProgramData\Cubita` روی
+    #: ویندوز، وگرنه `var/` کنارِ بک‌اند. نسخه‌ی دومِ مجوز کنارِ ردیفِ دیتابیس — توضیح در
+    #: `app/licensing/state.py`.
+    license_dir: str = ""
+
     database_url: str = "postgresql+psycopg://hesabdari:hesabdari@localhost:5432/hesabdari"
 
     jwt_secret: str = "changeme"

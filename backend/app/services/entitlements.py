@@ -31,12 +31,19 @@ def enforce(db: Session, tenant: Tenant, actions: Iterable[str]) -> None:
 
 
 def _enforce_license(db: Session, tenant: Tenant, actions: tuple[str, ...]) -> None:
-    """نسخه‌ی سازمانی: وضعیتِ مجوز (M2 — ENTERPRISE_PLAN.md).
+    """نسخه‌ی سازمانی: وضعیتِ مجوزِ همین نصب (`app/licensing/state.py`).
 
-    تا وقتی هسته‌ی مجوز ساخته نشده، عمداً هیچ چیز را نمی‌بندد. اشتراکِ ابری هم اینجا
-    سنجیده **نمی‌شود**: سرورِ شرکت هرگز اشتراکی ثبت نمی‌کند و کرون‌های ابری رویش
-    اجرا نمی‌شوند؛ سنجیدنش فقط یک منبعِ حقیقتِ دوم و نادرست می‌ساخت.
+    فقط اکشن‌های نوشتن سنجیده می‌شوند؛ هیچ حالتی — حتی آزمایشیِ منقضی — خواندن را
+    نمی‌بندد. اشتراکِ ابری اینجا سنجیده **نمی‌شود**: سرورِ شرکت هرگز اشتراکی ثبت
+    نمی‌کند و سنجیدنش فقط یک منبعِ حقیقتِ دوم و نادرست می‌ساخت.
     """
+    if not any(a in WRITE_ACTIONS for a in actions):
+        return
+    from app.licensing import state as license_state
+
+    status_ = license_state.current(db)
+    if not status_.writable:
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, status_.message)
 
 
 def _enforce_subscription(db: Session, tenant: Tenant, actions: tuple[str, ...]) -> None:
