@@ -288,6 +288,17 @@ export function AccountBrowsePage({
     [],
   )
 
+  //: درخواستِ فوکوس روی درخت. وقتی جست‌وجو باز است درخت اصلاً ساخته نشده، پس
+  //: `focus()`ِ مستقیم به هیچ می‌خورد و `requestAnimationFrame` روی رانرِ کُند دیر
+  //: می‌رسد — کلیدِ بعدی به کادرِ جست‌وجو می‌رفت. این پس از همان رندر اجرا می‌شود.
+  const wantTreeFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (wantTreeFocus.current && treeRef.current) {
+      wantTreeFocus.current = false
+      treeRef.current.focus({ preventScroll: true })
+    }
+  })
+
   // اسکرولِ درخت فقط یک بار، وقتی ردیف‌ها رسیدند، برمی‌گردد.
   useLayoutEffect(() => {
     if (restoredScroll.current || rows.length === 0 || !treeRef.current) return
@@ -350,7 +361,7 @@ export function AccountBrowsePage({
       setExpanded((prev) => revealIn(index, prev, id))
       setQuery('')
       focusRow(id)
-      requestAnimationFrame(() => treeRef.current?.focus({ preventScroll: true }))
+      wantTreeFocus.current = true
     },
     [index, flags, focusRow],
   )
@@ -390,7 +401,7 @@ export function AccountBrowsePage({
     } else if (e.key === 'Escape') {
       e.preventDefault()
       setQuery('')
-      treeRef.current?.focus()
+      wantTreeFocus.current = true
     }
   }
 

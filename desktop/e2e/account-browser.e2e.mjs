@@ -79,25 +79,38 @@ const faNum = (n) => Number(n).toLocaleString('fa-IR')
 
 const browser = await chromium.launch(process.env.E2E_CHROMIUM ? { executablePath: process.env.E2E_CHROMIUM } : {})
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
+//: شبیه‌سازیِ رانرِ کُند — همان پیچِ `accountant-journal.e2e.mjs`: هر `requestAnimationFrame`
+//: این‌قدر میلی‌ثانیه دیرتر (`E2E_LATE_FRAMES_MS=300`). این تست باید با ۰، ۳۰۰ و ۶۰۰ قبول شود.
+const lateFrames = Number(process.env.E2E_LATE_FRAMES_MS ?? 0)
+if (lateFrames > 0) {
+  await page.addInitScript((ms) => {
+    const raf = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = (cb) => raf(() => setTimeout(() => cb(performance.now()), ms))
+  }, lateFrames)
+}
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 let step = 'آغاز'
 
+//: **هر گام منتظرِ وضعیتِ خودش می‌ماند، نه یک ادعای فوری.** کلیدِ بعدی فقط وقتی فشرده
+//: می‌شود که فوکوس واقعاً رسیده باشد — وگرنه روی رانرِ کُند به عنصرِ قبلی می‌خورد.
 const selectedId = () =>
   page.evaluate(() => document.querySelector('[role="treeitem"][aria-selected="true"]')?.id.replace('ab-node-', '') ?? null)
-const active = () =>
-  page.evaluate(() => {
-    const el = document.activeElement
-    return el?.getAttribute('role') ?? el?.className ?? null
-  })
+const waitSelected = (id) =>
+  page.waitForFunction((x) => document.querySelector(`#ab-node-${x}[aria-selected="true"]`), id)
+const waitTreeFocus = () => page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'tree')
+const waitLedgerFocus = () => page.waitForFunction(() => document.activeElement?.classList.contains('ab-ledger-scroll'))
 
 /** صفحه‌ای را از فرمان‌یاب (Ctrl+K) باز می‌کند — Enter فقط وقتی که گزینه‌ی فعال همان است. */
 async function goTo(title) {
   await page.keyboard.press('Control+KeyK')
-  await page.locator('.cmdk input').waitFor()
+  //: وجودِ کادر کافی نیست؛ **فوکوس** باید رسیده باشد — فرمان‌یاب فوکوس را یک فریم بعد
+  //: از بازشدن می‌دهد و کلیدِ زودتر گم می‌شود (همان مسابقه‌ی #185 در انتخاب‌گرِ حساب).
+  await page.waitForFunction(() => document.activeElement?.closest('.cmdk-search') != null)
   //: فرمان‌یاب عبارتِ قبلی را نگه می‌دارد؛ بی‌این، عبارتِ تازه به تهِ آن می‌چسبید.
   await page.keyboard.press('Control+KeyA')
   await page.keyboard.type(title)
+  assert.equal(await page.locator('.cmdk input').inputValue(), title, 'عبارت کامل در فرمان‌یاب ننشست')
   await page.locator('.cmdk-item.is-active .cmdk-item-title', { hasText: new RegExp(`^${title}$`) }).waitFor()
   await page.keyboard.press('Enter')
   await page.locator('.cmdk').waitFor({ state: 'detached' })
@@ -119,10 +132,11 @@ try {
 
   step = 'مرور حساب‌ها از فرمان‌یاب (Ctrl+K)'
   await openBrowser()
-  await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'tree')
+  await waitTreeFocus()
 
   step = 'جست‌وجو: «/» و «بانک ملی مرور» → مسیر'
   await page.keyboard.press('/')
+  await page.waitForFunction(() => document.activeElement?.closest('.ab-search') != null)
   await page.keyboard.type(`بانک ملی مرور ${tag}`)
   const hit = page.locator('.ab-hit').first()
   await hit.waitFor()
@@ -133,8 +147,8 @@ try {
 
   step = 'Enter → نمایش در درخت'
   await page.keyboard.press('Enter')
-  await page.waitForFunction((id) => document.querySelector(`#ab-node-${id}[aria-selected="true"]`), melli.id)
-  assert.equal(await active(), 'tree')
+  await waitSelected(melli.id)
+  await waitTreeFocus()
 
   step = 'مانده‌ی والدها = عددِ سرور'
   const serverTree = await api(`/api/accounting/balance-tree`, { headers })
@@ -153,7 +167,7 @@ try {
   const ledgerReq = page.waitForRequest((r) => r.url().includes(`/api/reports/general-ledger/${melli.id}`) && r.url().includes('limit='))
   await page.keyboard.press('Enter')
   await ledgerReq
-  await page.waitForFunction(() => document.activeElement?.classList.contains('ab-ledger-scroll'))
+  await waitLedgerFocus()
   const firstLine = page.locator('.ab-ledger-table tbody tr.acc-row--clickable').first()
   assert.ok((await firstLine.textContent()).includes(faNum(entry.number)), 'ردیفِ سند در گردش نیست')
 
@@ -168,21 +182,21 @@ try {
   await page.keyboard.press('Escape')
   await drawer.waitFor({ state: 'detached' })
   assert.equal(await selectedId(), melli.id)
-  await page.waitForFunction(() => document.activeElement?.classList.contains('ab-ledger-scroll'))
+  await waitLedgerFocus()
 
   step = 'Esc → برگشت به درخت'
   await page.keyboard.press('Escape')
-  await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'tree')
+  await waitTreeFocus()
   await page.keyboard.press('Escape') // یک سطح بالا
-  assert.equal(await selectedId(), cash.id)
+  await waitSelected(cash.id)
   await page.keyboard.press('ArrowLeft') // باز است → اولین فرزند
-  assert.equal(await selectedId(), melli.id)
+  await waitSelected(melli.id)
 
   step = 'رفتن به صفحه‌ی دیگر و برگشت: زمینه می‌ماند'
   await goTo('گزارش ترازها')
   await page.locator('[role="tree"]').waitFor({ state: 'detached' })
   await openBrowser()
-  await page.waitForFunction((id) => document.querySelector(`#ab-node-${id}[aria-selected="true"]`), melli.id)
+  await waitSelected(melli.id)
   assert.ok(await page.locator(`#ab-node-${cash.id}[aria-expanded="true"]`).count(), 'گره‌ی باز بسته شده')
 
   step = 'سرریزِ افقی در ۱۳۶۶ و ۱۹۲۰'
@@ -196,7 +210,10 @@ try {
   }
 
   assert.deepEqual(errors, [], `خطای صفحه: ${errors.join(' | ')}`)
-  console.log(`✓ مرور حساب: درخت → بانک ملی → گردش → سند ${entry.number} → برگشت — فقط با کیبورد`)
+  console.log(
+    `✓ مرور حساب: درخت → بانک ملی → گردش → سند ${entry.number} → برگشت — فقط با کیبورد` +
+      (lateFrames ? ` (فریمِ دیررس ${lateFrames}ms)` : ''),
+  )
 } catch (err) {
   mkdirSync(OUT, { recursive: true })
   await page.screenshot({ path: `${OUT}/account-browser-failure.png`, fullPage: true }).catch(() => {})

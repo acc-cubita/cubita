@@ -287,6 +287,23 @@ describe('جست‌وجو (§۳۹)', () => {
     expect($('.ab-trail')!.textContent).toContain('موجودی نقد و بانک')
   })
 
+  it('Esc در جست‌وجو فوکوس را به درخت برمی‌گرداند — نه به هیچ‌جا', async () => {
+    await mount()
+    const input = typeSearch('بانک')
+    input.focus()
+    key(input, 'Escape')
+    expect($('.ab-hit')).toBeNull()
+    expect(document.activeElement).toBe($('[role="tree"]'))
+  })
+
+  it('Enter روی نتیجه، فوکوس را هم‌زمان به درخت می‌برد (بی‌انتظارِ فریم)', async () => {
+    await mount()
+    const input = typeSearch('بانک ملی')
+    input.focus()
+    key(input, 'Enter')
+    expect(document.activeElement).toBe($('[role="tree"]'))
+  })
+
   it('ارقامِ فارسی در کد', async () => {
     await mount()
     typeSearch('۱۱۰۲۰۲')
