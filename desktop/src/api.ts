@@ -447,6 +447,9 @@ export const fetchLicenseRequestCode = (token: string) =>
 /** کوبیتا سازمانی: نصبِ کدِ مجوزِ امضاشده (فقط مالک). */
 export const installLicense = (token: string, licenseToken: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license', { token: licenseToken })
+/** کوبیتا سازمانی: فعال‌سازیِ یک‌کلیکی با کدِ فعال‌سازی — سرور خودش با ابر حرف می‌زند (فقط مالک). */
+export const activateLicenseOnline = (token: string, code: string) =>
+  authedSend<LicenseInfo>(token, 'POST', '/api/license/activate', { code })
 
 export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 

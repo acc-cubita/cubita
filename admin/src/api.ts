@@ -321,3 +321,79 @@ export interface ClientErrorRow {
 
 export const fetchClientErrors = (t: string, onlyFatal: boolean) =>
   get<ClientErrorRow[]>(t, `/api/admin/client-errors?only_fatal=${onlyFatal}`)
+
+// ── مجوزهای کوبیتا سازمانی ──────────────────────────────────────────────────
+
+export interface EnterpriseLicense {
+  id: string
+  lic_id: string
+  org_name: string
+  contact: string | null
+  seats: number | null
+  mods: string[] | null
+  feat: string[] | null
+  expires_at: string | null
+  grace_days: number
+  code_hint: string
+  status: 'active' | 'revoked'
+  revoked_at: string | null
+  bound: boolean
+  bound_at: string | null
+  last_issued_at: string | null
+  issue_count: number
+  note: string | null
+  created_by_email: string | null
+  created_at: string
+}
+
+export interface EnterpriseLicenseEvent {
+  kind: 'create' | 'update' | 'activate' | 'issue' | 'refuse' | 'transfer' | 'revoke' | 'code'
+  actor: string
+  detail: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface EnterpriseLicenseDetail extends EnterpriseLicense {
+  events: EnterpriseLicenseEvent[]
+}
+
+export interface EnterpriseLicenseInput {
+  org_name: string
+  contact?: string | null
+  seats?: number | null
+  /** null = دائمی */
+  days?: number | null
+  grace_days?: number
+  feat?: string[] | null
+  note?: string | null
+}
+
+export interface EnterpriseLicenseUpdate {
+  org_name?: string
+  contact?: string
+  seats?: number
+  clear_seats?: boolean
+  extend_days?: number
+  make_perpetual?: boolean
+  grace_days?: number
+  feat?: string[]
+  all_features?: boolean
+  note?: string
+}
+
+export const fetchLicenses = (t: string, q = '') =>
+  get<EnterpriseLicense[]>(t, `/api/admin/licenses${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+export const fetchLicense = (t: string, id: string) =>
+  get<EnterpriseLicenseDetail>(t, `/api/admin/licenses/${id}`)
+export const createLicense = (t: string, data: EnterpriseLicenseInput) =>
+  send<{ license: EnterpriseLicense; activation_code: string }>(t, 'POST', '/api/admin/licenses', data)
+export const updateLicense = (t: string, id: string, data: EnterpriseLicenseUpdate) =>
+  send<EnterpriseLicenseDetail>(t, 'PATCH', `/api/admin/licenses/${id}`, data)
+export const issueLicenseOffline = (t: string, id: string, requestCode: string) =>
+  send<{ token: string }>(t, 'POST', `/api/admin/licenses/${id}/issue`, { request_code: requestCode })
+export const transferLicense = (t: string, id: string) =>
+  send<EnterpriseLicenseDetail>(t, 'POST', `/api/admin/licenses/${id}/transfer`, {})
+export const revokeLicense = (t: string, id: string) =>
+  send<EnterpriseLicenseDetail>(t, 'POST', `/api/admin/licenses/${id}/revoke`, {})
+export const regenerateLicenseCode = (t: string, id: string) =>
+  send<{ activation_code: string }>(t, 'POST', `/api/admin/licenses/${id}/code`, {})

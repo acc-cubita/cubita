@@ -91,6 +91,9 @@ _admin_login_per_email = SlidingWindowLimiter(max_events=10, window_seconds=3600
 #: نوشتن‌های کنترل‌پنل. هدف نه حدسِ رمز، که مهارِ اسکریپتی است که تصادفاً روی
 #: اندپوینتِ مخرب حلقه می‌زند.
 _admin_write_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
+#: فعال‌سازیِ آنلاینِ کوبیتا سازمانی — عمومی است (سرورِ مشتری توکنی از ما ندارد)، پس
+#: سقف جلوی حدسِ کدِ فعال‌سازی را می‌گیرد. کدِ ۸۰بیتی خودش حدس‌ناپذیر است؛ این لایه‌ی دوم است.
+_license_activate_limiter = SlidingWindowLimiter(max_events=10, window_seconds=3600)
 
 
 def limit_login(request: Request) -> None:
@@ -169,6 +172,10 @@ def limit_admin_write(request: Request) -> None:
     _admin_write_limiter.check(f"admin-write:{client_key(request)}")
 
 
+def limit_license_activate(request: Request) -> None:
+    _license_activate_limiter.check(f"license-activate:{client_key(request)}")
+
+
 def reset_all() -> None:
     """فقط برای تست — وگرنه تست‌ها به‌خاطر سقف مشترک روی هم اثر می‌گذارند."""
     _login_limiter.reset()
@@ -183,3 +190,4 @@ def reset_all() -> None:
     _admin_login_limiter.reset()
     _admin_login_per_email.reset()
     _admin_write_limiter.reset()
+    _license_activate_limiter.reset()

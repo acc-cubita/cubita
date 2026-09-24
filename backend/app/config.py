@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     #: ویندوز، وگرنه `var/` کنارِ بک‌اند. نسخه‌ی دومِ مجوز کنارِ ردیفِ دیتابیس — توضیح در
     #: `app/licensing/state.py`.
     license_dir: str = ""
+    #: فقط ابر: فایلِ PEMِ کلیدِ خصوصیِ امضای مجوز (`python -m app.licensing.cli keygen`).
+    #: **هرگز کامیت نمی‌شود و کنارِ پشتیبانِ دیتابیس نمی‌نشیند.** خالی = صدورِ مجوز
+    #: (پنلِ ستاد و فعال‌سازیِ آنلاین) با ۵۰۳ می‌ایستد.
+    license_signing_key_file: str = ""
+    #: فقط سازمانی: سروری که فعال‌سازیِ آنلاین به آن می‌رود.
+    license_server_url: str = "https://acc.cubita.ir"
 
     database_url: str = "postgresql+psycopg://hesabdari:hesabdari@localhost:5432/hesabdari"
 

@@ -49,6 +49,12 @@ ACTIONS = frozenset(
         "plan_deactivate",
         "support_session_open",
         "support_session_revoke",
+        "license_create",
+        "license_update",
+        "license_issue",
+        "license_transfer",
+        "license_revoke",
+        "license_code_regenerate",
     }
 )
 

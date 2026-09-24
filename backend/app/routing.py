@@ -20,6 +20,7 @@ from app.routers import (
     admin_billing,
     admin_commissions,
     admin_errors,
+    admin_licenses,
     admin_staff,
     advanced_inventory,
     alerts,
@@ -43,6 +44,7 @@ from app.routers import (
     currencies,
     dashboard,
     devices,
+    enterprise_activation,
     enterprise_license,
     enterprise_setup,
     fiscal_year,
@@ -89,6 +91,7 @@ from app.routers import (
 #: - فروشگاه/بازار (`integration`، `shop`، `storefront`، `marketplace`): تصمیمِ صاحبِ
 #:   محصول — این نسخه مخصوصِ شرکت‌ها و سازمان‌هاست و بازارِ عمده‌فروشی ندارد.
 #: - پوش (`devices`): توکنِ FCM برای اپِ موبایل؛ نسخه‌ی سازمانی موبایل ندارد.
+#: - فعال‌سازیِ آنلاین (`enterprise_activation`): سرورِ سازمانی *مشتریِ* این مسیر است، نه میزبانش.
 CLOUD_ONLY: tuple[APIRouter, ...] = (
     admin_auth.router,
     admin_auth.diagnostics_router,
@@ -98,6 +101,8 @@ CLOUD_ONLY: tuple[APIRouter, ...] = (
     admin_errors.router,
     admin_staff.router,
     admin_assurance.router,
+    admin_licenses.router,
+    enterprise_activation.router,
     billing.router,
     integration.router,
     shop.router,
@@ -182,6 +187,8 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     #: روترِ کاری پشتِ گیتِ ماژولِ مشتق — هر اندپوینتِ تازه‌اش خودکار گیت می‌خورد.
     assurance.work_router,
     admin_assurance.router,
+    admin_licenses.router,
+    enterprise_activation.router,
     enterprise_setup.router,
     enterprise_license.router,
 )

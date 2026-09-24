@@ -9,6 +9,7 @@ import AccountsPage from './pages/AccountsPage'
 import AssurancePage from './pages/AssurancePage'
 import ClientErrorsPage from './pages/ClientErrorsPage'
 import CommissionsPage from './pages/CommissionsPage'
+import LicensesPage from './pages/LicensesPage'
 import PurchasesPage from './pages/PurchasesPage'
 import StaffPage from './pages/StaffPage'
 import { faInt } from './ui/kit'
@@ -118,6 +119,8 @@ export default function App() {
         <AssurancePage token={token} onUnauthorized={guard} />
       ) : page === 'commissions' ? (
         <CommissionsPage token={token} onUnauthorized={guard} />
+      ) : page === 'licenses' ? (
+        <LicensesPage token={token} me={me} onUnauthorized={guard} />
       ) : page === 'purchases' ? (
         <PurchasesPage token={token} onUnauthorized={guard} />
       ) : page === 'errors' ? (

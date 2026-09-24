@@ -24,12 +24,11 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from app.licensing import fingerprint
-from app.licensing.state import REQUEST_PREFIX
+from app.licensing.state import decode_request
 from app.licensing.token import (
     FORMAT_VERSION,
     PREFIX,
-    b64u_decode,
+    LicenseError,
     decode_unverified,
     key_id,
     public_key_b64,
@@ -64,19 +63,15 @@ def _load_key(path: str) -> Ed25519PrivateKey:
 
 
 def _decode_request(code: str) -> dict:
-    parts = "".join(code.split()).split(".")
-    if len(parts) != 2 or parts[0] != REQUEST_PREFIX:
-        raise SystemExit("کدِ درخواست باید با CUBREQ1. شروع شود.")
-    return json.loads(b64u_decode(parts[1]))
+    try:
+        return decode_request(code)
+    except LicenseError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _issue(args: argparse.Namespace) -> int:
     request = _decode_request(args.request)
-    fp = request.get("fp") or {}
-    if len([k for k in fingerprint.COMPONENTS if k in fp]) < fingerprint.MIN_MATCH:
-        # با کمتر از دو جزء، تطبیقِ ۲ از ۳ هرگز برقرار نمی‌شود و مجوز روی همان
-        # سرور هم کار نمی‌کرد.
-        raise SystemExit("اثرانگشتِ این درخواست کمتر از دو جزء دارد؛ مجوز صادر نمی‌شود.")
+    fp = request["fp"]
     now = int(time.time())
     payload = {
         "v": FORMAT_VERSION,
@@ -108,6 +103,12 @@ def _inspect(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    #: کنسولِ ویندوز پیش‌فرض cp1252 است و پیامِ فارسی را نمی‌تواند چاپ کند — `keygen` کلید
+    #: را می‌نوشت و بعد موقعِ چاپِ کلیدِ عمومی می‌افتاد، یعنی کلیدی بی‌کلیدِ عمومی.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="python -m app.licensing.cli")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
