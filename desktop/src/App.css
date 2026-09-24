@@ -9317,6 +9317,20 @@ button.mp-item:focus-visible {
   overflow: hidden;
 }
 
+/* دفتر روزنامه: جمعِ کلِ دامنه (از سرور) بالای اسناد، و شمارنده و «سندهای بعدی» زیرشان. */
+.daybook-summary {
+  margin-bottom: 12px;
+}
+
+.daybook-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .cc-metric {
   display: flex;
   flex-direction: column;

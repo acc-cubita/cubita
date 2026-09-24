@@ -6775,6 +6775,42 @@ export interface JournalQuery {
   limit?: number
 }
 
+/** جمعِ **کلِ دامنه‌ی** فهرستِ اسناد، نه صفحه‌ی بارگذاری‌شده (`/api/journal-entries/summary`).
+ *
+ *  با فیلترِ مرکز هزینه یا تفصیلی، جمع فقط ردیف‌های منطبق را می‌شمارد، یعنی همان عددی که
+ *  دفتر و تراز با همان فیلتر می‌دهند. */
+export interface JournalListSummary {
+  entry_count: number
+  line_count: number
+  total_debit: string
+  total_credit: string
+}
+
+/** همان `reportFiltersQs`ِ دفتر و تراز، به‌علاوه‌ی جست‌وجوی شماره و شرحِ سند. */
+function journalListQs(filters: ReportFilters, q?: string): string {
+  const base = reportFiltersQs(filters)
+  if (!q) return base
+  return `${base}${base ? '&' : '?'}q=${encodeURIComponent(q)}`
+}
+
+/** یک صفحه از فهرستِ اسناد با همان فیلترهای دفتر و تراز. `cursor` از `next_cursor`ِ صفحه‌ی قبل. */
+export const fetchJournalEntriesPage = (
+  token: string,
+  filters: ReportFilters,
+  opts: { q?: string; cursor?: string | null; limit?: number } = {},
+) =>
+  authedGetPage<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, opts.q)}`, {
+    limit: opts.limit,
+    cursor: opts.cursor,
+  })
+
+export const fetchJournalEntriesSummary = (token: string, filters: ReportFilters, q?: string) =>
+  authedGet<JournalListSummary>(token, `/api/journal-entries/summary${journalListQs(filters, q)}`)
+
+/** همه‌ی اسنادِ دامنه، صفحه‌به‌صفحه. فقط برای خروجیِ CSV که کاربر صریحاً می‌خواهد، نه برای نمایش. */
+export const fetchAllJournalEntries = (token: string, filters: ReportFilters, q?: string) =>
+  authedGetAll<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, q)}`)
+
 /** فیلتر سمتِ سرور انجام می‌شود، نه در مرورگر: کشیدنِ کلِ دفترِ یک کسب‌وکارِ چندساله
  *  برای فیلترکردنش این‌جا، همان چیزی است که صفحه‌بندیِ keyset برای جلوگیری‌اش ساخته شد. */
 /** یک سند با ردیف‌ها و منشأش — آخرین پله‌ی drill-down از تراز و دفتر. */
