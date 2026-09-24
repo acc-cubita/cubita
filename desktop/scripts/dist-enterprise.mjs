@@ -46,7 +46,10 @@ const config = {
   appId: 'ir.ipnetcity.cubita.enterprise',
   productName: 'Cubita Enterprise',
   directories: { output: OUT_DIR },
-  publish: null,
+  //: فقط برای اینکه electron-builder `latest.yml` بسازد. هیچ‌چیز خودکار آپلود نمی‌شود؛ انتشار با
+  //: `scripts/publish-enterprise.mjs` است (امضا روی سرورِ ابری، کنارِ کلیدِ خصوصی).
+  //: کلاینتِ نصب‌شده این نشانی را نمی‌خواند — فیدش در زمانِ اجرا سرورِ خودِ شرکت است.
+  publish: [{ provider: 'generic', url: 'https://acc.cubita.ir/updates/enterprise/' }],
   artifactName: 'Cubita-Enterprise-Setup-${version}.${ext}',
   ...(hasServer ? { extraResources: [{ from: SERVER_BUNDLE, to: 'server' }] } : {}),
   nsis: {

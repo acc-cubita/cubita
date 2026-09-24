@@ -69,4 +69,10 @@ def health():
     #: `edition` برای جادوگرِ اولین اجرای کلاینتِ سازمانی است: «آزمایش اتصال» باید
     #: بفهمد آدرسی که کاربر داده واقعاً سرورِ کوبیتا سازمانی است، نه هر چیزی که روی
     #: آن پورت جواب می‌دهد (یا سرورِ ابری).
-    return {"status": "ok", "edition": settings.edition}
+    out = {"status": "ok", "edition": settings.edition}
+    if settings.is_enterprise:
+        #: کلاینت با این می‌فهمد از سرورش عقب است یا نه (آپدیت از `/updates/*`ِ همین سرور).
+        from app.version import app_version
+
+        out["version"] = app_version()
+    return out

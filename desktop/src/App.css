@@ -7094,6 +7094,7 @@ tr.kardex-voided td { color: var(--text-muted); }
 .lic-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .lic-step-title { font-weight: 600; color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
 .lic-activation { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; }
+.server-update-install { margin-top: 14px; }
 .lic-or { margin: 0; padding-top: 14px; border-top: 1px dashed var(--border); color: var(--text-muted); font-size: var(--fs-sm); }
 .lic-code {
   width: 100%;

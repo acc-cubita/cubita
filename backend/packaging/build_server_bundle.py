@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -97,6 +98,10 @@ def main() -> int:
     shutil.rmtree(BUNDLE, ignore_errors=True)
     shutil.copytree(frozen, BUNDLE)
     copy_postgres(Path(args.pg_dir), BUNDLE / "pgsql")
+    #: نسخه‌ی سرور = نسخه‌ی دسکتاپ (یک انتشار). سرور با این تعیین می‌کند کدام نصاب را به
+    #: کلاینت‌ها بدهد (`app/version.py`).
+    version = json.loads((BACKEND.parent / "desktop" / "package.json").read_text(encoding="utf-8"))["version"]
+    (BUNDLE / "version.txt").write_text(version, encoding="utf-8")
     fetch_winsw(BUNDLE / "winsw" / "WinSW-x64.exe", args.winsw)
 
     print("selftest…")

@@ -70,6 +70,10 @@ class Layout:
     def backups(self) -> Path:
         return self.home / "backups"
 
+    @property
+    def updates(self) -> Path:
+        return self.home / "updates"
+
 
 # --- رازها و .env -------------------------------------------------------------
 
@@ -319,6 +323,51 @@ def run_migrations(migration_url: str, alembic_dir: Path) -> str:
     return row[0] if row else ""
 
 
+def current_revision(migration_url: str) -> str | None:
+    """نسخه‌ی فعلیِ دیتابیس؛ None یعنی هنوز هیچ مهاجرتی اجرا نشده (نصبِ تازه)."""
+    import psycopg
+
+    raw = migration_url.replace("postgresql+psycopg://", "postgresql://")
+    with psycopg.connect(raw) as conn:
+        exists = conn.execute("SELECT to_regclass('public.alembic_version')").fetchone()[0]
+        if not exists:
+            return None
+        row = conn.execute("SELECT version_num FROM alembic_version").fetchone()
+        return row[0] if row else None
+
+
+def head_revision(alembic_dir: Path) -> str:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(alembic_dir))
+    return ScriptDirectory.from_config(cfg).get_current_head() or ""
+
+
+def backup_before_upgrade(pg_bin: Path, layout: Layout, secrets_: dict, port: int, revision: str) -> Path:
+    """`pg_dump -Fc` با نقشِ مالک (BYPASSRLS — بی‌آن پشتیبان بی‌صدا فقط ردیف‌های قابل‌دیدن را
+    می‌گرفت). **اگر شکست بخورد مهاجرت اجرا نمی‌شود**: ارتقایی که پشتیبان ندارد، ریسکی است
+    که دفترِ حسابداریِ شرکت نباید بپردازد."""
+    layout.backups.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = layout.backups / f"pre-upgrade-{revision}-{stamp}.dump"
+    _run(
+        [
+            _exe(pg_bin, "pg_dump"),
+            "-h", "127.0.0.1",
+            "-p", str(port),
+            "-U", MIGRATE_ROLE,
+            "-Fc",
+            "-f", str(target),
+            DB_NAME,
+        ],
+        env={"PGPASSWORD": secrets_["migrate_password"]},
+        timeout=3600,
+    )
+    return target
+
+
 def verify_isolation(app_url: str) -> int:
     """جداسازیِ داده زنده است؟ با همان نقشی که برنامه وصل می‌شود.
 
@@ -391,7 +440,7 @@ def provision(
     """همه‌ی قدم‌ها به ترتیب. Postgres برای مدتِ راه‌اندازی دستی بالا می‌آید و بعد خاموش
     می‌شود — از آن به بعد سرویسِ ویندوز صاحبش است (مگر `keep_running`)."""
     layout.home.mkdir(parents=True, exist_ok=True)
-    for sub in (layout.logs, layout.backups):
+    for sub in (layout.logs, layout.backups, layout.updates):
         sub.mkdir(parents=True, exist_ok=True)
 
     log("رازهای نصب…")
@@ -411,6 +460,12 @@ def provision(
 
         layout.env_file.write_text(render_env(secrets_, pg_port, api_port, layout.home), encoding="utf-8")
         env = read_env(layout)
+
+        current = current_revision(env["MIGRATION_DATABASE_URL"])
+        if current and current != head_revision(alembic_dir):
+            log(f"پشتیبان پیش از ارتقا (نسخه‌ی {current})…")
+            dump = backup_before_upgrade(pg_bin, layout, secrets_, pg_port, current)
+            log(f"  {dump.name}")
 
         log("مهاجرت‌ها…")
         version = run_migrations(env["MIGRATION_DATABASE_URL"], alembic_dir)

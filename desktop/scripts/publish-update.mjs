@@ -1,7 +1,13 @@
 /**
  * انتشار بسته‌ی دسکتاپ روی کانال به‌روزرسانی.
  *
- * اجرا:  node scripts/publish-update.mjs
+ * اجرا:  node scripts/publish-update.mjs                 (کوبیتا — کانالِ ابری)
+ *        node scripts/publish-update.mjs --enterprise    (کوبیتا سازمانی — کانالِ امضاشده)
+ *
+ * **کانالِ سازمانی** (`/updates/enterprise/`) دو فرق دارد: خروجی از `release-enterprise/` می‌آید،
+ * و `latest.yml` پیش از نشستن روی کانال **روی خودِ سرورِ ابری امضا می‌شود**
+ * (`app.licensing.cli sign-update`، با کلیدی که فقط آن‌جاست). سرورهای سازمانی بی‌امضای معتبر
+ * هیچ آپدیتی را نمی‌پذیرند (ENTERPRISE_PLAN.md، M5).
  *
  * **چرا اسکریپت و نه دستور دستی:** انتشار سه فایل دارد و ترتیبشان مهم است.
  * latest.yml باید *آخر* برود — همان فایلی است که به کلاینت می‌گوید نسخه‌ی تازه‌ای
@@ -25,10 +31,13 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(HERE, '..')
-const RELEASE = path.join(ROOT, 'release')
+const ENTERPRISE = process.argv.includes('--enterprise')
+const RELEASE = path.join(ROOT, ENTERPRISE ? 'release-enterprise' : 'release')
 
 const HOST = process.env.CUBITA_DEPLOY_HOST ?? 'root@62.60.129.39'
-const REMOTE = '/opt/hesabdari/updates'
+const REMOTE = ENTERPRISE ? '/opt/hesabdari/updates/enterprise' : '/opt/hesabdari/updates'
+//: بک‌اندِ production — امضای کانالِ سازمانی با CLIِ همان‌جا و کلیدِ `LICENSE_SIGNING_KEY_FILE`ِ `.env`اش.
+const REMOTE_APP = '/opt/hesabdari'
 
 /**
  * کلید خصوصی SSH — باید *وجود داشته باشد*، وگرنه همین‌جا می‌ایستیم.
@@ -78,12 +87,12 @@ if (version === '0.0.0') {
 }
 
 // باید با artifactName در package.json یکی باشد — عمداً بدون فاصله.
-const installer = `Cubita-Setup-${version}.exe`
+const installer = ENTERPRISE ? `Cubita-Enterprise-Setup-${version}.exe` : `Cubita-Setup-${version}.exe`
 const files = [installer, `${installer}.blockmap`, 'latest.yml']
 
 for (const f of files) {
   if (!existsSync(path.join(RELEASE, f))) {
-    console.error(`فایل انتشار پیدا نشد: ${f}\nاول اجرا کنید: npm run dist`)
+    console.error(`فایل انتشار پیدا نشد: ${f}\nاول اجرا کنید: ${ENTERPRISE ? 'npm run dist:enterprise' : 'npm run dist'}`)
     process.exit(1)
   }
 }
@@ -232,10 +241,11 @@ function scpLargeFile(local, remoteName) {
   }
 }
 
-console.log(`انتشار نسخه ${version}`)
+console.log(`انتشار نسخه ${version}${ENTERPRISE ? ' — کوبیتا سازمانی' : ''}`)
 
 const master = startControlMaster()
 try {
+  ssh(`mkdir -p ${REMOTE}`)
   // نصب‌کننده و blockmap اول. latest.yml آخر — تا هیچ کلاینتی نسخه‌ای را نبیند
   // که فایلش هنوز نرسیده.
   console.log(`  آپلود ${installer} …`)
@@ -244,8 +254,22 @@ try {
   console.log(`  آپلود ${installer}.blockmap …`)
   scpWithRetry(path.join(RELEASE, `${installer}.blockmap`), `${REMOTE}/${installer}.blockmap`)
 
-  console.log('  آپلود latest.yml …')
-  scpWithRetry(path.join(RELEASE, 'latest.yml'), `${REMOTE}/latest.yml`)
+  if (ENTERPRISE) {
+    // latest.yml اول با نامِ موقت، امضا روی سرور، بعد جابه‌جایی. کلیدِ خصوصی هرگز از سرورِ ابری
+    // بیرون نمی‌آید؛ اگر تنظیم نشده باشد انتشار همین‌جا می‌ایستد، پیش از اینکه latest.ymlِ
+    // بی‌امضا روی کانال بنشیند.
+    console.log('  آپلود و امضای latest.yml …')
+    scpWithRetry(path.join(RELEASE, 'latest.yml'), `${REMOTE}/latest.yml.new`)
+    ssh(
+      `cd ${REMOTE_APP} && KEY="$(grep '^LICENSE_SIGNING_KEY_FILE=' .env | cut -d= -f2-)" && ` +
+        `if [ -z "$KEY" ]; then echo 'LICENSE_SIGNING_KEY_FILE is not set in .env' >&2; exit 3; fi && ` +
+        `venv/bin/python -m app.licensing.cli sign-update --key "$KEY" ${REMOTE}/latest.yml.new && ` +
+        `mv ${REMOTE}/latest.yml.new ${REMOTE}/latest.yml`,
+    )
+  } else {
+    console.log('  آپلود latest.yml …')
+    scpWithRetry(path.join(RELEASE, 'latest.yml'), `${REMOTE}/latest.yml`)
+  }
 
   // **نسخه‌ی بی‌شماره — همان فایلی که دکمه‌ی «دانلود دسکتاپ» به آن اشاره می‌کند**
   // (`TopNav.tsx` و صفحه‌ی فرود سایت). تا امروز این‌جا نبود و دستی کپی می‌شد، پس
@@ -254,8 +278,10 @@ try {
   //
   // کپیِ سمتِ سرور است نه آپلودِ دوباره: فایل همین الان آن‌جاست، پس نه ۱۱۶
   // مگابایت دوباره می‌رود و نه شبکه فرصتِ خراب‌کردنش را دارد.
-  console.log('  به‌روزرسانی Cubita-Setup.exe (لینکِ دانلود) …')
-  ssh(`cp "${REMOTE}/${installer}" "${REMOTE}/Cubita-Setup.exe"`)
+  if (!ENTERPRISE) {
+    console.log('  به‌روزرسانی Cubita-Setup.exe (لینکِ دانلود) …')
+    ssh(`cp "${REMOTE}/${installer}" "${REMOTE}/Cubita-Setup.exe"`)
+  }
 
   ssh(`chown -R hesabdari:hesabdari ${REMOTE} && ls -la ${REMOTE}`)
 } finally {
@@ -282,7 +308,21 @@ function headStatus(url) {
   })
 }
 
-const base = 'https://acc.cubita.ir/updates'
+const base = ENTERPRISE ? 'https://acc.cubita.ir/updates/enterprise' : 'https://acc.cubita.ir/updates'
+if (ENTERPRISE) {
+  const [eYml, eSig, eExe] = await Promise.all([
+    headStatus(`${base}/latest.yml`),
+    headStatus(`${base}/latest.yml.sig`),
+    headStatus(`${base}/${installer}`),
+  ])
+  console.log(`\nراستی‌آزمایی:  latest.yml → ${eYml.status}   امضا → ${eSig.status}   نصب‌کننده → ${eExe.status}`)
+  if (eYml.status !== 200 || eSig.status !== 200 || eExe.status !== 200) {
+    console.error('انتشار ناقص است: فایل‌های کانالِ سازمانی از بیرون در دسترس نیستند.')
+    process.exit(1)
+  }
+  console.log(`\nمنتشر شد: ${base}/latest.yml`)
+  process.exit(0)
+}
 const [yml, exe, plain] = await Promise.all([
   headStatus(`${base}/latest.yml`),
   headStatus(`${base}/${installer}`),

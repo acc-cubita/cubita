@@ -115,6 +115,9 @@ def test_full_provision_against_real_postgres(tmp_path):
     layout = _layout(tmp_path)
     port = _free_port()
     alembic_dir = Path(__file__).resolve().parents[1] / "alembic"
+    #: `run_migrations` نشانیِ دیتابیس را در محیطِ پردازه می‌گذارد؛ conftest هم همین را برای
+    #: کلِ جلسه‌ی تست گذاشته — باید برگردد، نه پاک شود.
+    original_db_url = os.environ.get("DATABASE_URL")
     try:
         first = prov.provision(
             layout=layout, pg_bin=Path(PG_BIN), alembic_dir=alembic_dir, pg_port=port, log=lambda m: None
@@ -126,6 +129,34 @@ def test_full_provision_against_real_postgres(tmp_path):
         )
         assert not again.cluster_created and again.alembic_version == first.alembic_version
         assert prov.verify_isolation(prov.read_env(layout)["DATABASE_URL"]) > 100
+        assert not list(layout.backups.glob("pre-upgrade-*.dump")), "بدونِ ارتقا نباید پشتیبان بگیرد"
+
+        # ارتقا: یک نسخه عقب، بعد نصبِ دوباره — باید پیش از مهاجرت pg_dump بگیرد.
+        from alembic import command
+        from alembic.config import Config
+
+        cfg = Config()
+        cfg.set_main_option("script_location", str(alembic_dir))
+        os.environ["DATABASE_URL"] = prov.read_env(layout)["MIGRATION_DATABASE_URL"]
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        command.downgrade(cfg, "-1")
+        upgraded = prov.provision(
+            layout=layout, pg_bin=Path(PG_BIN), alembic_dir=alembic_dir, pg_port=port,
+            keep_running=True, log=lambda m: None,
+        )
+        assert upgraded.alembic_version == first.alembic_version
+        dumps = list(layout.backups.glob("pre-upgrade-*.dump"))
+        assert len(dumps) == 1 and dumps[0].stat().st_size > 10_000
     finally:
         if prov.is_running(Path(PG_BIN), layout):
             prov.pg_ctl(Path(PG_BIN), layout, "stop")
+        #: تست‌های بعدی نباید به دیتابیسِ این کلاستر وصل بمانند.
+        if original_db_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = original_db_url
+        from app.config import get_settings
+
+        get_settings.cache_clear()

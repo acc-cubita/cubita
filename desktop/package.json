@@ -17,6 +17,7 @@
     "dist": "npm run build && npm run rebuild-native && node scripts/builder-win-retry.cjs",
     "dist:enterprise": "node scripts/dist-enterprise.mjs",
     "publish-update": "node scripts/publish-update.mjs",
+    "publish-enterprise": "node scripts/publish-update.mjs --enterprise",
     "verify-update-channel": "electron scripts/verify-update-channel.cjs",
     "verify-pages": "node scripts/verify-pages.mjs"
   },

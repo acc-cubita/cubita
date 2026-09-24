@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, MenuItem, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { clearReferenceCaches, getLocalDb, initLocalDb, pendingOutboxCount } from './db.js'
@@ -57,6 +57,8 @@ import {
 } from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
 import { EDITION, currentServerUrl, discoverServers, probeServer, saveServerUrl } from './serverSettings.js'
+import { verifyDownloadedUpdate } from './updateVerify.js'
+import { TRUSTED_UPDATE_KEYS } from './updateKeys.js'
 import { normalizeServerUrl } from './serverAddress.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
@@ -146,11 +148,18 @@ app.whenReady().then(() => {
     createWindow()
     debugLog('createWindow called')
 
-    // کوبیتا سازمانی از فیدِ ابری آپدیت نمی‌گیرد: کلاینت‌ها از سرورِ خودِ شرکت
-    // می‌گیرند (M5 در ENTERPRISE_PLAN.md). تا آن روز، آپدیت دستی است.
+    // ابری: فیدِ acc.cubita.ir. سازمانی: فیدِ سرورِ خودِ شرکت با سنجشِ امضا پیش از نصب
+    // (ENTERPRISE_PLAN.md، M5). سازمانیِ هنوز وصل‌نشده فیدی ندارد.
     if (EDITION === 'cloud') {
       setupAutoUpdate(() => mainWindow, debugLog)
       debugLog('auto-update wired')
+    } else if (apiBaseUrl) {
+      const feedUrl = `${apiBaseUrl}/updates/`
+      setupAutoUpdate(() => mainWindow, debugLog, {
+        feedUrl,
+        verify: (file) => verifyDownloadedUpdate(feedUrl, file, TRUSTED_UPDATE_KEYS),
+      })
+      debugLog(`auto-update wired (enterprise feed ${feedUrl})`)
     }
 
     app.on('activate', () => {
@@ -199,6 +208,20 @@ ipcMain.on('server:config', (evt) => {
 ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
 
 ipcMain.handle('server:discover', () => discoverServers())
+
+// اجرای نصابِ نسخه‌ی تازه روی **خودِ سرور** (کوبیتا سازمانی). مسیر از API می‌آید، پس فقط
+// نصابی اجرا می‌شود که واقعاً در پوشه‌ی آپدیتِ سرور است — نه هر exeِ دلخواه.
+ipcMain.handle('updates:runInstaller', async (_evt, installerPath: string) => {
+  if (EDITION !== 'enterprise') return 'فقط در کوبیتا سازمانی.'
+  const root = path.resolve(process.env.ProgramData ?? 'C:\\ProgramData', 'Cubita', 'updates')
+  const target = path.resolve(String(installerPath ?? ''))
+  if (!target.toLowerCase().startsWith(root.toLowerCase() + path.sep) || !target.toLowerCase().endsWith('.exe')) {
+    return 'مسیرِ نصاب مجاز نیست.'
+  }
+  if (!fs.existsSync(target)) return 'فایلِ نصاب روی این رایانه نیست؛ این دکمه فقط روی خودِ سرور کار می‌کند.'
+  const err = await shell.openPath(target)
+  return err || null
+})
 
 ipcMain.handle('server:save', (_evt, input: string) => {
   const target = normalizeServerUrl(String(input ?? ''))

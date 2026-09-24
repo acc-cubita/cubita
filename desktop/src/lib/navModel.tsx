@@ -631,7 +631,7 @@ export const SECONDARY_NAV_ITEMS: NavItem[] = [
 //: ثبت بسته است)؛ خودِ فعال‌سازی داخلِ صفحه مالک‌محور است.
 const LICENSE_SETTINGS_ITEM: NavItem = {
   key: 'license',
-  label: 'مجوز نرم‌افزار',
+  label: 'مجوز و به‌روزرسانی',
   icon: <BadgeCheck size={18} />,
 }
 
