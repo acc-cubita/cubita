@@ -7145,6 +7145,20 @@ tr.kardex-voided td { color: var(--text-muted); }
 }
 .login-signup-link { font-weight: 700; color: var(--accent); }
 
+/* کوبیتا سازمانی: نشانیِ سرورِ فعلی زیرِ فرمِ ورود، با راهِ تغییرش. نشانی لاتین است
+   و ممکن است بلند باشد (IP + پورت)، پس می‌شکند به‌جای اینکه کارت را پهن کند. */
+.login-server-line {
+  margin: 10px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.login-server-line [dir='ltr'] { overflow-wrap: anywhere; color: var(--text); }
+
 @media (max-width: 760px) {
   .trial-banner { flex-direction: column; align-items: stretch; gap: 8px; text-align: center; }
   .trial-banner__cta { justify-content: center; }

@@ -11,6 +11,14 @@ import {
   type RestoreResult,
 } from './authSession.js'
 
+// پوشه‌ی داده‌ی کوبیتا سازمانی جداست. نامِ برنامه از `name`ِ package.json («desktop»)
+// می‌آید، نه از appIdِ electron-builder — پس بدونِ این خط هر دو نسخه در یک userData
+// می‌نشستند و اتصالِ سازمانی، نشست و کشِ نصبِ ابریِ کنارش را پاک می‌کرد (دقیقاً
+// همین اتفاق در اولین آزمونِ بسته افتاد). باید پیش از هر خواندنِ userData باشد.
+if (EDITION === 'enterprise') {
+  app.setPath('userData', path.join(app.getPath('appData'), 'Cubita Enterprise'))
+}
+
 const DEBUG_LOG = path.join(app.getPath('userData'), 'startup-debug.log')
 function debugLog(msg: string) {
   try {
@@ -48,15 +56,16 @@ import {
   type BackupSettings,
 } from './backup.js'
 import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
+import { EDITION, currentServerUrl, probeServer, saveServerUrl } from './serverSettings.js'
+import { normalizeServerUrl } from './serverAddress.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
-// acc.cubita.ir و acc.ipnetcity.ir به یک بک‌اند می‌روند، ولی رندرر روی
-// acc.cubita.ir ساخته می‌شود و این خط دامنه‌ی قدیمی را داشت. دو دامنه‌ی متفاوت در
-// دو نیمه‌ی یک اپ یعنی هر تغییر آینده‌ای (CORS، کوکی، دامنه‌ی جدید) باید در دو جا
-// یادآوری شود — و یکی‌شان فراموش می‌شود.
-const API_BASE_URL =
-  process.env.CUBITA_API_URL ?? (app.isPackaged ? 'https://acc.cubita.ir' : 'http://localhost:8000')
+// نشانیِ بک‌اند. ابری: acc.cubita.ir ثابت (acc.ipnetcity.ir هم به همان بک‌اند می‌رود،
+// ولی رندرر روی acc.cubita.ir ساخته می‌شود و دو دامنه در دو نیمه‌ی یک اپ یعنی هر
+// تغییرِ آینده در دو جا یادآوری شود). سازمانی: نشانیِ سرورِ شرکت که کاربر در جادوگرِ
+// «اتصال به سرور» داده — پس `let`، و خالی تا وقتی هنوز وصل نشده.
+let apiBaseUrl = currentServerUrl() ?? ''
 
 let mainWindow: BrowserWindow | null = null
 let authToken: string | null = null
@@ -137,8 +146,12 @@ app.whenReady().then(() => {
     createWindow()
     debugLog('createWindow called')
 
-    setupAutoUpdate(() => mainWindow, debugLog)
-    debugLog('auto-update wired')
+    // کوبیتا سازمانی از فیدِ ابری آپدیت نمی‌گیرد: کلاینت‌ها از سرورِ خودِ شرکت
+    // می‌گیرند (M5 در ENTERPRISE_PLAN.md). تا آن روز، آپدیت دستی است.
+    if (EDITION === 'cloud') {
+      setupAutoUpdate(() => mainWindow, debugLog)
+      debugLog('auto-update wired')
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -174,6 +187,54 @@ ipcMain.handle('window:isMaximized', () => {
   return mainWindow?.isMaximized() ?? false
 })
 
+// --- نسخه و نشانیِ سرور ---
+//
+// همزمان (`sendSync`) چون رندرر باید نشانی را **پیش از اولین fetch** بداند؛ preload
+// آن را روی `window.cubitaConfig` می‌گذارد. بعد از تغییرِ نشانی، رندرر صفحه را
+// دوباره بار می‌کند تا همه‌چیز از نشانیِ تازه شروع شود.
+ipcMain.on('server:config', (evt) => {
+  evt.returnValue = { edition: EDITION, serverUrl: apiBaseUrl || null }
+})
+
+ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
+
+ipcMain.handle('server:save', (_evt, input: string) => {
+  const target = normalizeServerUrl(String(input ?? ''))
+  if (!target.ok) return target
+  // سندِ صف‌شده‌ی آفلاین مالِ سرورِ قبلی است؛ اگر نشانی عوض شود، دفعه‌ی بعد به
+  // سرورِ دیگری فرستاده می‌شد — یعنی سندی در دفترِ شرکتِ اشتباه.
+  const pending = (() => {
+    try {
+      return pendingOutboxCount()
+    } catch {
+      return -1
+    }
+  })()
+  if (apiBaseUrl && target.url !== apiBaseUrl && pending !== 0) {
+    return {
+      ok: false as const,
+      error:
+        pending > 0
+          ? `${pending.toLocaleString('fa-IR')} سندِ ارسال‌نشده روی این رایانه هست. پیش از تغییرِ سرور، به سرورِ فعلی وصل شوید تا ارسال شوند.`
+          : 'وضعیتِ سندهای ارسال‌نشده معلوم نشد؛ برای امنیتِ داده، سرور عوض نشد.',
+    }
+  }
+  const result = saveServerUrl(target.url)
+  if (!result.ok) return result
+  if (result.url !== apiBaseUrl) {
+    // نشست و کشِ مرجع مالِ سرورِ قبلی‌اند.
+    clearStoredSession()
+    try {
+      clearReferenceCaches()
+    } catch {
+      // کش در اولین اتصال هنوز خالی است.
+    }
+    authToken = null
+  }
+  apiBaseUrl = result.url
+  return result
+})
+
 ipcMain.handle('auth:setToken', (_evt, token: string | null) => {
   authToken = token
 })
@@ -195,14 +256,16 @@ ipcMain.handle(
 )
 
 ipcMain.handle('auth:restoreSession', async (): Promise<RestoreResult> => {
-  const result = await restoreSession({ apiBaseUrl: API_BASE_URL })
+  // سازمانیِ هنوز وصل‌نشده: نشستی برای بازیابی نیست.
+  if (!apiBaseUrl) return null
+  const result = await restoreSession({ apiBaseUrl: apiBaseUrl })
   authToken = result?.session.access_token ?? null
   return result
 })
 
 ipcMain.handle('auth:clearSession', async () => {
   // بهترین‌تلاش: خروجِ سمتِ سرور نباید مانعِ خروجِ محلی شود (مثلاً آفلاین).
-  await bestEffortLogout({ apiBaseUrl: API_BASE_URL })
+  await bestEffortLogout({ apiBaseUrl: apiBaseUrl })
   clearStoredSession()
   authToken = null
 })
@@ -212,12 +275,12 @@ ipcMain.handle('auth:clearSession', async () => {
 ipcMain.handle('auth:currentRefreshToken', () => currentRefreshToken())
 
 ipcMain.handle('sync:pullAll', async () => {
-  const config = { apiBaseUrl: API_BASE_URL, getToken: () => authToken }
+  const config = { apiBaseUrl: apiBaseUrl, getToken: () => authToken }
   await Promise.all([pullAccounts(config), pullWarehouses(config), pullItems(config), pullBankAccounts(config)])
 })
 
 ipcMain.handle('sync:pushOutbox', async () => {
-  return pushOutbox({ apiBaseUrl: API_BASE_URL, getToken: () => authToken })
+  return pushOutbox({ apiBaseUrl: apiBaseUrl, getToken: () => authToken })
 })
 
 ipcMain.handle('journal:queueEntry', (_evt, payload: unknown) => {
@@ -269,7 +332,7 @@ ipcMain.handle('bankAccounts:listCached', () => {
 })
 
 // --- پشتیبان‌گیری/بازیابیِ محلی ---
-const backupConfig = () => ({ apiBaseUrl: API_BASE_URL, getToken: () => authToken })
+const backupConfig = () => ({ apiBaseUrl: apiBaseUrl, getToken: () => authToken })
 ipcMain.handle('backup:auto', () => autoSnapshot(backupConfig()))
 ipcMain.handle('backup:saveToFile', () => saveToFile(backupConfig(), mainWindow))
 ipcMain.handle('backup:listLocal', () => listLocalBackups())

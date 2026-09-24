@@ -8,6 +8,12 @@ class Settings(BaseSettings):
 
     env: str = "development"
 
+    #: کدام محصول: `cloud` (acc.cubita.ir، چندمستأجری، پرداخت و ستاد) یا `enterprise`
+    #: («کوبیتا سازمانی»، روی سرورِ خودِ شرکت در شبکه‌ی داخلی، یک کسب‌وکار، بدونِ
+    #: فروشگاه/بازار/ستاد). یک کد، دو محصول — نقشه‌ی کامل در ENTERPRISE_PLAN.md.
+    #: هر رفتارِ وابسته به نسخه از `is_enterprise` بپرسد، نه از مقایسه‌ی رشته.
+    edition: str = "cloud"
+
     database_url: str = "postgresql+psycopg://hesabdari:hesabdari@localhost:5432/hesabdari"
 
     jwt_secret: str = "changeme"
@@ -121,8 +127,19 @@ class Settings(BaseSettings):
         return self.env == "production"
 
     @property
+    def is_enterprise(self) -> bool:
+        return self.edition == "enterprise"
+
+    @property
     def allowed_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        #: تنها کلاینتِ نسخه‌ی سازمانی اپِ Electron است که صفحه را از دیسک بار می‌کند و
+        #: با `Origin: file://` درخواست می‌فرستد. بدونِ این، هر درخواستِ رندرر بی‌صدا
+        #: پشتِ CORS می‌ماند — و نصاب نباید برای کار کردنِ پایه‌ای‌ترین چیز به یادِ
+        #: کسی بماند که ALLOWED_ORIGINS را درست بنویسد.
+        if self.is_enterprise and "file://" not in origins:
+            origins.append("file://")
+        return origins
 
     @property
     def platform_admin_emails_list(self) -> list[str]:
@@ -134,6 +151,7 @@ class Settings(BaseSettings):
 
 
 KNOWN_ENVS = ("development", "staging", "production")
+KNOWN_EDITIONS = ("cloud", "enterprise")
 WEAK_JWT_SECRETS = ("changeme", "", "secret", "changeit", "test")
 MIN_JWT_SECRET_LENGTH = 32
 #: همان معیارِ JWT — کلیدی که راز را باز می‌کند از آن ضعیف‌تر نباشد.
@@ -151,7 +169,14 @@ def _validate(settings: Settings) -> None:
     if settings.env not in KNOWN_ENVS:
         raise RuntimeError(f"ENV نامعتبر است: {settings.env!r}. مقادیر مجاز: {', '.join(KNOWN_ENVS)}")
 
-    handles_real_money = not settings.zarinpal_sandbox
+    if settings.edition not in KNOWN_EDITIONS:
+        raise RuntimeError(
+            f"EDITION نامعتبر است: {settings.edition!r}. مقادیر مجاز: {', '.join(KNOWN_EDITIONS)}"
+        )
+
+    #: نسخه‌ی سازمانی روترِ پرداخت را اصلاً سوار نمی‌کند، پس هیچ‌وقت پولی جابه‌جا
+    #: نمی‌کند — مقدارِ ZARINPAL_SANDBOX آنجا بی‌معناست و نباید بوت را بشکند.
+    handles_real_money = not settings.zarinpal_sandbox and not settings.is_enterprise
 
     if handles_real_money and not settings.is_production:
         raise RuntimeError(

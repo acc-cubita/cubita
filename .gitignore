@@ -18,6 +18,7 @@ node_modules/
 desktop/dist/
 desktop/dist-electron/
 desktop/release/
+desktop/release-enterprise/
 website/dist/
 admin/dist/
 *.log

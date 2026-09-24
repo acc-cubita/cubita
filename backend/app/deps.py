@@ -13,9 +13,7 @@ from app.observability import request_id_var, tenant_id_var
 from app.models.user import User
 from app.security import TOKEN_TYPE_STAFF, TOKEN_TYPE_TENANT, decode_access_token
 from app import staff_roles
-from app.services.subscriptions import WRITE_ACTIONS
-from app.services.subscriptions import state_for as subscription_state
-from app.services.subscriptions import trial_info
+from app.services import entitlements
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -142,27 +140,22 @@ def require_permission(module: "str | tuple[str, ...]", action: "str | tuple[str
         if not any(principal.has_permission(m, a) for m in modules for a in actions):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی کافی نیست")
 
-        # آزمایشیِ منقضی: کلِ دفتر قفل می‌شود (خواندن هم)، نه فقط نوشتن. این عمداً
-        # سخت‌گیرانه‌تر از انقضای مشتریِ واقعی است — داده‌ی آزمایشی سندِ قانونیِ کسی
-        # نیست، و هدفِ قفلِ کامل، سوق دادن به خرید است. /me و /subscription و
-        # /billing از require_permission رد نمی‌شوند، پس صفحه‌ی خرید همچنان باز می‌ماند.
-        if principal.membership.tenant.is_trial and trial_info(db, principal.membership.tenant).expired:
-            raise HTTPException(
-                status.HTTP_402_PAYMENT_REQUIRED,
-                "دوره‌ی آزمایشیِ رایگان تمام شده است؛ برای ادامه و حفظِ اطلاعات یک پلن تهیه کنید.",
-            )
-
-        if any(a in WRITE_ACTIONS for a in actions):
-            state = subscription_state(db, principal.tenant_id)
-            if not state.can_write:
-                raise HTTPException(
-                    status.HTTP_402_PAYMENT_REQUIRED,
-                    "اشتراک این کسب‌وکار تمام شده است. دفترها و گزارش‌ها در دسترس‌اند "
-                    "ولی برای ثبت سند تازه باید اشتراک تمدید شود.",
-                )
+        # اشتراک (ابر) یا مجوز (سازمانی) — یک فراخوان، تا گلوگاه یکی بماند.
+        entitlements.enforce(db, principal.membership.tenant, actions)
         return principal.user
 
     return checker
+
+
+def cloud_only() -> None:
+    """مسیری که فقط در ابر معنا دارد ولی روترش در هر دو نسخه سوار است.
+
+    ثبت‌نامِ self-serve و بازیابیِ رمز با ایمیل/پیامک به SMTP و خطِ پیامکِ ما تکیه
+    دارند که سرورِ شرکت ندارد. ۴۰۴ (نه ۴۰۳): از دیدِ کلاینتِ سازمانی این مسیرها وجود
+    ندارند، همان‌طور که روترهای `routing.CLOUD_ONLY` وجود ندارند.
+    """
+    if get_settings().is_enterprise:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
 #: قابلیت‌هایی که در نسخه‌ی آزمایشی قفل‌اند و فقط با پلنِ خریداری‌شده باز می‌شوند.

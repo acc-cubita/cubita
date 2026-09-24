@@ -3,22 +3,12 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Building2, User, Gift, 
 import { requestSignupCode, signup, fetchMe, type MeResponse } from '../api'
 import { SearchSelect } from '../components/SearchSelect'
 import { useTrades } from '../lib/useTrades'
+import { INDUSTRIES } from '../lib/industries'
 
 const MIN_PASSWORD_LENGTH = 10
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 60
 
-//: قالبِ ماژول‌ها — کلیدها با INDUSTRY_TEMPLATES سمتِ سرور یکی‌اند. این با «صنف»
-//: پایین‌تر فرق دارد: این تعیین می‌کند کدام ماژول‌های پنل روشن باشند، آن می‌گوید
-//: کسب‌وکار چه می‌فروشد. فهرستِ اصناف عمداً این‌جا تکرار نشده و از `/api/trades`
-//: می‌آید — ~۹۰ ردیف است و دو فهرستِ موازی دیر یا زود از هم دور می‌شوند.
-const INDUSTRIES = [
-  { key: 'general', label: 'عمومی (همه‌ی ماژول‌ها)' },
-  { key: 'retail', label: 'خرده‌فروشی' },
-  { key: 'services', label: 'خدماتی' },
-  { key: 'manufacturing', label: 'تولیدی' },
-  { key: 'distribution', label: 'پخش / بازرگانی' },
-]
 
 /**
  * ثبت‌نامِ «۱۴ روز رایگان» با تأییدِ ایمیل — verify-before-create.

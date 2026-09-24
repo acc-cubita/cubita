@@ -132,6 +132,10 @@ export interface CubitaBridge {
   tenantPendingOutbox?: () => Promise<number>
   /** پاک‌کردنِ کشِ مرجع پس از تعویضِ کسب‌وکار (صف دست‌نخورده می‌ماند). */
   tenantClearCaches?: () => Promise<boolean>
+  /** کوبیتا سازمانی: آیا این نشانی سرورِ کوبیتا سازمانیِ در دسترس است؟ */
+  serverProbe?: (url: string) => Promise<ServerResult>
+  /** کوبیتا سازمانی: ذخیره‌ی نشانیِ سرور. نشست و کشِ سرورِ قبلی پاک می‌شوند. */
+  serverSave?: (url: string) => Promise<ServerResult>
   posTerminal?: PosTerminalBridge
 }
 
@@ -166,6 +170,15 @@ export interface LocalBackup {
   mtime: number
 }
 
+export type ServerResult = { ok: true; url: string } | { ok: false; url?: string; error: string }
+
+/** نسخه و نشانیِ سرور — preload همزمان از main می‌گیرد. در وب وجود ندارد. */
+export interface CubitaConfig {
+  edition: 'cloud' | 'enterprise'
+  /** سازمانیِ هنوز وصل‌نشده: null. */
+  serverUrl: string | null
+}
+
 export interface WindowControlsBridge {
   minimize: () => Promise<void>
   toggleMaximize: () => Promise<void>
@@ -177,6 +190,7 @@ export interface WindowControlsBridge {
 declare global {
   interface Window {
     cubita: CubitaBridge
+    cubitaConfig?: CubitaConfig
     windowControls: WindowControlsBridge
   }
 }

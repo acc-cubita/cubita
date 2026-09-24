@@ -52,6 +52,10 @@ OPTIONAL_MODULES: tuple[str, ...] = (
 #:
 RESTRICTED_MODULES: tuple[str, ...] = ("manufacturing", "integration")
 
+#: ماژول‌هایی که «کوبیتا سازمانی» اصلاً ندارد (تصمیمِ صاحبِ محصول، ENTERPRISE_PLAN.md).
+#: روترشان هم در `routing.CLOUD_ONLY` است؛ این فقط منو را با سرور هم‌خوان نگه می‌دارد.
+ENTERPRISE_REMOVED_MODULES: frozenset[str] = frozenset({"integration"})
+
 #: ماژول‌های **مشتق** — در هیچ ستونی ذخیره نمی‌شوند.
 #:
 #: منبعشان یک رکوردِ سرویس است، نه گرنتِ سوپرادمین: «پرونده‌ی حسابرسی» فقط تا
@@ -115,6 +119,15 @@ def allowed_modules(
     بماند) و **کلیدواژه‌ای با پیش‌فرضِ خالی** است: هر فراخوانی که آن را ندهد،
     ماژولِ مشتق را *نمی‌بیند*. یعنی فراموش‌کردنش در بسته‌شدن می‌شکند نه در بازشدن.
     """
+    from app.config import get_settings
+
+    if get_settings().is_enterprise:
+        #: سرورِ سازمانی سوپرادمینی ندارد که ماژولِ محدود را گرنت کند؛ تا وقتی مجوز
+        #: (M2) ماژول‌ها را تعیین کند، هرچه این نسخه دارد باز است.
+        allowed = {*CORE_MODULES, *OPTIONAL_MODULES} - ENTERPRISE_REMOVED_MODULES
+        allowed |= {k for k in derived if k in DERIVED_MODULES}
+        return allowed
+
     granted = set(tenant.granted_modules or [])
     allowed = set(CORE_MODULES)
     for key in OPTIONAL_MODULES:

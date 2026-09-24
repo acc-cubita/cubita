@@ -1,8 +1,13 @@
-// build همیشه VITE_API_URL را صریح می‌دهد، پس این fallback در عمل کد مرده است —
-// ولی همان دامنه‌ی قدیمی‌ای بود که در electron/main.ts هم یک‌بار جا مانده بود.
-// یکسان نگه داشتنش ارزان‌تر از دوباره پیدا کردنش است.
+import { isEnterprise } from './platform'
+
+// کوبیتا سازمانی نشانیِ سرورِ شرکت را در زمانِ اجرا از preload می‌گیرد (کاربر در
+// جادوگرِ «اتصال به سرور» داده). ابری: build همیشه VITE_API_URL را صریح می‌دهد، پس
+// fallbackِ بعدی در عمل کد مرده است — ولی همان دامنه‌ی قدیمی‌ای بود که در
+// electron/main.ts هم یک‌بار جا مانده بود؛ یکسان نگه داشتنش ارزان‌تر از دوباره پیدا کردنش است.
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? 'https://acc.cubita.ir' : 'http://localhost:8000')
+  (isEnterprise ? window.cubitaConfig?.serverUrl : null) ??
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.PROD ? 'https://acc.cubita.ir' : 'http://localhost:8000')
 
 /** یکی از کسب‌وکارهایی که کاربر به آن دسترسی دارد. */
 export interface TenantMembership {
@@ -119,6 +124,43 @@ export async function login(email: string, password: string): Promise<LoginResul
   }
   const data = await res.json()
   return { access_token: data.access_token as string, refresh_token: (data.refresh_token as string) ?? null }
+}
+
+/** کوبیتا سازمانی: سرورِ تازه‌نصب هنوز کسب‌وکاری ندارد؟ (پیش از صفحه‌ی ورود پرسیده می‌شود) */
+export async function fetchSetupStatus(): Promise<{ needs_setup: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/setup/status`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw apiError(body, 'وضعیتِ سرور خوانده نشد', res.status)
+  }
+  return res.json()
+}
+
+/** کوبیتا سازمانی: راه‌اندازیِ اولیه — کسب‌وکار و حسابِ مالک، فقط یک‌بار و بدونِ کدِ ایمیلی. */
+export async function enterpriseSetup(data: {
+  businessName: string
+  ownerName: string
+  email: string
+  password: string
+  industry: string
+}): Promise<LoginResult> {
+  const res = await fetch(`${API_BASE_URL}/api/setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      business_name: data.businessName,
+      owner_name: data.ownerName,
+      email: data.email,
+      password: data.password,
+      industry: data.industry,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw apiError(body, 'راه‌اندازی ناموفق بود', res.status)
+  }
+  const out = await res.json()
+  return { access_token: out.access_token as string, refresh_token: (out.refresh_token as string) ?? null }
 }
 
 /** ثبت‌نامِ خودسرویس — کسب‌وکار و مالکش با هم ساخته می‌شوند و حسابِ آزمایشیِ ۱۴روزه می‌گیرند. */
