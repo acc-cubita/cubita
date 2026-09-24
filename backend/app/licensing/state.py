@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.licensing import fingerprint, keys
-from app.licensing.token import LicenseError, b64u_encode, verify
+from app.licensing.token import LicenseError, b64u_decode, b64u_encode, verify
 from app.models.enterprise_license import EnterpriseLicense
 from app.models.tenant import Tenant
 
@@ -313,6 +313,29 @@ def request_code(db: Session, org: str | None) -> str:
         "org": org,
     }
     return f"{REQUEST_PREFIX}.{b64u_encode(json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode())}"
+
+
+def decode_request(code: str) -> dict:
+    """کدِ درخواستِ `CUBREQ1.…` را باز می‌کند — سمتِ ابر (ستاد، فعال‌سازیِ آنلاین، CLI).
+
+    فقط شکل سنجیده می‌شود، نه درستی: کدِ درخواست امضا ندارد و هر کسی می‌تواند بسازدش.
+    چیزی که آن را معتبر می‌کند کدِ فعال‌سازیِ خریداری‌شده است، نه این.
+    """
+    parts = "".join(code.split()).split(".")
+    if len(parts) != 2 or parts[0] != REQUEST_PREFIX:
+        raise LicenseError("کدِ درخواست باید با CUBREQ1. شروع شود؛ کلِ متن را کپی کنید.")
+    try:
+        body = json.loads(b64u_decode(parts[1]))
+    except ValueError as exc:
+        raise LicenseError("کدِ درخواست خراب است؛ کلِ متن را دوباره کپی کنید.") from exc
+    fp = body.get("fp") if isinstance(body, dict) else None
+    if not isinstance(fp, dict):
+        raise LicenseError("کدِ درخواست اثرانگشتِ دستگاه را ندارد.")
+    clean_fp = {k: str(v) for k, v in fp.items() if k in fingerprint.COMPONENTS and isinstance(v, str)}
+    if len(clean_fp) < fingerprint.MIN_MATCH:
+        # با کمتر از دو جزء تطبیقِ ۲ از ۳ هرگز برقرار نمی‌شود و مجوز روی همان سرور هم کار نمی‌کرد.
+        raise LicenseError("اثرانگشتِ این سرور کمتر از دو جزء دارد؛ با پشتیبانی تماس بگیرید.")
+    return {"install": str(body.get("install") or ""), "fp": clean_fp, "org": body.get("org")}
 
 
 def install(db: Session, token: str) -> LicenseStatus:

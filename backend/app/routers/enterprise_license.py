@@ -11,14 +11,17 @@
 
 import logging
 
+import httpx
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.deps import Principal, get_principal
 from app.licensing import state as license_state
 from app.licensing.token import LicenseError
-from app.schemas.enterprise import LicenseInstallIn, LicenseOut, LicenseRequestOut
+from app.schemas.enterprise import LicenseActivateIn, LicenseInstallIn, LicenseOut, LicenseRequestOut
 from app.services import members as members_service
 
 router = APIRouter(prefix="/api/license", tags=["enterprise-license"])
@@ -64,4 +67,44 @@ def install_license(
         "مجوز نصب شد",
         extra={"license_id": result.license_id, "mode": result.mode, "user_id": str(principal.user.id)},
     )
+    return _out(result, principal, db)
+
+
+@router.post("/activate", response_model=LicenseOut)
+def activate_online(
+    data: LicenseActivateIn,
+    principal: Principal = Depends(_owner_only),
+    db: Session = Depends(get_db),
+):
+    """فعال‌سازیِ یک‌کلیکی: کدِ فعال‌سازی + کدِ درخواستِ همین سرور به ابر می‌رود و توکنِ
+    امضاشده برمی‌گردد. بعد از آن سرور دیگر هرگز به اینترنت نیاز ندارد.
+
+    نبودِ اینترنت خطای کاربر نیست؛ پیام راهِ آفلاین (کدِ درخواست) را نشان می‌دهد.
+    """
+    request_code = license_state.request_code(db, principal.membership.tenant.name)
+    url = get_settings().license_server_url.rstrip("/") + "/api/enterprise/activate"
+    try:
+        resp = httpx.post(url, json={"code": data.code, "request_code": request_code}, timeout=20)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "این سرور به اینترنت یا سرورِ کوبیتا دسترسی ندارد. از روشِ «کدِ درخواست» استفاده کنید "
+            "و کد را برای پشتیبانی بفرستید.",
+        ) from exc
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("detail")
+        except ValueError:
+            detail = None
+        if resp.status_code == 429:
+            detail = "تلاش‌های زیادی انجام شد؛ یک ساعت دیگر دوباره امتحان کنید."
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST if resp.status_code < 500 else status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail if isinstance(detail, str) else "فعال‌سازی ناموفق بود؛ با پشتیبانیِ کوبیتا تماس بگیرید.",
+        )
+    try:
+        result = license_state.install(db, resp.json()["token"])
+    except (LicenseError, KeyError, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc) or "پاسخِ سرورِ مجوز نامعتبر بود.") from exc
+    log.info("مجوز آنلاین فعال شد", extra={"license_id": result.license_id, "user_id": str(principal.user.id)})
     return _out(result, principal, db)

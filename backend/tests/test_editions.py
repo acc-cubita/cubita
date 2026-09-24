@@ -32,6 +32,7 @@ CLOUD_ONLY_PREFIXES = (
     "/api/marketplace",
     "/api/integration",
     "/api/devices",
+    "/api/enterprise",
 )
 
 

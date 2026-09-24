@@ -12,6 +12,7 @@ import {
   Briefcase,
   ClipboardCheck,
   CreditCard,
+  KeyRound,
   Percent,
   ShieldCheck,
   Users,
@@ -25,6 +26,7 @@ export type PageKey =
   | 'assurance'
   | 'commissions'
   | 'purchases'
+  | 'licenses'
   | 'errors'
   | 'staff'
 
@@ -43,6 +45,7 @@ export const NAV: NavItem[] = [
   { key: 'assurance', label: 'کارتابل حسابرسی', icon: ClipboardCheck, area: 'assurance' },
   { key: 'commissions', label: 'کمیسیون بازار', icon: Percent, area: 'commissions' },
   { key: 'purchases', label: 'خریدهای سایت', icon: CreditCard, area: 'billing' },
+  { key: 'licenses', label: 'مجوزهای سازمانی', icon: KeyRound, area: 'licenses' },
   { key: 'errors', label: 'گزارش خطاها', icon: AlertTriangle, area: 'errors' },
   { key: 'staff', label: 'کاربران ستاد', icon: Users, area: 'staff', ownerOnly: true },
 ]
@@ -52,6 +55,7 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   assurance: 'کارتابل حسابرسی',
   commissions: 'کمیسیون بازار',
   purchases: 'خریدهای سایت',
+  licenses: 'مجوزهای سازمانی',
   errors: 'گزارش خطاها',
   staff: 'کاربران ستاد',
 }

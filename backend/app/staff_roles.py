@@ -19,6 +19,7 @@ STAFF_AREAS = frozenset(
         "billing",       # خریدهای سایتِ تجاری و پلن‌ها
         "commissions",   # کمیسیونِ بازارِ عمده‌فروشی
         "errors",        # گزارش‌های خطای کلاینت
+        "licenses",      # مجوزهای کوبیتا سازمانی
         "metrics",       # داشبوردِ درآمد و رشد
         "audit",         # ردِ کارهای ستاد
         "support",       # نشستِ «دیدن به‌نامِ مشتری»
@@ -44,6 +45,7 @@ STAFF_ROLE_PERMISSIONS: dict[str, dict[str, list[str]]] = {
         "billing": ["*"],
         "commissions": ["*"],
         "errors": ["view"],
+        "licenses": ["*"],
         "metrics": ["view"],
         "audit": ["view"],
         "support": ["*"],
@@ -52,6 +54,7 @@ STAFF_ROLE_PERMISSIONS: dict[str, dict[str, list[str]]] = {
         "accounts": ["view"],
         "billing": ["*"],
         "commissions": ["*"],
+        "licenses": ["view"],
         "metrics": ["view"],
         "audit": ["view"],
     },
@@ -59,6 +62,9 @@ STAFF_ROLE_PERMISSIONS: dict[str, dict[str, list[str]]] = {
         "accounts": ["view"],
         "assurance": ["view"],
         "errors": ["view"],
+        #: پشتیبانی کدِ درخواستِ مشتری را می‌گیرد و مجوزِ آفلاین صادر می‌کند؛ ساختن،
+        #: تغییرِ سقف، انتقال و ابطال کارِ مدیر است.
+        "licenses": ["view", "issue"],
         "support": ["view", "create", "revoke"],
     },
 }

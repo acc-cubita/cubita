@@ -47,6 +47,11 @@ describe('منویِ ستاد', () => {
     expect(keys).toEqual(['accounts', 'commissions', 'purchases'])
   })
 
+  it('پشتیبانی «مجوزهای سازمانی» را می‌بیند (برای صدورِ آفلاین)', () => {
+    const keys = visibleNav(me('support', { licenses: ['view', 'issue'] })).map((i) => i.key)
+    expect(keys).toEqual(['licenses'])
+  })
+
   it('مجوزِ خالی یعنی هیچ منویی — بسته می‌شکند، نه باز', () => {
     expect(visibleNav(me('support', {}))).toEqual([])
   })

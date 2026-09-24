@@ -52,6 +52,9 @@ GLOBAL_TABLES = frozenset(
         # مجوزِ کوبیتا سازمانی: مالِ نصب است نه کسب‌وکار، و پیش از هر زمینه‌ی مستأجری
         # (ورود، راه‌اندازی) خوانده می‌شود. توضیح در models/enterprise_license.py
         "enterprise_license",
+        # دفترِ مجوزهای فروخته‌شده در ابر (ستاد) — مثلِ subscriptions، دفترِ کنترل‌پنل است.
+        "enterprise_licenses",
+        "enterprise_license_events",
         # توکنِ دستگاهِ Push: به کاربر (سراسری) تعلق دارد نه مستأجر؛ ارسال با فیلترِ صریحِ user_id.
         "device_tokens",
         # اشتراک: داده‌ی صفحه‌ی کنترل پلتفرم است، نه دفتر مشتری

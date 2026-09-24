@@ -44,5 +44,10 @@ class LicenseRequestOut(BaseModel):
     code: str
 
 
+class LicenseActivateIn(BaseModel):
+    #: کدِ فعال‌سازیِ خریداری‌شده (XXXX-XXXX-XXXX-XXXX).
+    code: str = Field(min_length=8, max_length=64)
+
+
 class LicenseInstallIn(BaseModel):
     token: str = Field(min_length=10, max_length=8000)

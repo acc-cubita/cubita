@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCopy, KeyRound, ShieldCheck } from 'lucide-react'
-import { fetchLicense, fetchLicenseRequestCode, fetchMe, installLicense, type LicenseInfo, type MeResponse } from '../api'
+import { AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCopy, Globe, KeyRound, ShieldCheck } from 'lucide-react'
+import {
+  activateLicenseOnline,
+  fetchLicense,
+  fetchLicenseRequestCode,
+  fetchMe,
+  installLicense,
+  type LicenseInfo,
+  type MeResponse,
+} from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { formatJalali } from '../lib/jalali'
@@ -31,7 +39,8 @@ export function LicensePage({
   const [requestCode, setRequestCode] = useState('')
   const [copied, setCopied] = useState(false)
   const [licenseText, setLicenseText] = useState('')
-  const [busy, setBusy] = useState<'code' | 'install' | null>(null)
+  const [activationCode, setActivationCode] = useState('')
+  const [busy, setBusy] = useState<'code' | 'install' | 'online' | null>(null)
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -69,16 +78,32 @@ export function LicensePage({
     }
   }
 
+  async function activateOnline() {
+    setBusy('online')
+    setMsg(null)
+    try {
+      await applyInstalled(await activateLicenseOnline(token, activationCode.trim()))
+      setActivationCode('')
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'فعال‌سازی ناموفق بود.', kind: 'err' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function applyInstalled(next: LicenseInfo) {
+    setLic(next)
+    setMsg({ text: 'مجوز نصب شد و کوبیتا سازمانی فعال است.', kind: 'ok' })
+    // نوارِ بالا، منوی ماژول‌ها و قفلِ قابلیت‌ها از `me` می‌خوانند.
+    onMeUpdated(await fetchMe(token))
+  }
+
   async function install() {
     setBusy('install')
     setMsg(null)
     try {
-      const next = await installLicense(token, licenseText.trim())
-      setLic(next)
+      await applyInstalled(await installLicense(token, licenseText.trim()))
       setLicenseText('')
-      setMsg({ text: 'مجوز نصب شد و کوبیتا سازمانی فعال است.', kind: 'ok' })
-      // نوارِ بالا، منوی ماژول‌ها و قفلِ قابلیت‌ها از `me` می‌خوانند.
-      onMeUpdated(await fetchMe(token))
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'نصبِ مجوز ناموفق بود.', kind: 'err' })
     } finally {
@@ -159,12 +184,40 @@ export function LicensePage({
         <SectionCard
           icon={KeyRound}
           title="فعال‌سازی"
-          description="کدِ درخواست را برای پشتیبانیِ کوبیتا بفرستید و کدِ مجوزی را که می‌گیرید این‌جا وارد کنید."
+          description="با کدِ فعال‌سازی و اینترنت در یک قدم؛ یا بدونِ اینترنت با کدِ درخواست."
         >
           {!isOwner ? (
             <p className="muted">فعال‌سازی و تمدید فقط با حسابِ مالکِ کسب‌وکار انجام می‌شود.</p>
           ) : (
             <div className="lic-steps">
+              <div className="lic-step">
+                <span className="lic-step-title">
+                  <Globe size={15} /> فعال‌سازیِ آنلاین
+                </span>
+                <input
+                  type="text"
+                  dir="ltr"
+                  className="lic-activation"
+                  value={activationCode}
+                  onChange={(e) => setActivationCode(e.target.value)}
+                  spellCheck={false}
+                  aria-label="کدِ فعال‌سازی"
+                />
+                <span className="field-hint">
+                  کدِ ۱۶ نویسه‌ای که هنگامِ خرید گرفته‌اید. سرور فقط همین یک‌بار به اینترنت نیاز دارد.
+                </span>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={activateOnline}
+                  disabled={busy !== null || activationCode.replace(/[^0-9a-z]/gi, '').length < 8}
+                >
+                  {busy === 'online' ? 'در حال فعال‌سازی…' : 'فعال‌سازی'}
+                </button>
+              </div>
+
+              <p className="lic-or">سرور اینترنت ندارد؟ از این دو قدم استفاده کنید:</p>
+
               <div className="lic-step">
                 <span className="lic-step-title">۱. کدِ درخواستِ این سرور</span>
                 {requestCode ? (
