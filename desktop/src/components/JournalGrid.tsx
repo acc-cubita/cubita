@@ -497,8 +497,9 @@ const GridRow = memo(function GridRow({
         <DescriptionInput
           aria-label={`شرحِ ردیفِ ${fa(i + 1)}`}
           value={line.description ?? ''}
-          onChange={(v) => onUpdate(i, { description: v })}
-          getPool={() => getDescriptionPool(i)}
+          row={i}
+          onUpdate={onUpdate}
+          getDescriptionPool={getDescriptionPool}
           placeholder="اختیاری"
         />
       </td>

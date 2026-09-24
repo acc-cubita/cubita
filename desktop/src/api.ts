@@ -290,11 +290,13 @@ export interface BalanceSheet {
 export class ApiError extends Error {
   readonly status: number
   readonly detail: unknown
-  constructor(message: string, status: number, detail: unknown) {
+  readonly lineErrors: unknown
+  constructor(message: string, status: number, detail: unknown, lineErrors?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
+    this.lineErrors = lineErrors
   }
 }
 
@@ -309,8 +311,8 @@ export function detailText(detail: unknown): string | null {
   return msgs.length > 0 ? [...new Set(msgs)].join('؛ ') : null
 }
 
-function apiError(body: { detail?: unknown }, fallback: string, status: number): ApiError {
-  return new ApiError(detailText(body.detail) ?? fallback, status, body.detail)
+function apiError(body: { detail?: unknown; line_errors?: unknown }, fallback: string, status: number): ApiError {
+  return new ApiError(detailText(body.detail) ?? fallback, status, body.detail, body.line_errors)
 }
 
 async function authedGet<T>(token: string, path: string): Promise<T> {

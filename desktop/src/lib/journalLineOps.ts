@@ -155,7 +155,17 @@ const LINE_FIELD_FA: Record<string, string> = {
  * قراردادِ خطای سرور دست نخورده: خطاهای ردیفیِ بی‌شماره (تفصیلی، پیگیری) حساب را
  * با کد و نام می‌گویند و این‌جا عمداً تجزیه نمی‌شوند.
  */
-export function serverLineErrors(detail: unknown, postedRows: number[]): string | null {
+export function serverLineErrors(detail: unknown, postedRows: number[], tagged?: unknown): string | null {
+  if (Array.isArray(tagged)) {
+    const taggedMessages = tagged.flatMap((item: unknown) => {
+      if (!item || typeof item !== 'object') return []
+      const { index, field, message } = item as { index?: unknown; field?: unknown; message?: unknown }
+      if (!Number.isInteger(index) || typeof index !== 'number' || index < 0 || index >= postedRows.length) return []
+      if (typeof field !== 'string' || typeof message !== 'string') return []
+      return [`ردیفِ ${postedRows[index].toLocaleString('fa-IR')}: ${message}`]
+    })
+    if (taggedMessages.length > 0) return [...new Set(taggedMessages)].join(' — ')
+  }
   if (!Array.isArray(detail)) return null
   const byRow = new Map<number, string[]>()
   for (const d of detail) {

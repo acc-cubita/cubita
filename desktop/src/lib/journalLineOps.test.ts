@@ -212,6 +212,12 @@ describe('خطای ۴۲۲ِ سرور ← شماره‌ی گرید', () => {
     expect(serverLineErrors([{ loc: ['body'], msg: 'Value error, سند متوازن نیست' }], posted)).toBeNull()
     expect(serverLineErrors('سند یافت نشد', posted)).toBeNull()
   })
+
+  it('خطای ۴۰۰ با اندیسِ ساختاری و متنِ قدیمی، ردیفِ واقعیِ گرید را نشان می‌دهد', () => {
+    const tagged = [{ index: 1, field: 'tracking_no', message: 'این حساب پیگیری نمی‌پذیرد.' }]
+    expect(serverLineErrors('پیگیری مجاز نیست', posted, tagged)).toBe('ردیفِ ۳: این حساب پیگیری نمی‌پذیرد.')
+    expect(serverLineErrors('پیگیری مجاز نیست', posted, [{ index: 2, field: 'tracking_no', message: 'نامعتبر' }])).toBeNull()
+  })
 })
 
 describe('کپی از ردیفِ قبل — مرکزِ هزینه هم (§۱۸)', () => {

@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -30,6 +30,14 @@ from app.services.voiding import void_journal_entry
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
 
 
+class JournalLineInputError(HTTPException):
+    """متن قدیمیِ `detail` را نگه می‌دارد و جایگاهِ ردیف را جدا می‌افزاید."""
+
+    def __init__(self, status_code: int, detail: str, line_errors: list[dict]):
+        super().__init__(status_code=status_code, detail=detail)
+        self.line_errors = line_errors
+
+
 def _assert_tracking_allowed(db: Session, lines) -> None:
     """پیگیری فقط روی حسابی که «پیگیری» دارد.
 
@@ -54,10 +62,16 @@ def _assert_tracking_allowed(db: Session, lines) -> None:
             f"{a.code} {a.name}"
             for a in db.query(Account).filter(Account.id.in_(missing)).order_by(Account.code)
         ]
-        raise HTTPException(
+        invalid_lines = [
+            {"index": index, "field": "tracking_no", "message": "این حساب پیگیری نمی‌پذیرد."}
+            for index, line in enumerate(lines)
+            if line.account_id in missing and (line.tracking_no is not None or line.tracking_date is not None)
+        ]
+        raise JournalLineInputError(
             status.HTTP_400_BAD_REQUEST,
             "این حساب‌ها پیگیری نمی‌پذیرند؛ از ویرایشِ حساب گزینه‌ی «پیگیری» را "
             f"روشن کنید: {'، '.join(names)}",
+            invalid_lines,
         )
 
 
@@ -154,22 +168,56 @@ def create_entry(
     assert_period_open(db, data.entry_date)
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     entry_analytic_id = resolve_analytic_id(db, data.analytic_id)
-    _assert_tracking_allowed(db, data.lines)
+    try:
+        _assert_tracking_allowed(db, data.lines)
 
-    # تفصیلیِ ردیف بر تفصیلیِ سند مقدم است: سطحِ ریزتر همیشه برنده. یک‌بار این‌جا
-    # حل می‌شود تا هم گاردِ زیر و هم ساختِ ردیف‌ها از یک مقدار بخوانند — وگرنه
-    # گارد چیزی را می‌سنجید که با آنچه ذخیره می‌شود یکی نیست.
-    line_analytics = [
-        resolve_analytic_id(db, line.analytic_id) or entry_analytic_id for line in data.lines
-    ]
-    #: مرکزِ هزینه هم همان قاعده: ردیف بر سند مقدم است. هر مرکزِ ردیف جداگانه
-    #: اعتبارسنجی می‌شود (نامعتبر یا غیرفعال → ۴۰۰)، دقیقاً مثلِ مرکزِ سند.
-    line_centers = [resolve_cost_center_id(db, line.cost_center_id) or cost_center_id for line in data.lines]
-    tafsili.assert_lines_have_tafsili(
-        db,
-        [(line.account_id, analytic) for line, analytic in zip(data.lines, line_analytics)],
-        source_type="manual",
-    )
+        # تفصیلیِ ردیف بر تفصیلیِ سند مقدم است: سطحِ ریزتر همیشه برنده. یک‌بار این‌جا
+        # حل می‌شود تا هم گاردِ زیر و هم ساختِ ردیف‌ها از یک مقدار بخوانند — وگرنه
+        # گارد چیزی را می‌سنجید که با آنچه ذخیره می‌شود یکی نیست.
+        line_analytics = []
+        for index, line in enumerate(data.lines):
+            try:
+                line_analytics.append(resolve_analytic_id(db, line.analytic_id) or entry_analytic_id)
+            except HTTPException as exc:
+                raise JournalLineInputError(exc.status_code, str(exc.detail), [
+                    {"index": index, "field": "analytic_id", "message": str(exc.detail)},
+                ]) from exc
+        #: مرکزِ هزینه هم همان قاعده: ردیف بر سند مقدم است. هر مرکزِ ردیف جداگانه
+        #: اعتبارسنجی می‌شود (نامعتبر یا غیرفعال → ۴۰۰)، دقیقاً مثلِ مرکزِ سند.
+        line_centers = []
+        for index, line in enumerate(data.lines):
+            try:
+                line_centers.append(resolve_cost_center_id(db, line.cost_center_id) or cost_center_id)
+            except HTTPException as exc:
+                raise JournalLineInputError(exc.status_code, str(exc.detail), [
+                    {"index": index, "field": "cost_center_id", "message": str(exc.detail)},
+                ]) from exc
+        try:
+            tafsili.assert_lines_have_tafsili(
+                db,
+                [(line.account_id, analytic) for line, analytic in zip(data.lines, line_analytics)],
+                source_type="manual",
+            )
+        except HTTPException as exc:
+            missing_ids = {line.account_id for line, analytic in zip(data.lines, line_analytics) if analytic is None}
+            required_ids = {
+                row.id for row in db.query(Account.id).filter(
+                    Account.id.in_(missing_ids), Account.accepts_tafsili.is_(True)
+                )
+            }
+            line_errors = [
+                {"index": index, "field": "analytic_id", "message": "تفصیلیِ این ردیف الزامی است."}
+                for index, (line, analytic) in enumerate(zip(data.lines, line_analytics))
+                if analytic is None and line.account_id in required_ids
+            ]
+            if not line_errors:
+                raise
+            raise JournalLineInputError(exc.status_code, str(exc.detail), line_errors) from exc
+    except JournalLineInputError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "line_errors": exc.line_errors},
+        )
 
     # شماره‌ی سند از یک sequence اتمیک پایگاه‌داده گرفته می‌شود تا زیر بار همزمان چند کاربر تصادم نکند
     number = next_document_number(db, DOC_JOURNAL_ENTRY)
