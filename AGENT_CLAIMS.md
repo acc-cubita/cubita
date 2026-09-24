@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code | `desktop/e2e/accountant-journal.e2e.mjs`، `PROJECT_OVERVIEW.md`؛ اسکیمای یک‌بارمصرفِ `cubita_verify` (حذف شد) | رفعِ ناپایداریِ E2E (فوکوسِ کادرِ جست‌وجو) که CIِ مرجِ M2ِ آرش را قرمز کرد؛ بررسیِ اینکه UI-01 چیزی از M1/M2 نشکسته | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `routers/journal.py`، `main.py`، `test_journal_line_error_contract.py`، `desktop/package.json`، `PROJECT_OVERVIEW.md` | خطای ردیفیِ سند raise می‌شود تا تراکنش rollback شود (handlerِ `{detail, line_errors}` در main.py)؛ نسخه‌ی دسکتاپ ۱.۷.۰. بک‌اند ۳۸۷۳، فرانت ۴۲۱ | ۱۴۰۵/۰۷/۰۲ |
 | Codex | قرارداد خطای ردیفی journal، نمایش ردیف در دسکتاپ، سنجه و بهینه‌سازی گرید ۳۰۰ ردیفی، نصاب ۱٫۶٫۱ | تکمیل UI-01 روی master به‌روز؛ ۹۳ تست بک‌اند و ۴۲۱ تست دسکتاپ پاس؛ نصاب محلی ساخته شد | ۱۴۰۵/۰۷/۰۲ |
 | Claude Opus 5 | مهاجرت‌های `0177`–`0179`، `models/assurance.py`، `services/assurance.py`/`assurance_access.py`/`assurance_score.py`/`assurance_checks.py`، `routers/assurance.py`/`admin_assurance.py`، `services/modules.py` (ماژولِ مشتق)، `deps.py`، `routers/auth.py`، `services/members.py`، `models/tenant.py` (`expires_at`)، `models/user.py` (نقشِ `auditor`)، `services/integrity.py` (خانواده‌بندی)، `pages/assurance/*`، `pages/AssuranceAdminPage.tsx`، `navModel.tsx`، `moduleLists.tsx` | ماژولِ حسابرسی فازِ ۱: درخواستِ مشتری، تأییدِ ستاد، گیتِ زیرمنوها با ماژولِ مشتق، دسترسیِ موقتِ فقط‌خواندنیِ حسابرس، و دوازده بررسیِ خودکار با نمره‌ی سلامت و snapshot | ۱۴۰۵/۰۶/۲۹ |
