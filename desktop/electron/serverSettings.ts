@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { normalizeServerUrl } from './serverAddress.js'
+import os from 'node:os'
+import { DEFAULT_SERVER_PORT, candidateHosts, normalizeServerUrl } from './serverAddress.js'
 
 // نسخه‌ی این بیلد و نشانیِ سروری که کلاینت به آن وصل می‌شود.
 //
@@ -68,12 +69,12 @@ export type ServerProbe =
  * فقط «جواب داد» کافی نیست: باید سرورِ **کوبیتا سازمانی** باشد. کلاینتی که به
  * acc.cubita.ir یا هر وب‌سرورِ دیگری روی آن پورت وصل شود، بعداً خطاهای گیج‌کننده می‌دهد.
  */
-export async function probeServer(input: string): Promise<ServerProbe> {
+export async function probeServer(input: string, timeoutMs = 5000): Promise<ServerProbe> {
   const n = normalizeServerUrl(input)
   if (!n.ok) return n
   let res: Response
   try {
-    res = await fetch(`${n.url}/api/health`, { signal: AbortSignal.timeout(5000) })
+    res = await fetch(`${n.url}/api/health`, { signal: AbortSignal.timeout(timeoutMs) })
   } catch {
     return {
       ok: false,
@@ -96,4 +97,31 @@ export async function probeServer(input: string): Promise<ServerProbe> {
     return { ok: false, url: n.url, error: 'این سرورِ کوبیتا سازمانی نیست.' }
   }
   return { ok: true, url: n.url }
+}
+
+/**
+ * جست‌وجوی سرورِ کوبیتا سازمانی در شبکه‌ی داخلی: اول همین رایانه، بعد `/24`ِ هر کارتِ
+ * شبکه‌ی خصوصی (`candidateHosts`). فقط پاسخی که `edition: enterprise` بدهد شمرده می‌شود.
+ *
+ * ۶۴ درخواستِ همزمان با مهلتِ ۸۰۰ms — یک `/24` در حدودِ ۳ ثانیه. مهلتِ کوتاه عمدی است:
+ * سرورِ واقعی روی LAN در چند میلی‌ثانیه جواب می‌دهد؛ منتظرماندن برای نشانی‌های خالی فقط
+ * جست‌وجو را کند می‌کند.
+ */
+export async function discoverServers(): Promise<string[]> {
+  const local = await probeServer(`http://localhost:${DEFAULT_SERVER_PORT}`, 800)
+  if (local.ok) return [local.url]
+
+  const ifaces = Object.values(os.networkInterfaces()).flatMap((list) => list ?? [])
+  const hosts = candidateHosts(ifaces)
+  const found: string[] = []
+  let next = 0
+  const worker = async () => {
+    while (next < hosts.length) {
+      const host = hosts[next++]
+      const r = await probeServer(`http://${host}:${DEFAULT_SERVER_PORT}`, 800)
+      if (r.ok) found.push(r.url)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(64, hosts.length) }, worker))
+  return found.sort()
 }

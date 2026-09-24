@@ -136,6 +136,8 @@ export interface CubitaBridge {
   serverProbe?: (url: string) => Promise<ServerResult>
   /** کوبیتا سازمانی: ذخیره‌ی نشانیِ سرور. نشست و کشِ سرورِ قبلی پاک می‌شوند. */
   serverSave?: (url: string) => Promise<ServerResult>
+  /** کوبیتا سازمانی: جست‌وجوی سرور روی همین رایانه و `/24`ِ شبکه‌ی داخلی. */
+  serverDiscover?: () => Promise<string[]>
   posTerminal?: PosTerminalBridge
 }
 

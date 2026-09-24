@@ -20,6 +20,27 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
 const OUT_DIR = 'release-enterprise'
 
+//: بسته‌ی سرور (`backend/packaging/build_server_bundle.py`): exe + PostgreSQL + WinSW.
+//: بی‌آن نصاب فقط کلاینت است — با هشدار، نه خطا، تا ساختِ کلاینت به Postgres وابسته نباشد.
+const SERVER_BUNDLE = path.join(root, '..', 'backend', 'dist', 'server-bundle')
+const hasServer = fs.existsSync(path.join(SERVER_BUNDLE, 'cubita-server.exe'))
+if (!hasServer) {
+  console.warn(
+    `⚠ بسته‌ی سرور در ${SERVER_BUNDLE} نیست؛ نصابِ فقط-کلاینت ساخته می‌شود.\n` +
+      '  برای نصابِ کامل: cd backend && venv/Scripts/python.exe packaging/build_server_bundle.py --pg-dir …',
+  )
+}
+
+//: صفحه‌ی نقش و نصبِ سرور. `CUBITA_HAS_SERVER` فقط وقتی بسته واقعاً هست تعریف می‌شود.
+fs.mkdirSync(path.join(root, OUT_DIR), { recursive: true })
+const nshPath = path.join(root, OUT_DIR, 'installer-enterprise.nsh')
+fs.writeFileSync(
+  nshPath,
+  (hasServer ? '!define CUBITA_HAS_SERVER\n' : '') +
+    fs.readFileSync(path.join(root, 'build', 'installer-enterprise.nsh'), 'utf8'),
+  'utf8',
+)
+
 const config = {
   ...pkg.build,
   appId: 'ir.ipnetcity.cubita.enterprise',
@@ -27,13 +48,20 @@ const config = {
   directories: { output: OUT_DIR },
   publish: null,
   artifactName: 'Cubita-Enterprise-Setup-${version}.${ext}',
-  nsis: { ...pkg.build.nsis, shortcutName: 'کوبیتا سازمانی' },
+  ...(hasServer ? { extraResources: [{ from: SERVER_BUNDLE, to: 'server' }] } : {}),
+  nsis: {
+    ...pkg.build.nsis,
+    shortcutName: 'کوبیتا سازمانی',
+    //: نصبِ سرور سرویسِ ویندوز و قاعده‌ی فایروال می‌سازد — دسترسیِ مدیر لازم است؛ و برنامه
+    //: برای همه‌ی کاربرانِ رایانه نصب می‌شود (رایانه‌ی مشترکِ حسابداری).
+    perMachine: true,
+    include: nshPath,
+  },
 }
 
 const env = { ...process.env, CUBITA_EDITION: 'enterprise' }
 const run = (cmd) => execSync(cmd, { cwd: root, stdio: 'inherit', env, shell: true })
 
-fs.mkdirSync(path.join(root, OUT_DIR), { recursive: true })
 const configPath = path.join(root, OUT_DIR, 'electron-builder.enterprise.json')
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
 
