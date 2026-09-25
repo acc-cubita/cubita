@@ -1,8 +1,7 @@
-import { Archive, Coins, Repeat, Target } from 'lucide-react'
+import { Archive, Coins, Target } from 'lucide-react'
 import type { AccountCache } from '../../electron.d'
 import { BudgetPanel } from '../../components/BudgetPanel'
 import { CurrenciesPanel } from '../../components/CurrenciesPanel'
-import { RecurringEntriesPanel } from '../../components/RecurringEntriesPanel'
 import { SectionCard } from '../../components/SectionCard'
 import { CountBadge } from '../../components/form/FormKit'
 import { fetchPeriodCloses } from '../../api'
@@ -18,18 +17,9 @@ import { AsyncBlock, OpsPage, fa, faInt, useAsync } from './kit'
  * از تبِ درونِ صفحه به یک صفحه‌ی مستقل آمده.
  */
 
-export function RecurringListPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
-  return (
-    <OpsPage
-      canvas
-      icon={Repeat}
-      title="اسناد تکرارشونده"
-      description="سندهایی که در فاصله‌های مشخص خودکار ثبت می‌شوند — اجاره، حقوقِ ثابت، اقساط."
-    >
-      <RecurringEntriesPanel token={token} accounts={accounts} />
-    </OpsPage>
-  )
-}
+//: «اسناد تکرارشونده» با تمِ اکسلیِ سند حسابداری فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ
+//: ورودِ صفحه عوض نشود.
+export { RecurringListPage } from './RecurringPage'
 
 export function BudgetListPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   return (

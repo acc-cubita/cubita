@@ -23,6 +23,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |
 | ارزها و نرخ برابری | #209 | ب: دو برگه در یک فرم | [CurrenciesPanel.tsx](../../../desktop/src/components/CurrenciesPanel.tsx) |
 | اسناد حسابداری (فهرست) | پیش از #205 | د: دفتر | `EntryTable` در [JournalPages.tsx](../../../desktop/src/pages/accounting/JournalPages.tsx) |
+| اسناد تکرارشونده | (این PR) | الف برای فرمِ قالب + د برای فهرستِ قالب‌ها | [RecurringPage.tsx](../../../desktop/src/pages/accounting/RecurringPage.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
 منوهای حسابداری پیش از این در #211 بازچینی شدند (شش دسته، تکراری‌ها ادغام) — صفحه‌ای را که ادغام شده

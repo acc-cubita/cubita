@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `pages/accounting/RecurringPage.tsx` (تازه) و تستش، `components/RecurringEntriesPanel.tsx` (حذف)، `AccountingListPages.tsx`، `lib/recurringSheet.ts` (تازه) و تستش، `JalaliDatePicker.tsx`، `App.css`، `HelpPage.tsx` | «اسناد تکرارشونده» با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `lib/navModel.tsx`، `moduleLists.tsx`، `ModulePanels.tsx`، `TopNav.tsx`، `Sidebar.tsx`، `Dashboard.tsx`، `AccountTreePanel.tsx` و تستش، `pages/accounting/*`، `ModuleListPages.tsx`، `CompanyOpsPages.tsx`، `FiscalYearPage.tsx`، `HelpPage.tsx`، `lib/reportCatalog.ts`، `App.css`، سه پیامِ بک‌اند، تست‌های ناوبری | بازچینیِ منوهای حسابداری: ادغامِ تکراری‌ها، شش دسته، نام‌های روشن | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `.claude/skills/cubita-excel-theme/SKILL.md` (تازه)، `CLAUDE.md`، `PROJECT_OVERVIEW.md` | ثبتِ روشِ بازسازیِ صفحه‌ها با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `FxRevaluationPage.tsx` (تازه) و تستش، `ClosingPages.tsx`، `DocFooter.tsx` (تازه)، `BalanceFooter.tsx`، `SheetFooter.tsx`، `CurrenciesPanel.tsx` و تستش، `lib/currencySheet.ts` و تستش، `App.css` | «صدور سند تسعیر ارز» و «ارزها/نرخ برابری» با تمِ سند حسابداری؛ پایه‌ی مشترکِ نوارِ پایین؛ تقویم بالای نوار | ۱۴۰۵/۰۷/۰۳ |

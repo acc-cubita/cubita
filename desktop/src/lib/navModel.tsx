@@ -406,8 +406,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} />, section: 'ساختار و تعریف‌ها' },
       { key: 'reclassify', label: 'انتقال حساب به سرفصل دیگر', icon: <FolderTree size={18} />, section: 'ساختار و تعریف‌ها' },
       { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} />, section: 'ساختار و تعریف‌ها' },
-      //: این سه پنلِ سازنده‌ی خودشان را در همان صفحه دارند (RecurringEntriesPanel،
-      //: BudgetPanel، CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
+      //: این سه فرم و دفترشان را در همان صفحه دارند (RecurringPage، BudgetPanel،
+      //: CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
       { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} />, section: 'ساختار و تعریف‌ها' },
       { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} />, section: 'ساختار و تعریف‌ها' },
       { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} />, section: 'ثبت سند' },
