@@ -12611,6 +12611,9 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-table col.jg-c-last { width: 24%; }
 .jg-table col.jg-c-date { width: 20%; }
 .jg-table col.jg-c-chg { width: 12%; }
+/* برگه‌ی «انتقال حساب به سرفصل دیگر»: سرفصلِ فعلی و تازه (هم‌عرض)، و نوع. */
+.jg-table col.jg-c-parent { width: 23%; }
+.jg-table col.jg-c-kind { width: 13%; }
 /* هر کادر دقیقاً پهنای خانه‌اش (منهای padding) — همه هم‌لبه، با فاصله‌ی یکسان. قاعده‌ی عمومیِ
  * `.ef-form td > input { min-width: 120px }` این‌جا کادرِ شرح را از خانه‌اش بیرون می‌زد و به
  * بدهکار می‌چسباند؛ `tbody` فقط برای اینکه اختصاصیت از آن بالاتر برود. */
@@ -13463,6 +13466,50 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   block-size: 32px;
   padding-block: 0;
   font-size: var(--fs-sm);
+}
+
+/* ── انتقال حساب به سرفصل دیگر: برگه‌ی حساب × سرفصلِ تازه ──
+ * نام با تورفتگیِ عمقِ درختواره (padding از خودِ ردیف) و سرفصل پررنگ با نشانه‌ی پوشه — تا برگه شکلِ چارت را
+ * داشته باشد. نوعِ عوض‌شده: قبلی خط‌خورده و کم‌رنگ، تازه پررنگ. */
+.page .ef-table-wrap > table.jg-table.xl-grid td.rx-name { padding-inline-start: calc(10px + var(--rx-depth, 0) * 16px); }
+.rx-sheet td.rx-name svg { margin-inline-end: 6px; vertical-align: -2px; color: var(--text-muted); }
+/* جهتِ خودِ صفحه (نه `dir="ltr"`) تا فاصله سمتِ نام بیفتد؛ `isolate` کد را از جریانِ متنِ نام جدا نگه می‌دارد. */
+.rx-code-inline { display: none; unicode-bidi: isolate; margin-inline-end: 6px; color: var(--text-muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.page .ef-table-wrap > table.jg-table.xl-grid td.rx-name--group { font-weight: 700; }
+.page .ef-table-wrap > table.jg-table.xl-grid td.rx-from { color: var(--text); }
+.rx-sheet td.rx-kind s { color: var(--text-muted); }
+.rx-sheet td.rx-kind b { color: var(--text-h); }
+.page .ef-table-wrap > table.jg-table.xl-grid td.rx-empty { padding: 18px 12px; color: var(--text-muted); text-align: center; }
+/* «فقط تغییرها» کنارِ جست‌وجو، هم‌قدِ آن. */
+.jg-head-actions .rx-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  block-size: 32px;
+  min-height: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.jg-head-actions .rx-only[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint); }
+/* کادرِ «بردنِ همه زیرِ سرفصلِ…» درونِ نوارِ انتخاب، هم‌قدِ دکمه‌های آن. */
+.xl-selbar .rx-bulk { inline-size: min(300px, 100%); }
+.ef-form .xl-selbar .rx-bulk .jg-combo > input { block-size: 28px; min-height: 0; padding-block: 0; font-size: var(--fs-xs); }
+/* موبایل: «کد» و «سرفصلِ فعلی» پنهان (کد جلوی نام می‌آید و کادرِ سرفصلِ تازه تا عوض نشده همان فعلی را نشان
+ * می‌دهد) تا نام و خانه‌ی ویرایشی بی‌لغزش در قاب باشند؛ «نوع» و برگرداندن با لغزشِ کوتاه. */
+@media (max-width: 760px) {
+  .page .ef-table-wrap > table.rx-sheet { min-inline-size: 520px; }
+  .rx-sheet .rx-mhide { display: none; }
+  .rx-sheet col.jg-c-num { width: 36px; }
+  .rx-sheet col.jg-c-parent { width: 36%; }
+  .rx-sheet col.jg-c-kind { width: 18%; }
+  .rx-code-inline { display: inline; }
+  .page .ef-table-wrap > table.jg-table.xl-grid td.rx-name { padding-inline-start: calc(8px + var(--rx-depth, 0) * 8px); }
 }
 
 /* ── اسناد تکرارشونده: فهرستِ قالب‌ها (گریدِ فقط‌خواندنی، کارتی در موبایل) ──
