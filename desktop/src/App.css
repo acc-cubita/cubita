@@ -12838,6 +12838,11 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jb-stat--diff .jb-v svg { inline-size: 1em; block-size: 1em; margin-inline-end: 0.3em; vertical-align: -0.15em; }
 .jb-sub { color: var(--danger); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
 .jb-sub:empty { display: none; }
+/* خطِ دوم رنگِ حالِ خودش را دارد (سود سبز، نه قرمزِ پیش‌فرضِ «نامتوازن»)؛ تکه‌ی کناری (`side`) ایزوله است تا
+ * کدِ لاتینِ ارز («EUR بی‌نرخ») در متنِ راست‌به‌چپ به عددِ کنارش نچسبد. */
+.jb-sum--ok .jb-sub { color: var(--success); }
+.jb-sum--empty .jb-sub { color: var(--text-muted); }
+.jb-sub-side { unicode-bidi: isolate; }
 /* متنی که به‌جای پهن‌کردنِ خانه کوچک می‌شود: `--fit` را `useFitText` از پهنای واقعی می‌سنجد. */
 .jb-fit { display: block; max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .jb-v.jb-fit { font-size: calc(var(--fs-md) * var(--fit, 1)); }
@@ -12907,6 +12912,9 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jf-foot--cols :is(.jb-stat--debit, .jb-stat--a) { grid-column: 2; }
   .jf-foot--cols :is(.jb-stat--credit, .jb-stat--b) { grid-column: 3; }
   .jf-foot--cols .jb-body { padding-inline: 10px; }
+  /* `statusEnd` (تسعیر): وضعیت زیرِ ستونِ آخر («اختلاف») و خانه‌ی خالی به جای آن، زیرِ «نرخ». */
+  .jf-foot--cols.jf-foot--status-end .jb-stat--diff { grid-column: 4; }
+  .jf-foot--cols.jf-foot--status-end .jb-sum::after { grid-column: 1; }
   /* خانه‌ی خالیِ زیرِ ستونِ آیکون‌ها — سرستون دارد تا خطِ جدول تا لبه برسد. */
   .jf-foot--cols .jb-sum::after {
     content: '';
@@ -13367,6 +13375,22 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   list-style: none;
 }
 .xl-errbar b { color: var(--text-h); }
+
+/* ── پیش‌نمایشِ تسعیرِ ارز: گریدِ اکسلیِ فقط‌خواندنی ──
+ * «حساب» باقی را می‌گیرد؛ عددها هم‌عرض تا عددِ میلیاردی بی‌برش دیده شود. زیرِ ۷۶۰ کارت می‌شود
+ * (`cards-on-mobile`)، مثلِ فهرستِ اسناد. تا محاسبه‌ی تازه برسد، ردیف‌های کهنه کم‌رنگ می‌مانند. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.fx-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 760px; }
+  .fx-sheet col.fx-c-rowhead { width: 44px; }
+  .fx-sheet col.fx-c-cur { width: 64px; }
+  .fx-sheet col.fx-c-num { width: 12%; }
+  .fx-sheet col.fx-c-money { width: 14%; }
+  .page .ef-table-wrap > table.fx-sheet td { overflow: hidden; text-overflow: ellipsis; }
+}
+.fx-sheet.is-loading tbody { opacity: 0.55; transition: opacity 120ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .fx-sheet.is-loading tbody { transition: none; }
+}
 
 /* مانده اول دوره: دو گرید در یک کارت، هر کدام با عنوانِ خودش. */
 .ob-note { margin-block: var(--sp-2); }
