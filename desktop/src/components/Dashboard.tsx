@@ -730,7 +730,7 @@ export function Dashboard({
           {page === 'integrity' && <IntegrityPage token={token} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
           {page === 'recurringlist' && <RecurringListPage token={token} />}
-          {page === 'budgetlist' && <BudgetListPage token={token} accounts={accounts} />}
+          {page === 'budgetlist' && <BudgetListPage token={token} onNavigate={navigate} />}
           {page === 'currencylist' && <CurrencyListPage token={token} />}
           {page === 'periodcloselist' && <PeriodCloseListPage token={token} />}
           {/* ── ماژولِ «دریافت و پرداخت» — هجده عملیات و یک فهرست ── */}

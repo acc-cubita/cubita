@@ -1,6 +1,4 @@
-import { Archive, Coins, Target } from 'lucide-react'
-import type { AccountCache } from '../../electron.d'
-import { BudgetPanel } from '../../components/BudgetPanel'
+import { Archive, Coins } from 'lucide-react'
 import { CurrenciesPanel } from '../../components/CurrenciesPanel'
 import { SectionCard } from '../../components/SectionCard'
 import { CountBadge } from '../../components/form/FormKit'
@@ -21,18 +19,8 @@ import { AsyncBlock, OpsPage, fa, faInt, useAsync } from './kit'
 //: ورودِ صفحه عوض نشود.
 export { RecurringListPage } from './RecurringPage'
 
-export function BudgetListPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
-  return (
-    <OpsPage
-      canvas
-      icon={Target}
-      title="بودجه‌بندی"
-      description="رقمِ برنامه‌ریزی‌شده‌ی هر حساب در هر ماه. مقایسه‌ی بودجه با عملکرد در «گزارش‌ها» است."
-    >
-      <BudgetPanel token={token} accounts={accounts} />
-    </OpsPage>
-  )
-}
+//: «بودجه‌بندی» هم برگه‌ی اکسلیِ خودش را دارد (ماتریسِ حساب × ماه).
+export { BudgetListPage } from './BudgetPage'
 
 export function CurrencyListPage({ token }: { token: string }) {
   return (

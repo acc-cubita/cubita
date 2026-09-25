@@ -23,6 +23,7 @@ export function SheetFooter({
   message,
   submitLabel = 'ذخیره تغییرات',
   columns = false,
+  labels = ['ردیفِ تازه', 'ویرایش‌شده'],
 }: {
   state: SheetState
   fresh: number
@@ -31,6 +32,8 @@ export function SheetFooter({
   message: { text: string; kind: 'ok' | 'err' } | null
   submitLabel?: string
   columns?: boolean
+  /** برچسبِ دو عدد — برگه‌ای که خانه می‌شمارد نه ردیف (بودجه) «خانه‌ی تازه» می‌گوید. */
+  labels?: [string, string]
 }) {
   const pending = fresh + edited
   return (
@@ -62,8 +65,8 @@ export function SheetFooter({
       }
       sub={state === 'clean' ? undefined : { main: state === 'err' ? 'ردیفِ قرمز را ببینید' : 'ذخیره‌نشده' }}
       stats={[
-        { label: 'ردیفِ تازه', value: fa(fresh), className: 'jb-stat--a' },
-        { label: 'ویرایش‌شده', value: fa(edited), className: 'jb-stat--b' },
+        { label: labels[0], value: fa(fresh), className: 'jb-stat--a' },
+        { label: labels[1], value: fa(edited), className: 'jb-stat--b' },
       ]}
     />
   )

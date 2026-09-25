@@ -12108,6 +12108,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ef-table-wrap { border: 0; border-radius: 0; background: transparent; }
   /* در کارت دکمه تمام‌عرض است، پس نامِ کار هم کنارِ آیکون می‌آید. */
   .ef-row-btn-label { display: inline; }
+  /* گریدِ ویرایشی کارت نمی‌شود؛ خانه‌ی آیکون‌هایش باریک است و نامِ کار از آن بیرون می‌زد. */
+  .jg-table .ef-row-btn-label { display: none; }
   .ef-row-actions > *,
   .ef-row-btn-wrap > .ef-row-btn { flex: 1 1 0; }
   table.cards-on-mobile td.card-actions .ef-row-btn { width: auto; height: auto; min-height: 36px; gap: 6px; }
@@ -13409,6 +13411,60 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* خانه‌ی محاسبه‌شده‌ی رنگی (درصدِ تغییرِ نرخ): رنگِ `xl-ro` (متنِ پررنگ) رنگِ بالا/پایین را می‌پوشاند. */
 .page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-in { color: var(--success); }
 .page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-out { color: var(--danger); }
+/* ── بودجه‌بندی: ماتریسِ حساب × دوازده ماه ──
+ * دوازده ستونِ مبلغ در عرضِ صفحه جا نمی‌شوند: جدول عرضِ طبیعیِ خودش را دارد و در قابِ گرید افقی می‌لغزد
+ * (نه صفحه). «ردیف» و «حساب» مثلِ «ثابت‌کردنِ ستون»ِ اکسل سرِ جایشان می‌مانند و ردیفِ جمع ته قاب می‌چسبد.
+ * پس‌زمینه‌ی خانه‌های ثابت اختصاصیتِ کم دارد تا ته‌رنگِ ردیف (تازه، ویرایش‌شده، خطا، انتخاب) رویش بنشیند. */
+.page .ef-table-wrap > table.bg-sheet {
+  /* عرضِ صریح = جمعِ ستون‌ها (۴۴ + ۲۴۰ + ۱۲×۱۱۲ + ۱۳۶ + ۷۶): با `max-content` ستون‌هایی که `width: 1%`
+   * داشتند جمع می‌شدند و «حساب»ِ ثابت با فاصله‌ی ۴۴پیکسلی‌اش روی فروردین می‌نشست. */
+  table-layout: fixed;
+  inline-size: 1840px;
+  min-inline-size: 100%;
+}
+.bg-sheet col.bg-c-num { width: 44px; }
+.bg-sheet col.bg-c-account { width: 240px; }
+.bg-sheet col.bg-c-month { width: 112px; }
+.bg-sheet col.bg-c-total { width: 136px; }
+.bg-sheet col.bg-c-act { width: 76px; }
+.bg-pin { position: sticky; z-index: 1; background: var(--surface); }
+.bg-pin--num { inset-inline-start: 0; }
+.bg-pin--account { inset-inline-start: 44px; box-shadow: inset 1px 0 0 var(--border-strong); }
+.bg-sheet thead th.bg-pin { z-index: 3; }
+.bg-sheet tfoot :is(td, th) {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 2;
+  background: var(--xl-head, var(--surface-2));
+  color: var(--text-h);
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 var(--border-strong);
+}
+.bg-sheet tfoot :is(td, th).bg-pin { z-index: 3; }
+.bg-sheet tfoot th { text-align: start; padding-inline: 10px; }
+.bg-sheet tfoot td.xl-ro { color: var(--text-h); }
+.bg-sheet tfoot td.bg-grand { color: var(--accent-on-tint, var(--text-h)); }
+.bg-code { margin-inline-end: 4px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* موبایل: ستون‌های ثابت باریک، تا در کنارشان دست‌کم یک ماه و نیم دیده شود. */
+@media (max-width: 760px) {
+  .page .ef-table-wrap > table.bg-sheet { inline-size: 1632px; }
+  .bg-sheet col.bg-c-num { width: 36px; }
+  .bg-sheet col.bg-c-account { width: 136px; }
+  .bg-sheet col.bg-c-month { width: 104px; }
+  .bg-pin--account { inset-inline-start: 36px; }
+  .bg-sheet td.bg-pin--account.xl-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ef-form .jg-head-actions.bg-head > .bg-scope { inline-size: auto; flex: 1 1 140px; }
+}
+/* سال و دامنه کنارِ جست‌وجو، هم‌قدِ آن — اختصاصیتِ بالا عمدی است: قاعده‌ی سراسریِ فرم هر کادر را تمام‌عرض و
+ * ۴۰پیکسلی می‌کرد و دو انتخاب‌گر هرکدام یک ردیفِ کامل می‌گرفتند. */
+.ef-form .jg-head-actions.bg-head > .bg-scope {
+  inline-size: 150px;
+  min-height: 32px;
+  block-size: 32px;
+  padding-block: 0;
+  font-size: var(--fs-sm);
+}
+
 /* ── اسناد تکرارشونده: فهرستِ قالب‌ها (گریدِ فقط‌خواندنی، کارتی در موبایل) ──
  * «عنوان» باقی را می‌گیرد؛ بقیه عرضِ ثابتِ خوانا. خانه‌ی وضعیت خودِ دکمه است (بی‌حاشیه، مثلِ برگه‌ی تفصیلی). */
 @media (min-width: 761px) {
