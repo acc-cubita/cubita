@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `.claude/skills/cubita-excel-theme/SKILL.md` (تازه)، `CLAUDE.md`، `PROJECT_OVERVIEW.md` | ثبتِ روشِ بازسازیِ صفحه‌ها با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `FxRevaluationPage.tsx` (تازه) و تستش، `ClosingPages.tsx`، `DocFooter.tsx` (تازه)، `BalanceFooter.tsx`، `SheetFooter.tsx`، `CurrenciesPanel.tsx` و تستش، `lib/currencySheet.ts` و تستش، `App.css` | «صدور سند تسعیر ارز» و «ارزها/نرخ برابری» با تمِ سند حسابداری؛ پایه‌ی مشترکِ نوارِ پایین؛ تقویم بالای نوار | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `AnalyticsPage.tsx` (تازه) و تستش، `ChartPages.tsx`، `SheetFooter.tsx`، `FitText.tsx`، `BalanceFooter.tsx`، `lib/analyticsSheet.ts` و تستش، `lib/useSheetNav.ts`، `HelpPage.tsx`، `App.css` | «تفصیلی سایر» به برگه‌ی اکسلیِ ویرایشِ درجا | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code (آرش) | `OpeningBalancePage.tsx` و تستش، `BalanceFooter.tsx` (تازه)، `lib/balanceState.ts`، `lib/useSheetNav.ts` (تازه)، `lib/alignToGrid.ts`، `lib/journalGridNav.ts`، `AccountCombo.tsx`، `JournalEntryForm.tsx`، `App.css` | «مانده اول دوره» با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۲ |
