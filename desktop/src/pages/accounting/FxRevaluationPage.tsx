@@ -304,7 +304,8 @@ export function FxRevaluationPage({ token }: { token: string }) {
         />
       </form>
 
-      <CurrenciesPanel token={token} />
+      {/* نرخِ تازه همین‌جا ثبت می‌شود و پیش‌نمایش بی «محاسبه‌ی دوباره» به‌روز می‌شود. */}
+      <CurrenciesPanel token={token} onSaved={preview.reload} />
     </OpsPage>
   )
 }
