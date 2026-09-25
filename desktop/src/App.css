@@ -12685,11 +12685,22 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   margin-inline-start: auto;
   font-variant-numeric: tabular-nums;
 }
-.jb-stat { display: grid; align-content: center; gap: 2px; min-width: 150px; padding: 4px 18px; }
-.jb-stat:first-child { padding-inline-start: 4px; }
+/* **اندازه‌ی ثابت** — پهنا و ارتفاع هر دو. با `min-width` هر رقمِ تازه خانه را پهن‌تر می‌کرد و
+ * «نامتوازن» با خطِ اختلافش خانه را بلندتر؛ کلِ نوار با تایپ می‌لرزید. حالا عددی که جا نشود
+ * کوچک می‌شود (`.jb-fit` + `useFitText`)، نه خانه‌اش بزرگ. */
+.jb-stat {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  inline-size: 168px;
+  /* سه خط (برچسب، مقدار، مبلغِ اختلاف) باید در «نامتوازن» جا شوند — ارتفاع برای همان است. */
+  block-size: 66px;
+  padding: 4px 16px;
+  overflow: hidden;
+}
 .jb-stat + .jb-stat { border-inline-start: 1px solid var(--border); }
 .jb-sum .jb-stat--diff {
-  min-width: 170px;
+  inline-size: 200px;
   margin-inline-start: 8px;
   padding-inline: 16px;
   border-inline-start: 0;
@@ -12704,10 +12715,15 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   color: var(--text-h);
   font-size: var(--fs-xl);
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
   white-space: nowrap;
 }
 .jb-sub { color: var(--danger); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
+.jb-sub:empty { display: none; }
+/* متنی که به‌جای پهن‌کردنِ خانه کوچک می‌شود: `--fit` را `useFitText` از پهنای واقعی می‌سنجد. */
+.jb-fit { display: block; max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.jb-v.jb-fit { font-size: calc(var(--fs-xl) * var(--fit, 1)); }
+.jb-sub.jb-fit { font-size: calc(var(--fs-xs) * var(--fit, 1)); }
 .jb-sum--ok .jb-stat--diff { background: var(--success-bg); }
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
 .jb-sum--err .jb-stat--diff { background: var(--danger-bg); }
@@ -12726,12 +12742,12 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jf-foot { gap: 10px; padding: 10px 12px; }
   .jb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); inline-size: 100%; margin-inline-start: 0; }
   .jb-stat,
-  .jb-stat:first-child,
-  .jb-sum .jb-stat--diff { min-width: 0; padding: 3px 8px; }
+  .jb-sum .jb-stat--diff { inline-size: auto; min-width: 0; block-size: 60px; padding: 3px 8px; }
+  .jb-sub-side { display: none; }
   .jb-sum .jb-stat--diff { margin-inline-start: 4px; }
   .jb-k { font-size: 11px; }
   .jb-v { flex-wrap: wrap; font-size: var(--fs-md); white-space: normal; }
-  .jb-sub { white-space: normal; }
+  .jb-v.jb-fit { font-size: calc(var(--fs-md) * var(--fit, 1)); white-space: nowrap; }
   .jf-msg { flex-basis: 100%; }
   .jf-foot .jf-submit { order: 2; justify-content: center; inline-size: 100%; min-height: 44px; }
   /* صفحه‌کلیدِ فیزیکی نیست. */
