@@ -17,8 +17,9 @@ from app.rate_limit import (
     limit_sms_code,
     limit_sms_reset_verify,
 )
-from app.deps import PREMIUM_FEATURES, Principal, cloud_only, get_current_user, get_principal
+from app.deps import PREMIUM_FEATURES, Principal, cloud_only, enterprise_only, get_current_user, get_principal
 from app.models.auth_token import (
+    PURPOSE_INVITE,
     PURPOSE_PASSWORD_RESET,
     PURPOSE_PHONE_VERIFY,
     PURPOSE_SMS_PASSWORD_RESET,
@@ -45,6 +46,7 @@ from app.schemas.members import (
     ChangePasswordIn,
     ForgotPasswordIn,
     ForgotPasswordSmsIn,
+    RedeemCodeIn,
     ResetPasswordIn,
     ResetPasswordSmsIn,
 )
@@ -66,6 +68,7 @@ from app.services.tokens import (
     consume_code,
     issue_code,
     issue_password_reset,
+    peek,
 )
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, tenant_scope
 
@@ -479,6 +482,28 @@ def accept_invite(data: AcceptInviteIn, db: Session = Depends(get_db)):
         db, raw_token=data.token, password=data.password, name=data.name
     )
     return TokenOut(access_token=create_access_token(user, tenant_id))
+
+
+@router.post(
+    "/redeem-code",
+    response_model=TokenOut,
+    dependencies=[Depends(enterprise_only), Depends(limit_login)],
+)
+def redeem_code(data: RedeemCodeIn, db: Session = Depends(get_db)):
+    """سازمانی: کدی که مالک داده (دعوت) یا کدِ بازنشانی (از مالک یا از `cubita-server`).
+
+    یک ورودی برای هر دو، چون کارمند فقط «یک کد» از مالک گرفته. خطا هم یکی است و به
+    نوعِ کد یا وجودش اشاره نمی‌کند.
+    """
+    row = peek(db, data.code)
+    try:
+        if row is not None and row.purpose == PURPOSE_INVITE:
+            return accept_invite(AcceptInviteIn(token=data.code, password=data.password, name=data.name), db)
+        return reset_password(ResetPasswordIn(token=data.code, password=data.password), db)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "این کد نادرست یا منقضی است") from exc
+        raise
 
 
 @router.post("/change-password", response_model=TokenOut)

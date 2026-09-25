@@ -24,7 +24,8 @@ export function LoginScreen({
   onSignup?: () => void
   /** کوبیتا سازمانی: نشانیِ سرورِ فعلی و راهِ تغییرش. بازیابیِ رمز با ایمیل/پیامک
    *  آنجا نیست (سرورِ شرکت SMTP و خطِ پیامک ندارد) — رمزِ فراموش‌شده را مالک بازنشانی می‌کند. */
-  enterprise?: { serverUrl: string; onChangeServer: () => void }
+  /** `onHaveCode`: کارمندی که از مدیر کدِ دعوت یا بازنشانی گرفته (سرورِ شرکت ایمیل ندارد). */
+  enterprise?: { serverUrl: string; onChangeServer: () => void; onHaveCode: () => void }
 }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -378,12 +379,18 @@ export function LoginScreen({
           </button>
 
           {enterprise ? (
+            <>
+            <button type="button" className="link-button" onClick={enterprise.onHaveCode}>
+              کدِ دعوت یا بازنشانی دارم
+            </button>
             <p className="login-server-line">
               سرور: <span dir="ltr">{enterprise.serverUrl}</span>
               <button type="button" className="link-button" onClick={enterprise.onChangeServer}>
                 تغییرِ سرور
               </button>
             </p>
+            <p className="field-hint">رمز را فراموش کرده‌اید؟ از مدیرِ سیستم «کدِ بازنشانی» بگیرید.</p>
+            </>
           ) : (
             <button
               type="button"

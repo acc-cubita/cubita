@@ -9,8 +9,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
-from app.deps import Principal, get_principal, require_permission
+from app.deps import Principal, enterprise_only, get_principal, require_permission
 from app.models.tenant import Membership, Tenant
 from app.schemas.members import (
     ChangeRoleIn,
@@ -20,6 +21,7 @@ from app.schemas.members import (
     MemberOut,
     PermissionActionOut,
     PermissionModuleOut,
+    ResetCodeOut,
     RoleOut,
     SeatsOut,
     SetPermissionsIn,
@@ -28,7 +30,7 @@ from app.schemas.members import (
 from app.services.permissions import ACTION_LABELS, PERMISSION_MODULES
 from app.services import members as svc
 from app.services.mailer import send_invitation
-from app.services.tokens import INVITE_DAYS
+from app.services.tokens import INVITE_DAYS, STAFF_RESET_HOURS
 
 router = APIRouter(prefix="/api/members", tags=["members"])
 
@@ -46,6 +48,20 @@ def _out(membership: Membership, me_user_id: UUID) -> MemberOut:
         permissions=svc.effective_permissions(membership),
         custom_permissions=membership.permissions is not None,
     )
+
+
+def _invite_out(membership: Membership, raw_token: str, principal: Principal) -> InviteOut:
+    """ابر: لینک با ایمیل می‌رود. سازمانی: ایمیلی نیست — کد یک‌بار به مالک نشان داده می‌شود."""
+    if get_settings().is_enterprise:
+        return InviteOut(member=_out(membership, principal.user.id), email_sent=False, code=raw_token)
+    sent = send_invitation(
+        to=membership.user.email,
+        tenant_name=principal.membership.tenant.name,
+        inviter_name=principal.user.name,
+        token=raw_token,
+        valid_days=INVITE_DAYS,
+    )
+    return InviteOut(member=_out(membership, principal.user.id), email_sent=sent)
 
 
 @router.get("", response_model=MemberListOut)
@@ -110,14 +126,7 @@ def invite(
         role_key=data.role_key,
         permissions=data.permissions,
     )
-    sent = send_invitation(
-        to=membership.user.email,
-        tenant_name=principal.membership.tenant.name,
-        inviter_name=principal.user.name,
-        token=raw_token,
-        valid_days=INVITE_DAYS,
-    )
-    return InviteOut(member=_out(membership, principal.user.id), email_sent=sent)
+    return _invite_out(membership, raw_token, principal)
 
 
 @router.post("/{membership_id}/resend-invite", response_model=InviteOut)
@@ -131,14 +140,7 @@ def resend_invite(
     membership, raw_token = svc.resend_invite(
         db, tenant_id=principal.tenant_id, membership_id=membership_id
     )
-    sent = send_invitation(
-        to=membership.user.email,
-        tenant_name=principal.membership.tenant.name,
-        inviter_name=principal.user.name,
-        token=raw_token,
-        valid_days=INVITE_DAYS,
-    )
-    return InviteOut(member=_out(membership, principal.user.id), email_sent=sent)
+    return _invite_out(membership, raw_token, principal)
 
 
 @router.patch("/{membership_id}/permissions", response_model=MemberOut)
@@ -195,3 +197,21 @@ def set_status(
         actor=principal.user,
     )
     return _out(membership, principal.user.id)
+
+
+@router.post(
+    "/{membership_id}/reset-code",
+    response_model=ResetCodeOut,
+    dependencies=[Depends(enterprise_only)],
+)
+def reset_code(
+    membership_id: UUID,
+    _perm=Depends(require_permission(svc.PERMISSION_MODULE, "update")),
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    """کدِ بازنشانیِ رمزِ یک کارمند (فقط سازمانی؛ ابر بازیابیِ ایمیلی/پیامکی دارد)."""
+    membership, code = svc.issue_reset_code(
+        db, tenant_id=principal.tenant_id, membership_id=membership_id, actor=principal.user
+    )
+    return ResetCodeOut(member=_out(membership, principal.user.id), code=code, valid_hours=STAFF_RESET_HOURS)

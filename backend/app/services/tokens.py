@@ -31,6 +31,15 @@ PASSWORD_RESET_HOURS = 1
 #: دعوت باید بلندمدت‌تر باشد: گیرنده معمولاً منتظر آن نیست و ممکن است ایمیل را
 #: چند روز بعد ببیند. یک ساعت برای دعوت یعنی بیشتر دعوت‌ها منقضی می‌رسند.
 INVITE_DAYS = 7
+#: کدِ بازنشانی‌ای که مالکِ نسخه‌ی سازمانی برای کارمند می‌سازد دستی دست‌به‌دست می‌شود
+#: (کاغذ، پیام‌رسانِ داخلی)، نه با ایمیلی که همان لحظه باز شود؛ یک ساعت کم است.
+STAFF_RESET_HOURS = 24
+
+#: کدِ کوتاهِ نسخه‌ی سازمانی: ۱۶ نویسه از الفبای Crockford (بدونِ I/L/O/U) = ۸۰ بیت.
+#: سرورِ سازمانی ایمیل ندارد، پس دعوت و بازنشانی به‌جای لینکِ ۴۳ نویسه‌ای با کدی می‌رود
+#: که آدم بتواند بخواند و تایپ کند. ۸۰ بیت روی شبکه‌ی داخلی و با عمرِ محدود حدس‌ناپذیر است.
+SHORT_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+SHORT_LEN = 16
 
 
 def hash_token(raw: str) -> str:
@@ -43,6 +52,25 @@ def hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _new_short() -> str:
+    raw = "".join(secrets.choice(SHORT_ALPHABET) for _ in range(SHORT_LEN))
+    return "-".join(raw[i : i + 4] for i in range(0, SHORT_LEN, 4))
+
+
+def canonical(raw: str) -> str:
+    """کدِ کوتاه را به شکلِ یکتا برمی‌گرداند؛ توکنِ بلندِ لینک دست‌نخورده می‌ماند.
+
+    فاصله، خط‌تیره و حروفِ کوچک بی‌اثرند و O/I/L به ۰/۱ برمی‌گردند (خطای رایجِ تایپ).
+    توکنِ `token_urlsafe` ۴۳ نویسه است و هرگز به ۱۶ نویسه‌ی الفبای Crockford نمی‌رسد،
+    پس این تبدیل نمی‌تواند یک لینکِ ایمیلی را به چیزِ دیگری بدل کند.
+    """
+    cleaned = "".join(ch for ch in raw.upper() if ch.isalnum())
+    cleaned = cleaned.translate(str.maketrans({"O": "0", "I": "1", "L": "1"}))
+    if len(cleaned) == SHORT_LEN and all(ch in SHORT_ALPHABET for ch in cleaned):
+        return cleaned
+    return raw
+
+
 def issue(
     db: Session,
     *,
@@ -50,15 +78,19 @@ def issue(
     purpose: str,
     tenant_id: UUID | None = None,
     lifetime: timedelta,
+    short: bool = False,
 ) -> str:
-    """توکن تازه می‌سازد و مقدار خامش را برمی‌گرداند. این تنها لحظه‌ای است که خام وجود دارد."""
+    """توکن تازه می‌سازد و مقدار خامش را برمی‌گرداند. این تنها لحظه‌ای است که خام وجود دارد.
+
+    `short=True` کدِ ۱۶ نویسه‌ایِ قابلِ‌تایپ می‌دهد (نسخه‌ی سازمانی، بی‌ایمیل).
+    """
     invalidate_outstanding(db, user_id=user_id, purpose=purpose, tenant_id=tenant_id)
 
-    raw = secrets.token_urlsafe(TOKEN_BYTES)
+    raw = _new_short() if short else secrets.token_urlsafe(TOKEN_BYTES)
     db.add(
         AuthToken(
             purpose=purpose,
-            token_hash=hash_token(raw),
+            token_hash=hash_token(canonical(raw)),
             user_id=user_id,
             tenant_id=tenant_id,
             expires_at=datetime.now(timezone.utc) + lifetime,
@@ -87,6 +119,13 @@ def invalidate_outstanding(db: Session, *, user_id: UUID, purpose: str, tenant_i
     return count
 
 
+def peek(db: Session, raw: str) -> AuthToken | None:
+    """ردیفِ توکن بدونِ هیچ سنجش و مصرفی — فقط برای اینکه بدانیم کدام جریان باید آن را خرج کند."""
+    if not raw:
+        return None
+    return db.query(AuthToken).filter(AuthToken.token_hash == hash_token(canonical(raw.strip()))).first()
+
+
 def consume(db: Session, raw: str, *, purpose: str) -> AuthToken | None:
     """توکن را می‌سنجد و همان‌جا مصرفش می‌کند. None یعنی نامعتبر — بدون توضیح بیشتر.
 
@@ -100,7 +139,7 @@ def consume(db: Session, raw: str, *, purpose: str) -> AuthToken | None:
     if not raw:
         return None
 
-    token = db.query(AuthToken).filter(AuthToken.token_hash == hash_token(raw)).first()
+    token = peek(db, raw)
     if token is None or token.purpose != purpose or token.used_at is not None:
         return None
 
@@ -200,18 +239,21 @@ def consume_code(db: Session, *, user_id: UUID, purpose: str, code: str) -> bool
     return True
 
 
-def issue_password_reset(db: Session, user_id: UUID) -> str:
+def issue_password_reset(
+    db: Session, user_id: UUID, *, short: bool = False, hours: int = PASSWORD_RESET_HOURS
+) -> str:
     from app.models.auth_token import PURPOSE_PASSWORD_RESET
 
     return issue(
         db,
         user_id=user_id,
         purpose=PURPOSE_PASSWORD_RESET,
-        lifetime=timedelta(hours=PASSWORD_RESET_HOURS),
+        lifetime=timedelta(hours=hours),
+        short=short,
     )
 
 
-def issue_invite(db: Session, user_id: UUID, tenant_id: UUID) -> str:
+def issue_invite(db: Session, user_id: UUID, tenant_id: UUID, *, short: bool = False) -> str:
     from app.models.auth_token import PURPOSE_INVITE
 
     return issue(
@@ -220,4 +262,5 @@ def issue_invite(db: Session, user_id: UUID, tenant_id: UUID) -> str:
         purpose=PURPOSE_INVITE,
         tenant_id=tenant_id,
         lifetime=timedelta(days=INVITE_DAYS),
+        short=short,
     )

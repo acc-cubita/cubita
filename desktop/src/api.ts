@@ -458,6 +458,36 @@ export const fetchServerUpdateStatus = (token: string) => authedGet<ServerUpdate
 /** کوبیتا سازمانی: گرفتن و سنجیدنِ نسخه‌ی تازه از کانالِ ابر (فقط مالک؛ چیزی نصب نمی‌کند). */
 export const checkServerUpdate = (token: string) =>
   authedSend<ServerUpdateStatus>(token, 'POST', '/api/updates/check', {})
+/** کوبیتا سازمانی: وضعیتِ پشتیبانِ خودکارِ سرور (فقط مالک). */
+export interface ServerBackupStatus {
+  last_at: string | null
+  age_hours: number | null
+  count: number
+  total_bytes: number
+  folder: string
+  last_error: string | null
+  stale: boolean
+  automatic: boolean
+}
+export const fetchServerBackupStatus = (token: string) =>
+  authedGet<ServerBackupStatus>(token, '/api/maintenance/backups')
+/** یک پشتیبانِ کامل همین حالا روی دیسکِ سرور. */
+export const runServerBackup = (token: string) =>
+  authedSend<ServerBackupStatus>(token, 'POST', '/api/maintenance/backups/run', {})
+/** زیپِ عیب‌یابی برای پشتیبانی — بدونِ رمز و کلید. */
+export async function downloadDiagnostics(token: string): Promise<{ filename: string; blob: Blob }> {
+  const res = await fetch(`${API_BASE_URL}/api/maintenance/diagnostics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }))
+    throw apiError(errBody, `درخواست ناموفق بود (${res.status})`, res.status)
+  }
+  const match = /filename="?([^"]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')
+  //: سرآیندِ Content-Disposition از مبدأِ دیگر (file://، پورتِ دیگر) خواندنی نیست؛ نام را خودمان می‌سازیم.
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+  return { filename: match?.[1] ?? `cubita-diagnostics-${stamp}.zip`, blob: await res.blob() }
+}
 /** کوبیتا سازمانی: فعال‌سازیِ یک‌کلیکی با کدِ فعال‌سازی — سرور خودش با ابر حرف می‌زند (فقط مالک). */
 export const activateLicenseOnline = (token: string, code: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license/activate', { code })
@@ -4847,14 +4877,25 @@ export const fetchRoles = (token: string) => authedGet<RoleInfo[]>(token, '/api/
 export const fetchPermissionModules = (token: string) =>
   authedGet<PermissionModule[]>(token, '/api/members/permission-modules')
 
+/** `code` فقط در کوبیتا سازمانی (بی‌ایمیل): کدِ دعوتی که مالک دستی به کارمند می‌دهد. */
+export interface InviteResult {
+  member: Member
+  email_sent: boolean
+  code: string | null
+}
+
 export const inviteMember = (
   token: string,
   data: { email: string; name: string; role_key: string; permissions?: PermissionMap | null },
-) => authedSend<{ member: Member; email_sent: boolean }>(token, 'POST', '/api/members/invite', data)
+) => authedSend<InviteResult>(token, 'POST', '/api/members/invite', data)
 
 export const resendInvite = (token: string, membershipId: string) =>
-  authedSend<{ member: Member; email_sent: boolean }>(
-    token, 'POST', `/api/members/${membershipId}/resend-invite`, {},
+  authedSend<InviteResult>(token, 'POST', `/api/members/${membershipId}/resend-invite`, {})
+
+/** کوبیتا سازمانی: کدِ بازنشانیِ رمزِ کارمند؛ کارمند با آن رمزِ تازه‌اش را خودش می‌گذارد. */
+export const issueMemberResetCode = (token: string, membershipId: string) =>
+  authedSend<{ member: Member; code: string; valid_hours: number }>(
+    token, 'POST', `/api/members/${membershipId}/reset-code`, {},
   )
 
 /** `null` یعنی بازگشت به مجوزِ نقش. */
@@ -4938,6 +4979,10 @@ export const resetPasswordSms = (phone: string, code: string, password: string) 
 
 export const acceptInvite = (token: string, password: string, name?: string) =>
   anonPost<{ access_token: string }>('/api/auth/accept-invite', { token, password, name: name || null })
+
+/** کوبیتا سازمانی: کدِ دعوت یا بازنشانی که از مالک (یا از `cubita-server`) گرفته شده. */
+export const redeemCode = (code: string, password: string, name?: string) =>
+  anonPost<{ access_token: string }>('/api/auth/redeem-code', { code, password, name: name || null })
 
 
 // --- ابطال و چاپ فاکتور ------------------------------------------------------------

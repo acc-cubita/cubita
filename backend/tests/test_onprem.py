@@ -149,6 +149,40 @@ def test_full_provision_against_real_postgres(tmp_path):
         assert upgraded.alembic_version == first.alembic_version
         dumps = list(layout.backups.glob("pre-upgrade-*.dump"))
         assert len(dumps) == 1 and dumps[0].stat().st_size > 10_000
+
+        # M6 — مالکِ رمزفراموش‌کرده: کد با نقشِ مالکِ دیتابیس، روی یک کسب‌وکارِ واقعی.
+        import subprocess
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        from app.onprem import maintenance as mnt
+        from app.services.provisioning import signup_new_business
+
+        migration_url = prov.read_env(layout)["MIGRATION_DATABASE_URL"]
+        engine = create_engine(migration_url)
+        try:
+            with Session(engine) as s:
+                signup_new_business(
+                    s, business_name="شرکتِ آزمون", owner_name="مالکِ آزمون",
+                    email="owner@onprem-test.example.com", password="Owner-Pass-2026", trial=False,
+                )
+                s.commit()
+        finally:
+            engine.dispose()
+        issued = mnt.issue_owner_reset(migration_url)
+        assert [email for email, _, _ in issued] == ["owner@onprem-test.example.com"]
+        assert len(issued[0][2].replace("-", "")) == 16
+
+        # M6 — پشتیبانِ شبانه روی همان کلاستر؛ دامپ باید با pg_restore خوانا باشد.
+        nightly = mnt.run_backup(layout, Path(PG_BIN), migration_url)
+        assert nightly.name.startswith(mnt.NIGHTLY_PREFIX) and nightly.stat().st_size > 10_000
+        assert not mnt.status(layout).stale and not mnt.is_due(layout)
+        listing = subprocess.run(
+            [str(Path(PG_BIN) / "pg_restore"), "--list", str(nightly)], capture_output=True, text=True
+        )
+        assert listing.returncode == 0 and "TABLE DATA public audit_log" in listing.stdout
+        assert not list(layout.backups.glob("*.partial"))
     finally:
         if prov.is_running(Path(PG_BIN), layout):
             prov.pg_ctl(Path(PG_BIN), layout, "stop")

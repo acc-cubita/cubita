@@ -345,27 +345,39 @@ def head_revision(alembic_dir: Path) -> str:
     return ScriptDirectory.from_config(cfg).get_current_head() or ""
 
 
-def backup_before_upgrade(pg_bin: Path, layout: Layout, secrets_: dict, port: int, revision: str) -> Path:
+def dump(pg_bin: Path, layout: Layout, migration_url: str, name: str) -> Path:
     """`pg_dump -Fc` با نقشِ مالک (BYPASSRLS — بی‌آن پشتیبان بی‌صدا فقط ردیف‌های قابل‌دیدن را
-    می‌گرفت). **اگر شکست بخورد مهاجرت اجرا نمی‌شود**: ارتقایی که پشتیبان ندارد، ریسکی است
-    که دفترِ حسابداریِ شرکت نباید بپردازد."""
+    می‌گرفت). اول در `.partial` نوشته می‌شود و بعد جابه‌جا، تا دامپِ نیمه‌کاره (قطعِ برق،
+    پرشدنِ دیسک) هرگز به‌جای پشتیبانِ سالم شمرده نشود."""
+    from sqlalchemy.engine import make_url
+
+    url = make_url(migration_url)
     layout.backups.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    target = layout.backups / f"pre-upgrade-{revision}-{stamp}.dump"
+    target = layout.backups / name
+    partial = target.with_name(target.name + ".partial")
     _run(
         [
             _exe(pg_bin, "pg_dump"),
-            "-h", "127.0.0.1",
-            "-p", str(port),
-            "-U", MIGRATE_ROLE,
+            "-h", url.host or "127.0.0.1",
+            "-p", str(url.port or DEFAULT_PG_PORT),
+            "-U", url.username or MIGRATE_ROLE,
             "-Fc",
-            "-f", str(target),
-            DB_NAME,
+            "-f", str(partial),
+            url.database or DB_NAME,
         ],
-        env={"PGPASSWORD": secrets_["migrate_password"]},
+        env={"PGPASSWORD": url.password or ""},
         timeout=3600,
     )
+    partial.replace(target)
     return target
+
+
+def backup_before_upgrade(pg_bin: Path, layout: Layout, secrets_: dict, port: int, revision: str) -> Path:
+    """پیش از مهاجرتِ ارتقا. **اگر شکست بخورد مهاجرت اجرا نمی‌شود**: ارتقایی که پشتیبان
+    ندارد، ریسکی است که دفترِ حسابداریِ شرکت نباید بپردازد."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    url = db_url(MIGRATE_ROLE, secrets_["migrate_password"], port)
+    return dump(pg_bin, layout, url, f"pre-upgrade-{revision}-{stamp}.dump")
 
 
 def verify_isolation(app_url: str) -> int:

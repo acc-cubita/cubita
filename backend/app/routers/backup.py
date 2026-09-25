@@ -14,20 +14,33 @@ RLS خودکار به مستأجرِ جاری محدودش می‌کند ([tenan
 
 **فقط مالک.** خروجیِ کامل همه‌ی داده‌ی مالی است و بازیابی مخرب؛ هر دو فقط دستِ
 نقشِ «owner» است، نه هر کارمندی با دسترسیِ مشاهده.
+
+**انتقال از ابر به سرورِ سازمانی هم همین فایل است.** ولی ۱۰۱ ستونِ دفتر («ثبت‌کننده»،
+«تأییدکننده»…) به جدولِ سراسریِ `users` کلیدِ خارجی دارند، و روی سرورِ تازه آن کاربرها
+نیستند. پس خروجی فهرستِ کاربرانِ ارجاع‌شده را هم دارد (نام، ایمیل، نقش — **بدونِ hashِ
+رمز**)، و ورودیِ سازمانی آن‌ها را به‌صورتِ عضوِ «غیرفعال» می‌سازد: مالک هر کدام را که
+می‌خواهد فعال می‌کند و کدِ بازنشانی می‌دهد تا رمزِ خودش را بگذارد. کاربری که ایمیلش روی
+سرور هست (معمولاً خودِ مالک) به همان حساب نگاشته می‌شود. تنظیماتِ حسابداریِ کسب‌وکار
+(پهنای کدِ حساب، کنترلِ تفصیلی…) هم همراه می‌آید، چون دفتر بی آن‌ها معنای دیگری می‌دهد.
 """
 import base64
+import secrets
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.audit import PURGE_SETTING
+from app.config import get_settings
 from app.database import Base, get_db
 from app.deps import Principal, get_principal
+from app.models.tenant import Membership, Tenant
+from app.models.user import Role, User
+from app.security import hash_password
 from app.tenancy import is_tenant_table
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
@@ -63,6 +76,27 @@ def _skip_tables() -> set[str]:
             if is_tenant_table(fk.column.table.name):
                 skip.add(fk.column.table.name)
     return skip
+
+
+#: تنظیماتِ حسابداریِ کسب‌وکار که روی جدولِ سراسریِ `tenants` نشسته‌اند و با دفتر جابه‌جا
+#: می‌شوند. نام، نوع، سقفِ کاربر، آزمایشی و ماژول‌های اعطایی عمداً نیستند: آن‌ها را نصب
+#: و مجوزِ مقصد تعیین می‌کند، نه فایلِ پشتیبان.
+TENANT_SETTINGS = (
+    "industry",
+    "trade",
+    "enabled_modules",
+    "account_code_widths",
+    "tafsili_enforcement",
+    "cheque_number_control",
+    "sales_invoice_posting",
+)
+
+#: نقش‌هایی که با دفتر منتقل نمی‌شوند: حسابرسِ گماشته مهمانِ کوبیتاست و «دمو» حسابِ نمایشی.
+_UNMIGRATED_ROLES = {"auditor", "demo"}
+
+
+def _user_fk_columns(table: sa.Table) -> list[str]:
+    return [c.name for c in table.columns if any(fk.column.table.name == "users" for fk in c.foreign_keys)]
 
 
 def _tenant_tables_in_order() -> list[sa.Table]:
@@ -145,17 +179,125 @@ def _order_selfref(table: sa.Table, rows: list[dict]) -> list[dict]:
 def export_backup(principal: Principal = Depends(require_owner), db: Session = Depends(get_db)) -> dict:
     """کلِ داده‌ی این کسب‌وکار را در یک سندِ JSON برمی‌گرداند."""
     tables: dict[str, list[dict]] = {}
+    referenced: set[uuid.UUID] = set()
     for table in _tenant_tables_in_order():
         rows = db.execute(sa.select(table)).mappings().all()
+        user_cols = _user_fk_columns(table)
+        for row in rows:
+            referenced.update(row[c] for c in user_cols if row[c] is not None)
         tables[table.name] = [{k: _ser(v) for k, v in row.items()} for row in rows]
+    tenant = db.get(Tenant, principal.tenant_id)
     return {
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
         "tenant_id": str(principal.tenant_id),
         "tenant_name": principal.membership.tenant.name,
         "exported_at": datetime.utcnow().isoformat() + "Z",
+        "tenant_settings": {k: _ser(getattr(tenant, k)) for k in TENANT_SETTINGS},
+        "users": _export_users(db, principal.tenant_id, referenced),
         "tables": tables,
     }
+
+
+def _export_users(db: Session, tenant_id: uuid.UUID, referenced: set[uuid.UUID]) -> list[dict]:
+    """اعضای این کسب‌وکار به‌اضافه‌ی هر کاربرِ دیگری که دفتر به او ارجاع دارد (کارمندِ رفته).
+
+    hashِ رمز عمداً نیست: فایلِ پشتیبان دستِ مالک است و مالک نباید hashِ رمزِ کارمندانش را
+    داشته باشد. روی مقصد هر کس با کدِ بازنشانی رمزِ تازه‌اش را خودش می‌گذارد.
+    """
+    members = (
+        db.query(Membership, Role.key)
+        .join(Role, Role.id == Membership.role_id)
+        .filter(Membership.tenant_id == tenant_id)
+        .all()
+    )
+    by_user = {m.user_id: (m, key) for m, key in members}
+    ids = referenced | set(by_user)
+    if not ids:
+        return []
+    out: list[dict] = []
+    for user in db.query(User).filter(User.id.in_(ids)).all():
+        membership, role_key = by_user.get(user.id, (None, None))
+        out.append(
+            {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name,
+                "role_key": role_key,
+                "member_status": membership.status if membership else None,
+                "permissions": membership.permissions if membership else None,
+            }
+        )
+    return out
+
+
+def _import_users(db: Session, principal: Principal, users: list) -> dict[uuid.UUID, uuid.UUID]:
+    """سرورِ سازمانی: کاربرانِ فایل را می‌سازد و نگاشتِ شناسه‌ی ابر → شناسه‌ی محلی را می‌دهد.
+
+    - همان شناسه روی سرور هست (بازیابیِ دوباره) → همان.
+    - همان ایمیل هست (معمولاً خودِ مالک) → به آن حساب نگاشته می‌شود.
+    - وگرنه با همان شناسه ساخته می‌شود، با رمزِ تصادفیِ دورانداختنی.
+
+    هر عضوِ این کسب‌وکار عضویتِ «غیرفعال» می‌گیرد: صندلیِ مجوز مصرف نمی‌کند و تا مالک
+    خودش فعالش نکند و کدِ بازنشانی ندهد، کسی با آن وارد نمی‌شود.
+    """
+    mapping: dict[uuid.UUID, uuid.UUID] = {}
+    roles = {r.key: r for r in db.query(Role).filter(Role.tenant_id == principal.tenant_id).all()}
+    for entry in users:
+        if not isinstance(entry, dict) or not entry.get("id") or not entry.get("email"):
+            continue
+        cloud_id = uuid.UUID(str(entry["id"]))
+        email = str(entry["email"]).strip().lower()
+        user = db.get(User, cloud_id) or db.query(User).filter(User.email == email).first()
+        if user is None:
+            user = User(
+                id=cloud_id,
+                email=email,
+                name=str(entry.get("name") or email)[:100],
+                hashed_password=hash_password(secrets.token_urlsafe(32)),
+            )
+            db.add(user)
+            db.flush()
+        mapping[cloud_id] = user.id
+
+        role = roles.get(entry.get("role_key") or "")
+        if role is None or role.key in _UNMIGRATED_ROLES:
+            continue
+        exists = (
+            db.query(Membership)
+            .filter(Membership.tenant_id == principal.tenant_id, Membership.user_id == user.id)
+            .first()
+        )
+        if exists is None:
+            db.add(
+                Membership(
+                    user_id=user.id,
+                    tenant_id=principal.tenant_id,
+                    role_id=role.id,
+                    status="disabled",
+                    permissions=entry.get("permissions"),
+                )
+            )
+    db.flush()
+    return mapping
+
+
+def _missing_users(db: Session, ordered: list[sa.Table], tables_data: dict, mapping: dict) -> int:
+    """چند کاربرِ ارجاع‌شده روی این سرور نیستند — فایلِ قدیمی که بخشِ `users` ندارد."""
+    wanted: set[uuid.UUID] = set()
+    for table in ordered:
+        cols = _user_fk_columns(table)
+        if not cols:
+            continue
+        for r in tables_data.get(table.name) or []:
+            for c in cols:
+                if r.get(c):
+                    raw = uuid.UUID(str(r[c]))
+                    wanted.add(mapping.get(raw, raw))
+    if not wanted:
+        return 0
+    found = db.query(func.count(User.id)).filter(User.id.in_(wanted)).scalar() or 0
+    return len(wanted) - found
 
 
 @router.post("/import")
@@ -174,6 +316,22 @@ def import_backup(
     ordered = _tenant_tables_in_order()
     tenant_id = principal.tenant_id
 
+    user_map: dict[uuid.UUID, uuid.UUID] = {}
+    if get_settings().is_enterprise:
+        user_map = _import_users(db, principal, payload.get("users") or [])
+        if _missing_users(db, ordered, tables_data, user_map):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "این فایلِ پشتیبان فهرستِ کاربران را ندارد (از نسخه‌ی قدیمی‌ترِ کوبیتاست). "
+                "از حسابِ ابری یک پشتیبانِ تازه بگیرید و همان را اینجا بازیابی کنید.",
+            )
+        settings_in = payload.get("tenant_settings")
+        tenant = db.get(Tenant, tenant_id)
+        if isinstance(settings_in, dict) and tenant is not None:
+            for key in TENANT_SETTINGS:
+                if key in settings_in:
+                    setattr(tenant, key, settings_in[key])
+
     # پرچمِ purge تا بشود دفترِ حسابرسیِ فقط‌افزودنی را هم پاک کرد (به تراکنش محدود است).
     db.execute(text("SELECT set_config(:k, 'on', true)"), {"k": PURGE_SETTING})
 
@@ -190,11 +348,15 @@ def import_backup(
             continue
         rows = _order_selfref(table, raw)
         colmap = {c.name: c for c in table.columns}
+        user_cols = _user_fk_columns(table) if user_map else []
         params = []
         for r in rows:
             row = {k: _de(colmap[k], v) for k, v in r.items() if k in colmap}
             if "tenant_id" in colmap:
                 row["tenant_id"] = tenant_id
+            for c in user_cols:
+                if row.get(c) is not None:
+                    row[c] = user_map.get(row[c], row[c])
             params.append(row)
         db.execute(table.insert(), params)
         restored[table.name] = len(params)
