@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `routers/journal.py`، `JournalGrid.tsx`، `JournalEntryForm.tsx`، `XlGrid.tsx`، `lib/rowSelection.ts`، `lib/useColumnWidths.ts`، `lib/useDebounced.ts`، `lib/journalLineOps.ts`، `JournalPages.tsx`، `api.ts`، `ShortcutsPage.tsx`، `App.css` و تست‌ها | جدولِ اکسل‌مانند: گریدِ ثبتِ سند + فهرستِ اسناد | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `ModulePanels.tsx`، `lib/menuOrder.ts` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.mod-op-*`) و تست‌ها | کارت‌های «عملیات» و «فهرست»: جابه‌جاییِ منوها با فلش و Alt+↑/↓ | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `lib/useFitText.ts` (تازه)، `App.css` (`.jb-*`) | ثبتِ سند: خانه‌های ثابتِ جمع/توازن؛ عددِ بلند کوچک می‌شود نه خانه | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalGrid.tsx`، `JournalEntryForm.tsx`، `AccountCombo.tsx` (تازه)، `lib/gridPicker.ts`، `ShortcutsPage.tsx`، `App.css`، `e2e/accountant-journal.e2e.mjs` و تست‌ها | ثبتِ سند: فوترِ نهایی، پنجره‌ی میان‌برها، عرضِ ستون‌ها، جست‌وجوی درجای حساب، Enter از حساب به مبلغ | ۱۴۰۵/۰۷/۰۳ |

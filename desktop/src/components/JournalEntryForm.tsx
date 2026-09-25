@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Trash2, X } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Search, Trash2, X } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
@@ -21,6 +21,7 @@ import { useExperienceMode } from '../lib/experienceMode'
 import { JournalGrid } from './JournalGrid'
 import { openCellPicker } from '../lib/gridPicker'
 import { useFitText } from '../lib/useFitText'
+import { findLines } from '../lib/journalLineOps'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -63,6 +64,32 @@ export function JournalEntryForm({
     keysReturn.current?.focus()
     keysReturn.current = null
   }
+
+  //: جست‌وجوی سریع در ردیف‌ها (سرِ کارت، Ctrl+F) — مثلِ «یافتن»ِ مرورگر: فوکوس در کادر می‌ماند،
+  //: Enter/Shift+Enter بینِ یافته‌ها می‌رود، Esc پاک می‌کند و به همان ردیف برمی‌گردد. ردیف‌های
+  //: پیداشده در گرید برجسته و بقیه کم‌رنگ می‌شوند؛ هیچ ردیفی پنهان نمی‌شود تا ناوبریِ گرید
+  //: (که با شاخصِ ردیف کار می‌کند) دست‌نخورده بماند.
+  const [find, setFind] = useState('')
+  const [findPos, setFindPos] = useState(-1)
+  const findRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const accountLabel = useMemo(
+    () => new Map(d.postableAccounts.map((a) => [a.id, `${a.code} — ${a.name}`])),
+    [d.postableAccounts],
+  )
+  const hits = useMemo(() => findLines(d.lines, find, accountLabel), [d.lines, find, accountLabel])
+  const showHit = (pos: number) => {
+    setFindPos(pos)
+    const row = hits?.[pos]
+    if (row === undefined) return
+    formRef.current?.querySelector(`[data-cell="${row}-0"]`)?.scrollIntoView?.({ block: 'center' })
+  }
+  //: با هر حرف، اولین یافته جلوی چشم — همان جست‌وجوی افزایشیِ مرورگر.
+  useEffect(() => {
+    if (hits && hits.length > 0) showHit(0)
+    else setFindPos(-1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find])
 
   if (d.postableAccounts.length === 0) {
     return (
@@ -175,6 +202,7 @@ export function JournalEntryForm({
   if (isAccountant) {
     return (
       <form
+        ref={formRef}
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
@@ -193,6 +221,13 @@ export function JournalEntryForm({
           }
           //: پنجره‌ی باز مالِ خودش است — Ctrl+S از داخلِ آن سند نمی‌فرستد.
           if ((e.target as HTMLElement).closest('[role="dialog"]')) return
+          //: Ctrl+F «یافتنِ» مرورگر را کنار می‌زند و به جست‌وجوی ردیف‌های همین سند می‌رود.
+          if (e.code === 'KeyF') {
+            e.preventDefault()
+            findRef.current?.focus()
+            findRef.current?.select()
+            return
+          }
           //: Ctrl+S از **هر جای** فرم، نه فقط از خانه‌های گرید — روی دکمه نوشته شده، پس باید از
           //: سربرگ هم کار کند (در مرورگر وگرنه «ذخیره‌ی صفحه» باز می‌شد). گرید خودش همین را زودتر
           //: می‌گیرد و `preventDefault` می‌کند؛ این شرط جلوی ثبتِ دوباره را می‌گیرد.
@@ -208,20 +243,58 @@ export function JournalEntryForm({
           tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
           badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
           actions={
-            <button
-              type="button"
-              className="btn-ghost jk-trigger"
-              onClick={openKeys}
-              aria-haspopup="dialog"
-              aria-keyshortcuts="Control+/"
-              title="میان‌برهای صفحه‌کلید (Ctrl+/)"
-            >
-              <Keyboard size={16} aria-hidden="true" /> میان‌برها
-            </button>
+            <div className="jg-head-actions">
+              <div className={`jg-find${find ? ' has-query' : ''}`} role="search">
+                <Search size={14} aria-hidden="true" />
+                <input
+                  ref={findRef}
+                  type="search"
+                  value={find}
+                  onChange={(e) => setFind(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      //: Enter در کادرِ جست‌وجوی فرم نباید سند را ثبت کند.
+                      e.preventDefault()
+                      if (hits && hits.length > 0) {
+                        const n = hits.length
+                        showHit(findPos < 0 ? 0 : (findPos + (e.shiftKey ? -1 : 1) + n) % n)
+                      }
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const row = hits && findPos >= 0 ? hits[findPos] : 0
+                      setFind('')
+                      formRef.current
+                        ?.querySelector<HTMLElement>(`[data-cell="${row}-0"] input, [data-cell="${row}-0"] button`)
+                        ?.focus()
+                    }
+                  }}
+                  placeholder="جست‌وجو در ردیف‌ها"
+                  aria-label="جست‌وجو در ردیف‌های سند — حساب، شرح یا مبلغ"
+                  aria-keyshortcuts="Control+F"
+                  title="Ctrl+F — Enter: بعدی · Shift+Enter: قبلی · Esc: پاک‌کردن"
+                />
+                {hits && (
+                  <span className="jg-find-count" aria-live="polite">
+                    {hits.length === 0 ? 'پیدا نشد' : `${fa(Math.max(findPos, 0) + 1)} از ${fa(hits.length)}`}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn-ghost jk-trigger"
+                onClick={openKeys}
+                aria-haspopup="dialog"
+                aria-keyshortcuts="Control+/"
+                title="میان‌برهای صفحه‌کلید (Ctrl+/)"
+              >
+                <Keyboard size={16} aria-hidden="true" /> میان‌برها
+              </button>
+            </div>
           }
         >
           <JournalHeaderBar d={d} />
-          <JournalGrid d={d} />
+          <JournalGrid d={d} highlight={hits} current={hits && findPos >= 0 ? hits[findPos] : undefined} />
           {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
           <AddRowButton onClick={d.addLine}>افزودن ردیف (Ctrl+Enter)</AddRowButton>
         </SectionCard>
@@ -483,6 +556,7 @@ const KEY_GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Tab', 'خانه‌ی بعد (شرح و مرکز هم)؛ در پایان، ردیفِ تازه'],
       ['← → ↑ ↓', 'جابه‌جایی بینِ خانه‌ها'],
       ['Ctrl+G', 'رفتن به ردیف'],
+      ['Ctrl+F', 'جست‌وجو در ردیف‌ها (Enter: بعدی)'],
     ],
   },
   {
@@ -501,7 +575,8 @@ const KEY_GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Ctrl+Enter', 'ردیفِ تازه'],
       ['Ctrl+D', 'تکرارِ ردیف'],
       ['Ctrl+Shift+C', 'کپیِ حساب از ردیفِ قبل'],
-      ['Ctrl+Delete', 'حذفِ ردیف'],
+      ['Ctrl+Delete', 'حذفِ ردیف (یا ردیف‌های انتخاب‌شده)'],
+      ['کلیک روی شماره', 'انتخابِ ردیف — Ctrl/Shift برای چند ردیف'],
     ],
   },
   {

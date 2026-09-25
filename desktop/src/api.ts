@@ -6818,6 +6818,13 @@ export interface JournalQuery {
   sourceType?: string
   q?: string
   limit?: number
+  /** بازه‌ی شماره‌ی سند؛ فیلترِ ستونیِ «شماره» هر دو را یکی می‌گذارد. */
+  entryFrom?: number
+  entryTo?: number
+  /** فیلترهای ستونیِ فهرستِ اسناد: عطفِ دقیق، فرعی و شرحِ جزئی. */
+  atf?: number
+  sub?: string
+  desc?: string
 }
 
 /** جمعِ **کلِ دامنه‌ی** فهرستِ اسناد، نه صفحه‌ی بارگذاری‌شده (`/api/journal-entries/summary`).
@@ -6878,6 +6885,11 @@ export const fetchJournalEntriesFiltered = async (
   if (query.status) qs.set('status', query.status)
   if (query.sourceType) qs.set('source_type', query.sourceType)
   if (query.q) qs.set('q', query.q)
+  if (query.entryFrom !== undefined) qs.set('entry_from', String(query.entryFrom))
+  if (query.entryTo !== undefined) qs.set('entry_to', String(query.entryTo))
+  if (query.atf !== undefined) qs.set('atf', String(query.atf))
+  if (query.sub) qs.set('sub', query.sub)
+  if (query.desc) qs.set('desc', query.desc)
   const wanted = query.limit ?? 100
   const path = `/api/journal-entries?${qs}`
 

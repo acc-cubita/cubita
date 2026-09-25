@@ -168,6 +168,12 @@ export function useJournalEntryDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** حذفِ ردیف‌های انتخاب‌شده‌ی گرید با هم (`ops.removeRows`). */
+  const removeLines = useCallback((indices: number[]) => {
+    setLines((prev) => ops.removeRows(prev, indices, emptyLine))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   /** رونوشتِ کاملِ ردیف (با مبلغ)، بلافاصله بعد از خودش. شاخصِ تازه را برمی‌گرداند. */
   const duplicateLine = useCallback((index: number): number => {
     setLines((prev) => ops.duplicateAt(prev, index))
@@ -338,6 +344,7 @@ export function useJournalEntryDraft({
     setLineFx,
     addLine,
     removeLine,
+    removeLines,
     duplicateLine,
     copyPreviousInto,
     remaining,

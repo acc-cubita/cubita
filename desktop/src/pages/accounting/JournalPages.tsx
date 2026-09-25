@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BookOpen,
   CheckCircle2,
@@ -44,12 +44,18 @@ import { OutboxList } from '../../components/OutboxList'
 import { Pager, usePagination } from '../../components/Pager'
 import { isElectron } from '../../platform'
 import { formatJalali } from '../../lib/jalali'
+import { normalizeFa } from '../../lib/faText'
+import { modsOf, useRowSelection } from '../../lib/rowSelection'
+import { useColumnWidths } from '../../lib/useColumnWidths'
+import { useDebounced } from '../../lib/useDebounced'
+import { ColResizer, SelectionBar } from '../../components/XlGrid'
 import {
   AsyncBlock,
   Metric,
   Note,
   OpsPage,
   RangeBar,
+  SOURCE_LABELS,
   StatusChip,
   fa,
   faAmount,
@@ -108,17 +114,49 @@ export function JournalEntryPage({
   )
 }
 
+/** فیلترهای سرستونِ فهرستِ اسناد — متنِ خامِ کادرها؛ تبدیل به پارامترِ سرور در صفحه. */
+interface ColumnFilters {
+  number: string
+  atf: string
+  sub: string
+  desc: string
+  source: string
+}
+const NO_COLUMN_FILTERS: ColumnFilters = { number: '', atf: '', sub: '', desc: '', source: '' }
+
+//: عرضِ پیش‌فرضِ ستون‌ها برای وقتی کاربر یکی را کشید (`useColumnWidths`).
+const LIST_COL_FALLBACK: Record<string, number> = {
+  rowhead: 44,
+  number: 70,
+  atf: 70,
+  sub: 90,
+  date: 96,
+  desc: 240,
+  source: 130,
+  status: 80,
+  lines: 50,
+  amount: 130,
+  actions: 96,
+}
+
 /** جدولِ اسنادِ دفتر — تکی و مشترک.
  *
  *  پیش‌تر دو نسخه‌ی کمی‌متفاوت داشت: یکی ته صفحه‌ی «سند حسابداری» (با ابطال، بدونِ
  *  شمارِ ردیف) و یکی در صفحه‌ی فهرستِ «اسناد حسابداری» (با شمارِ ردیف، بدونِ ابطال).
- *  حالا یکی است و ستونِ کنش فقط وقتی می‌آید که `onVoid` داده شود. */
+ *  حالا یکی است و ستونِ کنش فقط وقتی می‌آید که `onVoid` داده شود.
+ *
+ *  **جدولِ اکسل‌مانند** (`.xl-grid`): سرستونِ خاکستری و خطوطِ ظریفِ افقی و عمودی، ردیفِ هر سند
+ *  با رنگِ ملایمِ وضعیتش (موقت کهربایی، دائم سبز، باطل خط‌خورده)، ستون‌های کشیدنی، و انتخابِ
+ *  ردیف با سرستونِ ردیف (کلیک / Ctrl / Shift) که جمعِ مبلغِ انتخاب‌شده‌ها را مثلِ نوارِ وضعیتِ
+ *  اکسل می‌گوید. `filters` ردیفِ فیلترِ زیرِ سرستون‌ها را می‌سازد — مقدارها سمتِ سرور اعمال
+ *  می‌شوند، نه روی صفحه‌ی بارشده. */
 function EntryTable({
   entries,
   pageSize = 20,
   onVoid,
   onPrint,
   onEditSub,
+  filters,
 }: {
   entries: JournalEntryRecord[]
   pageSize?: number
@@ -128,33 +166,125 @@ function EntryTable({
   onPrint?: (e: JournalEntryRecord) => void
   /** اصلاحِ شماره فرعی. فقط سندِ موقت؛ روی دائم دکمه نمی‌آید. */
   onEditSub?: (e: JournalEntryRecord) => void
+  filters?: {
+    values: ColumnFilters
+    onChange: (key: keyof ColumnFilters, value: string) => void
+    status: '' | 'temporary' | 'permanent'
+    onStatus: (s: '' | 'temporary' | 'permanent') => void
+  }
 }) {
   const pg = usePagination(entries, pageSize)
   const total = (e: JournalEntryRecord) =>
     e.lines.reduce((sum, l) => sum + Number(l.debit || 0), 0)
+  const cw = useColumnWidths('cubita.grid.journalList', LIST_COL_FALLBACK)
+  const { selected, click, clear } = useRowSelection()
+  //: فیلترِ تازه یعنی فهرستِ دیگری؛ انتخابِ قبلی دیگر معنا ندارد.
+  useEffect(() => clear(), [entries, clear])
+  const order = pg.pageItems.map((e) => e.id)
+  const chosen = entries.filter((e) => selected.has(e.id))
+  const withActions = Boolean(onVoid || onPrint)
+  const colIds = ['rowhead', 'number', 'atf', 'sub', 'date', 'desc', 'source', 'status', 'lines', 'amount', ...(withActions ? ['actions'] : [])]
+
+  const head = (id: string, label: ReactNode) => (
+    <th data-col={id}>
+      {label}
+      <ColResizer onBegin={(ev) => cw.begin(ev, id)} onReset={cw.reset} />
+    </th>
+  )
+  const textFilter = (key: keyof ColumnFilters, label: string, numeric = false) =>
+    filters && (
+      <input
+        type="search"
+        inputMode={numeric ? 'numeric' : undefined}
+        value={filters.values[key]}
+        onChange={(ev) => filters.onChange(key, ev.target.value)}
+        placeholder="فیلتر…"
+        aria-label={`فیلترِ ${label}`}
+      />
+    )
 
   return (
     <div className="table-scroll ef-table-wrap">
-      <table className="cards-on-mobile acc-table ef-table">
+      <table className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list" style={cw.table(colIds)}>
+        <colgroup>
+          {colIds.map((id) => (
+            <col key={id} className={`xl-c-${id}`} style={cw.col(id)} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
-            <th>شماره</th>
+            <th className="xl-rowhead" data-col="rowhead" aria-label="انتخاب" />
+            {head('number', 'شماره')}
             {/* عطف کنارِ شماره می‌نشیند چون کاربر این دو را با هم می‌خواند: یکی
                 جای سند در دفترِ امروز است، دیگری هویتِ ثابتش. */}
-            <th>عطف</th>
-            <th>فرعی</th>
-            <th>تاریخ</th>
-            <th>شرح</th>
-            <th>منشأ</th>
-            <th>وضعیت</th>
-            <th>ردیف</th>
-            <th>مبلغ</th>
-            {(onVoid || onPrint) && <th className="ef-col-min">عملیات</th>}
+            {head('atf', 'عطف')}
+            {head('sub', 'فرعی')}
+            {head('date', 'تاریخ')}
+            {head('desc', 'شرح')}
+            {head('source', 'منشأ')}
+            {head('status', 'وضعیت')}
+            {head('lines', 'ردیف')}
+            {head('amount', 'مبلغ')}
+            {withActions && <th className="ef-col-min" data-col="actions">عملیات</th>}
           </tr>
+          {filters && (
+            <tr className="xl-filter-row">
+              <th className="xl-rowhead" aria-hidden="true" />
+              <th>{textFilter('number', 'شماره', true)}</th>
+              <th>{textFilter('atf', 'عطف', true)}</th>
+              <th>{textFilter('sub', 'فرعی')}</th>
+              {/* تاریخ فیلترِ خودش را دارد: بازه‌ی بالای صفحه. */}
+              <th />
+              <th>{textFilter('desc', 'شرح')}</th>
+              <th>
+                <SearchSelect
+                  value={filters.values.source}
+                  onChange={(ev) => filters.onChange('source', ev.target.value)}
+                  aria-label="فیلترِ منشأ"
+                >
+                  <option value="">همه</option>
+                  {Object.entries(SOURCE_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>
+                      {label}
+                    </option>
+                  ))}
+                </SearchSelect>
+              </th>
+              <th>
+                <SearchSelect
+                  value={filters.status}
+                  onChange={(ev) => filters.onStatus(ev.target.value as '' | 'temporary' | 'permanent')}
+                  aria-label="فیلترِ وضعیت"
+                >
+                  <option value="">همه</option>
+                  <option value="temporary">موقت</option>
+                  <option value="permanent">دائم</option>
+                </SearchSelect>
+              </th>
+              <th />
+              <th />
+              {withActions && <th />}
+            </tr>
+          )}
         </thead>
         <tbody>
-          {pg.pageItems.map((e) => (
-            <tr key={e.id} className={e.voided_at ? 'acc-row--void' : ''}>
+          {pg.pageItems.map((e, idx) => {
+            const on = selected.has(e.id)
+            const tone = e.voided_at ? 'acc-row--void' : e.status === 'permanent' ? 'xl-row--perm' : 'xl-row--temp'
+            return (
+            <tr key={e.id} className={`${tone}${on ? ' is-selected' : ''}`}>
+              <td className="xl-rowhead card-hide">
+                <button
+                  type="button"
+                  className="xl-rowhead-btn"
+                  aria-pressed={on}
+                  aria-label={`انتخابِ سندِ ${fa(e.number ?? 0)}`}
+                  onClick={(ev) => click(order, e.id, modsOf(ev))}
+                >
+                  {/* `pg.page` از صفر است. */}
+                  {fa(pg.page * pageSize + idx + 1)}
+                </button>
+              </td>
               <td className="card-title" data-label="شماره">
                 {fa(e.number ?? 0)}
               </td>
@@ -173,8 +303,10 @@ function EntryTable({
                 )}
               </td>
               <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
-              <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceText(e)}</td>
+              <td data-label="شرح" className="xl-ellipsis" title={e.description || undefined}>
+                {e.description || '—'}
+              </td>
+              <td data-label="منشأ" className="xl-ellipsis">{sourceText(e)}</td>
               <td data-label="وضعیت">
                 <StatusChip status={e.status} voided={!!e.voided_at} />
               </td>
@@ -184,7 +316,7 @@ function EntryTable({
               <td data-label="مبلغ" className="num">
                 {faAmount(total(e))}
               </td>
-              {(onVoid || onPrint) && (
+              {withActions && (
                 <td className="card-actions ef-col-min">
                   <div className="row-actions ef-row-actions">
                     {onPrint && <RowAction icon={Printer} label="چاپ" onClick={() => onPrint(e)} />}
@@ -209,9 +341,20 @@ function EntryTable({
                 </td>
               )}
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
+      {chosen.length > 0 && (
+        <SelectionBar count={chosen.length} unit="سند" onClear={clear}>
+          <span>
+            جمع مبلغ <b className="num">{faAmount(chosen.reduce((s, e) => s + total(e), 0))}</b>
+          </span>
+          <span>
+            ردیف‌ها <b className="num">{faInt(chosen.reduce((s, e) => s + e.lines.length, 0))}</b>
+          </span>
+        </SelectionBar>
+      )}
       <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
     </div>
   )
@@ -888,6 +1031,14 @@ export function EntryListPage({ token }: { token: string }) {
   const [search, setSearch] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [msg, setMsg] = useState<Msg>(null)
+  //: فیلترهای سرستون — همه سمتِ سرور (`/api/journal-entries`)، نه روی ۳۰۰ سندِ بارشده. متن‌ها با
+  //: مکث می‌روند تا هر حرف یک درخواست نشود.
+  const [cols, setCols] = useState<ColumnFilters>(NO_COLUMN_FILTERS)
+  const colsQ = useDebounced(cols, 350)
+  const num = (v: string) => {
+    const d = normalizeFa(v).replace(/\D/g, '')
+    return d ? Number(d) : undefined
+  }
 
   const list = useAsync(
     () =>
@@ -897,8 +1048,14 @@ export function EntryListPage({ token }: { token: string }) {
         status: status || undefined,
         q: search || undefined,
         limit: 300,
+        entryFrom: num(colsQ.number),
+        entryTo: num(colsQ.number),
+        atf: num(colsQ.atf),
+        sub: colsQ.sub.trim() || undefined,
+        desc: colsQ.desc.trim() || undefined,
+        sourceType: colsQ.source || undefined,
       }),
-    [token, range.from, range.to, status, search, reloadKey],
+    [token, range.from, range.to, status, search, reloadKey, colsQ],
   )
   const rows = list.data ?? []
 
@@ -951,7 +1108,9 @@ export function EntryListPage({ token }: { token: string }) {
           <RangeBar
             range={range}
             extra={
-              <label className="acc-inline-field">
+              //: روی دسکتاپ «وضعیت» فیلترِ سرستونِ جدول است؛ این یکی فقط برای موبایل می‌ماند، جایی که
+              //: جدول کارت می‌شود و سرستون‌ها (و فیلترهایشان) پنهان‌اند.
+              <label className="acc-inline-field xl-narrow-only">
                 وضعیت
                 <SearchSelect value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
                   <option value="">همه</option>
@@ -989,7 +1148,13 @@ export function EntryListPage({ token }: { token: string }) {
           empty={rows.length === 0}
           emptyText="سندی با این شرایط پیدا نشد."
         >
-          <EntryTable entries={rows} onVoid={handleVoid} onPrint={handlePrint} onEditSub={handleEditSub} />
+          <EntryTable
+            entries={rows}
+            onVoid={handleVoid}
+            onPrint={handlePrint}
+            onEditSub={handleEditSub}
+            filters={{ values: cols, onChange: (k, v) => setCols((c) => ({ ...c, [k]: v })), status, onStatus: setStatus }}
+          />
         </AsyncBlock>
       </SectionCard>
     </OpsPage>

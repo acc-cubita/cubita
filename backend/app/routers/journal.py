@@ -98,7 +98,15 @@ def _assert_tracking_allowed(db: Session, lines) -> None:
         )
 
 
-def _filtered_entries(db: Session, filters: ReportFilters, q: str | None):
+def _filtered_entries(
+    db: Session,
+    filters: ReportFilters,
+    q: str | None,
+    *,
+    atf: int | None = None,
+    sub: str | None = None,
+    desc: str | None = None,
+):
     """اسنادی که فهرست و جمعِ آن می‌بینند — **یک تعریف برای هر دو**.
 
     فیلترها همان `ReportFilters`ِ دفتر و تراز است و از همان `apply_report_filters` رد
@@ -107,6 +115,11 @@ def _filtered_entries(db: Session, filters: ReportFilters, q: str | None):
     را کامل نشان می‌دهد، همان‌طور که ثبت شده.
 
     تاریخ جدا اعمال می‌شود، چون `apply_report_filters` عمداً تاریخ نمی‌گیرد.
+
+    `atf`، `sub` و `desc` فیلترهای **ستونیِ** فهرستِ اسناد‌اند (سرستونِ جدول): هرکدام فقط
+    ستونِ خودش را می‌گیرد و با بقیه «و» می‌شود. `q` همان جست‌وجوی سراسری است که در همه‌ی
+    این ستون‌ها با «یا» می‌گردد. شماره‌ی سند فیلترِ ستونیِ جدا نمی‌خواهد:
+    `entry_from = entry_to` همان است.
     """
     query = db.query(JournalEntry)
     if filters.date_from is not None:
@@ -133,6 +146,12 @@ def _filtered_entries(db: Session, filters: ReportFilters, q: str | None):
             conditions.append(JournalEntry.number == int(term))
             conditions.append(JournalEntry.atf_number == int(term))
         query = query.filter(or_(*conditions))
+    if atf is not None:
+        query = query.filter(JournalEntry.atf_number == atf)
+    if sub and sub.strip():
+        query = query.filter(JournalEntry.sub_number.ilike(f"%{sub.strip()}%"))
+    if desc and desc.strip():
+        query = query.filter(JournalEntry.description.ilike(f"%{desc.strip()}%"))
     return query
 
 
@@ -140,6 +159,9 @@ def _filtered_entries(db: Session, filters: ReportFilters, q: str | None):
 def list_entries(
     filters: ReportFilters = Depends(report_filters),
     q: str | None = None,
+    atf: int | None = None,
+    sub: str | None = None,
+    desc: str | None = None,
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
     _=Depends(require_permission("accounting", "view")),
@@ -154,7 +176,9 @@ def list_entries(
     منشأ را می‌شناخت، و دفتر روزنامه نمی‌توانست بر اساسِ شماره‌ی سند یا مرکز هزینه
     فیلتر کند.
     """
-    query = _filtered_entries(db, filters, q).options(selectinload(JournalEntry.lines))
+    query = _filtered_entries(db, filters, q, atf=atf, sub=sub, desc=desc).options(
+        selectinload(JournalEntry.lines)
+    )
 
     # (entry_date, number) یکتاست چون number از sequence می‌آید — کلید امن برای keyset
     items, next_cursor = paginate(
@@ -180,6 +204,9 @@ def list_entries(
 def list_summary(
     filters: ReportFilters = Depends(report_filters),
     q: str | None = None,
+    atf: int | None = None,
+    sub: str | None = None,
+    desc: str | None = None,
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
@@ -189,7 +216,7 @@ def list_summary(
     ردیفِ «مرکز تهران» و یک ردیفِ «مرکز شیراز»، با فیلترِ تهران در فهرست می‌آید ولی
     فقط ردیفِ تهرانش در جمع است — همان عددی که دفتر و تراز با همان فیلتر می‌دهند.
     """
-    entries = _filtered_entries(db, filters, q)
+    entries = _filtered_entries(db, filters, q, atf=atf, sub=sub, desc=desc)
     entry_count = entries.count()
     lines = db.query(
         func.count(JournalLine.id),

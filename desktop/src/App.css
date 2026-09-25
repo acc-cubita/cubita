@@ -12974,6 +12974,245 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-count { font-variant-numeric: tabular-nums; }
 .jg-jump-msg { color: var(--danger); }
 
+/* ══════════════ جدولِ اکسل‌مانند (`.xl-grid`) — گریدِ ثبتِ سند و فهرستِ اسناد ══════════════
+ * حسِ جدولِ نرم‌افزارهای مالیِ کلاسیک: سرستونِ خاکستری، خطوطِ ظریفِ افقی و عمودی بینِ همه‌ی
+ * خانه‌ها، hoverِ ملایم، ردیفِ انتخاب‌شده با ته‌رنگِ accent، و ستونِ شماره‌ی ردیف مثلِ ستونِ
+ * خاکستریِ اکسل (کلیک = انتخاب). رنگ‌ها همه از توکن‌های پوسته‌اند، پس تمِ تیره خودش درست است.
+ *
+ * اختصاصیت: `.page .ef-table-wrap > table.xl-grid …` هم‌وزن یا سنگین‌ترِ قاعده‌های `ef-table` و
+ * `jg-table` است و بعد از آن‌ها آمده — عمداً رویشان می‌نشیند. */
+.xl-grid {
+  --xl-line: var(--border);
+  --xl-head: color-mix(in srgb, var(--surface-2) 55%, var(--border) 45%);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.page .ef-table-wrap > table.xl-grid :is(th, td) {
+  border-block-end: 1px solid var(--xl-line);
+  border-inline-start: 1px solid var(--xl-line);
+}
+.page .ef-table-wrap > table.xl-grid :is(th, td):first-child { border-inline-start: 0; }
+.page .ef-table-wrap > table.xl-grid > tbody > tr:last-child > td { border-block-end: 0; }
+.page .ef-table-wrap > table.xl-grid > thead th {
+  padding: 8px 10px;
+  border-block-end-color: var(--border-strong);
+  background: var(--xl-head);
+  box-shadow: none;
+  color: var(--text-h);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-align: start;
+  white-space: nowrap;
+}
+/* اعداد راست‌چین، هم‌ستون و هم‌عرض (tabular) — خواندنِ ستونِ مبلغ از بالا به پایین. */
+.page .ef-table-wrap > table.xl-grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.xl-grid .xl-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* hover و انتخاب — انتخاب بعد از hover تا ردیفِ انتخاب‌شده زیرِ ماوس هم رنگِ انتخاب بماند. */
+.page .ef-table-wrap > table.xl-grid > tbody > tr:hover > td { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td { background: var(--accent-bg); }
+
+/* ستونِ شماره‌ی ردیف — سرستونِ ردیفِ اکسل. */
+.page .ef-table-wrap > table.xl-grid :is(th, td).xl-rowhead {
+  padding: 0;
+  background: var(--xl-head);
+  color: var(--text-muted);
+  text-align: center;
+}
+.xl-rowhead-btn {
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  min-height: 34px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.xl-rowhead-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text-h); }
+.xl-rowhead-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td.xl-rowhead { background: var(--accent); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected .xl-rowhead-btn { color: var(--accent-text); font-weight: 700; }
+
+/* لبه‌ی کشیدنیِ عرضِ ستون (`ColResizer`) — سمتِ پایانِ هر سرستون؛ با hover خطِ accent. */
+.page .ef-table-wrap > table.xl-grid--list > thead > tr:first-child > th { position: relative; }
+/* تمامش **درونِ** سرستونِ خودش: سرستونِ چسبنده (`position: sticky`) لایه‌ی خودش را می‌سازد و
+ * سرستونِ بعدی روی هر چه بیرون بزند می‌نشیند — نیمه‌ی بیرونیِ دستگیره گرفتنی نبود. */
+.xl-resize {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 3;
+  inline-size: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.xl-resize::after {
+  content: '';
+  position: absolute;
+  inset-block: 22%;
+  inset-inline-end: 0;
+  inline-size: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.xl-resize:hover::after,
+.xl-resize.is-resizing::after { background: var(--accent); }
+
+/* نوارِ وضعیتِ انتخاب — «n ردیف انتخاب شد · جمع …» مثلِ پایینِ پنجره‌ی اکسل. */
+.xl-selbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin-block-start: 8px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.xl-selbar strong { color: var(--accent-on-tint); }
+.xl-selbar b { color: var(--text-h); font-variant-numeric: tabular-nums; }
+.xl-selbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.xl-selbar .xl-selbar-danger { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); color: var(--danger); }
+.xl-selbar .xl-selbar-clear { margin-inline-start: auto; }
+
+/* ── گریدِ ثبتِ سند: خانه‌ی بی‌قاب، مثلِ اکسل ──
+ * کادرها قاب و گوشه ندارند و کلِ خانه را پر می‌کنند؛ خطوطِ جدول خودشان مرزند. خانه‌ی فعال قابِ
+ * accentِ دو پیکسلی می‌گیرد — همان «سلولِ انتخاب‌شده»ی اکسل. */
+.page .ef-table-wrap > table.jg-table.xl-grid td { padding: 0; }
+.page .ef-table-wrap > table.jg-table.xl-grid td.jg-actions { padding: 0 4px; }
+.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger) {
+  block-size: 36px;
+  min-height: 36px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.page .jg-table.xl-grid td .jg-combo > input { padding-inline-end: 28px; }
+.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger):focus {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.jg-table.xl-grid td :is(input, select):disabled { background: var(--surface-2); color: var(--text-muted); }
+.jg-table.xl-grid td .num-input { text-align: right; }
+
+/* جست‌وجوی سریع در ردیف‌ها: پیداشده‌ها برجسته، بقیه کم‌رنگ، و «فعلی» (Enter) پررنگ‌تر. */
+.page .ef-table-wrap > table.xl-grid > tbody > tr.is-dim > td { opacity: 0.5; }
+.page .ef-table-wrap > table.xl-grid > tbody > tr:is(.is-hit, .is-current) > td.xl-rowhead { background: color-mix(in srgb, var(--warning) 35%, var(--xl-head)); color: var(--text-h); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.is-current > td { background: var(--warning-bg); }
+
+/* کادرِ جست‌وجوی سرِ کارتِ سند (Ctrl+F). قاب مالِ ظرف است و کادرِ متن بی‌قاب درونش. */
+.jg-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.jg-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  inline-size: 250px;
+  block-size: 32px;
+  padding-inline: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.jg-find:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.jg-head-actions .jg-find input {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--fs-sm);
+}
+.jg-head-actions .jg-find input:focus { outline: none; }
+.jg-find-count { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── فهرستِ اسناد ── */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.xl-grid--list { table-layout: fixed; inline-size: 100%; min-inline-size: 980px; }
+  /* «شرح» ستونِ بی‌عرض است و باقی را می‌گیرد — متنِ بلندِ فهرست همان است. */
+  .xl-grid--list col.xl-c-rowhead { width: 44px; }
+  .xl-grid--list col.xl-c-number,
+  .xl-grid--list col.xl-c-atf { width: 70px; }
+  .xl-grid--list col.xl-c-sub { width: 90px; }
+  .xl-grid--list col.xl-c-date { width: 96px; }
+  .xl-grid--list col.xl-c-source { width: 130px; }
+  .xl-grid--list col.xl-c-status { width: 80px; }
+  .xl-grid--list col.xl-c-lines { width: 50px; }
+  .xl-grid--list col.xl-c-amount { width: 130px; }
+  .xl-grid--list col.xl-c-actions { width: 96px; }
+
+  /* ردیفِ فیلتر زیرِ سرستون‌ها — هر کادر فیلترِ سمتِ سرورِ همان ستون است. */
+  .page .ef-table-wrap > table.xl-grid > thead > tr.xl-filter-row > th {
+    padding: 3px 4px;
+    background: var(--surface);
+    font-weight: 400;
+  }
+  /* اختصاصیتِ بالا عمدی است: قاعده‌های عمومیِ فرم کادر را ۴۰ پیکسلی می‌کردند. */
+  .page .ef-table-wrap > table.xl-grid > thead > tr.xl-filter-row :is(input, select, .item-picker-trigger) {
+    inline-size: 100%;
+    min-width: 0;
+    block-size: 28px;
+    min-height: 0;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    font-size: var(--fs-xs);
+  }
+  .page .ef-table-wrap > table.xl-grid > thead > tr.xl-filter-row :is(input, select, .item-picker-trigger):focus { border-color: var(--accent); outline: none; }
+
+  /* رنگِ ملایمِ وضعیت: نوارِ باریکِ ابتدای ردیف برای همه، و ته‌رنگِ کهربایی برای «موقت» که هنوز
+   * رسمی نیست و چشم باید رویش بایستد. «دائم» فقط نوارِ سبز — دفترِ نهایی آرام است. */
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--temp > td { background: color-mix(in srgb, var(--warning-bg) 55%, var(--surface)); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--temp > td:first-child { border-inline-start: 3px solid var(--warning); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--perm > td:first-child { border-inline-start: 3px solid var(--success); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.acc-row--void > td:first-child { border-inline-start: 3px solid var(--border-strong); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr:hover > td { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td { background: var(--accent-bg); }
+  .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td.xl-rowhead { background: var(--accent); }
+
+  /* «وضعیت» روی دسکتاپ فیلترِ سرستون است؛ این نسخه‌ی نوارِ بالا فقط مالِ موبایل. */
+  .acc-inline-field.xl-narrow-only { display: none; }
+}
+@media (max-width: 760px) {
+  .jg-find { inline-size: 100%; }
+  .jg-head-actions { inline-size: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xl-resize::after { transition: none; }
+}
+
 /* ══════════════ مرور حساب‌ها (UI-02) — کاوشگرِ حرفه‌ایِ حساب ══════════════
  * دو ستون: درخت سمتِ راست (شروعِ خواندن)، خلاصه و گردش سمتِ چپ. هر ستون اسکرولِ
  * خودش را دارد تا درخت و دفتر مستقل از هم پیمایش شوند. تراکمِ «حسابدار»: ردیفِ

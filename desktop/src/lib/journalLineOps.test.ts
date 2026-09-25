@@ -5,10 +5,12 @@ import {
   copyPreviousInto,
   duplicateAt,
   faRows,
+  findLines,
   isPostedLine,
   postedRowNumbers,
   remainingOf,
   removeAt,
+  removeRows,
   rowsMissingTafsili,
   rowsWithoutAccount,
   rowsWithoutAmount,
@@ -224,5 +226,48 @@ describe('کپی از ردیفِ قبل — مرکزِ هزینه هم (§۱۸)'
   it('حساب، تفصیلی، مرکز و شرح می‌آیند؛ مبلغ نه', () => {
     const rows = [line({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '900' }), line()]
     expect(copyPreviousInto(rows, 1)[1]).toMatchObject({ accountId: 'a1', analyticId: 't', costCenterId: 'cc1', description: 'اجاره', debit: '' })
+  })
+})
+
+describe('حذفِ دسته‌ایِ ردیف‌های انتخاب‌شده', () => {
+  const blank = () => line()
+  it('ردیف‌های انتخاب‌شده می‌روند، بقیه به ترتیب می‌مانند', () => {
+    const ls = [line({ description: 'a' }), line({ description: 'b' }), line({ description: 'c' }), line({ description: 'd' })]
+    expect(removeRows(ls, [1, 3], blank).map((l) => l.description)).toEqual(['a', 'c'])
+  })
+  it('کفِ دو ردیف: همه که انتخاب شده‌اند، دو ردیفِ خالی می‌ماند — نه «حذف نمی‌شود»', () => {
+    const ls = [line({ accountId: 'x', debit: '5' }), line({ accountId: 'y', credit: '5' })]
+    const out = removeRows(ls, [0, 1], blank)
+    expect(out).toHaveLength(2)
+    expect(out.every((l) => !l.accountId && !l.debit && !l.credit)).toBe(true)
+  })
+})
+
+describe('findLines — جست‌وجوی سریع در ردیف‌ها', () => {
+  const labels = new Map([
+    ['bank', '1101 — بانک ملی'],
+    ['cust', '1301 — طرف حساب'],
+  ])
+  const ls = [
+    line({ accountId: 'bank', debit: '2500000' }),
+    line({ accountId: 'cust', credit: '2500000', description: 'بابت اجاره' }),
+    line({ accountId: 'cust', debit: '750' }),
+  ]
+  it('عبارتِ خالی یعنی جست‌وجویی نیست (`null`)، نه «هیچ پیدا نشد»', () => {
+    expect(findLines(ls, '  ', labels)).toBeNull()
+  })
+  it('کد یا نامِ حساب', () => {
+    expect(findLines(ls, '1101', labels)).toEqual([0])
+    expect(findLines(ls, 'طرف', labels)).toEqual([1, 2])
+  })
+  it('شرحِ ردیف', () => {
+    expect(findLines(ls, 'اجاره', labels)).toEqual([1])
+  })
+  it('مبلغ با رقمِ فارسی و جداکننده‌ی هزارگان', () => {
+    expect(findLines(ls, '۲٬۵۰۰٬۰۰۰', labels)).toEqual([0, 1])
+    expect(findLines(ls, '750', labels)).toEqual([2])
+  })
+  it('هیچ: آرایه‌ی خالی', () => {
+    expect(findLines(ls, 'ناموجود', labels)).toEqual([])
   })
 })
