@@ -19,7 +19,8 @@ import { TrialBanner } from './components/TrialBanner'
 import { TrialExpiredScreen } from './components/TrialExpiredScreen'
 import './App.css'
 
-type PendingAction = { action: 'reset-password' | 'accept-invite'; token: string }
+// `redeem-code` از URL نمی‌آید؛ فقط از دکمه‌ی «کدِ دعوت یا بازنشانی دارم»ِ ورودِ سازمانی.
+type PendingAction = { action: 'reset-password' | 'accept-invite' | 'redeem-code'; token: string }
 
 /**
  * لینک ایمیل را می‌خواند: `/?action=reset-password&token=...`
@@ -234,6 +235,7 @@ export default function App() {
                 enterprise={{
                   serverUrl: window.cubitaConfig?.serverUrl ?? '',
                   onChangeServer: () => setServerView(true),
+                  onHaveCode: () => setPending({ action: 'redeem-code', token: '' }),
                 }}
               />
             )

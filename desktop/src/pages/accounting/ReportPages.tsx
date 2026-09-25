@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -20,7 +20,9 @@ import {
   fetchChartAccounts,
   fetchAnalyticLedger,
   fetchGeneralLedger,
-  fetchJournalEntriesFiltered,
+  fetchAllJournalEntries,
+  fetchJournalEntriesPage,
+  fetchJournalEntriesSummary,
   fetchLegalBook,
   fetchMissingTafsili,
   fetchNatureViolations,
@@ -28,6 +30,7 @@ import {
   type BalanceRow,
   type ChartAccount,
   type GeneralLedger,
+  type JournalEntryRecord,
   type ReportFilters,
   type VatBreakdown,
 } from '../../api'
@@ -672,12 +675,18 @@ export function LedgerReportPage({ token }: { token: string }) {
             range={range}
             extra={
               book === 'journal' ? (
-                <SearchField
-                  value={search}
-                  onChange={setSearch}
-                  placeholder="نام یا کدِ حساب"
-                  label="جست‌وجوی حساب"
-                />
+                <>
+                  {/* سرور روی شماره، عطف، شماره‌ی فرعی و شرحِ سند می‌گردد، نه روی حساب.
+                      برچسبِ قبلی «نام یا کدِ حساب» بود و جست‌وجوی حساب بی‌صدا چیزی پیدا
+                      نمی‌کرد. گردشِ یک حساب جایش «دفتر معین» است. */}
+                  <SearchField
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="شماره یا شرحِ سند"
+                    label="جست‌وجوی سند"
+                  />
+                  <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
+                </>
               ) : book === 'general' ? (
                 <>
                   <label className="acc-inline-field">
@@ -724,13 +733,7 @@ export function LedgerReportPage({ token }: { token: string }) {
       }
     >
       {book === 'journal' ? (
-        <DaybookCard
-          token={token}
-          from={range.from}
-          to={range.to}
-          search={search}
-          accountNames={accountNames}
-        />
+        <DaybookCard token={token} filters={scope} search={search} accountNames={accountNames} />
       ) : book === 'general' ? (
         <SubsidiaryCard token={token} accountId={generalId} filters={scope} rollup />
       ) : book === 'analytic' ? (
@@ -742,80 +745,189 @@ export function LedgerReportPage({ token }: { token: string }) {
   )
 }
 
+/** اسنادِ هر صفحه‌ی روزنامه. سند با همه‌ی ردیف‌هایش می‌آید، پس ۵۰ سند چند صد ردیف است. */
+const DAYBOOK_PAGE = 50
+
+/**
+ * دفتر روزنامه — صفحه‌به‌صفحه از سرور، با جمعِ کلِ دامنه از سرور.
+ *
+ * پیش از این تا ۲۰۰ سند می‌گرفت و بقیه را **بی‌صدا** نمی‌آورد. در بازه‌ی یک‌ساله یعنی
+ * ماه‌های آخر اصلاً دیده نمی‌شدند، و «جمعِ گردشِ بازه» جمعِ همان ۲۰۰ سند بود. حالا
+ * صفحه‌ها با کرسرِ سرور می‌آیند و جمع از `/summary` است. عددِ بالای کارت هرگز از
+ * ردیف‌های بارگذاری‌شده ساخته نمی‌شود.
+ */
 function DaybookCard({
   token,
-  from,
-  to,
+  filters,
   search,
   accountNames,
 }: {
   token: string
-  from?: string
-  to?: string
+  filters: ReportFilters
   search: string
   accountNames: Map<string, string>
 }) {
-  const list = useAsync(
-    () =>
-      fetchJournalEntriesFiltered(token, {
-        dateFrom: from,
-        dateTo: to,
-        q: search || undefined,
-        limit: 200,
-      }),
-    [token, from, to, search],
-  )
-  const entries = list.data ?? []
-  const pg = usePagination(entries, 12)
+  //: هر حرفِ جست‌وجو دو درخواست است (صفحه و جمع)، پس با کمی مکث می‌رود.
+  const [q, setQ] = useState(search.trim())
+  useEffect(() => {
+    const t = setTimeout(() => setQ(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
-  function exportCsv() {
-    downloadCsv(
-      `daftar-rooznameh-${from ?? 'all'}`,
-      ['شماره سند', 'تاریخ', 'شرح سند', 'حساب', 'شرح ردیف', 'بدهکار', 'بستانکار'],
-      entries.flatMap((e) =>
-        e.lines.map((l) => [
-          e.number ?? '',
-          formatJalali(e.entry_date),
-          e.description,
-          accountNames.get(l.account_id) ?? '',
-          l.description,
-          Number(l.debit),
-          Number(l.credit),
-        ]),
-      ),
-    )
+  //: `filters` هر رندر شیءِ تازه است. کلید، دامنه را به‌صورتِ مقدار می‌گوید.
+  const scopeKey = JSON.stringify([filters, q])
+  const first = useAsync(
+    () => fetchJournalEntriesPage(token, filters, { q: q || undefined, limit: DAYBOOK_PAGE }),
+    [token, scopeKey],
+  )
+  const summary = useAsync(() => fetchJournalEntriesSummary(token, filters, q || undefined), [token, scopeKey])
+
+  //: صفحه‌های بعدی مالِ **همین بارِ** این دامنه‌اند، نه مقدارِ دامنه. کلید فقط مقدار را
+  //: می‌گوید: فیلتر را عوض کنی و برگردی، کلید همان می‌شود و صفحه‌های قدیمی زنده
+  //: می‌شدند. در رندرِ اولِ بعد از برگشت، `first.data` هنوز مالِ دامنه‌ی قبلی بود و
+  //: کنارِ آن صفحه‌ها سندِ تکراری می‌ساخت. مرورگرِ واقعی همین را گرفت. `visit` با هر
+  //: عوض‌شدنِ کلید شیءِ تازه است، حتی وقتی کلید به مقدارِ قبلی برگردد.
+  const visit = useMemo(() => ({ scopeKey }), [scopeKey])
+  const [more, setMore] = useState<{ visit: object | null; entries: JournalEntryRecord[]; cursor: string | null }>({
+    visit: null,
+    entries: [],
+    cursor: null,
+  })
+  const [moreBusy, setMoreBusy] = useState(false)
+  const [moreError, setMoreError] = useState<string | null>(null)
+  //: پاسخِ دیررسیده‌ی دامنه‌ی قبلی روی دامنه‌ی تازه نمی‌نشیند.
+  const liveVisit = useRef(visit)
+  useEffect(() => {
+    liveVisit.current = visit
+    setMoreError(null)
+  }, [visit])
+
+  const extra = more.visit === visit ? more : null
+  const entries = [...(first.data?.items ?? []), ...(extra?.entries ?? [])]
+  const nextCursor = extra ? extra.cursor : (first.data?.next_cursor ?? null)
+
+  async function loadMore() {
+    if (!nextCursor) return
+    const mine = visit
+    setMoreBusy(true)
+    setMoreError(null)
+    try {
+      const page = await fetchJournalEntriesPage(token, filters, {
+        q: q || undefined,
+        cursor: nextCursor,
+        limit: DAYBOOK_PAGE,
+      })
+      if (liveVisit.current !== mine) return
+      setMore((m) => ({
+        visit: mine,
+        entries: [...(m.visit === mine ? m.entries : []), ...page.items],
+        cursor: page.next_cursor,
+      }))
+    } catch (err) {
+      if (liveVisit.current === mine) setMoreError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setMoreBusy(false)
+    }
   }
 
-  const debit = entries.reduce(
-    (s, e) => s + e.lines.reduce((t, l) => t + Number(l.debit), 0),
-    0,
-  )
+  const [csvBusy, setCsvBusy] = useState(false)
+  const [csvError, setCsvError] = useState<string | null>(null)
+  //: خروجی کلِ دامنه است، نه صفحه‌های بارگذاری‌شده. کاربری که «خروجی» می‌زند همه را می‌خواهد.
+  async function exportCsv() {
+    setCsvBusy(true)
+    setCsvError(null)
+    try {
+      const all = await fetchAllJournalEntries(token, filters, q || undefined)
+      downloadCsv(
+        `daftar-rooznameh-${filters.dateFrom ?? 'all'}`,
+        ['شماره سند', 'تاریخ', 'شرح سند', 'حساب', 'شرح ردیف', 'بدهکار', 'بستانکار'],
+        all.flatMap((e) =>
+          e.lines.map((l) => [
+            e.number ?? '',
+            formatJalali(e.entry_date),
+            e.description,
+            accountNames.get(l.account_id) ?? '',
+            l.description,
+            Number(l.debit),
+            Number(l.credit),
+          ]),
+        ),
+      )
+    } catch (err) {
+      setCsvError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setCsvBusy(false)
+    }
+  }
+
+  const total = summary.data
+  //: با فیلترِ ردیفی، سند کامل نشان داده می‌شود ولی جمع فقط ردیف‌های منطبق است. برچسب
+  //: همین را می‌گوید تا کسی جمع را با ردیف‌های دیده‌شده مقایسه نکند و گیج نشود.
+  const lineScoped = Boolean(filters.costCenterId || filters.analyticId)
 
   return (
     <SectionCard
       icon={BookOpenCheck}
       title="دفتر روزنامه"
-      description={`${faInt(entries.length)} سند — هر سند با ردیف‌هایش`}
+      description={
+        total
+          ? `${faInt(total.entry_count)} سند · ${faInt(total.line_count)} ردیف${lineScoped ? 'ِ منطبق' : ''}`
+          : 'هر سند با ردیف‌هایش'
+      }
       actions={
-        <button type="button" className="ef-btn-secondary" onClick={exportCsv} disabled={entries.length === 0}>
-          <Download size={14} /> خروجی CSV
+        <button
+          type="button"
+          className="ef-btn-secondary"
+          onClick={exportCsv}
+          disabled={csvBusy || !total || total.entry_count === 0}
+        >
+          <Download size={14} /> {csvBusy ? 'در حال آماده‌سازی…' : 'خروجی CSV'}
         </button>
       }
     >
+      {total && (
+        <div className="cc-summary daybook-summary">
+          <Metric
+            icon={<Wallet size={14} />}
+            label={lineScoped ? 'بدهکارِ ردیف‌های منطبق' : 'جمعِ بدهکار'}
+            value={fa(Number(total.total_debit))}
+            tone="in"
+          />
+          <Metric
+            icon={<Wallet size={14} />}
+            label={lineScoped ? 'بستانکارِ ردیف‌های منطبق' : 'جمعِ بستانکار'}
+            value={fa(Number(total.total_credit))}
+            tone="out"
+          />
+        </div>
+      )}
+      {summary.error && <p className="hint acc-note acc-note--err">جمعِ دفتر نیامد: {summary.error}</p>}
+      {csvError && <p className="hint acc-note acc-note--err">خروجی ساخته نشد: {csvError}</p>}
       <AsyncBlock
-        loading={list.loading}
-        error={list.error}
+        loading={first.loading}
+        error={first.error}
         empty={entries.length === 0}
-        emptyText="در این بازه سندی نیست."
+        emptyText="در بازه و فیلترِ انتخاب‌شده سندی یافت نشد."
       >
         {/* همان `EntryCard`ی که درایوِ drill-down رندر می‌کند — یک نمای یک داده.
             پیش از این این جدول فقط این‌جا بود و وقتی «ردیفِ دفتر → سند» لازم شد،
             وسوسه‌ی نوشتنِ نسخه‌ی دومش پیش آمد. */}
-        {pg.pageItems.map((e) => (
+        {entries.map((e) => (
           <EntryCard key={e.id} entry={e} accountNames={accountNames} />
         ))}
-        <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-        <p className="hint">جمعِ گردشِ بازه: {fa(debit)}</p>
+        <div className="daybook-more">
+          <span className="hint">
+            {total
+              ? `نمایشِ ${faInt(entries.length)} از ${faInt(total.entry_count)} سند`
+              : `${faInt(entries.length)} سند`}
+          </span>
+          {nextCursor && (
+            <button type="button" className="ef-btn-secondary" onClick={loadMore} disabled={moreBusy}>
+              {moreBusy ? 'در حال بارگذاری…' : `${faInt(DAYBOOK_PAGE)} سندِ بعدی`}
+            </button>
+          )}
+        </div>
+        {moreError && <p className="hint acc-note acc-note--err">{moreError}</p>}
       </AsyncBlock>
     </SectionCard>
   )

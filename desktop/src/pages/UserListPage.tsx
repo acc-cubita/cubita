@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Mail, RotateCcw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, KeyRound, Mail, RotateCcw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import {
   changeMemberRole,
+  issueMemberResetCode,
   fetchMembers,
   fetchPermissionModules,
   fetchRoles,
@@ -14,12 +15,14 @@ import {
   type PermissionModule,
   type RoleInfo,
 } from '../api'
+import { AccessCodeCard, type IssuedCode } from '../components/AccessCodeCard'
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { EmptyState } from '../components/EmptyState'
 import { Pager, usePagination } from '../components/Pager'
 import { PermissionMatrix, isFullAccess, summarize } from '../components/PermissionMatrix'
 import { SearchSelect } from '../components/SearchSelect'
+import { isEnterprise } from '../platform'
 
 /**
  * فهرستِ کاربران — نیمه‌ی «دیدن و مدیریت‌کردن».
@@ -50,6 +53,7 @@ export function UserListPage({ token }: { token: string }) {
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<{ member: Member; perms: PermissionMap } | null>(null)
+  const [issued, setIssued] = useState<IssuedCode | null>(null)
   const pg = usePagination(data?.members ?? [], 12)
 
   async function refresh() {
@@ -98,6 +102,8 @@ export function UserListPage({ token }: { token: string }) {
           <div>{message.text}</div>
         </div>
       )}
+
+      {issued && <AccessCodeCard issued={issued} onClose={() => setIssued(null)} />}
 
       <SectionCard
         icon={ShieldCheck}
@@ -190,11 +196,31 @@ export function UserListPage({ token }: { token: string }) {
                               onClick={() =>
                                 void run(async () => {
                                   const r = await resendInvite(token, m.id)
+                                  if (r.code) {
+                                    setIssued({ kind: 'invite', name: m.name, code: r.code, hours: 7 * 24 })
+                                    return
+                                  }
                                   if (!r.email_sent) throw new Error('ارسال ایمیل دعوت ناموفق بود.')
-                                }, `دعوت دوباره برای ${m.name} ارسال شد.`)
+                                }, isEnterprise ? `کدِ دعوتِ تازه برای ${m.name} ساخته شد؛ کدِ قبلی دیگر کار نمی‌کند.` : `دعوت دوباره برای ${m.name} ارسال شد.`)
                               }
                             >
-                              <Mail size={13} /> ارسال دوباره
+                              <Mail size={13} /> {isEnterprise ? 'کدِ دعوتِ تازه' : 'ارسال دوباره'}
+                            </button>
+                          )}
+                          {/* سازمانی: ایمیلی برای «فراموشیِ رمز» نیست؛ مالک کد می‌دهد. رمزِ
+                              مالک از این‌جا بازنشانی نمی‌شود (سرور ۴۰۹ می‌دهد) — فقط روی خودِ سرور. */}
+                          {isEnterprise && m.status === 'active' && !m.is_me && m.role_key !== 'owner' && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(async () => {
+                                  const r = await issueMemberResetCode(token, m.id)
+                                  setIssued({ kind: 'reset', name: m.name, code: r.code, hours: r.valid_hours })
+                                }, `کدِ بازنشانیِ رمزِ ${m.name} ساخته شد.`)
+                              }
+                            >
+                              <KeyRound size={13} /> کدِ بازنشانیِ رمز
                             </button>
                           )}
                           {!m.is_me && (

@@ -7106,11 +7106,43 @@ tr.kardex-voided td { color: var(--text-muted); }
   resize: vertical;
 }
 
+/* کدِ دعوت/بازنشانیِ سازمانی — درشت و خوانا، چون از روی صفحه خوانده و تایپ می‌شود */
+.access-code {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.access-code__value {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text);
+  padding: 10px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, var(--surface));
+  user-select: all;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.access-code .btn-primary { display: inline-flex; align-items: center; gap: 6px; }
+/* شماره‌ی فهرست هم فارسی: بی این، مرورگر «1. 2. 3.» لاتین می‌گذارد. */
+.access-code__steps { margin: 14px 0 0; padding-inline-start: 20px; color: var(--text-muted); line-height: 1.9; list-style-type: persian; }
+
+/* پشتیبانِ سرور */
+.srv-backup-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.srv-backup-actions button { display: inline-flex; align-items: center; gap: 6px; }
+
 @media (max-width: 760px) {
   .license-banner { flex-wrap: wrap; }
   .license-banner__cta { width: 100%; }
   .lic-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .lic-facts dd { margin-bottom: 10px; }
+  .access-code__value { font-size: 17px; letter-spacing: 1px; width: 100%; box-sizing: border-box; text-align: center; }
+  .access-code .btn-primary { width: 100%; justify-content: center; }
+  .srv-backup-actions button { width: 100%; justify-content: center; }
 }
 
 /* نوارِ آفلاینِ دسکتاپ — همان قالبِ trial-banner، رنگِ ملایم‌ترِ warning */
@@ -8794,6 +8826,7 @@ button.mp-item:focus-visible {
 .pw-caps--ok { color: var(--success); }
 
 .pw-facts { margin: 0; padding-inline-start: 16px; display: flex; flex-direction: column; gap: 8px; }
+ol.pw-facts { list-style-type: persian; padding-inline-start: 20px; }
 .pw-facts li { font-size: var(--fs-sm); color: var(--text-muted); }
 .pw-facts strong { color: var(--text-h); font-weight: 700; }
 
@@ -9315,6 +9348,20 @@ button.mp-item:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+/* دفتر روزنامه: جمعِ کلِ دامنه (از سرور) بالای اسناد، و شمارنده و «سندهای بعدی» زیرشان. */
+.daybook-summary {
+  margin-bottom: 12px;
+}
+
+.daybook-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .cc-metric {

@@ -7,14 +7,17 @@
 **فهرست است تا کلید بچرخد:** کلیدِ تازه اضافه می‌شود، مجوزهای قدیمی با کلیدِ قبلی
 معتبر می‌مانند، و کلیدِ لورفته با حذف از اینجا در نسخه‌ی بعد باطل می‌شود.
 
-**کلیدِ تولید هنوز ساخته نشده** (یک‌بار، روی سرورِ ابری):
+**کلیدِ تولید** روی سرورِ ابری ساخته شد (۱۴۰۵/۰۷/۰۲) و فقط همان‌جاست
+(`/opt/hesabdari/secrets/license-signing.pem`، فقط برای کاربرِ سرویس). برای چرخش:
 
-    python -m app.licensing.cli keygen --out /opt/hesabdari/secrets/license-signing.pem
+    python -m app.licensing.cli keygen --out /opt/hesabdari/secrets/license-signing-<تاریخ>.pem
 
-خروجی `kid` و کلیدِ عمومی را چاپ می‌کند (کلیدِ خصوصی هرگز چاپ نمی‌شود). همان دو را
-اینجا اضافه و کامیت کنید. تا آن روز هیچ مجوزی معتبر نیست و هر نصب در دوره‌ی
-آزمایشی می‌ماند — تست‌ها کلیدِ خودشان را جایگزین می‌کنند.
+خط را اینجا **اضافه** کنید (قبلی را پاک نکنید، وگرنه مجوزهای فروخته‌شده باطل می‌شوند)، همان
+را در `desktop/electron/updateKeys.ts` هم بگذارید، و `LICENSE_SIGNING_KEY_FILE` را به فایلِ
+تازه ببرید. تست‌ها کلیدِ خودشان را جایگزین می‌کنند.
 """
 
 #: kid → کلیدِ عمومیِ خامِ Ed25519 (۳۲ بایت) به base64url بدونِ padding.
-TRUSTED_PUBLIC_KEYS: dict[str, str] = {}
+TRUSTED_PUBLIC_KEYS: dict[str, str] = {
+    "edea436f": "AUySGIhuD5evxY5CawybovAVT3rJd-O-fu6YCZTi1_c",
+}

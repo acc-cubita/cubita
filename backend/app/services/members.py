@@ -20,6 +20,8 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
+from app.models.audit import AuditLog
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
 from app.security import hash_password, record_login, set_password
@@ -181,7 +183,7 @@ def resend_invite(db: Session, *, tenant_id: UUID, membership_id: UUID) -> tuple
             status.HTTP_400_BAD_REQUEST,
             "این کاربر دعوت را پذیرفته است؛ ارسال دوباره‌ی دعوت معنا ندارد",
         )
-    return membership, tokens.issue_invite(db, membership.user_id, tenant_id)
+    return membership, tokens.issue_invite(db, membership.user_id, tenant_id, short=_short_codes())
 
 
 def invite_member(
@@ -240,7 +242,62 @@ def invite_member(
     membership.permissions = sanitize_permissions(permissions)
     db.flush()
 
-    return membership, tokens.issue_invite(db, user.id, tenant_id)
+    return membership, tokens.issue_invite(db, user.id, tenant_id, short=_short_codes())
+
+
+def _short_codes() -> bool:
+    """سرورِ سازمانی ایمیل ندارد: دعوت و بازنشانی کدی می‌شوند که مالک دستی می‌دهد."""
+    return get_settings().is_enterprise
+
+
+def issue_reset_code(db: Session, *, tenant_id: UUID, membership_id: UUID, actor: User) -> tuple[Membership, str]:
+    """کدِ بازنشانیِ رمز برای کارمندی که رمزش را فراموش کرده (فقط نسخه‌ی سازمانی).
+
+    مالک **رمز** نمی‌سازد، **کد** می‌سازد: کارمند با کد رمزِ تازه‌اش را خودش می‌گذارد.
+    اگر مالک رمزِ موقت می‌داد، رمزِ کارمند را می‌دانست و ردِ «چه کسی این سند را زد»
+    در دفترِ حسابرسی بی‌معنا می‌شد.
+
+    گاردها: نه برای خود (از «تغییرِ رمز» استفاده کند)، نه برای مالک (یک مدیرِ کاربر
+    نباید بتواند حسابِ مالک را بگیرد — مالک با `cubita-server reset-owner-password` روی
+    خودِ سرور برمی‌گردد)، و فقط عضوِ فعال (دعوت‌شده «ارسالِ دوباره‌ی دعوت» می‌خواهد).
+    """
+    membership = _get_member(db, tenant_id, membership_id)
+    if membership.user_id == actor.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "رمزِ خودتان را از «تغییرِ رمز» عوض کنید")
+    if membership.role.key == OWNER_ROLE_KEY:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "رمزِ مالک از اینجا بازنشانی نمی‌شود؛ روی رایانه‌ی سرور دستورِ "
+            "cubita-server reset-owner-password را اجرا کنید.",
+        )
+    if membership.status != "active" or not membership.user.active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "فقط برای کاربرِ فعال کدِ بازنشانی ساخته می‌شود؛ برای دعوت‌شده «ارسالِ دوباره‌ی دعوت» را بزنید.",
+        )
+    code = tokens.issue_password_reset(db, membership.user_id, short=True, hours=tokens.STAFF_RESET_HOURS)
+    audit_member(db, membership, actor, f"صدورِ کدِ بازنشانیِ رمز برای {membership.user.email}")
+    return membership, code
+
+
+def audit_member(db: Session, membership: Membership, actor: User | None, summary: str) -> None:
+    """ثبتِ صریحِ کارِ حساس روی عضویت در دفترِ حسابرسیِ همان کسب‌وکار.
+
+    ثبتِ خودکارِ `app/audit.py` فقط مدل‌های مالی را می‌پاید؛ عضویت سراسری است و آنجا
+    نیست. صدورِ کدِ ورود به حسابِ کسِ دیگر باید در دفتر بماند.
+    """
+    db.add(
+        AuditLog(
+            tenant_id=membership.tenant_id,
+            actor_id=actor.id if actor else None,
+            actor_email=actor.email if actor else "cubita-server",
+            action="update",
+            entity_type="Membership",
+            entity_id=membership.id,
+            summary=summary,
+        )
+    )
+    db.flush()
 
 
 def accept_invite(db: Session, *, raw_token: str, password: str, name: str | None = None) -> tuple[User, UUID]:

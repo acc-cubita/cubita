@@ -3,8 +3,9 @@
 // زمینه‌ی جدا). تستِ `backend/tests/test_enterprise_updates.py::test_client_and_server_keys_match`
 // ناهمخوانیِ این دو را می‌گیرد.
 //
-// خالی = هیچ آپدیتی نصب نمی‌شود (fail-closed)، تا وقتی کلیدِ تولید ساخته شود
-// (دستور در ENTERPRISE_PLAN.md، «نتایجِ M2»).
+// خالی = هیچ آپدیتی نصب نمی‌شود (fail-closed). کلیدِ تولید ۱۴۰۵/۰۷/۰۲ روی سرورِ ابری ساخته شد.
 
 //: kid → کلیدِ عمومیِ خامِ Ed25519 به base64url.
-export const TRUSTED_UPDATE_KEYS: Record<string, string> = {}
+export const TRUSTED_UPDATE_KEYS: Record<string, string> = {
+  'edea436f': 'AUySGIhuD5evxY5CawybovAVT3rJd-O-fu6YCZTi1_c',
+}

@@ -46,6 +46,7 @@ from app.routers import (
     devices,
     enterprise_activation,
     enterprise_license,
+    enterprise_maintenance,
     enterprise_setup,
     enterprise_updates,
     fiscal_year,
@@ -117,6 +118,7 @@ ENTERPRISE_ONLY: tuple[APIRouter, ...] = (
     enterprise_setup.router,
     enterprise_license.router,
     enterprise_updates.router,
+    enterprise_maintenance.router,
 )
 
 #: همه‌ی روترها به ترتیبِ سوارشدن.
@@ -197,6 +199,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     enterprise_setup.router,
     enterprise_license.router,
     enterprise_updates.router,
+    enterprise_maintenance.router,
 )
 
 

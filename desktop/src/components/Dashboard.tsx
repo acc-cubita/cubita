@@ -16,6 +16,7 @@ import { buildNav } from '../lib/navModel'
 import { TopNav } from './TopNav'
 import { QuickAccessBar } from './QuickAccessBar'
 import { LicenseBanner } from './LicenseBanner'
+import { ServerBackupBanner } from './ServerBackupBanner'
 import { useTheme } from '../lib/theme'
 import { useGuidedForms } from '../lib/experienceMode'
 import { NavSectionContext } from './navContext'
@@ -341,7 +342,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   calendar: 'تقویم و یادآوری',
   team: 'کاربر جدید',
   modules: 'شخصی‌سازیِ پنل',
-  license: 'مجوز و به‌روزرسانی',
+  license: 'سرور و مجوز',
   profile: 'پروفایل من',
   // ── ماژولِ «حسابداری» ──
   acctchart: 'درختواره حساب‌ها',
@@ -933,8 +934,12 @@ export function Dashboard({
   const panelsClass = hasModulePanels(page, navGroups) ? ' app-shell--panels' : ''
 
   //: کوبیتا سازمانی: نوارِ مجوز (آزمایشی، نزدیکِ انقضا، ثبتِ بسته). در ابر `me.license` خالی است.
+  //: و برای مالک، نوارِ قرمزِ پشتیبانِ کهنه‌ی سرور (M6).
   const licenseBanner = me.license ? (
-    <LicenseBanner license={me.license} onOpen={() => navigate('license')} />
+    <>
+      <LicenseBanner license={me.license} onOpen={() => navigate('license')} />
+      {me.role_key === 'owner' && <ServerBackupBanner token={token} onOpen={() => navigate('license')} />}
+    </>
   ) : null
 
   return (
