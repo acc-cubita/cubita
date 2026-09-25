@@ -8522,6 +8522,68 @@ button.mp-item:focus-visible {
 }
 .mod-op > span { min-width: 0; }
 
+/* جابه‌جاییِ منو: دو فلشِ کوچک روی لبه‌ی ردیف، فقط با hover یا فوکوسِ همان ردیف (`MenuItem`).
+   روی ردیف می‌نشینند و جای متن را نمی‌گیرند، تا منوها با حرکتِ ماوس جابه‌جا نشوند. دستگاهِ
+   بی‌hover همیشه می‌بیندشان — وگرنه راهی به آن‌ها نمی‌ماند. */
+.mod-op-row { position: relative; }
+.mod-op-move {
+  position: absolute;
+  inset-block-start: calc(50% - 1px);
+  inset-inline-end: 4px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  translate: 0 -50%;
+  transition: opacity 120ms ease;
+}
+.mod-op-row:is(:hover, :focus-within) > .mod-op-move { opacity: 1; pointer-events: auto; }
+.mod-op-move .mod-op-arrow {
+  display: grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mod-op-move .mod-op-arrow:hover:not(:disabled) { background: var(--accent-bg); color: var(--accent-on-tint); }
+.mod-op-move .mod-op-arrow:disabled { opacity: 0.3; cursor: default; }
+@media (hover: none) {
+  .mod-op-move { opacity: 1; pointer-events: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mod-op-move { transition: none; }
+}
+/* «ترتیبِ پیش‌فرض» — ته کارت، فقط وقتی ترتیب عوض شده. بیرون از بدنه‌ی اسکرول‌خور (فرزندِ خودِ
+   کارت) تا زیرِ منوهای بلند گم نشود و روی منوی آخر هم ننشیند. */
+.mod-panels .mod-order-reset {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  align-items: center;
+  gap: 5px;
+  min-height: 0;
+  margin: 0 10px 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.mod-panel.collapsed .mod-order-reset { display: none; }
+.mod-panels .mod-order-reset:hover { background: var(--surface-hover); color: var(--text-h); }
+
 /* صفحه‌ای که بخش‌هایش زیرش باز است: والد — پررنگ، بی‌ته‌رنگ. هایلایت مالِ بخشِ
    انتخاب‌شده است؛ اگر والد و فرزند هر دو یک‌جور برجسته شوند، پیدا نیست کاربر دقیقاً
    روی کدام زیرمنو ایستاده. (پیش از hover می‌آید تا hover رویش اثر کند.) */

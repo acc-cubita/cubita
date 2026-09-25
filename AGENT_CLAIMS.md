@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `ModulePanels.tsx`، `lib/menuOrder.ts` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.mod-op-*`) و تست‌ها | کارت‌های «عملیات» و «فهرست»: جابه‌جاییِ منوها با فلش و Alt+↑/↓ | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `lib/useFitText.ts` (تازه)، `App.css` (`.jb-*`) | ثبتِ سند: خانه‌های ثابتِ جمع/توازن؛ عددِ بلند کوچک می‌شود نه خانه | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalGrid.tsx`، `JournalEntryForm.tsx`، `AccountCombo.tsx` (تازه)، `lib/gridPicker.ts`، `ShortcutsPage.tsx`، `App.css`، `e2e/accountant-journal.e2e.mjs` و تست‌ها | ثبتِ سند: فوترِ نهایی، پنجره‌ی میان‌برها، عرضِ ستون‌ها، جست‌وجوی درجای حساب، Enter از حساب به مبلغ | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `JournalEntryForm.footer.test.tsx` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.jf-*`/`.jb-*`/`.jg-keys`/`.jg-actions`) | ثبتِ سند: نوارِ پایانیِ شناور، راهنمای تاشو (Ctrl+/)، کنش‌های ردیف روی hover | ۱۴۰۵/۰۷/۰۳ |
