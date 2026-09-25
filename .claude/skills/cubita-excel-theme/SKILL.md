@@ -23,7 +23,8 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |
 | ارزها و نرخ برابری | #209 | ب: دو برگه در یک فرم | [CurrenciesPanel.tsx](../../../desktop/src/components/CurrenciesPanel.tsx) |
 | اسناد حسابداری (فهرست) | پیش از #205 | د: دفتر | `EntryTable` در [JournalPages.tsx](../../../desktop/src/pages/accounting/JournalPages.tsx) |
-| اسناد تکرارشونده | (این PR) | الف برای فرمِ قالب + د برای فهرستِ قالب‌ها | [RecurringPage.tsx](../../../desktop/src/pages/accounting/RecurringPage.tsx) |
+| اسناد تکرارشونده | #212 | الف برای فرمِ قالب + د برای فهرستِ قالب‌ها | [RecurringPage.tsx](../../../desktop/src/pages/accounting/RecurringPage.tsx) |
+| بودجه‌بندی | (این PR) | ب: ماتریسِ حساب × ماه (ستون‌های ثابت، لغزشِ افقی) | [BudgetPage.tsx](../../../desktop/src/pages/accounting/BudgetPage.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
 منوهای حسابداری پیش از این در #211 بازچینی شدند (شش دسته، تکراری‌ها ادغام) — صفحه‌ای را که ادغام شده
@@ -196,6 +197,9 @@ const nav = useSheetNav<Col>({ gridRef, cols: COLS, rowCount: rows.length, onApp
   (`balanceState` همین‌طور رفت).
 - **`.page.panels > *`** پس‌زمینه‌ی فرزندِ مستقیم را بازنویسی می‌کند. برای جزئیات cubita-page §۲ را
   ببین.
+- **برگه‌ی پهن‌تر از قاب (ماتریس):** `useColumnWidths`ِ «جا در قاب» را نگذار؛ جدول عرضِ **صریح** (جمعِ ستون‌ها)
+  بگیرد نه `max-content` — وگرنه ستونِ `ef-col-min` (`width: 1%`) جمع می‌شود و ستونِ ثابتِ کناری روی ستونِ بعد
+  می‌نشیند (آرش همین را در بودجه دید). ستون‌های «ردیف» و «حساب» با `position: sticky` ثابت، و نوار بی `columns`.
 - **Playwright:** وقتی صفحه دو فرم دارد، لوکیتور را با `form:has(.xx-sheet)` محدود کن.
 - **سقفِ ورود** ۱۰ بار در ۵ دقیقه است. برای ادامه‌ی آزمایش، uvicornِ :8000 را ری‌استارت کن.
 
