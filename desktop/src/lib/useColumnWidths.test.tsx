@@ -11,7 +11,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { MIN_COL_WIDTH, dragBoundary, useColumnWidths } from './useColumnWidths'
+import { MIN_COL_WIDTH, dragBoundary, fitShares, useColumnWidths } from './useColumnWidths'
 
 const LAYOUT = { fixed: ['num', 'actions'], auto: 'account', autoMin: 160 }
 const IDS = ['num', 'account', 'desc', 'debit', 'credit', 'actions']
@@ -100,5 +100,85 @@ describe('useColumnWidths', () => {
     localStorage.setItem('test.shares', JSON.stringify({ desc: 240, debit: 'x' }))
     act(() => root.render(createElement(Probe)))
     expect(api.customized).toBe(false)
+  })
+})
+
+describe('fitShares — کفِ ستونِ کشسان در زمانِ نمایش', () => {
+  const pct = (s: Record<string, number>, ids: string[]) => ids.reduce((t, id) => t + s[id], 0)
+
+  it('اگر جا هست، همان ورودی', () => {
+    const s = { desc: 20, debit: 15 }
+    expect(fitShares(s, ['desc', 'debit'], 1000, 148, 160)).toBe(s)
+  })
+
+  it('سهم‌هایی که همه‌ی جا را گرفته‌اند (باگِ «ستونِ حساب ناپدید شد») به یک نسبت کوچک می‌شوند', () => {
+    //: عیناً داده‌ی ذخیره‌شده در اپِ کاربر: شرح ۷۲٪ — حساب با پنجره‌ی ۱۵۰۰ پیکسلی صفر می‌شد.
+    const s = { description: 72.07, debit: 7.07, credit: 10.97 }
+    const ids = ['description', 'debit', 'credit']
+    const out = fitShares(s, ids, 1500, 148, 160)
+    const left = 1500 - 148 - (pct(out, ids) / 100) * 1500
+    expect(left).toBeGreaterThanOrEqual(159)
+    expect(left).toBeLessThan(162)
+    //: نسبتِ ستون‌ها به هم همان می‌ماند — فقط همه با هم کوچک شدند.
+    expect(out.description / out.debit).toBeCloseTo(s.description / s.debit, 1)
+  })
+
+  it('هیچ ستونی زیرِ کمینه نمی‌رود، حتی در جدولِ خیلی باریک', () => {
+    const out = fitShares({ desc: 50, debit: 40 }, ['desc', 'debit'], 400, 148, 160)
+    expect((out.debit / 100) * 400).toBeGreaterThanOrEqual(MIN_COL_WIDTH - 0.01)
+  })
+})
+
+describe('useColumnWidths — با جدولِ واقعی', () => {
+  let rect: typeof HTMLElement.prototype.getBoundingClientRect
+  beforeEach(() => {
+    rect = HTMLElement.prototype.getBoundingClientRect
+    //: jsdom چیدمان ندارد؛ عرض‌ها از خودِ عنصر: جدول ۱۰۰۰، شماره ۴۴، کنش‌ها ۱۰۴.
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const w = this.tagName === 'TABLE' ? 1000 : ({ num: 44, actions: 104 } as Record<string, number>)[this.dataset.col ?? ''] ?? 100
+      return { width: w, height: 30, x: 0, y: 0, top: 0, left: 0, right: w, bottom: 30, toJSON: () => ({}) } as DOMRect
+    }
+  })
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = rect
+  })
+
+  function Table() {
+    api = useColumnWidths('test.shares', LAYOUT)
+    return createElement(
+      'table',
+      { ref: api.frame },
+      createElement(
+        'thead',
+        null,
+        createElement(
+          'tr',
+          null,
+          IDS.map((id) => createElement('th', { key: id, 'data-col': id })),
+        ),
+      ),
+    )
+  }
+
+  it('سهم‌های بیش‌ازحد روی صفحه کوچک می‌شوند تا «حساب» کمینه‌اش را داشته باشد', () => {
+    localStorage.setItem('test.shares', JSON.stringify({ desc: 60, debit: 20, credit: 10 }))
+    act(() => root.render(createElement(Table)))
+    const w = (id: string) => parseFloat(String(api.col(id)?.width))
+    const used = ((w('desc') + w('debit') + w('credit')) / 100) * 1000
+    expect(1000 - 148 - used).toBeGreaterThanOrEqual(159)
+    expect(w('desc') / w('debit')).toBeCloseTo(3, 1)
+    expect(api.col('account')).toEqual({ width: 'auto' })
+    //: ذخیره‌ی کاربر دست نمی‌خورد — پنجره که پهن شود، همان سهم‌ها برمی‌گردند.
+    expect(JSON.parse(localStorage.getItem('test.shares')!)).toEqual({ desc: 60, debit: 20, credit: 10 })
+  })
+
+  it('ذخیره‌ی نسخه‌های پیش از «جا در قاب» (با شماره و حساب) کنار می‌رود', () => {
+    localStorage.setItem(
+      'test.shares',
+      JSON.stringify({ desc: 72.07, debit: 7.07, credit: 10.97, num: 44, account: 320, actions: 104 }),
+    )
+    act(() => root.render(createElement(Table)))
+    expect(api.customized).toBe(false)
+    expect(api.col('desc')).toBeUndefined()
   })
 })

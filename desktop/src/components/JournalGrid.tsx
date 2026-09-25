@@ -493,6 +493,7 @@ export function JournalGrid({
       aria-label="ردیف‌های سند"
     >
       <table
+        ref={cw.frame}
         className="ef-table ef-table--edit jg-table xl-grid table-plain"
       >
         {/* عرضِ ستون‌ها (`table-layout: fixed`): حساب هرچه بماند می‌گیرد؛ شماره و شرح باریک،

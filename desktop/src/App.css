@@ -12570,59 +12570,84 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jg-combo-chev { transition: none; }
 }
 
-/* ── سربرگِ فشرده‌ی سند (حالت حسابدار) ─────────────────────────────────────
- * یک نوارِ افقی به‌جای سه ردیفِ فیلدِ ۴۰ پیکسلی: شرح (کشسان)، تاریخ، وضعیت، شماره‌ی
- * فرعی. ارتفاعِ کنترل‌ها با همان `--ef-h`ِ فرم‌کیت ۳۶ می‌شود — قاعده‌ی «یک ارتفاع برای
- * همه‌ی کنترل‌ها» سرِ جایش می‌ماند، فقط عددش این‌جا کوچک‌تر است. */
+/* ── سربرگِ سند (حالت حسابدار) — هم‌خانواده‌ی جدولِ اکسلی ──────────────────────
+ * همان زبانِ گریدِ زیرش، تا سربرگ، ردیف‌ها و نوارِ پایین یک جدول در سه تکه دیده شوند: هر فیلد یک
+ * «خانه» است با سرستونِ خاکستری (برچسب) بالای مقدار، خطوطِ ظریف میانِ خانه‌ها، و کادرهای بی‌قاب که
+ * کلِ خانه را پر می‌کنند؛ خانه‌ی فعال همان قابِ accentِ دو پیکسلیِ گرید را می‌گیرد. ارتفاعِ کادرها با
+ * `--ef-h`ِ فرم‌کیت ۳۶ است — همان ارتفاعِ خانه‌های گرید.
+ *
+ * خط‌ها `border`ِ خودِ خانه‌هاست و قاب `overflow: hidden` ندارد: تقویمِ تاریخ پاپ‌آورِ درونِ همین
+ * قاب است و بریده می‌شد. پس گوشه‌های گردِ بالا را خودِ برچسب‌های سطرِ اول می‌گیرند. */
 .jh-bar {
   --ef-h: 36px;
   display: grid;
-  gap: 10px;
-  padding: 10px 12px;
   margin-block-end: var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--xl-line);
   border-radius: var(--radius-md);
-  background: var(--surface-2);
+  background: var(--surface);
 }
-.jh-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 160px 150px 150px;
-  gap: 8px 12px;
-  align-items: end;
-}
-.jh-row--sub {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 230px));
-  padding-block-start: 10px;
-  border-block-start: 1px dashed var(--border);
-}
-.jh-field { display: grid; gap: 3px; min-width: 0; }
+.jh-row { display: grid; }
+/* ستون‌بندیِ سطرها (هم‌خط با گرید) پایین‌تر، در بلوکِ «ستون‌به‌ستون با گرید». */
+.jh-row--sub { border-block-start: 1px solid var(--xl-line); }
+.jh-field { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.jh-field + .jh-field { border-inline-start: 1px solid var(--xl-line); }
+/* برچسب = سرستونِ گرید: همان خاکستری، همان وزن، همان خطِ پررنگ‌ترِ زیرش. */
 .jh-label {
+  padding: 5px 10px;
+  border-block-end: 1px solid var(--border-strong);
+  background: var(--xl-head);
+  color: var(--text-h);
   font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--text-muted);
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.jh-row:first-child > .jh-field:first-child > .jh-label { border-start-start-radius: calc(var(--radius-md) - 1px); }
+.jh-row:first-child > .jh-field:last-child > .jh-label { border-start-end-radius: calc(var(--radius-md) - 1px); }
 .jh-req { color: var(--danger); }
 
-/* «موقت / دائم»: دو دکمه‌ی کنارِ هم در قابِ هم‌ارتفاعِ فیلدها. */
+/* کادرها بی‌قاب و تمام‌خانه — همان کادرِ خانه‌های گرید. اختصاصیتِ `.jh-bar .jh-field` عمداً بالاتر از
+ * «یک ارتفاع برای همه‌ی کنترل‌ها»ی فرم‌کیت است. */
+.jh-bar .jh-field :is(input:not([type='checkbox']):not([type='radio']), .jalali-date-trigger, .item-picker-trigger) {
+  inline-size: 100%;
+  block-size: var(--ef-h);
+  min-height: var(--ef-h);
+  padding-block: 0;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.jh-bar .jh-field :is(input:not([type='checkbox']):not([type='radio']), .jalali-date-trigger, .item-picker-trigger):hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.jh-bar .jh-field :is(input:not([type='checkbox']):not([type='radio']):focus, .jalali-date-trigger:focus-visible, .item-picker-trigger:focus-visible),
+.jh-bar .jh-field .item-picker.open .item-picker-trigger {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--surface);
+  box-shadow: none;
+}
+/* «ریال» کنارِ نرخِ ارز: جای واحد در کادرِ بی‌قاب هم خالی بماند. */
+.jh-bar .jh-field .ef-affix > input:not([dir='ltr']) { padding-inline-end: 48px; }
+.jh-bar .jh-field .ef-affix > input[dir='ltr'] { padding-inline: 48px 10px; }
+
+/* «موقت / دائم»: دو نیمه‌ی همان خانه با خطِ جدول میانشان؛ نیمه‌ی انتخاب‌شده ته‌رنگ می‌گیرد. */
 .jh-seg {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  height: var(--ef-h);
-  padding: 3px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  block-size: var(--ef-h);
 }
 .jh-seg .jh-seg-opt {
   min-height: 0;
   height: 100%;
   padding: 0 8px;
   border: 0;
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: 0;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -12630,15 +12655,16 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-weight: 600;
   cursor: pointer;
 }
-.jh-seg .jh-seg-opt:hover { color: var(--text-h); }
+.jh-seg .jh-seg-opt + .jh-seg-opt { border-inline-start: 1px solid var(--xl-line); }
+.jh-seg .jh-seg-opt:hover { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--text-h); }
 .jh-seg .jh-seg-opt[aria-checked='true'] { background: var(--accent-bg); color: var(--accent-on-tint); }
 /* «دائم» برگشت‌ناپذیر است — انتخابش رنگِ خودش را دارد تا با یک نگاه دیده شود. */
 .jh-seg .jh-seg-opt--permanent[aria-checked='true'] { background: var(--success-bg); color: var(--success); }
-.jh-seg .jh-seg-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.jh-seg .jh-seg-opt:focus-visible { position: relative; outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* ── پنجره‌ی میان‌برها (دکمه‌ی سرِ کارت یا Ctrl+/) ──
  * همان مودالِ عمومی (`.modal-overlay`/`.modal-card`)، پهن‌تر: چهار دسته در دو ستون. */
-.jk-trigger { gap: 6px; min-height: 32px; padding: 0 10px; font-size: var(--fs-sm); color: var(--text-muted); }
+.jk-trigger { gap: 6px; min-height: 32px; padding: 0 10px; border-radius: var(--radius-sm); font-size: var(--fs-sm); color: var(--text-muted); }
 .jk-trigger:hover { color: var(--text-h); }
 .modal-card.jk-card { width: min(720px, 100%); }
 .jk-body {
@@ -12682,6 +12708,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 
 /* ── نوارِ چسبنده‌ی پایینِ سند (هر دو حالت) ──
  * راست دکمه‌ی ثبت، چپ جمع‌ها و وضعیتِ توازن (ترتیبِ DOM همان ترتیبِ خواندنِ راست‌به‌چپ است).
+ * ظاهرش هم‌خانواده‌ی گرید است: قابِ یک‌پیکسلیِ هم‌رنگِ خطوطِ جدول، گوشه‌ی همان جدول، و جمع‌ها
+ * خانه‌های جدولی با سرستونِ خاکستری. در حالتِ حسابدار (`--cols`) ستون‌به‌ستون هم با گرید هم‌خط است.
  * `bottom` منفیِ همان paddingِ پایینِ `.app-content` (۲۸px) است: نوارِ چسبنده در آن padding
  * می‌ایستد، یعنی ۲۸px بالاتر از لبه‌ی پنجره، و ردیف‌ها از زیرش پیدا بودند. حالا چسبیده به
  * لبه می‌نشیند. `scroll-state` (Chromium، یعنی اپِ ویندوز) گوشه‌های پایین را وقتِ چسبیدن
@@ -12695,15 +12723,15 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jf-foot {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
+  align-items: stretch;
+  /* گوشه‌های گردِ قاب، خانه‌های جمع را هم ببُرد — این نوار پاپ‌آوری ندارد که بریده شود. */
+  overflow: hidden;
+  border: 1px solid var(--xl-line);
   /* رنگِ توازن روی لبه‌ی بالای کلِ نوار — از گوشه‌ی چشم هم دیده می‌شود. */
-  border-block-start: 3px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  border-block-start: 2px solid var(--border-strong);
+  border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.07);
 }
 .jf-foot--ok { border-block-start-color: var(--success); }
 .jf-foot--err { border-block-start-color: var(--danger); }
@@ -12711,18 +12739,20 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jf-foot {
     border-end-start-radius: 0;
     border-end-end-radius: 0;
-    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.14);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
   }
 }
 .jf-foot .jf-submit {
+  align-self: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 26px;
-  border-radius: var(--radius-md);
-  font-size: var(--fs-lg);
+  min-height: 44px;
+  margin: 10px 12px;
+  padding: 0 22px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: none;
 }
 /* «(Ctrl+S)» بخشی از متنِ دکمه است، نه چیپی جدا — چیپِ قاب‌دار دکمه‌ی دوم به‌نظر می‌آمد. */
 .jf-submit-hint { font-size: var(--fs-sm); font-weight: 600; opacity: 0.75; direction: ltr; }
@@ -12732,6 +12762,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   align-items: center;
   gap: 8px;
   min-width: 0;
+  padding-inline: 4px 12px;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
@@ -12740,13 +12771,16 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jf-msg .is-err { color: var(--danger); }
 .jf-msg svg { flex: 0 0 auto; }
 
-/* ── جمع‌ها و وضعیتِ توازن (انتهای نوار، چپ) ──
- * بدهکار و بستانکار بی‌رنگ و درشت؛ رنگِ توازن فقط روی خانه‌ی وضعیت (و لبه‌ی نوار) تا دو عددِ
- * اول همیشه خوانا بمانند. خانه‌ی وضعیت یک «چیپ» است: خاکستری، سبز یا قرمز. */
+/* ── جمع‌ها و وضعیتِ توازن ──
+ * سه خانه‌ی یک جدول: سرستونِ خاکستری (برچسب) و زیرش مقدار — همان الگوی سربرگ و گرید. بدهکار و
+ * بستانکار بی‌رنگ و درشت؛ رنگِ توازن فقط روی خانه‌ی وضعیت (و لبه‌ی نوار) تا دو عددِ اول همیشه
+ * خوانا بمانند. */
 .jb-sum {
+  --jb-band: 25px;
   display: flex;
   align-items: stretch;
   margin-inline-start: auto;
+  border-inline-start: 1px solid var(--xl-line);
   font-variant-numeric: tabular-nums;
 }
 /* **اندازه‌ی ثابت** — پهنا و ارتفاع هر دو. با `min-width` هر رقمِ تازه خانه را پهن‌تر می‌کرد و
@@ -12754,24 +12788,29 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
  * کوچک می‌شود (`.jb-fit` + `useFitText`)، نه خانه‌اش بزرگ. */
 .jb-stat {
   display: grid;
-  align-content: center;
-  gap: 2px;
+  grid-template-rows: auto minmax(0, 1fr);
   inline-size: 168px;
-  /* سه خط (برچسب، مقدار، مبلغِ اختلاف) باید در «نامتوازن» جا شوند — ارتفاع برای همان است. */
-  block-size: 66px;
-  padding: 4px 16px;
+  /* سرستون + دو خطِ «نامتوازن» (وضعیت و مبلغِ اختلاف) — ارتفاع برای همان است. */
+  block-size: 72px;
   overflow: hidden;
 }
-.jb-stat + .jb-stat { border-inline-start: 1px solid var(--border); }
-.jb-sum .jb-stat--diff {
-  inline-size: 200px;
-  margin-inline-start: 8px;
-  padding-inline: 16px;
-  border-inline-start: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
+.jb-stat + .jb-stat { border-inline-start: 1px solid var(--xl-line); }
+.jb-sum .jb-stat--diff { inline-size: 200px; }
+/* سرستونِ خانه — همان سرستونِ گرید. ارتفاعش ثابت است تا خانه‌ی خالیِ زیرِ آیکون‌ها هم‌قدش بکشد. */
+.jb-k {
+  block-size: var(--jb-band);
+  padding: 0 12px;
+  border-block-end: 1px solid var(--border-strong);
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: calc(var(--jb-band) - 1px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.jb-k { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; }
+.jb-body { display: grid; align-content: center; gap: 1px; min-width: 0; padding: 2px 12px; }
 .jb-v {
   display: inline-flex;
   align-items: center;
@@ -12782,38 +12821,118 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   line-height: 1.25;
   white-space: nowrap;
 }
+/* آیکونِ وضعیت هم‌اندازه‌ی متن، تا با کوچک‌شدنِ متن (`FitText`) کوچک شود. */
+.jb-stat--diff .jb-v svg { inline-size: 1em; block-size: 1em; margin-inline-end: 0.3em; vertical-align: -0.15em; }
 .jb-sub { color: var(--danger); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
 .jb-sub:empty { display: none; }
 /* متنی که به‌جای پهن‌کردنِ خانه کوچک می‌شود: `--fit` را `useFitText` از پهنای واقعی می‌سنجد. */
 .jb-fit { display: block; max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .jb-v.jb-fit { font-size: calc(var(--fs-xl) * var(--fit, 1)); }
 .jb-sub.jb-fit { font-size: calc(var(--fs-xs) * var(--fit, 1)); }
-.jb-sum--ok .jb-stat--diff { background: var(--success-bg); }
+.jb-sum--ok .jb-stat--diff .jb-body { background: var(--success-bg); }
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
-.jb-sum--err .jb-stat--diff { background: var(--danger-bg); }
+.jb-sum--err .jb-stat--diff .jb-body { background: var(--danger-bg); }
 .jb-sum--err .jb-stat--diff .jb-v { color: var(--danger); }
-.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: var(--fs-md); font-weight: 500; }
+.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: calc(var(--fs-md) * var(--fit, 1)); font-weight: 500; }
+
+/* ── ستون‌به‌ستون با گرید (حالت حسابدار) ──
+ * سربرگ و نوارِ پایین پنج خانه‌اند با مرزهای همان ستون‌های گرید (`useAlignToGrid` → `--jg-cols`):
+ *   ۱. ردیف + حساب   ۲. شرح ردیف   ۳. بدهکار   ۴. بستانکار   ۵. آیکون‌ها
+ * سربرگ: «شرح سند» روی ۱ و ۲، «تاریخ» روی بدهکار، «وضعیت» روی بستانکار، «شماره فرعی» روی آیکون‌ها.
+ * پایین: «ثبت سند» زیرِ ۱، «وضعیتِ توازن» زیرِ شرح ردیف، و هر جمع دقیقاً زیرِ ستونِ خودش.
+ * بی‌سنجش (گریدی که افقی می‌لغزد، یا پیش از اولین سنجش)، نسبت‌های پیش‌فرضِ همان ستون‌ها. */
+@media (min-width: 761px) {
+  .jh-bar,
+  .jf-foot--cols {
+    --jg-cols-default: minmax(200px, 4fr) minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+  .jh-row { grid-template-columns: var(--jg-cols, var(--jg-cols-default)); }
+  .jh-field--grow { grid-column: 1 / 3; }
+  .jh-field--date { grid-column: 3; }
+  .jh-field--status { grid-column: 4; }
+  .jh-field--sub { grid-column: 5; }
+  /* فیلدهای کسب‌وکاری (یک تا چهار) روی همان خانه‌ها؛ اولی تا وقتی جا هست دو خانه‌ی اول را می‌گیرد و
+   * آخری تا لبه می‌کشد — سطر خانه‌ی خالی ندارد. */
+  .jh-row--sub > .jh-field:first-child { grid-column: 1 / 3; }
+  .jh-row--sub > .jh-field:first-child:last-child { grid-column: 1 / -1; }
+  .jh-row--sub > .jh-field:nth-child(2):last-child { grid-column: 3 / -1; }
+  .jh-row--sub > .jh-field:nth-child(2):nth-last-child(2) { grid-column: 3; }
+  .jh-row--sub > .jh-field:nth-child(3):last-child { grid-column: 4 / -1; }
+  .jh-row--sub > .jh-field:first-child:nth-last-child(4) { grid-column: 1; }
+  .jh-row--sub > .jh-field:nth-child(2):nth-last-child(3) { grid-column: 2; }
+  .jh-row--sub > .jh-field:nth-child(3):nth-last-child(2) { grid-column: 3; }
+  .jh-row--sub > .jh-field:nth-child(4) { grid-column: 4 / -1; }
+
+  .jf-foot--cols {
+    display: grid;
+    grid-template-columns: var(--jg-cols, var(--jg-cols-default));
+  }
+  /* دکمه وسطِ خانه‌ی خودش (زیرِ ردیف + حساب)، نه چسبیده به لبه. */
+  .jf-foot--cols .jf-submit { grid-area: 1 / 1; justify-self: center; }
+  .jf-foot--cols .jf-msg { grid-area: 2 / 1 / 3 / -1; padding: 6px 12px; border-block-start: 1px solid var(--xl-line); }
+  /* `subgrid`: خانه‌های جمع روی همان خطوطِ نوار می‌نشینند و `role="group"` سرِ جایش می‌ماند. */
+  .jf-foot--cols .jb-sum {
+    grid-area: 1 / 2 / 2 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    margin-inline-start: 0;
+    border-inline-start: 0;
+  }
+  /* سطرِ صریح لازم است: وضعیت در DOM بعد از دو جمع است و بی آن به سطرِ دوم می‌رفت. */
+  .jf-foot--cols .jb-stat { grid-row: 1; inline-size: auto; min-width: 0; border-inline-start: 1px solid var(--xl-line); }
+  .jf-foot--cols .jb-stat--diff { grid-column: 1; }
+  .jf-foot--cols .jb-stat--debit { grid-column: 2; }
+  .jf-foot--cols .jb-stat--credit { grid-column: 3; }
+  .jf-foot--cols .jb-body { padding-inline: 10px; }
+  /* خانه‌ی خالیِ زیرِ ستونِ آیکون‌ها — سرستون دارد تا خطِ جدول تا لبه برسد. */
+  .jf-foot--cols .jb-sum::after {
+    content: '';
+    grid-row: 1;
+    grid-column: 4;
+    border-inline-start: 1px solid var(--xl-line);
+    background: linear-gradient(
+      var(--xl-head) 0 calc(var(--jb-band) - 1px),
+      var(--border-strong) 0 var(--jb-band),
+      transparent 0
+    );
+  }
+}
 
 @media (max-width: 760px) {
-  /* شرح تمام‌عرض؛ تاریخ و وضعیت کنارِ هم؛ شماره‌ی فرعی زیرشان. */
+  /* شرح تمام‌عرض؛ تاریخ و وضعیت کنارِ هم؛ شماره‌ی فرعی زیرشان، تمام‌عرض تا خانه‌ی خالی نماند.
+   * خطوطِ جدول از نو: خطِ عمودی فقط میانِ دو خانه‌ی یک سطر، خطِ افقی بالای هر سطرِ بعدی. */
   .jh-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .jh-field--grow { grid-column: 1 / -1; }
-  .jh-row--sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jh-field--grow,
+  .jh-field--sub,
+  .jh-row--sub > .jh-field:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .jh-field + .jh-field { border-inline-start: 0; }
+  .jh-row > .jh-field--status,
+  .jh-row--sub > .jh-field:nth-child(even) { border-inline-start: 1px solid var(--xl-line); }
+  .jh-row > :is(.jh-field--date, .jh-field--status, .jh-field--sub),
+  .jh-row--sub > .jh-field:nth-child(n + 3) { border-block-start: 1px solid var(--xl-line); }
+  .jh-row:first-child > .jh-field:last-child > .jh-label { border-start-end-radius: 0; }
+  .jh-row:first-child > .jh-field--grow > .jh-label { border-start-end-radius: calc(var(--radius-md) - 1px); }
   /* صفحه‌کلیدِ فیزیکی نیست؛ دکمه‌ی میان‌برها فقط جای سرِ کارت را می‌گیرد. */
   .jk-trigger { display: none; }
   /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود — این‌جا فشردگی، نه درشتی.
-   * جمع‌ها بالا، دکمه‌ی تمام‌عرض پایین، زیرِ انگشت. */
-  .jf-foot { gap: 10px; padding: 10px 12px; }
-  .jb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); inline-size: 100%; margin-inline-start: 0; }
+   * جمع‌ها بالا (سرستون‌هایشان لبه‌ی بالای نوار)، بعد پیام، و دکمه‌ی تمام‌عرض پایین، زیرِ انگشت. */
+  .jb-sum {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    inline-size: 100%;
+    margin-inline-start: 0;
+    border-inline-start: 0;
+    border-block-end: 1px solid var(--xl-line);
+  }
   .jb-stat,
-  .jb-sum .jb-stat--diff { inline-size: auto; min-width: 0; block-size: 60px; padding: 3px 8px; }
+  .jb-sum .jb-stat--diff { inline-size: auto; min-width: 0; block-size: 64px; }
+  .jb-k { padding: 0 8px; }
+  .jb-body { padding: 2px 8px; }
   .jb-sub-side { display: none; }
-  .jb-sum .jb-stat--diff { margin-inline-start: 4px; }
-  .jb-k { font-size: 11px; }
   .jb-v { flex-wrap: wrap; font-size: var(--fs-md); white-space: normal; }
   .jb-v.jb-fit { font-size: calc(var(--fs-md) * var(--fit, 1)); white-space: nowrap; }
-  .jf-msg { flex-basis: 100%; }
-  .jf-foot .jf-submit { order: 2; justify-content: center; inline-size: 100%; min-height: 44px; }
+  .jf-msg { order: 1; flex-basis: 100%; padding: 8px 12px 0; }
+  .jf-foot .jf-submit { order: 2; flex: 1 1 100%; justify-content: center; min-height: 44px; }
   /* صفحه‌کلیدِ فیزیکی نیست. */
   .jf-submit-hint { display: none; }
 }
@@ -12983,9 +13102,16 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
  *
  * اختصاصیت: `.page .ef-table-wrap > table.xl-grid …` هم‌وزن یا سنگین‌ترِ قاعده‌های `ef-table` و
  * `jg-table` است و بعد از آن‌ها آمده — عمداً رویشان می‌نشیند. */
-.xl-grid {
+/* توکن‌های خط و سرستون — مشترکِ گرید و قاب‌های هم‌خانواده‌اش (سربرگِ سند، نوارِ «افزودن ردیف»، نوارِ
+ * پایین)؛ یک جا، تا رنگِ خطِ جدول در هر سه تکه‌ی فرم یکی بماند. */
+.xl-grid,
+.jh-bar,
+.jg + .ef-add-row,
+.jf-foot {
   --xl-line: var(--border);
   --xl-head: color-mix(in srgb, var(--surface-2) 55%, var(--border) 45%);
+}
+.xl-grid {
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -13129,6 +13255,23 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-table.xl-grid td :is(input, select):disabled { background: var(--surface-2); color: var(--text-muted); }
 .jg-table.xl-grid td .num-input { text-align: right; }
 
+/* «افزودن ردیف» زیرِ گریدِ اکسلی: ادامه‌ی قابِ جدول — مثلِ سطرِ «ردیفِ تازه»ی جدول‌های داده، نه
+ * دکمه‌ی خط‌چینِ جدا. وقتی نوارِ انتخاب زیرِ گرید باز است، با فاصله‌ی عادی جدا می‌ماند. */
+.jg + .ef-add-row {
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 34px;
+  margin-top: var(--sp-2);
+  padding-inline: 12px;
+  border: 1px solid var(--xl-line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--xl-head) 40%, var(--surface));
+  font-size: var(--fs-sm);
+}
+.jg + .ef-add-row:hover:not(:disabled) { border-color: var(--xl-line); background: var(--accent-bg); }
+.jg:has(> .jg-wrap:last-child) > .jg-wrap { border-end-start-radius: 0; border-end-end-radius: 0; }
+.jg:has(> .jg-wrap:last-child) + .ef-add-row { margin-top: -1px; border-start-start-radius: 0; border-start-end-radius: 0; }
+
 /* جست‌وجوی سریع در ردیف‌ها: پیداشده‌ها برجسته، بقیه کم‌رنگ، و «فعلی» (Enter) پررنگ‌تر. */
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-dim > td { opacity: 0.5; }
 .page .ef-table-wrap > table.xl-grid > tbody > tr:is(.is-hit, .is-current) > td.xl-rowhead { background: color-mix(in srgb, var(--warning) 35%, var(--xl-head)); color: var(--text-h); }
@@ -13144,7 +13287,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   block-size: 32px;
   padding-inline: 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-muted);
 }

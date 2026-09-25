@@ -21,6 +21,7 @@ import { useExperienceMode } from '../lib/experienceMode'
 import { JournalGrid } from './JournalGrid'
 import { openCellPicker } from '../lib/gridPicker'
 import { useFitText } from '../lib/useFitText'
+import { useAlignToGrid } from '../lib/alignToGrid'
 import { findLines } from '../lib/journalLineOps'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -73,6 +74,8 @@ export function JournalEntryForm({
   const [findPos, setFindPos] = useState(-1)
   const findRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
+  //: سربرگ و نوارِ پایین ستون‌به‌ستون با گرید هم‌خط‌اند (فقط حالتِ حسابدار؛ حالتِ ساده گرید ندارد).
+  useAlignToGrid(formRef, '.jh-bar, .jf-foot--cols')
   const accountLabel = useMemo(
     () => new Map(d.postableAccounts.map((a) => [a.id, `${a.code} — ${a.name}`])),
     [d.postableAccounts],
@@ -298,7 +301,7 @@ export function JournalEntryForm({
           {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
           <AddRowButton onClick={d.addLine}>افزودن ردیف (Ctrl+Enter)</AddRowButton>
         </SectionCard>
-        <JournalFooter d={d} shortcut />
+        <JournalFooter d={d} shortcut columns />
         {keysOpen && <ShortcutsDialog onClose={closeKeys} />}
       </form>
     )
@@ -653,19 +656,31 @@ function balanceState(d: JournalEntryDraft): BalanceState {
  *
  * هر دو حالت همین را دارند. جای `ActionBar`ِ عمومی، چون این‌جا نوار خودش محتوای اصلی است:
  * عددها درشت‌اند، رنگِ توازن روی لبه‌ی بالای کلِ نوار می‌نشیند، و دکمه‌ی ثبت بزرگ‌تر از
- * دکمه‌ی فرم‌های دیگر است. دکمه اولین چیزی است که چشمِ راست‌به‌چپ می‌بیند؛ جمع‌ها در انتهای
+ * دکمه‌ی فرم‌های دیگر است. ظاهرش هم‌خانواده‌ی جدولِ اکسلیِ ردیف‌هاست: جمع‌ها خانه‌های یک جدول‌اند،
+ * هر کدام با سرستونِ خاکستری. دکمه اولین چیزی است که چشمِ راست‌به‌چپ می‌بیند؛ جمع‌ها در انتهای
  * نوار، جایی که حسابدار پیش از ثبت نگاه می‌کند. `shortcut` فقط در حالتِ حسابدار «(Ctrl+S)»
  * را روی دکمه می‌نویسد — حالتِ ساده آن میان‌بر را ندارد.
+ *
+ * `columns` (حالتِ حسابدار) نوار را ستون‌به‌ستون با گرید هم‌خط می‌کند (`useAlignToGrid`): دکمه زیرِ
+ * «ردیف + حساب»، وضعیت زیرِ «شرح ردیف»، و هر جمع دقیقاً زیرِ ستونِ خودش.
  *
  * **چرا دو لایه (`jf-dock` و `jf-foot`).** لایه‌ی بیرونی می‌چسبد و ظرفِ `scroll-state`
  * است؛ لایه‌ی درونی ظاهر است و وقتی نوار واقعاً چسبیده، گوشه‌های پایینش صاف می‌شود.
  * پرس‌وجوی `scroll-state` فقط فرزندان را می‌تواند رنگ کند، نه خودِ ظرف را.
  */
-function JournalFooter({ d, shortcut = false }: { d: JournalEntryDraft; shortcut?: boolean }) {
+function JournalFooter({
+  d,
+  shortcut = false,
+  columns = false,
+}: {
+  d: JournalEntryDraft
+  shortcut?: boolean
+  columns?: boolean
+}) {
   const state = balanceState(d)
   return (
     <div className="jf-dock">
-      <div className={`jf-foot jf-foot--${state}`}>
+      <div className={`jf-foot jf-foot--${state}${columns ? ' jf-foot--cols' : ''}`}>
         <button
           type="submit"
           className="btn-primary jf-submit"
@@ -701,37 +716,44 @@ function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceStat
   const side = d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'
   return (
     <div className={`jb-sum jb-sum--${state}`} role="group" aria-label="جمعِ سند">
-      <div className="jb-stat">
+      <div className="jb-stat jb-stat--debit">
         <span className="jb-k">جمع بدهکار</span>
-        <FitText className="jb-v" text={fa(d.totalDebit)} />
+        <div className="jb-body">
+          <FitText className="jb-v" text={fa(d.totalDebit)} />
+        </div>
       </div>
-      <div className="jb-stat">
+      <div className="jb-stat jb-stat--credit">
         <span className="jb-k">جمع بستانکار</span>
-        <FitText className="jb-v" text={fa(d.totalCredit)} />
+        <div className="jb-body">
+          <FitText className="jb-v" text={fa(d.totalCredit)} />
+        </div>
       </div>
       <div className="jb-stat jb-stat--diff" aria-live="polite">
         <span className="jb-k">وضعیتِ توازن</span>
-        <span className="jb-v">
-          {state === 'empty' ? (
-            'مبلغی وارد نشده'
-          ) : state === 'ok' ? (
-            <>
-              <CheckCircle2 size={18} aria-hidden="true" /> متوازن
-            </>
-          ) : (
-            <>
-              <AlertTriangle size={18} aria-hidden="true" /> نامتوازن
-            </>
-          )}
-        </span>
-        {/* در موبایل فقط مبلغ: خانه‌ی ۱۰۰ پیکسلی جای «بدهکار بیشتر» را ندارد، و طرفِ بزرگ‌تر از دو
-            جمعِ کنارش پیداست. */}
-        {state === 'err' && (
-          <FitText className="jb-sub" min={0.75} text={`${fa(diff)} ${side}`}>
-            {fa(diff)}
-            <span className="jb-sub-side"> {side}</span>
+        <div className="jb-body">
+          {/* این خانه زیرِ ستونِ «شرح ردیف» است و گاهی باریک — وضعیت هم مثلِ عددها کوچک می‌شود. */}
+          <FitText className="jb-v" min={0.6} text={state}>
+            {state === 'empty' ? (
+              'مبلغی وارد نشده'
+            ) : state === 'ok' ? (
+              <>
+                <CheckCircle2 aria-hidden="true" /> متوازن
+              </>
+            ) : (
+              <>
+                <AlertTriangle aria-hidden="true" /> نامتوازن
+              </>
+            )}
           </FitText>
-        )}
+          {/* در موبایل فقط مبلغ: خانه‌ی ۱۰۰ پیکسلی جای «بدهکار بیشتر» را ندارد، و طرفِ بزرگ‌تر از دو
+              جمعِ کنارش پیداست. */}
+          {state === 'err' && (
+            <FitText className="jb-sub" min={0.75} text={`${fa(diff)} ${side}`}>
+              {fa(diff)}
+              <span className="jb-sub-side"> {side}</span>
+            </FitText>
+          )}
+        </div>
       </div>
     </div>
   )
