@@ -6,12 +6,10 @@ import {
   ArrowLeftRight,
   BookOpenCheck,
   CalendarCheck,
-  Coins,
   DoorOpen,
   FileSpreadsheet,
   Lock,
   Printer,
-  RefreshCw,
   Scale,
   TrendingDown,
   TrendingUp,
@@ -22,14 +20,12 @@ import {
   fetchAccountBalances,
   fetchChartAccounts,
   fetchClosingPreview,
-  fetchFxPreview,
   fetchOpeningPreview,
   fetchPeriodCloses,
   fetchPnlClosePreview,
   issuePnlClose,
   fetchReclassSources,
   issueClosingEntry,
-  issueFxRevaluation,
   issueOpeningEntry,
   issueReclass,
   previewReclass,
@@ -47,7 +43,6 @@ import {
   FormGrid,
   FormStatus,
 } from '../../components/form/FormKit'
-import { CurrenciesPanel } from '../../components/CurrenciesPanel'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
 import { formatJalali, todayIso } from '../../lib/jalali'
@@ -85,191 +80,8 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 // ═════════════════════ ۱) صدور سند تسعیر ارز ═════════════════════
-
-export function FxRevaluationPage({ token }: { token: string }) {
-  const [asOf, setAsOf] = useState(todayIso())
-  const [description, setDescription] = useState('')
-  const [msg, setMsg] = useState<Msg>(null)
-  const preview = useAsync(() => fetchFxPreview(token, asOf), [token, asOf])
-
-  async function issue() {
-    if (!window.confirm(`سندِ تسعیر با تاریخ ${formatJalali(asOf)} صادر شود؟`)) return
-    try {
-      const out = await issueFxRevaluation(token, asOf, description)
-      setMsg({
-        text: `سندِ تسعیر با شماره ${fa(out.number ?? 0)} و خالصِ ${fa(out.net_difference)} صادر شد.`,
-        kind: 'ok',
-      })
-      setDescription('')
-      preview.reload()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  const data = preview.data
-  const net = Number(data?.total_difference ?? 0)
-
-  return (
-    <OpsPage
-      canvas
-      icon={Coins}
-      title="صدور سند تسعیر ارز"
-      description="مانده‌ی ارزیِ هر حساب با نرخِ روز سنجیده می‌شود و اختلافِ ریالی به سود/زیانِ تسعیر می‌رود. فقط ردیف‌هایی که هنگامِ ثبت مبلغِ ارزی داشته‌اند وارد محاسبه می‌شوند."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <label className="acc-inline-field">
-              تاریخِ تسعیر
-              <JalaliDatePicker value={asOf} onChange={setAsOf} />
-            </label>
-            <button type="button" onClick={preview.reload}>
-              <RefreshCw size={13} /> محاسبه‌ی دوباره
-            </button>
-          </div>
-          <div className="cc-summary">
-            <Metric
-              icon={<Coins size={14} />}
-              label="حساب‌های ارزی"
-              value={data ? faInt(data.items.length) : '—'}
-            />
-            <Metric
-              icon={net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-              label={net >= 0 ? 'سودِ تسعیر' : 'زیانِ تسعیر'}
-              value={data ? fa(Math.abs(net)) : '—'}
-              tone={net >= 0 ? 'in' : 'out'}
-            />
-            <Metric
-              icon={<AlertTriangle size={14} />}
-              label="ارزِ بدونِ نرخ"
-              value={data ? faInt(data.missing_rates.length) : '—'}
-              hint={data?.missing_rates.join('، ') || undefined}
-              tone={data && data.missing_rates.length > 0 ? 'out' : 'plain'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Scale}
-        title="پیش‌نمایشِ تسعیر"
-        tip="ارزشِ دفتری در برابرِ ارزشِ امروز؛ اختلاف همان سندی است که زده می‌شود."
-        badge={data ? <CountBadge>{faInt(data.items.length)} حساب</CountBadge> : undefined}
-      >
-        {data && data.missing_rates.length > 0 && (
-          <p className="hint acc-note acc-note--err">
-            <AlertTriangle size={14} />
-            برای {data.missing_rates.join('، ')} تا این تاریخ نرخی ثبت نشده؛ این ارزها در محاسبه نیامدند.
-          </p>
-        )}
-        <div className="ef-block-top">
-          <FormField label="شرحِ سند" optional>
-            {(id) => (
-              <input
-                id={id}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={`سند تسعیر ارز تا ${formatJalali(asOf)}`}
-              />
-            )}
-          </FormField>
-        </div>
-
-        <AsyncBlock
-          loading={preview.loading}
-          error={preview.error}
-          empty={(data?.items.length ?? 0) === 0}
-          emptyText="هیچ حسابی مانده‌ی ارزی ندارد. برای ثبتِ ردیفِ ارزی، هنگامِ ثبتِ سند ارز و مبلغِ ارزی را وارد کنید."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>حساب</th>
-                  <th>ارز</th>
-                  <th>مانده‌ی ارزی</th>
-                  <th>نرخِ روز</th>
-                  <th>ارزشِ دفتری</th>
-                  <th>ارزشِ امروز</th>
-                  <th>اختلاف</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.items ?? []).map((row) => {
-                  const diff = Number(row.difference)
-                  // بُعدها ستونِ تازه نمی‌گیرند: هویتِ ردیف‌اند، پس زیرِ خودِ حساب
-                  // می‌نشینند تا جدول هفت‌ستونه بماند و در موبایل هم کارتِ خوانا بماند.
-                  const dims = [
-                    row.analytic_name
-                      ? `تفصیلی: ${row.analytic_code ? `${row.analytic_code} ` : ''}${row.analytic_name}`
-                      : null,
-                    row.cost_center_name ? `مرکز: ${row.cost_center_name}` : null,
-                  ].filter(Boolean)
-                  // نرخِ کهنه حدس نیست ولی نرخِ روز هم نیست — باید دیده شود.
-                  const stale = row.rate_date !== asOf
-                  return (
-                    <tr
-                      key={`${row.account_id}-${row.analytic_id ?? '—'}-${row.cost_center_id ?? '—'}-${row.currency_code}`}
-                    >
-                      <td className="card-title" data-label="حساب">
-                        <span dir="ltr">{row.account_code}</span> — {row.account_name}
-                        {dims.length > 0 && <span className="field-hint">{dims.join(' · ')}</span>}
-                      </td>
-                      <td data-label="ارز" dir="ltr">
-                        {row.currency_code}
-                      </td>
-                      <td data-label="مانده‌ی ارزی" className="num">
-                        {fa(row.fx_balance)}
-                      </td>
-                      <td data-label="نرخِ روز" className="num">
-                        {fa(row.rate)}
-                        {stale && (
-                          <span className="field-hint field-hint--warn">
-                            نرخِ {formatJalali(row.rate_date)}
-                          </span>
-                        )}
-                      </td>
-                      <td data-label="ارزشِ دفتری" className="num">
-                        {fa(row.book_value)}
-                      </td>
-                      <td data-label="ارزشِ امروز" className="num">
-                        {fa(row.market_value)}
-                      </td>
-                      <td
-                        data-label="اختلاف"
-                        className={`num ${diff >= 0 ? 'pos-in' : 'pos-out'}`}
-                      >
-                        {fa(diff)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-
-      <CurrenciesPanel token={token} />
-      <ActionBar
-        status={
-          <FormStatus
-            msg={msg}
-            idle={
-              net === 0
-                ? 'اختلافِ تسعیری وجود ندارد؛ سندی لازم نیست.'
-                : `${net >= 0 ? 'سودِ' : 'زیانِ'} تسعیر: ${fa(Math.abs(net))} ریال`
-            }
-          />
-        }
-      >
-        <button type="button" className="btn-primary" disabled={!data || net === 0} onClick={() => void issue()}>
-          <Coins size={15} /> صدورِ سند تسعیر
-        </button>
-      </ActionBar>
-    </OpsPage>
-  )
-}
+//: هم‌سبکِ سند حسابداری، در فایلِ خودش؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
+export { FxRevaluationPage } from './FxRevaluationPage'
 
 // ═════════════════ ۲) بستن حساب‌های سود و زیان ═════════════════
 
