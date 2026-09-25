@@ -42,3 +42,25 @@ export function textMatches(haystack: string, query: string): boolean {
   const hay = normalizeFa(haystack)
   return q.split(' ').every((word) => hay.includes(word))
 }
+
+/**
+ * رتبه‌ی یک گزینه‌ی تطبیق‌خورده — کوچک‌تر یعنی بالاتر در فهرست.
+ *
+ * `textMatches` فقط می‌گوید «هست یا نه»، و فهرست به ترتیبِ اصلی می‌ماند. برای حساب‌ها
+ * این یعنی تایپِ «۱۱» حسابِ «۲۱۱۰» را هم‌تراز با «۱۱۰۱» نشان می‌داد، و با سقفِ نمایشِ
+ * پاپ‌آور، حسابِ درست حتی ممکن بود بیرون بیفتد. قاعده همان که حسابدار انتظار دارد:
+ *
+ * - ۰: خودِ برچسب با عبارت شروع می‌شود (کدِ حساب: «۱۱» ← «۱۱۰۱ — …»).
+ * - ۱: یکی از واژه‌های برچسب با آن شروع می‌شود (نام: «بان» ← «۱۱۰۱ — بانک ملی»).
+ * - ۲: فقط جایی در میانه هست.
+ *
+ * برای عبارتِ چندواژه‌ای واژه‌ی اول ملاک است؛ بقیه را `textMatches` تضمین کرده.
+ */
+export function matchRank(label: string, query: string): number {
+  const q = normalizeFa(query).split(' ')[0] ?? ''
+  if (!q) return 0
+  const hay = normalizeFa(label)
+  if (hay.startsWith(q)) return 0
+  //: جداکننده‌ی «کد — نام» و خط‌تیره/اسلش هم مرزِ واژه‌اند.
+  return hay.split(/[\s\-—–/،,]+/).some((w) => w.startsWith(q)) ? 1 : 2
+}
