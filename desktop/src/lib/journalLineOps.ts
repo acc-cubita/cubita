@@ -1,3 +1,4 @@
+import { normalizeFa, textMatches } from './faText'
 import type { JournalDraftLine } from './journalEntryDraft'
 
 /**
@@ -52,6 +53,22 @@ export function copyPreviousInto(lines: JournalDraftLine[], index: number): Jour
 /** حذفِ ردیف با حفظِ کفِ دو ردیف — سندِ تک‌ردیفی معنا ندارد. */
 export function removeAt(lines: JournalDraftLine[], index: number): JournalDraftLine[] {
   return lines.length > 2 ? lines.filter((_, i) => i !== index) : lines
+}
+
+/**
+ * حذفِ چند ردیف با هم (ردیف‌های انتخاب‌شده‌ی گرید). کفِ دو ردیف همان است، ولی این‌جا
+ * «حذف نمی‌شود» درست نیست — کاربر همه را انتخاب کرده و پاک‌شدن می‌خواهد: آنچه می‌ماند با
+ * ردیفِ خالی تا دو پر می‌شود.
+ */
+export function removeRows(
+  lines: JournalDraftLine[],
+  indices: Iterable<number>,
+  blank: () => JournalDraftLine,
+): JournalDraftLine[] {
+  const drop = new Set(indices)
+  const kept = lines.filter((_, i) => !drop.has(i))
+  while (kept.length < 2) kept.push(blank())
+  return kept
 }
 
 export interface Remaining {
@@ -194,4 +211,28 @@ export function faRows(rows: number[]): string {
 /** جمعِ یک طرف. رشته‌ی خالی یا نامعتبر صفر است، مثلِ خودِ فرم. */
 export function sumSide(lines: JournalDraftLine[], side: 'debit' | 'credit'): number {
   return lines.reduce((sum, l) => sum + (Number(l[side]) || 0), 0)
+}
+
+/**
+ * ردیف‌هایی که جست‌وجوی سریعِ گرید (سرِ کارت، Ctrl+F) پیدا می‌کند: حساب (کد یا نام)، شرح، یا
+ * مبلغ. مبلغ با رقمِ فارسی یا لاتین و با/بی جداکننده‌ی هزارگان («۲٬۵۰۰» = «2500»). عبارتِ خالی
+ * `null` است — یعنی جست‌وجویی نیست، نه «هیچ پیدا نشد».
+ */
+export function findLines(
+  lines: readonly JournalDraftLine[],
+  query: string,
+  accountLabel: ReadonlyMap<string, string>,
+): number[] | null {
+  if (!query.trim()) return null
+  const digits = normalizeFa(query).replace(/[,٬\s]/g, '')
+  const numeric = /^\d+$/.test(digits)
+  const out: number[] = []
+  lines.forEach((l, i) => {
+    const amountHit =
+      numeric && [l.debit, l.credit].some((v) => v && normalizeFa(String(v)).replace(/[,٬]/g, '').includes(digits))
+    if (amountHit || textMatches(accountLabel.get(l.accountId) ?? '', query) || textMatches(l.description ?? '', query)) {
+      out.push(i)
+    }
+  })
+  return out
 }

@@ -3,6 +3,7 @@ import { Copy, CopyPlus, Trash2 } from 'lucide-react'
 
 import { SearchSelect } from './SearchSelect'
 import { AccountCombo, type ComboCommit, type ComboOption } from './AccountCombo'
+import { ColResizer, SelectionBar } from './XlGrid'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { RowAction } from './form/FormKit'
@@ -22,6 +23,8 @@ import {
 import { openCellPicker } from '../lib/gridPicker'
 import { poolFor } from '../lib/descriptionMemory'
 import { normalizeFa } from '../lib/faText'
+import { modsOf, useRowSelection, type ClickMods } from '../lib/rowSelection'
+import { useColumnWidths } from '../lib/useColumnWidths'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -48,7 +51,32 @@ function isRtl(el: Element): boolean {
  * تولیدش می‌کند. به‌علاوه این‌طور `SearchSelect` و `NumberInput` دست‌نخورده
  * می‌مانند — هیچ‌کدام لازم نیست ref بپذیرند.
  */
-export function JournalGrid({ d }: { d: JournalEntryDraft }) {
+//: عرضِ پیش‌فرضِ هر ستون، وقتی کاربر عرضی را کشیده و بقیه باید پیکسلی شوند (`useColumnWidths`).
+const COL_FALLBACK: Record<string, number> = {
+  num: 44,
+  account: 320,
+  fx: 130,
+  tafsili: 150,
+  costCenter: 150,
+  description: 140,
+  debit: 170,
+  credit: 170,
+  trackingNo: 130,
+  trackingDate: 130,
+  actions: 104,
+}
+
+export function JournalGrid({
+  d,
+  highlight = null,
+  current,
+}: {
+  d: JournalEntryDraft
+  /** ردیف‌هایی که جست‌وجوی سریعِ سرِ کارت پیدا کرده؛ `null` یعنی جست‌وجویی نیست. */
+  highlight?: readonly number[] | null
+  /** ردیفی که Enterِ کادرِ جست‌وجو رویش ایستاده. */
+  current?: number
+}) {
   const gridRef = useRef<HTMLDivElement>(null)
   const jumpRef = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState('')
@@ -59,6 +87,9 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   const jumpFrom = useRef<{ row: number; col: number } | null>(null)
   //: جلو رفتن بعد از انتخابِ حساب با Enter/Tab — در اثرِ پایین، **بعد از** رندرِ وضعیتِ تازه.
   const [advance, setAdvance] = useState<{ row: number; how: ComboCommit } | null>(null)
+  //: انتخابِ ردیف با سرستونِ ردیف (شماره)، مثلِ اکسل — برای حذفِ دسته‌ای و جمعِ انتخاب.
+  const { selected, click: clickRowHead, clear: clearSelection } = useRowSelection()
+  const cw = useColumnWidths('cubita.journalGrid.widths', COL_FALLBACK)
 
   //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
   //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
@@ -120,6 +151,23 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
     [d.postableAccounts],
   )
   const commitAccount = useCallback((row: number, how: ComboCommit) => setAdvance({ row, how }), [])
+
+  //: ترتیبِ ردیف‌ها برای بازه‌ی Shift+کلیک، از ref تا تابعِ پاس‌داده به ردیف‌ها پایدار بماند.
+  const rowOrder = useRef<string[]>([])
+  rowOrder.current = d.lines.map((_, i) => String(i))
+  const onRowHead = useCallback((row: number, mods: ClickMods) => clickRowHead(rowOrder.current, String(row), mods), [clickRowHead])
+  //: با افزودن/حذف/تکرارِ ردیف شاخص‌ها جابه‌جا می‌شوند؛ انتخابِ کهنه ردیفِ اشتباه را پاک می‌کرد.
+  useEffect(() => clearSelection(), [d.lines.length, clearSelection])
+  const hitSet = useMemo(() => (highlight ? new Set(highlight) : null), [highlight])
+  const selectedRows = useMemo(() => [...selected].map(Number).sort((a, b) => a - b), [selected])
+
+  function deleteSelected() {
+    if (selectedRows.length === 0) return
+    const first = selectedRows[0]
+    d.removeLines(selectedRows)
+    clearSelection()
+    requestAnimationFrame(() => focusCell(Math.max(0, Math.min(first, d.lines.length - selectedRows.length) - 1), 0))
+  }
 
   /** عنصرِ قابلِ فوکوسِ درونِ یک سلول را پیدا و فوکوس می‌کند. */
   const focusCell = useCallback((row: number, col: number) => {
@@ -241,6 +289,12 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
     if (!coords || coords.length !== 2) return
     const at = { row: coords[0], col: coords[1] }
 
+    //: Esc انتخابِ ردیف‌ها را برمی‌دارد — فهرست‌های باز (حساب، شرح) Esc را خودشان می‌گیرند.
+    if (e.key === 'Escape' && selectedRows.length > 0) {
+      clearSelection()
+      return
+    }
+
     // ── میان‌برهای ردیف و سند ──
     if (e.ctrlKey || e.metaKey) {
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
@@ -261,6 +315,11 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       }
       if (e.code === 'Delete' || e.code === 'NumpadDecimal') {
         e.preventDefault()
+        //: با ردیف‌های انتخاب‌شده، همان‌ها با هم حذف می‌شوند (نوارِ انتخاب هم همین را دارد).
+        if (selectedRows.length > 0) {
+          deleteSelected()
+          return
+        }
         if (d.lines.length <= 2) return
         d.removeLine(at.row)
         requestAnimationFrame(() => focusCell(Math.max(0, at.row - 1), at.col))
@@ -445,35 +504,47 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       role="grid"
       aria-label="ردیف‌های سند"
     >
-      <table className="ef-table ef-table--edit jg-table table-plain">
+      <table
+        className="ef-table ef-table--edit jg-table xl-grid table-plain"
+        style={cw.table(['num', ...cols, 'actions'])}
+      >
         {/* عرضِ ستون‌ها (`table-layout: fixed`): حساب هرچه بماند می‌گیرد؛ شماره و شرح باریک،
-            مبلغ‌ها پهن تا عددِ میلیاردی بی‌برش دیده شود. */}
+            مبلغ‌ها پهن تا عددِ میلیاردی بی‌برش دیده شود. کاربر با کشیدنِ لبه‌ی سرستون عوضشان
+            می‌کند (`useColumnWidths`). */}
         <colgroup>
-          <col className="jg-c-num" />
-          <col className="jg-c-account" />
-          {showFx && <col className="jg-c-fx" />}
-          {showTafsili && <col className="jg-c-pick" />}
-          {showCostCenter && <col className="jg-c-pick" />}
-          <col className="jg-c-desc" />
-          <col className="jg-c-amount" />
-          <col className="jg-c-amount" />
-          {showTracking && <col className="jg-c-track" />}
-          {showTracking && <col className="jg-c-track" />}
-          <col className="jg-c-actions" />
+          <col className="jg-c-num" style={cw.col('num')} />
+          <col className="jg-c-account" style={cw.col('account')} />
+          {showFx && <col className="jg-c-fx" style={cw.col('fx')} />}
+          {showTafsili && <col className="jg-c-pick" style={cw.col('tafsili')} />}
+          {showCostCenter && <col className="jg-c-pick" style={cw.col('costCenter')} />}
+          <col className="jg-c-desc" style={cw.col('description')} />
+          <col className="jg-c-amount" style={cw.col('debit')} />
+          <col className="jg-c-amount" style={cw.col('credit')} />
+          {showTracking && <col className="jg-c-track" style={cw.col('trackingNo')} />}
+          {showTracking && <col className="jg-c-track" style={cw.col('trackingDate')} />}
+          <col className="jg-c-actions" style={cw.col('actions')} />
         </colgroup>
         <thead>
           <tr>
-            <th className="ef-col-min">ردیف</th>
-            <th>حساب</th>
-            {showFx && <th>مبلغ ارزی</th>}
-            {showTafsili && <th>تفصیلی</th>}
-            {showCostCenter && <th>مرکز هزینه</th>}
-            <th>شرح ردیف</th>
-            <th>بدهکار</th>
-            <th>بستانکار</th>
-            {showTracking && <th>شماره پیگیری</th>}
-            {showTracking && <th>تاریخ پیگیری</th>}
-            <th className="ef-col-min" aria-label="کنش‌ها" />
+            <th className="ef-col-min xl-rowhead" data-col="num">ردیف</th>
+            {(
+              [
+                ['account', 'حساب'],
+                ...(showFx ? [['fx', 'مبلغ ارزی']] : []),
+                ...(showTafsili ? [['tafsili', 'تفصیلی']] : []),
+                ...(showCostCenter ? [['costCenter', 'مرکز هزینه']] : []),
+                ['description', 'شرح ردیف'],
+                ['debit', 'بدهکار'],
+                ['credit', 'بستانکار'],
+                ...(showTracking ? [['trackingNo', 'شماره پیگیری'], ['trackingDate', 'تاریخ پیگیری']] : []),
+              ] as [string, string][]
+            ).map(([id, label]) => (
+              <th key={id} data-col={id}>
+                {label}
+                <ColResizer onBegin={(e) => cw.begin(e, id)} onReset={cw.reset} />
+              </th>
+            ))}
+            <th className="ef-col-min" data-col="actions" aria-label="کنش‌ها" />
           </tr>
         </thead>
         <tbody>
@@ -507,13 +578,34 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
               onCopyPrev={d.copyPreviousInto}
               onRemove={d.removeLine}
               getDescriptionPool={descriptionPool}
+              selected={selected.has(String(i))}
+              mark={hitSet ? (i === current ? 'current' : hitSet.has(i) ? 'hit' : 'dim') : undefined}
+              onRowHead={onRowHead}
             />
           ))}
         </tbody>
       </table>
     </div>
+      {selectedRows.length > 0 && (
+        <SelectionBar count={selectedRows.length} unit="ردیف" onClear={clearSelection}>
+          <span>
+            جمع بدهکار <b className="num">{fa(sumOf(d.lines, selectedRows, 'debit'))}</b>
+          </span>
+          <span>
+            جمع بستانکار <b className="num">{fa(sumOf(d.lines, selectedRows, 'credit'))}</b>
+          </span>
+          <button type="button" className="xl-selbar-danger" onClick={deleteSelected}>
+            <Trash2 size={14} aria-hidden="true" /> حذفِ ردیف‌ها (Ctrl+Delete)
+          </button>
+        </SelectionBar>
+      )}
     </div>
   )
+}
+
+//: جمعِ یک طرفِ ردیف‌های انتخاب‌شده — همان «جمع»ِ نوارِ وضعیتِ اکسل.
+function sumOf(lines: JournalDraftLine[], rows: number[], side: 'debit' | 'credit'): number {
+  return rows.reduce((s, r) => s + (Number(lines[r]?.[side]) || 0), 0)
 }
 
 /**
@@ -547,6 +639,9 @@ const GridRow = memo(function GridRow({
   onCopyPrev,
   onRemove,
   getDescriptionPool,
+  selected,
+  mark,
+  onRowHead,
 }: {
   i: number
   line: JournalDraftLine
@@ -571,14 +666,31 @@ const GridRow = memo(function GridRow({
   onCopyPrev: JournalEntryDraft['copyPreviousInto']
   onRemove: JournalEntryDraft['removeLine']
   getDescriptionPool: (row: number) => string[]
+  selected: boolean
+  /** نتیجه‌ی جست‌وجوی سریع: `current` همانی که Enter رویش است، `hit` پیدا شد، `dim` نه. */
+  mark: 'current' | 'hit' | 'dim' | undefined
+  onRowHead: (row: number, mods: ClickMods) => void
 }) {
   const col = (id: ColId) => cols.indexOf(id)
 
   return (
-    <tr>
+    <tr className={[selected && 'is-selected', mark && `is-${mark}`].filter(Boolean).join(' ') || undefined}>
       {/* `card-title` و `card-actions` دو کلاسِ معافِ قرارداد صفحه‌اند: در نمای
           کارتی سرِ کارت و نوارِ کنش می‌شوند و برچسب نمی‌خواهند. */}
-      <td className="ef-col-min jg-num card-title">{fa(i + 1)}</td>
+      <td className="ef-col-min jg-num xl-rowhead card-title">
+        {/* سرستونِ ردیف مثلِ اکسل: کلیک انتخاب، Ctrl+کلیک افزودن، Shift+کلیک بازه. از Tabِ گرید
+            بیرون است (`tabIndex=-1`) — ناوبریِ صفحه‌کلید خانه‌به‌خانه است. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          className="xl-rowhead-btn"
+          aria-pressed={selected}
+          aria-label={`انتخابِ ردیفِ ${fa(i + 1)}`}
+          onClick={(e) => onRowHead(i, modsOf(e))}
+        >
+          {fa(i + 1)}
+        </button>
+      </td>
 
       <td className="ef-col-wide" data-cell={`${i}-${col('account')}`}>
         <AccountCombo

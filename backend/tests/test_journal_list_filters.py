@@ -193,3 +193,32 @@ def test_the_http_contract_uses_the_report_filter_names(db, user, client):
     body = summary.json()
     assert (body["entry_count"], body["line_count"]) == (1, 1)
     assert Decimal(body["total_debit"]) == Decimal(8_000)
+
+
+def test_column_filters_each_narrow_their_own_column(db, user):
+    """فیلترهای سرستونِ «اسناد حسابداری»: عطف دقیق، فرعی و شرح جزئی — و با هم «و» می‌شوند."""
+    center = _center(db, user, _code(), "ستونی")
+    scope = ReportFilters(cost_center_id=center.id)
+    a = _post(db, user, MID, 1_000, center=center)
+    b = _post(db, user, MID, 2_000, center=center)
+    a.description, a.sub_number = "اجاره‌ی انبار مهر", "PR-77"
+    b.description, b.sub_number = "حقوقِ مهر", "PR-12"
+    db.flush()
+
+    ids = lambda **kw: {e.id for e in list_entries(filters=scope, q=None, db=db, params=PageParams(limit=200, cursor=None), **kw).items}  # noqa: E731
+    assert ids(atf=a.atf_number) == {a.id}
+    assert ids(sub="pr-7") == {a.id}  #: جزئی و بی‌حساسیت به بزرگی
+    assert ids(desc="مهر") == {a.id, b.id}
+    assert ids(desc="مهر", sub="12") == {b.id}  #: «و»، نه «یا»
+    assert ids(desc="   ") == {a.id, b.id}  #: فاصله‌ی خالی فیلتر نیست
+    assert list_summary(filters=scope, q=None, db=db, desc="انبار").entry_count == 1
+
+
+def test_column_filters_over_http(db, user, client):
+    center = _center(db, user, _code(), "ستونیِ http")
+    entry = _post(db, user, MID, 3_000, center=center)
+    entry.sub_number = "Z-9"
+    db.flush()
+    listed = client.get(f"/api/journal-entries?cost_center_id={center.id}&sub=z-9&atf={entry.atf_number}")
+    assert listed.status_code == 200, listed.text
+    assert [e["id"] for e in listed.json()["items"]] == [str(entry.id)]

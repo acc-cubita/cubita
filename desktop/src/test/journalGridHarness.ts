@@ -55,6 +55,7 @@ export function Harness({
     [],
   )
   const removeLine = useCallback((i: number) => setLines((ls) => ops.removeAt(ls, i)), [])
+  const removeLines = useCallback((ix: number[]) => setLines((ls) => ops.removeRows(ls, ix, () => line())), [])
   const duplicateLine = useCallback((i: number) => {
     setLines((ls) => ops.duplicateAt(ls, i))
     return i + 1
@@ -67,6 +68,7 @@ export function Harness({
     setLineFx: noop,
     addLine: () => setLines((ls) => [...ls, line()]),
     removeLine,
+    removeLines,
     duplicateLine,
     copyPreviousInto,
     remaining,
