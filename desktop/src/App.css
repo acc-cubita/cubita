@@ -12546,6 +12546,12 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-table col.jg-c-act1 { width: 56px; }
 .jg-table col.jg-c-wh { width: 18%; }
 .jg-table col.jg-c-qty { width: 11%; }
+/* برگه‌ی «تفصیلی سایر»: کد، دسته، توضیح، شمارِ ردیفِ سند، وضعیت. */
+.jg-table col.jg-c-code { width: 12%; }
+.jg-table col.jg-c-group { width: 16%; }
+.jg-table col.jg-c-note { width: 22%; }
+.jg-table col.jg-c-lines { width: 9%; }
+.jg-table col.jg-c-state { width: 10%; }
 /* هر کادر دقیقاً پهنای خانه‌اش (منهای padding) — همه هم‌لبه، با فاصله‌ی یکسان. قاعده‌ی عمومیِ
  * `.ef-form td > input { min-width: 120px }` این‌جا کادرِ شرح را از خانه‌اش بیرون می‌زد و به
  * بدهکار می‌چسباند؛ `tbody` فقط برای اینکه اختصاصیت از آن بالاتر برود. */
@@ -12740,6 +12746,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jf-foot--ok { border-block-start-color: var(--success); }
 .jf-foot--err { border-block-start-color: var(--danger); }
 .jf-foot--auto { border-block-start-color: var(--accent); }
+.jf-foot--warn { border-block-start-color: var(--warning); }
 @container scroll-state(stuck: bottom) {
   .jf-foot {
     border-end-start-radius: 0;
@@ -12843,6 +12850,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jb-sum--auto .jb-stat--diff .jb-body { background: var(--accent-bg); }
 .jb-sum--auto .jb-stat--diff .jb-v { color: var(--accent-on-tint); }
 .jb-sum--auto .jb-sub { color: var(--text-muted); }
+/* برگه‌ها ([SheetFooter]): زرد = تغییرِ ذخیره‌نشده. */
+.jb-sum--warn .jb-stat--diff .jb-body { background: var(--warning-bg); }
+.jb-sum--warn .jb-stat--diff .jb-v { color: color-mix(in srgb, var(--warning) 70%, var(--text-h)); }
+.jb-sum--warn .jb-sub { color: var(--text-muted); }
 .jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: calc(var(--fs-sm) * var(--fit, 1)); font-weight: 500; }
 
 /* ── ستون‌به‌ستون با گرید (حالت حسابدار) ──
@@ -12893,8 +12904,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   /* سطرِ صریح لازم است: وضعیت در DOM بعد از دو جمع است و بی آن به سطرِ دوم می‌رفت. */
   .jf-foot--cols .jb-stat { grid-row: 1; inline-size: auto; min-width: 0; border-inline-start: 1px solid var(--xl-line); }
   .jf-foot--cols .jb-stat--diff { grid-column: 1; }
-  .jf-foot--cols .jb-stat--debit { grid-column: 2; }
-  .jf-foot--cols .jb-stat--credit { grid-column: 3; }
+  .jf-foot--cols :is(.jb-stat--debit, .jb-stat--a) { grid-column: 2; }
+  .jf-foot--cols :is(.jb-stat--credit, .jb-stat--b) { grid-column: 3; }
   .jf-foot--cols .jb-body { padding-inline: 10px; }
   /* خانه‌ی خالیِ زیرِ ستونِ آیکون‌ها — سرستون دارد تا خطِ جدول تا لبه برسد. */
   .jf-foot--cols .jb-sum::after {
@@ -13295,6 +13306,67 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ── برگه‌های ویرایشِ درجا (تفصیلی سایر) ──
+ * خانه‌ی عوض‌شده‌ی ذخیره‌نشده ته‌رنگِ زرد می‌گیرد — همان «ویرایش‌شده»ی اکسل؛ شماره‌ی ردیف هم رنگِ حالِ
+ * ردیف را دارد: تازه (accent)، ویرایش‌شده (زرد)، ردشده از سرور (قرمز). ردیفِ انتخاب‌شده رنگِ انتخاب
+ * را نگه می‌دارد (`:not(.is-selected)`). */
+.page .ef-table-wrap > table.jg-table.xl-grid td.is-changed { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--new:not(.is-selected) > td.xl-rowhead { background: color-mix(in srgb, var(--accent) 22%, var(--xl-head)); color: var(--text-h); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--dirty:not(.is-selected) > td.xl-rowhead { background: color-mix(in srgb, var(--warning) 35%, var(--xl-head)); color: var(--text-h); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--error:not(.is-selected) > td.xl-rowhead { background: var(--danger); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--error:not(.is-selected) .xl-rowhead-btn { color: #fff; font-weight: 700; }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--error > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
+/* غیرفعال: خوانا ولی کم‌رنگ — داده‌اش هست، فقط در انتخاب‌گرهای سند نمی‌آید. */
+.xl-grid tr.xl-row--off td:not(.xl-rowhead) :is(input, .xl-ro) { color: var(--text-muted); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--off > td.xl-ro { color: var(--text-muted); }
+
+/* خانه‌ی «وضعیت»: یک دکمه‌ی تمام‌خانه — Space عوضش می‌کند، Enter مثلِ هر خانه جلو می‌رود. */
+.xl-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  inline-size: 100%;
+  block-size: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.xl-toggle::before {
+  content: '';
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.xl-toggle.is-on { color: var(--success); }
+.xl-toggle.is-on::before { background: currentColor; }
+.xl-toggle:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.xl-toggle:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: -2px; }
+.xl-toggle:disabled { cursor: default; opacity: 0.6; }
+
+/* دلیلِ ردیف‌هایی که سرور نپذیرفت — زیرِ برگه، هم‌خانواده‌ی نوارِ انتخاب ولی قرمز. */
+.xl-errbar {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  list-style: none;
+}
+.xl-errbar b { color: var(--text-h); }
 
 /* مانده اول دوره: دو گرید در یک کارت، هر کدام با عنوانِ خودش. */
 .ob-note { margin-block: var(--sp-2); }
