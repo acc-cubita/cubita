@@ -2779,7 +2779,9 @@ button:disabled {
 
 .jalali-date-popover {
   position: absolute;
-  z-index: 20;
+  /* بالاتر از نوارهای چسبنده‌ی پایین (`.jf-dock`، `.ef-actions` — هر دو ۲۰): با z برابر، نوار که در DOM
+   * بعد می‌آید روی تقویم می‌نشست و روزها زیرِ «جمع ارزش دفتری» پنهان می‌شدند. */
+  z-index: 30;
   top: calc(100% + 6px);
   inset-inline-start: 0;
   width: 250px;
@@ -12552,6 +12554,11 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-table col.jg-c-note { width: 22%; }
 .jg-table col.jg-c-lines { width: 9%; }
 .jg-table col.jg-c-state { width: 10%; }
+/* برگه‌های «ارزها» و «نرخ برابری». */
+.jg-table col.jg-c-sym { width: 10%; }
+.jg-table col.jg-c-last { width: 24%; }
+.jg-table col.jg-c-date { width: 20%; }
+.jg-table col.jg-c-chg { width: 12%; }
 /* هر کادر دقیقاً پهنای خانه‌اش (منهای padding) — همه هم‌لبه، با فاصله‌ی یکسان. قاعده‌ی عمومیِ
  * `.ef-form td > input { min-width: 120px }` این‌جا کادرِ شرح را از خانه‌اش بیرون می‌زد و به
  * بدهکار می‌چسباند؛ `tbody` فقط برای اینکه اختصاصیت از آن بالاتر برود. */
@@ -13266,7 +13273,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
  * accentِ دو پیکسلی می‌گیرد — همان «سلولِ انتخاب‌شده»ی اکسل. */
 .page .ef-table-wrap > table.jg-table.xl-grid td { padding: 0; }
 .page .ef-table-wrap > table.jg-table.xl-grid td.jg-actions { padding: 0 4px; }
-.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger) {
+.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger, .jalali-date-trigger) {
   block-size: 36px;
   min-height: 36px;
   padding-inline: 8px;
@@ -13276,7 +13283,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   box-shadow: none;
 }
 .page .jg-table.xl-grid td .jg-combo > input { padding-inline-end: 28px; }
-.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger):focus {
+.jg-table.xl-grid td :is(input:not([type='checkbox']):not([type='radio']), select, .item-picker-trigger, .jalali-date-trigger):focus {
   position: relative;
   z-index: 1;
   outline: 2px solid var(--accent);
@@ -13328,6 +13335,32 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* غیرفعال: خوانا ولی کم‌رنگ — داده‌اش هست، فقط در انتخاب‌گرهای سند نمی‌آید. */
 .xl-grid tr.xl-row--off td:not(.xl-rowhead) :is(input, .xl-ro) { color: var(--text-muted); }
 .page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--off > td.xl-ro { color: var(--text-muted); }
+
+/* خانه‌ی ثبت‌شده‌ی فقط‌خواندنی (ارزِ ثبت‌شده، ارز و تاریخِ نرخِ ثبت‌شده): متنِ ساده هم‌قدِ خانه‌های ورودی —
+ * نه ته‌رنگِ خاکستریِ «محاسبه‌شده» (`xl-ro`)، چون داده‌ی خودِ کاربر است، فقط سرور ویرایشش را ندارد. */
+.page .ef-table-wrap > table.jg-table.xl-grid td.xl-txt {
+  block-size: 36px;
+  padding-inline: 10px;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* شماره‌ی ردیفی که دکمه‌ی انتخاب نیست (برگه‌های بی‌انتخاب). */
+.xl-rowhead-num {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.xl-ro-note { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; }
+/* خانه‌ی محاسبه‌شده‌ی رنگی (درصدِ تغییرِ نرخ): رنگِ `xl-ro` (متنِ پررنگ) رنگِ بالا/پایین را می‌پوشاند. */
+.page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-in { color: var(--success); }
+.page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-out { color: var(--danger); }
+/* انتخاب‌گرِ «فقط یک ارز» سرِ کارتِ نرخ‌ها — هم‌قدِ کادرِ جست‌وجوی سرِ کارتِ سند. */
+.cur-only { inline-size: 220px; }
+.cur-only .item-picker-trigger { min-height: 32px; block-size: 32px; padding-block: 0; border-radius: var(--radius-sm); font-size: var(--fs-sm); }
 
 /* خانه‌ی «وضعیت»: یک دکمه‌ی تمام‌خانه — Space عوضش می‌کند، Enter مثلِ هر خانه جلو می‌رود. */
 .xl-toggle {
