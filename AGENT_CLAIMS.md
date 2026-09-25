@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/pages/accounting/{ChartPages,ReclassifyPage}.tsx`، `desktop/src/lib/reclassifySheet.ts` (تازه)، `SheetFooter.tsx`، `HelpPage.tsx`، `App.css`، `backend/app/services/accounting_ops.py` (`reclassify_accounts`) | «انتقال حساب به سرفصل دیگر» با تمِ اکسلی + اصلاحِ دسته‌ی جابه‌جایی در سرور | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `website/src/*` (حذفِ پلن‌ها و `/classic`، `concept/ContactSection.tsx` تازه)، `backend/app/{models/sales_inquiry,routers/sales_inquiries,routers/admin_sales}.py` (تازه)، مهاجرتِ `0186`، `rate_limit.py`، `staff_roles.py`، `staff_audit.py`، `tenancy.py`، `routing.py`، `admin/src/pages/SalesInquiriesPage.tsx` (تازه)، `admin/src/{api,nav,App}.tsx` | سایتِ بی‌پلن + فرمِ «خرید و مشاوره» + دانلودِ کوبیتا سازمانی | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `pages/accounting/BudgetPage.tsx` (تازه) و تستش، `components/BudgetPanel.tsx` (حذف)، `AccountingListPages.tsx`، `Dashboard.tsx`، `lib/budgetSheet.ts` (تازه) و تستش، `SheetFooter.tsx`، `App.css`، `HelpPage.tsx` | «بودجه‌بندی» با تمِ اکسلی — برگه‌ی ماهانه | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `pages/accounting/RecurringPage.tsx` (تازه) و تستش، `components/RecurringEntriesPanel.tsx` (حذف)، `AccountingListPages.tsx`، `lib/recurringSheet.ts` (تازه) و تستش، `JalaliDatePicker.tsx`، `App.css`، `HelpPage.tsx` | «اسناد تکرارشونده» با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۳ |

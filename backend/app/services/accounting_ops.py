@@ -39,7 +39,6 @@ from app.services.reports import (
     ReportFilters,
     _signed_balance,
     apply_report_filters,
-    descendant_account_ids,
 )
 
 #: نوعِ حساب‌هایی که مانده‌شان از سالی به سالِ بعد منتقل می‌شود (حساب‌های دائمی).
@@ -1736,12 +1735,24 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
       * سرفصلِ مقصد باید **گروه** باشد — حساب زیرِ حسابِ عادی معنا ندارد.
       * حرکت به زیرِ فرزندِ خودش حلقه می‌سازد و درخت را بی‌نهایت می‌کند.
       * نوعِ حساب باید با نوعِ سرفصلش بخواند، وگرنه ترازنامه و سود و زیان همان حساب
-        را در دو جای متناقض نشان می‌دهند.
+        را در دو جای متناقض نشان می‌دهند. بی `type`، نوع از سرفصلِ مقصد می‌آید.
+
+    **دسته یک‌جا سنجیده می‌شود، نه ردیف‌به‌ردیف.** `SessionLocal` بی autoflush است، پس کوئریِ درخت
+    وسطِ دسته جابه‌جاییِ ردیف‌های قبلی را نمی‌دید: «الف زیرِ ب» و «ب زیرِ الف» هر دو از گاردِ حلقه رد
+    می‌شدند، و هم‌نوع‌کردنِ زیرمجموعه‌ها روی درختِ *قدیمی* می‌رفت و حسابی را که در همان دسته بیرون برده
+    شده بود دوباره هم‌نوعِ سرفصلِ قبلی‌اش می‌کرد. حالا درختِ *نهایی* یک‌بار در حافظه ساخته می‌شود، حلقه
+    روی آن گرفته می‌شود، و جابه‌جایی‌ها از کم‌عمق به پرعمق اجرا می‌شوند — پس ترتیبِ ردیف‌ها در درخواست
+    بی‌اثر است و نوعِ سرفصلِ مقصد هنگامِ سنجش همان نوعِ نهایی‌اش است.
     """
     if not items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "هیچ حسابی برای اصلاح انتخاب نشده")
 
-    changed = []
+    accounts = {a.id: a for a in db.query(Account).all()}
+    orig_parent = {aid: a.parent_id for aid, a in accounts.items()}
+    orig_type = {aid: a.type for aid, a in accounts.items()}
+
+    #: account_id → (حساب، سرفصلِ نهایی، نوعِ صریح). ردیفِ تکراری: آخری می‌ماند.
+    moves: dict = {}
     for item in items:
         account = db.get(Account, item["account_id"])
         if account is None:
@@ -1753,9 +1764,6 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
             )
 
         new_parent_id = item.get("parent_id", account.parent_id)
-        new_type = item.get("type") or account.type
-
-        parent = None
         if new_parent_id is not None:
             parent = db.get(Account, new_parent_id)
             if parent is None:
@@ -1764,37 +1772,78 @@ def reclassify_accounts(db: Session, items: list[dict]) -> dict:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, f"«{parent.name}» سرفصل نیست و نمی‌تواند زیرمجموعه بگیرد"
                 )
-            if parent.id in descendant_account_ids(db, account.id):
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST, "حساب را نمی‌توان زیرِ زیرمجموعه‌ی خودش برد"
-                )
-            if parent.type != new_type:
+            new_parent_id = parent.id
+
+        explicit = item.get("type")
+        if new_parent_id == orig_parent[account.id] and explicit in (None, orig_type[account.id]):
+            moves.pop(account.id, None)
+            continue
+        moves[account.id] = (account, new_parent_id, explicit)
+
+    final_parent = {**orig_parent, **{aid: m[1] for aid, m in moves.items()}}
+
+    def depth(aid) -> int:
+        """عمقِ حساب در درختِ نهایی؛ برگشت به خودش یعنی حلقه."""
+        seen: set = set()
+        cur = final_parent.get(aid)
+        while cur is not None:
+            if cur == aid:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    f"نوعِ «{account.name}» با نوعِ سرفصلِ «{parent.name}» نمی‌خواند",
+                    f"«{accounts[aid].name}» را نمی‌توان زیرِ زیرمجموعه‌ی خودش برد",
                 )
+            #: `seen` حلقه‌ی ازپیش‌خرابِ درخت را (که به این حساب نمی‌رسد) می‌شکند.
+            if cur in seen:
+                break
+            seen.add(cur)
+            cur = final_parent.get(cur)
+        return len(seen)
 
-        if account.parent_id != new_parent_id or account.type != new_type:
-            changed.append(
-                {
-                    "account_id": account.id,
-                    "account_code": account.code,
-                    "account_name": account.name,
-                    "old_parent_id": account.parent_id,
-                    "new_parent_id": new_parent_id,
-                    "old_type": account.type,
-                    "new_type": new_type,
-                }
+    order = sorted(moves.values(), key=lambda m: (depth(m[0].id), m[0].code))
+
+    children: dict = {}
+    for aid, pid in final_parent.items():
+        children.setdefault(pid, []).append(aid)
+
+    def final_descendants(root_id) -> set:
+        seen: set = set()
+        stack = list(children.get(root_id, []))
+        while stack:
+            cur = stack.pop()
+            if cur in seen or cur == root_id:
+                continue
+            seen.add(cur)
+            stack.extend(children.get(cur, []))
+        return seen
+
+    changed = []
+    for account, new_parent_id, explicit in order:
+        parent = accounts.get(new_parent_id) if new_parent_id is not None else None
+        new_type = explicit or (parent.type if parent is not None else orig_type[account.id])
+        #: سرفصل کم‌عمق‌تر است و پیش‌تر اجرا شده (یا هم‌نوعِ جدِّ جابه‌جاشده‌اش شده)، پس این نوعِ نهایی‌اش است.
+        if parent is not None and parent.type != new_type:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"نوعِ «{account.name}» با نوعِ سرفصلِ «{parent.name}» نمی‌خواند",
             )
-            account.parent_id = new_parent_id
-            account.type = new_type
-            # زیرمجموعه‌ها باید با والدشان هم‌نوع بمانند، وگرنه گارد بالا بارِ بعد
-            # روی همان درخت شکست می‌خورد.
-            if account.is_group:
-                for child_id in descendant_account_ids(db, account.id) - {account.id}:
-                    child = db.get(Account, child_id)
-                    if child is not None:
-                        child.type = new_type
+        changed.append(
+            {
+                "account_id": account.id,
+                "account_code": account.code,
+                "account_name": account.name,
+                "old_parent_id": orig_parent[account.id],
+                "new_parent_id": new_parent_id,
+                "old_type": orig_type[account.id],
+                "new_type": new_type,
+            }
+        )
+        account.parent_id = new_parent_id
+        account.type = new_type
+        # زیرمجموعه‌ها (در درختِ نهایی) باید با والدشان هم‌نوع بمانند، وگرنه گارد بالا بارِ بعد روی همان
+        # درخت شکست می‌خورد. زیرمجموعه‌ای که خودش در دسته است پرعمق‌تر است و بعداً نوعِ خودش را می‌گیرد.
+        if account.is_group:
+            for child_id in final_descendants(account.id):
+                accounts[child_id].type = new_type
 
     db.flush()
     return {"count": len(changed), "changed": changed}

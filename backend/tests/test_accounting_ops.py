@@ -373,6 +373,94 @@ def test_reclassify_leaves_system_accounts_alone(db, user):
     assert "نقشِ سیستمی" in err.value.detail
 
 
+@pytest.fixture
+def no_autoflush(db):
+    """مثلِ `SessionLocal`ِ production (`autoflush=False`) — Sessionِ آزمون پیش‌فرض autoflush دارد و
+    باگِ «کوئریِ درخت تغییرهای همان دسته را نمی‌بیند» را پنهان می‌کرد."""
+    db.autoflush = False
+    yield db
+    db.autoflush = True
+
+
+def _group(db, code, type_, parent=None):
+    row = Account(code=code, name=f"سرفصلِ {code}", type=type_, is_group=True, parent_id=parent.id if parent else None)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_reclassify_refuses_a_cycle_made_inside_one_batch(no_autoflush):
+    """الف زیرِ ب و ب زیرِ الف در یک دسته: هیچ‌کدام به‌تنهایی حلقه نیست ولی با هم درخت را بی‌نهایت می‌کنند."""
+    db = no_autoflush
+    a = _group(db, "9701", "asset")
+    b = _group(db, "9702", "asset")
+    with pytest.raises(HTTPException) as err:
+        ops.reclassify_accounts(
+            db,
+            [
+                {"account_id": a.id, "parent_id": b.id, "type": "asset"},
+                {"account_id": b.id, "parent_id": a.id, "type": "asset"},
+            ],
+        )
+    assert "زیرمجموعه" in err.value.detail
+
+
+def test_reclassify_batch_order_does_not_matter(no_autoflush):
+    """سرفصلی که جابه‌جا می‌شود و حسابی که زیرش می‌رود، به هر ترتیبی که بیایند: نوعِ هر دو از مقصدِ نهایی."""
+    db = no_autoflush
+    liabilities = _group(db, "9711", "liability")
+    moving = _group(db, "9712", "asset")
+    leaf = db.query(Account).filter(Account.code == "5103").one()  # هزینه اجاره
+    ops.reclassify_accounts(
+        db,
+        [
+            # حساب اول آمده، با نوعِ *نهاییِ* سرفصلش — سرفصل هنوز جابه‌جا نشده و دارایی است.
+            {"account_id": leaf.id, "parent_id": moving.id, "type": "liability"},
+            {"account_id": moving.id, "parent_id": liabilities.id, "type": "liability"},
+        ],
+    )
+    db.flush()
+    db.refresh(leaf)
+    db.refresh(moving)
+    assert (moving.parent_id, moving.type) == (liabilities.id, "liability")
+    assert (leaf.parent_id, leaf.type) == (moving.id, "liability")
+
+
+def test_reclassify_cascade_spares_a_child_moved_out_in_the_same_batch(no_autoflush):
+    """زیرمجموعه‌ی سرفصلِ جابه‌جاشده هم‌نوعِ آن می‌شود — جز حسابی که در همان دسته به جای دیگری رفته."""
+    db = no_autoflush
+    group = _group(db, "9721", "expense")
+    stays = Account(code="972101", name="می‌ماند", type="expense", parent_id=group.id)
+    leaves = Account(code="972102", name="می‌رود", type="expense", parent_id=group.id)
+    db.add_all([stays, leaves])
+    db.flush()
+    incomes = _group(db, "9722", "income")
+    expenses = _group(db, "9723", "expense")
+    ops.reclassify_accounts(
+        db,
+        [
+            {"account_id": leaves.id, "parent_id": expenses.id, "type": "expense"},
+            {"account_id": group.id, "parent_id": incomes.id, "type": "income"},
+        ],
+    )
+    db.flush()
+    for row in (group, stays, leaves):
+        db.refresh(row)
+    assert group.type == "income"
+    assert stays.type == "income"
+    assert (leaves.parent_id, leaves.type) == (expenses.id, "expense")
+
+
+def test_reclassify_takes_the_type_from_the_parent_when_none_is_sent(db, user):
+    """بی `type`، نوع از سرفصلِ مقصد می‌آید — همان قاعده‌ای که گارد می‌خواهد، نه خطای ۴۰۰."""
+    leaf = db.query(Account).filter(Account.code == "5103").one()
+    liabilities = _group(db, "9731", "liability")
+    ops.reclassify_accounts(db, [{"account_id": leaf.id, "parent_id": liabilities.id}])
+    db.flush()
+    db.refresh(leaf)
+    assert leaf.type == "liability"
+
+
 # ────────────────────────── تفصیلیِ سایر ─────────────────────────
 
 

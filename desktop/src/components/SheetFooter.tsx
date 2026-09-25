@@ -24,6 +24,7 @@ export function SheetFooter({
   submitLabel = 'ذخیره تغییرات',
   columns = false,
   labels = ['ردیفِ تازه', 'ویرایش‌شده'],
+  pending = fresh + edited,
 }: {
   state: SheetState
   fresh: number
@@ -34,8 +35,10 @@ export function SheetFooter({
   columns?: boolean
   /** برچسبِ دو عدد — برگه‌ای که خانه می‌شمارد نه ردیف (بودجه) «خانه‌ی تازه» می‌گوید. */
   labels?: [string, string]
+  /** شمارِ «n تغییر»ِ وضعیت. پیش‌فرض جمعِ دو عدد است؛ برگه‌ای که دو عددش هم‌پوشانی دارند (حسابِ جابه‌جا و
+   *  تغییرِ نوع — یک حساب می‌تواند هر دو باشد) خودش می‌دهد. */
+  pending?: number
 }) {
-  const pending = fresh + edited
   return (
     <DocFooter
       tone={TONE[state]}
