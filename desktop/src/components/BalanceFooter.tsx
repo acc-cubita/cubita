@@ -1,8 +1,7 @@
-import type { ReactNode } from 'react'
 import { AlertTriangle, Check, CheckCircle2, Scale } from 'lucide-react'
 
 import { FormStatus } from './form/FormKit'
-import { useFitText } from '../lib/useFitText'
+import { FitText } from './FitText'
 import type { BalanceState } from '../lib/balanceState'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
@@ -137,19 +136,5 @@ function BalanceSummary({
         </div>
       </div>
     </div>
-  )
-}
-
-/**
- * متنِ یک خانه‌ی ثابت‌عرض — به‌جای پهن‌کردنِ خانه، کوچک می‌شود ([useFitText]). `text` کلیدِ
- * سنجشِ دوباره است؛ `children` اگر باشد به‌جایش رندر می‌شود (برای بخشی که CSS در موبایل پنهان
- * می‌کند — سنجش از پهنای واقعاً رندرشده است).
- */
-function FitText({ className, min, text, children }: { className: string; min?: number; text: string; children?: ReactNode }) {
-  const ref = useFitText<HTMLSpanElement>(text, min)
-  return (
-    <span ref={ref} className={`${className} jb-fit`}>
-      {children ?? text}
-    </span>
   )
 }

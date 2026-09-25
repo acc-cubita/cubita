@@ -46,7 +46,9 @@ export function useSheetNav<C extends string>({
   enabled?: CellEnabled<C>
   /** خانه‌هایی که Enter رویشان می‌ایستد (پیش‌فرض: همه‌ی خانه‌های فعال). */
   enterPath?: CellEnabled<C>
-  onAppendRow: () => void
+  /** ردیفِ تازه بساز. اگر شاخصی برگرداند، فوکوس به همان ردیف می‌رود (برگه‌ای که همیشه یک ردیفِ
+   *  خالیِ ته دارد، ردیف نمی‌سازد — به همان خالی می‌رود). */
+  onAppendRow: () => number | void
   onDeleteRow?: (row: number) => boolean
   /** Tab در انتهای گرید فقط وقتی ردیفِ آخر چیزی دارد ردیفِ تازه می‌سازد. */
   rowHasContent?: (row: number) => boolean
@@ -70,8 +72,8 @@ export function useSheetNav<C extends string>({
     if (move.kind === 'move') {
       focusCell(move.to.row, move.to.col)
     } else if (move.kind === 'appendRow') {
-      const row = rowCount
-      onAppendRow()
+      const target = onAppendRow()
+      const row = typeof target === 'number' ? target : rowCount
       //: ردیفِ تازه هنوز رندر نشده؛ فوکوس بعد از آن.
       requestAnimationFrame(() => {
         const head = firstInRow<C>({ cols, rowCount: row + 1 }, row, always)
