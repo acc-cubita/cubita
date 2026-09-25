@@ -203,6 +203,8 @@ description: قراردادِ ساختِ هر صفحه‌ی پنلِ کوبیت�
 
 1. `PageKey` در [navModel.tsx](../../../desktop/src/lib/navModel.tsx)
 2. ورودی در `NAV_GROUPS` (عملیات) **یا** در `LIST_MENUS` (فهرست) + `LIST_PAGE_GROUP`
+   — در گروهی که منوهایش دسته دارند («حسابداری»: ساختار و تعریف‌ها، ثبت سند، …) `section` را هم بده و
+   ردیف را کنارِ هم‌دسته‌هایش بگذار؛ کارتِ «عملیات»، کشوی موبایل و سایدبار تیترِ دسته را از همین می‌سازند.
 3. اگر زیرِ چترِ ماژولی گیت می‌شود: `PAGE_MODULE_KEY`
 4. بخش‌های تب‌دار: `MODULE_SECTIONS` — کلیدها باید **دقیقاً** با `<Tabs>` یکی باشند
 5. مسیر در [Dashboard.tsx](../../../desktop/src/components/Dashboard.tsx) + `PAGE_TITLES`
@@ -210,6 +212,10 @@ description: قراردادِ ساختِ هر صفحه‌ی پنلِ کوبیت�
 7. راهنما: یک ورودی در [HelpPage.tsx](../../../desktop/src/pages/HelpPage.tsx)
 8. اگر ماژولِ تازه است: کلید در
    [services/modules.py](../../../backend/app/services/modules.py)
+
+**حذف یا ادغامِ یک منو:** کلیدِ قدیمی را از هر چهار جا بردار و در `LEGACY_PAGES`
+([navModel.tsx](../../../desktop/src/lib/navModel.tsx)) به جای تازه‌اش ببر (با بخش، اگر لازم است) — میان‌برهای
+ذخیره‌شده‌ی کاربر هنوز آن کلید را دارند و بی‌این، صفحه‌ی خالی باز می‌کنند. تستِ `navModel.test.ts` برنگشتنش را می‌پاید.
 
 ---
 

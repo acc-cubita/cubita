@@ -106,3 +106,27 @@ describe('جابه‌جاییِ منوهای عملیات و فهرست', () => 
     expect(reset()).toBeNull()
   })
 })
+
+describe('دسته‌های منوی عملیات', () => {
+  it('حسابداری: تیترِ شش دسته به ترتیبِ کار، هرکدام بالای منوهای خودش', () => {
+    render()
+    const [ops] = panels()
+    const heads = [...ops.querySelectorAll('.mod-section-label')].map((e) => e.textContent)
+    expect(heads).toEqual(['ساختار و تعریف‌ها', 'ثبت سند', 'بازبینی اسناد', 'اصلاح و تعدیل', 'پایان دوره', 'گزارش و کنترل'])
+    //: تیترِ «ثبت سند» درست پیش از «سند حسابداری» است.
+    const head = [...ops.querySelectorAll('.mod-section-label')][1]
+    expect(head.nextElementSibling?.textContent).toContain('سند حسابداری')
+  })
+
+  it('جابه‌جایی فقط درونِ دسته: منوی اولِ دسته بالا نمی‌رود و آخرش پایین', () => {
+    render()
+    const [ops] = panels()
+    expect(arrow(ops, 'سند حسابداری', 'بالا').disabled).toBe(true)
+    expect(arrow(ops, 'بودجه‌بندی', 'پایین').disabled).toBe(true)
+    act(() => arrow(ops, 'مانده اول دوره', 'بالا').click())
+    const after = labels(panels()[0])
+    expect(after.indexOf('مانده اول دوره')).toBeLessThan(after.indexOf('سند حسابداری'))
+    //: دسته‌ی قبلی سرِ جایش است.
+    expect(after.indexOf('بودجه‌بندی')).toBeLessThan(after.indexOf('مانده اول دوره'))
+  })
+})

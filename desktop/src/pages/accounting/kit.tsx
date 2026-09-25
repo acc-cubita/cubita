@@ -93,7 +93,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   closing_entry: 'سند اختتامیه',
   opening_entry: 'سند افتتاحیه',
   fx_revaluation: 'تسعیر ارز',
-  reclassification: 'اصلاح طبقه‌بندی مانده',
+  reclassification: 'انتقال مانده به حساب دیگر',
   recurring: 'سند تکرارشونده',
   void: 'ابطال',
   opening_balance: 'مانده اول دوره',

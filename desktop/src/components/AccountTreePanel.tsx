@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronDown,
   FolderTree,
+  List,
   ListTree,
   Minus,
   Pencil,
@@ -154,7 +155,19 @@ function matchingIds(roots: Node[], query: string): Set<string> | null {
   return keep
 }
 
-export function AccountTreePanel({ token, onChanged }: { token: string; onChanged?: () => void }) {
+export function AccountTreePanel({
+  token,
+  onChanged,
+  startAdding = false,
+  startFlat = false,
+}: {
+  token: string
+  onChanged?: () => void
+  /** فرمِ «حساب تازه» از اول باز باشد — مقصدِ منوی قدیمیِ «سرفصل جدید». */
+  startAdding?: boolean
+  /** از اول در نمای تخت — مقصدِ فهرستِ قدیمیِ «فهرست حساب‌ها». */
+  startFlat?: boolean
+}) {
   const [accounts, setAccounts] = useState<ChartAccount[] | null>(null)
   const [balances, setBalances] = useState<Map<string, number>>(new Map())
   const [error, setError] = useState<string | null>(null)
@@ -162,6 +175,9 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [showInactive, setShowInactive] = useState(true)
+  //: **نمای تخت**: همه‌ی حساب‌ها بی‌تورفتگی و بی‌جمع‌شدن، به ترتیبِ کد — جای «فهرست حساب‌ها»ی
+  //: جدا. ترتیبِ پیمایشِ درخت همان ترتیبِ کد است (فرزندانِ هر گره به کد مرتب‌اند)، پس داده یکی است.
+  const [flat, setFlat] = useState(startFlat)
   // درخت پیش‌فرض **بسته** است: با ۶۰+ حساب، بازبودنِ همه یعنی دیواری از ردیف که
   // هیچ ساختاری نشان نمی‌دهد. کاربر هر سرفصلی را که لازم دارد باز می‌کند.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -175,6 +191,12 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   const [busy, setBusy] = useState(false)
   /** سرفصلی که فرمِ «افزودن زیرحساب» زیرش باز است. */
   const [addUnder, setAddUnder] = useState<Node | null>(null)
+  /**
+   * فرمِ «حساب تازه» بالای جدول — جانشینِ صفحه‌ی «سرفصل جدید»: سرفصلِ مادر از فهرست انتخاب
+   * می‌شود (یا ریشه، با نوعِ دستی). `null` یعنی بسته؛ رشته‌ی خالی یعنی ریشه.
+   */
+  const [addFreeParent, setAddFreeParent] = useState<string | null>(startAdding ? '' : null)
+  const [freeType, setFreeType] = useState('expense')
   const [newCode, setNewCode] = useState('')
   const [newName, setNewName] = useState('')
   const [newName2, setNewName2] = useState('')
@@ -204,6 +226,12 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  //: فرمی که از اول باز است (منوی قدیمیِ «سرفصل جدید») کدِ پیشنهادیِ ریشه را همان بارِ اول می‌گیرد.
+  useEffect(() => {
+    if (startAdding) loadNextCode(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const roots = useMemo(() => buildTree(accounts ?? [], balances), [accounts, balances])
 
@@ -274,8 +302,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
    * آن‌جا تعریف شده و همان‌جا هم اعمال می‌شود. حدس‌زدنِ محلی یعنی فرم کدی پیشنهاد
    * بدهد که سرور ردش کند.
    */
-  function openAdd(parent: Node) {
-    setAddUnder(parent)
+  function resetNewFields() {
     setNewName('')
     setNewName2('')
     setNewNature('')
@@ -283,7 +310,10 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
     setNewTraits(NEW_ACCOUNT_TRAITS)
     setNewCode('')
     setNewCodeHint('')
-    void fetchNextAccountCode(token, parent.id)
+  }
+
+  function loadNextCode(parentId: string | null) {
+    void fetchNextAccountCode(token, parentId)
       .then((r) => {
         setNewCode(r.code)
         setNewCodeHint(`سطحِ ${r.level} — ${r.digits.toLocaleString('fa-IR')} رقمِ افزوده`)
@@ -291,25 +321,61 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
       .catch(() => setNewCodeHint('کدِ پیشنهادی خوانده نشد؛ کد را دستی وارد کنید.'))
   }
 
+  /** فرمِ «حساب تازه»: اول ریشه، تا کاربر سرفصلِ مادر را انتخاب کند. */
+  function openAddFree() {
+    setAddUnder(null)
+    resetNewFields()
+    setAddFreeParent('')
+    loadNextCode(null)
+  }
+
+  function pickFreeParent(parentId: string) {
+    setAddFreeParent(parentId)
+    setNewCode('')
+    setNewCodeHint('')
+    loadNextCode(parentId || null)
+  }
+
+  function openAdd(parent: Node) {
+    setAddFreeParent(null)
+    setAddUnder(parent)
+    resetNewFields()
+    loadNextCode(parent.id)
+  }
+
   function submitAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!addUnder) return
-    const parent = addUnder
+    //: زیرِ یک گره (دکمه‌ی + ردیف) یا از فرمِ «حساب تازه» با مادرِ انتخابی. نوعِ حساب همیشه از
+    //: مادر می‌آید تا ترازنامه و سود و زیان یک چیز بگویند؛ فقط ریشه نوعِ دستی می‌گیرد.
+    const parent = addUnder ?? (addFreeParent ? (accounts ?? []).find((a) => a.id === addFreeParent) ?? null : null)
+    if (!addUnder && addFreeParent === null) return
     void run(async () => {
       await createAccount(token, {
         code: newCode.trim(),
         name: newName.trim(),
         name2: newName2.trim(),
         nature: newNature || null,
-        type: parent.type,
+        type: parent?.type ?? freeType,
         is_group: newIsGroup,
-        parent_id: parent.id,
+        parent_id: parent?.id ?? null,
         ...newTraits,
       })
       setAddUnder(null)
-      return `حساب «${newName.trim()}» زیرِ «${parent.name}» ساخته شد.`
+      setAddFreeParent(null)
+      return parent
+        ? `حساب «${newName.trim()}» زیرِ «${parent.name}» ساخته شد.`
+        : `سرفصلِ ریشه‌ی «${newName.trim()}» ساخته شد.`
     })
   }
+
+  /** سرفصل‌های قابلِ انتخاب به‌عنوانِ مادر در فرمِ «حساب تازه»، به ترتیبِ کد. */
+  const parentOptions = useMemo(
+    () =>
+      (accounts ?? [])
+        .filter((a) => a.is_group)
+        .sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true })),
+    [accounts],
+  )
 
   function setNewTrait(key: keyof AccountTraits, value: boolean) {
     setNewTraits((t) => {
@@ -329,6 +395,73 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
     }
   }, [accounts])
 
+  /** ردیفِ فرمِ افزودن — زیرِ یک گره (دکمه‌ی +)، یا بالای جدول برای «حساب تازه»؛ `head` جای برچسب است. */
+  function addFormRow(key: string, head: React.ReactNode) {
+    return (
+      <tr key={key} className="tree-add-row">
+        {/* `card-full`: در نمای کارتیِ موبایل تمام‌عرض، نه ستونِ باریکِ مقدارِ یک برچسب. */}
+        <td colSpan={6} className="card-full">
+          <form className="tree-add" onSubmit={submitAdd}>
+            {head}
+            <input
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              placeholder="کد"
+              title={newCodeHint}
+              required
+            />
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="نام حساب" required />
+            <input
+              value={newName2}
+              onChange={(e) => setNewName2(e.target.value)}
+              placeholder="عنوان دوم (اختیاری)"
+              dir="ltr"
+            />
+            <SearchSelect value={newNature} onChange={(e) => setNewNature(e.target.value)} title="ماهیتِ حساب">
+              <option value="">ماهیت: پیش‌فرضِ نوعِ حساب</option>
+              <option value="debit">بدهکار</option>
+              <option value="credit">بستانکار</option>
+              <option value="any">مهم نیست</option>
+            </SearchSelect>
+            <label className="fy-check">
+              <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
+              سرفصل است
+            </label>
+            {/* همان شش ویژگیِ کشوی ویرایش، این‌بار موقعِ ساخت — تا کاربر مجبور
+                نباشد حساب را بسازد و بلافاصله بازش کند تا تیک بزند. */}
+            {ACCOUNT_TRAIT_META.map((trait) => {
+              const locked = trait.key === 'fx_revaluable' && !newTraits.is_fx
+              return (
+                <label key={trait.key} className="fy-check" title={locked ? 'اول «ارزی» را روشن کنید.' : trait.hint}>
+                  <input
+                    type="checkbox"
+                    checked={newTraits[trait.key]}
+                    disabled={locked}
+                    onChange={(e) => setNewTrait(trait.key, e.target.checked)}
+                  />
+                  {trait.label}
+                </label>
+              )
+            })}
+            <button type="submit" className="btn-primary" disabled={busy}>
+              <Save size={13} /> ثبت
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddUnder(null)
+                setAddFreeParent(null)
+              }}
+            >
+              انصراف
+            </button>
+            {newCodeHint && <span className="bk-hint">{newCodeHint}</span>}
+          </form>
+        </td>
+      </tr>
+    )
+  }
+
   function renderRows(list: Node[]): React.ReactNode[] {
     const out: React.ReactNode[] = []
     for (const node of list) {
@@ -337,8 +470,8 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
       if (!showInactive && !node.is_active && !node.is_group) continue
 
       const hasChildren = node.children.length > 0
-      // در حالتِ جست‌وجو همه‌چیز باز است، وگرنه مسیرِ نتیجه پنهان می‌ماند.
-      const isCollapsed = !search && collapsed.has(node.id)
+      // در حالتِ جست‌وجو و نمای تخت همه‌چیز باز است، وگرنه مسیرِ نتیجه پنهان می‌ماند.
+      const isCollapsed = !search && !flat && collapsed.has(node.id)
 
       out.push(
         <tr
@@ -353,8 +486,8 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
           }}
         >
           <td data-label="حساب">
-            <div className="tree-cell" style={{ paddingInlineStart: `${node.depth * 18}px` }}>
-              {hasChildren ? (
+            <div className="tree-cell" style={{ paddingInlineStart: flat ? 0 : `${node.depth * 18}px` }}>
+              {flat ? null : hasChildren ? (
                 <button type="button" className="tree-toggle" onClick={() => toggle(node.id)}>
                   {isCollapsed ? <ChevronLeft size={14} /> : <ChevronDown size={14} />}
                 </button>
@@ -474,60 +607,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
       )
 
       if (addUnder?.id === node.id) {
-        out.push(
-          <tr key={`${node.id}-add`} className="tree-add-row">
-            <td colSpan={5}>
-              <form className="tree-add" onSubmit={submitAdd}>
-                <span className="tree-add-label">زیرِ «{node.name}»:</span>
-                <input
-                  value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
-                  placeholder="کد"
-                  title={newCodeHint}
-                  required
-                />
-                <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="نام حساب" required />
-                <input
-                  value={newName2}
-                  onChange={(e) => setNewName2(e.target.value)}
-                  placeholder="عنوان دوم (اختیاری)"
-                  dir="ltr"
-                />
-                <SearchSelect value={newNature} onChange={(e) => setNewNature(e.target.value)} title="ماهیتِ حساب">
-                  <option value="">ماهیت: پیش‌فرضِ نوعِ حساب</option>
-                  <option value="debit">بدهکار</option>
-                  <option value="credit">بستانکار</option>
-                  <option value="any">مهم نیست</option>
-                </SearchSelect>
-                <label className="fy-check">
-                  <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
-                  سرفصل است
-                </label>
-                {/* همان شش ویژگیِ کشوی ویرایش، این‌بار موقعِ ساخت — تا کاربر مجبور
-                    نباشد حساب را بسازد و بلافاصله بازش کند تا تیک بزند. */}
-                {ACCOUNT_TRAIT_META.map((trait) => {
-                  const locked = trait.key === 'fx_revaluable' && !newTraits.is_fx
-                  return (
-                    <label key={trait.key} className="fy-check" title={locked ? 'اول «ارزی» را روشن کنید.' : trait.hint}>
-                      <input
-                        type="checkbox"
-                        checked={newTraits[trait.key]}
-                        disabled={locked}
-                        onChange={(e) => setNewTrait(trait.key, e.target.checked)}
-                      />
-                      {trait.label}
-                    </label>
-                  )
-                })}
-                <button type="submit" className="btn-primary" disabled={busy}>
-                  <Save size={13} /> ثبت
-                </button>
-                <button type="button" onClick={() => setAddUnder(null)}>انصراف</button>
-                {newCodeHint && <span className="bk-hint">{newCodeHint}</span>}
-              </form>
-            </td>
-          </tr>,
-        )
+        out.push(addFormRow(`${node.id}-add`, <span className="tree-add-label">زیرِ «{node.name}»:</span>))
       }
 
       if (hasChildren && !isCollapsed) out.push(...renderRows(node.children))
@@ -559,8 +639,23 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                 <option key={k} value={k}>{v}</option>
               ))}
             </SearchSelect>
-            <button type="button" onClick={() => setCollapsed(new Set())}>بازکردن همه</button>
-            <button type="button" onClick={() => setCollapsed(new Set(allGroupIds))}>بستن همه</button>
+            <button type="button" className="btn-primary" onClick={openAddFree} disabled={busy}>
+              <Plus size={13} /> حساب تازه
+            </button>
+            <button
+              type="button"
+              aria-pressed={flat}
+              onClick={() => setFlat((f) => !f)}
+              title={flat ? 'برگشت به درخت با تورفتگی و جمع‌شدن' : 'همه‌ی حساب‌ها بی‌تورفتگی، به ترتیبِ کد'}
+            >
+              {flat ? <ListTree size={13} /> : <List size={13} />} {flat ? 'نمای درختی' : 'نمای تخت'}
+            </button>
+            {!flat && (
+              <>
+                <button type="button" onClick={() => setCollapsed(new Set())}>بازکردن همه</button>
+                <button type="button" onClick={() => setCollapsed(new Set(allGroupIds))}>بستن همه</button>
+              </>
+            )}
             <button type="button" onClick={() => void refresh()} title="به‌روزرسانی">
               <RefreshCw size={13} />
             </button>
@@ -582,7 +677,7 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
 
         {accounts == null ? (
           <p className="muted">در حال بارگذاری…</p>
-        ) : roots.length === 0 ? (
+        ) : roots.length === 0 && addFreeParent === null ? (
           <EmptyState
             icon={ListTree}
             //: کاربرِ تازه نمی‌داند قالب‌های آماده وجود دارند. «حسابی وجود ندارد»
@@ -603,7 +698,38 @@ export function AccountTreePanel({ token, onChanged }: { token: string; onChange
                     <th></th>
                   </tr>
                 </thead>
-                <tbody>{renderRows(roots)}</tbody>
+                <tbody>
+                  {addFreeParent !== null &&
+                    addFormRow(
+                      'free-add',
+                      <>
+                        <span className="tree-add-label">حسابِ تازه زیرِ</span>
+                        <SearchSelect
+                          value={addFreeParent}
+                          onChange={(e) => pickFreeParent(e.target.value)}
+                          title="سرفصلِ مادر — نوع و کدِ پیشنهادی از آن می‌آید"
+                        >
+                          <option value="">— ریشه (بی‌مادر) —</option>
+                          {parentOptions.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.code} — {g.name}
+                            </option>
+                          ))}
+                        </SearchSelect>
+                        {/* فقط ریشه نوعِ دستی می‌گیرد؛ زیرِ هر سرفصل، نوع همان نوعِ مادر است. */}
+                        {!addFreeParent && (
+                          <SearchSelect value={freeType} onChange={(e) => setFreeType(e.target.value)} title="نوعِ حساب">
+                            {Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => (
+                              <option key={k} value={k}>
+                                {v}
+                              </option>
+                            ))}
+                          </SearchSelect>
+                        )}
+                      </>,
+                    )}
+                  {renderRows(roots)}
+                </tbody>
               </table>
             </div>
           </div>

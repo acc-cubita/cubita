@@ -12,7 +12,7 @@ import {
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
 import { Sidebar, type PageKey } from './Sidebar'
-import { buildNav } from '../lib/navModel'
+import { buildNav, resolveLegacyPage } from '../lib/navModel'
 import { TopNav } from './TopNav'
 import { QuickAccessBar } from './QuickAccessBar'
 import { LicenseBanner } from './LicenseBanner'
@@ -146,7 +146,6 @@ import {
   StatementListPage,
 } from '../pages/treasury/TreasuryListPages'
 import {
-  AnalyticListPage,
   CalendarListPage,
   ContactGroupListPage,
   GeoListPage,
@@ -193,17 +192,14 @@ import { InstallmentSalesPage } from '../pages/company/InstallmentSalesPage'
 import {
   EntryCartablePage,
   EntryListPage,
-  FinalizeEntriesPage,
   JournalEntryPage,
   MergeEntriesPage,
   RenumberEntriesPage,
 } from '../pages/accounting/JournalPages'
 import {
   AccountBrowsePage,
-  AccountListPage,
   AnalyticsPage,
   ChartOfAccountsPage,
-  NewAccountPage,
   ReclassifyPage,
 } from '../pages/accounting/ChartPages'
 import { OpeningBalancePage } from '../pages/accounting/OpeningBalancePage'
@@ -212,7 +208,6 @@ import {
   ClosingOpeningPage,
   BalanceReclassPage,
   FxRevaluationPage,
-  GeneralDocumentPage,
 } from '../pages/accounting/ClosingPages'
 import {
   BalanceReportPage,
@@ -299,7 +294,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   contactsettlelist: 'تسویه‌های طرف مقابل',
   statementlist: 'ردیف‌های صورت‌حساب بانکی',
   pettylist: 'گردش تنخواه',
-  analyticlist: 'تفصیلی‌های سایر',
   geolist: 'محل‌های جغرافیایی',
   contactgrouplist: 'گروه‌های طرف حساب',
   calendarlist: 'رویدادهای تقویم',
@@ -346,18 +340,15 @@ const PAGE_TITLES: Record<PageKey, string> = {
   profile: 'پروفایل من',
   // ── ماژولِ «حسابداری» ──
   acctchart: 'درختواره حساب‌ها',
-  newaccount: 'سرفصل جدید',
   openingbalance: 'مانده اول دوره',
   journalentry: 'سند حسابداری',
-  entrycartable: 'کارتابل صدور سند حسابداری',
-  finalizeentries: 'تبدیل اسناد موقت به دائم',
+  entrycartable: 'کارتابل اسناد موقت',
   renumber: 'شماره‌گذاری مجدد اسناد',
   mergeentries: 'ادغام اسناد',
-  reclassify: 'جابه‌جایی حساب در درختواره',
+  reclassify: 'انتقال حساب به سرفصل دیگر',
   analytics: 'تفصیلی سایر',
   fxrevaluation: 'صدور سند تسعیر ارز',
-  balancereclass: 'اصلاح طبقه‌بندی مانده',
-  generaldoc: 'صدور سند کل',
+  balancereclass: 'انتقال مانده به حساب دیگر',
   closepnl: 'بستن حساب‌های سود و زیان',
   closingopening: 'صدور سند اختتامیه و افتتاحیه',
   vat: 'مالیات بر ارزش افزوده',
@@ -367,7 +358,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   ledgerreport: 'گزارش دفتر',
   integrity: 'بررسی یکپارچگی',
   entrylist: 'اسناد حسابداری',
-  accountlist: 'فهرست حساب‌ها',
   shortcuts: 'کلیدهای میان‌بر',
   recurringlist: 'اسناد تکرارشونده',
   budgetlist: 'بودجه‌بندی',
@@ -427,8 +417,10 @@ export function Dashboard({
   // بین سایدبار و نوارِ تبِ داخلِ صفحه دوطرفه هم‌گام می‌شود.
   const [section, setSection] = useState<string | null>(null)
   const navigate = (p: PageKey, s: string | null = null) => {
-    setPage(p)
-    setSection(s)
+    //: منویی که در بازچینی ادغام شد (میان‌برِ ذخیره‌شده‌ی قدیمی) به جای تازه‌اش می‌رود.
+    const to = resolveLegacyPage(p, s)
+    setPage(to.page)
+    setSection(to.section)
     setEditContactId(null)
   }
   //: میان‌برهای کاربر — از هر جای برنامه، نه فقط داشبورد. خودش گاردِ «در حالِ
@@ -706,12 +698,9 @@ export function Dashboard({
               <FixedAssetsPanel token={token} guided={guidedForms} />
             </div>
           )}
-          {/* ── ماژولِ «حسابداری» — هجده عملیات و شش فهرست ── */}
+          {/* ── ماژولِ «حسابداری» — بیست‌ودو عملیات در شش دسته و دو فهرست ── */}
           {page === 'acctchart' && (
             <ChartOfAccountsPage token={token} onChanged={() => void refreshFromLocalCache()} />
-          )}
-          {page === 'newaccount' && (
-            <NewAccountPage token={token} onChanged={() => void refreshFromLocalCache()} />
           )}
           {page === 'openingbalance' && <OpeningBalancePage token={token} />}
           {page === 'journalentry' && (
@@ -723,7 +712,6 @@ export function Dashboard({
             />
           )}
           {page === 'entrycartable' && <EntryCartablePage token={token} />}
-          {page === 'finalizeentries' && <FinalizeEntriesPage token={token} />}
           {page === 'renumber' && <RenumberEntriesPage token={token} />}
           {page === 'mergeentries' && <MergeEntriesPage token={token} />}
           {page === 'reclassify' && (
@@ -732,7 +720,6 @@ export function Dashboard({
           {page === 'analytics' && <AnalyticsPage token={token} />}
           {page === 'fxrevaluation' && <FxRevaluationPage token={token} />}
           {page === 'balancereclass' && <BalanceReclassPage token={token} />}
-          {page === 'generaldoc' && <GeneralDocumentPage token={token} />}
           {page === 'closepnl' && <ClosePnlPage token={token} />}
           {page === 'closingopening' && <ClosingOpeningPage token={token} />}
           {page === 'vat' && <VatPage token={token} />}
@@ -742,7 +729,6 @@ export function Dashboard({
           {page === 'ledgerreport' && <LedgerReportPage token={token} />}
           {page === 'integrity' && <IntegrityPage token={token} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
-          {page === 'accountlist' && <AccountListPage token={token} />}
           {page === 'recurringlist' && <RecurringListPage token={token} accounts={accounts} />}
           {page === 'budgetlist' && <BudgetListPage token={token} accounts={accounts} />}
           {page === 'currencylist' && <CurrencyListPage token={token} />}
@@ -777,7 +763,6 @@ export function Dashboard({
           {page === 'contactsettlelist' && <ContactSettlementListPage token={token} />}
           {page === 'statementlist' && <StatementListPage token={token} />}
           {page === 'pettylist' && <PettyCashListPage token={token} />}
-          {page === 'analyticlist' && <AnalyticListPage token={token} />}
           {page === 'geolist' && <GeoListPage token={token} />}
           {page === 'contactgrouplist' && <ContactGroupListPage token={token} />}
           {page === 'calendarlist' && <CalendarListPage token={token} />}

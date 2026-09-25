@@ -1,20 +1,18 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeftRight, FolderTree, ListTree, Check, Plus, X } from 'lucide-react'
-import { createAccount, fetchChartAccounts, fetchNextAccountCode, reclassifyAccounts } from '../../api'
+import { ArrowLeftRight, FolderTree, ListTree, Check, X } from 'lucide-react'
+import { fetchChartAccounts, reclassifyAccounts } from '../../api'
 import { AccountTreePanel } from '../../components/AccountTreePanel'
+import { useNavSection } from '../../components/navContext'
 import { SectionCard } from '../../components/SectionCard'
 import { SearchSelect } from '../../components/SearchSelect'
 import { Pager, usePagination } from '../../components/Pager'
 import {
   ActionBar,
   CountBadge,
-  FormField,
-  FormGrid,
   FormStatus,
   ListToolbar,
   SearchField,
 } from '../../components/form/FormKit'
-import { firstMissing } from '../../components/form/firstMissing'
 import {
   AsyncBlock,
   OpsPage,
@@ -24,11 +22,14 @@ import {
 } from './kit'
 
 /**
- * پنج عملیاتِ *ساختار*: چارت، سرفصلِ تازه، اصلاحِ طبقه‌بندی، تفصیلیِ سایر، و مرورِ حساب‌ها.
+ * چهار عملیاتِ *ساختار*: درختواره، انتقالِ حساب به سرفصلِ دیگر، تفصیلیِ سایر، و مرورِ حساب‌ها.
  *
- * چهارتای اول ساختار را می‌سازند و پنجمی همان ساختار را با عدد نشان می‌دهد. جدا
- * نگه‌داشتنِ «مرور» از «چارت» عمدی است: چارت ابزارِ *ویرایش* است و مرور ابزارِ
+ * سه‌تای اول ساختار را می‌سازند و چهارمی همان ساختار را با عدد نشان می‌دهد. جدا
+ * نگه‌داشتنِ «مرور» از «درختواره» عمدی است: درختواره ابزارِ *ویرایش* است و مرور ابزارِ
  * *خواندن*؛ یک صفحه‌ی مشترک هر دو کار را بد انجام می‌داد.
+ *
+ * «سرفصل جدید» و «فهرست حساب‌ها» (بازچینیِ ۱۴۰۵/۰۷/۰۳) صفحه‌ی جدا نیستند: افزودن و نمای تخت
+ * هر دو درونِ درختواره‌اند — دو صفحه برای یک داده یعنی حسابدار حدس بزند کدام را باز کند.
  */
 
 const TYPE_LABELS: Record<string, string> = {
@@ -42,189 +43,26 @@ const TYPE_LABELS: Record<string, string> = {
 // ═════════════════════ ۱) درختواره حساب‌ها ═════════════════════
 
 export function ChartOfAccountsPage({ token, onChanged }: { token: string; onChanged?: () => void }) {
+  const nav = useNavSection()
   return (
     <OpsPage
       canvas
       icon={ListTree}
       title="درختواره حساب‌ها"
-      description="ساختارِ کاملِ چارت: سرفصل‌ها، حساب‌های سطحِ آخر، کدینگ و قالب‌های آماده‌ی صنفی."
+      description="ساختارِ کاملِ چارت با مانده‌ی هر حساب: افزودن، ویرایش، غیرفعال‌کردن و جست‌وجو — درختی یا تخت. قالب‌های صنفی و حذفِ حساب در تنظیمات ← کدینگ است."
     >
-      <AccountTreePanel token={token} onChanged={onChanged} />
+      {/* «سرفصل جدید» و «فهرست حساب‌ها»ی قدیمی با بخشِ `new`/`flat` به همین‌جا می‌رسند. */}
+      <AccountTreePanel
+        token={token}
+        onChanged={onChanged}
+        startAdding={nav?.activePage === 'acctchart' && nav.section === 'new'}
+        startFlat={nav?.activePage === 'acctchart' && nav.section === 'flat'}
+      />
     </OpsPage>
   )
 }
 
-// ═══════════════════════ ۲) سرفصل جدید ═══════════════════════
-
-export function NewAccountPage({ token, onChanged }: { token: string; onChanged?: () => void }) {
-  const [msg, setMsg] = useState<Msg>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-  const accounts = useAsync(() => fetchChartAccounts(token), [token, reloadKey])
-
-  const [form, setForm] = useState({
-    code: '',
-    name: '',
-    type: 'expense',
-    is_group: false,
-    parent_id: '' as string,
-  })
-
-  const groups = useMemo(
-    () => (accounts.data ?? []).filter((a) => a.is_group).sort((a, b) => a.code.localeCompare(b.code)),
-    [accounts.data],
-  )
-
-  /** انتخابِ سرفصلِ مادر، نوع را هم تعیین می‌کند و کدِ آزادِ بعدی را از سرور می‌گیرد.
-   *  حدس‌زدنِ کد در مرورگر یعنی دو پیاده‌سازیِ قاعده‌ی کدینگ؛ سرور همان را می‌داند. */
-  async function pickParent(parentId: string) {
-    const parent = groups.find((g) => g.id === parentId)
-    setForm((f) => ({ ...f, parent_id: parentId, type: parent?.type ?? f.type }))
-    try {
-      const next = await fetchNextAccountCode(token, parentId || null)
-      setForm((f) => ({ ...f, parent_id: parentId, type: parent?.type ?? f.type, code: next.code }))
-    } catch {
-      // نبودنِ پیشنهادِ کد نباید فرم را قفل کند؛ کاربر خودش می‌نویسد.
-    }
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    const missing = firstMissing([
-      [form.code, 'acc-code', 'کدِ حساب را وارد کنید.'],
-      [form.name, 'acc-name', 'نامِ حساب را وارد کنید.'],
-    ])
-    if (missing) {
-      setMsg({ text: missing, kind: 'err' })
-      return
-    }
-    setMsg(null)
-    try {
-      const created = await createAccount(token, {
-        code: form.code.trim(),
-        name: form.name.trim(),
-        type: form.type,
-        is_group: form.is_group,
-        parent_id: form.parent_id || null,
-      })
-      setMsg({ text: `حسابِ «${created.name}» با کد ${created.code} ساخته شد.`, kind: 'ok' })
-      setForm({ code: '', name: '', type: form.type, is_group: false, parent_id: form.parent_id })
-      setReloadKey((k) => k + 1)
-      onChanged?.()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  const recent = useMemo(
-    () =>
-      [...(accounts.data ?? [])]
-        .filter((a) => !a.system_role)
-        .sort((a, b) => b.code.localeCompare(a.code))
-        .slice(0, 12),
-    [accounts.data],
-  )
-
-  return (
-    <OpsPage
-      canvas
-      icon={Plus}
-      title="سرفصل جدید"
-      description="افزودنِ یک حساب یا سرفصلِ تازه به چارت. سرفصل فقط دسته‌بندی می‌کند و سند مستقیم نمی‌گیرد؛ حسابِ سطحِ آخر است که سند می‌خورد."
-    >
-      <form noValidate onSubmit={submit}>
-        <SectionCard
-          icon={Plus}
-          title="مشخصاتِ حساب"
-          tip="اول سرفصلِ مادر را انتخاب کنید تا نوعِ حساب و کدِ پیشنهادیِ بعدی خودکار پر شوند."
-        >
-          <FormGrid>
-            <FormField label="سرفصلِ مادر" tip="نوعِ حساب از مادر گرفته می‌شود تا ترازنامه و سود و زیان یک چیز بگویند.">
-              {(id) => (
-                <SearchSelect id={id} value={form.parent_id} onChange={(e) => void pickParent(e.target.value)}>
-                  <option value="">— بدونِ مادر (ریشه) —</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.code} — {g.name}
-                    </option>
-                  ))}
-                </SearchSelect>
-              )}
-            </FormField>
-            <FormField id="acc-code" label="کدِ حساب" required>
-              {(id) => (
-                <input
-                  id={id}
-                  value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value })}
-                  dir="ltr"
-                />
-              )}
-            </FormField>
-            <FormField id="acc-name" label="نامِ حساب" required>
-              {(id) => (
-                <input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              )}
-            </FormField>
-            <FormField label="نوعِ حساب" required>
-              {(id) => (
-                <SearchSelect id={id} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  {Object.entries(TYPE_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </SearchSelect>
-              )}
-            </FormField>
-            <div className="ef-checks">
-              <label className="ef-check-tip">
-                <input
-                  type="checkbox"
-                  checked={form.is_group}
-                  onChange={(e) => setForm({ ...form, is_group: e.target.checked })}
-                />
-                سرفصل است (سند مستقیم نمی‌گیرد)
-              </label>
-            </div>
-          </FormGrid>
-        </SectionCard>
-        <ActionBar status={<FormStatus msg={msg} />}>
-          <button type="submit" className="btn-primary">
-            <Check size={16} /> ساختِ حساب
-          </button>
-        </ActionBar>
-      </form>
-
-      <SectionCard
-        icon={ListTree}
-        title="تازه‌ترین حساب‌ها"
-        description="آخرین کدهایی که به چارت اضافه شده‌اند."
-        badge={<CountBadge>{faInt(recent.length)} حساب</CountBadge>}
-      >
-        <AsyncBlock
-          loading={accounts.loading}
-          error={accounts.error}
-          empty={recent.length === 0}
-          emptyText="هنوز حسابِ سفارشی‌ای ساخته نشده."
-        >
-          <ul className="acc-groups">
-            {recent.map((a) => (
-              <li key={a.id}>
-                <span className="acc-group-name">
-                  <span dir="ltr">{a.code}</span> — {a.name}
-                </span>
-                <span className="acc-group-count">{TYPE_LABELS[a.type] ?? a.type}</span>
-                <span className="acc-group-total">{a.is_group ? 'سرفصل' : 'حساب'}</span>
-              </li>
-            ))}
-          </ul>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═════════════════ ۳) اصلاح طبقه‌بندی حساب‌ها ═════════════════
+// ═════════════════ ۲) انتقال حساب به سرفصل دیگر ═════════════════
 
 export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const [msg, setMsg] = useState<Msg>(null)
@@ -287,8 +125,8 @@ export function ReclassifyPage({ token, onChanged }: { token: string; onChanged?
     <OpsPage
       canvas
       icon={ArrowLeftRight}
-      title="جابه‌جایی حساب در درختواره"
-      description="جابه‌جاییِ دسته‌ایِ حساب‌ها زیرِ سرفصلِ درست. نوعِ حساب از سرفصلِ مقصد گرفته می‌شود تا ترازنامه و سود و زیان یک چیز بگویند. ⚠️ این کار مانده را جابه‌جا نمی‌کند و چون ساختارِ حساب را عوض می‌کند، گزارش‌های گذشته هم از این پس با طبقه‌بندیِ تازه دیده می‌شوند — برای بردنِ مانده به حسابِ درست، «اصلاح طبقه‌بندی مانده» را باز کنید."
+      title="انتقال حساب به سرفصل دیگر"
+      description="خودِ حساب‌ها را دسته‌ای زیرِ سرفصلِ درست می‌برد. نوعِ حساب از سرفصلِ مقصد گرفته می‌شود تا ترازنامه و سود و زیان یک چیز بگویند. ⚠️ سندی صادر نمی‌شود و چون ساختار عوض می‌شود، گزارش‌های گذشته هم از این پس با طبقه‌بندیِ تازه دیده می‌شوند — برای بردنِ *مانده* به حسابِ دیگر، «انتقال مانده به حساب دیگر» را باز کنید."
     >
       <SectionCard
         icon={FolderTree}
@@ -388,74 +226,3 @@ export { AnalyticsPage } from './AnalyticsPage'
 //: کاوشگرِ حرفه‌ای (UI-02) فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ
 //: ورودِ صفحه عوض نشود.
 export { AccountBrowsePage } from './AccountBrowser'
-
-/** فهرستِ تختِ حساب‌ها — صفحه‌ی «فهرست» ماژول، برای جست‌وجوی سریعِ یک کد. */
-export function AccountListPage({ token }: { token: string }) {
-  const [search, setSearch] = useState('')
-  const accounts = useAsync(() => fetchChartAccounts(token), [token])
-  const rows = useMemo(() => {
-    const term = search.trim()
-    return (accounts.data ?? [])
-      .filter((a) => !term || a.name.includes(term) || a.code.includes(term))
-      .sort((a, b) => a.code.localeCompare(b.code))
-  }, [accounts.data, search])
-  const pg = usePagination(rows, 25)
-
-  return (
-    <OpsPage
-      canvas
-      icon={ListTree}
-      title="فهرست حساب‌ها"
-      description="نمای تختِ چارت برای پیداکردنِ سریعِ یک حساب یا کد."
-    >
-      <SectionCard
-        icon={ListTree}
-        title="حساب‌ها"
-        badge={accounts.data ? <CountBadge accent>{faInt(rows.length)} حساب</CountBadge> : undefined}
-        description="نمای تختِ چارت — سرفصل‌ها و حساب‌های سطحِ آخر کنارِ هم."
-      >
-        <ListToolbar>
-          <SearchField value={search} onChange={setSearch} placeholder="نام یا کدِ حساب" label="جست‌وجوی حساب" />
-        </ListToolbar>
-        <AsyncBlock
-          loading={accounts.loading}
-          error={accounts.error}
-          empty={rows.length === 0}
-          emptyText="حسابی پیدا نشد."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>کد</th>
-                  <th>نام</th>
-                  <th>نوع</th>
-                  <th>سطح</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((a) => (
-                  <tr key={a.id} className={a.is_active ? '' : 'acc-row--muted'}>
-                    <td className="card-title" data-label="کد" dir="ltr">
-                      {a.code}
-                    </td>
-                    <td data-label="نام">{a.name}</td>
-                    <td data-label="نوع">{TYPE_LABELS[a.type] ?? a.type}</td>
-                    <td data-label="سطح">{a.is_group ? 'سرفصل' : 'حساب'}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${a.is_active ? 'tone-success' : 'tone-muted'}`}>
-                        {a.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}

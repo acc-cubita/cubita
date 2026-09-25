@@ -243,27 +243,38 @@ export function YearEndOpsPage({
             title="تطبیقِ بانک و صندوق"
             description="مانده‌ی دفترها با صورت‌حسابِ بانکی و شمارشِ صندوق یکی شود."
             state={{ label: 'پیش‌نیاز', tone: 'warn' }}
-            action="چک و بانک"
-            onGo={() => onNavigate('banking')}
+            action="مغایرت بانکی"
+            //: `banking` صفحه نبود (کلیدِ ماژول است) و این دکمه صفحه‌ی خالی باز می‌کرد.
+            onGo={() => onNavigate('bankreconcile')}
           />
           <Step
             index={3}
             title="بررسیِ تراز آزمایشی"
             description="تراز باید تراز باشد و حسابِ معلق نماند. اینجا آخرین فرصتِ اصلاحِ سندهاست."
             state={{ label: 'بررسی کنید', tone: 'warn' }}
-            action="گزارش‌ها"
-            onGo={() => onNavigate('reports')}
+            action="گزارش ترازها"
+            onGo={() => onNavigate('balancereport')}
           />
+          {/* دو گامِ سندسازِ حسابداری، هرکدام به صفحه‌ی خودش در «حسابداری ← پایان دوره». پیش‌تر
+              هر دو یک گام بودند که به «سال مالی» می‌رفت — صفحه‌ای که فقط سال تعریف می‌کند. */}
           <Step
             index={4}
-            title="بستنِ سال و سندِ اختتامیه"
-            description="حساب‌های موقت صفر و مانده‌های دائمی به دوره‌ی بعد منتقل می‌شوند. پس از بستن، ثبتِ سند در این بازه ممکن نیست."
+            title="بستنِ حساب‌های سود و زیان"
+            description="درآمد و هزینه صفر می‌شوند و سود یا زیانِ سال به سودِ انباشته می‌رود؛ بعد دوره قفل می‌شود و در آن بازه سندی ثبت نمی‌شود."
             state={closed ? { label: 'بسته شده', tone: 'ok' } : { label: 'انجام نشده', tone: 'todo' }}
-            action="سال مالی"
-            onGo={() => onNavigate('fiscalyear')}
+            action="بستن سود و زیان"
+            onGo={() => onNavigate('closepnl')}
           />
           <Step
             index={5}
+            title="سندِ اختتامیه و افتتاحیه"
+            description="اختتامیه حساب‌های دائمی را می‌بندد و افتتاحیه همان مانده‌ها را در سالِ بعد باز می‌کند."
+            state={closed ? { label: 'بسته شده', tone: 'ok' } : { label: 'انجام نشده', tone: 'todo' }}
+            action="اختتامیه و افتتاحیه"
+            onGo={() => onNavigate('closingopening')}
+          />
+          <Step
+            index={6}
             title="پشتیبانِ پایانِ دوره"
             description="یک نسخه‌ی کاملِ داده پیش از شروعِ دوره‌ی تازه بگیرید و بیرون از این دستگاه نگه دارید."
             state={{ label: 'توصیه‌ی جدی', tone: 'warn' }}

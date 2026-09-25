@@ -1,7 +1,7 @@
 import { LogOut, ChevronDown } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { MODULE_SECTIONS } from './moduleSections'
-import { buildNav, orderNavGroups, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
+import { buildNav, navSections, orderNavGroups, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
 import { useExperienceMode } from '../lib/experienceMode'
 import { PRODUCT_NAME } from '../platform'
 
@@ -167,7 +167,14 @@ export function Sidebar({
           <ChevronDown className="acc-chev" size={16} />
         </button>
         <div className="sidebar-acc-panel">
-          <div className="acc-inner">{group.items.map(renderModule)}</div>
+          <div className="acc-inner">
+            {navSections(group.items).map((sec, _i, all) => (
+              <Fragment key={sec.title ?? ''}>
+                {sec.title && all.length > 1 && <div className="sidebar-section-label">{sec.title}</div>}
+                {sec.items.map(renderModule)}
+              </Fragment>
+            ))}
+          </div>
         </div>
       </div>
     )

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BookOpen,
+  CalendarCheck,
   CheckCircle2,
   ClipboardCheck,
   Combine,
@@ -43,7 +44,7 @@ import {
 import { OutboxList } from '../../components/OutboxList'
 import { Pager, usePagination } from '../../components/Pager'
 import { isElectron } from '../../platform'
-import { formatJalali } from '../../lib/jalali'
+import { formatJalali, todayIso } from '../../lib/jalali'
 import { normalizeFa } from '../../lib/faText'
 import { modsOf, useRowSelection } from '../../lib/rowSelection'
 import { useColumnWidths } from '../../lib/useColumnWidths'
@@ -69,12 +70,13 @@ import {
 import { SearchSelect } from '../../components/SearchSelect'
 
 /**
- * پنج عملیاتی که مستقیماً روی *سند* کار می‌کنند.
+ * چهار عملیاتی که مستقیماً روی *سند* کار می‌کنند.
  *
  * تقسیم‌بندی عمدی است و از خودِ کارِ دفترداری می‌آید:
  *  - **سند حسابداری** جایی است که سند *ساخته* می‌شود.
- *  - **کارتابل** جایی است که سند *بازبینی* می‌شود (صفِ موقت‌ها).
- *  - **تبدیل به دائم** همان بازبینی است ولی *دسته‌ای*، برای پایانِ ماه.
+ *  - **کارتابل اسناد موقت** جایی است که سند *بازبینی* و دائم می‌شود — تکی، دسته‌ای به منشأ، یا کلِ
+ *    یک بازه برای پایانِ ماه. منوی جدای «تبدیل اسناد موقت به دائم» همین کارِ آخر را روی همین داده
+ *    می‌کرد و در بازچینیِ ۱۴۰۵/۰۷/۰۳ در کارتابل ادغام شد.
  *  - **شماره‌گذاری مجدد** و **ادغام** دو ابزارِ مرتب‌کردنِ دفترِ به‌هم‌ریخته‌اند و
  *    هر دو عمداً فقط روی اسنادِ موقت کار می‌کنند.
  */
@@ -351,7 +353,7 @@ function EntryTable({
   )
 }
 
-// ═══════════════════ ۲) کارتابل صدور سند ═══════════════════
+// ═══════════════════ ۲) کارتابل اسناد موقت ═══════════════════
 
 export function EntryCartablePage({ token }: { token: string }) {
   const range = useRange('all')
@@ -391,8 +393,8 @@ export function EntryCartablePage({ token }: { token: string }) {
     <OpsPage
       canvas
       icon={ClipboardCheck}
-      title="کارتابل صدور سند حسابداری"
-      description="صفِ اسنادِ موقت — هرچه ثبت شده ولی هنوز بازبینی نشده. سند را ببینید، بعد دائمش کنید."
+      title="کارتابل اسناد موقت"
+      description="هرچه ثبت شده ولی هنوز بازبینی نشده. سند را ببینید، بعد دائمش کنید — تکی، یک منشأ با هم، یا کلِ بازه در پایانِ ماه. دائم‌کردن اثرِ مالی ندارد ولی برگشت ندارد."
       head={
         <div className="cc-head">
           <RangeBar range={range} />
@@ -476,6 +478,22 @@ export function EntryCartablePage({ token }: { token: string }) {
           />
         }
       >
+        {/* «تبدیل اسناد موقت به دائم»ِ قدیمی: همه‌ی موقت‌های بازه، برای بستنِ ماه. */}
+        <button
+          type="button"
+          className="ef-btn-secondary"
+          disabled={!data || data.total_count === 0}
+          onClick={() =>
+            finalize(
+              { date_from: range.from, date_to: range.to },
+              `دائم‌کردنِ همه‌ی ${faInt(data?.total_count ?? 0)} سندِ موقتِ ${
+                range.from ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())}` : 'دفتر'
+              }.`,
+            )
+          }
+        >
+          <CalendarCheck size={15} /> دائم‌کردنِ کلِ این بازه
+        </button>
         <button
           type="button"
           className="btn-primary"
@@ -551,104 +569,7 @@ function CartableTable({
   )
 }
 
-// ═══════════════ ۳) تبدیل اسناد موقت به دائم ═══════════════
-
-export function FinalizeEntriesPage({ token }: { token: string }) {
-  const range = useRange('month')
-  const [msg, setMsg] = useState<Msg>(null)
-  const preview = useAsync(
-    () => fetchCartable(token, range.from, range.to),
-    [token, range.from, range.to],
-  )
-
-  async function run() {
-    const count = preview.data?.total_count ?? 0
-    if (count === 0) {
-      setMsg({ text: 'در این بازه سندِ موقتی نیست؛ بازه را عوض کنید.', kind: 'err' })
-      return
-    }
-    if (
-      !window.confirm(
-        `${count} سندِ موقتِ این بازه دائم می‌شوند.\nاین کار برگشت‌پذیر نیست. ادامه می‌دهید؟`,
-      )
-    )
-      return
-    try {
-      const out = await finalizeEntries(token, { date_from: range.from, date_to: range.to })
-      setMsg({
-        text: `${faInt(out.count)} سند از ${formatJalali(out.first_date)} تا ${formatJalali(out.last_date)} دائم شد.`,
-        kind: 'ok',
-      })
-      preview.reload()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  const data = preview.data
-  return (
-    <OpsPage
-      canvas
-      icon={Lock}
-      title="تبدیل اسناد موقت به دائم"
-      description="عملیاتِ پایانِ ماه: همه‌ی اسنادِ موقتِ یک بازه یک‌جا قطعی می‌شوند. اثرِ مالی ندارد — فقط سند را از دسترسِ ادغام و بازشماره‌گذاری بیرون می‌برد."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric
-              icon={<Inbox size={14} />}
-              label="موقت در این بازه"
-              value={data ? faInt(data.total_count) : '—'}
-              tone={data && data.total_count > 0 ? 'out' : 'in'}
-            />
-            <Metric
-              icon={<Layers size={14} />}
-              label="منشأها"
-              value={data ? faInt(data.groups.length) : '—'}
-            />
-            <Metric
-              icon={<CheckCircle2 size={14} />}
-              label="مبلغِ کل"
-              value={data ? fa(data.groups.reduce((s, g) => s + Number(g.total), 0)) : '—'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Lock}
-        title="آنچه دائم می‌شود"
-        description="پیش از تأیید، دقیقاً همان چیزی را ببینید که قطعی خواهد شد."
-        badge={data ? <CountBadge accent>{faInt(data.total_count)} سند</CountBadge> : undefined}
-      >
-        <AsyncBlock
-          loading={preview.loading}
-          error={preview.error}
-          empty={(data?.total_count ?? 0) === 0}
-          emptyText="در این بازه سندِ موقتی نیست."
-        >
-          <ul className="acc-groups">
-            {(data?.groups ?? []).map((g) => (
-              <li key={g.source_type}>
-                <span className="acc-group-name">{sourceLabel(g.source_type)}</span>
-                <span className="acc-group-count">{faInt(g.count)} سند</span>
-                <span className="acc-group-total">{fa(g.total)}</span>
-              </li>
-            ))}
-          </ul>
-        </AsyncBlock>
-      </SectionCard>
-      <ActionBar status={<FormStatus msg={msg} idle="اثرِ مالی ندارد، ولی برگشت‌پذیر هم نیست." />}>
-        <button type="button" className="btn-primary" disabled={preview.loading} onClick={() => void run()}>
-          <Lock size={15} /> دائم‌کردنِ همه
-        </button>
-      </ActionBar>
-    </OpsPage>
-  )
-}
-
-// ═══════════════ ۴) شماره‌گذاری مجدد اسناد ═══════════════
+// ═══════════════ ۳) شماره‌گذاری مجدد اسناد ═══════════════
 
 export function RenumberEntriesPage({ token }: { token: string }) {
   const range = useRange('year')
@@ -834,7 +755,7 @@ export function RenumberEntriesPage({ token }: { token: string }) {
   )
 }
 
-// ═══════════════════════ ۵) ادغام اسناد ═══════════════════════
+// ═══════════════════════ ۴) ادغام اسناد ═══════════════════════
 
 export function MergeEntriesPage({ token }: { token: string }) {
   const range = useRange('month')

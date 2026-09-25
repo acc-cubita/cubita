@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Circle,
 } from 'lucide-react'
-import { buildNav, groupLanding, menuEntryVisible, orderNavGroups, type PageKey } from '../lib/navModel'
+import { buildNav, groupLanding, menuEntryVisible, navSections, orderNavGroups, type PageKey } from '../lib/navModel'
 import { setExperience, useExperienceMode, type ExperienceMode } from '../lib/experienceMode'
 import { updateProfile } from '../api'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
@@ -483,78 +483,87 @@ export function TopNav({
                             />
                           )
                         })}
-                        {!opsMenu && group.items.map((item) => {
-                          const sections = MODULE_SECTIONS[item.key]
-                          if (!sections) {
-                            return (
-                              <MobileRow
-                                key={item.key}
-                                level="item"
-                                icon={item.icon}
-                                label={item.label}
-                                active={active === item.key}
-                                trailing={navBadge(item.key)}
-                                onClick={() => go(item.key)}
-                              />
-                            )
-                          }
-                          const current = active === item.key
-                          const activeSection = current ? (navSection?.section ?? sections[0]?.key) : null
-                          // بخش‌ها در دو دسته، همان دو ستونِ دسکتاپ: دفترها (فهرست دارایی‌ها، …)
-                          // زیرِ تیترِ «فهرست» می‌آیند، نه لابه‌لای عملیات.
-                          const parts = (level: 'item' | 'section') => {
-                            const ledgers = listSections(sections)
-                            return [opsSections(sections), ledgers].map((part, i) =>
-                              part.length === 0 ? null : (
-                                <Fragment key={i}>
-                                  {ledgers.length > 0 && (
-                                    <div className="mob-section-label">{i === 0 ? 'عملیات' : 'فهرست'}</div>
-                                  )}
-                                  {part.map((sec) => {
-                                    const Icon = sec.icon
-                                    return (
-                                      <MobileRow
-                                        key={sec.key}
-                                        level={level}
-                                        icon={<Icon size={level === 'item' ? 18 : 16} />}
-                                        label={sec.label}
-                                        active={activeSection === sec.key}
-                                        onClick={() => go(item.key, sec.key)}
-                                      />
-                                    )
-                                  })}
-                                </Fragment>
-                              ),
-                            )
-                          }
-                          // گروهی که فقط همین یک ماژول است و هم‌نامِ آن («دارایی ثابت» ← «دارایی
-                          // ثابت»): ردیفِ ماژول تکرارِ سرتیتر است، پس بخش‌ها مستقیم زیرِ گروه
-                          // می‌نشینند — همان کاری که ستونِ «عملیات»ِ دسکتاپ می‌کند.
-                          if (group.items.length === 1 && item.label === group.heading) {
-                            return <Fragment key={item.key}>{parts('item')}</Fragment>
-                          }
-                          // ماژولِ تب‌دار: ضربه روی ردیف **باز/بسته** می‌کند، نه رفتن.
-                          // پیش از این «تولید» فقط لینک بود و بخش‌هایش هیچ‌جای کشو نبودند —
-                          // روی موبایل تنها راهِ رسیدن به «سفارش تولید» نوارِ تبِ داخلِ صفحه بود.
-                          const modOpen = openModule === item.key
-                          return (
-                            <div className={`topnav-mobile-mod${modOpen ? ' open' : ''}`} key={item.key}>
-                              <MobileRow
-                                level="item"
-                                icon={item.icon}
-                                label={item.label}
-                                expanded={modOpen}
-                                parent={current}
-                                marked={current && !modOpen}
-                                trailing={navBadge(item.key)}
-                                onClick={() => setOpenModule((m) => (m === item.key ? null : item.key))}
-                              />
-                              <div className="topnav-mobile-panel">
-                                <div className="mob-inner mob-inner--sections">{parts('section')}</div>
-                              </div>
-                            </div>
-                          )
-                        })}
+                        {!opsMenu &&
+                          navSections(group.items).map((sec, _i, all) => (
+                            <Fragment key={sec.title ?? ''}>
+                              {/* دسته‌های گروه («ثبت سند»، «پایان دوره»، …) — همان تیترهای کارتِ «عملیات»ِ دسکتاپ. */}
+                              {sec.title && all.length > 1 && (
+                                <div className="mob-section-label mob-section-label--sub">{sec.title}</div>
+                              )}
+                              {sec.items.map((item) => {
+                                const sections = MODULE_SECTIONS[item.key]
+                                if (!sections) {
+                                  return (
+                                    <MobileRow
+                                      key={item.key}
+                                      level="item"
+                                      icon={item.icon}
+                                      label={item.label}
+                                      active={active === item.key}
+                                      trailing={navBadge(item.key)}
+                                      onClick={() => go(item.key)}
+                                    />
+                                  )
+                                }
+                                const current = active === item.key
+                                const activeSection = current ? (navSection?.section ?? sections[0]?.key) : null
+                                // بخش‌ها در دو دسته، همان دو ستونِ دسکتاپ: دفترها (فهرست دارایی‌ها، …)
+                                // زیرِ تیترِ «فهرست» می‌آیند، نه لابه‌لای عملیات.
+                                const parts = (level: 'item' | 'section') => {
+                                  const ledgers = listSections(sections)
+                                  return [opsSections(sections), ledgers].map((part, i) =>
+                                    part.length === 0 ? null : (
+                                      <Fragment key={i}>
+                                        {ledgers.length > 0 && (
+                                          <div className="mob-section-label">{i === 0 ? 'عملیات' : 'فهرست'}</div>
+                                        )}
+                                        {part.map((sec) => {
+                                          const Icon = sec.icon
+                                          return (
+                                            <MobileRow
+                                              key={sec.key}
+                                              level={level}
+                                              icon={<Icon size={level === 'item' ? 18 : 16} />}
+                                              label={sec.label}
+                                              active={activeSection === sec.key}
+                                              onClick={() => go(item.key, sec.key)}
+                                            />
+                                          )
+                                        })}
+                                      </Fragment>
+                                    ),
+                                  )
+                                }
+                                // گروهی که فقط همین یک ماژول است و هم‌نامِ آن («دارایی ثابت» ← «دارایی
+                                // ثابت»): ردیفِ ماژول تکرارِ سرتیتر است، پس بخش‌ها مستقیم زیرِ گروه
+                                // می‌نشینند — همان کاری که ستونِ «عملیات»ِ دسکتاپ می‌کند.
+                                if (group.items.length === 1 && item.label === group.heading) {
+                                  return <Fragment key={item.key}>{parts('item')}</Fragment>
+                                }
+                                // ماژولِ تب‌دار: ضربه روی ردیف **باز/بسته** می‌کند، نه رفتن.
+                                // پیش از این «تولید» فقط لینک بود و بخش‌هایش هیچ‌جای کشو نبودند —
+                                // روی موبایل تنها راهِ رسیدن به «سفارش تولید» نوارِ تبِ داخلِ صفحه بود.
+                                const modOpen = openModule === item.key
+                                return (
+                                  <div className={`topnav-mobile-mod${modOpen ? ' open' : ''}`} key={item.key}>
+                                    <MobileRow
+                                      level="item"
+                                      icon={item.icon}
+                                      label={item.label}
+                                      expanded={modOpen}
+                                      parent={current}
+                                      marked={current && !modOpen}
+                                      trailing={navBadge(item.key)}
+                                      onClick={() => setOpenModule((m) => (m === item.key ? null : item.key))}
+                                    />
+                                    <div className="topnav-mobile-panel">
+                                      <div className="mob-inner mob-inner--sections">{parts('section')}</div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </Fragment>
+                          ))}
                         {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
                             بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
                         {lists.length > 0 && <div className="mob-section-label">فهرست</div>}
