@@ -12542,6 +12542,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-table col.jg-c-pick { width: 14%; }
 .jg-table col.jg-c-fx { width: 12%; }
 .jg-table col.jg-c-track { width: 11%; }
+/* گریدهای هم‌سبکِ دیگر (مانده اول دوره): ستونِ یک‌آیکونه، انبار، تعداد. */
+.jg-table col.jg-c-act1 { width: 56px; }
+.jg-table col.jg-c-wh { width: 18%; }
+.jg-table col.jg-c-qty { width: 11%; }
 /* هر کادر دقیقاً پهنای خانه‌اش (منهای padding) — همه هم‌لبه، با فاصله‌ی یکسان. قاعده‌ی عمومیِ
  * `.ef-form td > input { min-width: 120px }` این‌جا کادرِ شرح را از خانه‌اش بیرون می‌زد و به
  * بدهکار می‌چسباند؛ `tbody` فقط برای اینکه اختصاصیت از آن بالاتر برود. */
@@ -12735,6 +12739,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 .jf-foot--ok { border-block-start-color: var(--success); }
 .jf-foot--err { border-block-start-color: var(--danger); }
+.jf-foot--auto { border-block-start-color: var(--accent); }
 @container scroll-state(stuck: bottom) {
   .jf-foot {
     border-end-start-radius: 0;
@@ -12834,6 +12839,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
 .jb-sum--err .jb-stat--diff .jb-body { background: var(--danger-bg); }
 .jb-sum--err .jb-stat--diff .jb-v { color: var(--danger); }
+/* «تراز خودکار» (سندِ افتتاحیه ← سرمایه): اختلاف خبر است نه خطا — رنگِ accent، نه قرمز. */
+.jb-sum--auto .jb-stat--diff .jb-body { background: var(--accent-bg); }
+.jb-sum--auto .jb-stat--diff .jb-v { color: var(--accent-on-tint); }
+.jb-sum--auto .jb-sub { color: var(--text-muted); }
 .jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: calc(var(--fs-sm) * var(--fit, 1)); font-weight: 500; }
 
 /* ── ستون‌به‌ستون با گرید (حالت حسابدار) ──
@@ -12852,6 +12861,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-field--date { grid-column: 3; }
   .jh-field--status { grid-column: 4; }
   .jh-field--sub { grid-column: 5; }
+  /* فیلدِ آخرِ سربرگی که فقط دو فیلد دارد (مانده اول دوره): از بدهکار تا لبه. */
+  .jh-field--rest { grid-column: 3 / -1; }
   /* فیلدهای کسب‌وکاری (یک تا چهار) روی همان خانه‌ها؛ اولی تا وقتی جا هست دو خانه‌ی اول را می‌گیرد و
    * آخری تا لبه می‌کشد — سطر خانه‌ی خالی ندارد. */
   .jh-row--sub > .jh-field:first-child { grid-column: 1 / 3; }
@@ -12905,11 +12916,12 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .jh-field--grow,
   .jh-field--sub,
+  .jh-field--rest,
   .jh-row--sub > .jh-field:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .jh-field + .jh-field { border-inline-start: 0; }
   .jh-row > .jh-field--status,
   .jh-row--sub > .jh-field:nth-child(even) { border-inline-start: 1px solid var(--xl-line); }
-  .jh-row > :is(.jh-field--date, .jh-field--status, .jh-field--sub),
+  .jh-row > :is(.jh-field--date, .jh-field--status, .jh-field--sub, .jh-field--rest),
   .jh-row--sub > .jh-field:nth-child(n + 3) { border-block-start: 1px solid var(--xl-line); }
   .jh-row:first-child > .jh-field:last-child > .jh-label { border-start-end-radius: 0; }
   .jh-row:first-child > .jh-field--grow > .jh-label { border-start-end-radius: calc(var(--radius-md) - 1px); }
@@ -13272,6 +13284,20 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg + .ef-add-row:hover:not(:disabled) { border-color: var(--xl-line); background: var(--accent-bg); }
 .jg:has(> .jg-wrap:last-child) > .jg-wrap { border-end-start-radius: 0; border-end-end-radius: 0; }
 .jg:has(> .jg-wrap:last-child) + .ef-add-row { margin-top: -1px; border-start-start-radius: 0; border-start-end-radius: 0; }
+
+/* خانه‌ی محاسبه‌شده (ارزشِ ردیف = تعداد × بها): ته‌رنگِ خاکستری، مثلِ خانه‌ی فرمولِ اکسل — تایپ‌شدنی
+ * نیست و در مسیرِ صفحه‌کلید هم نیست (`data-cell` ندارد). */
+.page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro {
+  padding-inline: 10px;
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+  color: var(--text-h);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* مانده اول دوره: دو گرید در یک کارت، هر کدام با عنوانِ خودش. */
+.ob-note { margin-block: var(--sp-2); }
 
 /* جست‌وجوی سریع در ردیف‌ها: پیداشده‌ها برجسته، بقیه کم‌رنگ، و «فعلی» (Enter) پررنگ‌تر. */
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-dim > td { opacity: 0.5; }

@@ -23,9 +23,10 @@ export type ColId =
   | 'trackingNo'
   | 'trackingDate'
 
-export interface GridShape {
-  /** ستون‌های رندرشده، به ترتیبِ چپ‌به‌راستِ منطقی (نه بصری). */
-  cols: ColId[]
+export interface GridShape<C extends string = ColId> {
+  /** ستون‌های رندرشده، به ترتیبِ چپ‌به‌راستِ منطقی (نه بصری). گریدهای دیگرِ هم‌سبک (مانده اول
+   *  دوره) ستون‌های خودشان را دارند — منطقِ حرکت به نامِ ستون کاری ندارد. */
+  cols: C[]
   rowCount: number
 }
 
@@ -41,7 +42,7 @@ export interface CellRef {
  * **غیرفعال**‌اند. ناوبری باید از رویشان بپرد، وگرنه کاربر به یک input قفل‌شده
  * می‌رسد و فکر می‌کند گرید گیر کرده. (§۱۴ — «مرحله غیرضروری Skip شود».)
  */
-export type CellEnabled = (row: number, col: ColId) => boolean
+export type CellEnabled<C extends string = ColId> = (row: number, col: C) => boolean
 
 /**
  * سلولِ بعدی/قبلی در همان ردیف، با پرش از سلول‌های غیرفعال.
@@ -49,11 +50,11 @@ export type CellEnabled = (row: number, col: ColId) => boolean
  * `null` یعنی به لبه‌ی ردیف رسیدیم — تصمیمِ «ردیفِ بعد» با فراخوان است، نه این‌جا،
  * چون آن تصمیم می‌تواند ردیفِ تازه بسازد و ساختنِ ردیف کارِ یک تابعِ ناوبری نیست.
  */
-export function stepInRow(
-  shape: GridShape,
+export function stepInRow<C extends string = ColId>(
+  shape: GridShape<C>,
   at: CellRef,
   dir: 1 | -1,
-  enabled: CellEnabled,
+  enabled: CellEnabled<C>,
 ): CellRef | null {
   for (let c = at.col + dir; c >= 0 && c < shape.cols.length; c += dir) {
     if (enabled(at.row, shape.cols[c])) return { row: at.row, col: c }
@@ -62,7 +63,7 @@ export function stepInRow(
 }
 
 /** اولین سلولِ فعالِ یک ردیف (از چپِ منطقی). `null` = ردیف هیچ سلولِ فعالی ندارد. */
-export function firstInRow(shape: GridShape, row: number, enabled: CellEnabled): CellRef | null {
+export function firstInRow<C extends string = ColId>(shape: GridShape<C>, row: number, enabled: CellEnabled<C>): CellRef | null {
   for (let c = 0; c < shape.cols.length; c++) {
     if (enabled(row, shape.cols[c])) return { row, col: c }
   }
@@ -70,7 +71,7 @@ export function firstInRow(shape: GridShape, row: number, enabled: CellEnabled):
 }
 
 /** آخرین سلولِ فعالِ یک ردیف. */
-export function lastInRow(shape: GridShape, row: number, enabled: CellEnabled): CellRef | null {
+export function lastInRow<C extends string = ColId>(shape: GridShape<C>, row: number, enabled: CellEnabled<C>): CellRef | null {
   for (let c = shape.cols.length - 1; c >= 0; c--) {
     if (enabled(row, shape.cols[c])) return { row, col: c }
   }
@@ -91,7 +92,7 @@ export type Move =
  * در آخرین ستونِ فعالِ ردیف → اولین ستونِ ردیفِ بعد.
  * در آخرین ستونِ **آخرین** ردیف → ردیفِ تازه ساخته شود (§۲۱).
  */
-export function onEnter(shape: GridShape, at: CellRef, enabled: CellEnabled): Move {
+export function onEnter<C extends string = ColId>(shape: GridShape<C>, at: CellRef, enabled: CellEnabled<C>): Move {
   const next = stepInRow(shape, at, 1, enabled)
   if (next) return { kind: 'move', to: next }
   if (at.row + 1 < shape.rowCount) {
@@ -107,7 +108,7 @@ export function onEnter(shape: GridShape, at: CellRef, enabled: CellEnabled): Mo
  * در اولین ستونِ ردیف → آخرین ستونِ ردیفِ قبل. در ردیفِ اول هیچ — عمداً ردیف
  * نمی‌سازد، چون «بالا رفتن» هرگز نباید داده اضافه کند.
  */
-export function onShiftEnter(shape: GridShape, at: CellRef, enabled: CellEnabled): Move {
+export function onShiftEnter<C extends string = ColId>(shape: GridShape<C>, at: CellRef, enabled: CellEnabled<C>): Move {
   const prev = stepInRow(shape, at, -1, enabled)
   if (prev) return { kind: 'move', to: prev }
   if (at.row === 0) return { kind: 'none' }
@@ -124,11 +125,11 @@ export function onShiftEnter(shape: GridShape, at: CellRef, enabled: CellEnabled
  * اگر سلولِ هم‌ستون در ردیفِ مقصد غیرفعال باشد، نزدیک‌ترین سلولِ فعالِ همان ردیف
  * انتخاب می‌شود تا حرکت هرگز بی‌اثر نماند.
  */
-export function onVertical(
-  shape: GridShape,
+export function onVertical<C extends string = ColId>(
+  shape: GridShape<C>,
   at: CellRef,
   dir: 1 | -1,
-  enabled: CellEnabled,
+  enabled: CellEnabled<C>,
 ): Move {
   const row = at.row + dir
   if (row < 0 || row >= shape.rowCount) return { kind: 'none' }
@@ -148,11 +149,11 @@ export function onVertical(
  * `exit`، تا کاربری که سند را تمام کرده با Tab به «ثبت سند» برسد و در گرید زندانی نشود.
  * Shift+Tab در اولین خانه‌ی ردیفِ اول هم `exit` است (به سربرگ).
  */
-export function onTab(
-  shape: GridShape,
+export function onTab<C extends string = ColId>(
+  shape: GridShape<C>,
   at: CellRef,
   dir: 1 | -1,
-  enabled: CellEnabled,
+  enabled: CellEnabled<C>,
   lastRowHasContent: boolean,
 ): Move {
   const inRow = stepInRow(shape, at, dir, enabled)
@@ -178,12 +179,12 @@ export function onTab(
  * یعنی ستونِ منطقیِ بعد. در لبه‌ی ردیف نمی‌پیچد (مثلِ Excel) — ردیف عوض‌کردن کارِ ↑/↓
  * و Enter/Tab است.
  */
-export function onHorizontal(
-  shape: GridShape,
+export function onHorizontal<C extends string = ColId>(
+  shape: GridShape<C>,
   at: CellRef,
   key: 'ArrowLeft' | 'ArrowRight',
   rtl: boolean,
-  enabled: CellEnabled,
+  enabled: CellEnabled<C>,
 ): Move {
   const dir: 1 | -1 = (key === 'ArrowLeft') === rtl ? 1 : -1
   const to = stepInRow(shape, at, dir, enabled)

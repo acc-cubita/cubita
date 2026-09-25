@@ -15,6 +15,9 @@ import { useLayoutEffect, useRef, type RefObject } from 'react'
  * وقتی گرید خودش افقی می‌لغزد (پنجره‌ی باریک)، هم‌خطی ممکن نیست: متغیر برداشته می‌شود و CSS
  * نسبت‌های پیش‌فرضِ همان ستون‌ها را می‌دهد. مستقیم روی `style` نوشته می‌شود، نه state — کشیدنِ ستون
  * نباید کلِ فرم را دوباره رندر کند (همان الگوی `useFitText`).
+ *
+ * صفحه‌های هم‌سبکِ دیگر (مانده اول دوره) جدولِ خودشان (`table`) و نگاشتِ خودشان (`slots`) را می‌دهند —
+ * همان پنج خانه، از ستون‌های دیگر.
  */
 export const SLOT_COUNT = 5
 
@@ -32,11 +35,20 @@ export function slotWidths(cols: readonly { id: string; w: number }[]): number[]
   return out
 }
 
-const HEADS = '.jg-table thead tr:first-child > th[data-col]'
+/** ستون‌های گرید (شناسه و عرض، به ترتیبِ روی صفحه) → عرضِ پنج خانه. */
+export type SlotMap = (cols: readonly { id: string; w: number }[]) => number[]
 
-function align(root: HTMLElement, followers: string) {
-  const wrap = root.querySelector<HTMLElement>('.jg-wrap')
-  const ths = [...root.querySelectorAll<HTMLElement>(HEADS)]
+export interface AlignOptions {
+  /** سلکتورِ جدولی که هم‌خطی از آن سنجیده می‌شود. پیش‌فرض: گریدِ سند. */
+  table?: string
+  slots?: SlotMap
+}
+
+const headsOf = (table: string) => `${table} thead tr:first-child > th[data-col]`
+
+function align(root: HTMLElement, followers: string, table: string, slotMap: SlotMap) {
+  const wrap = root.querySelector(table)?.closest<HTMLElement>('.ef-table-wrap')
+  const ths = [...root.querySelectorAll<HTMLElement>(headsOf(table))]
   const els = [...root.querySelectorAll<HTMLElement>(followers)]
   //: گریدی که افقی می‌لغزد با هیچ چیزِ بیرونش هم‌خط نمی‌ماند.
   if (!wrap || ths.length === 0 || wrap.scrollWidth > wrap.clientWidth + 1) {
@@ -45,7 +57,7 @@ function align(root: HTMLElement, followers: string) {
   }
   const rtl = getComputedStyle(root).direction === 'rtl'
   const rects = ths.map((th) => th.getBoundingClientRect())
-  const slots = slotWidths(ths.map((th, i) => ({ id: th.dataset.col ?? '', w: rects[i].width })))
+  const slots = slotMap(ths.map((th, i) => ({ id: th.dataset.col ?? '', w: rects[i].width })))
   const gridStart = rtl ? rects[0].right : rects[0].left
   for (const el of els) {
     const r = el.getBoundingClientRect()
@@ -62,7 +74,9 @@ function align(root: HTMLElement, followers: string) {
  * اندازه‌ی سرستون‌ها، قابِ گرید یا خودِ دنباله‌روها دوباره می‌سنجد؛ بعد از هر رندر فقط فهرستِ
  * سرستون‌ها را (بی‌سنجش) نگاه می‌کند تا ستونی که آمد یا رفت زیرِ نظر برود.
  */
-export function useAlignToGrid(rootRef: RefObject<HTMLElement | null>, followers: string) {
+export function useAlignToGrid(rootRef: RefObject<HTMLElement | null>, followers: string, options: AlignOptions = {}) {
+  const table = options.table ?? '.jg-table'
+  const slotMap = options.slots ?? slotWidths
   const watch = useRef<{ root: HTMLElement; ro: ResizeObserver; targets: Element[] } | null>(null)
 
   useLayoutEffect(() => {
@@ -73,9 +87,12 @@ export function useAlignToGrid(rootRef: RefObject<HTMLElement | null>, followers
       watch.current = null
     }
     if (!root || typeof ResizeObserver === 'undefined') return
-    if (!watch.current) watch.current = { root, ro: new ResizeObserver(() => align(root, followers)), targets: [] }
+    if (!watch.current) {
+      watch.current = { root, ro: new ResizeObserver(() => align(root, followers, table, slotMap)), targets: [] }
+    }
     const w = watch.current
-    const targets = [...root.querySelectorAll(`.jg-wrap, ${HEADS}, ${followers}`)]
+    const frame = root.querySelector(table)?.closest('.ef-table-wrap')
+    const targets = [...(frame ? [frame] : []), ...root.querySelectorAll(`${headsOf(table)}, ${followers}`)]
     if (targets.length === w.targets.length && targets.every((t, i) => t === w.targets[i])) return
     //: `observe` خودش یک‌بار فوراً گزارش می‌دهد، پس سنجشِ اول همین‌جا انجام می‌شود.
     w.ro.disconnect()
