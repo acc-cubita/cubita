@@ -1,4 +1,5 @@
-import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Trash2 } from 'lucide-react'
+import { useId, type KeyboardEvent } from 'react'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, Rows3, Trash2 } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
@@ -18,14 +19,20 @@ import {
 import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntryDraft'
 import { useExperienceMode } from '../lib/experienceMode'
 import { JournalGrid } from './JournalGrid'
+import { openCellPicker } from '../lib/gridPicker'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 /**
  * فرمِ «ثبت سند حسابداری دستی» — منطق در هوکِ [useJournalEntryDraft].
  *
- * دو کارت و یک نوار: سربرگِ سند، ردیف‌ها، و نوارِ چسبنده‌ای که جمعِ بدهکار/بستانکار را همیشه
- * جلوی چشم نگه می‌دارد — سندی که جمعش نمی‌خواند نباید تا لحظه‌ی زدنِ دکمه پنهان بماند.
+ * **حالتِ حسابدار یک کارت است:** نوارِ فشرده‌ی سربرگ (شرح، تاریخ، وضعیت، شماره‌ی فرعی
+ * در یک ردیف)، گرید، و راهنمای میان‌برها — تا چشم از سربرگ تا اولین ردیف راهی نرود.
+ * حالتِ ساده همان دو کارتِ راهنما را دارد (سربرگ با «گزینه‌های بیشتر»، و جدولِ ساده).
+ *
+ * در هر دو، نوارِ چسبنده‌ی پایین سه عدد را همیشه جلوی چشم نگه می‌دارد: جمعِ بدهکار، جمعِ
+ * بستانکار، و اختلاف با رنگِ توازن — سندی که جمعش نمی‌خواند نباید تا لحظه‌ی زدنِ دکمه
+ * پنهان بماند، و حسابدار نباید تفاضل را در ذهن حساب کند.
  */
 export function JournalEntryForm({
   token,
@@ -151,6 +158,47 @@ export function JournalEntryForm({
     ...(d.currencies.length > 0 ? ['ارز'] : []),
   ].join('، ')
 
+  const actionBar = (
+    <ActionBar
+      status={
+        <>
+          <FormStatus msg={d.message} />
+          <BalanceSummary d={d} />
+        </>
+      }
+    >
+      <button type="submit" className="btn-primary" disabled={d.submitting}>
+        <Check size={16} /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
+      </button>
+    </ActionBar>
+  )
+
+  if (isAccountant) {
+    return (
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          void d.submit()
+        }}
+      >
+        <SectionCard
+          icon={BookOpen}
+          title="سند حسابداری"
+          tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
+          badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
+        >
+          <JournalHeaderBar d={d} />
+          <JournalGrid d={d} />
+          {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
+          <AddRowButton onClick={d.addLine}>افزودن ردیف (Ctrl+Enter)</AddRowButton>
+          <ShortcutLegend />
+        </SectionCard>
+        {actionBar}
+      </form>
+    )
+  }
+
   return (
     <form
       noValidate
@@ -164,11 +212,7 @@ export function JournalEntryForm({
         title="سربرگ سند"
         //: حالتِ ساده بی اصطلاحِ «کارتابل» و «عطف»: کاربرِ ساده این‌ها را لازم ندارد، و
         //: راهِ درستِ کارهای روزمره‌اش فرم‌های خودشان است نه سندِ دستی (§۲۷، §۵۱).
-        tip={
-          isAccountant
-            ? 'سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد.'
-            : 'بیشترِ کارها سندِ دستی نمی‌خواهند: فاکتور، دریافت و پرداخت و چک خودشان سند می‌زنند. این فرم برای جابه‌جایی‌هایی است که فرمِ خودشان را ندارند.'
-        }
+        tip="بیشترِ کارها سندِ دستی نمی‌خواهند: فاکتور، دریافت و پرداخت و چک خودشان سند می‌زنند. این فرم برای جابه‌جایی‌هایی است که فرمِ خودشان را ندارند."
       >
         <FormGrid>
           <FormField label="شرح سند">
@@ -177,82 +221,290 @@ export function JournalEntryForm({
           <FormField label="تاریخ سند" required>
             {(id) => <JalaliDatePicker id={id} value={d.entryDate} onChange={d.setEntryDate} />}
           </FormField>
-          {isAccountant && advancedFields}
         </FormGrid>
-        {!isAccountant && (
-          <MoreOptions summary={advancedSummary} forceOpen={hasAdvancedValues}>
-            <FormGrid>{advancedFields}</FormGrid>
-          </MoreOptions>
-        )}
+        <MoreOptions summary={advancedSummary} forceOpen={hasAdvancedValues}>
+          <FormGrid>{advancedFields}</FormGrid>
+        </MoreOptions>
       </SectionCard>
 
       <SectionCard
         icon={Rows3}
         title="ردیف‌های سند"
-        //: در حالت حسابدار راهنمای طولانی جای گرید را می‌گیرد (§۳۰) — همان
-        //: جمله در حالت ساده مفید است و اینجا فقط تراکم را می‌خورد.
-        tip={
-          isAccountant
-            ? undefined
-            : 'در هر ردیف یک حساب انتخاب کنید و مبلغ را فقط در یکی از دو ستون بنویسید. جمعِ «بدهکار» و «بستانکار» باید برابر شود؛ نوارِ پایین نشان می‌دهد چقدر مانده.'
-        }
+        tip="در هر ردیف یک حساب انتخاب کنید و مبلغ را فقط در یکی از دو ستون بنویسید. جمعِ «بدهکار» و «بستانکار» باید برابر شود؛ نوارِ پایین نشان می‌دهد چقدر مانده."
         badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
-        actions={isAccountant ? <ShortcutHint /> : undefined}
       >
-        {isAccountant ? <JournalGrid d={d} /> : <JournalLinesTable d={d} />}
-        {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
-        <AddRowButton onClick={d.addLine}>افزودن ردیف{isAccountant ? ' (Ctrl+Enter)' : ''}</AddRowButton>
+        <JournalLinesTable d={d} />
+        <AddRowButton onClick={d.addLine}>افزودن ردیف</AddRowButton>
       </SectionCard>
 
-      <ActionBar status={<FormStatus msg={d.message} idle={<BalanceStatus d={d} />} />}>
-        <button type="submit" className="btn-primary" disabled={d.submitting}>
-          <Check size={16} /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
-        </button>
-      </ActionBar>
+      {actionBar}
     </form>
   )
 }
 
 /**
- * لینکِ کوچکِ «میان‌برها» بالای گرید (§۳۹).
+ * نوارِ فشرده‌ی سربرگ در حالتِ حسابدار — یک ردیفِ افقی به‌جای سه ردیفِ فیلدِ بلند.
  *
- * میان‌برهای گرید در `ShortcutsPage` هم ثبت شده‌اند؛ این فقط راهِ دیدنشان بدونِ
- * ترک‌کردنِ فرم است. عمداً یک `title` است نه پاپ‌آور: حسابدارِ وسطِ کار نباید
- * چیزی برای بستن داشته باشد.
+ * چهار فیلدِ هر سند (شرح، تاریخ، وضعیت، شماره‌ی فرعی) در ردیفِ اول؛ فیلدهای کسب‌وکاری
+ * که فقط گاهی لازم‌اند (مرکز هزینه، تفصیلیِ سایر، ارز) در ردیفِ دومِ کوچک‌تر و فقط اگر
+ * کسب‌وکار آن‌ها را تعریف کرده باشد. برچسب‌ها ریز و بالای فیلدند: همان اطلاعات در کمتر
+ * از نیمِ ارتفاعِ قبلی (UI-01 §۳۰: تراکم در حالتِ حسابدار).
+ *
+ * F4 از هر جای سربرگ فهرستِ حسابِ اولین ردیفِ بی‌حساب را باز می‌کند — کاربر لازم نیست
+ * اول به گرید برود.
  */
-function ShortcutHint() {
+function JournalHeaderBar({ d }: { d: JournalEntryDraft }) {
+  const uid = useId()
+  const ids = {
+    desc: `${uid}-desc`,
+    date: `${uid}-date`,
+    status: `${uid}-status`,
+    sub: `${uid}-sub`,
+    center: `${uid}-center`,
+    analytic: `${uid}-analytic`,
+    currency: `${uid}-currency`,
+    rate: `${uid}-rate`,
+  }
+  const hasSecondary = d.costCenters.length > 0 || d.analytics.length > 0 || d.currencies.length > 0
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'F4') return
+    e.preventDefault()
+    const row = Math.max(0, d.lines.findIndex((l) => !l.accountId))
+    //: ستونِ حساب همیشه اولین ستونِ گرید است (`cols[0]` در `JournalGrid`).
+    openCellPicker(e.currentTarget.closest('form')?.querySelector(`[data-cell="${row}-0"]`))
+  }
+
   return (
-    <span
-      className="jg-hint"
-      title={[
-        'Enter — مقدار بعدی (در ستونِ مبلغِ خالی: پذیرشِ باقی‌مانده و رفتن به خانه‌ی بعد)',
-        'Shift+Enter — مقدار قبلی',
-        'Tab / Shift+Tab — فیلد بعد/قبل',
-        '↑ ↓ — ردیف بالا/پایین در همان ستون',
-        'Ctrl+Enter — افزودن ردیف',
-        'Ctrl+D — تکرار ردیف',
-        'Ctrl+Shift+C — کپی از ردیف قبل',
-        'Ctrl+Delete — حذف ردیف',
-        'Ctrl+S — ثبت سند',
-        'Ctrl+G — رفتن به ردیف',
-        '↓ در شرحِ ردیف — پیشنهادِ شرح‌های تکراری',
-        'Esc — بستنِ فهرستِ انتخاب',
-      ].join('\n')}
-    >
-      <Keyboard size={14} aria-hidden="true" /> میان‌برها
-    </span>
+    <div className="jh-bar" onKeyDown={onKeyDown}>
+      <div className="jh-row">
+        <div className="jh-field jh-field--grow">
+          <label className="jh-label" htmlFor={ids.desc}>
+            شرح سند
+          </label>
+          <input
+            id={ids.desc}
+            value={d.description}
+            onChange={(e) => d.setDescription(e.target.value)}
+            placeholder="شرحِ کلیِ این سند"
+          />
+        </div>
+        <div className="jh-field jh-field--date">
+          <label className="jh-label" htmlFor={ids.date}>
+            تاریخ سند <span className="jh-req" aria-hidden="true">*</span>
+          </label>
+          <JalaliDatePicker id={ids.date} value={d.entryDate} onChange={d.setEntryDate} />
+        </div>
+        <div className="jh-field jh-field--status">
+          <span className="jh-label" id={ids.status}>
+            وضعیت سند
+          </span>
+          <StatusToggle value={d.status} onChange={d.setStatus} labelledBy={ids.status} />
+        </div>
+        <div className="jh-field jh-field--sub">
+          <label
+            className="jh-label"
+            htmlFor={ids.sub}
+            title="ارجاعِ خودتان: شماره‌ی پرونده، سندِ سیستمِ قبلی یا کدِ دسته."
+          >
+            شماره فرعی
+          </label>
+          <input
+            id={ids.sub}
+            value={d.subNumber}
+            onChange={(e) => d.setSubNumber(e.target.value)}
+            maxLength={30}
+            placeholder="اختیاری"
+          />
+        </div>
+      </div>
+
+      {hasSecondary && (
+        <div className="jh-row jh-row--sub">
+          {d.costCenters.length > 0 && (
+            <div className="jh-field">
+              <label className="jh-label" htmlFor={ids.center}>
+                مرکز هزینه / پروژه
+              </label>
+              <SearchSelect id={ids.center} value={d.costCenterId} onChange={(e) => d.setCostCenterId(e.target.value)}>
+                <option value="">— بدون مرکز —</option>
+                {d.costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code ? `${c.code} — ${c.name}` : c.name}
+                  </option>
+                ))}
+              </SearchSelect>
+            </div>
+          )}
+          {d.analytics.length > 0 && (
+            <div className="jh-field">
+              <label className="jh-label" htmlFor={ids.analytic}>
+                تفصیلی سایر
+              </label>
+              <SearchSelect id={ids.analytic} value={d.analyticId} onChange={(e) => d.setAnalyticId(e.target.value)}>
+                <option value="">— بدون تفصیلی —</option>
+                {d.analytics.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </SearchSelect>
+            </div>
+          )}
+          {d.currencies.length > 0 && (
+            <div className="jh-field">
+              <label
+                className="jh-label"
+                htmlFor={ids.currency}
+                title="تا ارز انتخاب نشود، ستونِ مبلغِ ارزی در ردیف‌ها نمی‌آید."
+              >
+                ارز سند
+              </label>
+              <SearchSelect id={ids.currency} value={d.currencyCode} onChange={(e) => d.setCurrencyCode(e.target.value)}>
+                <option value="">— ریالی —</option>
+                {d.currencies.map((c) => (
+                  <option key={c.id} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </SearchSelect>
+            </div>
+          )}
+          {d.currencyCode && (
+            <div className="jh-field">
+              <label className="jh-label" htmlFor={ids.rate}>
+                نرخ {d.currencyCode}
+              </label>
+              <InputAffix unit="ریال">
+                <NumberInput id={ids.rate} value={d.fxRate} onChange={d.setFxRate} allowDecimal />
+              </InputAffix>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
-/** جمعِ زنده‌ی سند در نوارِ پایین، با نشانِ توازن. */
-function BalanceStatus({ d }: { d: JournalEntryDraft }) {
-  if (d.totalDebit === 0 && d.totalCredit === 0) return <>مبلغی وارد نشده است.</>
+const STATUS_OPTIONS = [
+  { value: 'temporary', label: 'موقت', hint: 'در کارتابل بازبینی می‌شود.' },
+  { value: 'permanent', label: 'دائم', hint: 'همین حالا قطعی می‌شود و دیگر ادغام یا بازشماره‌گذاری نمی‌شود.' },
+] as const
+
+/**
+ * «موقت / دائم» به‌صورتِ دو دکمه‌ی کنارِ هم به‌جای فهرستِ کشویی — یک کلیک، و وضعیت با یک
+ * نگاه خوانده می‌شود. الگوی radiogroup: Tab یک‌بار واردش می‌شود و ←/→ عوضش می‌کند.
+ */
+function StatusToggle({
+  value,
+  onChange,
+  labelledBy,
+}: {
+  value: 'temporary' | 'permanent'
+  onChange: (v: 'temporary' | 'permanent') => void
+  labelledBy: string
+}) {
   return (
-    <span className={d.isBalanced ? 'is-ok' : 'is-err'}>
-      {d.isBalanced ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />} بدهکار {fa(d.totalDebit)} · بستانکار{' '}
-      {fa(d.totalCredit)}
-      {d.isBalanced ? ' — متوازن' : ` — اختلاف ${fa(Math.abs(d.totalDebit - d.totalCredit))}`}
-    </span>
+    <div
+      className="jh-seg"
+      role="radiogroup"
+      aria-labelledby={labelledBy}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        onChange(value === 'temporary' ? 'permanent' : 'temporary')
+        const group = e.currentTarget
+        requestAnimationFrame(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus())
+      }}
+    >
+      {STATUS_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          tabIndex={value === o.value ? 0 : -1}
+          className={`jh-seg-opt jh-seg-opt--${o.value}`}
+          title={o.hint}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * راهنمای میان‌برها، همیشه زیرِ گرید — نه پشتِ یک `title` که کسی پیدایش نمی‌کرد.
+ *
+ * فقط پرکاربردها؛ فهرستِ کامل در «میان‌برهای صفحه‌کلید» است. در موبایل پنهان است:
+ * آنجا صفحه‌کلیدِ فیزیکی نیست و این نوار فقط جای ردیف‌ها را می‌گیرد.
+ */
+const LEGEND: [string, string][] = [
+  ['Enter', 'خانه‌ی بعد'],
+  ['Tab', 'خانه‌ی بعد؛ در پایان، ردیفِ تازه'],
+  ['← → ↑ ↓', 'جابه‌جایی'],
+  ['F2', 'ویرایشِ متنِ خانه'],
+  ['F4', 'فهرستِ حساب‌ها'],
+  ['Ctrl+Enter', 'ردیفِ تازه'],
+  ['Ctrl+D', 'تکرارِ ردیف'],
+  ['Ctrl+Delete', 'حذفِ ردیف'],
+  ['Ctrl+G', 'رفتن به ردیف'],
+  ['Ctrl+S', 'ثبتِ سند'],
+]
+
+function ShortcutLegend() {
+  return (
+    <div className="jg-legend" role="note" aria-label="میان‌برهای صفحه‌کلید">
+      {LEGEND.map(([keys, what]) => (
+        <span key={keys} className="jg-legend-item">
+          <kbd dir="ltr">{keys}</kbd> {what}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * جمعِ زنده‌ی سند در نوارِ چسبنده‌ی پایین: سه عدد، و رنگِ توازن روی خودِ نوار.
+ *
+ * سبز = متوازن، قرمز = اختلاف (با اینکه کدام طرف بیشتر است، تا حسابدار بداند ردیفِ بعد
+ * بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. اختلاف `aria-live` دارد تا
+ * صفحه‌خوان هم بشنودش.
+ */
+function BalanceSummary({ d }: { d: JournalEntryDraft }) {
+  const empty = d.totalDebit === 0 && d.totalCredit === 0
+  const state = empty ? 'empty' : d.isBalanced ? 'ok' : 'err'
+  const diff = Math.abs(d.totalDebit - d.totalCredit)
+  return (
+    <div className={`jb-sum jb-sum--${state}`} role="group" aria-label="جمعِ سند">
+      <div className="jb-stat">
+        <span className="jb-k">جمع بدهکار</span>
+        <span className="jb-v">{fa(d.totalDebit)}</span>
+      </div>
+      <div className="jb-stat">
+        <span className="jb-k">جمع بستانکار</span>
+        <span className="jb-v">{fa(d.totalCredit)}</span>
+      </div>
+      <div className="jb-stat jb-stat--diff" aria-live="polite">
+        <span className="jb-k">{state === 'ok' ? 'توازن' : 'اختلاف'}</span>
+        <span className="jb-v">
+          {state === 'empty' ? (
+            'مبلغی وارد نشده'
+          ) : state === 'ok' ? (
+            <>
+              <CheckCircle2 size={15} aria-hidden="true" /> متوازن
+            </>
+          ) : (
+            <>
+              <AlertTriangle size={15} aria-hidden="true" /> {fa(diff)}
+              <small>{d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'}</small>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
   )
 }
 

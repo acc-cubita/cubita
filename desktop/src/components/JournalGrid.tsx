@@ -8,17 +8,30 @@ import { RowAction } from './form/FormKit'
 import { DescriptionInput } from './DescriptionInput'
 import type { JournalEntryDraft, JournalDraftLine } from '../lib/journalEntryDraft'
 import {
+  arrowLeavesField,
   firstInRow,
   onEnter,
+  onHorizontal,
   onShiftEnter,
+  onTab,
   onVertical,
   type ColId,
   type GridShape,
 } from '../lib/journalGridNav'
+import { openCellPicker } from '../lib/gridPicker'
 import { poolFor } from '../lib/descriptionMemory'
 import { normalizeFa } from '../lib/faText'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
+
+/**
+ * جهتِ نوشتار از صفتِ `dir` (نزدیک‌ترین جد، وگرنه `<html>`). `NumberInput` خودش
+ * `dir="ltr"` دارد و شرح از `<html dir="rtl">` می‌گیرد. صفت و نه `getComputedStyle`:
+ * جهتِ این برنامه همیشه با صفت تعیین می‌شود، و jsdom جهتِ محاسبه‌شده ندارد.
+ */
+function isRtl(el: Element): boolean {
+  return (el.closest('[dir]')?.getAttribute('dir') ?? document.documentElement.dir) === 'rtl'
+}
 
 /**
  * گریدِ ثبتِ سند برای **حالت حسابدار** — فشرده و صفحه‌کلیدمحور.
@@ -217,6 +230,69 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
         jumpRef.current?.select()
         return
       }
+      return
+    }
+
+    // ── F2: حالتِ ویرایش ──
+    //: خانه با کلِ مقدارِ انتخاب‌شده باز می‌شود (تایپ جایگزین می‌کند و ←/→ حرکت‌اند).
+    //: F2 مکان‌نما را به انتهای متن می‌برد تا بشود وسطِ عدد را اصلاح کرد — همان Excel.
+    if (e.code === 'F2') {
+      const el = e.target
+      if (el instanceof HTMLInputElement && !el.disabled) {
+        e.preventDefault()
+        const n = el.value.length
+        el.setSelectionRange(n, n)
+      }
+      return
+    }
+
+    // ── F4 / Alt+↓: فهرستِ انتخاب ──
+    //: F4 همیشه فهرستِ **حساب‌های** همین ردیف است — «بازکردنِ سریعِ فهرستِ حساب‌ها» از
+    //: هر خانه‌ی ردیف. Alt+↓ انتخاب‌گرِ خودِ همین خانه را باز می‌کند (تفصیلی، مرکز)، و
+    //: اگر خانه انتخاب‌گر ندارد همان حساب.
+    if (e.code === 'F4' || (e.altKey && e.code === 'ArrowDown')) {
+      e.preventDefault()
+      const cellOf = (c: number) => gridRef.current?.querySelector(`[data-cell="${at.row}-${c}"]`)
+      if (e.code === 'ArrowDown' && openCellPicker(cellOf(at.col))) return
+      openCellPicker(cellOf(cols.indexOf('account')))
+      return
+    }
+
+    // ── Tab / Shift+Tab ──
+    //: خانه‌به‌خانه، بی دکمه‌های کنشِ ردیف؛ در انتهای سند ردیفِ تازه، مگر ردیفِ آخر خالی
+    //: باشد — آن‌وقت به «ثبت سند» (`onTab` در `journalGridNav`).
+    if (e.code === 'Tab' && !e.ctrlKey && !e.altKey) {
+      const last = d.lines[d.lines.length - 1]
+      const lastHasContent = Boolean(last && (last.accountId || last.debit || last.credit || last.description?.trim()))
+      const move = onTab(shape, at, e.shiftKey ? -1 : 1, enabled, lastHasContent)
+      if (move.kind === 'exit') {
+        if (e.shiftKey) return //: رفتارِ پیش‌فرض: به «رفتن به ردیف» و سربرگ
+        e.preventDefault()
+        gridRef.current?.closest('form')?.querySelector<HTMLElement>('button[type="submit"]')?.focus()
+        return
+      }
+      e.preventDefault()
+      apply(move)
+      return
+    }
+
+    // ── ← / → ──
+    //: در رابطِ راست‌به‌چپ ← خانه‌ی بعد است. داخلِ متن، پیکان مالِ مکان‌نماست تا لبه
+    //: (`arrowLeavesField`)؛ Shift+پیکان انتخابِ متن است و دست نمی‌خورد.
+    if ((e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.shiftKey && !e.altKey) {
+      const el = e.target as HTMLElement
+      if (el.closest('.item-picker-pop, .jalali-date-popover')) return
+      if (el instanceof HTMLInputElement) {
+        const field = {
+          start: el.selectionStart,
+          end: el.selectionEnd,
+          length: el.value.length,
+          rtl: isRtl(el),
+        }
+        if (!arrowLeavesField(field, e.code)) return
+      }
+      e.preventDefault()
+      apply(onHorizontal(shape, at, e.code, isRtl(gridRef.current ?? el), enabled))
       return
     }
 

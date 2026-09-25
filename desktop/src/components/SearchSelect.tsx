@@ -9,7 +9,7 @@ import {
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search } from 'lucide-react'
 
-import { textMatches } from '../lib/commands'
+import { matchRank, textMatches } from '../lib/faText'
 import { toFaDigits } from '../lib/jalali'
 import { placePopover, type Placement } from '../lib/popover'
 import { flatten, shouldSearch, type Opt } from '../lib/selectOptions'
@@ -92,7 +92,15 @@ function Searchable({
   const selected = options.find((o) => o.value === current) ?? null
 
   const { filtered, hidden } = useMemo(() => {
-    const hits = query.trim() ? options.filter((o) => textMatches(o.label, query)) : options
+    //: تطبیق‌خورده‌ها رتبه‌بندی می‌شوند (کد/ابتدای نام بالاتر) — مرتب‌سازیِ پایدار، پس
+    //: ترتیبِ اصلی داخلِ هر رتبه می‌ماند (`matchRank` در `lib/faText`).
+    const hits = query.trim()
+      ? options
+          .filter((o) => textMatches(o.label, query))
+          .map((o, i) => ({ o, i, r: matchRank(o.label, query) }))
+          .sort((a, b) => a.r - b.r || a.i - b.i)
+          .map((x) => x.o)
+      : options
     //: سقفِ نمایش تا فهرست سبک بماند؛ تایپ‌کردن باریکش می‌کند.
     return { filtered: hits.slice(0, SHOW_LIMIT), hidden: Math.max(0, hits.length - SHOW_LIMIT) }
   }, [options, query])
