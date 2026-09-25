@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, CopyPlus, Trash2 } from 'lucide-react'
 
 import { SearchSelect } from './SearchSelect'
+import { AccountCombo, type ComboCommit, type ComboOption } from './AccountCombo'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { RowAction } from './form/FormKit'
@@ -52,6 +53,12 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   const jumpRef = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState('')
   const [jumpMsg, setJumpMsg] = useState<string | null>(null)
+  //: «رفتن به ردیف» فقط با Ctrl+G پیدا می‌شود — نوارِ همیشگی‌اش بالای گرید جا می‌گرفت و
+  //: شمارِ ردیف‌هایش همان نشانِ «ردیف معتبر»ِ کارت بود. Esc فوکوس را به خانه‌ی مبدأ برمی‌گرداند.
+  const [jumpOpen, setJumpOpen] = useState(false)
+  const jumpFrom = useRef<{ row: number; col: number } | null>(null)
+  //: جلو رفتن بعد از انتخابِ حساب با Enter/Tab — در اثرِ پایین، **بعد از** رندرِ وضعیتِ تازه.
+  const [advance, setAdvance] = useState<{ row: number; how: ComboCommit } | null>(null)
 
   //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
   //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
@@ -98,13 +105,21 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
     },
     [d.lines, d.tafsiliRequired, d.trackingAllowed],
   )
-  //: **مسیرِ Enter از مرکزِ هزینه می‌پرد** (§۱۵): در سندِ دستی اجباری نیست، و خانه‌ای
-  //: که بیشترِ ردیف‌ها خالی می‌گذارند هر ردیف را یک Enterِ اضافه کند می‌کرد. Tab و موس
-  //: به آن می‌رسند و ↑/↓ داخلِ همان ستون کار می‌کند (آن‌ها `enabled` را می‌خوانند).
+  //: **مسیرِ Enter از مرکزِ هزینه و شرحِ ردیف می‌پرد** (§۱۵): هیچ‌کدام در سندِ دستی اجباری
+  //: نیست، و خانه‌ای که بیشترِ ردیف‌ها خالی می‌گذارند هر ردیف را یک Enterِ اضافه کند می‌کرد.
+  //: حسابدار با Enter از حساب مستقیم به مبلغ می‌رسد (خواسته‌ی آرش، ۱۴۰۵/۰۷/۰۳). Tab، ←/→ و
+  //: موس به هر دو می‌رسند و ↑/↓ داخلِ همان ستون کار می‌کند (آن‌ها `enabled` را می‌خوانند).
   const onEnterPath = useCallback(
-    (row: number, col: ColId) => col !== 'costCenter' && enabled(row, col),
+    (row: number, col: ColId) => col !== 'costCenter' && col !== 'description' && enabled(row, col),
     [enabled],
   )
+
+  //: گزینه‌های حساب یک‌بار برای همه‌ی ردیف‌ها — آرایه‌ی تازه در هر رندر `memo`ِ ردیف‌ها را می‌شکست.
+  const accountOptions: ComboOption[] = useMemo(
+    () => d.postableAccounts.map((a) => ({ value: a.id, label: `${a.code} — ${a.name}` })),
+    [d.postableAccounts],
+  )
+  const commitAccount = useCallback((row: number, how: ComboCommit) => setAdvance({ row, how }), [])
 
   /** عنصرِ قابلِ فوکوسِ درونِ یک سلول را پیدا و فوکوس می‌کند. */
   const focusCell = useCallback((row: number, col: number) => {
@@ -130,7 +145,9 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
     const grid = gridRef.current
     const inOwnHeader = Boolean(active && grid?.closest('form')?.contains(active) && !grid.contains(active))
     if (inOwnHeader) return
-    const first = gridRef.current?.querySelector<HTMLElement>('[data-cell="0-0"] button, [data-cell="0-0"] select')
+    const first = gridRef.current?.querySelector<HTMLElement>(
+      '[data-cell="0-0"] input, [data-cell="0-0"] button, [data-cell="0-0"] select',
+    )
     first?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -184,7 +201,39 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       ?.querySelector(`[data-cell="${head.row}-${head.col}"]`)
       ?.scrollIntoView?.({ block: 'center' })
     focusCell(head.row, head.col)
+    setJumpOpen(false)
+    setJump('')
   }
+
+  function closeJump(restoreFocus: boolean) {
+    setJumpOpen(false)
+    setJump('')
+    setJumpMsg(null)
+    const from = jumpFrom.current
+    jumpFrom.current = null
+    if (restoreFocus && from) focusCell(from.row, from.col)
+  }
+
+  useEffect(() => {
+    if (!jumpOpen) return
+    jumpRef.current?.focus()
+    jumpRef.current?.select()
+  }, [jumpOpen])
+
+  //: بعد از انتخابِ حساب: همان حرکتِ Enter/Tab، ولی با `shape`/`enabled`ِ **این** رندر — حسابِ
+  //: تازه ممکن است ستونِ تفصیلیِ اجباری را تازه پیدا کرده باشد (`AccountCombo`).
+  useEffect(() => {
+    if (!advance) return
+    setAdvance(null)
+    const at = { row: advance.row, col: cols.indexOf('account') }
+    if (advance.how === 'enter') {
+      apply(onEnter(shape, at, onEnterPath))
+      return
+    }
+    const move = onTab(shape, at, 1, enabled, true)
+    if (move.kind !== 'exit') apply(move)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advance])
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const cellEl = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
@@ -226,8 +275,13 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       //: یافتن باز است؛ داخلِ خانه‌ی گرید معنای دیگری ندارد.
       if (e.code === 'KeyG') {
         e.preventDefault()
-        jumpRef.current?.focus()
-        jumpRef.current?.select()
+        jumpFrom.current = at
+        if (jumpOpen) {
+          jumpRef.current?.focus()
+          jumpRef.current?.select()
+        } else {
+          setJumpOpen(true)
+        }
         return
       }
       return
@@ -320,9 +374,9 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       //:
       //: `preventDefault` صدا زده **نمی‌شود** تا کلیکِ پیش‌فرضِ Enter روی دکمه
       //: خودش پاپ‌آور را باز کند.
-      if (!e.shiftKey && (col === 'account' || col === 'tafsili')) {
-        const emptyPick = col === 'account' ? !line?.accountId : !line?.analyticId
-        if (emptyPick && (e.target as HTMLElement).closest('.item-picker-trigger')) return
+      //: (خانه‌ی حساب این را خودش می‌کند — `AccountCombo`؛ این‌جا فقط تفصیلی.)
+      if (!e.shiftKey && col === 'tafsili') {
+        if (!line?.analyticId && (e.target as HTMLElement).closest('.item-picker-trigger')) return
       }
 
       if (!e.shiftKey && (col === 'debit' || col === 'credit') && emptyAmount && d.remaining) {
@@ -346,39 +400,44 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
   }
 
   return (
-    <>
-    <div className="jg-toolbar">
-      <label className="jg-jump">
-        رفتن به ردیف
-        <input
-          ref={jumpRef}
-          type="text"
-          inputMode="numeric"
-          dir="ltr"
-          size={5}
-          value={jump}
-          aria-describedby={jumpMsg ? 'jg-jump-msg' : undefined}
-          title="Ctrl + G از هر خانه‌ی گرید"
-          onChange={(e) => {
-            setJump(e.target.value)
-            setJumpMsg(null)
-          }}
-          onKeyDown={(e) => {
-            //: Enter این‌جا فرمِ سند را ثبت نمی‌کند — فقط می‌پرد.
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              jumpTo()
-            }
-          }}
-        />
-      </label>
-      <span className="jg-count">{fa(d.lines.length)} ردیف</span>
-      {jumpMsg && (
-        <span className="jg-jump-msg" id="jg-jump-msg" role="status">
-          {jumpMsg}
-        </span>
+    <div className="jg">
+      {jumpOpen && (
+        <div className="jg-jump-pop">
+          <label className="jg-jump">
+            رفتن به ردیف
+            <input
+              ref={jumpRef}
+              type="text"
+              inputMode="numeric"
+              dir="ltr"
+              size={5}
+              value={jump}
+              aria-describedby={jumpMsg ? 'jg-jump-msg' : undefined}
+              onChange={(e) => {
+                setJump(e.target.value)
+                setJumpMsg(null)
+              }}
+              onKeyDown={(e) => {
+                //: Enter این‌جا فرمِ سند را ثبت نمی‌کند — فقط می‌پرد.
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  jumpTo()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  closeJump(true)
+                }
+              }}
+              onBlur={() => closeJump(false)}
+            />
+          </label>
+          <span className="jg-count">از {fa(d.lines.length)}</span>
+          {jumpMsg && (
+            <span className="jg-jump-msg" id="jg-jump-msg" role="status">
+              {jumpMsg}
+            </span>
+          )}
+        </div>
       )}
-    </div>
     <div
       ref={gridRef}
       className="table-scroll ef-table-wrap jg-wrap"
@@ -387,6 +446,21 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
       aria-label="ردیف‌های سند"
     >
       <table className="ef-table ef-table--edit jg-table table-plain">
+        {/* عرضِ ستون‌ها (`table-layout: fixed`): حساب هرچه بماند می‌گیرد؛ شماره و شرح باریک،
+            مبلغ‌ها پهن تا عددِ میلیاردی بی‌برش دیده شود. */}
+        <colgroup>
+          <col className="jg-c-num" />
+          <col className="jg-c-account" />
+          {showFx && <col className="jg-c-fx" />}
+          {showTafsili && <col className="jg-c-pick" />}
+          {showCostCenter && <col className="jg-c-pick" />}
+          <col className="jg-c-desc" />
+          <col className="jg-c-amount" />
+          <col className="jg-c-amount" />
+          {showTracking && <col className="jg-c-track" />}
+          {showTracking && <col className="jg-c-track" />}
+          <col className="jg-c-actions" />
+        </colgroup>
         <thead>
           <tr>
             <th className="ef-col-min">ردیف</th>
@@ -419,7 +493,8 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
               hasTafsili={d.tafsiliRequired.has(line.accountId)}
               hasTracking={d.trackingAllowed.has(line.accountId)}
               tafsiliRequired={d.tafsiliMode !== 'floating'}
-              accounts={d.postableAccounts}
+              accountOptions={accountOptions}
+              onAccountCommit={commitAccount}
               analytics={d.analytics}
               hasHeaderAnalytic={Boolean(d.analyticId)}
               showCostCenter={showCostCenter}
@@ -437,7 +512,7 @@ export function JournalGrid({ d }: { d: JournalEntryDraft }) {
         </tbody>
       </table>
     </div>
-    </>
+    </div>
   )
 }
 
@@ -458,7 +533,8 @@ const GridRow = memo(function GridRow({
   hasTafsili,
   hasTracking,
   tafsiliRequired,
-  accounts,
+  accountOptions,
+  onAccountCommit,
   analytics,
   hasHeaderAnalytic,
   showCostCenter,
@@ -481,7 +557,8 @@ const GridRow = memo(function GridRow({
   hasTafsili: boolean
   hasTracking: boolean
   tafsiliRequired: boolean
-  accounts: JournalEntryDraft['postableAccounts']
+  accountOptions: ComboOption[]
+  onAccountCommit: (row: number, how: ComboCommit) => void
   analytics: JournalEntryDraft['analytics']
   hasHeaderAnalytic: boolean
   showCostCenter: boolean
@@ -504,18 +581,13 @@ const GridRow = memo(function GridRow({
       <td className="ef-col-min jg-num card-title">{fa(i + 1)}</td>
 
       <td className="ef-col-wide" data-cell={`${i}-${col('account')}`}>
-        <SearchSelect
+        <AccountCombo
           aria-label={`حسابِ ردیفِ ${fa(i + 1)}`}
           value={line.accountId}
-          onChange={(e) => onUpdate(i, { accountId: e.target.value })}
-        >
-          <option value="">— انتخاب حساب —</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
-            </option>
-          ))}
-        </SearchSelect>
+          options={accountOptions}
+          onChange={(v) => onUpdate(i, { accountId: v })}
+          onCommit={(how) => onAccountCommit(i, how)}
+        />
       </td>
 
       {showFx && (

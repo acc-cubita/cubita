@@ -88,7 +88,7 @@ describe('Enter روی مبلغِ خالی', () => {
   })
 })
 
-describe('ستونِ مرکزِ هزینه — بیرون از مسیرِ Enter (§۱۵)', () => {
+describe('مرکزِ هزینه و شرحِ ردیف — بیرون از مسیرِ Enter (§۱۵)', () => {
   const CENTERS = [{ id: 'cc1', code: '10', name: 'پروژه الف', is_active: true }]
   //: ستون‌ها با مرکز: حساب(۰) · مرکز(۱) · شرح(۲) · بدهکار(۳) · بستانکار(۴)
   const renderWithCenters = (initial: JournalDraftLine[]) =>
@@ -106,16 +106,22 @@ describe('ستونِ مرکزِ هزینه — بیرون از مسیرِ Enter 
     expect(container.querySelector('thead')?.textContent).toContain('مرکز هزینه')
   })
 
-  it('Enter از حساب مستقیم به شرح می‌رود؛ Shift+Enter از شرح به حساب برمی‌گردد', async () => {
+  it('Enter از حساب مستقیم به بدهکار می‌رود (نه مرکز، نه شرح)؛ Shift+Enter از بدهکار به حساب برمی‌گردد', async () => {
     renderWithCenters([line({ accountId: 'bank' }), line({ accountId: 'cust' })])
     await enterOn(cell(0, 0))
-    expect(focusedCell()).toBe('0-2')
+    expect(focusedCell()).toBe('0-3')
 
-    act(() => cell(0, 2).focus())
+    act(() => cell(0, 3).focus())
     await act(async () => {
-      cell(0, 2).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true, cancelable: true }))
+      cell(0, 3).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true, cancelable: true }))
     })
     expect(focusedCell()).toBe('0-0')
+  })
+
+  it('Enter از شرح (که با Tab به آن رسیده‌اند) به بدهکار می‌رود', async () => {
+    renderWithCenters([line({ accountId: 'bank' }), line({ accountId: 'cust' })])
+    await enterOn(cell(0, 2))
+    expect(focusedCell()).toBe('0-3')
   })
 
   it('↓ داخلِ ستونِ مرکز کار می‌کند — Tab/موس به آن می‌رسند و از آن‌جا عمودی می‌رود', () => {

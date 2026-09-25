@@ -105,27 +105,43 @@ describe('حافظه‌ی شرح در گرید', () => {
 
 describe('رفتن به ردیف', () => {
   const big = () => Array.from({ length: 300 }, (_, i) => line({ accountId: i % 2 ? 'cust' : 'bank' }))
-  const jump = () => container.querySelector<HTMLInputElement>('.jg-jump input')!
+  const jump = () => container.querySelector<HTMLInputElement>('.jg-jump input')
+  //: کادر فقط با Ctrl+G پیدا می‌شود — نوارِ همیشگی‌اش برداشته شد.
+  const openJump = (from = 10) => {
+    act(() => desc(from).focus())
+    key(desc(from), 'KeyG', { ctrlKey: true })
+  }
 
-  it('Ctrl+G از هر خانه به کادرِ «رفتن به ردیف» می‌رود', () => {
+  it('بسته است تا Ctrl+G؛ Ctrl+G از هر خانه کادر را باز و فوکوس می‌کند', () => {
     render(big())
-    act(() => desc(10).focus())
-    key(desc(10), 'KeyG', { ctrlKey: true })
+    expect(jump()).toBeNull()
+    openJump()
     expect(document.activeElement).toBe(jump())
   })
 
-  it('۲۳۶ + Enter: فوکوس روی اولین خانه‌ی ردیفِ ۲۳۶ — رقمِ فارسی هم', () => {
+  it('۲۳۶ + Enter: فوکوس روی اولین خانه‌ی ردیفِ ۲۳۶ — رقمِ فارسی هم؛ و کادر بسته می‌شود', () => {
     render(big())
-    type(jump(), '۲۳۶')
-    key(jump(), 'Enter')
+    openJump()
+    type(jump()!, '۲۳۶')
+    key(jump()!, 'Enter')
     expect(focusedCell()).toBe('235-0')
+    expect(jump()).toBeNull()
   })
 
   it('بیرون از محدوده: پیام، و فوکوس جابه‌جا نمی‌شود', () => {
     render(big())
-    type(jump(), '400')
-    key(jump(), 'Enter')
+    openJump()
+    type(jump()!, '400')
+    key(jump()!, 'Enter')
     expect(container.querySelector('.jg-jump-msg')?.textContent).toBe('ردیفِ ۴۰۰ نیست — سند ۳۰۰ ردیف دارد.')
     expect(document.activeElement).toBe(jump())
+  })
+
+  it('Esc کادر را می‌بندد و به خانه‌ی مبدأ برمی‌گردد', () => {
+    render(big())
+    openJump(10)
+    key(jump()!, 'Escape')
+    expect(jump()).toBeNull()
+    expect(focusedCell()).toBe('10-1')
   })
 })

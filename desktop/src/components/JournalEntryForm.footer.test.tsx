@@ -5,7 +5,8 @@
  * * رنگِ توازن روی کلِ نوار (`jf-foot--empty|ok|err`)، نه فقط روی عدد.
  * * Ctrl+S از **هر جای** فرمِ حسابدار ثبت می‌کند — و فقط یک بار، چون گرید همان کلید را
  *   زودتر می‌گیرد و فرم نباید دوباره بفرستد. شمارشِ درخواست‌های POST همین را می‌سنجد.
- * * راهنما بسته شروع می‌شود، با Ctrl+/ باز و بسته می‌شود، و انتخاب روی دستگاه می‌ماند.
+ * * راهنمای میان‌برها پنجره است: با دکمه‌ی سرِ کارت یا Ctrl+/ باز، با Esc یا Ctrl+/ بسته، و
+ *   فوکوس بعد از بستن به همان خانه برمی‌گردد.
  *
  * هوکِ واقعیِ `useJournalEntryDraft`؛ پیش‌نویس از `localStorage` (همان کلیدِ ماندگارِ وب)
  * پُر می‌شود تا تست به تایپ در گرید وابسته نباشد.
@@ -80,7 +81,8 @@ async function press(el: HTMLElement, code: string, opts: KeyboardEventInit = {}
 }
 
 const foot = () => container.querySelector<HTMLElement>('.jf-foot')!
-const guide = () => container.querySelector<HTMLDetailsElement>('details.jg-keys')
+const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')
+const trigger = () => container.querySelector<HTMLButtonElement>('.jk-trigger')
 const headerInput = () => container.querySelector<HTMLInputElement>('.jh-bar input')!
 
 describe('نوارِ پایین', () => {
@@ -102,17 +104,25 @@ describe('نوارِ پایین', () => {
     expect(foot().className).toContain('jf-foot--ok')
   })
 
-  it('حالتِ حسابدار «Ctrl+S» را کنارِ دکمه می‌نویسد؛ حالتِ ساده نه', async () => {
+  it('حالتِ حسابدار «ثبت سند (Ctrl+S)»؛ حالتِ ساده فقط «ثبت سند» — و یک دکمه‌ی ثبت', async () => {
     await render()
-    const submit = container.querySelector<HTMLButtonElement>('button[type=submit]')!
-    expect(submit.querySelector('kbd')?.textContent).toBe('Ctrl+S')
-    expect(submit.getAttribute('aria-keyshortcuts')).toBe('Control+S')
+    const submits = container.querySelectorAll<HTMLButtonElement>('button[type=submit]')
+    expect(submits).toHaveLength(1)
+    expect(submits[0].textContent).toBe('ثبت سند(Ctrl+S)')
+    expect(submits[0].getAttribute('aria-keyshortcuts')).toBe('Control+S')
 
     act(() => setExperience('simple'))
     const simple = container.querySelector<HTMLButtonElement>('button[type=submit]')!
-    expect(simple.querySelector('kbd')).toBeNull()
-    expect(guide()).toBeNull()
+    expect(simple.textContent).toBe('ثبت سند')
+    expect(trigger()).toBeNull()
     expect(foot()).not.toBeNull()
+  })
+
+  it('راست دکمه، چپ جمع‌ها: ترتیبِ DOM (= ترتیبِ خواندنِ راست‌به‌چپ)', async () => {
+    await render()
+    const kids = [...foot().children].map((c) => c.className)
+    expect(kids[0]).toContain('jf-submit')
+    expect(kids[kids.length - 1]).toContain('jb-sum')
   })
 })
 
@@ -133,33 +143,45 @@ describe('Ctrl+S', () => {
   })
 })
 
-describe('راهنمای میان‌برها', () => {
-  it('بسته شروع می‌شود؛ Ctrl+/ باز و بسته می‌کند و انتخاب می‌ماند', async () => {
+describe('پنجره‌ی میان‌برها', () => {
+  it('زیرِ گرید چیزی نیست؛ Ctrl+/ باز می‌کند، Esc می‌بندد و فوکوس به همان خانه برمی‌گردد', async () => {
     await render()
-    expect(guide()!.open).toBe(false)
-    //: بسته هم سه میان‌برِ اصلی را نشان می‌دهد.
-    expect(guide()!.querySelectorAll('.jg-keys-peek kbd')).toHaveLength(3)
+    expect(container.querySelector('.jg-keys, .jg-legend')).toBeNull()
+    expect(dialog()).toBeNull()
 
-    await press(headerInput(), 'Slash', { ctrlKey: true })
-    expect(guide()!.open).toBe(true)
-    expect(localStorage.getItem('cubita.journal.shortcutsOpen')).toBe('1')
+    const from = headerInput()
+    await press(from, 'Slash', { ctrlKey: true })
+    expect(dialog()).not.toBeNull()
+    expect(dialog()!.contains(document.activeElement)).toBe(true)
 
-    //: دوباره سوار شدن — همان باز می‌ماند.
-    act(() => root.unmount())
-    root = createRoot(container)
-    await render()
-    expect(guide()!.open).toBe(true)
-
-    await press(headerInput(), 'Slash', { ctrlKey: true })
-    expect(guide()!.open).toBe(false)
-    expect(localStorage.getItem('cubita.journal.shortcutsOpen')).toBe('0')
+    await press(document.activeElement as HTMLElement, 'Escape')
+    expect(dialog()).toBeNull()
+    expect(document.activeElement).toBe(from)
   })
 
-  it('همه‌ی میان‌برهای گرید در راهنما هست — از جمله کپی از ردیفِ قبل', async () => {
+  it('دکمه‌ی سرِ کارت باز می‌کند و Ctrl+/ از داخلِ پنجره می‌بندد', async () => {
     await render()
-    const keys = [...guide()!.querySelectorAll('.jg-keys-panel kbd')].map((k) => k.textContent)
+    act(() => trigger()!.click())
+    expect(dialog()).not.toBeNull()
+    await press(document.activeElement as HTMLElement, 'Slash', { ctrlKey: true })
+    expect(dialog()).toBeNull()
+  })
+
+  it('Ctrl+S از داخلِ پنجره سند نمی‌فرستد', async () => {
+    seed(BALANCED)
+    await render()
+    act(() => trigger()!.click())
+    await press(document.activeElement as HTMLElement, 'KeyS', { ctrlKey: true })
+    expect(posts).toBe(0)
+  })
+
+  it('همه‌ی میان‌برهای گرید در پنجره هست — از جمله کپی از ردیفِ قبل', async () => {
+    await render()
+    act(() => trigger()!.click())
+    const keys = [...dialog()!.querySelectorAll('kbd')].map((k) => k.textContent)
     expect(keys).toEqual(
       expect.arrayContaining(['Enter', 'Tab', 'F2', 'F4', 'Alt+↓', 'Ctrl+Enter', 'Ctrl+D', 'Ctrl+Shift+C', 'Ctrl+Delete', 'Ctrl+G', 'Ctrl+S', 'Ctrl+/']),
     )
+    act(() => dialog()!.querySelector<HTMLButtonElement>('[aria-label="بستن"]')!.click())
   })
 })
