@@ -124,20 +124,8 @@ interface ColumnFilters {
 }
 const NO_COLUMN_FILTERS: ColumnFilters = { number: '', atf: '', sub: '', desc: '', source: '' }
 
-//: عرضِ پیش‌فرضِ ستون‌ها برای وقتی کاربر یکی را کشید (`useColumnWidths`).
-const LIST_COL_FALLBACK: Record<string, number> = {
-  rowhead: 44,
-  number: 70,
-  atf: 70,
-  sub: 90,
-  date: 96,
-  desc: 240,
-  source: 130,
-  status: 80,
-  lines: 50,
-  amount: 130,
-  actions: 96,
-}
+//: ستون‌بندیِ «جا در قاب»: شماره‌ی ردیف و آیکون‌های کنش ثابت، «شرح» باقی را می‌گیرد.
+const LIST_LAYOUT = { fixed: ['rowhead', 'actions'], auto: 'desc' } as const
 
 /** جدولِ اسنادِ دفتر — تکی و مشترک.
  *
@@ -176,19 +164,22 @@ function EntryTable({
   const pg = usePagination(entries, pageSize)
   const total = (e: JournalEntryRecord) =>
     e.lines.reduce((sum, l) => sum + Number(l.debit || 0), 0)
-  const cw = useColumnWidths('cubita.grid.journalList', LIST_COL_FALLBACK)
+  const withActions = Boolean(onVoid || onPrint)
+  const cw = useColumnWidths('cubita.grid.journalList.shares', LIST_LAYOUT)
   const { selected, click, clear } = useRowSelection()
   //: فیلترِ تازه یعنی فهرستِ دیگری؛ انتخابِ قبلی دیگر معنا ندارد.
   useEffect(() => clear(), [entries, clear])
   const order = pg.pageItems.map((e) => e.id)
   const chosen = entries.filter((e) => selected.has(e.id))
-  const withActions = Boolean(onVoid || onPrint)
   const colIds = ['rowhead', 'number', 'atf', 'sub', 'date', 'desc', 'source', 'status', 'lines', 'amount', ...(withActions ? ['actions'] : [])]
 
   const head = (id: string, label: ReactNode) => (
     <th data-col={id}>
       {label}
-      <ColResizer onBegin={(ev) => cw.begin(ev, id)} onReset={cw.reset} />
+      {/* لبه‌ی کنارِ ستونِ ثابت (آیکون‌ها) کشیدنی نیست. */}
+      {cw.canResize(id, colIds[colIds.indexOf(id) + 1]) && (
+        <ColResizer onBegin={(ev) => cw.begin(ev, id)} onReset={cw.reset} />
+      )}
     </th>
   )
   const textFilter = (key: keyof ColumnFilters, label: string, numeric = false) =>
@@ -205,7 +196,7 @@ function EntryTable({
 
   return (
     <div className="table-scroll ef-table-wrap">
-      <table className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list" style={cw.table(colIds)}>
+      <table className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list">
         <colgroup>
           {colIds.map((id) => (
             <col key={id} className={`xl-c-${id}`} style={cw.col(id)} />
