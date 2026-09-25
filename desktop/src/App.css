@@ -12791,7 +12791,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   grid-template-rows: auto minmax(0, 1fr);
   inline-size: 168px;
   /* سرستون + دو خطِ «نامتوازن» (وضعیت و مبلغِ اختلاف) — ارتفاع برای همان است. */
-  block-size: 72px;
+  block-size: 64px;
   overflow: hidden;
 }
 .jb-stat + .jb-stat { border-inline-start: 1px solid var(--xl-line); }
@@ -12816,7 +12816,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   align-items: center;
   gap: 6px;
   color: var(--text-h);
-  font-size: var(--fs-xl);
+  /* هم‌مقیاسِ متنِ گرید، نه درشت‌تر (خواسته‌ی آرش) — وزنِ پررنگ جمع‌ها را از ردیف‌ها جدا می‌کند. */
+  font-size: var(--fs-md);
   font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
@@ -12827,13 +12828,13 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jb-sub:empty { display: none; }
 /* متنی که به‌جای پهن‌کردنِ خانه کوچک می‌شود: `--fit` را `useFitText` از پهنای واقعی می‌سنجد. */
 .jb-fit { display: block; max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.jb-v.jb-fit { font-size: calc(var(--fs-xl) * var(--fit, 1)); }
+.jb-v.jb-fit { font-size: calc(var(--fs-md) * var(--fit, 1)); }
 .jb-sub.jb-fit { font-size: calc(var(--fs-xs) * var(--fit, 1)); }
 .jb-sum--ok .jb-stat--diff .jb-body { background: var(--success-bg); }
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
 .jb-sum--err .jb-stat--diff .jb-body { background: var(--danger-bg); }
 .jb-sum--err .jb-stat--diff .jb-v { color: var(--danger); }
-.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: calc(var(--fs-md) * var(--fit, 1)); font-weight: 500; }
+.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: calc(var(--fs-sm) * var(--fit, 1)); font-weight: 500; }
 
 /* ── ستون‌به‌ستون با گرید (حالت حسابدار) ──
  * سربرگ و نوارِ پایین پنج خانه‌اند با مرزهای همان ستون‌های گرید (`useAlignToGrid` → `--jg-cols`):
