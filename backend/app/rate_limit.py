@@ -94,6 +94,9 @@ _admin_write_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
 #: فعال‌سازیِ آنلاینِ کوبیتا سازمانی — عمومی است (سرورِ مشتری توکنی از ما ندارد)، پس
 #: سقف جلوی حدسِ کدِ فعال‌سازی را می‌گیرد. کدِ ۸۰بیتی خودش حدس‌ناپذیر است؛ این لایه‌ی دوم است.
 _license_activate_limiter = SlidingWindowLimiter(max_events=10, window_seconds=3600)
+#: فرمِ «تماس برای خرید»ِ سایت — عمومی. سقف برای مهارِ پرکردنِ خودکارِ صفِ فروش است؛ آدمی که
+#: فرم را اشتباه پر کرده چند بار دیگر هم می‌تواند بفرستد.
+_sales_inquiry_limiter = SlidingWindowLimiter(max_events=5, window_seconds=3600)
 
 
 def limit_login(request: Request) -> None:
@@ -176,6 +179,10 @@ def limit_license_activate(request: Request) -> None:
     _license_activate_limiter.check(f"license-activate:{client_key(request)}")
 
 
+def limit_sales_inquiry(request: Request) -> None:
+    _sales_inquiry_limiter.check(f"sales-inquiry:{client_key(request)}")
+
+
 def reset_all() -> None:
     """فقط برای تست — وگرنه تست‌ها به‌خاطر سقف مشترک روی هم اثر می‌گذارند."""
     _login_limiter.reset()
@@ -191,3 +198,4 @@ def reset_all() -> None:
     _admin_login_per_email.reset()
     _admin_write_limiter.reset()
     _license_activate_limiter.reset()
+    _sales_inquiry_limiter.reset()

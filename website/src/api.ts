@@ -1,30 +1,18 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://acc.cubita.ir'
 
-export type BillingPeriod = 'monthly' | 'semiannual' | 'yearly'
+/** محصولی که درخواستِ خرید درباره‌اش است — همان `SALES_PRODUCTS`ِ بک‌اند. */
+export type SalesProduct = 'cloud' | 'desktop' | 'enterprise' | 'mobile' | 'unsure'
 
-export interface Plan {
-  id: string
-  key: string
+export interface SalesInquiryRequest {
   name: string
-  description: string
-  price_toman: string
-  billing_period: string
-  //: نگاشتِ دوره→قیمت (تومان). با تعویضِ دوره، قیمتِ همان کارت از این خوانده می‌شود.
-  prices: Partial<Record<BillingPeriod, string>>
-  max_users: number | null
-  features: string[]
-  is_active: boolean
-  sort_order: number
-  highlighted: boolean
-}
-
-export interface PurchaseRequest {
-  plan_key: string
-  customer_name: string
-  customer_email: string
-  customer_phone: string
-  business_name: string
-  billing_period: BillingPeriod
+  company: string
+  phone: string
+  email: string
+  product: SalesProduct
+  seats: number | null
+  message: string
+  /** تله‌ی ربات — همیشه خالی از آدم. */
+  website: string
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -32,9 +20,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const hasBody = init?.body != null
   // Content-Type فقط وقتی بدنه هست. افزودنش روی GET درخواست را «غیرِ ساده» می‌کند و
   // مرورگر را وادار به preflightِ OPTIONS می‌کند؛ روی موبایلِ کند این round-tripِ دوم
-  // شکننده است و باعثِ خطای «امکان دریافت پلن‌ها نیست» می‌شد. GET حالا درخواستِ ساده است.
+  // شکننده است. GET حالا درخواستِ ساده است.
   const headers = { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers ?? {}) }
-  // فقط GET (idempotent) را retry کن؛ POSTِ خرید را نه، تا تراکنش دوباره ثبت نشود.
+  // فقط GET (idempotent) را retry کن؛ POST را نه، تا درخواست دوباره ثبت نشود.
   const attempts = method === 'GET' ? 3 : 1
 
   let lastErr: unknown
@@ -58,10 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   throw lastErr instanceof Error ? lastErr : new Error('خطا در ارتباط با سرور')
 }
 
-export function fetchPlans(): Promise<Plan[]> {
-  return request<Plan[]>('/api/plans')
-}
-
-export function requestPurchase(data: PurchaseRequest): Promise<{ purchase_id: string; payment_url: string }> {
-  return request('/api/purchases', { method: 'POST', body: JSON.stringify(data) })
+//: پلن‌های قیمت‌دار از سایت برداشته شدند (۱۴۰۵/۰۷/۰۳) — خرید از راهِ فرمِ «تماس برای خرید» است.
+export function submitSalesInquiry(data: SalesInquiryRequest): Promise<{ ok: boolean }> {
+  return request('/api/sales-inquiries', { method: 'POST', body: JSON.stringify(data) })
 }

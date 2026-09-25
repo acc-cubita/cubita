@@ -15,6 +15,8 @@ export const APP_URL = 'https://acc.cubita.ir'
 export const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
 // همان الگو برای اپ اندروید: cubita-latest.apk روی هر انتشار به آخرین نسخه اشاره می‌کند.
 export const ANDROID_APK_URL = 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
+// نصابِ «کوبیتا سازمانی» (سرور و کلاینتِ شبکه‌ی داخلی) — نامِ پایدارِ کانالِ امضاشده‌ی سازمانی.
+export const ENTERPRISE_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe'
 
 //: با `/` شروع می‌شوند تا از صفحه‌های حقوقی هم به بخشِ درستِ صفحه‌ی اصلی برسند؛ روی
 //: خودِ صفحه‌ی اصلی فقط هش عوض می‌شود و صفحه دوباره بار نمی‌شود.
@@ -22,8 +24,9 @@ const NAV = [
   { href: '/#cc-features', label: 'امکانات' },
   { href: '/#cc-platforms', label: 'نسخه‌ها' },
   { href: '/#cc-industries', label: 'صنایع' },
-  { href: '/#cc-pricing', label: 'پلن‌ها و قیمت' },
   { href: '/#cc-faq', label: 'سوالات متداول' },
+  //: پلن‌های قیمت‌دار برداشته شدند (۱۴۰۵/۰۷/۰۳) — خرید از راهِ گفت‌وگو با کارشناس است.
+  { href: '/#cc-contact', label: 'خرید و مشاوره' },
 ]
 
 export function BrandMark({ id = 'm' }: { id?: string }) {
@@ -116,7 +119,7 @@ export function SiteFooter() {
           <a href="/" className="cc-brand">
             <BrandMark id="ftr" /> کوبیتا
           </a>
-          <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی؛ روی وب، ویندوز و اندروید.</p>
+          <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی؛ روی وب، ویندوز و اندروید، و نسخه‌ی سازمانی روی سرورِ خودِ شرکت.</p>
           <a
             className="cc-enamad"
             referrerPolicy="origin"
@@ -136,7 +139,7 @@ export function SiteFooter() {
           <h4>محصول</h4>
           <a href="/#cc-features">امکانات</a>
           <a href="/#cc-platforms">نسخه‌ها</a>
-          <a href="/#cc-pricing">پلن‌ها و قیمت‌ها</a>
+          <a href="/#cc-contact">خرید و مشاوره</a>
           <a href={TRIAL_URL}>شروعِ رایگان</a>
         </div>
         <div className="cc-footer-col">
@@ -145,6 +148,9 @@ export function SiteFooter() {
             نسخه‌ی ویندوز
           </a>
           <a href={ANDROID_APK_URL}>اپ اندروید</a>
+          <a href={ENTERPRISE_DOWNLOAD_URL} download>
+            کوبیتا سازمانی
+          </a>
           <a href={APP_URL} target="_blank" rel="noreferrer">
             نسخه‌ی وب
           </a>

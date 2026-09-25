@@ -322,6 +322,36 @@ export interface ClientErrorRow {
 export const fetchClientErrors = (t: string, onlyFatal: boolean) =>
   get<ClientErrorRow[]>(t, `/api/admin/client-errors?only_fatal=${onlyFatal}`)
 
+// ── درخواست‌های خرید از سایت ───────────────────────────────────────────────
+
+export type SalesProduct = 'cloud' | 'desktop' | 'enterprise' | 'mobile' | 'unsure'
+export type SalesStatus = 'new' | 'contacted' | 'won' | 'lost'
+
+export interface SalesInquiry {
+  id: string
+  created_at: string
+  name: string
+  company: string
+  phone: string
+  email: string
+  product: SalesProduct
+  seats: number | null
+  message: string
+  status: SalesStatus
+  staff_note: string
+  handled_at: string | null
+  handled_by: string | null
+}
+
+export const fetchSalesInquiries = (t: string, status: SalesStatus | '') =>
+  get<{ items: SalesInquiry[]; new_count: number }>(
+    t,
+    `/api/admin/sales-inquiries${status ? `?status=${status}` : ''}`,
+  )
+
+export const updateSalesInquiry = (t: string, id: string, data: { status?: SalesStatus; staff_note?: string }) =>
+  send<SalesInquiry>(t, 'PATCH', `/api/admin/sales-inquiries/${id}`, data)
+
 // ── مجوزهای کوبیتا سازمانی ──────────────────────────────────────────────────
 
 export interface EnterpriseLicense {

@@ -8,6 +8,7 @@ import { visibleNav, type PageKey } from './nav'
 import AccountsPage from './pages/AccountsPage'
 import AssurancePage from './pages/AssurancePage'
 import ClientErrorsPage from './pages/ClientErrorsPage'
+import SalesInquiriesPage from './pages/SalesInquiriesPage'
 import CommissionsPage from './pages/CommissionsPage'
 import LicensesPage from './pages/LicensesPage'
 import PurchasesPage from './pages/PurchasesPage'
@@ -123,6 +124,8 @@ export default function App() {
         <LicensesPage token={token} me={me} onUnauthorized={guard} />
       ) : page === 'purchases' ? (
         <PurchasesPage token={token} onUnauthorized={guard} />
+      ) : page === 'sales' ? (
+        <SalesInquiriesPage token={token} me={me} onUnauthorized={guard} />
       ) : page === 'errors' ? (
         <ClientErrorsPage token={token} onUnauthorized={guard} />
       ) : page === 'staff' ? (
