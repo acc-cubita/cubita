@@ -1,4 +1,5 @@
 import { normalizeFa, textMatches } from './faText'
+import { tenantKey } from './tenantScope'
 
 /**
  * حافظه‌ی شرح (UI-01 §۲۰) — پیشنهادِ شرح‌های تکراری، بی هیچ «یادگیری».
@@ -10,6 +11,9 @@ import { normalizeFa, textMatches } from './faText'
  *
  * **فقط پیشنهاد:** هیچ‌چیز خودکار در فیلد نمی‌نشیند؛ انتخاب با کاربر است
  * (`DescriptionInput`).
+ *
+ * **به‌ازای کسب‌وکار** (`tenantKey`): تعویضِ کسب‌وکار همین تب را دوباره بار می‌کند
+ * و `sessionStorage` می‌ماند. با کلیدِ سراسری، شرح‌های کسب‌وکارِ دیگر پیشنهاد می‌شد.
  */
 
 const KEY = 'cubita.journal.descriptions'
@@ -55,8 +59,10 @@ export function suggestDescriptions(pool: string[], query: string, limit = SUGGE
 
 /** شرح‌های ثبت‌شده در همین جلسه، تازه‌ترین اول. */
 export function sessionDescriptions(): string[] {
+  const key = tenantKey(KEY)
+  if (!key) return []
   try {
-    const raw = sessionStorage.getItem(KEY)
+    const raw = sessionStorage.getItem(key)
     const parsed: unknown = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
   } catch {
@@ -66,10 +72,11 @@ export function sessionDescriptions(): string[] {
 
 /** بعد از ثبتِ موفقِ سند: شرح‌هایش به حافظه‌ی جلسه اضافه می‌شوند. */
 export function rememberDescriptions(list: string[]): void {
+  const key = tenantKey(KEY)
   const merged = dedupe([...list, ...sessionDescriptions()]).slice(0, CAP)
-  if (merged.length === 0) return
+  if (!key || merged.length === 0) return
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(merged))
+    sessionStorage.setItem(key, JSON.stringify(merged))
   } catch {
     /* ذخیره‌ی جلسه در دسترس نیست — پیشنهادها فقط از همین سند می‌آیند */
   }
