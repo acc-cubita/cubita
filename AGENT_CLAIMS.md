@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `JournalGrid.tsx`، `JournalEntryForm.tsx`، `AccountCombo.tsx` (تازه)، `lib/gridPicker.ts`، `ShortcutsPage.tsx`، `App.css`، `e2e/accountant-journal.e2e.mjs` و تست‌ها | ثبتِ سند: فوترِ نهایی، پنجره‌ی میان‌برها، عرضِ ستون‌ها، جست‌وجوی درجای حساب، Enter از حساب به مبلغ | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `JournalEntryForm.footer.test.tsx` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.jf-*`/`.jb-*`/`.jg-keys`/`.jg-actions`) | ثبتِ سند: نوارِ پایانیِ شناور، راهنمای تاشو (Ctrl+/)، کنش‌های ردیف روی hover | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `JournalGrid.tsx`، `SearchSelect.tsx`، `lib/journalGridNav.ts`، `lib/faText.ts`، `lib/gridPicker.ts` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.jh-*`/`.jb-*`/`.jg-legend`) و تست‌ها | ارگونومیِ ثبتِ سند: سربرگِ فشرده، نوارِ توازن، Tab/←→/F2/F4، راهنمای میان‌بر، رتبه‌بندیِ جست‌وجو | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code | `desktop/src/lib/tenantScope.ts`، `App.tsx`، `AccountBrowser.tsx`، `descriptionMemory.ts` و تست‌هایشان، `PROJECT_OVERVIEW.md` | کلیدِ `sessionStorage` به‌ازای کسب‌وکار (باگِ بازبینیِ #191) | ۱۴۰۵/۰۷/۰۲ |

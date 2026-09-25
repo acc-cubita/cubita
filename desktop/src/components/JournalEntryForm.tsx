@@ -1,5 +1,6 @@
-import { useId, useState, type KeyboardEvent } from 'react'
-import { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, Keyboard, Rows3, Trash2 } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Trash2, X } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
@@ -48,10 +49,18 @@ export function JournalEntryForm({
   //: از بین نمی‌برد — نه ردیفی، نه مبلغی (§۳۵). این خاصیتِ طراحی است، نه کدِ
   //: اضافه: چیزی برای «انتقال» وجود ندارد چون حالت اصلاً مالکِ داده نیست.
   const { isAccountant } = useExperienceMode()
-  const [keysOpen, setKeysOpenState] = useState(readKeysOpen)
-  const setKeysOpen = (open: boolean) => {
-    setKeysOpenState(open)
-    writeKeysOpen(open)
+  //: پنجره‌ی میان‌برها. فوکوس بعد از بستن به همان‌جایی برمی‌گردد که کاربر بود — در رابطِ
+  //: صفحه‌کلیدی، گم‌کردنِ خانه‌ی فعال یعنی کاربر باید با ماوس برگردد.
+  const [keysOpen, setKeysOpen] = useState(false)
+  const keysReturn = useRef<HTMLElement | null>(null)
+  const openKeys = () => {
+    keysReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setKeysOpen(true)
+  }
+  const closeKeys = () => {
+    setKeysOpen(false)
+    keysReturn.current?.focus()
+    keysReturn.current = null
   }
 
   if (d.postableAccounts.length === 0) {
@@ -172,21 +181,23 @@ export function JournalEntryForm({
         }}
         onKeyDown={(e) => {
           if (!(e.ctrlKey || e.metaKey)) return
-          //: Ctrl+S از **هر جای** فرم، نه فقط از خانه‌های گرید — کنارِ دکمه نوشته شده، پس
-          //: باید از سربرگ هم کار کند (در مرورگر وگرنه «ذخیره‌ی صفحه» باز می‌شد). گرید خودش
-          //: همین را زودتر می‌گیرد و `preventDefault` می‌کند؛ این شرط جلوی ثبتِ دوباره را می‌گیرد.
+          //: Ctrl+/ پنجره‌ی میان‌برها را باز و بسته می‌کند — قراردادِ رایجِ «فهرستِ میان‌برها».
+          //: `code` و نه `key`: روی چیدمانِ فارسی `key` این کلید «/» نیست. کلیدهای داخلِ پنجره
+          //: (portal) هم از درختِ React به این‌جا می‌رسند؛ پس بستن با همین کلید هم کار می‌کند.
+          if (e.code === 'Slash') {
+            e.preventDefault()
+            if (keysOpen) closeKeys()
+            else openKeys()
+            return
+          }
+          //: پنجره‌ی باز مالِ خودش است — Ctrl+S از داخلِ آن سند نمی‌فرستد.
+          if ((e.target as HTMLElement).closest('[role="dialog"]')) return
+          //: Ctrl+S از **هر جای** فرم، نه فقط از خانه‌های گرید — روی دکمه نوشته شده، پس باید از
+          //: سربرگ هم کار کند (در مرورگر وگرنه «ذخیره‌ی صفحه» باز می‌شد). گرید خودش همین را زودتر
+          //: می‌گیرد و `preventDefault` می‌کند؛ این شرط جلوی ثبتِ دوباره را می‌گیرد.
           if (e.code === 'KeyS' && !e.defaultPrevented) {
             e.preventDefault()
             if (!d.submitting) void d.submit()
-          }
-          //: Ctrl+/ راهنما را باز و بسته می‌کند — همان قراردادِ رایجِ «فهرستِ میان‌برها».
-          //: `code` و نه `key`: روی چیدمانِ فارسی `key` این کلید «/» نیست.
-          if (e.code === 'Slash') {
-            e.preventDefault()
-            setKeysOpen(!keysOpen)
-            //: راهنما زیرِ آخرین ردیف است؛ در سندِ بلند بی این، باز می‌شد و دیده نمی‌شد.
-            const guide = e.currentTarget.querySelector('.jg-keys')
-            if (!keysOpen) requestAnimationFrame(() => guide?.scrollIntoView?.({ block: 'nearest' }))
           }
         }}
       >
@@ -195,14 +206,26 @@ export function JournalEntryForm({
           title="سند حسابداری"
           tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
           badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
+          actions={
+            <button
+              type="button"
+              className="btn-ghost jk-trigger"
+              onClick={openKeys}
+              aria-haspopup="dialog"
+              aria-keyshortcuts="Control+/"
+              title="میان‌برهای صفحه‌کلید (Ctrl+/)"
+            >
+              <Keyboard size={16} aria-hidden="true" /> میان‌برها
+            </button>
+          }
         >
           <JournalHeaderBar d={d} />
           <JournalGrid d={d} />
           {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
           <AddRowButton onClick={d.addLine}>افزودن ردیف (Ctrl+Enter)</AddRowButton>
-          <ShortcutGuide open={keysOpen} onOpenChange={setKeysOpen} />
         </SectionCard>
         <JournalFooter d={d} shortcut />
+        {keysOpen && <ShortcutsDialog onClose={closeKeys} />}
       </form>
     )
   }
@@ -444,35 +467,31 @@ function StatusToggle({
 }
 
 /**
- * راهنمای میان‌برها — یک خطِ کم‌رنگ زیرِ گرید که با کلیک یا Ctrl+/ باز می‌شود.
+ * پنجره‌ی میان‌برهای صفحه‌کلید — با دکمه‌ی «میان‌برها»ی سرِ کارت یا Ctrl+/.
  *
- * بسته: سه میان‌برِ اصلی و راهِ دیدنِ بقیه، در یک خط. باز: همه، در چهار دسته. پیش‌تر
- * ده میان‌بر همیشه باز بود و دو خطِ پُر زیرِ هر سند می‌گرفت؛ حسابداری که یادشان گرفته
- * دیگر لازمشان ندارد، و تازه‌کار با یک کلیک همه را می‌بیند. باز/بسته روی همین دستگاه
- * می‌ماند. در موبایل پنهان است: صفحه‌کلیدِ فیزیکی نیست.
+ * پیش‌تر راهنما زیرِ گرید می‌نشست (اول ده کلیدِ همیشه‌باز، بعد یک خطِ تاشو)؛ هر دو جای
+ * پایینِ صفحه را می‌گرفتند و «Ctrl+S ثبت»ش کنارِ دکمه‌ی ثبت، دکمه‌ی دوم به‌نظر می‌آمد.
+ * حالا صفحه خلوت است و فهرست فقط وقتی خواسته شود می‌آید. Esc یا Ctrl+/ می‌بندد و فوکوس به
+ * همان خانه برمی‌گردد. در موبایل دکمه پنهان است: صفحه‌کلیدِ فیزیکی نیست.
  */
-const KEY_PEEK: [string, string][] = [
-  ['Enter', 'خانه‌ی بعد'],
-  ['F4', 'فهرستِ حساب‌ها'],
-  ['Ctrl+S', 'ثبت'],
-]
-
 const KEY_GROUPS: { title: string; keys: [string, string][] }[] = [
   {
     title: 'حرکت',
     keys: [
-      ['Enter', 'خانه‌ی بعد'],
-      ['Tab', 'خانه‌ی بعد؛ در پایان، ردیفِ تازه'],
+      ['Enter', 'خانه‌ی بعد — از حساب مستقیم به مبلغ'],
+      ['Tab', 'خانه‌ی بعد (شرح و مرکز هم)؛ در پایان، ردیفِ تازه'],
       ['← → ↑ ↓', 'جابه‌جایی بینِ خانه‌ها'],
       ['Ctrl+G', 'رفتن به ردیف'],
     ],
   },
   {
-    title: 'ورود و انتخاب',
+    title: 'حساب و انتخاب',
     keys: [
-      ['F2', 'ویرایشِ متنِ خانه'],
-      ['F4', 'فهرستِ حساب‌ها'],
+      ['کد یا نام', 'در خانه‌ی حساب تایپ کنید تا فهرست فیلتر شود'],
+      ['↑ ↓  Enter', 'انتخاب از فهرست و رفتن به مبلغ'],
+      ['F4', 'فهرستِ کاملِ حساب‌ها'],
       ['Alt+↓', 'فهرستِ همین خانه'],
+      ['F2', 'ویرایشِ متنِ خانه'],
     ],
   },
   {
@@ -488,62 +507,61 @@ const KEY_GROUPS: { title: string; keys: [string, string][] }[] = [
     title: 'سند',
     keys: [
       ['Ctrl+S', 'ثبتِ سند'],
-      ['Ctrl+/', 'باز و بسته کردنِ این راهنما'],
+      ['Ctrl+/', 'همین پنجره'],
+      ['Esc', 'بستنِ فهرست یا پنجره'],
     ],
   },
 ]
 
-const KEYS_OPEN_KEY = 'cubita.journal.shortcutsOpen'
-
-//: ترجیحِ نمایشی است، نه داده: اگر ذخیره‌گاه در دسترس نبود راهنما بسته شروع می‌شود.
-function readKeysOpen(): boolean {
-  try {
-    return localStorage.getItem(KEYS_OPEN_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeKeysOpen(open: boolean) {
-  try {
-    localStorage.setItem(KEYS_OPEN_KEY, open ? '1' : '0')
-  } catch {
-    /* بی‌ذخیره هم کار می‌کند */
-  }
-}
-
-function ShortcutGuide({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  return (
-    <details className="jg-keys" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
-      <summary aria-keyshortcuts="Control+/">
-        <Keyboard size={15} aria-hidden="true" />
-        <span className="jg-keys-title">میان‌برها</span>
-        <span className="jg-keys-peek">
-          {KEY_PEEK.map(([keys, what]) => (
-            <span key={keys}>
-              <kbd dir="ltr">{keys}</kbd> {what}
-            </span>
+function ShortcutsDialog({ onClose }: { onClose: () => void }) {
+  const titleId = useId()
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => closeRef.current?.focus(), [])
+  return createPortal(
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="modal-card jk-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            onClose()
+          }
+        }}
+      >
+        <div className="modal-head">
+          <span id={titleId}>
+            <Keyboard size={16} aria-hidden="true" /> میان‌برهای صفحه‌کلید
+          </span>
+          <button ref={closeRef} type="button" aria-label="بستن" onClick={onClose}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="jk-body">
+          {KEY_GROUPS.map((g) => (
+            <div key={g.title} className="jk-group" role="group" aria-label={g.title}>
+              <div className="jk-group-title">{g.title}</div>
+              {g.keys.map(([keys, what]) => (
+                <div key={keys} className="jk-row">
+                  <kbd dir={/[a-z]/i.test(keys) || /[←→↑↓]/.test(keys) ? 'ltr' : undefined}>{keys}</kbd>
+                  <span>{what}</span>
+                </div>
+              ))}
+            </div>
           ))}
-        </span>
-        <span className="jg-keys-more">
-          {open ? 'بستن' : 'همه‌ی میان‌برها'} <kbd dir="ltr">Ctrl+/</kbd>
-          <ChevronDown size={14} aria-hidden="true" />
-        </span>
-      </summary>
-      <div className="jg-keys-panel">
-        {KEY_GROUPS.map((g) => (
-          <div key={g.title} className="jg-keys-group" role="group" aria-label={g.title}>
-            <div className="jg-keys-group-title">{g.title}</div>
-            {g.keys.map(([keys, what]) => (
-              <div key={keys} className="jg-keys-row">
-                <kbd dir="ltr">{keys}</kbd>
-                <span>{what}</span>
-              </div>
-            ))}
-          </div>
-        ))}
+        </div>
+        <p className="jk-foot">فهرستِ همه‌ی میان‌برهای برنامه: تنظیمات ← میان‌برهای صفحه‌کلید</p>
       </div>
-    </details>
+    </div>,
+    document.body,
   )
 }
 
@@ -555,12 +573,13 @@ function balanceState(d: JournalEntryDraft): BalanceState {
 }
 
 /**
- * نوارِ شناورِ پایینِ سند: جمع‌ها و دکمه‌ی ثبت، همیشه در دیدرس.
+ * نوارِ چسبنده‌ی پایینِ سند: **راست** دکمه‌ی ثبت، **چپ** وضعیتِ توازن و جمع‌ها.
  *
- * هر دو حالت همین را دارند. جای `ActionBar`ِ عمومی، چون این‌جا نوار خودش محتوای اصلی
- * است، نه جای یک دکمه: عددها درشت‌اند، رنگِ توازن روی لبه‌ی بالای کلِ نوار می‌نشیند، و
- * دکمه‌ی ثبت بزرگ‌تر از دکمه‌ی فرم‌های دیگر است. `shortcut` فقط در حالتِ حسابدار
- * «Ctrl+S» را کنارِ دکمه می‌نویسد — حالتِ ساده آن میان‌بر را ندارد.
+ * هر دو حالت همین را دارند. جای `ActionBar`ِ عمومی، چون این‌جا نوار خودش محتوای اصلی است:
+ * عددها درشت‌اند، رنگِ توازن روی لبه‌ی بالای کلِ نوار می‌نشیند، و دکمه‌ی ثبت بزرگ‌تر از
+ * دکمه‌ی فرم‌های دیگر است. دکمه اولین چیزی است که چشمِ راست‌به‌چپ می‌بیند؛ جمع‌ها در انتهای
+ * نوار، جایی که حسابدار پیش از ثبت نگاه می‌کند. `shortcut` فقط در حالتِ حسابدار «(Ctrl+S)»
+ * را روی دکمه می‌نویسد — حالتِ ساده آن میان‌بر را ندارد.
  *
  * **چرا دو لایه (`jf-dock` و `jf-foot`).** لایه‌ی بیرونی می‌چسبد و ظرفِ `scroll-state`
  * است؛ لایه‌ی درونی ظاهر است و وقتی نوار واقعاً چسبیده، گوشه‌های پایینش صاف می‌شود.
@@ -571,34 +590,31 @@ function JournalFooter({ d, shortcut = false }: { d: JournalEntryDraft; shortcut
   return (
     <div className="jf-dock">
       <div className={`jf-foot jf-foot--${state}`}>
-        <BalanceSummary d={d} state={state} />
-        <div className="jf-msg">
-          <FormStatus msg={d.message} />
-        </div>
         <button
           type="submit"
           className="btn-primary jf-submit"
           disabled={d.submitting}
           aria-keyshortcuts={shortcut ? 'Control+S' : undefined}
         >
-          <Check size={18} aria-hidden="true" /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
-          {shortcut && (
-            <kbd className="jf-submit-kbd" dir="ltr" aria-hidden="true">
-              Ctrl+S
-            </kbd>
-          )}
+          <Check size={18} aria-hidden="true" />
+          {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
+          {shortcut && !d.submitting && <span className="jf-submit-hint">(Ctrl+S)</span>}
         </button>
+        <div className="jf-msg">
+          <FormStatus msg={d.message} />
+        </div>
+        <BalanceSummary d={d} state={state} />
       </div>
     </div>
   )
 }
 
 /**
- * سه عددِ زنده‌ی سند: جمعِ بدهکار، جمعِ بستانکار، و اختلاف.
+ * جمع‌ها و وضعیتِ توازن: جمعِ بدهکار، جمعِ بستانکار، و «متوازن / نامتوازن».
  *
- * سبز = متوازن، قرمز = اختلاف (با اینکه کدام طرف بیشتر است، تا حسابدار بداند ردیفِ بعد
- * بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. اختلاف `aria-live` دارد تا
- * صفحه‌خوان هم بشنودش.
+ * سبز = متوازن، قرمز = نامتوازن (با مبلغِ اختلاف و اینکه کدام طرف بیشتر است، تا حسابدار
+ * بداند ردیفِ بعد بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. وضعیت `aria-live`
+ * دارد تا صفحه‌خوان هم بشنودش.
  */
 function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceState }) {
   const diff = Math.abs(d.totalDebit - d.totalCredit)
@@ -613,7 +629,7 @@ function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceStat
         <span className="jb-v">{fa(d.totalCredit)}</span>
       </div>
       <div className="jb-stat jb-stat--diff" aria-live="polite">
-        <span className="jb-k">{state === 'ok' ? 'توازن' : 'اختلاف'}</span>
+        <span className="jb-k">وضعیتِ توازن</span>
         <span className="jb-v">
           {state === 'empty' ? (
             'مبلغی وارد نشده'
@@ -623,11 +639,15 @@ function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceStat
             </>
           ) : (
             <>
-              <AlertTriangle size={18} aria-hidden="true" /> {fa(diff)}
-              <small>{d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'}</small>
+              <AlertTriangle size={18} aria-hidden="true" /> نامتوازن
             </>
           )}
         </span>
+        {state === 'err' && (
+          <span className="jb-sub">
+            اختلاف {fa(diff)} — {d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'}
+          </span>
+        )}
       </div>
     </div>
   )

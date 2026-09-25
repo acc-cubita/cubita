@@ -12462,8 +12462,49 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   outline-offset: -1px;
 }
 
-/* گریدِ حرفه‌ای در عرضِ کم افقی می‌لغزد، نه اینکه ستون‌ها را له کند (§۴۷). */
-.jg-table { min-inline-size: 720px; }
+/* گریدِ حرفه‌ای در عرضِ کم افقی می‌لغزد، نه اینکه ستون‌ها را له کند (§۴۷).
+ *
+ * **عرضِ ستون‌ها نسبی و ثابت است** (`table-layout: fixed` + `<colgroup>`). با چیدمانِ خودکار
+ * هر ستون به اندازه‌ی محتوایش پهن می‌شد: شرحِ ردیف (اختیاری) هم‌عرضِ مبلغ بود و نامِ حساب
+ * — مهم‌ترین خانه — سه‌نقطه می‌خورد. عرضِ پیکسلیِ ثابت هم در صفحه‌ی پهن بد بود: حساب ۸۰۰px و
+ * مبلغ ۱۵۰px. حالا درصد است و با صفحه با هم بزرگ می‌شوند: حساب باقی را می‌گیرد (حدودِ
+ * دو و نیم برابرِ مبلغ)، هر مبلغ ۱۶٪، شرح باریک‌تر؛ شماره و کنش‌ها ثابت. کف
+ * ۹۰۰px تا حساب در عرضِ کم زیرِ ~۲۰۰px نرود؛ زیرِ آن گرید در ظرفِ خودش می‌لغزد. */
+.jg-table { table-layout: fixed; inline-size: 100%; min-inline-size: 900px; }
+.jg-table col.jg-c-num { width: 44px; }
+.jg-table col.jg-c-actions { width: 104px; }
+.jg-table col.jg-c-amount { width: 16%; }
+.jg-table col.jg-c-desc { width: 11%; }
+.jg-table col.jg-c-pick { width: 14%; }
+.jg-table col.jg-c-fx { width: 12%; }
+.jg-table col.jg-c-track { width: 11%; }
+/* هر کادر دقیقاً پهنای خانه‌اش (منهای padding) — همه هم‌لبه، با فاصله‌ی یکسان. قاعده‌ی عمومیِ
+ * `.ef-form td > input { min-width: 120px }` این‌جا کادرِ شرح را از خانه‌اش بیرون می‌زد و به
+ * بدهکار می‌چسباند؛ `tbody` فقط برای اینکه اختصاصیت از آن بالاتر برود. */
+.ef-form .jg-table tbody td > :is(input:not([type='checkbox']), select, .item-picker-trigger, .jg-combo) {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+/* خانه‌ی حساب: کادرِ جست‌وجوی درجا (`AccountCombo`). فلش فقط نشانه است و داخلِ کادر
+ * می‌نشیند؛ کلیک روی کادر یا F4 فهرست را باز می‌کند. */
+.jg-combo { position: relative; }
+.jg-combo > input { inline-size: 100%; block-size: 30px; padding-inline-end: 28px; text-overflow: ellipsis; }
+.jg-combo-chev {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 8px;
+  color: var(--text-muted);
+  pointer-events: none;
+  translate: 0 -50%;
+  transition: rotate 120ms ease;
+}
+.jg-combo.is-open .jg-combo-chev { rotate: 180deg; color: var(--accent-on-tint); }
+.jg-combo.is-open > input { border-color: var(--accent); }
+.jg-combo-pop .item-picker-opt.selected .item-picker-opt-name { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .jg-combo-chev { transition: none; }
+}
 
 /* ── سربرگِ فشرده‌ی سند (حالت حسابدار) ─────────────────────────────────────
  * یک نوارِ افقی به‌جای سه ردیفِ فیلدِ ۴۰ پیکسلی: شرح (کشسان)، تاریخ، وضعیت، شماره‌ی
@@ -12531,80 +12572,52 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jh-seg .jh-seg-opt--permanent[aria-checked='true'] { background: var(--success-bg); color: var(--success); }
 .jh-seg .jh-seg-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* ── راهنمای میان‌برها: یک خطِ کم‌رنگ زیرِ گرید، تاشو ──
- * بسته فقط یک خط است؛ باز، چهار دسته کنارِ هم. `summary` خودش کنترلِ صفحه‌کلید است
- * (Enter/Space) و Ctrl+/ فقط همان را برمی‌گرداند. */
-.jg-keys {
-  margin-block-start: var(--sp-3);
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  /* وقتی Ctrl+/ آن را به دید می‌آورد، زیرِ نوارِ شناورِ پایین نماند. */
-  scroll-margin-block-end: 110px;
-}
-.jg-keys > summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-.jg-keys > summary::-webkit-details-marker { display: none; }
-.jg-keys > summary:hover { background: var(--surface-2); color: var(--text); }
-.jg-keys > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.jg-keys-title { font-weight: 700; }
-.jg-keys-peek { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
-.jg-keys-peek > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.jg-keys-more {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-inline-start: auto;
-  color: var(--accent-on-tint);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.jg-keys-more svg { transition: transform 150ms ease; }
-.jg-keys[open] .jg-keys-more svg { transform: rotate(180deg); }
-.jg-keys kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--border-strong);
-  border-block-end-width: 2px;
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--text-h);
-  font: inherit;
-  font-size: 0.72rem;
-  direction: ltr;
-  white-space: nowrap;
-}
-.jg-keys-panel {
+/* ── پنجره‌ی میان‌برها (دکمه‌ی سرِ کارت یا Ctrl+/) ──
+ * همان مودالِ عمومی (`.modal-overlay`/`.modal-card`)، پهن‌تر: چهار دسته در دو ستون. */
+.jk-trigger { gap: 6px; min-height: 32px; padding: 0 10px; font-size: var(--fs-sm); color: var(--text-muted); }
+.jk-trigger:hover { color: var(--text-h); }
+.modal-card.jk-card { width: min(720px, 100%); }
+.jk-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px 28px;
-  margin-block-start: 6px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px 32px;
+  padding: var(--sp-4);
+  font-size: var(--fs-sm);
 }
 /* هر دسته یک جدولِ دوستونه: ستونِ کلید به پهنای بلندترین کلیدِ همان دسته، تا شرح‌ها زیرِ هم
- * بنشینند و جا برای متن بماند. ردیف‌ها `display: contents` اند و خانه‌هایشان مستقیم در این گرید. */
-.jg-keys-group {
+ * بنشینند. ردیف‌ها `display: contents` اند و خانه‌هایشان مستقیم در این گرید. */
+.jk-group {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   align-content: start;
   align-items: center;
-  gap: 7px 10px;
+  gap: 8px 12px;
 }
-.jg-keys-group-title { grid-column: 1 / -1; color: var(--text-h); font-weight: 700; }
-.jg-keys-row { display: contents; }
-.jg-keys-row kbd { justify-self: start; }
+.jk-group-title { grid-column: 1 / -1; color: var(--text-h); font-weight: 700; }
+.jk-row { display: contents; }
+.jk-row > span { color: var(--text); }
+.jk-row kbd {
+  justify-self: start;
+  padding: 2px 7px;
+  border: 1px solid var(--border-strong);
+  border-block-end-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.jk-foot {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
 
-/* ── نوارِ شناورِ پایینِ سند (هر دو حالت) ──
+/* ── نوارِ چسبنده‌ی پایینِ سند (هر دو حالت) ──
+ * راست دکمه‌ی ثبت، چپ جمع‌ها و وضعیتِ توازن (ترتیبِ DOM همان ترتیبِ خواندنِ راست‌به‌چپ است).
  * `bottom` منفیِ همان paddingِ پایینِ `.app-content` (۲۸px) است: نوارِ چسبنده در آن padding
  * می‌ایستد، یعنی ۲۸px بالاتر از لبه‌ی پنجره، و ردیف‌ها از زیرش پیدا بودند. حالا چسبیده به
  * لبه می‌نشیند. `scroll-state` (Chromium، یعنی اپِ ویندوز) گوشه‌های پایین را وقتِ چسبیدن
@@ -12637,6 +12650,18 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.14);
   }
 }
+.jf-foot .jf-submit {
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 26px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* «(Ctrl+S)» بخشی از متنِ دکمه است، نه چیپی جدا — چیپِ قاب‌دار دکمه‌ی دوم به‌نظر می‌آمد. */
+.jf-submit-hint { font-size: var(--fs-sm); font-weight: 600; opacity: 0.75; direction: ltr; }
 .jf-msg {
   display: flex;
   flex: 1 1 160px;
@@ -12650,39 +12675,21 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jf-msg .is-ok { color: var(--success); }
 .jf-msg .is-err { color: var(--danger); }
 .jf-msg svg { flex: 0 0 auto; }
-.jf-foot .jf-submit {
-  gap: 8px;
-  min-height: 48px;
-  margin-inline-start: auto;
-  padding: 0 26px;
-  border-radius: var(--radius-md);
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  white-space: nowrap;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.jf-submit-kbd {
-  padding: 1px 6px;
-  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
-  border-radius: 4px;
-  font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  opacity: 0.85;
-}
 
-/* ── سه عددِ سند ──
- * بدهکار و بستانکار بی‌رنگ و درشت؛ رنگِ توازن فقط روی خانه‌ی سوم (و لبه‌ی نوار) تا دو عددِ
- * اول همیشه خوانا بمانند. خانه‌ی سوم یک «چیپ» است: خاکستری، سبز یا قرمز. */
+/* ── جمع‌ها و وضعیتِ توازن (انتهای نوار، چپ) ──
+ * بدهکار و بستانکار بی‌رنگ و درشت؛ رنگِ توازن فقط روی خانه‌ی وضعیت (و لبه‌ی نوار) تا دو عددِ
+ * اول همیشه خوانا بمانند. خانه‌ی وضعیت یک «چیپ» است: خاکستری، سبز یا قرمز. */
 .jb-sum {
   display: flex;
   align-items: stretch;
+  margin-inline-start: auto;
   font-variant-numeric: tabular-nums;
 }
 .jb-stat { display: grid; align-content: center; gap: 2px; min-width: 150px; padding: 4px 18px; }
 .jb-stat:first-child { padding-inline-start: 4px; }
 .jb-stat + .jb-stat { border-inline-start: 1px solid var(--border); }
 .jb-sum .jb-stat--diff {
+  min-width: 170px;
   margin-inline-start: 8px;
   padding-inline: 16px;
   border-inline-start: 0;
@@ -12700,7 +12707,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   line-height: 1.3;
   white-space: nowrap;
 }
-.jb-v small { font-size: var(--fs-xs); font-weight: 600; }
+.jb-sub { color: var(--danger); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
 .jb-sum--ok .jb-stat--diff { background: var(--success-bg); }
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
 .jb-sum--err .jb-stat--diff { background: var(--danger-bg); }
@@ -12712,19 +12719,23 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .jh-field--grow { grid-column: 1 / -1; }
   .jh-row--sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  /* صفحه‌کلیدِ فیزیکی نیست؛ راهنما فقط جای ردیف‌ها را می‌گیرد. */
-  .jg-keys { display: none; }
-  /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود — این‌جا فشردگی، نه درشتی. */
+  /* صفحه‌کلیدِ فیزیکی نیست؛ دکمه‌ی میان‌برها فقط جای سرِ کارت را می‌گیرد. */
+  .jk-trigger { display: none; }
+  /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود — این‌جا فشردگی، نه درشتی.
+   * جمع‌ها بالا، دکمه‌ی تمام‌عرض پایین، زیرِ انگشت. */
   .jf-foot { gap: 10px; padding: 10px 12px; }
-  .jb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); inline-size: 100%; }
+  .jb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); inline-size: 100%; margin-inline-start: 0; }
   .jb-stat,
-  .jb-stat:first-child { min-width: 0; padding: 3px 8px; }
-  .jb-sum .jb-stat--diff { margin-inline-start: 4px; padding-inline: 8px; }
+  .jb-stat:first-child,
+  .jb-sum .jb-stat--diff { min-width: 0; padding: 3px 8px; }
+  .jb-sum .jb-stat--diff { margin-inline-start: 4px; }
   .jb-k { font-size: 11px; }
   .jb-v { flex-wrap: wrap; font-size: var(--fs-md); white-space: normal; }
+  .jb-sub { white-space: normal; }
   .jf-msg { flex-basis: 100%; }
-  .jf-foot .jf-submit { justify-content: center; inline-size: 100%; min-height: 44px; margin-inline-start: 0; }
-  .jf-submit-kbd { display: none; }
+  .jf-foot .jf-submit { order: 2; justify-content: center; inline-size: 100%; min-height: 44px; }
+  /* صفحه‌کلیدِ فیزیکی نیست. */
+  .jf-submit-hint { display: none; }
 }
 
 /* ── انتخابِ حالتِ کار (پروفایل) ───────────────────────────────────────────── */
@@ -12857,21 +12868,31 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   border-block-start: 1px dashed var(--border);
 }
 
-/* ── نوارِ بالای گریدِ سند: «رفتن به ردیف» و شمارِ ردیف‌ها ──
-   بیرون از ظرفِ اسکرولِ گرید تا در سندِ ۳۰۰ ردیفی همیشه دیده شود. */
-.jg-toolbar {
+/* ── «رفتن به ردیف»: کادرِ شناور روی سرِ گرید، فقط با Ctrl+G ──
+   نوارِ همیشگی‌اش جای ردیف‌ها را می‌گرفت؛ حالا فقط وقتی خواسته شود روی سرستون می‌نشیند و
+   چیدمان را جابه‌جا نمی‌کند. Enter می‌پرد، Esc به خانه‌ی مبدأ برمی‌گرداند. */
+.jg { position: relative; }
+.jg-jump-pop {
+  position: absolute;
+  inset-block-start: -8px;
+  inset-inline-start: 0;
+  z-index: 6;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
-  margin-block-end: 8px;
-  font-size: var(--fs-sm);
+  gap: 6px 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
   color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 /* `label:has(> input)`ِ سراسری (index.css) برچسب را ستونی می‌کند؛ این‌جا برچسب کنارِ
    کادر است، پس جهت صریح گفته می‌شود — وگرنه کادر زیرِ متن می‌افتاد. */
-.jg-toolbar .jg-jump { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
-.jg-toolbar .jg-jump input { width: 72px; min-height: 0; height: 30px; padding-block: 0; text-align: center; }
+.jg-jump-pop .jg-jump { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+.jg-jump-pop .jg-jump input { width: 72px; min-height: 0; height: 30px; padding-block: 0; text-align: center; }
 .jg-count { font-variant-numeric: tabular-nums; }
 .jg-jump-msg { color: var(--danger); }
 
