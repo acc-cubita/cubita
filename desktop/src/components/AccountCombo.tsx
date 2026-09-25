@@ -47,6 +47,7 @@ export function AccountCombo({
   onChange,
   onCommit,
   placeholder = 'کد یا نامِ حساب…',
+  emptyText = 'حسابی با این کد یا نام پیدا نشد.',
   'aria-label': ariaLabel,
 }: {
   value: string
@@ -54,6 +55,8 @@ export function AccountCombo({
   onChange: (value: string) => void
   onCommit?: (how: ComboCommit) => void
   placeholder?: string
+  /** پیامِ «پیدا نشد» — همین کادر برای کالا هم به کار می‌رود (مانده اول دوره). */
+  emptyText?: string
   'aria-label'?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -217,7 +220,7 @@ export function AccountCombo({
           >
             <ul id={listId} role="listbox" aria-label={ariaLabel} className="item-picker-list" ref={listRef} style={{ maxHeight: rect.maxH }}>
               {filtered.length === 0 ? (
-                <li className="item-picker-empty">حسابی با این کد یا نام پیدا نشد.</li>
+                <li className="item-picker-empty">{emptyText}</li>
               ) : (
                 filtered.map((o, i) => (
                   <li

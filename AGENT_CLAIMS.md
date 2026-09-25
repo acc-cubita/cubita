@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `OpeningBalancePage.tsx` و تستش، `BalanceFooter.tsx` (تازه)، `lib/balanceState.ts`، `lib/useSheetNav.ts` (تازه)، `lib/alignToGrid.ts`، `lib/journalGridNav.ts`، `AccountCombo.tsx`، `JournalEntryForm.tsx`، `App.css` | «مانده اول دوره» با تمِ اکسلیِ سند حسابداری | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code (آرش) | `JournalEntryForm.tsx`، `App.css`، `lib/alignToGrid.ts`، `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx` و تست‌ها | سربرگ و نوارِ پایینِ سند ستون‌به‌ستون با گریدِ اکسلی؛ کفِ زمانِ نمایشِ ستونِ «حساب» | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code (آرش) | `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx`، `App.css` و تستش | جدولِ اکسلی: «جا در قاب» — ستون‌های ثابت، بی اسکرولِ افقی، کشیدن میانِ دو هم‌سایه | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx`، `App.css` و تستش | جدولِ اکسلی: جدول باریک‌تر از قاب نمی‌شود؛ ستونِ آخر جای خالی را می‌گیرد | ۱۴۰۵/۰۷/۰۳ |

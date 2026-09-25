@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Search, Trash2, X } from 'lucide-react'
+import { BookOpen, Keyboard, Rows3, Search, Trash2, X } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
@@ -11,7 +11,6 @@ import {
   CountBadge,
   FormField,
   FormGrid,
-  FormStatus,
   InputAffix,
   MoreOptions,
   RowAction,
@@ -19,8 +18,9 @@ import {
 import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntryDraft'
 import { useExperienceMode } from '../lib/experienceMode'
 import { JournalGrid } from './JournalGrid'
+import { BalanceFooter } from './BalanceFooter'
+import { balanceState } from '../lib/balanceState'
 import { openCellPicker } from '../lib/gridPicker'
-import { useFitText } from '../lib/useFitText'
 import { useAlignToGrid } from '../lib/alignToGrid'
 import { findLines } from '../lib/journalLineOps'
 
@@ -644,132 +644,18 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-type BalanceState = 'empty' | 'ok' | 'err'
-
-function balanceState(d: JournalEntryDraft): BalanceState {
-  if (d.totalDebit === 0 && d.totalCredit === 0) return 'empty'
-  return d.isBalanced ? 'ok' : 'err'
-}
-
-/**
- * نوارِ چسبنده‌ی پایینِ سند: **راست** دکمه‌ی ثبت، **چپ** وضعیتِ توازن و جمع‌ها.
- *
- * هر دو حالت همین را دارند. جای `ActionBar`ِ عمومی، چون این‌جا نوار خودش محتوای اصلی است:
- * عددها درشت‌اند، رنگِ توازن روی لبه‌ی بالای کلِ نوار می‌نشیند، و دکمه‌ی ثبت بزرگ‌تر از
- * دکمه‌ی فرم‌های دیگر است. ظاهرش هم‌خانواده‌ی جدولِ اکسلیِ ردیف‌هاست: جمع‌ها خانه‌های یک جدول‌اند،
- * هر کدام با سرستونِ خاکستری. دکمه اولین چیزی است که چشمِ راست‌به‌چپ می‌بیند؛ جمع‌ها در انتهای
- * نوار، جایی که حسابدار پیش از ثبت نگاه می‌کند. `shortcut` فقط در حالتِ حسابدار «(Ctrl+S)»
- * را روی دکمه می‌نویسد — حالتِ ساده آن میان‌بر را ندارد.
- *
- * `columns` (حالتِ حسابدار) نوار را ستون‌به‌ستون با گرید هم‌خط می‌کند (`useAlignToGrid`): دکمه زیرِ
- * «ردیف + حساب»، وضعیت زیرِ «شرح ردیف»، و هر جمع دقیقاً زیرِ ستونِ خودش.
- *
- * **چرا دو لایه (`jf-dock` و `jf-foot`).** لایه‌ی بیرونی می‌چسبد و ظرفِ `scroll-state`
- * است؛ لایه‌ی درونی ظاهر است و وقتی نوار واقعاً چسبیده، گوشه‌های پایینش صاف می‌شود.
- * پرس‌وجوی `scroll-state` فقط فرزندان را می‌تواند رنگ کند، نه خودِ ظرف را.
- */
-function JournalFooter({
-  d,
-  shortcut = false,
-  columns = false,
-}: {
-  d: JournalEntryDraft
-  shortcut?: boolean
-  columns?: boolean
-}) {
-  const state = balanceState(d)
+/** نوارِ پایینِ سند ([BalanceFooter]) با داده‌ی همین پیش‌نویس. */
+function JournalFooter({ d, shortcut = false, columns = false }: { d: JournalEntryDraft; shortcut?: boolean; columns?: boolean }) {
   return (
-    <div className="jf-dock">
-      <div className={`jf-foot jf-foot--${state}${columns ? ' jf-foot--cols' : ''}`}>
-        <button
-          type="submit"
-          className="btn-primary jf-submit"
-          disabled={d.submitting}
-          aria-keyshortcuts={shortcut ? 'Control+S' : undefined}
-        >
-          <Check size={18} aria-hidden="true" />
-          {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
-          {shortcut && !d.submitting && <span className="jf-submit-hint">(Ctrl+S)</span>}
-        </button>
-        <div className="jf-msg">
-          <FormStatus msg={d.message} />
-        </div>
-        <BalanceSummary d={d} state={state} />
-      </div>
-    </div>
-  )
-}
-
-/**
- * جمع‌ها و وضعیتِ توازن: جمعِ بدهکار، جمعِ بستانکار، و «متوازن / نامتوازن».
- *
- * سبز = متوازن، قرمز = نامتوازن (با مبلغِ اختلاف و اینکه کدام طرف بیشتر است، تا حسابدار
- * بداند ردیفِ بعد بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. وضعیت `aria-live`
- * دارد تا صفحه‌خوان هم بشنودش.
- *
- * **سه خانه اندازه‌ی ثابت دارند** (CSS) و با تایپِ هر رقم بزرگ و کوچک نمی‌شوند — نوار
- * جلوی چشمِ حسابدار است و هر لرزشش حواس را می‌بَرد. عددی که در خانه جا نشود به‌جای
- * پهن‌کردنِ خانه، به نسبت کوچک می‌شود (`FitText`).
- */
-function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceState }) {
-  const diff = Math.abs(d.totalDebit - d.totalCredit)
-  const side = d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'
-  return (
-    <div className={`jb-sum jb-sum--${state}`} role="group" aria-label="جمعِ سند">
-      <div className="jb-stat jb-stat--debit">
-        <span className="jb-k">جمع بدهکار</span>
-        <div className="jb-body">
-          <FitText className="jb-v" text={fa(d.totalDebit)} />
-        </div>
-      </div>
-      <div className="jb-stat jb-stat--credit">
-        <span className="jb-k">جمع بستانکار</span>
-        <div className="jb-body">
-          <FitText className="jb-v" text={fa(d.totalCredit)} />
-        </div>
-      </div>
-      <div className="jb-stat jb-stat--diff" aria-live="polite">
-        <span className="jb-k">وضعیتِ توازن</span>
-        <div className="jb-body">
-          {/* این خانه زیرِ ستونِ «شرح ردیف» است و گاهی باریک — وضعیت هم مثلِ عددها کوچک می‌شود. */}
-          <FitText className="jb-v" min={0.6} text={state}>
-            {state === 'empty' ? (
-              'مبلغی وارد نشده'
-            ) : state === 'ok' ? (
-              <>
-                <CheckCircle2 aria-hidden="true" /> متوازن
-              </>
-            ) : (
-              <>
-                <AlertTriangle aria-hidden="true" /> نامتوازن
-              </>
-            )}
-          </FitText>
-          {/* در موبایل فقط مبلغ: خانه‌ی ۱۰۰ پیکسلی جای «بدهکار بیشتر» را ندارد، و طرفِ بزرگ‌تر از دو
-              جمعِ کنارش پیداست. */}
-          {state === 'err' && (
-            <FitText className="jb-sub" min={0.75} text={`${fa(diff)} ${side}`}>
-              {fa(diff)}
-              <span className="jb-sub-side"> {side}</span>
-            </FitText>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * متنِ یک خانه‌ی ثابت‌عرض — به‌جای پهن‌کردنِ خانه، کوچک می‌شود ([useFitText]). `text` کلیدِ
- * سنجشِ دوباره است؛ `children` اگر باشد به‌جایش رندر می‌شود (برای بخشی که CSS در موبایل پنهان
- * می‌کند — سنجش از پهنای واقعاً رندرشده است).
- */
-function FitText({ className, min, text, children }: { className: string; min?: number; text: string; children?: ReactNode }) {
-  const ref = useFitText<HTMLSpanElement>(text, min)
-  return (
-    <span ref={ref} className={`${className} jb-fit`}>
-      {children ?? text}
-    </span>
+    <BalanceFooter
+      totalDebit={d.totalDebit}
+      totalCredit={d.totalCredit}
+      state={balanceState(d.totalDebit, d.totalCredit, d.isBalanced)}
+      submitting={d.submitting}
+      message={d.message}
+      shortcut={shortcut}
+      columns={columns}
+    />
   )
 }
 
