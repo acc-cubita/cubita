@@ -75,6 +75,13 @@ def copy_postgres(pg_dir: Path, dest: Path) -> None:
 
 
 def main() -> int:
+    #: خروجیِ هدایت‌شده به فایل روی ویندوز cp1252 است و پیامِ فارسی را نمی‌تواند چاپ کند —
+    #: بیلد وسطِ کار با UnicodeEncodeError می‌افتاد و بسته‌ی کهنه سرِ جایش می‌ماند (۱۴۰۵/۰۷/۰۳).
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--pg-dir", required=True, help="ریشه‌ی نصبِ PostgreSQL (حاویِ bin/lib/share)")
     parser.add_argument("--winsw", help="WinSW-x64.exe محلی (وگرنه دانلود با هشِ پین‌شده)")
