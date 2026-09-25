@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `JournalEntryForm.tsx`، `App.css`، `lib/alignToGrid.ts`، `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx` و تست‌ها | سربرگ و نوارِ پایینِ سند ستون‌به‌ستون با گریدِ اکسلی؛ کفِ زمانِ نمایشِ ستونِ «حساب» | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code (آرش) | `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx`، `App.css` و تستش | جدولِ اکسلی: «جا در قاب» — ستون‌های ثابت، بی اسکرولِ افقی، کشیدن میانِ دو هم‌سایه | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `lib/useColumnWidths.ts`، `JournalGrid.tsx`، `JournalPages.tsx`، `App.css` و تستش | جدولِ اکسلی: جدول باریک‌تر از قاب نمی‌شود؛ ستونِ آخر جای خالی را می‌گیرد | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `routers/journal.py`، `JournalGrid.tsx`، `JournalEntryForm.tsx`، `XlGrid.tsx`، `lib/rowSelection.ts`، `lib/useColumnWidths.ts`، `lib/useDebounced.ts`، `lib/journalLineOps.ts`، `JournalPages.tsx`، `api.ts`، `ShortcutsPage.tsx`، `App.css` و تست‌ها | جدولِ اکسل‌مانند: گریدِ ثبتِ سند + فهرستِ اسناد | ۱۴۰۵/۰۷/۰۳ |

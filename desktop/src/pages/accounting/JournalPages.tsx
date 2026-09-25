@@ -196,7 +196,7 @@ function EntryTable({
 
   return (
     <div className="table-scroll ef-table-wrap">
-      <table className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list">
+      <table ref={cw.frame} className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list">
         <colgroup>
           {colIds.map((id) => (
             <col key={id} className={`xl-c-${id}`} style={cw.col(id)} />
