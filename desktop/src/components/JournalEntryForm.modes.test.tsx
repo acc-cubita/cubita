@@ -64,7 +64,9 @@ async function render() {
   })
 }
 
-const labels = () => [...container.querySelectorAll('.ef-label label')].map((l) => l.textContent?.replace('*', '').trim())
+//: حالتِ ساده برچسبِ فرم‌کیت (`.ef-label`) دارد، حالتِ حسابدار نوارِ فشرده‌ی سربرگ (`.jh-label`).
+const labels = () =>
+  [...container.querySelectorAll('.ef-label label, .jh-label')].map((l) => l.textContent?.replace('*', '').trim())
 const toggle = () => container.querySelector<HTMLButtonElement>('.ef-more-toggle')
 
 describe('سربرگِ سند در هر حالت', () => {
@@ -72,6 +74,15 @@ describe('سربرگِ سند در هر حالت', () => {
     await render()
     expect(toggle()).toBeNull()
     expect(labels()).toEqual(expect.arrayContaining(['شرح سند', 'تاریخ سند', 'وضعیت سند', 'شماره فرعی', 'مرکز هزینه / پروژه', 'تفصیلی سایر', 'ارز سند']))
+    //: چهار فیلدِ هر سند در **یک** ردیفِ نوارِ فشرده؛ فیلدهای کسب‌وکاری در ردیفِ دوم.
+    const rows = [...container.querySelectorAll('.jh-bar .jh-row')]
+    expect(rows).toHaveLength(2)
+    expect([...rows[0].querySelectorAll('.jh-label')].map((l) => l.textContent?.replace('*', '').trim())).toEqual([
+      'شرح سند',
+      'تاریخ سند',
+      'وضعیت سند',
+      'شماره فرعی',
+    ])
   })
 
   it('ساده: فقط شرح و تاریخ؛ بقیه پشتِ «گزینه‌های بیشتر»', async () => {

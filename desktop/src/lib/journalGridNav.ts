@@ -82,6 +82,8 @@ export type Move =
   | { kind: 'move'; to: CellRef }
   | { kind: 'appendRow' }
   | { kind: 'none' }
+  //: از گرید بیرون برو (Tab در انتهای سندِ کامل) — مقصد را فراخوان تعیین می‌کند.
+  | { kind: 'exit' }
 
 /**
  * Enter: «این مقدار تمام شد، بعدی».
@@ -116,12 +118,8 @@ export function onShiftEnter(shape: GridShape, at: CellRef, enabled: CellEnabled
 /**
  * پیکانِ بالا/پایین: همان ستون، ردیفِ مجاور.
  *
- * **چرا فقط بالا/پایین و نه چپ/راست.** §۱۲ خودش راهِ خروج را داده: «اگر تعارضِ
- * UX دارد، فقط Up/Down پیاده شود». و تعارض واقعی است — چپ/راست داخلِ یک input
- * مکان‌نما را جابه‌جا می‌کند و گرفتنشان یعنی کاربر نتواند وسطِ عدد را اصلاح کند.
- * به‌علاوه در رابطِ راست‌به‌چپ «بعدی» بصری، *چپ* است نه راست؛ کپی‌کردنِ بی‌فکرِ
- * گریدهای LTR دقیقاً همان دامی است که §۳۷ هشدارش را داده. پس چپ/راست دست‌نخورده
- * می‌مانند و حرکتِ افقی فقط با Enter/Tab است — که در هر دو جهتِ نوشتار یکسان‌اند.
+ * چپ/راست در `onHorizontal` است، با قاعده‌ی لبه‌ی مکان‌نما (`arrowLeavesField`) — تا
+ * اصلاحِ وسطِ عدد ممکن بماند (همان تعارضی که §۱۲ از آن می‌ترسید).
  *
  * اگر سلولِ هم‌ستون در ردیفِ مقصد غیرفعال باشد، نزدیک‌ترین سلولِ فعالِ همان ردیف
  * انتخاب می‌شود تا حرکت هرگز بی‌اثر نماند.
@@ -139,4 +137,78 @@ export function onVertical(
     stepInRow(shape, { row, col: at.col }, 1, enabled) ??
     stepInRow(shape, { row, col: at.col }, -1, enabled)
   return near ? { kind: 'move', to: near } : { kind: 'none' }
+}
+
+/**
+ * Tab / Shift+Tab: خانه‌ی فعالِ بعد/قبل، **با** مرکزِ هزینه (برخلافِ Enter، §۱۵)، و
+ * پیچیدن به ردیفِ بعد/قبل — دکمه‌های کنشِ ردیف (تکرار/کپی/حذف) در مسیر نیستند؛ میان‌بر
+ * دارند (Ctrl+D، Ctrl+Shift+C، Ctrl+Delete) و بی این هر ردیف سه Tabِ اضافه می‌خواست.
+ *
+ * در آخرین خانه‌ی آخرین ردیف: ردیفِ تازه — **مگر ردیفِ آخر خالی باشد**؛ آن‌وقت
+ * `exit`، تا کاربری که سند را تمام کرده با Tab به «ثبت سند» برسد و در گرید زندانی نشود.
+ * Shift+Tab در اولین خانه‌ی ردیفِ اول هم `exit` است (به سربرگ).
+ */
+export function onTab(
+  shape: GridShape,
+  at: CellRef,
+  dir: 1 | -1,
+  enabled: CellEnabled,
+  lastRowHasContent: boolean,
+): Move {
+  const inRow = stepInRow(shape, at, dir, enabled)
+  if (inRow) return { kind: 'move', to: inRow }
+  if (dir === 1) {
+    for (let r = at.row + 1; r < shape.rowCount; r++) {
+      const head = firstInRow(shape, r, enabled)
+      if (head) return { kind: 'move', to: head }
+    }
+    return lastRowHasContent ? { kind: 'appendRow' } : { kind: 'exit' }
+  }
+  for (let r = at.row - 1; r >= 0; r--) {
+    const tail = lastInRow(shape, r, enabled)
+    if (tail) return { kind: 'move', to: tail }
+  }
+  return { kind: 'exit' }
+}
+
+/**
+ * ← / →: خانه‌ی مجاور در همان ردیف.
+ *
+ * **در رابطِ راست‌به‌چپ «بعدی» چپ است** (§۳۷): ستون‌ها از راست شروع می‌شوند، پس ←
+ * یعنی ستونِ منطقیِ بعد. در لبه‌ی ردیف نمی‌پیچد (مثلِ Excel) — ردیف عوض‌کردن کارِ ↑/↓
+ * و Enter/Tab است.
+ */
+export function onHorizontal(
+  shape: GridShape,
+  at: CellRef,
+  key: 'ArrowLeft' | 'ArrowRight',
+  rtl: boolean,
+  enabled: CellEnabled,
+): Move {
+  const dir: 1 | -1 = (key === 'ArrowLeft') === rtl ? 1 : -1
+  const to = stepInRow(shape, at, dir, enabled)
+  return to ? { kind: 'move', to } : { kind: 'none' }
+}
+
+/**
+ * آیا ← / → باید از این فیلد به خانه‌ی مجاور برود، یا مکان‌نما را داخلِ متن جابه‌جا کند؟
+ *
+ * همان دو حالتِ Excel: وقتی تازه به خانه رسیده‌ای (کلِ مقدار انتخاب‌شده — `focusCell`
+ * همین را می‌کند) یا خانه خالی است، پیکان **حرکت** است. وقتی مکان‌نما داخلِ متن است
+ * (کلیک یا F2)، پیکان مکان‌نما را می‌برد و فقط در لبه‌ی متن از خانه بیرون می‌زند —
+ * پس اصلاحِ وسطِ عدد همیشه ممکن است.
+ *
+ * «لبه» به جهتِ خودِ فیلد بسته است: در فیلدِ راست‌به‌چپ ← مکان‌نما را به **انتهای**
+ * متن می‌برد، در فیلدِ عددیِ چپ‌به‌راست به ابتدای آن. `start === null` یعنی کنترلی
+ * بی‌مکان‌نما (دکمه‌ی انتخاب‌گر، `select`) — همیشه حرکت.
+ */
+export function arrowLeavesField(
+  f: { start: number | null; end: number | null; length: number; rtl: boolean },
+  key: 'ArrowLeft' | 'ArrowRight',
+): boolean {
+  if (f.start === null || f.end === null || f.length === 0) return true
+  if (f.start === 0 && f.end === f.length) return true
+  if (f.start !== f.end) return false
+  const towardEnd = (key === 'ArrowLeft') === f.rtl
+  return towardEnd ? f.end === f.length : f.start === 0
 }

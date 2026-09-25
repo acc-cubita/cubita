@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `JournalEntryForm.tsx`، `JournalGrid.tsx`، `SearchSelect.tsx`، `lib/journalGridNav.ts`، `lib/faText.ts`، `lib/gridPicker.ts` (تازه)، `ShortcutsPage.tsx`، `App.css` (`.jh-*`/`.jb-*`/`.jg-legend`) و تست‌ها | ارگونومیِ ثبتِ سند: سربرگِ فشرده، نوارِ توازن، Tab/←→/F2/F4، راهنمای میان‌بر، رتبه‌بندیِ جست‌وجو | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code | `desktop/src/lib/tenantScope.ts`، `App.tsx`، `AccountBrowser.tsx`، `descriptionMemory.ts` و تست‌هایشان، `PROJECT_OVERVIEW.md` | کلیدِ `sessionStorage` به‌ازای کسب‌وکار (باگِ بازبینیِ #191) | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `backend/app/routers/journal.py`، `backend/app/schemas/accounting.py`، `backend/tests/test_journal_list_filters.py`، `desktop/src/api.ts`، `desktop/src/pages/accounting/ReportPages.tsx`، `Daybook.test.tsx`، `App.css`، `PROJECT_OVERVIEW.md`؛ پایگاه‌داده‌ی یک‌بارمصرفِ `cubita_verify` (حذف شد) | دفتر روزنامه: صفحه‌بندیِ سرور، جمعِ `/summary`، فیلترهای مشترک، برچسبِ جست‌وجو | ۱۴۰۵/۰۷/۰۲ |
 | Claude Code | `services/accounting_ops.py` (`get_balance_tree`)، `services/reports.py` (`get_general_ledger`: `limit/offset`)، دو روتر و دو شِما، `AccountBrowser.tsx` (تازه)، `lib/accountTree.ts` (تازه)، `ChartPages.tsx`، `Dashboard.tsx`، `api.ts`، `App.css`، `HelpPage.tsx`، `e2e/account-browser.e2e.mjs`، `ci.yml` | UI-02 مرور حسابِ حرفه‌ای: درختِ تجمیعیِ سمتِ سرور، گردشِ صفحه‌بندی‌شده، کیبورد، جست‌وجو، حفظِ زمینه — بی‌مهاجرت | ۱۴۰۵/۰۷/۰۲ |

@@ -12442,16 +12442,6 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jg-actions { text-align: end; }
 .jg-actions .row-actions { gap: 2px; }
 
-/* نشانِ «میان‌برها» در سرِ کارت. */
-.jg-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  cursor: help;
-}
-
 /* فوکوس باید در گرید **دیده شود** (§۳۶). ردیفِ فشرده بدونِ این، کاربرِ
  * صفحه‌کلید را گم می‌کند — همان چیزی که کلِ این حالت برای رفعش ساخته شد. */
 .jg-table :is(input, select, button):focus-visible {
@@ -12461,6 +12451,142 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 
 /* گریدِ حرفه‌ای در عرضِ کم افقی می‌لغزد، نه اینکه ستون‌ها را له کند (§۴۷). */
 .jg-table { min-inline-size: 720px; }
+
+/* ── سربرگِ فشرده‌ی سند (حالت حسابدار) ─────────────────────────────────────
+ * یک نوارِ افقی به‌جای سه ردیفِ فیلدِ ۴۰ پیکسلی: شرح (کشسان)، تاریخ، وضعیت، شماره‌ی
+ * فرعی. ارتفاعِ کنترل‌ها با همان `--ef-h`ِ فرم‌کیت ۳۶ می‌شود — قاعده‌ی «یک ارتفاع برای
+ * همه‌ی کنترل‌ها» سرِ جایش می‌ماند، فقط عددش این‌جا کوچک‌تر است. */
+.jh-bar {
+  --ef-h: 36px;
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-block-end: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.jh-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px 150px 150px;
+  gap: 8px 12px;
+  align-items: end;
+}
+.jh-row--sub {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 230px));
+  padding-block-start: 10px;
+  border-block-start: 1px dashed var(--border);
+}
+.jh-field { display: grid; gap: 3px; min-width: 0; }
+.jh-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jh-req { color: var(--danger); }
+
+/* «موقت / دائم»: دو دکمه‌ی کنارِ هم در قابِ هم‌ارتفاعِ فیلدها. */
+.jh-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  height: var(--ef-h);
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.jh-seg .jh-seg-opt {
+  min-height: 0;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.jh-seg .jh-seg-opt:hover { color: var(--text-h); }
+.jh-seg .jh-seg-opt[aria-checked='true'] { background: var(--accent-bg); color: var(--accent-on-tint); }
+/* «دائم» برگشت‌ناپذیر است — انتخابش رنگِ خودش را دارد تا با یک نگاه دیده شود. */
+.jh-seg .jh-seg-opt--permanent[aria-checked='true'] { background: var(--success-bg); color: var(--success); }
+.jh-seg .jh-seg-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── راهنمای میان‌برها، زیرِ گرید ── */
+.jg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-block-start: var(--sp-3);
+  padding-block-start: 10px;
+  border-block-start: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.jg-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.jg-legend kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-block-end-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 0.72rem;
+  direction: ltr;
+}
+
+/* ── نوارِ جمع و توازن (نوارِ چسبنده‌ی پایین، هر دو حالت) ──
+ * سه خانه: جمعِ بدهکار، جمعِ بستانکار، اختلاف. رنگِ توازن فقط روی خانه‌ی سوم و قابِ نوار
+ * است تا دو عددِ اول همیشه خوانا و بی‌رنگ بمانند. */
+.jb-sum {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.jb-stat { display: grid; gap: 1px; min-width: 130px; padding: 5px 14px; }
+.jb-stat + .jb-stat { border-inline-start: 1px solid var(--border); }
+.jb-k { font-size: var(--fs-xs); color: var(--text-muted); }
+.jb-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-h);
+  font-size: var(--fs-base);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.jb-v small { font-size: var(--fs-xs); font-weight: 600; }
+.jb-sum--ok { border-color: var(--success); }
+.jb-sum--ok .jb-stat--diff { background: var(--success-bg); }
+.jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
+.jb-sum--err { border-color: var(--danger); }
+.jb-sum--err .jb-stat--diff { background: var(--danger-bg); }
+.jb-sum--err .jb-stat--diff .jb-v { color: var(--danger); }
+.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
+
+@media (max-width: 760px) {
+  /* شرح تمام‌عرض؛ تاریخ و وضعیت کنارِ هم؛ شماره‌ی فرعی زیرشان. */
+  .jh-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .jh-field--grow { grid-column: 1 / -1; }
+  .jh-row--sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* صفحه‌کلیدِ فیزیکی نیست؛ راهنما فقط جای ردیف‌ها را می‌گیرد. */
+  .jg-legend { display: none; }
+  /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود. */
+  .jb-sum { inline-size: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .jb-stat { min-width: 0; padding: 3px 6px; }
+  .jb-k { font-size: 11px; }
+  .jb-v { font-size: var(--fs-sm); flex-wrap: wrap; white-space: normal; }
+}
 
 /* ── انتخابِ حالتِ کار (پروفایل) ───────────────────────────────────────────── */
 .exp-choices { display: grid; gap: 8px; }

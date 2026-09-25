@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  arrowLeavesField,
   firstInRow,
   lastInRow,
   onEnter,
+  onHorizontal,
   onShiftEnter,
+  onTab,
   onVertical,
   stepInRow,
   type ColId,
@@ -136,5 +139,76 @@ describe('سندِ ۳۰۰ ردیفی', () => {
 
   it('تهِ آخرین ردیف ردیفِ ۳۰۱ام را می‌خواهد', () => {
     expect(onEnter(big, { row: 299, col: 3 }, all)).toEqual({ kind: 'appendRow' })
+  })
+})
+
+describe('Tab / Shift+Tab', () => {
+  const withCenter: GridShape = { cols: ['account', 'costCenter', 'description', 'debit', 'credit'], rowCount: 2 }
+
+  it('از مرکزِ هزینه نمی‌پرد (برخلافِ Enter) و به ردیفِ بعد می‌پیچد', () => {
+    expect(onTab(withCenter, { row: 0, col: 0 }, 1, all, true)).toEqual({ kind: 'move', to: { row: 0, col: 1 } })
+    expect(onTab(withCenter, { row: 0, col: 4 }, 1, all, true)).toEqual({ kind: 'move', to: { row: 1, col: 0 } })
+  })
+
+  it('آخرین خانه‌ی آخرین ردیف: ردیفِ تازه، مگر ردیفِ آخر خالی باشد', () => {
+    expect(onTab(plain, { row: 1, col: 3 }, 1, all, true)).toEqual({ kind: 'appendRow' })
+    //: سند تمام شده و ردیفِ آخر خالی است — Tab باید به «ثبت سند» برسد، نه ردیفِ خالیِ دیگری.
+    expect(onTab(plain, { row: 1, col: 3 }, 1, all, false)).toEqual({ kind: 'exit' })
+  })
+
+  it('Shift+Tab به آخرین خانه‌ی فعالِ ردیفِ قبل؛ در ابتدای سند بیرون می‌رود', () => {
+    expect(onTab(plain, { row: 1, col: 0 }, -1, all, true)).toEqual({ kind: 'move', to: { row: 0, col: 3 } })
+    expect(onTab(plain, { row: 0, col: 0 }, -1, all, true)).toEqual({ kind: 'exit' })
+  })
+
+  it('از خانه‌ی غیرفعال می‌پرد', () => {
+    expect(onTab({ ...withTafsili, rowCount: 2 }, { row: 1, col: 0 }, 1, tafsiliOnlyRow0, true)).toEqual({
+      kind: 'move',
+      to: { row: 1, col: 2 },
+    })
+  })
+})
+
+describe('← / → (راست‌به‌چپ)', () => {
+  it('در رابطِ راست‌به‌چپ ← ستونِ منطقیِ بعد است و → قبل', () => {
+    expect(onHorizontal(plain, { row: 0, col: 1 }, 'ArrowLeft', true, all)).toEqual({ kind: 'move', to: { row: 0, col: 2 } })
+    expect(onHorizontal(plain, { row: 0, col: 1 }, 'ArrowRight', true, all)).toEqual({ kind: 'move', to: { row: 0, col: 0 } })
+  })
+
+  it('در چپ‌به‌راست برعکس', () => {
+    expect(onHorizontal(plain, { row: 0, col: 1 }, 'ArrowRight', false, all)).toEqual({ kind: 'move', to: { row: 0, col: 2 } })
+  })
+
+  it('در لبه‌ی ردیف نمی‌پیچد', () => {
+    expect(onHorizontal(plain, { row: 0, col: 3 }, 'ArrowLeft', true, all)).toEqual({ kind: 'none' })
+    expect(onHorizontal(plain, { row: 1, col: 0 }, 'ArrowRight', true, all)).toEqual({ kind: 'none' })
+  })
+})
+
+describe('arrowLeavesField — مکان‌نما یا حرکت؟', () => {
+  const f = (start: number | null, end: number | null, length: number, rtl = false) => ({ start, end, length, rtl })
+
+  it('کنترلِ بی‌مکان‌نما، خانه‌ی خالی، یا کلِ مقدارِ انتخاب‌شده (تازه رسیده): حرکت', () => {
+    expect(arrowLeavesField(f(null, null, 0), 'ArrowLeft')).toBe(true)
+    expect(arrowLeavesField(f(0, 0, 0), 'ArrowRight')).toBe(true)
+    expect(arrowLeavesField(f(0, 5, 5), 'ArrowLeft')).toBe(true)
+  })
+
+  it('مکان‌نما وسطِ عدد: پیکان مالِ خودِ فیلد است — اصلاحِ وسطِ عدد ممکن می‌ماند', () => {
+    expect(arrowLeavesField(f(2, 2, 5), 'ArrowLeft')).toBe(false)
+    expect(arrowLeavesField(f(2, 2, 5), 'ArrowRight')).toBe(false)
+    expect(arrowLeavesField(f(1, 3, 5), 'ArrowLeft')).toBe(false)
+  })
+
+  it('فیلدِ عددیِ چپ‌به‌راست: ← در ابتدا و → در انتها بیرون می‌زند', () => {
+    expect(arrowLeavesField(f(0, 0, 5), 'ArrowLeft')).toBe(true)
+    expect(arrowLeavesField(f(5, 5, 5), 'ArrowRight')).toBe(true)
+    expect(arrowLeavesField(f(5, 5, 5), 'ArrowLeft')).toBe(false)
+  })
+
+  it('فیلدِ راست‌به‌چپ (شرح): ← به انتهای متن می‌رود، پس در انتها بیرون می‌زند', () => {
+    expect(arrowLeavesField(f(4, 4, 4, true), 'ArrowLeft')).toBe(true)
+    expect(arrowLeavesField(f(0, 0, 4, true), 'ArrowRight')).toBe(true)
+    expect(arrowLeavesField(f(0, 0, 4, true), 'ArrowLeft')).toBe(false)
   })
 })
